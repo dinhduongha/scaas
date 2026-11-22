@@ -1738,13 +1738,30 @@ fn signature_ok(
     let Some(slots) = decode_member_sigs(sig) else {
         return Ok(false);
     };
+    let pop = *purpose == pop_v2_tag();
+    msig_record_ok(d, &keys, ua, &message, digest, &slots, pop, cx, bits)
+}
+
+/// The slots of a portable record's `msig` signature over `message` (`uaMessage(msig, purpose, digest)`): the canonical minimal set
+/// (both levels), each slot accepted outside the `pop` and enabled, each by [`slot_ok`]. `keys`: [`member_keys`] of `d`.
+#[allow(clippy::too_many_arguments)]
+fn msig_record_ok(
+    d: &[u8],
+    keys: &[Vec<u8>],
+    ua: &[u8; 32],
+    message: &[u8; 32],
+    digest: &[u8; 32],
+    slots: &[MemberSig],
+    pop: bool,
+    cx: &Cx,
+    bits: &Bits,
+) -> Result<bool> {
     if !msig_slots_minimal(d, &slots.iter().map(|s| s.index).collect::<Vec<_>>())? {
         return Ok(false);
     }
     let structure = MsigStructure::from_key_data(d)?;
-    let md = member_digest(ua, &message);
-    let pop = *purpose == pop_v2_tag();
-    for s in &slots {
+    let md = member_digest(ua, message);
+    for s in slots {
         if !(pop || bits.record(ua, s.index))
             || !cx.on(ua, s.index)
             || !slot_ok(
@@ -2372,6 +2389,65 @@ pub fn check_authorization_current(
         UAError::Unauthorized,
     )
 }
+/// `requirePortable(ua, purpose, digest, sig)` / `requirePortableApp` of the record `(kind, key_data)` (UARegistryCoreLib
+/// `_portable`; scaas-sdk spec §12.2, review r2 R7), on the target registry's state: never the registration's `pop`; a single key
+/// `signature` only (its kind's check, a surplus-form kind's minimal form); an `msig` `members` only, over its current structure, the
+/// canonical minimal set at both levels whatever its PQ weight, each slot accepted and enabled, an `evm-eoa` member over `digest`
+/// itself. `key_data` the first structure (the id). An `msig` with no `accepted`: `NotVerifiable`, as [`check_authorization`].
+#[allow(clippy::too_many_arguments)]
+pub fn check_portable_current(
+    kind: u16,
+    key_data: &[u8],
+    ua: &[u8; 32],
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    sig: &UASig,
+    members: &Members,
+    current: &Current,
+    accepted: Option<&Accepted>,
+) -> Result<()> {
+    if !is_record_of(kind, key_data, ua)? || *purpose == pop_v2_tag() || !sig.key_data.is_empty() {
+        return Err(UAError::Unauthorized);
+    }
+    let cx = Cx { members, current };
+    let bits = Bits::new(accepted);
+    let ok = if kind == 0x0120 {
+        if accepted.is_none() {
+            return Err(UAError::NotVerifiable);
+        }
+        let (d, _) = now_of(ua, key_data, current)?;
+        let keys = member_keys(&d, &cx)?;
+        let message = ua_message(kind, purpose, digest)?;
+        sig.signature.is_empty()
+            && msig_record_ok(
+                &d,
+                &keys,
+                ua,
+                &message,
+                digest,
+                &sig.members,
+                false,
+                &cx,
+                &bits,
+            )?
+    } else {
+        // a single key reads no bits
+        sig.members.is_empty()
+            && signature_ok(
+                kind,
+                key_data,
+                key_data,
+                ua,
+                purpose,
+                digest,
+                &sig.signature,
+                &cx,
+                &bits,
+            )?
+    };
+    bits.verdict(ok, UAError::Unauthorized)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn auth_ok(
     id: &[u8; 32],

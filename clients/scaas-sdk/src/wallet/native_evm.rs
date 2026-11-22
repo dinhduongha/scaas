@@ -13,9 +13,9 @@ use crate::SdkError;
 use alloy::primitives::{Bytes, U256};
 
 /// `prepare_native_send`'s request.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct NativeSend {
     /// a native `evm` key
     pub key: KeyRef,
@@ -32,9 +32,9 @@ pub struct NativeSend {
 }
 
 /// A native send as the user reviews it: the transaction's fields and the quote; `submit_native_send` signs exactly these.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct NativeQuote {
     pub key: KeyRef,
     pub chain: String,
@@ -85,11 +85,24 @@ impl Wallet {
                     None,
                 )
                 .await?;
+                let quoted = quote.tx_type;
                 quote.tx_type = match req.tx_type {
                     None => quote.tx_type,
                     Some(2) if quote.tx_type != 2 => return Err(SdkError::TxTypeRefused),
                     Some(t) => t,
                 };
+                // plan T38: the L1 data fee is of the envelope sent, so of the type asked
+                if quote.tx_type != quoted {
+                    crate::op::quote::with_l1(
+                        &sdk,
+                        &req.chain,
+                        &mut quote,
+                        to.into(),
+                        value,
+                        &data,
+                    )
+                    .await?;
+                }
                 let delegated = delegated(&pool.code(from).await.map_err(sim)?);
                 Ok(NativeQuote {
                     key: req.key,

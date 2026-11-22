@@ -22,6 +22,57 @@ contract DeployHarness is DeployBase {
 
     constructor() {
         mldsaPrecompile = true; // `MLDSA_PRECOMPILE`'s default, `on` (`_setup` does not run here)
+        txGasCap = 1 << 24; // `TX_GAS_CAP` (owner X1): a test chain under EIP-7825 (`setTxGasCap` for another)
+    }
+
+    bool internal newerBook;
+
+    /// Stands in for an existing book of the next generation (`deployments/<key>-ua-gen<n + 1>.json`; no files in a test).
+    function setNewerBook(bool on) external {
+        newerBook = on;
+    }
+
+    function _newerGenBook(uint256) internal view override returns (bool) {
+        return newerBook;
+    }
+
+    bool internal draftFlag;
+    bool internal draftOwner;
+
+    /// Stands in for the chain row's `probe_draft_precompiles` and the book's `probe_draft_precompiles_owner` (CTR-UA-69).
+    function setDraft(bool flag, bool owner) external {
+        (draftFlag, draftOwner) = (flag, owner);
+    }
+
+    /// `_voInit`: the init code `pq_verifiers.py verify-only` builds (Task 21 review P2-3).
+    function voInit(uint16 kind, uint8 form, uint256 callGas) external view returns (bytes memory) {
+        return _voInit(kind, form, callGas);
+    }
+
+    function mldsaCandidates(uint256 i) external view returns (address[] memory) {
+        return _mldsaCandidates(i);
+    }
+
+    function mldsaPrecompileOf(uint256 i) external view returns (address p) {
+        (p,,) = _mldsaPrecompile(i);
+    }
+
+    function _draftFlag() internal view override returns (bool) {
+        return draftFlag;
+    }
+
+    function _draftConfirmed() internal view override returns (bool) {
+        return draftOwner;
+    }
+
+    /// Stands in for `TX_GAS_CAP` (the process env is shared by parallel tests).
+    function setTxGasCap(uint64 cap) external {
+        txGasCap = cap;
+    }
+
+    /// `_setup`'s read of `TX_GAS_CAP` (owner X1: required, no default).
+    function txGasCapEnv() external view returns (uint64) {
+        return _txGasCapEnv();
     }
 
     function force(bool bls12381, bool bn254G2) external {
@@ -56,7 +107,7 @@ contract DeployHarness is DeployBase {
         return (releaseGas[name][0], releaseGas[name][1]);
     }
 
-    function checkMeasured(string calldata name, uint256 regular, uint256 state, uint256 limit) external pure {
+    function checkMeasured(string calldata name, uint256 regular, uint256 state, uint256 limit) external view {
         _checkMeasuredGas(name, regular, state, limit);
     }
 
@@ -73,6 +124,11 @@ contract DeployHarness is DeployBase {
     /// `DEPLOY_PQCHAT` for the next `deploy` (plan 3c T92).
     function setPqChat(bool on) external {
         deployPqChat = on;
+    }
+
+    /// `DEPLOY_PQVAULT` for the next `deploy` (PqVault plan V7).
+    function setPqVault(bool on) external {
+        deployPqVault = on;
     }
 
     /// `NOTICE_PERIOD` for the next `deploy` (0: a release is usable at once).
@@ -97,6 +153,17 @@ contract DeployHarness is DeployBase {
         accountFactory = a;
     }
 
+    string internal tablePath;
+
+    /// A `chain-uids.json` fixture in place of the table (NET-ALL-25 tests).
+    function setTable(string calldata p) external {
+        tablePath = p;
+    }
+
+    function _bookTable() internal view override returns (string memory) {
+        return bytes(tablePath).length != 0 ? tablePath : super._bookTable();
+    }
+
     function deploy(bytes32 uid_, bool zether, address ska) external returns (OpenFactory f, string memory json) {
         return deploy(uid_, zether, ska, false);
     }
@@ -113,6 +180,35 @@ contract DeployHarness is DeployBase {
         if (history.code.length != 0) vm.store(history, bytes32(0), uid_);
         deployZether = zether;
         f = _deployTokenFactory(address(this), true, ska, hedera);
+        json = vm.serializeBytes32("deploy", "chain_uid", uid);
+    }
+
+    /// `_deployPqChat` alone on the chain of `uid_` (no factory: the gate runs before any call to it).
+    function deployPqChatOnly(bytes32 uid_) external {
+        uid = uid_;
+        _deployPqChat(OpenFactory(address(0)), address(0));
+    }
+
+    /// `_deployPqVault` alone on the chain of `uid_` (no factory: the gate runs before any call to it).
+    function deployPqVaultOnly(bytes32 uid_) external {
+        uid = uid_;
+        _deployPqVault(OpenFactory(address(0)), address(0));
+    }
+
+    /// The gen-1 registry alone (`_deployUARegistry`, not Hedera, no account implementation) on the chain of `uid_`.
+    function deployRegistry(bytes32 uid_) external returns (address) {
+        (salt, uid) = (keccak256("scaas.deploy.v1"), uid_);
+        return address(_deployUARegistry(address(0), false));
+    }
+
+    /// The later-generation mode (`_deployUARegistryGen`) over `book` (a JSON string): generation n + 1 and the JSON. No env here:
+    /// `TX_GAS_CAP` unset (`txGasCap` 0, the book's value taken), the salt and `chain_uid` as `deploy` sets them.
+    function deployGen(bytes32 uid_, address ska, string calldata book)
+        external
+        returns (address reg, string memory json)
+    {
+        (salt, uid, txGasCap) = (keccak256("scaas.deploy.v1"), uid_, 0);
+        reg = address(_deployUARegistryGen(book, ska));
         json = vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 

@@ -50,14 +50,14 @@ contract PqzKeyVersionsTest is UARegistryBase {
 
     function _kinds(bool pqz) internal view returns (UARegistry.KindConfig[] memory c) {
         c = new UARegistry.KindConfig[](pqz ? 2 : 1);
-        c[0] = UARegistry.KindConfig(ML, address(mock), 400_000);
-        if (pqz) c[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 1_000_000);
+        c[0] = UARegistry.KindConfig(ML, address(mock), 400_000, false, 0);
+        if (pqz) c[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 1_000_000, false, 0);
     }
 
     /// Gen 2 enabling 0x0142 in front of `g1` (which does not): the host of gen-1 records' PQZ attachment.
     function _host(UARegistry g1) internal returns (UARegistry) {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 1_000_000);
+        c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 1_000_000, false, 0);
         return _deploy(REG_H, chainUidA, address(g1), false, BUDGET, address(0), true, c);
     }
 

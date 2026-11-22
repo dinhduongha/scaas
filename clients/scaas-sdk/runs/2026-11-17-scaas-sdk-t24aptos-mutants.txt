@@ -1,0 +1,12 @@
+# t24aptos mutants (name | outcome | commit | test | first failure line)
+read the second endpoint first | killed | 23a66a6d4 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features aptos --test aptos -- --exact aptos_two_endpoints_one_down | panicked at tests/aptos.rs:431:52:
+the views not pinned to the version | killed | 23a66a6d4 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features aptos --test aptos -- --exact aptos_strict_majority_agrees_at_one_version | panicked at tests/aptos.rs:481:46:
+the pinned version as the failover's floor | killed | 23a66a6d4 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features aptos --test aptos -- --exact aptos_floor_is_the_block_height | panicked at tests/aptos.rs:518:10:
+strict majority: the others read at their own version | killed | 23a66a6d4 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features aptos --test aptos -- --exact aptos_strict_majority_agrees_at_one_version | panicked at tests/aptos.rs:481:46:
+the native balance read without the amount rule | killed | 23a66a6d4 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features aptos --test aptos -- --exact aptos_malformed_answers_are_refused | panicked at tests/aptos.rs:337:9:
+a view of two values read | killed | 23a66a6d4 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features aptos --test aptos -- --exact aptos_malformed_answers_are_refused | panicked at tests/aptos.rs:369:9:
+the account view's address not checked | killed | 23a66a6d4 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features aptos --test aptos -- --exact aptos_account_that_is_no_address_is_refused | panicked at tests/aptos.rs:389:5:
+an address's uppercase hex read | killed | 23a66a6d4 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features aptos --test aptos -- --exact aptos_holder_and_token_forms | panicked at tests/aptos.rs:286:9:
+params of another family accepted | killed | 23a66a6d4 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features aptos --test aptos -- --exact aptos_holder_and_token_forms | panicked at tests/aptos.rs:298:5:
+chain id 0 accepted | killed | 23a66a6d4 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features aptos --test aptos -- --exact aptos_holder_and_token_forms | panicked at tests/aptos.rs:312:9:
+10 mutants, 10 killed, 0 survived, 0 not loaded, 0 other failure

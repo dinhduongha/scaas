@@ -773,7 +773,14 @@ confers nothing: a regulated token names its own registry in its config and chec
   `publishDexEnv`, `publishClassEnv` refuses an `env.registry` other than 0 or that value (`EnvRegistryMismatch(expected,
   got)`). The env each clone carries, the router that authenticates its governance and the directory name one registry. Without
   a router `uaRegistry()` is 0 and the envs are free, as today. A stack with its own registry has its own router and its own
-  factory (`script/pqz/e2e.py:1295-1315`), so one registry per factory holds.
+  factory (`script/pqz/e2e.py:1295-1315`), so one registry **line** per factory holds. **Change (owner 2026-11-19, rulings R1,
+  R10, P4 of spec [2026-11-19-registry-verify-only-kinds.md](2026-11-19-registry-verify-only-kinds.md) §10; BUILT on
+  `multi-gen-verify` `098c30feb`, UNAUDITED; [CTR-UA-67](../../contracts/accounts.md#CTR-UA-67)):** was "one registry per
+  factory"; an env may also name a later generation of the router's registry: a registry whose `lineReaches(router's registry)`
+  answers exactly one word `1` (its `predecessor()` chain reaches the router's registry within `MAX_GENERATION − 1` steps, each a
+  contract, and its `smartKeyCloneHash()` equals the router's), `chainUid` as before, else `EnvRegistryMismatch`. `uaRegistry()`
+  and the directory keep naming the router's registry, which authenticates governance; the `SmartKeyAccount` implementation is
+  frozen for the factory's line.
 - **The `SmartKeyAccount` implementation, bound from the router** (Fable P2-6). The router holds it as `_SMART_KEY_CLONE_CODEHASH`
   (the EIP-1167 clone code hash of the implementation, `src/metatx/UAMetaTxBase.sol:38-48`), and so does the UA registry
   (`smartKeyCloneHash()`, `src/ua/UARegistry.sol:378`). The router gains the view `smartKeyCloneHash()`. `configureChain` requires

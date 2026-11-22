@@ -42,7 +42,7 @@ the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the
 
 | Term | Meaning |
 |---|---|
-| chain host | the machine that runs the SCaaS testnet: live directory `~dockers/mba-chain-nethermind`, container `mba_chain_node_nethermind` (service `blockchain-node`) until 2026-10-31, then `mba_chain_sealer` + `mba_chain_rpc` (services `sealer`, `rpc`; [node split](#node-split-sealer--rpc-owner-2026-10-31)), RPC `http://127.0.0.1:8545`; the procedures below ran on the single node and keep its names |
+| chain host | the machine that runs the SCaaS testnet: live directory `~dockers/mba-chain-nethermind` (one stack directory `~dockers/mba-chain-nethermind` (owner 2026-11-20): `pqz-nethermind/` (the chain: the sealer and `rpc` compose, genesis and config, keystore, data), `blockscout/` (the Blockscout compose and `sc-verifier`), `docker-compose-full.yml` (all in one) and one `.env` at the top; the stack is a standalone MIT repository meant to be public, stock Nethermind by default, the PQ precompiles opt-in; `docker compose` runs in `pqz-nethermind/` for the chain, in `blockscout/` for the explorer), container `mba_chain_node_nethermind` (service `blockchain-node`) until 2026-10-31, then `mba_chain_sealer` + `mba_chain_rpc` (services `sealer`, `rpc`; [node split](#node-split-sealer--rpc-owner-2026-10-31)), RPC `http://127.0.0.1:8545`; the procedures below ran on the single node and keep its names |
 | copy | a replica of the SCaaS testnet with a throwaway signer key, run from `scratchpad/p6f-copy` (containers `pqzcopy-*`) |
 | chainspec | the chain's JSON configuration (`genesis.json`); the precompiles are switched on by its `engine.Pqz` section |
 | schedule, T | one entry of `engine.Pqz.schedules`: gas prices that apply from its timestamp T on |
@@ -162,7 +162,8 @@ Who: the operator, on the chain host. All must hold before step 1:
 2. The image is the one the gate used: `docker image inspect scaas/nethermind-pqz:1.39.0-pqz1 --format '{{.Id}}'`
    prints the same id.
 3. The live container is stopped: `docker inspect -f '{{.State.Status}}' mba_chain_node_nethermind` prints `exited`.
-   If not, stop it with `docker compose stop -t 120 blockchain-node` (in `~dockers/mba-chain-nethermind`).
+   If not, stop it with `docker compose stop -t 120 blockchain-node` (in `~dockers/mba-chain-nethermind`; since owner 2026-11-20 the
+   chain's compose is in `~dockers/mba-chain-nethermind/pqz-nethermind`).
 4. The probe and e2e inputs exist in the repository (the 2026-10-16 run had to rerun its probe because they were
    missing): the forge artifact `smartcontracts/evm/out/PqzPrecompileProbe.sol/PqzPrecompileProbe.json` (build it in
    `smartcontracts/evm` with `forge build test/p6f/PqzPrecompileProbe.sol`) and `pqz-core/nethermind/bin/corpus.jsonl`
@@ -175,7 +176,7 @@ checkout. From `cd $L` on, the working directory is the live directory, so `gene
 `docker-compose.yml` are the live files.
 
 ```sh
-L=~dockers/mba-chain-nethermind
+L=~dockers/mba-chain-nethermind/pqz-nethermind   # the chain's directory since owner 2026-11-20 (before: the stack's top)
 C=<repo>/pqz-core/nethermind/chain
 E=$C/engine-pqz-provisional-n2304.json   # until the next calibration: engine-pqz.json holds retired ids (check-provisional-ids.py)
 TS=$(date +%Y%m%d-%H%M%S)
@@ -373,7 +374,7 @@ match the comments in the block:
    e2e transactions with the test key `0x…04` pass.
 
 ```sh
-L=~dockers/mba-chain-nethermind; C=<repo>/pqz-core/nethermind/chain
+L=~dockers/mba-chain-nethermind/pqz-nethermind; C=<repo>/pqz-core/nethermind/chain   # the chain's directory since owner 2026-11-20
 TS=$(date +%Y%m%d-%H%M%S); B=~dockers/mba-chain-nethermind-backups/op7-$TS
 A="docker run --rm --memory 512m -v $L:/l -v $(dirname $B):/b alpine:3"
 cd $L && docker compose stop -t 120 blockchain-node
@@ -947,9 +948,10 @@ config files; `admin_nodeInfo` on either sidecar prints them.
     -d '{"jsonrpc":"2.0","id":1,"method":"clique_getSigners","params":[]}' http://127.0.0.1:8550
   # the same with --network container:mba_chain_rpc for the public node (admin_peers, admin_addPeer, txpool_*, trace_*)
   ```
-- **Start / stop order.** Start: `docker compose up -d sealer`, then `docker compose up -d rpc`, then Blockscout
-  (`docker compose up -d sc-verifier explorer-db explorer-backend explorer-frontend`). Stop in reverse:
-  `docker compose stop explorer-frontend explorer-backend explorer-db sc-verifier rpc sealer`. Every service runs
+- **Start / stop order.** Start, in `pqz-nethermind/`: `docker compose up -d sealer`, then `docker compose up -d rpc`; then
+  Blockscout, in `blockscout/` (owner 2026-11-20: its own compose): `docker compose up -d sc-verifier explorer-db
+  explorer-backend explorer-frontend`. Stop in reverse: in `blockscout/` `docker compose stop explorer-frontend
+  explorer-backend explorer-db sc-verifier`, then in `pqz-nethermind/` `docker compose stop rpc sealer`. Every service runs
   `restart: unless-stopped` (owner ruling 2026-10-31, § PQZ node above); after a host reboot Docker starts them all at
   once, so this order is not enforced. `rpc` may restart on its own at any time (public RPC down meanwhile, blocks keep coming); a `sealer`
   restart pauses blocks for about 10 s (measured 9–12 s).
@@ -1020,13 +1022,17 @@ config files; `admin_nodeInfo` on either sidecar prints them.
 
 Services `explorer-db` (postgres:18, `mem_limit` 1g, `cpus` 1.0), `explorer-backend` (`ghcr.io/blockscout/blockscout:9.0.2`,
 2g, 1.5), `explorer-frontend` (`ghcr.io/blockscout/frontend@sha256:4b69f44148414b55c6b8550bc3270c63c9f99e923d54ef0b307e762af6bac90a`,
-v2.3.5, 512m, 0.5); `restart: unless-stopped` (owner ruling 2026-10-31: a crashed backend had stayed down); UI `http://192.168.1.72:8558` (owner 2026-10-31: not 3000; compose `8558:3000`,
-`NEXT_PUBLIC_APP_PORT` 8558, the container listens on `PORT` 3000), API and WebSocket `http://192.168.1.72:4000` (the
-browser calls it directly; CORS `*`, `CHECK_ORIGIN` off). Host ports published by Blockscout: 8558 and 4000. The
+v2.3.5, 512m, 0.5); `restart: unless-stopped` (owner ruling 2026-10-31: a crashed backend had stayed down); UI `http://192.168.1.72:8549` (owner 2026-11-20; was 8558, owner 2026-10-31: not 3000; compose `8549:3000`,
+`NEXT_PUBLIC_APP_PORT` 8549, the container listens on `PORT` 3000), API and WebSocket on host port 8548 (owner 2026-11-20;
+was 4000, then 8557; the backend listens on 4000 in its container; the browser calls it directly; CORS `*`, `CHECK_ORIGIN` off). Host ports
+published by Blockscout: 8549 and 8548. Since owner 2026-11-20 Blockscout is a compose project of its own in
+`~dockers/mba-chain-nethermind/blockscout/` (with `sc-verifier`); the chain's compose in `pqz-nethermind/` holds the sealer and
+`rpc` only; the all-in-one form is `docker-compose-full.yml` at the stack's top (this directory's `docker-compose.yml` is that
+all-in-one form). The
 backend reads `rpc` over `http://rpc:8547` (before the split: the single node, `http://blockchain-node:8547`).
 
 ```sh
-cd ~dockers/mba-chain-nethermind
+cd ~dockers/mba-chain-nethermind/blockscout   # Blockscout's own compose (owner 2026-11-20)
 docker compose up -d explorer-db explorer-backend explorer-frontend      # start (after the node)
 docker compose stop explorer-frontend explorer-backend explorer-db       # stop (the index stays in data/explorer_*)
 ```
@@ -1113,7 +1119,7 @@ times with a fixed 15 s delay, a pause between contracts, forge status polls eve
   (the newest tag, also `latest` and `main`) parses the standard JSON into `foundry-compilers-artifacts` 0.19, whose
   `EvmVersion` stops at `osaka` and whose settings drop `experimental` (which solc needs for amsterdam and writes into
   the CBOR metadata): 0 of 31 verified (`Unknown evm version: amsterdam`). The live stack uses a locally patched
-  verifier image (built outside the repo, `~dockers/mba-chain-nethermind/sc-verifier/`: patch, `build.sh`, README;
+  verifier image (built outside the repo, `~dockers/mba-chain-nethermind/blockscout/sc-verifier/`: patch, `build.sh`, README;
   blockscout-rs `9457af29` + the two foundry-compilers 0.19.10 crates with `amsterdam` and `experimental` passed
   through, no verifier code change). Result (Deploy.s.sol only): 31 ok, 0 fail, every contract a full match (evm amsterdam, experimental
   true); with the PQZ e2e logs (five runs on this genesis) 136 ok, 0 fail: 126 contracts all full matches, 10 token

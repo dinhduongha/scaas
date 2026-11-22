@@ -8,9 +8,8 @@ use scaas_rpc::{Class, EndpointAuth, Policy};
 use std::sync::Arc;
 
 /// A chain family (the `scaas-rpc` readers'). Hedera is `Evm` with its chain id.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum Family {
     Evm,
     Soroban,
@@ -49,10 +48,9 @@ impl std::fmt::Debug for EndpointConfig {
 }
 
 /// The block of every decisive and decryption read (§9.4 requirement 3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum Finality {
     Finalized,
     Depth(u64),
@@ -106,13 +104,154 @@ pub struct ChainProfile {
     pub dexes: Vec<ListedDex>,
     /// the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
     pub wrappers: Vec<String>,
+    /// the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+    /// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+    /// `Sdk::open`
+    pub family_params: Option<FamilyParams>,
+    /// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+    /// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+    /// `Sdk::open` on another family)
+    pub l1_fee: Option<L1Fee>,
+    /// the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+    /// and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+    /// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+    /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+    pub disabled_kinds: Vec<String>,
+}
+
+/// An L1 data fee model (plan T38).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum L1Fee {
+    /// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
+    OpStack,
+}
+
+/// A family's own profile data (spec §8.7 rule 2; decisions CLI-SDK-15's Changes of 2026-11-21).
+#[derive(Debug, Clone)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+pub enum FamilyParams {
+    /// Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
+    /// profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),
+    /// the native denom and the bech32 prefix of the chain's addresses
+    Cosmos {
+        chain_id: String,
+        rest: Vec<EndpointConfig>,
+        #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::PolicyDef"))]
+        rest_policy: Policy,
+        denom: String,
+        prefix: String,
+    },
+    /// Aptos: the chain id ledger info must name (`aptos_framework::chain_id`, 1 to 255; the identity an Aptos node answers)
+    /// and the `scaas` package's address, whose view `meta::account_of(owner)` gives the Account an owner's tokens are in
+    /// (NET-APT-05), as `0x` + 64 lowercase hex (AIP-40's long form)
+    Aptos { chain_id: u8, package: String },
+    /// Solana: the `scaas` program's id (base58 of 32 bytes), under which an owner's SCaaS Account is the `["acct", owner]`
+    /// program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
+    Solana { program: String },
+    /// Soroban: the network passphrase its RPC endpoints name (`getNetwork`; its SHA-256 is `chain_uid`, checked at `Sdk::open`)
+    /// and the XLM SAC contract (`C…`), pinned, whose balance entry is a `C…` holder's native XLM (never derived here)
+    Soroban { passphrase: String, xlm_sac: String },
+    /// Sui: the GraphQL endpoints the reads go to, with their policy (public fullnodes refuse JSON-RPC, docs/networks/sui.md
+    /// §14; the profile's `rpc` are the JSON-RPC endpoints), each named by `chain_uid`, the genesis checkpoint's digest, whose
+    /// 32 bytes in base58 `chainIdentifier` must answer
+    Sui {
+        graphql: Vec<EndpointConfig>,
+        #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::PolicyDef"))]
+        graphql_policy: Policy,
+    },
+    /// Polkadot Hub's Substrate side on its EVM profile (decisions CLI-SDK-32's Change of 2026-11-22, plan T32's read part): the
+    /// Substrate JSON-RPC endpoints with their policy, each named by `genesis` (`0x` + 64 hex, `chain_getBlockHash(0)`), and the
+    /// SS58 prefix of the chain's addresses (0 to 16,383, not 46 or 47); `balances` of an SS58 id reads its `System.Account`
+    /// there. The same params serve the relay chain's Substrate side
+    Substrate {
+        rpc: Vec<EndpointConfig>,
+        #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::PolicyDef"))]
+        rpc_policy: Policy,
+        genesis: String,
+        ss58_prefix: u16,
+    },
+}
+
+/// Base58 (Bitcoin's alphabet) of 32 to 44 characters: a Solana key's form (its exact 32 bytes are checked where it is
+/// decoded, under the family's feature).
+pub(crate) fn is_base58_key(s: &str) -> bool {
+    (32..=44).contains(&s.len())
+        && s.bytes()
+            .all(|b| b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".contains(&b))
+}
+
+/// An Aptos address in AIP-40's long form: `0x` + 64 lowercase hex.
+pub(crate) fn is_aptos_address(s: &str) -> bool {
+    s.len() == 66
+        && s.starts_with("0x")
+        && s.bytes()
+            .skip(2)
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+impl FamilyParams {
+    /// Its family, and each field in its form: Cosmos, a chain id of 1 to 50 printable ASCII bytes (CometBFT's bound), a denom
+    /// as the Cosmos SDK's rule (`[a-zA-Z][a-zA-Z0-9/:._-]{2,127}`), a prefix of 1 to 83 lowercase letters and digits; Aptos,
+    /// a chain id other than 0 and the package in the long form; Solana, the program in base58's form; Soroban, a passphrase of 1 to 256 printable ASCII bytes and a `C…` SAC.
+    pub(crate) fn fits(&self, family: Family) -> bool {
+        match self {
+            FamilyParams::Cosmos {
+                chain_id,
+                denom,
+                prefix,
+                ..
+            } => {
+                let d = denom.as_bytes();
+                family == Family::Cosmos
+                    && (1..=50).contains(&chain_id.len())
+                    && chain_id.bytes().all(|b| b.is_ascii_graphic())
+                    && (3..=128).contains(&d.len())
+                    && d.first().is_some_and(u8::is_ascii_alphabetic)
+                    && d.iter()
+                        .all(|b| b.is_ascii_alphanumeric() || b"/:._-".contains(b))
+                    && (1..=83).contains(&prefix.len())
+                    && prefix
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+            }
+            FamilyParams::Aptos { chain_id, package } => {
+                family == Family::Aptos && *chain_id != 0 && is_aptos_address(package)
+            }
+            FamilyParams::Solana { program } => family == Family::Solana && is_base58_key(program),
+            FamilyParams::Soroban {
+                passphrase,
+                xlm_sac,
+            } => {
+                family == Family::Soroban
+                    && (1..=256).contains(&passphrase.len())
+                    && passphrase.bytes().all(|b| (0x20..0x7f).contains(&b))
+                    && xlm_sac.len() == 56
+                    && xlm_sac.starts_with('C')
+            }
+            FamilyParams::Sui { .. } => family == Family::Sui,
+            FamilyParams::Substrate {
+                genesis,
+                ss58_prefix,
+                ..
+            } => {
+                family == Family::Evm
+                    && is_word_hex(genesis)
+                    && *ss58_prefix <= 16_383
+                    && !matches!(ss58_prefix, 46 | 47)
+            }
+        }
+    }
 }
 
 /// A DEX of the chain profile (NET-ALL-24): its address, its liquidity mark (a module of group 11 among its `modules()`,
 /// CTR-DEX-30) and the position readers reviewed for it, each beside its position manager.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct ListedDex {
     /// `0x` + 40 hex
     pub address: String,
@@ -121,9 +260,9 @@ pub struct ListedDex {
 }
 
 /// A reviewed position reader of a position manager (a liquidity order that receives a position names one).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PositionReader {
     pub manager: String,
     pub reader: String,
@@ -132,9 +271,9 @@ pub struct PositionReader {
 /// A base row (gas table v2, owner 2026-11-19): the execution gas of `entry` (`mtxCancelNonce`, `mtxExecuteTransfer`, …) on a
 /// contract of domain kind `kind` (`token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `gov_router`), on a lane whose nonce
 /// is 0 (`fresh`) or above, signed by the reference signer, a native EVM key (its path makes no registry call).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct GasBase {
     pub entry: String,
     pub kind: String,
@@ -161,9 +300,9 @@ pub struct GasBase {
 /// up) for each counted `item` of the operation, one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`,
 /// `env_items`, `orders`). The row's own `gas` is its figure at a count of 0 (the line's intercept; the file states
 /// `"base_count": 0`), so the quote adds `gas × count` with no offset.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct GasPerItem {
     pub item: String,
     pub gas: u64,
@@ -176,9 +315,9 @@ pub struct GasPerItem {
 
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
 /// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct GasPerByte {
     pub input: String,
     pub gas: u64,
@@ -186,9 +325,9 @@ pub struct GasPerByte {
 
 /// A verify row (gas table v2): what a signer of UA kind `signer` (`0`: a native EVM key, the reference) adds over the
 /// reference signer's execution gas.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct GasVerify {
     pub signer: u16,
     pub gas: u64,
@@ -201,12 +340,40 @@ pub struct GasVerify {
     pub margin: u64,
     /// the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
     pub per_item: Option<GasPerItem>,
+    /// the registry line's columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); all absent: the holder's own
+    /// check on any registry (every row before the line)
+    #[serde(default)]
+    pub line: GasLine,
 }
 
-/// The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// A verify row's registry-line columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65; §13 Gas): the row is
+/// keyed by chain (the table it is in), registry address and signer kind; the verify path, the depth and the write path are
+/// columns. Within one table no two verify rows share signer, registry, path, depth and write.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
+pub struct GasLine {
+    /// the registry the row was measured through (`0x` + 40 hex): a quote bound to it takes it first; `None`: a row of no one
+    /// registry
+    pub registry: Option<String>,
+    /// `cache`, `precompile` or `fallback` (the holder's verdict after the verify-only verifier gave no answer, §5); `None`:
+    /// the holder's own check
+    pub path: Option<String>,
+    /// the generations between the registry asked and the holder (0: the registry holds the record), at most 15
+    pub depth: u8,
+    /// the write path of W1 (a registry write whose signature the holder checks), never a consumer operation's quote
+    pub write: bool,
+}
+
+/// A verify row's paths.
+const GAS_VERIFY_PATHS: [&str; 3] = ["cache", "precompile", "fallback"];
+/// The deepest line: `MAX_GENERATION` (16) less one.
+const GAS_DEPTH_MAX: u64 = 15;
+
+/// The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[serde(deny_unknown_fields)]
 pub struct GasRows {
     pub base: Vec<GasBase>,
     pub verify: Vec<GasVerify>,
@@ -216,11 +383,12 @@ pub struct GasRows {
 /// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
 /// save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
 /// per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
-/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?, registry?, path?, depth?, write?}` (the
+/// line's columns, [`GasLine`]), read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct GasTable {
     /// a module's name, `reference`, or the chain key of a chain's measured rows
     pub name: String,
@@ -297,6 +465,10 @@ const GAS_VERIFY_KEYS: &[&str] = &[
     "item",
     "per_item",
     "stand_in",
+    "registry",
+    "path",
+    "depth",
+    "write",
 ];
 /// A row's parts, each with its keys (`second_party` is a part of `ua_extra`).
 const GAS_PART_KEYS: &[(&str, &[&str])] = &[
@@ -347,7 +519,7 @@ impl GasTable {
     /// verify row's may be 0: the reference signer's own row); `source` present; a base row's optional `per_byte` names an
     /// input of [`GasPerByte`] with a `gas` of 1–1,000 and its `source`; a base row's optional `save`, `fee_extra` and
     /// `ua_extra` are `{gas, measured, source}` held like a row's figure, positive; a verify row's `sig_bytes` at most 65,536,
-    /// its optional `margin` 1–100,000; a base or verify row's optional `item` and `per_item` come together (owner 2026-11-19,
+    /// its optional `margin` 1–100,000, its optional line columns ([`GasLine`]: `registry` an address, `path` one of `cache`, `precompile`, `fallback`, `depth` 0–15, `write` a bool); a base or verify row's optional `item` and `per_item` come together (owner 2026-11-19,
     /// I1), `item` one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`, `env_items`, `orders`), `per_item` `{gas,
     /// base_count, source}` with a `gas` of 1–2^24 and `base_count` 0 (the row's figure is at a count of 0); a base row's
     /// optional `regular` (EIP-8037, the part EIP-7825's cap holds) held like a row's figure, positive, and on a counted row
@@ -472,12 +644,44 @@ impl GasTable {
                     Some(m) => m.as_u64().filter(|m| (1..=GAS_MARGIN_MAX).contains(m))?,
                 },
                 per_item: per_item(r, &mut named)?,
+                line: GasLine {
+                    registry: match r.get("registry") {
+                        None => None,
+                        Some(a) => Some(
+                            a.as_str()
+                                .filter(|a| is_address_hex(a))?
+                                .to_ascii_lowercase(),
+                        ),
+                    },
+                    path: match r.get("path") {
+                        None => None,
+                        Some(p) => Some(
+                            p.as_str()
+                                .filter(|p| GAS_VERIFY_PATHS.contains(p))?
+                                .to_string(),
+                        ),
+                    },
+                    depth: match r.get("depth") {
+                        None => 0,
+                        Some(d) => {
+                            u8::try_from(d.as_u64().filter(|d| *d <= GAS_DEPTH_MAX)?).ok()?
+                        }
+                    },
+                    write: match r.get("write") {
+                        None => false,
+                        Some(w) => w.as_bool()?,
+                    },
+                },
             };
             // no regular part on a verify row: its gas is regular whole
             if row.per_item.as_ref().is_some_and(|p| p.regular.is_some()) {
                 return None;
             }
-            if rows.verify.iter().any(|o| o.signer == row.signer) {
+            if rows
+                .verify
+                .iter()
+                .any(|o| o.signer == row.signer && o.line == row.line)
+            {
                 return None;
             }
             rows.verify.push(row);
@@ -549,11 +753,11 @@ impl GasBase {
 }
 
 /// A token of a profile's reviewed list (spec §8.2).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct ListedToken {
-    /// `0x` + 40 hex
+    /// EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
     pub address: String,
     pub symbol: String,
     pub decimals: u8,
@@ -561,9 +765,9 @@ pub struct ListedToken {
 
 /// The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor
 /// against a runaway quote, never a value assumed of a chain.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct Limits {
     /// decimal wei
     pub max_fee_per_gas: String,
@@ -646,12 +850,12 @@ impl std::fmt::Debug for SdkConfig {
     }
 }
 
-/// `0x` and 64 hex digits.
-/// `0x` + 40 hex.
+/// `0x` and 40 hex digits.
 pub(crate) fn is_address_hex(s: &str) -> bool {
     s.len() == 42 && s.starts_with("0x") && s.bytes().skip(2).all(|b| b.is_ascii_hexdigit())
 }
 
+/// `0x` and 64 hex digits.
 pub(crate) fn is_word_hex(s: &str) -> bool {
     s.len() == 66 && s.starts_with("0x") && s.bytes().skip(2).all(|b| b.is_ascii_hexdigit())
 }

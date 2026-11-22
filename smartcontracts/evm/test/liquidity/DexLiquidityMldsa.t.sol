@@ -50,7 +50,7 @@ contract DexLiquidityMldsaTest is UARegistryBase {
         vm.skip(bytes(clientkeys).length == 0);
         super.setUp();
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(ML65, address(new MldsaVerifier(ML65, address(0), "", "")), 5_950_000);
+        c[0] = UARegistry.KindConfig(ML65, address(new MldsaVerifier(ML65, address(0), "", "")), 5_950_000, false, 0);
         mreg = _deploy(REG_M, chainUidA, address(0), false, BUDGET, address(0), true, c);
         bytes memory pk = _ml(string.concat("keygen 65 ", _bare(SEED)));
         assertEq(pk.length, 1952, "an ML-DSA-65 key");

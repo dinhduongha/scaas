@@ -34,9 +34,23 @@ pub struct GwChain {
     pub guard: Arc<crate::guard::Guard>,
 }
 
+/// Plan T28 (`POST /v1/ops`): a family chain the gateway serves, by its key (`sui:testnet`): its adapter (the build and the
+/// simulation the lanes run), the node store its `~gateway` jobs go to, the registered tokens.
+#[derive(Clone)]
+pub struct GwFamily {
+    pub adapter: Arc<dyn crate::adapter::ChainAdapter>,
+    pub store: crate::store::Store,
+    /// the chain's registered tokens in the family's canonical form, refreshed as the lanes' (none while the chain is paused)
+    pub tokens: Arc<RwLock<Vec<String>>>,
+    /// the lanes' breaker: open ⇒ 503 before the simulation (R55)
+    pub breaker: Option<Arc<Mutex<Breaker>>>,
+}
+
 #[derive(Clone, Default)]
 pub struct AppState {
     pub chains: Arc<HashMap<u64, GwChain>>,
+    /// plan T28: the family chains of `POST /v1/ops`, by chain key
+    pub families: Arc<HashMap<String, GwFamily>>,
 }
 
 /// `POST /v1/metatx {chain, token, contract?, m, signature}`: an address `MetaTransfer`. No token and no mandate wallet has that
@@ -67,6 +81,13 @@ pub struct UaReq {
 #[derive(Deserialize)]
 pub struct OpReq {
     pub chain: u64,
+    pub op: Value,
+}
+
+/// `POST /v1/ops {chain, op}` (gateway.md): `chain` a family chain key, `op` the job API's `signed_op` payload.
+#[derive(Deserialize)]
+pub struct OpsReq {
+    pub chain: String,
     pub op: Value,
 }
 
@@ -177,6 +198,8 @@ pub fn router(state: AppState) -> Router {
             "/v1/op",
             post(post_op).layer(DefaultBodyLimit::max(OP_BODY_MAX)),
         )
+        .route("/v1/ops", post(post_ops))
+        .route("/v1/intents/{intent_id}", get(get_intent))
         .merge(dex_routes())
         .layer(DefaultBodyLimit::max(BODY_MAX))
         .layer(GlobalConcurrencyLimitLayer::new(32))
@@ -341,6 +364,217 @@ async fn post_op(State(s): State<AppState>, Json(r): Json<OpReq>) -> Reply {
         return e;
     }
     relay(c, w).await
+}
+
+// ------------------------------------------------------------------- `/v1/ops` (plan T28, gateway.md)
+
+/// NODE-GW-06's error contract: `{error, code, detail}`, `error` the code, the detail bounded and free of endpoint URLs.
+fn refuse(status: StatusCode, code: &str, detail: impl ToString) -> Reply {
+    let d: String = crate::chain::redact_urls(&detail.to_string())
+        .chars()
+        .take(300)
+        .collect();
+    (
+        status,
+        Json(json!({"error": code, "code": code, "detail": d})),
+    )
+}
+
+fn payload_refused(detail: impl ToString) -> Reply {
+    refuse(StatusCode::BAD_REQUEST, "BAD_PAYLOAD", detail)
+}
+
+/// `POST /v1/ops`: the accept checks of gateway.md in order, each refusal by its code, then a `signed_op` job in `~gateway`
+/// (origin key = the node's digest = `intent_id`), which the family's lanes lease through the same queue calls as the pull path
+/// (`external_pull::OwnQueue`). A duplicate answers `200` with the stored state.
+async fn post_ops(State(s): State<AppState>, Json(r): Json<OpsReq>) -> Reply {
+    use crate::adapter::Family;
+    // 1. the chain is served
+    let Some(c) = s.families.get(&r.chain) else {
+        return refuse(
+            StatusCode::BAD_REQUEST,
+            "UNKNOWN_CHAIN",
+            "chain not served by this gateway",
+        );
+    };
+    let open = c
+        .breaker
+        .as_ref()
+        .and_then(|k| k.lock().ok().and_then(|mut k| k.open(now())));
+    if let Some(b) = open {
+        return refuse(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "BREAKER_OPEN",
+            format!("circuit breaker open: {b}"),
+        );
+    }
+    let family = c.adapter.family();
+    // NET-TON-14 (blocking): no gateway path reaches a GRAM lane until the node half of the forward cap is in code
+    if family == Family::Ton {
+        return refuse(
+            StatusCode::BAD_REQUEST,
+            "FAMILY_NOT_SUPPORTED",
+            "GRAM: no gateway path reaches a lane until the node half of the forward cap is in code (NET-TON-14); the pull path only",
+        );
+    }
+    // 2. the op's family is the chain's
+    if Family::parse(r.op["family"].as_str().unwrap_or_default()) != Some(family) {
+        return payload_refused("op.family is not the chain's family");
+    }
+    // 3. the payload decodes as the lanes read it; the node's digest, a client digest that differs refused
+    let job: crate::external_pull::Job =
+        match serde_json::from_value(json!({"id": 0, "kind": "signed_op", "op": r.op})) {
+            Ok(j) => j,
+            Err(e) => return payload_refused(e),
+        };
+    let digest = match c.adapter.digest(&job).await {
+        Ok(Some(d)) => d,
+        Ok(None) => {
+            return payload_refused("no digest: the op names none and the family computes none")
+        }
+        Err(SimError::Revert(e)) => return payload_refused(e),
+        Err(SimError::Transport(e)) => {
+            return refuse(StatusCode::SERVICE_UNAVAILABLE, "RPC_UNAVAILABLE", e)
+        }
+    };
+    if let Some(d) = r.op["digest"].as_str() {
+        if !d.eq_ignore_ascii_case(&format!("{digest:#x}")) {
+            return payload_refused("op.digest is not the node's");
+        }
+    }
+    // 4. the token or asset is registered
+    let contract = r.op["contract"].as_str().unwrap_or_default();
+    if !c
+        .tokens
+        .read()
+        .map(|t| t.iter().any(|x| x == contract))
+        .unwrap_or(false)
+    {
+        return refuse(
+            StatusCode::BAD_REQUEST,
+            "TOKEN_NOT_SERVED",
+            "contract not served by this relayer",
+        );
+    }
+    // 5. now < valid_until <= now + max_valid_for_secs
+    let valid_until = c.adapter.job_valid_until(&job);
+    let max = crate::mesh::accept::MeshParams::default().max_valid_for_secs;
+    if valid_until <= now() || valid_until > now().saturating_add(max) {
+        return refuse(
+            StatusCode::BAD_REQUEST,
+            "EXPIRED",
+            format!("valid_until must be in (now, now + {max} s]"),
+        );
+    }
+    // 6.–8. the family's verify, the bound relayer and the simulation: the lane's own build (a signature the node cannot check
+    // is the simulation's to judge, NET-ALL-14), on lane 0
+    let built = c.adapter.build(&job, 0).await;
+    match built {
+        Ok(_) => {}
+        Err(SimError::Transport(e)) => {
+            return refuse(StatusCode::SERVICE_UNAVAILABLE, "RPC_UNAVAILABLE", e)
+        }
+        Err(SimError::Revert(e)) => {
+            let code = ["BAD_SIGNATURE", "RELAYER_NOT_OURS", "TOKEN_NOT_SERVED"]
+                .into_iter()
+                .find(|k| e.starts_with(k))
+                .unwrap_or("SIMULATION_REVERT");
+            return refuse(StatusCode::UNPROCESSABLE_ENTITY, code, e);
+        }
+    }
+    // 9. the job, durable (G2: one live job per digest)
+    let intent = format!("{digest:#x}");
+    let payload = serde_json::to_vec(&job.op).expect("a Value serialises");
+    let new = crate::store::NewJob {
+        namespace: crate::external_pull::GATEWAY_NAMESPACE.into(),
+        origin: gateway_origin(&intent),
+        client_ref: None,
+        chain_key: r.chain.clone(),
+        kind: "signed_op".into(),
+        digest: Some(digest.0),
+        payload_hash: alloy::primitives::keccak256(&payload).0,
+        payload,
+        valid_until: i64::try_from(valid_until).unwrap_or(i64::MAX),
+        lane_hint: None,
+        bus_scope: "restricted".into(),
+        private_window_secs: 0,
+    };
+    use crate::store::Accept;
+    match c.store.accept(&new, crate::store::now_ms()).await {
+        Ok(Accept::Created(_)) => (
+            StatusCode::ACCEPTED,
+            Json(json!({"status": "queued", "intent_id": intent})),
+        ),
+        Ok(Accept::Existing(row)) => (
+            StatusCode::OK,
+            Json(json!({"status": row.state.as_str(), "intent_id": intent})),
+        ),
+        Ok(Accept::DuplicateDigest) => (
+            StatusCode::OK,
+            Json(json!({"status": "queued", "intent_id": intent})),
+        ),
+        Ok(Accept::Quota) => refuse(
+            StatusCode::TOO_MANY_REQUESTS,
+            "QUOTA",
+            "the gateway's live jobs are at their cap",
+        ),
+        Ok(Accept::Expired) => refuse(StatusCode::BAD_REQUEST, "EXPIRED", "valid_until passed"),
+        Ok(a) => payload_refused(format!("{a:?}")),
+        Err(e) => refuse(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "SUBMIT_BUSY",
+            format!("store: {e}"),
+        ),
+    }
+}
+
+fn gateway_origin(intent: &str) -> crate::store::Origin {
+    crate::store::Origin {
+        scope: "gateway".into(),
+        producer: "gateway".into(),
+        key: intent.to_ascii_lowercase(),
+        generation: 0,
+    }
+}
+
+/// `GET /v1/intents/{intent_id}`: a `~gateway` row only (gateway.md); any other id, unknown or purged, is 404.
+async fn get_intent(
+    State(s): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Reply {
+    let not_found = || {
+        refuse(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "no gateway intent with this id",
+        )
+    };
+    // every family chain shares one store; the first answers
+    let Some(c) = s.families.values().next() else {
+        return not_found();
+    };
+    match c
+        .store
+        .job_by_origin(
+            crate::external_pull::GATEWAY_NAMESPACE,
+            &gateway_origin(&id),
+        )
+        .await
+    {
+        Ok(Some(r)) => {
+            let mut v = json!({"intent_id": id.to_ascii_lowercase(), "state": r.state.as_str(), "updated_at": r.updated_at});
+            if let Some(h) = r.tx_hash {
+                v["tx_hash"] = json!(h);
+            }
+            (StatusCode::OK, Json(v))
+        }
+        Ok(None) => not_found(),
+        Err(e) => refuse(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "SUBMIT_BUSY",
+            format!("store: {e}"),
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------------- DEX (R35)
@@ -642,6 +876,7 @@ mod tests {
         };
         let app = router(AppState {
             chains: Arc::new([(7, gw)].into_iter().collect()),
+            ..Default::default()
         });
         let body = json!({"chain": 7, "token": format!("{token:#x}"), "auth": {"keyData": "0x", "signature": "0x00", "members": []}, "m": {
             "from": format!("{:#x}", B256::ZERO), "to": format!("{:#x}", B256::ZERO), "value": "1",
@@ -705,6 +940,7 @@ mod tests {
         };
         let app = router(AppState {
             chains: Arc::new([(7, gw)].into_iter().collect()),
+            ..Default::default()
         });
         let body = json!({"chain": 7, "token": format!("{token:#x}"), "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)),
             "members": []}, "m": {
@@ -769,6 +1005,7 @@ mod tests {
         };
         let app = router(AppState {
             chains: Arc::new([(7, gw)].into_iter().collect()),
+            ..Default::default()
         });
         let body = json!({"chain": 7, "token": format!("{token:#x}"), "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)),
             "members": []}, "m": {
@@ -959,7 +1196,7 @@ mod tests {
             rpc_urls: vec![url],
             chain_uid: Some(d["salt"].as_str().unwrap().parse().unwrap()),
             account_factory: Some(FACTORY),
-            ua_registry: Some(REGISTRY),
+            ua_registries: vec![REGISTRY],
             dex: Some(DEX),
             ..Default::default()
         };
@@ -980,6 +1217,7 @@ mod tests {
         (
             router(AppState {
                 chains: Arc::new([(cfg.evm_chain_number, gw)].into_iter().collect()),
+                ..Default::default()
             }),
             rx,
             log,
@@ -1346,5 +1584,340 @@ mod tests {
             .await
             .1
             .contains("CONTRACT_KIND_MISMATCH"));
+    }
+}
+
+/// Plan T28: `POST /v1/ops` and `GET /v1/intents/{id}` against a family adapter that builds as told, on a store of its own.
+#[cfg(test)]
+mod ops_tests {
+    use super::*;
+    use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
+    use crate::external_pull::Job;
+    use alloy::primitives::B256;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    const TOKEN: &str = "wasm1token";
+
+    /// A family chain whose build answers `build` (`None`: built), whose node digest is `digest` (`None`: the op's own field).
+    struct Fam {
+        family: Family,
+        digest: Option<B256>,
+        build: Option<SimError>,
+    }
+
+    #[async_trait::async_trait]
+    impl ChainAdapter for Fam {
+        fn family(&self) -> Family {
+            self.family
+        }
+        fn chain_key(&self) -> &str {
+            "cosmos:t"
+        }
+        fn lanes(&self) -> &[Lane] {
+            &[]
+        }
+        async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
+            Ok(self.digest.or_else(|| crate::submit::job_digest(job)))
+        }
+        async fn build(&self, job: &Job, _: usize) -> std::result::Result<Built, SimError> {
+            match &self.build {
+                None => Ok(Built {
+                    job_id: job.id,
+                    body: vec![],
+                    valid_until: now() + 600,
+                    meta: Value::Null,
+                }),
+                Some(SimError::Revert(r)) => Err(SimError::Revert(r.clone())),
+                Some(SimError::Transport(r)) => Err(SimError::Transport(r.clone())),
+            }
+        }
+        async fn sign(&self, _: Built, _: usize, _: u64) -> anyhow::Result<Signed> {
+            unreachable!()
+        }
+        async fn submit(&self, _: &Signed) -> anyhow::Result<()> {
+            unreachable!()
+        }
+        async fn tx_status(&self, _: &str) -> anyhow::Result<TxStatus> {
+            unreachable!()
+        }
+        async fn sequence(&self, _: usize) -> anyhow::Result<u64> {
+            unreachable!()
+        }
+        async fn final_head(&self) -> anyhow::Result<Option<Head>> {
+            unreachable!()
+        }
+        async fn block_hash(&self, _: u64) -> anyhow::Result<String> {
+            unreachable!()
+        }
+        async fn events(&self, _: u64, _: u64, _: &[String]) -> anyhow::Result<Vec<Value>> {
+            unreachable!()
+        }
+    }
+
+    fn digest() -> String {
+        format!("0x{}", "77".repeat(32))
+    }
+
+    /// The passing op: every check below changes one field of it.
+    fn op() -> Value {
+        json!({"family": "cosmos", "contract": TOKEN, "from": "wasm1from", "op_kind": "pay", "payload": "0x01",
+            "signature": "0x02", "public_key": null, "auth_kind": "seed", "digest": digest(), "valid_until": now() + 600})
+    }
+
+    async fn app_with(fams: Vec<(&str, Fam)>) -> (Router, crate::store::Store) {
+        let st = crate::external_pull::tests::own_store("cosmos:t", "cosmos", "pk:aa").await;
+        let families = fams
+            .into_iter()
+            .map(|(k, a)| {
+                (
+                    k.to_string(),
+                    GwFamily {
+                        adapter: Arc::new(a),
+                        store: st.clone(),
+                        tokens: Arc::new(RwLock::new(vec![TOKEN.to_string()])),
+                        breaker: None,
+                    },
+                )
+            })
+            .collect();
+        let s = AppState {
+            families: Arc::new(families),
+            ..Default::default()
+        };
+        (router(s), st)
+    }
+
+    fn fam(family: Family) -> Fam {
+        Fam {
+            family,
+            digest: None,
+            build: None,
+        }
+    }
+
+    async fn send(app: &Router, method: &str, uri: &str, body: Vec<u8>) -> (StatusCode, Value) {
+        let req = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+        let r = app.clone().oneshot(req).await.unwrap();
+        let st = r.status();
+        let b = axum::body::to_bytes(r.into_body(), 1 << 20).await.unwrap();
+        (st, serde_json::from_slice(&b).unwrap_or(Value::Null))
+    }
+
+    async fn ops(app: &Router, chain: &str, op: &Value) -> (StatusCode, Value) {
+        send(
+            app,
+            "POST",
+            "/v1/ops",
+            json!({"chain": chain, "op": op}).to_string().into_bytes(),
+        )
+        .await
+    }
+
+    fn code(r: &(StatusCode, Value)) -> &str {
+        r.1["code"].as_str().unwrap_or("-")
+    }
+
+    /// gateway.md's accept checks in order, each refusal by its code (the passing op is the control of each), then `202
+    /// {status, intent_id}`, the duplicate `200` with the stored state, and the intent read; nothing is stored on a refusal.
+    #[tokio::test]
+    async fn ops_accept_checks_in_order_each_by_its_code() {
+        let (app, st) = app_with(vec![("cosmos:t", fam(Family::Cosmos))]).await;
+        let with = |f: &str, v: Value| {
+            let mut o = op();
+            o[f] = v;
+            o
+        };
+        assert_eq!(
+            code(&ops(&app, "cosmos:none", &op()).await),
+            "UNKNOWN_CHAIN"
+        );
+        assert_eq!(
+            code(&ops(&app, "cosmos:t", &with("family", json!("sui"))).await),
+            "BAD_PAYLOAD"
+        );
+        let mut no_digest = op();
+        no_digest.as_object_mut().unwrap().remove("digest");
+        assert_eq!(
+            code(&ops(&app, "cosmos:t", &no_digest).await),
+            "BAD_PAYLOAD"
+        );
+        assert_eq!(
+            code(&ops(&app, "cosmos:t", &with("contract", json!("wasm1other"))).await),
+            "TOKEN_NOT_SERVED"
+        );
+        assert_eq!(
+            code(&ops(&app, "cosmos:t", &with("valid_until", json!(now() - 1))).await),
+            "EXPIRED"
+        );
+        assert_eq!(
+            code(&ops(&app, "cosmos:t", &with("valid_until", json!(now() + 7200))).await),
+            "EXPIRED",
+            "too long"
+        );
+        // the order: an earlier check answers first
+        let two = with("contract", json!("wasm1other"));
+        let mut first = two.clone();
+        first["family"] = json!("sui");
+        assert_eq!(code(&ops(&app, "cosmos:t", &first).await), "BAD_PAYLOAD");
+        let mut late = two.clone();
+        late["valid_until"] = json!(now() - 1);
+        assert_eq!(
+            code(&ops(&app, "cosmos:t", &late).await),
+            "TOKEN_NOT_SERVED"
+        );
+        assert!(
+            st.queued_jobs("~gateway", "cosmos:t", 10)
+                .await
+                .unwrap()
+                .is_empty(),
+            "no refusal stores a job"
+        );
+        // accepted, then the duplicate, then the intent
+        let r = ops(&app, "cosmos:t", &op()).await;
+        assert_eq!(
+            (r.0, r.1["status"].as_str(), r.1["intent_id"].as_str()),
+            (
+                StatusCode::ACCEPTED,
+                Some("queued"),
+                Some(digest().as_str())
+            )
+        );
+        let rows = st.queued_jobs("~gateway", "cosmos:t", 10).await.unwrap();
+        assert_eq!(
+            (rows.len(), rows[0].kind.as_str(), rows[0].digest.as_deref()),
+            (1, "signed_op", Some(&[0x77; 32][..]))
+        );
+        let again = ops(&app, "cosmos:t", &op()).await;
+        assert_eq!(
+            (again.0, again.1["status"].as_str()),
+            (StatusCode::OK, Some("queued"))
+        );
+        let got = send(&app, "GET", &format!("/v1/intents/{}", digest()), vec![]).await;
+        assert_eq!(
+            (got.0, got.1["state"].as_str()),
+            (StatusCode::OK, Some("queued"))
+        );
+        let none = send(
+            &app,
+            "GET",
+            &format!("/v1/intents/0x{}", "78".repeat(32)),
+            vec![],
+        )
+        .await;
+        assert_eq!(none.0, StatusCode::NOT_FOUND);
+    }
+
+    /// Check 3: the node's digest is the key; a client digest that differs is refused, the same one and none are taken.
+    #[tokio::test]
+    async fn a_client_digest_other_than_the_nodes_is_bad_payload() {
+        let node = B256::repeat_byte(0x55);
+        let (app, _) = app_with(vec![(
+            "cosmos:t",
+            Fam {
+                digest: Some(node),
+                ..fam(Family::Cosmos)
+            },
+        )])
+        .await;
+        assert_eq!(code(&ops(&app, "cosmos:t", &op()).await), "BAD_PAYLOAD");
+        let mut same = op();
+        same["digest"] = json!(format!("{node:#x}"));
+        let r = ops(&app, "cosmos:t", &same).await;
+        assert_eq!(
+            (r.0, r.1["intent_id"].as_str()),
+            (StatusCode::ACCEPTED, Some(format!("{node:#x}").as_str()))
+        );
+    }
+
+    /// Checks 6–8: the build's refusal by its code (the named ones kept, any other `SIMULATION_REVERT`), an RPC failure 503.
+    #[tokio::test]
+    async fn the_build_refusal_is_named_and_a_transport_failure_is_503() {
+        for (build, want) in [
+            (
+                SimError::Revert("BAD_SIGNATURE: ed25519".into()),
+                "BAD_SIGNATURE",
+            ),
+            (
+                SimError::Revert("RELAYER_NOT_OURS: wasm1x".into()),
+                "RELAYER_NOT_OURS",
+            ),
+            (SimError::Revert("out of gas".into()), "SIMULATION_REVERT"),
+            (SimError::Transport("timeout".into()), "RPC_UNAVAILABLE"),
+        ] {
+            let (app, st) = app_with(vec![(
+                "cosmos:t",
+                Fam {
+                    build: Some(build),
+                    ..fam(Family::Cosmos)
+                },
+            )])
+            .await;
+            assert_eq!(code(&ops(&app, "cosmos:t", &op()).await), want);
+            assert!(st
+                .queued_jobs("~gateway", "cosmos:t", 10)
+                .await
+                .unwrap()
+                .is_empty());
+        }
+    }
+
+    /// NET-TON-14 (blocking): a GRAM chain is served but refused by name, before anything is read; every other family's
+    /// control passes.
+    #[tokio::test]
+    async fn ton_is_refused_by_name() {
+        let (app, _) = app_with(vec![
+            ("ton:t", fam(Family::Ton)),
+            ("cosmos:t", fam(Family::Cosmos)),
+        ])
+        .await;
+        let mut t = op();
+        t["family"] = json!("ton");
+        assert_eq!(code(&ops(&app, "ton:t", &t).await), "FAMILY_NOT_SUPPORTED");
+        assert_eq!(
+            ops(&app, "cosmos:t", &op()).await.0,
+            StatusCode::ACCEPTED,
+            "control"
+        );
+    }
+
+    /// The body cap (64 KiB, read past it never) and a body nested past serde_json's depth limit: 4xx, never a crash.
+    #[tokio::test]
+    async fn ops_body_cap_and_depth() {
+        let (app, _) = app_with(vec![("cosmos:t", fam(Family::Cosmos))]).await;
+        let sized = |len: usize| {
+            let head = br#"{"chain":"cosmos:none","op":{"pad":""#.to_vec();
+            let tail = br#""}}"#;
+            let mut b = head;
+            b.resize(len - tail.len(), b'x');
+            b.extend_from_slice(tail);
+            b
+        };
+        assert_eq!(
+            send(&app, "POST", "/v1/ops", sized(BODY_MAX)).await.0,
+            StatusCode::BAD_REQUEST,
+            "read: unknown chain"
+        );
+        assert_eq!(
+            send(&app, "POST", "/v1/ops", sized(BODY_MAX + 1)).await.0,
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+        let deep = [
+            &br#"{"chain":"cosmos:t","op":"#[..],
+            &[b'['; 4096],
+            &[b']'; 4096],
+            b"}",
+        ]
+        .concat();
+        assert!(send(&app, "POST", "/v1/ops", deep)
+            .await
+            .0
+            .is_client_error());
     }
 }

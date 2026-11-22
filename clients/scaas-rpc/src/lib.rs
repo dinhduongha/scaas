@@ -9,6 +9,10 @@
 pub mod algorand;
 #[cfg(feature = "aptos")]
 pub mod aptos;
+#[cfg(feature = "bitcoin")]
+pub mod bitcoin;
+#[cfg(feature = "ton")]
+pub mod boc;
 #[cfg(feature = "cosmos")]
 pub mod cosmos;
 pub mod endpoint;
@@ -28,6 +32,8 @@ pub mod pool;
 pub mod solana;
 #[cfg(feature = "soroban")]
 pub mod soroban;
+#[cfg(feature = "substrate")]
+pub mod substrate;
 #[cfg(feature = "sui")]
 pub mod sui;
 #[cfg(feature = "ton")]

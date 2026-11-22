@@ -380,7 +380,7 @@ contract ZetherS3VectorsTest is Test {
     function test_s3PopRegisters() public {
         string memory j = vm.readFile(string.concat(DIR, "r33_keys.json"));
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
-        k[0] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
+        k[0] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000, false, 0);
         string memory key = ".bls12381.keys[0]";
         uint16 kind = uint16(j.readUint(string.concat(key, ".pop.kind")));
         bytes memory y = j.readBytes(string.concat(key, ".Y"));
@@ -389,13 +389,7 @@ contract ZetherS3VectorsTest is Test {
         for (uint256 i; i < 2; ++i) {
             vm.chainId(i == 0 ? 31337 : 7622);
             address at = address(uint160(0xaa00 + i));
-            deployCodeTo(
-                "UARegistry.sol:UARegistry",
-                abi.encode(
-                    keccak256(abi.encode("s3 chain", i)), address(0), false, uint64(12_000_000), address(0), false, k
-                ),
-                at
-            );
+            deployCodeTo("UARegistry.sol:UARegistry", _regArgs(keccak256(abi.encode("s3 chain", i)), k), at);
             IUARegistry reg = IUARegistry(at);
             assertEq(reg.uaOf(kind, y), ua);
             bytes32 kh = reg.kemRecordHash(ua, 0, UACall.kem(""));
@@ -408,5 +402,10 @@ contract ZetherS3VectorsTest is Test {
             assertEq(UACall.register(reg, kind, y, UACall.attrs("", 0, ""), pop, ""), ua);
             assertEq(reg.keyOf(ua), y);
         }
+    }
+
+    /// The registry's constructor arguments on chain `uid` (owner X1: `txGasCap` 2^24, a test chain under EIP-7825).
+    function _regArgs(bytes32 uid, UARegistry.KindConfig[] memory k) internal pure returns (bytes memory) {
+        return abi.encode(uid, address(0), false, uint64(12_000_000), uint64(1 << 24), address(0), false, k);
     }
 }

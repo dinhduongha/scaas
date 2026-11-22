@@ -42,7 +42,7 @@ impl Cosmos {
 
     /// [`Cosmos::rpc_at`] without the identity check (the CometBFT probe's own reads).
     async fn comet(&self, i: usize, path: &str) -> Result<Value, FamilyError> {
-        let (status, v) = json_at(&self.rpc, i, reqwest::Method::GET, path, None).await?;
+        let (status, v) = json_at(&self.rpc, i, reqwest::Method::GET, path, None, None).await?;
         if status != 200 || v.get("error").is_some_and(|e| !e.is_null()) {
             return Err(FamilyError::Rpc {
                 method: path.into(),
@@ -57,7 +57,21 @@ impl Rest {
     /// GET `path` on gateway `i`: the status and the JSON (`null` for no body).
     pub async fn get(&self, i: usize, path: &str) -> Result<(u16, Value), FamilyError> {
         crate::family::admit_first(&self.client, self, i).await?;
-        json_at(&self.client, i, reqwest::Method::GET, path, None).await
+        json_at(&self.client, i, reqwest::Method::GET, path, None, None).await
+    }
+
+    /// [`Rest::get`] at block `height`: the request carries `x-cosmos-block-height`, so the gateway answers from the state at
+    /// that height (a read set at one height, SDK plan T24.cosmos).
+    pub async fn get_at_height(
+        &self,
+        i: usize,
+        path: &str,
+        height: u64,
+    ) -> Result<(u16, Value), FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
+        let h = height.to_string();
+        let header = Some((HEIGHT, h.as_str()));
+        json_at(&self.client, i, reqwest::Method::GET, path, None, header).await
     }
 
     /// POST `body` (JSON) to `path` on gateway `i`: the status and the JSON.
@@ -75,12 +89,12 @@ impl Rest {
             ))
         })?;
         crate::family::admit_first(&self.client, self, i).await?;
-        json_at(&self.client, i, reqwest::Method::POST, path, Some(b)).await
+        json_at(&self.client, i, reqwest::Method::POST, path, Some(b), None).await
     }
 
     /// A 2xx answer of gateway `i` to `path`, else the endpoint's failure `kind`.
     async fn ok(&self, i: usize, path: &str, kind: FailureKind) -> Result<Value, EndpointFailure> {
-        match json_at(&self.client, i, reqwest::Method::GET, path, None).await {
+        match json_at(&self.client, i, reqwest::Method::GET, path, None, None).await {
             Ok((200..=299, v)) => Ok(v),
             Ok((s, _)) => Err(EndpointFailure::new(i, kind, &format!("{path}: HTTP {s}"))),
             Err(FamilyError::Failure(f)) => Err(f),
@@ -101,9 +115,18 @@ async fn json_at(
     method: reqwest::Method,
     path: &str,
     body: Option<Vec<u8>>,
+    header: Option<(&str, &str)>,
 ) -> Result<(u16, Value), FamilyError> {
     let (status, b) = c
-        .raw_any_at(i, method, path, body, "application/json", ANSWER_MAX)
+        .raw_any_at(
+            i,
+            method,
+            path,
+            body,
+            "application/json",
+            ANSWER_MAX,
+            header,
+        )
         .await?;
     if b.iter().all(u8::is_ascii_whitespace) {
         return Ok((status, Value::Null));
@@ -113,6 +136,8 @@ async fn json_at(
     Ok((status, v))
 }
 
+/// The Cosmos SDK gateway's height header: a query answered from the state at that block.
+pub const HEIGHT: &str = "x-cosmos-block-height";
 const NODE_INFO: &str = "/cosmos/base/tendermint/v1beta1/node_info";
 const LATEST: &str = "/cosmos/base/tendermint/v1beta1/blocks/latest";
 

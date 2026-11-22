@@ -1,0 +1,5 @@
+# t23 mutants (name | outcome | commit | test | first failure line)
+the 24-word rule restored | killed | 4a4f4aaac | ../../scripts/capped cargo test --locked --offline -j2 --test r33_keys -- --exact bip39_seed_and_word_counts | panicked at tests/r33_keys.rs:44:60:
+the 24-word rule restored (the SDK's row) | killed | 4a4f4aaac | ../../scripts/capped cargo test --locked --offline -j2 --features zether --test confidential -- --exact short_seed_zether_key_is_the_provers | panicked at tests/confidential.rs:1421:65:
+no short-seed flag | killed | 4a4f4aaac | ../../scripts/capped cargo test --locked --offline -j2 --test r33_keys -- --exact bip39_seed_and_word_counts | panicked at tests/r33_keys.rs:45:5:
+3 mutants, 3 killed, 0 survived, 0 not loaded, 0 other failure

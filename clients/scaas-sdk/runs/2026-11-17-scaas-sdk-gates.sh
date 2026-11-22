@@ -20,7 +20,12 @@ TOOLS="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/scratchpad/tools"
 export PATH="$TOOLS/uniffi/bin:$PATH"
 C="--locked --offline ${J:--j2}"
 cap="$W/scripts/capped"
-F="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots"
+F="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton,substrate"
+# with the test feature `vectors` (pqchat-core T1): built by clippy, run only by its own test (a `vectors` build refuses
+# scaas-ua key handles until a test unlocks them, so the whole suite stays without it)
+V="$F,vectors"
+# T41.evm step 0: account, wallet and every non-EVM family without `evm` (no alloy provider in the graph)
+NE="vault,account,wallet,file-store,mlock,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native"
 SETS_CMD=""
 for s in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do
     m="--no-default-features --features vault,account,wallet,pqz,pqz-set-$s"
@@ -34,10 +39,13 @@ MCHECK='python3 -I clients/scaas-sdk/runs/test_mutants_lib.py || exit 1; bad=0; 
 STEPS=(
     "sdk-test|clients/scaas-sdk|$cap cargo test $C --features $F"
     "sdk-min|clients/scaas-sdk|$cap cargo test $C --no-default-features --features vault,file-store"
+    "sdk-noevm|clients/scaas-sdk|$cap cargo test $C --no-default-features --features $NE"
+    "sdk-clippy-noevm|clients/scaas-sdk|$cap cargo clippy $C --all-targets --no-default-features --features $NE -- -D warnings"
     "sdk-sets|clients/scaas-sdk|$SETS_CMD"
-    "sdk-clippy|clients/scaas-sdk|$cap cargo clippy $C --all-targets --features $F -- -D warnings"
+    "sdk-clippy|clients/scaas-sdk|$cap cargo clippy $C --all-targets --features $V -- -D warnings"
+    "sdk-vectors|clients/scaas-sdk|$cap cargo test $C --features $V --test pqchat_keys --test app_core_vault_rows"
     "sdk-e2e|clients/scaas-sdk|CAPPED_MEM=6G $cap cargo test $C --features $F --test e2e -- --ignored"
-    "sdk-wasm|clients/scaas-sdk|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet && $cap cargo clippy $C --target wasm32-unknown-unknown --no-default-features --features $F,wasm -- -D warnings && $cap cargo clippy $C --all-targets --features $F,wasm -- -D warnings"
+    "sdk-wasm|clients/scaas-sdk|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet,evm && $cap cargo clippy $C --target wasm32-unknown-unknown --no-default-features --features $F,wasm -- -D warnings && $cap cargo clippy $C --all-targets --features $F,wasm -- -D warnings"
     "sdk-deny|clients/scaas-sdk|$cap cargo deny --all-features check && $cap cargo audit"
     "ua-test|clients/ua-rs|$cap cargo test $C"
     "ua-clippy|clients/ua-rs|$cap cargo clippy $C --all-targets -- -D warnings"
@@ -57,7 +65,12 @@ STEPS=(
     "sdk-uniffi|clients/scaas-sdk|$cap cargo test $C --features $F,uniffi --test binding && $cap cargo test $C --features $F,sync-api --test binding && $cap cargo clippy $C --all-targets --features $F,uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features $F,sync-api -- -D warnings"
     "sdk-opaque|clients/scaas-sdk|$cap cargo test $C --features $F,opaque-calls --test wallet_ops"
     "ua-vectors|clients/ua-rs|$cap cargo clippy $C --all-targets --features vectors,roots -- -D warnings && $cap cargo test $C --features vectors,roots"
+    "ua-appcore|clients/ua-rs|$cap cargo clippy $C --all-targets --features app-core,vectors -- -D warnings && $cap cargo test $C --features app-core,vectors --test app_core && python3 -I scripts/gen_app_refusals.py --check"
     "ua-verify-only|clients/ua-rs|$cap cargo test $C --no-default-features"
+    # plan T42: the core with no family (every UA kind, the seed standards, FeatureMissing) and its clippy; then none, each
+    # fam-<row> alone and all on, in release, the size probe's bytes (runs/fam-sizes.sh prints `RESULT` rows for the summary)
+    "ua-core|clients/ua-rs|$cap cargo clippy $C --all-targets --no-default-features --features wallet -- -D warnings && $cap cargo test $C --no-default-features --features wallet --lib --test core_only --test wallet_pairing --test bls_multi --test wallet_webauthn --test bip85 --test wallet_pq"
+    "ua-fam|clients/ua-rs|bash runs/fam-sizes.sh | sed 's/^/RESULT /'"
     "ua-wallet-rows|clients/ua-rs|$cap cargo test $C --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows && git diff --exit-code -- ../../smartcontracts/vectors"
     "rpc-clippy|clients/scaas-rpc|$cap cargo clippy $C --all-targets --all-features -- -D warnings"
     "rpc-wasm|clients/scaas-rpc|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features evm,node-client"
@@ -71,8 +84,16 @@ STEPS=(
     "gas-gen|clients/scaas-sdk/gas|python3 -I generate.py --check && python3 -I test_generate.py"
     "docs|.|python3 scripts/docs_check.py check && python3 scripts/test_docs_check.py"
     "features|.|python3 scripts/check_test_features.py && cd clients/scaas-sdk && $cap cargo test $C --test feature_tree"
-    "sdk-raw|clients/scaas-sdk|$cap cargo test $C --lib --features $F,native-networks,raw-native && $cap cargo clippy $C --all-targets --features $F,native-networks,raw-native -- -D warnings"
+    "sdk-raw|clients/scaas-sdk|$cap cargo test $C --lib --features $F,native-networks,raw-native && $cap cargo clippy $C --all-targets --features $V,native-networks,raw-native -- -D warnings"
     "mutants-check|.|$MCHECK"
+    # plan T22: the CLI `scaas`, its release build and its dev-profiles build (the CI job scaas-cli)
+    "cli|clients/scaas-cli|$cap cargo test $C && $cap cargo test $C --features dev-profiles && $cap cargo clippy $C --all-targets --features dev-profiles -- -D warnings"
+    # plan T28: the node's suite and clippy (6 GB, alone: AGENTS.md), and its e2e (its own anvil, ignored tests, 10 at a
+    # time: 25 in parallel passed the 6 GB cap, one at a time is too slow; owner 2026-11-22; CI keeps its own command)
+    "node-test|scaas-node|CAPPED_MEM=6G $cap cargo test $C && CAPPED_MEM=6G $cap cargo clippy $C --all-targets -- -D warnings"
+    "node-e2e|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e -- --ignored --test-threads=10"
+    # plan T22's gap (a): the SDK e2e's chain driven through the CLI (its own anvil, stopped after)
+    "cli-e2e|clients/scaas-cli|$cap cargo test $C --features dev-profiles --test e2e -- --ignored"
 )
 
 cmd_of() {

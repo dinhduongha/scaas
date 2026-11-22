@@ -18,6 +18,7 @@ the EVM part by Fable in plan T13; the families' review is plan T24, pending). P
 6. [The scaas-node client](#6-the-scaas-node-client)
 7. [The verifier's agreement option](#7-the-verifiers-agreement-option)
 8. [Errors](#8-errors)
+9. [Arweave gateways and bundlers](#9-arweave-gateways-and-bundlers)
 
 ## 1. Scope
 
@@ -126,7 +127,14 @@ and a landed transaction's fee. The EVM reader adds calls, storage, code, transa
 simulation and fee data, at a block the caller names, on the crate's bounded transport. Each other family lifts its transport and
 these generic reads from the node's adapter, after the EVM part; parsing of events and of `build`'s family reads stays in the node
 for now, reading through the family's pooled client so CLI-RPC-04 and §5 apply to every read (BUILT for the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and TON
-adapters, plan T14–T22). The indexer's event-set quorum
+adapters, plan T14–T22; Sui's reads over GraphQL too, `sui::SuiGraphql` on `Client::graphql_at`, BUILT, SDK plan rpc
+T24.sui-graphql; TON's getters and account read at one masterchain seqno, `Ton::run_get_at` / `Ton::account_at` on TON
+Center's `/api/v2/` paths, the stack's cells through the bounded `boc` reader, BUILT, SDK plan rpc T24.ton-seqno; Substrate's reads, feature `substrate`,
+`substrate::Substrate`: identity `chain_getBlockHash(0)`, the finalized head and its number, `System.Account` at a block hash
+through a bounded `AccountInfo` reader (80 bytes exactly), one code path for Polkadot Hub's Substrate side and the relay chain,
+BUILT, SDK plan T32's read part; Bitcoin's reads, feature `bitcoin`, `bitcoin::Esplora` (UTXOs, history pages, a transaction's height,
+fee estimates) and `bitcoin::Core` (`getblockhash`, `gettxout`), two lists with their own credentials, and `cross_check`
+(`BitcoinCrossCheck`: Esplora's tip and every UTXO to spend against Core), BUILT, SDK plan T36's read part). The indexer's event-set quorum
 ([NODE-IDX-01](../node/indexer-feeds.md#NODE-IDX-01)) is unchanged; its helper (`agreed`, NEAR and Aptos) is the crate's.
 
 ## 4. Writes and transaction state
@@ -139,7 +147,8 @@ transaction in its network form is refused by name); an endpoint that answers an
 the outcome is `accepted` (an "already known" answer included), `refused` (a well-formed rejection, its reason kept, capped), or
 `unreachable`. The merge is `Sent` when at least one endpoint accepted, else `Rejected` (code `BroadcastRejected`) with every
 endpoint's outcome. Neither is a final verdict on the transaction ([CLI-RPC-09](#CLI-RPC-09)), and no consumer re-sends
-automatically on either. The same rule holds for a signed operation posted to several scaas-node gateways (§6).
+automatically on either (one exception, a controller call of 2026-11-21 ([ARCH-POS-20](../decisions.md#ARCH-POS-20) C20, owner:
+no): the SDK's bounded re-post of the same bytes of an unsettled Arweave item, [CLI-SDK-21](scaas-sdk.md#CLI-SDK-21)). The same rule holds for a signed operation posted to several scaas-node gateways (§6).
 
 <a id="CLI-RPC-09"></a>**CLI-RPC-09** — **A transaction ends only on facts from a decisive read at a final block** (follows "never
 report `dead` while a transaction may still land"; BUILT for EVM, plan T7, T13 S7: `final_from_an_agreed_read_is_terminal`,
@@ -188,8 +197,9 @@ counters (failover answers, refusals per endpoint) carry no URL.
 (BUILT for the routes the node serves, plan T10, T11, T13 S14: `bodies_are_sent_byte_for_byte`, `a_body_above_64_kib_is_refused_unsent`,
 `an_error_is_read_by_code_else_by_error_string`, `hmac_headers_follow_node_gw_02`, `a_second_gateway_receives_no_credential_of_the_first`;
 the job API client PLANNED). The client covers the gateway routes the node serves ([gateway.md](../node/gateway.md#NODE-GW-05)): `POST /v1/op`,
-`POST /v1/ua-metatx` and the DEX routes, BUILT in the node; `GET /v1/gateway`, `POST /v1/ops`, `POST /v1/ua/register` and
-`GET /v1/intents/{intent_id}` follow when the node serves them. Bodies are the named-field objects `ua-rs` builds; the client never
+`POST /v1/ua-metatx`, the DEX routes and `POST /v1/ops` (`submit_ops` / `submit_ops_at`, `{chain, op}` with the family's chain
+key, merged as `submit_op`'s; plan T28, test `submit_ops_sends_the_same_bytes_and_merges`), BUILT in the node; `GET /v1/gateway`,
+`POST /v1/ua/register` and the client of `GET /v1/intents/{intent_id}` follow. Bodies are the named-field objects `ua-rs` builds; the client never
 packs fields into hex and never rewrites an operation. A request above the route's body cap is refused before it is sent. An error
 answer is read by its `code` (else the legacy `error` string) with its `detail` and `revert_data`
 ([NODE-GW-06](../node/gateway.md#NODE-GW-06)); no logic keys on free text. `api` of `GET /v1/gateway` other than `1` is
@@ -237,3 +247,41 @@ Named, stable codes; the names shared with the app's endpoint lists are the same
 `BroadcastRejected` is the code of a send's `Rejected` outcome ([CLI-RPC-08](#CLI-RPC-08)), not an error. The failure of one
 endpoint inside `EndpointAllFailed` or `EndpointNoMajority` is one of `Transport`, `Timeout`, `Http`, `AnswerTooLarge`,
 `AnswerTooDeep`, `AnswerMalformed`, `WrongChain`, `IdentityUnread`, `BehindHead`, `BlockChanged` or `FailoverRevert`.
+
+## 9. Arweave gateways and bundlers
+
+Status: **SPECIFIED**, nothing built (owner 2026-11-21, [ARCH-POS-19](../decisions.md#ARCH-POS-19) (3) and Q5; the rules below
+controller calls of [ARCH-POS-20](../decisions.md#ARCH-POS-20); the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part D). A module `arweave` behind the feature
+`arweave`, under CLI-RPC-01 to CLI-RPC-11: no key, no signing, no payment; compiles for wasm32. The Avalanche and Polkadot EVM
+profiles need no new rule here: they are configuration of the EVM reader ([NET-EVM-16](../networks/evm.md#NET-EVM-16),
+[NET-EVM-17](../networks/evm.md#NET-EVM-17)).
+
+<a id="CLI-RPC-13"></a>**CLI-RPC-13** — **Arweave reads go to a list of gateways, streamed within an exact length; every
+attachment read feeds a decryption and is accepted only when the caller's check passes; "settled" needs agreement, depth and
+the bytes** (SPECIFIED). The list is [CLI-RPC-02](#CLI-RPC-02)'s: `default` the release's reviewed gateways, `named` the
+operator's or holder's, `discovered` only as the caller passes them (the crate discovers nothing and follows no redirect); each
+entry names its operator. A gateway answers `GET /info` with the configured `network` or is dropped for the process
+([CLI-RPC-03](#CLI-RPC-03)). `data(id, len, purpose, check)` reads `GET /raw/{id}`: `id` is checked as 43 canonical base64url
+characters before any request; `len` above the platform's cap (2^30 + 16 B on 64-bit targets, 2^27 + 16 B on wasm32) is refused
+before any request; an announced length other than `len` is refused unread; the body is streamed, its SHA-256 computed as it
+arrives, into a buffer of at most `len` bytes, and a body longer or shorter than `len` is refused; no `Range` request is sent
+(a range would tell the gateway the size). A body that fails `check` is that gateway's failure (`EndpointAnswerRefused`), so
+failover moves on. Failover by default; under strict majority ⌊n/2⌋ + 1 gateways return bytes with the same SHA-256 that also
+pass `check` (the id fixes the content; no block). Every attachment read is marked as feeding a decryption
+([CLI-RPC-06](#CLI-RPC-06)). `status(id)` reads GraphQL `transactions(ids: [id])` from each gateway, each answer capped at 64 KiB
+and depth 64, with the tip height. `settled(id, depth, object_sha256)` is true only when (a) a strict majority of at least two
+gateways run by different operators (`default` or `named`; discovered gateways never count) report the item in one block, (b)
+that block is at least `depth` blocks below the tip they report (`depth` a list setting, default 50), and (c) one `data` read
+returns bytes whose SHA-256 is `object_sha256`; with fewer than two such gateways nothing is ever settled. Logs carry ids and
+sizes only ([CLI-RPC-11](#CLI-RPC-11)).
+
+<a id="CLI-RPC-14"></a>**CLI-RPC-14** — **An upload posts the same signed data item to a list of bundlers; a receipt counts only
+when its id equals the id computed locally; never final** (SPECIFIED). `upload(item, paid_by)` parses the item's header within
+bounds (signature types 2, 3 and 4 only), computes its id (base64url of SHA-256 of the signature), and posts the same bytes
+(`POST /tx`, `application/octet-stream`) to the first or to every bundler of the list (`default` Turbo). Per bundler: `accepted`
+(the receipt kept, capped), `refused` (HTTP 402 as `PaymentRequired`) or `unreachable`; a receipt for another id is `refused`;
+merged `Sent` or `Rejected` as [CLI-RPC-08](#CLI-RPC-08). `paid_by` is the caller's, sent as `x-paid-by` to that bundler only.
+The body cap is the largest single-request object plus 1,024 B. Settlement is read later through [CLI-RPC-13](#CLI-RPC-13)'s
+`settled`, never taken from a receipt. The crate re-sends nothing; the SDK's bounded re-post of an unsettled item
+([CLI-SDK-21](scaas-sdk.md#CLI-SDK-21)) is the one exception to CLI-RPC-08's "no automatic re-send". The owner agreed to this exception (2026-11-21).
+

@@ -22,7 +22,9 @@ import {DeployBase} from "./DeployBase.sol";
 ///      (optional, testnet / public; Q4 of CTR-MTX-30): the release gas gate, `DeployBase._publicGate`. DEPLOY_PQCHAT
 ///      (optional, true/false; plan 3c T92): `PqChat` on the generic path (class 3, kind 0), its body module
 ///      `PqChatTopics`, and one instance when NOTICE_PERIOD is 0 (`_deployPqChat`; JSON `pqchat_topics`,
-///      `pqchat_implementation`, `pqchat_instance`). DEPLOY_NAME (a chain not in chain-uids.json: `<name>-testnet` |
+///      `pqchat_implementation`, `pqchat_instance`). DEPLOY_PQVAULT (optional, true/false; PqVault plan V7): `PqVault` on the generic
+///      path (class 4, kind 0, no body module) and one instance when NOTICE_PERIOD is 0 (`_deployPqVault`; JSON
+///      `pqvault_implementation`, `pqvault_instance`). DEPLOY_NAME (a chain not in chain-uids.json: `<name>-testnet` |
 ///      `<name>-mainnet`, NET-EVM-13; refused before anything is sent when missing).
 /// Ghi `deployments/<key>.json` (NET-EVM-13: the chain's key, its header first; token factory, implementations, the DEX
 /// implementation, the SmartKeyAccount factory, `chain_uid`, the demo tokens) để seed client (`blockchain.token`) và config
@@ -43,6 +45,7 @@ contract Deploy is DeployBase {
         );
         _setup();
         string memory book = _bookPath(uid, ".json"); // the key now: DEPLOY_NAME_REQUIRED before anything is sent
+        // NET-ALL-25 (C18): the kind gate sits where each kind is created (DeployBase), before the broadcast is sent
         vm.startBroadcast(pk);
         SmartKeyAccountFactory accounts = new SmartKeyAccountFactory{salt: salt}(uid);
         _gate(address(accounts));

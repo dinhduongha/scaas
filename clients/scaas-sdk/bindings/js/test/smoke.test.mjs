@@ -225,3 +225,38 @@ test("store, authenticator, PRF, events, copy calls", async () => {
   assert.ok(sdk.release(h));
   assert.equal(await failure(s.vault().unlock(id, { Passphrase: h })), "Argument");
 });
+
+test("an EVM profile opens: the bindings build the SDK's `evm` (decisions CLI-SDK-33 (49))", async () => {
+  assert.notEqual(sdk.features() & (1n << 30n), 0n, "the evm bit");
+  const profile = (more) => ({
+    key: "local",
+    family: "Evm",
+    chain_id: 31337,
+    chain_uid: "0x" + "60".repeat(32),
+    rpc: [{ url: "http://127.0.0.1:9", class: "Named", label: null, auth: null }],
+    rpc_policy: "Failover",
+    gateways: [],
+    registry: null,
+    factory: null,
+    router: null,
+    finality: "Finalized",
+    tx_gas_cap: null,
+    tokens: [],
+    gas: sdk.gas_rows_default(),
+    gas_opt_in: [],
+    max_valid_secs: null,
+    verifiers: [],
+    verifier_policy: "Failover",
+    dexes: [],
+    wrappers: [],
+    family_params: null,
+    l1_fee: null,
+    disabled_kinds: [],
+    ...more,
+  });
+  const open = (p) => sdk.open({ ...config(), profiles: [p] }, new MemStore());
+  assert.equal(await failure(open(profile({}))), "Ok");
+  // the merge's fields reach the SDK: the OP Stack L1 fee and a disabled kind open; an unknown kind is refused by name
+  assert.equal(await failure(open(profile({ l1_fee: "OpStack", disabled_kinds: ["pqz"] }))), "Ok");
+  assert.equal(await failure(open(profile({ disabled_kinds: ["no-such-kind"] }))), "Argument");
+});

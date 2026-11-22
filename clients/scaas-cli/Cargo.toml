@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# The CLI `scaas` (CLI-SDK-17; spec docs/superpowers/specs/2026-11-17-scaas-sdk.md §20; plan T22): one command per SDK call over
+# `scaas-sdk`, no logic of its own. UNAUDITED.
+[package]
+name = "scaas-cli"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../LICENSE"
+description = "scaas: the command line over scaas-sdk (CLI-SDK-17). UNAUDITED."
+
+[[bin]]
+name = "scaas"
+path = "src/main.rs"
+
+[features]
+# a profile file from the command line (`--profiles`), only in a development build, which says so on every run (CLI-SDK-17, R17)
+dev-profiles = []
+
+[dependencies]
+# the SDK's shipped surface; never its test feature `vectors` (scripts/check_test_features.py), never `raw-native` or
+# `opaque-calls` (no input that signs undecoded bytes, as CLI-TUI-17)
+scaas-sdk = { path = "../scaas-sdk", default-features = false, features = [
+  "vault",
+  "account",
+  "wallet",
+  "evm",
+  "file-store",
+  "mlock",
+  "zether",
+  "pqz",
+  "pqz-set-n2304-kmax4096",
+  "dex",
+  "admin",
+  "classical-roots",
+  "app-core",
+  "pqchat-records",
+  "native-networks",
+  "near",
+  "algorand",
+  "cosmos",
+  "aptos",
+  "solana",
+  "soroban",
+  "sui",
+  "ton",
+] }
+# plan T42: every family, as the SDK features above
+scaas-ua = { path = "../ua-rs", default-features = false, features = [
+  "wallet",
+  "fam-evm",
+  "fam-hedera",
+  "fam-near",
+  "fam-algorand",
+  "fam-cosmos",
+  "fam-aptos",
+  "fam-solana",
+  "fam-soroban",
+  "fam-sui",
+  "fam-ton",
+  "fam-dot",
+  "fam-btc",
+  "fam-arweave",
+] }
+scaas-rpc = { path = "../scaas-rpc", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+zeroize = "=1.8.2"
+# a passphrase from the terminal without echo
+rpassword = "=7.4.0"
+# the development banner's profile digest
+sha2 = "0.10"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+# the SDK tests' fake chain (`../scaas-sdk/tests/common/fake_chain.rs`) writes hex through alloy, as the SDK does
+alloy = { version = "~1.6", default-features = false, features = ["std"] }
+
+[profile.dev.package."*"]
+opt-level = 3

@@ -202,6 +202,9 @@ interface IUARegistry is IERC5267 {
     event UAMsigUpdated(bytes32 indexed ua, uint64 indexed version, uint16 threshold, uint16 count, uint256 enabled);
 
     error UAKindDisabled(uint16 kind); // not enabled in this generation (incl. kinds a predecessor offers)
+    /// Spec 2026-11-19-registry-verify-only-kinds §3 (CTR-UA-59): this generation carries `kind` verify-only; register (and fill the
+    /// ML-DSA cache) in the generation that enables it, `kindHome(kind)`.
+    error UAVerifyOnly(uint16 kind);
     error UAKeyData(uint16 kind); // non-canonical, curve, subgroup, identity, ordering, threshold, cap bound
     error UAIdInNativeSpace(bytes32 ua);
     error UAAlreadyRegistered(bytes32 ua);
@@ -253,11 +256,33 @@ interface IUARegistry is IERC5267 {
     /// CTR-UA-44: a target threshold of 0, or above the weight of its enabled and accepted slots.
     error UAMsigThreshold(bytes32 ua);
 
-    function generation() external view returns (uint8); // 1 or 2
+    function generation() external view returns (uint8); // 1 … MAX_GENERATION (16): the predecessor's + 1
     function predecessor() external view returns (address);
-    function kindEnabled(uint16 kind) external view returns (bool);
+    function kindEnabled(uint16 kind) external view returns (bool); // a verifier word is set here (verify-only included)
+    /// Spec 2026-11-19-registry-verify-only-kinds §3 (N4): this generation carries `kind` for the consumer checks only.
+    function verifyOnly(uint16 kind) external view returns (bool);
+    /// §11.1: this generation's verifier of `kind` (0 if none).
+    function verifierOf(uint16 kind) external view returns (address);
+    /// §11.1: the generation of the line where `kind` registers (this one if registrable here, else the predecessor's answer; 0
+    /// at generation 1); for `0x0142` the newest enabling generation. A client offers registration only where
+    /// `kindHome(kind) == registry`.
+    function kindHome(uint16 kind) external view returns (address);
+    /// §11.1 (M4): the one walk. The generation that holds `ua`'s record, its kind and its PQZ home (§11.2: the oldest generation from
+    /// the holder to this one that enables `0x0142`, 0 if none); `(0, 0, 0)` for an id no generation of the line holds, and without
+    /// a walk for a native-space id (P5).
+    function holderOf(bytes32 ua) external view returns (address holder, uint16 kind, address pqzHome);
+    /// §11.2 (P14): `holderOf`'s third word.
+    function pqzHomeOf(bytes32 ua) external view returns (address);
+    /// Spec 2026-11-19-registry-verify-only-kinds §10 (CTR-UA-67, owner R1, R10, P4): this registry is `root` or reaches it by
+    /// `predecessor()` within `MAX_GENERATION - 1` steps, each a contract, and its `smartKeyCloneHash()` is `root`'s (the
+    /// factory's env check of a release that binds a later generation).
+    function lineReaches(address root) external view returns (bool);
     function verifyCap(uint16 kind) external view returns (uint64); // measured per chain
     function verifyBudget() external view returns (uint64); // UA_VERIFY_BUDGET of this chain
+    /// The chain's per-transaction gas cap (owner X1, spec 2026-11-19-registry-verify-only-kinds §2): an immutable constructor
+    /// argument from the deploy book (EIP-7825's 2^24 on the SCaaS chains and Ethereum), `verifyBudget ≤ txGasCap`; every bound
+    /// of this generation (`msigBound`, the PQZ debit bound) reads it. A raised cap later is a new generation.
+    function txGasCap() external view returns (uint64);
     function chainUid() external view returns (bytes32); // genesis hash, constructor immutable
     function chainKeyHash() external view returns (bytes32); // keccak256("evm:" ‖ decimal(chainid)), at deploy (CTR-UA-07)
     function hederaNative() external view returns (bool); // Hedera profile: 0x0003 ∈ MEMBER

@@ -34,9 +34,9 @@ const KINDS: [&str; 7] = [
 ];
 
 /// The envelope's terms the user chooses (the lane's nonce is read; a pay's lane is its `payLane(entryRef)`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct Envelope {
     /// unix seconds on the chain's clock
     pub valid_until: u64,
@@ -50,9 +50,9 @@ pub struct Envelope {
 }
 
 /// A pay's `PayMeta` v3 (CTR-MTX-26): committed to by the signed `entryRef` (`metaPayId`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PayMeta {
     /// `0x` + 64 hex; `None`: 32 random bytes
     pub salt: Option<String>,
@@ -64,10 +64,9 @@ pub struct PayMeta {
 }
 
 /// The `PayMeta` body by schema (pay-meta-tax spec §7.1), named.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum PayBody {
     None,
     Note {
@@ -90,9 +89,9 @@ pub enum PayBody {
 /// The transfer on ids (`UAMetaTransfer`, entry `mtxExecuteTransfer`, `POST /v1/ua-metatx`; owner 2026-11-18, ruling 6): a plain
 /// transfer, `entryRef = 0` on the lane `batch` the caller names, its nonce read, signed under `Expect::Transfer` (owner
 /// 2026-11-19, ruling D): not recorded on chain as a payment, and a retry of the same request reads the same lane nonce.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct Transfer {
     pub signer: KeyRef,
     pub chain: String,
@@ -106,9 +105,9 @@ pub struct Transfer {
 }
 
 /// `mtxPay`: a `UAMetaTransfer` whose `entryRef` is `metaPayId(meta)`, on its pay lane, signed under `Expect::PayMeta`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct Pay {
     pub signer: KeyRef,
     pub chain: String,
@@ -120,9 +119,9 @@ pub struct Pay {
 }
 
 /// `UAPayWithTax` (regulated kinds): the payer's payment and its tax.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PayWithTax {
     pub signer: KeyRef,
     pub chain: String,
@@ -136,9 +135,9 @@ pub struct PayWithTax {
 }
 
 /// The payment a payee fee co-signs (the contract's shape: fee none, relayer bound).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct Payment {
     pub from: String,
     pub to: String,
@@ -148,9 +147,9 @@ pub struct Payment {
 }
 
 /// The payer's `UASig` over the payment (no members).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PayerAuth {
     /// `0x` hex; `0x` for a native id
     pub key_data: String,
@@ -158,9 +157,9 @@ pub struct PayerAuth {
 }
 
 /// `UAPayeeFee` (CTR-MTX-86): the payee's co-signature of its fee over the payment it expects; signed by the payee.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PayeeFee {
     pub signer: KeyRef,
     pub chain: String,
@@ -174,9 +173,9 @@ pub struct PayeeFee {
 }
 
 /// `UAPayUnderMandate`: the delegate's payment from the mandate wallet, its `entryRef` `metaPayId(meta)`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PayUnderMandate {
     pub signer: KeyRef,
     pub chain: String,
@@ -192,9 +191,9 @@ pub struct PayUnderMandate {
 
 /// `UARelayFee` (CTR-MTX-27): a fee to `payee` for relaying the operation `call`, bound by the hash of its signed calldata; the
 /// gateway job carries that operation as its `call` (`scaas-ua` `relay_fee_op`; owner 2026-11-19, ruling F).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct RelayFee {
     pub signer: KeyRef,
     pub chain: String,
@@ -209,8 +208,10 @@ pub struct RelayFee {
     pub relayer: String,
 }
 
-/// The marker of an undecoded call (spec §13.2): constructible only with feature `opaque-calls`.
+/// The marker of an undecoded call (spec §13.2): constructible only with feature `opaque-calls`. Under `wasm` its serde is the
+/// JS binding's (`src/wasm.rs`: `true`, lifted only with `opaque-calls`, as UniFFI's `bool`).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(not(feature = "wasm"), derive(serde::Serialize, serde::Deserialize))]
 pub struct AllowOpaqueCall(());
 
 impl AllowOpaqueCall {
@@ -221,10 +222,9 @@ impl AllowOpaqueCall {
 }
 
 /// A mandate wallet's call (spec §13.2): decoded, or opaque under the marker.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum ExecuteCall {
     /// an ERC-20 `transfer(to, amount)` of `token` held by the wallet
     Transfer {
@@ -242,9 +242,9 @@ pub enum ExecuteCall {
 }
 
 /// `UAExecute` on a mandate wallet: the owner's call, decoded only.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct Execute {
     pub signer: KeyRef,
     pub chain: String,
@@ -551,9 +551,9 @@ macro_rules! plain_ops {
     ($( $(#[$m:meta])* $req:ident, $f:ident, $name:literal { $( $field:ident : $ty:ty => $json:literal ),* } )*) => {
         $(
             $(#[$m])*
-            #[derive(Debug, Clone, PartialEq, Eq)]
+            #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
             #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-            #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+            #[serde(deny_unknown_fields)]
             pub struct $req {
                 pub signer: KeyRef,
                 pub chain: String,

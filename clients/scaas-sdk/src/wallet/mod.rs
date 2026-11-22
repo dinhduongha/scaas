@@ -4,21 +4,30 @@
 //! a token off the profile's reviewed list is `unlisted`, its name and symbol bounded and stripped, never shown without the
 //! mark. Values are decimal strings of the smallest unit; no floating point. UNAUDITED.
 pub(crate) mod balances;
+pub(crate) mod families;
+#[cfg(feature = "evm")]
 pub(crate) mod history;
 pub(crate) mod native;
+#[cfg(feature = "evm")]
 mod native_evm;
+#[cfg(feature = "evm")]
 pub(crate) mod ops;
 #[cfg(feature = "raw-native")]
 mod raw;
+#[cfg(feature = "evm")]
 pub(crate) mod tokens;
 
 pub use balances::{Balances, TokenBalance};
+#[cfg(feature = "evm")]
 pub use history::{Cursor, HistoryItem, HistoryPage, OpItem};
 pub use native::{NativeAddress, NativeKeyRef};
+#[cfg(feature = "evm")]
 pub use native_evm::{NativeQuote, NativeSend};
+#[cfg(feature = "evm")]
 pub use ops::*;
 #[cfg(feature = "raw-native")]
 pub use raw::{AllowRawNative, NativeSignRequest};
+#[cfg(feature = "evm")]
 pub use tokens::TokenInfo;
 
 use crate::Sdk;

@@ -30,7 +30,7 @@ contract UARegistryPortableTest is UARegistryBase {
             c[i] = base[i];
         }
         for (uint256 i; i < PQ.length; ++i) {
-            c[base.length + i] = UARegistry.KindConfig(PQ[i], address(mock), 50_000);
+            c[base.length + i] = UARegistry.KindConfig(PQ[i], address(mock), 50_000, false, 0);
         }
         p = _deploy(REG_P, chainUidA, address(0), false, BUDGET, address(0), true, c);
     }

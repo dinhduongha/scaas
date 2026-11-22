@@ -36,6 +36,33 @@ pub(crate) fn hidden(c: char) -> bool {
     c.is_control() || CF.iter().any(|(lo, hi)| (*lo..=*hi).contains(&u))
 }
 
+/// `b` as `0x` + lowercase hex.
+#[cfg_attr(not(any(feature = "account", feature = "wallet")), allow(dead_code))]
+pub(crate) fn hex(b: &[u8]) -> String {
+    let mut s = String::from("0x");
+    for x in b {
+        s.push_str(&format!("{x:02x}"));
+    }
+    s
+}
+
+/// `0x` + an even number of hex digits as its bytes, else `Argument`.
+#[cfg_attr(not(any(feature = "account", feature = "wallet")), allow(dead_code))]
+pub(crate) fn unhex(s: &str) -> Result<Vec<u8>, crate::SdkError> {
+    let h = s.strip_prefix("0x").ok_or(crate::SdkError::Argument)?;
+    if h.len() % 2 != 0 || !h.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(crate::SdkError::Argument);
+    }
+    (0..h.len())
+        .step_by(2)
+        .map(|i| {
+            h.get(i..i + 2)
+                .and_then(|p| u8::from_str_radix(p, 16).ok())
+                .ok_or(crate::SdkError::Argument)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

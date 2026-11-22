@@ -14,8 +14,10 @@ MUTANTS = [
     ("R1: no size bound", [(S, "text.len() > BLOB_MAX\n            || ", "")], T + "registration_blob_size_cap"),
     ("R1: the old 64 KiB cap", [(S, "pub const BLOB_MAX: usize = 768 * 1024;", "pub const BLOB_MAX: usize = 64 * 1024;")],
      T + "sponsored_registration_checks"),
-    ("R2: an unknown field inside the arguments read", [(S, "#[serde(deny_unknown_fields, rename_all = \"camelCase\")]\npub struct AttrsArgs",
-                                                       "#[serde(rename_all = \"camelCase\")]\npub struct AttrsArgs")],
+    ("R2: an unknown field inside the arguments read", [(S, "#[serde(deny_unknown_fields, rename_all = \"camelCase\")]\n"
+                                                           "#[cfg_attr(feature = \"uniffi\", derive(uniffi::Record))]\npub struct AttrsArgs",
+                                                       "#[serde(rename_all = \"camelCase\")]\n"
+                                                       "#[cfg_attr(feature = \"uniffi\", derive(uniffi::Record))]\npub struct AttrsArgs")],
      T + "sponsored_registration_checks"),
     ("R3: no registry skips the receiver check", [(R, "    let Some(registry) = profile.registry.as_deref() else {\n        return Err(SdkError::ReceiverUnregistered);",
                                                   "    let Some(registry) = profile.registry.as_deref() else {\n        return Ok(());")],

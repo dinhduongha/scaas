@@ -11,12 +11,14 @@ use crate::admin::{delay::*, *};
 use crate::confidential::*;
 #[cfg(feature = "dex")]
 use crate::dex::*;
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 use crate::op::*;
 use crate::platform::*;
 use crate::vault::*;
 #[cfg(feature = "wallet")]
 use crate::wallet::*;
+#[cfg(feature = "evm")]
+use crate::UaLine;
 use crate::{ChainProfile, GasTable, Limits, SdkError};
 use async_trait::async_trait;
 use js_sys::{Function, Promise, Reflect, Uint8Array};
@@ -195,39 +197,43 @@ free! {
     fn op_state_is_terminal(state: crate::OpState) -> bool = Ok(state.is_terminal());
     fn gas_table_parse(text: String) -> GasTable = GasTable::parse(&text);
     fn gas_rows_default() -> crate::GasRows = Ok(crate::GasRows::default());
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn register_attrs_default() -> RegisterAttrs = Ok(RegisterAttrs::default());
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn msig_structure(members: Vec<MsigMemberArgs>, threshold: u16) -> MsigStructureArgs =
         crate::account::msig::msig_structure(members, threshold);
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn msig_structure_ua(args: MsigStructureArgs) -> String = args.ua();
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn smart_account_address(factory: String, implementation: String, first_key: SubjectKeyArgs, guardian: String) -> String =
         crate::account::smart_account_address(&factory, &implementation, &first_key, &guardian);
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn subject_key_args_secp256k1(address: String) -> SubjectKeyArgs = SubjectKeyArgs::secp256k1(&address);
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn registration_blob_from_json(text: String) -> RegistrationBlob = RegistrationBlob::from_json(&text);
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn registration_blob_to_json(blob: RegistrationBlob) -> String = blob.to_json();
+    #[cfg(feature = "evm")]
+    fn ua_line_key_target(line: crate::UaLine) -> String = Ok(line.key_target());
+    #[cfg(feature = "evm")]
+    fn ua_line_pqz_target(line: crate::UaLine) -> String = line.pqz_target();
 }
 
 // the objects other than the module objects, by handle: `<object>_<method>(handle)`, as `binding.rs`'s methods
 free! {
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     fn prepared_id(p: Arc<Prepared>) -> String = Ok(p.id());
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     fn prepared_chain(p: Arc<Prepared>) -> String = Ok(p.chain());
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     fn prepared_entry(p: Arc<Prepared>) -> String = Ok(p.entry());
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     fn prepared_review(p: Arc<Prepared>) -> Vec<ReviewField> = Ok(p.review());
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     fn prepared_opaque(p: Arc<Prepared>) -> bool = Ok(p.opaque());
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     fn prepared_signer(p: Arc<Prepared>) -> KeyRef = Ok(p.signer());
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     fn prepared_expires_at(p: Arc<Prepared>) -> u64 = Ok(p.expires_at());
     #[cfg(feature = "dex")]
     fn prepared_order_id(p: Arc<PreparedOrder>) -> String = Ok(p.id());
@@ -237,21 +243,21 @@ free! {
     fn prepared_order_review(p: Arc<PreparedOrder>) -> Vec<ReviewField> = Ok(p.review());
     #[cfg(feature = "dex")]
     fn prepared_order_signer(p: Arc<PreparedOrder>) -> KeyRef = Ok(p.signer());
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn registry_write_id(w: Arc<RegistryWrite>) -> String = Ok(w.id());
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn registry_write_chain(w: Arc<RegistryWrite>) -> String = Ok(w.chain());
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn registry_write_entry(w: Arc<RegistryWrite>) -> String = Ok(w.entry());
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn registry_write_ua(w: Arc<RegistryWrite>) -> String = Ok(w.ua());
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn registry_write_review(w: Arc<RegistryWrite>) -> Vec<ReviewField> = Ok(w.review());
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn registry_write_calldata(w: Arc<RegistryWrite>) -> String = Ok(w.calldata());
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn registry_write_payer(w: Arc<RegistryWrite>) -> KeyRef = Ok(w.payer());
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     fn registry_write_registration_gas(w: Arc<RegistryWrite>) -> Option<RegistrationGas> = Ok(w.registration_gas());
     fn seed_backup_reveal(b: Arc<SeedBackup>) -> Arc<SecretBytes> = b.reveal();
     fn seed_backup_challenge(b: Arc<SeedBackup>) -> Vec<u32> = b.challenge();
@@ -318,7 +324,7 @@ impl Sdk {
         Wallet { m: self.m.wallet() }
     }
     /// The operations module (spec §13).
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     pub fn op(&self) -> Op {
         Op { m: self.m.op() }
     }
@@ -415,7 +421,7 @@ impl Vault {
     }
 }
 
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 #[wasm_bindgen]
 impl Op {
     /// Whether `part` is a valid partial of the prepared operation `prepared` (a handle) of its group (spec §5.4).

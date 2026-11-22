@@ -121,6 +121,9 @@ async fn setup(gateways: usize) -> T {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     };
     let store = MemoryStore::new();
     let sdk = Sdk::open(SdkConfig {
@@ -579,6 +582,7 @@ fn gas_rows() -> GasRows {
             .chain([0x0121]) // bls-multi Task 17: a group signer
             .chain(0x0130..=0x0135)
             .map(|signer| GasVerify {
+                line: Default::default(),
                 signer,
                 gas: if signer == 0x0135 { 5_000 } else { 0 }, // the dearest (ruling 4)
                 sig_bytes: 0,

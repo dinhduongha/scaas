@@ -12,7 +12,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'config.freezed.dart';
 
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `RuntimeChoice`, `SdkConfig`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A chain as the app's release pins it (spec §4).
 class ChainProfile {
@@ -69,6 +69,22 @@ class ChainProfile {
   /// the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
   final List<String> wrappers;
 
+  /// the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+  /// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+  /// `Sdk::open`
+  final FamilyParams? familyParams;
+
+  /// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+  /// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+  /// `Sdk::open` on another family)
+  final L1Fee? l1Fee;
+
+  /// the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+  /// and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+  /// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+  /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+  final List<String> disabledKinds;
+
   const ChainProfile({
     required this.key,
     required this.family,
@@ -90,6 +106,9 @@ class ChainProfile {
     required this.verifierPolicy,
     required this.dexes,
     required this.wrappers,
+    this.familyParams,
+    this.l1Fee,
+    required this.disabledKinds,
   });
 
   @override
@@ -113,7 +132,10 @@ class ChainProfile {
       verifiers.hashCode ^
       verifierPolicy.hashCode ^
       dexes.hashCode ^
-      wrappers.hashCode;
+      wrappers.hashCode ^
+      familyParams.hashCode ^
+      l1Fee.hashCode ^
+      disabledKinds.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -139,7 +161,10 @@ class ChainProfile {
           verifiers == other.verifiers &&
           verifierPolicy == other.verifierPolicy &&
           dexes == other.dexes &&
-          wrappers == other.wrappers;
+          wrappers == other.wrappers &&
+          familyParams == other.familyParams &&
+          l1Fee == other.l1Fee &&
+          disabledKinds == other.disabledKinds;
 }
 
 /// One endpoint of a profile's RPC or gateway list (CLI-RPC-02): `{url, class, label, auth}`; `auth` belongs to this endpoint
@@ -174,6 +199,61 @@ class EndpointConfig {
 
 /// A chain family (the `scaas-rpc` readers'). Hedera is `Evm` with its chain id.
 enum Family { evm, soroban, solana, near, algorand, aptos, sui, cosmos, ton }
+
+@freezed
+sealed class FamilyParams with _$FamilyParams {
+  const FamilyParams._();
+
+  /// Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
+  /// profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),
+  /// the native denom and the bech32 prefix of the chain's addresses
+  const factory FamilyParams.cosmos({
+    required String chainId,
+    required List<EndpointConfig> rest,
+    required Policy restPolicy,
+    required String denom,
+    required String prefix,
+  }) = FamilyParams_Cosmos;
+
+  /// Aptos: the chain id ledger info must name (`aptos_framework::chain_id`, 1 to 255; the identity an Aptos node answers)
+  /// and the `scaas` package's address, whose view `meta::account_of(owner)` gives the Account an owner's tokens are in
+  /// (NET-APT-05), as `0x` + 64 lowercase hex (AIP-40's long form)
+  const factory FamilyParams.aptos({
+    required int chainId,
+    required String package,
+  }) = FamilyParams_Aptos;
+
+  /// Solana: the `scaas` program's id (base58 of 32 bytes), under which an owner's SCaaS Account is the `["acct", owner]`
+  /// program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
+  const factory FamilyParams.solana({required String program}) =
+      FamilyParams_Solana;
+
+  /// Soroban: the network passphrase its RPC endpoints name (`getNetwork`; its SHA-256 is `chain_uid`, checked at `Sdk::open`)
+  /// and the XLM SAC contract (`C…`), pinned, whose balance entry is a `C…` holder's native XLM (never derived here)
+  const factory FamilyParams.soroban({
+    required String passphrase,
+    required String xlmSac,
+  }) = FamilyParams_Soroban;
+
+  /// Sui: the GraphQL endpoints the reads go to, with their policy (public fullnodes refuse JSON-RPC, docs/networks/sui.md
+  /// §14; the profile's `rpc` are the JSON-RPC endpoints), each named by `chain_uid`, the genesis checkpoint's digest, whose
+  /// 32 bytes in base58 `chainIdentifier` must answer
+  const factory FamilyParams.sui({
+    required List<EndpointConfig> graphql,
+    required Policy graphqlPolicy,
+  }) = FamilyParams_Sui;
+
+  /// Polkadot Hub's Substrate side on its EVM profile (decisions CLI-SDK-32's Change of 2026-11-22, plan T32's read part): the
+  /// Substrate JSON-RPC endpoints with their policy, each named by `genesis` (`0x` + 64 hex, `chain_getBlockHash(0)`), and the
+  /// SS58 prefix of the chain's addresses (0 to 16,383, not 46 or 47); `balances` of an SS58 id reads its `System.Account`
+  /// there. The same params serve the relay chain's Substrate side
+  const factory FamilyParams.substrate({
+    required List<EndpointConfig> rpc,
+    required Policy rpcPolicy,
+    required String genesis,
+    required int ss58Prefix,
+  }) = FamilyParams_Substrate;
+}
 
 @freezed
 sealed class Finality with _$Finality {
@@ -254,6 +334,49 @@ class GasBase {
           uaExtra == other.uaExtra &&
           perItem == other.perItem &&
           regular == other.regular;
+}
+
+/// A verify row's registry-line columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65; §13 Gas): the row is
+/// keyed by chain (the table it is in), registry address and signer kind; the verify path, the depth and the write path are
+/// columns. Within one table no two verify rows share signer, registry, path, depth and write.
+class GasLine {
+  /// the registry the row was measured through (`0x` + 40 hex): a quote bound to it takes it first; `None`: a row of no one
+  /// registry
+  final String? registry;
+
+  /// `cache`, `precompile` or `fallback` (the holder's verdict after the verify-only verifier gave no answer, §5); `None`:
+  /// the holder's own check
+  final String? path;
+
+  /// the generations between the registry asked and the holder (0: the registry holds the record), at most 15
+  final int depth;
+
+  /// the write path of W1 (a registry write whose signature the holder checks), never a consumer operation's quote
+  final bool write;
+
+  const GasLine({
+    this.registry,
+    this.path,
+    required this.depth,
+    required this.write,
+  });
+
+  static Future<GasLine> default_() =>
+      ScaasSdk.instance.api.scaasSdkConfigGasLineDefault();
+
+  @override
+  int get hashCode =>
+      registry.hashCode ^ path.hashCode ^ depth.hashCode ^ write.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GasLine &&
+          runtimeType == other.runtimeType &&
+          registry == other.registry &&
+          path == other.path &&
+          depth == other.depth &&
+          write == other.write;
 }
 
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
@@ -339,7 +462,8 @@ class GasRows {
 /// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
 /// save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
 /// per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
-/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?, registry?, path?, depth?, write?}` (the
+/// line's columns, [`GasLine`]), read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 class GasTable {
   /// a module's name, `reference`, or the chain key of a chain's measured rows
@@ -361,7 +485,7 @@ class GasTable {
   /// verify row's may be 0: the reference signer's own row); `source` present; a base row's optional `per_byte` names an
   /// input of [`GasPerByte`] with a `gas` of 1–1,000 and its `source`; a base row's optional `save`, `fee_extra` and
   /// `ua_extra` are `{gas, measured, source}` held like a row's figure, positive; a verify row's `sig_bytes` at most 65,536,
-  /// its optional `margin` 1–100,000; a base or verify row's optional `item` and `per_item` come together (owner 2026-11-19,
+  /// its optional `margin` 1–100,000, its optional line columns ([`GasLine`]: `registry` an address, `path` one of `cache`, `precompile`, `fallback`, `depth` 0–15, `write` a bool); a base or verify row's optional `item` and `per_item` come together (owner 2026-11-19,
   /// I1), `item` one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`, `env_items`, `orders`), `per_item` `{gas,
   /// base_count, source}` with a `gas` of 1–2^24 and `base_count` 0 (the row's figure is at a count of 0); a base row's
   /// optional `regular` (EIP-8037, the part EIP-7825's cap holds) held like a row's figure, positive, and on a counted row
@@ -405,12 +529,17 @@ class GasVerify {
   /// the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
   final GasPerItem? perItem;
 
+  /// the registry line's columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); all absent: the holder's own
+  /// check on any registry (every row before the line)
+  final GasLine line;
+
   const GasVerify({
     required this.signer,
     required this.gas,
     required this.sigBytes,
     required this.margin,
     this.perItem,
+    required this.line,
   });
 
   @override
@@ -419,7 +548,8 @@ class GasVerify {
       gas.hashCode ^
       sigBytes.hashCode ^
       margin.hashCode ^
-      perItem.hashCode;
+      perItem.hashCode ^
+      line.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -430,7 +560,14 @@ class GasVerify {
           gas == other.gas &&
           sigBytes == other.sigBytes &&
           margin == other.margin &&
-          perItem == other.perItem;
+          perItem == other.perItem &&
+          line == other.line;
+}
+
+/// An L1 data fee model (plan T38).
+enum L1Fee {
+  /// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
+  opStack,
 }
 
 /// The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor
@@ -532,7 +669,7 @@ class ListedDex {
 
 /// A token of a profile's reviewed list (spec §8.2).
 class ListedToken {
-  /// `0x` + 40 hex
+  /// EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
   final String address;
   final String symbol;
   final int decimals;

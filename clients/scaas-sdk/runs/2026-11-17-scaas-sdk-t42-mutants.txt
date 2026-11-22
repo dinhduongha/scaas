@@ -1,0 +1,14 @@
+# t42 mutants (name | outcome | commit | test | first failure line)
+a native network derived without its row | killed | 5f0d636e4 | ../../scripts/capped cargo test --locked --offline -j2 --no-default-features --features wallet --test core_only a_family_that_is_off_is_feature_missing | panicked at tests/core_only.rs:105:13:
+a Polkadot path derived without fam-dot | killed | 61c5bb014 | ../../scripts/capped cargo test --locked --offline -j2 --no-default-features --features wallet --test core_only a_family_that_is_off_is_feature_missing | panicked at tests/core_only.rs:113:9:
+the EVM transaction built without fam-evm | killed | 5f0d636e4 | ../../scripts/capped cargo test --locked --offline -j2 --no-default-features --features wallet --test core_only a_family_that_is_off_is_feature_missing | panicked at tests/core_only.rs:112:9:
+a row read as built whatever the feature | killed | 5f0d636e4 | ../../scripts/capped cargo test --locked --offline -j2 --no-default-features --features wallet --test core_only every_network_names_its_feature | panicked at tests/core_only.rs:142:9:
+Hedera's ECDSA side under fam-hedera | killed | 5f0d636e4 | ../../scripts/capped cargo test --locked --offline -j2 --no-default-features --features wallet --test core_only every_network_names_its_feature | panicked at tests/core_only.rs:144:5:
+the SDK's near without fam-near | killed | 5f0d636e4 | ../../scripts/capped cargo test --locked --offline -j2 --test feature_tree family_features_enable_their_rows | panicked at tests/feature_tree.rs:210:9:
+native-networks without fam-btc | killed | 5f0d636e4 | ../../scripts/capped cargo test --locked --offline -j2 --test feature_tree family_features_enable_their_rows | panicked at tests/feature_tree.rs:210:9:
+alloy-rlp back in the core | killed | 5f0d636e4 | ../../scripts/capped cargo test --locked --offline -j2 --test feature_tree ua_rows_and_the_core | panicked at tests/feature_tree.rs:254:9:
+schnorrkel back in the core | killed | 5f0d636e4 | ../../scripts/capped cargo test --locked --offline -j2 --test feature_tree ua_rows_and_the_core | panicked at tests/feature_tree.rs:254:9:
+an xcheck feature on by default | killed | 5f0d636e4 | ../../scripts/capped cargo test --locked --offline -j2 --test feature_tree ua_rows_and_the_core | panicked at tests/feature_tree.rs:247:9:
+a row off by default | killed | 5f0d636e4 | ../../scripts/capped cargo test --locked --offline -j2 --test feature_tree ua_rows_and_the_core | panicked at tests/feature_tree.rs:244:9:
+ua-rs' FeatureMissing passed through as Ua | killed | 5f0d636e4 | ../../scripts/capped cargo test --locked --offline -j2 --test feature_tree ua_feature_missing_is_the_sdks | panicked at tests/feature_tree.rs:269:5:
+12 mutants, 12 killed, 0 survived, 0 not loaded, 0 other failure

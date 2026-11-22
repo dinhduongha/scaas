@@ -449,3 +449,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   with it, a header naming the commit, nothing else changed. **The one compiled exception** (owner 2026-11-18, no bytecode in
   the repository): `test/ua/UARegistryPortableApp.t.sol` imports `UARegistry.preapp.sol` and deploys it as the pre-change gen 1
   (no entry, no fallback); forge compiles it with that test and links its libraries. Not deployed, not maintained.
+- `chains/etc-mainnet/`, `chains/etc-testnet/`: the Ethereum Classic and Mordor profiles of SDK plan T40 (`profile.json`, README)
+  as committed in `bcf13dff7`, moved here when the owner dropped ETC on 2026-11-22 (decisions CLI-SDK-32: no `finalized` block).
+  Not read by `forkcheck.py`, the SDK or any test.

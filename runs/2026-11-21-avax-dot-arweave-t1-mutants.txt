@@ -1,0 +1,10 @@
+# t1 mutants at commit 74c877013 (name | outcome | test)
+py: the pair compared by chainUid only | killed | python3 -I smartcontracts/evm/script/test_deploybook.py
+py: the private-genesis check dropped | killed | python3 -I smartcontracts/evm/script/test_deploybook.py
+py: the homeChain kind refusal dropped | killed | python3 -I smartcontracts/evm/script/test_deploybook.py
+sol: the pair compared by chainUid only | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_avalancheRowsResolve
+sol: the private-genesis check dropped | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_privateGenesisRefused
+sol: the homeChain kind refusal dropped | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_homeChainKindsRefused
+node: the pair compared by chain_uid only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib chain_pair_and_private_genesis_at_start
+node: the private-genesis check dropped | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib chain_pair_and_private_genesis_at_start
+8 mutants, 8 killed, 0 survived (0 killed elsewhere), 0 not loaded

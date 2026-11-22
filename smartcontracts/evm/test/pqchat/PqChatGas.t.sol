@@ -42,9 +42,13 @@ contract PqChatGasTest is PqTopicsBase {
     // 28,776 -> 29,152 B; regular 1,973,256 -> 1,998,222; state 44,602,560 -> 45,177,840 (+376 x 1,530)
     // code-format F2 (`bytecode_hash = "none"`: the metadata hash leaves runtime and init code, 41 B each; code unchanged):
     // 29,152 -> 29,111 B; regular 1,998,222 -> 1,996,141; state 45,177,840 -> 45,115,110 (-41 x 1,530)
-    uint256 internal constant RUNTIME = 29_111;
-    uint256 internal constant RELEASE_REGULAR = 1_996_141;
-    uint256 internal constant RELEASE_STATE = 45_115_110;
+    // pqvault review F1 / F2 / F7 (controller call 2026-11-21, `PqGroupBase._liveAdmin` and the author check at completion; O2 (a)
+    // precedent): 29,111 -> 29,383 B; regular 1,996,141 -> 2,012,785; state 45,115,110 -> 45,531,270 (+272 x 1,530)
+    // pqvault review F3 in PqChat too (controller call 2026-11-21, `PqGroupBase._removable`: an admin that is no member is
+    // removable): 29,383 -> 29,412 B; regular 2,012,785 -> 2,014,866; state 45,531,270 -> 45,575,640 (+29 x 1,530)
+    uint256 internal constant RUNTIME = 29_412;
+    uint256 internal constant RELEASE_REGULAR = 2_014_866;
+    uint256 internal constant RELEASE_STATE = 45_575_640;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice: 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
     // pqvault R3 (CTR-PQV-12: the shared code from `PqGroupBase`, the env and nonce errors through `PqChatCore._fail`): 16,398 ->
@@ -194,14 +198,17 @@ contract PqChatGasTest is PqTopicsBase {
         IUARegistry.UASig memory sig = _sig(ids[0], h.remove(r));
         vm.prank(STRANGER);
         chat.remove(r, sig);
-        _row("remove 1 of 3 members", 168_513, 1_067_940);
+        // pqvault review F2 / F7 (`_liveAdmin`: the admin's removed and left flags read cold): regular 168,513 -> 173,112
+        _row("remove 1 of 3 members", 173_112, 1_067_940);
         IPqChat.MemberKey[] memory m = new IPqChat.MemberKey[](2);
         (m[0], m[1]) = (s.members[0], s.members[1]);
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[0], 1, 1, sid, s.admins, m);
         sig = _sig(e.author, h.epoch(e));
         vm.prank(STRANGER);
         chat.rekey(e, ew, sig);
-        _row("rekey dropping the removed member, 2 left", 382_412, 7_642_350);
+        // pqvault review F1 (the completing child's author read from its record and checked against the removals): regular
+        // 382,412 -> 383,942
+        _row("rekey dropping the removed member, 2 left", 383_942, 7_642_350);
     }
 
     // ----- topics (topics spec §6) -----

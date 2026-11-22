@@ -47,6 +47,7 @@ fn app() -> (axum::Router, mpsc::Receiver<scaas_node::submit::Work>) {
     (
         router(AppState {
             chains: Arc::new([(CHAIN, gw)].into_iter().collect()),
+            ..Default::default()
         }),
         rx,
     )

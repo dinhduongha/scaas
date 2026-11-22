@@ -410,6 +410,22 @@ sol! {
         function expandedKeyOf(bytes32 ua) external view returns (address[3] memory);
         function uaOf(uint16 kind, bytes keyData) external pure returns (bytes32);
         error UAKeyNotCached(bytes32 ua);
+        /// The holding generation refuses the cache of `kind` (not ML-DSA, disabled, a part past the last, or its verifier
+        /// has a precompile): NODE-JOB-29's `UA_KEY_NOT_CACHEABLE`.
+        error UAKeyCache(uint16 kind);
+        // spec 2026-11-19-registry-verify-only-kinds §11 (CTR-UA-65, CTR-UA-70): the line's identity and walks, read at start and
+        // by the guard; `UAVerifyOnly` the registration of a kind this generation carries for the consumer checks only
+        function chainUid() external view returns (bytes32);
+        function generation() external view returns (uint8);
+        function predecessor() external view returns (address);
+        function kindEnabled(uint16 kind) external view returns (bool);
+        function kindHome(uint16 kind) external view returns (address);
+        function holderOf(bytes32 ua) external view returns (address holder, uint16 kind, address pqzHome);
+        function txGasCap() external view returns (uint64);
+        error UAVerifyOnly(uint16 kind);
+        /// Every argument of `register` but `pop` (its hash): the indexer reads `attrs.pqzKey` (version 0 of the PQZ key).
+        event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, UAAttrs attrs, bytes32 popHash, bytes pqzPop,
+            uint8 checkedPop, uint8 checkedPqzPop, uint8 checkedKem);
     }
 
     /// Set-auditor (spec §8, CTR-GOV-31): the refusals of bit 32's setters on both confidential families (`IConfidentialToken`'s
@@ -711,7 +727,7 @@ sol! {
     }
 
     /// `IOpenFactory.infoOf` (factory index spec §8.6): the record of a contract the chain's factory made, read for the generic
-    /// factory-class rule (`guard::Rule::FactoryClass`; `PqChat` is class 3, topics spec P45); no owner since round 3r R1.
+    /// factory-class rule (`guard::Rule::FactoryClass`; `PqChat` is class 3, topics spec P45; `PqVault` class 4, CTR-PQV-13); no owner since round 3r R1.
     #[derive(Debug)]
     interface IOpenFactory {
         struct Created {

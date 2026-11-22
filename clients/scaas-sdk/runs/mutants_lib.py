@@ -26,6 +26,9 @@ ROOT = Path(__file__).resolve().parents[3]
 # the test commands see foundry's tools as the gate runner's steps do (`anvil`, `cast`, `forge` of the e2e tests)
 os.environ["PATH"] = f"{Path.home() / '.foundry' / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}"
 RUNS = "clients/scaas-sdk/runs"
+# the record files' directory and name prefix; another plan's runner sets both (and RUNS, NOT_CODE) before `main`
+OUT = Path(__file__).parent
+PREFIX = "2026-11-17-scaas-sdk-"
 # the records and the summary are written by the runners themselves; they do not make the tree dirty
 NOT_CODE = [f":!{RUNS}/*-mutants.txt", f":!{RUNS}/2026-11-17-scaas-sdk-summary.txt"]
 
@@ -46,7 +49,7 @@ def check(mutants):
 
 
 def stale(task, mutants):
-    out = Path(__file__).with_name(f"2026-11-17-scaas-sdk-{task}-mutants.txt")
+    out = OUT / (f"{PREFIX}{task}-mutants.txt")
     if not out.exists():
         return [f"{task}: no record"]
     files = {m[0]: sorted({f for f, _, _ in m[1]}) for m in mutants}
@@ -114,8 +117,8 @@ def failure_line(text):
 
 
 def run(task, mutants, only=None):
-    out = Path(__file__).with_name(f"2026-11-17-scaas-sdk-{task}-mutants.txt")
-    log = Path(__file__).with_name(f"2026-11-17-scaas-sdk-{task}-mutants.log")
+    out = OUT / (f"{PREFIX}{task}-mutants.txt")
+    log = OUT / (f"{PREFIX}{task}-mutants.log")
     sel = [m for m in mutants if not only or m[0] in only]
     if only and len(sel) != len(only):
         print(f"[mutants] {task}: no such mutant: {sorted(set(only) - {m[0] for m in sel})}")

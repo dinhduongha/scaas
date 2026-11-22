@@ -32,10 +32,9 @@ use std::sync::Arc;
 
 /// A key the SDK signs with, by reference (spec §5): the seed's open wallet holds it, or, for [`KeyRef::Key`], the platform's
 /// authenticator (a passkey or a secure-element key, a row of the seed: owner 2026-11-19, S1).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum KeyRef {
     Ua {
         seed: String,
@@ -74,9 +73,8 @@ pub enum KeyRef {
 }
 
 /// One slot of an `msig` signature (`KeyRef::Msig`; `scaas-ua` `Slot`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum MsigSlot {
     /// the signing (or native) member at `index` signs with `key`
     Member { index: u16, key: KeyRef },
@@ -98,8 +96,8 @@ impl MsigSlot {
 }
 
 /// A slot of an inner `msig`: its index there and its key.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MsigLeaf {
     pub index: u16,
     pub key: KeyRef,
@@ -273,28 +271,7 @@ pub(crate) fn sim(e: SimError) -> SdkError {
     }
 }
 
-pub(crate) fn hex(b: &[u8]) -> String {
-    let mut s = String::from("0x");
-    for x in b {
-        s.push_str(&format!("{x:02x}"));
-    }
-    s
-}
-
-pub(crate) fn unhex(s: &str) -> Result<Vec<u8>, SdkError> {
-    let h = s.strip_prefix("0x").ok_or(SdkError::Argument)?;
-    if h.len() % 2 != 0 || !h.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(SdkError::Argument);
-    }
-    (0..h.len())
-        .step_by(2)
-        .map(|i| {
-            h.get(i..i + 2)
-                .and_then(|p| u8::from_str_radix(p, 16).ok())
-                .ok_or(SdkError::Argument)
-        })
-        .collect()
-}
+pub(crate) use crate::text::{hex, unhex};
 
 pub(crate) fn dec(v: &serde_json::Value) -> Result<U256, SdkError> {
     match v {
@@ -371,6 +348,23 @@ pub(crate) async fn final_number(pool: &EvmPool, p: &ChainProfile) -> Result<u64
         )
         .await?;
     Ok(a.value)
+}
+
+/// `KindDisabled` where the chain's profile disables `name` (owner 2026-11-22, ARCH-POS-18 confirmed): a UA kind's name, or
+/// `pqz` for the PQZ token and key attachment; checked before anything is signed.
+pub(crate) fn kind_enabled(profile: &ChainProfile, name: &str) -> Result<(), SdkError> {
+    if profile.disabled_kinds.iter().any(|k| k == name) {
+        return Err(SdkError::KindDisabled);
+    }
+    Ok(())
+}
+
+/// [`kind_enabled`] of UA kind `kind` (by its name in `scaas-ua`'s table; a kind not in it has no name to disable).
+pub(crate) fn ua_kind_enabled(profile: &ChainProfile, kind: u16) -> Result<(), SdkError> {
+    match scaas_ua::KINDS.iter().find(|k| k.kind == kind) {
+        Some(k) => kind_enabled(profile, k.name),
+        None => Ok(()),
+    }
 }
 
 /// The profile's final block (spec §13.5).

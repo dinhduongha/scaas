@@ -44,9 +44,9 @@ use std::sync::Arc;
 const MSIG: u16 = 0x0120;
 
 /// One member of an `msig` structure (CTR-UA-09): its kind, its id (`0x` + 64 hex), its weight.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct MsigMemberArgs {
     pub kind: u16,
     pub id: String,
@@ -54,9 +54,9 @@ pub struct MsigMemberArgs {
 }
 
 /// An `msig` structure: the threshold and the members, in slot order.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct MsigStructureArgs {
     pub threshold: u16,
     pub members: Vec<MsigMemberArgs>,
@@ -128,9 +128,9 @@ pub fn msig_structure(
 }
 
 /// One slot of an `msig` as the registry holds it now.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct MsigSlotState {
     pub kind: u16,
     pub id: String,
@@ -143,9 +143,9 @@ pub struct MsigSlotState {
 }
 
 /// An `msig` on the profile's registry (`msig_state`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct MsigState {
     pub ua: String,
     /// the structure the id derives from (`registrationOf`)
@@ -164,9 +164,9 @@ pub struct MsigState {
 
 /// `prepare_msig_register`: the `msig` `structure` registered on `chain` (`registerMsig`), its `pop` signed by `slots` (a
 /// minimal set, CTR-UA-07; none: an empty `pop`, a classical-dominant `msig`'s), sent by `payer`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct MsigRegister {
     pub chain: String,
     pub structure: MsigStructureArgs,
@@ -175,9 +175,9 @@ pub struct MsigRegister {
 }
 
 /// `accept_membership` (CTR-UA-37): slot `slot` of the `msig` `ua` accepts on `chain`, sent by `payer`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct AcceptMembership {
     pub chain: String,
     pub ua: String,
@@ -188,9 +188,9 @@ pub struct AcceptMembership {
 /// `update_msig` (CTR-UA-44): the `msig` `ua` on `chain`'s registry becomes `structure` (every slot, the stored ones unchanged,
 /// new members appended), `enabled` the slots that count, valid to block `valid_until_block`; signed by `slots` of the
 /// **stored** structure, sent by `payer`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct UpdateMsig {
     pub chain: String,
     pub ua: String,
@@ -444,7 +444,7 @@ fn structure(kd: &[u8]) -> Result<MsigStructure, SdkError> {
 }
 
 /// The registry's domain for a native member's `UAAuth` (gen 1 only: `predecessor() == 0`).
-async fn domain(
+pub(crate) async fn domain(
     sdk: &Sdk,
     chain: &str,
     pool: &EvmPool,
@@ -941,17 +941,20 @@ impl Account {
                 })?;
                 let args =
                     json!({"ua": hex(&ua), "memberSig": ms.get(0).ok_or(SdkError::Internal)?});
-                Ok(Some(keep_with(
-                    &sdk,
-                    &req.chain,
-                    "acceptMembership",
-                    ua,
-                    &args,
-                    &req.payer,
-                    Landed::Accepted(index),
-                    shape,
-                    None,
-                )?))
+                Ok(Some(
+                    keep_with(
+                        &sdk,
+                        &req.chain,
+                        "acceptMembership",
+                        ua,
+                        &args,
+                        &req.payer,
+                        Landed::Accepted(index),
+                        shape,
+                        None,
+                    )
+                    .await?,
+                ))
             })
             .await
     }
@@ -1045,7 +1048,7 @@ impl Account {
                         .collect(),
                 };
                 let landed = Landed::MsigUpdate(u.version, hash);
-                let write = keep_with(&sdk, &req.chain, "updateMsig", ua, args, &req.payer, landed, shape, None)?;
+                let write = keep_with(&sdk, &req.chain, "updateMsig", ua, args, &req.payer, landed, shape, None).await?;
                 Ok(MsigUpdatePlan {
                     write,
                     warnings: warnings.iter().map(|w| format!("{w:?}")).collect(),

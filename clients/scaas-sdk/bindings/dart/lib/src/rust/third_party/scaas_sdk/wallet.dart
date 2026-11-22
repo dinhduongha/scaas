@@ -19,8 +19,10 @@ abstract class AllowOpaqueCall implements RustOpaqueInterface {}
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Wallet>>
 abstract class Wallet implements RustOpaqueInterface {
-  /// The balances of `id` (a `0x` 20-byte address or a `0x` 32-byte UA) on `chain` at one block. `ChainUnknown`,
-  /// `ProfileMismatch` (a listed token's `chainUid()`), `Argument` (an id of another length).
+  /// The balances of `id` on `chain` at one block. EVM: `id` a `0x` 20-byte address or a `0x` 32-byte UA; another family
+  /// (spec §8.7): the family's printed form, or a `0x` 32-byte UA id where the family keeps a UA ledger, read at one final
+  /// height. `ChainUnknown`, `ProfileMismatch` (a listed token's `chainUid()`), `Argument` (an id of another form),
+  /// `FeatureMissing` (a family this build does not read).
   Future<Balances> balances({required String id, required String chain});
 
   /// The history of `account` (a `0x` 20-byte address or a `0x` 32-byte UA) on `chain`: one span window per call, at or

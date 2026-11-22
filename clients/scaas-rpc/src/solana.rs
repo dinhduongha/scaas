@@ -36,6 +36,50 @@ impl Solana {
         self.client.rpc_at(i, method, params).await
     }
 
+    /// One JSON-RPC batch to endpoint `i` (the calls answered together: a read set at one slot, SDK plan T24.solana): each
+    /// call's `result` or its error object (`FamilyError::Rpc`), in the calls' order. An answer that is not an array holding
+    /// one member per call by `id` (the call's index) is the endpoint's `AnswerMalformed`.
+    pub async fn batch(
+        &self,
+        i: usize,
+        calls: &[(&str, Value)],
+    ) -> Result<Vec<Result<Value, FamilyError>>, FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
+        let body: Vec<Value> = calls
+            .iter()
+            .enumerate()
+            .map(|(k, (m, p))| json!({"jsonrpc": "2.0", "id": k, "method": m, "params": p}))
+            .collect();
+        let v = self.client.post_at(i, "", &Value::Array(body)).await?;
+        let Value::Array(answers) = v else {
+            return Err(bad(i, "a batch answer that is not an array"));
+        };
+        let mut out: Vec<Option<Result<Value, FamilyError>>> = calls.iter().map(|_| None).collect();
+        for mut a in answers {
+            let slot = a
+                .get("id")
+                .and_then(Value::as_u64)
+                .and_then(|k| usize::try_from(k).ok())
+                .and_then(|k| out.get_mut(k).map(|s| (k, s)));
+            let Some((k, slot @ None)) = slot else {
+                return Err(bad(i, "a batch member not asked, or twice"));
+            };
+            let method = calls.get(k).map_or("", |c| c.0);
+            let error = a.get_mut("error").map(Value::take).filter(|e| !e.is_null());
+            *slot = Some(match (error, a.get_mut("result")) {
+                (Some(error), _) => Err(FamilyError::Rpc {
+                    method: method.into(),
+                    error,
+                }),
+                (None, Some(r)) => Ok(r.take()),
+                (None, None) => return Err(bad(i, &format!("{method}: no result"))),
+            });
+        }
+        out.into_iter()
+            .map(|r| r.ok_or_else(|| bad(i, "a batch member missing")))
+            .collect()
+    }
+
     /// The `finalized` slot of endpoint `i`.
     pub async fn finalized_slot(&self, i: usize) -> Result<u64, FamilyError> {
         let v = self

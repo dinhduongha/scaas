@@ -89,7 +89,7 @@ Non-goals:
 
 | Role | What it does | Listener | Status |
 |---|---|---|---|
-| **gateway** (door A) | Public intake of signed meta-txs, signed family ops and DEX orders from anyone; normalize ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)), simulate, enqueue | `[modules] gateway_bind` (default `127.0.0.1:8547`), auth `none` (loopback only) / `bearer` / `hmac` | `/v1/metatx`, `/v1/dex/*` **BUILT**; durable, journaled door A, `/v1/gateway`, `/v1/ops`, `/v1/ua-metatx`, `/v1/ua/register`, error contract **SPECIFIED** ([gateway.md](gateway.md)) |
+| **gateway** (door A) | Public intake of signed meta-txs, signed family ops and DEX orders from anyone; normalize ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)), simulate, enqueue | `[modules] gateway_bind` (default `127.0.0.1:8547`), auth `none` (loopback only) / `bearer` / `hmac` | `/v1/metatx`, `/v1/dex/*`, `/v1/ops` (durable `~gateway` jobs on the family lanes, plan T28) **BUILT**; durable, journaled EVM door A, `/v1/gateway`, `/v1/ua-metatx`, `/v1/ua/register`, error contract **SPECIFIED** ([gateway.md](gateway.md)) |
 | **job API** | External server-side clients push jobs, cancel, read feeds, push watch lists and token subsets | `[api] bind` (default `127.0.0.1:8548`), HMAC per API key | **SPECIFIED** ([job-api.md](job-api.md)) |
 | **submit** | Per-chain lanes: lease → simulate → journal → sign → broadcast → follow → replace/gap-fill; consumption checks | — | **BUILT** ([submit-lanes.md](submit-lanes.md)) |
 | **indexer** | Finality gate + RPC quorum → normalized events → `feed_item(range)`; drift A/C | — | **BUILT** (writes to the legacy client sink); feed **SPECIFIED** ([indexer-feeds.md](indexer-feeds.md)) |

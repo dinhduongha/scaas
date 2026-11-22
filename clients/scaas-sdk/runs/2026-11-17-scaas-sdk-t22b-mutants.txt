@@ -1,0 +1,7 @@
+# t22b mutants (name | outcome | commit | test | first failure line)
+admin sign-rescue-vault signs without asking | killed | 12abef40d | ../../scripts/capped cargo test --locked --offline -j2 --features dev-profiles --test cli -- --exact every_signing_command_asks_first | panicked at tests/cli.rs:1274:9:
+dex place listed without its confirm | killed | d0575040d | ../../scripts/capped cargo test --locked --offline -j2 --features dev-profiles --test cli -- --exact every_command_declares_its_confirm_class | panicked at tests/cli.rs:796:9:
+registry writes submitted without asking | killed | d0575040d | ../../scripts/capped cargo test --locked --offline -j2 --features dev-profiles --test cli -- --exact every_signing_command_asks_first | panicked at tests/cli.rs:1287:13:
+a session's prepared operation kept as a type no call names | killed | d0575040d | ../../scripts/capped cargo test --locked --offline -j2 --features dev-profiles --test cli -- --exact every_signing_command_asks_first | panicked at tests/cli.rs:1274:9:
+a text flag given JSON refused | killed | d0575040d | ../../scripts/capped cargo test --locked --offline -j2 --features dev-profiles --test cli -- --exact every_signing_command_asks_first | panicked at tests/cli.rs:1274:9:
+5 mutants, 5 killed, 0 survived, 0 not loaded, 0 other failure

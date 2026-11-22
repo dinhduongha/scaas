@@ -104,9 +104,9 @@ abstract contract PqChatBase is UARegistryBase {
         for (uint256 i; i < base.length; ++i) {
             c[i] = base[i];
         }
-        c[base.length] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mock), 50_000);
-        c[base.length + 1] = UARegistry.KindConfig(UAKinds.FNDSA512, address(mock), 50_000);
-        c[base.length + 2] = UARegistry.KindConfig(UAKinds.MLDSA44, address(mock), 50_000);
+        c[base.length] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mock), 50_000, false, 0);
+        c[base.length + 1] = UARegistry.KindConfig(UAKinds.FNDSA512, address(mock), 50_000, false, 0);
+        c[base.length + 2] = UARegistry.KindConfig(UAKinds.MLDSA44, address(mock), 50_000, false, 0);
         p = _deploy(REG_P, chainUidA, address(0), false, BUDGET, address(0), true, c);
         h = new PqChatHasher();
         f = EnvKit.factory(REGISTRAR, chainUidA, 0);

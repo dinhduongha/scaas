@@ -27,6 +27,10 @@
 )]
 
 mod aead;
+#[cfg(feature = "app-core")]
+mod app_refusals;
+#[cfg(feature = "app-core")]
+mod appkey;
 pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
@@ -44,6 +48,10 @@ pub mod pairing;
 #[cfg(not(feature = "vectors"))]
 mod pairing;
 mod policy;
+#[cfg(feature = "app-core")]
+pub mod pqchat;
+#[cfg(feature = "app-core")]
+pub mod pqchat_keys;
 #[cfg(feature = "vectors")]
 pub mod pqsign;
 #[cfg(not(feature = "vectors"))]
@@ -69,6 +77,12 @@ mod vault;
 mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
+#[cfg(feature = "app-core")]
+pub use app_refusals::{SCAAS_DOMAIN_NAMES, SCAAS_PURPOSES};
+#[cfg(feature = "app-core")]
+pub use appkey::{
+    AppKeys, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce, APP_KEYS_MAX, APP_ROOT, KEYWRAP,
+};
 #[cfg(feature = "pqz")]
 pub(crate) use eip712::u256_to_dec; // the PQZ facade's
 #[cfg(any(feature = "zether", feature = "pqz"))]
@@ -111,7 +125,14 @@ pub use sign::{
 #[cfg(feature = "vectors")]
 pub use signer::TestExternalKey;
 pub use signer::{AllowRawDigest, ExternalKey, KeyRef, SigRole, SignRequest, Signer};
+#[cfg(feature = "fam-dot")]
+pub use substrate::{ss58_public_key, system_account_key};
 pub use tx::{sign_transaction_by, AccessListItem, EvmTx, SignedTx};
+#[cfg(feature = "app-core")]
+pub use uasig::{
+    app_record_digest, is_scaas_purpose, sign_app_record, verify_app_record, verify_app_record_key,
+    AppPath, AppRecordState,
+};
 pub use uasig::{
     membership_sig, membership_sig_current, msig_combine, msig_sig, msig_sig_app, msig_sig_current,
     msig_slot_sig_current, msig_update_typed_data, registration_typed_data, ua_sig, ua_sig_app,
@@ -191,6 +212,26 @@ pub enum Error {
     /// A WebAuthn assertion whose `authData` and `clientDataJSON` together exceed [`WEBAUTHN_MAX_ASSERTION`] (owner
     /// 2026-11-19, G3): nothing returned.
     WebAuthnTooLong,
+    /// An app-core key handle used for an operation of another usage, or a `seal` / `open` whose `aad` starts with the
+    /// key-wrap constant (scaas-sdk spec §12.2).
+    AppKeyUsage,
+    /// An app-core key handle of another scope or store (scaas-sdk spec §12.3).
+    AppHandleForeign,
+    /// The arena holds its stated number of live app-core key handles (scaas-sdk spec §12.2); nothing dropped.
+    AppArenaFull,
+    /// An app record under a SCaaS purpose (`UAKinds`, `APP_PURPOSE_NS`, the seal purpose; scaas-sdk spec §12.4).
+    AppPurposeRefused,
+    /// An app record whose domain is a SCaaS contract's or the registry's, or not the path's form (scaas-sdk spec §12.4).
+    AppDomainRefused,
+    /// An app portable record whose domain `salt` is not its `app_id` (scaas-sdk spec §12.4).
+    AppSaltMismatch,
+    /// A PqChat content or `sealedInfo` whose padding or canonical JSON is not what a sealer writes (`pqchat_keys`; UA-7
+    /// §6.5, pqchat-core spec §5 K4, K5): nothing returned.
+    PqChatContent,
+    /// A PqChat chain walk of more than 2^20 steps (CLI-PQC-14): refused before any step.
+    PqChatTooFar,
+    /// A network of a family this build leaves out (plan T42: its `fam-<row>` feature is off); nothing derived or signed.
+    FeatureMissing,
     Ua(UAError),
 }
 
@@ -219,6 +260,15 @@ impl Error {
             Error::WalletMismatch => "WalletMismatch",
             Error::PqzSetMismatch => "PqzSetMismatch",
             Error::ExternalSignature => "ExternalSignature",
+            Error::AppKeyUsage => "AppKeyUsage",
+            Error::AppHandleForeign => "AppHandleForeign",
+            Error::AppArenaFull => "AppArenaFull",
+            Error::AppPurposeRefused => "AppPurposeRefused",
+            Error::AppDomainRefused => "AppDomainRefused",
+            Error::AppSaltMismatch => "AppSaltMismatch",
+            Error::PqChatContent => "PqChatContent",
+            Error::PqChatTooFar => "PqChatTooFar",
+            Error::FeatureMissing => "FeatureMissing",
             Error::Ua(e) => e.code(),
         }
     }
@@ -284,6 +334,49 @@ const NETWORK_NAMES: [(Network, &str); 13] = [
 ];
 
 impl Network {
+    /// The `fam-<row>` feature that holds this network (plan T42; Hedera's ECDSA side is its EVM side).
+    pub fn feature(self) -> &'static str {
+        match self {
+            Network::Evm | Network::HederaEcdsa => "fam-evm",
+            Network::HederaEd25519 => "fam-hedera",
+            Network::Cosmos => "fam-cosmos",
+            Network::Sui => "fam-sui",
+            Network::Stellar => "fam-soroban",
+            Network::Ton => "fam-ton",
+            Network::Aptos => "fam-aptos",
+            Network::Solana => "fam-solana",
+            Network::BitcoinP2wpkh | Network::BitcoinP2tr => "fam-btc",
+            Network::Near => "fam-near",
+            Network::Polkadot => "fam-dot",
+        }
+    }
+
+    /// Whether this build has the network's family (its [`Network::feature`]).
+    pub fn built(self) -> bool {
+        match self.feature() {
+            "fam-evm" => cfg!(feature = "fam-evm"),
+            "fam-hedera" => cfg!(feature = "fam-hedera"),
+            "fam-cosmos" => cfg!(feature = "fam-cosmos"),
+            "fam-sui" => cfg!(feature = "fam-sui"),
+            "fam-soroban" => cfg!(feature = "fam-soroban"),
+            "fam-ton" => cfg!(feature = "fam-ton"),
+            "fam-aptos" => cfg!(feature = "fam-aptos"),
+            "fam-solana" => cfg!(feature = "fam-solana"),
+            "fam-btc" => cfg!(feature = "fam-btc"),
+            "fam-near" => cfg!(feature = "fam-near"),
+            _ => cfg!(feature = "fam-dot"),
+        }
+    }
+
+    /// `FeatureMissing` for a network this build leaves out.
+    pub fn require(self) -> Result<()> {
+        if self.built() {
+            Ok(())
+        } else {
+            Err(Error::FeatureMissing)
+        }
+    }
+
     /// Every network, in the C ABI's order (`SCAAS_UA_NETWORK_*`: clientkeys `NETWORKS`, then `NATIVE_NETWORKS`).
     pub fn all() -> [Network; 13] {
         NETWORK_NAMES.map(|(n, _)| n)
@@ -875,6 +968,7 @@ impl Wallet {
         change: u32,
         index: u32,
     ) -> Result<NativeKey> {
+        network.require()?;
         network.coin_ok(coin_type)?;
         if network == Network::Polkadot {
             if index != 0 {
@@ -911,6 +1005,7 @@ impl Wallet {
     /// outside `u64` or with a leading zero, over 16 junctions or 512 bytes), or a 65th path; the path is noted in the manifest's
     /// `polkadotPaths` (public data).
     pub fn polkadot_key(&self, path: &str) -> Result<NativeKey> {
+        Network::Polkadot.require()?;
         let junctions = substrate::parse_path(path)?;
         if junctions.is_empty() {
             return self.polkadot_bare();

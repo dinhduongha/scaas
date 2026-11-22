@@ -327,10 +327,21 @@ pub struct ChainCfg {
     /// The token factory (`OpenFactory`): never a `call` target (NODE-JOB-01).
     #[serde(default)]
     pub token_factory: Option<Address>,
-    /// The chain's UA registry (`UARegistry`, the generation that takes new registrations): the target of the call-table
-    /// rows `register` / `setKemKey` / `storePqzPop` / `setPqzKey` (UA-8, ruling R-node; unset: refused).
+    /// CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12): the chain's registry line, every generation of `UARegistry`
+    /// (generation 1 and each later one), in any order: the targets of the call-table rows `register*` / `setKemKey` /
+    /// `storePqzPop` / `setPqzKey` / … (UA-8, ruling R-node; empty: refused). Checked on chain at start ([`read_ua_line`]), which
+    /// puts them in generation order.
     #[serde(default)]
-    pub ua_registry: Option<Address>,
+    pub ua_registries: Vec<Address>,
+    /// The one-registry key `ua_registry` (replaced by `ua_registries`): refused by name at load, never ignored.
+    #[serde(default, rename = "ua_registry")]
+    pub retired_ua_registry: Option<toml::Value>,
+    /// Read at start ([`read_ua_line`]), never configured: the generations of the line that enable `0x0142` (the PQZ homes the
+    /// indexer reads) and the newest generation's `txGasCap()` (the gas a registry-checked job may take, Review Focus 5).
+    #[serde(skip)]
+    pub ua_pqz_registries: Vec<Address>,
+    #[serde(skip)]
+    pub ua_tx_gas_cap: Option<u64>,
     /// The chain's `GovernanceRouter`s (NODE-JOB-19; spec 2026-11-02-governance §12.7): the only targets of a `gov_router` row, on
     /// the direct path and as the inner target of a relay fee. A list: a second router (another child of `GovernanceRouterBase`) is a
     /// config row. Empty: every router job is refused.
@@ -504,7 +515,10 @@ impl Default for ChainCfg {
             chain_uid: None,
             account_factory: None,
             token_factory: None,
-            ua_registry: None,
+            ua_registries: vec![],
+            retired_ua_registry: None,
+            ua_pqz_registries: vec![],
+            ua_tx_gas_cap: None,
             governance_routers: vec![],
             compliance_registry: None,
             compliance_registry_codehash: None,
@@ -754,6 +768,8 @@ impl Config {
             }
             c.relay_params().with_context(|| format!("chain {key}"))?;
             c.check_services().with_context(|| format!("chain {key}"))?;
+            c.check_ua_registries()
+                .with_context(|| format!("chain {key}"))?;
             if !(1..=100).contains(&c.breaker.call_budget_pct) {
                 bail!("chain {key}: breaker.call_budget_pct is a share of the budget, 1 to 100");
             }
@@ -787,6 +803,7 @@ impl Config {
         if v.timeout_ms == 0 || v.max_response_bytes == 0 {
             bail!("pqz_verifier: timeout_ms and max_response_bytes above 0");
         }
+        check_chain_pairs(&self.chains, CHAIN_UIDS)?;
         self.validate_store_sections(&seen)
     }
 
@@ -1208,7 +1225,7 @@ impl ChainCfg {
                 .iter()
                 .map(|a| (*a, "governance_routers")),
         );
-        others.extend(self.ua_registry.map(|a| (a, "ua_registry")));
+        others.extend(self.ua_registries.iter().map(|a| (*a, "ua_registries")));
         others.extend(self.account_factory.map(|a| (a, "account_factory")));
         others.extend(self.token_factory.map(|a| (a, "token_factory")));
         others.extend(router.map(|r| (r, "relay_fee.router")));
@@ -1220,6 +1237,33 @@ impl ChainCfg {
                     "service {:#x} is also {k} (one kind per address)",
                     s.address
                 );
+            }
+        }
+        Ok(())
+    }
+
+    /// CTR-UA-65 at load: the old key refused by name; no entry twice; at most `MAX_GENERATION` entries. The rest is the chain's
+    /// ([`order_ua_line`]).
+    pub fn check_ua_registries(&self) -> Result<()> {
+        if self.retired_ua_registry.is_some() {
+            bail!("ua_registry is replaced by ua_registries = [\"0x…\", …]: every generation of the registry line \
+                (CTR-UA-65; config shape change)");
+        }
+        if !self.ua_registries.is_empty() && self.uses_adapter() {
+            bail!(
+                "ua_registries is the EVM lane's, not family {}'s (CTR-UA-65)",
+                self.family
+            );
+        }
+        if self.ua_registries.len() > MAX_GENERATION as usize {
+            bail!(
+                "{UA_LINE_DEPTH}: {} entries in ua_registries, above MAX_GENERATION {MAX_GENERATION}",
+                self.ua_registries.len()
+            );
+        }
+        for (i, a) in self.ua_registries.iter().enumerate() {
+            if self.ua_registries[..i].contains(a) {
+                bail!("{UA_LINE_FORK}: {a:#x} twice in ua_registries");
             }
         }
         Ok(())
@@ -1268,6 +1312,212 @@ impl ChainCfg {
     }
 }
 
+/// NET-ALL-25's refusals at start, by name: two EVM profiles of one pair (chain id, `chain_uid`); a profile with the genesis of a
+/// private chain of `chain-uids.json` (a chain SCaaS runs) under another chain id.
+pub const CHAIN_PAIR_TAKEN: &str = "CHAIN_PAIR_TAKEN";
+pub const CHAIN_UID_PRIVATE: &str = "CHAIN_UID_PRIVATE";
+/// `smartcontracts/evm/chain-uids.json`: the listed chains, the private ones marked (NET-ALL-25), the deploy gate's table too.
+const CHAIN_UIDS: &str = include_str!("../../smartcontracts/evm/chain-uids.json");
+
+/// NET-ALL-25 at start, over the profiles that set `chain_uid` (an unset one is the RPC's block 0, NODE-GW-07): no two EVM
+/// profiles share the pair (chain id, `chain_uid`), and none has a private chain's genesis under another chain id.
+fn check_chain_pairs(chains: &[ChainCfg], table: &str) -> Result<()> {
+    let private = private_rows(table)?;
+    let mut pairs = std::collections::HashMap::new();
+    for c in chains.iter().filter(|c| c.is_evm()) {
+        let Some(uid) = c.chain_uid else { continue };
+        let key = c.chain_key();
+        if let Some(k) = pairs.insert((c.evm_chain_number, uid), key.clone()) {
+            bail!("{CHAIN_PAIR_TAKEN}: chain {key} repeats the (chain id, chain_uid) pair of {k} (NET-ALL-25)");
+        }
+        check_private(&private, &key, c.evm_chain_number, uid)?;
+    }
+    Ok(())
+}
+
+/// (chain id, chain_uid, key) of the `chain-uids.json` rows marked private.
+fn private_rows(table: &str) -> Result<Vec<(u64, B256, String)>> {
+    let t: serde_json::Value = serde_json::from_str(table).context("chain-uids.json")?;
+    let mut private = Vec::new();
+    for r in t["chains"]
+        .as_array()
+        .context("chain-uids.json: no chains")?
+    {
+        if r["private"].as_bool() == Some(true) {
+            let id = r["chainId"]
+                .as_u64()
+                .context("chain-uids.json: a chainId")?;
+            let uid: B256 = r["chainUid"]
+                .as_str()
+                .unwrap_or_default()
+                .parse()
+                .context("chain-uids.json: a chainUid")?;
+            private.push((id, uid, r["key"].as_str().unwrap_or_default().to_string()));
+        }
+    }
+    Ok(private)
+}
+
+fn check_private(private: &[(u64, B256, String)], key: &str, id: u64, uid: B256) -> Result<()> {
+    if let Some((_, _, p)) = private.iter().find(|(i, u, _)| *u == uid && *i != id) {
+        bail!("{CHAIN_UID_PRIVATE}: chain {key} has the genesis of the private chain {p}; a chain we run that forks is a new chain with its own genesis (NET-ALL-25)");
+    }
+    Ok(())
+}
+
+/// The pairs the lanes resolved at start (process-wide: every adapter's), by chain key.
+static RESOLVED_PAIRS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<(u64, B256), String>>,
+> = std::sync::LazyLock::new(Default::default);
+
+/// NET-ALL-25 at lane start (review P2-4), over the pair as the RPC resolved it (block 0's hash, NODE-GW-07), so a profile
+/// without `chain_uid` is checked too: a private chain's genesis under another chain id is `CHAIN_UID_PRIVATE`; a pair another
+/// chain key resolved first is `CHAIN_PAIR_TAKEN`. Fail closed: the lane does not start.
+pub fn check_resolved_pair(key: &str, id: u64, uid: B256) -> Result<()> {
+    check_private(&private_rows(CHAIN_UIDS)?, key, id, uid)?;
+    let mut m = RESOLVED_PAIRS
+        .lock()
+        .map_err(|_| anyhow::anyhow!("{CHAIN_PAIR_TAKEN}: the resolved pairs are unreadable"))?;
+    match m.get(&(id, uid)) {
+        Some(k) if k != key => {
+            bail!("{CHAIN_PAIR_TAKEN}: chain {key} resolves the (chain id, chain_uid) pair of {k} (NET-ALL-25)")
+        }
+        _ => {
+            m.insert((id, uid), key.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// `UARegistry.MAX_GENERATION`: the deepest generation of a line (spec 2026-11-19-registry-verify-only-kinds §11.1).
+pub const MAX_GENERATION: u8 = 16;
+/// CTR-UA-65's refusals of `ua_registries` at start, by name: an entry of another chain (`chainUid()`), not exactly one generation
+/// 1 with predecessor 0, an entry whose predecessor is no entry or whose generation is not its predecessor's + 1, two entries on
+/// one predecessor (or one entry twice), more than `MAX_GENERATION` entries or a generation outside 1 … 16.
+pub const UA_LINE_CHAIN_UID: &str = "UA_LINE_CHAIN_UID";
+pub const UA_LINE_ROOT: &str = "UA_LINE_ROOT";
+pub const UA_LINE_GAP: &str = "UA_LINE_GAP";
+pub const UA_LINE_FORK: &str = "UA_LINE_FORK";
+pub const UA_LINE_DEPTH: &str = "UA_LINE_DEPTH";
+
+/// One generation of the registry line as the chain answers it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UaGen {
+    pub registry: Address,
+    pub chain_uid: B256,
+    pub generation: u8,
+    pub predecessor: Address,
+    /// `kindEnabled(0x0142)`: a PQZ home (spec §11.2).
+    pub pqz: bool,
+    pub tx_gas_cap: u64,
+}
+
+/// CTR-UA-65: `gens` (the config's entries, in any order) as one line in generation order, or the refusal by name. The order
+/// comes from the links (`predecessor()`), never from the config.
+pub fn order_ua_line(chain_uid: B256, gens: &[UaGen]) -> Result<Vec<UaGen>> {
+    if gens.len() > MAX_GENERATION as usize {
+        bail!(
+            "{UA_LINE_DEPTH}: {} entries, above MAX_GENERATION {MAX_GENERATION}",
+            gens.len()
+        );
+    }
+    for g in gens {
+        let r = g.registry;
+        if g.chain_uid != chain_uid {
+            bail!("{UA_LINE_CHAIN_UID}: {r:#x} answers chainUid() {:#x}, this chain's is {chain_uid:#x}", g.chain_uid);
+        }
+        if !(1..=MAX_GENERATION).contains(&g.generation) {
+            bail!(
+                "{UA_LINE_DEPTH}: {r:#x} answers generation() {}, outside 1 … {MAX_GENERATION}",
+                g.generation
+            );
+        }
+        if (g.generation == 1) != (g.predecessor == Address::ZERO) {
+            bail!("{UA_LINE_ROOT}: {r:#x} is generation {} with predecessor {:#x}: generation 1, and only it, has none",
+                g.generation, g.predecessor);
+        }
+    }
+    let roots: Vec<UaGen> = gens.iter().filter(|g| g.generation == 1).copied().collect();
+    if gens.is_empty() {
+        return Ok(roots);
+    }
+    if roots.len() != 1 {
+        bail!(
+            "{UA_LINE_ROOT}: {} entries of generation 1, exactly one is",
+            roots.len()
+        );
+    }
+    let mut line = roots;
+    while let Some(last) = line.last().copied() {
+        let next: Vec<UaGen> = gens
+            .iter()
+            .filter(|g| g.predecessor == last.registry)
+            .copied()
+            .collect();
+        match next[..] {
+            [] => break,
+            [n] if n.generation == last.generation + 1 => line.push(n),
+            [n] => bail!(
+                "{UA_LINE_GAP}: {:#x} is generation {} over {:#x} of generation {}",
+                n.registry,
+                n.generation,
+                last.registry,
+                last.generation
+            ),
+            _ => bail!(
+                "{UA_LINE_FORK}: {} entries name {:#x} as predecessor",
+                next.len(),
+                last.registry
+            ),
+        }
+    }
+    if let Some(g) = gens.iter().find(|g| !line.contains(g)) {
+        bail!("{UA_LINE_GAP}: {:#x} (generation {}) names predecessor {:#x}, which is no entry of the line",
+            g.registry, g.generation, g.predecessor);
+    }
+    Ok(line)
+}
+
+/// CTR-UA-65 at start: each entry's identity read on chain, then [`order_ua_line`] against the chain's `chain_uid`. A read that
+/// fails stops the start (fail closed).
+pub async fn read_ua_line(chain: &crate::chain::Chain, regs: &[Address]) -> Result<Vec<UaGen>> {
+    use crate::abi::IUARegistry as R;
+    if regs.is_empty() {
+        return Ok(vec![]);
+    }
+    let uid = chain.uid().await?;
+    let mut gens = Vec::with_capacity(regs.len());
+    for &r in regs {
+        let e = |what: &'static str| {
+            move |e: crate::chain::SimError| anyhow::anyhow!("ua_registries {r:#x}: {what}: {e}")
+        };
+        gens.push(UaGen {
+            registry: r,
+            chain_uid: chain
+                .call_view(r, R::chainUidCall {})
+                .await
+                .map_err(e("chainUid()"))?,
+            generation: chain
+                .call_view(r, R::generationCall {})
+                .await
+                .map_err(e("generation()"))?,
+            predecessor: chain
+                .call_view(r, R::predecessorCall {})
+                .await
+                .map_err(e("predecessor()"))?,
+            pqz: chain
+                .call_view(r, R::kindEnabledCall { kind: 0x0142 })
+                .await
+                .map_err(e("kindEnabled(0x0142)"))?,
+            tx_gas_cap: chain
+                .call_view(r, R::txGasCapCall {})
+                .await
+                .map_err(e("txGasCap()"))?,
+        });
+    }
+    order_ua_line(uid, &gens)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1286,6 +1536,61 @@ rpc_urls = ["http://a"]
 signer_key_env = "K"
 finality = { mode = "depth", depth = 1, quorum = 1 }
 "#;
+
+    /// NET-ALL-25 at start: no two EVM profiles share the pair (chain id, `chain_uid`), and a profile with a private chain's
+    /// genesis (`chain-uids.json` `private`) under another chain id is refused; the two Avalanche profiles (one genesis, 43114
+    /// and 43113) are accepted. Each refusal beside its twin.
+    #[test]
+    fn chain_pair_and_private_genesis_at_start() {
+        const AVAX: &str = "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b";
+        const SCAAS: &str = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13";
+        let (u, v) = (
+            format!("{:#x}", B256::repeat_byte(0x77)),
+            format!("{:#x}", B256::repeat_byte(0x78)),
+        );
+        let two = |a: (&str, u64, &str), b: (&str, u64, &str)| -> Result<Config> {
+            let chain = |(fam, id, uid): (&str, u64, &str)| {
+                format!("[[chains]]\nfamily = \"{fam}\"\nevm_chain_number = {id}\nchain_uid = \"{uid}\"\nrpc_urls = [\"http://a\"]\nsigner_key_env = \"K\"\nfinality = {{ mode = \"depth\", depth = 1, quorum = 1 }}\n")
+            };
+            let head = OK.split("[[chains]]").next().unwrap();
+            let c: Config = toml::from_str(&format!("{head}{}{}", chain(a), chain(b)))?;
+            c.validate().map(|_| c)
+        };
+        let err = |r: Result<Config>| r.map(|_| ()).unwrap_err().to_string();
+        two(("evm", 43114, AVAX), ("evm", 43113, AVAX)).unwrap();
+        // one pair in two profiles: within a family one chain key (held before NET-ALL-25), across families by the pair
+        assert!(err(two(("evm", 43114, AVAX), ("evm", 43114, AVAX))).contains("configured twice"));
+        let e = err(two(("evm", 296, &u), ("hedera", 296, &u)));
+        assert!(e.contains(CHAIN_PAIR_TAKEN), "{e}");
+        two(("evm", 296, &u), ("hedera", 296, &v)).unwrap(); // twin: another genesis
+                                                             // the private chain's genesis under another chain id, with or without its own profile beside it
+        let e = err(two(("evm", 7623, SCAAS), ("evm", 43114, AVAX)));
+        assert!(e.contains(CHAIN_UID_PRIVATE), "{e}");
+        let e = err(two(("evm", 7622, SCAAS), ("evm", 7623, SCAAS)));
+        assert!(e.contains(CHAIN_UID_PRIVATE), "{e}");
+        two(("evm", 7622, SCAAS), ("evm", 7623, &u)).unwrap(); // twin: the private chain itself, a new chain its own genesis
+    }
+
+    /// Review P2-4: the pair as resolved at lane start: a second chain key on a pair another resolved is refused, the same key
+    /// again is not (every lane of a chain resolves it), the private chain's genesis under another chain id is refused.
+    #[test]
+    fn resolved_pairs_at_lane_start() {
+        let u = B256::repeat_byte(0xa7);
+        check_resolved_pair("evm:4242", 4242, u).unwrap();
+        check_resolved_pair("evm:4242", 4242, u).unwrap();
+        let e = check_resolved_pair("hedera:4242", 4242, u)
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains(CHAIN_PAIR_TAKEN), "{e}");
+        check_resolved_pair("hedera:4242", 4242, B256::repeat_byte(0xa8)).unwrap(); // twin: another genesis
+        let scaas: B256 = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"
+            .parse()
+            .unwrap();
+        let e = check_resolved_pair("evm:7623", 7623, scaas)
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains(CHAIN_UID_PRIVATE), "{e}");
+    }
 
     #[test]
     fn parses_with_defaults() {
@@ -2008,5 +2313,112 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         .unwrap()
         .validate()
         .unwrap();
+    }
+
+    /// A line of `n` generations: generation `i` at `0x0i…0i`, its predecessor generation `i − 1`'s, bound to `uid`.
+    fn line(n: u8, uid: B256) -> Vec<UaGen> {
+        (1..=n)
+            .map(|i| UaGen {
+                registry: Address::repeat_byte(i),
+                chain_uid: uid,
+                generation: i,
+                predecessor: if i == 1 {
+                    Address::ZERO
+                } else {
+                    Address::repeat_byte(i - 1)
+                },
+                pqz: i == 1,
+                tx_gas_cap: 1 << 24,
+            })
+            .collect()
+    }
+
+    /// CTR-UA-65: the start check of `ua_registries`, one change at a time from a valid line of three (the positive control): an
+    /// entry of another chain, two of generation 1, a gap (generation 2 missing; a generation skipped), a fork, a generation 1 with
+    /// a predecessor, 17 entries (and a generation above 16): each refused by its name. The old one-registry key is refused by name.
+    #[test]
+    fn config_ua_registries_validated() {
+        let uid = B256::repeat_byte(0x24);
+        let ok = line(3, uid);
+        assert_eq!(order_ua_line(uid, &ok).unwrap(), ok, "positive control");
+        assert_eq!(order_ua_line(uid, &[]).unwrap(), vec![], "no registry");
+        let refused = |gens: &[UaGen], name: &str| {
+            let e = order_ua_line(uid, gens).unwrap_err().to_string();
+            assert!(e.starts_with(&format!("{name}: ")), "{name}: {e}");
+        };
+        let mut g = ok.clone();
+        g[1].chain_uid = B256::repeat_byte(0x25);
+        refused(&g, UA_LINE_CHAIN_UID);
+        let mut g = ok.clone();
+        g.push(UaGen {
+            registry: Address::repeat_byte(9),
+            ..ok[0]
+        });
+        refused(&g, UA_LINE_ROOT);
+        let mut g = ok.clone();
+        g[0].predecessor = Address::repeat_byte(9);
+        refused(&g, UA_LINE_ROOT);
+        refused(&[ok[0], ok[2]], UA_LINE_GAP);
+        let mut g = ok.clone();
+        g[2].generation = 4;
+        refused(&g, UA_LINE_GAP);
+        let mut g = ok.clone();
+        g[2].predecessor = ok[0].registry;
+        refused(&g, UA_LINE_FORK);
+        refused(&line(17, uid), UA_LINE_DEPTH);
+        let mut g = ok.clone();
+        g[2].generation = 17;
+        refused(&g, UA_LINE_DEPTH);
+        assert_eq!(
+            order_ua_line(uid, &line(16, uid)).unwrap().len(),
+            16,
+            "16 generations fit"
+        );
+        // at load: the old key by name, 17 entries, one entry twice
+        let load = |extra: &str| -> Result<Config> {
+            let c: Config = toml::from_str(&format!("{OK}{extra}\n"))?;
+            c.validate().map(|_| c)
+        };
+        let one = format!("{:#x}", Address::repeat_byte(1));
+        let e = format!(
+            "{:#}",
+            load(&format!("ua_registry = \"{one}\"")).unwrap_err()
+        );
+        assert!(
+            e.contains("ua_registry is replaced by ua_registries"),
+            "{e}"
+        );
+        let list = |n: u8| {
+            (1..=n)
+                .map(|i| format!("\"{:#x}\"", Address::repeat_byte(i)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let c = load(&format!("ua_registries = [{}]", list(2))).unwrap();
+        assert_eq!(
+            c.chains[0].ua_registries,
+            [Address::repeat_byte(1), Address::repeat_byte(2)]
+        );
+        let e = format!(
+            "{:#}",
+            load(&format!("ua_registries = [{}]", list(17))).unwrap_err()
+        );
+        assert!(e.contains(UA_LINE_DEPTH), "{e}");
+        let e = format!(
+            "{:#}",
+            load(&format!("ua_registries = [\"{one}\", \"{one}\"]")).unwrap_err()
+        );
+        assert!(e.contains(UA_LINE_FORK), "{e}");
+    }
+
+    /// CTR-UA-65: the order written in the config carries no meaning: every permutation of a line of four orders the same.
+    #[test]
+    fn config_order_free() {
+        let uid = B256::repeat_byte(0x24);
+        let ok = line(4, uid);
+        for p in [[3, 1, 0, 2], [3, 2, 1, 0], [1, 0, 3, 2], [0, 1, 2, 3]] {
+            let shuffled: Vec<UaGen> = p.iter().map(|i| ok[*i]).collect();
+            assert_eq!(order_ua_line(uid, &shuffled).unwrap(), ok, "{p:?}");
+        }
     }
 }

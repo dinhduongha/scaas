@@ -71,6 +71,7 @@ own_codes! {
     SubmitPathNone,
     VerdictRefused,
     TxTypeRefused,
+    KindDisabled,
     RawDigestRefused,
     AppDomainRefused,
     AppPurposeRefused,
@@ -126,6 +127,13 @@ own_codes! {
     /// A gas table with a key outside the format, at the top, on a row or inside a row's part (PR A review, finding 1): an
     /// unknown part is refused, never dropped from a quote.
     GasFieldUnknown,
+    /// A registration of a kind whose home (`kindHome(kind)`) is another generation than the bound registry: that registry
+    /// carries it verify-only, or not at all (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); nothing is sent.
+    RegistrationVerifyOnly,
+    /// A UA no generation of the bound registry's line holds (`holderOf(ua)` answers no holder, §11.1).
+    UaUnregistered,
+    /// A PQZ write or read of a UA whose record has no PQZ home on the bound registry's walk (`pqzHomeOf(ua)` 0, §11.2).
+    PqzHomeNone,
     /// An order, a cancel or a liquidity order naming a DEX that is not on the chain profile's list, or a wrap order whose
     /// wrapped token is not on its wrapper list (CLI-SGN-35): refused before anything is signed (plan T17).
     DexNotListed,
@@ -141,7 +149,19 @@ own_codes! {
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).
-pub const SHARED_CODES: &[&str] = &["Argument", "VaultVersion"];
+pub const SHARED_CODES: &[&str] = &[
+    "Argument",
+    "VaultVersion",
+    // the app-core refusals (spec §12, T21): `scaas-ua` raises them for its checks, the SDK for the profile's
+    "AppDomainRefused",
+    "AppPurposeRefused",
+    "AppSaltMismatch",
+    "AppHandleForeign",
+    "AppKeyUsage",
+    "AppArenaFull",
+    // plan T42 (CLI-SDK-33 (37) (a)): a family this build leaves out, `scaas-ua`'s refusal mapped one to one
+    "FeatureMissing",
+];
 
 impl std::fmt::Display for SdkError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -153,7 +173,11 @@ impl std::error::Error for SdkError {}
 
 impl From<scaas_ua::wallet::Error> for SdkError {
     fn from(e: scaas_ua::wallet::Error) -> Self {
-        SdkError::Ua(e)
+        match e {
+            // plan T42: a family this build leaves out is the SDK's own `FeatureMissing` (one list of names)
+            scaas_ua::wallet::Error::FeatureMissing => SdkError::FeatureMissing,
+            e => SdkError::Ua(e),
+        }
     }
 }
 

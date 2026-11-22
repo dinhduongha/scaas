@@ -10,8 +10,8 @@ macro_rules! binding_list {
         $m! {
             /// The SDK (spec §4): the module accessors, events, watching.
             object Sdk = crate::Sdk {
-                #[cfg(feature = "wallet")] async watch / watch_blocking (account: String, chains: Vec<String>) -> ();
-                #[cfg(feature = "wallet")] async state_rev / state_rev_blocking () -> u64;
+                #[cfg(feature = "evm")] async watch / watch_blocking (account: String, chains: Vec<String>) -> ();
+                #[cfg(feature = "evm")] async state_rev / state_rev_blocking () -> u64;
             }
             /// Seeds (spec §6).
             object Vault = crate::vault::Vault {
@@ -41,66 +41,69 @@ macro_rules! binding_list {
                 async next_account / next_account_blocking (seed: String) -> u32;
                 async add_ua / add_ua_blocking (req: AddUa) -> AccountInfo;
                 async add_native / add_native_blocking (req: AddNative) -> AccountInfo;
-                #[cfg(feature = "wallet")] async create_passkey_key / create_passkey_key_blocking (req: CreatePasskeyKey) -> KeyRef;
-                #[cfg(feature = "wallet")] async create_se_key / create_se_key_blocking (req: CreateSeKey) -> KeyRef;
+                #[cfg(feature = "evm")] async create_passkey_key / create_passkey_key_blocking (req: CreatePasskeyKey) -> KeyRef;
+                #[cfg(feature = "evm")] async create_se_key / create_se_key_blocking (req: CreateSeKey) -> KeyRef;
                 async add_watch / add_watch_blocking (req: AddWatch) -> AccountInfo;
                 async signs / signs_blocking (seed: String, id: String) -> bool;
-                #[cfg(feature = "wallet")] async msig_state / msig_state_blocking (chain: String, ua: String) -> MsigState;
-                #[cfg(feature = "wallet")] async prepare_msig_register / prepare_msig_register_blocking (req: MsigRegister) -> Vec<Arc<RegistryWrite>>;
-                #[cfg(feature = "wallet")] async prepare_accept_membership / prepare_accept_membership_blocking (req: AcceptMembership) -> Option<Arc<RegistryWrite>>;
-                #[cfg(feature = "wallet")] async prepare_update_msig / prepare_update_msig_blocking (req: UpdateMsig) -> MsigUpdatePlan;
-                #[cfg(feature = "wallet")] async prepare_register / prepare_register_blocking (req: Register) -> Vec<Arc<RegistryWrite>>;
-                #[cfg(feature = "wallet")] async quote_registry_write / quote_registry_write_blocking (write: Arc<RegistryWrite>) -> SubmitQuote;
-                #[cfg(feature = "wallet")] async submit_registry_write / submit_registry_write_blocking (write: Arc<RegistryWrite>, quote: SubmitQuote) -> String;
-                #[cfg(feature = "wallet")] async registration_of / registration_of_blocking (chain: String, ua: String) -> RegistrationState;
-                #[cfg(feature = "wallet")] async prepare_kem_repair / prepare_kem_repair_blocking (key: KeyRef, chain: String, payer: KeyRef) -> Option<Arc<RegistryWrite>>;
-                async marks / marks_blocking (seed: String, chain: String) -> Vec<AccountInfo>;
-                async restore / restore_blocking (req: Restore) -> Vec<AccountInfo>;
-                #[cfg(feature = "wallet")] async prepare_smart_add_key / prepare_smart_add_key_blocking (op: SmartOp, key: SubjectKeyArgs) -> Arc<Prepared>;
-                #[cfg(feature = "wallet")] async prepare_smart_remove_key / prepare_smart_remove_key_blocking (op: SmartOp, index: String) -> Arc<Prepared>;
-                #[cfg(feature = "wallet")] async prepare_smart_rotate_key / prepare_smart_rotate_key_blocking (op: SmartOp, index: String, key: SubjectKeyArgs) -> Arc<Prepared>;
-                #[cfg(feature = "wallet")] async prepare_smart_set_guardian / prepare_smart_set_guardian_blocking (op: SmartOp, guardian: String) -> Arc<Prepared>;
-                #[cfg(feature = "wallet")] async prepare_smart_cancel_recovery / prepare_smart_cancel_recovery_blocking (op: SmartOp) -> Arc<Prepared>;
-                #[cfg(feature = "wallet")] async prepare_smart_cancel_nonce / prepare_smart_cancel_nonce_blocking (op: SmartOp, lane: String) -> Arc<Prepared>;
-                #[cfg(feature = "wallet")] async prepare_smart_execute / prepare_smart_execute_blocking (op: SmartOp, call: SmartCall) -> Arc<Prepared>;
-                #[cfg(feature = "wallet")] async prepare_smart_deploy / prepare_smart_deploy_blocking (key: KeyRef, chain: String, factory: String, first_key: SubjectKeyArgs, guardian: String) -> NativeQuote;
-                #[cfg(feature = "wallet")] async prepare_complete_recovery / prepare_complete_recovery_blocking (key: KeyRef, chain: String, account: String, new_key: SubjectKeyArgs) -> NativeQuote;
-                #[cfg(feature = "wallet")] async prepare_initiate_recovery / prepare_initiate_recovery_blocking (op: SmartOp, account: String, new_key: SubjectKeyArgs) -> Arc<Prepared>;
-                #[cfg(feature = "wallet")] async registration_blob / registration_blob_blocking (key: KeyRef, attrs: RegisterAttrs) -> RegistrationBlob;
-                #[cfg(feature = "wallet")] async prepare_submit_registration / prepare_submit_registration_blocking (blob: RegistrationBlob, chain: String, expected_ua: String, payer: KeyRef) -> Vec<Arc<RegistryWrite>>;
+                #[cfg(feature = "evm")] async msig_state / msig_state_blocking (chain: String, ua: String) -> MsigState;
+                #[cfg(feature = "evm")] async prepare_msig_register / prepare_msig_register_blocking (req: MsigRegister) -> Vec<Arc<RegistryWrite>>;
+                #[cfg(feature = "evm")] async prepare_accept_membership / prepare_accept_membership_blocking (req: AcceptMembership) -> Option<Arc<RegistryWrite>>;
+                #[cfg(feature = "evm")] async prepare_update_msig / prepare_update_msig_blocking (req: UpdateMsig) -> MsigUpdatePlan;
+                #[cfg(feature = "evm")] async prepare_register / prepare_register_blocking (req: Register) -> Vec<Arc<RegistryWrite>>;
+                #[cfg(feature = "evm")] async quote_registry_write / quote_registry_write_blocking (write: Arc<RegistryWrite>) -> SubmitQuote;
+                #[cfg(feature = "evm")] async submit_registry_write / submit_registry_write_blocking (write: Arc<RegistryWrite>, quote: SubmitQuote) -> String;
+                #[cfg(feature = "evm")] async registration_of / registration_of_blocking (chain: String, ua: String) -> RegistrationState;
+                #[cfg(feature = "evm")] async ua_line / ua_line_blocking (chain: String, ua: String) -> UaLine;
+                #[cfg(feature = "evm")] async register_target / register_target_blocking (chain: String, kind: u16) -> String;
+                #[cfg(feature = "evm")] async pqz_decoy_candidates / pqz_decoy_candidates_blocking (chain: String) -> Vec<String>;
+                #[cfg(feature = "evm")] async prepare_kem_repair / prepare_kem_repair_blocking (key: KeyRef, chain: String, payer: KeyRef) -> Option<Arc<RegistryWrite>>;
+                #[cfg(feature = "evm")] async marks / marks_blocking (seed: String, chain: String) -> Vec<AccountInfo>;
+                #[cfg(feature = "evm")] async restore / restore_blocking (req: Restore) -> Vec<AccountInfo>;
+                #[cfg(feature = "evm")] async prepare_smart_add_key / prepare_smart_add_key_blocking (op: SmartOp, key: SubjectKeyArgs) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_smart_remove_key / prepare_smart_remove_key_blocking (op: SmartOp, index: String) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_smart_rotate_key / prepare_smart_rotate_key_blocking (op: SmartOp, index: String, key: SubjectKeyArgs) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_smart_set_guardian / prepare_smart_set_guardian_blocking (op: SmartOp, guardian: String) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_smart_cancel_recovery / prepare_smart_cancel_recovery_blocking (op: SmartOp) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_smart_cancel_nonce / prepare_smart_cancel_nonce_blocking (op: SmartOp, lane: String) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_smart_execute / prepare_smart_execute_blocking (op: SmartOp, call: SmartCall) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_smart_deploy / prepare_smart_deploy_blocking (key: KeyRef, chain: String, factory: String, first_key: SubjectKeyArgs, guardian: String) -> NativeQuote;
+                #[cfg(feature = "evm")] async prepare_complete_recovery / prepare_complete_recovery_blocking (key: KeyRef, chain: String, account: String, new_key: SubjectKeyArgs) -> NativeQuote;
+                #[cfg(feature = "evm")] async prepare_initiate_recovery / prepare_initiate_recovery_blocking (op: SmartOp, account: String, new_key: SubjectKeyArgs) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async registration_blob / registration_blob_blocking (key: KeyRef, attrs: RegisterAttrs) -> RegistrationBlob;
+                #[cfg(feature = "evm")] async prepare_submit_registration / prepare_submit_registration_blocking (blob: RegistrationBlob, chain: String, expected_ua: String, payer: KeyRef) -> Vec<Arc<RegistryWrite>>;
             }
             /// Tokens, balances, payments (spec §8).
             #[cfg(feature = "wallet")]
             object Wallet = crate::wallet::Wallet {
                 async balances / balances_blocking (id: String, chain: String) -> Balances;
-                async history / history_blocking (account: String, chain: String, before: Option<Cursor>, limit: u32) -> HistoryPage;
+                #[cfg(feature = "evm")] async history / history_blocking (account: String, chain: String, before: Option<Cursor>, limit: u32) -> HistoryPage;
                 async native_address / native_address_blocking (key: NativeKeyRef, ss58_prefix: Option<u16>) -> NativeAddress;
-                async prepare_native_send / prepare_native_send_blocking (req: NativeSend) -> NativeQuote;
-                async submit_native_send / submit_native_send_blocking (q: NativeQuote) -> String;
-                async prepare_transfer / prepare_transfer_blocking (req: Transfer) -> Arc<Prepared>;
-                async prepare_pay / prepare_pay_blocking (req: Pay) -> Arc<Prepared>;
-                async prepare_pay_with_tax / prepare_pay_with_tax_blocking (req: PayWithTax) -> Arc<Prepared>;
-                async prepare_payee_fee / prepare_payee_fee_blocking (req: PayeeFee) -> Arc<Prepared>;
-                async prepare_pay_under_mandate / prepare_pay_under_mandate_blocking (req: PayUnderMandate) -> Arc<Prepared>;
-                async prepare_relay_fee / prepare_relay_fee_blocking (req: RelayFee) -> Arc<Prepared>;
-                async prepare_execute / prepare_execute_blocking (req: Execute) -> Arc<Prepared>;
-                async tokens / tokens_blocking (chain: String, with_index: bool) -> Vec<TokenInfo>;
-                async prepare_cancel_nonce / prepare_cancel_nonce_blocking (req: CancelNonce) -> Arc<Prepared>;
-                async prepare_burn / prepare_burn_blocking (req: Burn) -> Arc<Prepared>;
-                async prepare_wrap / prepare_wrap_blocking (req: Wrap) -> Arc<Prepared>;
-                async prepare_wrap_leg / prepare_wrap_leg_blocking (req: WrapLeg) -> Arc<Prepared>;
-                async prepare_unwrap / prepare_unwrap_blocking (req: Unwrap) -> Arc<Prepared>;
-                async prepare_unwrap_leg / prepare_unwrap_leg_blocking (req: UnwrapLeg) -> Arc<Prepared>;
-                async prepare_add_reserve / prepare_add_reserve_blocking (req: AddReserve) -> Arc<Prepared>;
-                async prepare_wrap_to_ua / prepare_wrap_to_ua_blocking (req: WrapToUa) -> Arc<Prepared>;
-                async prepare_unwrap_to_ua / prepare_unwrap_to_ua_blocking (req: UnwrapToUa) -> Arc<Prepared>;
-                async prepare_set_mandate / prepare_set_mandate_blocking (req: SetMandate) -> Arc<Prepared>;
-                async prepare_set_payee / prepare_set_payee_blocking (req: SetPayee) -> Arc<Prepared>;
-                async prepare_revoke_mandate / prepare_revoke_mandate_blocking (req: RevokeMandate) -> Arc<Prepared>;
-                async prepare_delegate_revoke / prepare_delegate_revoke_blocking (req: DelegateRevoke) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_native_send / prepare_native_send_blocking (req: NativeSend) -> NativeQuote;
+                #[cfg(feature = "evm")] async submit_native_send / submit_native_send_blocking (q: NativeQuote) -> String;
+                #[cfg(feature = "evm")] async prepare_transfer / prepare_transfer_blocking (req: Transfer) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_pay / prepare_pay_blocking (req: Pay) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_pay_with_tax / prepare_pay_with_tax_blocking (req: PayWithTax) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_payee_fee / prepare_payee_fee_blocking (req: PayeeFee) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_pay_under_mandate / prepare_pay_under_mandate_blocking (req: PayUnderMandate) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_relay_fee / prepare_relay_fee_blocking (req: RelayFee) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_execute / prepare_execute_blocking (req: Execute) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async tokens / tokens_blocking (chain: String, with_index: bool) -> Vec<TokenInfo>;
+                #[cfg(feature = "evm")] async prepare_cancel_nonce / prepare_cancel_nonce_blocking (req: CancelNonce) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_burn / prepare_burn_blocking (req: Burn) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_wrap / prepare_wrap_blocking (req: Wrap) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_wrap_leg / prepare_wrap_leg_blocking (req: WrapLeg) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_unwrap / prepare_unwrap_blocking (req: Unwrap) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_unwrap_leg / prepare_unwrap_leg_blocking (req: UnwrapLeg) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_add_reserve / prepare_add_reserve_blocking (req: AddReserve) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_wrap_to_ua / prepare_wrap_to_ua_blocking (req: WrapToUa) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_unwrap_to_ua / prepare_unwrap_to_ua_blocking (req: UnwrapToUa) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_set_mandate / prepare_set_mandate_blocking (req: SetMandate) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_set_payee / prepare_set_payee_blocking (req: SetPayee) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_revoke_mandate / prepare_revoke_mandate_blocking (req: RevokeMandate) -> Arc<Prepared>;
+                #[cfg(feature = "evm")] async prepare_delegate_revoke / prepare_delegate_revoke_blocking (req: DelegateRevoke) -> Arc<Prepared>;
             }
             /// Operations: quote, submit, follow (spec §13).
-            #[cfg(feature = "wallet")]
+            #[cfg(feature = "evm")]
             object Op = crate::op::Op {
                 #[cfg(feature = "account")] async member_sign / member_sign_blocking (prepared: Arc<Prepared>) -> String;
                 async state / state_blocking (op: String) -> OpState;

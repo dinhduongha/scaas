@@ -24,7 +24,9 @@
 //!   failed decryption goes back to the holder only.
 //!
 //! UNAUDITED.
-use super::words::{add, be, class_kind, map_slot, rec_slot, word, CLASS_TOKEN, PURPOSE, W};
+use super::words::{
+    add, be, class_kind, held_at, map_slot, rec_slot, word, CLASS_TOKEN, PURPOSE, W,
+};
 use crate::op::{addr20, evm, final_block, hex, unhex, KeyRef};
 use crate::vault::OpenSeed;
 use crate::{Sdk, SdkError};
@@ -234,8 +236,10 @@ async fn fetch(pool: &EvmPool, at: ReadAt<B256>, p: &Plan) -> Result<Raw, ReadEr
     let reg = Address::from(env.registry);
     let slot0 = tok(ns("disclosureMode")).await?;
     let (keys_of, versions_of) = key_maps(&slot0, &p.token, &p.ua);
-    let key_record = word(pool, at, reg, &map_slot(&be(p.version), &keys_of)).await?;
-    let key_versions = word(pool, at, reg, &versions_of).await?;
+    // CTR-UA-70 (review F2): the key records at the UA's PQZ home on the bound registry's line, never the bound registry alone
+    let (_, home) = held_at(pool, at, reg, &p.ua).await?;
+    let key_record = word(pool, at, home, &map_slot(&be(p.version), &keys_of)).await?;
+    let key_versions = word(pool, at, home, &versions_of).await?;
     let base = acct_base(&p.ua, p.version);
     let mut account = Vec::with_capacity(4);
     for i in 0..4 {
@@ -275,8 +279,9 @@ async fn fetch(pool: &EvmPool, at: ReadAt<B256>, p: &Plan) -> Result<Raw, ReadEr
     let mut keys = Vec::with_capacity(names.len());
     for u in names {
         let (k, v) = key_maps(&slot0, &p.token, &u);
-        let cur = current(&word(pool, at, reg, &v).await?);
-        let record = word(pool, at, reg, &map_slot(&be(cur), &k)).await?;
+        let (_, home) = held_at(pool, at, reg, &u).await?;
+        let cur = current(&word(pool, at, home, &v).await?);
+        let record = word(pool, at, home, &map_slot(&be(cur), &k)).await?;
         let ptr = low_addr(&record, 0);
         let code = if ptr == [0; 20] {
             vec![]
@@ -530,9 +535,9 @@ pub(crate) async fn read_all(
 /// A PQZ balance read (spec §9.2, §9.4): the account of the UA key `signer` (a PQZ-capable kind, `KeyRef::Ua`) at key
 /// version `key_version`, whose PQZ key is the wallet's `pqz_key_version(account, index, key_version)` of the same account and
 /// index (spec §7).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PqzBalanceRequest {
     pub signer: KeyRef,
     pub chain: String,
@@ -542,9 +547,9 @@ pub struct PqzBalanceRequest {
 }
 
 /// A decrypted PQZ balance, for the holder only.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PqzBalance {
     /// the smallest unit, decimal: what a debit at this block may spend (the account and the window `[rolled, p)`)
     pub amount: String,
@@ -656,9 +661,9 @@ async fn decrypt(
 /// Every key version's balance of `signer` on `token` and their sum (P-T16-5): versions `0..=latest`, `latest` the registry's
 /// `pqzVersions` word read with version 0's words; each version a [`super::Confidential::pqz_balance`] read of its own fixed
 /// word set (R1 to R7), decrypted by its own key.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PqzBalanceAll {
     /// the sum, decimal
     pub amount: String,
@@ -702,9 +707,9 @@ impl super::Confidential {
 // --- the PQZ rows without a proof (spec §9.2, §21): `wallet`'s plain path, the contract's domain must be a PQZ token's ---
 
 /// `pqz_shield` (`UAShield` on a PQZ token): `amount` of the signer's public balance into `to_ua`'s pending window.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PqzShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -716,9 +721,9 @@ pub struct PqzShield {
 }
 
 /// `pqz_wrap_shield` (`WrapShield` on a PQZ token): wrap `amount_in` of `underlying` and shield it to `to_ua`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PqzWrapShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -732,9 +737,9 @@ pub struct PqzWrapShield {
 
 /// `UAPrepareAcc` (`half` 0 or 1 of the materialisation) and `UAPqzRollOver` (`n` pending entries) of `ua`'s account at key
 /// version `key_version`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct PqzAccountOp {
     pub signer: KeyRef,
     pub chain: String,

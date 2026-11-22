@@ -32,6 +32,8 @@ pub enum Gw {
 }
 
 pub struct Chain {
+    /// the chain id `eth_chainId` answers, [`CHAIN_ID`] by default (plan T40: a profile's own)
+    pub chain_id: u64,
     pub head: u64,
     pub finalized: u64,
     pub timestamp: u64,
@@ -75,6 +77,9 @@ pub struct Chain {
     pub genesis: String,
     /// `eth_call` and `eth_estimateGas` that send a value revert (a non-payable target)
     pub value_reverts: bool,
+    /// `kindHome(uint16)` by registry (lower-case `0x` hex): the home it answers for every kind; a registry not listed answers
+    /// itself (a generation 1 registering every kind)
+    pub kind_home: HashMap<String, String>,
     /// storage words by (contract, slot as `0x` + 64 hex), lower case; an absent word is 0 (plan T15)
     pub storage: HashMap<(String, String), String>,
     /// `eth_call` answers by `(to, calldata prefix)`, read first (plan T13: the registry's views)
@@ -98,6 +103,7 @@ pub struct Chain {
 impl Default for Chain {
     fn default() -> Self {
         Chain {
+            chain_id: CHAIN_ID,
             head: 0x20,
             finalized: 0x20,
             timestamp: 1_800_000_000,
@@ -126,6 +132,7 @@ impl Default for Chain {
             gw_paths: vec![],
             genesis: hash_of(0),
             value_reverts: false,
+            kind_home: HashMap::new(),
             storage: HashMap::new(),
             answers: vec![],
             gas_of: None,
@@ -300,7 +307,7 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
         "eth_call" | "eth_estimateGas" if c.value_reverts && sends_value => {
             err("execution reverted")
         }
-        "eth_chainId" => ok(json!(format!("{CHAIN_ID:#x}"))),
+        "eth_chainId" => ok(json!(format!("{:#x}", c.chain_id))),
         "eth_blockNumber" => ok(json!(format!("{:#x}", c.head))),
         "eth_getBlockByNumber" => {
             let n = named(c, &p[0]);
@@ -347,6 +354,9 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 (c.domains.get(&to), data == sel("eip712Domain()"))
             {
                 ok(json!(eip712_domain(name, &to, salt)))
+            } else if data.starts_with(&sel("kindHome(uint16)")) {
+                let home = c.kind_home.get(&to).unwrap_or(&to);
+                ok(json!(format!("0x{:0>64}", home.trim_start_matches("0x"))))
             } else if data.starts_with(&sel("balanceOfUA(bytes32)")) {
                 ok(json!(format!(
                     "0x{:064x}",

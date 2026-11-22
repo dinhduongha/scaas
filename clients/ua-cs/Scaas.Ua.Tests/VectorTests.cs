@@ -1087,4 +1087,31 @@ public class VectorTests
             Assert.All(s, p => Assert.False(string.IsNullOrEmpty(p.Value.GetString())));
         }
     }
+
+    // CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
+    static readonly byte[] Gen1 = Enumerable.Repeat((byte)0x11, 20).ToArray(), Gen2 = Enumerable.Repeat((byte)0x22, 20).ToArray();
+
+    [Fact]
+    public void target_equal_ok() => UA.RegistrationTargetOk(0x0131, Gen1, (byte[])Gen1.Clone());
+
+    [Fact]
+    public void target_other_verify_only()
+    {
+        var e = Assert.Throws<TargetException>(() => UA.RegistrationTargetOk(0x0131, Gen2, Gen1));
+        Assert.IsAssignableFrom<UAException>(e);
+        Assert.Equal(("UAVerifyOnly", (ushort)0x0131), (e.Code, e.Kind));
+        Assert.Equal(Gen1, e.KindHome);
+    }
+
+    [Fact]
+    public void target_zero_home_not_on_line()
+    {
+        foreach (var reg in new[] { Gen1, new byte[20] })
+        {
+            var e = Assert.Throws<TargetException>(() => UA.RegistrationTargetOk(0x0131, reg, new byte[20]));
+            Assert.Equal(("UAKindNotOnLine", (ushort)0x0131), (e.Code, e.Kind));
+            Assert.Equal(new byte[20], e.KindHome);
+        }
+        Assert.Throws<ArgumentException>(() => UA.RegistrationTargetOk(0x0131, Gen1, new byte[19]));
+    }
 }

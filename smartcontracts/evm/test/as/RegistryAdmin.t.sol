@@ -209,8 +209,8 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
 
     function _kinds() internal view returns (UARegistry.KindConfig[] memory c) {
         c = new UARegistry.KindConfig[](2);
-        c[0] = UARegistry.KindConfig(K1, address(mock), 50_000);
-        c[1] = UARegistry.KindConfig(ML44, address(mock), CAP);
+        c[0] = UARegistry.KindConfig(K1, address(mock), 50_000, false, 0);
+        c[1] = UARegistry.KindConfig(ML44, address(mock), CAP, false, 0);
     }
 
     function _k1Key() internal returns (bytes memory) {

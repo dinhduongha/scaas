@@ -198,6 +198,11 @@ pub(crate) struct Arena {
     /// The PRF key-encryption key retained at a passkey or platform unlock (scaas-sdk spec §6.10, owner 2026-11-18 (b)): label
     /// vaults open with it on first use. In the arena's locked pages, so `lock` and drop zero it with them.
     prf_kek: Option<Slot>,
+    /// Slots of destroyed app-core key handles, wiped, reused by a secret of the same length (scaas-sdk spec §12.2: a ratchet
+    /// makes and destroys a key per message), and the app-core handles live in this arena (feature `app-core`).
+    free: Vec<Slot>,
+    #[cfg(feature = "app-core")]
+    app_live: usize,
 }
 
 impl Arena {
@@ -221,6 +226,9 @@ impl Arena {
             self_tests: 0,
             deks: HashMap::new(),
             prf_kek: None,
+            free: Vec::new(),
+            #[cfg(feature = "app-core")]
+            app_live: 0,
         }
     }
 
@@ -235,6 +243,11 @@ impl Arena {
     fn put(&mut self, bytes: &[u8]) -> Result<Slot> {
         if bytes.len() > PAGE {
             return Err(Error::Argument);
+        }
+        if let Some(i) = self.free.iter().position(|f| f.len == bytes.len()) {
+            let slot = self.free.swap_remove(i);
+            self.get_mut(slot)?.copy_from_slice(bytes);
+            return Ok(slot);
         }
         if self.chunks.is_empty() || PAGE - self.used < bytes.len() {
             self.chunks.push(Chunk::new());
@@ -551,6 +564,25 @@ impl SecretStore {
         })
     }
 
+    /// An app-core key handle's secret put into the open arena (scaas-sdk spec §12.2, feature `app-core`): `AppArenaFull` when
+    /// `max` handles are live, `WalletLocked` while locked.
+    #[cfg(feature = "app-core")]
+    pub(crate) fn put_app(self: &Arc<Self>, bytes: &[u8], max: usize) -> Result<Handle> {
+        let mut g = self.write();
+        let generation = g.generation;
+        let a = g.arena.as_mut().ok_or(Error::WalletLocked)?;
+        if a.app_live >= max {
+            return Err(Error::AppArenaFull);
+        }
+        let slot = a.put(bytes)?;
+        a.app_live += 1;
+        Ok(Handle {
+            store: self.clone(),
+            generation,
+            slot,
+        })
+    }
+
     /// A store of its own holding only `secret` (an ephemeral KEM key, spec §8.2), and the secret's handle.
     pub(crate) fn single(secret: &[u8]) -> Result<Handle> {
         let mut arena = Arena::empty();
@@ -714,6 +746,29 @@ impl Handle {
             generation: self.generation,
             slot,
         })
+    }
+
+    /// Wipes an app-core key handle's secret and frees its slot for reuse (feature `app-core`); nothing once the store's
+    /// generation moved (the arena was wiped with it).
+    #[cfg(feature = "app-core")]
+    pub(crate) fn free_app(&self) {
+        let mut g = self.store.write();
+        if g.generation != self.generation {
+            return;
+        }
+        if let Some(a) = g.arena.as_mut() {
+            if let Ok(s) = a.get_mut(self.slot) {
+                s.zeroize();
+                a.free.push(self.slot);
+                a.app_live = a.app_live.saturating_sub(1);
+            }
+        }
+    }
+
+    /// Whether two handles name the same store.
+    #[cfg(feature = "app-core")]
+    pub(crate) fn same_store(&self, store: &Arc<SecretStore>) -> bool {
+        Arc::ptr_eq(&self.store, store)
     }
 
     /// The secret's bytes, wiped in the arena as they are read (under the write lock): a one-use secret's only read.

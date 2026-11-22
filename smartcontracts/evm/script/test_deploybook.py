@@ -135,4 +135,139 @@ fails("DEPLOY_SET_UNKNOWN", d.set_book, b2, "mldsa-x")
 fails("DEPLOY_SET_UNKNOWN", d.set_merge, on, None, "mldsa-x", "r.json")
 fails("BOOK_SET_CHAIN", d.set_merge, on, dict(b1, chainUid=OTHER), "mldsa-on", "r.json")
 
+# plan 2026-11-19-registry-verify-only-kinds Task 13 (spec §9, F14): the later-generation book fields round-trip (red until
+# deploybook.gen_fields / gen_check exist)
+GEN = {
+    "ua_registry": "0x" + "0d" * 20,
+    "ua_registry_generation": 2,
+    "ua_registry_predecessor": "0x" + "0a" * 20,
+    "ua_registry_codehash": "0x" + "11" * 32,
+    "ua_registry_libraries": {"UARegistryCoreLib": {"address": "0x" + "0e" * 20, "codehash": "0x" + "12" * 32}},
+    "tx_gas_cap": 16777216,
+    "tx_gas_cap_probe_rows": [{"gas": 16777216, "accepted": True}, {"gas": 16777217, "accepted": False}],
+    "gen_pqz": True,
+    "verify_only": {
+        "0x0131": {
+            "kind": "0x0131",
+            "verifier": "0x" + "0f" * 20,
+            "cap": 250000,
+            "keyForm": 0,
+            "precompile": "0x000000000000000000000000000000005caa0013",
+            "eip": "EIP-8355",
+            "status": "chain-own",
+            "probe_rows_hash": "0x" + "13" * 32,
+        }
+    },
+    "owner_overrides": [],
+}
+
+
+def book_fields_roundtrip():
+    b = d.gen_fields(dict(H), GEN)
+    assert d.gen_check(b, "gen") and {k: b[k] for k in GEN} == GEN
+    fails("BOOK_GEN_FIELD", d.gen_check, {k: v for k, v in b.items() if k != "tx_gas_cap"}, "gen")
+
+
+book_fields_roundtrip()
+
+# NET-ALL-25 (the pair; C18): chain-uids.json as read refuses a second row of one (chainId, chainUid) pair and a private
+# chain's genesis anywhere else; the resolver refuses a private chain's genesis under a new chain id; the deploy gate refuses
+# a kind keeping homeChain records on a genesis another row shares. Each refusal beside its positive twin.
+AVAX = "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b"  # avalanche-mainnet 43114, avalanche-testnet 43113
+EVM0 = d.EVM = os.path.abspath(os.path.join(HERE, ".."))  # the find() block above left d.EVM on its temp dir
+
+
+def with_table(edit, f):
+    """`f()` against a copy of chain-uids.json changed by `edit(table)`, in a temp dir."""
+    t = json.load(open(os.path.join(EVM0, "chain-uids.json")))
+    edit(t)
+    with tempfile.TemporaryDirectory() as tmp:
+        json.dump(t, open(os.path.join(tmp, "chain-uids.json"), "w"), indent=2)
+        d.EVM = tmp
+        try:
+            return f()
+        finally:
+            d.EVM = EVM0
+
+
+def row(key, chain_id, uid, private=False):
+    return {
+        "key": key,
+        "name": key,
+        "chainId": chain_id,
+        "network": key.rsplit("-", 1)[1],
+        "testnet": True,
+        "chainUid": uid,
+        "private": private,
+    }
+
+
+def avalanche_rows_resolve():
+    assert d.resolve(43114, AVAX, env={}) == ("avalanche-mainnet", "Avalanche C-Chain", "mainnet")
+    assert d.resolve(43113, AVAX, env={}) == ("avalanche-testnet", "Avalanche Fuji", "testnet")
+    assert (
+        d.resolve(1, "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3", env={})[0]
+        == "ethereum-mainnet"
+    )
+    assert (
+        d.resolve(61, "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3", env={})[0] == "etc-mainnet"
+    )
+
+
+def pair_taken_refused():
+    dup = lambda t: t["chains"].append(row("avalanche-copy-testnet", 43113, AVAX))  # noqa: E731
+    fails("CHAIN_PAIR_TAKEN", with_table, dup, lambda: d.resolve(43114, AVAX, env={}))
+    # twin: the same genesis under a new chain id is a public chain's sharing, accepted
+    ok = lambda t: t["chains"].append(row("avalanche-copy-testnet", 43112, AVAX))  # noqa: E731
+    assert with_table(ok, lambda: d.resolve(43112, AVAX, env={}))[0] == "avalanche-copy-testnet"
+
+
+def private_genesis_refused():
+    assert [r["key"] for r in d.rows() if r["private"]] == ["scaas-testnet"]
+    # the resolver: a private chain's genesis under a new chain id (a fork, a copy), even with DEPLOY_NAME
+    fails("CHAIN_UID_PRIVATE", d.resolve, 7623, SCAAS[1], env={"DEPLOY_NAME": "fork-testnet"})
+    fails("CHAIN_UID_PRIVATE", d.resolve, 7623, SCAAS[1], env={})
+    assert d.resolve(7623, OTHER, env={"DEPLOY_NAME": "fork-testnet"})[0] == "fork-testnet"  # twin: its own genesis
+    assert d.resolve(*SCAAS, env={})[0] == "scaas-testnet"  # twin: the private chain itself
+    # a public chain's genesis under a new chain id: no private refusal (DEPLOY_NAME as for any unlisted chain)
+    assert d.resolve(43112, AVAX, env={"DEPLOY_NAME": "avax-copy-testnet"})[0] == "avax-copy-testnet"
+    # the table: a row repeating a private chain's genesis, under another chain id
+    rep = lambda t: t["chains"].append(row("fork-testnet", 7623, SCAAS[1].lower()))  # noqa: E731
+    fails("CHAIN_UID_PRIVATE", with_table, rep, d.rows)
+    pub = lambda t: (rep(t), t["chains"][0].update(private=False))  # noqa: E731
+    assert len(with_table(pub, d.rows)) == len(d.rows()) + 1  # twin: the same rows with the chain public
+    # a private row whose genesis an earlier public row holds
+    late = lambda t: t["chains"].append(row("avax-own-testnet", 7624, AVAX, private=True))  # noqa: E731
+    fails("CHAIN_UID_PRIVATE", with_table, late, d.rows)
+    # every row says private true | false
+    fails("CHAIN_ROW_PRIVATE", with_table, lambda t: t["chains"][3].pop("private"), d.rows)
+    fails("CHAIN_ROW_PRIVATE", with_table, lambda t: t["chains"][3].update(private="no"), d.rows)
+
+
+def home_chain_kinds_refused():
+    # UARegistry (review P1-2): UAMsigUpdate and UAPqzScopedKey(Record) bind chain_uid under the portable domain, no chain id
+    kinds = ("PqChat", "OpenFactory", "PqVault", "UARegistry")
+    assert d.table()["homeChainKinds"] == list(kinds)
+    for cid in (43114, 43113):
+        for kind in kinds:
+            fails("HOME_CHAIN_SHARED_GENESIS", d.kind_check, kind, cid, AVAX)
+        assert d.kind_check("PqChatStore", cid, AVAX) == "PqChatStore"  # twin: the store keeps no homeChain record
+    for kind in kinds:  # twin: a genesis no other row shares
+        assert d.kind_check(kind, *SCAAS) == kind
+        assert (
+            d.kind_check(kind, 11155111, "0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9") == kind
+        )
+    # a kind name on neither list (a typo) is refused, never passed (review P3-1); a kind of the other list passes
+    fails("KIND_UNKNOWN", d.kind_check, "PqChatt", *SCAAS)
+    fails("KIND_UNKNOWN", d.kind_check, "uaregistry", 43113, AVAX)
+    assert "PqChatStore" in d.table()["otherKinds"] and d.kind_check("RescueVault", 43113, AVAX) == "RescueVault"
+    fails("HOME_CHAIN_SHARED_GENESIS", d.kind_check, "PqChat", 43112, AVAX)  # an unlisted chain on a listed genesis
+    assert d.kind_check("PqChat", 43112, OTHER) == "PqChat"
+
+
+for t in (avalanche_rows_resolve, pair_taken_refused, private_genesis_refused, home_chain_kinds_refused):
+    try:
+        t()
+    except BaseException as e:  # noqa: BLE001  the test's name in the failing output (the mutants' `expect`)
+        sys.exit(f"FAIL {t.__name__}: {type(e).__name__}: {e}")
 print("test_deploybook: ok")

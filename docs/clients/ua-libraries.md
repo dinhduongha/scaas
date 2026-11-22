@@ -52,6 +52,20 @@ registry record (0 = none known: `UAKindUnknown`, a native kind `UAKindNotDerive
 
 **Registry arguments (`typed-signing`, [CTR-UA-36](../contracts/accounts.md#CTR-UA-36)).** Every library builds the explicit call of a registration: entry choice (`register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`), `UAAttrs` with `KemKey`, the KEM hash commit plus the `setKemKey(ua, 0, kem, UASig())` fill when the calldata is over `REGISTER_CALLDATA_LIMIT` (261,909 B) or forced, the `setKemKey` / `setPqzKey` arguments, and the ABI calldata length (arithmetic, no ABI encoder). A malformed KEM key is refused before a form is chosen (`kemKeyOf` runs the record check), and a `setKemKey` builder refuses no key. **Client rule (owner 2026-11-01):** a front-runner can land the commit form of a full `register`, so after `register`, or on `UAAlreadyRegistered`, read `registrationOf`; when `attrs.kemPkHash != 0` and `kemKeyAt(ua, 0)` is empty, send `setKemKey(ua, 0, key, UASig())` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)); clientkeys `kemRepair` and ua-rs `kem_repair` return that call or null from the read values, the other libraries build it with their `setKemKey` builder. clientkeys `registrationArgs` is the reference ([CLI-SGN-41](signers-clientkeys.md#CLI-SGN-41)); `scaas_ua::ua_portable::registration_args` in ua-rs; `registration_args` in ua-py and `registrationArgs` in ua-dart (named JSON maps), `RegistrationArgs` in ua-go and ua-cs (typed structs / records that marshal to the same JSON). The four wrappers take JSON in and out, one shim in ua-rs (feature `json`), because a nested typed struct over a C ABI is not thin: `scaas_ua_registration_args`, `scaas_ua_set_kem_key_args`, `scaas_ua_set_pqz_key_args` in ua-c, `registrationArgs` / `setKemKeyArgs` / `setPqzKeyArgs` in ua-cxx, ua-qt and ua-dart-frb, the object shapes of `portable.json`'s `args`. Bad JSON, a field of the wrong type or bad hex is `UAArgument`; the UA errors pass through.
 
+**Registration target ([CTR-UA-65](../contracts/accounts.md#CTR-UA-65) "Clients"; [registry verify-only kinds spec §12](../superpowers/specs/2026-11-19-registry-verify-only-kinds.md)).** A
+later registry generation may carry a kind verify-only; a registration of that kind belongs at the generation where it is
+registrable, `kindHome(kind)`. Before sending a registration of `kind` to `registry`, the caller reads `registry.kindHome(kind)`
+on chain and passes it to the pure check (no RPC in the libraries, owner C6): ua-rs `registration_target_ok(kind, &registry,
+&kind_home) -> Result<(), TargetError>`, clientkeys and ua-dart `registrationTargetOk`, ua-py `registration_target_ok`, ua-go
+`RegistrationTargetOk` (returns `error`), ua-cs `UA.RegistrationTargetOk`. The 20-byte addresses compare as bytes (clientkeys and
+ua-dart also take hex, any case). `kindHome == registry` passes; a different non-zero `kindHome` is `UAVerifyOnly` and a zero
+`kindHome` (no generation of the line enables the kind) `UAKindNotOnLine`, both as `TargetError` (ua-cs `TargetException`; a
+`UAError` / `UAException` subclass where the language has one) carrying `kind` and `kindHome`, the address to register at for
+`UAVerifyOnly`. A wrong address length is the language's argument error. Tests `target_equal_ok`, `target_other_verify_only`,
+`target_zero_home_not_on_line` in each library. No byte format changes, no vectors. BUILT in ua-rs, clientkeys, ua-py, ua-go,
+ua-cs and ua-dart; the four Rust wrappers (ua-c, ua-cxx, ua-qt, ua-dart-frb) do not export it yet (PLANNED; a caller there
+compares the two addresses itself).
+
 Language notes: Dart's KEM version is a `BigInt` (2^64 − 1 does not fit an `int`); ua-dart-frb's package entry point refuses a version below 0 or at or above 2^64 (`UAKemVersion`) before the bridge, which would otherwise wrap it to 64 bits; the wallet surface's other integers (kind, account, index, coin type, `change`, SS58 prefix, lengths) cross the bridge as `i64` and are `UAArgument` outside their Rust type, and ua-py refuses an integer outside its C type before the `ctypes` call, which would wrap it (ua-rs-native T13 C4); ua-qt's numbers (chain id, KEM version) are JS numbers, exact up to 2^53, and a larger or fractional value is `UAArgument`; ua-qt exposes `holderPopMessage(kind, ua, keyData, pqzKey, pqzPop, kemPk)` (+ `holderPopMessageH` for a hash-only proof, `purposeTagV(purpose, version)`) and returns JSON. **ua-c ABI version 5, the identity surface** (the wallet surface is ABI 6, [CLI-UAL-05](#CLI-UAL-05); 1 → 2: the proof-hash argument takes `(ptr, len)`, len 0 = absent, len ≠ 32 = `UAPqzPopHash`; 2 → 3: the typed digests, `scaas_ua_portable_domain_separator`, `scaas_ua_kem_record_hash`, `scaas_ua_portable_record_digest`, the `kem_record_tag`, `pqz_key_record_tag`, `portable_pop_digest` and `personal_sign_digest` exports gone; then `scaas_ua_registration_args`, `scaas_ua_set_kem_key_args`, `scaas_ua_set_pqz_key_args`): statuses **12–17** (`UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAPqzPopHash`, `UAPqzKeySet`, `UAKemScheme`), structs `ScaasUaHolderPop` and `ScaasUaPqzKeyRecord` (225 bytes, align 1), `scaas_ua_purpose_tag_v`; ua-cxx and ua-dart-frb follow through the Rust wrapper. Tests in every package read `portable.json` (27 registrations, 15 KEM records, 16 PQZ key records, 68 negatives; `mldsa87` and `fndsa1024` with `fndsa512`'s rows each: a KEM register key, KEM records v1-v3, PQZ key records at the four sets) and pin two known answers as literals: `chainKeyHash(1099511627783)` = `keccak256("evm:1099511627783")` = `0x6e45d591…`, and the KEM record digest at version 2^64 − 1 `0xa0063a84…38f07` (ua-qt pins it at 2^53 = `0x04a0150e…990482`, the largest version a QML number carries exactly). Errors carry one code everywhere: `UAKeyData`, `UAIdInNativeSpace`, `UAKindUnknown`,
 `UAKindNotDerived`, `UAKindNotNative`, `UAIdFormat`, `UAPurposeUnknown`. The Solidity library has the on-chain subset.
 
@@ -174,6 +188,8 @@ Claude), no external audit.
 | `mlock` | arena protection ([CLI-UAL-10](#CLI-UAL-10)); compiled out off Unix | yes (owner 2026-11-06) |
 | `pq`, `signers`, `json` | the identity layer's own: PQ verifiers, group signers, JSON shims | through `wallet` |
 | `vectors` | test-only entry points; never in a production artifact ([CLI-UAL-25](#CLI-UAL-25)) | no |
+| `fam-<row>` | one per row of chain-support, only that chain's transaction format (decisions CLI-SDK-33 (31), (37); plan T42): `fam-evm` (RLP, `EvmTx`, `evm`, `hedera_ecdsa`), `fam-hedera` (`hedera_ed25519`), `fam-near`, `fam-algorand`, `fam-cosmos`, `fam-aptos`, `fam-solana`, `fam-soroban` (`stellar`), `fam-sui`, `fam-ton`, `fam-dot` (sr25519, SS58, `polkadot`), `fam-btc` (the two Bitcoin networks), `fam-arweave`; a network whose row is off is `FeatureMissing`; the core (`wallet`) keeps every UA kind and the seed standards | yes (all) |
+| `xcheck-<family>` | a chain's own crate as a third cross-check of its vector rows; tests and CI only ([CLI-UAL-25](#CLI-UAL-25)'s rule for test features) | no |
 
 **C ABI 6** (`clients/ua-c`, `include/scaas_ua.h` by cbindgen; the v5 header is kept at `legacy/ua-rs-sign/scaas_ua.v5.h`).
 Every v5 declaration is unchanged. New: the opaque handles `ScaasUaWallet`, `ScaasUaKey` (UA or native), `ScaasUaKemKey`,
@@ -624,7 +640,7 @@ requirements; the library's word checks stop a careless caller, never a forger. 
 | 1 (<a id="CLI-UAL-31"></a>CLI-UAL-31) | **Trusted sources, one or several** (owner 2026-11-06; Change owner 2026-11-08, ARCH-POS-15): every source is an RPC endpoint the holder **named** (their own node or one they configured), a **default** in the release's own reviewed list (from public RPC information, trusted like a named one), a **discovered** endpoint (found at run time), or a verifying light client in the reading layer. A layer may take several (a wallet layer and the app may; the reference readers do, named only: `--rpc` repeated, `--rpc-agree`): by default **failover** in the order given, every word of a request from the one source that answered the whole read and the next source from scratch after a failure, never a mix; with the **agreement option** a **strict majority** of the sources (⌊n/2⌋ + 1) must return the same complete read at one block, counted per source over the whole read, else the read is refused. A discovered endpoint serves a read that feeds a decryption only under the agreement option with at least three sources | the request's words are one source's (failover) or the identical read of a strict majority (agreement); a discovered source alone, or under agreement with fewer than three sources, is refused |
 | 2 (<a id="CLI-UAL-32"></a>CLI-UAL-32) | **Known chain**: `(chainId, chain_uid)` from the holder's configuration (genesis hashes as pinned in `smartcontracts/evm/chain-uids.json`, [NET-ALL-22](../networks/README.md#NET-ALL-22)) | `eth_chainId` and `eth_getBlockByNumber("0x0").hash` equal the configured pair |
 | 3 (<a id="CLI-UAL-33"></a>CLI-UAL-33) | **One final block**: all words from one block final by the chain's rule, or at the holder's confirmation depth where the chain has no finality ([NET-EVM-04](../networks/evm.md#NET-EVM-04)) | every read names the same block number and hash; `head − block ≥ depth`, or the block is at or below the `finalized` tag |
-| 4 (<a id="CLI-UAL-34"></a>CLI-UAL-34) | **Real storage, not views**: storage words by `eth_getStorageAt` / `eth_getProof` at that block; blob and key code by `eth_getCode`, whose `keccak256` equals the account's `codeHash`; `eth_call` views only from requirement 1's own or configured node, never as the sole source of a word a light client verifies | `keccak256(code) == codeHash` for each pointer; the method and block recorded per word |
+| 4 (<a id="CLI-UAL-34"></a>CLI-UAL-34) | **Real storage, not views**: storage words by `eth_getStorageAt` / `eth_getProof` at that block; blob and key code by `eth_getCode`, whose `keccak256` equals the account's `codeHash`; `eth_call` views only from requirement 1's own or configured node, never as the sole source of a word a light client verifies (where a record is held on the registry line, an address and no word, scaas-sdk reads `holderOf` / `kindHome` by `eth_call` at that block: [off-chain readers](../contracts/accounts.md#off-chain-readers)) | `keccak256(code) == codeHash` for each pointer; the method and block recorded per word |
 | 5 (<a id="CLI-UAL-35"></a>CLI-UAL-35) | **Catalogued token**: catalogued by that chain's `OpenFactory` (its configured address) with a PQZ kind for the PQZ facade, a Zether kind for the Zether facade | the factory index's `_rec[token]` read as storage (slot and packing from ua-mtx-merge's pin `test/zether/ZetherStateVectors.t.sol`): `contractClass` TOKEN, `kind` among the facade's kinds; the token's code a clone of a chain-neutral release, its `ChainEnv` read at the fixed offsets (owner 2026-11-08) |
 | 6 (<a id="CLI-UAL-36"></a>CLI-UAL-36) | **The selected leg belongs to the handle**: the leg's recipient UA's registered key equals the handle's (PQZ: `pqzKeyOf(ua)` `proven`, its key hash the handle's; Zether: the registered `Y`); an auditor read: the account is the token's `auditorUA`, `auditorMode` not NONE, an auditor copy on that leg; a disclosure kind allowed by the token's `disclosureMode` | the registry and token words read as storage at the same block; the comparisons above; the registry read is the one the token's `ChainEnv` names (owner 2026-11-08) |
 | 7 (<a id="CLI-UAL-37"></a>CLI-UAL-37) | **Nothing back**: no result, failure, error code, result-dependent timing, follow-up read or log line that depends on a decryption goes back to the source; a result goes to the holder or a viewer the holder names | no request to the source after a decryption depends on its outcome (reviewable in the layer's code) |
@@ -754,6 +770,54 @@ T11–T14, T17–T20). Which device-id version a client defaults to is open (a c
 chain, since v7 puts its creation time on chain). The Rust client core that does all of this above `scaas-sdk`, with key handles only, is
 [`pqchat-core`](pqchat-core.md) (SPECIFIED).
 
+<a id="arweave-clients"></a>**Arweave data items and file objects** (SPECIFIED, nothing built; owner 2026-11-21,
+[ARCH-POS-19](../decisions.md#ARCH-POS-19) (2), Q4; the rules below controller calls of
+[ARCH-POS-20](../decisions.md#ARCH-POS-20); design in the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part D; UNAUDITED):
+
+<a id="CLI-UAL-64"></a>**CLI-UAL-64** — **`ua-rs` builds, signs and parses ANS-104 data items as `arbundles` builds them, with a
+per-file upload key that is never a UA, wallet or funded key and signs exactly one item; no RSA wallet.** Layout: signature
+type (2 B, little-endian), signature, owner, target and anchor (each a presence byte 0 or 1, then 32 B), tag count and tag
+bytes length (8 B each), the Avro tags, data; tags ≤ 128, name ≤ 1,024 B, value ≤ 3,072 B, both non-empty, ≤ 4,096 tag bytes; an
+item at least 80 B; a negative Avro block count, trailing tag bytes and a header tag count other than the Avro count refused.
+The signed message is the 48-byte SHA-384 deep hash of `["dataitem", "1", <type as decimal text>, owner, target, anchor, <raw
+Avro tag bytes>, data]` (an absent target or anchor an empty blob, an empty tag list 0 bytes); the id is base64url, unpadded,
+of SHA-256 of the signature. Types: 2 or 4 (ed25519, raw signature over the 48 bytes; which one Turbo takes is set by a probe)
+by default, 3 (secp256k1, EIP-191 `personal_sign` over the 48 bytes, 65-byte uncompressed owner, signature `r ‖ s ‖ v` with
+`v ∈ {27, 28}` and low `s`, both produced and checked) for a bundler that takes only EVM signers; no type 1. Items carry no
+target, no anchor and no tags (one fixed `Content-Type: application/octet-stream` tag only if the probe shows one is needed).
+**The upload key** is derived inside one `ua-rs` call that also seals the file (CLI-UAL-65), so no caller passes the hash it
+binds: `HKDF-SHA-256(ikm = the app root key ‖ the file key (32 B each), salt = empty, info = "scaas/arweave/v1/upload" ‖ type
+(1 B) ‖ ctSha256, L = 32)`, where `ctSha256` is SHA-256 of the object `ua-rs` has just encrypted under the file key handle; the
+ed25519 seed, or a big-endian secp256k1 scalar (0 or ≥ n: a counter byte `0x01`, `0x02`, … appended to `info`). It lives
+behind a handle of the single usage `UploadSign`, created in that call and bound to one type and one `ctSha256`; its only
+operation signs an item `ua-rs` built (a type with no public constructor), after recomputing SHA-256 of the item's data and
+refusing (`AppKeyUsage`) unless it equals the bound hash; it takes no digest and no message. Invariant: one upload key signs
+exactly one byte string. The signature is verified before the item is returned. Vectors: `smartcontracts/vectors/arweave/`,
+written by clientkeys first and cross-checked both ways against a pinned `arbundles` (each item byte-identical to the one
+`arbundles` builds from the same key and data, and accepted by `arbundles`' own verification), with tags, a target and an
+anchor in some rows; reproduced by `ua-rs`.
+
+<a id="CLI-UAL-65"></a>**CLI-UAL-65** — **A file on Arweave is encrypted with its padding inside the AEAD: the plaintext is
+framed as `len ‖ file ‖ zero pad` up to a power-of-two bucket, so the public object is exactly bucket + 16 B; it is named by
+`ar://<id>` in the `file` content's `url`, checked before decryption by length and `ctSha256`, and after decryption by the frame,
+the zero pad, `size` and `sha256`.** `frame = size (8 B, big-endian) ‖ file ‖ 0x00…` of length `bucket(size)`, where
+`bucket(size)` is the smallest power of two that is at least `max(2^16, size + 8)`, computed in integers (never floating point);
+the object is `AES-256-GCM(key, 0^96, frame)`, `bucket(size) + 16` B, and `ctSha256` is SHA-256 of the whole object. This
+replaces UA-7's `ct = AES-256-GCM(key, 0^96, file)` for a `file` content whose `url` is `ar://` (a `store` copy of such a file
+holds the same object); a content without an `ar://` `url` keeps UA-7's form. The largest bucket is the smaller of the bundler
+profile's largest single request and the platform's in-memory cap, 2^30 B on 64-bit targets and 2^27 B on wasm32; above it
+the writer refuses (`FileTooLarge`), and a reader refuses a signed `size` whose bucket is above its own cap before any request.
+`url` accepts `ar://<id>` beside `https://` and `ipfs://`: `<id>` exactly 43 characters of canonical base64url (no padding, the
+last character one of `AEIMQUYcgkosw048`), nothing after it, the scheme in lower case. A reader accepts the object only when its
+length is exactly `bucket(size) + 16` (an announced other length refused unread, no `Range` request) and its SHA-256 equals
+`ctSha256`; after the tag verifies, `open_file` requires the frame's `len` to equal the signed `size`, every pad byte zero, and
+SHA-256 of the file to equal the signed `sha256`, before any plaintext byte leaves `ua-rs`; a cache is keyed by the plaintext
+`sha256`, never by the id or `ctSha256` alone. Since the file key is random and arrives in a signed message, that check binds
+one message to one file without a separate key commitment. A failure is shown on the device only. PqVault's `file` item takes
+the same rules. Vectors: new rows in `smartcontracts/vectors/pqchat/` (an `ar://` `file` content and its refusals) and the
+frames, buckets (`size = 0`, and `size + 8 = 2^k − 1, 2^k, 2^k + 1` for every `k` from 16 to 31) and objects in
+`smartcontracts/vectors/arweave/`, written by clientkeys first and read by every client that reads those directories.
+
 <a id="pqvault-clients"></a>**PqVault** (SPECIFIED, nothing built; the contract is [pqvault.md](../contracts/pqvault.md), the design
 the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)). The rules every PqVault client follows; the
 first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-12 controller calls (owner may override):
@@ -770,6 +834,8 @@ SDK's `vault` stays the seed vault; `pqvault-core`'s calls are the spec's
 wrapped once to its own UA KEM key (ML-KEM-1024 + X25519); no seed-derived vault key exists; a personal vault is never
 rekeyed to add a member: sharing from it is a new shared vault and a copy of the chosen live items** (owner 2026-11-17,
 ruling "(a)", its sharing clause replaced by O1 (c) the same day). SPECIFIED. The bytes are [CLI-PQV-09](#CLI-PQV-09)'s.
+Single notes are shared through a share box: one shared vault per recipient set, created on the first share and reused,
+each later share one `createItems` copy (controller call 2026-11-21, within O1 (c)). SPECIFIED.
 
 <a id="CLI-PQV-03"></a>**CLI-PQV-03** — **Metadata reduction: titles, usernames, URLs, folders, tags, item types, vault names
 and settings only inside ciphertexts and `sealedInfo`; padding buckets always; batch writes for imports and migrations;
@@ -800,7 +866,13 @@ record with its parameter set's id; neither the seed nor the passphrase alone op
 a wrong passphrase is detected by an AEAD check before any item is opened; the passphrase is never stored or sent;
 forgetting it loses the vault; the choice is a flag in state with no value and no hint; versions written before a change
 stay under the old passphrase** (owner 2026-11-17, P2, changing V9). SPECIFIED. The mechanics are
-[CLI-PQV-10](#CLI-PQV-10)'s.
+[CLI-PQV-10](#CLI-PQV-10)'s. **Biometric unlock per device, opt-in** (owner 2026-11-21, O7 (b)): a client may keep
+`Argon2id`'s output `P_k`, never the passphrase, wrapped by a device-keystore key behind a biometric access policy; it is
+off by default, turned on per device, and on that device the device key and the seed then open the vault (the client says
+so when it is turned on); `passKdf = 1` is Argon2id 64 MiB / 3 / 4 (owner 2026-11-21, O8). SPECIFIED. **The passphrase's
+bytes** (controller call 2026-11-21, the Fable code review F4): RFC 8265's OpaqueString before Argon2id: non-ASCII spaces to
+U+0020, Unicode NFC, UTF-8; empty or a control character refused (`PassphraseInvalid`). BUILT in clientkeys (`passphraseBytes`)
+and reproduced by `ua-rs` (`tests/pqvault_pass.rs`), pinned by `smartcontracts/vectors/pqvault/pass.json` `normalization`.
 
 <a id="CLI-PQV-08"></a>**CLI-PQV-08** — **A migration tool moves the live items to vaults under a new seed and says that the
 old ciphertexts stay on chain and every secret must be changed at its service; until the audit round that covers the
@@ -815,7 +887,10 @@ from `K_v` with the key-wrap constant and its usage in the AAD, and a `file` ite
 under `K_v`; every key handle has one usage, `Derive`, `Data` or `KeyWrap`; a personal vault held by `ua_secret(seed, FN-DSA-512 by
 default, PQV_ACCOUNT, i)`, index 0 the index vault listing the user's vaults** (controller call, owner may override).
 SPECIFIED. Exact bytes: [spec §6](../superpowers/specs/2026-11-17-pqvault.md#6-cryptography); every client reproduces
-`smartcontracts/vectors/pqvault/`.
+`smartcontracts/vectors/pqvault/`. **`sealedInfo`'s padding** (owner 2026-11-21, the Fable
+code review F12): to 1,024 B, the smallest bucket, so its size does not show `prev` or a longer name; past 1,024 B the next power
+of two, at most 16,384 B; 1,052 B sealed, about 1.18 M state gas more than a 256-B bucket per vault or epoch record. The chain
+does not enforce it. BUILT in clientkeys (`padInfo`), reproduced by `ua-rs`.
 
 <a id="CLI-PQV-10"></a>**CLI-PQV-10** — **The passphrase's mechanics: a change, or turning it on or off, is an admin's rekey
 of the same members with a fresh salt; the history is as strong as the weakest epoch that links to it, so before a rekey

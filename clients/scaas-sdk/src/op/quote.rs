@@ -7,18 +7,23 @@ use super::gas::{Figure, GasFrom, GasSources};
 use super::prepared::{envelope, Prepared};
 use super::{evm, key, sim, KeyRef, Op};
 use crate::{Sdk, SdkError};
-use alloy::primitives::{Address, Bytes, U256};
-use scaas_rpc::Purpose;
+use alloy::primitives::{address, Address, Bytes, U256};
+use scaas_rpc::evm::EvmPool;
+use scaas_rpc::pool::{BlockChoice, ReadError};
+use scaas_rpc::{EndpointFailure, FailureKind, Purpose};
 use std::sync::Arc;
+
+/// The OP Stack `GasPriceOracle` predeploy and its `getL1Fee(bytes)` (plan T38).
+const GAS_PRICE_ORACLE: Address = address!("420000000000000000000000000000000000000f");
+const GET_L1_FEE: [u8; 4] = [0x49, 0x94, 0x8e, 0x0e];
 
 /// The `msig` kind: an `msig` signer's verify row (spec §13.3).
 const MSIG: u16 = 0x0120;
 
 /// How an operation reaches the chain (spec §13.3).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum SubmitPath {
     /// a gateway when the profile has one and the entry is one a gateway takes (door A), else a self-relay by `payer` when
     /// given, else `SubmitPathNone`
@@ -30,9 +35,9 @@ pub enum SubmitPath {
 }
 
 /// A quote the user confirms (spec §13.3); `submit` takes exactly it. Amounts are decimal strings of wei.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct SubmitQuote {
     /// `Gateway` or `SelfRelay`, never `Auto`
     pub path: SubmitPath,
@@ -75,15 +80,80 @@ fn cap(s: &str) -> Result<U256, SdkError> {
 
 /// The caps of the SDK's configuration over a self-relay's numbers (`FeeAboveCap`).
 pub(crate) fn check_caps(sdk: &Sdk, gas: u64, max_fee: u128) -> Result<U256, SdkError> {
+    check_cost(sdk, gas, max_fee, U256::ZERO)
+}
+
+/// [`check_caps`] of a cost that adds the chain's L1 data fee `l1` (plan T38): `gas × max_fee + l1`.
+pub(crate) fn check_cost(sdk: &Sdk, gas: u64, max_fee: u128, l1: U256) -> Result<U256, SdkError> {
     let l = &sdk.limits;
     let cost = U256::from(gas)
         .checked_mul(U256::from(max_fee))
+        .and_then(|c| c.checked_add(l1))
         .ok_or(SdkError::FeeAboveCap)?;
     if gas > l.max_gas || U256::from(max_fee) > cap(&l.max_fee_per_gas)? || cost > cap(&l.max_cost)?
     {
         return Err(SdkError::FeeAboveCap);
     }
     Ok(cost)
+}
+
+/// The L1 data fee of the unsigned transaction `unsigned` on `profile`'s chain (plan T38, spec §27.3): on `L1Fee::OpStack`
+/// `GasPriceOracle.getL1Fee(unsigned)` read at one block, pinned by hash, its answer exactly one `uint256` (else the endpoint's
+/// `AnswerMalformed`); 0 and no read without the profile's field.
+pub(crate) async fn l1_fee(
+    profile: &crate::ChainProfile,
+    pool: &EvmPool,
+    unsigned: &[u8],
+) -> Result<U256, SdkError> {
+    if profile.l1_fee != Some(crate::L1Fee::OpStack) {
+        return Ok(U256::ZERO);
+    }
+    // getL1Fee(bytes): the selector, the offset 32, the length, the bytes padded to a word
+    let mut data = GET_L1_FEE.to_vec();
+    data.extend_from_slice(&U256::from(32).to_be_bytes::<32>());
+    data.extend_from_slice(&U256::from(unsigned.len()).to_be_bytes::<32>());
+    data.extend_from_slice(unsigned);
+    data.resize(data.len() + (32 - unsigned.len() % 32) % 32, 0);
+    let data = Bytes::from(data);
+    let a = pool
+        .read_at_block(BlockChoice::Latest, Purpose::Plain, |at| {
+            let data = data.clone();
+            async move {
+                let r = pool.call_at(&at, GAS_PRICE_ORACLE, data).await?;
+                let w: [u8; 32] = r.as_ref().try_into().map_err(|_| {
+                    ReadError::Failure(EndpointFailure::new(
+                        at.endpoint,
+                        FailureKind::AnswerMalformed,
+                        "getL1Fee's answer is no uint256",
+                    ))
+                })?;
+                Ok(U256::from_be_bytes(w))
+            }
+        })
+        .await?;
+    Ok(a.value)
+}
+
+/// `q`'s `max_cost` with the L1 data fee of its transaction to `to` with `value` and `data` (plan T38): `gas_limit × max fee`
+/// + [`l1_fee`] of the unsigned transaction, within the SDK's caps (`FeeAboveCap` counts it).
+pub(crate) async fn with_l1(
+    sdk: &Sdk,
+    chain: &str,
+    q: &mut SubmitQuote,
+    to: Address,
+    value: U256,
+    data: &[u8],
+) -> Result<(), SdkError> {
+    let (profile, chain_id, pool) = evm(sdk, chain)?;
+    let fee = q
+        .max_fee_per_gas
+        .parse::<u128>()
+        .map_err(|_| SdkError::Argument)?;
+    let unsigned =
+        super::submit::evm_tx(chain_id, q, to.into_array(), value, data.to_vec())?.unsigned()?;
+    let l1 = l1_fee(&profile, &pool, &unsigned).await?;
+    q.max_cost = check_cost(sdk, q.gas_limit, fee, l1)?.to_string();
+    Ok(())
 }
 
 /// An EIP-7702 designator: `0xef0100 ‖ address`.
@@ -143,7 +213,7 @@ pub(crate) async fn self_relay(
     } else {
         // the estimate with the value sent (T13b ruling 5): a payable path's cost, a non-payable target's revert
         let g = pool
-            .simulate_value(from, to, value, data)
+            .simulate_value(from, to, value, data.clone())
             .await
             .map_err(sim)?;
         Figure::whole(g, GasSources::both(GasFrom::Estimate))
@@ -162,7 +232,7 @@ pub(crate) async fn self_relay(
         .copied()
         .unwrap_or(0);
     let tx_nonce = pool.pending_nonce(from, Purpose::Plain).await?.max(floor);
-    Ok(SubmitQuote {
+    let mut q = SubmitQuote {
         path: SubmitPath::SelfRelay {
             payer: payer.clone(),
         },
@@ -178,7 +248,10 @@ pub(crate) async fn self_relay(
         gateways: vec![],
         tx_nonce,
         tx_type: if block.base_fee.is_some() { 2 } else { 0 },
-    })
+    };
+    // plan T38: the chain's L1 data fee over the unsigned transaction (none without the profile's field)
+    with_l1(sdk, chain, &mut q, to, value, &data).await?;
+    Ok(q)
 }
 
 /// EIP-8037 under EIP-7825 (controller call, owner auto-run 2026-11-19): a transaction's regular gas `regular` above the
@@ -251,6 +324,8 @@ pub(crate) fn figure(
         attached: super::gas::attached_kind(extra, message),
         // PR A review, finding 4: a third party's derived holder debited
         holder: super::gas::holder_derived(key.0, message),
+        // CTR-UA-65: the verify rows of the registry the operation's contract binds (the profile's)
+        registry: profile.registry.as_deref(),
     };
     super::gas::quoted(
         &profile.gas,
@@ -264,21 +339,25 @@ pub(crate) fn figure(
 }
 
 /// A self-relay quote `q` of an operation on `chain` by a signer of kind `signer`, whose unsigned calldata is `unsigned` bytes,
-/// once signed into `signed` calldata bytes (owner 2026-11-19, G3 at `submit`, Q5 at a gateway operation's self-relay
+/// once signed into the calldata `signed` to `to` (owner 2026-11-19, G3 at `submit`, Q5 at a gateway operation's self-relay
 /// `resend`, from the row's stored signed calldata): its gas recomputed from the real signature's length, never below `q`'s
 /// (`q` itself when nothing grew); above `Limits::max_gas` `SignedGasAboveCap`, above the profile's per-transaction cap or the
 /// chain's block gas limit `GasAboveTxCap` (PR A review, finding 3: as `self_relay` checks it), a cost above the caps
 /// `FeeAboveCap`. `own`: the operation's own figure where the caller recomputed it (a gateway row's `resend`, PR A review
 /// finding 2): the larger of it and `q`'s is the base, so a quote of another entry, kind or lane state never lowers it.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn signed_quote(
     sdk: &Sdk,
     chain: &str,
     signer: u16,
     unsigned: usize,
     q: &SubmitQuote,
-    signed: usize,
+    to: Address,
+    signed: &[u8],
     own: Option<Figure>,
 ) -> Result<SubmitQuote, SdkError> {
+    let calldata = signed;
+    let signed = calldata.len();
     let c = sdk
         .chains
         .iter()
@@ -301,6 +380,7 @@ pub(crate) async fn signed_quote(
         &c.profile.gas_opt_in,
         &sdk.gas_tables,
         signer,
+        c.profile.registry.as_deref(),
         gas_from.as_ref(),
         unsigned,
     );
@@ -314,22 +394,19 @@ pub(crate) async fn signed_quote(
     let (_, _, pool) = evm(sdk, chain)?;
     let block = pool.block_gas().await.map_err(sim)?;
     above_caps(&c.profile, regular, gas, block.limit)?;
-    if gas == q.gas_limit && regular == q.regular_gas {
+    // an L1 data fee is of the signed calldata (plan T38): read again even when the gas did not move
+    if gas == q.gas_limit && regular == q.regular_gas && c.profile.l1_fee.is_none() {
         return Ok(q.clone());
     }
-    let fee = q
-        .max_fee_per_gas
-        .parse::<u128>()
-        .map_err(|_| SdkError::Argument)?;
-    let cost = check_caps(sdk, gas, fee)?;
-    Ok(SubmitQuote {
+    let mut out = SubmitQuote {
         gas_limit: gas,
         regular_gas: regular,
         gas: Some(gas),
         gas_from,
-        max_cost: cost.to_string(),
         ..q.clone()
-    })
+    };
+    with_l1(sdk, chain, &mut out, to, U256::ZERO, calldata).await?;
+    Ok(out)
 }
 
 /// Every gateway of `chain` announces the profile's `chain_uid` for its chain id (`GET /v1/gateway`; NODE-GW-05), else

@@ -1,0 +1,9 @@
+{
+  "evmFork": "cancun",
+  "codeSizeLimit": 24576,
+  "initCodeSizeLimit": 49152,
+  "txGasCap": null,
+  "blockGasLimit": 80000000,
+  "status": "draft",
+  "source": "docs/research/2026-11-21-avax-polkadot-arweave.md section 2: libevm v1.13.14 (Cancun), subnet-evm MaxCodeSize 24,576 B, EIP-3860 init code 49,152 B (ACP-24), no per-transaction cap (ACP-176), block gas limit live 2026-11-21 (Routescan)"
+}

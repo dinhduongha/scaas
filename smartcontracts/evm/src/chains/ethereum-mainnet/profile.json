@@ -1,0 +1,13 @@
+{
+  "evmFork": "osaka",
+  "codeSizeLimit": 24576,
+  "initCodeSizeLimit": 49152,
+  "txGasCap": 16777216,
+  "blockGasLimit": 59941408,
+  "finality": "tag",
+  "txType": 2,
+  "l1Fee": null,
+  "eip2537": true,
+  "status": "draft",
+  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (probes of 2026-11-22: fork, eip2537, caps, codesize, basefee, l1fee, H5, H7); txGasCap: EIP-7825 of Osaka (an eth_call on geth does not apply it)"
+}

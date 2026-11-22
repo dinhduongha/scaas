@@ -299,3 +299,31 @@ test("bls_multi: kinds.json 0x0121 rows", async () => {
   assert.ok(K.kinds.find((k) => k.kind === 0x0121).surplusForm);
   assert.ok(K.kinds.filter((k) => k.surplusForm).length === 1);
 });
+
+// CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
+const GEN1 = "0x" + "aB".repeat(20);
+const GEN2 = "0x" + "22".repeat(20);
+test("target_equal_ok", () => {
+  assert.equal(ua.registrationTargetOk(0x0131, GEN1, GEN1.toLowerCase()), undefined);
+  assert.equal(ua.registrationTargetOk(0x0131, fromHex(GEN1), GEN1.toUpperCase().replace("0X", "0x")), undefined);
+});
+test("target_other_verify_only", () => {
+  assert.throws(
+    () => ua.registrationTargetOk(0x0131, GEN2, GEN1),
+    (e) =>
+      e instanceof ua.TargetError &&
+      e instanceof ua.UAError &&
+      e.code === "UAVerifyOnly" &&
+      e.kind === 0x0131 &&
+      e.kindHome === GEN1.toLowerCase(),
+  );
+});
+test("target_zero_home_not_on_line", () => {
+  const zero = "0x" + "00".repeat(20);
+  for (const reg of [GEN1, zero])
+    assert.throws(
+      () => ua.registrationTargetOk(0x0131, reg, zero),
+      (e) => e instanceof ua.TargetError && e.code === "UAKindNotOnLine" && e.kind === 0x0131 && e.kindHome === zero,
+    );
+  assert.throws(() => ua.registrationTargetOk(0x0131, GEN1, "0x1234"), /kindHome must be 20 bytes/);
+});

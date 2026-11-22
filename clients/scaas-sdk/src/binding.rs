@@ -30,12 +30,14 @@ use crate::admin::{delay::*, *};
 use crate::confidential::*;
 #[cfg(feature = "dex")]
 use crate::dex::*;
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 use crate::op::*;
 use crate::platform::*;
 use crate::vault::*;
 #[cfg(feature = "wallet")]
 use crate::wallet::*;
+#[cfg(feature = "evm")]
+use crate::UaLine;
 use crate::{ChainProfile, Event, GasTable, Limits, SdkError};
 #[cfg(not(feature = "sync-api"))]
 use async_trait::async_trait;
@@ -83,13 +85,13 @@ uniffi::custom_type!(Value, String, {
 });
 
 // the opaque-call marker (spec §13.2): `true` lifts only in a build with `opaque-calls`, as the Rust marker is constructible
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 uniffi::custom_type!(AllowOpaqueCall, bool, {
     lower: |_m| true,
     try_lift: |b| marker(b),
 });
 
-#[cfg(all(feature = "wallet", feature = "opaque-calls"))]
+#[cfg(all(feature = "evm", feature = "opaque-calls"))]
 fn marker(b: bool) -> uniffi::Result<AllowOpaqueCall> {
     if b {
         Ok(AllowOpaqueCall::new())
@@ -98,7 +100,7 @@ fn marker(b: bool) -> uniffi::Result<AllowOpaqueCall> {
     }
 }
 
-#[cfg(all(feature = "wallet", not(feature = "opaque-calls")))]
+#[cfg(all(feature = "evm", not(feature = "opaque-calls")))]
 fn marker(_b: bool) -> uniffi::Result<AllowOpaqueCall> {
     Err(SdkError::OpaqueCallRefused.into())
 }
@@ -107,7 +109,7 @@ fn marker(_b: bool) -> uniffi::Result<AllowOpaqueCall> {
 // records and enums. So a slot crosses every binding as `MsigSlotValue`, its keys `SlotKey`: a `KeyRef` whose `Msig` names the
 // UA only. A slot's key is never an `msig` (spec §7: `Argument` at signing), so the lift loses nothing the SDK would take; the
 // lowering of such a key (never made by a binding) keeps its UA and drops its slots.
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 uniffi::custom_type!(MsigSlot, MsigSlotValue, {
     lower: |s| match s {
         MsigSlot::Member { index, key } => MsigSlotValue::Member { index, key: key.into() },
@@ -128,7 +130,7 @@ uniffi::custom_type!(MsigSlot, MsigSlotValue, {
 });
 
 /// One slot of an `msig` signature (`KeyRef::Msig`), as `MsigSlot`.
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 #[derive(uniffi::Enum)]
 pub enum MsigSlotValue {
     /// the signing (or native) member at `index` signs with `key`
@@ -143,7 +145,7 @@ pub enum MsigSlotValue {
 }
 
 /// A slot of an inner `msig`: its index there and its key.
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 #[derive(uniffi::Record)]
 pub struct MsigLeafValue {
     pub index: u16,
@@ -151,7 +153,7 @@ pub struct MsigLeafValue {
 }
 
 /// A slot's key: `KeyRef` without the slots of an `msig` (a slot's key is never one, spec §7).
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 #[derive(uniffi::Enum)]
 pub enum SlotKey {
     Ua {
@@ -187,7 +189,7 @@ pub enum SlotKey {
     },
 }
 
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 impl From<KeyRef> for SlotKey {
     fn from(k: KeyRef) -> Self {
         match k {
@@ -237,7 +239,7 @@ impl From<KeyRef> for SlotKey {
     }
 }
 
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 impl From<SlotKey> for KeyRef {
     fn from(k: SlotKey) -> Self {
         match k {
@@ -455,7 +457,7 @@ impl Sdk {
         Arc::new(Wallet { m, sdk })
     }
     /// The operations module (spec §13).
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     pub fn op(&self) -> Arc<Op> {
         let (m, sdk) = self.module(self.m.op());
         Arc::new(Op { m, sdk })
@@ -581,7 +583,7 @@ impl Vault {
     }
 }
 
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 #[uniffi::export]
 impl Op {
     /// Whether `part` is a valid partial of `prepared`'s group on it (`bls12381-multi`, spec §5.4).
@@ -615,7 +617,7 @@ impl Admin {
     }
 }
 
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 #[uniffi::export]
 impl Prepared {
     /// The typed digest, the node's in-flight key too.
@@ -674,7 +676,7 @@ impl PreparedOrder {
     }
 }
 
-#[cfg(all(feature = "account", feature = "wallet"))]
+#[cfg(all(feature = "account", feature = "evm"))]
 #[uniffi::export]
 impl RegistryWrite {
     #[uniffi::method(name = "id")]
@@ -823,14 +825,14 @@ pub fn gas_rows_default() -> crate::GasRows {
 }
 
 /// No registration attributes (no PQZ key, no KEM key).
-#[cfg(all(feature = "account", feature = "wallet"))]
+#[cfg(all(feature = "account", feature = "evm"))]
 #[uniffi::export]
 pub fn register_attrs_default() -> RegisterAttrs {
     RegisterAttrs::default()
 }
 
 /// An `msig` structure: members sorted by id, the threshold checked (spec §7).
-#[cfg(all(feature = "account", feature = "wallet"))]
+#[cfg(all(feature = "account", feature = "evm"))]
 #[uniffi::export]
 pub fn msig_structure(
     members: Vec<MsigMemberArgs>,
@@ -840,14 +842,14 @@ pub fn msig_structure(
 }
 
 /// An `msig` structure's UA.
-#[cfg(all(feature = "account", feature = "wallet"))]
+#[cfg(all(feature = "account", feature = "evm"))]
 #[uniffi::export]
 pub fn msig_structure_ua(args: MsigStructureArgs) -> Result<String, SdkError> {
     args.ua()
 }
 
 /// A `SmartKeyAccount`'s address before its deployment (spec §7).
-#[cfg(all(feature = "account", feature = "wallet"))]
+#[cfg(all(feature = "account", feature = "evm"))]
 #[uniffi::export]
 pub fn smart_account_address(
     factory: String,
@@ -859,24 +861,38 @@ pub fn smart_account_address(
 }
 
 /// A secp256k1 subject key from its address.
-#[cfg(all(feature = "account", feature = "wallet"))]
+#[cfg(all(feature = "account", feature = "evm"))]
 #[uniffi::export]
 pub fn subject_key_args_secp256k1(address: String) -> Result<SubjectKeyArgs, SdkError> {
     SubjectKeyArgs::secp256k1(&address)
 }
 
 /// A registration blob from its JSON (spec §7.1).
-#[cfg(all(feature = "account", feature = "wallet"))]
+#[cfg(all(feature = "account", feature = "evm"))]
 #[uniffi::export]
 pub fn registration_blob_from_json(text: String) -> Result<RegistrationBlob, SdkError> {
     RegistrationBlob::from_json(&text)
 }
 
 /// A registration blob's JSON (spec §7.1).
-#[cfg(all(feature = "account", feature = "wallet"))]
+#[cfg(all(feature = "account", feature = "evm"))]
 #[uniffi::export]
 pub fn registration_blob_to_json(blob: RegistrationBlob) -> Result<String, SdkError> {
     blob.to_json()
+}
+
+/// The target of a key write of the UA (`UaLine::key_target`, §12): its holder.
+#[cfg(feature = "evm")]
+#[uniffi::export]
+pub fn ua_line_key_target(line: crate::UaLine) -> String {
+    line.key_target()
+}
+
+/// The target of a PQZ write of the UA (`UaLine::pqz_target`, §12): its PQZ home; `PqzHomeNone` where the walk has none.
+#[cfg(feature = "evm")]
+#[uniffi::export]
+pub fn ua_line_pqz_target(line: crate::UaLine) -> Result<String, SdkError> {
+    line.pqz_target()
 }
 
 /// A binding's configuration (spec §4): the profiles, the passkey RP ID, the limits, the module gas tables; the runtime is the
@@ -1082,7 +1098,7 @@ mod tests {
     #[test]
     fn a_refused_lift_is_the_sdk_code() {
         let code = |e: uniffi::deps::anyhow::Error| e.downcast::<SdkError>().ok().map(|e| e.code());
-        #[cfg(all(feature = "wallet", not(feature = "opaque-calls")))]
+        #[cfg(all(feature = "evm", not(feature = "opaque-calls")))]
         {
             let e = <AllowOpaqueCall as Lift<crate::UniFfiTag>>::try_lift(1)
                 .err()

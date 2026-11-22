@@ -151,4 +151,10 @@ if [ "${1:-}" = --check ]; then
         exit 1
     fi
     echo "[gen] ok: no drift"
+    # the test feature `vectors` never reaches a binding (pqchat-core T1): no generated file names a test-only entry
+    if grep -rlE "vectors_|_vectors" "${GEN[@]}"; then
+        echo "[gen] FAIL a generated file names a test-only entry (feature vectors)" >&2
+        exit 1
+    fi
+    echo "[gen] ok: no test-only entry"
 fi

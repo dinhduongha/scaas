@@ -826,3 +826,244 @@ fn parse_request(v: &Value) -> Option<UaSigRequest> {
         by,
     })
 }
+
+/// An app record's path (scaas-sdk spec §12.2, §12.4): (A) portable under `appPurpose(app_id)` (`requirePortableApp`), or (B)
+/// chain-bound under the app's own `purpose` (`requireAuthorized`).
+#[cfg(feature = "app-core")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppPath {
+    Portable { app_id: [u8; 32] },
+    ChainBound { purpose: [u8; 32] },
+}
+
+/// Whether `purpose` is a SCaaS purpose: a `UAKinds` constant (`APP_PURPOSE_NS` included, the generated list), one this crate
+/// signs (`PURPOSES`, the portable records' tags), or the seal purpose.
+#[cfg(feature = "app-core")]
+pub fn is_scaas_purpose(purpose: &[u8; 32]) -> bool {
+    super::app_refusals::SCAAS_PURPOSES
+        .iter()
+        .any(|(_, s)| keccak256(s.as_bytes()) == *purpose)
+        || check_purpose(purpose).is_ok()
+        || *purpose == crate::seal_purpose_tag()
+}
+
+/// The typed digest of an app record on `path` once its domain and purpose pass (scaas-sdk spec §12.4): a domain named as a
+/// SCaaS contract's (`AppDomainRefused`); path A: `app_id` ≠ 0, a domain of exactly `name, version, salt` (`AppDomainRefused`)
+/// with `salt == app_id` (`AppSaltMismatch`); path B: an app purpose (`AppPurposeRefused`) and a domain with a `chainId` and a
+/// `verifyingContract` (`AppDomainRefused`; their values are the caller's to check against its profile).
+#[cfg(feature = "app-core")]
+pub fn app_record_digest(path: &AppPath, typed: &TypedData) -> Result<[u8; 32]> {
+    let v = typed.to_value();
+    let d = v
+        .get("domain")
+        .and_then(Value::as_object)
+        .ok_or(Error::AppDomainRefused)?;
+    let name = d.get("name").and_then(Value::as_str).unwrap_or_default();
+    if super::app_refusals::SCAAS_DOMAIN_NAMES.contains(&name) {
+        return Err(Error::AppDomainRefused);
+    }
+    match path {
+        AppPath::Portable { app_id } => {
+            if *app_id == [0; 32] {
+                return Err(Error::Argument);
+            }
+            let mut keys: Vec<&str> = d.keys().map(String::as_str).collect();
+            keys.sort_unstable();
+            if keys != ["name", "salt", "version"] {
+                return Err(Error::AppDomainRefused);
+            }
+            let salt = d.get("salt").and_then(Value::as_str);
+            if !salt.is_some_and(|s| s.eq_ignore_ascii_case(&eip712::to_hex(app_id))) {
+                return Err(Error::AppSaltMismatch);
+            }
+        }
+        AppPath::ChainBound { purpose } => {
+            if is_scaas_purpose(purpose) {
+                return Err(Error::AppPurposeRefused);
+            }
+            if !(d.contains_key("chainId") && d.contains_key("verifyingContract")) {
+                return Err(Error::AppDomainRefused);
+            }
+        }
+    }
+    typed.digest()
+}
+
+/// The `UASig` of a single key over an app record (scaas-sdk spec §12.4; typed data only, never a digest): path A by
+/// [`ua_sig_app`] (a native key: `Argument`, it has no portable record); path B a UA key over `uaMessage(kind, purpose,
+/// digest)` (its key data unless a stored kind), a native EVM key over `UAAuth(id, purpose, digest)` under `registry` (the
+/// registry generation's domain; `Argument` without it). A key claiming the `msig` kind: `Argument` (an `msig` signs by
+/// [`msig_sig_app`] or [`msig_sig`]).
+#[cfg(feature = "app-core")]
+pub fn sign_app_record(
+    key: &dyn Signer,
+    registry: Option<&Domain>,
+    path: &AppPath,
+    typed: &TypedData,
+) -> Result<UASig> {
+    let digest = app_record_digest(path, typed)?;
+    let purpose = match path {
+        AppPath::Portable { app_id } => return ua_sig_app(key, app_id, &digest),
+        AppPath::ChainBound { purpose } => purpose,
+    };
+    let r = key.key_ref();
+    if let KeyRef::Native { .. } = r {
+        let id = native_id(&r).ok_or(Error::Argument)?;
+        let td = eip712::ua_auth(registry.ok_or(Error::Argument)?, &id, purpose, &digest)?;
+        let signature = key.sign_request(&eip712::request(&td)?)?;
+        return Ok(UASig {
+            key_data: vec![],
+            signature,
+            members: vec![],
+        });
+    }
+    let KeyRef::Ua { kind, key_data } = r else {
+        return Err(Error::Argument);
+    };
+    if kind == MSIG {
+        return Err(Error::Argument);
+    }
+    let signature = super::webauthn::answer(
+        key,
+        &super::sign::app_chain_request(kind, purpose, &digest)?,
+    )?;
+    Ok(UASig {
+        key_data: if stored(kind) { vec![] } else { key_data },
+        signature,
+        members: vec![],
+    })
+}
+
+/// What [`verify_app_record`] reads of the target registry, at one block: `members` each registered id's `(kind, keyData)`
+/// (`registrationOf`; checked against the id here), `current` an `msig`'s `msigOf` and `enabled` word, `accepted` its accepted
+/// bits, `domain` the registry generation's `UAAuth` domain (a native signer's; `None` where none was read).
+#[cfg(feature = "app-core")]
+pub struct AppRecordState<'a> {
+    pub members: &'a crate::ua_portable::Members<'a>,
+    pub current: &'a Current<'a>,
+    pub accepted: &'a crate::ua_portable::Accepted<'a>,
+    pub domain: Option<&'a Domain>,
+}
+
+/// Whether `sig` is `ua`'s signature of the app record `typed` on `path`, as the registry judges it on `state` (scaas-sdk spec
+/// §12.2, review r2 R7): path A as `requirePortableApp` (a registered UA only; an `msig` down to its members, minimal, its native
+/// members over the record's typed digest), path B as `requireAuthorized` (a native id over `UAAuth(ua, purpose, digest)` in
+/// `state.domain`; an `msig` down to its members, its native members over `UAAuth(id, member, md)`; a single key with its key
+/// data against the id, a stored kind's from its record). A refused record, an unknown UA or a part nothing here can check
+/// (an `evm-eoa` id with code, a native kind other than `evm-eoa`): `false`.
+#[cfg(feature = "app-core")]
+pub fn verify_app_record(
+    ua: &[u8; 32],
+    path: &AppPath,
+    typed: &TypedData,
+    sig: &UASig,
+    state: &AppRecordState,
+) -> bool {
+    let Ok(digest) = app_record_digest(path, typed) else {
+        return false;
+    };
+    let purpose = match path {
+        AppPath::Portable { app_id } => match app_purpose(app_id) {
+            Ok(p) => p,
+            Err(_) => return false,
+        },
+        AppPath::ChainBound { purpose } => *purpose,
+    };
+    if crate::in_native_space(ua) {
+        // a native id has no portable record; on path B it signs `UAAuth` itself (an EOA: its own key, never a delegate)
+        let (AppPath::ChainBound { .. }, Some(d)) = (path, state.domain) else {
+            return false;
+        };
+        let Some(addr) = ua.get(12..).and_then(|a| <[u8; 20]>::try_from(a).ok()) else {
+            return false;
+        };
+        return sig.key_data.is_empty()
+            && sig.members.is_empty()
+            && crate::verify::native_ecdsa(
+                &addr,
+                &crate::ua_auth_digest(d, ua, &purpose, &digest),
+                &sig.signature,
+            );
+    }
+    let Some((kind, key_data)) = (state.members)(*ua) else {
+        return false;
+    };
+    let accepted = Some(state.accepted);
+    if let AppPath::Portable { .. } = path {
+        return crate::ua_portable::check_portable_current(
+            kind,
+            &key_data,
+            ua,
+            &purpose,
+            &digest,
+            sig,
+            state.members,
+            state.current,
+            accepted,
+        )
+        .is_ok();
+    }
+    if kind == MSIG {
+        let Some(d) = state.domain else {
+            return false;
+        };
+        return sig.key_data.is_empty()
+            && sig.signature.is_empty()
+            && crate::ua_portable::check_authorization_current(
+                &key_data,
+                ua,
+                &purpose,
+                &digest,
+                &sig.members,
+                d,
+                state.members,
+                state.current,
+                accepted,
+            )
+            .is_ok();
+    }
+    // `UARegistry._derived`: a stored kind's key from its record, `keyData` empty; any other kind's key data hashing to the id
+    let key = match (stored(kind), sig.key_data.is_empty()) {
+        (true, true) => key_data,
+        (false, false) => sig.key_data.clone(),
+        _ => return false,
+    };
+    if derive_ua(kind, &key, false).ok() != Some(*ua) || !sig.members.is_empty() {
+        return false;
+    }
+    match ua_message(kind, &purpose, &digest) {
+        Ok(m) => crate::verify::verify(kind, &key, &m, &sig.signature, false, false),
+        Err(_) => false,
+    }
+}
+
+/// Whether a single UA key's `signature` (kind `kind`, key data `key_data` read from the UA's record and checked against its id
+/// by the caller) signs the app record `typed` on `path` (scaas-sdk spec §12.2, review r2 R7): path A with the kind's PoP check
+/// (`requirePortableApp`), path B with its authorization check (`requireAuthorized`). A refused record or an `msig` kind is
+/// `false` (an `msig` is checked member by member).
+#[cfg(feature = "app-core")]
+pub fn verify_app_record_key(
+    kind: u16,
+    key_data: &[u8],
+    path: &AppPath,
+    typed: &TypedData,
+    signature: &[u8],
+) -> bool {
+    let Ok(digest) = app_record_digest(path, typed) else {
+        return false;
+    };
+    let (purpose, pop) = match path {
+        AppPath::Portable { app_id } => match crate::ua_portable::app_purpose(app_id) {
+            Ok(p) => (p, true),
+            Err(_) => return false,
+        },
+        AppPath::ChainBound { purpose } => (*purpose, false),
+    };
+    if kind == MSIG {
+        return false;
+    }
+    match ua_message(kind, &purpose, &digest) {
+        Ok(m) => crate::verify::verify(kind, key_data, &m, signature, pop, false),
+        Err(_) => false,
+    }
+}

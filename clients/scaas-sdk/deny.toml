@@ -49,14 +49,29 @@ confidence-threshold = 0.9
 
 # scaas-sdk T20b: UniFFI (feature `uniffi`, spec §16.1) is MPL-2.0, a file-level copyleft: used unmodified as a dependency, so
 # allowed for its own crates only, not for the tree
-exceptions = [
-  { allow = ["MPL-2.0"], crate = "uniffi" },
-  { allow = ["MPL-2.0"], crate = "uniffi_core" },
-  { allow = ["MPL-2.0"], crate = "uniffi_internal_macros" },
-  { allow = ["MPL-2.0"], crate = "uniffi_macros" },
-  { allow = ["MPL-2.0"], crate = "uniffi_meta" },
-  { allow = ["MPL-2.0"], crate = "uniffi_pipeline" },
-]
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "uniffi"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "uniffi_core"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "uniffi_internal_macros"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "uniffi_macros"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "uniffi_meta"
+
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "uniffi_pipeline"
 
 [licenses.private]
 # In-repo crates (publish = false: scaas-ua, zether-prover, pqz-*) carry the repository licence.

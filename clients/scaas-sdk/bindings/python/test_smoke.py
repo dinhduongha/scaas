@@ -6,7 +6,8 @@ reference library (ffi/target/lib-uniffi/, built by ../lib.sh uniffi) into a tem
 smartcontracts/vectors/keystore/keystore.json, each container the Python store's `keystore`: valid rows list their seeds and
 every seed opens with the rows' passphrase (its accounts listed); refused rows fail with their named error. Then: a Python
 async authenticator's PRF through the copy call (passkey unlock), `next` on the subscription, a panic as Internal, a Python
-exception in the store and in the authenticator (Unexpected on the Rust side: the SDK's error, no panic), the load check.
+exception in the store and in the authenticator (Unexpected on the Rust side: the SDK's error, no panic), the load check,
+an EVM profile with the profile fields of sdk-complete (the bindings build `evm`).
 Secrets go in only by the copy call. Run: python3 -I test_smoke.py (gate `bind-python`).
 """
 
@@ -239,6 +240,49 @@ class Smoke(unittest.IsolatedAsyncioTestCase):
         # a panic inside a call (the reference library's hook): Internal, the SDK goes on
         self.assertEqual(await failure(ffi.panic_in_call(sdk)), "Internal")
         self.assertEqual(len(await sdk.vault().seeds()), 1)
+
+    async def test_evm_profile(self):
+        # the bindings build the SDK's `evm` (decisions CLI-SDK-33 (49)): an EVM profile opens
+        self.assertNotEqual(s.features() & (1 << 30), 0, "the evm bit")
+
+        def profile(**more):
+            p = dict(
+                key="local",
+                family=s.Family.EVM,
+                chain_id=31337,
+                chain_uid="0x" + "60" * 32,
+                rpc=[s.EndpointConfig(url="http://127.0.0.1:9", _class=s.Class.NAMED, label=None, auth=None)],
+                rpc_policy=s.Policy.FAILOVER,
+                gateways=[],
+                registry=None,
+                factory=None,
+                router=None,
+                finality=s.Finality.FINALIZED(),
+                tx_gas_cap=None,
+                tokens=[],
+                gas=s.gas_rows_default(),
+                gas_opt_in=[],
+                max_valid_secs=None,
+                verifiers=[],
+                verifier_policy=s.Policy.FAILOVER,
+                dexes=[],
+                wrappers=[],
+                family_params=None,
+                l1_fee=None,
+                disabled_kinds=[],
+            )
+            p.update(more)
+            return s.ChainProfile(**p)
+
+        async def open_with(p):
+            c = config()
+            c.profiles = [p]
+            return await s.open(c, MemStore(), None)
+
+        self.assertEqual(await failure(open_with(profile())), "Ok")
+        # the merge's fields reach the SDK: the OP Stack L1 fee and a disabled kind open; an unknown kind is refused by name
+        self.assertEqual(await failure(open_with(profile(l1_fee=s.L1Fee.OP_STACK, disabled_kinds=["pqz"]))), "Ok")
+        self.assertEqual(await failure(open_with(profile(disabled_kinds=["no-such-kind"]))), "Argument")
 
 
 if __name__ == "__main__":

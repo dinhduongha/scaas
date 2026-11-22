@@ -134,14 +134,14 @@ pub mod endpoint_auth {
 }
 
 // the opaque-call marker: `true`, lifted only in a build with `opaque-calls` (spec §13.2), as on every binding
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 impl serde::Serialize for crate::wallet::AllowOpaqueCall {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         s.serialize_bool(true)
     }
 }
 
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 impl<'de> serde::Deserialize<'de> for crate::wallet::AllowOpaqueCall {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let b = bool::deserialize(d)?;

@@ -25,7 +25,24 @@ pqz-set-n2560-kmax16384 = ["scaas-ua/pqz-set-n2560-kmax16384"]
 pqz-set-n2816-kmax65536 = ["scaas-ua/pqz-set-n2816-kmax65536"]
 
 [dependencies]
-scaas-ua = { path = "../ua-rs", default-features = false, features = ["json", "wallet"] }
+# plan T42: every family, the C ABI keeps every network
+scaas-ua = { path = "../ua-rs", default-features = false, features = [
+  "json",
+  "wallet",
+  "fam-evm",
+  "fam-hedera",
+  "fam-near",
+  "fam-algorand",
+  "fam-cosmos",
+  "fam-aptos",
+  "fam-solana",
+  "fam-soroban",
+  "fam-sui",
+  "fam-ton",
+  "fam-dot",
+  "fam-btc",
+  "fam-arweave",
+] }
 
 [dev-dependencies]
 cbindgen = { version = "=0.28.0", default-features = false }

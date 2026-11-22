@@ -29,7 +29,7 @@ MUTANTS = [
     ),
     (
         "the fixup leaves a bound value over the converter's own",
-        [(X, 'lines[i], bound = re.sub(r"\\bvar value\\b", "var value_", line), True', "bound = True")],
+        [(X, 'lines[i], bound, indent = re.sub(r"\\bvar value\\b", "var value_", line), True, depth', "bound, indent = True, depth")],
         FX,
     ),
 ]

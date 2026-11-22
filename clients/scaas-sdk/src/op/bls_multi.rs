@@ -30,9 +30,9 @@ alloy::sol! {
 
 /// A member's part (spec §5.4, §4): its index in the group's key data and its partial `σ_i` (or PoP part `π_i`), 128 bytes,
 /// `0x` hex.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[serde(deny_unknown_fields)]
 pub struct BlsMultiPart {
     pub index: u8,
     pub signature: String,
@@ -196,13 +196,12 @@ pub(crate) fn register_calldata(d: &[u8], pop: &[u8]) -> Result<Vec<u8>, SdkErro
     .abi_encode())
 }
 
-fn registry(sdk: &crate::Sdk, chain: &str) -> Result<Address, SdkError> {
-    let (profile, _, _) = evm(sdk, chain)?;
-    profile
-        .registry
-        .as_deref()
-        .and_then(|a| a.parse().ok())
-        .ok_or(SdkError::Argument)
+/// The registry a group registration goes to (spec 2026-11-19-registry-verify-only-kinds §12): `kindHome(0x0121)` of the
+/// profile's registry, which must be that registry (`RegistrationVerifyOnly`, `RegistrationKindDisabled`; `Argument` without
+/// a registry).
+async fn registry(sdk: &crate::Sdk, chain: &str) -> Result<Address, SdkError> {
+    let (r, pool) = crate::line::bound(sdk, chain)?;
+    crate::line::register_target(&pool, r, bls_multi::KIND).await
 }
 
 impl Op {
@@ -307,7 +306,7 @@ impl Op {
                     .map_err(|_| SdkError::Argument)?
                     .members
                     .len();
-                let to = registry(&sdk, &chain)?;
+                let to = registry(&sdk, &chain).await?;
                 let cd = register_calldata(&d, &[0u8; 128])?; // the PoP's length, not its value
                 let c = sdk
                     .chains
@@ -372,7 +371,7 @@ impl Op {
                     .collect::<Result<Vec<_>, _>>()?;
                 let pop = bls_multi::aggregate_pop(&d, &parts)
                     .map_err(|_| SdkError::RegistrationPopInvalid)?;
-                let to = registry(&sdk, &chain)?;
+                let to = registry(&sdk, &chain).await?;
                 let cd = register_calldata(&d, &pop)?;
                 let (_, chain_id, pool) = evm(&sdk, &chain)?;
                 let from = super::quote::payer_address(&sdk, payer)?;
@@ -393,13 +392,15 @@ impl Op {
                 let block = pool.block_gas().await.map_err(sim)?;
                 super::quote::above_caps(&profile, regular, gas, block.limit)?;
                 let cost = super::quote::check_caps(&sdk, gas, fee)?;
-                let quote = SubmitQuote {
+                let mut quote = SubmitQuote {
                     gas_limit: gas,
                     regular_gas: regular,
                     gas: Some(gas),
                     max_cost: cost.to_string(),
                     ..quote.clone()
                 };
+                // plan T38: the chain's L1 data fee of the registration's transaction (none without the profile's field)
+                super::quote::with_l1(&sdk, &chain, &mut quote, to, U256::ZERO, &cd).await?;
                 let (raw, id) =
                     super::submit::sign_tx(&sdk, chain_id, &quote, to.into(), U256::ZERO, cd)?;
                 match pool.broadcast(&raw, Fanout::All).await? {

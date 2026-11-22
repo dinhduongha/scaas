@@ -19,6 +19,7 @@ scaas-sdk = { path = "../..", default-features = false, features = [
   "vault",
   "account",
   "wallet",
+  "evm",
   "zether",
   "pqz",
   "pqz-set-n2304-kmax4096",

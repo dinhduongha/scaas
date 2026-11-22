@@ -1,0 +1,29 @@
+# T42 sizes at 61c5bb014 (CLI-SDK-33 (37) (f), (g)); release, CARGO_NET_OFFLINE
+# ua-rs: clients/ua-rs/runs/fam-sizes.sh, the probe examples/fam_size.rs (wallet always), build | bytes | delta to none
+none | 2205784 | 0
+fam-evm | 2224536 | 18752
+fam-hedera | 2219496 | 13712
+fam-near | 2222072 | 16288
+fam-algorand | 2213704 | 7920
+fam-cosmos | 2219880 | 14096
+fam-aptos | 2218312 | 12528
+fam-solana | 2223240 | 17456
+fam-soroban | 2222560 | 16776
+fam-sui | 2223600 | 17816
+fam-ton | 2222536 | 16752
+fam-dot | 2323120 | 117336
+fam-btc | 2222680 | 16896
+fam-arweave | 2205712 | -72
+all | 2342744 | 136960
+# scaas-sdk: clients/scaas-sdk/runs/2026-11-17-scaas-sdk-t42-evm-size.sh, the sum of the release rlibs the build reports,
+# without = vault,file-store, with = vault,account,wallet,file-store: target | without | with | delta | delta / with
+native | 235105332 | 385798518 | 150693186 | 39 %
+wasm32 | 223707718 | 365153800 | 141446082 | 38 %
+# of the native delta, alloy's provider, network, rpc-types, rpc-client, json-rpc and transport rlibs alone: 15,554,872 B (alloy_provider 6,035,410, alloy_rpc_types_eth 5,053,480, alloy_network 1,761,084)
+# T41.evm step 0 (the SDK feature `evm`; CLI-SDK-33 (37) (g)), same script and sums, on the step 0 tree: target | vault,
+# file-store | account, wallet without evm | with evm | evm's part | its share; old → new for `account`, `wallet`
+native | 235143150 | 235928222 | 385961352 | 150033130 | 38 %
+wasm32 | 223743352 | 224491174 | 365159706 | 140668532 | 38 %
+# account + wallet (+ file-store, vault): native 385798518 → 235928222 B (−149870296), wasm32 365153800 → 224491174 B (−140662626);
+# no alloy-provider, alloy-network, alloy-rpc-types-eth, alloy-sol-types or alloy-primitives in their graph (feature_tree
+# alloy_only_under_evm); alloy-rlp stays, scaas-ua's `fam-evm`, which `vault` enables for the EVM native key (CLI-SDK-33 (37) (d))

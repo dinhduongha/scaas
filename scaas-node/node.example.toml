@@ -106,9 +106,14 @@ chain_uid = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"
 # token_factory = "0x..."                        # the token factory (OpenFactory): never a call target; its infoOf
 # lists the PqChat instances (class 3, version != 0) that pqchat jobs
 # run on (unset: every pqchat job refused, CALL_TARGET_REFUSED)
-# ua_registry = "0x..."                          # UARegistry: the only target of register / setKemKey / storePqzPop /
-# setPqzKey call jobs (unset: refused); a relayed PQ register over
-# max_gas_per_tx or the block gas limit is refused UA_REGISTER_SPLIT
+# ua_registries = ["0x...", "0x..."]             # the UARegistry line (CTR-UA-65): every generation, any order; replaces the
+# one-address key ua_registry (refused by name). The only targets of register* / setKemKey / storePqzPop / setPqzKey / ...
+# call jobs (empty: refused). Checked on chain at start: each chainUid() is this chain's, exactly one generation 1 with
+# predecessor 0, the others one line (each predecessor an entry, generations consecutive, at most 16); else the node does
+# not start (UA_LINE_CHAIN_UID, UA_LINE_ROOT, UA_LINE_GAP, UA_LINE_FORK, UA_LINE_DEPTH). A write sent to the wrong
+# generation is refused before sending: UA_VERIFY_ONLY (a registration off kindHome(kind)), UA_WRONG_GENERATION (a key
+# write off holderOf(ua), a PQZ write off pqzHomeOf(ua)). A relayed PQ register over max_gas_per_tx or the block gas limit
+# is refused UA_REGISTER_SPLIT
 governance_routers = ["0xB6507C187BAc79eE48Bc55272Bf4aa6696555f70"]
 # GovernanceRouter ("governance_router" in deployments/<key>.json): the only
 # targets of gov_router jobs, direct or relayed (empty: refused); on 7622
@@ -138,6 +143,8 @@ governance_routers = ["0xB6507C187BAc79eE48Bc55272Bf4aa6696555f70"]
 #                                                # unsigned storeMessage / addWraps at the lane's own gas (the operator's
 #                                                # lane policy); default false: only as a relay fee's call, else
 #                                                # UNSIGNED_WRITE_NOT_PAID (UA-7 P17)
+#                                                # relay_unsigned_pqvault = true likewise for PqVault's
+#                                                # unsigned addVaultWraps (CTR-PQV-11); default false
 # profile = "private"                            # public | private (MESH R76); a private chain never gossips
 # gossip = false                                 # open-mesh gossip for this chain (public only)
 # exclusive_ms = 7000
@@ -162,12 +169,34 @@ breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_re
 # pullToken, t, auth}}). Its entries must equal the contract's servicePullEntries(), both directions, and its eip712Domain()
 # must be on this chain, at startup (else SERVICE_ENTRIES_MISMATCH stops the lane); at most 32 entries, op_type at most
 # 1,024 bytes, C3 fields only (address, bool, bytesN, uintN, bytes, string; at most 16; the first `bytes32 payer`). A
-# service is no other kind's address (dex, governance_routers, ua_registry, the factories, the relay-fee router or its
+# service is no other kind's address (dex, governance_routers, ua_registries, the factories, the relay-fee router or its
 # executor, a registered token). params.max_service_op_bytes (default 2048) caps one bytes / string field. Must follow
 # every key of this [[chains]] table (a TOML sub-table):
 # [[chains.services]]
 # address = "0x..."
 # entries = [{ entry = "deposit", op_type = "Deposit(bytes32 payer,uint256 amount,uint64 releaseAfter,bytes32 salt)" }]
+
+# ---- Public EVM profiles, `draft` (SDK plan T40; smartcontracts/evm/src/chains/<key>/): uncomment one [[chains]] table
+# per chain, with the keys of the 7622 table above (lanes, keys, contracts, breaker). rpc_urls from the environment's
+# providers (two independent ones at least, NET-EVM-19); finality is each profile's: `tag` (the `finalized` block) where the chain serves it.
+# Ethereum Classic is dropped (owner 2026-11-22, decisions CLI-SDK-32: no finalized block): no rows. On OP, Arbitrum, Base mainnet and Celo the owner
+# disabled mldsa44, mldsa65, mldsa87 and PQZ (their largest transactions are above the chain's limit; each profile's README).
+# [[chains]] # ethereum-mainnet: family = "evm", evm_chain_number = 1, chain_uid = "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # ethereum-testnet: family = "evm", evm_chain_number = 11155111, chain_uid = "0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # op-mainnet: family = "evm", evm_chain_number = 10, chain_uid = "0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b",
+#   finality = { mode = "tag", quorum = 2 }, params = { l1_fee = "op-stack" }
+# [[chains]] # op-testnet: family = "evm", evm_chain_number = 11155420, chain_uid = "0x102de6ffb001480cc9b8b548fd05c34cd4f46ae4aa91759393db90ea0409887d",
+#   finality = { mode = "tag", quorum = 2 }, params = { l1_fee = "op-stack" }
+# [[chains]] # arbitrum-mainnet: family = "evm", evm_chain_number = 42161, chain_uid = "0x7ee576b35482195fc49205cec9af72ce14f003b9ae69f6ba0faef4514be8b442",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # arbitrum-testnet: family = "evm", evm_chain_number = 421614, chain_uid = "0x77194da4010e549a7028a9c3c51c3e277823be6ac7d138d0bb8a70197b5c004c",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # linea-mainnet: family = "evm", evm_chain_number = 59144, chain_uid = "0xb6762a65689107b2326364aefc18f94cda413209fab35c00d4af51eaa20ffbc6",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # linea-testnet: family = "evm", evm_chain_number = 59141, chain_uid = "0x65a64c825d7c13ce1bf077801d0b6b2a89853e19e4a89a5433d7d85d2102a20b",
+#   finality = { mode = "tag", quorum = 2 }
 
 # ---- Other network families (R58): one [[chains]] each; delete the ones you do not run. ----
 # They run the generic lane runner (one tx in flight per lane, `signed` journaled in ExternalPull before sending,

@@ -110,13 +110,13 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
             address v = k[i] == ML44 || k[i] == ML65 || k[i] == 0x0134
                 ? address(new CacheVerifier(address(0x14)))
                 : address(new MockVerifier(0, 0));
-            c[i] = UARegistry.KindConfig(k[i], v, k[i] >= 0x0110 ? PQ : _cap(k[i]));
+            c[i] = UARegistry.KindConfig(k[i], v, k[i] >= 0x0110 ? PQ : _cap(k[i]), false, 0);
         }
     }
 
     function _one(uint16 kind, address v, uint64 cap) internal pure returns (UARegistry.KindConfig[] memory c) {
         c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(kind, v, cap);
+        c[0] = UARegistry.KindConfig(kind, v, cap, false, 0);
     }
 
     function _plain(uint16 kind, bytes memory d) internal pure returns (bytes memory) {
@@ -332,31 +332,34 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
     /// for `fndsa1024` (CTR-UA-40, kind 0x0135: `vkLength`'s and `_slot`'s arm, `_CFG20`, `_cfg`'s slot-19/20 branch), old -> new in its
     /// commit. bls-multi Task 5 (kind 0x0121: `vkLength`'s and `_slot`'s arm, `_CFG21`; owner 2026-11-19), re-pinned after Task 8
     /// (the split and the fourth word leave the hot path as it was): 0x0100-0x0108 +68 (17,045 -> 17,113 … 17,563 -> 17,631).
+    /// multi-gen-verify Task 15 (the round's registry: the kind word's flags and their masks, the holderOf walk on the signer path,
+    /// the consumer branch; measured, the test stopped at the first row before): 0x0100-0x0107 +314, 0x0108 +310, 0x0110-0x0113
+    /// +282, 0x0121 +300, 0x0130 +323, 0x0131 +270, 0x0132 +315, 0x0133 +314, 0x0134 +303, 0x0135 +314, 0x0141 +327.
     function _before(uint256 kind) internal pure returns (uint256) {
-        if (kind == 256) return 17113;
-        if (kind == 257) return 17140;
-        if (kind == 258) return 17159;
-        if (kind == 259) return 17216;
-        if (kind == 260) return 17307;
-        if (kind == 261) return 17461;
-        if (kind == 262) return 17690;
-        if (kind == 263) return 17576;
-        if (kind == 264) return 17631;
-        if (kind == 272) return 19557;
-        if (kind == 273) return 19614;
-        if (kind == 274) return 19692;
-        if (kind == 275) return 19737;
-        if (kind == 304) return 23347;
-        if (kind == 305) return 24005;
-        if (kind == 306) return 20960;
-        if (kind == 307) return 20249;
+        if (kind == 256) return 17427;
+        if (kind == 257) return 17454;
+        if (kind == 258) return 17473;
+        if (kind == 259) return 17530;
+        if (kind == 260) return 17621;
+        if (kind == 261) return 17775;
+        if (kind == 262) return 18004;
+        if (kind == 263) return 17890;
+        if (kind == 264) return 17941;
+        if (kind == 272) return 19839;
+        if (kind == 273) return 19896;
+        if (kind == 274) return 19974;
+        if (kind == 275) return 20019;
+        if (kind == 304) return 23670;
+        if (kind == 305) return 24275;
+        if (kind == 306) return 21275;
+        if (kind == 307) return 20563;
         // mldsa87 (CTR-UA-39), added on its branch (mock verifier). 3zh (owner 2026-11-15): 22,197 -> 24,456, the row now reads its
         // first cache pointer (a cold SLOAD: three parts since 3zh, `UAStore.expanded`); its stand-in a `CacheVerifier` on a
         // precompile, as the 0x0130 / 0x0131 rows'
-        if (kind == 308) return 24456;
-        if (kind == 309) return 21562; // fndsa1024 (CTR-UA-40), added on its branch (mock verifier)
-        if (kind == 321) return 19661;
-        if (kind == 289) return 20297; // bls12381-multi (0x0121, mock verifier; its hot path verifies the stored `ua ‖ s`), added
+        if (kind == 308) return 24759;
+        if (kind == 309) return 21876; // fndsa1024 (CTR-UA-40), added on its branch (mock verifier)
+        if (kind == 321) return 19988;
+        if (kind == 289) return 20597; // bls12381-multi (0x0121, mock verifier; its hot path verifies the stored `ua ‖ s`), added
         return 0;
     }
 
@@ -426,12 +429,14 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         bytes memory ds = _msigKey(2, m);
         bytes32 mu = UARegistry(at).registerMsig(UACall.structure(ds), _none(), new IUARegistry.MemberSig[](0), "");
         uint256 used = vm.lastCallGas().gasTotalUsed;
-        emit log_string(string.concat("GAS|registerMsig regular|153387|", vm.toString(used)));
+        emit log_string(string.concat("GAS|registerMsig regular|167694|", vm.toString(used)));
         // pqz-three-keys step 3 (K3-3): 143,284 -> 143,464 (+180, the registry face dispatches eleven more selectors)
         // CTR-UA-44 (TODO 3ze): 143,464 -> 145,524 (+2,060: the bound walks the enabled slots, `_signs` per slot, packed arrays)
         // bls-multi (owner 2026-11-19, the registry library split): 145,524 -> 153,387 (+7,863: the step-6 check by one nested
         // DELEGATECALL to `UARegistryCoreLib.portableOk`, which answers an empty `pop` of a classical `msig`)
-        assertLe(used, 153387 + SLACK, "registerMsig");
+        // multi-gen-verify Task 7 (the hard bound's reads at registration, `_hard` / `_modes`): 153,387 -> 167,694 (+14,307; measured in
+        // Task 15, the test stopped at the first row before)
+        assertLe(used, 167694 + SLACK, "registerMsig");
         UARegistry(at).acceptMembership(mu, _acceptEoaSig(ds, ALICE));
         UARegistry(at).acceptMembership(mu, _acceptKeySig(ds, 0x0101, _key(0x0101)));
         bytes32 md = _memberDigest(mu, UAKinds.PURPOSE_METATX, DIGEST);
@@ -442,7 +447,7 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         sm.members[_indexOf(ds, p)] =
             _member(ds, p, _sig(_key(0x0101), UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
         // CTR-UA-44 (TODO 3ze): 52,185 -> 52,968 (+783: the current structure's pointer and enabled word, once per level)
-        _meter(at, mu, sm, "requireAuthorized msig 2-of-2", 52968, SLACK + 2 * MEMBER_LIST_GAS);
+        _meter(at, mu, sm, "requireAuthorized msig 2-of-2", 53275, SLACK + 2 * MEMBER_LIST_GAS);
     }
 
     /// `requireAuthorized`, every kind and native, stays within +64 of the recorded figures (a code layout's change of JUMPDEST order); an
@@ -458,10 +463,10 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         IUARegistry.UASig memory e;
         bytes32 alice = _pad(vm.addr(ALICE));
         e.signature = _ecdsa(ALICE, UARegistry(at).uaAuthDigest(alice, UAKinds.PURPOSE_METATX, DIGEST));
-        _meter(at, alice, e, "requireAuthorized native eoa", 12449, SLACK);
+        _meter(at, alice, e, "requireAuthorized native eoa", 12534, SLACK);
         MockWallet w = new MockWallet(vm.addr(ALICE), 0, 0, at);
         e.signature = _ecdsa(ALICE, UARegistry(at).uaAuthDigest(_pad(address(w)), UAKinds.PURPOSE_METATX, DIGEST));
-        _meter(at, _pad(address(w)), e, "requireAuthorized native 1271", 14262, SLACK);
+        _meter(at, _pad(address(w)), e, "requireAuthorized native 1271", 14343, SLACK);
         _msigRow(at);
     }
 

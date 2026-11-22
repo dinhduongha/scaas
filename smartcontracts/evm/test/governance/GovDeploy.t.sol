@@ -29,6 +29,8 @@ import {WrappedZetherRegulatedToken} from "../../src/regulated/WrappedZetherRegu
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
+import {PqVault} from "../../src/pqvault/PqVault.sol";
+import {IPqVault} from "../../src/pqvault/IPqVault.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
@@ -191,6 +193,93 @@ contract GovDeployTest is Test {
         (OpenFactory p,) = plain.deploy(ZUID, false, ska);
         assertEq(p.classReleaseOf(id).implementation, address(0), "the default registers no PqChat");
         assertFalse(p.classKindEnabled(3, 0));
+    }
+
+    /// PqVault plan V7 (CTR-PQV-02, CTR-PQV-13): `DEPLOY_PQVAULT` registers `PqVault` on the factory's generic path: the class env
+    /// 1 of `(4, 0)` (the UA registry, `params[0]` the declared code limit, no body module), release 1 from the chain-neutral init
+    /// code with empty `implArgs`, the `(4, 0)` switch on, and with a notice period of 0 one instance owned by no UA (JSON
+    /// `pqvault_implementation`, `pqvault_instance`), listed by `contractsPage(4, …)`; the release's code holds no SELFDESTRUCT,
+    /// no CALLCODE and no DELEGATECALL (no caller-supplied target can exist); without the flag nothing of class 4.
+    function test_deployPqVaultPath() public {
+        DeployHarness h = new DeployHarness();
+        h.setPqVault(true);
+        h.setNotice(0);
+        (OpenFactory f, string memory json) = h.deploy(ZUID, false, ska);
+        IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(4, 0, 1);
+        IOpenFactory.ClassRelease memory r = f.classReleaseOf(id);
+        assertEq(vm.parseJsonAddress(json, ".pqvault_implementation"), r.implementation);
+        assertTrue(r.implementation.code.length != 0, "the release");
+        assertEq(PqVault(r.implementation).owner(), bytes32(0), "an implementation: no owner");
+        assertEq(r.initSelector, IPqVault.initialize.selector);
+        assertEq(r.interfaceId, type(IPqVault).interfaceId);
+        assertTrue(f.classKindEnabled(4, 0), "(4, 0) on");
+        IFactoryToken.Env memory e = f.classEnvOf(4, 0, r.envVersion);
+        assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
+        assertEq(uint256(e.params[0]), h.chainCodeLimit(), "params[0]: the declared code limit");
+        assertEq(e.libs.length, 0, "no body module");
+        assertEq(PqVault(r.implementation).modules().length, 0);
+        address inst = vm.parseJsonAddress(json, ".pqvault_instance");
+        assertEq(IPqVault(inst).owner(), bytes32(0), "owned by no UA");
+        assertEq(PqVault(inst).factoryInfo().contractClass, 4);
+        (IOpenFactory.Created[] memory page, uint256 total) = f.contractsPage(4, 0, 8);
+        assertEq(total, 1);
+        assertEq(page[0].addr, inst);
+        (uint256 selfdestructs, uint256 callcodes, uint256 delegatecalls) = _opcodes(r.implementation.code);
+        assertEq(selfdestructs + callcodes + delegatecalls, 0, "no SELFDESTRUCT, no CALLCODE, no DELEGATECALL");
+
+        DeployHarness plain = new DeployHarness();
+        (OpenFactory p,) = plain.deploy(ZUID, false, ska);
+        assertEq(p.classReleaseOf(id).implementation, address(0), "the default registers no PqVault");
+        assertFalse(p.classKindEnabled(4, 0));
+    }
+
+    /// NET-ALL-25 (C18; review P3-1): `_deployPqVault` refuses `PqVault` on a genesis another row shares, where it is created and
+    /// before any call; the fixture lists `PqVault` alone in `homeChainKinds`, so no other kind's line can answer first.
+    function test_pqVaultRefusedOnSharedGenesis() public {
+        string memory p = "./cache/test-fixtures/govdeploy-pqvault-table-test.json";
+        vm.createDir("./cache/test-fixtures", true);
+        bytes32 u = keccak256("one genesis, two chain ids");
+        string memory r = string.concat('"chainUid":"', vm.toString(u), '","private":false}');
+        vm.writeFile(
+            p,
+            string.concat(
+                '{"homeChainKinds":["PqVault"],"otherKinds":["PqChatStore"],',
+                '"chains":[{"key":"a-mainnet","name":"a","chainId":43114,"network":"mainnet",',
+                r,
+                ',{"key":"b-testnet","name":"b","chainId":43113,"network":"testnet",',
+                r,
+                "]}"
+            )
+        );
+        DeployHarness h = new DeployHarness();
+        h.setTable(p);
+        vm.chainId(43114);
+        vm.expectRevert(
+            bytes(
+                "HOME_CHAIN_SHARED_GENESIS: PqVault keeps records bound to chain_uid without the chain id; chain 43114 shares its chain_uid with b-testnet (NET-ALL-25)"
+            )
+        );
+        h.deployPqVaultOnly(u);
+        // twin: a genesis no other row shares passes the gate; the next step then calls the absent factory (no revert data)
+        try h.deployPqVaultOnly(keccak256("its own genesis")) {
+            fail();
+        } catch (bytes memory e) {
+            assertEq(e.length, 0, "past the gate");
+        }
+        vm.removeFile(p);
+    }
+
+    /// The opcodes of `c` up to its last INVALID (solc's trailing data after it), PUSH data skipped.
+    function _opcodes(bytes memory c) internal pure returns (uint256 sd, uint256 cc, uint256 dc) {
+        uint256 end = c.length;
+        while (end > 0 && c[end - 1] != 0xfe) --end;
+        for (uint256 i; i < end; ++i) {
+            uint8 op = uint8(c[i]);
+            if (op == 0xff) ++sd;
+            if (op == 0xf2) ++cc;
+            if (op == 0xf4) ++dc;
+            if (op >= 0x60 && op <= 0x7f) i += op - 0x5f;
+        }
     }
 
     /// Plan T30 (regulated-kinds spec §6.1): `DEPLOY_ZETHER` also deploys the regulated Zether releases 10 and 11 (version 1,
@@ -794,7 +883,7 @@ contract GovDeployTest is Test {
     /// gas limit; one gas under passes.
     function test_publicGateRefusesRegularOver2pow24() public {
         DeployHarness h = new DeployHarness();
-        vm.expectRevert(bytes("X release: regular gas x 1.05 = 16777216 >= 2^24 (EIP-7825, NET-EVM-06)"));
+        vm.expectRevert(bytes("X release: regular gas x 1.05 = 16777216 >= txGasCap 16777216 (EIP-7825, NET-EVM-06)"));
         h.checkMeasured("X", 15_978_301, 0, type(uint256).max);
         h.checkMeasured("X", 15_978_300, 0, type(uint256).max);
     }

@@ -48,6 +48,9 @@ Pay-meta ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)) and the relay fee ([C
 | NEAR | `near:<genesis hash, base58>` (near-sandbox built; testnet / mainnet not deployed) | contract-level `MetaOp` v1 in Borsh, verified by the NEP-141 token against SCaaS key records ([near.md](near.md)) | ed25519 (NEP-413 `signMessage`) / secp256k1 / WebAuthn P-256 (in wasm) / msig; never a NEAR access key; a mandate's delegate is a `Holder` | ed25519 `m/44'/397'/0'/0'/i'` (implicit account) | no (job API only) | BUILT (branch `near-algorand`) |
 | Algorand | `algorand:<genesis hash, base64>` (localnet built; testnet / mainnet not deployed) | app-level `MetaOp` v1 in ARC-4, ARC-200 token in boxes, one shared `account` app ([algorand.md](algorand.md)) | ed25519 (`"MX"` sign-bytes, current authority) / secp256k1 / WebAuthn P-256 / msig | ed25519 `m/44'/283'/0'/0'/i'` | no (job API only) | BUILT (branch `near-algorand`) |
 
+What each chain supports today, one row per chain (contract, node relay and index, `ua-rs` signing, `scaas-rpc` read and write,
+SDK, Zether, PQ, PQZ), against the owner's done rule of 2026-11-21: [chain-support.md](chain-support.md).
+
 Lane keys come from one 24-word BIP-39 mnemonic or a raw private key per lane (Pi Network overrides the SLIP-44
 `coin_type`)
 ([NODE-LANE-08](../node/submit-lanes.md#NODE-LANE-08)); `scaas-node addresses` prints every lane address to fund.
@@ -362,14 +365,28 @@ node's `[[chains.services]]` today, [NODE-JOB-25](../node/job-api.md#NODE-JOB-25
 warns for a service off the list.
 
 <a id="chain-forks"></a><a id="NET-ALL-25"></a>**NET-ALL-25** — **A chain we run that forks becomes a new chain, and
-no two chain profiles share a genesis hash.** Owner ruling 2026-10-08. Two branches of a fork share their genesis
-block, so `chain_uid` cannot tell them apart and a signature made on one replays on the other. For chains SCaaS runs,
+no two chain profiles share the pair `(chainId, chain_uid)`.** Owner ruling 2026-10-08; the pair wording is a controller call
+of 2026-11-21 ([ARCH-POS-19](../decisions.md#ARCH-POS-19) Q8; the pair check BUILT on branch `chains-arweave` (plan T1): `script/deploybook.py`, `script/DeployBook.sol` and the node's start check `CHAIN_PAIR_TAKEN` / `CHAIN_UID_PRIVATE`, run again at lane start over the pair the RPC resolves, so a
+profile without `chain_uid` is checked too). Two branches of a fork share their
+genesis block, so `chain_uid` cannot tell them apart and a signature made on one replays on the other. For chains SCaaS runs,
 a fork is a new chain: a new chain id (EIP-155 practice) and a new `chain_key`, with its own profile; the deploy gate
 enforces it. A private chain re-created from the **same** genesis file would also repeat its genesis hash, so every
-private chain's genesis carries a unique `extraData` nonce, and the deploy gate and the node refuse a genesis hash
-that is already present in any chain profile. On public chains SCaaS relies on the fork's own chain-id change; a fork
-without one is a documented residual (signatures replay on both branches until the profile is withdrawn). Cost: a
-fork of our own chain needs fresh deployments and profiles.
+private chain's genesis carries a unique `extraData` nonce, and the deploy gate and the node refuse a private chain whose
+genesis hash is already present in any chain profile. Public chains may share a genesis (Avalanche C-Chain and Fuji,
+Ethereum and ETC): their profiles are told apart by the chain id, and the deploy gate and the node refuse a profile whose
+pair is already present. A digest that binds the chain id beside `chain_uid` (an EIP-712 domain with `chainId`) is told
+apart on a shared genesis; a record that names its chain by `chain_uid` alone is not: PqChat's `PqChatSession` and `PqTopic`
+and PqVault's records name their home by `homeChain` (a `chain_uid`) and a contract address, and on a shared genesis with a
+deterministic factory both hold on both chains; the UA registry's `UAMsigUpdate` and scoped PQZ keys (`UAPqzScopedKey`,
+`UAPqzScopedKeyRecord`) bind `chain_uid` under the portable domain, with no chain id, and replay to the registry of the
+other chain. So the deploy gate refuses a kind that keeps or checks such records (`PqChat`, `OpenFactory`, `PqVault`,
+`UARegistry`, and any later kind with such a record) on a profile whose `chain_uid` another profile shares, until those
+records carry the chain id; clients refuse such a home as well. A portable record binds no chain by
+design. Which digests bind the chain id is listed, per digest, by [the audit of the spec's plan T1](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md#t1-digest-audit). A chain is private
+(ours) when its `chain-uids.json` row says `"private": true`; every row carries the field, and the table's `homeChainKinds` is the deploy gate's list of kinds refused on a shared genesis (`HOME_CHAIN_SHARED_GENESIS`). (This paragraph's wording after the pair is a
+controller call of 2026-11-21, [ARCH-POS-20](../decisions.md#ARCH-POS-20) C18.) On public chains SCaaS relies on the fork's own chain-id change; a fork without one is a documented
+residual (signatures replay on both branches until the profile is withdrawn). Cost: a fork of our own chain needs fresh
+deployments and profiles.
 
 ## 5. Passkeys (WebAuthn P-256)
 
@@ -520,6 +537,22 @@ branch, the spec / plan file names and the commit prefixes use these names.
 | 19 | Order inside the round | stated per round, with its branches | — | S18 |
 | 20 | Explicit parameters | every entry and every job takes named, typed parameters, as in a REST / JSON / RPC API; no packed `bytes` bundling several fields; a genuine cryptographic blob (`proof`, `ciphertext`, `kemPk`, `pqzKey`, `signature`) is its own named parameter; the statement and digest bytes the verifiers hash stay byte-identical, and what is stored is what the packed bytes were (owner 2026-10-31, [CTR-MTX-29](../contracts/metatx.md#CTR-MTX-29), [CTR-UA-36](../contracts/accounts.md#CTR-UA-36)) | the chain's own argument types (`contracttype` structs on Soroban, ARC-4 structs on Algorand, per-token records on NEAR); a family answers this row in its UA round, NEAR and Algorand each in its own | — (the `ua8-soroban` branch carries Soroban's) |
 | 21 | Signed entries per operation | per operation a direct entry and at most one contract-verified signed entry, taking every subject the chain's host cannot authorize for a call someone else submits ([NET-ALL-28](#NET-ALL-28)) | how the host authorizes a native subject | one, `ua_*`, derived ids only; natives by `require_auth` on the direct entry ([NET-SOR-20](soroban.md#NET-SOR-20)) |
+
+<a id="registry-line-families"></a>**Later verifiers for records an earlier deployment holds** (PLANNED on every family but EVM;
+the principle is [CTR-UA-66](../contracts/accounts.md#CTR-UA-66), BUILT on EVM as the registry line of
+[accounts.md §1.8.1](../contracts/accounts.md#registry-line)). One principle everywhere: a later registry or verifier deployment
+may verify, through its own verifier (e.g. a host function or precompile that did not exist at the first deploy), records an
+earlier deployment holds for the same kind, reading them and writing nothing; equivalence and "never laxer" as
+[CTR-UA-62](../contracts/accounts.md#CTR-UA-62); the holding deployment keeps its software path and authenticates every write;
+nothing deployed is upgraded. Each family round answers how, beside the checklist above:
+
+| Family | Where the principle lands | Status |
+|---|---|---|
+| EVM (Hedera included) | a later `UARegistry` generation carries the kind verify-only, the line walked by `holderOf` | BUILT (EVM contracts, deploy, node, scaas-sdk, clients' target check) |
+| Soroban | no generations: a new kind is a new registry with new tokens ([NET-SOR-17](soroban.md#NET-SOR-17)); a later registry deployment that reads an earlier one's records | PLANNED, `ua-soroban` round |
+| Solana, Move (Aptos, Sui), TON, Cosmos | the family's registry design, in its round | PLANNED, each `ua-<family>` round |
+| NEAR | no registry: the records live per token, so the principle applies to a later token release reading an earlier one's records | PLANNED, `ua-near` round |
+| Algorand | no registry: the records live in the deployment's `account` app, so the principle applies to a later account-app release | PLANNED, `ua-algorand` round |
 
 ## 7. Key lifecycle per family
 
