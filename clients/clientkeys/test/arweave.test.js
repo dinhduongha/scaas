@@ -182,6 +182,15 @@ test("upload keys from the app root key and the file key; seal_for_arweave", () 
   }
 });
 
+test("items that are not C9 parse, and are refused where C9 holds", () => {
+  const object = ar.sealFile(b(O.fileKey), rnd("file/5 bytes", 5)).object;
+  for (const r of U.notC9) {
+    const item = concatBytes(b(r.header), object);
+    assert.equal(ar.parseItem(item).id, r.id, r.name);
+    assert.throws(() => ar.parseItem(item, { shape: "c9" }), { code: "ItemShape" }, r.name);
+  }
+});
+
 test("ar:// urls: accepted and refused rows", () => {
   for (const r of A.urls) {
     if (r.ok) assert.equal(ar.parseArUrl(r.url), r.url.slice(5), r.name);

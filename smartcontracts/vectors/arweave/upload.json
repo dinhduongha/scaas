@@ -103,5 +103,25 @@
       "url": "ar://7gr_YA-hVhmMShfqcf4qM-QuCoZMc4R770sOtBR7Psk",
       "itemSha256": "0x8f14c4833263c53435fd8291fcb113544f7e1d9869738a248bf7d816eb80f6d5"
     }
+  ],
+  "notC9": [
+    {
+      "name": "one tag",
+      "type": 2,
+      "fileKey": "0x65a4c23d04228c10b3fd2ea5a72cae7ee2d3acddba8ae5ffc5555ac1ca6afb19",
+      "fileSeed": "file/5 bytes",
+      "size": 5,
+      "header": "0x02004ab6db40523739d1ff625b9e7b2795cffbf2a9485d7407cfdbcc920dd17275a9e0785b9b1c893d5c5b08251deba2bf58775cc383aee91e0ee6cac432a83cf70059e7e4b9675e635e446f1d855b76a333d54f4f6ce3db396c8af5ba6648c9095a0000010000000000000028000000000000000218436f6e74656e742d54797065306170706c69636174696f6e2f6f637465742d73747265616d00",
+      "id": "2T4J2-LSOH5w8cm2De6dvhY37S2psEe876N-f0YQgoU"
+    },
+    {
+      "name": "a target",
+      "type": 2,
+      "fileKey": "0x65a4c23d04228c10b3fd2ea5a72cae7ee2d3acddba8ae5ffc5555ac1ca6afb19",
+      "fileSeed": "file/5 bytes",
+      "size": 5,
+      "header": "0x0200622b3380449a5cb1454552a011ca40d2204b1320b9cf153a82732aaaeade3c21fe029dfdb5c88a8d1bca5540dd4f2f12d638f3d8e6bc5b7548f89e2e9066240859e7e4b9675e635e446f1d855b76a333d54f4f6ce3db396c8af5ba6648c9095a018861606db294602385ba85dc9bcaed28f2aa286f26a33f43f84f71b3b499f90e0000000000000000000000000000000000",
+      "id": "AyEDuda-_e3mF1sYb9ZC1KbClWAZRnupvsIZM47-h9o"
+    }
   ]
 }

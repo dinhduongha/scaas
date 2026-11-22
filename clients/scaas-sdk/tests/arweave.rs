@@ -204,15 +204,19 @@ async fn only_an_item_ua_rs_built_is_posted() {
         matches!(f.upload_file(bad).await, Err(SdkError::ArweaveItem)),
         "a tampered kept item"
     );
-    let tagged = unhex(
-        vec("arweave/items.json")["items"][1]["item"]
-            .as_str()
-            .unwrap(),
-    );
-    assert!(
-        matches!(f.upload_file(tagged).await, Err(SdkError::ArweaveItem)),
-        "an item with a tag (not C9)"
-    );
+    // valid ANS-104 over the same object with a tag or a target (upload.json's notC9 rows): not C9, refused
+    for n in vec("arweave/upload.json")["notC9"].as_array().unwrap() {
+        let item = [unhex(n["header"].as_str().unwrap()), r.object.clone()].concat();
+        assert!(
+            scaas_ua::arweave::DataItem::parse(item.clone()).is_ok(),
+            "the row is a valid item"
+        );
+        assert!(
+            matches!(f.upload_file(item).await, Err(SdkError::ArweaveItem)),
+            "{} (not C9)",
+            n["name"]
+        );
+    }
     assert!(seen.lock().unwrap().is_empty(), "nothing posted");
     assert!(f.upload_file(r.item).await.is_ok(), "control");
 }
