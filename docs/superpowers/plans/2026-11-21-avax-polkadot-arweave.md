@@ -332,23 +332,26 @@ that `arbundles` builds differently from ours or refuses (type 3's `v` included)
 
 ## T16 — clientkeys: Arweave vectors
 
+**Done 2026-11-22** as T41.arweave on branch `sdk-arweave` (decisions CLI-SDK-33 (60)–(63)): the rows, the vectors and the both-way
+cross-check (72 checks); type 4 signs the deep hash's hex text, as `arbundles` does (CLI-SDK-33 (60)).
+
 **Files:** `clients/clientkeys/src/arweave.js` (new), `test/arweave.test.js`, `smartcontracts/vectors/arweave/*.json` (data items,
 deep hashes, ids, upload keys, frames, buckets, objects), `smartcontracts/vectors/pqchat/` (`ar://` `file` rows); the `arbundles`
 cross-check in its own generator directory with its own lock file (`clients/clientkeys/xcheck/arbundles/`, a pinned version),
 outside clientkeys' dependency tree.
 
-- [ ] The deep hash, layout and id as spec §7.2; types 2, 3 and 4 signed and verified; type 3 with `v ∈ {27, 28}` and low `s`.
-- [ ] Cross-check both ways, for each of types 2, 3 and 4 and the same key and data: our item byte-identical to the one `arbundles`
+- [x] The deep hash, layout and id as spec §7.2; types 2, 3 and 4 signed and verified; type 3 with `v ∈ {27, 28}` and low `s`.
+- [x] Cross-check both ways, for each of types 2, 3 and 4 and the same key and data: our item byte-identical to the one `arbundles`
   builds, `arbundles`' own verification accepting ours, and an `arbundles`-built item parsing with its id matching. Rows with one
   tag, 64 tags, a 64-byte name (the two-byte varint edge), a target, an anchor; refusals: a negative block count, trailing tag bytes,
   a header tag count other than the Avro count, an empty name, a presence byte 2, type 3 with `v` 0 or 1 or a high `s`.
-- [ ] Upload keys (spec §7.3) from the existing app-root-key rows and fixed file keys, `ctSha256` computed from the object; the
+- [x] Upload keys (spec §7.3) from the existing app-root-key rows and fixed file keys, `ctSha256` computed from the object; the
   secp256k1 counter path forced by a fixture; a row showing that another file key gives another upload key for the same `ctSha256`.
-- [ ] Frames, buckets and objects (spec §7.4), integer arithmetic: `size = 0`; `size + 8 = 2^k − 1, 2^k, 2^k + 1` for every `k` from 16
+- [x] Frames, buckets and objects (spec §7.4), integer arithmetic: `size = 0`; `size + 8 = 2^k − 1, 2^k, 2^k + 1` for every `k` from 16
   to 31 (above the cap: `FileTooLarge`); the frame's `len`, the zero pad, the object length bucket + 16; read refusals: a length other
   than bucket + 16, a flipped byte (`ctSha256`), and after decryption a `len` other than `size`, a non-zero pad byte, a plaintext
   `sha256` mismatch, each with its positive control.
-- [ ] `ar://` rows: accepted; refused at 42 and 44 characters, with `+` or `/`, with `=`, a non-canonical last character, a
+- [x] `ar://` rows: accepted; refused at 42 and 44 characters, with `+` or `/`, with `=`, a non-canonical last character, a
   trailing path, an upper-case scheme.
 - Mutants: the type string left out of the deep hash; the type as a binary byte instead of decimal text; an empty tag list as
   `0x00`; `"blob"` with a binary length; the id as SHA-256 of the item; `v` written as 0 or 1; the bucket floor at 2^15; the bucket
@@ -357,6 +360,9 @@ outside clientkeys' dependency tree.
 
 ## T17 — `ua-rs`: ANS-104, the sealed upload and the upload key
 
+**Done 2026-11-22** as T41.arweave on branch `sdk-arweave` (CLI-SDK-33 (61), (62)); mutants
+`clients/scaas-sdk/runs/2026-11-17-scaas-sdk-t41arw1-mutants.txt`.
+
 Placement (SDK plan T42, decisions CLI-SDK-33 (35), on branch `sdk-complete`): the generic file seal (the frame inside the
 AEAD, the buckets, `open_file`'s `size` and `sha256` checks, the file-key handle) is in the app-core core; ANS-104, the deep
 hash, `UploadSign`, the upload key, `seal_for_arweave`, `ar://` and `scaas-rpc`'s `arweave` module are behind `fam-arweave`.
@@ -364,15 +370,15 @@ Test: a build without `fam-arweave` seals and opens a file; a build with it uplo
 
 **Files:** `clients/ua-rs/src/arweave.rs` (new), the app-core handle usages, `tests/arweave.rs`.
 
-- [ ] Reproduce every T16 row byte for byte. The parser's bounds and refusals of spec §7.2; the signature verified before an item is
+- [x] Reproduce every T16 row byte for byte. The parser's bounds and refusals of spec §7.2; the signature verified before an item is
   returned.
-- [ ] `seal_for_arweave` as one call: a fresh file key handle, the frame, the object, `ctSha256` computed there, the upload key from
+- [x] `seal_for_arweave` as one call: a fresh file key handle, the frame, the object, `ctSha256` computed there, the upload key from
   the app root key and the file key, the item built, signed and verified. No parameter carries a hash.
-- [ ] The usage `UploadSign`: created only inside that call, bound to one type and one `ctSha256`; its one operation signs an item
+- [x] The usage `UploadSign`: created only inside that call, bound to one type and one `ctSha256`; its one operation signs an item
   `ua-rs` built after recomputing the item's data hash and refusing (`AppKeyUsage`) another; no byte accessor; the label prefix
   `scaas/arweave/` refused to app cores. Test: a handle bound to object A refuses an item over object B (a test-only constructor
   under `cfg(test)` builds that item).
-- [ ] `open_file` for the framed form: the tag, `len` equal to `size`, the zero pad, SHA-256 of the file equal to `sha256`, before any
+- [x] `open_file` for the framed form: the tag, `len` equal to `size`, the zero pad, SHA-256 of the file equal to `sha256`, before any
   plaintext leaves `ua-rs`; the same `size` and `sha256` check for UA-7's form; and the `ar://` parser.
 - Mutants: the presence byte 2 accepted; `UploadSign` signing without re-checking the item's data hash against its bound `ctSha256`
   (killed by the A/B test); the upload key derived without the file key; the pad check skipped; the plaintext `sha256` check skipped.

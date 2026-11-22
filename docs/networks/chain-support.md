@@ -86,7 +86,7 @@ Status: SPECIFIED.
 | 22 | Sui | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
 | 23 | TON (GRAM) | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
 | 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | after the freeze (owner 2026-11-22): T35 (sign), T36 (send; its reads B), T37 (SDK) |
-| 25 | Arweave (store) | n/a | n/a | n/a | P CA-T16, T17 | P CA-T19 | P CA-T19 | P CA-T20 | n/a | n/a | n/a | n/a | P CA-T17, T19, T20 |
+| 25 | Arweave (store) | n/a | n/a | n/a | B | P CA-T19 | P CA-T19 | P CA-T20 | n/a | n/a | n/a | n/a | P CA-T17, T19, T20 |
 
 
 Row 8 (Ethereum Classic, 61; Mordor 63) is removed: the owner dropped ETC on 2026-11-22 (decisions CLI-SDK-32, "ETC has no
