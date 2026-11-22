@@ -174,21 +174,15 @@ pub(crate) async fn sign_one(
     Ok(s)
 }
 
-/// An EIP-1559 transaction of `quote` from its payer to `to` with `data`, signed by `scaas-ua`: the raw bytes and the id.
-pub(crate) fn sign_tx(
-    sdk: &Sdk,
+/// The transaction of `quote` to `to` with `value` and `data`, unsigned (its type, nonce, gas and fees; the L1 data fee's
+/// input, plan T38).
+pub(crate) fn evm_tx(
     chain_id: u64,
     quote: &SubmitQuote,
     to: [u8; 20],
     value: U256,
     data: Vec<u8>,
-) -> Result<(Vec<u8>, String), SdkError> {
-    let SubmitPath::SelfRelay { payer } = &quote.path else {
-        return Err(SdkError::Argument);
-    };
-    let super::Key::Native(_, k) = key(sdk, payer)? else {
-        return Err(SdkError::Argument);
-    };
+) -> Result<EvmTx, SdkError> {
     let word = |s: &str| -> Result<[u8; 32], SdkError> {
         Ok(U256::from_str_radix(s, 10)
             .map_err(|_| SdkError::Argument)?
@@ -201,7 +195,7 @@ pub(crate) fn sign_tx(
         value.to_be_bytes::<32>(),
     );
     // types 0, 1, 2 (owner 2026-11-18, ruling 3); a legacy price is the quote's maximum fee per gas
-    let tx = match quote.tx_type {
+    Ok(match quote.tx_type {
         0 => EvmTx::Legacy {
             chain_id,
             nonce,
@@ -233,7 +227,26 @@ pub(crate) fn sign_tx(
             access_list: vec![],
         },
         _ => return Err(SdkError::TxTypeRefused),
+    })
+}
+
+/// An EIP-1559 transaction of `quote` from its payer to `to` with `data`, signed by `scaas-ua`: the raw bytes and the id.
+pub(crate) fn sign_tx(
+    sdk: &Sdk,
+    chain_id: u64,
+    quote: &SubmitQuote,
+    to: [u8; 20],
+    value: U256,
+    data: Vec<u8>,
+) -> Result<(Vec<u8>, String), SdkError> {
+    let SubmitPath::SelfRelay { payer } = &quote.path else {
+        return Err(SdkError::Argument);
     };
+    let super::Key::Native(_, k) = key(sdk, payer)? else {
+        return Err(SdkError::Argument);
+    };
+    let nonce = quote.tx_nonce;
+    let tx = evm_tx(chain_id, quote, to, value, data)?;
     let signed = k.sign_transaction(&tx)?;
     let id = hex(&scaas_ua::keccak256(&signed.raw));
     // the payer's next nonce after this one, the floor of its next quote in this session
@@ -423,7 +436,8 @@ impl Op {
                             signer,
                             unsigned_len,
                             &quote,
-                            built.calldata.len(),
+                            Address::from(prepared.t.entry_contract()),
+                            &built.calldata,
                             None,
                         )
                         .await
@@ -593,7 +607,8 @@ impl Op {
                             signer,
                             unsigned_len,
                             &quote,
-                            unhex(&row.calldata)?.len(),
+                            Address::from(to),
+                            &unhex(&row.calldata)?,
                             own,
                         )
                         .await?;

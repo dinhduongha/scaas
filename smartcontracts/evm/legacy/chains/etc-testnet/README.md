@@ -1,5 +1,9 @@
 # Ethereum Classic Mordor (`etc-testnet`)
 
+**Dropped** by the owner on 2026-11-22 ("ETC has no finalized block: drop it",
+decisions CLI-SDK-32): no longer a supported chain. Kept here as the record of its
+probes (SDK plan T40); not read by any tool.
+
 Public EVM testnet. Row `etc-testnet` of [`chain-uids.json`](../../../chain-uids.json): chain id **63**, chain_uid
 `0xa68ebde7932eccb177d38d55dcc6461a019dd795a681e59b5a3e4f3a7259a3f1`, network `testnet`. A chain is (chainId, chain_uid) (NET-ALL-22).
 

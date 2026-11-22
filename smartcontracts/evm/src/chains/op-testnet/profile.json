@@ -9,5 +9,11 @@
   "l1Fee": "op-stack",
   "eip2537": true,
   "status": "draft",
-  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (probes of 2026-11-22: fork, eip2537, caps, codesize, basefee, l1fee, H5, H7); txGasCap: none detected (an eth_call on op-reth may not apply EIP-7825)"
+  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (probes of 2026-11-22: fork, eip2537, caps, codesize, basefee, l1fee, H5, H7); txGasCap: none detected (an eth_call on op-reth may not apply EIP-7825); disabledKinds: the owner's ruling of 2026-11-22 (decisions CLI-SDK-32, ARCH-POS-18 confirmed)",
+  "disabledKinds": [
+    "mldsa44",
+    "mldsa65",
+    "mldsa87",
+    "pqz"
+  ]
 }

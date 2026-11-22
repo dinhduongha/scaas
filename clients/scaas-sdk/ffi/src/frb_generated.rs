@@ -16424,6 +16424,8 @@ const _: fn() = || {
         let _: Vec<scaas_sdk::config::ListedDex> = ChainProfile.dexes;
         let _: Vec<String> = ChainProfile.wrappers;
         let _: Option<scaas_sdk::config::FamilyParams> = ChainProfile.family_params;
+        let _: Option<scaas_sdk::config::L1Fee> = ChainProfile.l1_fee;
+        let _: Vec<String> = ChainProfile.disabled_kinds;
     }
     {
         let ConfirmRemove = None::<scaas_sdk::vault::seeds::ConfirmRemove>.unwrap();
@@ -19783,6 +19785,8 @@ impl SseDecode for scaas_sdk::config::ChainProfile {
         let mut var_wrappers = <Vec<String>>::sse_decode(deserializer);
         let mut var_familyParams =
             <Option<scaas_sdk::config::FamilyParams>>::sse_decode(deserializer);
+        let mut var_l1Fee = <Option<scaas_sdk::config::L1Fee>>::sse_decode(deserializer);
+        let mut var_disabledKinds = <Vec<String>>::sse_decode(deserializer);
         return scaas_sdk::config::ChainProfile {
             key: var_key,
             family: var_family,
@@ -19805,6 +19809,8 @@ impl SseDecode for scaas_sdk::config::ChainProfile {
             dexes: var_dexes,
             wrappers: var_wrappers,
             family_params: var_familyParams,
+            l1_fee: var_l1Fee,
+            disabled_kinds: var_disabledKinds,
         };
     }
 }
@@ -20631,6 +20637,17 @@ impl SseDecode for scaas_sdk::op::KeyRef {
                 unimplemented!("");
             }
         }
+    }
+}
+
+impl SseDecode for scaas_sdk::config::L1Fee {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => scaas_sdk::config::L1Fee::OpStack,
+            _ => unreachable!("Invalid variant for L1Fee: {}", inner),
+        };
     }
 }
 
@@ -21661,6 +21678,17 @@ impl SseDecode for Option<scaas_sdk::op::KeyRef> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<scaas_sdk::op::KeyRef>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<scaas_sdk::config::L1Fee> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<scaas_sdk::config::L1Fee>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -27381,6 +27409,8 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::ChainProfil
             self.0.dexes.into_into_dart().into_dart(),
             self.0.wrappers.into_into_dart().into_dart(),
             self.0.family_params.into_into_dart().into_dart(),
+            self.0.l1_fee.into_into_dart().into_dart(),
+            self.0.disabled_kinds.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -28466,6 +28496,26 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::op::KeyRef>>
     for scaas_sdk::op::KeyRef
 {
     fn into_into_dart(self) -> FrbWrapper<scaas_sdk::op::KeyRef> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::L1Fee> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self.0 {
+            scaas_sdk::config::L1Fee::OpStack => 0.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<scaas_sdk::config::L1Fee>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::config::L1Fee>>
+    for scaas_sdk::config::L1Fee
+{
+    fn into_into_dart(self) -> FrbWrapper<scaas_sdk::config::L1Fee> {
         self.into()
     }
 }
@@ -33734,6 +33784,8 @@ impl SseEncode for scaas_sdk::config::ChainProfile {
         <Vec<scaas_sdk::config::ListedDex>>::sse_encode(self.dexes, serializer);
         <Vec<String>>::sse_encode(self.wrappers, serializer);
         <Option<scaas_sdk::config::FamilyParams>>::sse_encode(self.family_params, serializer);
+        <Option<scaas_sdk::config::L1Fee>>::sse_encode(self.l1_fee, serializer);
+        <Vec<String>>::sse_encode(self.disabled_kinds, serializer);
     }
 }
 
@@ -34398,6 +34450,21 @@ impl SseEncode for scaas_sdk::op::KeyRef {
                 unimplemented!("");
             }
         }
+    }
+}
+
+impl SseEncode for scaas_sdk::config::L1Fee {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                scaas_sdk::config::L1Fee::OpStack => 0,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 
@@ -35167,6 +35234,16 @@ impl SseEncode for Option<scaas_sdk::op::KeyRef> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <scaas_sdk::op::KeyRef>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<scaas_sdk::config::L1Fee> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <scaas_sdk::config::L1Fee>::sse_encode(value, serializer);
         }
     }
 }

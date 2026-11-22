@@ -74,6 +74,7 @@ void main() {
       verifierPolicy: Policy.failover,
       dexes: const [],
       wrappers: const [],
+      disabledKinds: const [],
     );
     final sdk = await openSdk(MemStore(), FakeAuth(), profiles: [profile]);
     final seed = await sdk.vault().importWords(req: ImportWords(label: 'main', words: sec(repo), vaultPassphrase: sec(pass)));

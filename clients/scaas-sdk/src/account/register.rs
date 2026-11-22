@@ -682,7 +682,22 @@ pub(crate) async fn writes(
     args: &Value,
     kem_fill: Option<&Value>,
 ) -> Result<Vec<Arc<RegistryWrite>>, SdkError> {
-    let (_, _, pool) = evm(sdk, chain)?;
+    let (profile, _, pool) = evm(sdk, chain)?;
+    // a kind the chain's profile disables (owner 2026-11-22): the key's kind, a PQZ key attachment, before anything is signed
+    if let Some(k) = args
+        .get("kind")
+        .and_then(Value::as_u64)
+        .and_then(|k| u16::try_from(k).ok())
+    {
+        crate::op::ua_kind_enabled(&profile, k)?;
+    }
+    if args
+        .pointer("/attrs/pqzKey")
+        .and_then(Value::as_str)
+        .is_some_and(|k| k != "0x")
+    {
+        crate::op::kind_enabled(&profile, "pqz")?;
+    }
     let registry = registry_of(sdk, chain)?;
     let entry = args
         .get("entry")

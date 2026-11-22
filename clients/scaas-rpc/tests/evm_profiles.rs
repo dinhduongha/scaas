@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! SDK plan T40: the EVM profiles of `smartcontracts/evm/chain-uids.json` (Ethereum, Ethereum Classic, OP Mainnet, Arbitrum
-//! One, Linea; mainnet and testnet each), each with the values its row and its `src/chains/<key>/profile.json` pin, against
+//! SDK plan T40: the EVM profiles of `smartcontracts/evm/chain-uids.json` (Ethereum, OP Mainnet, Arbitrum One, Linea; mainnet
+//! and testnet each; Ethereum Classic dropped by the owner 2026-11-22, decisions CLI-SDK-32, its chain id 61 kept here as the
+//! other chain of Ethereum's block 0), each with the values its row and its `src/chains/<key>/profile.json` pin, against
 //! in-process fake nodes: the chain pair check drops an endpoint of the other chain (NET-ALL-25: Ethereum and ETC share block 0,
 //! the chain id separates them; an endpoint naming the chain id over another block 0 is dropped too), and a `finalized` read is
 //! pinned by the hash of the finalized block (EIP-1898, `requireCanonical`) where the profile's finality is the tag.
@@ -11,11 +12,9 @@ use scaas_rpc::{Endpoint, NodeList, Policy, Purpose, RpcError};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
-const KEYS: [&str; 10] = [
+const KEYS: [&str; 8] = [
     "ethereum-mainnet",
     "ethereum-testnet",
-    "etc-mainnet",
-    "etc-testnet",
     "op-mainnet",
     "op-testnet",
     "arbitrum-mainnet",
@@ -27,7 +26,7 @@ const EVM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm
 const WHO: Address = Address::repeat_byte(0x42);
 
 /// A profile: the chain id and `chain_uid` of its chain-uids.json row, the finality of its profile.json (`"tag"` or
-/// `{"depth": n}`; `{"depth": null}`: no finality stated, so no decisive read).
+/// `{"depth": n}`; none is no profile).
 struct Profile {
     key: &'static str,
     id: u64,
@@ -54,7 +53,7 @@ fn profiles() -> Vec<Profile> {
             .unwrap();
             let finality = match &p["finality"] {
                 Value::String(s) if s == "tag" => Some(BlockChoice::Finalized),
-                Value::Object(o) => o["depth"].as_u64().map(BlockChoice::Depth),
+                Value::Object(o) => Some(BlockChoice::Depth(o["depth"].as_u64().unwrap())),
                 f => panic!("{key}: finality {f}"),
             };
             Profile {
@@ -133,7 +132,10 @@ fn pool(urls: &[&str], p: &Profile) -> EvmPool {
     .unwrap()
 }
 
-async fn balance(pool: &EvmPool, choice: BlockChoice) -> Result<(U256, usize, B256, u64), RpcError> {
+async fn balance(
+    pool: &EvmPool,
+    choice: BlockChoice,
+) -> Result<(U256, usize, B256, u64), RpcError> {
     pool.read_at_block(choice, Purpose::Plain, |at| async move {
         pool.balance_at(&at, WHO).await
     })
@@ -160,7 +162,12 @@ async fn each_profile_drops_an_endpoint_of_the_other_chain() {
         let (v, member, _, _) = balance(&pool(&[&same_uid, &same_id, &own], p), choice)
             .await
             .unwrap_or_else(|e| panic!("{}: {e}", p.key));
-        assert_eq!((v, member), (U256::from(3), 2), "{}: the profile's own endpoint answers", p.key);
+        assert_eq!(
+            (v, member),
+            (U256::from(3), 2),
+            "{}: the profile's own endpoint answers",
+            p.key
+        );
         // the other chain alone: no answer at all
         assert!(
             balance(&pool(&[&same_uid], p), choice).await.is_err(),
@@ -180,29 +187,42 @@ async fn each_profile_drops_an_endpoint_of_the_other_chain() {
             p.key
         );
     }
-    // Ethereum and ETC: one block 0 (NET-ALL-25), told apart by the chain id only
-    let uid = |k: &str| ps.iter().find(|p| p.key == k).unwrap().uid;
-    assert_eq!(uid("ethereum-mainnet"), uid("etc-mainnet"));
+    // Ethereum and ETC (61): one block 0 (NET-ALL-25, chain-uids.json), told apart by the chain id only
+    let rows = std::fs::read_to_string(format!("{EVM}/chain-uids.json")).unwrap();
+    let uid = |id: u64| {
+        let v: Value = serde_json::from_str(&rows).unwrap();
+        v["chains"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["chainId"] == id)
+            .unwrap()["chainUid"]
+            .clone()
+    };
+    assert_eq!(uid(1), uid(61));
 }
 
-/// A profile whose finality is the tag reads at the `finalized` block, every request naming it by hash with
-/// `requireCanonical`; the agreed read carries that block's number and hash. ETC states no tag (no finalized block on a PoW
-/// chain): its profile names no finality until the owner states a depth.
+/// A profile whose finality is the tag (every profile here) reads at the `finalized` block, every request naming it by hash
+/// with `requireCanonical`; the agreed read carries that block's number and hash.
 #[tokio::test]
 async fn a_finalized_read_is_pinned_by_hash() {
     for p in profiles() {
-        let Some(choice) = p.finality else {
-            assert!(p.key.starts_with("etc-"), "{}: only ETC names no finality", p.key);
-            continue;
-        };
+        let choice = p.finality.unwrap();
         assert_eq!(choice, BlockChoice::Finalized, "{}: the tag", p.key);
         let seen: Arc<Mutex<Vec<Value>>> = Default::default();
         let own = node(p.id, p.uid, 7, seen.clone()).await;
         let (v, _, h, n) = balance(&pool(&[&own], &p), choice).await.unwrap();
-        assert_eq!((v, n, h), (U256::from(7), FINAL, hash(p.id, FINAL)), "{}", p.key);
+        assert_eq!(
+            (v, n, h),
+            (U256::from(7), FINAL, hash(p.id, FINAL)),
+            "{}",
+            p.key
+        );
         assert_eq!(
             *seen.lock().unwrap(),
-            vec![json!({"blockHash": format!("{:#x}", hash(p.id, FINAL)), "requireCanonical": true})],
+            vec![
+                json!({"blockHash": format!("{:#x}", hash(p.id, FINAL)), "requireCanonical": true})
+            ],
             "{}: pinned by the finalized block's hash",
             p.key
         );

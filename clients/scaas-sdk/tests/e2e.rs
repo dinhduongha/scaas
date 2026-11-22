@@ -147,6 +147,8 @@ async fn e2e_pay_on_anvil() {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: None,
     };
     let (sdk, seed) = sdk_on(profile).await;
@@ -323,6 +325,8 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: None,
     })
     .await;
@@ -495,6 +499,8 @@ fn registry_profile(rpc: &str, registry: &str, cap: Option<u64>) -> ChainProfile
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: None,
     }
 }
@@ -637,6 +643,8 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: None,
     };
     // the receiver's app and the sender's app: two SDKs (the same test seed, roles apart)
@@ -768,6 +776,8 @@ fn account_profile(rpc: &str) -> ChainProfile {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: None,
     }
 }
@@ -1627,6 +1637,8 @@ async fn e2e_dex_cancel_order_on_anvil() {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: None,
     };
     let (sdk, seed) = sdk_on(profile).await;
@@ -1782,6 +1794,8 @@ async fn e2e_bls_multi_on_anvil() {
         verifier_policy: scaas_rpc::Policy::Failover,
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: None,
     };
     let sdk = Sdk::open(SdkConfig {
@@ -1970,6 +1984,8 @@ async fn e2e_bls_multi_64_on_a_node() {
         verifier_policy: scaas_rpc::Policy::Failover,
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: None,
     };
     // the app raises `max_gas` for this run: the default 2^24 holds the whole gas limit

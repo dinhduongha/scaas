@@ -66,6 +66,8 @@ fn profile() -> ChainProfile {
             symbol: "T".into(),
             decimals: 6,
         }],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: None,
     }
 }

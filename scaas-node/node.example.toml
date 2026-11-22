@@ -177,15 +177,12 @@ breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_re
 # ---- Public EVM profiles, `draft` (SDK plan T40; smartcontracts/evm/src/chains/<key>/): uncomment one [[chains]] table
 # per chain, with the keys of the 7622 table above (lanes, keys, contracts, breaker). rpc_urls from the environment's
 # providers (two independent ones at least, NET-EVM-19); finality is each profile's: `tag` (the `finalized` block) where the chain serves it.
-# ETC states no depth (proof of work: no finalized block); its depth is the owner's, so its rows stay without one.
+# Ethereum Classic is dropped (owner 2026-11-22, decisions CLI-SDK-32: no finalized block): no rows. On OP, Arbitrum, Base mainnet and Celo the owner
+# disabled mldsa44, mldsa65, mldsa87 and PQZ (their largest transactions are above the chain's limit; each profile's README).
 # [[chains]] # ethereum-mainnet: family = "evm", evm_chain_number = 1, chain_uid = "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
 #   finality = { mode = "tag", quorum = 2 }
 # [[chains]] # ethereum-testnet: family = "evm", evm_chain_number = 11155111, chain_uid = "0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9",
 #   finality = { mode = "tag", quorum = 2 }
-# [[chains]] # etc-mainnet: family = "evm", evm_chain_number = 61, chain_uid = "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
-#   finality = { mode = "depth", depth = <owner>, quorum = 2 }
-# [[chains]] # etc-testnet: family = "evm", evm_chain_number = 63, chain_uid = "0xa68ebde7932eccb177d38d55dcc6461a019dd795a681e59b5a3e4f3a7259a3f1",
-#   finality = { mode = "depth", depth = <owner>, quorum = 2 }
 # [[chains]] # op-mainnet: family = "evm", evm_chain_number = 10, chain_uid = "0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b",
 #   finality = { mode = "tag", quorum = 2 }, params = { l1_fee = "op-stack" }
 # [[chains]] # op-testnet: family = "evm", evm_chain_number = 11155420, chain_uid = "0x102de6ffb001480cc9b8b548fd05c34cd4f46ae4aa91759393db90ea0409887d",

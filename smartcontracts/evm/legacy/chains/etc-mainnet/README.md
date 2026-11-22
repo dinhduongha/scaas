@@ -1,5 +1,9 @@
 # Ethereum Classic (`etc-mainnet`)
 
+**Dropped** by the owner on 2026-11-22 ("ETC has no finalized block: drop it",
+decisions CLI-SDK-32): no longer a supported chain. Kept here as the record of its
+probes (SDK plan T40); not read by any tool.
+
 Public EVM mainnet. Row `etc-mainnet` of [`chain-uids.json`](../../../chain-uids.json): chain id **61**, chain_uid
 `0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3`, network `mainnet`. A chain is (chainId, chain_uid) (NET-ALL-22). **Ethereum (1) and Ethereum Classic (61) share block 0**: the chain id separates them (NET-ALL-25).
 

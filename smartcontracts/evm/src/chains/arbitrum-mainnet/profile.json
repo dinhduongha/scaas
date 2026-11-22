@@ -9,5 +9,11 @@
   "l1Fee": "in-estimate",
   "eip2537": true,
   "status": "draft",
-  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (probes of 2026-11-22: fork, eip2537, caps, codesize, basefee, l1fee, H5, H7); txGasCap: ArbGasInfo.getGasAccountingParams max tx gas limit; the header's gas limit is not a block cap"
+  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (probes of 2026-11-22: fork, eip2537, caps, codesize, basefee, l1fee, H5, H7); txGasCap: ArbGasInfo.getGasAccountingParams max tx gas limit; the header's gas limit is not a block cap; disabledKinds: the owner's ruling of 2026-11-22 (decisions CLI-SDK-32, ARCH-POS-18 confirmed)",
+  "disabledKinds": [
+    "mldsa44",
+    "mldsa65",
+    "mldsa87",
+    "pqz"
+  ]
 }

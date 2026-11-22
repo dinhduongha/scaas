@@ -82,6 +82,7 @@ OPCODE_TESTS = {
 # cache's largest part (smartcontracts/evm/script/DeployGas.sol, the deploy-time rule MD-5); `register` of fndsa512 and
 # slhdsa128s (docs/contracts/accounts.md, the UA-8 table); fndsa1024's register is not measured, its verify cap stands in
 PQ = {
+    "mldsa44": (9_740_000, 9_740_000 + 31_715_370, "cache part 0, DeployGas.sol"),
     "mldsa65": (10_230_000, 10_230_000 + 33_282_090, "cache part 1, DeployGas.sol"),
     "fndsa512": (2_734_649, 2_734_649 + 6_384_690, "register, accounts.md UA-8"),
     "slhdsa128s": (1_116_222, 1_116_222 + 13_246_740, "register, accounts.md UA-8"),

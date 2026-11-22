@@ -53,6 +53,13 @@ MUTANTS = [
     ("a finalized read pinned by number", [(E, "    alloy::eips::BlockId::Hash(alloy::eips::RpcBlockHash {\n        block_hash: at.hash,\n        require_canonical: Some(true),\n    })",
                                             "    alloy::eips::BlockId::Number(alloy::eips::BlockNumberOrTag::Number(at.number))")],
      RT + "a_finalized_read_is_pinned_by_hash"),
+    # the SDK: the owner's disabled kinds (2026-11-22, decisions CLI-SDK-32 (2))
+    ("a disabled kind signed", [("clients/scaas-sdk/src/op/mod.rs", "    if profile.disabled_kinds.iter().any(|k| k == name) {", "    if false {")],
+     ST + "a_disabled_kind_is_refused_before_signing"),
+    ("a registration's kind not checked", [("clients/scaas-sdk/src/account/register.rs", "        crate::op::ua_kind_enabled(&profile, k)?;", "        let _ = k;")],
+     ST + "a_disabled_kind_is_refused_before_signing"),
+    ("an unknown disabled kind taken", [("clients/scaas-sdk/src/lib.rs", '.any(|k| k != "pqz" && !scaas_ua::KINDS.iter().any(|x| x.name == k))', '.any(|_| false)')],
+     ST + "a_disabled_kind_is_refused_before_signing"),
     # the SDK (plan: type 2 asked without a base fee)
     ("type 2 asked without a base fee", [(Q, "        tx_type: if block.base_fee.is_some() { 2 } else { 0 },", "        tx_type: 2,")],
      ST + "a_native_send_type_follows_the_base_fee"),

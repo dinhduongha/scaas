@@ -391,13 +391,15 @@ impl Op {
                 let block = pool.block_gas().await.map_err(sim)?;
                 super::quote::above_caps(&profile, regular, gas, block.limit)?;
                 let cost = super::quote::check_caps(&sdk, gas, fee)?;
-                let quote = SubmitQuote {
+                let mut quote = SubmitQuote {
                     gas_limit: gas,
                     regular_gas: regular,
                     gas: Some(gas),
                     max_cost: cost.to_string(),
                     ..quote.clone()
                 };
+                // plan T38: the chain's L1 data fee of the registration's transaction (none without the profile's field)
+                super::quote::with_l1(&sdk, &chain, &mut quote, to, U256::ZERO, &cd).await?;
                 let (raw, id) =
                     super::submit::sign_tx(&sdk, chain_id, &quote, to.into(), U256::ZERO, cd)?;
                 match pool.broadcast(&raw, Fanout::All).await? {

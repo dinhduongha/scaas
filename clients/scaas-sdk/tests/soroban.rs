@@ -188,6 +188,8 @@ fn profile(rpc: &[&str], policy: scaas_rpc::Policy) -> ChainProfile {
             symbol: "USDC".into(),
             decimals: 7,
         }],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: Some(FamilyParams::Soroban {
             passphrase: PASSPHRASE.into(),
             xlm_sac: v["sac"].as_str().unwrap().into(),

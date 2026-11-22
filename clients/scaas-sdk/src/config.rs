@@ -98,6 +98,23 @@ pub struct ChainProfile {
     /// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
     /// `Sdk::open`
     pub family_params: Option<FamilyParams>,
+    /// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+    /// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+    /// `Sdk::open` on another family)
+    pub l1_fee: Option<L1Fee>,
+    /// the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+    /// and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+    /// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+    /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+    pub disabled_kinds: Vec<String>,
+}
+
+/// An L1 data fee model (plan T38).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+pub enum L1Fee {
+    /// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
+    OpStack,
 }
 
 /// A family's own profile data (spec §8.7 rule 2; decisions CLI-SDK-15's Changes of 2026-11-21).

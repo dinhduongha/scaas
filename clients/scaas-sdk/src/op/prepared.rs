@@ -362,6 +362,13 @@ impl Op {
     /// struct refuses.
     pub(crate) async fn prepare(sdk: &Arc<Sdk>, d: Draft) -> Result<Arc<Prepared>, SdkError> {
         let (profile, chain_id, pool) = evm(sdk, &d.chain)?;
+        // a kind the chain's profile disables (owner 2026-11-22): a PQZ operation, a UA signer of that kind
+        if d.kind == "pqz" {
+            super::kind_enabled(&profile, "pqz")?;
+        }
+        if let KeyRef::Ua { kind, .. } = &d.signer {
+            super::ua_kind_enabled(&profile, *kind)?;
+        }
         // a locked seed refuses before any read (an `msig`'s slot keys are opened when it signs)
         if !matches!(d.signer, KeyRef::Msig { .. }) {
             drop(super::key_opened(sdk, &d.signer).await?);

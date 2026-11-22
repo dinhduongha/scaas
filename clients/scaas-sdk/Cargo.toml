@@ -153,6 +153,10 @@ required-features = ["wallet"]
 
 [[test]]
 name = "evm_profiles"
+required-features = ["account", "wallet"]
+
+[[test]]
+name = "l1_fee"
 required-features = ["wallet"]
 
 [[test]]

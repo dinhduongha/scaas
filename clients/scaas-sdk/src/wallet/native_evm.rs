@@ -83,11 +83,24 @@ impl Wallet {
                     None,
                 )
                 .await?;
+                let quoted = quote.tx_type;
                 quote.tx_type = match req.tx_type {
                     None => quote.tx_type,
                     Some(2) if quote.tx_type != 2 => return Err(SdkError::TxTypeRefused),
                     Some(t) => t,
                 };
+                // plan T38: the L1 data fee is of the envelope sent, so of the type asked
+                if quote.tx_type != quoted {
+                    crate::op::quote::with_l1(
+                        &sdk,
+                        &req.chain,
+                        &mut quote,
+                        to.into(),
+                        value,
+                        &data,
+                    )
+                    .await?;
+                }
                 let delegated = delegated(&pool.code(from).await.map_err(sim)?);
                 Ok(NativeQuote {
                     key: req.key,

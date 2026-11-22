@@ -69,6 +69,7 @@ own_codes! {
     SubmitPathNone,
     VerdictRefused,
     TxTypeRefused,
+    KindDisabled,
     RawDigestRefused,
     AppDomainRefused,
     AppPurposeRefused,
