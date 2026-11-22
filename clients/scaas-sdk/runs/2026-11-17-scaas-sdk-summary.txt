@@ -172,7 +172,6 @@ rpc-test | 6e7e71142 | 0 | 202 passed, 0 failed, 10 ignored (20 binaries)
 ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
 mutants-check | 8897d3999 | 0 | -
 ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-ua-core | cf5d5a9fa | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
 sdk-min | 7765d3e64 | 0 | 73 passed, 0 failed, 0 ignored (13 binaries)
 ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
 ua-clippy | 7765d3e64 | 0 | -
@@ -185,3 +184,4 @@ ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
 docs | 95badea99 | 0 | -
 features | 95badea99 | 0 | 4 passed, 0 failed, 0 ignored (1 binaries)
+ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
