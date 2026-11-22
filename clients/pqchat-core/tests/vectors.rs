@@ -67,6 +67,9 @@ fn pad(b: &[u8]) -> String {
     s
 }
 
+/// One live PqChat scope at a time (the SDK refuses a second scope of the same label prefix, `AppLabelRefused`).
+static ONE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 async fn app() -> (Arc<AppCore>, String, Fake) {
     let chain = fake();
     let url = serve(chain.clone()).await;
@@ -168,6 +171,7 @@ fn matrix_event_row() {
 /// the sender's position, the record's id and V1 over it; the hint of `K`.
 #[tokio::test(flavor = "multi_thread")]
 async fn message_rows() {
+    let _one = ONE.lock().await;
     let (a, seed, chain) = app().await;
     let (m, rec) = (pq("messages"), pq("records"));
     let r = &rec["message"]["record"];
@@ -271,6 +275,7 @@ async fn message_rows() {
 /// The wraps: every row's `hashStruct` through V2's wrap hash; every P14 row refused by the crate's name (`KemKeyInvalid`).
 #[tokio::test(flavor = "multi_thread")]
 async fn wrap_and_p14_rows() {
+    let _one = ONE.lock().await;
     let (a, seed, _c) = app().await;
     let keys = pq("keys");
     for x in keys["wraps"].as_array().unwrap() {
@@ -319,6 +324,7 @@ async fn wrap_and_p14_rows() {
 /// `sealedInfo`: every row opens under its `K` to its canonical JSON.
 #[tokio::test(flavor = "multi_thread")]
 async fn sealed_info_rows() {
+    let _one = ONE.lock().await;
     let (a, seed, _c) = app().await;
     let m = pq("messages");
     for r in m["sealedInfo"].as_array().unwrap() {
@@ -345,6 +351,7 @@ async fn sealed_info_rows() {
 /// A message sealed with the crate's `parents` (given out of order): the record carries them sorted, as the row does.
 #[tokio::test(flavor = "multi_thread")]
 async fn parents_sorted_into_s5() {
+    let _one = ONE.lock().await;
     let (a, seed, _c) = app().await;
     let r = &pq("records")["message"]["record"];
     let want: Vec<String> = r["parents"].as_array().unwrap().iter().map(s).collect();
@@ -420,4 +427,88 @@ fn unbound_fields_non_zero() {
             .any(|r| s(&r["entryId"]) != ZERO && s(&r["chainUid"]) != ZERO),
         "{refs:?}"
     );
+}
+
+/// Plan T10b: the `fileMessage` row through the crate's surface: its ciphertext opens to its content at the sender's
+/// position, the crate reads the row's public fields (no key) as a `file`, and the SDK opens the row's object named by it
+/// (the object by `scaas-ua`'s vectors seal under the row's file key); every `fileOpenRefused` row by its code; each
+/// `fileContentRefused` content is no `file` to the crate or the SDK.
+#[tokio::test(flavor = "multi_thread")]
+async fn file_rows() {
+    use pqchat_core::content::Content;
+    let _one = ONE.lock().await;
+    let (a, seed, _chain) = app().await;
+    let m = pq("messages");
+    let f = &m["fileMessage"];
+    let r = &f["record"];
+    let k = a
+        .vectors_import(&seed, a32(&f["K"]), AppKeyUsage::Derive)
+        .unwrap();
+    let p0 = a
+        .pqchat_chain(
+            k,
+            s(&r["sessionId"]),
+            s(&r["epochId"]),
+            s(&r["sender"]),
+            s(&r["device"]),
+        )
+        .unwrap();
+    let at = a
+        .pqchat_advance(p0, r["counter"].as_u64().unwrap())
+        .unwrap();
+    let content = Arc::new(a.pqchat_open_message(at, record_of(r)).unwrap());
+    assert_eq!(content.with(|b| b.to_vec()), s(&f["content"]).as_bytes());
+    match content.with(Content::parse).content {
+        Content::File {
+            size,
+            url,
+            ct_sha256,
+            ..
+        } => {
+            assert_eq!(size, f["size"].as_u64().unwrap());
+            assert_eq!(url, s(&f["url"]));
+            assert_eq!(ct_sha256, s(&f["ctSha256"]));
+        }
+        c => panic!("not a file: {c:?}"),
+    }
+    let w = scaas_ua::wallet::Wallet::from_mnemonic(REPO, "").unwrap();
+    let uk = w.app_keys();
+    let fk = uk
+        .vectors_import(&a32(&f["fileKey"]), scaas_ua::wallet::KeyUsage::File)
+        .unwrap();
+    let object = uk.vectors_seal_file(fk, &unhex(&f["file"])).unwrap().object;
+    let sec = |b: Vec<u8>| Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(b)).unwrap());
+    for x in m["fileOpenRefused"].as_array().unwrap() {
+        let mut o = object.clone();
+        match x["change"].as_str() {
+            Some("drop-last") => drop(o.pop()),
+            Some("append-zero") => o.push(0),
+            Some("flip-1000") => o[1000] ^= 1,
+            _ => {}
+        }
+        let c = match x.get("content") {
+            Some(v) => sec(scaas_ua::wallet::pqchat_keys::canonical_json(v)
+                .unwrap()
+                .into_bytes()),
+            None => content.clone(),
+        };
+        let got = a.pqchat_open_file(c, o);
+        match x["code"].as_str() {
+            None => assert_eq!(got.unwrap().with(|b| b.to_vec()), unhex(&f["file"])),
+            Some(want) => assert_eq!(got.err().unwrap().code(), want, "{}", x["name"]),
+        }
+    }
+    for x in m["fileContentRefused"].as_array().unwrap() {
+        let c = scaas_ua::wallet::pqchat_keys::canonical_json(&x["content"]).unwrap();
+        // the crate shows it as no file only when its public fields fail; the SDK refuses every row
+        assert_eq!(
+            a.pqchat_open_file(sec(c.into_bytes()), object.clone())
+                .err()
+                .map(|e| e.code()),
+            Some("PqChatContent"),
+            "{}",
+            x["name"]
+        );
+    }
+    drop(seed);
 }
