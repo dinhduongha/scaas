@@ -401,6 +401,9 @@ Keys and data are throwaway and derived from no real root; no key in any committ
 
 ## T19 — `scaas-rpc` module `arweave`
 
+**Done 2026-11-22** as T41.arweave on branch `sdk-arweave` (decisions CLI-SDK-33 (64), (65)); the payer route's client call
+with it (owner 2026-11-22).
+
 **Files:** `clients/scaas-rpc/src/arweave/` (new), `tests/arweave.rs` with a local mock server.
 
 - [ ] Tests first: identity by `GET /info`; an id checked before any request; `len` above the platform cap refused before any
@@ -416,6 +419,9 @@ Keys and data are throwaway and derived from no real root; no key in any committ
 - Gates: `rpc-test`, `rpc-wasm`, `docs`.
 
 ## T20 — SDK `seal_for_arweave`, `upload_file`, `fetch_file`, `open_file`
+
+**Done 2026-11-22** as T41.arweave on branch `sdk-arweave` (CLI-SDK-33 (66)); the three payment paths (owner 2026-11-22). The
+bindings are unchanged: neither `app-core` nor `arweave` is in the FRB surface's features (an open point for the owner).
 
 **Files:** `clients/scaas-sdk/src/` (the app-core surface), `tests/arweave.rs`, the bindings' regeneration.
 

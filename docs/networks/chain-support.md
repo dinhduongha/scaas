@@ -85,7 +85,7 @@ Status: SPECIFIED.
 | 22 | Sui | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.sui | M T41.sui (read B) |
 | 23 | TON (GRAM) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.ton | M T41.ton (read B) |
 | 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | M T35 (sign), T36 (send; its reads B), T37 (SDK) |
-| 25 | Arweave (store) | n/a | n/a | n/a | B | P CA-T19 | P CA-T19 | P CA-T20 | n/a | n/a | n/a | n/a | P CA-T17, T19, T20 |
+| 25 | Arweave (store) | n/a | n/a | n/a | B | B | B | B | n/a | n/a | n/a | n/a | B |
 
 
 Row 8 (Ethereum Classic, 61; Mordor 63) is removed: the owner dropped ETC on 2026-11-22 (decisions CLI-SDK-32, "ETC has no

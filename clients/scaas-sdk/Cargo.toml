@@ -78,6 +78,9 @@ vectors = ["app-core", "scaas-ua/vectors"]
 # non-EVM chain (spec §8.6), off by default and never in the default generated surface
 native-networks = ["wallet", "scaas-ua/fam-btc", "scaas-ua/fam-near", "scaas-ua/fam-dot"]
 raw-native = ["wallet"]
+# T41.arweave (chains-arweave plan T20; CLI-SDK-21): Arweave uploads, settlement, re-posts and reads (`src/arweave.rs`), without
+# the EVM part; the seal and the open are the app core's (`app-core`); bit 31
+arweave = ["vault", "scaas-rpc/arweave", "scaas-rpc/node-client", "scaas-ua/fam-arweave"]
 # the Dart adapter (src/frb.rs): the platform interfaces as records of async closures; no dependency of its own
 frb = []
 

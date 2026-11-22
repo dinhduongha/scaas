@@ -53,6 +53,7 @@ fn this_build() -> Vec<&'static str> {
         (cfg!(feature = "ton"), "ton"),
         (cfg!(feature = "substrate"), "substrate"),
         (cfg!(feature = "native-networks"), "native-networks"),
+        (cfg!(feature = "arweave"), "arweave"),
     ];
     all.iter().filter(|(on, _)| *on).map(|(_, f)| *f).collect()
 }
@@ -125,7 +126,7 @@ fn feature_tree() {
 /// Plan T42: each SDK family feature and the `scaas-ua` `fam-<row>` features it enables (CLI-SDK-33 (31)); EVM is
 /// `evm`'s (T41.evm step 0; `account` and `wallet` enable no row), Bitcoin, NEAR and Polkadot's native keys `native-networks`', the native keys of every build
 /// (spec §8.5) `vault`'s (CLI-SDK-33 (37)).
-const FAMILY: [(&str, &[&str]); 14] = [
+const FAMILY: [(&str, &[&str]); 15] = [
     (
         "vault",
         &[
@@ -142,6 +143,7 @@ const FAMILY: [(&str, &[&str]); 14] = [
     ("account", &[]),
     ("wallet", &[]),
     ("evm", &["fam-evm"]),
+    ("arweave", &["fam-arweave"]),
     ("soroban", &["fam-soroban"]),
     ("solana", &["fam-solana"]),
     ("near", &["fam-near"]),

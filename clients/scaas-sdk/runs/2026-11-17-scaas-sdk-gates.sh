@@ -17,12 +17,14 @@ SUMMARY=$R/2026-11-17-scaas-sdk-summary.txt
 export PATH="$HOME/.foundry/bin:$PATH"
 C="--locked --offline ${J:--j2}"
 cap="$W/scripts/capped"
-F="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton,substrate"
+F="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton,substrate,arweave"
 # with the test feature `vectors` (pqchat-core T1): built by clippy, run only by its own test (a `vectors` build refuses
 # scaas-ua key handles until a test unlocks them, so the whole suite stays without it)
 V="$F,vectors"
 # T41.evm step 0: account, wallet and every non-EVM family without `evm` (no alloy provider in the graph)
 NE="vault,account,wallet,file-store,mlock,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native"
+# T41.arweave: the SDK's Arweave part without the EVM part (no app core: the items are clientkeys' rows), beside every non-EVM family
+AR="$NE,arweave"
 SETS_CMD=""
 for s in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do
     m="--no-default-features --features vault,account,wallet,pqz,pqz-set-$s"
@@ -38,6 +40,7 @@ STEPS=(
     "sdk-min|clients/scaas-sdk|$cap cargo test $C --no-default-features --features vault,file-store"
     "sdk-noevm|clients/scaas-sdk|$cap cargo test $C --no-default-features --features $NE"
     "sdk-clippy-noevm|clients/scaas-sdk|$cap cargo clippy $C --all-targets --no-default-features --features $NE -- -D warnings"
+    "sdk-arweave|clients/scaas-sdk|$cap cargo test $C --no-default-features --features $AR --test arweave --test feature_tree && $cap cargo clippy $C --all-targets --no-default-features --features $AR -- -D warnings"
     "sdk-sets|clients/scaas-sdk|$SETS_CMD"
     "sdk-clippy|clients/scaas-sdk|$cap cargo clippy $C --all-targets --features $V -- -D warnings"
     "sdk-vectors|clients/scaas-sdk|$cap cargo test $C --features $V --test pqchat_keys --test app_core_vault_rows"
@@ -66,7 +69,7 @@ STEPS=(
     "ua-fam|clients/ua-rs|bash runs/fam-sizes.sh | sed 's/^/RESULT /'"
     "ua-wallet-rows|clients/ua-rs|$cap cargo test $C --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows && git diff --exit-code -- ../../smartcontracts/vectors"
     "rpc-clippy|clients/scaas-rpc|$cap cargo clippy $C --all-targets --all-features -- -D warnings"
-    "rpc-wasm|clients/scaas-rpc|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features evm,node-client"
+    "rpc-wasm|clients/scaas-rpc|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features evm,node-client,arweave"
     "ua-c|clients/ua-c|$cap cargo clippy $C --all-targets -- -D warnings && $cap cargo build $C && $cap cargo test $C && python3 -m unittest tests.test_vectors"
     "ua-c-release|clients/ua-c|$cap cargo build $C --release"
     "ua-py|clients/ua-py|python3 -m unittest tests.test_vectors tests.test_wallet"

@@ -26,6 +26,9 @@ substrate = []
 # SDK plan T36 (decisions CLI-SDK-33 (32)): Esplora REST and Bitcoin Core JSON-RPC reads, the cross-check
 bitcoin = []
 node-client = []
+# chains-arweave plan T19 (T41.arweave): the gateway reader and the bundler uploader (CLI-RPC-13, CLI-RPC-14); the data item's
+# verifying parser and the object's sizes are scaas-ua's (`fam-arweave`, no wallet)
+arweave = ["scaas-ua/fam-arweave"]
 # the node's raw reads (`raw_read`, `raw_read_at`, `connect_shared`); never enabled by the SDK (F15, F23)
 node-internal = ["evm"]
 

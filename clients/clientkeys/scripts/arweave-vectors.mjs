@@ -318,15 +318,19 @@ for (const type of [2, 3, 4]) {
   });
 }
 // seal_for_arweave end to end: the 5-byte file under the fixed file key, per type
-const sealForArweave = [2, 3, 4].map((type) => {
-  const s = ar.sealForArweave(ROOT, FILE_KEY, small, type);
+// and one object of the 2^17 bucket (the payer path's rows: above the free tier)
+const sealForArweave = [
+  ...[2, 3, 4].map((type) => ({ name: `type ${type}`, type, seed: "file/5 bytes", size: 5 })),
+  { name: "type 2, the 2^17 bucket", type: 2, seed: "file/one byte over: the 2^17 bucket", size: 65529 },
+].map(({ name, type, seed, size }) => {
+  const s = ar.sealForArweave(ROOT, FILE_KEY, rnd(seed, size), type);
   const header = s.item.slice(0, s.item.length - s.object.length);
   return {
-    name: `type ${type}`,
+    name,
     type,
     fileKey: h(FILE_KEY),
-    fileSeed: "file/5 bytes",
-    size: 5,
+    fileSeed: seed,
+    size,
     sha256: h(s.sha256),
     ctSha256: h(s.ctSha256),
     header: h(header),

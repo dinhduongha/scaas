@@ -75,6 +75,24 @@ pub const EXCLUDED: &[(&str, &str)] = &[
         "AllowOpaqueCall::new",
         "feature opaque-calls: off in the CLI",
     ),
+    // T41.arweave (CLI-SDK-21): an Arweave upload is public and permanent (a live one is the owner's, plan T21)
+    (
+        "ArweaveFiles::new",
+        "feature arweave: off in the CLI (a permanent public upload)",
+    ),
+    (
+        "ArweaveFiles::upload_file",
+        "feature arweave: off in the CLI (a permanent public upload)",
+    ),
+    ("ArweaveFiles::keep_up", "feature arweave: off in the CLI"),
+    (
+        "ArweaveFiles::fetch_file",
+        "feature arweave: off in the CLI",
+    ),
+    (
+        "AppCore::seal_for_arweave",
+        "feature arweave: off in the CLI",
+    ),
 ];
 
 fn take<T: serde::de::DeserializeOwned>(m: Map<String, Value>) -> Result<T, Fail> {
@@ -554,6 +572,17 @@ calls! { cx;
     "app-core open" "AppCore::open" {key: H<Arc<AppKey>>, nonce: Nonce, aad: Vec<u8>, ct: Vec<u8>} => {
         // the plaintext of the caller's own sealed record (`Plaintext` only): to stdout, as the app would show it
         let p = cx.app()?.open(key.0, nonce.sdk(), aad, ct)?;
+        p.with(|b| hexed("plaintext", b))
+    };
+    "app-core seal-file" "AppCore::seal_file" {seed: String, file: Vec<u8>} => {
+        let s = cx.app()?.seal_file(&seed, file)?;
+        let h = |b: &[u8]| format!("0x{}", b.iter().map(|x| format!("{x:02x}")).collect::<String>());
+        handle(s.key, json!({"key": "an app key handle (never readable)", "object": h(&s.object), "ct_sha256": h(&s.ct_sha256),
+            "sha256": h(&s.sha256), "size": s.size}))
+    };
+    "app-core open-file" "AppCore::open_file" {key: H<Arc<AppKey>>, object: Vec<u8>, size: u64, sha256: Vec<u8>} => {
+        // the plaintext of a file whose key the caller holds (`Plaintext` only), after every check
+        let p = cx.app()?.open_file(key.0, object, size, sha256)?;
         p.with(|b| hexed("plaintext", b))
     };
     "app-core seal-key" "AppCore::seal_key" {under: H<Arc<AppKey>>, key: H<Arc<AppKey>>, aad: Vec<u8>} => hexed("wire", &cx.app()?.seal_key(under.0, key.0, aad)?);

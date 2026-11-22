@@ -89,6 +89,19 @@
       "id": "aSOXDaD0io0hFsI8unSnAj7cvpJNU8q_yeIEbeQJaw4",
       "url": "ar://aSOXDaD0io0hFsI8unSnAj7cvpJNU8q_yeIEbeQJaw4",
       "itemSha256": "0x34ac1bd9af70f32f36eb9af7d2bed88b787fa2003e37bbae2c39efefe814b74f"
+    },
+    {
+      "name": "type 2, the 2^17 bucket",
+      "type": 2,
+      "fileKey": "0x65a4c23d04228c10b3fd2ea5a72cae7ee2d3acddba8ae5ffc5555ac1ca6afb19",
+      "fileSeed": "file/one byte over: the 2^17 bucket",
+      "size": 65529,
+      "sha256": "0xe773ea989e30f0ffb59a033235082744dcb2346df94810f2a19fd769eee7d713",
+      "ctSha256": "0x9e54a1c5f7d85c9e1f6cdd0f1aebaaec09c5ef1b787911831081aad6ca0b5cf3",
+      "header": "0x02000bc915386bcf77bc65959f7f9eafec5feebbe8fab85347cfb1439806838f0cb8d4f96e6bced89390fbceac42cad4f66bd09e83de18ba735ac1c6856829571a06695b77e1540bd3b689fc03bea81e93bcdfd4bb83b1aa2a46b4ab5adca01d1840000000000000000000000000000000000000",
+      "id": "7gr_YA-hVhmMShfqcf4qM-QuCoZMc4R770sOtBR7Psk",
+      "url": "ar://7gr_YA-hVhmMShfqcf4qM-QuCoZMc4R770sOtBR7Psk",
+      "itemSha256": "0x8f14c4833263c53435fd8291fcb113544f7e1d9869738a248bf7d816eb80f6d5"
     }
   ]
 }

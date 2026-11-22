@@ -142,6 +142,22 @@ own_codes! {
     /// registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
     /// sent.
     GasAboveBlockShare,
+    /// An Arweave upload above the free tier, or refused there, with no payer: none configured, or the operator's node payer
+    /// off (NODE-SPN-05; CLI-SDK-21).
+    PayerUnavailable,
+    /// An Arweave upload the bundler refused for payment (HTTP 402): the user's own credits, or a payer's approval, are missing.
+    PaymentRequired,
+    /// An Arweave upload no bundler accepted, for a reason other than payment.
+    UploadRejected,
+    /// A kept Arweave upload still unsettled after its last re-post (C20): shown; the bytes stay kept.
+    UploadUnsettled,
+    /// A data item that is not one `scaas-ua` built: its verifying parser refused it, or it carries a target, an anchor or a
+    /// tag, or its object is no bucket's (CLI-UAL-64).
+    ArweaveItem,
+    /// A file or object above the platform's cap or the store's largest object (CLI-UAL-65): `scaas-ua`'s code.
+    FileTooLarge,
+    /// A file object or plaintext whose SHA-256 is not the signed one (CLI-UAL-65): `scaas-ua`'s code.
+    FileHashMismatch,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).
@@ -157,6 +173,9 @@ pub const SHARED_CODES: &[&str] = &[
     "AppArenaFull",
     // plan T42 (CLI-SDK-33 (37) (a)): a family this build leaves out, `scaas-ua`'s refusal mapped one to one
     "FeatureMissing",
+    // T41.arweave (CLI-UAL-65): the file seal's refusals, raised by `scaas-ua`'s `open_file` and the SDK's reads alike
+    "FileTooLarge",
+    "FileHashMismatch",
 ];
 
 impl std::fmt::Display for SdkError {
@@ -172,6 +191,8 @@ impl From<scaas_ua::wallet::Error> for SdkError {
         match e {
             // plan T42: a family this build leaves out is the SDK's own `FeatureMissing` (one list of names)
             scaas_ua::wallet::Error::FeatureMissing => SdkError::FeatureMissing,
+            scaas_ua::wallet::Error::FileTooLarge => SdkError::FileTooLarge,
+            scaas_ua::wallet::Error::FileHashMismatch => SdkError::FileHashMismatch,
             e => SdkError::Ua(e),
         }
     }

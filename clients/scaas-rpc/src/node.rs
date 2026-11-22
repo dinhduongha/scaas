@@ -53,6 +53,14 @@ pub struct UaMetaTxReq {
     pub auth: Value,
 }
 
+/// NODE-SPN-05's answer: the payer address to send as `x-paid-by` and the approval's expiry (Unix seconds).
+#[cfg(feature = "arweave")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PayerApproval {
+    pub paid_by: String,
+    pub expires_at: u64,
+}
+
 /// The client of a list of scaas-node gateways, each with its own credential.
 #[derive(Clone)]
 pub struct NodeClient {
@@ -225,6 +233,88 @@ impl NodeClient {
             },
             Err(f) => Err(failed(f)),
         }
+    }
+
+    /// NODE-SPN-05's payer route, `POST /v1/arweave/payer {address, signatureType, bucket}`, failed over in list order (feature
+    /// `arweave`): named fields only, no UA, no UA signature, no file bytes; the gateway's credential is the endpoint's own.
+    /// `Ok(Some)` an approval (`paidBy`, `expiresAt`); `Ok(None)` no payer (the route answers 404 or 501 while the operator has
+    /// it off, or no gateway serves it); a 4xx with the node's code (a budget, a refused field) is its refusal.
+    #[cfg(feature = "arweave")]
+    pub async fn arweave_payer(
+        &self,
+        address: &str,
+        signature_type: u16,
+        bucket: u64,
+    ) -> Result<Option<PayerApproval>, RpcError> {
+        if address.is_empty()
+            || address.len() > 128
+            || !address
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
+            || !matches!(signature_type, 2..=4)
+            || !bucket.is_power_of_two()
+        {
+            return Err(RpcError::argument("a payer request out of form"));
+        }
+        let body = serde_json::to_vec(&serde_json::json!({
+            "address": address, "signatureType": signature_type, "bucket": bucket,
+        }))
+        .expect("a Value serialises");
+        let mut last = None;
+        let mut absent = 0;
+        for i in 0..self.list.len() {
+            match self
+                .http
+                .request(
+                    &self.list,
+                    i,
+                    reqwest::Method::POST,
+                    "/v1/arweave/payer",
+                    Some(body.clone()),
+                    ANSWER_MAX,
+                    None,
+                )
+                .await
+            {
+                Ok((s, v)) if (200..300).contains(&s) => {
+                    let paid_by = v["paidBy"].as_str().filter(|p| {
+                        !p.is_empty()
+                            && p.len() <= 128
+                            && p.bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
+                    });
+                    match (paid_by, v["expiresAt"].as_u64()) {
+                        (Some(p), Some(e)) => {
+                            return Ok(Some(PayerApproval {
+                                paid_by: p.to_string(),
+                                expires_at: e,
+                            }))
+                        }
+                        _ => {
+                            last = Some(EndpointFailure::new(
+                                i,
+                                crate::FailureKind::AnswerMalformed,
+                                "a payer approval without paidBy and expiresAt",
+                            ))
+                        }
+                    }
+                }
+                Ok((404 | 501, _)) => absent += 1,
+                Ok((s, v)) => match answer(i, s, v) {
+                    NodeOutcome::Refused(e) => return Err(e),
+                    NodeOutcome::Unreachable(f) => last = Some(f),
+                    NodeOutcome::Queued { .. } => unreachable!("not a 2xx"),
+                },
+                Err(f) => last = Some(f),
+            }
+        }
+        if absent > 0 && last.is_none() {
+            return Ok(None);
+        }
+        Err(RpcError::EndpointAllFailed {
+            last,
+            failover_revert: None,
+        })
     }
 
     /// One submit to gateway `i`: the body cap first (nothing sent above it), then the answer by the node's contract.

@@ -39,6 +39,9 @@ pub enum FailureKind {
     BlockChanged,
     /// a revert from an endpoint after the first used: no verdict (CLI-RPC-04); its data is kept
     FailoverRevert,
+    /// the answer failed the caller's check (an Arweave object whose SHA-256 is not `ctSha256`, CLI-RPC-13:
+    /// `EndpointAnswerRefused`): that endpoint's failure, so failover moves on
+    AnswerRefused,
 }
 
 /// One endpoint's failure: its index and label, the kind, a short redacted text; a failover endpoint's revert keeps its data.

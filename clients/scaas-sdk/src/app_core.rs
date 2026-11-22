@@ -75,6 +75,8 @@ pub enum AppKeyUsage {
     Derive,
     Data,
     KeyWrap,
+    /// a file key (CLI-UAL-65): `open_file` only; `seal_file` draws its own
+    File,
 }
 
 impl From<AppKeyUsage> for KeyUsage {
@@ -83,6 +85,7 @@ impl From<AppKeyUsage> for KeyUsage {
             AppKeyUsage::Derive => KeyUsage::Derive,
             AppKeyUsage::Data => KeyUsage::Data,
             AppKeyUsage::KeyWrap => KeyUsage::KeyWrap,
+            AppKeyUsage::File => KeyUsage::File,
         }
     }
 }
@@ -104,6 +107,28 @@ pub struct AppWrap {
     pub mlkem_ct: Vec<u8>,
     pub x25519_eph: Vec<u8>,
     pub sealed_key: Vec<u8>,
+}
+
+/// A sealed file (CLI-UAL-65): the file key's handle and the public parts.
+pub struct AppSealedFile {
+    pub key: Arc<AppKey>,
+    /// exactly bucket + 16 B
+    pub object: Vec<u8>,
+    pub ct_sha256: Vec<u8>,
+    pub sha256: Vec<u8>,
+    pub size: u64,
+}
+
+/// `seal_for_arweave`'s answer (CLI-SDK-21): the `file` content's fields, the file key's handle, the signed item to keep and
+/// post; the object is the item's data.
+#[cfg(feature = "arweave")]
+pub struct AppArweaveFile {
+    pub url: String,
+    pub ct_sha256: Vec<u8>,
+    pub sha256: Vec<u8>,
+    pub size: u64,
+    pub key: Arc<AppKey>,
+    pub item: Vec<u8>,
 }
 
 /// A key handle of one scope: no bytes, no `Clone` of its key; released by [`AppCore::destroy`], its drop, or the seed's lock.
@@ -895,6 +920,68 @@ impl AppCore {
         };
         let h = self.scope(&seed)?.app_root_key(&app_id, &id).map_err(ua)?;
         Ok(self.wrap(&seed, h))
+    }
+
+    /// The generic file seal (CLI-UAL-65, in every store): `file` framed to its power-of-two bucket and sealed under a fresh
+    /// file key (a `File` handle); the object is exactly bucket + 16 B. Above the platform's cap: `FileTooLarge`.
+    pub fn seal_file(&self, seed: &str, file: Vec<u8>) -> Result<AppSealedFile, SdkError> {
+        let s = self.scope(seed)?.seal_file(&file)?;
+        Ok(AppSealedFile {
+            ct_sha256: s.ct_sha256.to_vec(),
+            sha256: s.sha256.to_vec(),
+            size: s.size,
+            object: s.object,
+            key: self.wrap(seed, s.key),
+        })
+    }
+
+    /// The file of `object` under the `File` handle `key`, after `scaas-ua`'s checks (the length, the tag, the frame's `len`
+    /// against `size`, the zero pad, SHA-256 against `sha256`) and only then, as `Plaintext`. Run it after the read's check of
+    /// `ctSha256` (`ArweaveFiles::fetch_file`); a cache of opened files is keyed by `sha256`.
+    pub fn open_file(
+        &self,
+        key: Arc<AppKey>,
+        object: Vec<u8>,
+        size: u64,
+        sha256: Vec<u8>,
+    ) -> Result<SecretBytes, SdkError> {
+        let sha: [u8; 32] = sha256.try_into().map_err(|_| SdkError::Argument)?;
+        let pt = self.with(&[&key], |s, hs| {
+            Ok(s.open_file(at(hs, 0)?, &object, size, &sha)?)
+        })?;
+        SecretBytes::from_zeroizing(pt).map_err(ua)
+    }
+
+    /// `file` sealed for Arweave in one `scaas-ua` call (CLI-SDK-21): a fresh file key, the object, its `ctSha256`, the upload
+    /// key from `account`'s app root key and the file key, the item of `signature_type` (2, 3 or 4) built, signed and verified;
+    /// `url` = `ar://<id>` is known before any upload. `max_object`: the bundler profile's largest single request
+    /// (`FileTooLarge` above its bucket, or above the platform's cap).
+    #[cfg(feature = "arweave")]
+    pub fn seal_for_arweave(
+        &self,
+        account: KeyRef,
+        file: Vec<u8>,
+        signature_type: u16,
+        max_object: u64,
+    ) -> Result<AppArweaveFile, SdkError> {
+        let t =
+            scaas_ua::arweave::SigType::from_u16(signature_type).map_err(|_| SdkError::Argument)?;
+        let cap = max_object.saturating_sub(scaas_ua::file::TAG);
+        let root = self.app_root_key(account)?;
+        let seed = root.seed().to_string();
+        let a = self.with(&[&root], |s, hs| {
+            Ok(s.seal_for_arweave(at(hs, 0)?, &file, t, cap)?)
+        });
+        self.destroy(root)?;
+        let a = a?;
+        Ok(AppArweaveFile {
+            url: a.url,
+            ct_sha256: a.ct_sha256.to_vec(),
+            sha256: a.sha256.to_vec(),
+            size: a.size,
+            item: a.item.into_bytes(),
+            key: self.wrap(&seed, a.key),
+        })
     }
 
     /// Wipes the handle's key now.

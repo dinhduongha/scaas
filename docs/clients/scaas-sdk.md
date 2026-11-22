@@ -359,7 +359,14 @@ runs on the user's action, or for the 2^16-B bucket automatically if the app all
 release's pinned data, with `named` entries from the operator or holder. The user is told, before the first upload, that the
 object is public and permanent: a `redact` hides the message, never the object. The metadata cost is stated: the payer's
 approvals and the receipt's `payer` link every funded upload key to the operator's payer address, and the bundler sees the
-uploader's IP.
+uploader's IP. **Three payment paths** (owner 2026-11-22, decisions CLI-SDK-32; Arweave never depends on the node): the free
+tier; the user's **self-pay** (Turbo credits from the user's own wallet, or a per-upload payment: the uploader's own item, a 402
+`PaymentRequired`; the paying wallet links the user's upload keys at the bundler, and the client shows `SELF_PAY_NOTICE`); the
+operator's payer (NODE-SPN-05, optional, an operator convenience). **As built** (BUILT, UNAUDITED; feature `arweave`, without the
+EVM part: `src/arweave.rs` `ArweaveFiles` (`upload_file`, `keep_up`, `fetch_file`), `ArweaveConfig` with `Payer::{None,
+SelfPay, Operator}`; with `app-core`: `AppCore::seal_file`, `open_file` (every store) and `seal_for_arweave`; tests
+`tests/arweave.rs`; decisions CLI-SDK-33 (66)). The kept bytes are the app core's (`KeptUpload`); `keep_up(kept, now)` takes the
+app's clock.
 
 ## 8. Runtime, events, errors
 
@@ -392,7 +399,9 @@ by `code`. The SDK's own names include `StoreConflict`, `KeystoreMismatch`, `Key
 `AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`, `AppKeyUsage`, `AppArenaFull`, `KemKeyGone`,
 `ReceiverUnregistered`, `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`,
 `GasAboveBlockShare`, `RegistrationVerifyOnly` (the kind's home, `kindHome(kind)`, is another generation of the line), `UaUnregistered`
-(no generation of the bound registry's line holds the UA), `PqzHomeNone` (no PQZ home on the walk)
+(no generation of the bound registry's line holds the UA), `PqzHomeNone` (no PQZ home on the walk), and for Arweave
+(CLI-SDK-21) `PayerUnavailable`, `PaymentRequired`, `UploadRejected`, `UploadUnsettled`, `ArweaveItem`, with `FileTooLarge` and
+`FileHashMismatch` shared with `scaas-ua`
 ([CTR-UA-65](../contracts/accounts.md#CTR-UA-65), [off-chain readers](../contracts/accounts.md#off-chain-readers)). A
 warning (`short_seed`, `imported_key`) comes beside a success, never as an error.
 

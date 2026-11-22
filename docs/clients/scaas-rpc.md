@@ -246,7 +246,9 @@ Named, stable codes; the names shared with the app's endpoint lists are the same
 
 `BroadcastRejected` is the code of a send's `Rejected` outcome ([CLI-RPC-08](#CLI-RPC-08)), not an error. The failure of one
 endpoint inside `EndpointAllFailed` or `EndpointNoMajority` is one of `Transport`, `Timeout`, `Http`, `AnswerTooLarge`,
-`AnswerTooDeep`, `AnswerMalformed`, `WrongChain`, `IdentityUnread`, `BehindHead`, `BlockChanged` or `FailoverRevert`.
+`AnswerTooDeep`, `AnswerMalformed`, `WrongChain`, `IdentityUnread`, `BehindHead`, `BlockChanged`, `FailoverRevert` or
+`AnswerRefused` (an answer that failed the caller's check: an Arweave object whose SHA-256 is not `ctSha256`, CLI-RPC-13's
+`EndpointAnswerRefused`).
 
 ## 9. Arweave gateways and bundlers
 
@@ -273,7 +275,10 @@ and depth 64, with the tip height. `settled(id, depth, object_sha256)` is true o
 gateways run by different operators (`default` or `named`; discovered gateways never count) report the item in one block, (b)
 that block is at least `depth` blocks below the tip they report (`depth` a list setting, default 50), and (c) one `data` read
 returns bytes whose SHA-256 is `object_sha256`; with fewer than two such gateways nothing is ever settled. Logs carry ids and
-sizes only ([CLI-RPC-11](#CLI-RPC-11)).
+sizes only ([CLI-RPC-11](#CLI-RPC-11)). **As built** (BUILT, UNAUDITED; feature `arweave`, `src/arweave.rs`, `Http::get_exact`,
+tests `tests/arweave.rs`; decisions CLI-SDK-33 (64)): `Gateways::new(list, operators, network)`, `data`, `status_at`,
+`settled`, `settled_item`; the platform cap is `scaas_ua::file::CAP` + 16; a body failing the check is `AnswerRefused`;
+`/info`, GraphQL and receipts capped at 64 KiB, depth 64.
 
 <a id="CLI-RPC-14"></a>**CLI-RPC-14** — **An upload posts the same signed data item to a list of bundlers; a receipt counts only
 when its id equals the id computed locally; never final** (SPECIFIED). `upload(item, paid_by)` parses the item's header within
@@ -284,4 +289,8 @@ merged `Sent` or `Rejected` as [CLI-RPC-08](#CLI-RPC-08). `paid_by` is the calle
 The body cap is the largest single-request object plus 1,024 B. Settlement is read later through [CLI-RPC-13](#CLI-RPC-13)'s
 `settled`, never taken from a receipt. The crate re-sends nothing; the SDK's bounded re-post of an unsettled item
 ([CLI-SDK-21](scaas-sdk.md#CLI-SDK-21)) is the one exception to CLI-RPC-08's "no automatic re-send". The owner agreed to this exception (2026-11-21).
+**As built** (BUILT, UNAUDITED; `Bundlers::upload(item, fanout, paid_by: Option<(bundler, payer)>)`, the item parsed and
+verified by `scaas-ua`'s `DataItem::parse` first; the node's payer route as a client call, `NodeClient::arweave_payer(address,
+signature_type, bucket)` (`POST /v1/arweave/payer`, NODE-SPN-05's named fields, `Ok(None)` when the route is off: 404 or 501),
+tested against a fake of that shape: decisions CLI-SDK-33 (65)).
 

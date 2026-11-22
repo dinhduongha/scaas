@@ -40,6 +40,8 @@ pub mod account;
 pub mod admin;
 #[cfg(feature = "app-core")]
 pub mod app_core;
+#[cfg(feature = "arweave")]
+pub mod arweave;
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub mod confidential;
 pub mod config;
@@ -123,6 +125,8 @@ pub mod bits {
     pub const SUBSTRATE: u64 = 1 << 29;
     /// T41.evm step 0: the EVM part (alloy's providers, the operations, the registry); `account` and `wallet` hold none
     pub const EVM: u64 = 1 << 30;
+    /// T41.arweave: Arweave uploads and reads (CLI-SDK-21)
+    pub const ARWEAVE: u64 = 1 << 31;
 }
 
 /// The bits of this build's features.
@@ -172,6 +176,7 @@ pub fn features() -> u64 {
         (cfg!(feature = "vectors"), VECTORS),
         (cfg!(feature = "substrate"), SUBSTRATE),
         (cfg!(feature = "evm"), EVM),
+        (cfg!(feature = "arweave"), ARWEAVE),
     ];
     on.iter()
         .filter(|(enabled, _)| *enabled)
