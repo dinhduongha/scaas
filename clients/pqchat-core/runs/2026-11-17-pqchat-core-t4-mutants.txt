@@ -8,6 +8,6 @@ drop the messageId dedupe | killed | b947598f4 | ../../scripts/capped cargo test
 skip the replica equality | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check replica_differs_from_home | panicked at tests/check.rs:207:5:
 skip the factory listing | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check unlisted_instance | panicked at tests/check.rs:255:9:
 skip the wrap-hash check | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check wrap_hash_before_any_decapsulation | panicked at tests/check.rs:281:5:
-mark kemKeyOf as an ordinary read | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test reads kem_key_of_is_trusted | panicked at tests/reads.rs:50:5:
+mark kemKeyOf as an ordinary read | killed | 14765e1d6 | ../../scripts/capped cargo test --locked --offline -j2 --test reads kem_key_of_is_trusted | panicked at tests/reads.rs:50:5:
 drop the highest-version check | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test reads kem_version_lowered | panicked at tests/reads.rs:117:50:
 11 mutants, 11 killed, 0 survived, 0 not loaded, 0 other failure
