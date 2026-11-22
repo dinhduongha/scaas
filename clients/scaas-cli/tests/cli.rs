@@ -1202,6 +1202,10 @@ fn every_signing_command_asks_first() {
                     Run::Session(l, json!(["account", "submit-registry-write", "--write", "w.0", "--quote", "q"]))
                 }
                 "wallet submit-native-send" => zf(&["wallet", "submit-native-send"], zero::<scaas_sdk::wallet::NativeQuote>()),
+                "wallet soroban-submit" => zf(&["wallet", "soroban-submit"], json!({"prepared": zero::<scaas_sdk::wallet::SorobanPrepared>(),
+                    "quote": zero::<scaas_sdk::wallet::SorobanQuote>()})),
+                "wallet soroban-hand-off" => zf(&["wallet", "soroban-hand-off"], zero::<scaas_sdk::wallet::SorobanPrepared>()),
+                "wallet soroban-submit-native-send" => zf(&["wallet", "soroban-submit-native-send"], zero::<scaas_sdk::wallet::SorobanNativeQuote>()),
                 "dex sign-order" => Run::Session(vec![order.clone()], json!(["dex", "sign-order", "--order", "o"])),
                 "dex place" => Run::Session(vec![order.clone()], json!(["dex", "place", "--order", "o"])),
                 "dex cancel-all" => zf(&["dex", "cancel-all"], zero::<scaas_sdk::dex::CancelAll>()),
