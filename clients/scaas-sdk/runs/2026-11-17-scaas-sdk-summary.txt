@@ -291,24 +291,10 @@ sdk-arweave | 028da021c | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 sdk-clippy-noevm | 028da021c | 0 | -
 cli | 028da021c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 docs | eff2aa3e5 | 0 | -
-mutants-check | eff2aa3e5 | 0 | -
-bind-gen | eff2aa3e5 | 0 | -
-sdk-uniffi | eff2aa3e5 | 0 | 18 passed, 0 failed, 0 ignored (2 binaries)
-ffi | eff2aa3e5 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 sdk-wasm | eff2aa3e5 | 0 | -
 sdk-clippy | eff2aa3e5 | 0 | -
-bind-cpp | eff2aa3e5 | 0 | ctest: 0 tests failed out of 1
-bind-cs | eff2aa3e5 | 0 | dotnet: 4 passed, 0 failed
-bind-python | eff2aa3e5 | 0 | unittest: 7 ran, OK
-bind-kotlin | eff2aa3e5 | 0 | kotlin: PASS (0 failures)
-bind-swift | eff2aa3e5 | 0 | swift: PASS (0 failures)
-bind-java | eff2aa3e5 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
-bind-go | eff2aa3e5 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
-bind-dart | eff2aa3e5 | 0 | dart: +14:
 features | eff2aa3e5 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
-sdk-deny | eff2aa3e5 | 1 | -
 sdk-test | eff2aa3e5 | 0 | 437 passed, 0 failed, 17 ignored (41 binaries)
-bind-js | e2c2ede7c | 0 | node: 5 pass, 0 fail, 0 skipped
 # the rows above at eff2aa3e5 (the merge of ua-rs-sign 3da595648, e33e863c9, and its regenerated bindings) and bind-js at
 # e2c2ede7c (its scan hardened; the only later code change): every bind-* step, bind-gen, sdk-uniffi, ffi, sdk-wasm,
 # sdk-clippy, sdk-test, features, docs, mutants-check green. sdk-deny rc 1: RUSTSEC-2026-0592 (url 2.5.8, Url::origin stack
@@ -317,3 +303,21 @@ bind-js | e2c2ede7c | 0 | node: 5 pass, 0 fail, 0 skipped
 # t20d 2/2, t20e 2/2, t20e2 3/3, t20f 2/2, t20g 4/4, t20h 3/3, t13rulings 5/5, bind100 2/2 at eff2aa3e5; review-b 7/7 (B3
 # killed at e2c2ede7c after the scan fix, survived at eff2aa3e5); t20 2/2 at cb4d7e52d (the kill rule now reads dart's [E]
 # and the generator's [gen] FAIL; mutants-check green there, tree dirty only by these records).
+mutants-check | 57729f7bc | 0 | -
+sdk-deny | 57729f7bc | 0 | -
+bind-gen | 57729f7bc | 0 | -
+sdk-uniffi | 57729f7bc | 0 | 18 passed, 0 failed, 0 ignored (2 binaries)
+ffi | 57729f7bc | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+bind-cpp | 57729f7bc | 0 | ctest: 0 tests failed out of 1
+bind-cs | 57729f7bc | 0 | dotnet: 4 passed, 0 failed
+bind-python | 57729f7bc | 0 | unittest: 7 ran, OK
+bind-kotlin | 57729f7bc | 0 | kotlin: PASS (0 failures)
+bind-swift | 57729f7bc | 0 | swift: PASS (0 failures)
+bind-js | 57729f7bc | 0 | node: 5 pass, 0 fail, 0 skipped
+bind-java | 57729f7bc | 0 | java: PASS (0 failures); unittest: 4 ran, OK
+bind-go | 57729f7bc | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
+bind-dart | 57729f7bc | 0 | dart: +14:
+# the rows above at 57729f7bc (the merge of ua-rs-sign b0ee76349, 2196bdade, and its regenerated bindings, prepare_set_kem_key
+# in every binding and in the Dart surface): sdk-deny green (url 2.5.9 in every lockfile, bindings/js's bumped here), bind-gen,
+# sdk-uniffi, ffi, every bind-* step, mutants-check green. The binding mutant files were not rerun: none of their texts moved
+# (mutants-check loads each), and their records stand at eff2aa3e5 / e2c2ede7c / cb4d7e52d.
