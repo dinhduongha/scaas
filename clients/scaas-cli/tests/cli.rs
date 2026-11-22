@@ -773,6 +773,10 @@ fn confirm_class(sdk: &str) -> Option<&'static str> {
             "bls_multi_pop_part",
             "pqchat_seal_message",
             "prepare_app_call",
+            // SDK plan T41.soroban: the subject's op signed (submit, hand-off), the payer's native send signed
+            "soroban_submit",
+            "soroban_hand_off",
+            "soroban_submit_native_send",
         ]
         .contains(&f)
         || sdk == "Vault::remove";

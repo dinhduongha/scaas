@@ -398,6 +398,18 @@ calls! { cx;
     "wallet native-address" "Wallet::native_address" {key: NativeKeyRef, ss58_prefix: Option<u16>} => js(sdk(cx).wallet().native_address(key, ss58_prefix).await?);
     "wallet prepare-native-send" "Wallet::prepare_native_send" (r: NativeSend) @op => sdk(cx).wallet().prepare_native_send(r).await?;
     "wallet submit-native-send" "Wallet::submit_native_send" (q: NativeQuote) @sign => { cx.confirm(json!({"quote": q}))?; named("tx", sdk(cx).wallet().submit_native_send(q).await?) };
+    // SDK plan T41.soroban: a G… subject's ops through `/v1/ops` or by self-relay, the hand-off, the native XLM send
+    "wallet soroban-prepare" "Wallet::soroban_prepare" (r: SorobanOpRequest) => js(sdk(cx).wallet().soroban_prepare(r).await?);
+    "wallet soroban-quote" "Wallet::soroban_quote" {prepared: SorobanPrepared, path: SorobanPath} => js(sdk(cx).wallet().soroban_quote(prepared, path).await?);
+    "wallet soroban-submit" "Wallet::soroban_submit" {prepared: SorobanPrepared, quote: SorobanQuote} @sign => { cx.confirm(json!({"prepared": prepared, "quote": quote}))?; named("op", sdk(cx).wallet().soroban_submit(prepared, quote).await?) };
+    "wallet soroban-hand-off" "Wallet::soroban_hand_off" (p: SorobanPrepared) @sign => { cx.confirm(json!({"hand_off": p}))?; js(sdk(cx).wallet().soroban_hand_off(p).await?) };
+    "wallet soroban-import" "Wallet::soroban_import" {blob: SignedOpBlob, expect: ImportExpect} => js(sdk(cx).wallet().soroban_import(blob, expect).await?);
+    "wallet soroban-resend" "Wallet::soroban_resend" {op: String} => js(sdk(cx).wallet().soroban_resend(op).await?);
+    "wallet soroban-follow" "Wallet::soroban_follow" {op: String} => named("state", sdk(cx).wallet().soroban_follow(op).await?);
+    "wallet soroban-prepare-native-send" "Wallet::soroban_prepare_native_send" (r: SorobanNativeSend) => js(sdk(cx).wallet().soroban_prepare_native_send(r).await?);
+    "wallet soroban-submit-native-send" "Wallet::soroban_submit_native_send" (q: SorobanNativeQuote) @sign => { cx.confirm(json!({"quote": q}))?; named("op", sdk(cx).wallet().soroban_submit_native_send(q).await?) };
+    "signed-op-blob from-json" "SignedOpBlob::from_json" {text: String} => js(SignedOpBlob::from_json(&text)?);
+    "signed-op-blob to-json" "SignedOpBlob::to_json" (b: SignedOpBlob) => named("json", b.to_json());
     "wallet prepare-transfer" "Wallet::prepare_transfer" (r: Transfer) @op => sdk(cx).wallet().prepare_transfer(r).await?;
     "wallet prepare-pay" "Wallet::prepare_pay" (r: Pay) @op => sdk(cx).wallet().prepare_pay(r).await?;
     "wallet prepare-pay-with-tax" "Wallet::prepare_pay_with_tax" (r: PayWithTax) @op => sdk(cx).wallet().prepare_pay_with_tax(r).await?;
