@@ -17,7 +17,7 @@ MUTANTS = [
      T + "import_refusals_in_order"),
     ("the relayer check dropped", [(H, "                    if bound != Some(payer) {\n                        return Err(SdkError::ImportRelayerBound);\n                    }\n", "                    let _ = bound;\n")],
      T + "a_bound_relayer_must_be_the_payer"),
-    ("the consumed check dropped", [(H, "                if lane_nonce(&pool, Address::from(contract), \"token\", &from, batch).await? > nonce {", "                if lane_nonce(&pool, Address::from(contract), \"token\", &from, batch).await? > nonce && false {")],
+    ("the consumed check dropped", [(H, "                    return Err(SdkError::ImportConsumed);\n", "                    let _ = SdkError::ImportConsumed;\n")],
      T + "import_refusals_in_order"),
     ("the quote signing", [(Q, "                let unsigned = super::submit::unsigned(&prepared)?;\n", "                let _ = super::submit::sign(&sdk, &prepared).await?;\n                let unsigned = super::submit::unsigned(&prepared)?;\n")],
      W + "every_wallet_pair_is_its_vector"),
