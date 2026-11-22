@@ -942,13 +942,58 @@ impl AppCore {
         path: AppPath,
         typed_json: String,
     ) -> Result<AppSigned, SdkError> {
+        self.sign_with(
+            account,
+            path,
+            typed_json,
+            scaas_ua::wallet::app_record_digest,
+            scaas_ua::wallet::sign_app_record,
+        )
+        .await
+    }
+
+    /// Signs the PqVault record `typed_json` (EIP-712 JSON, never a digest) on `path` by `account`, PqVault's dedicated path
+    /// (owner 2026-11-22, CLI-PQV-12; `scaas-ua` `wallet::pqvault`): a scope of PqVault's `app_id`, a primary type and
+    /// `encodeType` of PqVault's records (`Argument`), the domain `DS_V` on the portable path or `DS_B` on the chain-bound one
+    /// under `P_V` (`purpose` none or `P_V`; `AppDomainRefused`), the profile's checks of a chain-bound domain as
+    /// [`Self::sign_app_record`]'s. The generic call refuses every PqVault record.
+    pub async fn sign_pqvault_record(
+        self: &Arc<Self>,
+        account: KeyRef,
+        path: AppPath,
+        typed_json: String,
+    ) -> Result<AppSigned, SdkError> {
+        self.sign_with(
+            account,
+            path,
+            typed_json,
+            scaas_ua::wallet::pqvault::digest,
+            scaas_ua::wallet::pqvault::sign,
+        )
+        .await
+    }
+
+    /// The entry under both signing calls: `digest` states the record's typed digest after its refusals, `sign` signs it.
+    async fn sign_with(
+        self: &Arc<Self>,
+        account: KeyRef,
+        path: AppPath,
+        typed_json: String,
+        digest: fn(&UaPath, &TypedData) -> scaas_ua::wallet::Result<[u8; 32]>,
+        sign: fn(
+            &dyn Signer,
+            Option<&scaas_ua::Domain>,
+            &UaPath,
+            &TypedData,
+        ) -> scaas_ua::wallet::Result<UASig>,
+    ) -> Result<AppSigned, SdkError> {
         let me = self.clone();
         let sdk = self.sdk.clone();
         sdk.clone()
             .spawn(async move {
                 let typed = TypedData::from_json(typed_json.as_bytes()).map_err(ua)?;
                 let (ua_path, registry) = me.ua_path(&path, &typed, &account).await?;
-                let digest = scaas_ua::wallet::app_record_digest(&ua_path, &typed).map_err(ua)?;
+                let digest = digest(&ua_path, &typed).map_err(ua)?;
                 let review = Self::review(&path, &typed);
                 let key = crate::op::key(&sdk, &account)?;
                 let signer: &dyn Signer = match &key {
@@ -957,9 +1002,7 @@ impl AppCore {
                     #[allow(unreachable_patterns)]
                     _ => return Err(SdkError::Argument),
                 };
-                let sig =
-                    scaas_ua::wallet::sign_app_record(signer, registry.as_ref(), &ua_path, &typed)
-                        .map_err(ua)?;
+                let sig = sign(signer, registry.as_ref(), &ua_path, &typed).map_err(ua)?;
                 Ok(AppSigned {
                     key_data: sig.key_data,
                     signature: sig.signature,
@@ -1141,6 +1184,49 @@ impl AppCore {
         typed_json: String,
         sig: AppUaSig,
     ) -> Result<bool, SdkError> {
+        self.verify_with(
+            chain,
+            ua,
+            path,
+            typed_json,
+            sig,
+            scaas_ua::wallet::verify_app_record,
+        )
+        .await
+    }
+
+    /// Whether `sig` is `ua`'s signature of the PqVault record `typed_json` on `path`, PqVault's dedicated path (owner
+    /// 2026-11-22; `scaas-ua` `wallet::pqvault::verify`): its refusals as [`Self::sign_pqvault_record`]'s (a refused record:
+    /// `false`), then the registry's judgement as [`Self::verify_app_record`]'s.
+    pub async fn verify_pqvault_record(
+        self: &Arc<Self>,
+        chain: String,
+        ua: String,
+        path: AppPath,
+        typed_json: String,
+        sig: AppUaSig,
+    ) -> Result<bool, SdkError> {
+        self.verify_with(
+            chain,
+            ua,
+            path,
+            typed_json,
+            sig,
+            scaas_ua::wallet::pqvault::verify,
+        )
+        .await
+    }
+
+    /// The entry under both verifying calls: `f` judges the record on the registry state read.
+    async fn verify_with(
+        self: &Arc<Self>,
+        chain: String,
+        ua: String,
+        path: AppPath,
+        typed_json: String,
+        sig: AppUaSig,
+        f: fn(&[u8; 32], &UaPath, &TypedData, &UASig, &AppRecordState) -> bool,
+    ) -> Result<bool, SdkError> {
         let id = hex32(&ua)?;
         let typed = TypedData::from_json(typed_json.as_bytes()).map_err(SdkError::Ua)?;
         let p = match &path {
@@ -1164,7 +1250,7 @@ impl AppCore {
         };
         let chain_bound = matches!(p, UaPath::ChainBound { .. });
         self.with_records(&chain, id, chain_bound, |state| {
-            scaas_ua::wallet::verify_app_record(&id, &p, &typed, &UASig::from(&sig), state)
+            f(&id, &p, &typed, &UASig::from(&sig), state)
         })
         .await
     }

@@ -60,6 +60,8 @@ pub mod pqchat_keys;
 pub mod pqsign;
 #[cfg(not(feature = "vectors"))]
 mod pqsign;
+#[cfg(feature = "app-core")]
+pub mod pqvault;
 #[cfg(feature = "roots")]
 pub mod roots;
 #[cfg(feature = "vectors")]
@@ -84,7 +86,7 @@ mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
 #[cfg(feature = "app-core")]
-pub use app_refusals::{SCAAS_DOMAIN_NAMES, SCAAS_PURPOSES};
+pub use app_refusals::{SCAAS_APP_IDS, SCAAS_DOMAIN_NAMES, SCAAS_PURPOSES};
 #[cfg(feature = "app-core")]
 pub use appkey::{
     AppKeys, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce, APP_KEYS_MAX, APP_ROOT, KEYWRAP,

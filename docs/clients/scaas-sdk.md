@@ -289,7 +289,8 @@ the SDK and its app cores in one Rust library** (owner 2026-11-17: "agreed to re
 An app core (`pqchat-core`, `pqvault-core`, a third party's) depends on `scaas-sdk` with the feature `app-core` and on nothing
 below it that touches a key or a node; the SDK names no app core and holds no app logic, while the record types of SCaaS
 contracts (`PqChat`'s among them, behind the feature `pqchat-records`) are named, typed SDK entries as every SCaaS
-contract's are under [CLI-SDK-08](#CLI-SDK-08). scaas-app's one
+contract's are under [CLI-SDK-08](#CLI-SDK-08); `PqVault`'s records have two signing calls, `sign_pqvault_record` and
+`verify_pqvault_record`, and no other PqVault logic (owner 2026-11-22, [CLI-PQV-13](../decisions.md#CLI-PQV-13)). scaas-app's one
 library is `app-core-rust` (scaas-app's contract section 12), with the features `native-core` (on by default), `scaas`,
 `pqchat` and `pqvault` (each implying `scaas`); the SDK defines no aggregating crate.
 
@@ -326,7 +327,11 @@ OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control charac
 a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`. PqVault's V1 vectors
 (`smartcontracts/vectors/pqvault/`) run through this surface only (BUILT, UNAUDITED; `tests/app_core_vault_rows.rs` under
 `vectors`, `tests/app_core_vault_records.rs` in the main suite: typed digests in both domains, both signing paths,
-`verify_app_record`); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](ua-libraries.md#CLI-PQV-12) in decisions.md.
+the verification); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](ua-libraries.md#CLI-PQV-12) in decisions.md.
+PqVault's records are signed and verified by `sign_pqvault_record` and `verify_pqvault_record` (owner 2026-11-22,
+[CLI-PQV-13](../decisions.md#CLI-PQV-13); BUILT, UNAUDITED): thin calls of `ua-rs`'s `wallet::pqvault` with the generic
+calls' profile checks, accepting PqVault's domains `DS_V` / `DS_B` and its seven structs only; `sign_app_record` and
+`verify_app_record` refuse every PqVault record (its domain name, its app id, its purpose `P_V`).
 
 <a id="CLI-SDK-21"></a>**CLI-SDK-21** — **`seal_for_arweave`, `upload_file`, `fetch_file` and `open_file` put an app core's
 file on Arweave and read it back; the upload key signs only the item `ua-rs` built; the client keeps the signed bytes until
