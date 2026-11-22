@@ -238,6 +238,7 @@ Named, stable codes; the names shared with the app's endpoint lists are the same
 | `EndpointNoMajority` | strict majority: no ⌊n/2⌋ + 1 equal complete answers at one block after the fallback round (`n`, `need`, the largest group's size) |
 | `NoTrustedEndpoint` | a read that feeds a decryption with no `named` or `default` endpoint in the list (failover: only discovered endpoints; strict majority: Q6 (b)) |
 | `AgreementNeedsThree` | the same under strict majority with a discovered endpoint and `n < 3` |
+| `PinnedReadsUntrusted` | a pinned read (CLI-RPC-05; a read feeding a decryption included) on a pool built `with_pinned_reads(false)`: the chain's profile states `"pinnedReads": false` (Moonbeam, Moonbase: a read pinned by a made-up hash is answered; owner 2026-11-22, [ARCH-POS-20](../decisions.md#ARCH-POS-20)); refused before any request, plain reads still work; BUILT, the SDK's wiring PLANNED (T41 family) |
 | `Revert` | the first endpoint's revert (failover), or the agreed revert (strict majority), with its data as bytes |
 | `NodeRefused` | a scaas-node's error contract: `code`, `detail`, `revert_data` |
 | `NodeApiVersion` | a node's `api` this client does not speak |

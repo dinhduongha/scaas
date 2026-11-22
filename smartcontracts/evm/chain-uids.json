@@ -351,7 +351,7 @@
         "https://polkadot-asset-hub-rpc.polkadot.io",
         "https://statemint.api.onfinality.io/public"
       ],
-      "note": "read 2026-11-22: chain_getBlockHash(0) of the Substrate side on both sources (Substrate JSON-RPC, not eth-rpc), equal; Westend Hub's eth-rpc answers block 0 with its Substrate genesis hash, and this chain's eth-rpc (https://eth-rpc.polkadot.io/, the one public eth-rpc provider listed) answers block 0 null (it serves no early blocks; scaas-rpc refuses such an endpoint ChainIdentityUnreadable unless its entry names a checkpoint, CLI-RPC-03), so NET-EVM-19 H1 does not pass here: the owner's question (chains-arweave plan T11, controller call)"
+      "note": "read 2026-11-22: chain_getBlockHash(0) of the Substrate side on both sources (Substrate JSON-RPC, not eth-rpc), equal; Westend Hub's eth-rpc answered block 0 with its Substrate genesis hash (the cross-check), and this chain's eth-rpc (https://eth-rpc.polkadot.io/, the one public eth-rpc provider listed) answers block 0 null (it serves no early blocks; scaas-rpc refuses such an endpoint ChainIdentityUnreadable unless its entry names a checkpoint, CLI-RPC-03), so NET-EVM-19 H1 does not pass on the eth-rpc; the owner accepted the Substrate genesis as this chain's identity (2026-11-22, decisions ARCH-POS-20)"
     },
     {
       "key": "polkadot-hub-testnet",
@@ -366,22 +366,7 @@
         "https://asset-hub-paseo-rpc.n.dwellir.com",
         "https://sys.turboflakes.io/asset-hub-paseo"
       ],
-      "note": "read 2026-11-22: chain_getBlockHash(0) of the Substrate side on both sources (system_chain \"Paseo Asset Hub\"), equal; its eth-rpc (https://eth-rpc-testnet.polkadot.io/, the one public eth-rpc provider listed) answers block 0 null, as on mainnet (H1: the owner's question)"
-    },
-    {
-      "key": "polkadot-hub-westend",
-      "name": "Westend Asset Hub",
-      "chainId": 420420421,
-      "network": "testnet",
-      "testnet": true,
-      "private": false,
-      "chainUid": "0x67f9723393ef76214df0118c34bbbd3dbebc8ed46a10973a8c969d48fe7598c9",
-      "genesisTimestamp": 0,
-      "sources": [
-        "https://westend-asset-hub-eth-rpc.polkadot.io",
-        "https://asset-hub-westend-rpc.n.dwellir.com"
-      ],
-      "note": "read 2026-11-22: eth_getBlockByNumber(0x0) on the eth-rpc source and chain_getBlockHash(0) of the Substrate side on the second, equal (the eth-rpc maps block 0 to the Substrate genesis); a second Hub testnet beside Paseo, network per NET-EVM-13"
+      "note": "read 2026-11-22: chain_getBlockHash(0) of the Substrate side on both sources (system_chain \"Paseo Asset Hub\"), equal; its eth-rpc (https://eth-rpc-testnet.polkadot.io/, the one public eth-rpc provider listed) answers block 0 null, as on mainnet (the owner accepted the Substrate genesis as the identity, 2026-11-22, decisions ARCH-POS-20)"
     },
     {
       "key": "moonbeam-mainnet",
@@ -396,7 +381,7 @@
         "http://rpc.api.moonbeam.network",
         "https://moonbeam.api.onfinality.io/public"
       ],
-      "note": "read 2026-11-22 on both sources, equal (Frontier's Ethereum block 0, not the Substrate genesis 0xfe58ea77…b76d); rpc.api.moonbeam.network refused this client's TLS handshake that day, so it was read over plain HTTP, the second source over TLS"
+      "note": "read 2026-11-22 on both sources, equal (Frontier's Ethereum block 0, not the Substrate genesis 0xfe58ea77…b76d); rpc.api.moonbeam.network refused this client's TLS handshake that day, so it was read over plain HTTP, the second source over TLS; an independent second source is to be found before any deploy (owner 2026-11-22)"
     },
     {
       "key": "moonbeam-testnet",

@@ -8,8 +8,10 @@ Profile [`profile.json`](profile.json) (`draft`, chains-arweave plan T11; the fo
 beside it; **one sample each**: the 24-h and 7-day windows of NET-EVM-19 are the operator's scheduler's, still to run):
 
 - **H2 FAIL:** on both providers, a read pinned by a **made-up** block hash (`{blockHash, requireCanonical: true}`) is answered
-  (balance 0, empty code) instead of refused: CLI-RPC-05's pinned reads cannot tell a wrong hash here. A stop condition of the
-  plan: the owner decides; the profile stays `draft`.
+  (balance 0, empty code) instead of refused: CLI-RPC-05's pinned reads cannot tell a wrong hash here. **Pinned reads are not
+  trusted on this chain** (owner 2026-11-22, decisions ARCH-POS-20): `profile.json` `"pinnedReads": false`; `scaas-rpc` refuses
+  every pinned read on such a pool, by name (`PinnedReadsUntrusted`), a decryption feed included; plain reads still work. The
+  SDK's wiring of the field is a T41-family follow-up. The profile stays `draft`.
 - **Fork:** `osaka` by opcodes (CLZ answered); no `blockAccessListHash`. No SCaaS set deploys before NET-EVM-06 holds here.
 - **Caps:** runtime 24,576 B, init code 49,152 B (measured); block gas limit 60,000,000 (read 2026-11-22); per-transaction cap
   52,000,000 (moonbeam-docs, the research note §3.2; an `eth_call` does not apply it). Gas adds storage growth (366 gas per byte,

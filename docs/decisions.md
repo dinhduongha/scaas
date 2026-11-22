@@ -449,6 +449,20 @@ final only at or below the answering endpoint's `finalized` (spec §4.3 (3)). **
 breaker, never a new stop. **Gate runner:** `sdk-test` uses the SDK gate's feature list (one PQZ set), since `--all-features`
 enables two and `pqz-stmt` refuses that.
 
+Change (owner 2026-11-22, the five questions of plan T12 "as proposed"; owner: yes; status: BUILT on branch `chains-arweave`
+except where named): **(1)** Polkadot Hub's `chainUid` is its Substrate genesis hash, read from two Substrate providers: Hub is
+one chain with two sides and this is its identity; Westend Hub's eth-rpc answering block 0 with its own genesis is the
+cross-check. **(2)** Moonbeam and Moonbase: pinned reads are not trusted. The profile states it (`profile.json`
+`"pinnedReads": false`, absent = true); `scaas-rpc` refuses every pinned read on such a pool by name
+(`PinnedReadsUntrusted`), a read feeding a decryption included; plain reads still work; the SDK's wiring of the field from its
+profile is a T41-family follow-up (PLANNED). **(3)** Westend Hub is dropped: its profile and README moved to
+`smartcontracts/evm/legacy/chains/polkadot-hub-westend/`, its `chain-uids.json`, chain-support, node and evm.md rows removed.
+**(4)** Moonbeam mainnet stays `draft`; an independent second source must be found before any deploy (after the freeze).
+**(5)** Avalanche Fuji disables the kinds above its 32 M block (× 1.05 of the Amsterdam figures): `mldsa44` 43.5 M, `mldsa65`
+45.7 M, `mldsa87` 47.9 M, PQZ ≈ 45.2 M (ARCH-POS-18 confirmed); Fuji is Cancun without EIP-8037, so its own figures are
+measured again at deploy; C-Chain keeps every kind. Source: the owner's words (in Vietnamese, "the five questions: as proposed")
+are quoted in the plan's T12 section.
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 

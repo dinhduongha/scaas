@@ -152,6 +152,8 @@ pub struct EvmPool {
     pinned_uid: Option<B256>,
     uid: Arc<OnceLock<B256>>,
     decode: fn(&[u8]) -> String,
+    /// the profile's `pinnedReads` (default true): false refuses every pinned read ([`EvmPool::read_at_block`])
+    pinned_reads: bool,
 }
 
 fn is_local(url: &url::Url) -> bool {
@@ -196,7 +198,16 @@ impl EvmPool {
             pinned_uid: chain_uid,
             uid: Default::default(),
             decode: default_decode,
+            pinned_reads: true,
         })
+    }
+
+    /// With the profile's `pinnedReads` (chains-arweave, owner 2026-11-22): on a chain whose RPC answers a read pinned by a
+    /// made-up block hash, `false` refuses every pinned read by name (`PinnedReadsUntrusted`), a read feeding a decryption
+    /// included, before any request; plain reads still work.
+    pub fn with_pinned_reads(mut self, on: bool) -> Self {
+        self.pinned_reads = on;
+        self
     }
 
     /// With the head and the failover total shared per `[[chains]]` table (feature `node-internal`: the node's pools of one chain).
@@ -929,6 +940,9 @@ impl EvmPool {
         F: Fn(ReadAt<B256>) -> Fut,
         Fut: Future<Output = Result<T, ReadError>>,
     {
+        if !self.pinned_reads {
+            return Err(RpcError::PinnedReadsUntrusted);
+        }
         if self.pool.policy() == crate::Policy::StrictMajority {
             return self.pool.agree(self, choice, purpose, f).await;
         }

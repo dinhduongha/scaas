@@ -2,7 +2,7 @@
 //! SDK plan T40: the EVM profiles of `smartcontracts/evm/chain-uids.json` (Ethereum, OP Mainnet, Arbitrum One, Linea; mainnet
 //! and testnet each; Ethereum Classic dropped by the owner 2026-11-22, decisions CLI-SDK-32, its chain id 61 kept here as the
 //! other chain of Ethereum's block 0), and the chains-arweave plan's T2 and T11 (Avalanche C-Chain and Fuji, which share block
-//! 0; the three Polkadot Hub profiles; Moonbeam and Moonbase Alpha), each with the values its row and its `src/chains/<key>/profile.json` pin, against
+//! 0; the two Polkadot Hub profiles (Westend dropped by the owner 2026-11-22); Moonbeam and Moonbase Alpha), each with the values its row and its `src/chains/<key>/profile.json` pin, against
 //! in-process fake nodes: the chain pair check drops an endpoint of the other chain (NET-ALL-25: Ethereum and ETC share block 0,
 //! the chain id separates them; an endpoint naming the chain id over another block 0 is dropped too), and a `finalized` read is
 //! pinned by the hash of the finalized block (EIP-1898, `requireCanonical`) where the profile's finality is the tag.
@@ -13,7 +13,7 @@ use scaas_rpc::{Endpoint, NodeList, Policy, Purpose, RpcError};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
-const KEYS: [&str; 15] = [
+const KEYS: [&str; 14] = [
     "ethereum-mainnet",
     "ethereum-testnet",
     "op-mainnet",
@@ -26,7 +26,6 @@ const KEYS: [&str; 15] = [
     "avalanche-testnet",
     "polkadot-hub-mainnet",
     "polkadot-hub-testnet",
-    "polkadot-hub-westend",
     "moonbeam-mainnet",
     "moonbeam-testnet",
 ];
@@ -40,6 +39,8 @@ struct Profile {
     id: u64,
     uid: B256,
     finality: Option<BlockChoice>,
+    /// `profile.json` `pinnedReads` (absent: true)
+    pinned_reads: bool,
 }
 
 fn profiles() -> Vec<Profile> {
@@ -69,6 +70,7 @@ fn profiles() -> Vec<Profile> {
                 id: row["chainId"].as_u64().unwrap(),
                 uid: row["chainUid"].as_str().unwrap().parse().unwrap(),
                 finality,
+                pinned_reads: p["pinnedReads"].as_bool().unwrap_or(true),
             }
         })
         .collect()
@@ -283,5 +285,46 @@ async fn a_log_read_above_finalized_is_not_final_and_gas_is_the_receipts() {
             .value
             .unwrap_or_else(|| panic!("{}: the receipt", p.key));
         assert_eq!(r.gas_used, 21_000, "{}: the receipt's gas", p.key);
+    }
+}
+
+/// Owner 2026-11-22 (decisions ARCH-POS-20 (2)): on a profile whose `pinnedReads` is false (Moonbeam, Moonbase: a read pinned
+/// by a made-up block hash is answered), every pinned read is refused by name before any request, a read feeding a
+/// decryption included; a plain read still works. Twin: the same pool on a profile with pinned reads answers.
+#[tokio::test]
+async fn a_pinned_read_is_refused_where_pinned_reads_are_not_trusted() {
+    let ps = profiles();
+    assert_eq!(
+        ps.iter()
+            .filter(|p| !p.pinned_reads)
+            .map(|p| p.key)
+            .collect::<Vec<_>>(),
+        ["moonbeam-mainnet", "moonbeam-testnet"]
+    );
+    for p in &ps {
+        let seen: Arc<Mutex<Vec<Value>>> = Default::default();
+        let own = node(p.id, p.uid, 7, seen.clone()).await;
+        let pool = pool(&[&own], p).with_pinned_reads(p.pinned_reads);
+        for purpose in [Purpose::Plain, Purpose::FeedsDecryption] {
+            let r = pool
+                .read_at_block(BlockChoice::Finalized, purpose, |at| {
+                    let pool = &pool;
+                    async move { pool.balance_at(&at, WHO).await }
+                })
+                .await;
+            if p.pinned_reads {
+                assert_eq!(r.unwrap().value, U256::from(7), "{}: twin", p.key);
+            } else {
+                assert_eq!(r.unwrap_err().code(), "PinnedReadsUntrusted", "{}", p.key);
+            }
+        }
+        if !p.pinned_reads {
+            assert!(
+                seen.lock().unwrap().is_empty(),
+                "{}: refused before any request",
+                p.key
+            );
+        }
+        assert_eq!(pool.head().await.unwrap(), HEAD, "{}: a plain read", p.key);
     }
 }

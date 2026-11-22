@@ -10,8 +10,10 @@ beside it; **one sample each**: the 24-h and 7-day windows of NET-EVM-19 are the
 - **Block 0 (H1 FAIL):** the chain's only public eth-rpc provider answers `eth_getBlockByNumber("0x0")` (and block 1) with
   `null`: it serves no early blocks, so `scaas-rpc` refuses it `ChainIdentityUnreadable` unless its endpoint entry names a
   checkpoint (a block number and hash) it then matches (CLI-RPC-03). The pin is the Substrate genesis hash, read from two Substrate
-  providers (`chain_getBlockHash(0)`, equal), as Westend Hub's eth-rpc maps block 0 to it (controller call, chains-arweave T11).
-  H1 also needs two independent eth-rpc providers and the chain has one: the owner's question.
+  providers (`chain_getBlockHash(0)`, equal), as Westend Hub's eth-rpc maps block 0 to it (chains-arweave T11).
+  The owner accepted this identity (2026-11-22, decisions ARCH-POS-20): Hub is one chain with two sides, the Substrate
+  genesis is its identity, Westend Hub's eth-rpc answering block 0 with its own genesis is the cross-check. H1 on the eth-rpc
+  still has one public provider.
 - **Fork:** `osaka` by opcodes (PUSH0, TLOAD, CLZ answered); no `blockAccessListHash`. No SCaaS set deploys before NET-EVM-06
   holds here.
 - **Caps:** runtime 24,576 B, init code 49,152 B (measured; REVM's hard cap). The header's gas limit is u64::MAX: no block cap.

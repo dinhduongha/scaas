@@ -26,7 +26,7 @@ beside it; **one sample each**: the 24-h and 7-day windows of NET-EVM-19 are the
   against the block limit 32,000,000; this chain is Cancun, without EIP-8037, so its own figures are measured at deploy time,
   never compared with the Amsterdam pins):
 
-  | Kind | Largest transaction | Regular | Total | Total × 1.05 | Within 32,000,000 |
+  | Kind | Largest transaction | Regular | Total | Total × 1.05 | Within 32,000,000 (else disabled) |
   |---|---|---|---|---|---|
   | `mldsa44` | cache part 0 | 9,740,000 | 41,455,370 | 43,528,138 | **no** |
   | `mldsa65` | cache part 1 | 10,230,000 | 43,512,090 | 45,687,694 | **no** |
@@ -36,8 +36,10 @@ beside it; **one sample each**: the 24-h and 7-day windows of NET-EVM-19 are the
   | `fndsa1024` | verify cap (register not measured) | 5,250,000 | 5,250,000 | 5,512,500 | yes |
   | PQZ (`pqz`) | an operation ≈ 43 M (`storePqzPop` 49.1 M at `n2304-kmax4096`) | — | ≈ 43,000,000 | ≈ 45,150,000 | **no** |
 
-  **Nothing is disabled** (no owner ruling for this chain; ARCH-POS-18): `mldsa44`, `mldsa65`, `mldsa87` and PQZ do not fit this
-  block and are reported to the owner with these numbers.
+  **Disabled kinds** (owner 2026-11-22, decisions ARCH-POS-20, ARCH-POS-18 confirmed): `mldsa44` (43.5 M), `mldsa65` (45.7 M),
+  `mldsa87` (47.9 M) and PQZ (≈ 45.2 M) do not fit this 32 M block (× 1.05 above): `profile.json` `disabledKinds`; the SDK
+  refuses a disabled kind `KindDisabled` before anything is signed. Fuji is Cancun without EIP-8037, so these Amsterdam figures
+  stand in until its own are measured at deploy. C-Chain (80 M) keeps every kind.
 - **Deterministic deployer:** `0x4e59b44847b379578588920cA78FbF26c0B4956C` present (the research note §2).
 - **Lanes** (NET-EVM-16, node audit of chains-arweave T3): a transaction accepted but without a receipt is `Pending`, never
   `dead`; a lane key keeps at most 16 in flight (`max_inflight`, NODE-LANE-24; the pool's executable slots per account);

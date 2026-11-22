@@ -345,6 +345,12 @@ code changes. The original steps (a mock chain delaying receipts, written first)
   Hub keys (one public eth-rpc provider each; mainnet and Paseo serve no block 0); H2 on both Moonbeam keys (a read pinned by a
   made-up block hash is answered from an empty state, not refused); Westend Hub's eth-rpc refused every `eth_call` ("Metadata
   error"), so H2, `fork`, `codesize`, `eip2537` and `caps` failed or are unread there. Avalanche passed H1, H2, H4 and H7.
+- **Owner 2026-11-22** ("5 câu hỏi: theo đề xuất": the five questions, as proposed; owner: yes; decisions ARCH-POS-20):
+  (1) Hub's `chainUid` is the Substrate genesis; (2) Moonbeam's pinned reads are not trusted: `profile.json` `pinnedReads`
+  false, `scaas-rpc` refuses pinned reads on such a pool (`PinnedReadsUntrusted`), plain reads work; **follow-up (T41 family,
+  PLANNED):** the SDK reads `pinnedReads` from its profile and builds the pool with it; (3) Westend Hub dropped
+  (`smartcontracts/evm/legacy/chains/polkadot-hub-westend/`); (4) Moonbeam mainnet needs an independent second source before
+  any deploy; (5) Fuji disables `mldsa44`, `mldsa65`, `mldsa87` and PQZ, C-Chain keeps every kind.
 
 ## T13 — Hub weight-to-gas measurement on Paseo **[owner's word]**
 

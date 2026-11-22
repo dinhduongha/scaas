@@ -1,5 +1,9 @@
 # Westend Asset Hub (`polkadot-hub-westend`)
 
+**Dropped** by the owner on 2026-11-22 (the five questions of chains-arweave T12 "as proposed", decisions ARCH-POS-20): its
+eth-rpc refused every `eth_call` that day, so it is no longer a profile. Kept here as the record of its probes (chains-arweave
+T11, T12); not read by any tool. Its `chain-uids.json` row is removed (no test needs it).
+
 Public EVM testnet. Row `polkadot-hub-westend` of [`chain-uids.json`](../../../chain-uids.json): chain id **420420421**, chain_uid
 `0x67f9723393ef76214df0118c34bbbd3dbebc8ed46a10973a8c969d48fe7598c9`, network `testnet`. A chain is (chainId, chain_uid) (NET-ALL-22). The EVM side (pallet-revive on REVM, `eth-rpc`, accounts as mapped H160) carries SCaaS; the Substrate side (sr25519, `System.Account`) is the chain-support Native column, read by the SDK (T41.dot). NET-EVM-17.
 
