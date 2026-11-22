@@ -81,7 +81,7 @@ fn every_pair_has_one_entry_point() {
             e.function,
             e.module
         );
-        let features = ["wallet", "account", "zether", "pqz", "dex", "admin"];
+        let features = ["evm", "account", "zether", "pqz", "dex", "admin"];
         assert!(
             features.contains(&e.feature),
             "{}: {}",

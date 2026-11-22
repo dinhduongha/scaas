@@ -14,6 +14,7 @@ use scaas_sdk::{
     ListedToken, RuntimeChoice, Sdk, SdkConfig,
 };
 use scaas_ua::wallet::{Network, SecretBytes, Wallet};
+#[cfg(feature = "app-core")]
 use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
@@ -148,6 +149,7 @@ async fn e2e_pay_on_anvil() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -326,6 +328,7 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     })
@@ -500,6 +503,7 @@ fn registry_profile(rpc: &str, registry: &str, cap: Option<u64>) -> ChainProfile
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }
@@ -644,6 +648,7 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -777,6 +782,7 @@ fn account_profile(rpc: &str) -> ChainProfile {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }
@@ -1638,6 +1644,7 @@ async fn e2e_dex_cancel_order_on_anvil() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -1795,6 +1802,7 @@ async fn e2e_bls_multi_on_anvil() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -1942,13 +1950,73 @@ async fn e2e_bls_multi_on_anvil() {
     landed(&sdk, &spent).await;
 }
 
-/// Merged-tree review M20 (owner 2026-11-20): `register_bls_multi` of a 64-member group by self-relay against a node that
-/// enforces EIP-7825 under EIP-8037 (a local Nethermind copy, never the live stack): the quote's `gas_limit` and
-/// `regular_gas` beside the receipt's `gasUsed`. Env: `SCAAS_M20_RPC` (the copy's URL), `SCAAS_M20_BOOK` (the deploy book),
-/// `SCAAS_M20_CHAIN_ID`; the seed's EVM key 0 funded. Prints one `M20` line per figure; the run script records them.
+/// The largest `bls12381-multi` group (unweighted, threshold `n / 2 + 1`) whose registration fitted one transaction in every
+/// run on the local Nethermind copy, a chain capping the regular gas at 2^24 (`SCAAS_M20_BLS_FIND=1` measures it again):
+/// `register_bls_multi` counts the whole raise above the table's quote as regular gas (owner 2026-11-22, "keep it as it
+/// is"; decisions CLI-SDK-32's Change), so a larger group is refused `GasAboveTxCap` and must be split. 46 sits on the
+/// edge (refused in one run, sent in another: the node's estimate moves with the chain's state); 47 and 48 were refused.
+const BLS_MULTI_MAX_FIT: u32 = 45;
+/// The smallest group refused in every run (the twin above the edge).
+const BLS_MULTI_REFUSED: u32 = 48;
+
+/// One `registerBlsMulti` of the group of members `first..first + n` (seed accounts, index 0) by self-relay: the quote, then
+/// the registration (`Ok(tx)` sent, or the SDK's refusal before anything is signed). Each probe takes members no earlier
+/// registration named: a member key the registry already holds makes the next group's estimate smaller (measured: 46
+/// members refused on fresh keys, sent after a 45-member group of the same keys had landed).
+async fn register_group(
+    sdk: &Arc<Sdk>,
+    seed: &str,
+    payer: &KeyRef,
+    first: u32,
+    n: u32,
+) -> Result<(String, [u8; 32]), scaas_sdk::SdkError> {
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let keys: Vec<[u8; 256]> = (first..first + n)
+        .map(|a| {
+            w.ua_key(0x0121, a, 0)
+                .unwrap()
+                .key_data()
+                .try_into()
+                .unwrap()
+        })
+        .collect();
+    let (d, _) = scaas_ua::bls_multi::build_key_data_unweighted(&keys, n as u16 / 2 + 1).unwrap();
+    let ua = scaas_ua::bls_multi::ua_of(&d);
+    let d = format!("0x{}", alloy::hex::encode(&d));
+    let member = |account: u32| KeyRef::BlsMulti {
+        seed: seed.into(),
+        account,
+        index: 0,
+        key_data: d.clone(),
+    };
+    let op = sdk.op();
+    let pops: Vec<BlsMultiPart> = (first..first + n)
+        .map(|a| op.bls_multi_pop_part(member(a)).unwrap())
+        .collect();
+    let q = op
+        .quote_register_bls_multi("copy".into(), d.clone(), payer.clone())
+        .await?;
+    println!(
+        "M20 bls n {n} quote gas_limit {} regular_gas {}",
+        q.gas_limit, q.regular_gas
+    );
+    let tx = op.register_bls_multi("copy".into(), d, pops, q).await;
+    println!(
+        "M20 bls n {n} register {}",
+        tx.as_ref().map_or_else(|e| e.code(), |_| "sent")
+    );
+    Ok((tx?, ua))
+}
+
+/// Merged-tree review M20 (owner 2026-11-20) and the owner's ruling of 2026-11-22 on the raise: `register_bls_multi` against a
+/// node that enforces EIP-7825 under EIP-8037 (a local Nethermind copy, never the live stack). A 64-member group is refused
+/// `GasAboveTxCap` before anything is sent (the payer's pending nonce unchanged); [`BLS_MULTI_REFUSED`] members are refused the
+/// same way, and the largest group that fitted in every run, [`BLS_MULTI_MAX_FIT`], lands. Env: `SCAAS_M20_RPC` (the copy's URL), `SCAAS_M20_BOOK` (the
+/// deploy book), `SCAAS_M20_CHAIN_ID`; the seed's EVM key 0 funded; `SCAAS_M20_BLS_FIND=1` searches the largest count first
+/// (each fitting probe lands). Prints `M20` lines; the run script records them.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "needs a local Nethermind copy with Amsterdam rules (clients/scaas-sdk/runs/2026-11-20-m20-nethermind.sh)"]
-async fn e2e_bls_multi_64_on_a_node() {
+async fn e2e_bls_multi_group_limit_on_a_node() {
     let rpc = std::env::var("SCAAS_M20_RPC").expect("SCAAS_M20_RPC");
     let dep: serde_json::Value = serde_json::from_str(
         &std::fs::read_to_string(std::env::var("SCAAS_M20_BOOK").unwrap()).unwrap(),
@@ -1985,6 +2053,7 @@ async fn e2e_bls_multi_64_on_a_node() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -2019,53 +2088,68 @@ async fn e2e_bls_multi_64_on_a_node() {
         network: "evm".into(),
         index: 0,
     };
-    let w = Wallet::from_mnemonic(REPO, "").unwrap();
-    let keys: Vec<[u8; 256]> = (0..64)
-        .map(|a| {
-            w.ua_key(0x0121, a, 0)
-                .unwrap()
-                .key_data()
-                .try_into()
-                .unwrap()
-        })
-        .collect();
-    let (d, _) = scaas_ua::bls_multi::build_key_data_unweighted(&keys, 33).unwrap();
-    let ua = scaas_ua::bls_multi::ua_of(&d);
-    let d = format!("0x{}", alloy::hex::encode(&d));
-    let member = |account: u32| KeyRef::BlsMulti {
-        seed: seed.clone(),
-        account,
-        index: 0,
-        key_data: d.clone(),
+    let holder = cast(&["wallet", "address", "--mnemonic", REPO]);
+    // the pending nonce: a refusal sends nothing, while an earlier probe's transaction may still be mining
+    let nonce = || cast(&["nonce", &holder, "--block", "pending", "--rpc-url", &rpc]);
+    let refused = |r: Result<(String, [u8; 32]), scaas_sdk::SdkError>| match r {
+        Err(e) => e.code(),
+        Ok((tx, _)) => panic!("sent {tx}"),
     };
-    let op = sdk.op();
-    let pops: Vec<BlsMultiPart> = (0..64)
-        .map(|a| op.bls_multi_pop_part(member(a)).unwrap())
-        .collect();
-    let q = op
-        .quote_register_bls_multi("copy".into(), d.clone(), payer.clone())
-        .await
-        .unwrap();
-    println!(
-        "M20 quote gas_limit {} regular_gas {}",
-        q.gas_limit, q.regular_gas
+    // the ruling: 64 members refused before anything is signed or sent
+    let before = nonce();
+    assert_eq!(
+        refused(register_group(&sdk, &seed, &payer, 0, 64).await),
+        "GasAboveTxCap"
     );
-    let tx = op
-        .register_bls_multi("copy".into(), d.clone(), pops, q)
-        .await
-        .unwrap();
-    println!("M20 tx {tx}");
-    let ua_hex = format!("0x{}", alloy::hex::encode(ua));
-    let mut registered = String::new();
-    for _ in 0..120 {
-        registered = cast(&[
+    assert_eq!(nonce(), before, "nothing sent for 64 members");
+    // the largest count that fits: measured (each fitting probe lands), else the pinned figure
+    if std::env::var("SCAAS_M20_BLS_FIND").is_ok() {
+        let (mut lo, mut hi) = (2u32, 64u32); // a group has at least 2 members; lo fits (landed below), hi refused
+        let mut first = 100;
+        while hi - lo > 1 {
+            let mid = (lo + hi) / 2;
+            first += 64; // fresh members for every probe
+            match register_group(&sdk, &seed, &payer, first, mid).await {
+                Ok(_) => lo = mid,
+                Err(e) => {
+                    assert_eq!(e.code(), "GasAboveTxCap", "{mid} members");
+                    hi = mid
+                }
+            }
+        }
+        println!("M20 bls largest fitting group {lo}");
+    }
+    // the twin above the edge is refused, nothing sent; the pinned largest group lands
+    let max = BLS_MULTI_MAX_FIT;
+    let before = nonce();
+    assert_eq!(
+        refused(register_group(&sdk, &seed, &payer, 1000, BLS_MULTI_REFUSED).await),
+        "GasAboveTxCap"
+    );
+    assert_eq!(
+        nonce(),
+        before,
+        "nothing sent for {BLS_MULTI_REFUSED} members"
+    );
+    let ua_hex = |ua: [u8; 32]| format!("0x{}", alloy::hex::encode(ua));
+    let is_registered = |ua: &str| {
+        cast(&[
             "call",
             &registry,
             "isRegistered(bytes32)(bool)",
-            &ua_hex,
+            ua,
             "--rpc-url",
             &rpc,
-        ]);
+        ])
+    };
+    let (tx, ua) = match register_group(&sdk, &seed, &payer, 2000, max).await {
+        Ok(x) => x,
+        Err(e) => panic!("{max} members: {}", e.code()),
+    };
+    println!("M20 tx {tx}");
+    let mut registered = String::new();
+    for _ in 0..120 {
+        registered = is_registered(&ua_hex(ua));
         if registered == "true" {
             break;
         }
@@ -2077,13 +2161,16 @@ async fn e2e_bls_multi_64_on_a_node() {
         "M20 receipt status {} gasUsed {} block {}",
         r["status"], r["gasUsed"], r["blockNumber"]
     );
-    assert_eq!(registered, "true", "registerBlsMulti of 64 included {tx}");
+    assert_eq!(
+        registered, "true",
+        "registerBlsMulti of {max} included {tx}"
+    );
 }
 
 /// Merged-tree review M20 (owner 2026-11-20), the PQZ part: one PQZ debit (`mtxConfidentialTransferSingle`) by SDK self-relay
 /// on the copy (the `PQZ` precompile verifies the proof): two `mldsa65` UAs registered with their PQZ keys (split when the
 /// cap requires it), the payer's public units shielded to the holder, both halves of its account prepared, then the single
-/// transfer to the other UA. Env as `e2e_bls_multi_64_on_a_node` plus `SCAAS_M20_TOKEN` (a `NORMAL_PQZ` token whose public
+/// transfer to the other UA. Env as `e2e_bls_multi_group_limit_on_a_node` plus `SCAAS_M20_TOKEN` (a `NORMAL_PQZ` token whose public
 /// units the seed's EVM key 0 holds). Prints one `M20` line per figure.
 #[cfg(feature = "pqz")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -2305,6 +2392,7 @@ async fn e2e_pqz_debit_on_a_node() {
 
 /// An operation's end with its transaction's receipt (status, `gasUsed`) when it landed (the M20 record), and that
 /// `gasUsed`: a `Landed` names the block of the operation's fact (its hash), so the payer's transaction is found in that block.
+#[cfg(feature = "pqz")]
 fn receipt_line(rpc: &str, payer: &str, s: &OpState) -> (String, Option<u64>) {
     match s {
         OpState::Landed { block, .. } => {
@@ -2549,4 +2637,183 @@ async fn e2e_app_records_on_anvil() {
         "the twin"
     );
     assert!(v(b(), cb, nid, vec![], sn.signature.clone()).await);
+}
+
+/// Plan T41.evm (spec §27.5 (c)) on `anvil`: A (the seed's EVM key 0, the token holder) signs a pay to B (key 1, holding only
+/// ether) and hands it off; B imports it, quotes a self-relay by its own key, submits it and sees `Landed`, and A's handed-off
+/// row ends `Landed` by the same fact; the same blob again is `ImportConsumed`; a blob bound to C (key 2) is
+/// `ImportRelayerBound` for B; A's own self-relay of its own pay lands.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_hand_off_on_anvil() {
+    use scaas_sdk::op::ImportExpect;
+    let (_anvil, rpc) = anvil().await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    let holder = funded_holder(rpc);
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let addr = |i| {
+        w.native_key(Network::Evm, i, None)
+            .unwrap()
+            .address()
+            .unwrap()
+            .to_ascii_lowercase()
+    };
+    let (b, c) = (addr(1), addr(2));
+    cast(&[
+        "rpc",
+        "--rpc-url",
+        rpc,
+        "anvil_setBalance",
+        &b,
+        "0x8ac7230489e80000",
+    ]);
+    let name = format!("local-31337-{port}-testnet");
+    let dep = deploy(
+        rpc,
+        &name,
+        &[("DEMO_SUPPLY", "1000000000000"), ("DEMO_HOLDER", &holder)],
+    );
+    let token = dep["demo_token"].as_str().unwrap().to_ascii_lowercase();
+    let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", rpc]);
+    let row = |fresh| GasBase {
+        entry: "mtxPay".into(),
+        kind: "token".into(),
+        fresh,
+        gas: 400_000,
+        per_byte: None,
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
+        regular: None,
+    };
+    let profile = ChainProfile {
+        key: "anvil".into(),
+        family: Family::Evm,
+        chain_id: Some(31337),
+        chain_uid: uid,
+        rpc: vec![endpoint(rpc)],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: None,
+        factory: None,
+        router: None,
+        finality: Finality::Depth(0),
+        tx_gas_cap: Some(1 << 24),
+        tokens: vec![ListedToken {
+            address: token.clone(),
+            symbol: "DEMO".into(),
+            decimals: 0,
+        }],
+        gas: GasRows {
+            base: vec![row(true), row(false)],
+            verify: vec![GasVerify {
+                line: Default::default(),
+                signer: 0,
+                gas: 0,
+                sig_bytes: 0,
+                margin: 0,
+                per_item: None,
+            }],
+        },
+        max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
+        gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
+        l1_fee: None,
+        pinned_reads: true,
+        disabled_kinds: vec![],
+        family_params: None,
+    };
+    let (sa, seed_a) = sdk_on(profile.clone()).await;
+    let (sb, seed_b) = sdk_on(profile).await;
+    let key = |seed: &str, index| KeyRef::Native {
+        seed: seed.into(),
+        network: "evm".into(),
+        index,
+    };
+    let to_b = format!("0x{}{}", "00".repeat(12), &b[2..]);
+    let pay = |no: &str, mode: u32, relayer: Option<String>| Pay {
+        signer: key(&seed_a, 0),
+        chain: "anvil".into(),
+        token: token.clone(),
+        to: to_b.clone(),
+        value: "1000".into(),
+        meta: PayMeta {
+            salt: None,
+            pay_no: Some(format!("0x{no:0>64}")),
+            save: false,
+            body: PayBody::Note {
+                note: "hand-off".into(),
+            },
+        },
+        envelope: Envelope {
+            valid_until: now() + 600,
+            mode,
+            relayer,
+            fee: "0".into(),
+            fee_recipient: None,
+        },
+    };
+    let expect = ImportExpect {
+        chain: "anvil".into(),
+        payee: vec![to_b.clone()],
+        payer: key(&seed_b, 1),
+    };
+    // A hands off; B imports, quotes, submits: Landed, and A's row with it
+    let p = sa.wallet().prepare_pay(pay("1", 0, None)).await.unwrap();
+    let blob = sa.op().hand_off(p.clone()).await.unwrap();
+    let imported = sb
+        .op()
+        .import_signed(blob.clone(), expect.clone())
+        .await
+        .unwrap();
+    let q = sb
+        .op()
+        .quote(
+            imported.clone(),
+            SubmitPath::SelfRelay {
+                payer: key(&seed_b, 1),
+            },
+        )
+        .await
+        .unwrap();
+    let op = sb.op().submit(imported, q).await.unwrap();
+    let last = follow(&sb, op).await;
+    assert!(
+        matches!(last, OpState::Landed { .. }),
+        "B's import: {last:?}"
+    );
+    assert!(
+        matches!(follow(&sa, p.id()).await, OpState::Landed { .. }),
+        "A's handed-off row"
+    );
+    // the same blob again
+    let again = sb.op().import_signed(blob, expect.clone()).await;
+    assert_eq!(again.err().map(|e| e.code()), Some("ImportConsumed"));
+    // a blob bound to C
+    let p = sa.wallet().prepare_pay(pay("2", 1, Some(c))).await.unwrap();
+    let bound = sa.op().hand_off(p).await.unwrap();
+    let r = sb.op().import_signed(bound, expect).await;
+    assert_eq!(r.err().map(|e| e.code()), Some("ImportRelayerBound"));
+    // A's own self-relay of its own pay
+    let p = sa.wallet().prepare_pay(pay("3", 0, None)).await.unwrap();
+    let q = sa
+        .op()
+        .quote(
+            p.clone(),
+            SubmitPath::SelfRelay {
+                payer: key(&seed_a, 0),
+            },
+        )
+        .await
+        .unwrap();
+    let op = sa.op().submit(p, q).await.unwrap();
+    assert!(
+        matches!(follow(&sa, op).await, OpState::Landed { .. }),
+        "A's own self-relay"
+    );
 }

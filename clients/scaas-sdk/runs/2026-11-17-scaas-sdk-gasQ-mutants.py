@@ -60,7 +60,7 @@ MUTANTS = [
     ("Q5: the unsigned length not kept",
      [(S, "                    unsigned_len: Some(unsigned_len as u64),\n", "                    unsigned_len: Some(0),\n")], Q5),
     ("Q5: the stored signed calldata not read",
-     [(S, "                            unhex(&row.calldata)?.len(),\n", "                            unsigned_len as usize,\n")], Q5),
+     [(S, "                            &unhex(&row.calldata)?,\n                            own,\n", "                            &vec![0u8; unsigned_len],\n                            own,\n")], Q5),
     # K1
     ("K1: no clamp", [(G, "            let n = roll_max().map_or(n, |m| n.min(alloy::primitives::U256::from(m)));\n", "")],
      U + "a_huge_rollover_is_quoted_at_roll_max"),

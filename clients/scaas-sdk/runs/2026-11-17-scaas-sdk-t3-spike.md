@@ -104,3 +104,25 @@ records, opaque objects, owned records, error codes). The generated Dart and `fr
 - `clients/scaas-sdk/ffi/{Cargo.toml,Cargo.lock,src/lib.rs,src/api/mod.rs,src/frb_generated.rs}`, `clients/scaas-sdk/src/frb.rs`,
   `clients/scaas-sdk/bindings/dart/{pubspec.yaml,pubspec.lock,flutter_rust_bridge.yaml,run.sh,lib/,test/spike_test.dart}`: the
   FRB half.
+
+## The C# half (plan T20c, 2026-11-20)
+
+The same probe, built with `async-fn,async-callback`, through `uniffi-bindgen-cs` v0.11.1+v0.31.0 (git tag, commit `7b1aaae1`,
+`cargo install --git … --tag … --locked`): rc 0, one `sdk_spike_probe.cs`; `ping_async` and `read_async` are `async Task<uint>`,
+`AsyncStore` a C# interface with `Task<byte[]?> Get(string)`. C# therefore takes the SDK's async API; the binding and its smoke
+test over the whole surface are `clients/scaas-sdk/bindings/cs/` (decisions CLI-SDK-30, T20c change).
+
+## The Java half (plan T20e2, 2026-11-20)
+
+The same probe through `uniffi-bindgen-java` 0.4.2 (crates.io, `cargo install --version =0.4.2 --locked`; the last release on
+uniffi 0.31): rc 0; `pingAsync` and `readAsync` return `CompletableFuture`, `AsyncStore` is a Java interface whose `get`
+returns `CompletableFuture<byte[]>`. Java therefore takes the SDK's async API; the binding is `clients/scaas-sdk/bindings/java/`
+(decisions CLI-SDK-30, T20e2 change).
+
+## The Go half (plan T20h, 2026-11-20)
+
+The same probe through `uniffi-bindgen-go` v0.7.1+v0.31.0 (git tag, commit `0b7fb4ce`, `cargo install --git … --tag …
+--locked`): rc 0; `PingAsync(n uint32) uint32` and `ReadAsync(store AsyncStore, name string) (uint32, error)` block their
+goroutine over the async Rust, `AsyncStore` is a Go interface with `Get(name string) (*[]byte, error)`. Go therefore takes the
+SDK's async API; the binding is `clients/scaas-sdk/bindings/go/` (decisions CLI-SDK-30, T20h change).
+

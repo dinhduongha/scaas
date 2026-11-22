@@ -324,3 +324,12 @@ mod tests {
         assert_eq!(c.list().timeout_ms, 20_000);
     }
 }
+
+/// One endpoint's answer to a family send (CLI-RPC-08; plan T30): it holds the transaction (its id answered, or the family's
+/// already-known answer), a well-formed refusal with its reason capped and redacted, or a failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SendOutcome {
+    Accepted,
+    Refused { reason: String },
+    Unreachable { failure: EndpointFailure },
+}

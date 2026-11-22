@@ -9,6 +9,7 @@ import 'error.dart';
 import 'events.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
+import 'wallet.dart';
 part 'op.freezed.dart';
 
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Key`
@@ -40,6 +41,26 @@ abstract class Op implements RustOpaqueInterface {
   Future<bool> blsMultiPopPartOk({
     required String keyData,
     required BlsMultiPart part_,
+  });
+
+  /// The signer's side (spec §27.5 (c)): signs `prepared` once under its check, writes its row ahead (state `handed_off`,
+  /// path `handoff`, its id `prepared.id()` for `Op::state`), sends nothing, and returns the blob for its payee. `PreparedUnknown`, `PreparedStale`; `Argument` for an
+  /// operation with a fee (a hand-off is fee 0, (b)), a relay fee's paid call, an order's other contract or a
+  /// `bls12381-multi` group (its aggregate is `submit_bls_multi`'s). The row ends on chain facts only.
+  Future<SignedOpBlob> handOff({required ArcPrepared prepared});
+
+  /// The payee's side (spec §27.5 (c)): the blob's checks in order, each its refusal, then an ordinary [`Prepared`] whose
+  /// signature is made, for `quote` and `submit` on `SubmitPath::SelfRelay` by `expect.payer`: the profile's `chain_uid` and
+  /// family (`ProfileMismatch`); the contract a listed token of the profile (`ProfileMismatch`); a confidential kind or a
+  /// struct the token rows do not hold (`ImportKindRefused`); a pay or transfer to none of `expect.payee` (`ImportNotPayee`);
+  /// a `relayer` bound to another address than the payer's (`ImportRelayerBound`); a fee (`ImportFeeRefused`); fewer than
+  /// 120 s left on the chain's clock (`ImportExpired`); its lane nonce spent (`ImportConsumed`); then `scaas-ua` rebuilds
+  /// the typed data and the calldata from the named fields, and the calldata simulated from the payer must not revert
+  /// (`ImportedOpRefused`); a signer kind the profile disables is `KindDisabled`. The review lists the signed fields, `handed_off` and the simulation's gas. `ChainUnknown`;
+  /// `Argument` for a payer that is not an EVM native key.
+  Future<ArcPrepared> importSigned({
+    required SignedOpBlob blob,
+    required ImportExpect expect,
   });
 
   /// One member's signature of a prepared operation signed by an `msig` (M1, owner 2026-11-19: members on different
@@ -198,6 +219,32 @@ class GasSources {
           verify == other.verify;
 }
 
+/// What the payee expects of an imported operation: its chain, its own ids (`0x` + 64 hex: a pay or transfer must name one as
+/// `to`), and the native key that will submit it (`SubmitPath::SelfRelay`).
+class ImportExpect {
+  final String chain;
+  final List<String> payee;
+  final KeyRef payer;
+
+  const ImportExpect({
+    required this.chain,
+    required this.payee,
+    required this.payer,
+  });
+
+  @override
+  int get hashCode => chain.hashCode ^ payee.hashCode ^ payer.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ImportExpect &&
+          runtimeType == other.runtimeType &&
+          chain == other.chain &&
+          payee == other.payee &&
+          payer == other.payer;
+}
+
 @freezed
 sealed class KeyRef with _$KeyRef {
   const KeyRef._();
@@ -245,6 +292,10 @@ sealed class KeyRef with _$KeyRef {
     required int index,
     required String keyData,
   }) = KeyRef_BlsMulti;
+
+  /// an operation another party signed and handed off (`Op::import_signed`, spec §27.5 (c)): its signer's subject id (`0x`
+  /// hex); nothing in this SDK signs for it
+  const factory KeyRef.signed({required String signer}) = KeyRef_Signed;
 }
 
 /// A slot of an inner `msig`: its index there and its key.

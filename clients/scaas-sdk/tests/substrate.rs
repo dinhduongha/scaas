@@ -136,6 +136,7 @@ fn profile(family: Family, p: Option<FamilyParams>) -> ChainProfile {
         wrappers: vec![],
         tokens: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: p,
     }

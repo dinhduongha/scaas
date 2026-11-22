@@ -40,7 +40,7 @@ pub(crate) fn account_id(s: &str) -> bool {
 fn holder(id: &str) -> Result<Holder, SdkError> {
     let lower = id.to_ascii_lowercase();
     if lower.starts_with("0x") && lower.len() == 66 {
-        let b = crate::op::unhex(&lower)?;
+        let b = crate::text::unhex(&lower)?;
         return b.try_into().map(Holder::Ua).map_err(|_| SdkError::Argument);
     }
     if account_id(id) {

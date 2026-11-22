@@ -23,11 +23,14 @@ fn endpoint(url: &str) -> EndpointConfig {
     }
 }
 
+/// An EVM profile; a NEAR one in a build without `evm`, which refuses every EVM profile (`tests/evm_feature.rs`): these checks
+/// are the family's own in neither.
 fn profile(key: &str) -> ChainProfile {
+    let evm = cfg!(feature = "evm");
     ChainProfile {
         key: key.into(),
-        family: Family::Evm,
-        chain_id: Some(7622),
+        family: if evm { Family::Evm } else { Family::Near },
+        chain_id: evm.then_some(7622),
         chain_uid: UID.into(),
         rpc: vec![
             endpoint("http://127.0.0.1:1/"),
@@ -49,6 +52,7 @@ fn profile(key: &str) -> ChainProfile {
         wrappers: vec![],
         tokens: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }
@@ -186,11 +190,11 @@ async fn open_checks_gas_tables_and_opt_ins() {
         ok(with(&["vault"], vec![gas_table("vault", "evm")]).await),
         "Ok"
     );
-    // the reference table is data of the quote (`op`, feature `wallet`): a build without it holds no reference table, so an
+    // the reference table is data of the quote (`op`, feature `evm`): a build without it holds no reference table, so an
     // opt-in to it names a table the SDK does not hold
     assert_eq!(
         ok(with(&["reference", "vault"], vec![gas_table("vault", "evm")]).await),
-        if cfg!(feature = "wallet") {
+        if cfg!(feature = "evm") {
             "Ok"
         } else {
             "Argument"
@@ -327,6 +331,7 @@ fn features_bits_match_the_build() {
     let expect = [
         (cfg!(feature = "account"), bits::ACCOUNT),
         (cfg!(feature = "wallet"), bits::WALLET),
+        (cfg!(feature = "evm"), bits::EVM),
         (cfg!(feature = "zether"), bits::ZETHER),
         (cfg!(feature = "pqz"), bits::PQZ),
         (cfg!(feature = "dex"), bits::DEX),
@@ -350,7 +355,8 @@ fn features_bits_match_the_build() {
             bits::ADMIN,
             bits::MLOCK,
             bits::FILE_STORE,
-            bits::CLASSICAL_ROOTS
+            bits::CLASSICAL_ROOTS,
+            bits::EVM
         ],
         [
             1 << 0,
@@ -362,7 +368,8 @@ fn features_bits_match_the_build() {
             1 << 11,
             1 << 13,
             1 << 22,
-            1 << 24
+            1 << 24,
+            1 << 30
         ]
     );
     let sets = [

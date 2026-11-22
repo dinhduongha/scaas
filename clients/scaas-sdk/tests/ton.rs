@@ -275,6 +275,7 @@ fn profile(rpc: &[&str], policy: scaas_rpc::Policy) -> ChainProfile {
         wrappers: vec![],
         tokens: vec![token(MASTER, "USDT", 6), token(&master2(), "VND", 0)],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }

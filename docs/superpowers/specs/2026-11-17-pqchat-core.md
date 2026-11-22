@@ -189,7 +189,7 @@ UA-7's bytes for PqChat; the requirements of §5.3 hold for whichever form the S
 | V1 | verify a portable PqChat record | a record (named fields) and a `UASig` against the signer's registry record (a trusted read; single key, `msig` minimal form two levels); returns the typed digest and id; `Refused` carries no detail. Runs where the signature's bytes are at hand: messages from stores, topic records | `records.json`, `topics.json` |
 | V2 | decode received bytes, bounded | a stored payload, a stored record blob, a view's page, by length and depth ([CLI-UAL-03](../../clients/ua-libraries.md#CLI-UAL-03)) into named fields; `hashStruct` of a read wrap for the check against `wrapHashes` | `messages.json`, `records.json` |
 | R1 | ordinary chain reads | topic pages and the other views that choose nothing, through `scaas-rpc`'s lists (ARCH-POS-15) | — |
-| R2 | trusted reads | under `Purpose::FeedsDecryption` ([CLI-RPC-06](../../clients/scaas-rpc.md#CLI-RPC-06)): `kemKeyOf`, `kemKeyAt`, `checkedOf`, `memberAccepted`, `latestEpoch`, `epochsOf`, `childOf`, `removedIn`, the factory listing, the signer's registry record for V1, the wraps, `sealedInfo`, `messageAt`, `storedRange` (CLI-PQC-13) | — |
+| R2 | trusted reads | under `Purpose::FeedsDecryption` ([CLI-RPC-06](../../clients/scaas-rpc.md#CLI-RPC-06)): the registry's `kemKeyOf`, `kemKeyAt`, `checkedOf`, `memberAccepted`, `msigOf` (an `msig` seat's slots, P13; added 2026-11-22, controller call); the factory listing (`infoOf`, `contractsPage`); at an instance, every view of a session's state: `sessionOf`, `epochOf` (their `wrapHashes` and `sealedInfo`), `epochComplete`, `epochCount`, `epochsOf`, `latestEpoch`, `childOf`, `wrapAt` (the wraps), `leftIn`, `removedIn`, `removalCount`, `removalAt`, `messageCount`, `messageAt`, `storedCount`, `storedRange`; the signer's registry record for V1 (read inside the SDK) (CLI-PQC-13; held to the crate's `READS` by gate `pqc-reads`; widened 2026-11-22 from the first list to every session-state view, controller call) | — |
 | R3 | finality | the home's `childOf` / `epochsOf` read at a final block | — |
 | W1 | submission | the `PqChat` writes (`createSession`, `addWraps`, `rekey`, `leave`, `remove`, `postMessage`, `storeMessage`, the six topic writes) as prepared operations (prepare, review, quote, submit, follow; [CLI-SDK-08](../../clients/scaas-sdk.md#CLI-SDK-08)), self-relay or a gateway that takes them, fee 0 allowed; the quote (a simulation) sizes wrap chunks; an unsigned write (`addWraps`, `storeMessage`) is paid or self-relayed (UA-7 P17) | — |
 | T1 | test-only vectors build | fixed randomness and key import for K1, K2, S1, S5 and the signers; refused in a release build by the SDK's load check | §10 |
@@ -265,8 +265,10 @@ Whichever form the SDK takes (§13 O3), it must hold:
 ### 6.2 Rooms and sessions apart (the app's contract §11; binding by Fable K8)
 
 - **A room counts for a session** only if this client created it for that session, or joined it through that session's acceptance.
-  Never a room the account had joined before: a session whose `sealedInfo` names such a room is shown with that warning and its
-  room is not used. One room serves one session; the first accepted keeps it, a second session naming it is warned about and its
+  A room the account had joined before counts only once its members check against the epoch: every Matrix id it holds, joined
+  or invited, is the account's own or one the epoch's `sealedInfo` maps to a member of that epoch (a fresh device's state-only
+  recovery; controller call 2026-11-22); a session whose `sealedInfo` names such a room with any other member is shown with that
+  warning and its room is not used. One room serves one session; the first accepted keeps it, a second session naming it is warned about and its
   room not used.
 - **A Matrix id counts for a UA** only when that UA asserted it: its signed contact card (UA-7 §14 O7) or an envelope signed by that
   UA and received from that Matrix sender. `sealedInfo`'s `matrix` map is the author's claim: an id it maps that is not bound so is
@@ -360,6 +362,7 @@ operation states).
 | `CounterExhausted` | an own chain at `2^64 − 1` (a rekey is needed) |
 | `StoreIo`, `StoreConflict` | the app's storage interface failed; the item changed under the crate three times |
 | `Internal` | no better name; carries nothing |
+| `CardRefused` | a contact card that does not count for its UA (UA-7 §14 O7, CLI-PQC-05): not its signature, or not well formed |
 
 ## 9. Threat model
 

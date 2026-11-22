@@ -63,6 +63,7 @@ fn profile(rpc: &str, l1_fee: Option<L1Fee>) -> ChainProfile {
         wrappers: vec![],
         family_params: None,
         l1_fee,
+        pinned_reads: true,
         disabled_kinds: vec![],
     }
 }

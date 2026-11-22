@@ -37,6 +37,8 @@ pub(crate) const DECOYS_MAX: u64 = 4_096;
 
 /// Where a UA's record and its PQZ attachment live, as the bound registry's one walk answers (`holderOf`, §11.1).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct UaLine {
     /// the generation holding the record (`0x` + 40 hex): the target of a key write, where its record is read
     pub holder: String,

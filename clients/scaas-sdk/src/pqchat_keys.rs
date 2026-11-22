@@ -4,7 +4,8 @@
 //! scope's handles, in a scope that declared PqChat's prefix `scaas/pqchat/v1/` (`AppLabelRefused` otherwise). The SDK reads
 //! the member's KEM key (K2) and the signer's registry records (V1) at the profile's final block as reads that feed a
 //! decryption (CLI-PQC-13), and takes the sender, creator or author from the signing account, never from the caller. No entry
-//! that signs takes a digest, typed data or a ciphertext of the caller's: the content and the info are sealed inside.
+//! that signs takes a digest, typed data or a ciphertext of the caller's: the content and the info are sealed inside. A `file`
+//! content's key enters it inside `scaas-ua` and a received file opens there (T10b).
 //! Plaintexts leave as `SecretBytes` only. UNAUDITED.
 use crate::app_core::{
     at, hex32, AppCore, AppInnerSig, AppKey, AppKeyUsage, AppMemberSig, AppUaSig,
@@ -355,10 +356,44 @@ impl AppCore {
         header: PqMessageHeader,
         content_json: String,
     ) -> Result<PqSealedMessage, SdkError> {
-        self.seal_message_with(account, k, pos, header, content_json, None)
+        self.seal_message_with(account, k, pos, header, content_json, None, None)
             .await
     }
 
+    /// pqchat-core T10b (a), owner 2026-11-22: a `file` content sealed as S5 seals any content, its key entered inside
+    /// `scaas-ua` from `file_key` (the `File` handle of `seal_for_arweave` or `seal_file`): `fields_json` is every field of
+    /// UA-7 §6.4.1's `file` but `key` (`url` an `ar://<id>`), checked there (a `key` given, another type or a field out of
+    /// its form `PqChatContent`; a handle of another usage `AppKeyUsage`). The key is in no byte that leaves but the
+    /// ciphertext.
+    pub async fn pqchat_seal_file_message(
+        self: &Arc<Self>,
+        account: KeyRef,
+        k: Arc<AppKey>,
+        pos: Arc<AppKey>,
+        header: PqMessageHeader,
+        fields_json: String,
+        file_key: Arc<AppKey>,
+    ) -> Result<PqSealedMessage, SdkError> {
+        self.seal_message_with(account, k, pos, header, fields_json, Some(file_key), None)
+            .await
+    }
+
+    /// pqchat-core T10b (b), owner 2026-11-22: the file of `object` named by `content`, a content K4 opened (the handle
+    /// [`AppCore::pqchat_open_message`] gave): inside `scaas-ua` the content's `file` form checked (`PqChatContent`), then
+    /// before any decryption the object's exact length (`FileLength`) and SHA-256 against its `ctSha256`
+    /// (`FileHashMismatch`), then the tag, the frame and `sha256`; the key never leaves `scaas-ua`. Run on the user's action
+    /// for that file only; a failure is shown on the device only (ARCH-POS-13).
+    pub fn pqchat_open_file(
+        &self,
+        content: Arc<SecretBytes>,
+        object: Vec<u8>,
+    ) -> Result<SecretBytes, SdkError> {
+        self.label(pk::PREFIX.as_bytes())?;
+        let pt = content.with(|c| scaas_ua::wallet::pqchat_file::pqchat_open_file(c, &object))?;
+        secret(pt)
+    }
+
+    #[allow(clippy::too_many_arguments)]
     async fn seal_message_with(
         self: &Arc<Self>,
         account: KeyRef,
@@ -366,6 +401,7 @@ impl AppCore {
         pos: Arc<AppKey>,
         header: PqMessageHeader,
         content_json: String,
+        file_key: Option<Arc<AppKey>>,
         env_nonce: Option<[u8; 12]>,
     ) -> Result<PqSealedMessage, SdkError> {
         self.label(pk::ENV)?;
@@ -391,15 +427,21 @@ impl AppCore {
                         .map(|p| h32(p))
                         .collect::<Result<_, _>>()?,
                 };
-                let s = me.with(&[&k, &pos], |sc, hs| {
+                let mut ks: Vec<&AppKey> = vec![&k, &pos];
+                ks.extend(file_key.as_deref());
+                let s = me.with(&ks, |sc, hs| {
                     let (kh, ph) = (at(hs, 0)?, at(hs, 1)?);
                     let c = content_json.as_bytes();
-                    match env_nonce {
-                        None => sc.pqchat_seal_message(kh, ph, &h, c, &signer),
+                    match (env_nonce, file_key.is_some()) {
+                        (None, true) => {
+                            sc.pqchat_seal_file_message(kh, ph, &h, c, at(hs, 2)?, &signer)
+                        }
+                        (None, false) => sc.pqchat_seal_message(kh, ph, &h, c, &signer),
                         #[cfg(feature = "vectors")]
-                        Some(n) => sc.pqchat_vectors_seal_message(kh, ph, &h, c, &signer, &n),
-                        #[cfg(not(feature = "vectors"))]
-                        Some(_) => Err(scaas_ua::wallet::Error::Argument),
+                        (Some(n), false) => {
+                            sc.pqchat_vectors_seal_message(kh, ph, &h, c, &signer, &n)
+                        }
+                        _ => Err(scaas_ua::wallet::Error::Argument),
                     }
                     .map_err(SdkError::Ua)
                 })?;
@@ -485,7 +527,7 @@ impl AppCore {
         let v = scaas_ua::wallet::bounded::json(record_json.as_bytes(), 1 << 20, pk::JSON_DEPTH)?;
         let td = pqchat::typed(&name, v)?;
         let sig = UASig::from(&sig);
-        self.with_records(&chain, id, false, |state| {
+        self.with_records(&chain, id, false, false, |state| {
             pqchat::verify(&id, &td, &sig, state)
         })
         .await
@@ -591,7 +633,7 @@ impl AppCore {
         content_json: String,
         env_nonce: [u8; 12],
     ) -> Result<PqSealedMessage, SdkError> {
-        self.seal_message_with(account, k, pos, header, content_json, Some(env_nonce))
+        self.seal_message_with(account, k, pos, header, content_json, None, Some(env_nonce))
             .await
     }
 }

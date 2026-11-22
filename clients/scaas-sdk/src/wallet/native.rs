@@ -3,7 +3,7 @@
 //! address. Bitcoin (P2WPKH, P2TR), NEAR and Polkadot need the feature `native-networks` (`FeatureMissing` without it); the
 //! other networks are always here. Signing a non-EVM chain's transaction is the raw entry's (`raw-native`, spec §8.6). UNAUDITED.
 use super::Wallet;
-use crate::op::hex;
+use crate::text::hex;
 use crate::{Sdk, SdkError};
 use scaas_ua::wallet::{NativeKey, Network};
 use std::sync::Arc;
@@ -20,6 +20,7 @@ pub(crate) const EXTRA_NETWORKS: [&str; 4] = ["bitcoin_p2wpkh", "bitcoin_p2tr", 
     doc = "```compile_fail\nlet _ = scaas_sdk::wallet::AllowRawNative::new();\n```"
 )]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct NativeKeyRef {
     pub seed: String,
@@ -32,6 +33,7 @@ pub struct NativeKeyRef {
 
 /// A native key's public parts.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct NativeAddress {
     pub network: String,

@@ -150,7 +150,8 @@ In words:
 
 1. `chain` is served (`UNKNOWN_CHAIN`).
 2. `family` equals the chain's family (`BAD_PAYLOAD`).
-3. The payload decodes; the node computes the digest; a client digest that differs fails (`BAD_PAYLOAD`).
+3. The payload decodes; the node computes the digest from the named fields; a family whose node computes none is refused by
+   name (`FAMILY_NOT_SUPPORTED`); a client digest that differs fails (`BAD_PAYLOAD`).
 4. The token or asset is registered (`TOKEN_NOT_SERVED`).
 5. `now < valid_until ≤ now + max_valid_for_secs` (`EXPIRED`).
 6. The family signature verify, where the node has one (`BAD_SIGNATURE`). A verifier that returns `None` (the key is
@@ -166,8 +167,12 @@ node's. Limits: 64 KiB body (a body nested past serde_json's depth limit is refu
 As built (plan T28): the chain is the family's chain key (`sui:testnet`); Hedera is not served here (its EVM side is
 `/v1/op`'s). **GRAM is refused by name**, `FAMILY_NOT_SUPPORTED`, before any other check, until the node half of the
 forward cap is in code ([NET-TON-14](../networks/ton.md#NET-TON-14), blocking). Step 3's digest is the family adapter's
-(`ChainAdapter::digest`): Soroban computes its own op digest; the other families take the op's `digest` as their lanes do, so
-an op without one is `BAD_PAYLOAD` (the node's own digest for them is SPECIFIED). Step 4 reads the chain's registered tokens
+`ChainAdapter::ops_digest`, never the client's `op.digest`: Soroban rebuilds the bytes its subject signed (`sha256` of the
+main entry's `HashIdPreimage::SorobanAuthorization` on the chain's network id) and that digest is the intent id, the origin
+key, the G2 key and the duplicate check's; the client's `op.digest` is compared with it and not stored. Every other family is
+refused by name, `FAMILY_NOT_SUPPORTED`, until its node computes the digest (its T41 slice, after the freeze; owner
+2026-11-22): the trait's default refuses, so no adapter inherits a client digest (the defect fixed 2026-11-22: the default
+took the client's field, so step 3's comparison could not fail and the intent was client-chosen). Step 4 reads the chain's registered tokens
 in the family's canonical form (refreshed every 30 s; none while the chain is paused). Steps 6–8 are the lane's own build on
 lane 0 (build and simulation, as the lane runs it again at lease): a refusal starting `BAD_SIGNATURE`, `RELAYER_NOT_OURS`
 or `TOKEN_NOT_SERVED` keeps that code, any other is `SIMULATION_REVERT` (422), an RPC failure `RPC_UNAVAILABLE` (503). Step

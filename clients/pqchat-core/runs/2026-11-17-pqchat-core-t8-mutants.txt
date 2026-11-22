@@ -1,0 +1,8 @@
+# t8 mutants (name | outcome | commit | test | first failure line)
+process events of any room | killed | 520dc7be1 | ../../scripts/capped cargo test --locked --offline -j2 --test matrix_fake events_of_an_unbound_room_ignored | panicked at tests/matrix_fake.rs:181:5:
+use a room joined before | killed | ca743f021 | ../../scripts/capped cargo test --locked --offline -j2 --test matrix_fake room_joined_before_not_used | panicked at tests/matrix_fake.rs:210:5:
+invite an unbound id | killed | 520dc7be1 | ../../scripts/capped cargo test --locked --offline -j2 --test matrix_fake invites_only_bound_ids_once_complete | panicked at tests/matrix_fake.rs:375:5:
+trust a power level for a removal | killed | 520dc7be1 | ../../scripts/capped cargo test --locked --offline -j2 --test matrix_fake removal_by_a_parent_admin_only | panicked at tests/matrix_fake.rs:424:9:
+send a Matrix read receipt in a bound room | killed | 520dc7be1 | ../../scripts/capped cargo test --locked --offline -j2 --test matrix_conformance fake_conforms | panicked at tests/matrix_conformance.rs:116:5:
+carry the room id in a chain write | killed | 520dc7be1 | ../../scripts/capped cargo test --locked --offline -j2 --test matrix_fake room_id_in_no_chain_write | panicked at tests/matrix_fake.rs:530:9:
+6 mutants, 6 killed, 0 survived, 0 not loaded, 0 other failure

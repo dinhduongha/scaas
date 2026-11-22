@@ -4,6 +4,7 @@
 //! from the type strings UA-7 and the public-topics spec fix (clientkeys `src/pqchat.js` `TYPE_STRINGS`), a `Wrap`'s struct hash
 //! (what a session or epoch lists as `wrapHashes`), the ids of the tags `scaas/pqchat/v1/*`, and a single UA key's signature
 //! over `uaMessage(kind, PURPOSE_PQCHAT, typed)` (role `Pop`: the registry's `requirePortable` checks it, `keyData` empty).
+//! The signed contact card (UA-7 §14 O7, [`Card`]) is signed and checked by its own calls, never as a record.
 //! Vectors: `smartcontracts/vectors/pqchat/`. Not here: an `msig` or a native signer of a PqChat record. UNAUDITED.
 use super::eip712::TypedData;
 use super::signer::{KeyRef, SigRole, SignRequest, Signer};
@@ -11,6 +12,15 @@ use super::{Error, Result};
 use crate::ua_portable::UASig;
 use crate::{keccak256, ua_message};
 use serde_json::{json, Value};
+
+/// PqChat's app id in the registry's open app namespace (pqchat-core T10b, owner 2026-11-22): the scope's per-account
+/// storage root (`app_root_key`), so the shared `seal_for_arweave` derives its upload keys. No app record is signed under it.
+pub const APP_ID_TAG: &str = "scaas.pqchat.v1";
+
+/// `APP_ID = keccak256("scaas.pqchat.v1")`.
+pub fn app_id() -> [u8; 32] {
+    keccak256(APP_ID_TAG.as_bytes())
+}
 
 /// The type strings, exactly as the specs fix them (UA-7 §4, public topics §2).
 pub const TYPE_STRINGS: &[(&str, &str)] = &[
@@ -67,9 +77,13 @@ pub const TYPE_STRINGS: &[(&str, &str)] = &[
         "PqTopicVote",
         "PqTopicVote(bytes32 entryId,bytes32 voter,int8 value,uint64 seq)",
     ),
+    (
+        "PqChatCard",
+        "PqChatCard(bytes32 ua,uint64 kemVersion,string matrixId)",
+    ),
 ];
 
-/// The structs a UA signs (every type string but the nested `MemberKey`, `Wrap` and `EntryRef`).
+/// The records a UA signs for a contract (every type string but the nested `MemberKey`, `Wrap` and `EntryRef`, and the card).
 pub const RECORDS: &[&str] = &[
     "PqChatSession",
     "PqChatEpoch",
@@ -152,15 +166,19 @@ pub fn id(tag: &str, words: &[[u8; 32]]) -> [u8; 32] {
 /// A single UA key's `UASig` over the record `td` (one of [`RECORDS`] in `DS_C`, else `Argument`): `uaMessage(kind,
 /// PURPOSE_PQCHAT, typed)`, role `Pop`, no key data, no members. A native key or one claiming the `msig` kind: `Argument`.
 pub fn sign(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
+    if !RECORDS.contains(&td.primary_type()) {
+        return Err(Error::Argument);
+    }
+    sign_typed(key, td)
+}
+
+/// [`sign`] after its struct check.
+fn sign_typed(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
     let KeyRef::Ua { kind, .. } = key.key_ref() else {
         return Err(Error::Argument);
     };
     let v = td.to_value();
-    let ds = v.get("domain");
-    if kind == 0x0120
-        || !RECORDS.contains(&td.primary_type())
-        || ds != Some(&json!({"name": "SCaaS PqChat", "version": "1"}))
-    {
+    if kind == 0x0120 || v.get("domain") != Some(&json!({"name": "SCaaS PqChat", "version": "1"})) {
         return Err(Error::Argument);
     }
     let m = ua_message(kind, &purpose(), &td.digest()?)?;
@@ -185,9 +203,13 @@ pub fn sign(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
 /// `msig` minimal over two levels, its native members over the typed digest). A native id, an unknown UA, another struct or
 /// domain: `false`. No detail: a reader counts a refusal, it never answers one.
 pub fn verify(ua: &[u8; 32], td: &TypedData, sig: &UASig, state: &super::AppRecordState) -> bool {
+    RECORDS.contains(&td.primary_type()) && verify_typed(ua, td, sig, state)
+}
+
+/// [`verify`] after its struct check.
+fn verify_typed(ua: &[u8; 32], td: &TypedData, sig: &UASig, state: &super::AppRecordState) -> bool {
     let v = td.to_value();
-    if !RECORDS.contains(&td.primary_type())
-        || v.get("domain") != Some(&json!({"name": "SCaaS PqChat", "version": "1"}))
+    if v.get("domain") != Some(&json!({"name": "SCaaS PqChat", "version": "1"}))
         || crate::in_native_space(ua)
     {
         return false;
@@ -207,4 +229,56 @@ pub fn verify(ua: &[u8; 32], td: &TypedData, sig: &UASig, state: &super::AppReco
         Some(state.accepted),
     )
     .is_ok()
+}
+
+/// A Matrix user id's bound in bytes (the Matrix spec's).
+pub const MATRIX_ID_MAX: usize = 255;
+
+/// The signed contact card (UA-7 §14 O7, its Change of 2026-11-05; CLI-PQC-05): `PqChatCard(bytes32 ua, uint64 kemVersion,
+/// string matrixId)` in `DS_C` under `PURPOSE_PQCHAT`, signed off chain and exchanged out of band; `matrix_id` empty when the
+/// UA has none. Vectors: `smartcontracts/vectors/pqchat/cards.json`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Card {
+    pub ua: [u8; 32],
+    pub kem_version: u64,
+    pub matrix_id: String,
+}
+
+/// A card's Matrix id: empty, or `@localpart:server` in at most [`MATRIX_ID_MAX`] bytes of printable ASCII (0x21-0x7e), the
+/// localpart non-empty and without `:`, the server name non-empty; else `Argument`. Ids compare byte for byte.
+pub fn check_matrix_id(id: &str) -> Result<()> {
+    if id.is_empty() {
+        return Ok(());
+    }
+    let b = id.as_bytes();
+    let colon = id.find(':');
+    if b.len() > MATRIX_ID_MAX
+        || b.iter().any(|c| !(0x21..=0x7e).contains(c))
+        || !id.starts_with('@')
+        || colon.is_none_or(|i| i < 2 || i == b.len() - 1)
+    {
+        return Err(Error::Argument);
+    }
+    Ok(())
+}
+
+/// The card's typed data in `DS_C`; a malformed Matrix id: `Argument`.
+pub fn card_typed(c: &Card) -> Result<TypedData> {
+    check_matrix_id(&c.matrix_id)?;
+    typed(
+        "PqChatCard",
+        json!({"ua": super::eip712::to_hex(&c.ua), "kemVersion": c.kem_version, "matrixId": c.matrix_id}),
+    )
+}
+
+/// A single UA key's `UASig` over its card, as [`sign`] signs a record. The card's `ua` is the caller's to set (the SDK takes
+/// it from the signing account).
+pub fn sign_card(key: &dyn Signer, c: &Card) -> Result<UASig> {
+    sign_typed(key, &card_typed(c)?)
+}
+
+/// Whether `c` counts for `ua` (CLI-PQC-05): its `ua` is `ua`, its Matrix id well formed, and `sig` is `ua`'s portable
+/// signature of it as [`verify`] judges a record on `state`. No detail.
+pub fn verify_card(ua: &[u8; 32], c: &Card, sig: &UASig, state: &super::AppRecordState) -> bool {
+    c.ua == *ua && card_typed(c).is_ok_and(|td| verify_typed(ua, &td, sig, state))
 }

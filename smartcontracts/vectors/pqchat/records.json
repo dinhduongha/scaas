@@ -12,6 +12,10 @@
     "tag": "scaas.ua.purpose.pqchat.v1",
     "hash": "0x8f17e5e7078e03da0ce7bf2ac1d69da5e1c8a45ba607ea841d7652077fab090a"
   },
+  "appId": {
+    "tag": "scaas.pqchat.v1",
+    "hash": "0x0ff21b7d13e785d30f93c4ff2e8dd5a767392bb818ea221b73341d92a9f6eb9b"
+  },
   "typehashes": {
     "MemberKey": {
       "type": "MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",

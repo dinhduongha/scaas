@@ -10,10 +10,12 @@ import { base58 } from "@scure/base";
 import * as sol from "../src/fam/solana.js";
 import * as sor from "../src/fam/soroban.js";
 import * as sui from "../src/fam/sui.js";
-import { strkey } from "../src/seed.js";
+import { strkey, seedFromWords, deriveKey, signDigest } from "../src/seed.js";
 import { hex, fromHex, keccak_256, utf8ToBytes } from "../src/bytes.js";
 
 const b64 = (b) => Buffer.from(b).toString("base64");
+const fromB64 = (s) => Uint8Array.from(Buffer.from(s, "base64"));
+const OP_MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 const OUT = process.argv[2] ?? fileURLToPath(new URL("../../../smartcontracts/vectors/families/", import.meta.url));
 mkdirSync(OUT, { recursive: true });
@@ -221,8 +223,156 @@ const refusedStrkeys = [
   { why: "55 characters", text: holders.account.slice(0, 55) },
   { why: "a seed's version (S…)", text: strkey(18 << 3, rnd("sor/s")) },
 ];
+// T27.soroban: a G… subject's op envelope per kind, seed-signed, and a refused row per must-check (CLI-SGN-27)
+const OP_SEED = seedFromWords(OP_MNEMONIC);
+const subject = deriveKey(OP_SEED, "stellar", 0);
+const payee = deriveKey(OP_SEED, "stellar", 1).address;
+const OP_PASSPHRASE = "Standalone Network ; February 2017";
+const OP_NET = hex(sor.networkIdOf(OP_PASSPHRASE));
+const LEDGER = 5000;
+const WINDOW = 17280;
+const opFields = {
+  transfer: { from: subject.address, to: payee, amount: "2500000" },
+  pay: {
+    from: subject.address,
+    to: payee,
+    amount: "1000000",
+    pay_ref: hex(rnd("sor/op/pay_ref")),
+    valid_until: 1790000300,
+  },
+  burn: { from: subject.address, amount: "7" },
+};
+const opTerms = (kind, over = {}) => ({
+  networkId: OP_NET,
+  contract: token,
+  kind,
+  fields: opFields[kind],
+  nonce: kind === "pay" ? String(sor.payNonce(opFields.pay.pay_ref, opFields.pay.valid_until)) : "-42",
+  expiry: LEDGER + 720,
+  ledger: LEDGER,
+  window: WINDOW,
+  ...over,
+});
+const opShown = (kind, over = {}) => ({
+  passphrase: OP_PASSPHRASE,
+  contract: token,
+  kind,
+  from: opFields[kind].from,
+  ...(opFields[kind].to ? { to: opFields[kind].to } : {}),
+  amount: opFields[kind].amount,
+  ...over,
+});
+const ops = Object.keys(sor.OP_KINDS).map((kind) => {
+  const terms = opTerms(kind);
+  const checked = sor.checkTerms(terms, opShown(kind));
+  const sig = signDigest(subject, checked.signingBytes, { allowRawDigest: true });
+  const packed = sor.packSignature(checked, subject, sig);
+  return {
+    kind,
+    terms,
+    shown: opShown(kind),
+    preimage: hex(fromB64(checked.walletInput)),
+    digest: hex(checked.signingBytes),
+    signature: packed.signature,
+    signed_op: sor.signedOp(checked, packed, { contract: token, validUntil: 1790000300 }),
+  };
+});
+const fieldsWith = (kind, f) => ({ fields: { ...opFields[kind], ...f } });
+const refusedOps = [
+  {
+    why: "an entry that is no Soroban op",
+    terms: opTerms("transfer", { kind: "approve" }),
+    shown: opShown("transfer", { kind: "approve" }),
+  },
+  { why: "the entry is not the one shown", terms: opTerms("transfer"), shown: opShown("transfer", { kind: "burn" }) },
+  { why: "the contract is not the token shown", terms: opTerms("pay", { contract: sac }), shown: opShown("pay") },
+  {
+    why: "the contract is a G…",
+    terms: opTerms("pay", { contract: payee }),
+    shown: opShown("pay", { contract: payee }),
+  },
+  {
+    why: "a field the entry does not take",
+    terms: opTerms("burn", fieldsWith("burn", { to: payee })),
+    shown: opShown("burn"),
+  },
+  {
+    why: "from is not the account shown",
+    terms: opTerms("pay", fieldsWith("pay", { from: payee })),
+    shown: opShown("pay"),
+  },
+  {
+    why: "from is a C…",
+    terms: opTerms("transfer", fieldsWith("transfer", { from: sac })),
+    shown: opShown("transfer", { from: sac }),
+  },
+  {
+    why: "to is not the recipient shown",
+    terms: opTerms("transfer", fieldsWith("transfer", { to: subject.address })),
+    shown: opShown("transfer"),
+  },
+  {
+    why: "an amount of 0",
+    terms: opTerms("transfer", fieldsWith("transfer", { amount: "0" })),
+    shown: opShown("transfer", { amount: "0" }),
+  },
+  {
+    why: "an amount with a leading zero",
+    terms: opTerms("transfer", fieldsWith("transfer", { amount: "02500000" })),
+    shown: opShown("transfer", { amount: "02500000" }),
+  },
+  {
+    why: "the amount is not the one shown",
+    terms: opTerms("pay", fieldsWith("pay", { amount: "1000001" })),
+    shown: opShown("pay"),
+  },
+  {
+    why: "an amount above i128",
+    terms: opTerms("burn", fieldsWith("burn", { amount: String(1n << 127n) })),
+    shown: opShown("burn", { amount: String(1n << 127n) }),
+  },
+  {
+    why: "a pay_ref of 31 bytes",
+    terms: opTerms("pay", fieldsWith("pay", { pay_ref: hex(rnd("x").slice(0, 31)) })),
+    shown: opShown("pay"),
+  },
+  { why: "a valid_until of 0", terms: opTerms("pay", fieldsWith("pay", { valid_until: 0 })), shown: opShown("pay") },
+  {
+    why: "another network's id",
+    terms: opTerms("transfer", { networkId: hex(sor.networkIdOf("Test SDF Network ; September 2015")) }),
+    shown: opShown("transfer"),
+  },
+  {
+    why: "an expiry past its window",
+    terms: opTerms("transfer", { expiry: LEDGER + WINDOW + 1 }),
+    shown: opShown("transfer"),
+  },
+  {
+    why: "an expiry below the current ledger",
+    terms: opTerms("transfer", { expiry: LEDGER - 1 }),
+    shown: opShown("transfer"),
+  },
+  { why: "a nonce above i64", terms: opTerms("transfer", { nonce: String(1n << 63n) }), shown: opShown("transfer") },
+];
+for (const r of refusedOps)
+  must(
+    (() => {
+      try {
+        sor.checkTerms(r.terms, r.shown);
+        return false;
+      } catch (e) {
+        return e instanceof sor.SorobanError;
+      }
+    })(),
+    `refused op: ${r.why}`,
+  );
+const payNonces = [0, 1].map((i) => {
+  const pay_ref = hex(rnd(`sor/nonce/${i}`));
+  const valid_until = 1790000000 + i;
+  return { pay_ref, valid_until, nonce: String(sor.payNonce(pay_ref, valid_until)) };
+});
 const soroban = {
-  note: "Generated by clients/clientkeys/scripts/families-vectors.mjs from src/fam/soroban.js and src/soroban.js; never edit by hand. keys: getLedgerEntries LedgerKey XDR (base64): Account of a G…, ContractData (persistent) of a token's Balance(Address) or UaBalance(BytesN<32>) and of the XLM SAC's Balance(Address). entries: LedgerEntryData XDR (base64) the key answers, its amount (stroops / the token's units). refusedEntries: one change each; refusedStrkeys: strkeys a reader refuses.",
+  note: "Generated by clients/clientkeys/scripts/families-vectors.mjs from src/fam/soroban.js and src/soroban.js; never edit by hand. keys: getLedgerEntries LedgerKey XDR (base64): Account of a G…, ContractData (persistent) of a token's Balance(Address) or UaBalance(BytesN<32>) and of the XLM SAC's Balance(Address). entries: LedgerEntryData XDR (base64) the key answers, its amount (stroops / the token's units). refusedEntries: one change each; refusedStrkeys: strkeys a reader refuses. ops (T27): checkTerms(terms, shown) of a G… subject (key m/44'/148'/0' of mnemonic, signer of the digest), the HashIdPreimage::SorobanAuthorization XDR, its sha256, the ed25519 signature and the node's signed_op; refusedOps: one must-check failed each; payNonces: NET-SOR-02's i64 of a pay.",
   holders,
   token,
   sac,
@@ -230,6 +380,10 @@ const soroban = {
   entries,
   refusedEntries,
   refusedStrkeys,
+  mnemonic: OP_MNEMONIC,
+  ops,
+  refusedOps,
+  payNonces,
 };
 writeFileSync(join(OUT, "soroban.json"), JSON.stringify(soroban, null, 1) + "\n");
 console.log(`wrote ${join(OUT, "soroban.json")}`);

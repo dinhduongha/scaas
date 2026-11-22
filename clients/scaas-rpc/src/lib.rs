@@ -9,6 +9,8 @@
 pub mod algorand;
 #[cfg(feature = "aptos")]
 pub mod aptos;
+#[cfg(feature = "arweave")]
+pub mod arweave;
 #[cfg(feature = "bitcoin")]
 pub mod bitcoin;
 #[cfg(feature = "ton")]

@@ -25,7 +25,7 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
     EntryPoint {
         function: "prepare_cancel_nonce",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[
             ("UACancelNonce", "token"),
             ("UACancelNonce", "zether"),
@@ -36,19 +36,19 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
     EntryPoint {
         function: "prepare_burn",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[("UABurn", "token"), ("UABurn", "zether"), ("UABurn", "pqz")],
     },
     EntryPoint {
         function: "prepare_wrap",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[("Wrap", "token"), ("Wrap", "zether"), ("Wrap", "pqz")],
     },
     EntryPoint {
         function: "prepare_wrap_leg",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[
             ("WrapLeg", "token"),
             ("WrapLeg", "zether"),
@@ -58,7 +58,7 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
     EntryPoint {
         function: "prepare_unwrap",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[
             ("UAUnwrap", "token"),
             ("UAUnwrap", "zether"),
@@ -68,7 +68,7 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
     EntryPoint {
         function: "prepare_unwrap_leg",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[
             ("UAUnwrapLeg", "token"),
             ("UAUnwrapLeg", "zether"),
@@ -78,7 +78,7 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
     EntryPoint {
         function: "prepare_add_reserve",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[
             ("AddReserve", "token"),
             ("AddReserve", "zether"),
@@ -88,7 +88,7 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
     EntryPoint {
         function: "prepare_wrap_to_ua",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[
             ("WrapToUA", "token"),
             ("WrapToUA", "zether"),
@@ -98,7 +98,7 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
     EntryPoint {
         function: "prepare_unwrap_to_ua",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[
             ("UAUnwrapToUA", "token"),
             ("UAUnwrapToUA", "zether"),
@@ -108,7 +108,7 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
     EntryPoint {
         function: "prepare_pay_with_tax",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[
             ("UAPayWithTax", "token"),
             ("UAPayWithTax", "zether"),
@@ -118,7 +118,7 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
     EntryPoint {
         function: "prepare_payee_fee",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[
             ("UAPayeeFee", "token"),
             ("UAPayeeFee", "zether"),
@@ -128,7 +128,7 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
     EntryPoint {
         function: "prepare_relay_fee",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[
             ("UARelayFee", "token"),
             ("UARelayFee", "zether"),
@@ -138,37 +138,37 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
     EntryPoint {
         function: "prepare_set_mandate",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[("UASetMandate", "wallet")],
     },
     EntryPoint {
         function: "prepare_set_payee",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[("UASetPayee", "wallet")],
     },
     EntryPoint {
         function: "prepare_revoke_mandate",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[("UARevokeMandate", "wallet")],
     },
     EntryPoint {
         function: "prepare_pay_under_mandate",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[("UAPayUnderMandate", "wallet")],
     },
     EntryPoint {
         function: "prepare_delegate_revoke",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[("UADelegateRevoke", "wallet")],
     },
     EntryPoint {
         function: "prepare_execute",
         module: "wallet",
-        feature: "wallet",
+        feature: "evm",
         pairs: &[("UAExecute", "wallet")],
     },
     EntryPoint {

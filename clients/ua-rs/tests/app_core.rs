@@ -1152,3 +1152,552 @@ fn pqchat_sign_records_only() {
     );
     assert!(pqchat::typed("Nope", Value::Null).is_err());
 }
+
+/// A UA key signs its contact card (a control verifying under its key); a native key does not; a malformed Matrix id is no card.
+#[test]
+fn pqchat_sign_card() {
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let k = w.ua_key(0x0131, 0, 0).unwrap();
+    let (ua, kind, kd) = id_of(&k);
+    let card = pqchat::Card {
+        ua,
+        kem_version: 1,
+        matrix_id: "@alice:example.org".into(),
+    };
+    let s = pqchat::sign_card(&k, &card).unwrap();
+    assert!(s.key_data.is_empty() && s.members.is_empty());
+    let td = pqchat::card_typed(&card).unwrap();
+    let m = scaas_ua::ua_message(kind, &pqchat::purpose(), &td.digest().unwrap()).unwrap();
+    assert!(scaas_ua::verify::verify(
+        kind,
+        &kd,
+        &m,
+        &s.signature,
+        true,
+        false
+    ));
+    let nat = w.native_key(Network::Evm, 0, None).unwrap();
+    assert_eq!(
+        pqchat::sign_card(&nat, &card).err(),
+        Some(Error::Argument),
+        "a native key"
+    );
+    let bad = pqchat::Card {
+        matrix_id: "alice:example.org".into(),
+        ..card
+    };
+    assert_eq!(
+        pqchat::sign_card(&k, &bad).err(),
+        Some(Error::Argument),
+        "a malformed Matrix id"
+    );
+}
+
+// --- PqVault's dedicated signing path (owner 2026-11-22, CLI-PQV-12): smartcontracts/vectors/pqvault/records.json ---
+
+use scaas_ua::wallet::{pqvault, SCAAS_APP_IDS};
+
+fn pqv() -> Value {
+    let p = format!(
+        "{}/../../smartcontracts/vectors/pqvault/records.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
+}
+
+/// An `encodeType` string as JSON `types` entries.
+fn types_of(enc: &str, out: &mut serde_json::Map<String, Value>) {
+    let mut rest = enc;
+    while let Some(open) = rest.find('(') {
+        let close = open + rest[open..].find(')').unwrap();
+        let fields: Vec<Value> = rest[open + 1..close]
+            .split(',')
+            .map(|f| {
+                let (t, n) = f.split_once(' ').unwrap();
+                serde_json::json!({"name": n, "type": t})
+            })
+            .collect();
+        out.insert(rest[..open].to_string(), Value::Array(fields));
+        rest = &rest[close + 1..];
+    }
+}
+
+/// A record's typed data: its struct's type string `enc`, `domain` with its `EIP712Domain` type string `denc`.
+fn pqv_typed(enc: &str, st: &str, record: &Value, denc: &str, domain: &Value) -> TypedData {
+    let mut types = serde_json::Map::new();
+    types_of(enc, &mut types);
+    types_of(denc, &mut types);
+    let v =
+        serde_json::json!({"types": types, "primaryType": st, "domain": domain, "message": record});
+    TypedData::from_json(&serde_json::to_vec(&v).unwrap()).unwrap()
+}
+
+/// A vault mode's path, domain and domain type string: 0 `DS_V` portable under `APP_ID`, 1 `DS_B` chain-bound under `P_V`.
+fn pqv_mode(d: &Value, mode: u64) -> (AppPath, Value, String) {
+    let (k, path) = match mode {
+        0 => (
+            "V",
+            AppPath::Portable {
+                app_id: pqvault::app_id(),
+            },
+        ),
+        _ => (
+            "B",
+            AppPath::ChainBound {
+                purpose: pqvault::purpose(),
+            },
+        ),
+    };
+    let x = &d["domains"][k];
+    let mut dom = serde_json::json!({"name": x["name"], "version": x["version"]});
+    for f in ["salt", "chainId", "verifyingContract"] {
+        if let Some(v) = x.get(f) {
+            dom[f] = v.clone();
+        }
+    }
+    (path, dom, x["type"].as_str().unwrap().to_string())
+}
+
+/// Every record row of the vectors through `pqvault`: its typed digest in its vault's domain, its committed signature
+/// verified on its path; the generic path refuses every one of them (`AppDomainRefused`); the pinned constants.
+#[test]
+fn pqvault_records_reproduce_the_vectors() {
+    let d = pqv();
+    assert_eq!(pqvault::app_id(), a32(&d["purpose"]["appId"]));
+    assert_eq!(pqvault::purpose(), a32(&d["purpose"]["purpose"]));
+    assert_eq!(pqvault::RECORDS.len(), 7);
+    for (n, s) in pqvault::RECORDS {
+        assert_eq!(d["typehashes"][n]["type"], *s, "{n}");
+        assert_eq!(
+            scaas_ua::keccak256(s.as_bytes()),
+            a32(&d["typehashes"][n]["hash"]),
+            "{n}"
+        );
+    }
+    let signers: HashMap<String, (u16, Vec<u8>)> = d["signers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| {
+            (
+                s["ua"].as_str().unwrap().to_string(),
+                (s["kind"].as_u64().unwrap() as u16, unhex(&s["publicKey"])),
+            )
+        })
+        .collect();
+    let by_name = |n: &str| {
+        d["signers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["name"] == n)
+            .unwrap()["ua"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let st = St {
+        recs: signers
+            .iter()
+            .map(|(u, r)| (a32(&Value::String(u.clone())), r.clone()))
+            .collect(),
+        refused: None,
+    };
+    let mut n = 0;
+    for v in d["vaults"].as_array().unwrap() {
+        let (path, dom, denc) = pqv_mode(&d, v["mode"].as_u64().unwrap());
+        for r in v["records"].as_array().unwrap() {
+            let s = r["struct"].as_str().unwrap();
+            let enc = d["typehashes"][s]["type"].as_str().unwrap();
+            let td = pqv_typed(enc, s, &r["record"], &denc, &dom);
+            assert_eq!(
+                pqvault::digest(&path, &td).unwrap(),
+                a32(&r["typed"]),
+                "{}",
+                r["name"]
+            );
+            // the generic path: refused by the domain's name (positive twin: the dedicated digest above)
+            assert_eq!(
+                app_record_digest(&path, &td).err(),
+                Some(Error::AppDomainRefused),
+                "{}",
+                r["name"]
+            );
+            let ua = a32(&Value::String(by_name(r["signer"].as_str().unwrap())));
+            let sig = UASig {
+                key_data: unhex(&r["uaSig"]["keyData"]),
+                signature: unhex(&r["uaSig"]["signature"]),
+                members: vec![],
+            };
+            let ok = |sig: &UASig| {
+                let members = |id: [u8; 32]| st.recs.get(&id).cloned();
+                pqvault::verify(
+                    &ua,
+                    &path,
+                    &td,
+                    sig,
+                    &AppRecordState {
+                        members: &members,
+                        current: &|_| None,
+                        accepted: &|_, _| true,
+                        domain: None,
+                    },
+                )
+            };
+            assert!(ok(&sig), "{}", r["name"]);
+            let mut bad = sig.clone();
+            bad.signature[5] ^= 1;
+            assert!(!ok(&bad), "{}: a changed signature", r["name"]);
+            n += 1;
+        }
+    }
+    assert_eq!(n, 23);
+}
+
+/// Each refusal one change at a time beside its control: the generic path in PqVault's domain or under its purpose; the
+/// dedicated path outside PqVault's domains, structs and paths, and with a key that has no portable record.
+#[test]
+fn pqvault_sign_refusals() {
+    let d = pqv();
+    let w = Wallet::from_mnemonic(d["pqvAccount"]["mnemonic"].as_str().unwrap(), "").unwrap();
+    let key = w.ua_key(0x0132, 0x7071_7600, 0).unwrap();
+    let (ua, kind, kd) = id_of(&key);
+    let item = d["vaults"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|v| v["records"].as_array().unwrap().iter())
+        .find(|r| r["struct"] == "PqVaultItem")
+        .unwrap()["record"]
+        .clone();
+    let enc = d["typehashes"]["PqVaultItem"]["type"].as_str().unwrap();
+    let (pa, dv, venc) = pqv_mode(&d, 0);
+    let (pb, db, benc) = pqv_mode(&d, 1);
+    let tv = pqv_typed(enc, "PqVaultItem", &item, &venc, &dv);
+    let tb = pqv_typed(enc, "PqVaultItem", &item, &benc, &db);
+    let members = |id: [u8; 32]| (id == ua).then(|| (kind, kd.clone()));
+    let state = AppRecordState {
+        members: &members,
+        current: &|_| None,
+        accepted: &|_, _| true,
+        domain: None,
+    };
+    // the controls: both paths sign and verify
+    let sv = pqvault::sign(&key, None, &pa, &tv).unwrap();
+    assert!(sv.key_data.is_empty() && sv.members.is_empty());
+    assert!(pqvault::verify(&ua, &pa, &tv, &sv, &state));
+    let sb = pqvault::sign(&key, None, &pb, &tb).unwrap();
+    assert!(pqvault::verify(&ua, &pb, &tb, &sb, &state));
+    // the generic path: PqVault's domain on either path
+    assert_eq!(
+        sign_app_record(&key, None, &pa, &tv).err(),
+        Some(Error::AppDomainRefused)
+    );
+    assert_eq!(
+        sign_app_record(&key, None, &pb, &tb).err(),
+        Some(Error::AppDomainRefused)
+    );
+    // the generic path under PqVault's app id or purpose with an app's own domain name (control: another app id)
+    let mine = portable(&pqvault::app_id(), "My App", None);
+    assert_eq!(
+        sign_app_record(&key, None, &pa, &mine).err(),
+        Some(Error::AppPurposeRefused)
+    );
+    assert_eq!(
+        sign_app_record(&key, None, &pb, &chain_bound("My App", true)).err(),
+        Some(Error::AppPurposeRefused)
+    );
+    assert!(is_scaas_purpose(&pqvault::purpose()));
+    assert!(sign_app_record(
+        &key,
+        None,
+        &AppPath::Portable { app_id: APP },
+        &portable(&APP, "My App", None)
+    )
+    .is_ok());
+    // the dedicated path: another domain name, version or salt, on each path
+    for (k, v, mode) in [
+        ("name", serde_json::json!("SCaaS PqChat"), 0),
+        ("name", serde_json::json!("My App"), 0),
+        ("version", serde_json::json!("2"), 0),
+        (
+            "salt",
+            serde_json::json!(format!("0x{}", "11".repeat(32))),
+            0,
+        ),
+        ("name", serde_json::json!("SCaaS PqChat"), 1),
+        ("name", serde_json::json!("My App"), 1),
+        ("version", serde_json::json!("2"), 1),
+    ] {
+        let (p, base, denc, s) = if mode == 0 {
+            (&pa, &dv, &venc, &sv)
+        } else {
+            (&pb, &db, &benc, &sb)
+        };
+        let mut dom = base.clone();
+        dom[k] = v;
+        let t = pqv_typed(enc, "PqVaultItem", &item, denc, &dom);
+        assert_eq!(
+            pqvault::sign(&key, None, p, &t).err(),
+            Some(Error::AppDomainRefused),
+            "{k} {mode}"
+        );
+        assert!(!pqvault::verify(&ua, p, &t, s, &state), "{k} {mode}");
+    }
+    let mut extra = db.clone();
+    extra["salt"] = dv["salt"].clone();
+    let t = pqv_typed(
+        enc,
+        "PqVaultItem",
+        &item,
+        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)",
+        &extra,
+    );
+    assert_eq!(
+        pqvault::sign(&key, None, &pb, &t).err(),
+        Some(Error::AppDomainRefused),
+        "DS_B with a salt"
+    );
+    // the dedicated path: a domain on the other path, the chain-bound path under the app id, another app
+    assert_eq!(
+        pqvault::sign(&key, None, &pb, &tv).err(),
+        Some(Error::AppDomainRefused)
+    );
+    assert_eq!(
+        pqvault::sign(&key, None, &pa, &tb).err(),
+        Some(Error::AppDomainRefused)
+    );
+    let under_id = AppPath::ChainBound {
+        purpose: pqvault::app_id(),
+    };
+    assert_eq!(
+        pqvault::sign(&key, None, &under_id, &tb).err(),
+        Some(Error::AppDomainRefused)
+    );
+    assert!(!pqvault::verify(&ua, &under_id, &tb, &sb, &state));
+    assert_eq!(
+        pqvault::sign(&key, None, &AppPath::Portable { app_id: APP }, &tv).err(),
+        Some(Error::AppDomainRefused)
+    );
+    // the dedicated path: a struct that is not PqVault's, a PqVault name with other fields, a nested one alone
+    let note = TypedData::from_json(
+        &serde_json::to_vec(&serde_json::json!({
+            "types": {"EIP712Domain": [{"name": "name", "type": "string"}, {"name": "version", "type": "string"},
+                {"name": "salt", "type": "bytes32"}], "Note": [{"name": "id", "type": "bytes32"}]},
+            "primaryType": "Note", "domain": dv, "message": {"id": format!("0x{}", "11".repeat(32))},
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        pqvault::sign(&key, None, &pa, &note).err(),
+        Some(Error::Argument)
+    );
+    let wide = enc.replace("uint64 nonce", "uint256 nonce");
+    let t = pqv_typed(&wide, "PqVaultItem", &item, &venc, &dv);
+    assert_eq!(
+        pqvault::sign(&key, None, &pa, &t).err(),
+        Some(Error::Argument),
+        "another field type"
+    );
+    let mk = pqv_typed(
+        d["typehashes"]["MemberKey"]["type"].as_str().unwrap(),
+        "MemberKey",
+        &serde_json::json!({"ua": format!("0x{}", "11".repeat(32)), "keyId": 1, "via": format!("0x{}", "00".repeat(32))}),
+        &venc,
+        &dv,
+    );
+    assert_eq!(
+        pqvault::sign(&key, None, &pa, &mk).err(),
+        Some(Error::Argument),
+        "a nested struct"
+    );
+    // a key with no portable record (a native EVM key) on the portable path
+    let nat = w.native_key(Network::Evm, 0, None).unwrap();
+    assert_eq!(
+        pqvault::sign(&nat, None, &pa, &tv).err(),
+        Some(Error::Argument)
+    );
+}
+
+/// Drift: `SCAAS_APP_IDS` is exactly `PqVaultTypes.sol`'s `APP_ID` (the generator's list), its hash `pqvault::app_id()`.
+#[test]
+fn scaas_app_ids_match_the_contracts() {
+    let t = src("pqvault/PqVaultTypes.sol");
+    assert!(t.contains("bytes32 internal constant APP_ID = keccak256(\"scaas.pqvault.v1\");"));
+    assert_eq!(
+        SCAAS_APP_IDS,
+        &[("PqVaultTypes.APP_ID", "scaas.pqvault.v1")]
+    );
+    assert_eq!(
+        scaas_ua::keccak256(SCAAS_APP_IDS[0].1.as_bytes()),
+        pqvault::app_id()
+    );
+}
+
+/// Owner 2026-11-22 (CLI-PQV-15 (1) (b)): PqVault's dedicated path signs as an `msig` the way the generic `msig` paths do,
+/// with their bounds: an `msig` of a derived key and a native EVM key (threshold 2) over a vault item, path A (`DS_V`, the
+/// native member over the record itself) and path B (`DS_B`, the members over `memberDigest` under `member`, the native one
+/// over `UAAuth` in the registry generation's domain), each verified by `pqvault::verify` beside its twin; the refusals
+/// before anything is signed: a record that is no PqVault record, a record on the other path, a set below the threshold,
+/// path B's native member without the registry's domain.
+#[test]
+fn pqvault_msig_signs_both_paths() {
+    let d = pqv();
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let k1 = w.ua_key(0x0108, 0, 0).unwrap();
+    let nat = w.native_key(Network::Evm, 0, None).unwrap();
+    let (id1, kind1, kd1) = id_of(&k1);
+    let nid = native_id(&w);
+    let mut om = vec![(kind1, id1, 1u16), (1, nid, 1)];
+    om.sort_by_key(|x| x.1);
+    let kd = scaas_ua::encode_msig(2, &om);
+    let ua = scaas_ua::derive_ua(MSIG, &kd, false).unwrap();
+    let at = |id: [u8; 32]| om.iter().position(|x| x.1 == id).unwrap() as u16;
+    let slots = by_index(vec![
+        (
+            at(id1),
+            Slot::Member {
+                index: at(id1),
+                key: &k1,
+            },
+        ),
+        (
+            at(nid),
+            Slot::Member {
+                index: at(nid),
+                key: &nat,
+            },
+        ),
+    ]);
+    let item = d["vaults"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|v| v["records"].as_array().unwrap().iter())
+        .find(|r| r["struct"] == "PqVaultItem")
+        .unwrap()["record"]
+        .clone();
+    let enc = d["typehashes"]["PqVaultItem"]["type"].as_str().unwrap();
+    let (pa, dv, venc) = pqv_mode(&d, 0);
+    let (pb, db, benc) = pqv_mode(&d, 1);
+    let tv = pqv_typed(enc, "PqVaultItem", &item, &venc, &dv);
+    let tb = pqv_typed(enc, "PqVaultItem", &item, &benc, &db);
+    let recs: HashMap<[u8; 32], (u16, Vec<u8>)> =
+        HashMap::from([(id1, (kind1, kd1)), (ua, (MSIG, kd.clone()))]);
+    let members = |id: [u8; 32]| recs.get(&id).cloned();
+    let check = |p: &AppPath, t: &TypedData, s: &UASig, dom: Option<&scaas_ua::Domain>| {
+        pqvault::verify(
+            &ua,
+            p,
+            t,
+            s,
+            &AppRecordState {
+                members: &members,
+                current: &|_| None,
+                accepted: &|_, _| true,
+                domain: dom,
+            },
+        )
+    };
+    let none = |_: [u8; 32]| None;
+    let d1 = dom(1);
+    let flip = |s: &UASig| {
+        let mut s = s.clone();
+        s.members[0].sig[3] ^= 1;
+        s
+    };
+    // path A
+    let sa = pqvault::sign_msig(&kd, &none_cur, &none, None, &pa, &tv, &slots).unwrap();
+    assert!(sa.key_data.is_empty() && sa.signature.is_empty() && sa.members.len() == 2);
+    assert!(check(&pa, &tv, &sa, None));
+    assert!(!check(&pa, &tv, &flip(&sa), None), "the twin");
+    // path B
+    let sb = pqvault::sign_msig(&kd, &none_cur, &none, Some(&d1), &pb, &tb, &slots).unwrap();
+    assert!(check(&pb, &tb, &sb, Some(&d1)));
+    assert!(
+        !check(&pb, &tb, &sb, Some(&dom(2))),
+        "the native member in another generation's domain"
+    );
+    assert!(!check(&pb, &tb, &flip(&sb), Some(&d1)), "the twin");
+    assert!(!check(&pa, &tv, &sb, None), "a path-B signature on path A");
+    // a disabled slot (CTR-UA-44: its `enabled` bit clear in the current structure) signs nothing, beside its twin (every
+    // slot enabled)
+    let enabled = |on: &[u16]| {
+        let mut e = [0u8; 32];
+        for i in on {
+            e[31 - usize::from(*i) / 8] |= 1 << (i % 8);
+        }
+        e
+    };
+    let (kd2, all, one_off) = (
+        kd.clone(),
+        enabled(&[at(id1), at(nid)]),
+        enabled(&[at(id1)]),
+    );
+    let cur_all = |id: [u8; 32]| (id == ua).then(|| (kd2.clone(), all));
+    let cur_off = |id: [u8; 32]| (id == ua).then(|| (kd2.clone(), one_off));
+    assert!(
+        pqvault::sign_msig(&kd, &cur_all, &none, None, &pa, &tv, &slots).is_ok(),
+        "every slot enabled"
+    );
+    assert_eq!(
+        pqvault::sign_msig(&kd, &cur_off, &none, None, &pa, &tv, &slots).err(),
+        Some(Error::Argument),
+        "the native slot disabled"
+    );
+    assert_eq!(
+        pqvault::sign_msig(&kd, &cur_off, &none, Some(&d1), &pb, &tb, &slots).err(),
+        Some(Error::Argument),
+        "the native slot disabled, path B"
+    );
+    // refusals before anything is signed
+    let other = portable(&APP, "My App", None);
+    assert_eq!(
+        pqvault::sign_msig(&kd, &none_cur, &none, None, &pa, &other, &slots).err(),
+        Some(Error::Argument)
+    );
+    assert_eq!(
+        pqvault::sign_msig(&kd, &none_cur, &none, None, &pa, &tb, &slots).err(),
+        Some(Error::AppDomainRefused)
+    );
+    let one = by_index(vec![(
+        at(id1),
+        Slot::Member {
+            index: at(id1),
+            key: &k1,
+        },
+    )]);
+    assert!(
+        pqvault::sign_msig(&kd, &none_cur, &none, None, &pa, &tv, &one).is_err(),
+        "below the threshold"
+    );
+    assert!(
+        pqvault::sign_msig(&kd, &none_cur, &none, None, &pb, &tb, &slots).is_err(),
+        "no domain for the native member"
+    );
+}
+
+fn none_cur(_: [u8; 32]) -> Option<(Vec<u8>, [u8; 32])> {
+    None
+}
+
+/// Owner 2026-11-22 (CLI-PQV-15 (2)): a generated vault passphrase is 6 BIP-39 English words, one space apart, drawn from
+/// the whole list (over 600 draws far more than 256 distinct words: 11 bits each, not a byte).
+#[test]
+fn generated_passphrase_six_bip39_words() {
+    let (_w, k) = keys();
+    let text =
+        |s: &scaas_ua::wallet::SecretBytes| s.with(|x| std::str::from_utf8(x).unwrap().to_string());
+    let a = text(&k.generated_passphrase().unwrap());
+    assert_eq!(a.split(' ').count(), 6, "{}", a.len());
+    assert!(a.split(' ').all(scaas_ua::wallet::bip39_word_in_list));
+    assert!(!a.contains("  ") && a.trim() == a);
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..600 {
+        let p = text(&k.generated_passphrase().unwrap());
+        assert_ne!(p, a);
+        seen.extend(p.split(' ').map(str::to_string));
+    }
+    assert!(seen.len() > 1500, "{} distinct words", seen.len());
+}

@@ -25,8 +25,9 @@ export class AppCoreError extends Error {
   }
 }
 
-/** A handle's usage, fixed when it is made (review r2 R2); its byte enters only `sealKey`'s AAD. */
-export const USAGE = Object.freeze({ Derive: 1, Data: 2, KeyWrap: 3 });
+/** A handle's usage, fixed when it is made (review r2 R2); its byte enters only `sealKey`'s AAD. `File` (4): a file key of
+ *  CLI-UAL-65 (src/arweave.js), wrapped into a message or a vault item like any other. */
+export const USAGE = Object.freeze({ Derive: 1, Data: 2, KeyWrap: 3, File: 4 });
 /** The key-wrap constant: `sealKey`'s AAD starts with it, and `seal` refuses an `aad` that does. */
 export const KEYWRAP = utf8ToBytes("scaas/ua/v1/keywrap");
 /** The label of an app's per-account storage root. */
@@ -67,7 +68,7 @@ export function openRandom(key, aad, wire) {
 }
 
 const keyWrapAad = (usage, aad) => {
-  if (![1, 2, 3].includes(usage)) throw new AppCoreError("Argument");
+  if (![1, 2, 3, 4].includes(usage)) throw new AppCoreError("Argument");
   return concatBytes(KEYWRAP, Uint8Array.of(usage), bytes(aad));
 };
 /** `seal_key`: `nonce ‖ AES-256-GCM-SIV(under, nonce, key, "scaas/ua/v1/keywrap" ‖ u8(usage of key) ‖ aad)`, 60 B. */

@@ -12,7 +12,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'config.freezed.dart';
 
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `RuntimeChoice`, `SdkConfig`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A chain as the app's release pins it (spec §4).
 class ChainProfile {
@@ -85,6 +85,12 @@ class ChainProfile {
   /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
   final List<String> disabledKinds;
 
+  /// Whether the chain's RPC is trusted on a read pinned by block hash (owner 2026-11-22, decisions ARCH-POS-20 (2); the
+  /// profile's `pinnedReads`, default true): false on Moonbeam and Moonbase, whose RPC answers a read pinned by a made-up
+  /// hash. With false, every pinned read (CLI-RPC-05: a decisive read, a read feeding a decryption) is refused by name,
+  /// `PinnedReadsUntrusted`; plain reads work. EVM profiles only (`Argument` at `Sdk::open` on another family)
+  final bool pinnedReads;
+
   const ChainProfile({
     required this.key,
     required this.family,
@@ -109,6 +115,7 @@ class ChainProfile {
     this.familyParams,
     this.l1Fee,
     required this.disabledKinds,
+    required this.pinnedReads,
   });
 
   @override
@@ -135,7 +142,8 @@ class ChainProfile {
       wrappers.hashCode ^
       familyParams.hashCode ^
       l1Fee.hashCode ^
-      disabledKinds.hashCode;
+      disabledKinds.hashCode ^
+      pinnedReads.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -164,7 +172,8 @@ class ChainProfile {
           wrappers == other.wrappers &&
           familyParams == other.familyParams &&
           l1Fee == other.l1Fee &&
-          disabledKinds == other.disabledKinds;
+          disabledKinds == other.disabledKinds &&
+          pinnedReads == other.pinnedReads;
 }
 
 /// One endpoint of a profile's RPC or gateway list (CLI-RPC-02): `{url, class, label, auth}`; `auth` belongs to this endpoint
@@ -596,6 +605,11 @@ class Limits {
   /// is never pruned (owner 2026-11-19, T13b ruling 2)
   final BigInt stateRetentionSecs;
 
+  /// the most a family's native transaction may cost its payer, per chain profile, as a decimal string in the chain's
+  /// smallest unit (spec §27.5 (e): fee + storage + forward; plan T41): never from an endpoint. A chain without its row
+  /// spends nothing natively (`FeeAboveCap`: fail closed). EVM's self-relay keeps `max_cost`
+  final List<NativeCap> maxNativeCost;
+
   const Limits({
     required this.maxFeePerGas,
     required this.maxGas,
@@ -606,6 +620,7 @@ class Limits {
     required this.maxValidSecs,
     required this.eventQueue,
     required this.stateRetentionSecs,
+    required this.maxNativeCost,
   });
 
   static Future<Limits> default_() =>
@@ -621,7 +636,8 @@ class Limits {
       maxConcurrentHeavy.hashCode ^
       maxValidSecs.hashCode ^
       eventQueue.hashCode ^
-      stateRetentionSecs.hashCode;
+      stateRetentionSecs.hashCode ^
+      maxNativeCost.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -636,7 +652,8 @@ class Limits {
           maxConcurrentHeavy == other.maxConcurrentHeavy &&
           maxValidSecs == other.maxValidSecs &&
           eventQueue == other.eventQueue &&
-          stateRetentionSecs == other.stateRetentionSecs;
+          stateRetentionSecs == other.stateRetentionSecs &&
+          maxNativeCost == other.maxNativeCost;
 }
 
 /// A DEX of the chain profile (NET-ALL-24): its address, its liquidity mark (a module of group 11 among its `modules()`,
@@ -691,6 +708,28 @@ class ListedToken {
           address == other.address &&
           symbol == other.symbol &&
           decimals == other.decimals;
+}
+
+/// One chain's native cost cap (`Limits::max_native_cost`).
+class NativeCap {
+  /// the profile's key
+  final String chain;
+
+  /// decimal, the chain's smallest unit (stroops on Soroban)
+  final String max;
+
+  const NativeCap({required this.chain, required this.max});
+
+  @override
+  int get hashCode => chain.hashCode ^ max.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NativeCap &&
+          runtimeType == other.runtimeType &&
+          chain == other.chain &&
+          max == other.max;
 }
 
 /// A reviewed position reader of a position manager (a liquidity order that receives a position names one).

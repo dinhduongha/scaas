@@ -215,6 +215,8 @@ internal static unsafe class Native
     [DllImport(L)] internal static extern int scaas_ua_export_pqz_leaf_raw(WalletHandle w, uint account, uint index, byte* o);
     [DllImport(L)] internal static extern int scaas_ua_wallet_pqz_key_version(WalletHandle w, uint account, uint index, ulong version, out PqzHandle k);
     [DllImport(L)] internal static extern int scaas_ua_export_pqz_leaf_raw_version(WalletHandle w, uint account, uint index, ulong version, byte* o);
+    [DllImport(L)] internal static extern int scaas_ua_wallet_seal_pq_key(WalletHandle w, uint account, uint index, ulong version, byte* pass, byte* o, ref nuint n);
+    [DllImport(L)] internal static extern int scaas_ua_pqz_open_leaf(byte* vault, byte* pass, byte* prf, uint account, uint index, ulong version, out PqzHandle k);
 }
 #pragma warning restore SYSLIB1054
 
@@ -560,6 +562,16 @@ public static unsafe class UaLib
         return OutStr(1024, (o, ref n) => Native.scaas_ua_pqz_set(o, ref n));
     }
 
+    /// <summary>P6h (3), CLI-SGN-55 (clientkeys <c>openPqKey</c>): the PQZ key of a leaf vault of <see cref="Wallet.SealPqKey"/>,
+    /// with no wallet: exactly one of the passphrase and prf32; every refusal of the vault is UAVaultOpen.</summary>
+    public static PqzKey PqzOpenLeaf(string vaultJson, uint account, uint index, ulong version = 0, byte[]? passphrase = null, byte[]? prf32 = null)
+    {
+        Load();
+        using var a = new Args();
+        Check(Native.scaas_ua_pqz_open_leaf(a.Str(vaultJson), a.Secret(passphrase), a.OptSized(prf32, 32, "prf32"), account, index, version, out var k));
+        return new PqzKey(k);
+    }
+
     /// <summary><c>checkProven</c> (no-oracle spec §4.14.8): an MPC quorum member's keyless check before a partial, with no
     /// handle; its JSON answer <c>{parts, sum}</c>, in one call into <see cref="PqzOutMax"/> bytes.</summary>
     public static string PqzCheck(string request)
@@ -757,6 +769,15 @@ public sealed unsafe class Wallet : IDisposable
     {
         UaLib.Check(Native.scaas_ua_wallet_pqz_key_version(H, account, index, version, out var k));
         return new PqzKey(k);
+    }
+
+    /// <summary>P6h (3), CLI-SGN-55 (clientkeys <c>sealPqKey</c>): the PQZ leaf of account / index / version sealed as a vault
+    /// v2 JSON of label <c>pqz:registry:&lt;account&gt;:&lt;index&gt;:&lt;version&gt;</c> (a new vault each call).</summary>
+    public string SealPqKey(uint account, uint index, ulong version, byte[] passphrase)
+    {
+        using var a = new Args();
+        var p = a.Secret(passphrase);
+        return UaLib.OutStr(1 << 14, (o, ref n) => Native.scaas_ua_wallet_seal_pq_key(H, account, index, version, p, o, ref n));
     }
 
     /// <summary>WARNING: a secret in the clear, the 32-byte PQZ leaf seed32 of key <paramref name="version"/> (a pinned array): wipe

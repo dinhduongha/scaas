@@ -1,14 +1,14 @@
-# gasR mutants at commit 6d12887b2 plus the uncommitted fixes (name | outcome | test); run in six parts, merged
+# gasR mutants (name | outcome | commit | test | first failure line)
 F1: unknown keys not refused | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 gas_table_unknown_key_refused
 F1: the top level not checked | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 gas_table_unknown_key_refused
 F1: verify rows not checked | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 gas_table_unknown_key_refused
 F1: a row's parts not checked | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 gas_table_unknown_key_refused
 F1: a generator key not allowed (control) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 gas_table_unknown_key_refused
-F2: resend ignores the row's own figure | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 resend_as_self_relay_takes_the_rows_own_figure
-F2: the row's figure replaces a higher quote | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 resend_as_self_relay_takes_the_rows_own_figure
+F2: resend ignores the row's own figure | killed | 842549ab0 | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 resend_as_self_relay_takes_the_rows_own_figure | panicked at src/op/tests.rs:2739:9:
+F2: the row's figure replaces a higher quote | killed | 842549ab0 | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 resend_as_self_relay_takes_the_rows_own_figure | panicked at src/op/tests.rs:2739:9:
 F2: the row's lane state misread | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 resend_as_self_relay_takes_the_rows_own_figure
-F3: the block limit not checked after signing | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 signed_gas_is_held_to_the_block_limit
-F3: the block limit off by one | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 signed_gas_is_held_to_the_block_limit
+F3: the block limit not checked after signing | killed | 842549ab0 | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 signed_gas_is_held_to_the_block_limit | panicked at src/op/tests.rs:2652:13:
+F3: the block limit off by one | killed | 842549ab0 | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 signed_gas_is_held_to_the_block_limit | panicked at src/op/tests.rs:2660:26:
 F4: a derived holder adds nothing | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 holder
 F4: an operator transfer's account read inverted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 holder
 F4: an unreadable account counted native | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 holder
@@ -20,4 +20,4 @@ F5: not-bytes not refused by name | killed | ../../scripts/capped node --test te
 F5: passkeyAssertion returns the raw authenticatorData | killed | ../../scripts/capped node --test test/webauthn.test.js
 F5 uakey: the cap reads .length of the raw inputs | killed | ../../scripts/capped node --test test/ua-wallet.test.js
 F5 uakey: not-bytes not refused by name | killed | ../../scripts/capped node --test test/ua-wallet.test.js
-21 mutants, 21 killed, 0 survived, 0 not loaded
+21 mutants, 21 killed, 0 survived, 0 not loaded, 0 other failure

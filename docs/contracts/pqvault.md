@@ -6,7 +6,9 @@ ciphertexts, the group's keys wrapped to each member, the signed group records a
 encrypt, decrypt, verify and merge. Every record is signed by its author and checked by the contract; a relayer only
 carries it.
 
-Status: **SPECIFIED, nothing built, UNAUDITED.** Design, parts and order: the spec
+Status: **BUILT on EVM, UNAUDITED** (`smartcontracts/evm/src/pqvault/` `PqVault.sol`, `IPqVault.sol`, `PqVaultTypes.sol`;
+tests `smartcontracts/evm/test/pqvault/`; the deploy `script/DeployBase.sol`; the node's rows `scaas-node/src/typed.rs`).
+Design, parts and order: the spec
 [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md) and its plan
 [`2026-11-17-pqvault.md`](../superpowers/plans/2026-11-17-pqvault.md). The registry's open portable app namespace
 ([CTR-UA-45](accounts.md#CTR-UA-45)) and the base shared with PqChat come before the EVM freeze (Part R); the contract may
@@ -28,7 +30,7 @@ Other families: **PLANNED**, each in its own `pqvault-<family>` round.
 
 ## 1. Overview
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`src/pqvault/PqVault.sol`, `test/pqvault/PqVault.t.sol`, `PqVaultInvariant.t.sol`).
 
 <a id="CTR-PQV-01"></a>**CTR-PQV-01** — **PqVault is PqChat's group rules with at least one member plus an item model taken
 from PqChat topics: every version of every item in contract state, an edit the next version number, the latest version
@@ -49,7 +51,8 @@ its [register entry](../decisions.md#ctr-pqv-01--pqvault-pqchats-group-rules-wit
 
 ## 2. The release on the factory
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`script/DeployBase.sol` `pqvault_implementation`, `test/pqvault/PqVaultBase.sol`, the layout
+`test/v2/layout/PqVault.json`, `PqVaultLayout.t.sol`).
 
 <a id="CTR-PQV-02"></a>**CTR-PQV-02** — **`PqVault` is a generic factory class of its own on `OpenFactory`'s generic path,
 not class 3; each instance reads its chain values from its own `ChainEnv`, is initialised once by the factory, keeps its
@@ -64,7 +67,8 @@ PqVault's class with version ≠ 0. Class 3 stays `PqChat`.
 
 ## 3. Records and typed signing
 
-Status: **SPECIFIED** (registry entry: BUILT, Part R `09000f2af`, [CTR-UA-46](accounts.md#CTR-UA-46); records: Part V).
+Status: **BUILT** (registry entry: Part R `09000f2af`, [CTR-UA-46](accounts.md#CTR-UA-46); records: `src/pqvault/PqVaultTypes.sol`,
+`test/pqvault/PqVaultTypes.t.sol`).
 
 <a id="CTR-PQV-03"></a>**CTR-PQV-03** — **Every record is a typed EIP-712 struct in its vault's domain, signed as a `UASig`
 over `uaMessage(kind, P_V, typed(record))` with `P_V = appPurpose(keccak256("scaas.pqvault.v1"))`, PqVault's purpose in the
@@ -92,7 +96,7 @@ vault id; a used nonce is `PqVaultNonceUsed(scope, nonce)`.
 
 ## 4. Storage
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`test/pqvault/PqVaultLayout.t.sol`, `PqVaultGas.t.sol`).
 
 <a id="CTR-PQV-05"></a>**CTR-PQV-05** — **Every accepted record is kept in full in contract state, in SSTORE2 blobs no larger
 than the chain's code-size limit (chained beyond it); vault, epoch and remove records keep their full `UASig`, items their
@@ -107,7 +111,7 @@ a slot with its bytes in calldata or a log.
 
 ## 5. Vaults, epochs and wraps
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`test/pqvault/PqVaultEpochs.t.sol`, `PqVaultBatch.t.sol`).
 
 <a id="CTR-PQV-06"></a>**CTR-PQV-06** — **A vault is epoch 0 with at least one member; a personal vault is a one-member
 vault whose random epoch key is wrapped once to its own UA KEM key, by the same path as a shared vault, and no
@@ -138,7 +142,7 @@ calls, owner may override).
 
 ## 6. Items and versions
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`test/pqvault/PqVaultItems.t.sol`).
 
 <a id="CTR-PQV-07"></a>**CTR-PQV-07** — **An item write names an epoch of the item's vault that is complete here and, at
 home, has no complete child; its author is a member of that epoch** (owner 2026-11-17, V4: every member of the current
@@ -170,7 +174,7 @@ most those around the 16,384-B bucket; `PqVaultShape`), so no write reads an unb
 
 ## 7. Recovery from state alone
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`test/pqvault/PqVaultRecovery.t.sol`).
 
 <a id="CTR-PQV-10"></a>**CTR-PQV-10** — **A client keeps no vault list and reads no event: `vaultsOf(ua)`, `vaultOf`,
 `epochsOf`, `latestEpoch`, `epochOf`, `wrapAt`, `itemsOf(vaultId)`, `itemOf`, `versionAt`, `latestRange(vaultId)` and
@@ -181,7 +185,7 @@ recovery from state alone). The views and bounds are the spec's
 
 ## 8. Relaying
 
-Status: **SPECIFIED** (the node's rows in Part V; [job-api.md](../node/job-api.md#pqchat-calls) gains a `pqvault` kind).
+Status: **BUILT** (the node's rows, PqVault plan V8: `scaas-node/src/typed.rs` `pqvault_op`, [job-api.md](../node/job-api.md#pqvault-calls)).
 
 <a id="CTR-PQV-11"></a>**CTR-PQV-11** — **Every write is relayable by anyone with a fee of 0 too; the seven signed writes
 carry the record and its `UASig`; whether a relayer pays for the unsigned `addVaultWraps` is the node's policy** (the rule
@@ -205,7 +209,7 @@ boundary is the spec's [§4.2](../superpowers/specs/2026-11-17-pqvault.md#42-r-b
 
 ## 10. The two modes
 
-Status: **SPECIFIED** (Part V).
+Status: **BUILT** (`test/pqvault/PqVaultModes.t.sol`).
 
 <a id="CTR-PQV-16"></a>**CTR-PQV-16** — **PqVault supports both paths an app has: a vault is portable (path A, the
 registry's open app namespace, replicas allowed) or chain-bound (path B, the registry's `requireAuthorized`, one instance,

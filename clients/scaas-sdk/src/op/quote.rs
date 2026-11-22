@@ -23,6 +23,7 @@ const MSIG: u16 = 0x0120;
 /// How an operation reaches the chain (spec §13.3).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum SubmitPath {
     /// a gateway when the profile has one and the entry is one a gateway takes (door A), else a self-relay by `payer` when
     /// given, else `SubmitPathNone`
@@ -35,6 +36,7 @@ pub enum SubmitPath {
 
 /// A quote the user confirms (spec §13.3); `submit` takes exactly it. Amounts are decimal strings of wei.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct SubmitQuote {
     /// `Gateway` or `SelfRelay`, never `Auto`
@@ -159,12 +161,13 @@ pub(crate) fn delegated(code: &[u8]) -> bool {
     code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00])
 }
 
-/// The native EVM payer's address (`Argument` for any other key).
+/// The native EVM payer's address: an `evm` key, or Hedera's `hedera_ecdsa` (its EVM side, the JSON-RPC Relay: T41.evm,
+/// controller call CLI-SDK-33 (49)); `Argument` for any other key (`hedera_ed25519` included: HAPI is T41.hedera's).
 pub(crate) fn payer_address(sdk: &Sdk, payer: &KeyRef) -> Result<Address, SdkError> {
     let KeyRef::Native { network, .. } = payer else {
         return Err(SdkError::Argument);
     };
-    if network != "evm" {
+    if network != "evm" && network != "hedera_ecdsa" {
         return Err(SdkError::Argument);
     }
     let super::Key::Native(_, k) = key(sdk, payer)? else {
@@ -274,6 +277,13 @@ pub(crate) async fn signer_kind(sdk: &Sdk, p: &Prepared) -> Result<u16, SdkError
         KeyRef::BlsMulti { .. } => scaas_ua::bls_multi::KIND,
         KeyRef::Native { .. } | KeyRef::Imported { .. } => super::gas::NATIVE_EVM,
         KeyRef::Msig { .. } => MSIG,
+        // an imported operation's signer, as its blob names it (spec §27.5 (c))
+        KeyRef::Signed { .. } => {
+            p.t.signed
+                .as_ref()
+                .map(|(_, k)| *k)
+                .ok_or(SdkError::Internal)?
+        }
         KeyRef::Key { .. } => match super::key_opened(sdk, &p.signer()).await? {
             super::Key::External(row, _) => row.kind,
             _ => return Err(SdkError::Internal),

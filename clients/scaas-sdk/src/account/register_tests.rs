@@ -2,7 +2,12 @@
 //! Plan T13 `pq_registration_split`: a PQ registration carrying its PQZ key's `pqzPop` (the `ua/portable.json` row
 //! `mldsa65/n2304-kmax4096`, a real one) on the fake chain whose estimate grows with the calldata, driven here as both entries
 //! drive it (`tests/account_ops.rs` `sponsored_pq_blob_split` drives it through a blob).
-#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::expect_used,
+    clippy::panic
+)]
 // the fake chain of the integration tests, as `op::tests` takes it too (a test-only copy per module)
 #[allow(clippy::duplicate_mod)]
 #[path = "../../tests/common/fake_chain.rs"]
@@ -88,6 +93,7 @@ async fn pq_registration_split() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -229,6 +235,13 @@ fn record_offsets_added_checked() {
     assert_eq!(record_holds(Landed::Kem(0), &kem), Some(true));
     let kem_near = [w(u64::MAX - 8), w(1)].concat();
     assert_eq!(record_holds(Landed::Kem(0), &kem_near), None);
+    // F24: a word index whose byte offset overflows is no word (the multiplication checked), beside its control
+    assert!(super::word(&ok, 1).is_some(), "control: word 1");
+    assert_eq!(
+        super::word(&ok, usize::MAX / 16),
+        None,
+        "an index whose offset overflows"
+    );
 }
 
 // ------------------------------------------------------------------ the registry writes' gas rows (owner 2026-11-20)
@@ -350,6 +363,7 @@ async fn reg_setup(name: &str, block: u64, rows: Vec<crate::GasBase>) -> Reg {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -838,6 +852,7 @@ async fn write_targets_follow_the_line() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -1020,4 +1035,50 @@ fn registry_quote_never_below_the_m20_receipts() {
         one.gas <= 100_000_000 && one.regular <= 1 << 24,
         "one transaction on a block of 200 M"
     );
+}
+
+/// KEM key rotation (owner 2026-11-22): the `setKemKey` arguments of version 1 pass the registry's check as `scaas-ua` runs
+/// it (`check_kem_record`, `UARegistry.setKemKey`'s order) and encode as the registry's row (`registry_call`); the key is the
+/// wallet's version-1 KEM key, not version 0's; the twin (one signature byte changed) is refused; version 0 and a kind that
+/// holds no KEM key are `Argument`.
+#[test]
+fn set_kem_key_args_pass_the_registry_check() {
+    use scaas_ua::wallet::{Signer, Wallet};
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let k = w.ua_key(0x0132, 0, 0).unwrap();
+    let ua = k.ua().unwrap();
+    let scaas_ua::wallet::KeyRef::Ua { kind, key_data } = k.key_ref() else {
+        panic!()
+    };
+    let a = set_kem_key_args(&k, 1).unwrap();
+    let kem_pk = [
+        vec![1u8],
+        unhex(a["kem"]["mlkemEk"].as_str().unwrap()).unwrap(),
+        unhex(a["kem"]["x25519"].as_str().unwrap()).unwrap(),
+    ]
+    .concat();
+    assert_eq!(kem_pk, k.kem_key(1).unwrap().kem_pk());
+    assert_ne!(kem_pk, k.kem_key(0).unwrap().kem_pk());
+    assert_eq!(a["version"], 1);
+    assert_eq!(a["ua"], hex(&ua));
+    assert_eq!(a["sig"]["keyData"], "0x");
+    let sig = unhex(a["sig"]["signature"].as_str().unwrap()).unwrap();
+    let none = |_: [u8; 32]| None;
+    assert!(
+        scaas_ua::ua_portable::check_kem_record(kind, &key_data, &ua, 1, &kem_pk, &sig, &none)
+            .is_ok()
+    );
+    let mut twin = sig.clone();
+    twin[5] ^= 1;
+    assert!(scaas_ua::ua_portable::check_kem_record(
+        kind, &key_data, &ua, 1, &kem_pk, &twin, &none
+    )
+    .is_err());
+    assert!(registry_call("setKemKey", &a).is_ok());
+    assert!(matches!(set_kem_key_args(&k, 0), Err(SdkError::Argument)));
+    let secp = w.ua_key(0x0108, 0, 0).unwrap();
+    assert!(matches!(
+        set_kem_key_args(&secp, 1),
+        Err(SdkError::Argument)
+    ));
 }

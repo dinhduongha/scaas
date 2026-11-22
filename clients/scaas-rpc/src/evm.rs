@@ -152,6 +152,8 @@ pub struct EvmPool {
     pinned_uid: Option<B256>,
     uid: Arc<OnceLock<B256>>,
     decode: fn(&[u8]) -> String,
+    /// the profile's `pinnedReads` (default true): false refuses every pinned read ([`EvmPool::read_at_block`])
+    pinned_reads: bool,
 }
 
 fn is_local(url: &url::Url) -> bool {
@@ -196,7 +198,16 @@ impl EvmPool {
             pinned_uid: chain_uid,
             uid: Default::default(),
             decode: default_decode,
+            pinned_reads: true,
         })
+    }
+
+    /// With the profile's `pinnedReads` (chains-arweave, owner 2026-11-22): on a chain whose RPC answers a read pinned by a
+    /// made-up block hash, `false` refuses every pinned read by name (`PinnedReadsUntrusted`), a read feeding a decryption
+    /// included, before any request; plain reads still work.
+    pub fn with_pinned_reads(mut self, on: bool) -> Self {
+        self.pinned_reads = on;
+        self
     }
 
     /// With the head and the failover total shared per `[[chains]]` table (feature `node-internal`: the node's pools of one chain).
@@ -889,6 +900,14 @@ pub struct ReceiptAt {
     pub logs: Vec<LogAt>,
 }
 
+/// A log read with its finality ([`EvmPool::logs_range_labelled`]).
+#[derive(Debug, Clone)]
+pub struct LogsAt {
+    pub logs: Agreed<Vec<LogAt>, B256>,
+    /// `to` at or below the answering endpoint's `finalized` block
+    pub is_final: bool,
+}
+
 /// A transaction by hash as compared.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TxAt {
@@ -921,6 +940,9 @@ impl EvmPool {
         F: Fn(ReadAt<B256>) -> Fut,
         Fut: Future<Output = Result<T, ReadError>>,
     {
+        if !self.pinned_reads {
+            return Err(RpcError::PinnedReadsUntrusted);
+        }
         if self.pool.policy() == crate::Policy::StrictMajority {
             return self.pool.agree(self, choice, purpose, f).await;
         }
@@ -1146,6 +1168,28 @@ impl EvmPool {
             Ok(logs.iter().map(LogAt::from).collect())
         })
         .await
+    }
+
+    /// [`Self::logs_range`] with its finality (chains-arweave spec §4.3): final only when `to` is at or below the `finalized`
+    /// block of the endpoint that answered. A chain whose RPC returns no logs for a block not yet executed (Avalanche after
+    /// Helicon) answers nothing there, so logs above the final block are no evidence of absence; a chain without `finalized`
+    /// is never final here.
+    pub async fn logs_range_labelled(
+        &self,
+        from: u64,
+        to: u64,
+        filter: Filter,
+        purpose: Purpose,
+    ) -> Result<LogsAt, RpcError> {
+        let logs = self.logs_range(from, to, filter, purpose).await?;
+        let fin = self
+            .named(logs.members[0], BlockChoice::Finalized, None)
+            .await
+            .ok();
+        Ok(LogsAt {
+            is_final: fin.is_some_and(|f| to <= f),
+            logs,
+        })
     }
 
     /// The head, failed over.

@@ -8,6 +8,8 @@ macro_rules! own_codes {
         /// An SDK error. `Display` is the code; no variant carries an input, a URL, a body, a key or a ciphertext.
         #[derive(Debug)]
         #[non_exhaustive]
+        // a binding sees each variant by name, its message the code (`Ua` / `Rpc`: the layer's own code)
+        #[cfg_attr(feature = "uniffi", derive(uniffi::Error), uniffi(flat_error))]
         pub enum SdkError {
             $($(#[$m])* $v,)*
             /// A `scaas-ua` wallet error, by its own code.
@@ -142,6 +144,41 @@ own_codes! {
     /// registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
     /// sent.
     GasAboveBlockShare,
+    /// An imported operation (spec §27.5 (c), owner 2026-11-22, Q-R3) of a kind the importer's family cannot show and check
+    /// before sending, a confidential one (Zether, PQZ), or a struct or entry the family's rows do not hold.
+    ImportKindRefused,
+    /// An imported pay or transfer whose `to` is none of the importer's ids.
+    ImportNotPayee,
+    /// An imported operation whose signed `relayer` is bound to another address than the importer's payer (Soroban binds none).
+    ImportRelayerBound,
+    /// An imported operation with a fee to anyone: a hand-off is fee 0 (spec §27.5 (b)).
+    ImportFeeRefused,
+    /// An imported operation valid for less than the node's 120 s: its `validUntil` on the chain's clock (EVM, a Soroban
+    /// pay), or its auth entry's expiry ledger (Soroban, a ledger at most each second).
+    ImportExpired,
+    /// An imported operation already spent at the final height: its lane nonce (EVM), its host nonce or `pay_ref` entry
+    /// (Soroban); it landed, or another operation took the nonce.
+    ImportConsumed,
+    /// An imported operation the simulation from the payer refused: the chain's judgement of the signature and the effect.
+    ImportedOpRefused,
+    /// An Arweave upload above the free tier, or refused there, with no payer: none configured, or the operator's node payer
+    /// off (NODE-SPN-05; CLI-SDK-21).
+    PayerUnavailable,
+    /// An Arweave upload the bundler refused for payment (HTTP 402): the user's own credits, or a payer's approval, are missing.
+    PaymentRequired,
+    /// An Arweave upload no bundler accepted, for a reason other than payment.
+    UploadRejected,
+    /// A kept Arweave upload still unsettled after its last re-post (C20): shown; the bytes stay kept.
+    UploadUnsettled,
+    /// A data item that is not one `scaas-ua` built: its verifying parser refused it, or it carries a target, an anchor or a
+    /// tag, or its object is no bucket's (CLI-UAL-64): `scaas-ua`'s code for an item it built.
+    ArweaveItem,
+    /// A file or object above the platform's cap or the store's largest object (CLI-UAL-65): `scaas-ua`'s code.
+    FileTooLarge,
+    /// A file object or plaintext whose SHA-256 is not the signed one (CLI-UAL-65): `scaas-ua`'s code.
+    FileHashMismatch,
+    /// a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
+    Cancelled,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).
@@ -157,6 +194,11 @@ pub const SHARED_CODES: &[&str] = &[
     "AppArenaFull",
     // plan T42 (CLI-SDK-33 (37) (a)): a family this build leaves out, `scaas-ua`'s refusal mapped one to one
     "FeatureMissing",
+    // T41.arweave (CLI-UAL-65): the file seal's refusals, raised by `scaas-ua`'s `open_file` and the SDK's reads alike
+    "FileTooLarge",
+    "FileHashMismatch",
+    // an Arweave data item its verifying parser refused (CLI-UAL-64): `scaas-ua` for an item it built, the SDK for a kept one
+    "ArweaveItem",
 ];
 
 impl std::fmt::Display for SdkError {
@@ -172,6 +214,9 @@ impl From<scaas_ua::wallet::Error> for SdkError {
         match e {
             // plan T42: a family this build leaves out is the SDK's own `FeatureMissing` (one list of names)
             scaas_ua::wallet::Error::FeatureMissing => SdkError::FeatureMissing,
+            scaas_ua::wallet::Error::FileTooLarge => SdkError::FileTooLarge,
+            scaas_ua::wallet::Error::FileHashMismatch => SdkError::FileHashMismatch,
+            scaas_ua::wallet::Error::ArweaveItem => SdkError::ArweaveItem,
             e => SdkError::Ua(e),
         }
     }

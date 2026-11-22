@@ -30,6 +30,13 @@ flutter_rust_bridge = "=2.13.0"
 tokio = { version = "1", features = ["rt", "time"] }
 # the SDK's records holding a JSON value (an opaque handle across the binding)
 serde_json = "1"
+# the UniFFI surface (plan T20b-T20h): the SDK's pin, for the test hook of src/hook.rs
+uniffi = { version = "=0.31.0", optional = true }
+
+# the SDK's UniFFI surface in this library (spec §16.1): `uniffi` the async API, `sync-api` the sync one (C++)
+[features]
+uniffi = ["dep:uniffi", "scaas-sdk/uniffi"]
+sync-api = ["uniffi", "scaas-sdk/sync-api"]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

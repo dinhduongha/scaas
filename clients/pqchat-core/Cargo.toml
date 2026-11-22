@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+[package]
+name = "pqchat-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../LICENSE"
+description = "PqChat's client core above scaas-sdk (CLI-PQC-01): sessions, epochs, checks, order, recovery, topics. No cryptography of its own. UNAUDITED."
+
+# docs/clients/pqchat-core.md (CLI-PQC-*), spec docs/superpowers/specs/2026-11-17-pqchat-core.md. CLI-PQC-01: the SDK with its
+# app-core surface and PqChat's record entries, and nothing else that touches a key, a node or Matrix (tests/deps.rs).
+[dependencies]
+# default-features = false: no file store or mlock of the SDK's own (the app's build chooses them); the wasm32 check builds it
+# `arweave` (plan T10b): `seal_for_arweave` for attachments; it adds no crate of the crate's own (tests/deps.rs)
+scaas-sdk = { path = "../scaas-sdk", default-features = false, features = ["app-core", "pqchat-records", "arweave"] }
+tokio = { version = "1", features = ["sync"] }
+serde = { version = "1", features = ["derive"] }
+# content values and the crate's own store items only, never written as signed bytes
+serde_json = "1"
+# the device id: a UUID v4 from 16 bytes of the OS generator (not a key), as the SDK makes its ids
+uuid = { version = "1", default-features = false }
+getrandom = "0.2"
+tracing = "0.1"
+# the transport trait's and the chain port's async methods as trait objects (in the SDK's graph already)
+async-trait = "0.1"
+# the Matrix event's transport encoding (RFC 4648 §4 with padding, CLI-PQC-05; the SDK's version)
+base64 = "0.22"
+
+[features]
+# test-only (plan T3, CLI-PQC-11): the SDK's vectors build (fixed randomness, key import); never in a release build nor a
+# binding (the SDK refuses it without debug_assertions); only the vectors test needs it
+vectors = ["scaas-sdk/vectors"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "net", "io-util"] }
+tracing-core = "0.1"
+# the tests' world: the SDK's fake chain (its tests/common/fake_chain.rs), the repository seed's keys and KEM keys, the
+# endpoint classes; never in the crate's normal graph (tests/deps.rs)
+scaas-ua = { path = "../ua-rs", default-features = false, features = ["wallet"] }
+scaas-rpc = { path = "../scaas-rpc", default-features = false }
+alloy = { version = "~1.6", default-features = false, features = ["std"] }
+zeroize = "=1.8.2"
+# the e2e's test-only Matrix client over Synapse's client-server API (plan T11; matrix-rust-sdk is not in the offline
+# cargo cache); the SDK's graph has it already
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+
+# `frb_expand`: set only by the bindings generator's expansion (plan T12, src/lib.rs `frb_hint!`)
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+[[test]]
+name = "vectors"
+required-features = ["vectors"]
+
+# the SDK's: the dependencies built at opt-level 3 (scrypt and ML-KEM crawl unoptimised)
+[profile.dev.package."*"]
+opt-level = 3

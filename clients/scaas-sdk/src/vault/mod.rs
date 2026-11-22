@@ -14,7 +14,11 @@ mod unlock;
 pub use roots::{DeriveFromKey, DeriveFromSignature};
 pub use unlock::{SessionSet, Unlock};
 
-pub(crate) use seeds::{change_entry, uuid4, OpenSeed};
+#[cfg(feature = "account")]
+pub(crate) use seeds::change_entry;
+#[cfg(any(feature = "account", feature = "evm"))]
+pub(crate) use seeds::uuid4;
+pub(crate) use seeds::OpenSeed;
 pub use seeds::{
     ConfirmRemove, ConfirmRemoveUnbacked, DeriveChild, Generate, ImportKey, ImportWords,
     ImportedKey, NewSeed, Remove, SeedBackup, SeedInfo, Vault,

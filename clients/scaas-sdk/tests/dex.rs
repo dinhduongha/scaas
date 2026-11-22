@@ -182,6 +182,7 @@ async fn setup(gateways: usize, dead: usize) -> T {
         ],
         wrappers: vec![WRAPPER.into()],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };

@@ -46,7 +46,8 @@ ls_files() { ls_all "$@" | grep -v -E '(^|/)runs/'; }
 # Rust: one rustfmt run per crate root at its edition. rustfmt follows out-of-line `mod`s, so a file of .rustfmt-ignore
 # it reaches is kept as it was (format) or not reported (check).
 RUST_CRATES="scaas-node scaas-pqz-verifier clients/ua-rs clients/ua-c clients/zether-prover clients/scaas-rpc
-  clients/scaas-ct clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust clients/scaas-sdk clients/scaas-cli pqz-core
+  clients/scaas-ct clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust clients/scaas-sdk clients/scaas-cli clients/pqvault-core clients/pqchat-core
+  pqz-core
   smartcontracts/evm/script/pqz/wallet
   smartcontracts/soroban smartcontracts/cosmos smartcontracts/solana smartcontracts/near"
 rust_ignored() { grep -v -E '^\s*(#|$)' .rustfmt-ignore | sed 's/^/:(glob)/' | xargs git ls-files --; }
@@ -90,10 +91,12 @@ if want yaml; then
 fi
 
 # Python: ruff (pyproject.toml) over clients/ua-py and pqz-core, and every other tracked Python file outside runs/ and docs/
-# (scripts/, the generators, smartcontracts/algorand, smartcontracts/evm/script, the clients' tools)
+# (scripts/, the generators, smartcontracts/algorand, smartcontracts/evm/script, the clients' tools); UniFFI's generated
+# Python (clients/scaas-sdk/bindings/python/generated/) is the generator's
 if want py; then
     ruff format $([ $check = 1 ] && echo --check) -q clients/ua-py pqz-core \
-        $(ls_files '*.py' | grep -v -E '^(clients/ua-py|pqz-core|docs)/') && say "py ok" || fail py
+        $(ls_files '*.py' | grep -v -E '^(clients/ua-py|pqz-core|docs)/|^clients/scaas-sdk/bindings/python/generated/') &&
+        say "py ok" || fail py
 fi
 
 # Go: gofmt has no settings; in check mode any listed file fails (legacy/ left out)

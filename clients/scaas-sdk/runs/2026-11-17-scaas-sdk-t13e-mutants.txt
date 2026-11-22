@@ -1,12 +1,12 @@
-# t13e mutants at commit 12efc6a55 (name | outcome | test)
+# t13e mutants (name | outcome | commit | test | first failure line)
 1: a past validUntil passes | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib valid_until_is_held_to_the_sdk_clock
 1: no window on the SDK's clock | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib valid_until_is_held_to_the_sdk_clock
 1: the window is the limits' only | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib valid_until_is_held_to_the_sdk_clock
 2: terminal rows never pruned | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib terminal_rows_pruned_after_retention
 2: a non-terminal row pruned too | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib terminal_rows_pruned_after_retention
-5: the native estimate without its value | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet native_send_estimate_carries_the_value
+5: the native estimate without its value | killed | 5eeed4adf | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet native_send_estimate_carries_the_value | panicked at tests/wallet.rs:556:14:
 5: simulate_value drops the value | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes simulate_value_carries_the_value
 6: the passphrase's bytes kept in a new secret | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test vault passphrase_not_retained_after_unlock
 7: a retry signs before the earlier op is Expired | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib retry_on_a_lane_waits_for_expired
 7: a retry is the earlier op even once Expired | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib retry_on_a_lane_waits_for_expired
-10 mutants, 10 killed, 0 survived, 0 not loaded
+10 mutants, 10 killed, 0 survived, 0 not loaded, 0 other failure

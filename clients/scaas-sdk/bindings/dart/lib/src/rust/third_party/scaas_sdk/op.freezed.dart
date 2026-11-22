@@ -427,7 +427,7 @@ extension KeyRefPatterns on KeyRef {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( KeyRef_Ua value)?  ua,TResult Function( KeyRef_Native value)?  native,TResult Function( KeyRef_Imported value)?  imported,TResult Function( KeyRef_Key value)?  key,TResult Function( KeyRef_Msig value)?  msig,TResult Function( KeyRef_BlsMulti value)?  blsMulti,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( KeyRef_Ua value)?  ua,TResult Function( KeyRef_Native value)?  native,TResult Function( KeyRef_Imported value)?  imported,TResult Function( KeyRef_Key value)?  key,TResult Function( KeyRef_Msig value)?  msig,TResult Function( KeyRef_BlsMulti value)?  blsMulti,TResult Function( KeyRef_Signed value)?  signed,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case KeyRef_Ua() when ua != null:
@@ -436,7 +436,8 @@ return native(_that);case KeyRef_Imported() when imported != null:
 return imported(_that);case KeyRef_Key() when key != null:
 return key(_that);case KeyRef_Msig() when msig != null:
 return msig(_that);case KeyRef_BlsMulti() when blsMulti != null:
-return blsMulti(_that);case _:
+return blsMulti(_that);case KeyRef_Signed() when signed != null:
+return signed(_that);case _:
   return orElse();
 
 }
@@ -454,7 +455,7 @@ return blsMulti(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( KeyRef_Ua value)  ua,required TResult Function( KeyRef_Native value)  native,required TResult Function( KeyRef_Imported value)  imported,required TResult Function( KeyRef_Key value)  key,required TResult Function( KeyRef_Msig value)  msig,required TResult Function( KeyRef_BlsMulti value)  blsMulti,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( KeyRef_Ua value)  ua,required TResult Function( KeyRef_Native value)  native,required TResult Function( KeyRef_Imported value)  imported,required TResult Function( KeyRef_Key value)  key,required TResult Function( KeyRef_Msig value)  msig,required TResult Function( KeyRef_BlsMulti value)  blsMulti,required TResult Function( KeyRef_Signed value)  signed,}){
 final _that = this;
 switch (_that) {
 case KeyRef_Ua():
@@ -463,7 +464,8 @@ return native(_that);case KeyRef_Imported():
 return imported(_that);case KeyRef_Key():
 return key(_that);case KeyRef_Msig():
 return msig(_that);case KeyRef_BlsMulti():
-return blsMulti(_that);}
+return blsMulti(_that);case KeyRef_Signed():
+return signed(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -477,7 +479,7 @@ return blsMulti(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( KeyRef_Ua value)?  ua,TResult? Function( KeyRef_Native value)?  native,TResult? Function( KeyRef_Imported value)?  imported,TResult? Function( KeyRef_Key value)?  key,TResult? Function( KeyRef_Msig value)?  msig,TResult? Function( KeyRef_BlsMulti value)?  blsMulti,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( KeyRef_Ua value)?  ua,TResult? Function( KeyRef_Native value)?  native,TResult? Function( KeyRef_Imported value)?  imported,TResult? Function( KeyRef_Key value)?  key,TResult? Function( KeyRef_Msig value)?  msig,TResult? Function( KeyRef_BlsMulti value)?  blsMulti,TResult? Function( KeyRef_Signed value)?  signed,}){
 final _that = this;
 switch (_that) {
 case KeyRef_Ua() when ua != null:
@@ -486,7 +488,8 @@ return native(_that);case KeyRef_Imported() when imported != null:
 return imported(_that);case KeyRef_Key() when key != null:
 return key(_that);case KeyRef_Msig() when msig != null:
 return msig(_that);case KeyRef_BlsMulti() when blsMulti != null:
-return blsMulti(_that);case _:
+return blsMulti(_that);case KeyRef_Signed() when signed != null:
+return signed(_that);case _:
   return null;
 
 }
@@ -503,7 +506,7 @@ return blsMulti(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String seed,  int kind,  int account,  int index)?  ua,TResult Function( String seed,  String network,  int index)?  native,TResult Function( String seed,  String network,  int index)?  imported,TResult Function( String seed,  String id)?  key,TResult Function( String ua,  List<MsigSlot> slots)?  msig,TResult Function( String seed,  int account,  int index,  String keyData)?  blsMulti,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String seed,  int kind,  int account,  int index)?  ua,TResult Function( String seed,  String network,  int index)?  native,TResult Function( String seed,  String network,  int index)?  imported,TResult Function( String seed,  String id)?  key,TResult Function( String ua,  List<MsigSlot> slots)?  msig,TResult Function( String seed,  int account,  int index,  String keyData)?  blsMulti,TResult Function( String signer)?  signed,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case KeyRef_Ua() when ua != null:
 return ua(_that.seed,_that.kind,_that.account,_that.index);case KeyRef_Native() when native != null:
@@ -511,7 +514,8 @@ return native(_that.seed,_that.network,_that.index);case KeyRef_Imported() when 
 return imported(_that.seed,_that.network,_that.index);case KeyRef_Key() when key != null:
 return key(_that.seed,_that.id);case KeyRef_Msig() when msig != null:
 return msig(_that.ua,_that.slots);case KeyRef_BlsMulti() when blsMulti != null:
-return blsMulti(_that.seed,_that.account,_that.index,_that.keyData);case _:
+return blsMulti(_that.seed,_that.account,_that.index,_that.keyData);case KeyRef_Signed() when signed != null:
+return signed(_that.signer);case _:
   return orElse();
 
 }
@@ -529,7 +533,7 @@ return blsMulti(_that.seed,_that.account,_that.index,_that.keyData);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String seed,  int kind,  int account,  int index)  ua,required TResult Function( String seed,  String network,  int index)  native,required TResult Function( String seed,  String network,  int index)  imported,required TResult Function( String seed,  String id)  key,required TResult Function( String ua,  List<MsigSlot> slots)  msig,required TResult Function( String seed,  int account,  int index,  String keyData)  blsMulti,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String seed,  int kind,  int account,  int index)  ua,required TResult Function( String seed,  String network,  int index)  native,required TResult Function( String seed,  String network,  int index)  imported,required TResult Function( String seed,  String id)  key,required TResult Function( String ua,  List<MsigSlot> slots)  msig,required TResult Function( String seed,  int account,  int index,  String keyData)  blsMulti,required TResult Function( String signer)  signed,}) {final _that = this;
 switch (_that) {
 case KeyRef_Ua():
 return ua(_that.seed,_that.kind,_that.account,_that.index);case KeyRef_Native():
@@ -537,7 +541,8 @@ return native(_that.seed,_that.network,_that.index);case KeyRef_Imported():
 return imported(_that.seed,_that.network,_that.index);case KeyRef_Key():
 return key(_that.seed,_that.id);case KeyRef_Msig():
 return msig(_that.ua,_that.slots);case KeyRef_BlsMulti():
-return blsMulti(_that.seed,_that.account,_that.index,_that.keyData);}
+return blsMulti(_that.seed,_that.account,_that.index,_that.keyData);case KeyRef_Signed():
+return signed(_that.signer);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -551,7 +556,7 @@ return blsMulti(_that.seed,_that.account,_that.index,_that.keyData);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String seed,  int kind,  int account,  int index)?  ua,TResult? Function( String seed,  String network,  int index)?  native,TResult? Function( String seed,  String network,  int index)?  imported,TResult? Function( String seed,  String id)?  key,TResult? Function( String ua,  List<MsigSlot> slots)?  msig,TResult? Function( String seed,  int account,  int index,  String keyData)?  blsMulti,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String seed,  int kind,  int account,  int index)?  ua,TResult? Function( String seed,  String network,  int index)?  native,TResult? Function( String seed,  String network,  int index)?  imported,TResult? Function( String seed,  String id)?  key,TResult? Function( String ua,  List<MsigSlot> slots)?  msig,TResult? Function( String seed,  int account,  int index,  String keyData)?  blsMulti,TResult? Function( String signer)?  signed,}) {final _that = this;
 switch (_that) {
 case KeyRef_Ua() when ua != null:
 return ua(_that.seed,_that.kind,_that.account,_that.index);case KeyRef_Native() when native != null:
@@ -559,7 +564,8 @@ return native(_that.seed,_that.network,_that.index);case KeyRef_Imported() when 
 return imported(_that.seed,_that.network,_that.index);case KeyRef_Key() when key != null:
 return key(_that.seed,_that.id);case KeyRef_Msig() when msig != null:
 return msig(_that.ua,_that.slots);case KeyRef_BlsMulti() when blsMulti != null:
-return blsMulti(_that.seed,_that.account,_that.index,_that.keyData);case _:
+return blsMulti(_that.seed,_that.account,_that.index,_that.keyData);case KeyRef_Signed() when signed != null:
+return signed(_that.signer);case _:
   return null;
 
 }
@@ -987,6 +993,72 @@ seed: null == seed ? _self.seed : seed // ignore: cast_nullable_to_non_nullable
 as String,account: null == account ? _self.account : account // ignore: cast_nullable_to_non_nullable
 as int,index: null == index ? _self.index : index // ignore: cast_nullable_to_non_nullable
 as int,keyData: null == keyData ? _self.keyData : keyData // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class KeyRef_Signed extends KeyRef {
+  const KeyRef_Signed({required this.signer}): super._();
+  
+
+ final  String signer;
+
+/// Create a copy of KeyRef
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$KeyRef_SignedCopyWith<KeyRef_Signed> get copyWith => _$KeyRef_SignedCopyWithImpl<KeyRef_Signed>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is KeyRef_Signed&&(identical(other.signer, signer) || other.signer == signer));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,signer);
+
+@override
+String toString() {
+  return 'KeyRef.signed(signer: $signer)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $KeyRef_SignedCopyWith<$Res> implements $KeyRefCopyWith<$Res> {
+  factory $KeyRef_SignedCopyWith(KeyRef_Signed value, $Res Function(KeyRef_Signed) _then) = _$KeyRef_SignedCopyWithImpl;
+@useResult
+$Res call({
+ String signer
+});
+
+
+
+
+}
+/// @nodoc
+class _$KeyRef_SignedCopyWithImpl<$Res>
+    implements $KeyRef_SignedCopyWith<$Res> {
+  _$KeyRef_SignedCopyWithImpl(this._self, this._then);
+
+  final KeyRef_Signed _self;
+  final $Res Function(KeyRef_Signed) _then;
+
+/// Create a copy of KeyRef
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? signer = null,}) {
+  return _then(KeyRef_Signed(
+signer: null == signer ? _self.signer : signer // ignore: cast_nullable_to_non_nullable
 as String,
   ));
 }

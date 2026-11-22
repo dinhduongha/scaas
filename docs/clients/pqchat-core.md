@@ -42,8 +42,8 @@ tokio runtime and one Matrix login ([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12)'s one 
 topics; attachments (owner 2026-11-21); no calls, no HCS, Waku or libp2p, no `msig` author** (owner 2026-11-10: the 2-person chat is the main case;
 controller call for the cut, owner may override; SPECIFIED). In: sessions, epochs and rekeys, wraps in chunks, `leave`, `remove`,
 the home rule and replicas, `msig` expansion of members, the sender chains, the envelope, `postMessage` and `storeMessage`, dedupe
-and order, recovery from state, pending until accepted, the content types `text`, `edit`, `redact`, `react`, `receipt` and
-`typing` (UA-7 §6.4.1), and public topics. Out, PLANNED in later tasks of the UA-7 plan: calls and their content types
+and order, recovery from state, pending until accepted, the content types `text`, `edit`, `redact`, `react`, `receipt`,
+`typing` and `file` (UA-7 §6.4.1), and public topics. Out, PLANNED in later tasks of the UA-7 plan: calls and their content types
 (`callMember`, `callOffer`, `callAnswer`, `callCandidates`, `callKey`), the HCS, Waku and libp2p adapters,
 device linking and the epoch-key export (UA-7 P6, §14 O5), and records authored by an `msig` (an `msig` admin's epoch or removal,
 an `msig` topic owner), whose co-signers need the full record on other devices (`MsigAuthorPlanned`). A content of a type out of
@@ -53,7 +53,7 @@ scope is shown as unsupported and never acted on (UA-7 P49).
 
 Status: **SPECIFIED** (the SDK surface it needs: the SDK spec's App cores section, SPECIFIED on branch `scaas-sdk`).
 
-**Attachments are in this round** (owner 2026-11-21, "put it in" after "images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave"; O9 (b)): the `file` content (UA-7 `file`, P28) is sent and read; the file is sealed under a fresh file key by an SDK call so no key byte leaves `ua-rs`, its ciphertext stored on Arweave (`url` = `ar://<id>`), `ctSha256` checked before it is opened, its size padded to buckets. SPECIFIED; the Arweave format, reader and upload path follow the research of TODO 8i, and the attachment task (plan T10b) waits for it.
+**Attachments are in this round** (owner 2026-11-21, "put it in" after "images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave"; O9 (b); owner 2026-11-22: two new calls and an app id for PqChat): the `file` content (UA-7 §6.4.1 with its 2026-11-21 Change, P28) is sent and read; the file is sealed under a fresh file key by the SDK's `seal_for_arweave` under PqChat's app id (`keccak256("scaas.pqchat.v1")`), framed to its power-of-two bucket inside the AEAD, its key entered into the content inside `ua-rs` by `pqchat_seal_file_message`, so no key byte reaches the crate; the signed item is returned for the app to post to Arweave (`url` = `ar://<id>`) and keep, the crate posts nothing; a reader opens the object by `pqchat_open_file`, which checks its length and `ctSha256` before any decryption and reads the key from the opened content inside `ua-rs`; a failed file is shown on the device only. BUILT (plan T10b, `src/file.rs`: `send_file`, `file_info`, `open_file`; tests `tests/stores.rs`; the form and the controller calls in CLI-PQC-02's Change of 2026-11-23 in [decisions](../decisions.md)), UNAUDITED; a `file` without an `ar://` url is not built or read in this round.
 
 <a id="CLI-PQC-03"></a>**CLI-PQC-03** — **Secrets stay below the SDK: `pqchat-core` holds key handles only, and only decrypted
 plaintext leaves** (coordinator condition 1, 2026-11-17; SPECIFIED). The epoch key `K` and the sender chains' positions are `ua-rs`
@@ -99,9 +99,11 @@ the binding rules a controller call after Fable's review, owner may override; SP
 sync loop of its own and links no second Matrix SDK. It sends each envelope as one `net.scaas.pqchat.v1` event `{v, hint, env}`
 (UA-7 P15; `hint` and `env` in RFC 4648 §4 base64 with padding, the `matrixEvent` row's form, and only that form read back).
 **Binding.** A room counts for a session only if this client created it for that session, or joined it through that session's
-acceptance; never a room the account had joined before; one room serves one session, the first accepted keeps it. A Matrix id counts
-for a UA only when that UA asserted it: its signed contact card (UA-7 §14 O7), or an envelope signed by that UA and received from
-that Matrix sender; invites and removals go only to ids bound so, and only as an epoch's members and `sealedInfo` say. The room id
+acceptance; a room the account had joined before only once its members check against the epoch (every Matrix id it holds, joined
+or invited, is the account's own or one the epoch's `sealedInfo` maps to a member of that epoch: a fresh device's state-only
+recovery, controller call 2026-11-22), else not used; one room serves one session, the first accepted keeps it. A Matrix id counts
+for a UA only when that UA asserted it: its signed contact card (UA-7 §14 O7; `add_card`, checked through the SDK's
+`verify_pqchat_card`), or an envelope signed by that UA and received from that Matrix sender; invites and removals go only to ids bound so, and only as an epoch's members and `sealedInfo` say. The room id
 goes only in `sealedInfo` (never on chain in the clear, D10); no PqChat right comes from a Matrix power level. **In a bound room the
 transport sends no Matrix read receipt, read marker, typing notice or presence update, and joins only on `pqchat-core`'s call**
 (UA-7 P15: never Matrix's plaintext ephemeral events, D10); the trait states it and the crate's conformance test holds every
@@ -148,7 +150,9 @@ as amended on 2026-11-13; SPECIFIED).
   reads (the spec's open point O11). A replica's record counts only when it equals the home's record and `sigHash` under the same id
   (P32).
 - **A failure** is no error, no receipt, no retry and no write; it is counted on the device only, per reason (`envelope`, `decode`,
-  `signature`, `member`, `counter`, `duplicate`, `replica`, `unlisted`, `wrap-hash`, `content`, `too-far`).
+  `signature`, `member`, `counter`, `duplicate`, `replica`, `unlisted`, `wrap-hash`, `content`, `too-far`, and `control` for a
+  control-plane record that breaks the epoch rule, the rights or the shapes, which only a forged answer shows; an own wrap that
+  passed its hash check and does not open counts as `envelope`; controller call 2026-11-22).
 - **No automatic reaction** to a result that depends on an opening or an epoch: an own wrap of the winning epoch that does not open
   is shown, never answered by a rekey, a leave or a message; a member's higher KEM version raises an event and the rekey is a write
   the user confirms; between the first sight of a complete child and its finality the client sends under neither epoch and holds the

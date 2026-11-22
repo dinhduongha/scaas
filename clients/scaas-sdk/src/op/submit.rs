@@ -93,8 +93,18 @@ pub(crate) fn unsigned(p: &Prepared) -> Result<Built, SdkError> {
 /// The signature of `p` under its check, and the entry built with it (calldata and job op from one parse). A stored key row
 /// (a passkey, a secure-element key) signs through the platform's authenticator (`external`).
 pub(crate) async fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
+    let (sig, extra) = signature(sdk, p).await?;
+    build(p, &sig, &extra)
+}
+
+/// The signature of `p` in the entry's form and the entry's unsigned arguments with any statement signed first (`ownerSig`);
+/// an imported operation's own, made elsewhere (spec §27.5 (c)).
+pub(crate) async fn signature(sdk: &Sdk, p: &Prepared) -> Result<(Value, Value), SdkError> {
+    if let Some((sig, _)) = &p.t.signed {
+        return Ok((sig.clone(), p.t.extra.clone()));
+    }
     if let super::KeyRef::Msig { ua, slots } = p.signer() {
-        return sign_msig(sdk, p, &ua, &slots).await;
+        return Ok((sign_msig(sdk, p, &ua, &slots).await?, p.t.extra.clone()));
     }
     if let super::KeyRef::BlsMulti { .. } = p.signer() {
         return Err(SdkError::Argument); // a group signs by its members' aggregate: `Op::submit_bls_multi`
@@ -113,7 +123,7 @@ pub(crate) async fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
         );
     }
     let s = sign_one(sdk, &k, &p.t.td, &p.t.expect).await?;
-    build(p, &sig_json(p, &s.key_data, &s.signature)?, &extra)
+    Ok((sig_json(p, &s.key_data, &s.signature)?, extra))
 }
 
 /// An `msig` signer (`KeyRef::Msig`): its `UASig{"", "", members}` by `account::msig` under the entry's check, for a `UA*` entry
@@ -124,7 +134,7 @@ async fn sign_msig(
     p: &Prepared,
     ua: &str,
     slots: &[super::MsigSlot],
-) -> Result<Built, SdkError> {
+) -> Result<Value, SdkError> {
     let plan = entry_rows()
         .into_iter()
         .find(|r| r.name == p.t.name && r.kinds.contains(&p.t.kind))
@@ -139,9 +149,7 @@ async fn sign_msig(
     sdk.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let s =
         crate::account::msig::sign_typed(sdk, &p.chain(), ua, slots, &p.t.td, &p.t.expect).await?;
-    let sig: Value =
-        serde_json::from_str(&scaas_ua::json::uasig_json(&s)).map_err(|_| SdkError::Internal)?;
-    build(p, &sig, &p.t.extra)
+    serde_json::from_str(&scaas_ua::json::uasig_json(&s)).map_err(|_| SdkError::Internal)
 }
 
 #[cfg(not(feature = "account"))]
@@ -150,7 +158,7 @@ async fn sign_msig(
     _: &Prepared,
     _: &str,
     _: &[super::MsigSlot],
-) -> Result<Built, SdkError> {
+) -> Result<Value, SdkError> {
     Err(SdkError::FeatureMissing)
 }
 
@@ -290,7 +298,7 @@ async fn check_quote(sdk: &Sdk, p: Option<&Prepared>, q: &SubmitQuote) -> Result
 }
 
 /// Takes `p` out of the SDK's table (one `submit` of a `Prepared`: a second, concurrent or later, is `PreparedUnknown`).
-fn take(sdk: &Sdk, p: &Arc<Prepared>) -> Result<(), SdkError> {
+pub(crate) fn take(sdk: &Sdk, p: &Arc<Prepared>) -> Result<(), SdkError> {
     let mut t = sdk.prepared.lock().unwrap_or_else(PoisonError::into_inner);
     match t.get(&p.id()) {
         Some(q) if Arc::ptr_eq(q, p) => {
@@ -351,7 +359,7 @@ pub(crate) enum Signing {
 }
 
 /// Puts `p` back after a failure before anything was signed or written.
-fn put_back(sdk: &Sdk, p: &Arc<Prepared>) {
+pub(crate) fn put_back(sdk: &Sdk, p: &Arc<Prepared>) {
     sdk.prepared
         .lock()
         .unwrap_or_else(PoisonError::into_inner)

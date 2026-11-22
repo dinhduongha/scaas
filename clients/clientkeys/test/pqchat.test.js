@@ -16,8 +16,8 @@ import { pqKeygen, verifyUA, uaMessage as pqUaMessage } from "../src/pq.js";
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode } from "../src/bytes.js";
 
 const dir = new URL("../../../smartcontracts/vectors/pqchat/", import.meta.url);
-const FILES = ["records.json", "keys.json", "messages.json", "topics.json"];
-const [R, KEYS, M, T] = FILES.map((f) => JSON.parse(readFileSync(new URL(f, dir))));
+const FILES = ["records.json", "keys.json", "messages.json", "topics.json", "cards.json"];
+const [R, KEYS, M, T, C] = FILES.map((f) => JSON.parse(readFileSync(new URL(f, dir))));
 const h = (x) => hex(x);
 const Z32 = hex(new Uint8Array(32));
 
@@ -44,6 +44,7 @@ const SPEC = {
   EntryRef: "EntryRef(bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash)",
   PqTopicEdit: "PqTopicEdit(bytes32 entryId,bytes32 author,uint64 nonce,uint32 version,string mediaType,bytes body)",
   PqTopicVote: "PqTopicVote(bytes32 entryId,bytes32 voter,int8 value,uint64 seq)",
+  PqChatCard: "PqChatCard(bytes32 ua,uint64 kemVersion,string matrixId)",
 };
 const STRUCT_OF = {
   session: "PqChatSession",
@@ -64,7 +65,7 @@ const kemKey = Object.fromEntries(
   KEYS.kemKeys.map((k) => [k.name, { ...k, ...pc.kemKey(k.mlkemSeed, k.x25519Secret) }]),
 );
 
-test("the generator reproduces the four files byte for byte", () => {
+test("the generator reproduces the five files byte for byte", () => {
   const out = mkdtempSync(join(tmpdir(), "pqchat-vectors-"));
   try {
     const r = spawnSync(
@@ -640,3 +641,106 @@ test("unpad refusal rows: each refused, its positive twin opens", () => {
     assert.equal(h(pc.unpad(r.twin)), r.content, `${r.name}: the twin`);
   }
 });
+
+test("contact cards (UA-7 §14 O7): digests, signatures; refused cards fail their own check; Matrix id refusals with twins", () => {
+  assert.deepEqual(Object.keys(C.typehashes), pc.CARD_STRUCTS);
+  assert.equal(C.typehashes.PqChatCard.hash, h(keccak_256(utf8ToBytes(SPEC.PqChatCard))));
+  assert.equal(C.domain.separator, R.domain.separator);
+  assert.deepEqual(C.purpose, R.purpose);
+  assert.deepEqual(
+    C.cards.map((c) => [c.name, c.record.matrixId === ""]),
+    [
+      ["alice", false],
+      ["bob, no Matrix id", true],
+    ],
+  );
+  for (const c of C.cards) {
+    assert.deepEqual(pc.contactCard(c.record), c.record, c.name);
+    assert.equal(c.record.ua, signer[c.signer].ua, c.name);
+    assert.equal(h(pc.structHash("PqChatCard", c.record)), c.hashStruct, c.name);
+    assert.equal(h(pc.typed("PqChatCard", c.record)), c.typed, c.name);
+    assert.deepEqual(c.uaMessage, { kind: 0x0131, digest: h(pc.signedDigest(0x0131, "PqChatCard", c.record)) }, c.name);
+    assert.deepEqual([c.uaSig.keyData, c.uaSig.members], ["0x", []], c.name);
+    assert.ok(pc.verifyCard(c.record.ua, c.record, c.uaSig, signer[c.signer].publicKey), c.name);
+  }
+  // each refused card: its own check fails, and its twin (one change back) passes
+  assert.deepEqual(
+    C.refused.map((r) => [r.name, r.error]),
+    [
+      ["signed by another UA's key", "signature"],
+      ["another UA's card", "ua"],
+      ["Matrix id changed after signing", "signature"],
+    ],
+  );
+  for (const r of C.refused) {
+    const key = signer[r.key].publicKey;
+    assert.equal(pc.verifyCard(r.ua, r.record, r.uaSig, key), false, r.name);
+    assert.ok(pc.verifyCard(r.twin.ua, r.twin.record, r.twin.uaSig, signer[r.twin.key].publicKey), `${r.name}: twin`);
+  }
+  for (const id of C.matrixIdAccepted) assert.equal(pc.checkMatrixId(id), id, id);
+  assert.ok(C.matrixIdAccepted.some((id) => utf8ToBytes(id).length === 255));
+  for (const r of C.matrixIdRefused) {
+    assert.throws(
+      () => pc.checkMatrixId(r.id),
+      (e) => e.code === "matrix id",
+      r.name,
+    );
+    assert.equal(pc.checkMatrixId(r.twin), r.twin, `${r.name}: the twin`);
+  }
+});
+
+// The `file` content (UA-7 §6.4.1 with its 2026-11-21 Change; pqchat-core T10b, owner 2026-11-22): PqChat's app id, the
+// sealed object of the row (ar://, the padding inside the AEAD), the content the sealer is given and the one it seals (the
+// key entered by the sealer), the message carrying it, and the reader's checks before decryption.
+test("file content: the app id, the row reseals and opens after the length and ctSha256 checks; refusals beside their twins", async () => {
+  const ar = await import("../src/arweave.js");
+  const F = M.fileMessage;
+  assert.equal(R.appId.tag, "scaas.pqchat.v1");
+  assert.equal(h(pc.APP_ID), h(keccak_256(utf8ToBytes(R.appId.tag))));
+  assert.equal(R.appId.hash, h(pc.APP_ID));
+  const file = fromHex(F.file);
+  const s = ar.sealForArweave(fromHex(F.appRoot), fromHex(F.fileKey), file, F.signatureType);
+  assert.equal(s.url, F.url);
+  assert.equal(h(s.ctSha256), F.ctSha256);
+  assert.equal(h(s.sha256), F.sha256);
+  assert.equal(s.object.length, F.objectLength);
+  assert.equal(s.object.length, ar.bucket(F.size) + 16, "padded to its bucket inside the AEAD");
+  // the sealer is given every field but the key; it enters the key, and the result is the row's content
+  assert.equal(JSON.parse(F.sealed).key, undefined);
+  const content = pc.sealFileContent(JSON.parse(F.sealed), fromHex(F.fileKey));
+  assert.equal(content, F.content);
+  assert.equal(JSON.parse(content).key, F.fileKey);
+  // the message carrying it
+  const K = fromHex(F.K);
+  const { ciphertext, ...header } = F.record;
+  assert.equal(h(pc.encryptMessage(K, header, pc.pad(utf8ToBytes(content)))), ciphertext);
+  assert.equal(h(pc.messageId(F.record)), F.id);
+  assert.equal(new TextDecoder().decode(pc.unpad(pc.decryptMessage(K, F.record))), F.content);
+  const env = pc.envelope(K, F.record, F.uaSig, fromHex(F.envNonce));
+  assert.equal(h(env.env), F.env);
+  // the reader: the content checked, then the object's length and ctSha256 before decryption, then the frame and sha256
+  assert.equal(h(pc.openFileContent(F.content, s.object)), F.file);
+  for (const r of M.fileOpenRefused) {
+    let o = s.object;
+    if (r.change === "drop-last") o = o.slice(0, -1);
+    if (r.change === "append-zero") o = concatBytes(o, Uint8Array.of(0));
+    if (r.change === "flip-1000") (o = o.slice()), (o[1000] ^= 1);
+    const c = canonical(r.content ?? JSON.parse(F.content));
+    if (r.code) assert.throws(() => pc.openFileContent(c, o), { code: r.code }, r.name);
+    else assert.equal(h(pc.openFileContent(c, o)), F.file, r.name);
+  }
+  // a refused object is refused before any decryption: a wrong key in the content changes nothing of it
+  const wrongKey = { ...JSON.parse(F.content), key: Z32 };
+  assert.throws(() => pc.openFileContent(canonical(wrongKey), s.object.slice(0, -1)), { code: "FileLength" });
+  assert.throws(() => pc.openFileContent(canonical(wrongKey), s.object), { code: "Aead" });
+  for (const r of M.fileContentRefused) {
+    assert.throws(() => pc.checkFileContent(r.content), { code: "file" }, r.name);
+    assert.throws(() => pc.openFileContent(canonical(r.content), s.object), { code: "file" }, r.name);
+    assert.doesNotThrow(() => pc.checkFileContent(r.twin), r.name);
+  }
+  for (const r of M.fileSealRefused) {
+    assert.throws(() => pc.sealFileContent(r.content, fromHex(F.fileKey)), { code: "file" }, r.name);
+    assert.doesNotThrow(() => pc.sealFileContent(r.twin, fromHex(F.fileKey)), r.name);
+  }
+});
+const canonical = (v) => pc.canonicalJson(v);

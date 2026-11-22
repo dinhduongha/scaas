@@ -9,7 +9,7 @@
 //! the preimage built in this process from the transaction the user reviewed. UNAUDITED.
 use super::native::{derive, NativeKeyRef};
 use super::Wallet;
-use crate::op::{hex, unhex};
+use crate::text::{hex, unhex};
 use crate::SdkError;
 use scaas_ua::wallet::AllowRawDigest;
 

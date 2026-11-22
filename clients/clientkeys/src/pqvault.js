@@ -9,7 +9,7 @@ import { x25519 } from "@noble/curves/ed25519.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { argon2id } from "@noble/hashes/argon2.js";
 import { gcm, gcmsiv } from "@noble/ciphers/aes.js";
-import { keccak_256, sha256, concatBytes, utf8ToBytes, fromHex, abiEncode } from "./bytes.js";
+import { keccak_256, sha256, concatBytes, utf8ToBytes, fromHex, abiEncode, hex } from "./bytes.js";
 import { encodeType, hashStruct } from "./evm.js";
 import { uaMessage, appPurpose } from "./ua.js";
 import { encaps, checkKemPk, combine, pad, unpad, canonicalJson, sigHash, UASIG_ABI } from "./pqchat.js";
@@ -124,6 +124,32 @@ export const structHash = (name, s) => hashStruct(TYPES, name, s);
 /** `typed(s) = keccak256(0x1901 ‖ DS ‖ hashStruct(s))`. */
 export const typed = (name, s, ds) =>
   keccak_256(concatBytes(Uint8Array.of(0x19, 0x01), bytes(ds), structHash(name, s)));
+/** The EIP-712 JSON of the record `name` holding `s` (its fields by name) in a vault of `mode` (`at` = {chainId,
+ *  verifyingContract} for mode 1): what `ua-rs`'s PqVault path (`wallet::pqvault`) and the SDK's `sign_pqvault_record` take
+ *  (owner 2026-11-22). A name outside `SIGNED` or another mode is `PqVaultShape`. */
+export function typedData(name, s, mode, at) {
+  if (!SIGNED.includes(name)) throw new PqVaultError("PqVaultShape");
+  const str = (n) => ({ name: n, type: "string" });
+  const [dt, domain] =
+    mode === 0
+      ? [[str("name"), str("version"), { name: "salt", type: "bytes32" }], { salt: hex(PQVAULT_APP_ID) }]
+      : mode === 1
+        ? [
+            [
+              str("name"),
+              str("version"),
+              { name: "chainId", type: "uint256" },
+              { name: "verifyingContract", type: "address" },
+            ],
+            { chainId: at.chainId, verifyingContract: at.verifyingContract },
+          ]
+        : (() => {
+            throw new PqVaultError("PqVaultShape");
+          })();
+  const types = { EIP712Domain: dt };
+  for (const k of Object.keys(TYPES)) if (TYPE_STRINGS[name].includes(`${k}(`)) types[k] = TYPES[k];
+  return { types, primaryType: name, domain: { name: DOMAIN_NAME, version: DOMAIN_VERSION, ...domain }, message: s };
+}
 /** What the signer signs: `uaMessage(kind, P_V, typed(s))`. */
 export const signedDigest = (kind, name, s, ds) => uaMessage(kind, P_V, typed(name, s, ds));
 

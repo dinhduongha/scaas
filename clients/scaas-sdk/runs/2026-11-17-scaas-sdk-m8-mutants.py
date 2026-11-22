@@ -40,9 +40,9 @@ MUTANTS = [
     ("M17: a quote's regular part 0 read as 0",
      [(Q, "        0 => q.gas_limit,\n", "        0 => 0,\n")], T + "op::tests::signed_quote_never_lowers_the_regular_bound"),
     ("M17: the caps not held when nothing grew",
-     [(Q, "    above_caps(&c.profile, regular, gas, block.limit)?;\n    if gas == q.gas_limit && regular == q.regular_gas {",
+     [(Q, "    above_caps(&c.profile, regular, gas, block.limit)?;\n",
        "    if gas == q.gas_limit && regular == q.regular_gas {\n        return Ok(q.clone());\n    }\n"
-       "    above_caps(&c.profile, regular, gas, block.limit)?;\n    if gas == q.gas_limit && regular == q.regular_gas {")],
+       "    above_caps(&c.profile, regular, gas, block.limit)?;\n")],
      T + "op::tests::signed_quote_never_lowers_the_regular_bound"),
     ("generator: an uncounted row's regular the best variant, not the worst",
      [(GEN, '        x = max(m[f"{k}_regular"] for k in keys)', '        x = min(m[f"{k}_regular"] for k in keys)')], PY),

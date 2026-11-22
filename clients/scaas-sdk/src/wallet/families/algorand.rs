@@ -27,7 +27,7 @@ enum Holder {
 fn holder(id: &str) -> Result<Holder, SdkError> {
     let lower = id.to_ascii_lowercase();
     if lower.starts_with("0x") && lower.len() == 66 {
-        let b = crate::op::unhex(&lower)?;
+        let b = crate::text::unhex(&lower)?;
         return b.try_into().map(Holder::Ua).map_err(|_| SdkError::Argument);
     }
     scaas_ua::algorand::address_to_key(id)
@@ -118,7 +118,7 @@ async fn pass(
                     .and_then(|s| B64.decode(s).ok())
                     .filter(|w| w.len() == 32)
                     .ok_or_else(|| malformed(i, "a box value that is not 32 bytes"))?;
-                out.push(alloy::primitives::U256::from_be_slice(&w).to_string());
+                out.push(be_dec(&w));
             }
         }
     }
@@ -186,4 +186,40 @@ pub(crate) async fn balances(c: &Chain, id: &str) -> Result<Balances, SdkError> 
             })
             .collect(),
     })
+}
+
+/// Big-endian bytes as a decimal string (a box's 32-byte word).
+fn be_dec(b: &[u8]) -> String {
+    let mut n = b.to_vec();
+    let mut digits = vec![];
+    while n.iter().any(|x| *x != 0) {
+        let mut rem = 0u32;
+        for x in n.iter_mut() {
+            let v = (rem << 8) | u32::from(*x);
+            *x = (v / 10) as u8;
+            rem = v % 10;
+        }
+        digits.push(b'0' + rem as u8);
+    }
+    if digits.is_empty() {
+        return "0".into();
+    }
+    digits.reverse();
+    String::from_utf8(digits).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod be_dec_tests {
+    #[test]
+    fn be_dec_words() {
+        assert_eq!(super::be_dec(&[0; 32]), "0");
+        let mut w = [0u8; 32];
+        w[31] = 1;
+        w[30] = 1;
+        assert_eq!(super::be_dec(&w), "257");
+        assert_eq!(
+            super::be_dec(&[0xff; 32]),
+            "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        );
+    }
 }

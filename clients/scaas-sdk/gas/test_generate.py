@@ -169,7 +169,7 @@ def main():
     assert r["regular"]["measured"] == max(v - 132 * n for n, v in pts.items()), r  # 400 - 264 = 136
     assert t[("account", "reg", False)]["regular"]["measured"] == 86, "the used lane's points"
     # M18: the largest measured count beside the line; none without counted points
-    assert r["per_item"]["measured_max"] == 64, r
+    assert r["per_item"].get("measured_max") == 64, r
     c2 = {k: v for k, v in c.items() if "_n" not in k}
     r = table(c2, kinds=("account",), entries=("reg",), per_item={"account:reg": "members"})[("account", "reg", True)]
     assert "regular" not in r and "regular" not in r["per_item"], "no points: none"

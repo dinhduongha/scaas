@@ -191,6 +191,7 @@ fn profile(rpc: &[&str], policy: scaas_rpc::Policy) -> ChainProfile {
             token(&VND.to_string(), "VND", 0),
         ],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }

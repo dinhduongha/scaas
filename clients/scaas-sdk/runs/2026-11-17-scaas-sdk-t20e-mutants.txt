@@ -1,0 +1,4 @@
+# t20e mutants (name | outcome | commit | test | first failure line)
+the PRF output names another secret | killed | eff2aa3e5 | KOTLINC="$(git rev-parse --git-common-dir)/../scratchpad/tools/kotlin-2.4.21/kotlinc/bin/kotlinc" bash run.sh | FAIL: unexpected exception: uniffi.scaas_sdk.SdkException$AuthenticatorRefused: AuthenticatorRefused
+the store's write drops the expected revision | killed | eff2aa3e5 | KOTLINC="$(git rev-parse --git-common-dir)/../scratchpad/tools/kotlin-2.4.21/kotlinc/bin/kotlinc" bash run.sh | FAIL: unexpected exception: uniffi.scaas_sdk.SdkException$StoreConflict: StoreConflict
+2 mutants, 2 killed, 0 survived, 0 not loaded, 0 other failure

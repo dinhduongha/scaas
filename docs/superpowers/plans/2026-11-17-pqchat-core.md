@@ -116,6 +116,15 @@ only `TODO.md`.
 
 T5 and T10 may run beside each other; T7 and T8 too. Every other task in order.
 
+**Round 2 order (owner 2026-11-22).** After T11's local run and T12's first bindings check (red by its finding):
+1. the round-2 mutants for the contact card and the room check (done: `0f78ce0aa`);
+2. T12: decrypted content reaches the bindings only as the SDK's `SecretBytes` handles, plus the glue fixes (the crate's
+   `Drop` enum renamed, the SDK `use` lines in the reference library's `api`);
+3. T10b: the two new calls (vectors first), PqChat's `app_id`, `open_file`'s `ctSha256` check on every open path, the
+   `file` content rows;
+4. merge `origin/ua-rs-sign` into `pqchat-core-impl` and run the reconciliation checks;
+5. only then the rest of T11 over Matrix and the T11 mutants that need the hostile-envelope and reorg fixtures.
+
 ## T0 — Gate runner and baseline
 
 **Files:** `clients/pqchat-core/runs/2026-11-17-pqchat-core-gates.sh`, the summary file.
@@ -336,6 +345,9 @@ script (`script/DeployBase.sol` with `DEPLOY_PQCHAT`) into a test `anvil --enabl
 - [ ] Code; green. Gates: `pqc-test`, `pqc-chain`.
 - Mutants: skip the factory listing of the `ref`'s instance; skip the home check; accept a `seq` jump.
 - [ ] Commit `pqchat-core T10: public topics`.
+- **For the next `PqChat` release, after the audit** (owner 2026-11-22, "Để sau audit"): a view returning a version's `nonce`
+  (`entryOf`, `versionAt` return none), so that a reader rebuilds the referenced `PqTopicEntry` / `PqTopicEdit` typed digest and
+  checks a pinned `contentHash`. Until then no contract change: a pinned `contentHash` stays shown as unchecked (`HashUnchecked`).
 
 ## T11 — Real-crypto end-to-end run, local
 
@@ -424,8 +436,10 @@ reference crate if the SDK plan keeps that library SDK-only.
       library and generate `pqchat-core`'s public API with the SDK's surface rules; no handle type and no byte accessor of one in the
       generated surface (a grep of the generated sources); `attach_matrix` and the storage interface absent from it; decrypted
       content only through the SDK's copy calls; the library's symbols and enabled features hold no vectors-build entry (K30).
-- [ ] Code; green. Gates: `bind`, `pqc-test`.
-- [ ] Commit `pqchat-core T12: bindings check`.
+- [x] Code; green. Gates: `bind`, `pqc-test`. (Round 2, owner 2026-11-22 "Handle SecretBytes": decrypted content and
+      `sealedInfo` plaintext only as the SDK's `SecretBytes` handles, held member by member by `runs/bind_surface.py`;
+      the decisions entry of 2026-11-23.)
+- [x] Commit `pqchat-core T12: bindings check`.
 
 ## T13 — The same end-to-end run on the SCaaS testnet
 

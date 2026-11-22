@@ -1822,3 +1822,57 @@ func TestNativeDeterministicRowsAndRefusals(t *testing.T) {
 		t.Error(code(err))
 	}
 }
+
+// P6h (3), CLI-SGN-55: pqz_leaf.json's leaves open to the wallet's key at their path; every refusal is UAVaultOpen beside its
+// control; SealPqKey's vault carries the path's label and opens.
+func TestPqzLeafRows(t *testing.T) {
+	f := newFix(t)
+	w := f.fresh("pq_kat")
+	open := func(vault any, at, u obj) (*PqzKey, error) {
+		var pin, prf []byte
+		if p, ok := u["pin"].(string); ok {
+			pin = []byte(p)
+		}
+		if p, ok := u["prfOutput"].(string); ok {
+			prf = must(hex.DecodeString(p[2:]))
+		}
+		return PqzOpenLeaf(js(vault), pin, prf, uint32(at["account"].(float64)), uint32(at["index"].(float64)), uint64(at["version"].(float64)))
+	}
+	pk := func(k *PqzKey) string { defer k.Close(); return fmt.Sprintf("%x", must(k.PublicKey())) }
+	lf := uaVec(t, "pqz_leaf.json")
+	for _, r := range rows(lf["leaves"]) {
+		want := pk(must(w.PqzKeyVersion(uint32(r["account"].(float64)), uint32(r["index"].(float64)), uint64(r["version"].(float64)))))
+		if pk(must(open(r["vault"], r, r["unlock"].(obj)))) != want {
+			t.Fatal(r["id"])
+		}
+	}
+	refusals := rows(lf["refusals"])
+	if len(refusals) != 17 {
+		t.Fatal(len(refusals))
+	}
+	for _, x := range refusals {
+		if _, err := open(x["vault"], x["open"].(obj), x["unlock"].(obj)); code(err) != "UAVaultOpen" {
+			t.Fatal(x["id"], err)
+		}
+		c := x["control"].(obj)
+		k, err := open(c["vault"], c["open"].(obj), c["unlock"].(obj))
+		if err != nil {
+			t.Fatal("control", x["id"], err)
+		}
+		k.Close()
+	}
+	v := must(w.SealPqKey(1, 2, 3, []byte("river-otter-7 ünï")))
+	var vo obj
+	must0(json.Unmarshal([]byte(v), &vo))
+	if vo["label"] != "pqz:registry:1:2:3" {
+		t.Fatal(vo["label"])
+	}
+	at, u := obj{"account": 1.0, "index": 2.0, "version": 3.0}, obj{"pin": "river-otter-7 ünï"}
+	if pk(must(open(vo, at, u))) != pk(must(w.PqzKeyVersion(1, 2, 3))) {
+		t.Fatal("SealPqKey round trip")
+	}
+	at["version"] = 2.0
+	if _, err := open(vo, at, u); code(err) != "UAVaultOpen" {
+		t.Fatal("another version", err)
+	}
+}

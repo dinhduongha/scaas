@@ -425,8 +425,9 @@ sequenceDiagram
   bytes>, data]`; an absent target or anchor is an empty blob; an empty tag list is 0 bytes. Deep hash (SHA-384): a blob →
   `SHA384(SHA384("blob" ‖ decimal length) ‖ SHA384(data))`; a list → `acc = SHA384("list" ‖ decimal count)`, then
   `acc = SHA384(acc ‖ deepHash(item))` per item.
-- Types: **2** (ed25519: raw signature over the 48 bytes, owner the 32-byte key) or **4** (the same bytes, the type Turbo documents)
-  as the Q7 probe decides, default ed25519; **3** (secp256k1: EIP-191 `personal_sign` over the 48 bytes, prefix
+- Types: **2** (ed25519: raw signature over the 48 bytes, owner the 32-byte key) or **4** (ed25519 over the deep hash's lowercase
+  hex text, 96 ASCII bytes, as `arbundles`' Solana signers sign it: corrected 2026-11-22 by the T16 cross-check, decisions CLI-SDK-33
+  (60); revision 2 said "the same bytes"; the type Turbo documents) as the Q7 probe decides, default ed25519; **3** (secp256k1: EIP-191 `personal_sign` over the 48 bytes, prefix
   `"\x19Ethereum Signed Message:\n48"`, signature `r ‖ s ‖ v` 65 B with **`v ∈ {27, 28}` and low `s`** (`s ≤ n/2`), both produced
   by the builder and checked by the parser, owner the uncompressed 65-byte key) built and tested for a bundler that takes only EVM
   signers. No type 1 (RSA-PSS), no other type.
@@ -682,6 +683,7 @@ caller's digest's.
 | **Gateway lies** | Wrong bytes, a truncated or oversized body, a false "settled", withheld data | The exact length and `ctSha256` checked before decryption, and `ctSha256` is signed in the message (ARCH-POS-13: a gateway cannot make a client decrypt bytes of its choosing); an announced other length refused unread, a platform cap; failover past a refused body; "settled" only by a strict majority of at least two gateways of different operators, at a depth, with the bytes read back (C16, CLI-RPC-13), so the client keeps its copy until then; strict majority optionally for data; discovered gateways never alone (CLI-RPC-06) |
 | **Memory exhaustion** | A session member signs a `size` near the cap and names any large object | The exact length refused unread when announced; the platform cap (2^30 B, 2^27 B on wasm32) checked before any request; the size shown before the user's action (C17) |
 | **Two keys, one object** | AES-GCM does not commit to the key: a sender builds one object that opens under two keys to two files and names it in two messages | `open_file` checks `size` and the signed plaintext `sha256` before any plaintext leaves `ua-rs`, and a cache is keyed by the plaintext `sha256` (C15). No separate key commitment: the file keys are random and arrive in signed messages, so there is no partitioning-oracle setting; the signed `sha256` binds one message to one file |
+| **Self-pay links uploads** (owner 2026-11-22) | A user who pays for uploads from their own wallet (Turbo credits shared to each upload address, or a per-upload payment) links every upload key it funds to that wallet at the bundler, and publicly through the approvals and the receipts' `payer`; the per-file keys then no longer keep that user's uploads apart | Stated; the client shows the notice (`SELF_PAY_NOTICE`) with a self-paid upload; the free tier and the operator's payer (one payer for many users) do not link a user's uploads to a wallet of theirs; the user chooses (CLI-SDK-21) |
 | **Gateway learns readers** | A gateway sees which id an IP fetches | Fetch on the user's action (CLI-PQV-05); the reader may name its own gateway; a stated residual |
 | **Avalanche store metadata** | On chain: the 8-byte hint (links an epoch's stored messages on every chain they are copied to), size, submitter, time | As CTR-CHAT-13 on every chain store; the store list itself stays in `sealedInfo` |
 | **Avalanche store spam or RPC lies** | Junk payloads; an RPC hides or invents payloads | Unsigned by design: clients check every payload (UA-7 P25); trusted reads under CLI-RPC-06; other listed stores replicate |

@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# The bindings enabled, one per line (owner 2026-11-22, decisions CLI-SDK-33 (102)); read by bindings/langs.py for the
+# generator (runs/2026-11-17-scaas-sdk-gen.sh), the gate runner's bind-* steps and CI's changes job (one matrix cell each).
+# A language left out (deleted or commented here) is neither generated, tested nor run in CI; its committed generated files
+# stay as they are. Known: cpp cs python kotlin swift java go dart js.
+cpp
+cs
+python
+kotlin
+swift
+java
+go
+dart
+js

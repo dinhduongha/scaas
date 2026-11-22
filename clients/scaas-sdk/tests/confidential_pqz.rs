@@ -134,6 +134,7 @@ fn profile(rpc: Vec<EndpointConfig>) -> ChainProfile {
         wrappers: vec![],
         tokens: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }

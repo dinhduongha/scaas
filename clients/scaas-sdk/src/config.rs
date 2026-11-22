@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 /// A chain family (the `scaas-rpc` readers'). Hedera is `Evm` with its chain id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Family {
     Evm,
     Soroban,
@@ -25,10 +26,14 @@ pub enum Family {
 /// only and is built by the app from its own secret source.
 #[derive(Clone)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct EndpointConfig {
     pub url: String,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::ClassDef"))]
     pub class: Class,
     pub label: Option<String>,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::endpoint_auth"))]
     pub auth: Option<EndpointAuth>,
 }
 
@@ -45,6 +50,7 @@ impl std::fmt::Debug for EndpointConfig {
 /// The block of every decisive and decryption read (§9.4 requirement 3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Finality {
     Finalized,
     Depth(u64),
@@ -52,6 +58,8 @@ pub enum Finality {
 
 /// A chain as the app's release pins it (spec §4).
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct ChainProfile {
     /// `scaas-testnet`, `<chain>-mainnet`, `<chain>-testnet`
     pub key: String,
@@ -61,6 +69,7 @@ pub struct ChainProfile {
     /// `0x` + 64 hex (NET-ALL-24): every SCaaS EIP-712 domain's salt, pinned on every connection
     pub chain_uid: String,
     pub rpc: Vec<EndpointConfig>,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::PolicyDef"))]
     pub rpc_policy: Policy,
     /// scaas-node gateways; empty: no gateway path on this chain
     pub gateways: Vec<EndpointConfig>,
@@ -88,6 +97,7 @@ pub struct ChainProfile {
     /// `failover` (the default) or `strict_majority` (ARCH-POS-15; owner 2026-11-19, T16-a), each with its own credential;
     /// empty: no verdict on this chain (`VerdictRefused`)
     pub verifiers: Vec<EndpointConfig>,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::PolicyDef"))]
     pub verifier_policy: Policy,
     /// the SCaaS DEXes of the chain (NET-ALL-24): an order or a cancel naming a DEX not here is refused before anything is
     /// signed (CLI-SGN-35, `DexNotListed`)
@@ -107,11 +117,28 @@ pub struct ChainProfile {
     /// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
     /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
     pub disabled_kinds: Vec<String>,
+    /// Whether the chain's RPC is trusted on a read pinned by block hash (owner 2026-11-22, decisions ARCH-POS-20 (2); the
+    /// profile's `pinnedReads`, default true): false on Moonbeam and Moonbase, whose RPC answers a read pinned by a made-up
+    /// hash. With false, every pinned read (CLI-RPC-05: a decisive read, a read feeding a decryption) is refused by name,
+    /// `PinnedReadsUntrusted`; plain reads work. EVM profiles only (`Argument` at `Sdk::open` on another family)
+    #[cfg_attr(feature = "uniffi", uniffi(default = true))]
+    #[cfg_attr(
+        feature = "wasm",
+        serde(default = "crate::config::pinned_reads_default")
+    )]
+    pub pinned_reads: bool,
+}
+
+/// `ChainProfile::pinned_reads`'s default (a JS profile without the field): trusted.
+#[cfg(feature = "wasm")]
+pub(crate) fn pinned_reads_default() -> bool {
+    true
 }
 
 /// An L1 data fee model (plan T38).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum L1Fee {
     /// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
     OpStack,
@@ -120,6 +147,8 @@ pub enum L1Fee {
 /// A family's own profile data (spec §8.7 rule 2; decisions CLI-SDK-15's Changes of 2026-11-21).
 #[derive(Debug, Clone)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum FamilyParams {
     /// Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
     /// profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),
@@ -127,6 +156,7 @@ pub enum FamilyParams {
     Cosmos {
         chain_id: String,
         rest: Vec<EndpointConfig>,
+        #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::PolicyDef"))]
         rest_policy: Policy,
         denom: String,
         prefix: String,
@@ -146,6 +176,7 @@ pub enum FamilyParams {
     /// 32 bytes in base58 `chainIdentifier` must answer
     Sui {
         graphql: Vec<EndpointConfig>,
+        #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::PolicyDef"))]
         graphql_policy: Policy,
     },
     /// Polkadot Hub's Substrate side on its EVM profile (decisions CLI-SDK-32's Change of 2026-11-22, plan T32's read part): the
@@ -154,6 +185,7 @@ pub enum FamilyParams {
     /// there. The same params serve the relay chain's Substrate side
     Substrate {
         rpc: Vec<EndpointConfig>,
+        #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::PolicyDef"))]
         rpc_policy: Policy,
         genesis: String,
         ss58_prefix: u16,
@@ -234,6 +266,7 @@ impl FamilyParams {
 /// A DEX of the chain profile (NET-ALL-24): its address, its liquidity mark (a module of group 11 among its `modules()`,
 /// CTR-DEX-30) and the position readers reviewed for it, each beside its position manager.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct ListedDex {
     /// `0x` + 40 hex
@@ -244,6 +277,7 @@ pub struct ListedDex {
 
 /// A reviewed position reader of a position manager (a liquidity order that receives a position names one).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct PositionReader {
     pub manager: String,
@@ -254,6 +288,7 @@ pub struct PositionReader {
 /// contract of domain kind `kind` (`token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `gov_router`), on a lane whose nonce
 /// is 0 (`fresh`) or above, signed by the reference signer, a native EVM key (its path makes no registry call).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct GasBase {
     pub entry: String,
@@ -282,6 +317,7 @@ pub struct GasBase {
 /// `env_items`, `orders`). The row's own `gas` is its figure at a count of 0 (the line's intercept; the file states
 /// `"base_count": 0`), so the quote adds `gas × count` with no offset.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct GasPerItem {
     pub item: String,
@@ -296,6 +332,7 @@ pub struct GasPerItem {
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
 /// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct GasPerByte {
     pub input: String,
@@ -305,6 +342,7 @@ pub struct GasPerByte {
 /// A verify row (gas table v2): what a signer of UA kind `signer` (`0`: a native EVM key, the reference) adds over the
 /// reference signer's execution gas.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct GasVerify {
     pub signer: u16,
@@ -328,6 +366,7 @@ pub struct GasVerify {
 /// keyed by chain (the table it is in), registry address and signer kind; the verify path, the depth and the write path are
 /// columns. Within one table no two verify rows share signer, registry, path, depth and write.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct GasLine {
     /// the registry the row was measured through (`0x` + 40 hex): a quote bound to it takes it first; `None`: a row of no one
@@ -349,6 +388,7 @@ const GAS_DEPTH_MAX: u64 = 15;
 
 /// The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct GasRows {
     pub base: Vec<GasBase>,
@@ -363,6 +403,7 @@ pub struct GasRows {
 /// line's columns, [`GasLine`]), read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct GasTable {
     /// a module's name, `reference`, or the chain key of a chain's measured rows
@@ -729,6 +770,7 @@ impl GasBase {
 
 /// A token of a profile's reviewed list (spec §8.2).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct ListedToken {
     /// EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
@@ -740,6 +782,7 @@ pub struct ListedToken {
 /// The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor
 /// against a runaway quote, never a value assumed of a chain.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct Limits {
     /// decimal wei
@@ -759,6 +802,22 @@ pub struct Limits {
     /// how long a terminal operation row stays in `sdk.state` after it ended, in seconds (default 90 days); a non-terminal row
     /// is never pruned (owner 2026-11-19, T13b ruling 2)
     pub state_retention_secs: u64,
+    /// the most a family's native transaction may cost its payer, per chain profile, as a decimal string in the chain's
+    /// smallest unit (spec §27.5 (e): fee + storage + forward; plan T41): never from an endpoint. A chain without its row
+    /// spends nothing natively (`FeeAboveCap`: fail closed). EVM's self-relay keeps `max_cost`
+    #[serde(default)]
+    pub max_native_cost: Vec<NativeCap>,
+}
+
+/// One chain's native cost cap (`Limits::max_native_cost`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[serde(deny_unknown_fields)]
+pub struct NativeCap {
+    /// the profile's key
+    pub chain: String,
+    /// decimal, the chain's smallest unit (stroops on Soroban)
+    pub max: String,
 }
 
 impl Default for Limits {
@@ -773,6 +832,7 @@ impl Default for Limits {
             max_valid_secs: 86_400,
             event_queue: 1_024,
             state_retention_secs: 90 * 86_400,
+            max_native_cost: vec![],
         }
     }
 }

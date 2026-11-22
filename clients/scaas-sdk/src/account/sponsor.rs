@@ -34,6 +34,7 @@ const BLOB_DEPTH: usize = 4;
 /// The KEM key of version 0 a hash-commit registration carries beside its arguments.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct KemRecord {
     pub version: u64,
     /// `0x` hex: `mlkemEk ‖ x25519` (`scaas-ua` `kem_pk`)
@@ -43,6 +44,7 @@ pub struct KemRecord {
 /// A `registerWebAuthn` key, named.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct WebAuthnArgs {
     pub x: String,
     pub y: String,
@@ -52,6 +54,7 @@ pub struct WebAuthnArgs {
 /// `KemKey`, named.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct KemArgs {
     pub scheme: u8,
     pub mlkem_ek: String,
@@ -61,6 +64,7 @@ pub struct KemArgs {
 /// `UAAttrs`, named.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct AttrsArgs {
     pub pqz_key: String,
     pub pqz_pop_hash: String,
@@ -72,6 +76,7 @@ pub struct AttrsArgs {
 /// `keyData`) or `registerWebAuthn` (`key`); bytes as `0x` hex.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct RegisterArgs {
     pub entry: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -89,6 +94,7 @@ pub struct RegisterArgs {
 /// clientkeys' `registrationBlob` (`smartcontracts/vectors/ua/registration_blobs.json`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct RegistrationBlob {
     pub v: u32,
     pub ua: String,

@@ -1,0 +1,14 @@
+{
+  "evmFork": "osaka",
+  "codeSizeLimit": 24576,
+  "initCodeSizeLimit": 49152,
+  "txGasCap": null,
+  "blockGasLimit": 18446744073709551615,
+  "finality": "tag",
+  "txType": 2,
+  "l1Fee": null,
+  "eip2537": false,
+  "status": "draft",
+  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (chains-arweave T12, probes of 2026-11-22, one sample each: H1-H8, fork, eip2537, caps, codesize, basefee, l1fee), through the one public eth-rpc provider; the header's gas limit is u64::MAX, no block cap; Hub gas folds ref_time, proof_size and the storage deposit, so the per-transaction cap (50 % of the maximum extrinsic weight) has no gas figure here: max_tx_gas waits for chains-arweave T13 (Paseo measurement, on the owner's word); disabledKinds: none, no owner ruling",
+  "disabledKinds": []
+}

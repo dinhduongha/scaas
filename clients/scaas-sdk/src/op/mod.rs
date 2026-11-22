@@ -8,6 +8,7 @@ pub(crate) mod bls_multi;
 pub(crate) mod external;
 mod follow;
 pub(crate) mod gas;
+mod handoff;
 mod prepared;
 pub(crate) mod quote;
 pub(crate) mod state;
@@ -18,7 +19,10 @@ mod tests;
 pub use crate::events::{InFlight, OpState};
 pub use bls_multi::BlsMultiPart;
 pub use gas::{GasFrom, GasSources};
-pub(crate) use prepared::{domain_name, field, flatten, Draft, ExpectFn};
+pub use handoff::{ImportExpect, SignedOpBlob, HANDOFF_MAX};
+#[cfg(feature = "dex")]
+pub(crate) use prepared::flatten;
+pub(crate) use prepared::{domain_name, field, Draft, ExpectFn};
 pub use prepared::{Prepared, ReviewField, Source};
 pub use quote::{SubmitPath, SubmitQuote};
 
@@ -34,6 +38,7 @@ use std::sync::Arc;
 /// authenticator (a passkey or a secure-element key, a row of the seed: owner 2026-11-19, S1).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum KeyRef {
     Ua {
         seed: String,
@@ -69,6 +74,9 @@ pub enum KeyRef {
         index: u32,
         key_data: String,
     },
+    /// an operation another party signed and handed off (`Op::import_signed`, spec §27.5 (c)): its signer's subject id (`0x`
+    /// hex); nothing in this SDK signs for it
+    Signed { signer: String },
 }
 
 /// One slot of an `msig` signature (`KeyRef::Msig`; `scaas-ua` `Slot`).
@@ -187,7 +195,9 @@ pub(crate) fn key(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             Key::Native(s, k)
         }
         // a stored key row is read from the keystore: `key_opened`; an `msig` signs by its slots (`account::msig`)
-        KeyRef::Key { .. } | KeyRef::Msig { .. } => return Err(SdkError::Argument),
+        KeyRef::Key { .. } | KeyRef::Msig { .. } | KeyRef::Signed { .. } => {
+            return Err(SdkError::Argument)
+        }
         KeyRef::BlsMulti {
             seed,
             account,
@@ -270,28 +280,7 @@ pub(crate) fn sim(e: SimError) -> SdkError {
     }
 }
 
-pub(crate) fn hex(b: &[u8]) -> String {
-    let mut s = String::from("0x");
-    for x in b {
-        s.push_str(&format!("{x:02x}"));
-    }
-    s
-}
-
-pub(crate) fn unhex(s: &str) -> Result<Vec<u8>, SdkError> {
-    let h = s.strip_prefix("0x").ok_or(SdkError::Argument)?;
-    if h.len() % 2 != 0 || !h.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(SdkError::Argument);
-    }
-    (0..h.len())
-        .step_by(2)
-        .map(|i| {
-            h.get(i..i + 2)
-                .and_then(|p| u8::from_str_radix(p, 16).ok())
-                .ok_or(SdkError::Argument)
-        })
-        .collect()
-}
+pub(crate) use crate::text::{hex, unhex};
 
 pub(crate) fn dec(v: &serde_json::Value) -> Result<U256, SdkError> {
     match v {

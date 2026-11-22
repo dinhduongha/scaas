@@ -99,6 +99,7 @@ async fn setup() -> (Arc<Sdk>, KeyRef, Value) {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };

@@ -8,6 +8,7 @@ use tokio::sync::broadcast;
 /// An SDK event (appended only).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Event {
     SeedUnlocked {
         seed: String,
@@ -41,7 +42,7 @@ pub enum Event {
         token: String,
     },
     /// A watched account's new history items (spec §8.4), newest first.
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     HistoryAdded {
         account: String,
         chain: String,
@@ -57,6 +58,7 @@ pub enum Event {
 /// block.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum OpState {
     /// the executed event of the operation's digest at or below the final block
     Landed { block: u64, hash: String },
@@ -79,6 +81,7 @@ impl OpState {
 /// What is known of an operation in flight (spec §13.5): none of it ends the operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum InFlight {
     /// signed and written, not sent yet
     Signed,

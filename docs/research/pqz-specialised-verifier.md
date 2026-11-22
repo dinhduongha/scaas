@@ -265,9 +265,9 @@ libFuzzer target (`test/pqz_sv_fuzz.c`: edit scripts over honest proofs and stat
 ASan + UBSan): 748 executions in 10 minutes (the generic verifier dominates), 2,218 coverage edges, no crash, no
 disagreement. A long fuzz campaign would need the fast verifier alone (or a faster reference).
 
-**What the tests cannot reach.** A proof whose final hash check passes but which fails only a norm check (z1, z3,
-z4, w − γ·w1, hint ℓ∞, h's zero coefficients) can only come from a cheating prover; mutated proofs fail the hash
-first. Those checks were written against `_lnp_tbox_check_z34` / `lnp_quad_verify` line by line (same representatives,
+**What the honest and mutated proofs cannot reach.** A proof whose final hash check passes but which fails only a
+norm check (z1, z3, z4, w − γ·w1, hint ℓ∞, h's zero coefficients) needs a cheating prover; mutated proofs fail the hash
+first. (Since this was written, the cheating fixtures of §7 reach those checks at each set.) Those checks were written against `_lnp_tbox_check_z34` / `lnp_quad_verify` line by line (same representatives,
 same ≤ / < at the bound); the hint bound is unreachable within `PQZ_MAX_PROOF` (|hint| = m needs 2m bits).
 
 ## 5. Measurements
@@ -358,11 +358,13 @@ verifier accepts the same proofs; a wallet (wasm) can check its own proof before
 ## 7. Risks and open points
 
 - **Second implementation.** The specialised verifier re-states LaZer's equations (`lnp-tbox.c`, `pqz_rel.c`) by
-  hand. The differential test covers what honest and mutated proofs reach; it cannot construct a proof that passes
-  the final hash check and fails only a norm check (that needs a cheating prover), so those checks (z1, z3, z4,
-  w − γw1, hint, h coefficients 0 and d/2) rest on reading the code against `lnp_quad_verify` /
-  `_lnp_tbox_check_z34` line by line. An independent review of `pqz_sv.c` against `lnp-tbox.c` is still due before any
-  use.
+  hand. The differential test covers what honest and mutated proofs reach. The norm checks (z1, z3, z4, w − γw1, hint,
+  h coefficients 0 and d/2) are also reached by the cheating fixtures, proofs that pass the final hash check and fail
+  only a norm check, built per set (`pqz-core/pqzl/rust/tests/fixtures/cheating/`, `export.sh`; the gate's `fixtures`
+  step); an earlier draft of this note said such proofs could not be built, which no longer holds. The review of the
+  checks against `lnp_quad_verify` / `_lnp_tbox_check_z34` done so far covered the C code only, before the Rust port
+  and the four sets; the line-by-line norm review at the four sets, C and Rust, is the AI audit's unit `pqz-core-pqzl`,
+  invariant 6 ([ARCH-POS-14](../decisions.md#ARCH-POS-14)). Until a round covers the current code it is `UNAUDITED`.
 - **The statement is hard-wired.** The selection blocks, the `R_TX` evaluation equations and the input rows are
   re-stated from `pqz_rel.c` (`build_reg`, `build_debit`, `build_ds`, `build_dr`). A change to a relation must change both files; the
   differential test catches a mismatch on the first honest proof.

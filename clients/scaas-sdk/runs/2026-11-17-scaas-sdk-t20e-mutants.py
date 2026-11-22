@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+"""scaas-sdk plan T20e (the Kotlin binding) mutants: python3 clients/scaas-sdk/runs/2026-11-17-scaas-sdk-t20e-mutants.py check | run [name]"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from mutants_lib import main
+
+B = "clients/scaas-sdk/src/binding.rs"
+KT = (
+    'cd clients/scaas-sdk/bindings/kotlin && KOTLINC="$(git rev-parse --git-common-dir)/../scratchpad/tools/kotlin-2.4.21/'
+    'kotlinc/bin/kotlinc" bash run.sh'
+)
+MUTANTS = [
+    (
+        "the PRF output names another secret",
+        [(B, "self.0.get_assertion(req, prf_out.id()).await", "self.0.get_assertion(req, prf_out.id() + 1).await")],
+        KT,
+        "AuthenticatorRefused",
+    ),
+    (
+        "the store's write drops the expected revision",
+        [(B, "self.0.put_if(name, prev_rev, bytes, policy).await", "self.0.put_if(name, None, bytes, policy).await")],
+        KT,
+        "StoreConflict",
+    ),
+]
+
+if __name__ == "__main__":
+    main("t20e", MUTANTS)

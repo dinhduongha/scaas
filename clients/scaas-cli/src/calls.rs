@@ -11,7 +11,9 @@ use scaas_sdk::app_core::*;
 use scaas_sdk::confidential::*;
 use scaas_sdk::dex::*;
 use scaas_sdk::events::Subscription;
-use scaas_sdk::op::{BlsMultiPart, KeyRef, OpState, Prepared, SubmitPath, SubmitQuote};
+use scaas_sdk::op::{
+    BlsMultiPart, ImportExpect, KeyRef, OpState, Prepared, SignedOpBlob, SubmitPath, SubmitQuote,
+};
 use scaas_sdk::pqchat_keys::*;
 use scaas_sdk::pqchat_records::*;
 use scaas_sdk::vault::{
@@ -19,12 +21,16 @@ use scaas_sdk::vault::{
     DeriveFromSignature, Generate, ImportKey, ImportWords, Keystore, Remove, SeedBackup, Unlock,
 };
 use scaas_sdk::wallet::*;
-use scaas_sdk::{GasTable, Sdk};
+use scaas_sdk::{GasTable, Sdk, SdkError, SecretBytes};
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
 
 /// SDK calls without a command of their own, each with its reason.
 pub const EXCLUDED: &[(&str, &str)] = &[
+    (
+        "lib::load_check",
+        "a binding's load check against the library it loads (spec §16.3); the CLI links the SDK it was built with",
+    ),
     (
         "Sdk::open",
         "every command opens the SDK over the data directory, the profiles and the overlay",
@@ -74,6 +80,24 @@ pub const EXCLUDED: &[(&str, &str)] = &[
     (
         "AllowOpaqueCall::new",
         "feature opaque-calls: off in the CLI",
+    ),
+    // T41.arweave (CLI-SDK-21): an Arweave upload is public and permanent (a live one is the owner's, plan T21)
+    (
+        "ArweaveFiles::new",
+        "feature arweave: off in the CLI (a permanent public upload)",
+    ),
+    (
+        "ArweaveFiles::upload_file",
+        "feature arweave: off in the CLI (a permanent public upload)",
+    ),
+    ("ArweaveFiles::keep_up", "feature arweave: off in the CLI"),
+    (
+        "ArweaveFiles::fetch_file",
+        "feature arweave: off in the CLI",
+    ),
+    (
+        "AppCore::seal_for_arweave",
+        "feature arweave: off in the CLI",
     ),
 ];
 
@@ -318,6 +342,7 @@ calls! { cx;
     };
     "account registration-of" "Account::registration_of" {chain: String, ua: String} => js(sdk(cx).account().registration_of(chain, ua).await?);
     "account prepare-kem-repair" "Account::prepare_kem_repair" {key: KeyRef, chain: String, payer: KeyRef} @op => sdk(cx).account().prepare_kem_repair(key, chain, payer).await?.into_iter().collect::<Vec<_>>();
+    "account prepare-set-kem-key" "Account::prepare_set_kem_key" {key: KeyRef, chain: String, version: u64, payer: KeyRef} @op => sdk(cx).account().prepare_set_kem_key(key, chain, version, payer).await?.into_iter().collect::<Vec<_>>();
     "account marks" "Account::marks" {seed: String, chain: String} => js(sdk(cx).account().marks(seed, chain).await?);
     "account restore" "Account::restore" (r: Restore) => js(sdk(cx).account().restore(r).await?);
     "account prepare-smart-add-key" "Account::prepare_smart_add_key" {op: SmartOp, key: SubjectKeyArgs} @op => sdk(cx).account().prepare_smart_add_key(op, key).await?;
@@ -360,6 +385,15 @@ calls! { cx;
     "op submit" "Op::submit" {prepared: H<Arc<Prepared>>, quote: H<SubmitQuote>} @sign => { cx.confirm_op(&prepared.0, &quote.0)?; { let op = sdk(cx).op().submit(prepared.0, quote.0).await?; cx.sent(op).await } };
     "op resume" "Op::resume" {} => named("resumed", sdk(cx).op().resume().await?);
     "op resend" "Op::resend" {op: String, quote: H<SubmitQuote>} @sign => { cx.confirm(json!({"resend": op, "quote": quote.0}))?; sdk(cx).op().resend(op.clone(), quote.0).await?; cx.sent(op).await };
+    // T41.evm (spec §27.5 (c)): the signer's hand-off signs once and sends nothing; the payee's import is an operation object,
+    // quoted and submitted as any (`op quote`, `op submit`)
+    "op hand-off" "Op::hand_off" {prepared: H<Arc<Prepared>>} @sign => {
+        cx.confirm(json!({"review": review(&prepared.0.review()), "op": prepared.0.id(), "sign": "a hand-off: signed once, sent by its payee"}))?;
+        js(sdk(cx).op().hand_off(prepared.0).await?)
+    };
+    "op import-signed" "Op::import_signed" {blob: SignedOpBlob, expect: ImportExpect} @op => sdk(cx).op().import_signed(blob, expect).await?;
+    "signed-op-blob from-json" "SignedOpBlob::from_json" {text: String} => js(SignedOpBlob::from_json(&text)?);
+    "signed-op-blob to-json" "SignedOpBlob::to_json" (b: SignedOpBlob) => named("json", b.to_json()?);
     "op member-sign" "Op::member_sign" {prepared: H<Arc<Prepared>>} @sign => {
         cx.confirm(json!({"review": review(&prepared.0.review()), "op": prepared.0.id(), "sign": "as an msig member"}))?;
         named("signature", sdk(cx).op().member_sign(prepared.0).await?)
@@ -398,6 +432,16 @@ calls! { cx;
     "wallet native-address" "Wallet::native_address" {key: NativeKeyRef, ss58_prefix: Option<u16>} => js(sdk(cx).wallet().native_address(key, ss58_prefix).await?);
     "wallet prepare-native-send" "Wallet::prepare_native_send" (r: NativeSend) @op => sdk(cx).wallet().prepare_native_send(r).await?;
     "wallet submit-native-send" "Wallet::submit_native_send" (q: NativeQuote) @sign => { cx.confirm(json!({"quote": q}))?; named("tx", sdk(cx).wallet().submit_native_send(q).await?) };
+    // SDK plan T41.soroban: a G… subject's ops through `/v1/ops` or by self-relay, the hand-off, the native XLM send
+    "wallet soroban-prepare" "Wallet::soroban_prepare" (r: SorobanOpRequest) => js(sdk(cx).wallet().soroban_prepare(r).await?);
+    "wallet soroban-quote" "Wallet::soroban_quote" {prepared: SorobanPrepared, path: SorobanPath} => js(sdk(cx).wallet().soroban_quote(prepared, path).await?);
+    "wallet soroban-submit" "Wallet::soroban_submit" {prepared: SorobanPrepared, quote: SorobanQuote} @sign => { cx.confirm(json!({"prepared": prepared, "quote": quote}))?; named("op", sdk(cx).wallet().soroban_submit(prepared, quote).await?) };
+    "wallet soroban-hand-off" "Wallet::soroban_hand_off" (p: SorobanPrepared) @sign => { cx.confirm(json!({"hand_off": p}))?; js(sdk(cx).wallet().soroban_hand_off(p).await?) };
+    "wallet soroban-import" "Wallet::soroban_import" {blob: SignedOpBlob, expect: SorobanImportExpect} => js(sdk(cx).wallet().soroban_import(blob, expect).await?);
+    "wallet soroban-resend" "Wallet::soroban_resend" {op: String} => js(sdk(cx).wallet().soroban_resend(op).await?);
+    "wallet soroban-follow" "Wallet::soroban_follow" {op: String} => named("state", sdk(cx).wallet().soroban_follow(op).await?);
+    "wallet soroban-prepare-native-send" "Wallet::soroban_prepare_native_send" (r: SorobanNativeSend) => js(sdk(cx).wallet().soroban_prepare_native_send(r).await?);
+    "wallet soroban-submit-native-send" "Wallet::soroban_submit_native_send" (q: SorobanNativeQuote) @sign => { cx.confirm(json!({"quote": q}))?; named("op", sdk(cx).wallet().soroban_submit_native_send(q).await?) };
     "wallet prepare-transfer" "Wallet::prepare_transfer" (r: Transfer) @op => sdk(cx).wallet().prepare_transfer(r).await?;
     "wallet prepare-pay" "Wallet::prepare_pay" (r: Pay) @op => sdk(cx).wallet().prepare_pay(r).await?;
     "wallet prepare-pay-with-tax" "Wallet::prepare_pay_with_tax" (r: PayWithTax) @op => sdk(cx).wallet().prepare_pay_with_tax(r).await?;
@@ -545,6 +589,15 @@ calls! { cx;
 
     // ---- app-core (spec §12): key handles live in this process, named by `--as` in a session
     "app-core random-bytes" "AppCore::random_bytes" {seed: String, n: u32} => hexed("bytes", &cx.app()?.random_bytes(&seed, n)?);
+    "app-core generate-passphrase" "AppCore::generate_passphrase" {seed: String} => {
+        // the words shown on the user's own terminal after the typed confirmation, as a seed backup's reveal
+        if !cx.typed_reveal() {
+            return Err(Fail::cli("NotConfirmed", "the words stay hidden"));
+        }
+        let p = cx.app()?.generate_passphrase(&seed)?;
+        let text = p.with(|w| String::from_utf8_lossy(w).into_owned());
+        named("passphrase", zeroize::Zeroizing::new(text).as_str())
+    };
     "app-core random-key" "AppCore::random_key" {seed: String, usage: AppKeyUsage} => handle(cx.app()?.random_key(&seed, usage)?, key_shown());
     "app-core derive" "AppCore::derive" {keys: Vec<H<Arc<AppKey>>>, salt: Vec<u8>, label: Vec<u8>, context: Vec<u8>, usage: AppKeyUsage, nonce: bool} =>
         handle(cx.app()?.derive(keys.into_iter().map(|k| k.0).collect(), salt, label, context, usage, nonce)?, key_shown());
@@ -554,6 +607,17 @@ calls! { cx;
     "app-core open" "AppCore::open" {key: H<Arc<AppKey>>, nonce: Nonce, aad: Vec<u8>, ct: Vec<u8>} => {
         // the plaintext of the caller's own sealed record (`Plaintext` only): to stdout, as the app would show it
         let p = cx.app()?.open(key.0, nonce.sdk(), aad, ct)?;
+        p.with(|b| hexed("plaintext", b))
+    };
+    "app-core seal-file" "AppCore::seal_file" {seed: String, file: Vec<u8>} => {
+        let s = cx.app()?.seal_file(&seed, file)?;
+        let h = |b: &[u8]| format!("0x{}", b.iter().map(|x| format!("{x:02x}")).collect::<String>());
+        handle(s.key, json!({"key": "an app key handle (never readable)", "object": h(&s.object), "ct_sha256": h(&s.ct_sha256),
+            "sha256": h(&s.sha256), "size": s.size}))
+    };
+    "app-core open-file" "AppCore::open_file" {key: H<Arc<AppKey>>, object: Vec<u8>, size: u64, sha256: Vec<u8>, ct_sha256: Vec<u8>} => {
+        // the plaintext of a file whose key the caller holds (`Plaintext` only), after every check (ctSha256 first)
+        let p = cx.app()?.open_file(key.0, object, size, sha256, ct_sha256)?;
         p.with(|b| hexed("plaintext", b))
     };
     "app-core seal-key" "AppCore::seal_key" {under: H<Arc<AppKey>>, key: H<Arc<AppKey>>, aad: Vec<u8>} => hexed("wire", &cx.app()?.seal_key(under.0, key.0, aad)?);
@@ -568,6 +632,7 @@ calls! { cx;
     "app-core kem-wrap-to-key" "AppCore::kem_wrap_to_key" {kem_pk: Vec<u8>, key: H<Arc<AppKey>>, label: Vec<u8>, aad: Vec<u8>} => js(cx.app()?.kem_wrap_to_key(kem_pk, key.0, label, aad)?);
     "app-core kem-unwrap" "AppCore::kem_unwrap" {account: KeyRef, key_version: u64, wrap: AppWrap, label: Vec<u8>, aad: Vec<u8>, usage: AppKeyUsage} => handle(cx.app()?.kem_unwrap(account, key_version, wrap, label, aad, usage)?, key_shown());
     "app-core app-root-key" "AppCore::app_root_key" {account: KeyRef} => handle(cx.app()?.app_root_key(account)?, key_shown());
+    "app-core account-ua" "AppCore::account_ua" {account: KeyRef} => hexed("ua", &cx.app()?.account_ua(&account)?);
     "app-core destroy" "AppCore::destroy" {key: H<Arc<AppKey>>} => { cx.app()?.destroy(key.0)?; ok() };
     "app-core sign-app-record" "AppCore::sign_app_record" {account: KeyRef, path: AppPath, typed_json: String} @sign => {
         cx.confirm(json!({"sign": "an app record", "account": account, "path": path, "typed_data": typed_json}))?;
@@ -575,6 +640,11 @@ calls! { cx;
     };
     "app-core kem-wrap" "AppCore::kem_wrap" {chain: String, recipient: String, kem_version: u64, key: H<Arc<AppKey>>, label: Vec<u8>, aad: Vec<u8>} => js(cx.app()?.kem_wrap(chain, recipient, kem_version, key.0, label, aad).await?);
     "app-core verify-app-record" "AppCore::verify_app_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_app_record(chain, ua, path, typed_json, sig).await?);
+    "app-core sign-pqvault-record" "AppCore::sign_pqvault_record" {account: KeyRef, path: AppPath, records: Option<String>, typed_json: String} @sign => {
+        cx.confirm(json!({"sign": "a PqVault record", "account": account, "path": path, "records": records, "typed_data": typed_json}))?;
+        js(cx.app()?.sign_pqvault_record(account, path, records, typed_json).await?)
+    };
+    "app-core verify-pqvault-record" "AppCore::verify_pqvault_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_pqvault_record(chain, ua, path, typed_json, sig).await?);
     "app-core verify-app-record-key" "AppCore::verify_app_record_key" {kind: u16, key_data: Vec<u8>, path: AppPath, purpose: Option<String>, typed_json: String, signature: Vec<u8>} => named("valid", cx.app()?.verify_app_record_key(kind, key_data, path, purpose, typed_json, signature)?);
     "app-core prepare-app-call" "AppCore::prepare_app_call" {chain: String, contract: String, entry: String, args: String, payer: KeyRef} @sign => {
         let call = cx.app()?.prepare_app_call(chain, contract, entry, args, payer).await?;
@@ -599,6 +669,15 @@ calls! { cx;
         cx.confirm(json!({"sign": "a PqChat message", "account": account, "header": header}))?;
         js(cx.app()?.pqchat_seal_message(account, k.0, pos.0, header, content_json).await?)
     };
+    "app-core pqchat-seal-file-message" "AppCore::pqchat_seal_file_message" {account: KeyRef, k: H<Arc<AppKey>>, pos: H<Arc<AppKey>>, header: PqMessageHeader, fields_json: String, file_key: H<Arc<AppKey>>} @sign => {
+        cx.confirm(json!({"sign": "a PqChat file message", "account": account, "header": header, "file": fields_json}))?;
+        js(cx.app()?.pqchat_seal_file_message(account, k.0, pos.0, header, fields_json, file_key.0).await?)
+    };
+    "app-core pqchat-open-file" "AppCore::pqchat_open_file" {content: Vec<u8>, object: Vec<u8>} => {
+        // the file named by an opened content (`pqchat-open-message`'s), after the length and ctSha256 checks
+        let c = Arc::new(SecretBytes::from_zeroizing(zeroize::Zeroizing::new(content)).map_err(SdkError::Ua)?);
+        let p = cx.app()?.pqchat_open_file(c, object)?; p.with(|b| hexed("file", b))
+    };
     "app-core pqchat-sign-session" "AppCore::pqchat_sign_session" {account: KeyRef, k: H<Arc<AppKey>>, r: PqSessionNew} @sign => {
         cx.confirm(json!({"sign": "a PqChat session", "account": account, "record": r}))?; js(cx.app()?.pqchat_sign_session(account, k.0, r).await?)
     };
@@ -606,7 +685,15 @@ calls! { cx;
         cx.confirm(json!({"sign": "a PqChat epoch", "account": account, "record": r}))?; js(cx.app()?.pqchat_sign_epoch(account, k.0, r).await?)
     };
     "app-core verify-pqchat-record" "AppCore::verify_pqchat_record" {chain: String, ua: String, name: String, record_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_pqchat_record(chain, ua, name, record_json, sig).await?);
+    "app-core sign-pqchat-card" "AppCore::sign_pqchat_card" {account: KeyRef, kem_version: u64, matrix_id: String} @sign => {
+        cx.confirm(json!({"sign": "a PqChat contact card", "account": account, "kemVersion": kem_version, "matrixId": matrix_id}))?; js(cx.app()?.sign_pqchat_card(account, kem_version, matrix_id).await?)
+    };
+    "app-core verify-pqchat-card" "AppCore::verify_pqchat_card" {chain: String, ua: String, card: PqChatCard, sig: AppUaSig} => named("valid", cx.app()?.verify_pqchat_card(chain, ua, card, sig).await?);
     "app-core pqchat-decode-payload" "AppCore::pqchat_decode_payload" {payload: Vec<u8>} => js(cx.app()?.pqchat_decode_payload(payload)?);
+    "app-core pqchat-wrap-hash" "AppCore::pqchat_wrap_hash" {wrap: PqWrap} => named("hash", cx.app()?.pqchat_wrap_hash(wrap)?);
+    "app-core pqchat-message-id" "AppCore::pqchat_message_id" {r: PqChatMessage} => named("messageId", cx.app()?.pqchat_message_id(r)?);
+    "app-core pqchat-session-id" "AppCore::pqchat_session_id" {creator: String, nonce: u64} => named("sessionId", cx.app()?.pqchat_session_id(creator, nonce)?);
+    "app-core pqchat-epoch-id" "AppCore::pqchat_epoch_id" {session_id: String, author: String, nonce: u64} => named("epochId", cx.app()?.pqchat_epoch_id(session_id, author, nonce)?);
     "app-core sign-pqchat-session" "AppCore::sign_pqchat_session" {account: KeyRef, r: PqChatSession} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_session(account, r).await?) };
     "app-core sign-pqchat-epoch" "AppCore::sign_pqchat_epoch" {account: KeyRef, r: PqChatEpoch} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_epoch(account, r).await?) };
     "app-core sign-pqchat-leave" "AppCore::sign_pqchat_leave" {account: KeyRef, r: PqChatLeave} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_leave(account, r).await?) };

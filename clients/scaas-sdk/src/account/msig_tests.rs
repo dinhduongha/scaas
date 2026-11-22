@@ -101,6 +101,7 @@ async fn setup_auth(
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -1020,7 +1021,7 @@ async fn msig_members_apart() {
 /// Extra item 3 (controller call, owner auto-run 2026-11-19): an `msig` auditor's PQZ consent (`AuditorConsent` under
 /// `auditor-consent`): the consent names the `msig`'s own UA and comes back as its `UASig{"", "", members}` signed by the slots
 /// named; a slot set below the threshold refused.
-#[cfg(feature = "pqz")]
+#[cfg(all(feature = "pqz", feature = "admin"))]
 #[tokio::test(flavor = "multi_thread")]
 async fn msig_auditor_pqz_consent() {
     let t = setup(REGISTRY, None).await;

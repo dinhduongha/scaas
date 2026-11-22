@@ -104,6 +104,18 @@ impl Breaker {
         }
     }
 
+    /// The balance alert on the lane's own cost (NET-EVM-16, chains-arweave T3): an EVM pool accepts a transaction only while
+    /// the balance covers its gas limit × max fee per gas + value (Avalanche checks it at acceptance), so a balance below the
+    /// in-flight transactions' sum `cost` (lane transactions carry no value) is alerted, whatever `min_relayer_balance` is.
+    /// True when below. An alert only: the floor breaker stays the operator's `min_relayer_balance`.
+    pub fn below_cost(&self, balance: u128, cost: u128) -> bool {
+        let short = balance < cost;
+        if short {
+            warn!(%balance, %cost, "relayer balance below its in-flight cost (gas limit x max fee + value): top up");
+        }
+        short
+    }
+
     pub fn last_balance(&self) -> Option<u128> {
         self.balance
     }
@@ -228,5 +240,15 @@ mod tests {
         assert_eq!(k.last_balance(), Some(999));
         k.balance(5000);
         assert_eq!(k.open(1), None);
+    }
+
+    /// The alert on the lane's in-flight cost: below it alerts; at it, or above, not (control); the floor breaker is untouched.
+    #[test]
+    fn balance_below_the_in_flight_cost_is_alerted() {
+        let mut k = b(0.0, None, Some(1000));
+        k.balance(5000);
+        assert!(k.below_cost(5000, 5001));
+        assert!(!k.below_cost(5000, 5000), "control");
+        assert_eq!(k.open(1), None, "an alert, not the floor");
     }
 }

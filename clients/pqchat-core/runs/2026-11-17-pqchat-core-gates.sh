@@ -16,6 +16,9 @@ R=clients/pqchat-core/runs
 SUMMARY=$R/2026-11-17-pqchat-core-summary.txt
 TASK=${TASK:--}
 export PATH="$HOME/.foundry/bin:$PATH"
+# `bind` runs the SDK's generator, which needs the pinned UniFFI generators (as the SDK's gate runner puts them on PATH)
+TOOLS="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/scratchpad/tools"
+export PATH="$TOOLS/uniffi/bin:$PATH"
 C="--locked --offline ${J:--j2}"
 cap="$W/scripts/capped"
 # the SDK's CI feature set (its gate runner's F)
@@ -31,9 +34,9 @@ STEPS=(
     "pqc-tree|clients/pqchat-core|$cap cargo test $C --test deps"
     "pqc-reads|.|python3 -I clients/pqchat-core/runs/check_reads.py"
     "pqc-wasm|clients/pqchat-core|$cap cargo check $C --target wasm32-unknown-unknown"
-    "pqc-vectors|clients/pqchat-core|$cap cargo test $C --test vectors"
+    "pqc-vectors|clients/pqchat-core|$cap cargo test $C --features vectors --test vectors"
     "pqc-chain|clients/pqchat-core|$cap cargo test $C -- --ignored --test-threads 1 chain_"
-    "pqc-e2e|clients/pqchat-core|$cap cargo test $C --test e2e -- --ignored --test-threads 1"
+    "pqc-e2e|clients/pqchat-core|$cap cargo test $C --test e2e -- --ignored --test-threads 1 --nocapture"
     "sdk-test|clients/scaas-sdk|$cap cargo test $C --features $F"
     "sdk-clippy|clients/scaas-sdk|$cap cargo clippy $C --all-targets --features $F,vectors -- -D warnings"
     "sdk-vectors|clients/scaas-sdk|$cap cargo test $C --features $F,vectors --test pqchat_keys"
@@ -41,7 +44,7 @@ STEPS=(
     "ua-appcore|clients/ua-rs|$cap cargo clippy $C --all-targets --features app-core,vectors -- -D warnings && $cap cargo test $C --features app-core,vectors --test app_core --test pqchat_keys && python3 -I scripts/gen_app_refusals.py --check"
     "ck-test|clients/clientkeys|$cap npm test"
     "ck-vectors|clients/clientkeys|node scripts/pqchat-vectors.mjs && git diff --exit-code -- ../../smartcontracts/vectors/pqchat"
-    "bind|.|bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check"
+    "bind|.|bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check && bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh"
     "docs|.|python3 scripts/docs_check.py check && python3 scripts/test_docs_check.py"
     "mutants-check|.|$MCHECK"
 )

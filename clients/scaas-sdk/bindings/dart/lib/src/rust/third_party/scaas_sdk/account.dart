@@ -117,6 +117,17 @@ abstract class Account implements RustOpaqueInterface {
   /// `pqz`; a PQZ key on a kind that holds none is `Argument`); `GasAboveTxCap`.
   Future<List<ArcRegistryWrite>> prepareRegister({required Register req});
 
+  /// KEM key rotation (owner 2026-11-22): the `setKemKey(ua, version, kem, sig)` that stores `key`'s KEM key of version
+  /// `version` ≥ 1 ([`set_kem_key_args`]), quoted and landed by its record (`kemKeyAt(ua, version)` non-empty) as every
+  /// registry write; `None` when that version is already stored. An unregistered UA: `Argument` (the registry refuses it).
+  /// No PqVault name: any app core wraps to the new version once it lands (`kemKeyOf` follows the highest).
+  Future<ArcRegistryWrite?> prepareSetKemKey({
+    required KeyRef key,
+    required String chain,
+    required BigInt version,
+    required KeyRef payer,
+  });
+
   /// `AddKey` (CTR-ACC-10): `ProfileMismatch`, `Argument`, `WalletLocked`.
   Future<ArcPrepared> prepareSmartAddKey({
     required SmartOp op,

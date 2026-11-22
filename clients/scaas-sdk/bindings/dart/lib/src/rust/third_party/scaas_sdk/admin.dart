@@ -378,7 +378,8 @@ class SignedRescue {
           signature == other.signature;
 }
 
-///`UAAcceptAdmin` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAAcceptAdmin
 class UaAcceptAdmin {
   final KeyRef signer;
   final String chain;
@@ -422,7 +423,8 @@ class UaAcceptAdmin {
           envelope == other.envelope;
 }
 
-///`UAApproveDexRelease` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAApproveDexRelease
 class UaApproveDexRelease {
   final KeyRef signer;
   final String chain;
@@ -494,7 +496,8 @@ class UaApproveDexRelease {
           envelope == other.envelope;
 }
 
-///`UAApproveRelease` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAApproveRelease
 class UaApproveRelease {
   final KeyRef signer;
   final String chain;
@@ -582,7 +585,8 @@ class UaApproveRelease {
           envelope == other.envelope;
 }
 
-///`UAApproveTokenRelease` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAApproveTokenRelease
 class UaApproveTokenRelease {
   final KeyRef signer;
   final String chain;
@@ -658,7 +662,8 @@ class UaApproveTokenRelease {
           envelope == other.envelope;
 }
 
-///`UACancelGrant` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UACancelGrant
 class UaCancelGrant {
   final KeyRef signer;
   final String chain;
@@ -710,7 +715,8 @@ class UaCancelGrant {
           envelope == other.envelope;
 }
 
-///`UACancelNonce` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UACancelNonce
 class UaCancelNonce {
   final KeyRef signer;
   final String chain;
@@ -754,7 +760,8 @@ class UaCancelNonce {
           envelope == other.envelope;
 }
 
-///`UACancelRate` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UACancelRate
 class UaCancelRate {
   final KeyRef signer;
   final String chain;
@@ -798,7 +805,8 @@ class UaCancelRate {
           envelope == other.envelope;
 }
 
-///`UACreateDex` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UACreateDex
 class UaCreateDex {
   final KeyRef signer;
   final String chain;
@@ -854,7 +862,8 @@ class UaCreateDex {
           envelope == other.envelope;
 }
 
-///`UACreateInstance` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UACreateInstance
 class UaCreateInstance {
   final KeyRef signer;
   final String chain;
@@ -918,7 +927,8 @@ class UaCreateInstance {
           envelope == other.envelope;
 }
 
-///`UACreateToken` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UACreateToken
 class UaCreateToken {
   final KeyRef signer;
   final String chain;
@@ -978,7 +988,8 @@ class UaCreateToken {
           envelope == other.envelope;
 }
 
-///`UADeprecateDex` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UADeprecateDex
 class UaDeprecateDex {
   final KeyRef signer;
   final String chain;
@@ -1030,7 +1041,8 @@ class UaDeprecateDex {
           envelope == other.envelope;
 }
 
-///`UADeprecateRelease` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UADeprecateRelease
 class UaDeprecateRelease {
   final KeyRef signer;
   final String chain;
@@ -1090,7 +1102,8 @@ class UaDeprecateRelease {
           envelope == other.envelope;
 }
 
-///`UADeprecateToken` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UADeprecateToken
 class UaDeprecateToken {
   final KeyRef signer;
   final String chain;
@@ -1146,7 +1159,8 @@ class UaDeprecateToken {
           envelope == other.envelope;
 }
 
-///`UADisableFeature` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UADisableFeature
 class UaDisableFeature {
   final KeyRef signer;
   final String chain;
@@ -1194,7 +1208,8 @@ class UaDisableFeature {
           envelope == other.envelope;
 }
 
-///`UADisableWrap` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UADisableWrap
 class UaDisableWrap {
   final KeyRef signer;
   final String chain;
@@ -1246,7 +1261,8 @@ class UaDisableWrap {
           envelope == other.envelope;
 }
 
-///`UAEnableFeature` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAEnableFeature
 class UaEnableFeature {
   final KeyRef signer;
   final String chain;
@@ -1294,7 +1310,8 @@ class UaEnableFeature {
           envelope == other.envelope;
 }
 
-///`UAExecuteRate` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAExecuteRate
 class UaExecuteRate {
   final KeyRef signer;
   final String chain;
@@ -1338,7 +1355,8 @@ class UaExecuteRate {
           envelope == other.envelope;
 }
 
-///`UAForceTransfer` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAForceTransfer
 class UaForceTransfer {
   final KeyRef signer;
   final String chain;
@@ -1390,7 +1408,8 @@ class UaForceTransfer {
           envelope == other.envelope;
 }
 
-///`UAFreeze` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAFreeze
 class UaFreeze {
   final KeyRef signer;
   final String chain;
@@ -1446,7 +1465,8 @@ class UaFreeze {
           envelope == other.envelope;
 }
 
-///`UAGrantRole` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAGrantRole
 class UaGrantRole {
   final KeyRef signer;
   final String chain;
@@ -1498,7 +1518,8 @@ class UaGrantRole {
           envelope == other.envelope;
 }
 
-///`UAMint` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAMint
 class UaMint {
   final KeyRef signer;
   final String chain;
@@ -1550,7 +1571,8 @@ class UaMint {
           envelope == other.envelope;
 }
 
-///`UAMintToUA` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAMintToUA
 class UaMintToUA {
   final KeyRef signer;
   final String chain;
@@ -1602,7 +1624,8 @@ class UaMintToUA {
           envelope == other.envelope;
 }
 
-///`UAOperatorTransfer` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAOperatorTransfer
 class UaOperatorTransfer {
   final KeyRef signer;
   final String chain;
@@ -1662,7 +1685,8 @@ class UaOperatorTransfer {
           envelope == other.envelope;
 }
 
-///`UAPause` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAPause
 class UaPause {
   final KeyRef signer;
   final String chain;
@@ -1714,7 +1738,8 @@ class UaPause {
           envelope == other.envelope;
 }
 
-///`UAPqzCancelVerifier` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAPqzCancelVerifier
 class UaPqzCancelVerifier {
   final KeyRef signer;
   final String chain;
@@ -1758,7 +1783,8 @@ class UaPqzCancelVerifier {
           envelope == other.envelope;
 }
 
-///`UAPqzRevokeVerifier` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAPqzRevokeVerifier
 class UaPqzRevokeVerifier {
   final KeyRef signer;
   final String chain;
@@ -1802,7 +1828,8 @@ class UaPqzRevokeVerifier {
           envelope == other.envelope;
 }
 
-///`UAPqzSetVerifier` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAPqzSetVerifier
 class UaPqzSetVerifier {
   final KeyRef signer;
   final String chain;
@@ -1850,7 +1877,8 @@ class UaPqzSetVerifier {
           envelope == other.envelope;
 }
 
-///`UAProposeRate` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAProposeRate
 class UaProposeRate {
   final KeyRef signer;
   final String chain;
@@ -1906,7 +1934,8 @@ class UaProposeRate {
           envelope == other.envelope;
 }
 
-///`UAPublishClassEnv` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAPublishClassEnv
 class UaPublishClassEnv {
   final KeyRef signer;
   final String chain;
@@ -1966,7 +1995,8 @@ class UaPublishClassEnv {
           envelope == other.envelope;
 }
 
-///`UAPublishDexEnv` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAPublishDexEnv
 class UaPublishDexEnv {
   final KeyRef signer;
   final String chain;
@@ -2018,7 +2048,8 @@ class UaPublishDexEnv {
           envelope == other.envelope;
 }
 
-///`UAPublishTokenEnv` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAPublishTokenEnv
 class UaPublishTokenEnv {
   final KeyRef signer;
   final String chain;
@@ -2074,7 +2105,8 @@ class UaPublishTokenEnv {
           envelope == other.envelope;
 }
 
-///`UARecordOrder` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UARecordOrder
 class UaRecordOrder {
   final KeyRef signer;
   final String chain;
@@ -2142,7 +2174,8 @@ class UaRecordOrder {
           envelope == other.envelope;
 }
 
-///`UARenounceAdmin` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UARenounceAdmin
 class UaRenounceAdmin {
   final KeyRef signer;
   final String chain;
@@ -2186,7 +2219,8 @@ class UaRenounceAdmin {
           envelope == other.envelope;
 }
 
-///`UARenounceRole` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UARenounceRole
 class UaRenounceRole {
   final KeyRef signer;
   final String chain;
@@ -2234,7 +2268,8 @@ class UaRenounceRole {
           envelope == other.envelope;
 }
 
-///`UARevokeApproval` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UARevokeApproval
 class UaRevokeApproval {
   final KeyRef signer;
   final String chain;
@@ -2282,7 +2317,8 @@ class UaRevokeApproval {
           envelope == other.envelope;
 }
 
-///`UARevokeOrder` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UARevokeOrder
 class UaRevokeOrder {
   final KeyRef signer;
   final String chain;
@@ -2334,7 +2370,8 @@ class UaRevokeOrder {
           envelope == other.envelope;
 }
 
-///`UARevokeRole` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UARevokeRole
 class UaRevokeRole {
   final KeyRef signer;
   final String chain;
@@ -2386,7 +2423,8 @@ class UaRevokeRole {
           envelope == other.envelope;
 }
 
-///`UASetAllowed` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetAllowed
 class UaSetAllowed {
   final KeyRef signer;
   final String chain;
@@ -2438,7 +2476,8 @@ class UaSetAllowed {
           envelope == other.envelope;
 }
 
-///`UASetAuditorKey` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetAuditorKey
 class UaSetAuditorKey {
   final KeyRef signer;
   final String chain;
@@ -2494,7 +2533,8 @@ class UaSetAuditorKey {
           envelope == other.envelope;
 }
 
-///`UASetAuditorUA` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetAuditorUA
 class UaSetAuditorUA {
   final KeyRef signer;
   final String chain;
@@ -2550,7 +2590,8 @@ class UaSetAuditorUA {
           envelope == other.envelope;
 }
 
-///`UASetChainEntries` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetChainEntries
 class UaSetChainEntries {
   final KeyRef signer;
   final String chain;
@@ -2598,7 +2639,8 @@ class UaSetChainEntries {
           envelope == other.envelope;
 }
 
-///`UASetClassKindEnabled` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetClassKindEnabled
 class UaSetClassKindEnabled {
   final KeyRef signer;
   final String chain;
@@ -2654,7 +2696,8 @@ class UaSetClassKindEnabled {
           envelope == other.envelope;
 }
 
-///`UASetCompliance` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetCompliance
 class UaSetCompliance {
   final KeyRef signer;
   final String chain;
@@ -2710,7 +2753,8 @@ class UaSetCompliance {
           envelope == other.envelope;
 }
 
-///`UASetDenied` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetDenied
 class UaSetDenied {
   final KeyRef signer;
   final String chain;
@@ -2762,7 +2806,8 @@ class UaSetDenied {
           envelope == other.envelope;
 }
 
-///`UASetExchangeTarget` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetExchangeTarget
 class UaSetExchangeTarget {
   final KeyRef signer;
   final String chain;
@@ -2814,7 +2859,8 @@ class UaSetExchangeTarget {
           envelope == other.envelope;
 }
 
-///`UASetFeeSplit` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetFeeSplit
 class UaSetFeeSplit {
   final KeyRef signer;
   final String chain;
@@ -2866,7 +2912,8 @@ class UaSetFeeSplit {
           envelope == other.envelope;
 }
 
-///`UASetGrant` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetGrant
 class UaSetGrant {
   final KeyRef signer;
   final String chain;
@@ -2922,7 +2969,8 @@ class UaSetGrant {
           envelope == other.envelope;
 }
 
-///`UASetKycProvider` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetKycProvider
 class UaSetKycProvider {
   final KeyRef signer;
   final String chain;
@@ -2974,7 +3022,8 @@ class UaSetKycProvider {
           envelope == other.envelope;
 }
 
-///`UASetListedOnly` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetListedOnly
 class UaSetListedOnly {
   final KeyRef signer;
   final String chain;
@@ -3022,7 +3071,8 @@ class UaSetListedOnly {
           envelope == other.envelope;
 }
 
-///`UASetMarket` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetMarket
 class UaSetMarket {
   final KeyRef signer;
   final String chain;
@@ -3078,7 +3128,8 @@ class UaSetMarket {
           envelope == other.envelope;
 }
 
-///`UASetMaxSupply` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetMaxSupply
 class UaSetMaxSupply {
   final KeyRef signer;
   final String chain;
@@ -3126,7 +3177,8 @@ class UaSetMaxSupply {
           envelope == other.envelope;
 }
 
-///`UASetMaxWrapSupply` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetMaxWrapSupply
 class UaSetMaxWrapSupply {
   final KeyRef signer;
   final String chain;
@@ -3174,7 +3226,8 @@ class UaSetMaxWrapSupply {
           envelope == other.envelope;
 }
 
-///`UASetProofStore` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetProofStore
 class UaSetProofStore {
   final KeyRef signer;
   final String chain;
@@ -3222,7 +3275,8 @@ class UaSetProofStore {
           envelope == other.envelope;
 }
 
-///`UASetTaxRate` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetTaxRate
 class UaSetTaxRate {
   final KeyRef signer;
   final String chain;
@@ -3270,7 +3324,8 @@ class UaSetTaxRate {
           envelope == other.envelope;
 }
 
-///`UASetTaxRecipient` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetTaxRecipient
 class UaSetTaxRecipient {
   final KeyRef signer;
   final String chain;
@@ -3318,7 +3373,8 @@ class UaSetTaxRecipient {
           envelope == other.envelope;
 }
 
-///`UASetTokenKindEnabled` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetTokenKindEnabled
 class UaSetTokenKindEnabled {
   final KeyRef signer;
   final String chain;
@@ -3370,7 +3426,8 @@ class UaSetTokenKindEnabled {
           envelope == other.envelope;
 }
 
-///`UASetVerifierFee` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetVerifierFee
 class UaSetVerifierFee {
   final KeyRef signer;
   final String chain;
@@ -3418,7 +3475,8 @@ class UaSetVerifierFee {
           envelope == other.envelope;
 }
 
-///`UASetWrapLimits` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetWrapLimits
 class UaSetWrapLimits {
   final KeyRef signer;
   final String chain;
@@ -3478,7 +3536,8 @@ class UaSetWrapLimits {
           envelope == other.envelope;
 }
 
-///`UASetWrapMember` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UASetWrapMember
 class UaSetWrapMember {
   final KeyRef signer;
   final String chain;
@@ -3534,7 +3593,8 @@ class UaSetWrapMember {
           envelope == other.envelope;
 }
 
-///`UATransferAdmin` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UATransferAdmin
 class UaTransferAdmin {
   final KeyRef signer;
   final String chain;
@@ -3582,7 +3642,8 @@ class UaTransferAdmin {
           envelope == other.envelope;
 }
 
-///`UAUnfreeze` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAUnfreeze
 class UaUnfreeze {
   final KeyRef signer;
   final String chain;
@@ -3634,7 +3695,8 @@ class UaUnfreeze {
           envelope == other.envelope;
 }
 
-///`UAUnpause` on the profile's `GovernanceRouter` (spec §11).
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+///UAUnpause
 class UaUnpause {
   final KeyRef signer;
   final String chain;

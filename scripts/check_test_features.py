@@ -51,9 +51,20 @@ ARTIFACTS = [
     # the SDK apps call (scaas-sdk plan T1): every feature it ships, its own test feature `vectors` excepted (pqchat-core T1);
     # the reference library of its binding tests
     ("clients/scaas-sdk", "shipped"),
+    # T41.evm step 0: the SDK without its EVM part (`evm`), account, wallet and every non-EVM family
+    (
+        "clients/scaas-sdk",
+        [
+            "--no-default-features",
+            "--features",
+            "vault,account,wallet,file-store,mlock,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native",
+        ],
+    ),
     ("clients/scaas-sdk/ffi", []),
     # the CLI `scaas` (plan T22): every feature it ships (dev-profiles included); the SDK's `vectors` never reaches it
     ("clients/scaas-cli", "shipped"),
+    # PqVault's app core (plan V10): every feature it ships; its own test feature `vectors` excepted
+    ("clients/pqvault-core", "shipped"),
 ]
 
 
@@ -226,6 +237,7 @@ def main():
     forced = check_graph("clients/scaas-sdk", ["--features", "vectors"])
     ok = (
         "vectors" not in shipped("clients/scaas-sdk")[1].split(",")
+        and "evm" in shipped("clients/scaas-sdk")[1].split(",")
         and any('scaas-sdk feature "vectors"' in x for x in forced)
         and any('scaas-ua feature "vectors"' in x for x in forced)
     )

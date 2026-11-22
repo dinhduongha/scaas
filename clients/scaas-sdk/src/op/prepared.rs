@@ -11,6 +11,7 @@ use std::sync::{Arc, PoisonError};
 
 /// Where a reviewed value comes from (spec §13.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Source {
     /// a field of the signed struct (or committed to by it, as a pay's `PayMeta`), decoded
     Signed,
@@ -22,6 +23,7 @@ pub enum Source {
 
 /// One reviewed value: its name (a path for a nested field, `payment.value`), the value as signed, its display form.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct ReviewField {
     pub name: String,
@@ -87,6 +89,9 @@ pub(crate) struct Typed {
     pub key_index: U256,
     /// the entry's contract when it is not the domain's
     pub target: Option<[u8; 20]>,
+    /// an imported operation's signature in the entry's form and its signer's kind (`Op::import_signed`): `submit` signs
+    /// nothing for it
+    pub signed: Option<(Value, u16)>,
     /// an order row's closing fact: the contract, the event and the order hash (plan T17)
     pub fact: Option<([u8; 20], &'static str, [u8; 32])>,
 }
@@ -99,11 +104,12 @@ impl Typed {
 }
 
 /// A prepared operation (spec §13.1): opaque, kept in the SDK's table; it holds no secret and nothing signed.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct Prepared {
     id: String,
     chain: String,
     entry: String,
-    review: Vec<ReviewField>,
+    review: std::sync::Mutex<Vec<ReviewField>>,
     opaque: bool,
     signer: KeyRef,
     expires_at: u64,
@@ -130,7 +136,10 @@ impl Prepared {
         self.entry.clone()
     }
     pub fn review(&self) -> Vec<ReviewField> {
-        self.review.clone()
+        self.review
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
     /// An undecoded call under `AllowOpaqueCall` (§13.2).
     pub fn opaque(&self) -> bool {
@@ -356,11 +365,30 @@ fn address_of(m: &Map<String, Value>, k: &str) -> Option<[u8; 20]> {
         .filter(|a| *a != [0; 20])
 }
 
+impl Prepared {
+    /// A line the import adds after its simulation (spec §27.5 (c): the effect shown before anything is signed).
+    pub(crate) fn add_review(&self, f: ReviewField) {
+        self.review
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(f);
+    }
+}
+
 impl Op {
+    /// [`Op::prepare_signed`] of an operation this SDK signs.
+    pub(crate) async fn prepare(sdk: &Arc<Sdk>, d: Draft) -> Result<Arc<Prepared>, SdkError> {
+        Op::prepare_signed(sdk, d, None).await
+    }
+
     /// Builds and keeps a [`Prepared`] (spec §13.1): the lane's nonce and the chain's time read, the typed data and its check
     /// built by `scaas-ua`, every field listed for review. `WalletLocked`: the signer's seed is locked; `Argument`: a field the
     /// struct refuses.
-    pub(crate) async fn prepare(sdk: &Arc<Sdk>, d: Draft) -> Result<Arc<Prepared>, SdkError> {
+    pub(crate) async fn prepare_signed(
+        sdk: &Arc<Sdk>,
+        d: Draft,
+        signed: Option<(Value, u16)>,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let (profile, chain_id, pool) = evm(sdk, &d.chain)?;
         // a kind the chain's profile disables (owner 2026-11-22): a PQZ operation, a UA signer of that kind
         if d.kind == "pqz" {
@@ -370,7 +398,7 @@ impl Op {
             super::ua_kind_enabled(&profile, *kind)?;
         }
         // a locked seed refuses before any read (an `msig`'s slot keys are opened when it signs)
-        if !matches!(d.signer, KeyRef::Msig { .. }) {
+        if !matches!(d.signer, KeyRef::Msig { .. } | KeyRef::Signed { .. }) {
             drop(super::key_opened(sdk, &d.signer).await?);
         }
         let uid: [u8; 32] = super::unhex(&profile.chain_uid)?
@@ -562,7 +590,7 @@ impl Op {
             id: id.clone(),
             chain: d.chain,
             entry,
-            review,
+            review: std::sync::Mutex::new(review),
             opaque: d.opaque,
             signer: d.signer,
             expires_at,
@@ -580,6 +608,7 @@ impl Op {
                 owner,
                 key_index: d.key_index,
                 target: d.target,
+                signed,
                 fact,
             },
         });

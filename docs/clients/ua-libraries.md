@@ -222,11 +222,12 @@ Stated gaps: no binding wraps the C calls of the PQZ seed backup ([CLI-SGN-47](s
 `scaas_ua_pqz_seed_backup_warning`, `scaas_ua_wallet_pqz_held_key`), and none marshals an external signer's callback (each passes NULL
 and expects `KindUnavailable`). The wasm-bindgen browser binding is PLANNED (next, after the size and device numbers).
 Apps do not wrap these: they reach SCaaS through `scaas-sdk` and the bindings generated from it
-([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12); SPECIFIED); the wrappers above stay for clients that use the signer without the SDK.
-PLANNED in `ua-rs` for the SDK, each with clientkeys rows first: `SecretBytes` lifted from `ua-dart-frb` (one implementation), the
-master fingerprint, the keystore's index MAC ([CLI-SDK-03](scaas-sdk.md#CLI-SDK-03)), a re-seal of a vault's data under its same data
-key, BIP-85 children with a sealed high-water mark ([CLI-SDK-04](scaas-sdk.md#CLI-SDK-04)), and the named-entry JSON and calldata of
-every typed operation.
+([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12); BUILT for the Dart binding, the others PLANNED); the wrappers above stay for clients
+that use the signer without the SDK. BUILT in `ua-rs` for the SDK (SDK plan T2a, T4, T5, T8; each with clientkeys rows first;
+UNAUDITED): `SecretBytes` (one implementation), the master fingerprint, the keystore's index MAC
+([CLI-SDK-03](scaas-sdk.md#CLI-SDK-03)), a re-seal of a vault's data under its same data key, BIP-85 children with a sealed
+high-water mark ([CLI-SDK-04](scaas-sdk.md#CLI-SDK-04)), and the named-entry JSON and calldata of every typed operation
+(`wallet/entries/`).
 
 **Targets.** CI (`.github/workflows/ci.yml`; its header lists the commands): `ua-rs` runs ten cells, each with clippy and tests;
 `ua-rs-targets` compiles for the other targets; `ua-deps` runs `cargo tree --locked`, `cargo deny`, `cargo audit`;
@@ -770,7 +771,8 @@ T11–T14, T17–T20). Which device-id version a client defaults to is open (a c
 chain, since v7 puts its creation time on chain). The Rust client core that does all of this above `scaas-sdk`, with key handles only, is
 [`pqchat-core`](pqchat-core.md) (SPECIFIED).
 
-<a id="arweave-clients"></a>**Arweave data items and file objects** (SPECIFIED, nothing built; owner 2026-11-21,
+<a id="arweave-clients"></a>**Arweave data items and file objects** (BUILT in clientkeys and `ua-rs`, UNAUDITED: chains-arweave plan T16
+and T17 as T41.arweave on branch `sdk-arweave`; the network and SDK parts, CLI-RPC-13, CLI-RPC-14 and CLI-SDK-21, as their rules say; owner 2026-11-21,
 [ARCH-POS-19](../decisions.md#ARCH-POS-19) (2), Q4; the rules below controller calls of
 [ARCH-POS-20](../decisions.md#ARCH-POS-20); design in the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part D; UNAUDITED):
 
@@ -795,7 +797,15 @@ refusing (`AppKeyUsage`) unless it equals the bound hash; it takes no digest and
 exactly one byte string. The signature is verified before the item is returned. Vectors: `smartcontracts/vectors/arweave/`,
 written by clientkeys first and cross-checked both ways against a pinned `arbundles` (each item byte-identical to the one
 `arbundles` builds from the same key and data, and accepted by `arbundles`' own verification), with tags, a target and an
-anchor in some rows; reproduced by `ua-rs`.
+anchor in some rows; reproduced by `ua-rs`. **As built** (BUILT, UNAUDITED; controller calls CLI-SDK-33 (60)–(63)): clientkeys
+`src/arweave.js`, `scripts/arweave-vectors.mjs`, `test/arweave.test.js`; the cross-check `clients/clientkeys/xcheck/arbundles/`
+(`@dha-team/arbundles` 1.2.0 under its own lock file, 72 checks, both ways); `ua-rs` `src/arweave.rs` (feature `fam-arweave`: the
+deep hash, the Avro tags, `DataItem` and its verifying parser, `ar://`) and `src/wallet/arweave.rs` (with `app-core`:
+`AppKeys::seal_for_arweave`, the upload key, `UploadSign`), tests `tests/arweave.rs`, `tests/arweave_rows.rs`. **Type 4 signs
+the deep hash's lowercase hex text** (96 ASCII bytes), as `arbundles`' Solana signers sign and verify it; types 2 and 3 sign the 48
+bytes (the cross-check found this; the spec's "the same bytes" for type 4 is corrected by CLI-SDK-33 (60)). The strict tag
+reader also refuses any tag bytes other than the one-block encoding a builder writes (`TagNonCanonical`), since the signature
+covers the raw bytes. `UploadSign` lives for the one `seal_for_arweave` call and is no `KeyUsage` (CLI-SDK-33 (61)).
 
 <a id="CLI-UAL-65"></a>**CLI-UAL-65** — **A file on Arweave is encrypted with its padding inside the AEAD: the plaintext is
 framed as `len ‖ file ‖ zero pad` up to a power-of-two bucket, so the public object is exactly bucket + 16 B; it is named by
@@ -816,19 +826,34 @@ SHA-256 of the file to equal the signed `sha256`, before any plaintext byte leav
 one message to one file without a separate key commitment. A failure is shown on the device only. PqVault's `file` item takes
 the same rules. Vectors: new rows in `smartcontracts/vectors/pqchat/` (an `ar://` `file` content and its refusals) and the
 frames, buckets (`size = 0`, and `size + 8 = 2^k − 1, 2^k, 2^k + 1` for every `k` from 16 to 31) and objects in
-`smartcontracts/vectors/arweave/`, written by clientkeys first and read by every client that reads those directories.
+`smartcontracts/vectors/arweave/`, written by clientkeys first and read by every client that reads those directories. **As
+built** (BUILT, UNAUDITED; CLI-SDK-33 (62)): the generic seal is the core's (`app-core`, without `fam-arweave`): `scaas_ua::file`
+(`bucket`, the caps, `check_object`, the reader's check before decryption) and `AppKeys::seal_file` / `open_file` with the new
+usage `KeyUsage::File` (4), a fresh file key per seal, wrapped like any other key (`seal_key`, `kem_wrap`); tests
+`tests/file_seal.rs` (a build without `fam-arweave` seals and opens a file) and the rows of `tests/arweave_rows.rs`; the vectors
+`smartcontracts/vectors/arweave/objects.json` and `smartcontracts/vectors/pqchat/ar-urls.json`.
 
-<a id="pqvault-clients"></a>**PqVault** (SPECIFIED, nothing built; the contract is [pqvault.md](../contracts/pqvault.md), the design
+<a id="pqvault-clients"></a>**PqVault** (`pqvault-core` BUILT, UNAUDITED, [CLI-PQV-01](#CLI-PQV-01); the contract is [pqvault.md](../contracts/pqvault.md), the design
 the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)). The rules every PqVault client follows; the
 first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-12 controller calls (owner may override):
 
 <a id="CLI-PQV-01"></a>**CLI-PQV-01** — **`pqvault-core`, a Rust crate of its own, builds, encrypts, opens and merges vault
-records as an app core above `scaas-sdk`: it depends on the SDK, the SDK knows nothing about PqVault, and every signature,
+records as an app core above `scaas-sdk`: it depends on the SDK, the SDK holds no PqVault logic beyond its two signing calls
+`sign_pqvault_record` / `verify_pqvault_record` (all vault logic stays in `pqvault-core`; owner 2026-11-22,
+[CLI-PQV-13](../decisions.md#CLI-PQV-13)), and every signature,
 KEM, KDF and AEAD still runs in `ua-rs`, reached through the SDK ([CLI-UAL-01](#CLI-UAL-01)); scaas-app links it in its one
 Rust library `app-core-rust` with the feature `pqvault` (which implies `scaas`; scaas-app's contract section 12)** (owner
-2026-11-17, N2: "agreed to reverse the dependency", which replaced V11's SDK module `pqvault` the same day). SPECIFIED. The
-SDK's `vault` stays the seed vault; `pqvault-core`'s calls are the spec's
-[§8](../superpowers/specs/2026-11-17-pqvault.md#8-the-app-facing-api-of-pqvault-core).
+2026-11-17, N2: "agreed to reverse the dependency", which replaced V11's SDK module `pqvault` the same day). BUILT, UNAUDITED
+(plan V10, V10e: `clients/pqvault-core`; its controller calls [CLI-PQV-14](../decisions.md#CLI-PQV-14)): the records, ids
+and typed data of both modes, the key schedule on the SDK's handles, the state read from the views alone and the signature
+chain of spec §6.9 verified before an unlock, unlock with the unopenable-epoch and history rules, rekey, leave, remove with
+the affected list, items, edits, merge, batches sized by the chain's limits, recovery from the index vault and the scan,
+the replica check, the migration plan; `tests/vectors.rs` reproduces `smartcontracts/vectors/pqvault/`, `tests/e2e.rs`
+runs the real client on a local `anvil`, a KEM key rotation and an `msig` admin with a native member in both modes included
+(owner 2026-11-22, [CLI-PQV-15](../decisions.md#CLI-PQV-15)); the generated passphrase is 6 BIP-39 words drawn in `ua-rs`,
+the share box is found among the unlocked vaults. Not built yet: the members' kind flags, the migration's run; reads spread
+over the node list (a `scaas-rpc` / SDK follow-up) and the biometric `P_k` (CLI-PQV-07, scaas-app's) are not this crate's. The SDK's `vault` stays the seed vault; `pqvault-core`'s
+calls are the spec's [§8](../superpowers/specs/2026-11-17-pqvault.md#8-the-app-facing-api-of-pqvault-core).
 
 <a id="CLI-PQV-02"></a>**CLI-PQV-02** — **A personal vault uses the same path as a shared one: a random 32-byte epoch key
 wrapped once to its own UA KEM key (ML-KEM-1024 + X25519); no seed-derived vault key exists; a personal vault is never
@@ -896,17 +921,21 @@ does not enforce it. BUILT in clientkeys (`padInfo`), reproduced by `ua-rs`.
 of the same members with a fresh salt; the history is as strong as the weakest epoch that links to it, so before a rekey
 that weakens it (passphrase off or weaker, a member added) the client shows what it would expose and offers the rekey
 without `prev`; a downgrade is accepted only from a verified admin record; Argon2id without associated data at a parameter
-set pinned after a measured run; a generated 5-word passphrase offered, a user-chosen one at least 16 characters with a
+set pinned after a measured run; a generated passphrase offered (6 BIP-39 words, owner 2026-11-22), a user-chosen one at least 16 characters with a
 strength meter, nothing more enforced; a shared vault's passphrase never equal to the user's personal one** (controller
-call, owner may override). SPECIFIED. Design: [spec §6.5](../superpowers/specs/2026-11-17-pqvault.md#65-the-vault-passphrase-p2).
+call, owner may override). SPECIFIED. The generated passphrase is 6 BIP-39 English words (about 66 bits) drawn in `ua-rs`
+(owner 2026-11-22, [CLI-PQV-15](../decisions.md#CLI-PQV-15)); BUILT. Design: [spec §6.5](../superpowers/specs/2026-11-17-pqvault.md#65-the-vault-passphrase-p2).
 
 <a id="CLI-PQV-12"></a>**CLI-PQV-12** — **`pqvault-core` holds key handles only and signs only under PqVault's app purpose:
 the KEM-unwrapped epoch key, the passphrase output, the effective key and every key derived from them stay in `ua-rs`
 behind handles of one usage each (`Derive`, `Data`, `KeyWrap`), and wrap, unwrap, HKDF, Argon2id, AEAD and key sealing
 run there on those handles; the only bytes that come out are plaintexts it asks to decrypt for the user, which hold no
-key (earlier and file keys are sealed); it signs typed data of its own domain through the SDK's app signing call, which
-refuses every SCaaS purpose and every SCaaS contract's or the registry's domain by name; if either cannot be met, the task
-stops and the owner decides** (coordinator conditions, controller calls, owner may override). App scoping avoids
+key (earlier and file keys are sealed); it signs its records only through the SDK's PqVault signing call
+(`sign_pqvault_record`, over `ua-rs`'s dedicated path `wallet::pqvault`, which accepts the domain "SCaaS PqVault" and
+PqVault's structs only), while the SDK's generic app signing call refuses every SCaaS purpose (PqVault's `P_V` included) and
+every SCaaS contract's or the registry's domain by name (PqVault's included); if either cannot be met, the task stops and the
+owner decides** (coordinator conditions, controller calls, owner may override; the dedicated path is the owner's ruling of
+2026-11-22, [CLI-PQV-13](../decisions.md#CLI-PQV-13), BUILT, UNAUDITED). App scoping avoids
 collisions among the cores an app links; it does not isolate: an app holding the user's unlocked seed set acts for that UA
 in every app namespace, PqVault's included, so only reviewed app cores are linked. SPECIFIED. Design: the spec's
 [§7](../superpowers/specs/2026-11-17-pqvault.md#7-pqvault-core).

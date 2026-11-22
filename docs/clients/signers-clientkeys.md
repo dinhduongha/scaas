@@ -479,7 +479,7 @@ virtual authenticator per family.
 <a id="vault"></a>
 
 Several seeds on one device, each a set of v2 vaults below, are kept in the `scaas.keystore` container of
-[CLI-SDK-03](scaas-sdk.md#CLI-SDK-03) (SPECIFIED): the same bytes in clientkeys, `ua-rs`, `scaas-sdk` and scaas-app, each seed's public
+[CLI-SDK-03](scaas-sdk.md#CLI-SDK-03) (BUILT in clientkeys, `ua-rs` and `scaas-sdk`; SDK plan T2a–T2c, T13b): the same bytes in clientkeys, `ua-rs`, `scaas-sdk` and scaas-app, each seed's public
 fields and vault texts authenticated by an index MAC computed in clientkeys and `ua-rs`; each vault's AAD binds its seed's id
 (vault v2, owner 2026-11-19, scaas-sdk T13b ruling 3).
 
@@ -547,7 +547,7 @@ IndexedDB database (`scaas-clientkeys`, store `kv`), so eviction removes both to
 | Key | Value |
 |---|---|
 | `device-key:v1` | the `CryptoKey` (`extractable: false`) |
-| `vault:<id>` | v3 (or v2 on fallback); a portal `<id>` = `<portal-prefix>:<subject>`, where `<subject>` is an opaque per-partner tag issued by the server; the app `seed:<account label>`; Zether `zether-conf:<curve>:<coin>:<account>`; PQ Zether `vault:pqz:<account>:<index>` |
+| `vault:<id>` | v3 (or v2 on fallback); a portal `<id>` = `<portal-prefix>:<subject>`, where `<subject>` is an opaque per-partner tag issued by the server; the app `seed:<account label>`; Zether `zether-conf:<curve>:<coin>:<account>`; PQ Zether `pqz:registry:<account>:<index>:<version>` ([CLI-SGN-55](#CLI-SGN-55)) |
 | `rewrap-attempt:<id>` | the `N` being attempted |
 | `persist-notice` | `true` once the refusal notice was shown |
 
@@ -1084,9 +1084,10 @@ needed; with a fixed `k` the bytes match). A separate lazy entry `zether-keys.js
 in the vault like the seed. BUILT.
 
 Post-quantum Zether keys: the BIP-39 seed lives only in the key worker, so the PQ `seed32` is derived there and nowhere
-else. `sealPqKey({account, index})` (key worker) derives `seed32` once and seals it as a 32-byte PQZ leaf in vault v2 under
-`vault:pqz:<account>:<index>` (AES-256-GCM with the device key and its own AAD label, the `sealConfKey` pattern);
-`openPqKey({account, index})` (Zether worker) opens that leaf only, never the seed; `pqz-cli` (and `pqz-cli serve`) reads
+else. `sealPqKey({account, index, version})` (key worker) derives `seed32` once and seals it as a 32-byte PQZ leaf in vault v2
+under the label `pqz:registry:<account>:<index>:<version>` (AES-256-GCM with the device key and its own AAD label, the
+`sealConfKey` pattern); `openPqKey({account, index, version})` (Zether worker) opens that leaf only, never the seed
+([CLI-SGN-55](#CLI-SGN-55)); `pqz-cli` (and `pqz-cli serve`) reads
 the 32-byte leaf from stdin, exported on the user's own machine, never the BIP-39 seed; organizations keep the leaf in the
 key oracle and the ML-DSA key in an HSM with FIPS 204 firmware where available. `sealPqKey`/`openPqKey` join the vault v2 API
 next to `sealConfKey`/`openConfKey`. clientkeys uses `deriveUAKey(seed, {kind: 'mldsa65', account, index})` /
@@ -1109,6 +1110,29 @@ existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzTok
 `UAMetaTransaction` builder (UA path, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA
 vectors (`smartcontracts/vectors/ua/kinds.json`) carry the `pqz-mlwe` scheme row (seed → pk, keyHash, `pqz_reg_message`). Protocol detail:
 [contracts/pq-zether](../contracts/pq-zero-knowledge.md). SPECIFIED.
+
+<a id="CLI-SGN-55"></a>**CLI-SGN-55** — **The registry-class PQZ leaf is sealed alone and opened alone: `sealPqKey` in the key
+worker, `openPqKey` beside the prover; every refusal of the opener is one class, `VaultOpen`.** Owner 2026-11-22 (P6h (3) in
+the round before the pre-freeze tag). Status: **BUILT** in `clientkeys` (`src/pq.js` `sealPqKey`, `openPqKey`, `pqzLeafLabel`),
+`ua-rs` (feature `pqz`: `Wallet::seal_pq_key`, `facade::pqz::PqzKey::open_leaf`, `pqz_leaf_label`), `ua-c`
+(`scaas_ua_wallet_seal_pq_key`, `scaas_ua_pqz_open_leaf`) and the bindings over them; rows
+`smartcontracts/vectors/ua/pqz_leaf.json` (`clients/clientkeys/scripts/pqz-leaf-vectors.mjs [--check]`). UNAUDITED.
+- **What is sealed.** The `registry` key class only ([CTR-PQZ-37](../contracts/pq-zero-knowledge.md#CTR-PQZ-37)): the leaf is
+  `seed32` of [CLI-SGN-49](#CLI-SGN-49) at `(account, index, version)`, both indices below 2^31. The `offchain-shared` and
+  `offchain-token` keys with the opening stay in their key handles ([CLI-SGN-51](#CLI-SGN-51)) and have no leaf here.
+- **Bytes.** A vault v2 ([CLI-SGN-02](#CLI-SGN-02)) of the 32 bytes under the label `pqz:registry:<account>:<index>:<version>`
+  (decimal, canonical; [CLI-SGN-50](#CLI-SGN-50)'s leaf key with the class named), stored under `vault:` + the label; its `id`
+  is the seed vault's, so the AAD binds the leaf to its seed. New passphrase policy and PRF envelope as any vault.
+- **Seal.** `sealPqKey({seed, account, index, version = 0, pin, prf, id})` / `Wallet::seal_pq_key(account, index, version,
+  vault_passphrase, prf)` derive the leaf where the seed is (the arena in `ua-rs`) and return the vault; the seed never leaves.
+- **Open.** `openPqKey(vault, {account, index, version, pin | prfOutput})` returns the 32 bytes; `PqzKey::open_leaf(vault_json,
+  unlock, account, index, version)` puts them in a store of their own (mlock, zeroized on drop) and returns the key handle,
+  with no wallet and no seed. The vault must carry exactly the label of the asked `(account, index, version)` and a 32-byte
+  payload. A wrong passphrase or PRF output, another leaf's label (account, index or key version), an altered or truncated box
+  or JSON, another payload length, another vault version or the tombstone, envelope parameters outside CLI-SGN-21 (still
+  refused before scrypt runs), an id not a UUID v4: all `VaultOpen`, nothing else ([ARCH-POS-13](../decisions.md#ARCH-POS-13)).
+- `pqz-cli` reads the leaf from stdin as before ([CTR-PQZ-13](../contracts/pq-zero-knowledge.md#CTR-PQZ-13)); it is the
+  32 bytes `openPqKey` returns.
 
 <a id="CLI-SGN-49"></a>**CLI-SGN-49** — **A PQZ key has versions: the seed of version v ≥ 1 appends `be64(v)`, an `msig` draws
 each version fresh, vault and backup keys name `(ua, version, pqzKeyHash)`, and the builders refuse a broken sequence.** Status:

@@ -19,6 +19,8 @@ export PATH="$HOME/.foundry/bin:$PATH"
 C="--locked --offline ${J:--j2}"
 TT=${T:+ --test-threads=$T}
 cap="$W/scripts/capped"
+# the SDK's features: one PQZ parameter set (pqz-stmt refuses two, so never --all-features; the SDK gate's F)
+SDKF="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records"
 
 # step | directory | command (run with bash -c from the directory)
 STEPS=(
@@ -38,7 +40,7 @@ STEPS=(
     "ua-test|clients/ua-rs|$cap cargo test $C --all-features"
     "rpc-test|clients/scaas-rpc|$cap cargo test $C --all-features && $cap cargo clippy $C --all-targets --all-features -- -D warnings"
     "rpc-wasm|clients/scaas-rpc|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features evm\$(grep -q '^arweave *=' Cargo.toml && echo ,arweave)"
-    "sdk-test|clients/scaas-sdk|$cap cargo test $C --all-features && $cap cargo clippy $C --all-targets --all-features -- -D warnings"
+    "sdk-test|clients/scaas-sdk|$cap cargo test $C --features $SDKF && $cap cargo clippy $C --all-targets --features $SDKF -- -D warnings"
     "node-test|scaas-node|CAPPED_MEM=6G $cap cargo test $C && $cap cargo clippy $C --all-targets -- -D warnings"
     "node-e2e|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e -- --ignored$TT"
     "docs|.|python3 scripts/docs_check.py check && python3 scripts/docs_check.py paths && python3 scripts/test_docs_check.py"
