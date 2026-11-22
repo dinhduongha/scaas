@@ -1058,3 +1058,71 @@ async fn prepare_app_call_builds_named_calldata() {
     );
     assert!(call(APP_CONTRACT, args).await.is_ok());
 }
+
+/// Controller call 2026-11-22 (CLI-SDK-33): one handle given twice in one call is `Argument`, before any lock is taken (it
+/// waited on itself before: each handle's lock is taken in turn); every call over handles goes through that one path. Each
+/// refusal beside its twin (two distinct handles), and each call run on its own thread under a 20 s bound, so a hang is a
+/// failure, not a stuck suite.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_handle_twice_in_one_call_is_refused() {
+    use scaas_sdk::app_core::{AppKeyUsage, AppNonce};
+    let (s, seed) = sdk().await;
+    let a = AppCore::new(s.clone(), desc(None, &["scaas/dup/v1/"])).unwrap();
+    let k = a.random_key(&seed, AppKeyUsage::Derive).unwrap();
+    let k2 = a.random_key(&seed, AppKeyUsage::Derive).unwrap();
+    let w = a.random_key(&seed, AppKeyUsage::KeyWrap).unwrap();
+    let d = a.random_key(&seed, AppKeyUsage::Data).unwrap();
+    let bounded = |f: Box<dyn FnOnce() -> &'static str + Send>| {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(f());
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(20))
+            .unwrap_or("hung")
+    };
+    let (a1, k1, k1b) = (a.clone(), k.clone(), k.clone());
+    assert_eq!(
+        bounded(Box::new(move || code(a1.same_key(k1, k1b)))),
+        "Argument"
+    );
+    let (a1, k1, k2b) = (a.clone(), k.clone(), k2.clone());
+    assert_eq!(
+        bounded(Box::new(move || code(a1.same_key(k1, k2b)))),
+        "Ok",
+        "the twin"
+    );
+    let (a1, w1, w1b) = (a.clone(), w.clone(), w.clone());
+    assert_eq!(
+        bounded(Box::new(move || code(a1.seal_key(w1, w1b, vec![])))),
+        "Argument"
+    );
+    let (a1, w1, d1) = (a.clone(), w.clone(), d.clone());
+    assert_eq!(
+        bounded(Box::new(move || code(a1.seal_key(w1, d1, vec![])))),
+        "Ok",
+        "the twin"
+    );
+    let (a1, k1, k1b) = (a.clone(), k.clone(), k.clone());
+    assert_eq!(
+        bounded(Box::new(move || code(a1.derive(
+            vec![k1, k1b],
+            vec![],
+            b"scaas/dup/v1/x".to_vec(),
+            vec![],
+            AppKeyUsage::Derive,
+            false
+        )))),
+        "Argument"
+    );
+    let (a1, d1, n1) = (a.clone(), d.clone(), k.clone());
+    assert_eq!(
+        bounded(Box::new(move || code(a1.seal(
+            d1,
+            AppNonce::FromHandle(n1),
+            vec![],
+            b"x".to_vec()
+        )))),
+        "Ok",
+        "a nonce handle beside its key"
+    );
+}
