@@ -17,5 +17,11 @@ assert not killed_by(red.replace("msig_members_apart", "other_test"), intended(C
 assert not killed_by("error: could not find something\n", None), "no failing test"
 assert killed_by("[FAIL: measured at the bound: 64 != 80] test_sdkGas_pqzConfRoll() (gas: 1)\n", "test_sdkGas_pqzConfRoll")
 assert failure_line("all good\n") == "-"
+dart = "00:00 +0 -1: test/binding_test.dart: load_check: this library passes [E]\n  Expected: throws\n"
+assert killed_by(dart, None) and failure_line(dart) != "-", "a dart test's failure"
+assert not killed_by("00:00 +3: test/binding_test.dart: load_check: this library passes\n", None), "a dart pass"
+gen = "[gen] ok: Go\n[gen] FAIL a generated file differs from the committed one\n"
+assert killed_by(gen, None) and failure_line(gen).startswith("[gen] FAIL"), "the generator's drift check"
+assert not killed_by("[gen] ok: no drift\n", None)
 assert any(e in "Error (2314): Compiler run failed" for e in COMPILE_ERRORS), "solc"
 print("mutants_lib kill rule ok")

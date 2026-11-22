@@ -96,9 +96,10 @@ def intended(cmd, expect=None):
 def killed_by(text, want):
     """Whether `text` shows a failing test, `want`'s when it is named: a Rust `test … FAILED` / `panicked`, a forge
     `[FAIL…]`, a node `not ok` (TAP) or `✖` (spec reporter), a Python `FAIL:` / `ERROR:` / `AssertionError` line, a Go
-    `--- FAIL:` line, an xUnit `<test> [FAIL]` line."""
+    `--- FAIL:` line, an xUnit `<test> [FAIL]` line, a `dart test` `<file>: <test> [E]` line, the bindings generator's drift
+    check `[gen] FAIL`."""
     fails = [ln for ln in text.splitlines()
-             if re.search(r"\.\.\. FAILED|^\[FAIL|panicked at|^not ok|^FAIL:|^ERROR: |^\s*--- FAIL: |\S \[FAIL\]$|^\s*✖ |AssertionError|^failures:|---- .* stdout ----", ln)]
+             if re.search(r"\.\.\. FAILED|^\[FAIL|panicked at|^not ok|^FAIL:|^ERROR: |^\s*--- FAIL: |\S \[FAIL\]$|^\s*✖ |AssertionError|^failures:|---- .* stdout ----|^\[gen\] FAIL |: .* \[E\]$", ln)]
     if not fails:
         return False
     return want is None or any(want in ln for ln in fails)
@@ -107,7 +108,7 @@ def killed_by(text, want):
 def failure_line(text):
     """The first line that says why the test failed (a panic, a failed test, an error), shortened."""
     for pat in (r"panicked at [^\n]*", r"assertion[^\n]*failed[^\n]*", r"^test \S+ \.\.\. FAILED", r"^not ok [^\n]*",
-                r"^\s*✖ [^\n]*", r"^FAIL: [^\n]*", r"^ERROR: [^\n]*", r"^\s*--- FAIL: [^\n]*", r"\S+ \[FAIL\]$", r"(?i)^\S*error[^\n]*"):
+                r"^\s*✖ [^\n]*", r"^FAIL: [^\n]*", r"^ERROR: [^\n]*", r"^\s*--- FAIL: [^\n]*", r"\S+ \[FAIL\]$", r"^\[gen\] FAIL [^\n]*", r"^[^\n]*: [^\n]* \[E\]$", r"(?i)^\S*error[^\n]*"):
         m = re.search(pat, text, re.M)
         if m:
             # no machine path in a committed record: the worktree relative, the home `~`, a temp dir `<tmp>`
