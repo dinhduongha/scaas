@@ -193,7 +193,7 @@ fn soroban_native_transactions_through_the_official_xdr() {
             unhex(r["hash"].as_str().unwrap())
         );
         let TransactionEnvelope::Tx(e) =
-            TransactionEnvelope::from_xdr(&unhex(r["envelope"].as_str().unwrap()), Limits::none())
+            TransactionEnvelope::from_xdr(unhex(r["envelope"].as_str().unwrap()), Limits::none())
                 .unwrap()
         else {
             panic!("a v1 envelope")
@@ -223,7 +223,7 @@ fn soroban_native_transactions_through_the_official_xdr() {
                 panic!("soroban data")
             };
             let want = SorobanTransactionData::from_xdr(
-                &unhex(r["dataXdr"].as_str().unwrap()),
+                unhex(r["dataXdr"].as_str().unwrap()),
                 Limits::none(),
             )
             .unwrap();
