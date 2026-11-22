@@ -165,9 +165,6 @@ cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 rpc-clippy | cd3b6c03e | 0 | -
 gas-gen | 6e7e71142 | 0 | -
 ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
-ua-clippy | 7765d3e64 | 0 | -
-ua-test | 95badea99 | 0 | 608 passed, 0 failed, 3 ignored (61 binaries)
 ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
 ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
@@ -196,31 +193,39 @@ node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 4175c2d43 (origin/ua-rs-sign cc45679e8 into sdk-complete): node-e2e at --test-threads=10, wall 84 s, the capped scope's memory.peak 3.75 GB read at 60 s (cap 6 GiB); two reds before it were the runner's inputs, not the tree: a forge recovery snapshot of chain 31918 left by an interrupted earlier run (moved aside), and zether-cli built without `--features hazmat` (CI's e2e builds it with hazmat)
 sdk-min | 54ddfcb33 | 0 | 74 passed, 0 failed, 0 ignored (13 binaries)
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
-cli | e90f26685 | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
 ua-c | e90f26685 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | e90f26685 | 0 | ctest: 0 tests failed out of 45
-docs | 0011b40e4 | 0 | -
-features | 0011b40e4 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
-mutants-check | 0011b40e4 | 0 | -
-sdk-clippy | 0011b40e4 | 0 | -
-sdk-clippy-noevm | 0011b40e4 | 0 | -
 sdk-noevm | 0011b40e4 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
 sdk-wasm | 0011b40e4 | 0 | -
-bind-gen | 0011b40e4 | 0 | -
 bind-dart | 0011b40e4 | 0 | dart: +14:
 rpc-wasm | 0011b40e4 | 0 | -
 # faecafcd2 (T41.evm): sdk-e2e's e2e_hand_off_on_anvil alone (CAPPED_MEM=6G, --ignored): 1 passed (A hands off, B lands it, the same blob ImportConsumed, a blob bound to C ImportRelayerBound, A's own self-relay lands); the whole sdk-e2e is the round's matrix (T39). Mutants: t41evm0 9 of 9, t41evm 13 of 13 killed
-ck-test | 0736ad763 | 0 | node: 567 pass, 0 fail, 4 skipped
 ck-xcheck | 0736ad763 | 0 | -
-docs | 0736ad763 | 0 | -
-features | 0736ad763 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 ua-arweave | 0736ad763 | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 ua-core | 0736ad763 | 0 | 75 passed, 0 failed, 0 ignored (8 binaries)
-ua-clippy | 0736ad763 | 0 | -
-ua-verify-only | 0736ad763 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
-ua-vectors | 0736ad763 | 0 | 726 passed, 0 failed, 6 ignored (70 binaries)
-ua-test | 0736ad763 | 0 | 616 passed, 0 failed, 3 ignored (62 binaries)
 # T41.arweave's ua-rs part at 0736ad763 (CA-T16, CA-T17): the rows above; mutants t41arw1 20/20 killed (the ua-rs rows at 0736ad763, the clientkeys rows at 9764de7c0, their command through capped with the TAP reporter); every mutant script loads (mutants-check's commands, run by hand at 9764de7c0: rc 0)
 # T41.arweave fam-arweave size (clients/ua-rs/runs/fam-sizes.sh, release, the probe now reaching DataItem::parse) at 0736ad763: none 2212040 B; fam-arweave 2205712 → 2265656 B (delta −72 → +53616 B, old the empty feature at 61c5bb014); all 2342744 → 2379296 B (delta +136960 → +167256 B)
 rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
-sdk-test | 1eeb8561c | 101 | 181 passed, 4 failed, 0 ignored (6 binaries)
+docs | 7992a33e7 | 0 | -
+mutants-check | 7992a33e7 | 0 | -
+ua-appcore | 7992a33e7 | 0 | 14 passed, 0 failed, 0 ignored (1 binaries)
+ua-test | 7992a33e7 | 0 | 622 passed, 0 failed, 3 ignored (63 binaries)
+ua-clippy | 7992a33e7 | 0 | -
+ua-vectors | 7992a33e7 | 0 | 732 passed, 0 failed, 6 ignored (71 binaries)
+ua-verify-only | 7992a33e7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
+sdk-test | 7992a33e7 | 0 | 417 passed, 0 failed, 17 ignored (39 binaries)
+sdk-clippy | 7992a33e7 | 0 | -
+sdk-clippy-noevm | 7992a33e7 | 0 | -
+features | 7992a33e7 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+cli | 7992a33e7 | 101 | 20 passed, 1 failed, 0 ignored (2 binaries)
+bind-gen | 7992a33e7 | 0 | -
+ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
+# PqVault's dedicated signing path (owner 2026-11-22, CLI-PQV-13) 4f64cf766, merged with origin/ua-rs-sign a97cce414 at
+# caecc3ade, mutant text fix 7992a33e7: the 14 rows above at 7992a33e7, clean tree. sdk-test's four reds of 8c869f3c5
+# (app_core_vault_records, AppDomainRefused) green with their assertions unchanged, plus pqvault_path_refusals. cli's one red
+# is pre-existing in the base 8c869f3c5: one_command_per_sdk_call_both_ways names Op::hand_off, Op::import_signed,
+# SignedOpBlob::from_json, SignedOpBlob::to_json (T41.evm faecafcd2, no CLI command yet); the two new calls
+# (AppCore::sign_pqvault_record, verify_pqvault_record) have theirs. ua-clippy --no-default-features at 7992a33e7: rc 0 (by
+# hand, not a runner step). format.sh --check: rust, js, py, sol clean at 4f64cf766 (tact not run: no ton node_modules in the
+# worktree; untouched). Mutants pqvsign 14/14 killed at 7992a33e7. No pin moved: no vector row, typehash, gas or size pin
+# changes (records.json is read, not regenerated; the purpose P_V enters no new digest).
