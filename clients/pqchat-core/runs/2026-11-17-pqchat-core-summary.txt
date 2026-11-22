@@ -103,4 +103,4 @@ merge-ua-rs-sign | ua-appcore | 81f0ca068 | 0 | 30 passed, 0 failed, 0 ignored (
 merge-ua-rs-sign | sdk-test | 81f0ca068 | 0 | 352 passed, 0 failed, 17 ignored (36 binaries)
 merge-ua-rs-sign | sdk-clippy | 81f0ca068 | 0 | -
 merge-ua-rs-sign | sdk-vectors | 81f0ca068 | 0 | 14 passed, 0 failed, 0 ignored (1 binaries)
-merge-ua-rs-sign | bind | 81f0ca068 | 2 | -
+merge-ua-rs-sign | bind | 807fdca08 | 0 | -
