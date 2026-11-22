@@ -521,6 +521,9 @@ fn named(
     })
 }
 
+/// A seed's `scaas-ua` scope and the open session whose arena it was made over.
+type Scoped = (Weak<OpenSeed>, Arc<AppKeys>);
+
 /// One app core's scope (spec §12.2).
 pub struct AppCore {
     pub(crate) sdk: Arc<Sdk>,
@@ -530,7 +533,7 @@ pub struct AppCore {
     labels: Vec<String>,
     /// one `scaas-ua` scope per seed the core used, over the arena of the seed's open session it was made in (a lock and
     /// the next unlock open a new arena: the scope is made again there)
-    keys: Mutex<HashMap<String, (Weak<OpenSeed>, Arc<AppKeys>)>>,
+    keys: Mutex<HashMap<String, Scoped>>,
 }
 
 impl Drop for AppCore {
