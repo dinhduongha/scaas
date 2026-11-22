@@ -98,10 +98,11 @@ pub struct Message {
     pub sender: String,
     pub ts: Option<u64>,
     pub on_behalf_of: Option<String>,
-    /// a `text`; else shown as unsupported, never acted on
+    /// a `text` or a `file` (plan T10b); else shown as unsupported, never acted on
     pub supported: bool,
     pub edited: bool,
-    /// the canonical JSON content: the `text`'s, or its newest own `edit`'s when `edited`
+    /// the canonical JSON content: the `text`'s, or its newest own `edit`'s when `edited`; a `file`'s (its public fields by
+    /// `PqChat::file_info`, its object by `PqChat::open_file`)
     pub content: Arc<SecretBytes>,
     /// one per reaction value, in the values' order
     pub reactions: Vec<Reaction>,
@@ -193,7 +194,7 @@ impl Timeline {
         }
         order
             .iter()
-            .filter(|m| matches!(m.kind, "text" | "unsupported"))
+            .filter(|m| matches!(m.kind, "text" | "file" | "unsupported"))
             .filter(|m| !redacted.contains(m.id.as_str()))
             .map(|m| {
                 let reactions = reacts
@@ -211,7 +212,7 @@ impl Timeline {
                     sender: m.sender.clone(),
                     ts: m.ts,
                     on_behalf_of: m.on_behalf_of.clone(),
-                    supported: m.kind == "text",
+                    supported: matches!(m.kind, "text" | "file"),
                     edited: edit.is_some(),
                     content: Arc::clone(edit.copied().unwrap_or(&m.content)),
                     reactions,

@@ -765,3 +765,98 @@ async fn test_chain_store_warned() {
             .unwrap();
     assert_eq!(pq.test_chain_stores(&info), [entry(&test)]);
 }
+
+/// Plan T10b (owner 2026-11-22): alice sends a `file` content to a chain store; the sealed item comes back for the app to post
+/// (nothing posted), its object padded to its bucket; her own timeline shows the content without a key; bob's client receives
+/// the envelope, reads the file's public fields and opens the object, its length and `ctSha256` checked before any
+/// decryption (a flipped byte `FileHashMismatch`, a short object `FileLength`, each beside the control), no write caused.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_file_is_sent_and_read() {
+    use pqchat_core::file::FileToSend;
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let (b, s) = alice_sends(&w, vec![chain(HOME)]).await;
+    let file: Vec<u8> = (0..1000u32).map(|i| (i * 7) as u8).collect();
+    let f = FileToSend {
+        file: file.clone(),
+        media_type: "application/octet-stream".into(),
+        name: "a.bin".into(),
+        max_object: 1 << 30,
+    };
+    let (rep, up) =
+        w.pq.send_file(&s, &me(&w.alice), &f, None, &opts(&w))
+            .await
+            .unwrap();
+    assert!(rep.stores.iter().all(|(_, d)| sent(d)), "{rep:?}");
+    assert!(up.url.starts_with("ar://") && up.size == 1000);
+    // the object is the item's data: exactly bucket(1000) + 16 = 2^16 + 16 B
+    let object = up.item[up.item.len() - ((1 << 16) + 16)..].to_vec();
+    // her own timeline: a file, its content without a key
+    let mine = w.pq.timeline(&s.session_id);
+    let own = mine
+        .iter()
+        .find(|m| w.pq.file_info(m.content.clone()).is_some())
+        .unwrap();
+    assert!(own.supported);
+    let shown: Value = own.content.with(|c| serde_json::from_slice(c).unwrap());
+    assert!(shown.get("key").is_none(), "{shown}");
+    assert_eq!(shown["url"], up.url.as_str());
+    // bob's client receives it from the store
+    let st = w.net.writes_of("IPqChat.storeMessage");
+    let env = unhex(st[0]["env"].as_str().unwrap()).unwrap();
+    let bob = PqChat::with_net(
+        w.app.clone(),
+        w.net.clone(),
+        Arc::new(MemoryStore::new()),
+        conf(),
+    );
+    let ep = OpenEpoch {
+        chain: CHAIN.into(),
+        epoch: b.e.clone(),
+        k: b.k.clone(),
+    };
+    let got = bob.receive(&ep, env).await.unwrap();
+    let info = bob.file_info(got.content.clone()).unwrap();
+    assert_eq!(
+        (info.url.as_str(), info.size, info.name.as_str()),
+        (up.url.as_str(), 1000, "a.bin")
+    );
+    assert_eq!(info.ct_sha256, up.ct_sha256);
+    let writes = w.net.writes();
+    let mut flip = object.clone();
+    flip[1000] ^= 1;
+    assert_eq!(
+        code(bob.open_file(got.content.clone(), flip)),
+        "FileHashMismatch"
+    );
+    assert_eq!(
+        code(bob.open_file(got.content.clone(), object[..object.len() - 1].to_vec())),
+        "FileLength"
+    );
+    let opened = bob.open_file(got.content.clone(), object).unwrap();
+    assert_eq!(opened.with(|b| b.to_vec()), file, "control");
+    assert_eq!(w.net.writes(), writes, "no write from a read");
+    // a text content is no file
+    assert!(bob.file_info(own.content.clone()).is_some());
+    let t =
+        w.pq.send(&s, &me(&w.alice), &txt("hi"), None, &opts(&w))
+            .await
+            .unwrap();
+    assert!(t.message_id.is_some());
+    let text =
+        w.pq.timeline(&s.session_id)
+            .into_iter()
+            .find(|m| m.id == t.message_id.clone().unwrap())
+            .unwrap();
+    assert!(bob.file_info(text.content).is_none());
+}
+
+/// PqChat's scope carries its app id (owner 2026-11-22): `scaas-ua`'s `keccak256("scaas.pqchat.v1")`, the root
+/// `seal_for_arweave` derives from.
+#[test]
+fn the_scope_has_pqchat_s_app_id() {
+    assert_eq!(
+        pqchat_core::APP_ID,
+        hex(&scaas_ua::wallet::pqchat::app_id())
+    );
+}

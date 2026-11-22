@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! PqChat's `file` content (UA-7 §6.4.1 with its 2026-11-21 Change; pqchat-core T10b, owner 2026-11-22 "2 hàm mới + app_id
-//! PqChat"; feature `app-core`, with or without `fam-arweave`: the `ar://` form is `crate::file`'s): the two calls that keep
+//! PqChat's `file` content (UA-7 §6.4.1 with its 2026-11-21 Change; pqchat-core T10b, owner 2026-11-22: two new calls and an app id
+//! for PqChat; feature `app-core`, with or without `fam-arweave`: the `ar://` form is `crate::file`'s): the two calls that keep
 //! a file key inside `ua-rs`.
 //!
 //! - **(a)** [`AppKeys::pqchat_seal_file_message`]: the sealer is given every field of the content but `key` and the file

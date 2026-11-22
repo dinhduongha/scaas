@@ -12,7 +12,8 @@ description = "PqChat's client core above scaas-sdk (CLI-PQC-01): sessions, epoc
 # app-core surface and PqChat's record entries, and nothing else that touches a key, a node or Matrix (tests/deps.rs).
 [dependencies]
 # default-features = false: no file store or mlock of the SDK's own (the app's build chooses them); the wasm32 check builds it
-scaas-sdk = { path = "../scaas-sdk", default-features = false, features = ["app-core", "pqchat-records"] }
+# `arweave` (plan T10b): `seal_for_arweave` for attachments; it adds no crate of the crate's own (tests/deps.rs)
+scaas-sdk = { path = "../scaas-sdk", default-features = false, features = ["app-core", "pqchat-records", "arweave"] }
 tokio = { version = "1", features = ["sync"] }
 serde = { version = "1", features = ["derive"] }
 # content values and the crate's own store items only, never written as signed bytes

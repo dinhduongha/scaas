@@ -29,6 +29,7 @@ pub mod content;
 pub mod device;
 pub mod drops;
 pub mod error;
+pub mod file;
 #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub mod matrix;
 pub mod message;
@@ -55,16 +56,20 @@ use std::sync::{Arc, Mutex};
 
 /// PqChat's label prefix (CLI-PQC-03): the one the crate declares to the SDK.
 pub const LABELS: &str = "scaas/pqchat/v1/";
+/// PqChat's app id (plan T10b, owner 2026-11-22): `keccak256("scaas.pqchat.v1")` (`scaas-ua` `wallet::pqchat::app_id`,
+/// clientkeys `APP_ID`), the scope's storage root, from which `seal_for_arweave` derives the upload keys; no app record is
+/// signed under it.
+pub const APP_ID: &str = "0x0ff21b7d13e785d30f93c4ff2e8dd5a767392bb818ea221b73341d92a9f6eb9b";
 /// `PqChat`'s factory class (CTR-CHAT-02).
 pub const CLASS: u16 = 3;
 
-/// The crate's SDK scope: PqChat's label prefix and class 3, no app purpose (its records are signed by the SDK's PqChat
-/// entries under `PURPOSE_PQCHAT`, CLI-PQC-04).
+/// The crate's SDK scope: PqChat's label prefix, class 3 and its app id [`APP_ID`] (its records are signed by the SDK's
+/// PqChat entries under `PURPOSE_PQCHAT`, CLI-PQC-04, never under the app id's purpose).
 pub fn scope(sdk: &Arc<Sdk>) -> Result<Arc<AppCore>, PqChatError> {
     Ok(AppCore::new(
         sdk.clone(),
         AppDesc {
-            app_id: None,
+            app_id: Some(APP_ID.into()),
             name: "PqChat".into(),
             class: Some(CLASS),
             labels: vec![LABELS.into()],

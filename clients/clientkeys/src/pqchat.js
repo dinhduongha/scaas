@@ -12,7 +12,7 @@ import { keccak_256, sha256, concatBytes, utf8ToBytes, fromHex, abiEncode } from
 import { encodeType, hashStruct, intWord } from "./evm.js";
 import { uaMessage } from "./ua.js";
 import { verifyUA } from "./pq.js";
-import { checkObject, openFile, parseArUrl } from "./arweave.js";
+import { openFile, parseArUrl } from "./arweave.js";
 
 const bytes = (v) => (v instanceof Uint8Array ? v : fromHex(v));
 const tag = (s) => keccak_256(utf8ToBytes(s));
@@ -521,8 +521,8 @@ export function sealFileContent(fields, fileKey) {
 }
 
 /** The reader (pqchat-core T10b (b)): the file of `object` named by the opened content `content` (its canonical JSON text):
- *  the content checked (`PqChatError('file')`), then before any decryption the object's exact length (`FileLength`) and
- *  SHA-256 equal to `ctSha256` (`FileHashMismatch`), then the tag, the frame and `sha256` (`openFile`). */
+ *  the content checked (`PqChatError('file')`), then `openFile`: before any decryption the object's exact length
+ *  (`FileLength`) and SHA-256 equal to `ctSha256` (`FileHashMismatch`), then the tag, the frame and `sha256`. */
 export function openFileContent(content, object) {
   let c;
   try {
@@ -531,7 +531,5 @@ export function openFileContent(content, object) {
     badFile();
   }
   checkFileContent(c);
-  const ct = fromHex(c.ctSha256);
-  checkObject(object, c.size, ct);
-  return openFile(fromHex(c.key), object, c.size, fromHex(c.sha256), ct);
+  return openFile(fromHex(c.key), object, c.size, fromHex(c.sha256), fromHex(c.ctSha256));
 }

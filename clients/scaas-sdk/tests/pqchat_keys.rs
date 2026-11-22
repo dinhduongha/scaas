@@ -1347,7 +1347,7 @@ async fn cards_sign_and_verify() {
     );
 }
 
-/// pqchat-core T10b (owner 2026-11-22, "2 hàm mới + app_id PqChat"): (b) the `fileMessage` row's ciphertext opens to its
+/// pqchat-core T10b (owner 2026-11-22: two new calls and an app id for PqChat): (b) the `fileMessage` row's ciphertext opens to its
 /// content at the sender's position, and `pqchat_open_file` opens the row's object named by it (the object built by
 /// `scaas-ua`'s vectors seal under the row's file key, the same bytes `seal_for_arweave` posts); every refusal row by name.
 /// (a) `pqchat_seal_file_message` on the account's own chain: the content it seals is the row's (the key entered from the

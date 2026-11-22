@@ -649,7 +649,7 @@ impl PqChat {
         crate::session::seed_of(&me.key)?;
         let v = content.value(ts)?;
         let ep = self.send_under(s, me).await?;
-        let out = self.seal_under(&ep, me, &v).await?;
+        let out = self.seal_under(&ep, me, &v, None).await?;
         self.mine(&out, &v);
         Ok(out)
     }
@@ -674,11 +674,13 @@ impl PqChat {
         );
     }
 
+    /// `v` sealed at the own chain's next counter; with `file`, a `file` content whose key the SDK enters from that handle.
     pub(crate) async fn seal_under(
         &self,
         ep: &Arc<OpenEpoch>,
         me: &Me,
         v: &Value,
+        file: Option<Arc<AppKey>>,
     ) -> Result<Outgoing, PqChatError> {
         let ua = me.ua.to_ascii_lowercase();
         let sid = ep.epoch.session_id.clone();
@@ -694,22 +696,26 @@ impl PqChat {
             .unwrap_or_default();
         let parents = order::parents(&heads)?;
         let pos = self.own_position(ep, &ua, &device, counter)?;
-        let sealed = self
-            .app
-            .pqchat_seal_message(
-                me.key.clone(),
-                ep.k.clone(),
-                pos,
-                PqMessageHeader {
-                    session_id: sid.clone(),
-                    epoch_id: ep.epoch.id.clone(),
-                    device,
-                    counter,
-                    parents,
-                },
-                v.to_string(),
-            )
-            .await?;
+        let header = PqMessageHeader {
+            session_id: sid.clone(),
+            epoch_id: ep.epoch.id.clone(),
+            device,
+            counter,
+            parents,
+        };
+        let (key, k) = (me.key.clone(), ep.k.clone());
+        let sealed = match file {
+            None => {
+                self.app
+                    .pqchat_seal_message(key, k, pos, header, v.to_string())
+                    .await?
+            }
+            Some(f) => {
+                self.app
+                    .pqchat_seal_file_message(key, k, pos, header, v.to_string(), f)
+                    .await?
+            }
+        };
         if sealed.record.sender.to_ascii_lowercase() != ua {
             return Err(PqChatError::Internal);
         }

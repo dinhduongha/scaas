@@ -7,6 +7,7 @@
 //! (`ContentTooLarge`); a store the user has not confirmed is neither written nor read (`StoreUnconfirmed`), and a rekey that
 //! brings one is told (`StoresChanged`, by an admin or not).
 use crate::content::Content;
+use crate::file::{FileToSend, FileUpload};
 use crate::message::{OpenEpoch, POST_BUCKET};
 use crate::reads::SessionRef;
 use crate::session::{check_stores, Info, Me, StoreEntry};
@@ -53,6 +54,13 @@ pub struct SendReport {
     /// [`PqChat::info`])
     pub stores: Vec<(u32, Delivery)>,
     pub post: Option<Delivery>,
+}
+
+/// What a send carries: a content, or a file the SDK seals first (`file`).
+#[derive(Clone, Copy)]
+pub(crate) enum Body<'a> {
+    Content(&'a Content),
+    File(&'a FileToSend),
 }
 
 /// A `sealedInfo` handle read by its named fields.
@@ -177,9 +185,31 @@ impl PqChat {
         ts: Option<u64>,
         o: &SendOpts,
     ) -> Result<SendReport, PqChatError> {
+        Ok(self
+            .send_with(s, me, Body::Content(content), ts, o)
+            .await?
+            .0)
+    }
+
+    /// [`PqChat::send`] of a content, or of a file sealed by the SDK just before the message ([`PqChat::send_file`]).
+    pub(crate) async fn send_with(
+        &self,
+        s: &SessionRef,
+        me: &Me,
+        body: Body<'_>,
+        ts: Option<u64>,
+        o: &SendOpts,
+    ) -> Result<(SendReport, Option<FileUpload>), PqChatError> {
         crate::session::seed_of(&me.key)?;
         self.require_accepted(&s.session_id)?;
-        let v = content.value(ts)?;
+        match body {
+            Body::Content(c) => drop(c.value(ts)?),
+            Body::File(f) => f.check(ts)?,
+        }
+        let content = match body {
+            Body::Content(c) => Some(c),
+            Body::File(_) => None,
+        };
         let ep = self.send_under(s, me).await?;
         let info = self.info_of(&ep)?;
         check_stores(&info)?;
@@ -189,10 +219,12 @@ impl PqChat {
             stores: vec![],
             post: None,
         };
-        let typing = matches!(content, Content::Typing { .. });
+        let typing = matches!(content, Some(Content::Typing { .. }));
         let chain_listed = info.stores.iter().any(is_chain);
-        if matches!(content, Content::Receipt { .. }) && !prefs.receipts.unwrap_or(!chain_listed) {
-            return Ok(report);
+        if matches!(content, Some(Content::Receipt { .. }))
+            && !prefs.receipts.unwrap_or(!chain_listed)
+        {
+            return Ok((report, None));
         }
         // (index in the list, store, confirmed) in the list's order
         let mut plan = vec![];
@@ -207,7 +239,7 @@ impl PqChat {
         let post = o.post && !typing;
         if targets.is_empty() && !post {
             return if plan.is_empty() {
-                Ok(report)
+                Ok((report, None))
             } else {
                 Err(PqChatError::StoreUnconfirmed)
             };
@@ -218,7 +250,18 @@ impl PqChat {
         if (post || targets.iter().any(|e| is_chain(e))) && !prefs.chain_spend {
             return Err(PqChatError::ChainCostUnconfirmed);
         }
-        let out = self.seal_under(&ep, me, &v).await?;
+        let (v, key, upload) = match body {
+            Body::Content(c) => (c.value(ts)?, None, None),
+            Body::File(f) => {
+                let (v, key, up) = self.seal_file_for(me, f, ts)?;
+                (v, Some(key), Some(up))
+            }
+        };
+        let out = self.seal_under(&ep, me, &v, key.clone()).await;
+        if let Some(k) = key {
+            let _ = self.app.destroy(k);
+        }
+        let out = out?;
         if post && out.bucket() > POST_BUCKET && !o.post_cost_confirmed {
             return Err(PqChatError::ContentTooLarge);
         }
@@ -241,7 +284,7 @@ impl PqChat {
             });
         }
         report.message_id = Some(out.sealed.message_id.clone());
-        Ok(report)
+        Ok((report, upload))
     }
 
     /// One store's copy of `out`: a Matrix event `{v, hint, env}` to the room, or `storeMessage(1, hint, env)`.

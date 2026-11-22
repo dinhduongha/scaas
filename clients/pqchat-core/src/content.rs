@@ -2,8 +2,9 @@
 //! Message contents (UA-7 §6.4.1, P49; CLI-PQC-02's types in scope: `text`, `edit`, `redact`, `react`, `receipt`, `typing`).
 //! The crate builds and reads JSON values only: the SDK canonicalises, pads and seals a content (S5) and checks a received
 //! one canonical (K4); here only P49's fields and bounds. A field the reader does not know is ignored; a type it does not know
-//! or does not act on in this round (`file`, the call types), or a content that breaks a bound or a field's type, is shown as
-//! unsupported and never acted on. Rust-only (plan T12, owner 2026-11-22): the bindings get a content only as the SDK's
+//! or does not act on in this round (the call types), or a content that breaks a bound or a field's type, is shown as
+//! unsupported and never acted on. A `file` (plan T10b) is read by its public fields only, `url` an `ar://` one; its `key`
+//! is never read here (the SDK's `pqchat_open_file` reads it inside `scaas-ua`) and never written here (entered there). Rust-only (plan T12, owner 2026-11-22): the bindings get a content only as the SDK's
 //! `SecretBytes` handle; the crate parses it where it acts on it (type, target, bounds).
 use crate::PqChatError;
 use serde_json::{json, Map, Value};
@@ -42,6 +43,15 @@ pub enum Content {
     },
     Typing {
         on: bool,
+    },
+    /// an attachment (UA-7 §6.4.1 with its 2026-11-21 Change): its public fields; hashes `0x` hex, `url` `ar://<id>`
+    File {
+        media_type: String,
+        name: String,
+        size: u64,
+        sha256: String,
+        ct_sha256: String,
+        url: String,
     },
     /// an unknown type, a type out of this round's scope, or a content out of P49's bounds: shown so, never acted on
     Unsupported,
@@ -84,6 +94,9 @@ fn id(o: &Obj, k: &str) -> Result<String, ()> {
     let s = need(o, k, 66, 66)?;
     id_ok(&s).then_some(s).ok_or(())
 }
+
+/// A `file`'s largest `size` (UA-7 §6.4.1).
+pub const FILE_SIZE_MAX: u64 = (1 << 36) - 32;
 
 /// `text/plain` (absent) or `text/markdown`.
 fn media(o: &Obj) -> Result<Option<String>, ()> {
@@ -146,6 +159,20 @@ impl Content {
             "typing" => Content::Typing {
                 on: o.get("on").and_then(Value::as_bool).ok_or(())?,
             },
+            "file" => Content::File {
+                media_type: need(o, "mediaType", 1, 64)?,
+                name: need(o, "name", 1, 255)?,
+                size: o
+                    .get("size")
+                    .and_then(Value::as_u64)
+                    .filter(|s| (1..=FILE_SIZE_MAX).contains(s))
+                    .ok_or(())?,
+                sha256: id(o, "sha256")?,
+                ct_sha256: id(o, "ctSha256")?,
+                url: Some(need(o, "url", 1, 2048)?)
+                    .filter(|u| u.starts_with("ar://"))
+                    .ok_or(())?,
+            },
             _ => Content::Unsupported,
         };
         Ok(Parsed {
@@ -165,6 +192,7 @@ impl Content {
             Content::React { .. } => "react",
             Content::Receipt { .. } => "receipt",
             Content::Typing { .. } => "typing",
+            Content::File { .. } => "file",
             Content::Unsupported => "unsupported",
         }
     }
@@ -190,6 +218,18 @@ impl Content {
             }
             Content::Receipt { target } => json!({"type": "receipt", "target": target}),
             Content::Typing { on } => json!({"type": "typing", "on": on}),
+            // the sealer's input: every field but `key`, which the SDK enters inside `scaas-ua`
+            Content::File {
+                media_type,
+                name,
+                size,
+                sha256,
+                ct_sha256,
+                url,
+            } => {
+                json!({"type": "file", "mediaType": media_type, "name": name, "size": size, "sha256": sha256,
+                "ctSha256": ct_sha256, "url": url})
+            }
             Content::Unsupported => return Err(PqChatError::ContentInvalid),
         };
         if let Content::Text { body, .. } | Content::Edit { body, .. } = self {
