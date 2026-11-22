@@ -168,7 +168,6 @@ bind-dart | 7104a069f | 0 | dart: +14:
 rpc-clippy | cd3b6c03e | 0 | -
 rpc-wasm | cd3b6c03e | 0 | -
 gas-gen | 6e7e71142 | 0 | -
-rpc-test | 6e7e71142 | 0 | 202 passed, 0 failed, 10 ignored (20 binaries)
 ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
 mutants-check | 8897d3999 | 0 | -
 ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
@@ -182,6 +181,10 @@ bind-gen | 95badea99 | 0 | -
 cli | 95badea99 | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
 ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
-docs | 95badea99 | 0 | -
 features | 95badea99 | 0 | 4 passed, 0 failed, 0 ignored (1 binaries)
 ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
+node-test | 7f156ac72 | 0 | 887 passed, 0 failed, 73 ignored (19 binaries)
+rpc-test | 7f156ac72 | 0 | 203 passed, 0 failed, 10 ignored (20 binaries)
+docs | 7f156ac72 | 0 | -
+node-e2e | 7f156ac72 | 143 | -
+# node-e2e rc=143 at 7f156ac72: 25 tests in parallel OOM-killed at the 6 GB cap (kernel oom-kill in capped's scope); the step runs 10 at a time since e80c39854, on the merged tree

@@ -1,0 +1,9 @@
+# t28 mutants (name | outcome | commit | test | first failure line)
+the token check skipped | killed | 7f156ac72 | ../scripts/capped cargo test --locked --offline -j2 --lib ops_accept_checks_in_order_each_by_its_code | panicked at src/gateway.rs:1751:9:
+the validity's upper bound dropped | killed | 7f156ac72 | ../scripts/capped cargo test --locked --offline -j2 --lib ops_accept_checks_in_order_each_by_its_code | panicked at src/gateway.rs:1759:9:
+a client digest other than the node's taken | killed | 7f156ac72 | ../scripts/capped cargo test --locked --offline -j2 --lib a_client_digest_other_than_the_nodes_is_bad_payload | panicked at src/gateway.rs:1829:9:
+the family check dropped | killed | 7f156ac72 | ../scripts/capped cargo test --locked --offline -j2 --lib ops_accept_checks_in_order_each_by_its_code | panicked at src/gateway.rs:1741:9:
+TON reaches a lane | killed | 7f156ac72 | ../scripts/capped cargo test --locked --offline -j2 --lib ton_is_refused_by_name | panicked at src/gateway.rs:1882:9:
+a lease by a worker without a lane | killed | 7f156ac72 | ../scripts/capped cargo test --locked --offline -j2 --lib the_own_queue_hands_out_claims_and_moves_gateway_rows | panicked at src/external_pull.rs:570:9:
+the merge counting unreachable as accepted | killed | 7f156ac72 | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node submit_ops_sends_the_same_bytes_and_merges | panicked at tests/node.rs:815:13:
+7 mutants, 7 killed, 0 survived, 0 not loaded, 0 other failure
