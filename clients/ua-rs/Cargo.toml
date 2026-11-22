@@ -320,7 +320,20 @@ required-features = ["wallet"]
 # ua-rs-native: the native networks and raw native signing against smartcontracts/vectors/native/native.json
 [[test]]
 name = "wallet_native"
-required-features = ["wallet", "fam-evm", "fam-cosmos", "fam-hedera", "fam-sui", "fam-soroban", "fam-ton", "fam-aptos", "fam-solana", "fam-btc", "fam-near", "fam-dot"]
+required-features = [
+  "wallet",
+  "fam-evm",
+  "fam-cosmos",
+  "fam-hedera",
+  "fam-sui",
+  "fam-soroban",
+  "fam-ton",
+  "fam-aptos",
+  "fam-solana",
+  "fam-btc",
+  "fam-near",
+  "fam-dot",
+]
 
 # ua-rs-native: the fixed-randomness rows (test-only entry points) and the published Taproot answers
 [[test]]

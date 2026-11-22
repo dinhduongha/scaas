@@ -38,14 +38,19 @@ type Seen = Arc<Mutex<Vec<(String, Value)>>>;
 /// A TON Center answering every `/api/v2/` request with `answer`; its head is [`SEQNO`], its masterchain block `n` has root
 /// hash `{fork}{n}`.
 async fn center(answer: Value, fork: &'static str, seen: Seen) -> String {
-    serve(axum::Router::new().fallback(
-        move |uri: axum::http::Uri, body: axum::body::Bytes| {
+    serve(
+        axum::Router::new().fallback(move |uri: axum::http::Uri, body: axum::body::Bytes| {
             let (seen, answer) = (seen.clone(), answer.clone());
             async move {
-                let p = uri.path_and_query().map(|p| p.to_string()).unwrap_or_default();
+                let p = uri
+                    .path_and_query()
+                    .map(|p| p.to_string())
+                    .unwrap_or_default();
                 let ok = |v: Value| (axum::http::StatusCode::OK, serde_json::to_vec(&v).unwrap());
                 if p.starts_with("/api/v2/") {
-                    seen.lock().unwrap().push((p, serde_json::from_slice(&body).unwrap_or(Value::Null)));
+                    seen.lock()
+                        .unwrap()
+                        .push((p, serde_json::from_slice(&body).unwrap_or(Value::Null)));
                     ok(answer)
                 } else if p.starts_with("/api/v3/masterchainInfo") {
                     ok(json!({"last": {"seqno": SEQNO, "root_hash": "rh"}}))
@@ -56,8 +61,8 @@ async fn center(answer: Value, fork: &'static str, seen: Seen) -> String {
                     (axum::http::StatusCode::NOT_FOUND, b"not found".to_vec())
                 }
             }
-        },
-    ))
+        }),
+    )
     .await
 }
 
@@ -89,11 +94,19 @@ async fn a_getter_is_asked_at_the_seqno_and_its_cell_read() {
     let n = ton(&[&center(fixture("address"), "b", seen.clone()).await]);
     let (wc, h) = raw(OWNER);
     let g = n
-        .run_get_at(0, MASTER, "get_wallet_address", &[StackArg::Slice(boc::address_slice(wc, &h))], SEQNO)
+        .run_get_at(
+            0,
+            MASTER,
+            "get_wallet_address",
+            &[StackArg::Slice(boc::address_slice(wc, &h))],
+            SEQNO,
+        )
         .await
         .unwrap();
     assert_eq!(g.exit_code, 0);
-    let StackEntry::Cell(b) = &g.stack[0] else { panic!("{:?}", g.stack) };
+    let StackEntry::Cell(b) = &g.stack[0] else {
+        panic!("{:?}", g.stack)
+    };
     assert_eq!(boc::std_address(&boc::parse(b).unwrap()), Some(raw(WALLET)));
     let s = seen.lock().unwrap();
     assert_eq!(s[0].0, "/api/v2/runGetMethod");
@@ -104,15 +117,23 @@ async fn a_getter_is_asked_at_the_seqno_and_its_cell_read() {
     let arg = &s[0].1["stack"][0];
     assert_eq!(arg[0], "tvm.Slice");
     use base64::Engine as _;
-    let sent = base64::engine::general_purpose::STANDARD.decode(arg[1].as_str().unwrap()).unwrap();
-    assert_eq!(boc::std_address(&boc::parse(&sent).unwrap()), Some(raw(OWNER)));
+    let sent = base64::engine::general_purpose::STANDARD
+        .decode(arg[1].as_str().unwrap())
+        .unwrap();
+    assert_eq!(
+        boc::std_address(&boc::parse(&sent).unwrap()),
+        Some(raw(OWNER))
+    );
 }
 
 /// The wallet's `get_wallet_data`: a number and three cells (the owner, the master, the code with its references).
 #[tokio::test]
 async fn a_stack_of_numbers_and_cells_is_read() {
     let n = ton(&[&center(fixture("data"), "b", Default::default()).await]);
-    let g = n.run_get_at(0, WALLET, "get_wallet_data", &[], SEQNO).await.unwrap();
+    let g = n
+        .run_get_at(0, WALLET, "get_wallet_data", &[], SEQNO)
+        .await
+        .unwrap();
     assert_eq!(g.stack.len(), 4);
     assert_eq!(g.stack[0].as_u128(), Some(101));
     let cell = |k: usize| match &g.stack[k] {
@@ -122,14 +143,21 @@ async fn a_stack_of_numbers_and_cells_is_read() {
     assert_eq!(boc::std_address(&cell(1)), Some(raw(OWNER)));
     assert_eq!(boc::std_address(&cell(2)), Some(raw(MASTER)));
     assert!(!cell(3).refs.is_empty(), "the code cell and its references");
-    assert_eq!(boc::std_address(&cell(3)), None, "a code cell is no address");
+    assert_eq!(
+        boc::std_address(&cell(3)),
+        None,
+        "a code cell is no address"
+    );
 }
 
 /// An uninitialized account's getter: its exit code as the endpoint gave it, for the caller to read.
 #[tokio::test]
 async fn a_getters_exit_code_is_the_callers() {
     let n = ton(&[&center(fixture("uninit"), "b", Default::default()).await]);
-    let g = n.run_get_at(0, OWNER, "get_wallet_data", &[], SEQNO).await.unwrap();
+    let g = n
+        .run_get_at(0, OWNER, "get_wallet_data", &[], SEQNO)
+        .await
+        .unwrap();
     assert_eq!(g.exit_code, -13);
 }
 
@@ -143,11 +171,32 @@ async fn a_getter_answer_of_another_block_is_malformed() {
     };
     run(fixture("data")).await.unwrap();
     for (why, v) in [
-        ("another seqno", edited("data", |v| v["result"]["block_id"]["seqno"] = json!(SEQNO + 1))),
-        ("another workchain", edited("data", |v| v["result"]["block_id"]["workchain"] = json!(0))),
-        ("no block", edited("data", |v| v["result"].as_object_mut().unwrap().remove("block_id").map(|_| ()).unwrap())),
+        (
+            "another seqno",
+            edited("data", |v| {
+                v["result"]["block_id"]["seqno"] = json!(SEQNO + 1)
+            }),
+        ),
+        (
+            "another workchain",
+            edited("data", |v| v["result"]["block_id"]["workchain"] = json!(0)),
+        ),
+        (
+            "no block",
+            edited("data", |v| {
+                v["result"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("block_id")
+                    .map(|_| ())
+                    .unwrap()
+            }),
+        ),
         ("ok false", edited("data", |v| v["ok"] = json!(false))),
-        ("an exit code not a number", edited("data", |v| v["result"]["exit_code"] = json!("0"))),
+        (
+            "an exit code not a number",
+            edited("data", |v| v["result"]["exit_code"] = json!("0")),
+        ),
     ] {
         assert!(malformed(run(v).await.unwrap_err()), "{why}");
     }
@@ -163,11 +212,27 @@ async fn a_stack_entry_out_of_form_is_malformed() {
         n.run_get_at(0, WALLET, "get_wallet_data", &[], SEQNO).await
     };
     let long = format!("0x1{}", "0".repeat(64));
-    assert_eq!(run(json!(["num", long])).await.unwrap().stack[0].as_u128(), None);
-    assert_eq!(run(json!(["num", "-0x1"])).await.unwrap().stack[0].as_u128(), None);
-    assert_eq!(run(json!(["num", "0xffffffffffffffffffffffffffffffff"])).await.unwrap().stack[0].as_u128(), Some(u128::MAX));
+    assert_eq!(
+        run(json!(["num", long])).await.unwrap().stack[0].as_u128(),
+        None
+    );
+    assert_eq!(
+        run(json!(["num", "-0x1"])).await.unwrap().stack[0].as_u128(),
+        None
+    );
+    assert_eq!(
+        run(json!(["num", "0xffffffffffffffffffffffffffffffff"]))
+            .await
+            .unwrap()
+            .stack[0]
+            .as_u128(),
+        Some(u128::MAX)
+    );
     for (why, e) in [
-        ("66 hex digits", json!(["num", format!("0x1{}", "0".repeat(65))])),
+        (
+            "66 hex digits",
+            json!(["num", format!("0x1{}", "0".repeat(65))]),
+        ),
         ("decimal", json!(["num", "101"])),
         ("not hex", json!(["num", "0xg"])),
         ("a number as JSON", json!(["num", 101])),
@@ -184,27 +249,59 @@ async fn the_account_is_read_at_the_seqno() {
     let seen: Seen = Default::default();
     let n = ton(&[&center(fixture("active"), "b", seen.clone()).await]);
     let a = n.account_at(0, WALLET, SEQNO).await.unwrap();
-    assert_eq!((a.balance.as_str(), a.state.as_str()), ("10000000", "active"));
+    assert_eq!(
+        (a.balance.as_str(), a.state.as_str()),
+        ("10000000", "active")
+    );
     let p = seen.lock().unwrap()[0].0.clone();
-    assert_eq!(p, format!("/api/v2/getAddressInformation?address={}&seqno={SEQNO}", WALLET.replace(':', "%3A")));
+    assert_eq!(
+        p,
+        format!(
+            "/api/v2/getAddressInformation?address={}&seqno={SEQNO}",
+            WALLET.replace(':', "%3A")
+        )
+    );
     let n = ton(&[&center(fixture("uninit-account"), "b", Default::default()).await]);
     let a = n.account_at(0, OWNER, SEQNO).await.unwrap();
-    assert_eq!((a.balance.as_str(), a.state.as_str()), ("0", "uninitialized"));
+    assert_eq!(
+        (a.balance.as_str(), a.state.as_str()),
+        ("0", "uninitialized")
+    );
 }
 
 /// An account answer of another seqno, a balance not a decimal string of at most 78 digits: malformed. Control above.
 #[tokio::test]
 async fn an_account_answer_out_of_form_is_malformed() {
     for (why, v) in [
-        ("another seqno", edited("active", |v| v["result"]["block_id"]["seqno"] = json!(SEQNO - 1))),
+        (
+            "another seqno",
+            edited("active", |v| {
+                v["result"]["block_id"]["seqno"] = json!(SEQNO - 1)
+            }),
+        ),
         ("ok false", edited("active", |v| v["ok"] = json!(false))),
-        ("a balance as a number", edited("active", |v| v["result"]["balance"] = json!(10000000))),
-        ("a balance not decimal", edited("active", |v| v["result"]["balance"] = json!("1e7"))),
-        ("79 digits", edited("active", |v| v["result"]["balance"] = json!("1".repeat(79)))),
-        ("no state", edited("active", |v| v["result"]["state"] = json!(null))),
+        (
+            "a balance as a number",
+            edited("active", |v| v["result"]["balance"] = json!(10000000)),
+        ),
+        (
+            "a balance not decimal",
+            edited("active", |v| v["result"]["balance"] = json!("1e7")),
+        ),
+        (
+            "79 digits",
+            edited("active", |v| v["result"]["balance"] = json!("1".repeat(79))),
+        ),
+        (
+            "no state",
+            edited("active", |v| v["result"]["state"] = json!(null)),
+        ),
     ] {
         let n = ton(&[&center(v, "b", Default::default()).await]);
-        assert!(malformed(n.account_at(0, WALLET, SEQNO).await.unwrap_err()), "{why}");
+        assert!(
+            malformed(n.account_at(0, WALLET, SEQNO).await.unwrap_err()),
+            "{why}"
+        );
     }
 }
 
@@ -234,16 +331,29 @@ async fn a_pinned_read_fails_over_past_another_network() {
         .await
         .unwrap();
     assert_eq!((a.endpoint, a.value.stack[0].as_u128()), (2, Some(101)));
-    assert_eq!(n.client.pool().identity_of(1), Some(false), "another root hash: dropped");
+    assert_eq!(
+        n.client.pool().identity_of(1),
+        Some(false),
+        "another root hash: dropped"
+    );
 }
 
 /// `wc:hex` addresses: workchain 0 or -1 and 64 hex digits, any case; anything else none.
 #[test]
 fn raw_addresses() {
     assert_eq!(raw(WALLET).0, 0);
-    assert_eq!(scaas_rpc::ton::raw_address(&MASTER.to_lowercase()), Some(raw(MASTER)));
+    assert_eq!(
+        scaas_rpc::ton::raw_address(&MASTER.to_lowercase()),
+        Some(raw(MASTER))
+    );
     assert_eq!(raw(&format!("-1:{}", &OWNER[2..])), (-1, raw(OWNER).1));
-    for s in ["1:00", &format!("5:{}", &OWNER[2..]), &OWNER[2..], &format!("{OWNER}0"), "EQAAAA"] {
+    for s in [
+        "1:00",
+        &format!("5:{}", &OWNER[2..]),
+        &OWNER[2..],
+        &format!("{OWNER}0"),
+        "EQAAAA",
+    ] {
         assert_eq!(scaas_rpc::ton::raw_address(s), None, "{s}");
     }
     assert_eq!(scaas_rpc::ton::format_raw(raw(OWNER)), OWNER.to_lowercase());
@@ -275,7 +385,20 @@ fn boc_of(cells: &[(Vec<u8>, Vec<u16>)]) -> Vec<u8> {
 
 /// A chain of `n` cells, each referring to the next: depth `n - 1`.
 fn chain(n: usize) -> Vec<u8> {
-    boc_of(&(0..n).map(|i| (vec![1], if i + 1 < n { vec![(i + 1) as u16] } else { vec![] })).collect::<Vec<_>>())
+    boc_of(
+        &(0..n)
+            .map(|i| {
+                (
+                    vec![1],
+                    if i + 1 < n {
+                        vec![(i + 1) as u16]
+                    } else {
+                        vec![]
+                    },
+                )
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 
 /// Depth: TON's own limit of 1024 is read, 1025 refused (computed without recursion).
@@ -294,16 +417,28 @@ fn a_boc_out_of_bounds_is_refused() {
     assert!(boc::parse(&one(vec![7])).is_ok(), "control");
     let many = boc_of(&vec![(vec![], vec![]); 4096]);
     assert!(boc::parse(&many).is_ok(), "4096 cells");
-    assert!(boc::parse(&boc_of(&vec![(vec![], vec![]); 4097])).is_err(), "4097 cells");
+    assert!(
+        boc::parse(&boc_of(&vec![(vec![], vec![]); 4097])).is_err(),
+        "4097 cells"
+    );
     let mut b = one(vec![7]);
     b.push(0);
     assert!(boc::parse(&b).is_err(), "a byte after the cells");
     let mut b = one(vec![7]);
     b[15] += 1;
     assert!(boc::parse(&b).is_err(), "a cells size past the cells");
-    assert!(boc::parse(&boc_of(&[(vec![], vec![1]), (vec![], vec![1])])).is_err(), "a reference to itself");
-    assert!(boc::parse(&boc_of(&[(vec![], vec![1]), (vec![], vec![])])).is_ok(), "control: a reference forward");
-    assert!(boc::parse(&boc_of(&[(vec![], vec![2]), (vec![], vec![])])).is_err(), "a reference past the last cell");
+    assert!(
+        boc::parse(&boc_of(&[(vec![], vec![1]), (vec![], vec![1])])).is_err(),
+        "a reference to itself"
+    );
+    assert!(
+        boc::parse(&boc_of(&[(vec![], vec![1]), (vec![], vec![])])).is_ok(),
+        "control: a reference forward"
+    );
+    assert!(
+        boc::parse(&boc_of(&[(vec![], vec![2]), (vec![], vec![])])).is_err(),
+        "a reference past the last cell"
+    );
     let five = boc_of(&[(vec![], vec![1; 5]), (vec![], vec![])]);
     assert!(boc::parse(&five).is_err(), "five references");
     let four = boc_of(&[(vec![], vec![1; 4]), (vec![], vec![])]);
@@ -334,7 +469,10 @@ fn std_addresses_round_trip_and_nothing_else_is_one() {
     let (wc, h) = raw(MASTER);
     let s = boc::address_slice(wc, &h);
     assert_eq!(boc::std_address(&boc::parse(&s).unwrap()), Some((wc, h)));
-    assert_eq!(boc::std_address(&boc::parse(&boc::address_slice(-1, &h)).unwrap()), Some((-1, h)));
+    assert_eq!(
+        boc::std_address(&boc::parse(&boc::address_slice(-1, &h)).unwrap()),
+        Some((-1, h))
+    );
     // the first byte holds the tag `10` and the anycast bit: `11` (addr_var) and an anycast are no addr_std
     for (why, first) in [("addr_var", 0xc0u8), ("anycast", 0xa0)] {
         let mut b = s.clone();

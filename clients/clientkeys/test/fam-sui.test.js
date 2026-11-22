@@ -34,7 +34,9 @@ test("the generator writes the committed bytes", () => {
 
 test("the Move test's Account<SUI> of alice is derived, and is a row", () => {
   assert.equal(hex(sui.deriveAccount(fromHex(MOVE.registry), fromHex(MOVE.owner))), MOVE.account);
-  assert.ok(V.account.some((r) => r.registry === MOVE.registry && r.owner === MOVE.owner && r.account === MOVE.account));
+  assert.ok(
+    V.account.some((r) => r.registry === MOVE.registry && r.owner === MOVE.owner && r.account === MOVE.account),
+  );
 });
 
 test("every Account<T> row is derive_address(registry, owner)", () => {

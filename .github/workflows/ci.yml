@@ -898,7 +898,7 @@ jobs:
           workspaces: clients/ua-rs
           key: fam
       - name: none, each family alone, all on (release, sizes)
-        run: CAP= bash runs/fam-sizes.sh
+        run: CAP='' bash runs/fam-sizes.sh
 
   # Compile only (no run; plan T0 had no NDK or Xcode, so Android and iOS are built here first). Falcon's C is skipped on wasm32
   # (KIND_UNAVAILABLE there), compiled by the NDK's clang and by Xcode.

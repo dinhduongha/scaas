@@ -36,7 +36,8 @@ const key32 = (k, what) => {
 export function findPda(seeds, program) {
   key32(program, "program");
   if (seeds.length > MAX_SEEDS - 1) throw new SolanaError("Argument: too many seeds"); // the bump is the 16th
-  for (const s of seeds) if (!(s instanceof Uint8Array) || s.length > MAX_SEED_LEN) throw new SolanaError("Argument: seed");
+  for (const s of seeds)
+    if (!(s instanceof Uint8Array) || s.length > MAX_SEED_LEN) throw new SolanaError("Argument: seed");
   for (let bump = 255; bump >= 0; bump--) {
     const h = sha256(concatBytes(...seeds, Uint8Array.of(bump), program, MARKER));
     if (!onCurve(h)) return { address: h, bump };
