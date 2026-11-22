@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# scaas-sdk plan T20g: the JS / TS binding's smoke test (gate `bind-js`, CI job `scaas-sdk-js`), from this directory: builds
+# scaas-sdk plan T20g: the JS / TS binding's smoke test (gate `bind-js`, CI cell `scaas-sdk-bindings` [js]), from this directory: builds
 # this crate (the SDK with feature `wasm`) for wasm32-unknown-unknown, runs the wasm-bindgen CLI (WASM_BINDGEN, else
 # `wasm-bindgen` on PATH; the crate's pin 0.2.130 exactly) into git-ignored pkg/ for Node, and runs test/ under `node --test`.
 # The .wasm and its glue are build output, never committed. Through scripts/capped, in the foreground (on CI, which sets `CI`,

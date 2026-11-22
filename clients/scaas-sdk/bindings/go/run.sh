@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# scaas-sdk plan T20h: the Go binding's smoke test (gate `bind-go`, CI job `scaas-sdk-go`), from this directory: builds the
+# scaas-sdk plan T20h: the Go binding's smoke test (gate `bind-go`, CI cell `scaas-sdk-bindings` [go]), from this directory: builds the
 # reference library with the async API (../lib.sh uniffi), then `go vet` of the hand-written packages and `go test` of smoke/
 # with cgo linked to that library (the generated packages under generated/, module `scaas`). Through scripts/capped, in the
 # foreground (on CI, which sets `CI`, directly).

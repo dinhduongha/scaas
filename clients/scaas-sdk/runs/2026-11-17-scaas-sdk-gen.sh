@@ -5,7 +5,8 @@
 #   clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check    regenerate, fail if a generated file differs from HEAD's (the
 #                                                                 drift test, as ua-c's header test), then put the working
 #                                                                 tree's generated files back as they were
-#   SCAAS_GEN=<part>[,<part>…] limits it to those parts (a CI job with one generator); default every part:
+#   SCAAS_GEN=<part>[,<part>…] limits it to those parts (a CI job with one generator); default every part; either way only
+#   the parts enabled in bindings/langs (decisions CLI-SDK-33 (102)):
 #   dart  the FRB Dart surface (flutter_rust_bridge_codegen 2.13.0, the pin of the ffi crate's flutter_rust_bridge):
 #         bindings/dart/lib/src/rust/ (the freezed classes of the data-carrying enums by build_runner, which the codegen runs)
 #         and ffi/src/frb_generated.rs, from ffi/src/api and the scaas-sdk crate itself (`rust_input`)
@@ -29,13 +30,21 @@
 set -euo pipefail
 W=$(git rev-parse --show-toplevel)
 D="$W/clients/scaas-sdk"
-PARTS=",${SCAAS_GEN:-dart,cpp,cs,python,kotlin,swift,java,go},"
+# the languages enabled (bindings/langs, decisions CLI-SDK-33 (102)): a part left out there is neither generated nor checked,
+# its committed files stay as they are
+ON=$(python3 -I "$D/bindings/langs.py") || exit 2
+want=${SCAAS_GEN:-dart,cpp,cs,python,kotlin,swift,java,go}
+PARTS=","
+for p in ${want//,/ }; do
+    case " dart cpp cs python kotlin swift java go " in *" $p "*) ;; *) echo "[gen] FAIL no part $p (SCAAS_GEN)" >&2 && exit 2 ;; esac
+    if [[ " $ON " == *" $p "* ]]; then PARTS+="$p,"; else echo "[gen] skipped: $p (left out in bindings/langs)"; fi
+done
+[ "$PARTS" != "," ] || { echo "[gen] ok: every part asked is left out in bindings/langs" && exit 0; }
 GEN=()
 if [[ $PARTS == *,dart,* ]]; then GEN+=(bindings/dart/lib/src/rust ffi/src/frb_generated.rs); fi
 for p in cpp cs python kotlin swift java go; do
     if [[ $PARTS == *,$p,* ]]; then GEN+=("bindings/$p/generated"); fi
 done
-[ ${#GEN[@]} -gt 0 ] || { echo "[gen] FAIL no part in SCAAS_GEN=${SCAAS_GEN:-}" >&2 && exit 2; }
 cap=("$W/scripts/capped")
 [ -n "${CI:-}" ] && cap=()
 off=(--offline)

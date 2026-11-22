@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# scaas-sdk plan T20f: the Swift binding's smoke test on Linux (gate `bind-swift`, CI job `scaas-sdk-swift`), from this
+# scaas-sdk plan T20f: the Swift binding's smoke test on Linux (gate `bind-swift`, CI cell `scaas-sdk-bindings` [swift]), from this
 # directory: builds the reference library with the async API (../lib.sh uniffi), compiles generated/ (both crates' Swift and
 # their C module maps) with main.swift by swiftc (SWIFTC, else `swiftc` on PATH; the pin 6.4.2, Swift 5 language mode as the
 # generated code is written for it), links the library and runs it over the keystore rows (../rows.py). Build output in

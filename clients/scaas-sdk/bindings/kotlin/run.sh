@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# scaas-sdk plan T20e: the Kotlin binding's smoke test (gate `bind-kotlin`, CI job `scaas-sdk-kotlin`), from this directory:
+# scaas-sdk plan T20e: the Kotlin binding's smoke test (gate `bind-kotlin`, CI cell `scaas-sdk-bindings` [kotlin]), from this directory:
 # builds the reference library with the async API (../lib.sh uniffi), writes the keystore rows (../rows.py), compiles generated/
 # and Smoke.kt with kotlinc (KOTLINC, else `kotlinc` on PATH; the pin 2.4.21) against the two pinned jars (JNA 5.12 or later:
 # the generated code uses its Cleaner), and runs it on the JVM. The jars sit in git-ignored lib/: copied from the main

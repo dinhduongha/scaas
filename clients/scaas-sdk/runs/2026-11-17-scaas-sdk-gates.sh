@@ -174,7 +174,15 @@ row() { # replace the step's summary row
 }
 
 worst=0
+# the bindings enabled (clients/scaas-sdk/bindings/langs, decisions CLI-SDK-33 (102)): a bind-<lang> step of a language
+# left out there is skipped, no row
+LANGS=$(python3 -I clients/scaas-sdk/bindings/langs.py) || exit 2
 for s in "${WANT[@]}"; do
+    l=${s#bind-}
+    if [[ $s == bind-* && $l != gen && " $LANGS " != *" $l "* ]]; then
+        echo "[G] $s: left out in clients/scaas-sdk/bindings/langs, skipped"
+        continue
+    fi
     IFS='|' read -r name dir cmd <<<"$(cmd_of "$s")"
     log=$R/2026-11-17-scaas-sdk-$name.log
     if [[ $FORCE != --force && -f $log ]] && clean && [[ $(head -1 "$log") == "# $name at commit $sha" ]] && [[ $(tail -1 "$log") == rc=0 ]]; then

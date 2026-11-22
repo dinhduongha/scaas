@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# scaas-sdk plan T20e2: the Java binding's smoke test (gate `bind-java`, CI job `scaas-sdk-java`), from this directory: builds
+# scaas-sdk plan T20e2: the Java binding's smoke test (gate `bind-java`, CI cell `scaas-sdk-bindings` [java]), from this directory: builds
 # the reference library with the async API (../lib.sh uniffi), writes the keystore rows (../rows.py), compiles generated/ and
 # Smoke.java with the JDK of JAVA_HOME (else `javac` / `java` on PATH; 22 or later: the generated code is Java's FFM API, the
 # pin 25) and runs it with native access. No jar beyond the JDK. Build output in git-ignored build/.

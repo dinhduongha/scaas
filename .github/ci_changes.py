@@ -117,16 +117,6 @@ JOBS = {
         "smartcontracts/vectors/",
     ]
     + UARS,
-    "scaas-sdk-bindings": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/"] + UARS,
-    # the UniFFI bindings (plan T20b-T20h): the reference library with one UniFFI surface, a generator, a smoke test each
-    "scaas-sdk-cpp": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
-    "scaas-sdk-cs": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
-    "scaas-sdk-python": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
-    "scaas-sdk-kotlin": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
-    "scaas-sdk-swift": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
-    "scaas-sdk-js": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
-    "scaas-sdk-java": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
-    "scaas-sdk-go": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
     "keystore-vectors": ["clients/scaas-sdk/", "clients/clientkeys/", "smartcontracts/vectors/keystore/"] + UARS,
     # ARCH-POS-13 (ua-rs-sign T15c2): no test feature in a production artifact; every manifest that can reach scaas-ua,
     # zether-prover or pqz-ffi
@@ -168,8 +158,6 @@ RUNS_READ = {
     "smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt": [
         "node"
     ],  # guard.rs erc1271_floor_covers_forge_minimum
-    # the generated bindings' drift check (plan T20)
-    "clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh": ["scaas-sdk-bindings"],
 }
 
 
@@ -195,15 +183,60 @@ def needed(paths, forced=()):
     }
 
 
+# the bindings (plan T20, T20b-T20h): one matrix cell per language enabled in clients/scaas-sdk/bindings/langs (owner
+# 2026-11-22, decisions CLI-SDK-33 (102)). A change under bindings/<lang>/ needs that language's cell only; a change to what
+# every cell builds or reads (the SDK, ffi, lib.sh, the shared rows, the list itself, scaas-rpc, the vectors, ua-rs and its
+# crates) and the generator under runs/ need every enabled cell; a language left out has no cell.
+BINDINGS = "clients/scaas-sdk/bindings/"
+BIND_SHARED = ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/"] + UARS
+BIND_RUNS = ["clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh"]
+
+
+def _langs_module():
+    import importlib.util
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location("langs", os.path.join(root, BINDINGS, "langs.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+LANGS = _langs_module()
+
+
+def bind_cells(paths, forced=(), langs=None):
+    """The enabled languages (the list's order) whose cell the paths need; paths None or a ci-full / ci-full-clients group:
+    every enabled one."""
+    langs = LANGS.enabled(LANGS.FILE.read_text()) if langs is None else langs
+    if paths is None or any(g in ("ci-full", "ci-full-clients") for g in forced):
+        return list(langs)
+    on = set()
+    for p in paths:
+        own = p[len(BINDINGS) :].split("/", 1) if p.startswith(BINDINGS) else []
+        if p in BIND_RUNS:
+            on |= set(langs)
+        elif not read_by_tests(p):
+            continue
+        elif len(own) == 2 and own[0] in LANGS.KNOWN:  # a language's own directory
+            on |= {own[0]} & set(langs)
+        elif any(p.startswith(x) for x in BIND_SHARED):
+            on |= set(langs)
+    return [lang for lang in langs if lang in on]
+
+
 def main():
     if os.environ.get("EVENT") == "workflow_dispatch":
-        out = needed([""], [os.environ.get("FULL", "")])  # no diff: only `docs` (prefix '') and the chosen group
+        paths, forced = [""], [os.environ.get("FULL", "")]  # no diff: only `docs` (prefix '') and the chosen group
     else:
-        out = needed(changed(), json.loads(os.environ.get("LABELS") or "null") or [])
+        paths, forced = changed(), json.loads(os.environ.get("LABELS") or "null") or []
+    out = needed(paths, forced)
+    cells = bind_cells(paths, forced)
     with open(os.environ.get("GITHUB_OUTPUT", "/dev/stdout"), "a") as f:
         for job, run in out.items():
             f.write(f"{job.replace('-', '_')}={'true' if run else 'false'}\n")
-    print(" ".join(j for j, r in out.items() if r) or "no job")
+        f.write(f"scaas_sdk_bind_langs={json.dumps(cells, separators=(',', ':'))}\n")
+    print(" ".join(j for j, r in out.items() if r) or "no job", "| bindings:", " ".join(cells) or "none")
 
 
 if __name__ == "__main__":
@@ -268,15 +301,6 @@ if __name__ == "__main__":
         "ua-deps",
         "scaas-sdk",
         "scaas-sdk-wasm",
-        "scaas-sdk-bindings",
-        "scaas-sdk-cpp",
-        "scaas-sdk-cs",
-        "scaas-sdk-python",
-        "scaas-sdk-kotlin",
-        "scaas-sdk-swift",
-        "scaas-sdk-js",
-        "scaas-sdk-java",
-        "scaas-sdk-go",
         "keystore-vectors",
         "scaas-cli",
         "pqvault-core",
@@ -286,12 +310,10 @@ if __name__ == "__main__":
     assert sdk >= {
         "scaas-sdk",
         "scaas-sdk-wasm",
-        "scaas-sdk-bindings",
         "keystore-vectors",
         "scaas-cli",
         "pqvault-core",
     }, sdk
-    assert needed(["clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh"])["scaas-sdk-bindings"]
     assert not needed(["clients/scaas-sdk/runs/2026-11-17-scaas-sdk-summary.txt"])["scaas-sdk"]
     assert needed(["smartcontracts/vectors/keystore/keystore.json"])["keystore-vectors"]
     assert all(needed(["docs/x.md"], ["ci-full"]).values())
@@ -342,15 +364,6 @@ if __name__ == "__main__":
         "scaas-rpc",
         "scaas-sdk",
         "scaas-sdk-wasm",
-        "scaas-sdk-bindings",
-        "scaas-sdk-cpp",
-        "scaas-sdk-cs",
-        "scaas-sdk-python",
-        "scaas-sdk-kotlin",
-        "scaas-sdk-swift",
-        "scaas-sdk-js",
-        "scaas-sdk-java",
-        "scaas-sdk-go",
         "keystore-vectors",
         "scaas-cli",
         "pqvault-core",
@@ -385,4 +398,38 @@ if __name__ == "__main__":
     assert needed(["smartcontracts/evm/foundry.txt"])["contract-evm"]  # a .txt outside runs/ counts
     assert needed(["scaas-node/runs/a.txt", "scaas-node/src/x.rs"])["node"]
     assert needed(["smartcontracts/evm/runs/a.txt"], ["ci-full-contracts"])["contract-evm"]  # a label still forces
+    # the bindings' cells (decisions CLI-SDK-33 (102)): the committed list enables all nine; a language's own directory needs
+    # its cell only, what every cell builds needs them all, a left-out language none; an unknown or repeated name is refused
+    nine = ["cpp", "cs", "python", "kotlin", "swift", "java", "go", "dart", "js"]
+    assert LANGS.enabled(LANGS.FILE.read_text()) == nine and list(LANGS.KNOWN) == nine
+    assert bind_cells(None) == nine and bind_cells(["docs/x.md"], ["ci-full-clients"]) == nine
+    assert bind_cells(["clients/scaas-sdk/bindings/go/smoke/smoke_test.go"]) == ["go"]
+    assert bind_cells(["clients/scaas-sdk/bindings/js/test/smoke.test.mjs", "clients/scaas-sdk/bindings/cs/X.cs"]) == [
+        "cs",
+        "js",
+    ]
+    for p in (
+        "clients/scaas-sdk/src/lib.rs",
+        "clients/scaas-sdk/ffi/src/lib.rs",
+        "clients/scaas-sdk/bindings/lib.sh",
+        "clients/scaas-sdk/bindings/rows.py",
+        "clients/scaas-sdk/bindings/langs",
+        "clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh",
+        "clients/ua-rs/src/lib.rs",
+        "smartcontracts/vectors/keystore/keystore.json",
+    ):
+        assert bind_cells([p]) == nine, p
+    for p in ("clients/scaas-sdk/runs/2026-11-17-scaas-sdk-summary.txt", "docs/x.md", "scaas-node/src/main.rs"):
+        assert bind_cells([p]) == [], p
+    some = ["cpp", "python", "js"]
+    assert bind_cells(["clients/scaas-sdk/bindings/go/x.go"], langs=some) == [], "a left-out language has no cell"
+    assert bind_cells(["clients/scaas-sdk/src/lib.rs"], langs=some) == some
+    assert bind_cells([""], ["ci-full-pqz"]) == []  # a manual run of another group
+    for bad in ("cpp\nrust\n", "go\ngo\n"):
+        try:
+            LANGS.enabled(bad)
+            raise AssertionError(bad)
+        except ValueError:
+            pass
+    assert LANGS.enabled("# all off\n") == [] and LANGS.enabled("cpp # the C++ one\njs\n") == ["cpp", "js"]
     main()
