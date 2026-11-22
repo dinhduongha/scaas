@@ -288,10 +288,64 @@ MUTANTS15 = [
     ),
 ]
 
+AC = "clients/scaas-sdk/src/app_core.rs"
+MS = "clients/scaas-sdk/src/account/msig.rs"
+UASIG = "clients/ua-rs/src/wallet/uasig.rs"
+SDKA = "cd clients/scaas-sdk && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features app-core "
+
+# the coordinator's controller calls of 2026-11-22 (CLI-PQV-15 (5)-(8), CLI-SDK-33): the duplicate handle, the explicit
+# records chain, the msig slot refusals, F2
+MUTANTS3 = [
+    (
+        "a handle twice in one call taken",
+        [(AC, ".any(|(i, a)| ks.iter().take(i).any(|b| std::ptr::eq(*a, *b)))", ".any(|_| false)")],
+        SDKA + "--test app_core a_handle_twice_in_one_call_is_refused",
+    ),
+    (
+        "a single key's portable records taken",
+        [(AC, "            (AppPath::Portable, _, None) => None,", "            (AppPath::Portable, _, _) => None,")],
+        SDKA + "--test app_core_vault_records pqvault_records_chain_is_explicit",
+    ),
+    (
+        "chain-bound records of another chain taken",
+        [(AC, " if r.as_ref().is_none_or(|r| r == chain)", "")],
+        SDKA + "--test app_core_vault_records pqvault_records_chain_is_explicit",
+    ),
+    (
+        "an msig slot's acceptance not checked on the dedicated path",
+        [
+            (
+                MS,
+                "    slots_active(&views, v, slots)?;\n    let keys = open(sdk, slots).await?;\n    if keys.iter().any(|k| matches!(k, Key::External(..))) {",
+                "    let keys = open(sdk, slots).await?;\n    if keys.iter().any(|k| matches!(k, Key::External(..))) {",
+            )
+        ],
+        E2E + "kem_rotation_and_msig_admin",
+    ),
+    (
+        "a disabled msig slot signing",
+        [(UASIG, "    if !indexes.iter().all(|i| on(&enabled, *i)) {", "    if false {")],
+        UAT + "pqvault_msig_signs_both_paths",
+    ),
+    (
+        "F2: the holder's domain not used",
+        [(MS, "                at = holder;", "                let _ = holder;")],
+        E2E + "pqvault_records_on_a_two_generation_line",
+    ),
+    (
+        "F2: generation 1 always",
+        [(MS, "    let generation = small(&g, 0, 16)", "    let generation = small(&g, 0, 16).map(|_| 1usize)")],
+        E2E + "pqvault_records_on_a_two_generation_line",
+    ),
+]
+
 if __name__ == "__main__":
     # `v10` the first round's, `v10-r2` the owner's rulings of 2026-11-22 (CLI-PQV-15): one record each
     if len(sys.argv) > 1 and sys.argv[1] == "--r2":
         del sys.argv[1]
         L.main("v10-r2", MUTANTS15)
+    elif len(sys.argv) > 1 and sys.argv[1] == "--r3":
+        del sys.argv[1]
+        L.main("v10-r3", MUTANTS3)
     else:
         L.main("v10", MUTANTS)
