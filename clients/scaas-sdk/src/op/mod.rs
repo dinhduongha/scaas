@@ -270,28 +270,7 @@ pub(crate) fn sim(e: SimError) -> SdkError {
     }
 }
 
-pub(crate) fn hex(b: &[u8]) -> String {
-    let mut s = String::from("0x");
-    for x in b {
-        s.push_str(&format!("{x:02x}"));
-    }
-    s
-}
-
-pub(crate) fn unhex(s: &str) -> Result<Vec<u8>, SdkError> {
-    let h = s.strip_prefix("0x").ok_or(SdkError::Argument)?;
-    if h.len() % 2 != 0 || !h.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(SdkError::Argument);
-    }
-    (0..h.len())
-        .step_by(2)
-        .map(|i| {
-            h.get(i..i + 2)
-                .and_then(|p| u8::from_str_radix(p, 16).ok())
-                .ok_or(SdkError::Argument)
-        })
-        .collect()
-}
+pub(crate) use crate::text::{hex, unhex};
 
 pub(crate) fn dec(v: &serde_json::Value) -> Result<U256, SdkError> {
     match v {

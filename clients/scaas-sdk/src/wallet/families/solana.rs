@@ -9,10 +9,9 @@
 //! `strict_majority` another endpoint reads the set with `minContextSlot` = the answering endpoint's slot and the sets are
 //! compared (decisions CLI-SDK-15's Change of 2026-11-21, T24.solana). Holder and mints are base58 of 32 bytes; Solana has no UA
 //! ledger, so a `0x` id is `Argument`.
-use super::{amount, malformed, read_set};
+use super::{amount, malformed, read_set, u256_dec};
 use crate::wallet::{Balances, TokenBalance};
 use crate::{Chain, SdkError};
-use alloy::primitives::U256;
 use scaas_rpc::family::FamilyError;
 use scaas_rpc::pool::ReadError;
 use scaas_rpc::solana::Solana;
@@ -99,7 +98,7 @@ async fn pass(
             .get("value")
             .and_then(Value::as_array)
             .ok_or_else(|| malformed(i, "token accounts that are not a list"))?;
-        let mut sum = U256::ZERO;
+        let mut sum = String::from("0");
         for a in accounts {
             let info = a.pointer("/account/data/parsed/info");
             let field = |k: &str| info.and_then(|v| v.pointer(k)).and_then(Value::as_str);
@@ -115,15 +114,35 @@ async fn pass(
             }
             let s = field("/tokenAmount/amount")
                 .ok_or_else(|| malformed(i, "a token amount that is not a string"))?;
-            let v = U256::from_str_radix(&amount(i, s)?, 10)
-                .map_err(|_| malformed(i, "a token amount above 2^256 - 1"))?;
-            sum = sum
-                .checked_add(v)
+            sum = dec_add(&sum, &amount(i, s)?)
                 .ok_or_else(|| malformed(i, "token amounts summing above 2^256 - 1"))?;
         }
-        sums.push(sum.to_string());
+        sums.push(sum);
     }
     Ok((slots, (Some(native), sums)))
+}
+
+/// `a + b` of two decimal strings, `None` above 2^256 - 1.
+fn dec_add(a: &str, b: &str) -> Option<String> {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let mut out = Vec::with_capacity(a.len().max(b.len()) + 1);
+    let mut carry = 0;
+    for k in 0..a.len().max(b.len()) {
+        let d = |x: &[u8]| {
+            x.len()
+                .checked_sub(k + 1)
+                .and_then(|j| x.get(j))
+                .map_or(0, |c| c - b'0')
+        };
+        let v = d(a) + d(b) + carry;
+        out.push(b'0' + v % 10);
+        carry = v / 10;
+    }
+    if carry > 0 {
+        out.push(b'0' + carry);
+    }
+    out.reverse();
+    u256_dec(std::str::from_utf8(&out).ok()?)
 }
 
 /// The set on endpoint `i` at one slot, at or after `min`: a batch naming two slots is read again once at the later one.
@@ -193,4 +212,20 @@ pub(crate) async fn balances(c: &Chain, id: &str) -> Result<Balances, SdkError> 
             })
             .collect(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn dec_add_carries_and_caps() {
+        assert_eq!(super::dec_add("0", "0").as_deref(), Some("0"));
+        assert_eq!(super::dec_add("999", "1").as_deref(), Some("1000"));
+        assert_eq!(
+            super::dec_add("18446744073709551615", "18446744073709551615").as_deref(),
+            Some("36893488147419103230")
+        );
+        let max = "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+        assert_eq!(super::dec_add(max, "0").as_deref(), Some(max));
+        assert_eq!(super::dec_add(max, "1"), None);
+    }
 }

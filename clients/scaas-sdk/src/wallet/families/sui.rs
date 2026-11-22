@@ -35,8 +35,8 @@ fn bytes32(s: &str) -> Result<[u8; 32], SdkError> {
     if !is_aptos_address(s) {
         return Err(SdkError::Argument);
     }
-    s.parse::<alloy::primitives::B256>()
-        .map(|b| b.0)
+    crate::text::unhex(s)?
+        .try_into()
         .map_err(|_| SdkError::Argument)
 }
 
@@ -127,7 +127,7 @@ pub(crate) async fn balances(c: &Chain, id: &str) -> Result<Balances, SdkError> 
         .iter()
         .map(|t| {
             let a = scaas_ua::families::sui::account_of(&bytes32(&t.address)?, &owner);
-            Ok((t.address.clone(), format!("0x{}", alloy::hex::encode(a))))
+            Ok((t.address.clone(), crate::text::hex(&a)))
         })
         .collect::<Result<Vec<(String, String)>, SdkError>>()?;
     let tokens = &tokens;

@@ -21,6 +21,8 @@ F="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-ro
 # with the test feature `vectors` (pqchat-core T1): built by clippy, run only by its own test (a `vectors` build refuses
 # scaas-ua key handles until a test unlocks them, so the whole suite stays without it)
 V="$F,vectors"
+# T41.evm step 0: account, wallet and every non-EVM family without `evm` (no alloy provider in the graph)
+NE="vault,account,wallet,file-store,mlock,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native"
 SETS_CMD=""
 for s in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do
     m="--no-default-features --features vault,account,wallet,pqz,pqz-set-$s"
@@ -34,11 +36,13 @@ MCHECK='python3 -I clients/scaas-sdk/runs/test_mutants_lib.py || exit 1; bad=0; 
 STEPS=(
     "sdk-test|clients/scaas-sdk|$cap cargo test $C --features $F"
     "sdk-min|clients/scaas-sdk|$cap cargo test $C --no-default-features --features vault,file-store"
+    "sdk-noevm|clients/scaas-sdk|$cap cargo test $C --no-default-features --features $NE"
+    "sdk-clippy-noevm|clients/scaas-sdk|$cap cargo clippy $C --all-targets --no-default-features --features $NE -- -D warnings"
     "sdk-sets|clients/scaas-sdk|$SETS_CMD"
     "sdk-clippy|clients/scaas-sdk|$cap cargo clippy $C --all-targets --features $V -- -D warnings"
     "sdk-vectors|clients/scaas-sdk|$cap cargo test $C --features $V --test pqchat_keys --test app_core_vault_rows"
     "sdk-e2e|clients/scaas-sdk|CAPPED_MEM=6G $cap cargo test $C --features $F --test e2e -- --ignored"
-    "sdk-wasm|clients/scaas-sdk|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet"
+    "sdk-wasm|clients/scaas-sdk|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet,evm"
     "sdk-deny|clients/scaas-sdk|$cap cargo deny --all-features check && $cap cargo audit"
     "ua-test|clients/ua-rs|$cap cargo test $C"
     "ua-clippy|clients/ua-rs|$cap cargo clippy $C --all-targets -- -D warnings"

@@ -41,7 +41,7 @@ pub enum Event {
         token: String,
     },
     /// A watched account's new history items (spec §8.4), newest first.
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     HistoryAdded {
         account: String,
         chain: String,

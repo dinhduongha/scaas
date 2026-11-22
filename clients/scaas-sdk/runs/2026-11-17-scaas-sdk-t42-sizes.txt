@@ -20,3 +20,10 @@ all | 2342744 | 136960
 native | 235105332 | 385798518 | 150693186 | 39 %
 wasm32 | 223707718 | 365153800 | 141446082 | 38 %
 # of the native delta, alloy's provider, network, rpc-types, rpc-client, json-rpc and transport rlibs alone: 15,554,872 B (alloy_provider 6,035,410, alloy_rpc_types_eth 5,053,480, alloy_network 1,761,084)
+# T41.evm step 0 (the SDK feature `evm`; CLI-SDK-33 (37) (g)), same script and sums, on the step 0 tree: target | vault,
+# file-store | account, wallet without evm | with evm | evm's part | its share; old → new for `account`, `wallet`
+native | 235143150 | 235928222 | 385961352 | 150033130 | 38 %
+wasm32 | 223743352 | 224491174 | 365159706 | 140668532 | 38 %
+# account + wallet (+ file-store, vault): native 385798518 → 235928222 B (−149870296), wasm32 365153800 → 224491174 B (−140662626);
+# no alloy-provider, alloy-network, alloy-rpc-types-eth, alloy-sol-types or alloy-primitives in their graph (feature_tree
+# alloy_only_under_evm); alloy-rlp stays, scaas-ua's `fam-evm`, which `vault` enables for the EVM native key (CLI-SDK-33 (37) (d))

@@ -25,6 +25,7 @@ scaas-sdk = { path = "../scaas-sdk", default-features = false, features = [
   "vault",
   "account",
   "wallet",
+  "evm",
   "file-store",
   "mlock",
   "zether",

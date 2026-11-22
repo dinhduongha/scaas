@@ -50,9 +50,9 @@ pub mod events;
 #[cfg(feature = "frb")]
 #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub mod frb;
-#[cfg(any(feature = "account", feature = "wallet"))]
+#[cfg(feature = "evm")]
 pub mod line;
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 pub mod op;
 pub mod platform;
 #[cfg(feature = "pqchat-records")]
@@ -64,7 +64,7 @@ pub(crate) mod text;
 pub mod vault;
 #[cfg(feature = "wallet")]
 pub mod wallet;
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 mod watch;
 
 pub use config::{
@@ -74,7 +74,7 @@ pub use config::{
 };
 pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};
-#[cfg(any(feature = "account", feature = "wallet"))]
+#[cfg(feature = "evm")]
 pub use line::UaLine;
 pub use vault::Vault;
 
@@ -121,6 +121,8 @@ pub mod bits {
     pub const VECTORS: u64 = 1 << 28;
     /// T32's read part: native DOT on Polkadot Hub's Substrate side
     pub const SUBSTRATE: u64 = 1 << 29;
+    /// T41.evm step 0: the EVM part (alloy's providers, the operations, the registry); `account` and `wallet` hold none
+    pub const EVM: u64 = 1 << 30;
 }
 
 /// The bits of this build's features.
@@ -169,6 +171,7 @@ pub fn features() -> u64 {
         (cfg!(feature = "pqchat-records"), PQCHAT_RECORDS),
         (cfg!(feature = "vectors"), VECTORS),
         (cfg!(feature = "substrate"), SUBSTRATE),
+        (cfg!(feature = "evm"), EVM),
     ];
     on.iter()
         .filter(|(enabled, _)| *enabled)
@@ -180,7 +183,7 @@ pub(crate) struct Chain {
     pub(crate) profile: ChainProfile,
     /// an EVM chain's one pool for the session (closing review P2-3): its identity checks, head floors and failover counts
     /// hold across calls; pinned to the profile's `chain_uid`
-    #[cfg(any(feature = "account", feature = "wallet"))]
+    #[cfg(feature = "evm")]
     pub(crate) pool: Option<Arc<scaas_rpc::evm::EvmPool>>,
     #[allow(dead_code)] // the gateways of a profile without the `wallet` feature
     pub(crate) gateways: Option<NodeList>,
@@ -244,6 +247,7 @@ pub struct Sdk {
     /// profile opts in (spec §13.3)
     #[allow(dead_code)] // read by the quote (`wallet`)
     pub(crate) gas_tables: Vec<GasTable>,
+    #[cfg_attr(not(feature = "evm"), allow(dead_code))] // read by the EVM operations
     clock: Option<Clock>,
     pub(crate) rt: Option<Rt>,
     pub(crate) authenticator: Option<Arc<dyn platform::Authenticator>>,
@@ -262,26 +266,26 @@ pub struct Sdk {
     #[allow(dead_code)]
     pub(crate) store: Arc<dyn vault::SecureStore>,
     /// the operations prepared in this session, by id (spec §13.1: a `Prepared` not here is `PreparedUnknown`)
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     pub(crate) prepared: Mutex<HashMap<String, Arc<op::Prepared>>>,
     /// the registry writes prepared in this session, by id (spec §7: one not here is `PreparedUnknown`)
-    #[cfg(all(feature = "account", feature = "wallet"))]
+    #[cfg(all(feature = "account", feature = "evm"))]
     pub(crate) registry_writes: Mutex<HashMap<String, Arc<account::RegistryWrite>>>,
     /// tokens read in this session, by (chain, address) (spec §8.2: metadata read once per session)
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     pub(crate) tokens: Mutex<HashMap<(String, String), wallet::TokenInfo>>,
     /// the next transaction nonce of each payer by (chain, address) after this session's own signed transactions: a quote's
     /// floor above the endpoints' pending nonce (spec §8.5; under `strict_majority` the agreed nonce is the committed one)
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     pub(crate) sent_nonces: Mutex<HashMap<(String, String), u64>>,
     /// the watched pairs and the polls' last reads (spec §14)
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     pub(crate) watching: Mutex<watch::Watching>,
     /// `sdk.state`'s `rev` last seen by a poll or written by this SDK (R17)
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     pub(crate) state_seen: std::sync::atomic::AtomicU64,
     /// the tests' count of SCaaS signatures made (`op::submit::sign`)
-    #[cfg(all(test, feature = "wallet"))]
+    #[cfg(all(test, feature = "evm"))]
     pub(crate) signs: std::sync::atomic::AtomicU32,
 }
 
@@ -296,7 +300,7 @@ fn gas_tables(modules: Vec<GasTable>) -> Result<Vec<GasTable>, SdkError> {
     }
     #[allow(unused_mut)]
     let mut out = modules;
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     out.push(GasTable::parse(op::gas::REFERENCE_FILE)?);
     Ok(out)
 }
@@ -367,7 +371,7 @@ impl Sdk {
             #[cfg(all(feature = "wallet", feature = "near"))]
             let near = match p.family {
                 Family::Near => {
-                    let uid = op::unhex(&p.chain_uid.to_ascii_lowercase())?;
+                    let uid = text::unhex(&p.chain_uid.to_ascii_lowercase())?;
                     let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
                     Some(Arc::new(scaas_rpc::near::Near::new(
                         client,
@@ -380,7 +384,7 @@ impl Sdk {
             let algorand = match p.family {
                 Family::Algorand => {
                     use base64::Engine;
-                    let uid = op::unhex(&p.chain_uid.to_ascii_lowercase())?;
+                    let uid = text::unhex(&p.chain_uid.to_ascii_lowercase())?;
                     let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
                     Some(Arc::new(scaas_rpc::algorand::Algorand::new(
                         client,
@@ -429,7 +433,7 @@ impl Sdk {
                         .and_then(|v| v.try_into().ok())
                         .ok_or(SdkError::Argument)?;
                     let genesis =
-                        bs58::encode(op::unhex(&p.chain_uid.to_ascii_lowercase())?).into_string();
+                        bs58::encode(text::unhex(&p.chain_uid.to_ascii_lowercase())?).into_string();
                     let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
                     Some((
                         Arc::new(scaas_rpc::solana::Solana::new(client, &genesis)),
@@ -446,7 +450,7 @@ impl Sdk {
                     passphrase,
                     xlm_sac,
                 }) => {
-                    let uid = op::unhex(&p.chain_uid.to_ascii_lowercase())?;
+                    let uid = text::unhex(&p.chain_uid.to_ascii_lowercase())?;
                     if scaas_ua::sha256(passphrase.as_bytes()).as_slice() != uid.as_slice() {
                         return Err(SdkError::Argument);
                     }
@@ -470,7 +474,7 @@ impl Sdk {
                     graphql_policy,
                 }) => {
                     let uid =
-                        bs58::encode(op::unhex(&p.chain_uid.to_ascii_lowercase())?).into_string();
+                        bs58::encode(text::unhex(&p.chain_uid.to_ascii_lowercase())?).into_string();
                     Some(Arc::new(scaas_rpc::sui::SuiGraphql::pinned(
                         scaas_rpc::family::Client::new(list(graphql, *graphql_policy)?)?,
                         Some(&uid),
@@ -503,7 +507,12 @@ impl Sdk {
                 )),
                 _ => None,
             };
-            #[cfg(any(feature = "account", feature = "wallet"))]
+            // T41.evm step 0: a well-formed EVM profile needs the feature `evm` (the shared `FeatureMissing`; `open` reads
+            // nothing and derives no key)
+            if p.family == Family::Evm && !cfg!(feature = "evm") {
+                return Err(SdkError::FeatureMissing);
+            }
+            #[cfg(feature = "evm")]
             let pool = match (p.family, p.chain_id) {
                 (Family::Evm, Some(id)) => {
                     let uid = p.chain_uid.parse().map_err(|_| SdkError::Argument)?;
@@ -515,7 +524,7 @@ impl Sdk {
                 }
                 _ => None,
             };
-            #[cfg(not(any(feature = "account", feature = "wallet")))]
+            #[cfg(not(feature = "evm"))]
             drop(rpc);
             // T16-a: the PQZ verifiers, a list with its own policy (ARCH-POS-15)
             #[cfg(feature = "pqz")]
@@ -529,7 +538,7 @@ impl Sdk {
             };
             chains.push(Chain {
                 profile: p,
-                #[cfg(any(feature = "account", feature = "wallet"))]
+                #[cfg(feature = "evm")]
                 pool,
                 gateways,
                 #[cfg(feature = "pqz")]
@@ -578,19 +587,19 @@ impl Sdk {
             open: Mutex::new(HashMap::new()),
             hidden: Mutex::new(HashMap::new()),
             store: config.store,
-            #[cfg(feature = "wallet")]
+            #[cfg(feature = "evm")]
             prepared: Mutex::new(HashMap::new()),
-            #[cfg(all(feature = "account", feature = "wallet"))]
+            #[cfg(all(feature = "account", feature = "evm"))]
             registry_writes: Mutex::new(HashMap::new()),
-            #[cfg(feature = "wallet")]
+            #[cfg(feature = "evm")]
             tokens: Mutex::new(HashMap::new()),
-            #[cfg(feature = "wallet")]
+            #[cfg(feature = "evm")]
             sent_nonces: Mutex::new(HashMap::new()),
-            #[cfg(feature = "wallet")]
+            #[cfg(feature = "evm")]
             watching: Mutex::default(),
-            #[cfg(feature = "wallet")]
+            #[cfg(feature = "evm")]
             state_seen: std::sync::atomic::AtomicU64::new(watch::REV_UNSEEN),
-            #[cfg(all(test, feature = "wallet"))]
+            #[cfg(all(test, feature = "evm"))]
             signs: std::sync::atomic::AtomicU32::new(0),
         }))
     }
@@ -684,6 +693,7 @@ impl Sdk {
 
     /// Unix seconds now on the SDK's clock (the configured one, else the device's; 0 when the device's is unreadable, which
     /// refuses every window: fail closed).
+    #[cfg_attr(not(feature = "evm"), allow(dead_code))]
     pub(crate) fn now(&self) -> u64 {
         if let Some(c) = &self.clock {
             return c();
@@ -696,7 +706,7 @@ impl Sdk {
     }
 
     /// The signing window of chain `chain`: its profile's, else `Limits::max_valid_secs`.
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     pub(crate) fn window(&self, chain: &str) -> u64 {
         self.chains
             .iter()
@@ -729,7 +739,7 @@ impl Sdk {
     }
 
     /// An EVM chain's profile, chain id and the session's pool (`ChainUnknown`; `Argument`: not an EVM profile with a chain id).
-    #[cfg(any(feature = "account", feature = "wallet"))]
+    #[cfg(feature = "evm")]
     pub(crate) fn evm(
         &self,
         chain: &str,

@@ -69,12 +69,14 @@
 #                          (the binding's own Rust tests: secrets never cross frb's codec; T15o); dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
 #   scaas-sdk:             in clients/scaas-sdk: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton;
-#                          cargo test --locked --no-default-features --features vault,file-store; cargo test --locked --lib --features <the same>,native-networks,raw-native;
+#                          cargo test --locked --no-default-features --features vault,file-store; without evm (T41.evm step 0) cargo test and cargo clippy --all-targets
+#                          -- -D warnings --no-default-features --features vault,account,wallet,file-store,mlock,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native;
+#                          cargo test --locked --lib --features <the same>,native-networks,raw-native;
 #                          cargo test --locked --features <the same>,vectors --test pqchat_keys --test app_core_vault_rows (the test feature alone: a vectors build refuses
 #                          scaas-ua key handles until a test unlocks them); cargo clippy --locked --all-targets --features <the same>,vectors,native-networks,raw-native -- -D warnings; per PQZ set
 #                          (n2048-kmax1024, n2560-kmax16384, n2816-kmax65536): cargo test --locked --no-default-features --features vault,account,wallet,pqz,pqz-set-<set> --test sets;
 #                          cargo test --locked --test feature_tree (the e2e on anvil, 6 GB, stays the local gate sdk-e2e)
-#   scaas-sdk-wasm:        in clients/scaas-sdk: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet
+#   scaas-sdk-wasm:        in clients/scaas-sdk: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet,evm
 #   scaas-sdk-bindings:    clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check (flutter_rust_bridge_codegen 2.13.0 with cargo-expand 1.0.127: the
 #                          generated FRB Dart surface of the whole SDK equals the committed one); in clients/scaas-sdk/ffi: cargo clippy --locked --all-targets
 #                          -- -D warnings; cargo build --locked; in clients/scaas-sdk/bindings/dart: dart pub get --enforce-lockfile; dart test (the load check,
@@ -1204,6 +1206,11 @@ jobs:
         run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton,vectors --test pqchat_keys --test app_core_vault_rows
       - name: cargo test (vault and file store only)
         run: cargo test --locked --no-default-features --features vault,file-store
+      - name: account, wallet and the non-EVM families without evm (T41.evm step 0)
+        run: |
+          NE=vault,account,wallet,file-store,mlock,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native
+          cargo test --locked --no-default-features --features "$NE"
+          cargo clippy --locked --all-targets --no-default-features --features "$NE" -- -D warnings
       - name: the raw native entry and native networks
         run: cargo test --locked --lib --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native
       - name: cargo clippy
@@ -1233,7 +1240,7 @@ jobs:
         with:
           workspaces: clients/scaas-sdk
       - name: compiles for wasm32 (not run)
-        run: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet
+        run: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet,evm
 
   # the CLI `scaas` (plan T22, CLI-SDK-17): one command per SDK call, both builds (release profiles; dev-profiles)
   scaas-cli:

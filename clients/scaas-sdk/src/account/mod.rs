@@ -3,34 +3,37 @@
 //! seed; a UA key is `(seed, kind, account, index)` and its UA is the one `scaas-ua` derives; one account index per wallet (a new
 //! wallet takes the next free index, so no two wallets share one); the EIP-2333 kinds at index 0 only (CLI-UAL-15). Every change
 //! rewrites the seed's index MAC (the seed unlocked). A watch row holds no key and signs nothing. UNAUDITED.
+#[cfg(feature = "evm")]
 mod line;
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 pub mod msig;
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 mod register;
+#[cfg(feature = "evm")]
 mod restore;
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 pub mod smart;
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 mod sponsor;
 
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 pub use msig::{
     msig_structure, AcceptMembership, MsigMemberArgs, MsigRegister, MsigSlotState, MsigState,
     MsigStructureArgs, MsigUpdatePlan, UpdateMsig,
 };
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 pub(crate) use register::{
     receiver_registered, record_call, record_call2, record_holds, record_holds2, Landed,
 };
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 pub use register::{
     Register, RegisterAttrs, RegistrationGas, RegistrationState, RegistryWrite, StepGas,
 };
+#[cfg(feature = "evm")]
 pub use restore::Restore;
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 pub use smart::{smart_account_address, SmartCall, SmartOp, SubjectKeyArgs};
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 pub use sponsor::{
     AttrsArgs, KemArgs, KemRecord, RegisterArgs, RegistrationBlob, WebAuthnArgs, BLOB_MAX,
 };
@@ -284,7 +287,7 @@ impl Account {
     /// (the seed's other passkeys excluded), its `webauthn-p256` (0x0100) key data and credential id stored as a key row of
     /// `seed` (unlocked: `WalletLocked`), the UA `scaas-ua` derives; the `KeyRef` that signs with it. `AuthenticatorRefused`: no
     /// authenticator or RP ID, a refusal; `Argument`: a bad name or key data.
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     pub async fn create_passkey_key(
         &self,
         req: CreatePasskeyKey,
@@ -334,7 +337,7 @@ impl Account {
     /// A new secure-element P-256 key (spec §7 "Secure-element keys"; S1): the `Authenticator` generates it under `policy`, its
     /// `p256` (0x0101) key data and handle stored as a key row of `seed` (unlocked); the `KeyRef` that signs with it (MESSAGE
     /// mode). Not recoverable without a second member or a guardian: the app says so. Errors as [`Account::create_passkey_key`].
-    #[cfg(feature = "wallet")]
+    #[cfg(feature = "evm")]
     pub async fn create_se_key(&self, req: CreateSeKey) -> Result<crate::op::KeyRef, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
@@ -440,7 +443,7 @@ fn same(a: &AccountRow, b: &AccountRow) -> bool {
 }
 
 /// A key row of `kind` and `key_data`, its UA the one `scaas-ua` derives.
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 fn key_row(
     name: &str,
     kind: u16,
@@ -461,7 +464,7 @@ fn key_row(
 }
 
 /// `row` added to `seed`; its `KeyRef`.
-#[cfg(feature = "wallet")]
+#[cfg(feature = "evm")]
 async fn key_ref(
     sdk: &Arc<Sdk>,
     seed: &str,

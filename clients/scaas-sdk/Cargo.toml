@@ -11,9 +11,9 @@ description = "SCaaS SDK: the one API apps call (CLI-SDK-01). Signs only through
 # docs/clients/scaas-sdk.md (CLI-SDK-*), spec docs/superpowers/specs/2026-11-17-scaas-sdk.md §3.2, §3.3. Each feature's bit is
 # the table's (`Sdk::features`, src/lib.rs): appended only, never reused (bit 12, the withdrawn `chat`, stays unused).
 [features]
-default = ["vault", "account", "wallet", "file-store", "mlock"]
+default = ["vault", "account", "wallet", "evm", "file-store", "mlock"]
 # plan T42 (CLI-SDK-33 (31), (37)): each family feature enables exactly its `scaas-ua` `fam-<row>`; EVM (with Hedera's EVM side) is
-# `account` / `wallet`'s; `vault` keeps the native keys spec §8.5 has in every build (the `scaas-ua` networks outside
+# `evm`'s; `vault` keeps the native keys spec §8.5 has in every build (the `scaas-ua` networks outside
 # `native-networks`), so it enables their rows
 vault = [
   "scaas-ua/wallet",
@@ -26,19 +26,23 @@ vault = [
   "scaas-ua/fam-aptos",
   "scaas-ua/fam-solana",
 ]
-account = ["vault", "scaas-rpc/evm", "dep:alloy", "scaas-ua/fam-evm"]
-wallet = ["vault", "scaas-rpc/evm", "scaas-rpc/node-client", "dep:alloy", "scaas-ua/fam-evm"]
+# T41.evm step 0 (owner 2026-11-22, decisions CLI-SDK-32): `account` and `wallet` carry no chain code of their own (the rows,
+# the native keys, the non-EVM families' reads); every EVM call (alloy's providers, network, rpc-types, the operations, the
+# registry, the restore scan) is `evm`'s, which needs `wallet`. Without it an EVM profile is `FeatureMissing` at `Sdk::open`
+account = ["vault"]
+wallet = ["vault"]
+evm = ["wallet", "scaas-rpc/evm", "scaas-rpc/node-client", "dep:alloy", "scaas-ua/fam-evm"]
 # T15: the reading layer reads through `scaas-rpc`'s EVM pool and the operations are `wallet`'s; the layout constants of
 # `scaas.zether` (`ROOT`, `LAYOUT`) are zether-prover's, the prover `scaas-ua`'s facade runs
-zether = ["wallet", "scaas-ua/zether", "dep:zether-prover"]
+zether = ["evm", "scaas-ua/zether", "dep:zether-prover"]
 # T16: the PQZ reading layer reads through `scaas-rpc`'s EVM pool and the operations are `wallet`'s, as `zether`
-pqz = ["wallet", "scaas-ua/pqz"]
+pqz = ["evm", "scaas-ua/pqz"]
 pqz-set-n2048-kmax1024 = ["scaas-ua/pqz-set-n2048-kmax1024"]
 pqz-set-n2304-kmax4096 = ["scaas-ua/pqz-set-n2304-kmax4096"]
 pqz-set-n2560-kmax16384 = ["scaas-ua/pqz-set-n2560-kmax16384"]
 pqz-set-n2816-kmax65536 = ["scaas-ua/pqz-set-n2816-kmax65536"]
-dex = ["wallet"]
-admin = ["wallet"]
+dex = ["evm"]
+admin = ["evm"]
 mlock = ["vault", "scaas-ua/mlock"]
 # T24.soroban: the ledger keys and entries in base64 (an encoding; the XDR read by fixed templates in the SDK)
 soroban = ["scaas-rpc/soroban", "dep:base64", "scaas-ua/fam-soroban"]
@@ -56,14 +60,14 @@ sui = ["scaas-rpc/sui", "dep:bs58", "scaas-ua/fam-sui"]
 cosmos = ["scaas-rpc/cosmos", "dep:base64", "scaas-ua/fam-cosmos"]
 ton = ["scaas-rpc/ton", "scaas-ua/fam-ton"]
 # T32's read part (decisions CLI-SDK-32's Change of 2026-11-22): native DOT on Polkadot Hub's Substrate side; the SS58 form
-# and the storage key are scaas-ua's
-substrate = ["scaas-rpc/substrate", "scaas-ua/fam-dot"]
+# and the storage key are scaas-ua's; the side is a part of Hub's profile, an EVM one, so it needs `evm`
+substrate = ["evm", "scaas-rpc/substrate", "scaas-ua/fam-dot"]
 file-store = ["vault"]
 # roots (c) and (d) (spec §6.6; T6): scaas-ua's Argon2id roots
 classical-roots = ["vault", "scaas-ua/roots"]
 opaque-calls = []
 # T21 (spec §12; bit 26): the app-core surface for app cores above the SDK
-app-core = ["account", "wallet", "scaas-ua/app-core"]
+app-core = ["account", "evm", "scaas-ua/app-core"]
 # T21 (spec §12.5; bit 27): PqChat's signed records as named entries
 pqchat-records = ["app-core"]
 # pqchat-core T1 (bit 28): test-only entry points with fixed randomness and key bytes in and out, for the vectors; refused in
@@ -142,7 +146,7 @@ required-features = ["classical-roots"]
 
 [[test]]
 name = "account"
-required-features = ["account"]
+required-features = ["account", "evm"]
 
 [[test]]
 name = "app_core"
@@ -158,31 +162,35 @@ required-features = ["pqchat-records"]
 
 [[test]]
 name = "account_ops"
-required-features = ["account", "wallet"]
+required-features = ["account", "evm"]
 
 [[test]]
 name = "wallet"
-required-features = ["wallet"]
+required-features = ["evm"]
 
 [[test]]
 name = "evm_profiles"
-required-features = ["account", "wallet"]
+required-features = ["account", "evm"]
+
+[[test]]
+name = "evm_feature"
+required-features = ["account"]
 
 [[test]]
 name = "l1_fee"
-required-features = ["wallet"]
+required-features = ["evm"]
 
 [[test]]
 name = "wallet_ops"
-required-features = ["wallet"]
+required-features = ["evm"]
 
 [[test]]
 name = "e2e"
-required-features = ["wallet"]
+required-features = ["evm"]
 
 [[test]]
 name = "history"
-required-features = ["wallet"]
+required-features = ["evm"]
 
 [[test]]
 name = "confidential"
@@ -198,7 +206,7 @@ required-features = ["dex"]
 
 [[test]]
 name = "completeness"
-required-features = ["wallet"]
+required-features = ["evm"]
 
 [[test]]
 name = "algorand"

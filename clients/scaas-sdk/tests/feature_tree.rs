@@ -16,6 +16,7 @@ fn this_build() -> Vec<&'static str> {
         (cfg!(feature = "vault"), "vault"),
         (cfg!(feature = "account"), "account"),
         (cfg!(feature = "wallet"), "wallet"),
+        (cfg!(feature = "evm"), "evm"),
         (cfg!(feature = "zether"), "zether"),
         (cfg!(feature = "pqz"), "pqz"),
         (
@@ -122,9 +123,9 @@ fn feature_tree() {
 }
 
 /// Plan T42: each SDK family feature and the `scaas-ua` `fam-<row>` features it enables (CLI-SDK-33 (31)); EVM is
-/// `account` / `wallet`'s, Bitcoin, NEAR and Polkadot's native keys `native-networks`', the native keys of every build
+/// `evm`'s (T41.evm step 0; `account` and `wallet` enable no row), Bitcoin, NEAR and Polkadot's native keys `native-networks`', the native keys of every build
 /// (spec §8.5) `vault`'s (CLI-SDK-33 (37)).
-const FAMILY: [(&str, &[&str]); 13] = [
+const FAMILY: [(&str, &[&str]); 14] = [
     (
         "vault",
         &[
@@ -138,8 +139,9 @@ const FAMILY: [(&str, &[&str]); 13] = [
             "fam-solana",
         ],
     ),
-    ("account", &["fam-evm"]),
-    ("wallet", &["fam-evm"]),
+    ("account", &[]),
+    ("wallet", &[]),
+    ("evm", &["fam-evm"]),
     ("soroban", &["fam-soroban"]),
     ("solana", &["fam-solana"]),
     ("near", &["fam-near"]),
@@ -175,7 +177,11 @@ fn features_of(path: &str) -> Vec<(String, Vec<String>)> {
     let body = body.split("\n[").next().unwrap();
     let mut out: Vec<(String, Vec<String>)> = vec![];
     let mut open = false;
-    for l in body.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+    for l in body
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+    {
         if !open {
             let (k, v) = l.split_once(" = ").unwrap();
             out.push((k.to_string(), vec![]));
@@ -244,7 +250,10 @@ fn ua_rows_and_the_core() {
         assert!(default.iter().any(|d| d == r), "{r} on by default");
     }
     for (k, _) in &ua {
-        assert!(!(k.starts_with("xcheck-") && default.contains(k)), "{k} by default");
+        assert!(
+            !(k.starts_with("xcheck-") && default.contains(k)),
+            "{k} by default"
+        );
         if k.starts_with("fam-") {
             assert!(ROWS.contains(&k.as_str()), "{k}: not a row");
         }
@@ -255,7 +264,16 @@ fn ua_rows_and_the_core() {
     }
     assert!(get("fam-evm").iter().any(|d| d == "dep:alloy-rlp"));
     assert!(get("fam-dot").iter().any(|d| d == "dep:schnorrkel"));
-    for core in ["dep:bip39", "dep:bip32", "dep:hkdf", "dep:ml-kem", "dep:aes-gcm", "dep:scrypt", "signers", "pq"] {
+    for core in [
+        "dep:bip39",
+        "dep:bip32",
+        "dep:hkdf",
+        "dep:ml-kem",
+        "dep:aes-gcm",
+        "dep:scrypt",
+        "signers",
+        "pq",
+    ] {
         assert!(wallet.iter().any(|d| d == core), "{core} not in the core");
     }
     assert!(get("signers").iter().any(|d| d == "dep:frost-secp256k1"));
@@ -266,9 +284,64 @@ fn ua_rows_and_the_core() {
 fn ua_feature_missing_is_the_sdks() {
     use scaas_sdk::SdkError;
     use scaas_ua::wallet::Error;
-    assert!(matches!(SdkError::from(Error::FeatureMissing), SdkError::FeatureMissing));
+    assert!(matches!(
+        SdkError::from(Error::FeatureMissing),
+        SdkError::FeatureMissing
+    ));
     assert!(
-        matches!(SdkError::from(Error::Argument), SdkError::Ua(Error::Argument)),
+        matches!(
+            SdkError::from(Error::Argument),
+            SdkError::Ua(Error::Argument)
+        ),
         "control"
     );
+}
+
+/// T41.evm step 0: alloy's provider, network and rpc-types are in this build's graph exactly when `evm` is on (the
+/// `account`, `wallet` and family features pull none of them), and the SDK names `alloy` only under `evm`.
+#[test]
+fn alloy_only_under_evm() {
+    let tree = |pkg: &str| {
+        let out = Command::new(env!("CARGO"))
+            .args([
+                "tree",
+                "--offline",
+                "--locked",
+                "-e",
+                "normal",
+                "-i",
+                pkg,
+                "--no-default-features",
+                "--features",
+            ])
+            .arg(this_build().join(","))
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .output()
+            .unwrap();
+        let err = String::from_utf8_lossy(&out.stderr).to_string();
+        assert!(
+            out.status.success() || err.contains("did not match any packages"),
+            "{err}"
+        );
+        out.status.success()
+    };
+    for pkg in [
+        "alloy-provider",
+        "alloy-network",
+        "alloy-rpc-types-eth",
+        "alloy-sol-types",
+        "alloy-primitives",
+    ] {
+        assert_eq!(tree(pkg), cfg!(feature = "evm"), "{pkg} in the graph");
+    }
+    // control: a crate every build has is found
+    assert!(tree("serde_json"));
+    let sdk = features_of("Cargo.toml");
+    for (name, list) in &sdk {
+        assert_eq!(
+            list.iter().any(|e| e == "dep:alloy"),
+            name == "evm",
+            "SDK feature {name} names alloy"
+        );
+    }
 }

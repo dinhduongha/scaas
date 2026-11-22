@@ -70,7 +70,9 @@ pub(crate) async fn balances(sdk: &Sdk, chain: &str, id: &str) -> Result<Balance
     }
 }
 
-/// `balances` of an SS58 id on a profile with a Substrate side; `FeatureMissing` in a build without `substrate`.
+/// `balances` of an SS58 id on a profile with a Substrate side (an EVM profile); `FeatureMissing` in a build without
+/// `substrate`.
+#[cfg(feature = "evm")]
 pub(crate) async fn substrate_balances(c: &crate::Chain, id: &str) -> Result<Balances, SdkError> {
     #[cfg(all(feature = "wallet", feature = "substrate"))]
     return substrate::balances(c, id).await;
@@ -99,9 +101,38 @@ pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
     if s.is_empty() || s.len() > 78 || !s.bytes().all(|b| b.is_ascii_digit()) {
         return Err(malformed(i, "a balance that is not a decimal string"));
     }
-    alloy::primitives::U256::from_str_radix(s, 10)
-        .map(|v| v.to_string())
-        .map_err(|_| malformed(i, "a balance above 2^256 - 1"))
+    u256_dec(s).ok_or_else(|| malformed(i, "a balance above 2^256 - 1"))
+}
+
+/// 2^256 - 1 in decimal.
+#[cfg(any(
+    feature = "near",
+    feature = "cosmos",
+    feature = "aptos",
+    feature = "solana",
+    feature = "sui",
+    feature = "ton"
+))]
+const U256_MAX: &str =
+    "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+
+/// A string of decimal digits as its shortest form when it is at most 2^256 - 1, else `None` (no alloy in a build without
+/// `evm`).
+#[cfg(any(
+    feature = "near",
+    feature = "cosmos",
+    feature = "aptos",
+    feature = "solana",
+    feature = "sui",
+    feature = "ton"
+))]
+pub(crate) fn u256_dec(s: &str) -> Option<String> {
+    if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let t = s.trim_start_matches('0');
+    let t = if t.is_empty() { "0" } else { t };
+    (t.len() < 78 || (t.len() == 78 && t <= U256_MAX)).then(|| t.to_string())
 }
 
 /// ARCH-POS-15 for one read set: `first(i)` reads endpoint `i`'s final height and the set at it, through the family client's
@@ -198,4 +229,30 @@ where
         }
     }
     Ok((height, value))
+}
+
+#[cfg(all(test, feature = "near"))]
+mod tests {
+    use super::u256_dec;
+
+    #[test]
+    fn u256_decimals() {
+        assert_eq!(u256_dec("0").as_deref(), Some("0"));
+        assert_eq!(u256_dec("000").as_deref(), Some("0"));
+        assert_eq!(u256_dec("0012").as_deref(), Some("12"));
+        let max = super::U256_MAX;
+        assert_eq!(u256_dec(max).as_deref(), Some(max));
+        assert_eq!(u256_dec(&format!("0{max}")).as_deref(), Some(max));
+        // 2^256 and a 79-digit value are above; a sign, a space or nothing is no decimal
+        assert_eq!(
+            u256_dec(
+                "115792089237316195423570985008687907853269984665640564039457584007913129639936"
+            ),
+            None
+        );
+        assert_eq!(u256_dec(&format!("1{max}")), None);
+        for bad in ["", "-1", "+1", " 1", "1a"] {
+            assert_eq!(u256_dec(bad), None, "{bad:?}");
+        }
+    }
 }
