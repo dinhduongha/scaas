@@ -165,9 +165,6 @@ cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 rpc-clippy | cd3b6c03e | 0 | -
 gas-gen | 6e7e71142 | 0 | -
 ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
-ua-clippy | 7765d3e64 | 0 | -
-ua-test | 95badea99 | 0 | 608 passed, 0 failed, 3 ignored (61 binaries)
 ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
 ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
@@ -196,34 +193,17 @@ node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 4175c2d43 (origin/ua-rs-sign cc45679e8 into sdk-complete): node-e2e at --test-threads=10, wall 84 s, the capped scope's memory.peak 3.75 GB read at 60 s (cap 6 GiB); two reds before it were the runner's inputs, not the tree: a forge recovery snapshot of chain 31918 left by an interrupted earlier run (moved aside), and zether-cli built without `--features hazmat` (CI's e2e builds it with hazmat)
 sdk-min | 54ddfcb33 | 0 | 74 passed, 0 failed, 0 ignored (13 binaries)
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
-cli | e90f26685 | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
 ua-c | e90f26685 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | e90f26685 | 0 | ctest: 0 tests failed out of 45
-docs | 0011b40e4 | 0 | -
-features | 0011b40e4 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
-mutants-check | 0011b40e4 | 0 | -
-sdk-clippy | 0011b40e4 | 0 | -
-sdk-clippy-noevm | 0011b40e4 | 0 | -
-sdk-noevm | 0011b40e4 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
 sdk-wasm | 0011b40e4 | 0 | -
-bind-gen | 0011b40e4 | 0 | -
 bind-dart | 0011b40e4 | 0 | dart: +14:
 rpc-wasm | 0011b40e4 | 0 | -
 # faecafcd2 (T41.evm): sdk-e2e's e2e_hand_off_on_anvil alone (CAPPED_MEM=6G, --ignored): 1 passed (A hands off, B lands it, the same blob ImportConsumed, a blob bound to C ImportRelayerBound, A's own self-relay lands); the whole sdk-e2e is the round's matrix (T39). Mutants: t41evm0 9 of 9, t41evm 13 of 13 killed
-ck-test | 0736ad763 | 0 | node: 567 pass, 0 fail, 4 skipped
 ck-xcheck | 0736ad763 | 0 | -
-docs | 0736ad763 | 0 | -
-features | 0736ad763 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 ua-arweave | 0736ad763 | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 ua-core | 0736ad763 | 0 | 75 passed, 0 failed, 0 ignored (8 binaries)
-ua-clippy | 0736ad763 | 0 | -
-ua-verify-only | 0736ad763 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
-ua-vectors | 0736ad763 | 0 | 726 passed, 0 failed, 6 ignored (70 binaries)
-ua-test | 0736ad763 | 0 | 616 passed, 0 failed, 3 ignored (62 binaries)
 # T41.arweave's ua-rs part at 0736ad763 (CA-T16, CA-T17): the rows above; mutants t41arw1 20/20 killed (the ua-rs rows at 0736ad763, the clientkeys rows at 9764de7c0, their command through capped with the TAP reporter); every mutant script loads (mutants-check's commands, run by hand at 9764de7c0: rc 0)
 # T41.arweave fam-arweave size (clients/ua-rs/runs/fam-sizes.sh, release, the probe now reaching DataItem::parse) at 0736ad763: none 2212040 B; fam-arweave 2205712 → 2265656 B (delta −72 → +53616 B, old the empty feature at 61c5bb014); all 2342744 → 2379296 B (delta +136960 → +167256 B)
-rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
-sdk-test | 1eeb8561c | 101 | 181 passed, 4 failed, 0 ignored (6 binaries)
 # T41.soroban (branch sdk-soroban; with T27, T29, T30.soroban), before its merge of ua-rs-sign a97cce414: its rows ck-test to docs at
 # 17d674c71 (code), b73877866 and a9d971b95 (the CLI's Soroban commands; docs unchanged after 17d674c71 but for the (80)-(89)
 # renumbering, 92c2bd274); CARGO_INCREMENTAL=0. Beside them, not runner steps: scaas-node `cargo test --test families_vectors`
@@ -232,3 +212,24 @@ sdk-test | 1eeb8561c | 101 | 181 passed, 4 failed, 0 ignored (6 binaries)
 # --features vectors, --no-default-features: clean; scaas-rpc clippy --all-features clean; format.sh --check rust js py clean.
 # Mutants t41sor 22/22 killed (2026-11-17-scaas-sdk-t41sor-mutants.txt). The Soroban local-network e2e was not run (no
 # recorded fixtures either: the SDK tests' fake RPC answers with clientkeys' rows).
+docs | 7eac8a0d1 | 0 | -
+mutants-check | 7eac8a0d1 | 0 | -
+features | 7eac8a0d1 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+ck-test | 7eac8a0d1 | 0 | node: 580 pass, 0 fail, 4 skipped
+rpc-test | 7eac8a0d1 | 0 | 214 passed, 0 failed, 10 ignored (22 binaries)
+sdk-noevm | 7eac8a0d1 | 0 | 157 passed, 0 failed, 0 ignored (21 binaries)
+sdk-clippy-noevm | 7eac8a0d1 | 0 | -
+sdk-clippy | 7eac8a0d1 | 0 | -
+ua-clippy | 7eac8a0d1 | 0 | -
+ua-test | 7eac8a0d1 | 0 | 628 passed, 0 failed, 3 ignored (64 binaries)
+ua-vectors | 7eac8a0d1 | 0 | 738 passed, 0 failed, 6 ignored (72 binaries)
+ua-verify-only | 7eac8a0d1 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
+sdk-test | 7eac8a0d1 | 101 | 181 passed, 4 failed, 0 ignored (6 binaries)
+bind-gen | 7eac8a0d1 | 0 | -
+cli | 7eac8a0d1 | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
+# 7eac8a0d1 (sdk-soroban's merge of ua-rs-sign a97cce414): the rows above at 7eac8a0d1 (docs, mutants-check, features, ck-test,
+# rpc-test, sdk-noevm, sdk-clippy-noevm, sdk-clippy, ua-clippy, ua-test, ua-vectors, ua-verify-only, bind-gen, cli) green;
+# sdk-test rc 101 are app_core_vault_records' 4 reds only, AppDomainRefused, as on ua-rs-sign since 7da6fbb32 (8c869f3c5:
+# the owner's dedicated PqVault signing path); its whole set with --no-fail-fast: 420 passed, those 4 failed, 40 binaries
+# (handoff 8, soroban_ops 8). ua-rs clippy --all-targets --no-default-features -D warnings clean; format.sh --check rust js py
+# clean (after git add -N). Mutants t41sor: the 12 SDK ones rerun at 7eac8a0d1 (their files moved), 22 of 22 killed.
