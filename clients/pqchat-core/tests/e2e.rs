@@ -679,7 +679,9 @@ async fn e2e_run() {
     );
     println!("[e2e] fixtures: counter, unlisted, wrap-hash, pending gate");
     let _ = (&s3b, &eb1);
-    println!("[e2e] {} transactions landed", w.txs.lock().unwrap().len());
+    // the run's writes (the gate's summary note), hashes only
+    let txs = w.txs.lock().unwrap().clone();
+    println!("[e2e] {} transactions landed: {}", txs.len(), txs.join(" "));
 }
 
 async fn world_and_log() -> World {
