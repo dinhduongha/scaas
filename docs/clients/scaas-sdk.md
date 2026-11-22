@@ -400,7 +400,7 @@ by `code`. The SDK's own names include `StoreConflict`, `KeystoreMismatch`, `Key
 `ReceiverUnregistered`, `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`,
 `GasAboveBlockShare`, `RegistrationVerifyOnly` (the kind's home, `kindHome(kind)`, is another generation of the line), `UaUnregistered`
 (no generation of the bound registry's line holds the UA), `PqzHomeNone` (no PQZ home on the walk), and for Arweave
-(CLI-SDK-21) `PayerUnavailable`, `PaymentRequired`, `UploadRejected`, `UploadUnsettled`, `ArweaveItem`, with `FileTooLarge` and
+(CLI-SDK-21) `PayerUnavailable`, `PaymentRequired`, `UploadRejected`, `UploadUnsettled`, with `ArweaveItem`, `FileTooLarge` and
 `FileHashMismatch` shared with `scaas-ua`
 ([CTR-UA-65](../contracts/accounts.md#CTR-UA-65), [off-chain readers](../contracts/accounts.md#off-chain-readers)). A
 warning (`short_seed`, `imported_key`) comes beside a success, never as an error.

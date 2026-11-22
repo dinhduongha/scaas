@@ -164,7 +164,6 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 bind-dart | 7104a069f | 0 | dart: +14:
-rpc-clippy | cd3b6c03e | 0 | -
 gas-gen | 6e7e71142 | 0 | -
 ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
@@ -189,25 +188,12 @@ ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
 # cli: the rc=101 note above is closed by baf175492 (git cherry-pick -x of sdk-complete's b7a34aff6): cli rc=0 at baf175492
 # node build at 129380772 (the merged tree, CAPPED_MEM=6G, cargo build --locked --offline -j2): rc=0, Finished in 3m 19s; log runs/2026-11-22-sdk-evm-profiles-node-build.log (git-ignored)
 # sdk-evm-profiles: docs | 1cba8f84a | 0 | -
-sdk-test | 4175c2d43 | 0 | 402 passed, 0 failed, 16 ignored (37 binaries)
-rpc-test | 4175c2d43 | 0 | 205 passed, 0 failed, 10 ignored (21 binaries)
-rpc-wasm | 4175c2d43 | 0 | -
-bind-gen | 4175c2d43 | 0 | -
-cli | 4175c2d43 | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
 node-test | 4175c2d43 | 0 | 897 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 4175c2d43 (origin/ua-rs-sign cc45679e8 into sdk-complete): node-e2e at --test-threads=10, wall 84 s, the capped scope's memory.peak 3.75 GB read at 60 s (cap 6 GiB); two reds before it were the runner's inputs, not the tree: a forge recovery snapshot of chain 31918 left by an interrupted earlier run (moved aside), and zether-cli built without `--features hazmat` (CI's e2e builds it with hazmat)
-sdk-min | 54ddfcb33 | 0 | 74 passed, 0 failed, 0 ignored (13 binaries)
-sdk-noevm | 54ddfcb33 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
-sdk-clippy-noevm | 54ddfcb33 | 0 | -
-sdk-clippy | 54ddfcb33 | 0 | -
 mutants-check | 54ddfcb33 | 1 | -
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
-ck-test | 0736ad763 | 0 | node: 567 pass, 0 fail, 4 skipped
 ck-xcheck | 0736ad763 | 0 | -
-docs | 0736ad763 | 0 | -
-features | 0736ad763 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
-ua-arweave | 0736ad763 | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 ua-core | 0736ad763 | 0 | 75 passed, 0 failed, 0 ignored (8 binaries)
 ua-clippy | 0736ad763 | 0 | -
 ua-verify-only | 0736ad763 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
@@ -215,3 +201,18 @@ ua-vectors | 0736ad763 | 0 | 726 passed, 0 failed, 6 ignored (70 binaries)
 ua-test | 0736ad763 | 0 | 616 passed, 0 failed, 3 ignored (62 binaries)
 # T41.arweave's ua-rs part at 0736ad763 (CA-T16, CA-T17): the rows above; mutants t41arw1 20/20 killed (the ua-rs rows at 0736ad763, the clientkeys rows at 9764de7c0, their command through capped with the TAP reporter); every mutant script loads (mutants-check's commands, run by hand at 9764de7c0: rc 0)
 # T41.arweave fam-arweave size (clients/ua-rs/runs/fam-sizes.sh, release, the probe now reaching DataItem::parse) at 0736ad763: none 2212040 B; fam-arweave 2205712 → 2265656 B (delta −72 → +53616 B, old the empty feature at 61c5bb014); all 2342744 → 2379296 B (delta +136960 → +167256 B)
+docs | 6f2eb3dbd | 0 | -
+ck-test | 6f2eb3dbd | 0 | node: 567 pass, 0 fail, 4 skipped
+ua-arweave | 6f2eb3dbd | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
+rpc-test | 6f2eb3dbd | 0 | 219 passed, 0 failed, 10 ignored (22 binaries)
+rpc-clippy | 6f2eb3dbd | 0 | -
+rpc-wasm | 6f2eb3dbd | 0 | -
+sdk-arweave | 6f2eb3dbd | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
+sdk-test | 6f2eb3dbd | 101 | 266 passed, 1 failed, 0 ignored (14 binaries)
+sdk-clippy | 6f2eb3dbd | 0 | -
+sdk-noevm | 6f2eb3dbd | 101 | 59 passed, 1 failed, 0 ignored (7 binaries)
+sdk-clippy-noevm | 6f2eb3dbd | 0 | -
+sdk-min | 6f2eb3dbd | 101 | 30 passed, 1 failed, 0 ignored (5 binaries)
+features | 6f2eb3dbd | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+cli | 6f2eb3dbd | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
+bind-gen | 6f2eb3dbd | 0 | -

@@ -152,7 +152,7 @@ own_codes! {
     /// A kept Arweave upload still unsettled after its last re-post (C20): shown; the bytes stay kept.
     UploadUnsettled,
     /// A data item that is not one `scaas-ua` built: its verifying parser refused it, or it carries a target, an anchor or a
-    /// tag, or its object is no bucket's (CLI-UAL-64).
+    /// tag, or its object is no bucket's (CLI-UAL-64): `scaas-ua`'s code for an item it built.
     ArweaveItem,
     /// A file or object above the platform's cap or the store's largest object (CLI-UAL-65): `scaas-ua`'s code.
     FileTooLarge,
@@ -176,6 +176,8 @@ pub const SHARED_CODES: &[&str] = &[
     // T41.arweave (CLI-UAL-65): the file seal's refusals, raised by `scaas-ua`'s `open_file` and the SDK's reads alike
     "FileTooLarge",
     "FileHashMismatch",
+    // an Arweave data item its verifying parser refused (CLI-UAL-64): `scaas-ua` for an item it built, the SDK for a kept one
+    "ArweaveItem",
 ];
 
 impl std::fmt::Display for SdkError {
@@ -193,6 +195,7 @@ impl From<scaas_ua::wallet::Error> for SdkError {
             scaas_ua::wallet::Error::FeatureMissing => SdkError::FeatureMissing,
             scaas_ua::wallet::Error::FileTooLarge => SdkError::FileTooLarge,
             scaas_ua::wallet::Error::FileHashMismatch => SdkError::FileHashMismatch,
+            scaas_ua::wallet::Error::ArweaveItem => SdkError::ArweaveItem,
             e => SdkError::Ua(e),
         }
     }
