@@ -88,10 +88,19 @@ T10b | pqc-wasm | 14441e690 | 0 | -
 T10b | pqc-vectors | 14441e690 | 0 | 7 passed, 0 failed, 0 ignored (1 binaries)
 T10b | bind | 14441e690 | 0 | -
 T10b | docs | 14441e690 | 0 | -
-merge-ua-rs-sign | pqc-reads | d38491843 | 0 | reads 37 (23 trusted), writes 13, R2 23; 0 refused
-merge-ua-rs-sign | mutants-check | d38491843 | 1 | -
-merge-ua-rs-sign | docs | d38491843 | 0 | -
-merge-ua-rs-sign | ck-vectors | d38491843 | 0 | -
-merge-ua-rs-sign | pqc-test | d38491843 | 101 | -
-merge-ua-rs-sign | pqc-clippy | d38491843 | 101 | -
-merge-ua-rs-sign | pqc-tree | d38491843 | 101 | -
+merge-ua-rs-sign | pqc-reads | 81f0ca068 | 0 | reads 37 (23 trusted), writes 13, R2 23; 0 refused
+merge-ua-rs-sign | mutants-check | 81f0ca068 | 0 | -
+merge-ua-rs-sign | docs | 81f0ca068 | 0 | -
+merge-ua-rs-sign | ck-vectors | 81f0ca068 | 0 | -
+merge-ua-rs-sign | pqc-test | 81f0ca068 | 0 | 107 passed, 0 failed, 7 ignored (20 binaries)
+merge-ua-rs-sign | pqc-clippy | 81f0ca068 | 0 | -
+merge-ua-rs-sign | pqc-tree | 81f0ca068 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
+merge-ua-rs-sign | pqc-wasm | 81f0ca068 | 0 | -
+merge-ua-rs-sign | pqc-vectors | 81f0ca068 | 0 | 7 passed, 0 failed, 0 ignored (1 binaries)
+merge-ua-rs-sign | ck-test | 81f0ca068 | 0 | node: 585 pass, 0 fail, 4 skipped
+merge-ua-rs-sign | ua-test | 81f0ca068 | 0 | 735 passed, 0 failed, 6 ignored (71 binaries)
+merge-ua-rs-sign | ua-appcore | 81f0ca068 | 0 | 30 passed, 0 failed, 0 ignored (2 binaries)
+merge-ua-rs-sign | sdk-test | 81f0ca068 | 0 | 352 passed, 0 failed, 17 ignored (36 binaries)
+merge-ua-rs-sign | sdk-clippy | 81f0ca068 | 0 | -
+merge-ua-rs-sign | sdk-vectors | 81f0ca068 | 0 | 14 passed, 0 failed, 0 ignored (1 binaries)
+merge-ua-rs-sign | bind | 81f0ca068 | 2 | -
