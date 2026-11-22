@@ -359,6 +359,40 @@ Future<UaPqzKey> walletPqzKeyVersion({
   version: version,
 );
 
+/// P6h (3), CLI-SGN-55 (clientkeys `sealPqKey`): the PQZ leaf of `account` / `index` / `version` sealed as a vault v2 JSON of
+/// label `pqz:registry:<account>:<index>:<version>`; a free function for the same reason.
+Future<String> walletSealPqKey({
+  required UaWallet w,
+  required PlatformInt64 account,
+  required PlatformInt64 index,
+  required BigInt version,
+  required SecretBytes vaultPassphrase,
+}) => ScaasUa.instance.api.crateApiWalletWalletSealPqKey(
+  w: w,
+  account: account,
+  index: index,
+  version: version,
+  vaultPassphrase: vaultPassphrase,
+);
+
+/// P6h (3), CLI-SGN-55 (clientkeys `openPqKey`): the PQZ key of a leaf vault, with no wallet; every refusal of the vault is
+/// `UAVaultOpen`.
+Future<UaPqzKey> pqzOpenLeaf({
+  required String vaultJson,
+  SecretBytes? vaultPassphrase,
+  SecretBytes? prf32,
+  required PlatformInt64 account,
+  required PlatformInt64 index,
+  required BigInt version,
+}) => ScaasUa.instance.api.crateApiWalletPqzOpenLeaf(
+  vaultJson: vaultJson,
+  vaultPassphrase: vaultPassphrase,
+  prf32: prf32,
+  account: account,
+  index: index,
+  version: version,
+);
+
 /// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4); a free function for the same reason.
 Future<SecretBytes> walletExportPqzLeafRawVersion({
   required UaWallet w,

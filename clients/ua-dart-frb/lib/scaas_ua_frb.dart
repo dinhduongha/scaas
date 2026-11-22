@@ -25,6 +25,8 @@ export 'src/rust/api/wallet.dart'
         keyKemKey,
         walletPqzKeyVersion,
         walletExportPqzLeafRawVersion,
+        walletSealPqKey,
+        pqzOpenLeaf,
         seedBackupVerify,
         vaultNeedsRewrap,
         vaultRewrapPin,
