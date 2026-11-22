@@ -243,6 +243,11 @@ impl PqChat {
     ) -> Result<String, PqChatError> {
         match e {
             StoreEntry::Matrix { room } => {
+                // only the room bound to this session (CLI-PQC-05)
+                if self.room_session(room)?.as_deref() != Some(out.epoch.epoch.session_id.as_str())
+                {
+                    return Err(PqChatError::MatrixRoom);
+                }
                 let m = self.matrix().ok_or(PqChatError::MatrixDetached)?;
                 m.send_event(
                     room,

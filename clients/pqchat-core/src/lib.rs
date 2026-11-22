@@ -99,6 +99,11 @@ pub enum Event {
         author: String,
         by_admin: bool,
     },
+    /// the session's Matrix room is not used (CLI-PQC-05's binding): the reason, shown with the session
+    RoomNotUsed {
+        session: String,
+        reason: matrix::RoomRefusal,
+    },
     /// `missed` events dropped, the queue full
     Lagged { missed: u64 },
 }

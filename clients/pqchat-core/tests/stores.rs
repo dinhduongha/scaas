@@ -88,10 +88,39 @@ struct Room(Mutex<Vec<(String, Value)>>);
 
 #[async_trait]
 impl MatrixTransport for Room {
+    fn user_id(&self) -> String {
+        "@alice:example.org".into()
+    }
+    async fn create_room(&self) -> Result<String, PqChatError> {
+        Err(PqChatError::MatrixRoom)
+    }
+    async fn joined(&self, _: &str) -> Result<bool, PqChatError> {
+        Ok(false)
+    }
+    async fn join(&self, _: &str) -> Result<(), PqChatError> {
+        Ok(())
+    }
+    async fn invite(&self, _: &str, _: &str) -> Result<(), PqChatError> {
+        Ok(())
+    }
+    async fn remove(&self, _: &str, _: &str) -> Result<(), PqChatError> {
+        Ok(())
+    }
+    async fn set_admin(&self, _: &str, _: &str, _: bool) -> Result<(), PqChatError> {
+        Ok(())
+    }
     async fn send_event(&self, room: &str, content: Value) -> Result<(), PqChatError> {
         self.0.lock().unwrap().push((room.into(), content));
         Ok(())
     }
+    async fn history(
+        &self,
+        _: &str,
+        _: Option<String>,
+    ) -> Result<pqchat_core::matrix::HistoryPage, PqChatError> {
+        Ok(Default::default())
+    }
+    async fn hold_invite(&self, _: &str, _: bool) {}
 }
 
 fn review<'a>(s: &'a PqChatSigned, name: &str) -> &'a str {
@@ -258,6 +287,10 @@ async fn alice_sends(w: &World, stores: Vec<Value>) -> (Built, SessionRef) {
         .unwrap();
     w.pq.confirm_stores(&ep).unwrap();
     w.pq.consent_chain_spend(&s.session_id, true).unwrap();
+    // its room (if listed) joined through the session and bound (CLI-PQC-05), then the client detached again
+    w.pq.attach_matrix(Arc::new(Room::default()));
+    w.pq.join_room(&ep).await.unwrap();
+    w.pq.detach_matrix();
     (b, s)
 }
 

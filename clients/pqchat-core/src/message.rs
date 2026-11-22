@@ -490,10 +490,20 @@ impl PqChat {
         hint: &[u8],
         env: Vec<u8>,
     ) -> Result<Incoming, PqChatError> {
+        Ok(self.incoming_from(session, hint, env).await?.0)
+    }
+
+    /// [`PqChat::incoming`], with the sender UA of a message shown.
+    pub(crate) async fn incoming_from(
+        &self,
+        session: &str,
+        hint: &[u8],
+        env: Vec<u8>,
+    ) -> Result<(Incoming, Option<String>), PqChatError> {
         let sid = session.to_ascii_lowercase();
         if hint.len() != 8 {
             self.drops.add(&sid, Drop::Decode);
-            return Ok(Incoming::Dropped(Drop::Decode));
+            return Ok((Incoming::Dropped(Drop::Decode), None));
         }
         let ep = self.in_use().0.get(&sid).and_then(|v| {
             v.iter()
@@ -502,8 +512,11 @@ impl PqChat {
         });
         if let Some(ep) = ep {
             return Ok(match self.receive(&ep, env).await {
-                Ok(r) => Incoming::Shown(r.message_id),
-                Err(d) => Incoming::Dropped(d),
+                Ok(r) => (
+                    Incoming::Shown(r.message_id),
+                    Some(r.record.sender.to_ascii_lowercase()),
+                ),
+                Err(d) => (Incoming::Dropped(d), None),
             });
         }
         let item = (crate::model::hex(hint), crate::model::hex(&env));
@@ -515,7 +528,7 @@ impl PqChat {
             }
             Ok(v)
         })?;
-        Ok(Incoming::Buffered)
+        Ok((Incoming::Buffered, None))
     }
 
     /// How many envelopes `session` keeps for epochs not in use.

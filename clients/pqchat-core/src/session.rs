@@ -390,6 +390,10 @@ impl PqChat {
         self.require_listed(&r.chain, &r.home).await?;
         let c = self.conf(&r.chain)?.clone();
         let sid = self.app.pqchat_session_id(me.clone(), r.nonce)?;
+        // only a room this client created for the session, bound to it before anything is signed (CLI-PQC-05)
+        if let Some(room) = crate::matrix::room_of(&r.info.stores) {
+            self.bind_created(room, &sid)?;
+        }
         let k = self.app.pqchat_epoch_key(seed)?;
         let w = self
             .wrap_members(&r.chain, &k, &sid, &sid, &members)
