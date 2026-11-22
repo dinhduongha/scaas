@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mutants_lib import main
 
 JS = "clients/clientkeys/src/arweave.js"
-CK = "cd clients/clientkeys && node --test test/arweave.test.js"
+CK = "cd clients/clientkeys && ../../scripts/capped node --test --test-reporter=tap test/arweave.test.js"
 AR = "clients/ua-rs/src/arweave.rs"
 WA = "clients/ua-rs/src/wallet/arweave.rs"
 WF = "clients/ua-rs/src/wallet/file.rs"
