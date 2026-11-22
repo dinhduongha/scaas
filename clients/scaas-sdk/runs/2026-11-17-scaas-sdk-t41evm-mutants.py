@@ -10,7 +10,9 @@ S = "clients/scaas-sdk/src/op/submit.rs"
 Q = "clients/scaas-sdk/src/op/quote.rs"
 E = "clients/ua-rs/src/wallet/eip712.rs"
 T = "cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --test handoff "
-W = "cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --test wallet_ops "
+# the quote's signer calls are counted in the lib tests only (`Sdk::signs`, cfg(test)): a signature made and never sent is
+# invisible to an integration test (`wallet_ops` `every_wallet_pair_is_its_vector` let this mutant survive)
+L = "cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --lib "
 MUTANTS = [
     # plan T41's common mutants
     ("the payee check dropped", [(H, "                    if !expect.payee.iter().any(|p| p.eq_ignore_ascii_case(to)) {\n                        return Err(SdkError::ImportNotPayee);\n                    }\n", "                    let _ = to;\n")],
@@ -20,7 +22,7 @@ MUTANTS = [
     ("the consumed check dropped", [(H, "                    return Err(SdkError::ImportConsumed);\n", "                    let _ = SdkError::ImportConsumed;\n")],
      T + "import_refusals_in_order"),
     ("the quote signing", [(Q, "                let unsigned = super::submit::unsigned(&prepared)?;\n", "                let _ = super::submit::sign(&sdk, &prepared).await?;\n                let unsigned = super::submit::unsigned(&prepared)?;\n")],
-     W + "every_wallet_pair_is_its_vector"),
+     L + "op::tests::quote_makes_no_signature"),
     ("an imported operation signed again", [(S, "    if let Some((sig, _)) = &p.t.signed {\n        return Ok((sig.clone(), p.t.extra.clone()));\n    }\n", "")],
      T + "hand_off_import_quote_submit"),
     ("the payer's nonce not advanced", [(S, "        *e = (*e).max(nonce.saturating_add(1));", "        *e = (*e).max(nonce);")],
