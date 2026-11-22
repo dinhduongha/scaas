@@ -1703,6 +1703,14 @@ impl SolanaAdapter {
 
 #[async_trait]
 impl ChainAdapter for SolanaAdapter {
+    /// G2's in-flight key on the pull path: the job's own field; this family computes no digest, so `/v1/ops` refuses it
+    /// (`ops_digest`'s default).
+    async fn digest(
+        &self,
+        job: &Job,
+    ) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
+        Ok(crate::submit::job_digest(job))
+    }
     fn family(&self) -> Family {
         Family::Solana
     }
