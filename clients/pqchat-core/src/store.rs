@@ -38,6 +38,18 @@ impl MemoryStore {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// A copy of every item (a copied data directory).
+    pub fn copy(&self) -> Self {
+        MemoryStore {
+            items: Mutex::new(
+                self.items
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .clone(),
+            ),
+        }
+    }
 }
 
 impl PqChatStore for MemoryStore {

@@ -394,6 +394,16 @@ impl PqChat {
         if let Some(room) = crate::matrix::room_of(&r.info.stores) {
             self.bind_created(room, &sid)?;
         }
+        // the creator's own session: accepted on this device
+        self.set_consent(
+            &SessionRef {
+                chain: r.chain.clone(),
+                home: r.home.to_ascii_lowercase(),
+                session_id: sid.clone(),
+            },
+            crate::consent::Consent::Accepted,
+            true,
+        )?;
         let k = self.app.pqchat_epoch_key(seed)?;
         let w = self
             .wrap_members(&r.chain, &k, &sid, &sid, &members)

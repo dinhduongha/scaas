@@ -364,9 +364,11 @@ impl PqChat {
         self.chains().held(&session.to_ascii_lowercase())
     }
 
-    /// The seed was locked: every chain position and epoch key handle released; positions are derived again, lazily, when
-    /// a message needs one after the epochs are open again.
+    /// The seed was locked (or the app starts with it locked): every chain position and epoch key handle released;
+    /// positions are derived again, lazily, when a message needs one after the epochs are open again; Matrix events kept
+    /// until [`PqChat::resume`] (CLI-PQC-10).
     pub fn locked(&self) {
+        self.set_locked(true);
         self.chains().clear();
         self.in_use().0.clear();
     }

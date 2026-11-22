@@ -182,6 +182,7 @@ async fn chain_store_post_and_read() {
         .unwrap();
     let eb = pb.use_epoch(&s, eb).await.unwrap();
     pb.confirm_stores(&eb).unwrap();
+    pb.accept(&s, false).unwrap();
     let p0 = pb.posted(&l.home, 0, &eb).await.unwrap();
     let p1 = pb.posted(&l.home, 1, &eb).await.unwrap();
     assert_eq!(

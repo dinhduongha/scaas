@@ -165,6 +165,7 @@ impl PqChat {
         o: &SendOpts,
     ) -> Result<SendReport, PqChatError> {
         crate::session::seed_of(&me.key)?;
+        self.require_accepted(&s.session_id)?;
         let v = content.value(ts)?;
         let ep = self.send_under(s, me).await?;
         let info = self.info(&ep)?;

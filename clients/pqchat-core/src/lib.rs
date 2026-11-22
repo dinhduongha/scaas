@@ -14,7 +14,9 @@
 pub mod chain_state;
 pub mod chain_store;
 pub mod check;
+pub mod consent;
 pub mod content;
+pub mod device;
 pub mod drops;
 pub mod error;
 pub mod matrix;
@@ -23,6 +25,7 @@ pub mod model;
 pub mod net;
 pub mod order;
 pub mod reads;
+pub mod recovery;
 pub mod session;
 pub mod store;
 pub mod stores;
@@ -86,6 +89,8 @@ pub struct PqChat {
     pub(crate) in_use: Mutex<message::InUse>,
     pub(crate) timelines: Mutex<std::collections::HashMap<String, order::Timeline>>,
     pub(crate) matrix: Mutex<Option<Arc<dyn matrix::MatrixTransport>>>,
+    /// the seed is locked: Matrix events are kept, never read (CLI-PQC-10)
+    pub(crate) seed_locked: std::sync::atomic::AtomicBool,
 }
 
 /// What the crate tells the app (spec §8); ids and UAs only, never a secret, handle, ciphertext, room id or Matrix id.
@@ -103,6 +108,13 @@ pub enum Event {
     RoomNotUsed {
         session: String,
         reason: matrix::RoomRefusal,
+    },
+    /// recovery's progress on `chain`: instances read of all, sessions found so far
+    RecoveryProgress {
+        chain: String,
+        instances_done: u64,
+        instances: u64,
+        found: u64,
     },
     /// `missed` events dropped, the queue full
     Lagged { missed: u64 },
@@ -153,6 +165,7 @@ impl PqChat {
             in_use: Mutex::new(Default::default()),
             timelines: Mutex::new(Default::default()),
             matrix: Mutex::new(None),
+            seed_locked: Default::default(),
         })
     }
 
@@ -214,6 +227,15 @@ impl PqChat {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
+    }
+
+    pub(crate) fn is_locked(&self) -> bool {
+        self.seed_locked.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub(crate) fn set_locked(&self, on: bool) {
+        self.seed_locked
+            .store(on, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub(crate) fn conf(&self, chain: &str) -> Result<&ChainConf, PqChatError> {

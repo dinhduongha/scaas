@@ -84,6 +84,7 @@ impl PqChat {
         e: &StoreEntry,
     ) -> Result<usize, PqChatError> {
         let sid = ep.epoch.session_id.clone();
+        self.require_accepted(&sid)?;
         if !self.info(ep)?.stores.contains(e) || !self.prefs(&sid)?.confirmed.contains(e) {
             return Err(PqChatError::StoreUnconfirmed);
         }

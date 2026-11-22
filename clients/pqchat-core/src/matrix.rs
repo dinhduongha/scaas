@@ -72,6 +72,8 @@ pub const HISTORY_PAGES: usize = 64;
 pub const HISTORY_MAX: usize = 4096;
 /// Matrix ids kept per UA.
 pub const MXIDS_MAX: usize = 8;
+/// Events kept per room while the seed is locked; past it the room is read again from its history at unlock.
+pub const LOCKED_MAX: usize = 64;
 
 /// The content of the event carrying `env` under `hint`.
 pub fn event(hint: &[u8], env: &[u8]) -> Value {
@@ -155,6 +157,19 @@ pub struct RoomSync {
 
 fn room_key(room: &str) -> String {
     format!("mroom/{room}")
+}
+
+/// The events of one room kept while the seed was locked, in their order, and whether more came than were kept.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+struct Kept {
+    events: Vec<RoomEvent>,
+    overflow: bool,
+}
+
+const KEPT_ROOMS: &str = "locked-rooms";
+
+fn kept_key(room: &str) -> String {
+    format!("locked/{room}")
 }
 
 fn mxid_key(ua: &str) -> String {
@@ -242,6 +257,7 @@ impl PqChat {
     /// has not confirmed it; refused (shown with the reason, `RoomNotUsed`) when another session holds it or the account had
     /// joined it before this client bound it; else joined (an invite held answered) and bound.
     pub async fn join_room(&self, ep: &OpenEpoch) -> Result<RoomUse, PqChatError> {
+        self.require_accepted(&ep.epoch.session_id)?;
         let sid = ep.epoch.session_id.to_ascii_lowercase();
         let info = self.info(ep)?;
         let Some(room) = room_of(&info.stores) else {
@@ -291,9 +307,15 @@ impl PqChat {
     /// ignored when no accepted session binds the room; else parsed with bounds (`decode`) and read as its session's
     /// (CLI-PQC-07). A message that passed every check binds its sender's Matrix id to the record's sender UA.
     pub async fn matrix_event(&self, room: &str, ev: RoomEvent) -> Result<MatrixIn, PqChatError> {
+        if self.keep_locked(room, &ev)? {
+            return Ok(MatrixIn::Kept);
+        }
         let Some(sid) = self.room_session(room)? else {
             return Ok(MatrixIn::Ignored);
         };
+        if !self.is_accepted(&sid)? {
+            return Ok(MatrixIn::Ignored);
+        }
         let (hint, env) = match parse(&ev.content) {
             Ok(x) => x,
             Err(d) => {
@@ -311,7 +333,8 @@ impl PqChat {
     /// `room`'s history read back (to its first event, the server's retention limit, or [`HISTORY_PAGES`] pages), its events
     /// processed oldest first as [`PqChat::matrix_event`] (an id seen is a duplicate); how many were shown.
     pub async fn read_room(&self, room: &str) -> Result<usize, PqChatError> {
-        let _sid = self.room_session(room)?.ok_or(PqChatError::MatrixRoom)?;
+        let sid = self.room_session(room)?.ok_or(PqChatError::MatrixRoom)?;
+        self.require_accepted(&sid)?;
         let t = self.transport()?;
         let mut pages = vec![];
         let mut before = None;
@@ -347,6 +370,7 @@ impl PqChat {
         me: &Me,
     ) -> Result<RoomSync, PqChatError> {
         let sid = ep.epoch.session_id.to_ascii_lowercase();
+        self.require_accepted(&sid)?;
         let ua = me.ua.to_ascii_lowercase();
         let mut out = RoomSync::default();
         if ep.epoch.author != ua {
@@ -425,6 +449,70 @@ impl PqChat {
             }
         }
         Ok(out)
+    }
+}
+
+impl PqChat {
+    /// While the seed is locked: `ev` kept in the store, every one, up to [`LOCKED_MAX`] per room, past it the room marked
+    /// to be read again from its history (CLI-PQC-10). Nothing is read, sent or answered. `false` when the seed is open.
+    fn keep_locked(&self, room: &str, ev: &RoomEvent) -> Result<bool, PqChatError> {
+        if !self.is_locked() {
+            return Ok(false);
+        }
+        Items(&*self.store).update::<Vec<String>, _>(KEPT_ROOMS, |r| {
+            let mut r = r.unwrap_or_default();
+            if !r.iter().any(|x| x == room) {
+                r.push(room.to_string());
+            }
+            Ok(r)
+        })?;
+        Items(&*self.store).update::<Kept, _>(&kept_key(room), |k| {
+            let mut k = k.unwrap_or_default();
+            if k.events.len() < LOCKED_MAX {
+                k.events.push(ev.clone());
+            } else {
+                k.overflow = true;
+            }
+            Ok(k)
+        })?;
+        Ok(true)
+    }
+
+    /// How many events are kept for `room` while locked, and whether its bound was passed.
+    pub fn kept(&self, room: &str) -> Result<(usize, bool), PqChatError> {
+        let k: Kept = Items(&*self.store)
+            .get(&kept_key(room))?
+            .unwrap_or_default();
+        Ok((k.events.len(), k.overflow))
+    }
+
+    /// The events kept while locked, processed in their order (rooms in the order first kept); a room whose bound was
+    /// passed read again from its history; each room's items emptied once processed. How many were shown.
+    pub(crate) async fn process_kept(&self) -> Result<usize, PqChatError> {
+        let rooms: Vec<String> = Items(&*self.store).get(KEPT_ROOMS)?.unwrap_or_default();
+        let mut shown = 0;
+        for room in rooms {
+            let k: Kept = Items(&*self.store)
+                .get(&kept_key(&room))?
+                .unwrap_or_default();
+            for ev in k.events {
+                if let MatrixIn::Read(Incoming::Shown(_)) = self.matrix_event(&room, ev).await? {
+                    shown += 1;
+                }
+            }
+            let bound = self.room_session(&room)?;
+            if k.overflow && bound.is_some_and(|s| self.is_accepted(&s).unwrap_or(false)) {
+                shown += self.read_room(&room).await?;
+            }
+            Items(&*self.store).update::<Kept, _>(&kept_key(&room), |_| Ok(Kept::default()))?;
+            Items(&*self.store).update::<Vec<String>, _>(KEPT_ROOMS, |r| {
+                Ok(r.unwrap_or_default()
+                    .into_iter()
+                    .filter(|x| *x != room)
+                    .collect())
+            })?;
+        }
+        Ok(shown)
     }
 }
 

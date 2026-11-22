@@ -286,7 +286,8 @@ async fn alice_sends(w: &World, stores: Vec<Value>) -> (Built, SessionRef) {
         .await
         .unwrap();
     w.pq.confirm_stores(&ep).unwrap();
-    w.pq.consent_chain_spend(&s.session_id, true).unwrap();
+    // accepted with the spend consent (CLI-PQC-08)
+    w.pq.accept(&s, true).unwrap();
     // its room (if listed) joined through the session and bound (CLI-PQC-05), then the client detached again
     w.pq.attach_matrix(Arc::new(Room::default()));
     w.pq.join_room(&ep).await.unwrap();
@@ -393,6 +394,7 @@ async fn stored_range_paged_sixteen() {
             .unwrap();
     let ep = w.pq.use_epoch(&s, ep).await.unwrap();
     w.pq.confirm_stores(&ep).unwrap();
+    w.pq.accept(&s, false).unwrap();
     let hint = w.app.pqchat_hint(b.k.clone()).unwrap();
     let mut payloads = vec![];
     for c in 0..16u64 {
@@ -592,6 +594,7 @@ async fn hcs_listed_refused_before_signing() {
         .unwrap();
     let ep = bob.use_epoch(&s, ep).await.unwrap();
     bob.confirm_stores(&ep).unwrap();
+    bob.accept(&s, false).unwrap();
     let hint = w.app.pqchat_hint(b.k.clone()).unwrap();
     let m = sealed(
         &w,

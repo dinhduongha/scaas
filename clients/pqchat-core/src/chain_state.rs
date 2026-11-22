@@ -2,10 +2,8 @@
 //! Own sender chains (UA-7 §6.3, CLI-PQC-09, spec §7): this device's id and, per own chain `(epoch, device)`, the next counter,
 //! from 0, written to the store **before** the send: a crash between the write and the send skips a counter and never reuses
 //! one. `CounterExhausted` once a chain's next counter is 2^64 − 1 (a rekey gives a new chain).
-use crate::model::hex;
+use crate::device::{new_id, DeviceItem, DEVICE};
 use crate::{Items, PqChat, PqChatError};
-
-const DEVICE: &str = "device";
 
 /// The store item of the own chain `(epoch, device)`: the counter its next send takes.
 pub fn own_key(epoch: &str, device: &str) -> String {
@@ -17,17 +15,21 @@ pub fn own_key(epoch: &str, device: &str) -> String {
 }
 
 impl PqChat {
-    /// This device's id, `0x` + 32 hex: kept in the store, made once, a UUID v4 from 16 bytes of the OS generator (spec §13
-    /// O8; T9 binds it to the device's anchor).
+    /// This device's id, `0x` + 32 hex: the one [`PqChat::start_device`] bound to the app's anchor, else made once and kept
+    /// (a UUID v4 from 16 bytes of the OS generator, spec §13 O8).
     pub fn device(&self) -> Result<String, PqChatError> {
-        if let Some(d) = Items(&*self.store).get::<String>(DEVICE)? {
-            return Ok(d);
+        if let Some(d) = Items(&*self.store).get::<DeviceItem>(DEVICE)? {
+            return Ok(d.id);
         }
-        let mut b = [0u8; 16];
-        getrandom::getrandom(&mut b).map_err(|_| PqChatError::Internal)?;
-        let new = hex(uuid::Builder::from_random_bytes(b).into_uuid().as_bytes());
+        let new = new_id()?;
         // a racing first call keeps the id written first
-        Items(&*self.store).update::<String, _>(DEVICE, |d| Ok(d.unwrap_or_else(|| new.clone())))
+        let d = Items(&*self.store).update::<DeviceItem, _>(DEVICE, |d| {
+            Ok(d.unwrap_or_else(|| DeviceItem {
+                id: new.clone(),
+                anchor: None,
+            }))
+        })?;
+        Ok(d.id)
     }
 
     /// The counter the next send of the own chain `(epoch, device)` takes (a read).

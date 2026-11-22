@@ -62,7 +62,7 @@ async fn ev_of(w: &World, from: &Acc, s: &Signed, counter: u64, mxid: &str) -> R
 async fn in_use(w: &World, s: &Signed) -> Arc<OpenEpoch> {
     let ep = w.pq.use_epoch(&sref(&s.e), s.open()).await.unwrap();
     w.pq.confirm_stores(&ep).unwrap();
-    w.pq.consent_chain_spend(&s.e.session_id, true).unwrap();
+    w.pq.accept(&sref(&s.e), true).unwrap();
     ep
 }
 
