@@ -29,6 +29,7 @@ pub mod recovery;
 pub mod session;
 pub mod store;
 pub mod stores;
+pub mod topics;
 
 pub use drops::{Drop, DropCounts};
 pub use error::PqChatError;
