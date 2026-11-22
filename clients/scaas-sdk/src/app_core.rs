@@ -20,9 +20,13 @@ use scaas_rpc::Purpose;
 use scaas_ua::ua_portable::{InnerSig, MemberSig, UASig};
 use scaas_ua::wallet::{
     AppKeys, AppPath as UaPath, AppRecordState, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce,
-    SecretBytes, Signer, TypedData,
+    Signer, TypedData,
 };
 use std::collections::{BTreeMap, HashMap};
+
+/// The secret buffer an app core hands the SDK (a passphrase) and gets back (a plaintext [`AppCore::open`] gives): `scaas-ua`'s,
+/// so an app core above the SDK names it without depending on `scaas-ua` (CLI-PQV-01).
+pub use scaas_ua::wallet::SecretBytes;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -1238,8 +1242,8 @@ impl AppCore {
         kem_pk_of(&out)
     }
 
-    /// The UA of `account` (a UA key; any other: `Argument`).
-    pub(crate) fn account_ua(&self, account: &KeyRef) -> Result<[u8; 32], SdkError> {
+    /// The UA of `account` (a UA key; any other: `Argument`): the id `scaas-ua` derives, no read.
+    pub fn account_ua(&self, account: &KeyRef) -> Result<[u8; 32], SdkError> {
         let KeyRef::Ua {
             seed,
             kind,

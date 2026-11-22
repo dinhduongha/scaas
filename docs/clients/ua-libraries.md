@@ -832,7 +832,7 @@ usage `KeyUsage::File` (4), a fresh file key per seal, wrapped like any other ke
 `tests/file_seal.rs` (a build without `fam-arweave` seals and opens a file) and the rows of `tests/arweave_rows.rs`; the vectors
 `smartcontracts/vectors/arweave/objects.json` and `smartcontracts/vectors/pqchat/ar-urls.json`.
 
-<a id="pqvault-clients"></a>**PqVault** (SPECIFIED, nothing built; the contract is [pqvault.md](../contracts/pqvault.md), the design
+<a id="pqvault-clients"></a>**PqVault** (`pqvault-core` BUILT, UNAUDITED, [CLI-PQV-01](#CLI-PQV-01); the contract is [pqvault.md](../contracts/pqvault.md), the design
 the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)). The rules every PqVault client follows; the
 first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-12 controller calls (owner may override):
 
@@ -842,9 +842,16 @@ records as an app core above `scaas-sdk`: it depends on the SDK, the SDK holds n
 [CLI-PQV-13](../decisions.md#CLI-PQV-13)), and every signature,
 KEM, KDF and AEAD still runs in `ua-rs`, reached through the SDK ([CLI-UAL-01](#CLI-UAL-01)); scaas-app links it in its one
 Rust library `app-core-rust` with the feature `pqvault` (which implies `scaas`; scaas-app's contract section 12)** (owner
-2026-11-17, N2: "agreed to reverse the dependency", which replaced V11's SDK module `pqvault` the same day). SPECIFIED. The
-SDK's `vault` stays the seed vault; `pqvault-core`'s calls are the spec's
-[§8](../superpowers/specs/2026-11-17-pqvault.md#8-the-app-facing-api-of-pqvault-core).
+2026-11-17, N2: "agreed to reverse the dependency", which replaced V11's SDK module `pqvault` the same day). BUILT, UNAUDITED
+(plan V10, V10e: `clients/pqvault-core`; its controller calls [CLI-PQV-14](../decisions.md#CLI-PQV-14)): the records, ids
+and typed data of both modes, the key schedule on the SDK's handles, the state read from the views alone and the signature
+chain of spec §6.9 verified before an unlock, unlock with the unopenable-epoch and history rules, rekey, leave, remove with
+the affected list, items, edits, merge, batches sized by the chain's limits, recovery from the index vault and the scan,
+the replica check, the migration plan; `tests/vectors.rs` reproduces `smartcontracts/vectors/pqvault/`, `tests/e2e.rs`
+runs the real client on a local `anvil`. Not built yet: the generated 5-word passphrase, the biometric `P_k` (CLI-PQV-07),
+the members' kind flags, reads spread over the node list, the share box's lookup, the migration's run, a KEM key rotation
+and an `msig` admin in the e2e (the SDK has no call for either yet). The SDK's `vault` stays the seed vault; `pqvault-core`'s
+calls are the spec's [§8](../superpowers/specs/2026-11-17-pqvault.md#8-the-app-facing-api-of-pqvault-core).
 
 <a id="CLI-PQV-02"></a>**CLI-PQV-02** — **A personal vault uses the same path as a shared one: a random 32-byte epoch key
 wrapped once to its own UA KEM key (ML-KEM-1024 + X25519); no seed-derived vault key exists; a personal vault is never

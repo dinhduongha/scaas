@@ -84,6 +84,9 @@
 #                          the vault and keystore rows, the e2e smoke on a local anvil: foundry v1.8.5)
 #   scaas-cli:             in clients/scaas-cli: cargo test --locked; cargo test --locked --features dev-profiles (the review and the quote
 #                          before a submit, against the SDK tests' fake chain); cargo clippy --locked --all-targets --features dev-profiles -- -D warnings
+#   pqvault-core:          in clients/pqvault-core (PqVault plan V10): cargo test --locked; cargo test --locked --features vectors --test vectors;
+#                          cargo clippy --locked --all-targets -- -D warnings, default and --features vectors; the real-crypto e2e on anvil
+#                          (cargo test --test e2e -- --ignored, V10e) stays local (runs/2026-11-22-pqvault-e2e.sh)
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
 #                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
@@ -206,6 +209,7 @@ jobs:
       scaas_sdk_wasm: ${{ steps.f.outputs.scaas_sdk_wasm }}
       scaas_sdk_bindings: ${{ steps.f.outputs.scaas_sdk_bindings }}
       scaas_cli: ${{ steps.f.outputs.scaas_cli }}
+      pqvault_core: ${{ steps.f.outputs.pqvault_core }}
       keystore_vectors: ${{ steps.f.outputs.keystore_vectors }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
@@ -1280,6 +1284,32 @@ jobs:
         run: cargo test --locked --features dev-profiles
       - name: cargo clippy
         run: cargo clippy --locked --all-targets --features dev-profiles -- -D warnings
+
+  # PqVault's app core above the SDK (plan V10, CLI-PQV-01): its tests and the vectors through it
+  pqvault-core:
+    needs: changes
+    if: needs.changes.outputs.pqvault_core == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/pqvault-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/pqvault-core
+      - name: cargo test
+        run: cargo test --locked
+      - name: the vectors through pqvault-core
+        run: cargo test --locked --features vectors --test vectors
+      - name: cargo clippy
+        run: |
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --all-targets --features vectors -- -D warnings
 
   # the generated bindings (spec §16): the FRB Dart surface regenerated equals the committed one; the reference library and
   # the Dart tests over it
