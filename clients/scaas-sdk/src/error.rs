@@ -69,6 +69,7 @@ own_codes! {
     SubmitPathNone,
     VerdictRefused,
     TxTypeRefused,
+    KindDisabled,
     RawDigestRefused,
     AppDomainRefused,
     AppPurposeRefused,
@@ -144,7 +145,19 @@ own_codes! {
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).
-pub const SHARED_CODES: &[&str] = &["Argument", "VaultVersion"];
+pub const SHARED_CODES: &[&str] = &[
+    "Argument",
+    "VaultVersion",
+    // the app-core refusals (spec §12, T21): `scaas-ua` raises them for its checks, the SDK for the profile's
+    "AppDomainRefused",
+    "AppPurposeRefused",
+    "AppSaltMismatch",
+    "AppHandleForeign",
+    "AppKeyUsage",
+    "AppArenaFull",
+    // plan T42 (CLI-SDK-33 (37) (a)): a family this build leaves out, `scaas-ua`'s refusal mapped one to one
+    "FeatureMissing",
+];
 
 impl std::fmt::Display for SdkError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -156,7 +169,11 @@ impl std::error::Error for SdkError {}
 
 impl From<scaas_ua::wallet::Error> for SdkError {
     fn from(e: scaas_ua::wallet::Error) -> Self {
-        SdkError::Ua(e)
+        match e {
+            // plan T42: a family this build leaves out is the SDK's own `FeatureMissing` (one list of names)
+            scaas_ua::wallet::Error::FeatureMissing => SdkError::FeatureMissing,
+            e => SdkError::Ua(e),
+        }
     }
 }
 

@@ -1,0 +1,16 @@
+# t24near mutants (name | outcome | commit | test | first failure line)
+read the second endpoint first | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_two_endpoints_one_down | panicked at tests/near.rs:420:49:
+an amount's digits not checked | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_malformed_amount_is_refused | panicked at tests/near.rs:356:9:
+an amount's length not checked | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_malformed_amount_is_refused | panicked at tests/near.rs:356:9:
+an empty amount read as 0 | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_malformed_amount_is_refused | panicked at tests/near.rs:356:9:
+strict majority: no agreement asked | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_strict_majority_agrees_at_one_height | panicked at tests/near.rs:493:5:
+strict majority: another endpoint's identity not checked | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_strict_majority_agrees_at_one_height | panicked at tests/near.rs:497:5:
+strict majority: the others read at their own final block | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_strict_majority_agrees_at_one_height | panicked at tests/near.rs:488:46:
+an answer at another block accepted | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_answer_at_another_height_is_refused | panicked at tests/near.rs:408:5:
+a view result above 128 bytes read | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_view_result_above_128_bytes_is_refused | panicked at tests/near.rs:395:5:
+a view's number read as its digits | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_malformed_amount_is_refused | panicked at tests/near.rs:372:9:
+an unknown account not read as 0 | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_unknown_account_is_zero | panicked at tests/near.rs:284:50:
+a NEAR account id's case not checked | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_holder_and_token_forms | panicked at tests/near.rs:311:9:
+a listed token's form not checked | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_holder_and_token_forms | panicked at tests/near.rs:324:5:
+the genesis as hex, not base58 | killed | f7ae15a3d dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_balances_at_the_final_block | panicked at tests/near.rs:242:42:
+14 mutants, 14 killed, 0 survived, 0 not loaded, 0 other failure

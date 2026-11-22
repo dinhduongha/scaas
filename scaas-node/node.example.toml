@@ -176,6 +176,28 @@ breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_re
 # address = "0x..."
 # entries = [{ entry = "deposit", op_type = "Deposit(bytes32 payer,uint256 amount,uint64 releaseAfter,bytes32 salt)" }]
 
+# ---- Public EVM profiles, `draft` (SDK plan T40; smartcontracts/evm/src/chains/<key>/): uncomment one [[chains]] table
+# per chain, with the keys of the 7622 table above (lanes, keys, contracts, breaker). rpc_urls from the environment's
+# providers (two independent ones at least, NET-EVM-19); finality is each profile's: `tag` (the `finalized` block) where the chain serves it.
+# Ethereum Classic is dropped (owner 2026-11-22, decisions CLI-SDK-32: no finalized block): no rows. On OP, Arbitrum, Base mainnet and Celo the owner
+# disabled mldsa44, mldsa65, mldsa87 and PQZ (their largest transactions are above the chain's limit; each profile's README).
+# [[chains]] # ethereum-mainnet: family = "evm", evm_chain_number = 1, chain_uid = "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # ethereum-testnet: family = "evm", evm_chain_number = 11155111, chain_uid = "0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # op-mainnet: family = "evm", evm_chain_number = 10, chain_uid = "0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b",
+#   finality = { mode = "tag", quorum = 2 }, params = { l1_fee = "op-stack" }
+# [[chains]] # op-testnet: family = "evm", evm_chain_number = 11155420, chain_uid = "0x102de6ffb001480cc9b8b548fd05c34cd4f46ae4aa91759393db90ea0409887d",
+#   finality = { mode = "tag", quorum = 2 }, params = { l1_fee = "op-stack" }
+# [[chains]] # arbitrum-mainnet: family = "evm", evm_chain_number = 42161, chain_uid = "0x7ee576b35482195fc49205cec9af72ce14f003b9ae69f6ba0faef4514be8b442",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # arbitrum-testnet: family = "evm", evm_chain_number = 421614, chain_uid = "0x77194da4010e549a7028a9c3c51c3e277823be6ac7d138d0bb8a70197b5c004c",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # linea-mainnet: family = "evm", evm_chain_number = 59144, chain_uid = "0xb6762a65689107b2326364aefc18f94cda413209fab35c00d4af51eaa20ffbc6",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # linea-testnet: family = "evm", evm_chain_number = 59141, chain_uid = "0x65a64c825d7c13ce1bf077801d0b6b2a89853e19e4a89a5433d7d85d2102a20b",
+#   finality = { mode = "tag", quorum = 2 }
+
 # ---- Other network families (R58): one [[chains]] each; delete the ones you do not run. ----
 # They run the generic lane runner (one tx in flight per lane, `signed` journaled in ExternalPull before sending,
 # in-flight jobs re-checked on restart). `network` makes the key `family:network`, which must equal

@@ -12,7 +12,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'config.freezed.dart';
 
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `RuntimeChoice`, `SdkConfig`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A chain as the app's release pins it (spec §4).
 class ChainProfile {
@@ -69,6 +69,22 @@ class ChainProfile {
   /// the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
   final List<String> wrappers;
 
+  /// the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+  /// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+  /// `Sdk::open`
+  final FamilyParams? familyParams;
+
+  /// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+  /// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+  /// `Sdk::open` on another family)
+  final L1Fee? l1Fee;
+
+  /// the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+  /// and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+  /// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+  /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+  final List<String> disabledKinds;
+
   const ChainProfile({
     required this.key,
     required this.family,
@@ -90,6 +106,9 @@ class ChainProfile {
     required this.verifierPolicy,
     required this.dexes,
     required this.wrappers,
+    this.familyParams,
+    this.l1Fee,
+    required this.disabledKinds,
   });
 
   @override
@@ -113,7 +132,10 @@ class ChainProfile {
       verifiers.hashCode ^
       verifierPolicy.hashCode ^
       dexes.hashCode ^
-      wrappers.hashCode;
+      wrappers.hashCode ^
+      familyParams.hashCode ^
+      l1Fee.hashCode ^
+      disabledKinds.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -139,7 +161,10 @@ class ChainProfile {
           verifiers == other.verifiers &&
           verifierPolicy == other.verifierPolicy &&
           dexes == other.dexes &&
-          wrappers == other.wrappers;
+          wrappers == other.wrappers &&
+          familyParams == other.familyParams &&
+          l1Fee == other.l1Fee &&
+          disabledKinds == other.disabledKinds;
 }
 
 /// One endpoint of a profile's RPC or gateway list (CLI-RPC-02): `{url, class, label, auth}`; `auth` belongs to this endpoint
@@ -174,6 +199,61 @@ class EndpointConfig {
 
 /// A chain family (the `scaas-rpc` readers'). Hedera is `Evm` with its chain id.
 enum Family { evm, soroban, solana, near, algorand, aptos, sui, cosmos, ton }
+
+@freezed
+sealed class FamilyParams with _$FamilyParams {
+  const FamilyParams._();
+
+  /// Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
+  /// profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),
+  /// the native denom and the bech32 prefix of the chain's addresses
+  const factory FamilyParams.cosmos({
+    required String chainId,
+    required List<EndpointConfig> rest,
+    required Policy restPolicy,
+    required String denom,
+    required String prefix,
+  }) = FamilyParams_Cosmos;
+
+  /// Aptos: the chain id ledger info must name (`aptos_framework::chain_id`, 1 to 255; the identity an Aptos node answers)
+  /// and the `scaas` package's address, whose view `meta::account_of(owner)` gives the Account an owner's tokens are in
+  /// (NET-APT-05), as `0x` + 64 lowercase hex (AIP-40's long form)
+  const factory FamilyParams.aptos({
+    required int chainId,
+    required String package,
+  }) = FamilyParams_Aptos;
+
+  /// Solana: the `scaas` program's id (base58 of 32 bytes), under which an owner's SCaaS Account is the `["acct", owner]`
+  /// program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
+  const factory FamilyParams.solana({required String program}) =
+      FamilyParams_Solana;
+
+  /// Soroban: the network passphrase its RPC endpoints name (`getNetwork`; its SHA-256 is `chain_uid`, checked at `Sdk::open`)
+  /// and the XLM SAC contract (`C…`), pinned, whose balance entry is a `C…` holder's native XLM (never derived here)
+  const factory FamilyParams.soroban({
+    required String passphrase,
+    required String xlmSac,
+  }) = FamilyParams_Soroban;
+
+  /// Sui: the GraphQL endpoints the reads go to, with their policy (public fullnodes refuse JSON-RPC, docs/networks/sui.md
+  /// §14; the profile's `rpc` are the JSON-RPC endpoints), each named by `chain_uid`, the genesis checkpoint's digest, whose
+  /// 32 bytes in base58 `chainIdentifier` must answer
+  const factory FamilyParams.sui({
+    required List<EndpointConfig> graphql,
+    required Policy graphqlPolicy,
+  }) = FamilyParams_Sui;
+
+  /// Polkadot Hub's Substrate side on its EVM profile (decisions CLI-SDK-32's Change of 2026-11-22, plan T32's read part): the
+  /// Substrate JSON-RPC endpoints with their policy, each named by `genesis` (`0x` + 64 hex, `chain_getBlockHash(0)`), and the
+  /// SS58 prefix of the chain's addresses (0 to 16,383, not 46 or 47); `balances` of an SS58 id reads its `System.Account`
+  /// there. The same params serve the relay chain's Substrate side
+  const factory FamilyParams.substrate({
+    required List<EndpointConfig> rpc,
+    required Policy rpcPolicy,
+    required String genesis,
+    required int ss58Prefix,
+  }) = FamilyParams_Substrate;
+}
 
 @freezed
 sealed class Finality with _$Finality {
@@ -484,6 +564,12 @@ class GasVerify {
           line == other.line;
 }
 
+/// An L1 data fee model (plan T38).
+enum L1Fee {
+  /// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
+  opStack,
+}
+
 /// The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor
 /// against a runaway quote, never a value assumed of a chain.
 class Limits {
@@ -583,7 +669,7 @@ class ListedDex {
 
 /// A token of a profile's reviewed list (spec §8.2).
 class ListedToken {
-  /// `0x` + 40 hex
+  /// EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
   final String address;
   final String symbol;
   final int decimals;

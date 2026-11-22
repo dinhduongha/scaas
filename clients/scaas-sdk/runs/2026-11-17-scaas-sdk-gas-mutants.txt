@@ -1,4 +1,4 @@
-# gas mutants at commit 6d99b2332 (name | outcome | test)
+# gas mutants (name | outcome | commit | test | first failure line)
 the chain's rows not first | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_lookup_order_and_opt_in
 the chain's rows named as reference | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib quote_names_its_gas_source_in_order
 module tables read without opt-in | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_lookup_order_and_opt_in
@@ -6,7 +6,7 @@ the reference read as a module (before the other modules) | killed | ../../scrip
 the reference read without opt-in | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib an_operation_without_a_gas_row_is_gas_unquoted
 the base row's lane state ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib an_operation_without_a_gas_row_is_gas_unquoted
 the base row's domain kind ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_parts_are_looked_up_independently
-the verify row's signer ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib an_operation_without_a_gas_row_is_gas_unquoted
+the verify row's signer ignored | killed | e2d9383a5 dirty | ../../scripts/capped cargo test --locked --offline -j2 --lib an_operation_without_a_gas_row_is_gas_unquoted | panicked at src/op/tests.rs:1254:5:
 the verify part not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_lookup_order_and_opt_in
 the verify part read with the base part's order (base source for both) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib quote_names_its_gas_source_in_order
 the base part read as the verify part's (verify source for both) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_parts_are_looked_up_independently
@@ -22,10 +22,10 @@ the file: 1,000 above the measurement accepted | killed | ../../scripts/capped c
 the file: measured above the table accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
 the file: a base figure of zero accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
 the file: one base key twice | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
-the file: one signer twice | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
+the file: one signer twice | killed | e2d9383a5 dirty | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks | panicked at src/op/gas.rs:1165:13:
 the file: version 1 accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
 the file: the row bound on base rows only | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
 a reference row away from its source | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
 open: an opt-in naming no table | killed | ../../scripts/capped cargo test --locked --offline -j2 --test config open_checks_gas_tables_and_opt_ins
 open: a module table named reference | killed | ../../scripts/capped cargo test --locked --offline -j2 --test config open_checks_gas_tables_and_opt_ins
-29 mutants, 29 killed, 0 survived, 0 not loaded
+29 mutants, 29 killed, 0 survived, 0 not loaded, 0 other failure

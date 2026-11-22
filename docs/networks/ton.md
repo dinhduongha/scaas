@@ -221,7 +221,11 @@ the network's standard `wallet_id`. BUILT.
 
 <a id="NET-TON-11"></a>**NET-TON-11** — **The node uses TON Center API v3** (`masterchainInfo`,
 `transactionsByMasterchainBlock`, `transactionsByMessage`, `message`, `runGetMethod`, `walletInformation`, `blocks`),
-available on mainnet/testnet and in MyLocalTon (profile `indexer`). BUILT.
+available on mainnet/testnet and in MyLocalTon (profile `indexer`). BUILT. The client stack's reads at one masterchain seqno use TON
+Center's `/api/v2/` paths of the same endpoints, since v3's `runGetMethod` and `walletInformation` take no seqno: `scaas-rpc`
+`Ton::run_get_at` (`runGetMethod` with `seqno`) and `Ton::account_at` (`getAddressInformation` with `seqno`), each answer
+required to name that masterchain block, the stack's cells read by `scaas_rpc::boc` (at most 4096 cells, depth 1024, no hash);
+BUILT (SDK plan rpc T24.ton-seqno). The node adapter still uses v3 alone.
 
 Endpoints (BUILT, scaas-rpc T22): `rpc_urls` are read through the crate's family client (16 MiB, depth 64, no redirect,
 20 s a request; `api_key_env` names the key's env var: a name, the first endpoint's key only, or a list of names, one per

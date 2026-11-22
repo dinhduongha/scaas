@@ -587,6 +587,35 @@ impl Backend for SqliteStore {
             .bind(chain_key).bind(lane).fetch_all(&self.pool).await?)
     }
 
+    async fn queued_jobs(
+        &self,
+        namespace: &str,
+        chain_key: &str,
+        limit: i64,
+    ) -> Result<Vec<JobRow>> {
+        Ok(sqlx::query_as("SELECT * FROM job WHERE chain_key = ? AND state = 'queued' AND namespace = ? AND hold = 0 \
+                           ORDER BY uid LIMIT ?")
+            .bind(chain_key).bind(namespace).bind(limit).fetch_all(&self.pool).await?)
+    }
+
+    async fn lane_live(&self, namespace: &str, chain_key: &str, lane: &str) -> Result<Vec<JobRow>> {
+        Ok(sqlx::query_as(
+            "SELECT * FROM job WHERE chain_key = ? AND lane_label = ? AND namespace = ? \
+                           AND state IN ('leased', 'signed', 'broadcast') ORDER BY uid",
+        )
+        .bind(chain_key)
+        .bind(lane)
+        .bind(namespace)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    async fn job_by_origin(&self, namespace: &str, o: &Origin) -> Result<Option<JobRow>> {
+        Ok(sqlx::query_as("SELECT * FROM job WHERE namespace = ? AND origin_scope = ? AND origin_producer = ? AND origin_key = ? \
+                           ORDER BY generation DESC LIMIT 1")
+            .bind(namespace).bind(&o.scope).bind(&o.producer).bind(&o.key).fetch_optional(&self.pool).await?)
+    }
+
     async fn bump_journal_max(&self, chain_key: &str, lane: &str, nonce: i64) -> Result<()> {
         let mut tx = self.begin().await?;
         let n = sqlx::query(

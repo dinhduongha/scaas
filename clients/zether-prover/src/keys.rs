@@ -89,15 +89,27 @@ pub fn derive_path<C: ZCurve>(seed: &[u8], path: &[u32]) -> Result<Fr<C>, ZError
     Ok(sk)
 }
 
-/// BIP-39 seed (64 B) from a 24-word English mnemonic (R32). Checksum is verified; mnemonic and
-/// passphrase are NFKD-normalized as BIP-39 requires (same seed as @scure/bip39).
+/// BIP-39 seed (64 B) from a 12- to 24-word English mnemonic (plan scaas-sdk T23, spec §25 Q-K15, owner 2026-11-17: aligned
+/// with the SDK's import rule, R32's 24 words before; its old test in `legacy/scaas-sdk-t23/`). Checksum is verified; mnemonic
+/// and passphrase are NFKD-normalized as BIP-39 requires (same seed as @scure/bip39). A caller that shows the seed's state uses
+/// [`seed_from_mnemonic_warned`] for the short-seed warning.
 pub fn seed_from_mnemonic(words: &str, passphrase: &str) -> Result<Zeroizing<[u8; 64]>, ZError> {
+    seed_from_mnemonic_warned(words, passphrase).map(|(s, _)| s)
+}
+
+/// [`seed_from_mnemonic`] and the short-seed flag: `true` for 12 to 21 words (the SDK's `short_seed` warning: move funds to a
+/// 24-word seed).
+pub fn seed_from_mnemonic_warned(
+    words: &str,
+    passphrase: &str,
+) -> Result<(Zeroizing<[u8; 64]>, bool), ZError> {
     let m =
         bip39::Mnemonic::parse(words).map_err(|_| ZError::BadSeed("invalid BIP-39 mnemonic"))?;
-    if m.word_count() != 24 {
-        return Err(ZError::BadSeed("R32: mnemonic must have 24 words"));
+    let n = m.word_count();
+    if !(12..=24).contains(&n) {
+        return Err(ZError::BadSeed("a mnemonic has 12 to 24 words"));
     }
-    Ok(Zeroizing::new(m.to_seed(passphrase)))
+    Ok((Zeroizing::new(m.to_seed(passphrase)), n < 24))
 }
 
 /// A Zether key pair: `x` and `y = g^x` on G1.

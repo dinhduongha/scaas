@@ -188,6 +188,8 @@ Claude), no external audit.
 | `mlock` | arena protection ([CLI-UAL-10](#CLI-UAL-10)); compiled out off Unix | yes (owner 2026-11-06) |
 | `pq`, `signers`, `json` | the identity layer's own: PQ verifiers, group signers, JSON shims | through `wallet` |
 | `vectors` | test-only entry points; never in a production artifact ([CLI-UAL-25](#CLI-UAL-25)) | no |
+| `fam-<row>` | one per row of chain-support, only that chain's transaction format (decisions CLI-SDK-33 (31), (37); plan T42): `fam-evm` (RLP, `EvmTx`, `evm`, `hedera_ecdsa`), `fam-hedera` (`hedera_ed25519`), `fam-near`, `fam-algorand`, `fam-cosmos`, `fam-aptos`, `fam-solana`, `fam-soroban` (`stellar`), `fam-sui`, `fam-ton`, `fam-dot` (sr25519, SS58, `polkadot`), `fam-btc` (the two Bitcoin networks), `fam-arweave`; a network whose row is off is `FeatureMissing`; the core (`wallet`) keeps every UA kind and the seed standards | yes (all) |
+| `xcheck-<family>` | a chain's own crate as a third cross-check of its vector rows; tests and CI only ([CLI-UAL-25](#CLI-UAL-25)'s rule for test features) | no |
 
 **C ABI 6** (`clients/ua-c`, `include/scaas_ua.h` by cbindgen; the v5 header is kept at `legacy/ua-rs-sign/scaas_ua.v5.h`).
 Every v5 declaration is unchanged. New: the opaque handles `ScaasUaWallet`, `ScaasUaKey` (UA or native), `ScaasUaKemKey`,

@@ -127,7 +127,14 @@ and a landed transaction's fee. The EVM reader adds calls, storage, code, transa
 simulation and fee data, at a block the caller names, on the crate's bounded transport. Each other family lifts its transport and
 these generic reads from the node's adapter, after the EVM part; parsing of events and of `build`'s family reads stays in the node
 for now, reading through the family's pooled client so CLI-RPC-04 and §5 apply to every read (BUILT for the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and TON
-adapters, plan T14–T22). The indexer's event-set quorum
+adapters, plan T14–T22; Sui's reads over GraphQL too, `sui::SuiGraphql` on `Client::graphql_at`, BUILT, SDK plan rpc
+T24.sui-graphql; TON's getters and account read at one masterchain seqno, `Ton::run_get_at` / `Ton::account_at` on TON
+Center's `/api/v2/` paths, the stack's cells through the bounded `boc` reader, BUILT, SDK plan rpc T24.ton-seqno; Substrate's reads, feature `substrate`,
+`substrate::Substrate`: identity `chain_getBlockHash(0)`, the finalized head and its number, `System.Account` at a block hash
+through a bounded `AccountInfo` reader (80 bytes exactly), one code path for Polkadot Hub's Substrate side and the relay chain,
+BUILT, SDK plan T32's read part; Bitcoin's reads, feature `bitcoin`, `bitcoin::Esplora` (UTXOs, history pages, a transaction's height,
+fee estimates) and `bitcoin::Core` (`getblockhash`, `gettxout`), two lists with their own credentials, and `cross_check`
+(`BitcoinCrossCheck`: Esplora's tip and every UTXO to spend against Core), BUILT, SDK plan T36's read part). The indexer's event-set quorum
 ([NODE-IDX-01](../node/indexer-feeds.md#NODE-IDX-01)) is unchanged; its helper (`agreed`, NEAR and Aptos) is the crate's.
 
 ## 4. Writes and transaction state
@@ -190,8 +197,9 @@ counters (failover answers, refusals per endpoint) carry no URL.
 (BUILT for the routes the node serves, plan T10, T11, T13 S14: `bodies_are_sent_byte_for_byte`, `a_body_above_64_kib_is_refused_unsent`,
 `an_error_is_read_by_code_else_by_error_string`, `hmac_headers_follow_node_gw_02`, `a_second_gateway_receives_no_credential_of_the_first`;
 the job API client PLANNED). The client covers the gateway routes the node serves ([gateway.md](../node/gateway.md#NODE-GW-05)): `POST /v1/op`,
-`POST /v1/ua-metatx` and the DEX routes, BUILT in the node; `GET /v1/gateway`, `POST /v1/ops`, `POST /v1/ua/register` and
-`GET /v1/intents/{intent_id}` follow when the node serves them. Bodies are the named-field objects `ua-rs` builds; the client never
+`POST /v1/ua-metatx`, the DEX routes and `POST /v1/ops` (`submit_ops` / `submit_ops_at`, `{chain, op}` with the family's chain
+key, merged as `submit_op`'s; plan T28, test `submit_ops_sends_the_same_bytes_and_merges`), BUILT in the node; `GET /v1/gateway`,
+`POST /v1/ua/register` and the client of `GET /v1/intents/{intent_id}` follow. Bodies are the named-field objects `ua-rs` builds; the client never
 packs fields into hex and never rewrites an operation. A request above the route's body cap is refused before it is sent. An error
 answer is read by its `code` (else the legacy `error` string) with its `detail` and `revert_data`
 ([NODE-GW-06](../node/gateway.md#NODE-GW-06)); no logic keys on free text. `api` of `GET /v1/gateway` other than `1` is

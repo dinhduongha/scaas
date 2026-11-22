@@ -121,6 +121,9 @@ pub fn profile(
         dexes: vec![],
         wrappers: vec![],
         tokens: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     }
 }
 
@@ -1414,6 +1417,56 @@ async fn watch_reads_a_zether_account() {
         }),
         "{ev:?}"
     );
+}
+
+/// Plan T23 (spec §25 Q-K15, owner 2026-11-17: align with the ruling): a 12-word seed's Zether key is available and equals
+/// `zether-prover`'s from the same words (`seed_from_mnemonic`, which accepts 12 to 24 words with the short-seed flag); the
+/// 24-word control beside it.
+#[tokio::test(flavor = "multi_thread")]
+async fn short_seed_zether_key_is_the_provers() {
+    use zether_prover::curve::{encode_point, Bls12381};
+    use zether_prover::keys::{seed_from_mnemonic_warned, ZetherKey};
+    const TWELVE: &str =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    let s = Sdk::open(SdkConfig {
+        profiles: vec![],
+        store: MemoryStore::new(),
+        authenticator: None,
+        rp_id: None,
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: Limits::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let sec = |t: &str| {
+        Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(t.as_bytes().to_vec())).unwrap())
+    };
+    for (words, short, label) in [(TWELVE, true, "twelve"), (REPO, false, "repo")] {
+        let seed = s
+            .vault()
+            .import_words(ImportWords {
+                label: label.into(),
+                words: sec(words),
+                vault_passphrase: sec(PASS),
+            })
+            .await
+            .unwrap()
+            .id;
+        let k = s.confidential().zether_key(seed, 0).await.unwrap();
+        let (ps, warned) = seed_from_mnemonic_warned(words, "").unwrap();
+        assert_eq!(warned, short);
+        let pk = ZetherKey::<Bls12381>::conf(&ps[..], 60, 0).unwrap();
+        assert_eq!(
+            k.y,
+            format!("0x{}", hex_of(&encode_point::<Bls12381>(&pk.y)))
+        );
+    }
+}
+
+fn hex_of(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
 /// Review F2 (CTR-UA-70): a holder whose `0x0141` record a predecessor holds, through the later generation the token binds, is

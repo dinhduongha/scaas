@@ -36,7 +36,8 @@ use serde_json::{json, Value};
 use std::sync::{Arc, PoisonError};
 
 /// What a registration carries besides the key (spec §7): the PQZ key with its `R_REG` proof, the KEM key (version 0).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RegisterAttrs {
     pub pqz_key: bool,
     pub kem: bool,
@@ -44,7 +45,8 @@ pub struct RegisterAttrs {
 
 /// `prepare_register`: the UA key `key` (a seed's `KeyRef::Ua`) registered on `chain`, its writes self-relayed by `payer` (a
 /// native `evm` key).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Register {
     pub key: KeyRef,
     pub chain: String,
@@ -100,7 +102,8 @@ impl Landed {
 }
 
 /// One step of a registration carrying its PQZ key's proof as quoted at prepare (owner 2026-11-20).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StepGas {
     /// `register` (or `registerWebAuthn`, `registerMsig`), with or without the proof, or `storePqzPop`
     pub entry: String,
@@ -115,7 +118,8 @@ pub struct StepGas {
 /// A registration carrying its PQZ key's proof as the SDK quoted it at prepare (owner 2026-11-20): one transaction, or two
 /// (`register` without the proof, then `storePqzPop`, F22's restart-safe flow) when the one transaction's gas is above half
 /// the chain's block gas limit or its regular gas above the per-transaction cap; each step's gas and the total.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RegistrationGas {
     /// 1 or 2
     pub transactions: u32,
@@ -197,7 +201,8 @@ impl RegistryWrite {
 }
 
 /// A registration as the registry holds it (`registration_of`).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RegistrationState {
     pub registered: bool,
     /// the hash commit of the KEM key (`attrs.kemPkHash`, `0x` + 64 hex; all zero: none)
@@ -677,7 +682,22 @@ pub(crate) async fn writes(
     args: &Value,
     kem_fill: Option<&Value>,
 ) -> Result<Vec<Arc<RegistryWrite>>, SdkError> {
-    let (_, _, pool) = evm(sdk, chain)?;
+    let (profile, _, pool) = evm(sdk, chain)?;
+    // a kind the chain's profile disables (owner 2026-11-22): the key's kind, a PQZ key attachment, before anything is signed
+    if let Some(k) = args
+        .get("kind")
+        .and_then(Value::as_u64)
+        .and_then(|k| u16::try_from(k).ok())
+    {
+        crate::op::ua_kind_enabled(&profile, k)?;
+    }
+    if args
+        .pointer("/attrs/pqzKey")
+        .and_then(Value::as_str)
+        .is_some_and(|k| k != "0x")
+    {
+        crate::op::kind_enabled(&profile, "pqz")?;
+    }
     let registry = registry_of(sdk, chain)?;
     let entry = args
         .get("entry")

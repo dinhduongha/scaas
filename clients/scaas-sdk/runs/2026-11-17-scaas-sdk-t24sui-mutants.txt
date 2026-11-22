@@ -1,0 +1,17 @@
+# t24sui mutants (name | outcome | commit | test | first failure line)
+the Sui dispatch off | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --features sui --test sui -- --exact sui_balances_at_one_checkpoint | panicked at tests/sui.rs:256:45:
+read the second endpoint first | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --features sui --test sui -- --exact sui_two_endpoints_one_down | panicked at tests/sui.rs:456:52:
+the registry and the owner swapped in the derivation | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --features sui --test sui -- --exact sui_balances_at_one_checkpoint | panicked at tests/sui.rs:259:5:
+an absent Account refused, not 0 | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --features sui --test sui -- --exact sui_balances_at_one_checkpoint | panicked at tests/sui.rs:273:43:
+an Account of another registry read | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --features sui --test sui -- --exact sui_malformed_answers_are_refused | panicked at tests/sui.rs:395:9:
+an Account of another owner read | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --features sui --test sui -- --exact sui_malformed_answers_are_refused | panicked at tests/sui.rs:395:9:
+a set of another checkpoint read | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --features sui --test sui -- --exact sui_malformed_answers_are_refused | panicked at tests/sui.rs:395:9:
+the holder's SUI not pinned to the checkpoint | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --features sui --test sui -- --exact sui_balances_at_one_checkpoint | panicked at tests/sui.rs:268:5:
+the network identity not pinned to chain_uid | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --features sui --test sui -- --exact sui_endpoint_of_another_network_is_dropped | panicked at tests/sui.rs:472:5:
+the GraphQL policy ignored | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --features sui --test sui -- --exact sui_strict_majority_agrees_at_one_checkpoint | panicked at tests/sui.rs:513:5:
+ua-rs: another hashing intent | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --test families_sui -- --exact account_rows | panicked at tests/families_sui.rs:28:9:
+ua-rs: the key's type tag of another type argument | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --test families_sui -- --exact account_rows | panicked at tests/families_sui.rs:28:9:
+clientkeys: the key's length left out | killed | 46eabe7f5 | ../../scripts/capped node --test --test-reporter=tap test/fam-sui.test.js | not ok 1 - the generator writes the committed bytes
+the CLI's Sui params dropped | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas family_params_are_read_by_name | panicked at src/config.rs:560:9:
+the CLI's SDK without Sui reads | killed | 46eabe7f5 | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas family_profiles_open_and_read | panicked at src/config.rs:602:13:
+15 mutants, 15 killed, 0 survived, 0 not loaded, 0 other failure

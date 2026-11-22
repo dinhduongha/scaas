@@ -18,7 +18,7 @@ const BITS: &str =
     include_str!("../../../../smartcontracts/vectors/governance/governance_bits.json");
 
 /// The holder's kind as the app read it from the registry (`singleKey` is per holder: spec set-auditor §4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum HolderKind {
     /// a single key (one signer)
@@ -30,7 +30,7 @@ pub enum HolderKind {
 }
 
 /// One delay sentence of a power bit, by name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum DelaySentence {
     /// `atOnce`: the delay is 0, a holder's change applies at once

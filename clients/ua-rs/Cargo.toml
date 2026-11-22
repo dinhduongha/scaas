@@ -102,7 +102,26 @@ js-sys = { version = "=0.3.107", optional = true }
 # with `pqz` (src/facade/pqz.rs refuses to compile otherwise). `vectors`: test-only entry points (secrets through hooks), never in a release build.
 # `vectors` also keeps the facades' raw decrypt commands and zether-prover's `hazmat` (ARCH-POS-13, T15c: never in a release build).
 # `mlock` on by default for native builds (owner 2026-11-06, superseding MD-5's list); off Unix it compiles out (no libc).
-default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096", "mlock"]
+default = [
+  "wallet",
+  "zether",
+  "pqz",
+  "pqz-set-n2304-kmax4096",
+  "mlock",
+  "fam-evm",
+  "fam-hedera",
+  "fam-near",
+  "fam-algorand",
+  "fam-cosmos",
+  "fam-aptos",
+  "fam-solana",
+  "fam-soroban",
+  "fam-sui",
+  "fam-ton",
+  "fam-dot",
+  "fam-btc",
+  "fam-arweave",
+]
 wallet = [
   "pq",
   "signers",
@@ -115,14 +134,11 @@ wallet = [
   "dep:ripemd",
   "dep:bs58",
   "dep:blake2",
-  "dep:alloy-rlp",
   "dep:ml-kem",
   "dep:aes-gcm",
   "dep:aes-gcm-siv",
   "dep:base64ct",
   "dep:scrypt",
-  "dep:schnorrkel",
-  "dep:pbkdf2",
   "dep:js-sys",
   "rand_core/getrandom",
   "dep:getrandom",
@@ -142,6 +158,8 @@ vectors = ["wallet", "scaas-ct/vectors", "ml-kem/hazmat", "zether-prover?/hazmat
 mlock = ["wallet", "dep:libc"]
 # scaas-sdk T6: roots (c) and (d) (src/wallet/roots.rs): scaas-sdk's `classical-roots`
 roots = ["wallet", "dep:argon2"]
+# scaas-sdk T21: app-core key handles (src/wallet/appkey.rs; spec §12.2, §23.1 item 9)
+app-core = ["wallet", "dep:argon2"]
 # PqVault plan V1 (spec §6.5, CLI-PQV-10; owner 2026-11-21, O8): the vault passphrase's Argon2id set 1 (64 MiB / 3 / 4), the same
 # `argon2` 0.5.3 pin as `roots` (MIT OR Apache-2.0, `alloc` + `zeroize`, no `password-hash`; its blake2 0.10.6 is ua-rs's), so no
 # second version enters the lock. Today only tests/pqvault_pass.rs reads it (the reproducer of vectors/pqvault/pass.json); the key
@@ -150,6 +168,37 @@ roots = ["wallet", "dep:argon2"]
 pqvault = ["dep:argon2", "dep:unicode-normalization"]
 signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha", "dep:scaas-ct", "dep:zeroize"]
 json = ["dep:serde_json"]
+# plan T42 (owner 2026-11-22, decisions CLI-SDK-32; controller call CLI-SDK-33 (31)): one feature per row of chain-support,
+# each holding only that chain's transaction format; every UA-kind algorithm, BIP-39 / BIP-32 / BIP-44 / SLIP-10 / SLIP-44,
+# BIP-85, BIP-340 / BIP-327 / FROST (`signers`), ML-KEM, EIP-712, keccak, HKDF, AEAD and the KDFs stay in the core (`wallet`).
+# A network of a family that is off is `Error::FeatureMissing` (the network list stays one list); `tests/feature_tree.rs`
+# checks the placement. All on by default.
+# EVM: RLP and the EIP-2718 transactions (`EvmTx`, wallet/tx.rs), Hedera's EVM side (`hedera_ecdsa`)
+fam-evm = ["wallet", "dep:alloy-rlp"]
+# Hedera's native side: `0.0.x` accounts with ed25519 keys (`hedera_ed25519`), the HAPI body signed as given
+fam-hedera = ["wallet"]
+# NEAR: the MetaOp digest, the relay-fee ref, the native account (src/near.rs; `near`)
+fam-near = []
+# Algorand: the MetaOp digest, the relay-fee ref, address <-> key (src/algorand.rs)
+fam-algorand = []
+# Cosmos: the bech32 address of a secp256k1 key (`cosmos`)
+fam-cosmos = ["wallet"]
+fam-aptos = ["wallet"]
+# Solana: the PDA and the SCaaS Account (src/families/solana.rs), base58 (`solana`)
+fam-solana = []
+# Soroban (Stellar): strkey, the XDR envelope's signature base (`stellar`)
+fam-soroban = ["wallet"]
+# Sui: the Account<T> id (src/families/sui.rs), the intent digest (`sui`)
+fam-sui = ["wallet"]
+fam-ton = ["wallet"]
+# Polkadot Hub's Substrate side: sr25519 (schnorrkel; not a UA kind), substrate-bip39, SS58, the `System.Account` key
+fam-dot = ["wallet", "dep:schnorrkel", "dep:pbkdf2"]
+# BTC: BIP-84 / BIP-86 paths and addresses, bech32 / bech32m (`bitcoin_p2wpkh`, `bitcoin_p2tr`); the sighashes with
+# rust-bitcoin come in T41.btc
+fam-btc = ["wallet"]
+# Arweave as a store: ANS-104 and `seal_for_arweave` (chains-arweave CA-T16, CA-T17 on branch `sdk-arweave`); the generic file
+# seal stays in the core
+fam-arweave = []
 pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc"]
 
 [build-dependencies]
@@ -271,7 +320,20 @@ required-features = ["wallet"]
 # ua-rs-native: the native networks and raw native signing against smartcontracts/vectors/native/native.json
 [[test]]
 name = "wallet_native"
-required-features = ["wallet"]
+required-features = [
+  "wallet",
+  "fam-evm",
+  "fam-cosmos",
+  "fam-hedera",
+  "fam-sui",
+  "fam-soroban",
+  "fam-ton",
+  "fam-aptos",
+  "fam-solana",
+  "fam-btc",
+  "fam-near",
+  "fam-dot",
+]
 
 # ua-rs-native: the fixed-randomness rows (test-only entry points) and the published Taproot answers
 [[test]]
@@ -352,6 +414,11 @@ name = "vectors_marker"
 required-features = ["vectors", "pqz", "zether"]
 
 # ua-rs-sign T17: the reference bench, release build, no test feature; the command and its record: runs/2026-11-07-ua-rs-sign-t17.md
+# plan T42: the size probe of runs/fam-sizes.sh
+[[example]]
+name = "fam_size"
+required-features = ["wallet"]
+
 [[example]]
 name = "ua_bench"
 required-features = ["pqz"]
@@ -388,3 +455,24 @@ required-features = ["wallet"]
 [[test]]
 name = "roots"
 required-features = ["roots"]
+
+# plan T42: the core without any family (the `ua-core` gate step runs it with `--no-default-features --features wallet`)
+[[test]]
+name = "core_only"
+required-features = ["wallet"]
+
+[[test]]
+name = "families_solana"
+required-features = ["fam-solana"]
+
+[[test]]
+name = "families_sui"
+required-features = ["wallet", "fam-sui"]
+
+[[test]]
+name = "near_algorand"
+required-features = ["fam-near", "fam-algorand"]
+
+[[test]]
+name = "app_core"
+required-features = ["app-core", "vectors"]

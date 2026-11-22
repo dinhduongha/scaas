@@ -47,7 +47,8 @@ std::thread_local! {
 }
 
 /// The keystore: its revision and its seeds in display order.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub struct Keystore {
     pub rev: u64,
@@ -55,7 +56,8 @@ pub struct Keystore {
 }
 
 /// One seed entry (public fields and vault ciphertexts only).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub struct SeedEntry {
     pub id: String,
@@ -73,7 +75,7 @@ pub struct SeedEntry {
 }
 
 /// An account row, by shape (spec §6.1), each with its fields in the written order.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum AccountRow {
     Ua {

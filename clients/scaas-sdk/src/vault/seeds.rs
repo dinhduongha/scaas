@@ -11,7 +11,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use zeroize::Zeroizing;
 
 /// A seed as listed: public fields of the container entry, and whether it is unlocked (its MAC checked) in this session.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SeedInfo {
     pub id: String,
     pub label: String,
@@ -264,7 +265,8 @@ pub struct ImportKey {
 }
 
 /// An imported key's place: its network and its number `n` (the vault `native-import:<network>:<n>`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ImportedKey {
     pub network: String,
     pub index: u32,
@@ -278,10 +280,10 @@ fn seed_passphrase(seed_vault: &scaas_ua::wallet::Vault, p: &str) -> Result<(), 
 }
 
 /// The first marker of `remove`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct ConfirmRemove {}
 /// The second marker of `remove`, for a seed whose backup is `pending`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct ConfirmRemoveUnbacked {}
 
 /// `vault.remove`'s request.

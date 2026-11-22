@@ -1,0 +1,13 @@
+{
+  "evmFork": "amsterdam",
+  "codeSizeLimit": 65536,
+  "initCodeSizeLimit": 131072,
+  "txGasCap": 16777216,
+  "blockGasLimit": 199802400,
+  "finality": "tag",
+  "txType": 2,
+  "l1Fee": null,
+  "eip2537": true,
+  "status": "draft",
+  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (probes of 2026-11-22: fork, eip2537, caps, codesize, basefee, l1fee, H5, H7); Sepolia at Amsterdam: runtime 65,536 B, init 131,072 B measured; txGasCap EIP-7825"
+}

@@ -99,7 +99,8 @@ impl Signer for ZetherSigner {
 // --- the rows without a proof: `wallet`'s plain path, the contract's domain must be a Zether token's ---
 
 /// `zether_shield` (`UAShield` on a Zether token): `amount` of the signer's public balance into `to_ua`'s pending balance.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZetherShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -111,7 +112,8 @@ pub struct ZetherShield {
 }
 
 /// `zether_wrap_shield` (`WrapShield` on a Zether token): wrap `amount_in` of `underlying` and shield it to `to_ua`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZetherWrapShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -124,7 +126,8 @@ pub struct ZetherWrapShield {
 }
 
 /// `UARollOver`: roll `ua`'s pending balance over (`n`: the entries to take).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZetherRollOver {
     pub signer: KeyRef,
     pub chain: String,
@@ -136,7 +139,8 @@ pub struct ZetherRollOver {
 }
 
 /// `UARollOverBatch`: roll each of `uas` over.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZetherRollOverBatch {
     pub signer: KeyRef,
     pub chain: String,
@@ -150,7 +154,8 @@ pub struct ZetherRollOverBatch {
 
 /// `UAZetherTransferSingle`: `amount` from the holder's Zether account (`seed`, `account`) to `to_ua` (a registered Zether
 /// UA), the proof valid until block `valid_until_block`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZetherTransfer {
     pub seed: String,
     pub account: u32,
@@ -167,7 +172,8 @@ pub struct ZetherTransfer {
 }
 
 /// `UAZetherUnshield`: `amount` out of the holder's Zether account to `recipient` (a 32-byte id).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZetherUnshield {
     pub seed: String,
     pub account: u32,
@@ -186,7 +192,8 @@ pub struct ZetherUnshield {
 /// `recipient` (a 32-byte id: a native address zero-padded, or a derived UA in the leg's own ledger), at least `min_out` of
 /// the leg. The burn proof binds `recipient` and `amount` (the contract's `unshieldWith(b, proof, x.amount, x.recipient, …)`);
 /// the relayed form binds the envelope, never `unwrapBinding` (the direct call's).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZetherUnshieldUnwrap {
     pub seed: String,
     pub account: u32,
@@ -204,7 +211,8 @@ pub struct ZetherUnshieldUnwrap {
 }
 
 /// One real recipient of a multi-recipient transfer: a registered Zether UA and its amount.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZetherLeg {
     pub to_ua: String,
     pub amount: String,
@@ -215,7 +223,8 @@ pub struct ZetherLeg {
 /// token pays (decimal, `"0"` none; the token's `minDecoyFee` is the contract's check). `ua_signer_gas`: the Zether UA's
 /// verify gas the prover's gas-cap check adds for the relayed build (zether-prover `uaSignerGas`), the app's figure: a verify
 /// row for `0x0141` in the gas tables (chain → module → reference) wins over it (owner 2026-11-19, P1).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZetherTransferMulti {
     pub seed: String,
     pub account: u32,
@@ -235,7 +244,8 @@ pub struct ZetherTransferMulti {
 /// The owner's roll-over (`ZetherRollOver`, its direct call `mtxRollOverSigned`; or with `relayed`, `UARollOverSigned`): every
 /// pending entry up to the account's `pendingSeq` at the final block, signed by the Zether UA under `zether-owner` (owner
 /// 2026-11-19, C3).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZetherOwnerRollOver {
     pub seed: String,
     pub account: u32,
@@ -245,7 +255,8 @@ pub struct ZetherOwnerRollOver {
 }
 
 /// The owner's roll-over mode (`ZetherSetRollOverMode`; or `UASetRollOverMode`): `mode` 0 PUBLIC, 1 OWNER_ONLY.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZetherOwnerSetMode {
     pub seed: String,
     pub account: u32,
@@ -256,7 +267,8 @@ pub struct ZetherOwnerSetMode {
 }
 
 /// The envelope of an owner statement's relayed form (`UARollOverSigned`, `UASetRollOverMode`): the Zether UA's own lane.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OwnerRelay {
     pub batch: String,
     pub envelope: Envelope,

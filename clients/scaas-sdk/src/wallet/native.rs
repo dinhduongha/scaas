@@ -19,7 +19,8 @@ pub(crate) const EXTRA_NETWORKS: [&str; 4] = ["bitcoin_p2wpkh", "bitcoin_p2tr", 
     not(feature = "raw-native"),
     doc = "```compile_fail\nlet _ = scaas_sdk::wallet::AllowRawNative::new();\n```"
 )]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NativeKeyRef {
     pub seed: String,
     pub network: String,
@@ -30,7 +31,8 @@ pub struct NativeKeyRef {
 }
 
 /// A native key's public parts.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NativeAddress {
     pub network: String,
     /// hex, no `0x`

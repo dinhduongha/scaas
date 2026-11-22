@@ -1,0 +1,19 @@
+# t22 mutants (name | outcome | commit | test | first failure line)
+a secret read from the environment | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --test cli -- --exact secret_never_from_environment | panicked at tests/cli.rs:282:5:
+unknown flags ignored (a secret given as a value is not refused) | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --test cli -- --exact no_secret_flag_exists | panicked at tests/cli.rs:244:5:
+-fd flags not kept apart | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --test cli -- --exact no_secret_flag_exists | panicked at tests/cli.rs:259:5:
+any answer confirms | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --features dev-profiles --test cli -- --exact review_and_quote_before_submit | panicked at tests/cli.rs:739:9:
+the review not shown before the confirm | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --features dev-profiles --test cli -- --exact review_and_quote_before_submit | panicked at tests/cli.rs:742:44:
+the process ends before the send is reported | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --features dev-profiles --test cli -- --exact review_and_quote_before_submit | panicked at tests/cli.rs:751:9:
+the reveal not typed | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --test cli -- --exact generate_reveals_once | panicked at tests/cli.rs:400:5:
+remove without asking | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --test cli -- --exact remove_asks_first | panicked at tests/cli.rs:487:5:
+--profiles in a release build | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --test cli -- --exact profiles_pinned | panicked at tests/cli.rs:631:9:
+no development banner | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --features dev-profiles --test cli -- --exact profiles_pinned | panicked at tests/cli.rs:625:9:
+an overlay may raise a decimal cap | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas -- --exact config::tests::overlay_lowers_caps_and_adds_credentials_only | panicked at src/config.rs:403:9:
+an overlay may raise max_gas | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas -- --exact config::tests::overlay_lowers_caps_and_adds_credentials_only | panicked at src/config.rs:395:9:
+an overlay's unknown fields ignored (a chain_uid, a contract, an endpoint list) | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas -- --exact config::tests::overlay_lowers_caps_and_adds_credentials_only | panicked at src/config.rs:425:13:
+a credential file readable by others | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas -- --exact config::tests::credential_file_readable_by_others_refused | panicked at src/config.rs:461:9:
+output unbounded | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas -- --exact tests::output_bounded | panicked at src/main.rs:675:9:
+a secret line unbounded | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas -- --exact tests::secret_line_bounded | panicked at src/main.rs:693:9:
+the table draws outside text raw | killed | 2ad364a82 | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas -- --exact tests::table_escapes_what_a_terminal_acts_on | panicked at src/main.rs:684:9:
+17 mutants, 17 killed, 0 survived, 0 not loaded, 0 other failure

@@ -91,6 +91,9 @@ async fn setup_with(registry: Option<&str>) -> T {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     };
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![profile],

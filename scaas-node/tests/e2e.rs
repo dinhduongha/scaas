@@ -1537,6 +1537,7 @@ async fn dex_order_with_a_ua_trade_order_leg() {
     };
     let app = router(AppState {
         chains: Arc::new([(chain_id, gw)].into_iter().collect()),
+        ..Default::default()
     });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:18651")
         .await
@@ -2092,6 +2093,7 @@ async fn dex_fill_below_half_settles_on_anvil() {
     };
     let app = router(AppState {
         chains: Arc::new([(chain_id, gw)].into_iter().collect()),
+        ..Default::default()
     });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:18653")
         .await
@@ -4097,6 +4099,7 @@ async fn gateway_doors_end_to_end() {
     };
     let app = router(AppState {
         chains: Arc::new([(chain_id, gw)].into_iter().collect()),
+        ..Default::default()
     });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let gw_url = format!("http://{}", listener.local_addr().unwrap());

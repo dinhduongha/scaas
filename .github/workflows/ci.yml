@@ -44,9 +44,12 @@
 #   clients/ua-rs:         one matrix cell per feature set (ua-rs-sign MD-5, T18), each: cargo clippy --locked --all-targets <features> -- -D warnings; cargo test --locked <features> [<tests>]:
 #                          default (wallet + zether + pqz at n2304-kmax4096, the release cell; no_oracle, pqz_wallet_rows; then pqz_read --bin pqz-read -- --include-ignored against anvil),
 #                          vectors (--features vectors: the test hooks, the vector rows both ways, no_oracle's positive control), verify-only (--no-default-features),
+#                          core (plan T42: wallet with no fam-*: --lib core_only wallet_pairing bls_multi wallet_webauthn bip85 wallet_pq),
 #                          signers (--test groups_verify; tests/groups.rs, the generator, runs in the vectors cell), json (--test json), pq (--test pq --test ua_portable), wallet-mlock (wallet,mlock), zether-only (wallet,zether,mlock: --lib --test facade_zether),
 #                          pqz-n2048 (wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock: --lib --bin pqz-read --test pqz_read facade_pqz_state facade_pqz pqz_backup no_oracle) and the same + vectors
 #                          (facade_pqz_state facade_pqz pqz_backup no_oracle), pqvault (--test pqvault_pass: the Argon2id reproducer of vectors/pqvault/pass.json); the vectors cell also: cargo test --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows; git diff --exit-code (wallet_state.json stays what its generator writes)
+#   ua-rs-features:        plan T42: in clients/ua-rs, bash runs/fam-sizes.sh: cargo build --locked --release --example fam_size with no family, each
+#                          fam-<row> alone and all on (wallet always), each probe's size printed
 #   ua-rs-targets:         compile only, no run (MD-5, plan T0 / T18), wasm32-unknown-unknown, aarch64-linux-android (NDK clang, API 24), aarch64-apple-ios (macOS): cargo build --locked --lib --target <t> <cell> in ua-rs
 #                          for the default, --no-default-features, signers, json, pq, wallet, zether, pqz at n2048-kmax1024; then cargo build --locked --lib --target <t> in ua-c
 #   ua-deps:               cargo tree --locked -e normal for ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node (no lockfile moves);
@@ -65,9 +68,10 @@
 #   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; cargo test --locked --manifest-path rust/Cargo.toml
 #                          (the binding's own Rust tests: secrets never cross frb's codec; T15o); dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
-#   scaas-sdk:             in clients/scaas-sdk: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots;
+#   scaas-sdk:             in clients/scaas-sdk: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton;
 #                          cargo test --locked --no-default-features --features vault,file-store; cargo test --locked --lib --features <the same>,native-networks,raw-native;
-#                          cargo clippy --locked --all-targets --features <the same>,native-networks,raw-native -- -D warnings; per PQZ set
+#                          cargo test --locked --features <the same>,vectors --test pqchat_keys --test app_core_vault_rows (the test feature alone: a vectors build refuses
+#                          scaas-ua key handles until a test unlocks them); cargo clippy --locked --all-targets --features <the same>,vectors,native-networks,raw-native -- -D warnings; per PQZ set
 #                          (n2048-kmax1024, n2560-kmax16384, n2816-kmax65536): cargo test --locked --no-default-features --features vault,account,wallet,pqz,pqz-set-<set> --test sets;
 #                          cargo test --locked --test feature_tree (the e2e on anvil, 6 GB, stays the local gate sdk-e2e)
 #   scaas-sdk-wasm:        in clients/scaas-sdk: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet
@@ -75,6 +79,8 @@
 #                          generated FRB Dart surface of the whole SDK equals the committed one); in clients/scaas-sdk/ffi: cargo clippy --locked --all-targets
 #                          -- -D warnings; cargo build --locked; in clients/scaas-sdk/bindings/dart: dart pub get --enforce-lockfile; dart test (the load check,
 #                          the vault and keystore rows, the e2e smoke on a local anvil: foundry v1.8.5)
+#   scaas-cli:             in clients/scaas-cli: cargo test --locked; cargo test --locked --features dev-profiles (the review and the quote
+#                          before a submit, against the SDK tests' fake chain); cargo clippy --locked --all-targets --features dev-profiles -- -D warnings
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
 #                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
@@ -196,6 +202,7 @@ jobs:
       scaas_sdk: ${{ steps.f.outputs.scaas_sdk }}
       scaas_sdk_wasm: ${{ steps.f.outputs.scaas_sdk_wasm }}
       scaas_sdk_bindings: ${{ steps.f.outputs.scaas_sdk_bindings }}
+      scaas_cli: ${{ steps.f.outputs.scaas_cli }}
       keystore_vectors: ${{ steps.f.outputs.keystore_vectors }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
@@ -815,7 +822,11 @@ jobs:
             features: --no-default-features --features pq
             tests: --test pq --test ua_portable
           - cell: wallet-mlock
-            features: --no-default-features --features wallet,mlock
+            features: --no-default-features --features wallet,mlock,fam-evm,fam-hedera,fam-near,fam-algorand,fam-cosmos,fam-aptos,fam-solana,fam-soroban,fam-sui,fam-ton,fam-dot,fam-btc,fam-arweave
+          # plan T42: the core with no family (no fam-*): every UA kind, BIP-39 / BIP-32 / SLIP-10 / BIP-85, FeatureMissing
+          - cell: core
+            features: --no-default-features --features wallet
+            tests: --lib --test core_only --test wallet_pairing --test bls_multi --test wallet_webauthn --test bip85 --test wallet_pq
           - cell: zether-only
             features: --no-default-features --features wallet,zether,mlock
             tests: --lib --test facade_zether
@@ -828,6 +839,9 @@ jobs:
           - cell: roots
             features: --no-default-features --features roots
             tests: --test roots
+          - cell: app-core
+            features: --features app-core,vectors
+            tests: --test app_core
           - cell: pqvault
             features: --no-default-features --features pqvault
             tests: --test pqvault_pass
@@ -862,6 +876,27 @@ jobs:
       - name: pqz-read against anvil
         if: matrix.cell == 'default'
         run: cargo test --locked --test pqz_read --bin pqz-read -- --include-ignored
+
+  # Plan T42 (CLI-SDK-33 (31)): ua-rs with no family, each fam-<row> alone and all on, built in release, the size of each
+  # build's size probe printed (clients/ua-rs/runs/fam-sizes.sh; the record is clients/scaas-sdk/runs/2026-11-17-scaas-sdk-t42-sizes.txt)
+  ua-rs-features:
+    needs: changes
+    if: needs.changes.outputs.ua_rs == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/ua-rs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/ua-rs
+          key: fam
+      - name: none, each family alone, all on (release, sizes)
+        run: CAP='' bash runs/fam-sizes.sh
 
   # Compile only (no run; plan T0 had no NDK or Xcode, so Android and iOS are built here first). Falcon's C is skipped on wasm32
   # (KIND_UNAVAILABLE there), compiled by the NDK's clang and by Xcode.
@@ -1164,13 +1199,15 @@ jobs:
         with:
           workspaces: clients/scaas-sdk
       - name: cargo test (full feature set)
-        run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots
+        run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton
+      - name: the test feature vectors (pqchat-core T1 rows, PqVault V9 rows)
+        run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton,vectors --test pqchat_keys --test app_core_vault_rows
       - name: cargo test (vault and file store only)
         run: cargo test --locked --no-default-features --features vault,file-store
       - name: the raw native entry and native networks
-        run: cargo test --locked --lib --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,native-networks,raw-native
+        run: cargo test --locked --lib --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native
       - name: cargo clippy
-        run: cargo clippy --locked --all-targets --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,native-networks,raw-native -- -D warnings
+        run: cargo clippy --locked --all-targets --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton,vectors,native-networks,raw-native -- -D warnings
       - name: each other PQZ set
         run: |
           for s in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do
@@ -1197,6 +1234,30 @@ jobs:
           workspaces: clients/scaas-sdk
       - name: compiles for wasm32 (not run)
         run: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet
+
+  # the CLI `scaas` (plan T22, CLI-SDK-17): one command per SDK call, both builds (release profiles; dev-profiles)
+  scaas-cli:
+    needs: changes
+    if: needs.changes.outputs.scaas_cli == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-cli
+      - name: cargo test (the release build)
+        run: cargo test --locked
+      - name: cargo test (dev-profiles)
+        run: cargo test --locked --features dev-profiles
+      - name: cargo clippy
+        run: cargo clippy --locked --all-targets --features dev-profiles -- -D warnings
 
   # the generated bindings (spec §16): the FRB Dart surface regenerated equals the committed one; the reference library and
   # the Dart tests over it

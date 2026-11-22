@@ -1,0 +1,177 @@
+# EVM probes (NET-EVM-19 H1-H8; SDK plan T40), rewritten by `2026-11-22-evm-probes.py --summary` from the git-ignored logs; key | probe | samples | last verdict | facts | first .. last sample (UTC)
+arbitrum-mainnet | H1 | 1 | PASS | chain id 42161, block 0 0x7ee576b3…, 1 distinct block 0 over 1 samples | 2026-11-21T23:02:35Z .. 2026-11-21T23:02:35Z
+arbitrum-mainnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-21T23:02:44Z .. 2026-11-21T23:02:44Z
+arbitrum-mainnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-21T23:02:46Z .. 2026-11-21T23:02:46Z
+arbitrum-mainnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-21T23:02:49Z .. 2026-11-21T23:02:49Z
+arbitrum-mainnet | H5 | 1 | INFO | p99 3212 blocks, 1107 s over 2 endpoint samples (last [3212, 3211] blocks) | 2026-11-21T23:02:51Z .. 2026-11-21T23:02:51Z
+arbitrum-mainnet | H6 | 3 | INFO | largest span 0, 100000 | 2026-11-21T23:02:55Z .. 2026-11-21T23:04:53Z
+arbitrum-mainnet | H7 | 1 | PASS | finalized 526356460; finalized 526356460 | 2026-11-21T23:02:55Z .. 2026-11-21T23:02:55Z
+arbitrum-mainnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-21T23:02:58Z .. 2026-11-21T23:02:58Z
+arbitrum-mainnet | basefee | 1 | INFO | type 2 | 2026-11-21T23:03:14Z .. 2026-11-21T23:03:14Z
+arbitrum-mainnet | caps | 3 | INFO | block 1,125,899,906,842,624, tx cap none, published tx limit 32,000,000; mldsa44 NO, mldsa65 NO, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 NO | 2026-11-21T23:03:07Z .. 2026-11-21T23:51:07Z
+arbitrum-mainnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T23:03:13Z .. 2026-11-21T23:03:13Z
+arbitrum-mainnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:03:02Z .. 2026-11-21T23:03:02Z
+arbitrum-mainnet | fork | 1 | INFO | fork osaka | 2026-11-21T23:03:01Z .. 2026-11-21T23:03:01Z
+arbitrum-mainnet | l1fee | 1 | INFO | model in-estimate | 2026-11-21T23:03:17Z .. 2026-11-21T23:03:17Z
+arbitrum-testnet | H1 | 1 | PASS | chain id 421614, block 0 0x77194da4…, 1 distinct block 0 over 1 samples | 2026-11-21T23:05:00Z .. 2026-11-21T23:05:00Z
+arbitrum-testnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-21T23:05:17Z .. 2026-11-21T23:05:17Z
+arbitrum-testnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-21T23:05:21Z .. 2026-11-21T23:05:21Z
+arbitrum-testnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-21T23:05:24Z .. 2026-11-21T23:05:24Z
+arbitrum-testnet | H5 | 1 | INFO | p99 3166 blocks, 915 s over 2 endpoint samples (last [3165, 3166] blocks) | 2026-11-21T23:05:26Z .. 2026-11-21T23:05:26Z
+arbitrum-testnet | H6 | 1 | INFO | largest span 10000, 100000 | 2026-11-21T23:05:32Z .. 2026-11-21T23:05:32Z
+arbitrum-testnet | H7 | 1 | PASS | finalized 331495245; finalized 331495245 | 2026-11-21T23:05:33Z .. 2026-11-21T23:05:33Z
+arbitrum-testnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-21T23:05:36Z .. 2026-11-21T23:05:36Z
+arbitrum-testnet | basefee | 1 | INFO | type 2 | 2026-11-21T23:05:53Z .. 2026-11-21T23:05:53Z
+arbitrum-testnet | caps | 2 | INFO | block 1,125,899,906,842,624, tx cap none, published tx limit 32,000,000; mldsa44 NO, mldsa65 NO, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 NO | 2026-11-21T23:05:46Z .. 2026-11-21T23:51:11Z
+arbitrum-testnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T23:05:52Z .. 2026-11-21T23:05:52Z
+arbitrum-testnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:05:41Z .. 2026-11-21T23:05:41Z
+arbitrum-testnet | fork | 1 | INFO | fork osaka | 2026-11-21T23:05:40Z .. 2026-11-21T23:05:40Z
+arbitrum-testnet | l1fee | 2 | INFO | model in-estimate | 2026-11-21T23:05:56Z .. 2026-11-21T23:08:20Z
+base-mainnet | H1 | 1 | FAIL | chain id 8453, block 0 None…, 2 distinct block 0 over 1 samples | 2026-11-21T23:37:25Z .. 2026-11-21T23:37:25Z
+base-mainnet | H5 | 1 | INFO | p99 7674 blocks, 1535 s over 2 endpoint samples (last [7674, 5806] blocks) | 2026-11-21T23:37:26Z .. 2026-11-21T23:37:26Z
+base-mainnet | H7 | 1 | PASS | finalized 60563548; finalized 60563548 | 2026-11-21T23:37:27Z .. 2026-11-21T23:37:27Z
+base-mainnet | basefee | 1 | INFO | type 2 | 2026-11-21T23:37:39Z .. 2026-11-21T23:37:39Z
+base-mainnet | caps | 2 | INFO | block 40,000,000, tx cap none; mldsa44 NO, mldsa65 NO, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 NO | 2026-11-21T23:37:35Z .. 2026-11-21T23:51:23Z
+base-mainnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T23:37:39Z .. 2026-11-21T23:37:39Z
+base-mainnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:37:31Z .. 2026-11-21T23:37:31Z
+base-mainnet | fork | 1 | INFO | fork osaka | 2026-11-21T23:37:30Z .. 2026-11-21T23:37:30Z
+base-mainnet | l1fee | 1 | INFO | model op-stack | 2026-11-21T23:37:44Z .. 2026-11-21T23:37:44Z
+base-testnet | H1 | 1 | PASS | chain id 84532, block 0 0x0dcc9e08…, 1 distinct block 0 over 1 samples | 2026-11-21T23:39:47Z .. 2026-11-21T23:39:47Z
+base-testnet | H5 | 1 | INFO | p99 5469 blocks, 1094 s over 2 endpoint samples (last [5464, 5469] blocks) | 2026-11-21T23:39:49Z .. 2026-11-21T23:39:49Z
+base-testnet | H7 | 1 | PASS | finalized 61907129; finalized 61907129 | 2026-11-21T23:39:50Z .. 2026-11-21T23:39:50Z
+base-testnet | basefee | 1 | INFO | type 2 | 2026-11-21T23:40:07Z .. 2026-11-21T23:40:07Z
+base-testnet | caps | 2 | INFO | block 120,000,000, tx cap none; mldsa44 fits, mldsa65 fits, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 fits | 2026-11-21T23:39:59Z .. 2026-11-21T23:51:29Z
+base-testnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T23:40:07Z .. 2026-11-21T23:40:07Z
+base-testnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:39:54Z .. 2026-11-21T23:39:54Z
+base-testnet | fork | 1 | INFO | fork osaka | 2026-11-21T23:39:53Z .. 2026-11-21T23:39:53Z
+base-testnet | l1fee | 1 | INFO | model op-stack | 2026-11-21T23:40:12Z .. 2026-11-21T23:40:12Z
+celo-mainnet | H1 | 1 | PASS | chain id 42220, block 0 0x19ea3339…, 1 distinct block 0 over 1 samples | 2026-11-21T23:37:47Z .. 2026-11-21T23:37:47Z
+celo-mainnet | H5 | 1 | FAIL | the endpoints' finalized differ: gaps [1440, 1586281, 1442] blocks | 2026-11-21T23:37:49Z .. 2026-11-21T23:37:49Z
+celo-mainnet | H7 | 1 | PASS | finalized 83402067; finalized 83402067; finalized 83402067 | 2026-11-21T23:37:51Z .. 2026-11-21T23:37:51Z
+celo-mainnet | basefee | 1 | INFO | type 2 | 2026-11-21T23:39:26Z .. 2026-11-21T23:39:26Z
+celo-mainnet | caps | 2 | INFO | block 30,000,000, tx cap none; mldsa44 NO, mldsa65 NO, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 NO | 2026-11-21T23:38:02Z .. 2026-11-21T23:51:34Z
+celo-mainnet | codesize | 1 | INFO | runtime 65536 B, init 131072 B | 2026-11-21T23:39:25Z .. 2026-11-21T23:39:25Z
+celo-mainnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:37:57Z .. 2026-11-21T23:37:57Z
+celo-mainnet | fork | 1 | INFO | fork prague | 2026-11-21T23:37:55Z .. 2026-11-21T23:37:55Z
+celo-mainnet | l1fee | 1 | INFO | model op-stack | 2026-11-21T23:39:32Z .. 2026-11-21T23:39:32Z
+celo-testnet | H1 | 1 | PASS | chain id 11142220, block 0 0xabcc77fb…, 1 distinct block 0 over 1 samples | 2026-11-21T23:40:13Z .. 2026-11-21T23:40:13Z
+celo-testnet | H5 | 1 | INFO | p99 1575 blocks, 1575 s over 2 endpoint samples (last [1190, 1575] blocks) | 2026-11-21T23:40:15Z .. 2026-11-21T23:40:15Z
+celo-testnet | H7 | 1 | PASS | finalized 42019236; finalized 42018851 | 2026-11-21T23:40:16Z .. 2026-11-21T23:40:16Z
+celo-testnet | basefee | 1 | INFO | type 2 | 2026-11-21T23:41:20Z .. 2026-11-21T23:41:20Z
+celo-testnet | caps | 1 | INFO | block 30,000,000, tx cap none; mldsa65 NO, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 NO | 2026-11-21T23:40:25Z .. 2026-11-21T23:40:25Z
+celo-testnet | codesize | 1 | INFO | runtime 65536 B, init 131072 B | 2026-11-21T23:41:20Z .. 2026-11-21T23:41:20Z
+celo-testnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:40:20Z .. 2026-11-21T23:40:20Z
+celo-testnet | fork | 1 | INFO | fork prague | 2026-11-21T23:40:19Z .. 2026-11-21T23:40:19Z
+celo-testnet | l1fee | 1 | INFO | model op-stack | 2026-11-21T23:41:24Z .. 2026-11-21T23:41:24Z
+etc-mainnet | H1 | 1 | PASS | chain id 61, block 0 0xd4e56740…, 1 distinct block 0 over 1 samples | 2026-11-21T22:58:01Z .. 2026-11-21T22:58:01Z
+etc-mainnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-21T22:58:18Z .. 2026-11-21T22:58:18Z
+etc-mainnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-21T22:58:21Z .. 2026-11-21T22:58:21Z
+etc-mainnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-21T22:58:25Z .. 2026-11-21T22:58:25Z
+etc-mainnet | H5 | 1 | FAIL | no finalized block | 2026-11-21T22:58:26Z .. 2026-11-21T22:58:26Z
+etc-mainnet | H6 | 1 | INFO | largest span 10000, 100 | 2026-11-21T22:58:32Z .. 2026-11-21T22:58:32Z
+etc-mainnet | H7 | 1 | FAIL | finalized not served; finalized not served | 2026-11-21T22:58:34Z .. 2026-11-21T22:58:34Z
+etc-mainnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-21T22:58:38Z .. 2026-11-21T22:58:38Z
+etc-mainnet | basefee | 1 | INFO | type 0 | 2026-11-21T22:59:04Z .. 2026-11-21T22:59:04Z
+etc-mainnet | caps | 1 | INFO | block 8,000,000, tx cap none; mldsa65 NO, fndsa512 NO, slhdsa128s NO, fndsa1024 fits, mldsa87 NO | 2026-11-21T22:58:52Z .. 2026-11-21T22:58:52Z
+etc-mainnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T22:59:03Z .. 2026-11-21T22:59:03Z
+etc-mainnet | eip2537 | 1 | INFO | EIP-2537 absent | 2026-11-21T22:58:46Z .. 2026-11-21T22:58:46Z
+etc-mainnet | fork | 1 | INFO | fork shanghai | 2026-11-21T22:58:44Z .. 2026-11-21T22:58:44Z
+etc-mainnet | l1fee | 1 | INFO | model none | 2026-11-21T22:59:07Z .. 2026-11-21T22:59:07Z
+etc-testnet | H1 | 1 | PASS | chain id 63, block 0 0xa68ebde7…, 1 distinct block 0 over 1 samples | 2026-11-21T22:59:15Z .. 2026-11-21T22:59:15Z
+etc-testnet | H2 | 2 | PASS (earlier: FAIL 1) | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-21T22:59:31Z .. 2026-11-21T23:10:14Z
+etc-testnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-21T22:59:35Z .. 2026-11-21T22:59:35Z
+etc-testnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-21T22:59:39Z .. 2026-11-21T22:59:39Z
+etc-testnet | H5 | 1 | FAIL | no finalized block | 2026-11-21T22:59:40Z .. 2026-11-21T22:59:40Z
+etc-testnet | H6 | 1 | INFO | largest span 100000, 100000 | 2026-11-21T22:59:52Z .. 2026-11-21T22:59:52Z
+etc-testnet | H7 | 1 | FAIL | finalized not served; finalized not served | 2026-11-21T22:59:54Z .. 2026-11-21T22:59:54Z
+etc-testnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-21T22:59:58Z .. 2026-11-21T22:59:58Z
+etc-testnet | basefee | 1 | INFO | type 0 | 2026-11-21T23:00:26Z .. 2026-11-21T23:00:26Z
+etc-testnet | caps | 1 | INFO | block 8,000,000, tx cap none; mldsa65 NO, fndsa512 NO, slhdsa128s NO, fndsa1024 fits, mldsa87 NO | 2026-11-21T23:00:13Z .. 2026-11-21T23:00:13Z
+etc-testnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T23:00:24Z .. 2026-11-21T23:00:24Z
+etc-testnet | eip2537 | 1 | INFO | EIP-2537 absent | 2026-11-21T23:00:06Z .. 2026-11-21T23:00:06Z
+etc-testnet | fork | 1 | INFO | fork shanghai | 2026-11-21T23:00:04Z .. 2026-11-21T23:00:04Z
+etc-testnet | l1fee | 1 | INFO | model none | 2026-11-21T23:00:32Z .. 2026-11-21T23:00:32Z
+ethereum-mainnet | H1 | 1 | PASS | chain id 1, block 0 0xd4e56740…, 1 distinct block 0 over 1 samples | 2026-11-21T22:52:49Z .. 2026-11-21T22:52:49Z
+ethereum-mainnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-21T22:53:01Z .. 2026-11-21T22:53:01Z
+ethereum-mainnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-21T22:53:03Z .. 2026-11-21T22:53:03Z
+ethereum-mainnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-21T22:53:05Z .. 2026-11-21T22:53:05Z
+ethereum-mainnet | H5 | 1 | INFO | p99 95 blocks, 1140 s over 2 endpoint samples (last [95, 95] blocks) | 2026-11-21T22:53:06Z .. 2026-11-21T22:53:06Z
+ethereum-mainnet | H6 | 1 | INFO | largest span 1000, 100 | 2026-11-21T22:53:09Z .. 2026-11-21T22:53:09Z
+ethereum-mainnet | H7 | 1 | PASS | finalized 26466495; finalized 26466495 | 2026-11-21T22:53:10Z .. 2026-11-21T22:53:10Z
+ethereum-mainnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-21T22:53:12Z .. 2026-11-21T22:53:12Z
+ethereum-mainnet | basefee | 1 | INFO | type 2 | 2026-11-21T22:53:26Z .. 2026-11-21T22:53:26Z
+ethereum-mainnet | caps | 2 | UNREAD (earlier: INFO 1) | eth_call: HTTP 429 | 2026-11-21T22:53:21Z .. 2026-11-21T23:51:15Z
+ethereum-mainnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T22:53:25Z .. 2026-11-21T22:53:25Z
+ethereum-mainnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T22:53:17Z .. 2026-11-21T22:53:17Z
+ethereum-mainnet | fork | 1 | INFO | fork osaka | 2026-11-21T22:53:15Z .. 2026-11-21T22:53:15Z
+ethereum-mainnet | l1fee | 2 | INFO | model none | 2026-11-21T22:53:28Z .. 2026-11-21T22:57:51Z
+ethereum-testnet | H1 | 1 | PASS | chain id 11155111, block 0 0x25a5cc10…, 1 distinct block 0 over 1 samples | 2026-11-21T22:53:30Z .. 2026-11-21T22:53:30Z
+ethereum-testnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-21T22:53:40Z .. 2026-11-21T22:53:40Z
+ethereum-testnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-21T22:53:41Z .. 2026-11-21T22:53:41Z
+ethereum-testnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-21T22:53:46Z .. 2026-11-21T22:53:46Z
+ethereum-testnet | H5 | 2 | INFO (earlier: UNREAD 1) | p99 61 blocks, 804 s over 2 endpoint samples (last [61, 61] blocks) | 2026-11-21T22:54:27Z .. 2026-11-21T22:57:53Z
+ethereum-testnet | H6 | 2 | INFO (earlier: UNREAD 1) | largest span 10000, 100000 | 2026-11-21T22:55:13Z .. 2026-11-21T22:57:58Z
+ethereum-testnet | H7 | 1 | PASS | finalized 12184771; finalized 12184771 | 2026-11-21T22:55:53Z .. 2026-11-21T22:55:53Z
+ethereum-testnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-21T22:55:56Z .. 2026-11-21T22:55:56Z
+ethereum-testnet | basefee | 1 | INFO | type 2 | 2026-11-21T22:57:16Z .. 2026-11-21T22:57:16Z
+ethereum-testnet | caps | 1 | INFO | block 199,802,400, tx cap none; mldsa65 fits, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 fits | 2026-11-21T22:56:03Z .. 2026-11-21T22:56:03Z
+ethereum-testnet | codesize | 1 | INFO | runtime 65536 B, init 131072 B | 2026-11-21T22:57:16Z .. 2026-11-21T22:57:16Z
+ethereum-testnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T22:56:00Z .. 2026-11-21T22:56:00Z
+ethereum-testnet | fork | 1 | INFO | fork amsterdam | 2026-11-21T22:55:59Z .. 2026-11-21T22:55:59Z
+ethereum-testnet | l1fee | 1 | INFO | model none | 2026-11-21T22:57:19Z .. 2026-11-21T22:57:19Z
+linea-mainnet | H1 | 1 | PASS | chain id 59144, block 0 0xb6762a65…, 1 distinct block 0 over 1 samples | 2026-11-21T23:05:58Z .. 2026-11-21T23:05:58Z
+linea-mainnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-21T23:06:09Z .. 2026-11-21T23:06:09Z
+linea-mainnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-21T23:06:11Z .. 2026-11-21T23:06:11Z
+linea-mainnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-21T23:06:14Z .. 2026-11-21T23:06:14Z
+linea-mainnet | H5 | 2 | FAIL (earlier: INFO 1) | the endpoints' finalized differ: gaps [0, 414] blocks | 2026-11-21T23:06:16Z .. 2026-11-21T23:08:17Z
+linea-mainnet | H6 | 1 | INFO | largest span 100, 10000 | 2026-11-21T23:06:20Z .. 2026-11-21T23:06:20Z
+linea-mainnet | H7 | 1 | PASS | finalized 32676754; finalized 32676348 | 2026-11-21T23:06:21Z .. 2026-11-21T23:06:21Z
+linea-mainnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-21T23:06:24Z .. 2026-11-21T23:06:24Z
+linea-mainnet | basefee | 1 | INFO | type 2 | 2026-11-21T23:06:40Z .. 2026-11-21T23:06:40Z
+linea-mainnet | caps | 2 | INFO | block 2,000,000,000, tx cap none; mldsa44 fits, mldsa65 fits, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 fits | 2026-11-21T23:06:33Z .. 2026-11-21T23:51:19Z
+linea-mainnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T23:06:39Z .. 2026-11-21T23:06:39Z
+linea-mainnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:06:29Z .. 2026-11-21T23:06:29Z
+linea-mainnet | fork | 1 | INFO | fork osaka | 2026-11-21T23:06:28Z .. 2026-11-21T23:06:28Z
+linea-mainnet | l1fee | 2 | INFO | model linea | 2026-11-21T23:06:43Z .. 2026-11-21T23:08:15Z
+linea-testnet | H1 | 1 | PASS | chain id 59141, block 0 0x65a64c82…, 1 distinct block 0 over 1 samples | 2026-11-21T23:08:23Z .. 2026-11-21T23:08:23Z
+linea-testnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-21T23:08:44Z .. 2026-11-21T23:08:44Z
+linea-testnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-21T23:08:47Z .. 2026-11-21T23:08:47Z
+linea-testnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-21T23:08:53Z .. 2026-11-21T23:08:53Z
+linea-testnet | H5 | 1 | FAIL | the endpoints' finalized differ: gaps [0, 5688] blocks | 2026-11-21T23:08:56Z .. 2026-11-21T23:08:56Z
+linea-testnet | H6 | 1 | INFO | largest span 10000, 1000 | 2026-11-21T23:09:05Z .. 2026-11-21T23:09:05Z
+linea-testnet | H7 | 1 | PASS | finalized 33748595; finalized 33742904 | 2026-11-21T23:09:07Z .. 2026-11-21T23:09:07Z
+linea-testnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-21T23:09:11Z .. 2026-11-21T23:09:11Z
+linea-testnet | basefee | 1 | INFO | type 2 | 2026-11-21T23:09:37Z .. 2026-11-21T23:09:37Z
+linea-testnet | caps | 1 | INFO | block 2,000,000,000, tx cap none; mldsa65 fits, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 fits | 2026-11-21T23:09:25Z .. 2026-11-21T23:09:25Z
+linea-testnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T23:09:35Z .. 2026-11-21T23:09:35Z
+linea-testnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:09:19Z .. 2026-11-21T23:09:19Z
+linea-testnet | fork | 1 | INFO | fork osaka | 2026-11-21T23:09:17Z .. 2026-11-21T23:09:17Z
+linea-testnet | l1fee | 1 | INFO | model linea | 2026-11-21T23:09:43Z .. 2026-11-21T23:09:43Z
+op-mainnet | H1 | 1 | PASS | chain id 10, block 0 0x7ca38a19…, 1 distinct block 0 over 1 samples | 2026-11-21T23:00:34Z .. 2026-11-21T23:00:34Z
+op-mainnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-21T23:00:44Z .. 2026-11-21T23:00:44Z
+op-mainnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-21T23:00:46Z .. 2026-11-21T23:00:46Z
+op-mainnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-21T23:00:49Z .. 2026-11-21T23:00:49Z
+op-mainnet | H5 | 1 | INFO | p99 654 blocks, 1308 s over 2 endpoint samples (last [523, 654] blocks) | 2026-11-21T23:00:51Z .. 2026-11-21T23:00:51Z
+op-mainnet | H6 | 1 | INFO | largest span 1000, 10000 | 2026-11-21T23:00:57Z .. 2026-11-21T23:00:57Z
+op-mainnet | H7 | 1 | PASS | finalized 159850982; finalized 159850982 | 2026-11-21T23:00:58Z .. 2026-11-21T23:00:58Z
+op-mainnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-21T23:01:00Z .. 2026-11-21T23:01:00Z
+op-mainnet | basefee | 1 | INFO | type 2 | 2026-11-21T23:01:16Z .. 2026-11-21T23:01:16Z
+op-mainnet | caps | 2 | INFO | block 40,000,000, tx cap none; mldsa44 NO, mldsa65 NO, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 NO | 2026-11-21T23:01:08Z .. 2026-11-21T23:50:57Z
+op-mainnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T23:01:15Z .. 2026-11-21T23:01:15Z
+op-mainnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:01:05Z .. 2026-11-21T23:01:05Z
+op-mainnet | fork | 1 | INFO | fork osaka | 2026-11-21T23:01:04Z .. 2026-11-21T23:01:04Z
+op-mainnet | l1fee | 1 | INFO | model op-stack | 2026-11-21T23:01:26Z .. 2026-11-21T23:01:26Z
+op-testnet | H1 | 1 | PASS | chain id 11155420, block 0 0x102de6ff…, 1 distinct block 0 over 1 samples | 2026-11-21T23:01:33Z .. 2026-11-21T23:01:33Z
+op-testnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-21T23:01:47Z .. 2026-11-21T23:01:47Z
+op-testnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-21T23:01:54Z .. 2026-11-21T23:01:54Z
+op-testnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-21T23:01:58Z .. 2026-11-21T23:01:58Z
+op-testnet | H5 | 1 | INFO | p99 583 blocks, 1166 s over 2 endpoint samples (last [583, 583] blocks) | 2026-11-21T23:02:00Z .. 2026-11-21T23:02:00Z
+op-testnet | H6 | 1 | INFO | largest span 10000, 10000 | 2026-11-21T23:02:06Z .. 2026-11-21T23:02:06Z
+op-testnet | H7 | 1 | PASS | finalized 51749206; finalized 51749206 | 2026-11-21T23:02:07Z .. 2026-11-21T23:02:07Z
+op-testnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-21T23:02:10Z .. 2026-11-21T23:02:10Z
+op-testnet | basefee | 1 | INFO | type 2 | 2026-11-21T23:02:28Z .. 2026-11-21T23:02:28Z
+op-testnet | caps | 2 | INFO | block 40,000,000, tx cap none; mldsa44 NO, mldsa65 NO, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 NO | 2026-11-21T23:02:20Z .. 2026-11-21T23:51:03Z
+op-testnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T23:02:27Z .. 2026-11-21T23:02:27Z
+op-testnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:02:16Z .. 2026-11-21T23:02:16Z
+op-testnet | fork | 1 | INFO | fork osaka | 2026-11-21T23:02:15Z .. 2026-11-21T23:02:15Z
+op-testnet | l1fee | 1 | INFO | model op-stack | 2026-11-21T23:02:33Z .. 2026-11-21T23:02:33Z

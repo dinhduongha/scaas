@@ -13,6 +13,126 @@ pub struct ExternalPull {
     base: String,
     db: String,
     key: String,
+    /// Plan T28: the node's own queue beside the pull path, on one family chain's lanes (`with_queue`).
+    queue: Option<std::sync::Arc<OwnQueue>>,
+}
+
+/// Plan T28 (gateway.md `POST /v1/ops`): the namespace of the jobs the gateway accepts (door A, G2 durable).
+pub const GATEWAY_NAMESPACE: &str = "~gateway";
+
+/// Plan T28: a family chain's own queue, the `~gateway` rows of the node store, read and moved by the same lane calls as the
+/// pull path (`relay_poll_ref`, `relay_claim`, `relay_report`, `node_config_ref`'s `inflight`). A row's job id on the lane is
+/// `-uid`: the pull path's ids are positive, so one id names one source. ponytail: one id space split by sign; the node's
+/// queue alone (NODE-JOB-21) drops the split when the pull path goes.
+pub struct OwnQueue {
+    pub store: crate::store::Store,
+    pub chain_key: String,
+    /// a lane's worker name (`node#lane`) → its store label (the lane row a lease names)
+    pub labels: std::collections::HashMap<String, String>,
+}
+
+impl OwnQueue {
+    /// The lane's `Job` of a stored row: `{"id": -uid, "kind": "signed_op", "op": <the stored op>}`.
+    fn job(r: &crate::store::JobRow) -> Result<Job> {
+        let op: Value = serde_json::from_slice(r.payload.as_deref().unwrap_or_default())
+            .with_context(|| format!("~gateway job {}: payload", r.uid))?;
+        Ok(serde_json::from_value(
+            json!({"id": -r.uid, "kind": r.kind, "op": op}),
+        )?)
+    }
+
+    fn serves(&self, chain: &Value) -> bool {
+        chain.as_str() == Some(self.chain_key.as_str())
+    }
+
+    async fn poll(&self, limit: u32) -> Result<Vec<Job>> {
+        let rows = self
+            .store
+            .queued_jobs(GATEWAY_NAMESPACE, &self.chain_key, limit.into())
+            .await?;
+        rows.iter().map(Self::job).collect()
+    }
+
+    /// `queued → leased` by the lane `worker` names; a row another lane took (`Moved`) or an unread outcome is not ours.
+    async fn claim(&self, uid: i64, worker: &str) -> Result<bool> {
+        use crate::store::{Fields, State, Transition};
+        let Some(label) = self.labels.get(worker) else {
+            return Ok(false);
+        };
+        let f = Fields {
+            lane_label: Some(label.clone()),
+            ..Fields::default()
+        };
+        let t = self
+            .store
+            .transition(
+                uid,
+                State::Queued,
+                State::Leased,
+                &f,
+                crate::store::now_ms(),
+            )
+            .await?;
+        Ok(matches!(t, Transition::Ok { .. }))
+    }
+
+    /// A lane's report on row `uid`: the move from the row's state to `chain_state`, the store's table deciding (a report it
+    /// refuses is an error the caller logs, never a silent change).
+    async fn report(&self, uid: i64, r: &Report) -> Result<()> {
+        use crate::store::{Fields, State, Transition};
+        let row = self
+            .store
+            .job(uid)
+            .await?
+            .ok_or_else(|| anyhow!("~gateway job {uid}: no row"))?;
+        let to = State::try_from(r.chain_state.clone()).map_err(|e| anyhow!(e))?;
+        let f = Fields {
+            outer_nonce: match to {
+                State::Signed => r.outer_nonce.map(i64::try_from).transpose()?,
+                _ => None,
+            },
+            tx_hash: r
+                .tx_hash
+                .clone()
+                .filter(|_| matches!(to, State::Signed | State::Broadcast)),
+            error: r.error.as_deref().map(crate::chain::redact_urls),
+            ..Fields::default()
+        };
+        match self
+            .store
+            .transition(uid, row.state, to, &f, crate::store::now_ms())
+            .await?
+        {
+            Transition::Ok { .. } => Ok(()),
+            t => Err(anyhow!(
+                "~gateway job {uid}: {} -> {}: {t:?}",
+                row.state.as_str(),
+                to.as_str()
+            )),
+        }
+    }
+
+    /// The rows lane `worker` holds (`leased`, `signed`, `broadcast`), as the pull path's `inflight`.
+    async fn inflight(&self, worker: &str) -> Result<Vec<InflightJob>> {
+        let Some(label) = self.labels.get(worker) else {
+            return Ok(vec![]);
+        };
+        let rows = self
+            .store
+            .lane_live(GATEWAY_NAMESPACE, &self.chain_key, label)
+            .await?;
+        rows.iter()
+            .map(|r| {
+                Ok(InflightJob {
+                    job_id: -r.uid,
+                    nonce: r.outer_nonce.and_then(|n| u64::try_from(n).ok()),
+                    state: r.state.as_str().into(),
+                    tx_hash: r.tx_hash.clone(),
+                    payload: Self::job(r)?,
+                })
+            })
+            .collect()
+    }
 }
 
 pub use crate::config::TokenCfg;
@@ -163,7 +283,14 @@ impl ExternalPull {
             base: cfg.url.trim_end_matches('/').to_string(),
             db: cfg.database.clone(),
             key,
+            queue: None,
         })
+    }
+
+    /// Plan T28: this client's lanes also take the jobs of `queue` (a family chain's `~gateway` rows).
+    pub fn with_queue(mut self, queue: OwnQueue) -> Self {
+        self.queue = Some(std::sync::Arc::new(queue));
+        self
     }
 
     pub async fn call<T: DeserializeOwned>(
@@ -208,35 +335,75 @@ impl ExternalPull {
         if let Some(r) = relayer {
             body["relayer_address"] = json!(r);
         }
-        if let Some(w) = worker {
+        if let Some(w) = &worker {
             body["worker"] = json!(w);
         }
-        self.call("blockchain.chain", "node_config", body).await
+        let mut nc: NodeConfig = self.call("blockchain.chain", "node_config", body).await?;
+        if let (Some(q), Some(w)) = (&self.queue, &worker) {
+            if q.serves(&chain) {
+                nc.inflight.extend(q.inflight(w).await?);
+            }
+        }
+        Ok(nc)
     }
 
     pub async fn relay_poll(&self, chain: u64, limit: u32) -> Result<Vec<Job>> {
         self.relay_poll_ref(json!(chain), limit).await
     }
 
+    /// The jobs to claim: the own queue's first (plan T28), then the pull path's; a pull path that fails while the own queue has
+    /// work still hands that work out.
     pub async fn relay_poll_ref(&self, chain: Value, limit: u32) -> Result<Vec<Job>> {
-        self.call(
-            "blockchain.relay.job",
-            "relay_poll",
-            json!({"evm_chain_number": chain, "limit": limit}),
-        )
-        .await
+        let mut own = match &self.queue {
+            Some(q) if q.serves(&chain) => q.poll(limit).await?,
+            _ => vec![],
+        };
+        let pulled: Result<Vec<Job>> = self
+            .call(
+                "blockchain.relay.job",
+                "relay_poll",
+                json!({"evm_chain_number": chain, "limit": limit}),
+            )
+            .await;
+        match pulled {
+            Ok(p) => own.extend(p),
+            Err(e) if own.is_empty() => return Err(e),
+            Err(e) => tracing::warn!("relay_poll: {e:#}; the own queue's jobs go on"),
+        }
+        Ok(own)
     }
 
     pub async fn relay_claim(&self, ids: &[i64], worker: &str) -> Result<Vec<i64>> {
-        self.call(
-            "blockchain.relay.job",
-            "relay_claim",
-            json!({"job_ids": ids, "worker": worker}),
-        )
-        .await
+        let (own, pulled): (Vec<i64>, Vec<i64>) = ids.iter().partition(|&&i| i < 0);
+        let mut won = vec![];
+        if let Some(q) = &self.queue {
+            for id in own {
+                if q.claim(-id, worker).await? {
+                    won.push(id);
+                }
+            }
+        }
+        if !pulled.is_empty() {
+            let p: Vec<i64> = self
+                .call(
+                    "blockchain.relay.job",
+                    "relay_claim",
+                    json!({"job_ids": pulled, "worker": worker}),
+                )
+                .await?;
+            won.extend(p);
+        }
+        Ok(won)
     }
 
     pub async fn relay_report(&self, r: &Report) -> Result<()> {
+        if r.job_id < 0 {
+            let q = self
+                .queue
+                .as_ref()
+                .ok_or_else(|| anyhow!("job {}: no own queue", r.job_id))?;
+            return q.report(-r.job_id, r).await;
+        }
         let mut v = serde_json::to_value(r)?;
         // Fable E N-8: no endpoint URL in a job's error (the one sink of every runner's report)
         if let Some(e) = r.error.as_deref() {
@@ -293,9 +460,152 @@ impl ExternalPull {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use alloy::sol_types::SolCall;
+
+    /// Plan T28: a node store of its own (a temp file) knowing one family chain `key` and its lane `label`.
+    pub(crate) async fn own_store(key: &str, family: &str, label: &str) -> crate::store::Store {
+        let dir = std::env::temp_dir().join(format!(
+            "scaas-own-{}-{:016x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let st = crate::store::create(
+            &format!("sqlite://{}", dir.join("node.db").display()),
+            "test",
+        )
+        .await
+        .unwrap();
+        let chain = crate::store::ChainRow {
+            chain_key: key.into(),
+            family: family.into(),
+            state: "active".into(),
+            profile: "private".into(),
+            finality_mode: "instant".into(),
+            finality_depth: 0,
+            finality_quorum: 1,
+            fee_recipient: None,
+            poll_ms: 1000,
+            stuck_after_secs: 60,
+            max_gas_per_tx: 3_000_000,
+            max_fee_cap_gwei: 500,
+            max_index_lag: 100,
+            breaker: "{}".into(),
+            dex: None,
+            gossip: false,
+            exclusive_ms: 7000,
+        };
+        let set = crate::store::ConfigSet {
+            chains: vec![chain],
+            lanes: vec![crate::store::LaneRow {
+                chain_key: key.into(),
+                label: label.into(),
+                account_index: 0,
+                journal_max: None,
+            }],
+            ..Default::default()
+        };
+        crate::store::bootstrap(st.as_ref(), &set, 1).await.unwrap();
+        st
+    }
+
+    /// Plan T28: a `~gateway` `signed_op` row as the gateway writes it (origin key = digest).
+    pub(crate) async fn own_job(st: &crate::store::Store, key: &str, digest: u8, op: Value) -> i64 {
+        let payload = serde_json::to_vec(&op).unwrap();
+        let j = crate::store::NewJob {
+            namespace: GATEWAY_NAMESPACE.into(),
+            origin: crate::store::Origin {
+                scope: "gateway".into(),
+                producer: "gateway".into(),
+                key: format!("0x{}", alloy::hex::encode([digest; 32])),
+                generation: 0,
+            },
+            client_ref: None,
+            chain_key: key.into(),
+            kind: "signed_op".into(),
+            digest: Some([digest; 32]),
+            payload_hash: alloy::primitives::keccak256(&payload).0,
+            payload,
+            valid_until: 4_000_000_000,
+            lane_hint: None,
+            bus_scope: "restricted".into(),
+            private_window_secs: 0,
+        };
+        match st.accept(&j, crate::store::now_ms()).await.unwrap() {
+            crate::store::Accept::Created(r) => r.uid,
+            a => panic!("{a:?}"),
+        }
+    }
+
+    /// Plan T28: the own queue's rows go out as `-uid`, a lease names the worker's lane (a worker without a lane claims
+    /// nothing: the control), a report moves the row by the store's table and one it refuses is an error, and the lane's rows
+    /// come back as `inflight`.
+    #[tokio::test]
+    async fn the_own_queue_hands_out_claims_and_moves_gateway_rows() {
+        use crate::store::State;
+        let st = own_store("cosmos:t", "cosmos", "pk:aa").await;
+        let uid = own_job(
+            &st,
+            "cosmos:t",
+            7,
+            json!({"family": "cosmos", "valid_until": 4_000_000_000u64}),
+        )
+        .await;
+        let q = OwnQueue {
+            store: st.clone(),
+            chain_key: "cosmos:t".into(),
+            labels: [("n#0".to_string(), "pk:aa".to_string())].into(),
+        };
+        assert!(
+            !q.serves(&json!("cosmos:other")),
+            "another chain's lanes never see it"
+        );
+        let jobs = q.poll(5).await.unwrap();
+        assert_eq!(
+            (jobs.len(), jobs[0].id, jobs[0].kind.as_deref()),
+            (1, -uid, Some("signed_op"))
+        );
+        assert!(
+            !q.claim(uid, "n#9").await.unwrap(),
+            "a worker without a lane leases nothing"
+        );
+        assert!(q.claim(uid, "n#0").await.unwrap());
+        assert!(!q.claim(uid, "n#0").await.unwrap(), "leased once");
+        assert!(
+            q.poll(5).await.unwrap().is_empty(),
+            "a leased row is not handed out"
+        );
+        let inflight = q.inflight("n#0").await.unwrap();
+        assert_eq!(
+            (inflight[0].job_id, inflight[0].tx_hash.as_deref()),
+            (-uid, None)
+        );
+        let rep = |state: &str| Report {
+            job_id: -uid,
+            chain_state: state.into(),
+            tx_hash: Some("0x01".into()),
+            outer_nonce: Some(3),
+            ..Default::default()
+        };
+        q.report(uid, &rep("signed")).await.unwrap();
+        let row = st.job(uid).await.unwrap().unwrap();
+        assert_eq!(
+            (row.state, row.outer_nonce, row.tx_hash.as_deref()),
+            (State::Signed, Some(3), Some("0x01"))
+        );
+        assert!(
+            q.report(uid, &rep("leased")).await.is_err(),
+            "signed -> leased is no move of the table"
+        );
+        q.report(uid, &rep("mined")).await.unwrap();
+        assert_eq!(st.job(uid).await.unwrap().unwrap().state, State::Mined);
+        assert!(
+            q.inflight("n#0").await.unwrap().is_empty(),
+            "a mined row is no longer the lane's"
+        );
+    }
 
     #[test]
     fn job_payload_from_external_pull_decodes() {

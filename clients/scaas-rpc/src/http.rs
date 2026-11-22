@@ -222,7 +222,7 @@ impl Http {
                 body,
                 cap,
                 deadline,
-                ("application/json", true),
+                ("application/json", true, None),
             )
             .await?;
         if status >= 500 {
@@ -251,7 +251,7 @@ impl Http {
         deadline: Option<Instant>,
     ) -> Result<(u16, Vec<u8>), EndpointFailure> {
         let (status, b) = self
-            .raw_any(list, i, method, path, body, ctype, cap, deadline)
+            .raw_any(list, i, method, path, body, ctype, cap, deadline, None)
             .await?;
         if status >= 500 {
             return Err(self.fail(list, i, FailureKind::Http, &format!("HTTP {status}")));
@@ -272,6 +272,7 @@ impl Http {
         ctype: &str,
         cap: usize,
         deadline: Option<Instant>,
+        header: Option<(&str, &str)>,
     ) -> Result<(u16, Vec<u8>), EndpointFailure> {
         self.send_any(
             list,
@@ -281,7 +282,7 @@ impl Http {
             body,
             cap,
             deadline,
-            (ctype, false),
+            (ctype, false, header),
         )
         .await
     }
@@ -306,7 +307,7 @@ impl Http {
                 body,
                 cap,
                 deadline,
-                ("application/json", true),
+                ("application/json", true, None),
             )
             .await?;
         if !(200..300).contains(&status) {
@@ -327,6 +328,7 @@ impl Http {
         body: Option<Vec<u8>>,
         deadline: Option<Instant>,
         ctype: &str,
+        header: Option<(&str, &str)>,
     ) -> Result<(url::Url, reqwest::RequestBuilder), EndpointFailure> {
         let e = list
             .endpoints()
@@ -381,6 +383,9 @@ impl Http {
                     .header("x-scaas-signature", sig);
             }
         }
+        if let Some((name, value)) = header {
+            req = req.header(name, value);
+        }
         if !body.is_empty() {
             req = req.header(reqwest::header::CONTENT_TYPE, ctype).body(body);
         }
@@ -399,9 +404,9 @@ impl Http {
         body: Option<Vec<u8>>,
         cap: usize,
         deadline: Option<Instant>,
-        (ctype, scan): (&str, bool),
+        (ctype, scan, header): (&str, bool, Option<(&str, &str)>),
     ) -> Result<(u16, Vec<u8>), EndpointFailure> {
-        let (_, req) = self.build(list, i, method, path, body, deadline, ctype)?;
+        let (_, req) = self.build(list, i, method, path, body, deadline, ctype, header)?;
         let net = |err: reqwest::Error| {
             let kind = if err.is_timeout() {
                 FailureKind::Timeout
@@ -455,9 +460,9 @@ impl Http {
         body: Option<Vec<u8>>,
         cap: usize,
         deadline: Option<Instant>,
-        (ctype, scan): (&str, bool),
+        (ctype, scan, header): (&str, bool, Option<(&str, &str)>),
     ) -> Result<(u16, Vec<u8>), EndpointFailure> {
-        let (url, req) = self.build(list, i, method, path, body, deadline, ctype)?;
+        let (url, req) = self.build(list, i, method, path, body, deadline, ctype, header)?;
         let net = |err: reqwest::Error| {
             let kind = if err.is_timeout() {
                 FailureKind::Timeout

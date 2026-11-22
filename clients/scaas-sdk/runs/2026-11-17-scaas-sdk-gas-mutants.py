@@ -67,7 +67,7 @@ MUTANTS = [
     ),
     (
         "the verify row's signer ignored",
-        [(G, "let v = r.verify.iter().find(|v| v.signer == signer)?;", "let v = r.verify.iter().find(|_| true)?;")],
+        [(G, ".filter(|v| v.signer == signer && !v.line.write);", ".filter(|v| !v.line.write);")],
         U + "an_operation_without_a_gas_row_is_gas_unquoted",
     ),
     (
@@ -193,7 +193,7 @@ MUTANTS = [
     ),
     (
         "the file: one signer twice",
-        [(C, "            if rows.verify.iter().any(|o| o.signer == row.signer) {", "            if false {")],
+        [(C, ".any(|o| o.signer == row.signer && o.line == row.line)", ".any(|_| false)")],
         U + "gas_table_parse_checks",
     ),
     (

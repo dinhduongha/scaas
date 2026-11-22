@@ -1,0 +1,19 @@
+{
+  "evmFork": "prague",
+  "codeSizeLimit": 65536,
+  "initCodeSizeLimit": 131072,
+  "txGasCap": null,
+  "blockGasLimit": 30000000,
+  "finality": "tag",
+  "txType": 2,
+  "l1Fee": "op-stack",
+  "eip2537": true,
+  "status": "draft",
+  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (probes of 2026-11-22: H1, H5, H7, fork, eip2537, caps, codesize, basefee, l1fee; SDK plan T38); no CLZ (fork prague by requestsHash); runtime 65,536 B and init 131,072 B measured; txGasCap none detected; disabledKinds: the owner's ruling of 2026-11-22 (decisions CLI-SDK-32 (2), Base and Celo)",
+  "disabledKinds": [
+    "mldsa44",
+    "mldsa65",
+    "mldsa87",
+    "pqz"
+  ]
+}

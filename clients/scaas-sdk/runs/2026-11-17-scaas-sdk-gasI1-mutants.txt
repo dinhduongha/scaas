@@ -1,7 +1,7 @@
-# gasI1 mutants at commit 120b1db5d (name | outcome | test)
+# gasI1 mutants (name | outcome | commit | test | first failure line)
 base per_item not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
 verify per_item not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
-the signer's verify row reads no count | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
+the signer's verify row reads no count | killed | e2d9383a5 dirty | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count | panicked at src/op/gas.rs:1703:9:
 an attached signature's count read as the operation's | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
 not saturating | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
 an unknown count falls through (no refusal) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
@@ -19,4 +19,4 @@ an unknown item refused as Argument | killed | ../../scripts/capped cargo test -
 base_count not enforced | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_item_parse
 the per-item gas unbounded | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_item_parse
 an unpaired part not checked | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_item_parse
-20 mutants, 20 killed, 0 survived, 0 not loaded
+20 mutants, 20 killed, 0 survived, 0 not loaded, 0 other failure

@@ -14,41 +14,15 @@ use scaas_sdk::{
     ListedToken, RuntimeChoice, Sdk, SdkConfig,
 };
 use scaas_ua::wallet::{Network, SecretBytes, Wallet};
-use std::process::{Child, Command, Stdio};
+use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 use zeroize::Zeroizing;
 
 const PASS: &str = "river-otter-7 ünï";
-const REPO: &str = "bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author capable act festival slice deposit sauce coconut afford frown better";
-/// anvil's first key (a public test key): the deployer
-const DEPLOYER: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-const DEPLOYER_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-
-struct Anvil(Child);
-impl Drop for Anvil {
-    fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
-    }
-}
-
-fn sc() -> String {
-    format!("{}/../../smartcontracts/evm", env!("CARGO_MANIFEST_DIR"))
-}
-
-fn cast(args: &[&str]) -> String {
-    let out = Command::new("cast")
-        .args(args)
-        .output()
-        .expect("cast in PATH");
-    assert!(
-        out.status.success(),
-        "cast {args:?}: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    String::from_utf8(out.stdout).unwrap().trim().to_string()
-}
+#[path = "common/anvil.rs"]
+mod anvil_chain;
+use anvil_chain::*;
 
 fn sec(s: &str) -> Arc<SecretBytes> {
     Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(s.as_bytes().to_vec())).unwrap())
@@ -61,111 +35,6 @@ fn endpoint(url: &str) -> EndpointConfig {
         label: None,
         auth: None,
     }
-}
-
-/// An `anvil` (stopped on drop) on a port the OS gave as free, ready to answer as chain 31337 while the child is alive; its
-/// URL. Never a computed port: another node of the machine (another agent's `anvil`, the testnet stack) is never asked.
-async fn anvil() -> (Anvil, String) {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .expect("a free port")
-        .port();
-    let rpc = format!("http://127.0.0.1:{port}");
-    let mut a = Anvil(
-        Command::new("anvil")
-            .args([
-                "--chain-id",
-                "31337",
-                "--hardfork",
-                "amsterdam",
-                "--gas-limit",
-                "200000000",
-                "--code-size-limit",
-                "65536",
-                "--port",
-                &port.to_string(),
-                "--silent",
-            ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("anvil in PATH"),
-    );
-    for _ in 0..100 {
-        assert!(
-            a.0.try_wait().expect("anvil's state").is_none(),
-            "anvil exited (port {port} taken?)"
-        );
-        let id = Command::new("cast")
-            .args(["chain-id", "--rpc-url", &rpc])
-            .output();
-        if id.is_ok_and(|o| {
-            o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == "31337"
-        }) {
-            assert!(
-                a.0.try_wait().expect("anvil's state").is_none(),
-                "the node on {port} is not this anvil"
-            );
-            return (a, rpc);
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    panic!("anvil on {port} never answered as chain 31337");
-}
-
-/// The contracts' own `script/Deploy.s.sol` on `rpc` with `env`; its book (`deployments/<name>.json`, removed after reading).
-/// One `forge script` at a time: the tests run in parallel, and forge's broadcast cache of a chain id takes a lock.
-fn deploy(rpc: &str, name: &str, env: &[(&str, &str)]) -> serde_json::Value {
-    static FORGE: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let _one = FORGE
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let status = Command::new("forge")
-        .current_dir(sc())
-        .args([
-            "script",
-            "script/Deploy.s.sol",
-            "--rpc-url",
-            rpc,
-            "--broadcast",
-            "--slow",
-            "--silent",
-            "--disable-code-size-limit",
-            "--sender",
-            DEPLOYER_ADDRESS,
-        ])
-        .env("PRIVATE_KEY", DEPLOYER)
-        .env("FOUNDRY_PROFILE", "scaas-testnet")
-        // owner X1: the registry's txGasCap, the deploy book's value; a local anvil applies EIP-7825's 2^24
-        .env("TX_GAS_CAP", "16777216")
-        .env("DEPLOY_NAME", name)
-        .envs(env.iter().copied())
-        .status()
-        .expect("forge in PATH");
-    assert!(status.success(), "forge script failed");
-    let book = format!("{}/deployments/{name}.json", sc());
-    let dep = serde_json::from_str(&std::fs::read_to_string(&book).unwrap()).unwrap();
-    let _ = std::fs::remove_file(&book);
-    dep
-}
-
-/// The seed's EVM key 0 (the token holder, the payer), funded with 10 ether.
-fn funded_holder(rpc: &str) -> String {
-    let holder = Wallet::from_mnemonic(REPO, "")
-        .unwrap()
-        .native_key(Network::Evm, 0, None)
-        .unwrap()
-        .address()
-        .unwrap();
-    cast(&[
-        "rpc",
-        "--rpc-url",
-        rpc,
-        "anvil_setBalance",
-        &holder,
-        "0x8ac7230489e80000",
-    ]);
-    holder
 }
 
 /// An SDK over one `anvil` profile (`Depth(0)`: anvil mines a block per transaction) with the repository seed imported; the
@@ -278,6 +147,9 @@ async fn e2e_pay_on_anvil() {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     };
     let (sdk, seed) = sdk_on(profile).await;
     let key = KeyRef::Native {
@@ -453,6 +325,9 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     })
     .await;
     let zether = 0x0141; // zether-bls12381
@@ -624,6 +499,9 @@ fn registry_profile(rpc: &str, registry: &str, cap: Option<u64>) -> ChainProfile
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     }
 }
 
@@ -765,6 +643,9 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     };
     // the receiver's app and the sender's app: two SDKs (the same test seed, roles apart)
     let (receiver, rseed) = sdk_on(profile.clone()).await;
@@ -895,6 +776,9 @@ fn account_profile(rpc: &str) -> ChainProfile {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     }
 }
 
@@ -1753,6 +1637,9 @@ async fn e2e_dex_cancel_order_on_anvil() {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     };
     let (sdk, seed) = sdk_on(profile).await;
     let key = KeyRef::Native {
@@ -1907,6 +1794,9 @@ async fn e2e_bls_multi_on_anvil() {
         verifier_policy: scaas_rpc::Policy::Failover,
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     };
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![profile],
@@ -2094,6 +1984,9 @@ async fn e2e_bls_multi_64_on_a_node() {
         verifier_policy: scaas_rpc::Policy::Failover,
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     };
     // the app raises `max_gas` for this run: the default 2^24 holds the whole gas limit
     let sdk = Sdk::open(SdkConfig {
@@ -2459,4 +2352,201 @@ fn receipt_line(rpc: &str, payer: &str, s: &OpState) -> (String, Option<u64>) {
         }
         other => (format!("state {other:?}"), None),
     }
+}
+
+/// Plan T21's two path controls (spec §12.2, §18 "App cores"): an app record signed through the SDK is accepted by the deployed
+/// registry itself, path A by `requirePortableApp` (a registered `secp256k1` UA), path B by `requireAuthorized` (the same UA,
+/// and the seed's native EVM key over `UAAuth`), and `verify_app_record` agrees; the control's twin (one signature byte
+/// changed) is refused by the registry.
+#[cfg(feature = "app-core")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_app_records_on_anvil() {
+    use scaas_sdk::app_core::{AppCore, AppDesc, AppPath, AppUaSig};
+    const SECP: u16 = 0x0108;
+    const APP_ID: &str = "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a";
+    let (_anvil, rpc) = anvil().await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    funded_holder(rpc);
+    let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    let (sdk, seed) = sdk_on(registry_profile(rpc, &registry, Some(1 << 24))).await;
+    let ua = register_with_sdk(&sdk, &seed, SECP, 0, false).await;
+    let core = AppCore::new(
+        sdk.clone(),
+        AppDesc {
+            app_id: Some(APP_ID.into()),
+            name: "E2E App".into(),
+            class: None,
+            labels: vec!["scaas/e2e-app/v1/".into()],
+        },
+    )
+    .unwrap();
+    let record = |domain: serde_json::Value| {
+        let mut fields = vec![
+            serde_json::json!({"name": "name", "type": "string"}),
+            serde_json::json!({"name": "version", "type": "string"}),
+        ];
+        for (k, t) in [
+            ("chainId", "uint256"),
+            ("verifyingContract", "address"),
+            ("salt", "bytes32"),
+        ] {
+            if domain.get(k).is_some() {
+                fields.push(serde_json::json!({"name": k, "type": t}));
+            }
+        }
+        serde_json::json!({
+            "types": {"EIP712Domain": fields, "Note": [{"name": "id", "type": "bytes32"}, {"name": "body", "type": "string"}]},
+            "primaryType": "Note",
+            "domain": domain,
+            "message": {"id": format!("0x{}", "11".repeat(32)), "body": "hello"},
+        })
+        .to_string()
+    };
+    let hx = |b: &[u8]| {
+        format!(
+            "0x{}",
+            b.iter().map(|x| format!("{x:02x}")).collect::<String>()
+        )
+    };
+    let ok = |args: &[&str]| {
+        let out = Command::new("cast")
+            .args(["call", "--rpc-url", rpc, &registry])
+            .args(args)
+            .output()
+            .expect("cast in PATH");
+        out.status.success()
+    };
+    let flipped = |s: &[u8]| {
+        let mut s = s.to_vec();
+        s[7] ^= 1;
+        s
+    };
+    let key = KeyRef::Ua {
+        seed: seed.clone(),
+        kind: SECP,
+        account: 0,
+        index: 0,
+    };
+    let uasig = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
+
+    // path A: requirePortableApp(ua, appId, typedDigest, UASig{"", sig, []})
+    let pa = record(serde_json::json!({"name": "E2E App", "version": "1", "salt": APP_ID}));
+    let sa = core
+        .sign_app_record(key.clone(), AppPath::Portable, pa.clone())
+        .await
+        .unwrap();
+    let call_a = |sig: &[u8]| {
+        ok(&[
+            &format!("requirePortableApp(bytes32,bytes32,bytes32,{uasig})"),
+            &ua,
+            APP_ID,
+            &sa.digest,
+            &format!("({},{},[])", hx(&sa.key_data), hx(sig)),
+        ])
+    };
+    assert!(
+        call_a(&sa.signature),
+        "requirePortableApp accepts the SDK's record"
+    );
+    assert!(
+        !call_a(&flipped(&sa.signature)),
+        "the twin: one byte changed"
+    );
+    let v = |p: AppPath, t: String, u: String, key_data: Vec<u8>, signature: Vec<u8>| {
+        let core = core.clone();
+        async move {
+            core.verify_app_record(
+                "anvil".into(),
+                u,
+                p,
+                t,
+                AppUaSig {
+                    key_data,
+                    signature,
+                    members: vec![],
+                },
+            )
+            .await
+            .unwrap()
+        }
+    };
+    assert!(
+        v(
+            AppPath::Portable,
+            pa.clone(),
+            ua.clone(),
+            vec![],
+            sa.signature.clone()
+        )
+        .await
+    );
+
+    // path B: requireAuthorized(ua, appPurpose(appId), typedDigest, UASig{keyData, sig, []}), by the UA and by the native key
+    let cb = record(
+        serde_json::json!({"name": "E2E App", "version": "1", "chainId": "31337",
+        "verifyingContract": "0x00000000000000000000000000000000000000aa"}),
+    );
+    let b = || AppPath::ChainBound {
+        chain: "anvil".into(),
+        purpose: None,
+    };
+    let app_id: [u8; 32] = alloy::hex::decode(&APP_ID[2..])
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let purpose = hx(&scaas_ua::ua_portable::app_purpose(&app_id).unwrap());
+    let sb = core.sign_app_record(key, b(), cb.clone()).await.unwrap();
+    let call_b = |who: &str, key_data: &[u8], sig: &[u8], digest: &str| {
+        ok(&[
+            &format!("requireAuthorized(bytes32,bytes32,bytes32,{uasig})"),
+            who,
+            &purpose,
+            digest,
+            &format!("({},{},[])", hx(key_data), hx(sig)),
+        ])
+    };
+    assert!(
+        call_b(&ua, &sb.key_data, &sb.signature, &sb.digest),
+        "requireAuthorized accepts the UA's record"
+    );
+    assert!(
+        !call_b(&ua, &sb.key_data, &flipped(&sb.signature), &sb.digest),
+        "the twin"
+    );
+    assert!(
+        v(
+            b(),
+            cb.clone(),
+            ua.clone(),
+            sb.key_data.clone(),
+            sb.signature.clone()
+        )
+        .await
+    );
+    let native = KeyRef::Native {
+        seed: seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let sn = core.sign_app_record(native, b(), cb.clone()).await.unwrap();
+    let holder = Wallet::from_mnemonic(REPO, "")
+        .unwrap()
+        .native_key(Network::Evm, 0, None)
+        .unwrap()
+        .address()
+        .unwrap()
+        .to_ascii_lowercase();
+    let nid = format!("0x{:0>64}", holder.trim_start_matches("0x"));
+    assert!(
+        call_b(&nid, &[], &sn.signature, &sn.digest),
+        "requireAuthorized accepts the native key's record"
+    );
+    assert!(
+        !call_b(&nid, &[], &flipped(&sn.signature), &sn.digest),
+        "the twin"
+    );
+    assert!(v(b(), cb, nid, vec![], sn.signature.clone()).await);
 }

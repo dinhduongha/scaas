@@ -38,8 +38,9 @@
 //! ```
 use super::eip712::{from_hex, u256_dec, u256_from, U256};
 use super::signer::{SignRequest, Signer};
-use super::{bounded, Error, NativeKey, Result};
+use super::{bounded, Error, NativeKey, Network, Result};
 use crate::keccak256;
+#[cfg(feature = "fam-evm")]
 use alloy_rlp::Header;
 use serde_json::{Map, Value};
 
@@ -118,8 +119,14 @@ pub struct SignedTx {
 
 // --- RLP: each item encoded on its own, lists assembled from encoded items ---
 
+// plan T42: alloy-rlp is `fam-evm`'s; without it [`EvmTx::items`] is `FeatureMissing` first, so these empty forms are never read
+#[cfg(feature = "fam-evm")]
 fn rlp_bytes(b: &[u8]) -> Vec<u8> {
     alloy_rlp::encode(b)
+}
+#[cfg(not(feature = "fam-evm"))]
+fn rlp_bytes(_: &[u8]) -> Vec<u8> {
+    Vec::new()
 }
 /// A 256-bit integer: its minimal big-endian bytes (0 is the empty string).
 fn rlp_uint(x: &U256) -> Vec<u8> {
@@ -128,9 +135,27 @@ fn rlp_uint(x: &U256) -> Vec<u8> {
             .unwrap_or_default(),
     )
 }
+#[cfg(feature = "fam-evm")]
 fn rlp_u64(x: u64) -> Vec<u8> {
     alloy_rlp::encode(x)
 }
+#[cfg(feature = "fam-evm")]
+fn rlp_u128(x: u128) -> Vec<u8> {
+    alloy_rlp::encode(x)
+}
+#[cfg(not(feature = "fam-evm"))]
+fn rlp_u64(_: u64) -> Vec<u8> {
+    Vec::new()
+}
+#[cfg(not(feature = "fam-evm"))]
+fn rlp_u128(_: u128) -> Vec<u8> {
+    Vec::new()
+}
+#[cfg(not(feature = "fam-evm"))]
+fn rlp_list(_: &[Vec<u8>]) -> Vec<u8> {
+    Vec::new()
+}
+#[cfg(feature = "fam-evm")]
 fn rlp_list(items: &[Vec<u8>]) -> Vec<u8> {
     let payload_length = items.iter().map(Vec::len).sum();
     let mut out = Vec::with_capacity(payload_length + 9);
@@ -188,6 +213,7 @@ impl EvmTx {
     /// The RLP items of the signed fields in their order (type 0: without the EIP-155 tail); `Argument` for chain id 0 or a
     /// type-3 transaction with no blob hash.
     fn items(&self) -> Result<Vec<Vec<u8>>> {
+        Network::Evm.require()?;
         if self.chain_id() == 0 {
             return Err(Error::Argument);
         }
@@ -331,7 +357,7 @@ impl EvmTx {
             .ok_or(Error::Argument)?;
         let v_item = match self {
             EvmTx::Legacy { chain_id, .. } => {
-                alloy_rlp::encode(u128::from(*chain_id) * 2 + 35 + u128::from(y_parity))
+                rlp_u128(u128::from(*chain_id) * 2 + 35 + u128::from(y_parity))
             }
             _ => rlp_u64(u64::from(y_parity)),
         };
