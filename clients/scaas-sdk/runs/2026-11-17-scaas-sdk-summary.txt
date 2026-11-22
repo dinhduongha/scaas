@@ -252,7 +252,6 @@ node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # vectors, and the non-EVM set), its tests handoff 8 and soroban_ops 8; scaas-cli clippy --all-targets --features dev-profiles
 # and tests/cli.rs 13 passed (one_command_per_sdk_call_both_ways, every_signing_command_asks_first: its missing run of
 # pqvault-sign's `app-core sign-pqvault-record` added); docs; format.sh --check rust js py after git add -N.
-features | 028da021c | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 rpc-clippy | 028da021c | 0 | -
 ua-clippy | 028da021c | 0 | -
 ua-arweave | 028da021c | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
@@ -260,14 +259,12 @@ cli | 028da021c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 sdk-clippy-default | 5eeed4adf | 0 | -
 sdk-clippy-min | 5eeed4adf | 0 | -
 sdk-soroban-e2e | 5eeed4adf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-docs | 5eeed4adf | 0 | -
 sdk-min | 5eeed4adf | 0 | 74 passed, 0 failed, 0 ignored (16 binaries)
 sdk-noevm | 5eeed4adf | 0 | 157 passed, 0 failed, 1 ignored (23 binaries)
 sdk-clippy-noevm | 5eeed4adf | 0 | -
 sdk-arweave | 5eeed4adf | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 sdk-wasm | 5eeed4adf | 0 | -
 sdk-clippy | 5eeed4adf | 0 | -
-mutants-check | 7c637b66f | 0 | -
 gas-gen | 7c637b66f | 0 | -
 sdk-test | 7c637b66f | 0 | 437 passed, 0 failed, 18 ignored (42 binaries)
 # T39 / T25 (2026-11-22, branch sdk-round-end): every step's last row above is rc 0 (sdk-test 437 passed at 363151f8d, after
@@ -276,3 +273,6 @@ sdk-test | 7c637b66f | 0 | 437 passed, 0 failed, 18 ignored (42 binaries)
 # (docs, node) fixed on ua-rs-sign at fe435934b. Local only: the Nethermind copy (PQZ debit green; e2e_bls_multi_64_on_a_node
 # red GasAboveTxCap, open: runs/2026-11-20-m20-nethermind-summary.txt), the Soroban e2e (sdk-soroban-e2e, green).
 # Mutants: 70 reruns, 70 killed (plan T39). origin/ua-rs-sign b0ee76349 (pqvault-core, url 2.5.9) merged before T25.
+docs | 88e469e6b | 0 | -
+mutants-check | 88e469e6b | 0 | -
+features | 88e469e6b | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
