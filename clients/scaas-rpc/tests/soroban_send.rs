@@ -53,7 +53,7 @@ fn transaction_data_rows_read_to_their_named_fields() {
         .iter()
         .filter(|r| r.get("dataXdr").is_some())
         .collect();
-    assert_eq!(invokes.len(), 2);
+    assert_eq!(invokes.len(), 3);
     for r in invokes {
         let d = tx_data(&hexb(&r["dataXdr"])).unwrap();
         let n = &r["op"]["invoke"]["data"];

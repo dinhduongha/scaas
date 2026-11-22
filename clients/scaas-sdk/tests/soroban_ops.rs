@@ -865,5 +865,18 @@ async fn a_source_account_entry_only_when_the_subject_pays() {
     let id = t.w.soroban_submit(p, q).await.unwrap();
     let env = t.node.lock().unwrap().sent[0].clone();
     assert_eq!(&env[8..40], &strkey_key(&g(0)), "the source is the subject");
+    let sig = hexb(pay_row()["signature"].as_str().unwrap());
+    assert!(
+        !env.windows(64).any(|w| w == sig.as_slice()),
+        "no op signature: the transaction's authorizes it"
+    );
+    // the auth list of one, SOROBAN_CREDENTIALS_SOURCE_ACCOUNT, a contract function of the token
+    let mut source_entry = vec![0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+    source_entry.extend_from_slice(&strkey_key(fam()["token"].as_str().unwrap()));
+    assert!(
+        env.windows(source_entry.len())
+            .any(|w| w == source_entry.as_slice()),
+        "one SourceAccount entry"
+    );
     assert_eq!(t.w.soroban_follow(id).await.unwrap(), "landed");
 }
