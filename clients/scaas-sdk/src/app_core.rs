@@ -945,19 +945,22 @@ impl AppCore {
         })
     }
 
-    /// The file of `object` under the `File` handle `key`, after `scaas-ua`'s checks (the length, the tag, the frame's `len`
-    /// against `size`, the zero pad, SHA-256 against `sha256`) and only then, as `Plaintext`. Run it after the read's check of
-    /// `ctSha256` (`ArweaveFiles::fetch_file`); a cache of opened files is keyed by `sha256`.
+    /// The file of `object` under the `File` handle `key`, after `scaas-ua`'s checks: before any decryption the length
+    /// (`FileLength`) and SHA-256 of the object against `ct_sha256` (`FileHashMismatch`; pqchat-core T10b: on every open path,
+    /// whoever fetched the bytes), then the tag, the frame's `len` against `size`, the zero pad, SHA-256 against `sha256`, and
+    /// only then, as `Plaintext`. A cache of opened files is keyed by `sha256`.
     pub fn open_file(
         &self,
         key: Arc<AppKey>,
         object: Vec<u8>,
         size: u64,
         sha256: Vec<u8>,
+        ct_sha256: Vec<u8>,
     ) -> Result<SecretBytes, SdkError> {
         let sha: [u8; 32] = sha256.try_into().map_err(|_| SdkError::Argument)?;
+        let ct: [u8; 32] = ct_sha256.try_into().map_err(|_| SdkError::Argument)?;
         let pt = self.with(&[&key], |s, hs| {
-            Ok(s.open_file(at(hs, 0)?, &object, size, &sha)?)
+            Ok(s.open_file(at(hs, 0)?, &object, size, &sha, &ct)?)
         })?;
         SecretBytes::from_zeroizing(pt).map_err(ua)
     }

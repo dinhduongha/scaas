@@ -773,6 +773,7 @@ fn confirm_class(sdk: &str) -> Option<&'static str> {
             "bls_multi_part",
             "bls_multi_pop_part",
             "pqchat_seal_message",
+            "pqchat_seal_file_message",
             "prepare_app_call",
             // SDK plan T41.soroban: the signer's hand-off, the subject's op signed, the payer's native send signed
             "soroban_submit",
@@ -1225,6 +1226,9 @@ fn every_signing_command_asks_first() {
                 }
                 "app-core pqchat-seal-message" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-seal-message", "--account", sg, "--k", "k",
                     "--pos", "k", "--header", zero::<scaas_sdk::pqchat_keys::PqMessageHeader>().to_string(), "--content-json", "{}"])),
+                "app-core pqchat-seal-file-message" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-seal-file-message", "--account", sg,
+                    "--k", "k", "--pos", "k", "--header", zero::<scaas_sdk::pqchat_keys::PqMessageHeader>().to_string(), "--fields-json", "{}",
+                    "--file-key", "k"])),
                 "app-core pqchat-sign-session" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-sign-session", "--account", sg, "--k", "k",
                     "--r", zero::<scaas_sdk::pqchat_keys::PqSessionNew>().to_string()])),
                 "app-core pqchat-sign-epoch" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-sign-epoch", "--account", sg, "--k", "k",

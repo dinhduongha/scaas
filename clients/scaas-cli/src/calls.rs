@@ -21,7 +21,7 @@ use scaas_sdk::vault::{
     DeriveFromSignature, Generate, ImportKey, ImportWords, Keystore, Remove, SeedBackup, Unlock,
 };
 use scaas_sdk::wallet::*;
-use scaas_sdk::{GasTable, Sdk};
+use scaas_sdk::{GasTable, Sdk, SdkError, SecretBytes};
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
 
@@ -601,9 +601,9 @@ calls! { cx;
         handle(s.key, json!({"key": "an app key handle (never readable)", "object": h(&s.object), "ct_sha256": h(&s.ct_sha256),
             "sha256": h(&s.sha256), "size": s.size}))
     };
-    "app-core open-file" "AppCore::open_file" {key: H<Arc<AppKey>>, object: Vec<u8>, size: u64, sha256: Vec<u8>} => {
-        // the plaintext of a file whose key the caller holds (`Plaintext` only), after every check
-        let p = cx.app()?.open_file(key.0, object, size, sha256)?;
+    "app-core open-file" "AppCore::open_file" {key: H<Arc<AppKey>>, object: Vec<u8>, size: u64, sha256: Vec<u8>, ct_sha256: Vec<u8>} => {
+        // the plaintext of a file whose key the caller holds (`Plaintext` only), after every check (ctSha256 first)
+        let p = cx.app()?.open_file(key.0, object, size, sha256, ct_sha256)?;
         p.with(|b| hexed("plaintext", b))
     };
     "app-core seal-key" "AppCore::seal_key" {under: H<Arc<AppKey>>, key: H<Arc<AppKey>>, aad: Vec<u8>} => hexed("wire", &cx.app()?.seal_key(under.0, key.0, aad)?);
@@ -653,6 +653,15 @@ calls! { cx;
     "app-core pqchat-seal-message" "AppCore::pqchat_seal_message" {account: KeyRef, k: H<Arc<AppKey>>, pos: H<Arc<AppKey>>, header: PqMessageHeader, content_json: String} @sign => {
         cx.confirm(json!({"sign": "a PqChat message", "account": account, "header": header}))?;
         js(cx.app()?.pqchat_seal_message(account, k.0, pos.0, header, content_json).await?)
+    };
+    "app-core pqchat-seal-file-message" "AppCore::pqchat_seal_file_message" {account: KeyRef, k: H<Arc<AppKey>>, pos: H<Arc<AppKey>>, header: PqMessageHeader, fields_json: String, file_key: H<Arc<AppKey>>} @sign => {
+        cx.confirm(json!({"sign": "a PqChat file message", "account": account, "header": header, "file": fields_json}))?;
+        js(cx.app()?.pqchat_seal_file_message(account, k.0, pos.0, header, fields_json, file_key.0).await?)
+    };
+    "app-core pqchat-open-file" "AppCore::pqchat_open_file" {content: Vec<u8>, object: Vec<u8>} => {
+        // the file named by an opened content (`pqchat-open-message`'s), after the length and ctSha256 checks
+        let c = Arc::new(SecretBytes::from_zeroizing(zeroize::Zeroizing::new(content)).map_err(SdkError::Ua)?);
+        let p = cx.app()?.pqchat_open_file(c, object)?; p.with(|b| hexed("file", b))
     };
     "app-core pqchat-sign-session" "AppCore::pqchat_sign_session" {account: KeyRef, k: H<Arc<AppKey>>, r: PqSessionNew} @sign => {
         cx.confirm(json!({"sign": "a PqChat session", "account": account, "record": r}))?; js(cx.app()?.pqchat_sign_session(account, k.0, r).await?)

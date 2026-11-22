@@ -637,13 +637,27 @@ mod app {
         let ct: [u8; 32] = a.ct_sha256.clone().try_into().unwrap();
         let got = f.fetch_file(&a.url, a.size, ct).await.unwrap();
         let pt = app
-            .open_file(a.key.clone(), got.clone(), a.size, a.sha256.clone())
+            .open_file(
+                a.key.clone(),
+                got.clone(),
+                a.size,
+                a.sha256.clone(),
+                a.ct_sha256.clone(),
+            )
             .unwrap();
         pt.with(|b| assert_eq!(b, b"an attachment"));
         assert!(app
-            .open_file(a.key.clone(), got.clone(), a.size + 1, a.sha256.clone())
+            .open_file(
+                a.key.clone(),
+                got.clone(),
+                a.size + 1,
+                a.sha256.clone(),
+                a.ct_sha256.clone()
+            )
             .is_err());
-        assert!(app.open_file(a.key, got, a.size, vec![0; 32]).is_err());
+        assert!(app
+            .open_file(a.key, got, a.size, vec![0; 32], a.ct_sha256.clone())
+            .is_err());
     }
 
     /// The process count of `UploadSign`'s signatures (feature `vectors`), else none.

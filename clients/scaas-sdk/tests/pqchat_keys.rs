@@ -1346,3 +1346,202 @@ async fn cards_sign_and_verify() {
         "Argument"
     );
 }
+
+/// pqchat-core T10b (owner 2026-11-22, "2 hàm mới + app_id PqChat"): (b) the `fileMessage` row's ciphertext opens to its
+/// content at the sender's position, and `pqchat_open_file` opens the row's object named by it (the object built by
+/// `scaas-ua`'s vectors seal under the row's file key, the same bytes `seal_for_arweave` posts); every refusal row by name.
+/// (a) `pqchat_seal_file_message` on the account's own chain: the content it seals is the row's (the key entered from the
+/// handle, never given), the key in no byte that leaves; a handle of another usage `AppKeyUsage`; the sealer's refusals.
+#[tokio::test(flavor = "multi_thread")]
+async fn file_content_rows() {
+    let _one = ONE.lock().await;
+    let (sdk, seed, _c) = on_fake().await;
+    let a = AppCore::new(sdk, desc(&[PQC])).unwrap();
+    let m = pq("messages");
+    let f = &m["fileMessage"];
+    let r = &f["record"];
+    let k = a
+        .vectors_import(&seed, a32(&f["K"]), AppKeyUsage::Derive)
+        .unwrap();
+    let pos = |sender: String, counter: u64| {
+        let p0 = a
+            .pqchat_chain(
+                k.clone(),
+                s(&r["sessionId"]),
+                s(&r["epochId"]),
+                sender,
+                s(&r["device"]),
+            )
+            .unwrap();
+        a.pqchat_advance(p0, counter).unwrap()
+    };
+    let counter = r["counter"].as_u64().unwrap();
+    let record = PqChatMessage {
+        session_id: s(&r["sessionId"]),
+        epoch_id: s(&r["epochId"]),
+        sender: s(&r["sender"]),
+        device: s(&r["device"]),
+        counter,
+        parents: r["parents"].as_array().unwrap().iter().map(s).collect(),
+        ciphertext: unhex(&r["ciphertext"]),
+    };
+    let content = Arc::new(
+        a.pqchat_open_message(pos(s(&r["sender"]), counter), record)
+            .unwrap(),
+    );
+    assert_eq!(content.with(|b| b.to_vec()), s(&f["content"]).as_bytes());
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let uk = w.app_keys();
+    let fk = uk
+        .vectors_import(&a32(&f["fileKey"]), scaas_ua::wallet::KeyUsage::File)
+        .unwrap();
+    let file = unhex(&f["file"]);
+    let object = uk.vectors_seal_file(fk, &file).unwrap().object;
+    assert_eq!(object.len() as u64, f["objectLength"].as_u64().unwrap());
+    let got = a.pqchat_open_file(content.clone(), object.clone()).unwrap();
+    assert_eq!(got.with(|b| b.to_vec()), file);
+    let canon = |v: &Value| {
+        let c = scaas_ua::wallet::pqchat_keys::canonical_json(v).unwrap();
+        Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(c.into_bytes())).unwrap())
+    };
+    for x in m["fileOpenRefused"].as_array().unwrap() {
+        let mut o = object.clone();
+        match x["change"].as_str() {
+            Some("drop-last") => drop(o.pop()),
+            Some("append-zero") => o.push(0),
+            Some("flip-1000") => o[1000] ^= 1,
+            _ => {}
+        }
+        let c = x.get("content").map_or(content.clone(), canon);
+        let want = x["code"].as_str().unwrap_or("Ok");
+        let want = if want == "file" {
+            "PqChatContent"
+        } else {
+            want
+        };
+        assert_eq!(code(a.pqchat_open_file(c, o)), want, "{}", x["name"]);
+    }
+    for x in m["fileContentRefused"].as_array().unwrap() {
+        assert_eq!(
+            code(a.pqchat_open_file(canon(&x["content"]), object.clone())),
+            "PqChatContent",
+            "{}",
+            x["name"]
+        );
+        assert_eq!(
+            code(a.pqchat_open_file(canon(&x["twin"]), object.clone())),
+            "Ok"
+        );
+    }
+    // (a) on the account's own chain
+    let me = format!("0x{}", hexs(&w.ua_key(0x0131, 0, 0).unwrap().ua().unwrap()));
+    let own = pos(me.clone(), counter);
+    let header = PqMessageHeader {
+        session_id: s(&r["sessionId"]),
+        epoch_id: s(&r["epochId"]),
+        device: s(&r["device"]),
+        counter,
+        parents: r["parents"].as_array().unwrap().iter().map(s).collect(),
+    };
+    let file_key = || {
+        a.vectors_import(&seed, a32(&f["fileKey"]), AppKeyUsage::File)
+            .unwrap()
+    };
+    let sealed = a
+        .pqchat_seal_file_message(
+            ua(&seed, 0x0131),
+            k.clone(),
+            own.clone(),
+            header.clone(),
+            s(&f["sealed"]),
+            file_key(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(sealed.record.sender, me);
+    let back = a
+        .pqchat_open_message(own.clone(), sealed.record.clone())
+        .unwrap();
+    assert_eq!(back.with(|b| b.to_vec()), s(&f["content"]).as_bytes());
+    let key = unhex(&f["fileKey"]);
+    let hexkey = s(&f["fileKey"]);
+    let js = serde_json::to_string(&sealed).unwrap();
+    assert!(
+        !js.contains(&hexkey[2..]),
+        "the key in no field that leaves"
+    );
+    for b in [
+        &sealed.inner,
+        &sealed.env,
+        &sealed.payload,
+        &sealed.record.ciphertext,
+    ] {
+        assert!(!b.windows(32).any(|x| x == &key[..]));
+    }
+    let data = a.random_key(&seed, AppKeyUsage::Data).unwrap();
+    assert_eq!(
+        code(
+            a.pqchat_seal_file_message(
+                ua(&seed, 0x0131),
+                k.clone(),
+                own.clone(),
+                header.clone(),
+                s(&f["sealed"]),
+                data
+            )
+            .await
+        ),
+        "AppKeyUsage"
+    );
+    for x in m["fileSealRefused"].as_array().unwrap() {
+        let seal = |v: &Value| {
+            a.pqchat_seal_file_message(
+                ua(&seed, 0x0131),
+                k.clone(),
+                own.clone(),
+                header.clone(),
+                v.to_string(),
+                file_key(),
+            )
+        };
+        assert_eq!(
+            code(seal(&x["content"]).await),
+            "PqChatContent",
+            "{}",
+            x["name"]
+        );
+        assert_eq!(code(seal(&x["twin"]).await), "Ok", "{}", x["name"]);
+    }
+}
+
+/// pqchat-core T10b, the class fix: `AppCore::open_file` checks the length and `ctSha256` before any decryption.
+#[tokio::test(flavor = "multi_thread")]
+async fn open_file_checks_ct_sha256_first() {
+    let _one = ONE.lock().await;
+    let (sdk, seed, _c) = on_fake().await;
+    let a = AppCore::new(sdk, desc(&[PQC])).unwrap();
+    let s = a.seal_file(&seed, b"hello".to_vec()).unwrap();
+    let open = |o: Vec<u8>, ct: Vec<u8>| a.open_file(s.key.clone(), o, 5, s.sha256.clone(), ct);
+    assert_eq!(
+        open(s.object.clone(), s.ct_sha256.clone())
+            .unwrap()
+            .with(|b| b.to_vec()),
+        b"hello",
+        "control"
+    );
+    let mut flip = s.object.clone();
+    flip[100] ^= 1;
+    assert_eq!(code(open(flip, s.ct_sha256.clone())), "FileHashMismatch");
+    assert_eq!(
+        code(open(s.object.clone(), vec![0; 32])),
+        "FileHashMismatch"
+    );
+    assert_eq!(
+        code(open(
+            s.object[..s.object.len() - 1].to_vec(),
+            s.ct_sha256.clone()
+        )),
+        "FileLength"
+    );
+    assert_eq!(code(open(s.object.clone(), vec![0; 31])), "Argument");
+}

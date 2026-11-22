@@ -368,8 +368,9 @@ user, who may re-post the same bytes by hand; the bytes are kept until settlemen
 names an `ar://` object is written only after one gateway read of the object has passed the check. `fetch_file(app, url, size,
 ct_sha256) -> FileObject` refuses a malformed `url`, and a `size` whose bucket is above the platform's cap, before any request;
 reads through CLI-RPC-13 with the exact length `bucket(size) + 16`, marked as feeding a decryption, with SHA-256 equal to
-`ct_sha256` as the gateway's acceptance check. `open_file(app, object, key, size, sha256) -> Plaintext` checks the tag, the frame,
-the zero pad, `size` and `sha256` in `ua-rs` before any plaintext leaves it; a failure is `FileHashMismatch` (or the read's
+`ct_sha256` as the gateway's acceptance check. `open_file(app, object, key, size, sha256, ct_sha256) -> Plaintext` checks the
+exact length and SHA-256 of the object against `ct_sha256` before any decryption, whoever fetched the bytes (pqchat-core T10b),
+then the tag, the frame, the zero pad, `size` and `sha256` in `ua-rs` before any plaintext leaves it; a failure is `FileHashMismatch` (or the read's
 error), shown on the device only, and nothing the client sends depends on it ([ARCH-POS-13](../decisions.md#ARCH-POS-13)). It
 runs on the user's action, or for the 2^16-B bucket automatically if the app allows it. The gateway and bundler lists are the
 release's pinned data, with `named` entries from the operator or holder. The user is told, before the first upload, that the
@@ -381,7 +382,12 @@ tier; the user's **self-pay** (Turbo credits from the user's own wallet, or a pe
 operator's payer (NODE-SPN-05, optional, an operator convenience). **As built** (BUILT, UNAUDITED; feature `arweave`, without the
 EVM part: `src/arweave.rs` `ArweaveFiles` (`upload_file`, `keep_up`, `fetch_file`), `ArweaveConfig` with `Payer::{None,
 SelfPay, Operator}`; with `app-core`: `AppCore::seal_file`, `open_file` (every store) and `seal_for_arweave`; tests
-`tests/arweave.rs`; decisions CLI-SDK-33 (66)). The kept bytes are the app core's (`KeptUpload`); `keep_up(kept, now)` takes the
+`tests/arweave.rs`; decisions CLI-SDK-33 (66)). PqChat's `file` content (pqchat-core T10b, owner 2026-11-22; feature
+`pqchat-records`; [CLI-PQC-02](../decisions.md#CLI-PQC-02)'s Change of 2026-11-23): `pqchat_seal_file_message(account, k, pos,
+header, fields_json, file_key)` seals a `file` content given without its key, the key entered from the `File` handle inside
+`ua-rs`; `pqchat_open_file(content, object)` opens the object a received content names, its length and `ctSha256` checked
+before any decryption, the key read inside `ua-rs` (BUILT, UNAUDITED; CLI `app-core pqchat-seal-file-message`, `app-core
+pqchat-open-file`; tests `tests/pqchat_keys.rs`). The kept bytes are the app core's (`KeptUpload`); `keep_up(kept, now)` takes the
 app's clock.
 
 ## 8. Runtime, events, errors
