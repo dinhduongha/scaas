@@ -383,7 +383,7 @@ operator's payer (NODE-SPN-05, optional, an operator convenience). **As built** 
 EVM part: `src/arweave.rs` `ArweaveFiles` (`upload_file`, `keep_up`, `fetch_file`), `ArweaveConfig` with `Payer::{None,
 SelfPay, Operator}`; with `app-core`: `AppCore::seal_file`, `open_file` (every store) and `seal_for_arweave`; tests
 `tests/arweave.rs`; decisions CLI-SDK-33 (66)). PqChat's `file` content (pqchat-core T10b, owner 2026-11-22; feature
-`pqchat-records`; [CLI-PQC-02](../decisions.md#CLI-PQC-02)'s Change of 2026-11-23): `pqchat_seal_file_message(account, k, pos,
+`pqchat-records`; [CLI-PQC-02](pqchat-core.md#CLI-PQC-02)): `pqchat_seal_file_message(account, k, pos,
 header, fields_json, file_key)` seals a `file` content given without its key, the key entered from the `File` handle inside
 `ua-rs`; `pqchat_open_file(content, object)` opens the object a received content names, its length and `ctSha256` checked
 before any decryption, the key read inside `ua-rs` (BUILT, UNAUDITED; CLI `app-core pqchat-seal-file-message`, `app-core
