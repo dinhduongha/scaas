@@ -11,10 +11,15 @@
     clippy::indexing_slicing
 )]
 
+pub mod check;
 pub mod drops;
 pub mod error;
 pub mod matrix;
+pub mod message;
+pub mod model;
+pub mod net;
 pub mod order;
+pub mod reads;
 pub mod store;
 
 pub use drops::{Drop, DropCounts};
@@ -23,7 +28,8 @@ pub use store::{Item, Items, MemoryStore, PqChatStore, StoreFault};
 
 use scaas_sdk::app_core::{AppCore, AppDesc};
 use scaas_sdk::Sdk;
-use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+use std::sync::{Arc, Mutex};
 
 /// PqChat's label prefix (CLI-PQC-03): the one the crate declares to the SDK.
 pub const LABELS: &str = "scaas/pqchat/v1/";
@@ -42,4 +48,83 @@ pub fn scope(sdk: &Arc<Sdk>) -> Result<Arc<AppCore>, PqChatError> {
             labels: vec![LABELS.into()],
         },
     )?)
+}
+
+/// One chain the app serves PqChat on: the SDK profile's key and the contracts the crate reads there.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ChainConf {
+    /// the SDK profile's key
+    pub chain: String,
+    pub chain_uid: String,
+    pub registry: String,
+    pub factory: String,
+}
+
+/// The crate's configuration: the chains it serves.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct PqChatConfig {
+    pub chains: Vec<ChainConf>,
+}
+
+/// The PqChat client core: one per process, over one app-core scope of the SDK.
+pub struct PqChat {
+    pub(crate) app: Arc<AppCore>,
+    pub(crate) net: Arc<dyn net::Net>,
+    pub(crate) store: Arc<dyn PqChatStore>,
+    pub(crate) conf: PqChatConfig,
+    pub(crate) drops: DropCounts,
+    pub(crate) chains: Mutex<message::Chains>,
+    pub(crate) unwraps: AtomicU64,
+}
+
+impl PqChat {
+    /// The crate over `sdk`: its scope declares PqChat's label prefix and class 3; reads and writes through the SDK.
+    pub fn new(
+        sdk: Arc<Sdk>,
+        store: Arc<dyn PqChatStore>,
+        conf: PqChatConfig,
+    ) -> Result<Arc<Self>, PqChatError> {
+        let app = scope(&sdk)?;
+        let net = Arc::new(net::SdkNet {
+            sdk,
+            app: app.clone(),
+        });
+        Ok(Self::with_net(app, net, store, conf))
+    }
+
+    /// The crate over a scope and a chain port of the caller's (the tests' recording fakes).
+    pub fn with_net(
+        app: Arc<AppCore>,
+        net: Arc<dyn net::Net>,
+        store: Arc<dyn PqChatStore>,
+        conf: PqChatConfig,
+    ) -> Arc<Self> {
+        Arc::new(PqChat {
+            app,
+            net,
+            store,
+            conf,
+            drops: DropCounts::default(),
+            chains: Mutex::new(message::Chains::default()),
+            unwraps: AtomicU64::new(0),
+        })
+    }
+
+    /// The drops of `session` per reason, on this device only (CLI-PQC-07).
+    pub fn dropped(&self, session: &str) -> std::collections::BTreeMap<Drop, u64> {
+        self.drops.of(&session.to_ascii_lowercase())
+    }
+
+    /// How many own wraps reached the KEM (a test's recording of K2's unwrap).
+    pub fn unwrap_calls(&self) -> u64 {
+        self.unwraps.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub(crate) fn conf(&self, chain: &str) -> Result<&ChainConf, PqChatError> {
+        self.conf
+            .chains
+            .iter()
+            .find(|c| c.chain == chain)
+            .ok_or(PqChatError::InstanceUnlisted)
+    }
 }

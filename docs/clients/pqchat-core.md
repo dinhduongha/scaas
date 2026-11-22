@@ -148,7 +148,9 @@ as amended on 2026-11-13; SPECIFIED).
   reads (the spec's open point O11). A replica's record counts only when it equals the home's record and `sigHash` under the same id
   (P32).
 - **A failure** is no error, no receipt, no retry and no write; it is counted on the device only, per reason (`envelope`, `decode`,
-  `signature`, `member`, `counter`, `duplicate`, `replica`, `unlisted`, `wrap-hash`, `content`, `too-far`).
+  `signature`, `member`, `counter`, `duplicate`, `replica`, `unlisted`, `wrap-hash`, `content`, `too-far`, and `control` for a
+  control-plane record that breaks the epoch rule, the rights or the shapes, which only a forged answer shows; an own wrap that
+  passed its hash check and does not open counts as `envelope`; controller call 2026-11-22).
 - **No automatic reaction** to a result that depends on an opening or an epoch: an own wrap of the winning epoch that does not open
   is shown, never answered by a rekey, a leave or a message; a member's higher KEM version raises an event and the rekey is a write
   the user confirms; between the first sight of a complete child and its finality the client sends under neither epoch and holds the
