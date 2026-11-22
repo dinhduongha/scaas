@@ -20,3 +20,8 @@ T4 | pqc-clippy | a4e39f770 | 0 | -
 T4 | pqc-reads | b947598f4 | 0 | reads 32 (22 trusted), writes 13, R2 22; 0 refused
 T4 | pqc-tree | b947598f4 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
 T4 | docs | b947598f4 | 0 | -
+T5 | pqc-test | 50fdb74b4 | 0 | 41 passed, 0 failed, 2 ignored (10 binaries)
+T5 | pqc-clippy | 50fdb74b4 | 0 | -
+T5 | pqc-reads | 50fdb74b4 | 0 | reads 33 (23 trusted), writes 13, R2 23; 0 refused
+T5 | mutants-check | 50fdb74b4 | 0 | -
+T5 | pqc-chain | 50fdb74b4 | 0 | 2 passed, 0 failed, 0 ignored (10 binaries)
