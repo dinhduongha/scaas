@@ -70,7 +70,12 @@ fn pqz_leaf_json_leaves_open() {
             .unwrap();
         assert_eq!(*leaf, h32(&r["seed32"]), "{}", r["id"]);
         let k = open(&r["vault"], r, &r["unlock"]).unwrap();
-        assert_eq!(k.pk(), w.pqz_key_version(a, i, v).unwrap().pk(), "{}", r["id"]);
+        assert_eq!(
+            k.pk(),
+            w.pqz_key_version(a, i, v).unwrap().pk(),
+            "{}",
+            r["id"]
+        );
         assert_eq!((k.account(), k.index()), (a, i));
     }
 }
@@ -92,7 +97,12 @@ fn pqz_leaf_json_refusals() {
             .unwrap_or_else(|e| panic!("control {}: {e:?}", x["id"]));
         if h32(&c["seed32"]) != [0u8; 32] {
             let (a, i, v) = at(&c["open"]);
-            assert_eq!(k.pk(), w.pqz_key_version(a, i, v).unwrap().pk(), "control {}", x["id"]);
+            assert_eq!(
+                k.pk(),
+                w.pqz_key_version(a, i, v).unwrap().pk(),
+                "control {}",
+                x["id"]
+            );
         }
     }
 }
@@ -151,9 +161,18 @@ fn seal_pq_key_round_trip() {
         );
     }
     // the new-passphrase policy and the hardened range, as seal_vault and pqz_key
-    assert_eq!(w.seal_pq_key(0, 0, 0, "1234567", None).err(), Some(Error::Argument));
-    assert_eq!(w.seal_pq_key(1 << 31, 0, 0, pass, None).err(), Some(Error::Argument));
-    assert_eq!(w.seal_pq_key(0, 1 << 31, 0, pass, None).err(), Some(Error::Argument));
+    assert_eq!(
+        w.seal_pq_key(0, 0, 0, "1234567", None).err(),
+        Some(Error::Argument)
+    );
+    assert_eq!(
+        w.seal_pq_key(1 << 31, 0, 0, pass, None).err(),
+        Some(Error::Argument)
+    );
+    assert_eq!(
+        w.seal_pq_key(0, 1 << 31, 0, pass, None).err(),
+        Some(Error::Argument)
+    );
 }
 
 /// A locked wallet seals nothing; a leaf opened before the lock keeps its own store (it never held the wallet's seed).
@@ -167,6 +186,9 @@ fn locked_wallet_and_own_store() {
     let k = PqzKey::open_leaf(json.as_bytes(), Unlock::VaultPassphrase(pass), 0, 0, 0).unwrap();
     let cache = k.seal_balance_cache(b"{}").unwrap();
     w.lock();
-    assert_eq!(w.seal_pq_key(0, 0, 0, pass, None).err(), Some(Error::WalletLocked));
+    assert_eq!(
+        w.seal_pq_key(0, 0, 0, pass, None).err(),
+        Some(Error::WalletLocked)
+    );
     assert_eq!(&*k.open_balance_cache(cache.as_bytes()).unwrap(), b"{}");
 }

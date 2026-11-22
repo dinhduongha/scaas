@@ -26,7 +26,10 @@ const fast = (v) => rewrapPin(v, PASS, PASS, { N: 2 ** 15, r: 8, p: 1, dkLen: 32
 
 test("pqzLeafLabel: pqz:registry:<account>:<index>:<version>, decimal", () => {
   assert.equal(pqzLeafLabel({ account: 0, index: 0 }), "pqz:registry:0:0:0");
-  assert.equal(pqzLeafLabel({ account: 3, index: 7, version: 2n ** 64n - 1n }), "pqz:registry:3:7:18446744073709551615");
+  assert.equal(
+    pqzLeafLabel({ account: 3, index: 7, version: 2n ** 64n - 1n }),
+    "pqz:registry:3:7:18446744073709551615",
+  );
 });
 
 test("sealPqKey seals pqzKeySeed under the leaf label and the given vault id; openPqKey gives the 32 bytes back", async () => {
@@ -56,15 +59,17 @@ test("openPqKey: every refusal is VaultOpen, each beside its positive control", 
   const good = await fast(await sealPqKey({ seed, ...at, pin: PASS }));
   const ok = (v, a = at, u = { pin: PASS }) => openPqKey(v, { ...a, ...u });
   assert.equal(hex(await ok(good)), hex(pqzKeySeed(seed, 0, 0, 0)), "positive control");
-  const leafOf = async (label, secret) =>
-    fast(await createVault(secret, { label, pin: PASS, id: good.id }));
+  const leafOf = async (label, secret) => fast(await createVault(secret, { label, pin: PASS, id: good.id }));
   const ct = fromB64url(good.data.ct);
   const cases = [
     ["wrong passphrase", () => ok(good, at, { pin: "river-otter-8 ünï" })],
     ["another account", () => ok(good, { ...at, account: 1 })],
     ["another index", () => ok(good, { ...at, index: 1 })],
     ["another key version", () => ok(good, { ...at, version: 1 })],
-    ["relabelled (sealed at version 1)", async () => ok({ ...(await leafOf("pqz:registry:0:0:1", new Uint8Array(32))), label: good.label })],
+    [
+      "relabelled (sealed at version 1)",
+      async () => ok({ ...(await leafOf("pqz:registry:0:0:1", new Uint8Array(32))), label: good.label }),
+    ],
     ["truncated ciphertext", () => ok({ ...good, data: { ...good.data, ct: b64url(ct.subarray(0, ct.length - 1)) } })],
     ["31-byte payload", async () => ok(await leafOf(good.label, new Uint8Array(31)))],
     ["33-byte payload", async () => ok(await leafOf(good.label, new Uint8Array(33)))],
