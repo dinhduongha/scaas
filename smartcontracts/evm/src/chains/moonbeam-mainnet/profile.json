@@ -1,0 +1,14 @@
+{
+  "evmFork": "osaka",
+  "codeSizeLimit": 24576,
+  "initCodeSizeLimit": 49152,
+  "txGasCap": 52000000,
+  "blockGasLimit": 60000000,
+  "finality": "tag",
+  "txType": 2,
+  "l1Fee": null,
+  "eip2537": true,
+  "status": "draft",
+  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (chains-arweave T12, probes of 2026-11-22, one sample each: H1-H8, fork, eip2537, caps, codesize, basefee, l1fee); txGasCap: 52,000,000 per transaction (moonbeam-docs variables.yml, the research note section 3.2; an eth_call does not apply it); gas adds storage growth (366 gas per byte, MBIP-5), not EIP-8037; disabledKinds: none, no owner ruling",
+  "disabledKinds": []
+}

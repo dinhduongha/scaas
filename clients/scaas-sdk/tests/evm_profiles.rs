@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Plan T40: the EVM profiles of `smartcontracts/evm/chain-uids.json` (Ethereum, OP Mainnet, Arbitrum One, Linea; mainnet and
-//! testnet each; Ethereum Classic dropped by the owner 2026-11-22, decisions CLI-SDK-32) as release data: the row's chain id
+//! testnet each; Ethereum Classic dropped by the owner 2026-11-22, decisions CLI-SDK-32; and the chains-arweave plan's T2 and
+//! T11: Avalanche C-Chain and Fuji, the three Polkadot Hub profiles, Moonbeam and Moonbase Alpha) as release data: the row's chain id
 //! and `chain_uid`, the `profile.json` finality, per-transaction cap, transaction type, L1 fee model and disabled kinds. Each
 //! profile loads; a native send's type follows the chain's base fee; a kind the profile disables is `KindDisabled` before
 //! anything is signed (owner 2026-11-22: OP and Arbitrum), against the fake chain of `tests/common/fake_chain.rs` answering
@@ -29,7 +30,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use zeroize::Zeroizing;
 
-const KEYS: [&str; 8] = [
+const KEYS: [&str; 15] = [
     "ethereum-mainnet",
     "ethereum-testnet",
     "op-mainnet",
@@ -38,6 +39,14 @@ const KEYS: [&str; 8] = [
     "arbitrum-testnet",
     "linea-mainnet",
     "linea-testnet",
+    // chains-arweave T2 and T11: draft profiles, no kind disabled (no owner ruling for them)
+    "avalanche-mainnet",
+    "avalanche-testnet",
+    "polkadot-hub-mainnet",
+    "polkadot-hub-testnet",
+    "polkadot-hub-westend",
+    "moonbeam-mainnet",
+    "moonbeam-testnet",
 ];
 const ORACLE: &str = "0x420000000000000000000000000000000000000f";
 const EVM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm");
@@ -173,10 +182,13 @@ async fn each_profile_loads() {
             .prepare_native_send(send(&seed, key, None))
             .await
             .unwrap_or_else(|e| panic!("{key}: {e:?}"));
-        // the other chain of the pair: the ETC id over Ethereum's block 0 and back, else the id + 1
+        // the other chain of the pair: the ETC id over Ethereum's block 0 and back, Fuji's over C-Chain's and back, else the
+        // id + 1
         let other = match p.chain_id.unwrap() {
             1 => 61,
             61 => 1,
+            43114 => 43113,
+            43113 => 43114,
             id => id + 1,
         };
         c.lock().unwrap().chain_id = other;

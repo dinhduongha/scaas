@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! SDK plan T40: the EVM profiles of `smartcontracts/evm/chain-uids.json` (Ethereum, OP Mainnet, Arbitrum One, Linea; mainnet
 //! and testnet each; Ethereum Classic dropped by the owner 2026-11-22, decisions CLI-SDK-32, its chain id 61 kept here as the
-//! other chain of Ethereum's block 0), each with the values its row and its `src/chains/<key>/profile.json` pin, against
+//! other chain of Ethereum's block 0), and the chains-arweave plan's T2 and T11 (Avalanche C-Chain and Fuji, which share block
+//! 0; the three Polkadot Hub profiles; Moonbeam and Moonbase Alpha), each with the values its row and its `src/chains/<key>/profile.json` pin, against
 //! in-process fake nodes: the chain pair check drops an endpoint of the other chain (NET-ALL-25: Ethereum and ETC share block 0,
 //! the chain id separates them; an endpoint naming the chain id over another block 0 is dropped too), and a `finalized` read is
 //! pinned by the hash of the finalized block (EIP-1898, `requireCanonical`) where the profile's finality is the tag.
@@ -12,7 +13,7 @@ use scaas_rpc::{Endpoint, NodeList, Policy, Purpose, RpcError};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
-const KEYS: [&str; 8] = [
+const KEYS: [&str; 15] = [
     "ethereum-mainnet",
     "ethereum-testnet",
     "op-mainnet",
@@ -21,6 +22,13 @@ const KEYS: [&str; 8] = [
     "arbitrum-testnet",
     "linea-mainnet",
     "linea-testnet",
+    "avalanche-mainnet",
+    "avalanche-testnet",
+    "polkadot-hub-mainnet",
+    "polkadot-hub-testnet",
+    "polkadot-hub-westend",
+    "moonbeam-mainnet",
+    "moonbeam-testnet",
 ];
 const EVM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm");
 const WHO: Address = Address::repeat_byte(0x42);
@@ -73,11 +81,20 @@ fn hash(id: u64, n: u64) -> B256 {
 
 fn block(id: u64, n: u64, h: B256) -> Value {
     json!({"timestamp": "0x6ac07487", "difficulty": "0x0", "extraData": "0x", "gasLimit": "0x1c9c380", "baseFeePerGas": "0x7",
-        "gasUsed": "0x0", "logsBloom": format!("0x{}", "00".repeat(256)), "miner": format!("{:#x}", Address::ZERO),
+        "gasUsed": "0x1c9c380", "logsBloom": format!("0x{}", "00".repeat(256)), "miner": format!("{:#x}", Address::ZERO),
         "mixHash": format!("{:#x}", B256::ZERO), "nonce": "0x0000000000000000", "receiptsRoot": format!("{:#x}", B256::ZERO),
         "sha3Uncles": format!("{:#x}", B256::ZERO), "size": "0x200", "stateRoot": format!("{:#x}", B256::ZERO),
         "totalDifficulty": "0x0", "transactions": [], "transactionsRoot": format!("{:#x}", B256::ZERO), "uncles": [],
         "number": format!("{n:#x}"), "hash": format!("{h:#x}"), "parentHash": format!("{:#x}", hash(id, n.saturating_sub(1)))})
+}
+
+const TX: B256 = B256::repeat_byte(0xab);
+
+fn receipt(id: u64, n: u64) -> Value {
+    json!({"transactionHash": format!("{TX:#x}"), "transactionIndex": "0x0", "blockHash": format!("{:#x}", hash(id, n)),
+        "blockNumber": format!("{n:#x}"), "from": format!("{WHO:#x}"), "to": format!("{:#x}", Address::ZERO),
+        "cumulativeGasUsed": "0x5208", "gasUsed": "0x5208", "contractAddress": null, "logs": [],
+        "logsBloom": format!("0x{}", "00".repeat(256)), "type": "0x2", "status": "0x1", "effectiveGasPrice": "0x1"})
 }
 
 const HEAD: u64 = 1_000;
@@ -103,6 +120,9 @@ async fn node(id: u64, uid: B256, own: u64, seen: Arc<Mutex<Vec<Value>>>) -> Str
                     let k = n(&p[0]);
                     json!({"result": block(id, k, if k == 0 { uid } else { hash(id, k) })})
                 }
+                Some("eth_getLogs") => json!({"result": []}),
+                // Avalanche's receipt: its own gas, while the header's `gasUsed` sums the gas limits (ACP-194)
+                Some("eth_getTransactionReceipt") => json!({"result": receipt(id, FINAL)}),
                 Some("eth_getBalance") => {
                     seen.lock().unwrap().push(p[1].clone());
                     json!({"result": format!("{own:#x}")})
@@ -143,15 +163,18 @@ async fn balance(
     .map(|a| (a.value, a.members[0], a.hash, a.number))
 }
 
-/// The other chain of a pair: the same block 0 under another chain id (Ethereum's for ETC, ETC's for Ethereum, else the
-/// chain id + 1), and the chain id over another block 0. Both are dropped; the profile's own endpoint answers.
+/// The other chain of a pair: the same block 0 under another chain id (Ethereum's for ETC and back, Fuji's for C-Chain and
+/// back, else the chain id + 1), and the chain id over another block 0. Both are dropped; the profile's own endpoint answers.
 #[tokio::test]
 async fn each_profile_drops_an_endpoint_of_the_other_chain() {
     let ps = profiles();
     for p in &ps {
+        // the real pairs of one block 0: Ethereum and ETC, C-Chain and Fuji (NET-ALL-25)
         let other_id = match p.id {
             1 => 61,
             61 => 1,
+            43114 => 43113,
+            43113 => 43114,
             id => id + 1,
         };
         let seen: Arc<Mutex<Vec<Value>>> = Default::default();
@@ -200,6 +223,7 @@ async fn each_profile_drops_an_endpoint_of_the_other_chain() {
             .clone()
     };
     assert_eq!(uid(1), uid(61));
+    assert_eq!(uid(43114), uid(43113));
 }
 
 /// A profile whose finality is the tag (every profile here) reads at the `finalized` block, every request naming it by hash
@@ -226,5 +250,38 @@ async fn a_finalized_read_is_pinned_by_hash() {
             "{}: pinned by the finalized block's hash",
             p.key
         );
+    }
+}
+
+/// Spec §4.3 (3) on every profile: a log read whose range ends above the answering endpoint's `finalized` block is labelled
+/// not final (on Avalanche `eth_getLogs` returns nothing for a block not yet executed: no evidence of absence); at or below
+/// it, final. And a transaction's gas is its receipt's, never the header's `gasUsed` (Avalanche sums the gas limits there).
+#[tokio::test]
+async fn a_log_read_above_finalized_is_not_final_and_gas_is_the_receipts() {
+    for p in profiles() {
+        let own = node(p.id, p.uid, 7, Default::default()).await;
+        let pool = pool(&[&own], &p);
+        let f = alloy::rpc::types::Filter::new();
+        for (from, to, want) in [
+            (800, FINAL, true),
+            (FINAL, FINAL + 1, false),
+            (950, HEAD, false),
+        ] {
+            let l = pool
+                .logs_range_labelled(from, to, f.clone(), Purpose::Plain)
+                .await
+                .unwrap_or_else(|e| panic!("{}: {e}", p.key));
+            assert_eq!(l.is_final, want, "{}: logs {from}..{to}", p.key);
+        }
+        let r = pool
+            .read_at_block(p.finality.unwrap(), Purpose::Plain, |at| {
+                let pool = &pool;
+                async move { pool.receipt_at(&at, TX).await }
+            })
+            .await
+            .unwrap()
+            .value
+            .unwrap_or_else(|| panic!("{}: the receipt", p.key));
+        assert_eq!(r.gas_used, 21_000, "{}: the receipt's gas", p.key);
     }
 }

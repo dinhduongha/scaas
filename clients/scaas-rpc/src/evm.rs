@@ -889,6 +889,14 @@ pub struct ReceiptAt {
     pub logs: Vec<LogAt>,
 }
 
+/// A log read with its finality ([`EvmPool::logs_range_labelled`]).
+#[derive(Debug, Clone)]
+pub struct LogsAt {
+    pub logs: Agreed<Vec<LogAt>, B256>,
+    /// `to` at or below the answering endpoint's `finalized` block
+    pub is_final: bool,
+}
+
 /// A transaction by hash as compared.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TxAt {
@@ -1146,6 +1154,28 @@ impl EvmPool {
             Ok(logs.iter().map(LogAt::from).collect())
         })
         .await
+    }
+
+    /// [`Self::logs_range`] with its finality (chains-arweave spec §4.3): final only when `to` is at or below the `finalized`
+    /// block of the endpoint that answered. A chain whose RPC returns no logs for a block not yet executed (Avalanche after
+    /// Helicon) answers nothing there, so logs above the final block are no evidence of absence; a chain without `finalized`
+    /// is never final here.
+    pub async fn logs_range_labelled(
+        &self,
+        from: u64,
+        to: u64,
+        filter: Filter,
+        purpose: Purpose,
+    ) -> Result<LogsAt, RpcError> {
+        let logs = self.logs_range(from, to, filter, purpose).await?;
+        let fin = self
+            .named(logs.members[0], BlockChoice::Finalized, None)
+            .await
+            .ok();
+        Ok(LogsAt {
+            is_final: fin.is_some_and(|f| to <= f),
+            logs,
+        })
     }
 
     /// The head, failed over.
