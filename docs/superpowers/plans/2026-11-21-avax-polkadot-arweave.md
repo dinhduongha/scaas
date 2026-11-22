@@ -187,10 +187,10 @@ that `arbundles` builds differently from ours or refuses (type 3's `v` included)
 **Files:** `smartcontracts/evm/src/chains/avalanche-{mainnet,testnet}/README.md` (the facts of spec §4.1, as `base-testnet`'s);
 `scaas-node/node.example.toml` (commented rows, `finality.mode = "tag"`); the SDK's pinned profile data; `clients/scaas-rpc/tests/`.
 
-- [ ] `scaas-rpc` tests against a mock server: an endpoint answering `eth_chainId` 43113 with C-Chain's block 0 hash is dropped from a
+- [x] `scaas-rpc` tests against a mock server: an endpoint answering `eth_chainId` 43113 with C-Chain's block 0 hash is dropped from a
   43114 list and the reverse (CLI-RPC-03); a `finalized` read pins the settled block by hash (EIP-1898); a log read above
   `finalized` is labelled not final; real gas is read from receipts, never from a header's `gasUsed`.
-- [ ] Profiles seeded `draft`; the SDK's profile data gains both with `chain_uid` and chain id.
+- [x] Profiles seeded `draft`; the SDK's profile data gains both with `chain_uid` and chain id.
 - Mutants: the identity check on chain id only; the not-final label dropped.
 - Gates: `rpc-test`, `rpc-wasm`, `sdk-test`, `docs`.
 - **Done (2026-11-22, BUILT on `chains-arweave`):** `src/chains/avalanche-{mainnet,testnet}/{profile.json,README.md}` in the SDK

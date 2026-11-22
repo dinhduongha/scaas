@@ -15,7 +15,7 @@ beside it; **one sample each**: the 24-h and 7-day windows of NET-EVM-19 are the
   Substrate provider): the chain_uid convention the other two Hub rows follow.
 - **Transaction type:** 2 (the head carries a base fee).
 - **L1 fee:** none. **Storage deposit:** per item and per byte, refunded only when cleared; SCaaS clears nothing, so it is a fee
-  inside the gas figure (spec §6.4); a lane's balance alert adds the existential deposit.
+  inside the gas figure (spec §6.4); NET-EVM-17 adds the existential deposit to a lane's balance alert (SPECIFIED, with T14).
 - **EIP-2537:** absent (no BLS12-381): Zether waits for the software path (ARCH-POS-18). P-256 only on `master` (unconfirmed).
 - **No PQZ or ML-DSA precompile:** a new precompile is a runtime upgrade through Polkadot governance.
 - **Weight-to-gas (T13):** every SCaaS line priced in Ethereum gas (the 60 M deploy line, a 23 M PQZ op, a 5.8 M ML-DSA-65
