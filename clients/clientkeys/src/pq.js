@@ -10,7 +10,8 @@ import { slh_dsa_sha2_128s } from "@noble/post-quantum/slh-dsa.js";
 import { falcon512padded, falcon1024padded } from "@noble/post-quantum/falcon.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { shake128, shake256 } from "@noble/hashes/sha3.js";
-import { keccak_256, sha256, concatBytes, utf8ToBytes } from "./bytes.js";
+import { keccak_256, sha256, concatBytes, utf8ToBytes, wipe } from "./bytes.js";
+import { createVault, openVault } from "./vault.js";
 
 /** kind number, tag string, scheme, HKDF output length, signed message. */
 export const PQ_KINDS = {
@@ -80,6 +81,45 @@ export function pqzKeySeed(seed, account, index, version = 0) {
     v === 0n ? new Uint8Array(0) : be64,
   );
   return hkdf(sha256, seed, utf8ToBytes("scaas.ua.pq.v1"), info, 32);
+}
+
+/** The vault v2 label of a registry-class PQZ leaf (CLI-SGN-52): `pqz:registry:<account>:<index>:<version>`, decimal; stored
+ *  under `vault:` + the label (CLI-SGN-50's leaf key with class `registry`). */
+export const pqzLeafLabel = ({ account, index, version = 0 }) => `pqz:registry:${account}:${index}:${BigInt(version)}`;
+
+const hardened = (v, what) => {
+  if (!Number.isInteger(v) || v < 0 || v >= 2 ** 31) throw new Error(`${what} must be an integer in [0, 2^31)`);
+};
+
+/** Key worker (CTR-PQZ-13 seed custody, CLI-SGN-52): derives the registry-class leaf `seed32 = pqzKeySeed(seed, account, index,
+ *  version)` once and seals it as vault v2 (the `sealConfKey` pattern: `pin`, optional `prf`, `id` the seed vault's so the AAD
+ *  binds the leaf to its seed). Returns the vault; the seed never leaves this call. */
+export async function sealPqKey({ seed, account, index, version = 0, pin, prf, id }) {
+  hardened(account, "account");
+  hardened(index, "index");
+  const leaf = pqzKeySeed(seed, account, index, version);
+  try {
+    return await createVault(leaf, { label: pqzLeafLabel({ account, index, version }), pin, prf, id });
+  } finally {
+    wipe(leaf);
+  }
+}
+
+/** Zether worker / pqz-cli side (CLI-SGN-52): the 32-byte leaf of `vault`, which must be the leaf of `account` / `index` /
+ *  `version`; never the seed. Every refusal is one class, `VaultOpen` (another leaf's label, the vault's version, parameters
+ *  or id, a wrong passphrase or PRF output, an altered or truncated box, a payload of other than 32 bytes; ARCH-POS-13). The
+ *  caller wipes the result. */
+export async function openPqKey(vault, { account, index, version = 0, pin, prfOutput }) {
+  let leaf;
+  try {
+    if (vault?.label !== pqzLeafLabel({ account, index, version })) throw new Error();
+    leaf = await openVault(vault, { pin, prfOutput });
+    if (leaf.length !== 32) throw new Error();
+    return leaf;
+  } catch {
+    wipe(leaf);
+    throw Object.assign(new Error("Not this PQZ leaf, or a wrong unlock."), { code: "VaultOpen" });
+  }
 }
 
 /** Deterministic key pair of a PQ kind. Falcon keys are implementation-specific: pinned to @noble/post-quantum 0.7.1 by the vectors. */
