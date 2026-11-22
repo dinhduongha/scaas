@@ -1,0 +1,15 @@
+# PqVault plan V10 / V10e (clients/pqvault-core): task | step | commit | rc | counts. Logs git-ignored (runs/*.log).
+V10 | pqvault-core lib + core + vectors (cargo test --features vectors) | c776e38b6 | 0 | lib 8 passed; core 6 passed; vectors 4 passed; e2e 3 ignored
+V10 | pqvault-core clippy --all-targets -D warnings (default) | c776e38b6 | 0 | -
+V10 | pqvault-core clippy --all-targets -D warnings (--features vectors) | c776e38b6 | 0 | -
+V10e | e2e on anvil (runs/2026-11-22-pqvault-e2e.sh, all three) | c776e38b6 | 0 | personal_vault_recovery_conflict_passphrase ok 43 s; shared_vault_both_modes ok 37 s; a_second_app_core_is_kept_apart ok 26 s
+V10e | e2e personal_vault_recovery_conflict_passphrase (the mutant runner's green baseline) | 50144b73c | 0 | 1 passed
+V10 | sdk-test (CI's full feature set) | 65d22edc6 | 0 | 419 passed 0 failed 17 ignored
+V10 | sdk-vectors (--features <set>,vectors --test pqchat_keys --test app_core_vault_rows) | 65d22edc6 | 0 | 15 passed
+V10 | sdk-clippy (<set>,vectors,native-networks,raw-native -D warnings) | 65d22edc6 | 0 | -
+V10 | cli test (cargo test --locked; one_command_per_sdk_call_both_ways with `app-core account-ua`) | c776e38b6 tree | 0 | 22 passed
+V10 | cli clippy --features dev-profiles -D warnings | c776e38b6 tree | 0 | -
+V10 | docs_check check / paths / test_docs_check | 50144b73c | 0 | 0 errors (7 budget warnings of docs/node, not this round's); 0 machine paths; ok
+V10 | check_test_features.py | 65d22edc6 tree | 0 | ok (pqvault-core listed, shipped features)
+V10 | format.sh --check | 50144b73c | 1 | every step ok but tact (tact-fmt absent: smartcontracts/ton/node_modules not installed here; no Tact file touched)
+V10 mutants | runs/2026-11-22-pqvault-core-mutants.py run | c776e38b6, 50144b73c | - | 21 mutants, 21 killed (one survived at c776e38b6, killed at 50144b73c after the e2e wrote an item under each epoch)
