@@ -179,8 +179,6 @@ ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
 ua-clippy | 7765d3e64 | 0 | -
 ua-test | 95badea99 | 0 | 608 passed, 0 failed, 3 ignored (61 binaries)
 gas-gen | 6e7e71142 | 0 | -
-bind-dart | 7104a069f | 0 | dart: +14:
-ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
 ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
@@ -206,13 +204,11 @@ ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
 # sdk-evm-profiles: docs | 1cba8f84a | 0 | -
 rpc-test | 4175c2d43 | 0 | 205 passed, 0 failed, 10 ignored (21 binaries)
 rpc-wasm | 4175c2d43 | 0 | -
-cli | 4175c2d43 | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
 node-test | 4175c2d43 | 0 | 897 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 4175c2d43 (origin/ua-rs-sign cc45679e8 into sdk-complete): node-e2e at --test-threads=10, wall 84 s, the capped scope's memory.peak 3.75 GB read at 60 s (cap 6 GiB); two reds before it were the runner's inputs, not the tree: a forge recovery snapshot of chain 31918 left by an interrupted earlier run (moved aside), and zether-cli built without `--features hazmat` (CI's e2e builds it with hazmat)
 sdk-min | 54ddfcb33 | 0 | 74 passed, 0 failed, 0 ignored (13 binaries)
 sdk-noevm | 54ddfcb33 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
-sdk-clippy-noevm | 54ddfcb33 | 0 | -
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
 # the rows above at 5c189e9f1 (the merge of sdk-complete e90f26685, a625341ae, and its regenerated bindings): every bind-* step,
 # bind-gen, sdk-uniffi, ffi, sdk-wasm, sdk-clippy, sdk-test, sdk-deny, features, docs, mutants-check green. Mutants at 5c189e9f1:
@@ -230,7 +226,6 @@ ck-xcheck | 0736ad763 | 0 | -
 ua-c | e90f26685 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | e90f26685 | 0 | ctest: 0 tests failed out of 45
 sdk-noevm | 0011b40e4 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
-bind-dart | 0011b40e4 | 0 | dart: +14:
 rpc-wasm | 0011b40e4 | 0 | -
 
 # faecafcd2 (T41.evm): sdk-e2e's e2e_hand_off_on_anvil alone (CAPPED_MEM=6G, --ignored): 1 passed (A hands off, B lands it, the same blob ImportConsumed, a blob bound to C ImportRelayerBound, A's own self-relay lands); the whole sdk-e2e is the round's matrix (T39). Mutants: t41evm0 9 of 9, t41evm 13 of 13 killed
@@ -246,7 +241,6 @@ rpc-test | 6f2eb3dbd | 0 | 219 passed, 0 failed, 10 ignored (22 binaries)
 rpc-wasm | 6f2eb3dbd | 0 | -
 sdk-min | 7daa8b2bc | 0 | 74 passed, 0 failed, 0 ignored (14 binaries)
 sdk-noevm | 7daa8b2bc | 0 | 149 passed, 0 failed, 0 ignored (21 binaries)
-bind-gen | 7daa8b2bc | 0 | -
 ck-test | 898fa1ebc | 0 | node: 568 pass, 0 fail, 4 skipped
 # T41.arweave's scaas-rpc and SDK parts (CA-T19, CA-T20): code 6f2eb3dbd, the shared ArweaveItem code 7daa8b2bc (error_codes_are_names was red at 6f2eb3dbd in sdk-test, sdk-noevm, sdk-min: fixed, rows above at 7daa8b2bc), the notC9 rows 291a864b2 (the survivor of t41arw2 killed); the rpc rows at 6f2eb3dbd are unchanged by the two later code commits (scaas-rpc untouched)
 rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
@@ -254,7 +248,6 @@ ua-appcore | 7992a33e7 | 0 | 14 passed, 0 failed, 0 ignored (1 binaries)
 ua-test | 7992a33e7 | 0 | 622 passed, 0 failed, 3 ignored (63 binaries)
 ua-vectors | 7992a33e7 | 0 | 732 passed, 0 failed, 6 ignored (71 binaries)
 ua-verify-only | 7992a33e7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
-bind-gen | 7992a33e7 | 0 | -
 ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # PqVault's dedicated signing path (owner 2026-11-22, CLI-PQV-13) 4f64cf766, merged with origin/ua-rs-sign a97cce414 at
 # caecc3ade, mutant text fix 7992a33e7: the 14 rows above at 7992a33e7, clean tree. sdk-test's four reds of 8c869f3c5
@@ -292,13 +285,7 @@ rpc-clippy | 028da021c | 0 | -
 ua-clippy | 028da021c | 0 | -
 ua-arweave | 028da021c | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 sdk-arweave | 028da021c | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
-sdk-clippy-noevm | 028da021c | 0 | -
-cli | 028da021c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
-docs | eff2aa3e5 | 0 | -
-sdk-wasm | eff2aa3e5 | 0 | -
-sdk-clippy | eff2aa3e5 | 0 | -
 features | eff2aa3e5 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
-sdk-test | eff2aa3e5 | 0 | 437 passed, 0 failed, 17 ignored (41 binaries)
 # the rows above at eff2aa3e5 (the merge of ua-rs-sign 3da595648, e33e863c9, and its regenerated bindings) and bind-js at
 # e2c2ede7c (its scan hardened; the only later code change): every bind-* step, bind-gen, sdk-uniffi, ffi, sdk-wasm,
 # sdk-clippy, sdk-test, features, docs, mutants-check green. sdk-deny rc 1: RUSTSEC-2026-0592 (url 2.5.8, Url::origin stack
@@ -307,42 +294,46 @@ sdk-test | eff2aa3e5 | 0 | 437 passed, 0 failed, 17 ignored (41 binaries)
 # t20d 2/2, t20e 2/2, t20e2 3/3, t20f 2/2, t20g 4/4, t20h 3/3, t13rulings 5/5, bind100 2/2 at eff2aa3e5; review-b 7/7 (B3
 # killed at e2c2ede7c after the scan fix, survived at eff2aa3e5); t20 2/2 at cb4d7e52d (the kill rule now reads dart's [E]
 # and the generator's [gen] FAIL; mutants-check green there, tree dirty only by these records).
-mutants-check | 57729f7bc | 0 | -
-sdk-deny | 57729f7bc | 0 | -
-bind-gen | 57729f7bc | 0 | -
-sdk-uniffi | 57729f7bc | 0 | 18 passed, 0 failed, 0 ignored (2 binaries)
-ffi | 57729f7bc | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-bind-cpp | 57729f7bc | 0 | ctest: 0 tests failed out of 1
-bind-cs | 57729f7bc | 0 | dotnet: 4 passed, 0 failed
-bind-python | 57729f7bc | 0 | unittest: 7 ran, OK
-bind-kotlin | 57729f7bc | 0 | kotlin: PASS (0 failures)
-bind-swift | 57729f7bc | 0 | swift: PASS (0 failures)
-bind-js | 57729f7bc | 0 | node: 5 pass, 0 fail, 0 skipped
-bind-java | 57729f7bc | 0 | java: PASS (0 failures); unittest: 4 ran, OK
-bind-go | 57729f7bc | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
-bind-dart | 57729f7bc | 0 | dart: +14:
 # the rows above at 57729f7bc (the merge of ua-rs-sign b0ee76349, 2196bdade, and its regenerated bindings, prepare_set_kem_key
 # in every binding and in the Dart surface): sdk-deny green (url 2.5.9 in every lockfile, bindings/js's bumped here), bind-gen,
 # sdk-uniffi, ffi, every bind-* step, mutants-check green. The binding mutant files were not rerun: none of their texts moved
 # (mutants-check loads each), and their records stand at eff2aa3e5 / e2c2ede7c / cb4d7e52d.
-cli | 028da021c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
-sdk-clippy-default | 5eeed4adf | 0 | -
-sdk-clippy-min | 5eeed4adf | 0 | -
 sdk-soroban-e2e | 5eeed4adf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 sdk-min | 5eeed4adf | 0 | 74 passed, 0 failed, 0 ignored (16 binaries)
 sdk-noevm | 5eeed4adf | 0 | 157 passed, 0 failed, 1 ignored (23 binaries)
-sdk-clippy-noevm | 5eeed4adf | 0 | -
 sdk-arweave | 5eeed4adf | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
-sdk-wasm | 5eeed4adf | 0 | -
-sdk-clippy | 5eeed4adf | 0 | -
 gas-gen | 7c637b66f | 0 | -
-sdk-test | 7c637b66f | 0 | 437 passed, 0 failed, 18 ignored (42 binaries)
 # T39 / T25 (2026-11-22, branch sdk-round-end): every step's last row above is rc 0 (sdk-test 437 passed at 363151f8d, after
 # the 101 of 76bdb5865); bind-cpp has no row (clients/scaas-sdk/bindings/cpp does not exist yet: T20b-T20h on sdk-binding) and
 # ua-fam has none (CI's ua-rs-features runs the size probe). PR #29's CI is the round's matrix (owner 2026-11-22); its two reds
 # (docs, node) fixed on ua-rs-sign at fe435934b. Local only: the Nethermind copy (PQZ debit green; e2e_bls_multi_64_on_a_node
 # red GasAboveTxCap, open: runs/2026-11-20-m20-nethermind-summary.txt), the Soroban e2e (sdk-soroban-e2e, green).
 # Mutants: 70 reruns, 70 killed (plan T39). origin/ua-rs-sign b0ee76349 (pqvault-core, url 2.5.9) merged before T25.
-docs | 88e469e6b | 0 | -
-mutants-check | 88e469e6b | 0 | -
 features | 88e469e6b | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+docs | 4a96991f4 | 0 | -
+mutants-check | 4a96991f4 | 0 | -
+sdk-deny | 4a96991f4 | 0 | -
+cli | 4a96991f4 | 101 | 21 passed, 1 failed, 0 ignored (2 binaries)
+sdk-clippy | 4a96991f4 | 0 | -
+sdk-clippy-noevm | 4a96991f4 | 0 | -
+sdk-clippy-default | 4a96991f4 | 0 | -
+sdk-clippy-min | 4a96991f4 | 0 | -
+sdk-wasm | 4a96991f4 | 0 | -
+bind-gen | 4a96991f4 | 0 | -
+sdk-uniffi | 4a96991f4 | 0 | 18 passed, 0 failed, 0 ignored (2 binaries)
+ffi | 4a96991f4 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+bind-cpp | 4a96991f4 | 0 | ctest: 0 tests failed out of 1
+bind-cs | 4a96991f4 | 0 | dotnet: 4 passed, 0 failed
+bind-python | 4a96991f4 | 0 | unittest: 7 ran, OK
+bind-kotlin | 4a96991f4 | 0 | kotlin: PASS (0 failures)
+bind-swift | 4a96991f4 | 0 | swift: PASS (0 failures)
+bind-js | 4a96991f4 | 0 | node: 5 pass, 0 fail, 0 skipped
+bind-java | 4a96991f4 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
+bind-go | 4a96991f4 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
+bind-dart | 4a96991f4 | 0 | dart: +14:
+sdk-test | 4a96991f4 | 0 | 441 passed, 0 failed, 18 ignored (42 binaries)
+# the rows above at 4a96991f4 (the merge of ua-rs-sign 977435769 with the SDK's pinned_reads, 938133189, and its regenerated
+# bindings): the runner names the commit it started at; from sdk-wasm on the tree was d7910088b, whose only change is the CLI's
+# completeness test (it skips the binding adapters; lib::load_check excluded), after cli rc 101 on exactly that list. docs,
+# mutants-check, sdk-deny, the four sdk-clippy sets, sdk-wasm, bind-gen, sdk-uniffi, ffi, every bind-* step, sdk-test green;
+# pqvault-core `cargo check --tests` rc 0; mutants pinned 2/2 killed.
