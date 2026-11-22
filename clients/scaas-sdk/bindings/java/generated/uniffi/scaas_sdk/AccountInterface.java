@@ -20,6 +20,7 @@ public interface AccountInterface {
     public java.util.concurrent.CompletableFuture<RegistryWrite> prepareKemRepair(KeyRef key, java.lang.String chain, KeyRef payer) ;
     public java.util.concurrent.CompletableFuture<java.util.List<RegistryWrite>> prepareMsigRegister(MsigRegister req) ;
     public java.util.concurrent.CompletableFuture<java.util.List<RegistryWrite>> prepareRegister(Register req) ;
+    public java.util.concurrent.CompletableFuture<RegistryWrite> prepareSetKemKey(KeyRef key, java.lang.String chain, long version, KeyRef payer) ;
     public java.util.concurrent.CompletableFuture<Prepared> prepareSmartAddKey(SmartOp op, SubjectKeyArgs key) ;
     public java.util.concurrent.CompletableFuture<Prepared> prepareSmartCancelNonce(SmartOp op, java.lang.String lane) ;
     public java.util.concurrent.CompletableFuture<Prepared> prepareSmartCancelRecovery(SmartOp op) ;

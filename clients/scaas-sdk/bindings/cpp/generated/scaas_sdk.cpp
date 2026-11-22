@@ -168,6 +168,9 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_account_prepare_register_blocking() != 59445) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key_blocking() != 59728) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key_blocking() != 51434) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
@@ -1340,6 +1343,12 @@ std::vector<std::shared_ptr<RegistryWrite>> Account::prepare_register_blocking(c
         uniffi_scaas_sdk_fn_method_account_prepare_register_blocking,
         uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterTypeRegister::lower(req), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
+std::shared_ptr<RegistryWrite> Account::prepare_set_kem_key_blocking(KeyRef key, const std::string &chain, uint64_t version, KeyRef payer, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterOptionalRegistryWrite::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterKeyRef::lower(key), uniffi::FfiConverterString::lower(chain), uniffi::FfiConverterUInt64::lower(version), uniffi::FfiConverterKeyRef::lower(payer), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
 }
 std::shared_ptr<Prepared> Account::prepare_smart_add_key_blocking(const SmartOp &op, const SubjectKeyArgs &key, std::shared_ptr<CancelToken> cancel) {
     return uniffi::FfiConverterPrepared::lift(uniffi::rust_call(

@@ -1460,6 +1460,8 @@ static class _UniFFILib {
     
     
     
+    
+    
 
     static _UniFFILib() {
         _UniFFILib.uniffiCheckContractApiVersion();
@@ -1775,6 +1777,17 @@ static class _UniFFILib {
     public static extern
 #endif
      ulong uniffi_scaas_sdk_fn_method_account_prepare_register(ulong @ptr,RustBuffer @req
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ulong uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key(ulong @ptr,RustBuffer @key,RustBuffer @chain,ulong @version,RustBuffer @payer
     );
 
     #if NET8_0_OR_GREATER
@@ -6053,6 +6066,17 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ushort uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ushort uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key(
     );
 
@@ -8880,6 +8904,12 @@ static class _UniFFILib {
             }
         }
         {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key();
+            if (checksum != 57031) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key` checksum `57031`, library returned `{checksum}`");
+            }
+        }
+        {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key();
             if (checksum != 63709) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key` checksum `63709`, library returned `{checksum}`");
@@ -10552,6 +10582,8 @@ internal interface IAccount {
     /// <exception cref="SdkException"></exception>
     Task<RegistryWrite[]> PrepareRegister(Register @req);
     /// <exception cref="SdkException"></exception>
+    Task<RegistryWrite?> PrepareSetKemKey(KeyRef @key, string @chain, ulong @version, KeyRef @payer);
+    /// <exception cref="SdkException"></exception>
     Task<Prepared> PrepareSmartAddKey(SmartOp @op, SubjectKeyArgs @key);
     /// <exception cref="SdkException"></exception>
     Task<Prepared> PrepareSmartCancelNonce(SmartOp @op, string @lane);
@@ -11027,6 +11059,28 @@ internal class Account : IAccount, IDisposable {
         (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
         // Lift
         (result) => FfiConverterSequenceTypeRegistryWrite.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
+    
+    /// <exception cref="SdkException"></exception>
+    public async Task<RegistryWrite?> PrepareSetKemKey(KeyRef @key, string @chain, ulong @version, KeyRef @payer) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key(thisPtr, FfiConverterTypeKeyRef.INSTANCE.Lower(@key), FfiConverterString.INSTANCE.Lower(@chain), FfiConverterUInt64.INSTANCE.Lower(@version), FfiConverterTypeKeyRef.INSTANCE.Lower(@payer));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // Lift
+        (result) => FfiConverterOptionalTypeRegistryWrite.INSTANCE.Lift(result),
         // Error
         FfiConverterTypeSdkError.INSTANCE
     );

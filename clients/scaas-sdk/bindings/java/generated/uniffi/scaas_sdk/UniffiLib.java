@@ -272,6 +272,15 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key = findDowncallHandle("uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT, RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT));
+
+    static long uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key(long ptr, java.lang.foreign.MemorySegment key, java.lang.foreign.MemorySegment chain, long version, java.lang.foreign.MemorySegment payer) {
+        try {
+            return (long) MH_uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key.invokeExact(ptr, key, chain, version, payer);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_fn_method_account_prepare_smart_add_key
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_account_prepare_smart_add_key = findDowncallHandle("uniffi_scaas_sdk_fn_method_account_prepare_smart_add_key", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT, RustBuffer.LAYOUT));
 
@@ -3761,6 +3770,15 @@ final class UniffiLib {
     static short uniffi_scaas_sdk_checksum_method_account_prepare_register() {
         try {
             return (short) MH_uniffi_scaas_sdk_checksum_method_account_prepare_register.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key = findDowncallHandle("uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key.invokeExact();
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 

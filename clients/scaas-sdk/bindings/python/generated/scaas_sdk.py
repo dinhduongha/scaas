@@ -565,6 +565,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_account_prepare_register() != 55685:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key() != 57031:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key() != 63709:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_account_prepare_smart_cancel_nonce() != 45340:
@@ -1759,6 +1761,14 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_account_prepare_register.argtypes = (
     _UniffiRustBuffer,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_account_prepare_register.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_account_prepare_smart_add_key.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3157,6 +3167,9 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_account_prepare_msig_register.restyp
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_prepare_register.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_prepare_register.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key.restype = ctypes.c_uint16
@@ -26084,6 +26097,8 @@ class AccountProtocol(typing.Protocol):
         raise NotImplementedError
     async def prepare_register(self, req: Register) -> typing.List[RegistryWrite]:
         raise NotImplementedError
+    async def prepare_set_kem_key(self, key: KeyRef,chain: str,version: int,payer: KeyRef) -> typing.Optional[RegistryWrite]:
+        raise NotImplementedError
     async def prepare_smart_add_key(self, op: SmartOp,key: SubjectKeyArgs) -> Prepared:
         raise NotImplementedError
     async def prepare_smart_cancel_nonce(self, op: SmartOp,lane: str) -> Prepared:
@@ -26441,6 +26456,32 @@ class Account(AccountProtocol):
         _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
         return await _uniffi_rust_call_async(
             _UniffiLib.uniffi_scaas_sdk_fn_method_account_prepare_register(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def prepare_set_kem_key(self, key: KeyRef,chain: str,version: int,payer: KeyRef) -> typing.Optional[RegistryWrite]:
+        
+        _UniffiFfiConverterTypeKeyRef.check_lower(key)
+
+        _UniffiFfiConverterString.check_lower(chain)
+
+        _UniffiFfiConverterUInt64.check_lower(version)
+
+        _UniffiFfiConverterTypeKeyRef.check_lower(payer)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeKeyRef.lower(key),
+            _UniffiFfiConverterString.lower(chain),
+            _UniffiFfiConverterUInt64.lower(version),
+            _UniffiFfiConverterTypeKeyRef.lower(payer),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalTypeRegistryWrite.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key(*_uniffi_lowered_args),
             _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
             _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
             _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,

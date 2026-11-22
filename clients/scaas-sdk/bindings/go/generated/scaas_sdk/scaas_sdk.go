@@ -836,6 +836,15 @@ func uniffiCheckChecksums() {
 	}
 	{
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key()
+		})
+		if checksum != 57031 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key()
 		})
 		if checksum != 63709 {
@@ -3249,6 +3258,7 @@ type AccountInterface interface {
 	PrepareKemRepair(key KeyRef, chain string, payer KeyRef) (**RegistryWrite, error)
 	PrepareMsigRegister(req MsigRegister) ([]*RegistryWrite, error)
 	PrepareRegister(req Register) ([]*RegistryWrite, error)
+	PrepareSetKemKey(key KeyRef, chain string, version uint64, payer KeyRef) (**RegistryWrite, error)
 	PrepareSmartAddKey(op SmartOp, key SubjectKeyArgs) (*Prepared, error)
 	PrepareSmartCancelNonce(op SmartOp, lane string) (*Prepared, error)
 	PrepareSmartCancelRecovery(op SmartOp) (*Prepared, error)
@@ -3813,6 +3823,41 @@ func (_self *Account) PrepareRegister(req Register) ([]*RegistryWrite, error) {
 		},
 		C.uniffi_scaas_sdk_fn_method_account_prepare_register(
 			_pointer, FfiConverterRegisterINSTANCE.Lower(req)),
+		// pollFn
+		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_poll_rust_buffer(handle, continuation, data)
+		},
+		// freeFn
+		func(handle C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_free_rust_buffer(handle)
+		},
+	)
+
+	if err == nil {
+		return res, nil
+	}
+
+	return res, err
+}
+
+func (_self *Account) PrepareSetKemKey(key KeyRef, chain string, version uint64, payer KeyRef) (**RegistryWrite, error) {
+	_pointer := _self.ffiObject.incrementPointer("*Account")
+	defer _self.ffiObject.decrementPointer()
+	res, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
+		// completeFn
+		func(handle C.uint64_t, status *C.RustCallStatus) RustBufferI {
+			res := C.ffi_scaas_sdk_rust_future_complete_rust_buffer(handle, status)
+			return GoRustBuffer{
+				inner: res,
+			}
+		},
+		// liftFn
+		func(ffi RustBufferI) **RegistryWrite {
+			return FfiConverterOptionalRegistryWriteINSTANCE.Lift(ffi)
+		},
+		C.uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key(
+			_pointer, FfiConverterKeyRefINSTANCE.Lower(key), FfiConverterStringINSTANCE.Lower(chain), FfiConverterUint64INSTANCE.Lower(version), FfiConverterKeyRefINSTANCE.Lower(payer)),
 		// pollFn
 		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
 			C.ffi_scaas_sdk_rust_future_poll_rust_buffer(handle, continuation, data)

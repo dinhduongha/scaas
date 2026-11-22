@@ -469,6 +469,11 @@ uint64_t uniffi_scaas_sdk_fn_method_account_prepare_msig_register(uint64_t ptr, 
 uint64_t uniffi_scaas_sdk_fn_method_account_prepare_register(uint64_t ptr, RustBuffer req
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_PREPARE_SET_KEM_KEY
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_PREPARE_SET_KEM_KEY
+uint64_t uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key(uint64_t ptr, RustBuffer key, RustBuffer chain, uint64_t version, RustBuffer payer
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_PREPARE_SMART_ADD_KEY
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_PREPARE_SMART_ADD_KEY
 uint64_t uniffi_scaas_sdk_fn_method_account_prepare_smart_add_key(uint64_t ptr, RustBuffer op, RustBuffer key
@@ -2463,6 +2468,12 @@ uint16_t uniffi_scaas_sdk_checksum_method_account_prepare_msig_register(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_PREPARE_REGISTER
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_PREPARE_REGISTER
 uint16_t uniffi_scaas_sdk_checksum_method_account_prepare_register(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_PREPARE_SET_KEM_KEY
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_PREPARE_SET_KEM_KEY
+uint16_t uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key(void
     
 );
 #endif

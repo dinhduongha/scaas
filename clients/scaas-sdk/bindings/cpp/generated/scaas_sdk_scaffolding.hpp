@@ -71,6 +71,7 @@ uint64_t uniffi_scaas_sdk_fn_method_account_prepare_initiate_recovery_blocking(u
 RustBuffer uniffi_scaas_sdk_fn_method_account_prepare_kem_repair_blocking(uint64_t ptr, RustBuffer key, RustBuffer chain, RustBuffer payer, RustBuffer cancel, RustCallStatus *out_status);
 RustBuffer uniffi_scaas_sdk_fn_method_account_prepare_msig_register_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
 RustBuffer uniffi_scaas_sdk_fn_method_account_prepare_register_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
+RustBuffer uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key_blocking(uint64_t ptr, RustBuffer key, RustBuffer chain, uint64_t version, RustBuffer payer, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_account_prepare_smart_add_key_blocking(uint64_t ptr, RustBuffer op, RustBuffer key, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_account_prepare_smart_cancel_nonce_blocking(uint64_t ptr, RustBuffer op, RustBuffer lane, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_account_prepare_smart_cancel_recovery_blocking(uint64_t ptr, RustBuffer op, RustBuffer cancel, RustCallStatus *out_status);
@@ -416,6 +417,7 @@ uint16_t uniffi_scaas_sdk_checksum_method_account_prepare_initiate_recovery_bloc
 uint16_t uniffi_scaas_sdk_checksum_method_account_prepare_kem_repair_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_account_prepare_msig_register_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_account_prepare_register_blocking();
+uint16_t uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_account_prepare_smart_cancel_nonce_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_account_prepare_smart_cancel_recovery_blocking();

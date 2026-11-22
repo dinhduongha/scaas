@@ -837,6 +837,8 @@ external fun uniffi_scaas_sdk_checksum_method_account_prepare_msig_register(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_account_prepare_register(
 ): Short
+external fun uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key(
+): Short
 external fun uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_account_prepare_smart_cancel_nonce(
@@ -1368,6 +1370,8 @@ external fun uniffi_scaas_sdk_fn_method_account_prepare_kem_repair(`ptr`: Long,`
 external fun uniffi_scaas_sdk_fn_method_account_prepare_msig_register(`ptr`: Long,`req`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_account_prepare_register(`ptr`: Long,`req`: RustBuffer.ByValue,
+): Long
+external fun uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key(`ptr`: Long,`key`: RustBuffer.ByValue,`chain`: RustBuffer.ByValue,`version`: Long,`payer`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_account_prepare_smart_add_key(`ptr`: Long,`op`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,
 ): Long
@@ -2209,6 +2213,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_account_prepare_register() != 55685.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key() != 57031.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key() != 63709.toShort()) {
@@ -3582,6 +3589,8 @@ public interface AccountInterface {
     
     suspend fun `prepareRegister`(`req`: Register): List<RegistryWrite>
     
+    suspend fun `prepareSetKemKey`(`key`: KeyRef, `chain`: kotlin.String, `version`: kotlin.ULong, `payer`: KeyRef): RegistryWrite?
+    
     suspend fun `prepareSmartAddKey`(`op`: SmartOp, `key`: SubjectKeyArgs): Prepared
     
     suspend fun `prepareSmartCancelNonce`(`op`: SmartOp, `lane`: kotlin.String): Prepared
@@ -4051,6 +4060,27 @@ open class Account: Disposable, AutoCloseable, AccountInterface
         { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterSequenceTypeRegistryWrite.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `prepareSetKemKey`(`key`: KeyRef, `chain`: kotlin.String, `version`: kotlin.ULong, `payer`: KeyRef) : RegistryWrite? {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key(
+                uniffiHandle,
+                FfiConverterTypeKeyRef.lower(`key`),FfiConverterString.lower(`chain`),FfiConverterULong.lower(`version`),FfiConverterTypeKeyRef.lower(`payer`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterOptionalTypeRegistryWrite.lift(it) },
         // Error FFI converter
         SdkException.ErrorHandler,
     )

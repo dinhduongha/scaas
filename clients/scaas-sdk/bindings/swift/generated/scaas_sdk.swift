@@ -641,6 +641,8 @@ public protocol AccountProtocol: AnyObject, Sendable {
     
     func prepareRegister(req: Register) async throws  -> [RegistryWrite]
     
+    func prepareSetKemKey(key: KeyRef, chain: String, version: UInt64, payer: KeyRef) async throws  -> RegistryWrite?
+    
     func prepareSmartAddKey(op: SmartOp, key: SubjectKeyArgs) async throws  -> Prepared
     
     func prepareSmartCancelNonce(op: SmartOp, lane: String) async throws  -> Prepared
@@ -1002,6 +1004,23 @@ open func prepareRegister(req: Register)async throws  -> [RegistryWrite]  {
             completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
             freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeRegistryWrite.lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func prepareSetKemKey(key: KeyRef, chain: String, version: UInt64, payer: KeyRef)async throws  -> RegistryWrite?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeKeyRef_lower(key),FfiConverterString.lower(chain),FfiConverterUInt64.lower(version),FfiConverterTypeKeyRef_lower(payer)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeRegistryWrite.lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -31183,6 +31202,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_account_prepare_register() != 55685) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_account_prepare_set_kem_key() != 57031) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_account_prepare_smart_add_key() != 63709) {

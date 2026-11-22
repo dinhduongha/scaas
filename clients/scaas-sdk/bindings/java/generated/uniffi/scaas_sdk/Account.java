@@ -492,6 +492,30 @@ public class Account implements AutoCloseable, AccountInterface {
 
   
     @Override
+    public java.util.concurrent.CompletableFuture<RegistryWrite> prepareSetKemKey(KeyRef key, java.lang.String chain, long version, KeyRef payer){
+        return prepareSetKemKey(key, chain, version, payer, java.util.concurrent.ForkJoinPool.commonPool());
+    }public java.util.concurrent.CompletableFuture<RegistryWrite> prepareSetKemKey(KeyRef key, java.lang.String chain, long version, KeyRef payer, java.util.concurrent.Executor uniffiExecutor
+    ){
+        return UniffiAsyncHelpers.uniffiRustCallAsync(
+        uniffiExecutor,
+        callWithHandle(uniffiHandle -> {
+            return UniffiLib.uniffi_scaas_sdk_fn_method_account_prepare_set_kem_key(
+                uniffiHandle,
+                FfiConverterTypeKeyRef.INSTANCE.lower(key), FfiConverterString.INSTANCE.lower(chain), version, FfiConverterTypeKeyRef.INSTANCE.lower(payer)
+            );
+        }),
+        (future, callback, continuationHandle) -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuationHandle),
+        (_allocator, future, continuation) -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(_allocator, future, continuation),
+        (future) -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // lift function
+        (it) -> FfiConverterOptionalTypeRegistryWrite.INSTANCE.lift(it),
+        // Error FFI converter
+        new SdkExceptionErrorHandler()
+    );
+    }
+
+  
+    @Override
     public java.util.concurrent.CompletableFuture<Prepared> prepareSmartAddKey(SmartOp op, SubjectKeyArgs key){
         return prepareSmartAddKey(op, key, java.util.concurrent.ForkJoinPool.commonPool());
     }public java.util.concurrent.CompletableFuture<Prepared> prepareSmartAddKey(SmartOp op, SubjectKeyArgs key, java.util.concurrent.Executor uniffiExecutor
