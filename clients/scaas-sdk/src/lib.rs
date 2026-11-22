@@ -708,8 +708,6 @@ impl Sdk {
         c.verifiers.clone().ok_or(SdkError::VerdictRefused)
     }
 
-    /// An EVM chain's profile, chain id and the session's pool (`ChainUnknown`; `Argument`: not an EVM profile with a chain id).
-    #[cfg(any(feature = "account", feature = "wallet"))]
     /// The chain of profile `chain` (`ChainUnknown`).
     #[cfg(feature = "wallet")]
     pub(crate) fn chain(&self, chain: &str) -> Result<&Chain, SdkError> {
@@ -719,6 +717,8 @@ impl Sdk {
             .ok_or(SdkError::ChainUnknown)
     }
 
+    /// An EVM chain's profile, chain id and the session's pool (`ChainUnknown`; `Argument`: not an EVM profile with a chain id).
+    #[cfg(any(feature = "account", feature = "wallet"))]
     pub(crate) fn evm(
         &self,
         chain: &str,
