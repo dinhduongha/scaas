@@ -92,16 +92,11 @@ frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
 # tests), clippy --all-targets -D warnings clean. format.sh --check rust clean. Mutants t17 7/7, t18 5/5, t18b 3/3, t19 6/6
 # killed, each by its intended assertion (t17/t18/t18b/t19-mutants.txt).
 # T20 first part (at 5d206063c + the uncommitted T20 files): bind-gen (gen.sh --check, no drift) ok; ci_changes.py self-tests ok; actionlint 1.7.12 with shellcheck 0.11.0 clean; format.sh --check yaml sh py clean; docs check 0 errors, test_docs_check ok. Mutants t20 2/2 killed (the drift check on a source change without regeneration; the Dart load_check test).
-sdk-deny | 7f5e03caf | 0 | -; tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
-features | 7f5e03caf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
 ua-clippy | 1233ed00d | 0 | -; tree dirty
-docs | c1a17c82f | 0 | -
-sdk-wasm | 7f5e03caf | 0 | -; tree dirty
-sdk-deny | 7f5e03caf | 0 | -; tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 ua-vectors | c1a17c82f | 0 | 665 passed, 0 failed, 6 ignored (62 binaries)
 # T20 rest and the native auditor's PQZ consent (1233ed00d, c1a17c82f): the rows at 7f5e03caf "tree dirty" ran on the working
@@ -123,9 +118,6 @@ ua-vectors | c1a17c82f | 0 | 665 passed, 0 failed, 6 ignored (62 binaries)
 # errors; mutant t20c 3/3 killed (the new one by the test's unwrap). Not run: sdk-test whole, sdk-e2e, bind-gen (no public
 # item changed).
 sdk-raw | f4c422ef6 | 0 | 114 passed, 0 failed, 0 ignored (1 binaries)
-features | f4c422ef6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-docs | f4c422ef6 | 0 | -
-mutants-check | f4c422ef6 | 0 | -
 sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # The two Fable reviews of T13-T20 at ecabb7d41 (2026-11-20; controller call, owner auto-run 2026-11-19; decisions CLI-SDK-30's
 # last Change line). Fixed: F1, F3 (one block), F7, F14, F16 (doc), F19, F22, F24, F26 and F30 (doc); T1, T2, T3, T5, T6,
@@ -174,34 +166,16 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # M18  the regular line extrapolated past its measured counts (measure at the largest count the cap admits, or refuse above)
 # M20  closed: both parts run on a local Nethermind copy, runs/2026-11-20-m20-nethermind-summary.txt
 # M20  the cap rule never run against an enforcing node (a recorded Nethermind run of a 64-member registration and a PQZ debit)
-sdk-deny | b5b5ec89c | 0 | -
 sdk-test-sync | b5b5ec89c | 0 | 272 passed, 0 failed, 12 ignored (22 binaries) (--features <the set>,sync-api)
 # the rows above at 4e9aabf8b (the merge of ua-rs-sign 34f882da6): sdk-uniffi and sdk-clippy rc 101 on one clippy error in
 # ua-rs-sign's src/op/gas.rs (indexing_slicing), fixed by c21803966 (clippy clean on the four feature sets by hand; the two
 # gate steps not rerun); sdk-test stopped for the machine's shutdown, not recorded.
-bind-gen | 0b43541d3 | 0 | -
-sdk-uniffi | 0b43541d3 | 0 | 18 passed, 0 failed, 0 ignored (2 binaries)
-sdk-clippy | 0b43541d3 | 0 | -
-ffi | 0b43541d3 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-sdk-wasm | 0b43541d3 | 0 | -
-bind-cpp | 0b43541d3 | 0 | ctest: 0 tests failed out of 1
-bind-cs | 0b43541d3 | 0 | dotnet: 4 passed, 0 failed
-bind-python | 0b43541d3 | 0 | unittest: 6 ran, OK
-bind-kotlin | 0b43541d3 | 0 | kotlin: PASS (0 failures)
-bind-swift | 0b43541d3 | 0 | swift: PASS (0 failures)
-bind-java | 0b43541d3 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
-bind-go | 0b43541d3 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
-bind-js | 0b43541d3 | 0 | node: 4 pass, 0 fail, 0 skipped
-bind-dart | 0b43541d3 | 0 | dart: +14:
-sdk-test | 0b43541d3 | 0 | 294 passed, 0 failed, 15 ignored (21 binaries)
 sdk-min | 0b43541d3 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-bind-dart | 7104a069f | 0 | dart: +14:
 rpc-clippy | cd3b6c03e | 0 | -
 gas-gen | 6e7e71142 | 0 | -
 ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
-ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
 ua-clippy | 7765d3e64 | 0 | -
 ua-test | 95badea99 | 0 | 608 passed, 0 failed, 3 ignored (61 binaries)
@@ -228,19 +202,38 @@ ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
 # cli: the rc=101 note above is closed by baf175492 (git cherry-pick -x of sdk-complete's b7a34aff6): cli rc=0 at baf175492
 # node build at 129380772 (the merged tree, CAPPED_MEM=6G, cargo build --locked --offline -j2): rc=0, Finished in 3m 19s; log runs/2026-11-22-sdk-evm-profiles-node-build.log (git-ignored)
 # sdk-evm-profiles: docs | 1cba8f84a | 0 | -
-sdk-test | 4175c2d43 | 0 | 402 passed, 0 failed, 16 ignored (37 binaries)
 rpc-test | 4175c2d43 | 0 | 205 passed, 0 failed, 10 ignored (21 binaries)
 rpc-wasm | 4175c2d43 | 0 | -
-bind-gen | 4175c2d43 | 0 | -
 cli | 4175c2d43 | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
 node-test | 4175c2d43 | 0 | 897 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 4175c2d43 (origin/ua-rs-sign cc45679e8 into sdk-complete): node-e2e at --test-threads=10, wall 84 s, the capped scope's memory.peak 3.75 GB read at 60 s (cap 6 GiB); two reds before it were the runner's inputs, not the tree: a forge recovery snapshot of chain 31918 left by an interrupted earlier run (moved aside), and zether-cli built without `--features hazmat` (CI's e2e builds it with hazmat)
-docs | 54ddfcb33 | 0 | -
-features | 54ddfcb33 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 sdk-min | 54ddfcb33 | 0 | 74 passed, 0 failed, 0 ignored (13 binaries)
 sdk-noevm | 54ddfcb33 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
 sdk-clippy-noevm | 54ddfcb33 | 0 | -
-sdk-clippy | 54ddfcb33 | 0 | -
-mutants-check | 54ddfcb33 | 1 | -
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
+docs | 5c189e9f1 | 0 | -
+mutants-check | 5c189e9f1 | 0 | -
+bind-gen | 5c189e9f1 | 0 | -
+sdk-uniffi | 5c189e9f1 | 0 | 18 passed, 0 failed, 0 ignored (2 binaries)
+ffi | 5c189e9f1 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+sdk-wasm | 5c189e9f1 | 0 | -
+sdk-clippy | 5c189e9f1 | 0 | -
+bind-cpp | 5c189e9f1 | 0 | ctest: 0 tests failed out of 1
+bind-cs | 5c189e9f1 | 0 | dotnet: 4 passed, 0 failed
+bind-python | 5c189e9f1 | 0 | unittest: 7 ran, OK
+bind-kotlin | 5c189e9f1 | 0 | kotlin: PASS (0 failures)
+bind-swift | 5c189e9f1 | 0 | swift: PASS (0 failures)
+bind-js | 5c189e9f1 | 0 | node: 5 pass, 0 fail, 0 skipped
+bind-java | 5c189e9f1 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
+bind-go | 5c189e9f1 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
+bind-dart | 5c189e9f1 | 0 | dart: +14:
+features | 5c189e9f1 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+sdk-deny | 5c189e9f1 | 0 | -
+sdk-test | 5c189e9f1 | 0 | 408 passed, 0 failed, 16 ignored (38 binaries)
+# the rows above at 5c189e9f1 (the merge of sdk-complete e90f26685, a625341ae, and its regenerated bindings): every bind-* step,
+# bind-gen, sdk-uniffi, ffi, sdk-wasm, sdk-clippy, sdk-test, sdk-deny, features, docs, mutants-check green. Mutants at 5c189e9f1:
+# bind49 2/2, review-b 7/7 killed (B3 now killed, was other failure), t20b-sync 3 killed + 1 other failure: "the cancel token
+# ignored" hangs since review B15 took the test's wall-clock bound (cancel_token_cancels waits for its release forever), its
+# test process killed after 48 min. Paused by the owner (2026-11-22) before t20c-cs, t20d, t20e, t20e2, t20f, t20g, t20h,
+# t13rulings (R2 retargeted, not rerun) and t20 ran: they rerun once on the final ua-rs-sign merge.

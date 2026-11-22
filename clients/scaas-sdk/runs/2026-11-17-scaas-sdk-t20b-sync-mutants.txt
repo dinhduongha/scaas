@@ -1,6 +1,6 @@
-# t20b-sync mutants at commit 415e31f8d (name | outcome | test)
-one twin dropped from the list | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,uniffi --test binding every_async_call_has_a_blocking_twin
-the cancel token ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,sync-api --test binding sync::cancel_token_cancels
-a twin awaits on the caller's thread (no spawn) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,sync-api --test binding sync::a_panic_is_internal
-a twin blocks a runtime thread | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,sync-api --test binding sync::a_twin_on_a_runtime_thread_is_refused
-4 mutants, 4 killed, 0 survived, 0 not loaded
+# t20b-sync mutants (name | outcome | commit | test | first failure line)
+one twin dropped from the list | killed | 5c189e9f1 | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,uniffi --test binding every_async_call_has_a_blocking_twin | panicked at tests/binding.rs:104:5:
+the cancel token ignored | other failure | 5c189e9f1 | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,sync-api --test binding sync::cancel_token_cancels | error: test failed, to rerun pass `--test binding`
+a twin awaits on the caller's thread (no spawn) | killed | 5c189e9f1 | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,sync-api --test binding sync::a_panic_is_internal | panicked at tests/binding.rs:540:68:
+a twin blocks a runtime thread | killed | 5c189e9f1 | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,sync-api --test binding sync::a_twin_on_a_runtime_thread_is_refused | panicked at src/sync_cpp.rs:66:7:
+4 mutants, 3 killed, 0 survived, 0 not loaded, 1 other failure
