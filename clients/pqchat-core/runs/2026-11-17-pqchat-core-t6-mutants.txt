@@ -1,5 +1,5 @@
 # t6 mutants (name | outcome | commit | test | first failure line)
-counter persisted after the send | killed | 1dc2991c3 | ../../scripts/capped cargo test --locked --offline -j2 --test message counter_taken_before_the_seal | panicked at tests/message.rs:197:5:
+counter persisted after the send | killed | b4443da65 | ../../scripts/capped cargo test --locked --offline -j2 --test message counter_taken_before_the_seal | panicked at tests/message.rs:200:5:
 a walk before the signature check | killed | 1dc2991c3 | ../../scripts/capped cargo test --locked --offline -j2 --test message walk_only_after_signature_and_membership | panicked at tests/message.rs:375:5:
 the walk bound off by a factor | killed | 1dc2991c3 | ../../scripts/capped cargo test --locked --offline -j2 --test message long_chain_fresh_store | panicked at tests/message.rs:311:5:
 positions unbounded | killed | 1dc2991c3 | ../../scripts/capped cargo test --locked --offline -j2 --test message five_hundred_devices_keep_positions_bounded | panicked at tests/message.rs:341:9:

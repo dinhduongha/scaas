@@ -4,5 +4,5 @@ send typing to a chain store | killed | a010e6496 | ../../scripts/capped cargo t
 skip the spend consent | killed | 2e9b3f5a3 | ../../scripts/capped cargo test --locked --offline -j2 --test stores chain_cost_unconfirmed | panicked at tests/stores.rs:447:5:
 use a new store without confirmation | killed | a010e6496 | ../../scripts/capped cargo test --locked --offline -j2 --test stores rekey_by_a_member_adds_an_unconfirmed_store | panicked at tests/stores.rs:684:5:
 accept a list with no message store | killed | 2e9b3f5a3 | ../../scripts/capped cargo test --locked --offline -j2 --test stores store_list_invalid | panicked at tests/stores.rs:604:9:
-sign before the store-list check | killed | 2e9b3f5a3 | ../../scripts/capped cargo test --locked --offline -j2 --test stores hcs_listed_refused_before_signing | panicked at tests/stores.rs:547:5:
+sign before the store-list check | killed | b4443da65 | ../../scripts/capped cargo test --locked --offline -j2 --test stores hcs_listed_refused_before_signing | panicked at tests/stores.rs:585:5:
 6 mutants, 6 killed, 0 survived, 0 not loaded, 0 other failure
