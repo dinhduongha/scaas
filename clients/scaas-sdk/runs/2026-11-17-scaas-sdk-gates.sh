@@ -73,10 +73,10 @@ STEPS=(
     "mutants-check|.|$MCHECK"
     # plan T22: the CLI `scaas`, its release build and its dev-profiles build (the CI job scaas-cli)
     "cli|clients/scaas-cli|$cap cargo test $C && $cap cargo test $C --features dev-profiles && $cap cargo clippy $C --all-targets --features dev-profiles -- -D warnings"
-    # plan T28: the node's suite and clippy (6 GB, alone: AGENTS.md), and its e2e (its own anvil, ignored tests, one at a
-    # time as CI runs it: 25 in parallel passed the 6 GB cap)
+    # plan T28: the node's suite and clippy (6 GB, alone: AGENTS.md), and its e2e (its own anvil, ignored tests, 10 at a
+    # time: 25 in parallel passed the 6 GB cap, one at a time is too slow; owner 2026-11-22; CI keeps its own command)
     "node-test|scaas-node|CAPPED_MEM=6G $cap cargo test $C && CAPPED_MEM=6G $cap cargo clippy $C --all-targets -- -D warnings"
-    "node-e2e|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e -- --ignored --test-threads=1"
+    "node-e2e|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e -- --ignored --test-threads=10"
     # plan T22's gap (a): the SDK e2e's chain driven through the CLI (its own anvil, stopped after)
     "cli-e2e|clients/scaas-cli|$cap cargo test $C --features dev-profiles --test e2e -- --ignored"
 )
