@@ -575,6 +575,11 @@ calls! { cx;
     };
     "app-core kem-wrap" "AppCore::kem_wrap" {chain: String, recipient: String, kem_version: u64, key: H<Arc<AppKey>>, label: Vec<u8>, aad: Vec<u8>} => js(cx.app()?.kem_wrap(chain, recipient, kem_version, key.0, label, aad).await?);
     "app-core verify-app-record" "AppCore::verify_app_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_app_record(chain, ua, path, typed_json, sig).await?);
+    "app-core sign-pqvault-record" "AppCore::sign_pqvault_record" {account: KeyRef, path: AppPath, typed_json: String} @sign => {
+        cx.confirm(json!({"sign": "a PqVault record", "account": account, "path": path, "typed_data": typed_json}))?;
+        js(cx.app()?.sign_pqvault_record(account, path, typed_json).await?)
+    };
+    "app-core verify-pqvault-record" "AppCore::verify_pqvault_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_pqvault_record(chain, ua, path, typed_json, sig).await?);
     "app-core verify-app-record-key" "AppCore::verify_app_record_key" {kind: u16, key_data: Vec<u8>, path: AppPath, purpose: Option<String>, typed_json: String, signature: Vec<u8>} => named("valid", cx.app()?.verify_app_record_key(kind, key_data, path, purpose, typed_json, signature)?);
     "app-core prepare-app-call" "AppCore::prepare_app_call" {chain: String, contract: String, entry: String, args: String, payer: KeyRef} @sign => {
         let call = cx.app()?.prepare_app_call(chain, contract, entry, args, payer).await?;

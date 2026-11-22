@@ -836,20 +836,25 @@ pub enum AppPath {
     ChainBound { purpose: [u8; 32] },
 }
 
-/// Whether `purpose` is a SCaaS purpose: a `UAKinds` constant (`APP_PURPOSE_NS` included, the generated list), one this crate
-/// signs (`PURPOSES`, the portable records' tags), or the seal purpose.
+/// Whether `purpose` is a SCaaS purpose: a `UAKinds` constant (`APP_PURPOSE_NS` included, the generated list), a SCaaS app's
+/// `appPurpose(appId)` (the generated `SCAAS_APP_IDS`: PqVault's `P_V`, signed only by [`super::pqvault`], owner 2026-11-22),
+/// one this crate signs (`PURPOSES`, the portable records' tags), or the seal purpose.
 #[cfg(feature = "app-core")]
 pub fn is_scaas_purpose(purpose: &[u8; 32]) -> bool {
     super::app_refusals::SCAAS_PURPOSES
         .iter()
         .any(|(_, s)| keccak256(s.as_bytes()) == *purpose)
+        || super::app_refusals::SCAAS_APP_IDS
+            .iter()
+            .any(|(_, s)| app_purpose(&keccak256(s.as_bytes())).ok() == Some(*purpose))
         || check_purpose(purpose).is_ok()
         || *purpose == crate::seal_purpose_tag()
 }
 
 /// The typed digest of an app record on `path` once its domain and purpose pass (scaas-sdk spec §12.4): a domain named as a
-/// SCaaS contract's (`AppDomainRefused`); path A: `app_id` ≠ 0, a domain of exactly `name, version, salt` (`AppDomainRefused`)
-/// with `salt == app_id` (`AppSaltMismatch`); path B: an app purpose (`AppPurposeRefused`) and a domain with a `chainId` and a
+/// SCaaS contract's (`AppDomainRefused`); path A: `app_id` ≠ 0 and not a SCaaS app's (`AppPurposeRefused`: PqVault's signs by
+/// [`super::pqvault`] only), a domain of exactly `name, version, salt` (`AppDomainRefused`) with `salt == app_id`
+/// (`AppSaltMismatch`); path B: an app purpose (`AppPurposeRefused`) and a domain with a `chainId` and a
 /// `verifyingContract` (`AppDomainRefused`; their values are the caller's to check against its profile).
 #[cfg(feature = "app-core")]
 pub fn app_record_digest(path: &AppPath, typed: &TypedData) -> Result<[u8; 32]> {
@@ -866,6 +871,9 @@ pub fn app_record_digest(path: &AppPath, typed: &TypedData) -> Result<[u8; 32]> 
         AppPath::Portable { app_id } => {
             if *app_id == [0; 32] {
                 return Err(Error::Argument);
+            }
+            if is_scaas_purpose(&app_purpose(app_id)?) {
+                return Err(Error::AppPurposeRefused);
             }
             let mut keys: Vec<&str> = d.keys().map(String::as_str).collect();
             keys.sort_unstable();
@@ -901,7 +909,18 @@ pub fn sign_app_record(
     path: &AppPath,
     typed: &TypedData,
 ) -> Result<UASig> {
-    let digest = app_record_digest(path, typed)?;
+    sign_app_digest(key, registry, path, &app_record_digest(path, typed)?)
+}
+
+/// [`sign_app_record`] after its refusals: the record's typed digest `digest` on `path` (also [`super::pqvault::sign`]'s).
+#[cfg(feature = "app-core")]
+pub(super) fn sign_app_digest(
+    key: &dyn Signer,
+    registry: Option<&Domain>,
+    path: &AppPath,
+    digest: &[u8; 32],
+) -> Result<UASig> {
+    let digest = *digest;
     let purpose = match path {
         AppPath::Portable { app_id } => return ua_sig_app(key, app_id, &digest),
         AppPath::ChainBound { purpose } => purpose,
@@ -959,9 +978,20 @@ pub fn verify_app_record(
     sig: &UASig,
     state: &AppRecordState,
 ) -> bool {
-    let Ok(digest) = app_record_digest(path, typed) else {
-        return false;
-    };
+    app_record_digest(path, typed).is_ok_and(|d| verify_app_digest(ua, path, &d, sig, state))
+}
+
+/// [`verify_app_record`] after its refusals: `sig` over the record's typed digest `digest` on `path` (also
+/// [`super::pqvault::verify`]'s).
+#[cfg(feature = "app-core")]
+pub(super) fn verify_app_digest(
+    ua: &[u8; 32],
+    path: &AppPath,
+    digest: &[u8; 32],
+    sig: &UASig,
+    state: &AppRecordState,
+) -> bool {
+    let digest = *digest;
     let purpose = match path {
         AppPath::Portable { app_id } => match app_purpose(app_id) {
             Ok(p) => p,
