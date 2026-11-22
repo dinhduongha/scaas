@@ -201,6 +201,7 @@ pub(crate) struct Arena {
     /// Slots of destroyed app-core key handles, wiped, reused by a secret of the same length (scaas-sdk spec §12.2: a ratchet
     /// makes and destroys a key per message), and the app-core handles live in this arena (feature `app-core`).
     free: Vec<Slot>,
+    #[cfg(feature = "app-core")]
     app_live: usize,
 }
 
@@ -226,6 +227,7 @@ impl Arena {
             deks: HashMap::new(),
             prf_kek: None,
             free: Vec::new(),
+            #[cfg(feature = "app-core")]
             app_live: 0,
         }
     }
