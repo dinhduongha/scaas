@@ -474,6 +474,34 @@ with it false (Moonbeam, Moonbase, whose `profile.json` states `"pinnedReads": f
 send's quote) works; the field false on a non-EVM profile is `Argument`. Every binding carries it (regenerated); chain-support's
 Moonbeam SDK and Self-relay cells are BUILT.
 
+<a id="ARCH-POS-21"></a>
+### ARCH-POS-21 — The PQZ per-set runs go in parallel, one fixed lane per set
+- old: — · status: current · owner: yes · date: 2026-11-22 · normative: decisions.md#ARCH-POS-21 · superseded-by: —
+
+**Rule.** A run at a PQZ parameter set (`smartcontracts/evm/script/pqz/at-set.sh`, which calls `script/pqz/lanes.sh`)
+builds and tests in that set's fixed lane, `scratchpad/lanes/<set>/` (git-ignored): `smartcontracts/evm` (its `lib/` as
+real files), `smartcontracts/vectors` and `pqz-core/params/sets`, copied from the work tree by `rsync --delete
+--copy-links` (no hardlink, no symlink back into the work tree), with the lane's own `out/` and `cache/` kept, so builds
+are incremental. The set's `PqzSet.sol` is installed in the lane only; the work tree's `src/pqz/PqzSet.sol` is never
+written, so several sets run at once from one work tree. One writer per lane: a flock per lane, and a second run on a
+busy lane is refused by name. `others` runs the three other sets **in parallel**, one lane each, each forge through
+`scripts/capped`; a lane starts only while `free -g` shows about 4 GB per lane above a 10 GB reserve, the rest wait
+(never dropped), with start, ok or FAIL per set and a heartbeat every 30 s, the full output in a git-ignored `.log`
+per set, and a non-zero exit naming each failed set. A fifth lane, `mutants`, runs a mutant runner at the work tree's
+own set. `--clean` wipes the lane's `out/` and `cache/` first: **the round's final matrix and every pre-merge gate use
+`--clean`**; the incremental path is for task-level runs. The incremental path was proven before use: an incremental
+lane build after a source change and a clean build give byte-identical runtime and init bytecode for every contract
+(`smartcontracts/evm/runs/2026-11-23-set-lanes.txt`). The CLI and scopes of `at-set.sh` are unchanged (`<set>` or
+`others`; `sensitive`, `list`, `modules` or forge arguments); inside an outer `scripts/capped` `others` runs the sets
+one after another.
+**Status.** BUILT on branch `set-lanes`, UNAUDITED tooling. TODO 8g (2) (suites selected by changed bytecode), (3) (an
+explicit list of set-sensitive suites with a check) and (5) (generated code-hash pins) are still open.
+**Why.** `at-set.sh` rewrote `src/pqz/PqzSet.sol` in place, so a work tree ran one set at a time and `others` ran the
+sets one after another: a round's matrix took hours longer than it needs.
+**Cost if wrong.** A stale incremental cache would test old bytecode: hence the proof, and `--clean` wherever a gate
+decides a merge. Disk: one `out/` per lane.
+**Source.** Owner 2026-11-18 (TODO 8g (4)): "Đồng ý. Làm luôn" (agreed, build it now). Owner 2026-11-22: "Khi chạy các set (4 set), cần cho phép chạy song song" (when the four sets run, they must be allowed to run in parallel); earlier, 2026-10-23, the four per-set gates may run at once with `CAPPED_SLOTS=4`. Owner 2026-11-23: build 8g now, beside the T26 review.
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 
