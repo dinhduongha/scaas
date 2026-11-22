@@ -11,6 +11,16 @@
     clippy::indexing_slicing
 )]
 
+/// FRB 2's attributes as doc hints, read only by `flutter_rust_bridge_codegen`'s expansion (`--cfg frb_expand`; the SDK's
+/// `frb_hint!`, plan T12); no effect on a build and no dependency. `ignore`: a Rust-only item, absent from every binding
+/// (the storage interface, the chain port, the Matrix transport, spec §11).
+#[allow(unused_macros)]
+macro_rules! frb_hint {
+    (ignore) => {
+        "frb_encoded(235b6672622869676e6f7265295d)"
+    };
+}
+
 pub mod chain_state;
 pub mod chain_store;
 pub mod check;
@@ -19,14 +29,17 @@ pub mod content;
 pub mod device;
 pub mod drops;
 pub mod error;
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub mod matrix;
 pub mod message;
 pub mod model;
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub mod net;
 pub mod order;
 pub mod reads;
 pub mod recovery;
 pub mod session;
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub mod store;
 pub mod stores;
 pub mod topics;
@@ -133,6 +146,7 @@ pub(crate) struct Events {
 
 impl PqChat {
     /// The crate over `sdk`: its scope declares PqChat's label prefix and class 3; reads and writes through the SDK.
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub fn new(
         sdk: Arc<Sdk>,
         store: Arc<dyn PqChatStore>,
@@ -147,6 +161,7 @@ impl PqChat {
     }
 
     /// The crate over a scope and a chain port of the caller's (the tests' recording fakes).
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub fn with_net(
         app: Arc<AppCore>,
         net: Arc<dyn net::Net>,
@@ -208,6 +223,7 @@ impl PqChat {
     }
 
     /// The app's Matrix client, after its Matrix login (Rust only, spec §11).
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub fn attach_matrix(&self, client: Arc<dyn matrix::MatrixTransport>) {
         *self
             .matrix
@@ -216,6 +232,7 @@ impl PqChat {
     }
 
     /// Before the app's Matrix logout: a session listing Matrix cannot send (`MatrixDetached`); chain stores still serve.
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub fn detach_matrix(&self) {
         *self
             .matrix

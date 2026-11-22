@@ -150,6 +150,7 @@ pub struct Built {
     pub session_id: String,
     pub epoch_id: String,
     pub epoch: Epoch,
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub k: Arc<AppKey>,
     pub wraps: Vec<PqWrap>,
     pub signed: PqChatSigned,

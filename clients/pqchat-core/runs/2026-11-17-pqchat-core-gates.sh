@@ -41,7 +41,7 @@ STEPS=(
     "ua-appcore|clients/ua-rs|$cap cargo clippy $C --all-targets --features app-core,vectors -- -D warnings && $cap cargo test $C --features app-core,vectors --test app_core --test pqchat_keys && python3 -I scripts/gen_app_refusals.py --check"
     "ck-test|clients/clientkeys|$cap npm test"
     "ck-vectors|clients/clientkeys|node scripts/pqchat-vectors.mjs && git diff --exit-code -- ../../smartcontracts/vectors/pqchat"
-    "bind|.|bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check"
+    "bind|.|bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check && bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh"
     "docs|.|python3 scripts/docs_check.py check && python3 scripts/test_docs_check.py"
     "mutants-check|.|$MCHECK"
 )

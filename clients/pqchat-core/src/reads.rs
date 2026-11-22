@@ -129,6 +129,7 @@ impl PqChat {
     /// The account's own wrap of `e` at `contract`, read from state (trusted), checked against the signed record's
     /// `wrapHashes[i]` before it enters a decapsulation (`wrap-hash`), then opened by the account's KEM key: the epoch key.
     /// `member` when the account is not a member; `envelope` when the wrap does not open (shown, never answered).
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub async fn open_own_wrap(
         &self,
         chain: &str,

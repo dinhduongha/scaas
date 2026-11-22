@@ -47,6 +47,10 @@ zeroize = "=1.8.2"
 # cargo cache); the SDK's graph has it already
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 
+# `frb_expand`: set only by the bindings generator's expansion (plan T12, src/lib.rs `frb_hint!`)
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
 [[test]]
 name = "vectors"
 required-features = ["vectors"]

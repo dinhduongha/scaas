@@ -1,0 +1,3 @@
+.dart_tool/
+# generated at check time
+lib/src/rust/

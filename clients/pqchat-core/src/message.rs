@@ -43,6 +43,7 @@ pub const EPOCH_STEPS: usize = 64;
 pub struct OpenEpoch {
     pub chain: String,
     pub epoch: Epoch,
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub k: Arc<AppKey>,
 }
 
