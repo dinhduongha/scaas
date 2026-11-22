@@ -24,7 +24,8 @@ fn a_build_without_fam_arweave_still_seals_and_opens_a_file() {
         assert_eq!(s.ct_sha256, <[u8; 32]>::from(Sha256::digest(&s.object)));
         assert_eq!(s.sha256, <[u8; 32]>::from(Sha256::digest(&file)));
         assert_eq!(
-            &k.open_file(&s.key, &s.object, s.size, &s.sha256).unwrap()[..],
+            &k.open_file(&s.key, &s.object, s.size, &s.sha256, &s.ct_sha256)
+                .unwrap()[..],
             &file[..]
         );
     }
@@ -36,42 +37,51 @@ fn open_file_refuses_each_mismatch_beside_its_control() {
     let k = w.app_keys();
     let s = k.seal_file(b"hello").unwrap();
     assert!(
-        k.open_file(&s.key, &s.object, 5, &s.sha256).is_ok(),
+        k.open_file(&s.key, &s.object, 5, &s.sha256, &s.ct_sha256)
+            .is_ok(),
         "control"
     );
     let short = &s.object[..s.object.len() - 1];
     assert_eq!(
-        k.open_file(&s.key, short, 5, &s.sha256).unwrap_err(),
+        k.open_file(&s.key, short, 5, &s.sha256, &s.ct_sha256)
+            .unwrap_err(),
         Error::FileLength
     );
     let mut flip = s.object.clone();
     flip[100] ^= 1;
+    // with the flipped object's own ctSha256 (a content naming it) the check passes and the tag refuses
+    let flip_ct: [u8; 32] = Sha256::digest(&flip).into();
     assert_eq!(
-        k.open_file(&s.key, &flip, 5, &s.sha256).unwrap_err(),
+        k.open_file(&s.key, &flip, 5, &s.sha256, &flip_ct)
+            .unwrap_err(),
         Error::Aead
     );
     assert_eq!(
-        k.open_file(&s.key, &s.object, 4, &s.sha256).unwrap_err(),
+        k.open_file(&s.key, &s.object, 4, &s.sha256, &s.ct_sha256)
+            .unwrap_err(),
         Error::FileFrame
     );
     assert_eq!(
-        k.open_file(&s.key, &s.object, 6, &s.sha256).unwrap_err(),
+        k.open_file(&s.key, &s.object, 6, &s.sha256, &s.ct_sha256)
+            .unwrap_err(),
         Error::FileFrame
     );
     assert_eq!(
-        k.open_file(&s.key, &s.object, 5, &[0; 32]).unwrap_err(),
+        k.open_file(&s.key, &s.object, 5, &[0; 32], &s.ct_sha256)
+            .unwrap_err(),
         Error::FileHashMismatch
     );
     let other = k.seal_file(b"hello").unwrap();
     assert_ne!(other.object, s.object, "a fresh key per file");
     assert_eq!(
-        k.open_file(&other.key, &s.object, 5, &s.sha256)
+        k.open_file(&other.key, &s.object, 5, &s.sha256, &s.ct_sha256)
             .unwrap_err(),
         Error::Aead
     );
     // above the cap: refused before anything is read
     assert_eq!(
-        k.open_file(&s.key, &s.object, CAP, &s.sha256).unwrap_err(),
+        k.open_file(&s.key, &s.object, CAP, &s.sha256, &s.ct_sha256)
+            .unwrap_err(),
         Error::FileTooLarge
     );
 }
@@ -87,7 +97,8 @@ fn a_file_key_serves_open_file_only() {
     );
     let data = k.random_key(KeyUsage::Data).unwrap();
     assert_eq!(
-        k.open_file(&data, &s.object, 1, &s.sha256).unwrap_err(),
+        k.open_file(&data, &s.object, 1, &s.sha256, &s.ct_sha256)
+            .unwrap_err(),
         Error::AppKeyUsage
     );
     // a wrapped file key comes back as a File handle and opens the object
@@ -95,7 +106,41 @@ fn a_file_key_serves_open_file_only() {
     let wire = k.seal_key(&kw, &s.key, b"file").unwrap();
     let back = k.open_key(&kw, &wire, KeyUsage::File, b"file").unwrap();
     assert_eq!(
-        &k.open_file(&back, &s.object, 1, &s.sha256).unwrap()[..],
+        &k.open_file(&back, &s.object, 1, &s.sha256, &s.ct_sha256)
+            .unwrap()[..],
         b"x"
+    );
+}
+
+/// pqchat-core T10b, the class fix: `open_file` checks the exact length and `ctSha256` before any decryption; a flipped byte is
+/// `FileHashMismatch` (never reaching the tag), another `ctSha256` too; each beside its control.
+#[test]
+fn open_file_checks_ct_sha256_before_decryption() {
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let k = w.app_keys();
+    let s = k.seal_file(b"hello").unwrap();
+    assert_eq!(
+        &k.open_file(&s.key, &s.object, 5, &s.sha256, &s.ct_sha256)
+            .unwrap()[..],
+        b"hello",
+        "control"
+    );
+    let mut flip = s.object.clone();
+    flip[100] ^= 1;
+    assert_eq!(
+        k.open_file(&s.key, &flip, 5, &s.sha256, &s.ct_sha256)
+            .unwrap_err(),
+        Error::FileHashMismatch
+    );
+    assert_eq!(
+        k.open_file(&s.key, &s.object, 5, &s.sha256, &[0; 32])
+            .unwrap_err(),
+        Error::FileHashMismatch
+    );
+    let short = &s.object[..s.object.len() - 1];
+    assert_eq!(
+        k.open_file(&s.key, short, 5, &s.sha256, &s.ct_sha256)
+            .unwrap_err(),
+        Error::FileLength
     );
 }

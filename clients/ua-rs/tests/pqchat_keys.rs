@@ -696,3 +696,125 @@ fn cards_reproduce_the_rows() {
         assert!(pqchat::card_typed(&k).is_err(), "{name}: no card");
     }
 }
+
+/// pqchat-core T10b (owner 2026-11-22): the `file` content rows. (a) the sealer is given every field but the key and a `File`
+/// handle; the key enters the content here: the row's ciphertext and id; the content opens to the row's. (b) the reader opens
+/// the object named by the opened content: its length and `ctSha256` before decryption, then the frame and `sha256`; every
+/// refusal row by name (clientkeys' "file" is `PqChatContent`), each beside its twin; PqChat's app id.
+#[cfg(feature = "fam-arweave")]
+#[test]
+fn file_message_rows() {
+    use scaas_ua::arweave::SigType;
+    use scaas_ua::wallet::pqchat_file::pqchat_open_file;
+    let (w, k) = keys();
+    let (m, rec) = (pq("messages"), pq("records"));
+    let f = &m["fileMessage"];
+    assert_eq!(
+        scaas_ua::wallet::pqchat::app_id().to_vec(),
+        unhex(&rec["appId"]["hash"])
+    );
+    let h = header(&f["record"]);
+    let kk = epoch_key(&k, &f["K"]);
+    let pos = position(&k, &kk, &h);
+    let signer = w.ua_key(0x0131, 0, 0).unwrap();
+    let fk = || {
+        k.vectors_import(&a32(&f["fileKey"]), KeyUsage::File)
+            .unwrap()
+    };
+    let sealed = f["sealed"].as_str().unwrap().as_bytes();
+    let nonce = a12(&f["envNonce"]);
+    let s = k
+        .pqchat_vectors_seal_file_message(&kk, &pos, &h, sealed, &fk(), &signer, &nonce)
+        .unwrap();
+    assert_eq!(s.ciphertext, unhex(&f["record"]["ciphertext"]));
+    assert_eq!(s.message_id.to_vec(), unhex(&f["id"]));
+    let content = k.pqchat_open_message(&pos, &h, &s.ciphertext).unwrap();
+    assert_eq!(
+        content.as_slice(),
+        f["content"].as_str().unwrap().as_bytes()
+    );
+    let (s_, e_) = (h.session_id, h.epoch_id);
+    let env = k
+        .pqchat_vectors_envelope(&kk, &s_, &e_, &unhex(&f["inner"]), &nonce)
+        .unwrap();
+    assert_eq!(env, unhex(&f["env"]));
+    // the object of the row, padded to its bucket inside the AEAD
+    let root = k
+        .vectors_import(&a32(&f["appRoot"]), KeyUsage::Derive)
+        .unwrap();
+    let file = unhex(&f["file"]);
+    let a = k
+        .vectors_seal_for_arweave(&root, fk(), &file, SigType::Ed25519)
+        .unwrap();
+    assert_eq!(a.url, f["url"].as_str().unwrap());
+    assert_eq!(a.ct_sha256.to_vec(), unhex(&f["ctSha256"]));
+    let object = a.item.data().to_vec();
+    assert_eq!(object.len() as u64, f["objectLength"].as_u64().unwrap());
+    assert_eq!(&pqchat_open_file(&content, &object).unwrap()[..], &file[..]);
+    let code = |c: &str| {
+        if c == "file" {
+            "PqChatContent".to_string()
+        } else {
+            c.to_string()
+        }
+    };
+    for r in m["fileOpenRefused"].as_array().unwrap() {
+        let mut o = object.clone();
+        match r["change"].as_str() {
+            Some("drop-last") => drop(o.pop()),
+            Some("append-zero") => o.push(0),
+            Some("flip-1000") => o[1000] ^= 1,
+            _ => {}
+        }
+        let c = match r.get("content") {
+            Some(v) => canonical_json(v).unwrap().into_bytes(),
+            None => content.to_vec(),
+        };
+        let got = pqchat_open_file(&c, &o);
+        match r["code"].as_str() {
+            None => assert_eq!(&got.unwrap()[..], &file[..], "{}", r["name"]),
+            Some(x) => assert_eq!(got.unwrap_err().code(), code(x), "{}", r["name"]),
+        }
+    }
+    for r in m["fileContentRefused"].as_array().unwrap() {
+        let c = canonical_json(&r["content"]).unwrap();
+        assert_eq!(
+            pqchat_open_file(c.as_bytes(), &object).err(),
+            Some(Error::PqChatContent),
+            "{}",
+            r["name"]
+        );
+        let t = canonical_json(&r["twin"]).unwrap();
+        assert!(
+            pqchat_open_file(t.as_bytes(), &object).is_ok(),
+            "{}",
+            r["name"]
+        );
+    }
+    for r in m["fileSealRefused"].as_array().unwrap() {
+        let c = serde_json::to_vec(&r["content"]).unwrap();
+        assert_eq!(
+            k.pqchat_seal_file_message(&kk, &pos, &h, &c, &fk(), &signer)
+                .err(),
+            Some(Error::PqChatContent),
+            "{}",
+            r["name"]
+        );
+        let t = serde_json::to_vec(&r["twin"]).unwrap();
+        assert!(k
+            .pqchat_seal_file_message(&kk, &pos, &h, &t, &fk(), &signer)
+            .is_ok());
+    }
+    // the key handle is a File key: another usage is refused before anything is sealed
+    let data = k.random_key(KeyUsage::Data).unwrap();
+    assert_eq!(
+        k.pqchat_seal_file_message(&kk, &pos, &h, sealed, &data, &signer)
+            .err(),
+        Some(Error::AppKeyUsage)
+    );
+    // the sealed message holds no key byte outside its ciphertext: the key is only inside the content
+    let key = unhex(&f["fileKey"]);
+    for b in [&s.inner, &s.env, &s.payload] {
+        assert!(!b.windows(32).any(|x| x == &key[..]));
+    }
+}

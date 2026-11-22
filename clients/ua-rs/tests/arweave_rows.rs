@@ -101,7 +101,8 @@ fn sealed_objects_frames_and_checks() {
         assert_eq!(s.object[s.object.len() - 16..].to_vec(), unhex(&r["tail"]));
         assert_eq!(s.sha256.to_vec(), unhex(&r["sha256"]));
         assert_eq!(
-            &k.open_file(&s.key, &s.object, s.size, &s.sha256).unwrap()[..],
+            &k.open_file(&s.key, &s.object, s.size, &s.sha256, &s.ct_sha256)
+                .unwrap()[..],
             &file[..]
         );
     }
@@ -125,7 +126,7 @@ fn sealed_objects_frames_and_checks() {
             "{}",
             r["name"]
         );
-        let got = k.open_file(&h, &object, 5, &a32(&r["sha256"]));
+        let got = k.open_file(&h, &object, 5, &a32(&r["sha256"]), &a32(&r["ctSha256"]));
         match r["code"].as_str() {
             None => assert_eq!(&got.unwrap()[..], &file[..], "{}", r["name"]),
             Some(c) => assert_eq!(got.unwrap_err().code(), c, "{}", r["name"]),

@@ -3,12 +3,13 @@
 //! `app-core`): [`AppKeys::seal_file`] draws a fresh file key (a [`KeyUsage::File`] handle), frames the file as
 //! `size (8 B big-endian) ‖ file ‖ 0x00…` up to its power-of-two bucket ([`crate::file::bucket`]) and encrypts the frame with
 //! AES-256-GCM under that key and the nonce `0^96` (safe: the key is never used again to seal), so the object is exactly
-//! `bucket + 16` B; [`AppKeys::open_file`] checks the length, the tag, the frame's `len` against the signed `size`, every pad
-//! byte zero and SHA-256 of the file against the signed `sha256` before any plaintext leaves (C15). Byte formats: clientkeys
+//! `bucket + 16` B; [`AppKeys::open_file`] checks the length and SHA-256 of the object against the signed `ctSha256` before any
+//! decryption (pqchat-core T10b), then the tag, the frame's `len` against the signed `size`, every pad byte zero and SHA-256 of
+//! the file against the signed `sha256` before any plaintext leaves (C15). Byte formats: clientkeys
 //! `src/arweave.js`, `smartcontracts/vectors/arweave/objects.json`. UNAUDITED.
 use super::aead::{aead_open, aead_seal, Alg};
 use super::{AppKeys, Error, KeyHandle, KeyUsage, Result};
-use crate::file::{bucket, CAP};
+use crate::file::{bucket, check_object, ObjectError, CAP};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
@@ -65,8 +66,9 @@ impl AppKeys {
         self.seal_file_under(self.random_key(KeyUsage::File)?, file, CAP)
     }
 
-    /// The file of `object` under the `File` handle `key`, after every check: the length `bucket(size) + 16` (`FileLength`;
-    /// a bucket above the cap `FileTooLarge`), the tag (`Aead`), the frame's `len` equal to `size` and the zero pad
+    /// The file of `object` under the `File` handle `key`, after every check: first, before any decryption, the length
+    /// `bucket(size) + 16` (`FileLength`; a bucket above the cap `FileTooLarge`) and SHA-256 of the object equal to
+    /// `ct_sha256` (`FileHashMismatch`); then the tag (`Aead`), the frame's `len` equal to `size` and the zero pad
     /// (`FileFrame`), SHA-256 of the file equal to `sha256` (`FileHashMismatch`).
     pub fn open_file(
         &self,
@@ -74,29 +76,43 @@ impl AppKeys {
         object: &[u8],
         size: u64,
         sha256: &[u8; 32],
+        ct_sha256: &[u8; 32],
     ) -> Result<Zeroizing<Vec<u8>>> {
         self.check_usage(key, KeyUsage::File)?;
-        let b = bucket(size, CAP).ok_or(Error::FileTooLarge)?;
-        if object.len() as u64 != b + 16 {
-            return Err(Error::FileLength);
-        }
-        let fr = aead_open(Alg::Aes256Gcm, &*self.bytes(key)?, &[0; 12], &[], object)?;
-        let n = usize::try_from(size).map_err(|_| Error::FileTooLarge)?;
-        let len = fr.get(..8).ok_or(Error::FileFrame)?;
-        if len != size.to_be_bytes() {
-            return Err(Error::FileFrame);
-        }
-        let pad = fr.get(8 + n..).ok_or(Error::FileFrame)?;
-        if pad.iter().fold(0u8, |a, x| a | x) != 0 {
-            return Err(Error::FileFrame);
-        }
-        let file = Zeroizing::new(fr.get(8..8 + n).ok_or(Error::FileFrame)?.to_vec());
-        let h: [u8; 32] = Sha256::digest(&file[..]).into();
-        if h.iter().zip(sha256).fold(0u8, |a, (x, y)| a | (x ^ y)) != 0 {
-            return Err(Error::FileHashMismatch);
-        }
-        Ok(file)
+        let kb = self.bytes(key)?;
+        open_object(&kb, object, size, sha256, ct_sha256)
     }
+}
+
+/// [`AppKeys::open_file`]'s checks and open under the key bytes `key` (also the `file` content's reader, `pqchat_file`).
+pub(super) fn open_object(
+    key: &[u8; 32],
+    object: &[u8],
+    size: u64,
+    sha256: &[u8; 32],
+    ct_sha256: &[u8; 32],
+) -> Result<Zeroizing<Vec<u8>>> {
+    check_object(object, size, ct_sha256, CAP).map_err(|e| match e {
+        ObjectError::TooLarge => Error::FileTooLarge,
+        ObjectError::Length => Error::FileLength,
+        ObjectError::HashMismatch => Error::FileHashMismatch,
+    })?;
+    let fr = aead_open(Alg::Aes256Gcm, key, &[0; 12], &[], object)?;
+    let n = usize::try_from(size).map_err(|_| Error::FileTooLarge)?;
+    let len = fr.get(..8).ok_or(Error::FileFrame)?;
+    if len != size.to_be_bytes() {
+        return Err(Error::FileFrame);
+    }
+    let pad = fr.get(8 + n..).ok_or(Error::FileFrame)?;
+    if pad.iter().fold(0u8, |a, x| a | x) != 0 {
+        return Err(Error::FileFrame);
+    }
+    let file = Zeroizing::new(fr.get(8..8 + n).ok_or(Error::FileFrame)?.to_vec());
+    let h: [u8; 32] = Sha256::digest(&file[..]).into();
+    if h.iter().zip(sha256).fold(0u8, |a, (x, y)| a | (x ^ y)) != 0 {
+        return Err(Error::FileHashMismatch);
+    }
+    Ok(file)
 }
 
 /// Test-only entry points (feature `vectors`, never in a release build).

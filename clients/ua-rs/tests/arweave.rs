@@ -161,7 +161,7 @@ fn seal_for_arweave_seals_signs_and_opens() {
         let again = DataItem::parse_c9(a.item.bytes().to_vec()).unwrap();
         assert_eq!(again.id(), a.item.id(), "the kept item reloads");
         assert_eq!(
-            &k.open_file(&a.key, a.item.data(), a.size, &a.sha256)
+            &k.open_file(&a.key, a.item.data(), a.size, &a.sha256, &a.ct_sha256)
                 .unwrap()[..],
             b"attachment"
         );

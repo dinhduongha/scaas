@@ -13,6 +13,15 @@ use crate::ua_portable::UASig;
 use crate::{keccak256, ua_message};
 use serde_json::{json, Value};
 
+/// PqChat's app id in the registry's open app namespace (pqchat-core T10b, owner 2026-11-22): the scope's per-account
+/// storage root (`app_root_key`), so the shared `seal_for_arweave` derives its upload keys. No app record is signed under it.
+pub const APP_ID_TAG: &str = "scaas.pqchat.v1";
+
+/// `APP_ID = keccak256("scaas.pqchat.v1")`.
+pub fn app_id() -> [u8; 32] {
+    keccak256(APP_ID_TAG.as_bytes())
+}
+
 /// The type strings, exactly as the specs fix them (UA-7 §4, public topics §2).
 pub const TYPE_STRINGS: &[(&str, &str)] = &[
     ("MemberKey", "MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"),

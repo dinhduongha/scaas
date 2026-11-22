@@ -179,10 +179,21 @@ fn write_canonical(v: &Value, out: &mut String) -> Result<()> {
     Ok(())
 }
 
-/// The canonical JSON of the JSON text `text` (bounded: [`PT_MAX`] bytes, [`JSON_DEPTH`]).
-fn canonical_of_text(text: &[u8]) -> Result<String> {
-    let v = super::bounded::json(text, PT_MAX, JSON_DEPTH).map_err(|_| Error::PqChatContent)?;
-    canonical_json(&v)
+/// The canonical JSON of the JSON text `text` (bounded: [`PT_MAX`] bytes, [`JSON_DEPTH`]), in memory wiped on drop (a
+/// content may carry a file key); the parsed value wiped too.
+fn canonical_of_text(text: &[u8]) -> Result<Zeroizing<String>> {
+    let mut v = super::bounded::json(text, PT_MAX, JSON_DEPTH).map_err(|_| Error::PqChatContent)?;
+    let c = canonical_zeroizing(&v, text.len());
+    super::bounded::wipe(&mut v);
+    c
+}
+
+/// [`canonical_json`] of `v` into a buffer of `cap` bytes reserved up front (no reallocation leaves a copy behind for a
+/// canonical form within it), wiped on drop.
+pub(super) fn canonical_zeroizing(v: &Value, cap: usize) -> Result<Zeroizing<String>> {
+    let mut out = Zeroizing::new(String::with_capacity(cap.saturating_add(64)));
+    write_canonical(v, &mut out)?;
+    Ok(out)
 }
 
 /// `u32be(len) ‖ content ‖ zeros` to the smallest of 256, 1,024, 4,096, 16,384 B, then multiples of 16,384 B; above
@@ -700,7 +711,22 @@ impl AppKeys {
     ) -> Result<SealedMessage> {
         h.check()?;
         let canon = canonical_of_text(content_json)?;
-        let pt = Zeroizing::new(pad(canon.as_bytes())?);
+        self.seal_canonical(k, pos, h, canon.as_bytes(), signer, env_nonce)
+    }
+
+    /// S5 from a canonical content (`canon`): padded, encrypted at `pos`, signed, the envelope and the payload.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn seal_canonical(
+        &self,
+        k: &KeyHandle,
+        pos: &KeyHandle,
+        h: &Header,
+        canon: &[u8],
+        signer: &dyn Signer,
+        env_nonce: &[u8; 12],
+    ) -> Result<SealedMessage> {
+        h.check()?;
+        let pt = Zeroizing::new(pad(canon)?);
         let (mk, n) = self.message_key(pos, h)?;
         let ciphertext = aead_seal(Alg::Aes256GcmSiv, &mk, &n, &message_aad(h), &pt)?;
         let td = pqchat::typed("PqChatMessage", h.record(&ciphertext))?;
@@ -799,7 +825,7 @@ impl AppKeys {
 /// `unpad`, then the canonical check: the content re-serialised must equal its bytes.
 fn canonical_content(pt: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
     let c = unpad(pt)?;
-    let again = Zeroizing::new(canonical_of_text(&c)?);
+    let again = canonical_of_text(&c)?;
     if again.as_bytes() != c.as_slice() {
         return Err(Error::PqChatContent);
     }
