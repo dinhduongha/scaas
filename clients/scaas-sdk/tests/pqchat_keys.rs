@@ -16,12 +16,12 @@ use fake_chain::{fake, keccak_hex, serve, Fake};
 use scaas_sdk::app_core::{AppCore, AppDesc, AppKeyUsage, AppPath, AppUaSig};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_keys::{PqMessageHeader, PqSessionNew};
-use scaas_sdk::pqchat_records::{PqChatMessage, PqMemberKey, PqWrap};
+use scaas_sdk::pqchat_records::{PqChatCard, PqChatMessage, PqMemberKey, PqWrap};
 use scaas_sdk::vault::{ImportWords, MemoryStore};
 use scaas_sdk::{
     ChainProfile, EndpointConfig, Family, Finality, Limits, RuntimeChoice, Sdk, SdkConfig, SdkError,
 };
-use scaas_ua::wallet::{SecretBytes, Wallet};
+use scaas_ua::wallet::{SecretBytes, Signer as _, Wallet};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use zeroize::Zeroizing;
@@ -1230,5 +1230,119 @@ async fn v1_msig_minimal_and_accepted() {
     assert!(
         check(sig(vec![slot(1)])).await.unwrap(),
         "its twin, accepted"
+    );
+}
+
+/// The contact card (UA-7 §14 O7) on the fake registry: every card row verifies for its UA at the final block, each refused
+/// row is false beside its passing twin; the account signs its own card (its UA, the KEM version and Matrix id given, the
+/// row's typed digest), which verifies; a malformed Matrix id and a native key refused (`Argument`).
+#[tokio::test(flavor = "multi_thread")]
+async fn cards_sign_and_verify() {
+    let _one = ONE.lock().await;
+    let (sdk, seed, chain) = on_fake().await;
+    let a = AppCore::new(sdk, desc(&[PQC])).unwrap();
+    let (rec, c) = (pq("records"), pq("cards"));
+    for x in rec["signers"].as_array().unwrap() {
+        reg_answer(
+            &chain,
+            &a32(&x["ua"]),
+            x["kind"].as_u64().unwrap() as u16,
+            &unhex(&x["publicKey"]),
+        );
+    }
+    let card = |r: &Value| PqChatCard {
+        ua: s(&r["ua"]),
+        kem_version: r["kemVersion"].as_u64().unwrap(),
+        matrix_id: r["matrixId"].as_str().unwrap().into(),
+    };
+    let check = |u: &Value, r: &Value, g: &Value| {
+        a.verify_pqchat_card("local".into(), s(u), card(r), sig_of(g))
+    };
+    for r in c["cards"].as_array().unwrap() {
+        assert!(
+            check(&r["record"]["ua"], &r["record"], &r["uaSig"])
+                .await
+                .unwrap(),
+            "{}",
+            r["name"]
+        );
+    }
+    for r in c["refused"].as_array().unwrap() {
+        let t = &r["twin"];
+        assert!(
+            check(&t["ua"], &t["record"], &t["uaSig"]).await.unwrap(),
+            "{}: the twin",
+            r["name"]
+        );
+        assert!(
+            !check(&r["ua"], &r["record"], &r["uaSig"]).await.unwrap(),
+            "{}",
+            r["name"]
+        );
+    }
+    let reqs = chain.lock().unwrap().requests.clone();
+    let r = reqs
+        .iter()
+        .find(|r| r.contains(&sel("registrationOf(bytes32)")[2..]))
+        .unwrap();
+    assert!(
+        r.contains("blockHash") && r.contains("requireCanonical"),
+        "{r}"
+    );
+    // the account's own card: its UA (not the rows' alice), registered, the fields as given
+    let k = Wallet::from_mnemonic(REPO, "")
+        .unwrap()
+        .ua_key(0x0131, 0, 0)
+        .unwrap();
+    let scaas_ua::wallet::KeyRef::Ua { key_data, .. } = k.key_ref() else {
+        panic!()
+    };
+    let me = k.ua().unwrap();
+    reg_answer(&chain, &me, 0x0131, &key_data);
+    let signed = a
+        .sign_pqchat_card(ua(&seed, 0x0131), 1, "@alice:example.org".into())
+        .await
+        .unwrap();
+    assert_eq!(
+        signed.card,
+        PqChatCard {
+            ua: format!("0x{}", hexs(&me)),
+            kem_version: 1,
+            matrix_id: "@alice:example.org".into()
+        }
+    );
+    assert_ne!(
+        signed.typed,
+        s(&c["cards"][0]["typed"]),
+        "another UA, another digest"
+    );
+    assert!(signed
+        .review
+        .iter()
+        .any(|f| f.name == "message.matrixId" && f.value == "@alice:example.org"));
+    assert!(a
+        .verify_pqchat_card(
+            "local".into(),
+            signed.card.ua.clone(),
+            signed.card.clone(),
+            signed.sig.clone()
+        )
+        .await
+        .unwrap());
+    assert_eq!(
+        code(
+            a.sign_pqchat_card(ua(&seed, 0x0131), 1, "alice:example.org".into())
+                .await
+        ),
+        "Argument"
+    );
+    let native = KeyRef::Native {
+        seed: seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    assert_eq!(
+        code(a.sign_pqchat_card(native, 1, String::new()).await),
+        "Argument"
     );
 }

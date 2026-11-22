@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-// Generates smartcontracts/vectors/pqchat/{records,keys,messages,topics}.json (UA-7 T4, P48; public topics PT1; plan group 3c T84) by
+// Generates smartcontracts/vectors/pqchat/{records,keys,messages,topics,cards}.json (UA-7 T4, P48; public topics PT1; plan group 3c T84) by
 // src/pqchat.js: typehashes, DS_C, ids, nonce scopes, typed and uaMessage digests, signed-record blobs, P14 refusals, wraps,
 // sender chains, padding, the message, envelope, payload, sealedInfo and call keys. Every random input is fixed:
 // rnd(name, n) = the first n bytes of keccak256("scaas/pqchat/vectors/<name>/0") ‖ keccak256(".../<name>/1") ‖ …
@@ -56,6 +56,8 @@ const sign = (who, struct, s) => ({
 });
 
 const homeChain = hex(rnd("home-chain-uid"));
+/** A localpart that makes `@<localpart>:example.org` exactly 255 bytes. */
+const MXLOCAL = 255 - "@:example.org".length;
 const homeChatContract = hex(rnd("home-contract", 20));
 const seat = hex(rnd("msig-seat"));
 
@@ -563,4 +565,72 @@ write("topics.json", {
   edit: topicRow("PqTopicEdit", edit, carol, { scope: pc.scopeEntry(tid, carol.ua) }),
   vote: topicRow("PqTopicVote", vote, alice),
 });
-console.log(`pqchat vectors: records, keys (${wrapRows.length} wraps), messages, topics -> ${OUT}`);
+
+// ------------------------------------------------------------------ contact cards (§14 O7)
+const cardRow = (name, who, record) => ({
+  name,
+  ...recordRow("PqChatCard", pc.contactCard(record), who),
+  uaSig: sign(who, "PqChatCard", record),
+});
+const aliceCard = { ua: alice.ua, kemVersion: 1, matrixId: "@alice:example.org" };
+const bobCard = { ua: bob.ua, kemVersion: 3, matrixId: "" };
+const cards = [cardRow("alice", alice, aliceCard), cardRow("bob, no Matrix id", bob, bobCard)];
+const twin = { ua: alice.ua, key: "alice", record: aliceCard, uaSig: cards[0].uaSig };
+const long = `@${"a".repeat(MXLOCAL)}:example.org`;
+write("cards.json", {
+  _comment:
+    `${COMMON} The signed contact card (UA-7 spec §14 O7, its Change of 2026-11-05; CLI-PQC-05): PqChatCard(bytes32 ua, uint64 ` +
+    "kemVersion, string matrixId), signed off chain and exchanged out of band, in records.json's DS_C under its PURPOSE_PQCHAT by " +
+    "its signers (kind 0x0131, real ML-DSA-65 signatures, UASig keyData and members empty); matrixId empty = no Matrix id. A card " +
+    "counts for a UA when its ua is that UA, its matrixId is well formed and its uaSig is that UA's portable signature of it. " +
+    "refused: a card each check refuses (error names the check: signature or ua), with its twin (one change back) that passes; " +
+    "key = the signer whose public key verifies, ua = the UA the card is checked for. matrixIdAccepted / matrixIdRefused: the " +
+    "Matrix id rule (empty, or @localpart:server in at most 255 bytes of 0x21-0x7e, a non-empty localpart without ':', a non-empty " +
+    "server name), each refusal with its accepted twin.",
+  version: 1,
+  domain: { separator: pc.DS_C },
+  purpose,
+  typehashes: typehashes(pc.CARD_STRUCTS),
+  cards,
+  refused: [
+    {
+      name: "signed by another UA's key",
+      error: "signature",
+      ua: alice.ua,
+      key: "alice",
+      record: aliceCard,
+      uaSig: sign(bob, "PqChatCard", aliceCard),
+      twin,
+    },
+    {
+      name: "another UA's card",
+      error: "ua",
+      ua: bob.ua,
+      key: "alice",
+      record: aliceCard,
+      uaSig: cards[0].uaSig,
+      twin,
+    },
+    {
+      name: "Matrix id changed after signing",
+      error: "signature",
+      ua: alice.ua,
+      key: "alice",
+      record: { ...aliceCard, matrixId: "@mallory:example.org" },
+      uaSig: cards[0].uaSig,
+      twin,
+    },
+  ],
+  matrixIdAccepted: ["", "@alice:example.org", "@a:b", "@alice:[::1]:8448", long],
+  matrixIdRefused: [
+    { name: "no @", id: "alice:example.org", twin: "@alice:example.org" },
+    { name: "empty localpart", id: "@:example.org", twin: "@a:example.org" },
+    { name: "no server name", id: "@alice", twin: "@alice:b" },
+    { name: "empty server name", id: "@alice:", twin: "@alice:b" },
+    { name: "a space", id: "@al ice:example.org", twin: "@alice:example.org" },
+    { name: "non-ASCII", id: "@alic\u00e9:example.org", twin: "@alice:example.org" },
+    { name: "a control character", id: "@alice:example.org\n", twin: "@alice:example.org" },
+    { name: "256 bytes", id: `${long}g`, twin: long },
+  ],
+});
+console.log(`pqchat vectors: records, keys (${wrapRows.length} wraps), messages, topics, cards -> ${OUT}`);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 // PqChat (UA-7 spec v2 §4, §6, §7, §10, P48; public topics spec §2; plan group 3c, 3C-D3 / 3C-D5 / 3C-D9): the typed records, ids,
 // nonce scopes, signed-record blobs, the hybrid KEM wrap, the sender chains, padding, the message, envelope and payload bytes,
-// sealedInfo and the call keys. The byte formats of smartcontracts/vectors/pqchat/. UNAUDITED.
+// sealedInfo, the call keys and the signed contact card (§14 O7). The byte formats of smartcontracts/vectors/pqchat/. UNAUDITED.
 import { ml_kem1024 } from "@noble/post-quantum/ml-kem.js";
 import { x25519 } from "@noble/curves/ed25519.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
@@ -11,6 +11,7 @@ import { gcm, gcmsiv } from "@noble/ciphers/aes.js";
 import { keccak_256, sha256, concatBytes, utf8ToBytes, fromHex, abiEncode } from "./bytes.js";
 import { encodeType, hashStruct, intWord } from "./evm.js";
 import { uaMessage } from "./ua.js";
+import { verifyUA } from "./pq.js";
 
 const bytes = (v) => (v instanceof Uint8Array ? v : fromHex(v));
 const tag = (s) => keccak_256(utf8ToBytes(s));
@@ -60,6 +61,7 @@ export const TYPE_STRINGS = Object.freeze({
   EntryRef: "EntryRef(bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash)",
   PqTopicEdit: "PqTopicEdit(bytes32 entryId,bytes32 author,uint64 nonce,uint32 version,string mediaType,bytes body)",
   PqTopicVote: "PqTopicVote(bytes32 entryId,bytes32 voter,int8 value,uint64 seq)",
+  PqChatCard: "PqChatCard(bytes32 ua,uint64 kemVersion,string matrixId)",
 });
 export const SESSION_STRUCTS = [
   "MemberKey",
@@ -79,6 +81,9 @@ export const TOPIC_STRUCTS = [
   "PqTopicEdit",
   "PqTopicVote",
 ];
+
+/** The signed contact card (§14 O7): signed off chain, exchanged out of band, never stored by a contract. */
+export const CARD_STRUCTS = ["PqChatCard"];
 
 export const TYPES = Object.freeze(
   Object.fromEntries(
@@ -436,4 +441,34 @@ export function callKeys({ K, callSecret, sessionId: s, epochId: e, callId, call
     callBase,
     baseKeys: senders.map(({ sender, device }) => H(callBase, label("scaas/pqchat/v1/sframe", sender, device))),
   };
+}
+
+// ------------------------------------------------------------------ the signed contact card (§14 O7, CLI-PQC-05)
+
+/** A Matrix user id's bound (the Matrix spec's 255 bytes). */
+export const MATRIX_ID_MAX = 255;
+/** A card's `matrixId`: empty (no Matrix id, O7's Change of 2026-11-05), or `@localpart:server` in at most 255 bytes of printable
+ *  ASCII (0x21-0x7e), the localpart non-empty and free of `:`, the server name non-empty; compared byte for byte, never folded.
+ *  Anything else: `PqChatError('matrix id')`. */
+export function checkMatrixId(id) {
+  if (typeof id !== "string") throw new PqChatError("matrix id");
+  if (id === "") return id;
+  const b = utf8ToBytes(id);
+  const i = id.indexOf(":");
+  if (b.length > MATRIX_ID_MAX || b.some((c) => c < 0x21 || c > 0x7e) || id[0] !== "@" || i < 2 || i === id.length - 1)
+    throw new PqChatError("matrix id");
+  return id;
+}
+/** A card `{ua, kemVersion, matrixId}` with its Matrix id checked: the UA's id, its current KEM version, its Matrix id or "". */
+export const contactCard = ({ ua, kemVersion, matrixId }) => ({ ua, kemVersion, matrixId: checkMatrixId(matrixId) });
+/** Whether `sig` is `ua`'s single-key ML-DSA signature (`name`, default mldsa65) of the card `card` under `publicKey`: the card's
+ *  `ua` must be `ua`, its Matrix id well formed, the signature over `uaMessage(kind, PURPOSE_PQCHAT, typed(PqChatCard))`. */
+export function verifyCard(ua, card, sig, publicKey, name = "mldsa65") {
+  if (String(card.ua).toLowerCase() !== String(ua).toLowerCase()) return false;
+  try {
+    checkMatrixId(card.matrixId);
+  } catch {
+    return false;
+  }
+  return verifyUA(name, bytes(publicKey), PURPOSE_PQCHAT, typed("PqChatCard", card), bytes(sig.signature));
 }

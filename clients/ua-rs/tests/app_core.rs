@@ -1153,6 +1153,46 @@ fn pqchat_sign_records_only() {
     assert!(pqchat::typed("Nope", Value::Null).is_err());
 }
 
+/// A UA key signs its contact card (a control verifying under its key); a native key does not; a malformed Matrix id is no card.
+#[test]
+fn pqchat_sign_card() {
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let k = w.ua_key(0x0131, 0, 0).unwrap();
+    let (ua, kind, kd) = id_of(&k);
+    let card = pqchat::Card {
+        ua,
+        kem_version: 1,
+        matrix_id: "@alice:example.org".into(),
+    };
+    let s = pqchat::sign_card(&k, &card).unwrap();
+    assert!(s.key_data.is_empty() && s.members.is_empty());
+    let td = pqchat::card_typed(&card).unwrap();
+    let m = scaas_ua::ua_message(kind, &pqchat::purpose(), &td.digest().unwrap()).unwrap();
+    assert!(scaas_ua::verify::verify(
+        kind,
+        &kd,
+        &m,
+        &s.signature,
+        true,
+        false
+    ));
+    let nat = w.native_key(Network::Evm, 0, None).unwrap();
+    assert_eq!(
+        pqchat::sign_card(&nat, &card).err(),
+        Some(Error::Argument),
+        "a native key"
+    );
+    let bad = pqchat::Card {
+        matrix_id: "alice:example.org".into(),
+        ..card
+    };
+    assert_eq!(
+        pqchat::sign_card(&k, &bad).err(),
+        Some(Error::Argument),
+        "a malformed Matrix id"
+    );
+}
+
 // --- PqVault's dedicated signing path (owner 2026-11-22, CLI-PQV-12): smartcontracts/vectors/pqvault/records.json ---
 
 use scaas_ua::wallet::{pqvault, SCAAS_APP_IDS};

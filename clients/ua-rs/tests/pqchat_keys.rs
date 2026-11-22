@@ -612,3 +612,87 @@ fn v1_verifies_the_record_rows() {
         &state
     ));
 }
+
+/// The contact card (UA-7 §14 O7): every row of cards.json reproduces (struct hash, typed and `uaMessage` digests) and
+/// verifies for its UA against its signer's record; each refused row fails beside its passing twin; the Matrix id rows.
+#[test]
+fn cards_reproduce_the_rows() {
+    use scaas_ua::wallet::pqchat::{self, Card};
+    use scaas_ua::wallet::AppRecordState;
+    let (rec, c) = (pq("records"), pq("cards"));
+    let signers: Vec<Value> = rec["signers"].as_array().unwrap().clone();
+    let reg = |id: [u8; 32]| {
+        signers
+            .iter()
+            .find(|s| a32(&s["ua"]) == id)
+            .map(|s| (s["kind"].as_u64().unwrap() as u16, unhex(&s["publicKey"])))
+    };
+    let current = |_: [u8; 32]| None;
+    let accepted = |_: [u8; 32], _: u16| false;
+    let state = AppRecordState {
+        members: &reg,
+        current: &current,
+        accepted: &accepted,
+        domain: None,
+    };
+    let card = |r: &Value| Card {
+        ua: a32(&r["ua"]),
+        kem_version: r["kemVersion"].as_u64().unwrap(),
+        matrix_id: r["matrixId"].as_str().unwrap().to_string(),
+    };
+    let rows = c["cards"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    for r in rows {
+        let k = card(&r["record"]);
+        let td = pqchat::card_typed(&k).unwrap();
+        assert_eq!(td.struct_hash().unwrap(), a32(&r["hashStruct"]));
+        assert_eq!(td.digest().unwrap(), a32(&r["typed"]));
+        let kind = r["uaMessage"]["kind"].as_u64().unwrap() as u16;
+        let m = scaas_ua::ua_message(kind, &pqchat::purpose(), &td.digest().unwrap()).unwrap();
+        assert_eq!(m, a32(&r["uaMessage"]["digest"]));
+        assert!(pqchat::verify_card(&k.ua, &k, &uasig(&r["uaSig"]), &state));
+    }
+    let refused = c["refused"].as_array().unwrap();
+    assert_eq!(refused.len(), 3);
+    for r in refused {
+        let name = r["name"].as_str().unwrap();
+        let t = &r["twin"];
+        assert!(
+            pqchat::verify_card(
+                &a32(&t["ua"]),
+                &card(&t["record"]),
+                &uasig(&t["uaSig"]),
+                &state
+            ),
+            "{name}: the twin"
+        );
+        assert!(
+            !pqchat::verify_card(
+                &a32(&r["ua"]),
+                &card(&r["record"]),
+                &uasig(&r["uaSig"]),
+                &state
+            ),
+            "{name}"
+        );
+    }
+    for id in c["matrixIdAccepted"].as_array().unwrap() {
+        assert_eq!(pqchat::check_matrix_id(id.as_str().unwrap()), Ok(()));
+    }
+    for r in c["matrixIdRefused"].as_array().unwrap() {
+        let name = r["name"].as_str().unwrap();
+        assert_eq!(
+            pqchat::check_matrix_id(r["id"].as_str().unwrap()),
+            Err(Error::Argument),
+            "{name}"
+        );
+        assert_eq!(
+            pqchat::check_matrix_id(r["twin"].as_str().unwrap()),
+            Ok(()),
+            "{name}: the twin"
+        );
+        let mut k = card(&rows[0]["record"]);
+        k.matrix_id = r["id"].as_str().unwrap().into();
+        assert!(pqchat::card_typed(&k).is_err(), "{name}: no card");
+    }
+}

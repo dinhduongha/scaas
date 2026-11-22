@@ -661,6 +661,10 @@ calls! { cx;
         cx.confirm(json!({"sign": "a PqChat epoch", "account": account, "record": r}))?; js(cx.app()?.pqchat_sign_epoch(account, k.0, r).await?)
     };
     "app-core verify-pqchat-record" "AppCore::verify_pqchat_record" {chain: String, ua: String, name: String, record_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_pqchat_record(chain, ua, name, record_json, sig).await?);
+    "app-core sign-pqchat-card" "AppCore::sign_pqchat_card" {account: KeyRef, kem_version: u64, matrix_id: String} @sign => {
+        cx.confirm(json!({"sign": "a PqChat contact card", "account": account, "kemVersion": kem_version, "matrixId": matrix_id}))?; js(cx.app()?.sign_pqchat_card(account, kem_version, matrix_id).await?)
+    };
+    "app-core verify-pqchat-card" "AppCore::verify_pqchat_card" {chain: String, ua: String, card: PqChatCard, sig: AppUaSig} => named("valid", cx.app()?.verify_pqchat_card(chain, ua, card, sig).await?);
     "app-core pqchat-decode-payload" "AppCore::pqchat_decode_payload" {payload: Vec<u8>} => js(cx.app()?.pqchat_decode_payload(payload)?);
     "app-core pqchat-wrap-hash" "AppCore::pqchat_wrap_hash" {wrap: PqWrap} => named("hash", cx.app()?.pqchat_wrap_hash(wrap)?);
     "app-core pqchat-message-id" "AppCore::pqchat_message_id" {r: PqChatMessage} => named("messageId", cx.app()?.pqchat_message_id(r)?);

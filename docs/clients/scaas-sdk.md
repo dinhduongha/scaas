@@ -327,6 +327,11 @@ wrap read from state, checked by the app core against `wrapHashes[i]` before it 
 `pqchat_message_id` (a received message's `typed(PqChatMessage)`, its dedupe id), `pqchat_session_id` and
 `pqchat_epoch_id` (S4: the ids the wraps' AAD binds, before signing); no key, no network. `SecretBytes` is re-exported so
 an app core holds its plaintexts without a `scaas-ua` dependency of its own.
+The signed contact card (UA-7 §14 O7, owner 2026-11-22; BUILT, UNAUDITED): `sign_pqchat_card(account, kem_version,
+matrix_id)` signs `PqChatCard(bytes32 ua, uint64 kemVersion, string matrixId)` in `DS_C` under `PURPOSE_PQCHAT`, the UA from
+the account, the Matrix id empty or well formed (`Argument`); `verify_pqchat_card(chain, ua, card, sig)` is V1's check of a
+card for `ua` (its `ua` that UA, its Matrix id well formed, the signature the UA's on the registry's records read at the final
+block as a read that feeds a decryption), `false` with no detail. Rows: `smartcontracts/vectors/pqchat/cards.json`.
 `argon2id_passphrase` (PqVault V9, 2026-11-21; BUILT, UNAUDITED) is `argon2id` of a typed passphrase after RFC 8265's
 OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control character or bytes that are not UTF-8: `Argument`), so
 a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`. PqVault's V1 vectors

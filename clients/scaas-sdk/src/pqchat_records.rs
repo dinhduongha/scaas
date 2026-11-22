@@ -176,6 +176,27 @@ pub struct PqTopicVote {
     pub seq: u64,
 }
 
+/// The signed contact card (UA-7 §14 O7, CLI-PQC-05): `PqChatCard(bytes32 ua, uint64 kemVersion, string matrixId)` in `DS_C`
+/// under `PURPOSE_PQCHAT`; `matrix_id` empty when the UA has none. Signed off chain and exchanged out of band; no contract
+/// stores it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PqChatCard {
+    pub ua: String,
+    pub kem_version: u64,
+    pub matrix_id: String,
+}
+
+/// A card signed: the card, its typed digest, the `UASig` and the review shown before signing.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PqCardSigned {
+    pub card: PqChatCard,
+    pub typed: String,
+    pub sig: AppUaSig,
+    pub review: Vec<ReviewField>,
+}
+
 /// A signed PqChat record: its struct, id (`None` for a struct without one), typed digest, the `wrapHashes` it computed, the
 /// `UASig` and the review shown before signing.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -224,6 +245,14 @@ enum Id {
     None,
     Typed,
     Of(&'static str, Vec<[u8; 32]>),
+}
+
+fn card_of(c: &PqChatCard) -> Result<pqchat::Card, SdkError> {
+    Ok(pqchat::Card {
+        ua: w32(&c.ua)?,
+        kem_version: c.kem_version,
+        matrix_id: c.matrix_id.clone(),
+    })
 }
 
 impl AppCore {
@@ -456,5 +485,71 @@ impl AppCore {
         let m = json!({"entryId": r.entry_id, "voter": r.voter, "value": r.value, "seq": r.seq});
         self.sign_pq(account, "PqTopicVote", m, Id::None, vec![])
             .await
+    }
+
+    /// The account's contact card (UA-7 §14 O7): its UA from the signing account (a UA key; a native key or an `msig`:
+    /// `Argument`), `kem_version` and `matrix_id` (empty: none; a malformed one `Argument`) as given and shown in the review.
+    pub async fn sign_pqchat_card(
+        self: &Arc<Self>,
+        account: KeyRef,
+        kem_version: u64,
+        matrix_id: String,
+    ) -> Result<PqCardSigned, SdkError> {
+        let card = PqChatCard {
+            ua: hex(&self.account_ua(&account)?),
+            kem_version,
+            matrix_id,
+        };
+        let c = card_of(&card)?;
+        let sdk = self.sdk.clone();
+        sdk.clone()
+            .spawn(async move {
+                let td = pqchat::card_typed(&c)?;
+                let mut review = vec![crate::app_core::field(
+                    "record",
+                    "PqChatCard".into(),
+                    Source::Derived,
+                )];
+                let v = td.to_value();
+                crate::app_core::flatten(
+                    "message",
+                    v.get("message").unwrap_or(&Value::Null),
+                    &mut review,
+                );
+                let crate::op::Key::Ua(_, k) = crate::op::key(&sdk, &account)? else {
+                    return Err(SdkError::Argument);
+                };
+                let s = pqchat::sign_card(&k, &c)?;
+                Ok(PqCardSigned {
+                    card,
+                    typed: hex(&td.digest()?),
+                    sig: AppUaSig {
+                        key_data: s.key_data,
+                        signature: s.signature,
+                        members: vec![],
+                    },
+                    review,
+                })
+            })
+            .await
+    }
+
+    /// Whether `card` counts for `ua` (CLI-PQC-05): its `ua` is `ua`, its Matrix id well formed, and `sig` is `ua`'s portable
+    /// signature of it as V1 judges a record, on the registry's records read at the profile's final block as a read that
+    /// feeds a decryption. A card whose `ua` is not 32 bytes: `Argument`; any other refusal: `false`, no detail.
+    pub async fn verify_pqchat_card(
+        self: &Arc<Self>,
+        chain: String,
+        ua: String,
+        card: PqChatCard,
+        sig: AppUaSig,
+    ) -> Result<bool, SdkError> {
+        let id = w32(&ua)?;
+        let c = card_of(&card)?;
+        let sig = scaas_ua::ua_portable::UASig::from(&sig);
+        self.with_records(&chain, id, false, |state| {
+            pqchat::verify_card(&id, &c, &sig, state)
+        })
+        .await
     }
 }
