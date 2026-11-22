@@ -1,0 +1,5 @@
+# t9 mutants at commit ff9350a0b (name | outcome | test)
+the code-hash check skipped | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib a_pqchatstore_job
+the default policy relaying unpaid writes | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib a_pqchatstore_job
+the pinned hash not the release data's | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib a_pqchatstore_job
+3 mutants, 3 killed, 0 survived (0 killed elsewhere), 0 not loaded

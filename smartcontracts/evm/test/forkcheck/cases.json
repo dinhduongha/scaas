@@ -1,0 +1,13 @@
+{
+  "contracts": [
+    {
+      "artifact": "ForkcheckPlain.sol/ForkcheckPlain.json",
+      "cases": [
+        {"name": "addClzByte(1) = 31", "sig": "addClzByte(uint256)", "args": "0x0000000000000000000000000000000000000000000000000000000000000001", "ok": true, "return": "0x000000000000000000000000000000000000000000000000000000000000001f"},
+        {"name": "set(7)", "sig": "set(uint256)", "args": "0x0000000000000000000000000000000000000000000000000000000000000007", "ok": true, "return": "0x"},
+        {"name": "stored() = 7", "sig": "stored()", "ok": true, "return": "0x0000000000000000000000000000000000000000000000000000000000000007"},
+        {"name": "fail() reverts", "sig": "fail()", "ok": false}
+      ]
+    }
+  ]
+}

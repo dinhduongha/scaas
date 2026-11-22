@@ -48,6 +48,9 @@ Pay-meta ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)) and the relay fee ([C
 | NEAR | `near:<genesis hash, base58>` (near-sandbox built; testnet / mainnet not deployed) | contract-level `MetaOp` v1 in Borsh, verified by the NEP-141 token against SCaaS key records ([near.md](near.md)) | ed25519 (NEP-413 `signMessage`) / secp256k1 / WebAuthn P-256 (in wasm) / msig; never a NEAR access key; a mandate's delegate is a `Holder` | ed25519 `m/44'/397'/0'/0'/i'` (implicit account) | no (job API only) | BUILT (branch `near-algorand`) |
 | Algorand | `algorand:<genesis hash, base64>` (localnet built; testnet / mainnet not deployed) | app-level `MetaOp` v1 in ARC-4, ARC-200 token in boxes, one shared `account` app ([algorand.md](algorand.md)) | ed25519 (`"MX"` sign-bytes, current authority) / secp256k1 / WebAuthn P-256 / msig | ed25519 `m/44'/283'/0'/0'/i'` | no (job API only) | BUILT (branch `near-algorand`) |
 
+What each chain supports today, one row per chain (contract, node relay and index, `ua-rs` signing, `scaas-rpc` read and write,
+SDK, Zether, PQ, PQZ), against the owner's done rule of 2026-11-21: [chain-support.md](chain-support.md).
+
 Lane keys come from one 24-word BIP-39 mnemonic or a raw private key per lane (Pi Network overrides the SLIP-44
 `coin_type`)
 ([NODE-LANE-08](../node/submit-lanes.md#NODE-LANE-08)); `scaas-node addresses` prints every lane address to fund.
@@ -363,7 +366,8 @@ warns for a service off the list.
 
 <a id="chain-forks"></a><a id="NET-ALL-25"></a>**NET-ALL-25** — **A chain we run that forks becomes a new chain, and
 no two chain profiles share the pair `(chainId, chain_uid)`.** Owner ruling 2026-10-08; the pair wording is a controller call
-of 2026-11-21 ([ARCH-POS-19](../decisions.md#ARCH-POS-19) Q8; the pair check SPECIFIED). Two branches of a fork share their
+of 2026-11-21 ([ARCH-POS-19](../decisions.md#ARCH-POS-19) Q8; the pair check BUILT on branch `chains-arweave` (plan T1): `script/deploybook.py`, `script/DeployBook.sol` and the node's start check `CHAIN_PAIR_TAKEN` / `CHAIN_UID_PRIVATE`, run again at lane start over the pair the RPC resolves, so a
+profile without `chain_uid` is checked too). Two branches of a fork share their
 genesis block, so `chain_uid` cannot tell them apart and a signature made on one replays on the other. For chains SCaaS runs,
 a fork is a new chain: a new chain id (EIP-155 practice) and a new `chain_key`, with its own profile; the deploy gate
 enforces it. A private chain re-created from the **same** genesis file would also repeat its genesis hash, so every
@@ -373,11 +377,13 @@ Ethereum and ETC): their profiles are told apart by the chain id, and the deploy
 pair is already present. A digest that binds the chain id beside `chain_uid` (an EIP-712 domain with `chainId`) is told
 apart on a shared genesis; a record that names its chain by `chain_uid` alone is not: PqChat's `PqChatSession` and `PqTopic`
 and PqVault's records name their home by `homeChain` (a `chain_uid`) and a contract address, and on a shared genesis with a
-deterministic factory both hold on both chains. So the deploy gate refuses a kind that keeps such records (`PqChat`,
-`OpenFactory`, `PqVault`, and any later kind with a `homeChain` field) on a profile whose `chain_uid` another profile
-shares, until those records carry the chain id; clients refuse such a home as well. A portable record binds no chain by
-design. Which digests bind the chain id is listed, per digest, by the audit of the spec's plan T1. A chain is private
-(ours) when its `chain-uids.json` row says so in the field T1 defines. (This paragraph's wording after the pair is a
+deterministic factory both hold on both chains; the UA registry's `UAMsigUpdate` and scoped PQZ keys (`UAPqzScopedKey`,
+`UAPqzScopedKeyRecord`) bind `chain_uid` under the portable domain, with no chain id, and replay to the registry of the
+other chain. So the deploy gate refuses a kind that keeps or checks such records (`PqChat`, `OpenFactory`, `PqVault`,
+`UARegistry`, and any later kind with such a record) on a profile whose `chain_uid` another profile shares, until those
+records carry the chain id; clients refuse such a home as well. A portable record binds no chain by
+design. Which digests bind the chain id is listed, per digest, by [the audit of the spec's plan T1](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md#t1-digest-audit). A chain is private
+(ours) when its `chain-uids.json` row says `"private": true`; every row carries the field, and the table's `homeChainKinds` is the deploy gate's list of kinds refused on a shared genesis (`HOME_CHAIN_SHARED_GENESIS`). (This paragraph's wording after the pair is a
 controller call of 2026-11-21, [ARCH-POS-20](../decisions.md#ARCH-POS-20) C18.) On public chains SCaaS relies on the fork's own chain-id change; a fork without one is a documented
 residual (signatures replay on both branches until the profile is withdrawn). Cost: a fork of our own chain needs fresh
 deployments and profiles.

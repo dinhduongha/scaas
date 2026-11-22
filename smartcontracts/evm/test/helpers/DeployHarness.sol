@@ -126,6 +126,11 @@ contract DeployHarness is DeployBase {
         deployPqChat = on;
     }
 
+    /// `DEPLOY_PQVAULT` for the next `deploy` (PqVault plan V7).
+    function setPqVault(bool on) external {
+        deployPqVault = on;
+    }
+
     /// `NOTICE_PERIOD` for the next `deploy` (0: a release is usable at once).
     function setNotice(uint64 n) external {
         noticePeriod = n;
@@ -148,6 +153,17 @@ contract DeployHarness is DeployBase {
         accountFactory = a;
     }
 
+    string internal tablePath;
+
+    /// A `chain-uids.json` fixture in place of the table (NET-ALL-25 tests).
+    function setTable(string calldata p) external {
+        tablePath = p;
+    }
+
+    function _bookTable() internal view override returns (string memory) {
+        return bytes(tablePath).length != 0 ? tablePath : super._bookTable();
+    }
+
     function deploy(bytes32 uid_, bool zether, address ska) external returns (OpenFactory f, string memory json) {
         return deploy(uid_, zether, ska, false);
     }
@@ -165,6 +181,24 @@ contract DeployHarness is DeployBase {
         deployZether = zether;
         f = _deployTokenFactory(address(this), true, ska, hedera);
         json = vm.serializeBytes32("deploy", "chain_uid", uid);
+    }
+
+    /// `_deployPqChat` alone on the chain of `uid_` (no factory: the gate runs before any call to it).
+    function deployPqChatOnly(bytes32 uid_) external {
+        uid = uid_;
+        _deployPqChat(OpenFactory(address(0)), address(0));
+    }
+
+    /// `_deployPqVault` alone on the chain of `uid_` (no factory: the gate runs before any call to it).
+    function deployPqVaultOnly(bytes32 uid_) external {
+        uid = uid_;
+        _deployPqVault(OpenFactory(address(0)), address(0));
+    }
+
+    /// The gen-1 registry alone (`_deployUARegistry`, not Hedera, no account implementation) on the chain of `uid_`.
+    function deployRegistry(bytes32 uid_) external returns (address) {
+        (salt, uid) = (keccak256("scaas.deploy.v1"), uid_);
+        return address(_deployUARegistry(address(0), false));
     }
 
     /// The later-generation mode (`_deployUARegistryGen`) over `book` (a JSON string): generation n + 1 and the JSON. No env here:

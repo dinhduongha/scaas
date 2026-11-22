@@ -1,0 +1,7 @@
+# t6 mutants at commit 059698e9c (name | outcome | test)
+the code-hash check skipped | killed | python3 -I script/test_deploy_pqchatstore.py deployed_code_hash_differs_refused
+the init-code hash check skipped | killed | python3 -I script/test_deploy_pqchatstore.py local_init_hash_differs_refused
+salt not 0 | killed | python3 -I script/test_deploy_pqchatstore.py release_pins_the_create2_address
+a case's revert data not compared | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py case_from_revert_logs
+a case's logs not compared | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py case_from_revert_logs
+5 mutants, 5 killed, 0 survived (0 killed elsewhere), 0 not loaded

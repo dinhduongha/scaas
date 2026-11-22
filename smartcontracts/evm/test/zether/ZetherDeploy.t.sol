@@ -166,20 +166,35 @@ contract ZetherDeployTest is Test {
 
     /// Without `DEPLOY_ZETHER` no chain gets the stack (a plain anvil deploys as before P3); with it the SCaaS testnet
     /// 7622 and the mainnet 22776 get it (owner ruling 2026-10-31, CTR-ZTH-02 superseded, `test_testnetAndMainnet_…`)
-    /// and Hedera refuses `DEPLOY_ZETHER`.
-    function test_defaultNoZether_hederaRefusesZether() public {
-        uint256[4] memory ids = [uint256(31337), 31901, 298, 7622];
-        for (uint256 i; i < ids.length; ++i) {
-            vm.chainId(ids[i]);
-            DeployHarness h = new DeployHarness();
-            (OpenFactory f,) = h.deploy(ZUID, false, ska);
-            assertFalse(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
-            assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1), address(0));
-            assertEq(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1), address(0));
-            assertEq(
-                f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1) == address(0), false, "the public kinds still"
-            );
-        }
+    /// and Hedera refuses `DEPLOY_ZETHER`. One deploy per test: a `DeployHarness` (about 700 KB of runtime) costs over a
+    /// billion gas to create at Amsterdam, and five in one test passed the 2^33 test gas limit.
+    function _defaultNoZether(uint256 id) internal {
+        vm.chainId(id);
+        DeployHarness h = new DeployHarness();
+        (OpenFactory f,) = h.deploy(ZUID, false, ska);
+        assertFalse(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
+        assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1), address(0));
+        assertEq(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1), address(0));
+        assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1) == address(0), false, "the public kinds still");
+    }
+
+    function test_defaultNoZether_anvil() public {
+        _defaultNoZether(31337);
+    }
+
+    function test_defaultNoZether_31901() public {
+        _defaultNoZether(31901);
+    }
+
+    function test_defaultNoZether_hedera() public {
+        _defaultNoZether(298);
+    }
+
+    function test_defaultNoZether_scaasTestnet() public {
+        _defaultNoZether(7622);
+    }
+
+    function test_hederaRefusesZether() public {
         vm.chainId(298);
         DeployHarness hh = new DeployHarness();
         vm.expectRevert("DEPLOY_ZETHER: not on Hedera (ZetherLayer refuses a Hedera env)");
