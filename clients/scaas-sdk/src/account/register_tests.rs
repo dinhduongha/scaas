@@ -230,9 +230,9 @@ fn record_offsets_added_checked() {
     let kem_near = [w(u64::MAX - 8), w(1)].concat();
     assert_eq!(record_holds(Landed::Kem(0), &kem_near), None);
     // F24: a word index whose byte offset overflows is no word (the multiplication checked), beside its control
-    assert!(word(&ok, 1).is_some(), "control: word 1");
+    assert!(super::word(&ok, 1).is_some(), "control: word 1");
     assert_eq!(
-        word(&ok, usize::MAX / 16),
+        super::word(&ok, usize::MAX / 16),
         None,
         "an index whose offset overflows"
     );
