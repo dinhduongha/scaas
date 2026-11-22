@@ -5,7 +5,7 @@
 //! `messageId` is new (`duplicate`), its counter is fresh in its scope (`counter`); only then is its chain walked, at most
 //! 2^20 steps from the nearest held position (`too-far`), and its content opened, unpadded and checked canonical in `ua-rs`
 //! (`content`). A failure is a drop reason: no error, no write, no network call that depends on it.
-use crate::check::Drop;
+use crate::check::DropReason;
 use crate::content::Content;
 use crate::model::at;
 use crate::model::{bytes, h, list, num, Epoch, ZERO32};
@@ -51,8 +51,8 @@ pub struct OpenEpoch {
 pub struct Received {
     pub message_id: String,
     pub record: PqChatMessage,
-    /// the canonical JSON content
-    pub content: SecretBytes,
+    /// the canonical JSON content, only as the SDK's handle (owner 2026-11-22, spec §11)
+    pub content: Arc<SecretBytes>,
 }
 
 /// The held chain positions and seen ids, in memory only (handles die at the lock; derived again).
@@ -116,7 +116,7 @@ fn seen_key(epoch: &str, sender: &str, device: &str) -> String {
 
 impl PqChat {
     /// An envelope of `ep` read from a store: the checked message, or the reason it was dropped (counted).
-    pub async fn receive(&self, ep: &OpenEpoch, env: Vec<u8>) -> Result<Received, Drop> {
+    pub async fn receive(&self, ep: &OpenEpoch, env: Vec<u8>) -> Result<Received, DropReason> {
         let r = self.receive_inner(ep, env).await;
         if let Err(d) = &r {
             self.drops.add(&ep.epoch.session_id, *d);
@@ -124,21 +124,21 @@ impl PqChat {
         r
     }
 
-    async fn receive_inner(&self, ep: &OpenEpoch, env: Vec<u8>) -> Result<Received, Drop> {
+    async fn receive_inner(&self, ep: &OpenEpoch, env: Vec<u8>) -> Result<Received, DropReason> {
         let (sid, eid) = (&ep.epoch.session_id, &ep.epoch.id);
         let inner = self
             .app
             .pqchat_open_envelope(ep.k.clone(), sid.clone(), eid.clone(), env)
             .map_err(|e| {
                 if e.code() == "Aead" {
-                    Drop::Envelope
+                    DropReason::Envelope
                 } else {
-                    Drop::Decode
+                    DropReason::Decode
                 }
             })?;
         let r = inner.record;
         if r.session_id.to_ascii_lowercase() != *sid || r.epoch_id.to_ascii_lowercase() != *eid {
-            return Err(Drop::Envelope);
+            return Err(DropReason::Envelope);
         }
         let ok = self
             .app
@@ -152,7 +152,7 @@ impl PqChat {
             .await
             .unwrap_or(false);
         if !ok {
-            return Err(Drop::Signature);
+            return Err(DropReason::Signature);
         }
         self.accept_record(ep, r).await
     }
@@ -165,7 +165,7 @@ impl PqChat {
         instance: &str,
         index: u64,
         ep: &OpenEpoch,
-    ) -> Result<Received, Drop> {
+    ) -> Result<Received, DropReason> {
         let sid = ep.epoch.session_id.clone();
         let r = self.posted_inner(instance, index, ep).await;
         if let Err(d) = &r {
@@ -179,22 +179,22 @@ impl PqChat {
         instance: &str,
         index: u64,
         ep: &OpenEpoch,
-    ) -> Result<Received, Drop> {
+    ) -> Result<Received, DropReason> {
         if !self
             .listed(&ep.chain, instance)
             .await
-            .map_err(|_| Drop::Unlisted)?
+            .map_err(|_| DropReason::Unlisted)?
         {
-            return Err(Drop::Unlisted);
+            return Err(DropReason::Unlisted);
         }
         let a = serde_json::json!({ "sessionId": ep.epoch.session_id, "index": index.to_string() });
         let v = self
             .net
             .read(&ep.chain, instance, "IPqChat.messageAt", a)
             .await
-            .map_err(|_| Drop::Decode)?;
+            .map_err(|_| DropReason::Decode)?;
         let m = &at(&v, "m");
-        let d = |_| Drop::Decode;
+        let d = |_| DropReason::Decode;
         let r = PqChatMessage {
             session_id: h(at(m, "sessionId")).map_err(d)?,
             epoch_id: h(at(m, "epochId")).map_err(d)?,
@@ -205,7 +205,7 @@ impl PqChat {
             ciphertext: bytes(at(m, "ciphertext")).map_err(d)?,
         };
         if r.session_id != ep.epoch.session_id || r.epoch_id != ep.epoch.id {
-            return Err(Drop::Control);
+            return Err(DropReason::Control);
         }
         self.accept_record(ep, r).await
     }
@@ -216,35 +216,36 @@ impl PqChat {
         &self,
         ep: &OpenEpoch,
         r: PqChatMessage,
-    ) -> Result<Received, Drop> {
+    ) -> Result<Received, DropReason> {
         let sid = &ep.epoch.session_id;
         let sender = r.sender.to_ascii_lowercase();
         let device = r.device.to_ascii_lowercase();
         if !ep.epoch.has_member(&sender) {
-            return Err(Drop::Member);
+            return Err(DropReason::Member);
         }
         let id = self
             .app
             .pqchat_message_id(r.clone())
-            .map_err(|_| Drop::Decode)?;
+            .map_err(|_| DropReason::Decode)?;
         if self.chains().seen_id(sid, &id) {
-            return Err(Drop::Duplicate);
+            return Err(DropReason::Duplicate);
         }
         let key = seen_key(&ep.epoch.id, &sender, &device);
         let seen: Vec<u64> = Items(&*self.store)
             .get(&key)
-            .map_err(|_| Drop::Counter)?
+            .map_err(|_| DropReason::Counter)?
             .unwrap_or_default();
         if seen.contains(&r.counter)
             || (seen.len() >= SEEN_MAX && seen.first().is_some_and(|m| r.counter <= *m))
         {
-            return Err(Drop::Counter);
+            return Err(DropReason::Counter);
         }
         let pos = self.position(ep, &sender, &device, r.counter)?;
-        let content = self
-            .app
-            .pqchat_open_message(pos, r.clone())
-            .map_err(|_| Drop::Content)?;
+        let content = Arc::new(
+            self.app
+                .pqchat_open_message(pos, r.clone())
+                .map_err(|_| DropReason::Content)?,
+        );
         // counted only once it opened: a record that fails later spends nothing of the scope
         let c = r.counter;
         Items(&*self.store)
@@ -258,10 +259,10 @@ impl PqChat {
                 }
                 Ok(v)
             })
-            .map_err(|_| Drop::Counter)?;
+            .map_err(|_| DropReason::Counter)?;
         self.chains().add_id(sid, id.clone());
         let p = content.with(Content::parse);
-        self.show(ep, &r, &id, p);
+        self.show(ep, &r, &id, p, content.clone());
         Ok(Received {
             message_id: id,
             record: r,
@@ -277,7 +278,7 @@ impl PqChat {
         sender: &str,
         device: &str,
         counter: u64,
-    ) -> Result<Arc<AppKey>, Drop> {
+    ) -> Result<Arc<AppKey>, DropReason> {
         let sid = &ep.epoch.session_id;
         let scope = format!("{}/{sender}/{device}", ep.epoch.id);
         let near = self.chains().nearest(sid, &scope, counter);
@@ -293,18 +294,20 @@ impl PqChat {
                         sender.into(),
                         device.into(),
                     )
-                    .map_err(|_| Drop::Content)?;
+                    .map_err(|_| DropReason::Content)?;
                 (0, p)
             }
         };
         let n = counter - from;
         if n > WALK_MAX {
-            return Err(Drop::TooFar);
+            return Err(DropReason::TooFar);
         }
         let at = if n == 0 {
             p
         } else {
-            self.app.pqchat_advance(p, n).map_err(|_| Drop::TooFar)?
+            self.app
+                .pqchat_advance(p, n)
+                .map_err(|_| DropReason::TooFar)?
         };
         self.chains().hold(sid, &scope, counter, at.clone());
         Ok(at)
@@ -330,7 +333,8 @@ impl Outgoing {
     }
 
     /// `postMessage`'s arguments by name: the envelope's own record and signature (their ABI encoding is the SDK's `inner`,
-    /// the envelope's inner bytes), so the message has one `messageId` on every store.
+    /// the envelope's inner bytes), so the message has one `messageId` on every store. Rust-only (a JSON value).
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub fn post_args(&self) -> Value {
         let r = &self.sealed.record;
         json!({"m": {"sessionId": r.session_id, "epochId": r.epoch_id, "sender": r.sender, "device": r.device,
@@ -345,7 +349,7 @@ pub enum Incoming {
     Shown(String),
     /// kept until its epoch is open (bounded)
     Buffered,
-    Dropped(Drop),
+    Dropped(DropReason),
 }
 
 /// An epoch in use and its hint.
@@ -400,6 +404,7 @@ impl PqChat {
         r: &PqChatMessage,
         id: &str,
         p: crate::content::Parsed,
+        content: Arc<SecretBytes>,
     ) {
         let sender = r.sender.to_ascii_lowercase();
         // display only, and only from a leaf of that seat in the epoch
@@ -419,8 +424,10 @@ impl PqChat {
             counter: r.counter,
             parents: r.parents.iter().map(|x| x.to_ascii_lowercase()).collect(),
             ts: p.ts,
-            content: p.content,
             on_behalf_of,
+            kind: p.content.kind(),
+            target: p.content.target().map(str::to_string),
+            content,
         };
         self.timelines()
             .entry(ep.epoch.session_id.clone())
@@ -505,8 +512,8 @@ impl PqChat {
     ) -> Result<(Incoming, Option<String>), PqChatError> {
         let sid = session.to_ascii_lowercase();
         if hint.len() != 8 {
-            self.drops.add(&sid, Drop::Decode);
-            return Ok((Incoming::Dropped(Drop::Decode), None));
+            self.drops.add(&sid, DropReason::Decode);
+            return Ok((Incoming::Dropped(DropReason::Decode), None));
         }
         let ep = self.in_use().0.get(&sid).and_then(|v| {
             v.iter()
@@ -585,7 +592,7 @@ impl PqChat {
                         .open_epoch(s, &id, &me.key, &me.ua, None)
                         .await
                         .map_err(|d| match d {
-                            Drop::Member => PqChatError::NotMember,
+                            DropReason::Member => PqChatError::NotMember,
                             _ => PqChatError::Internal,
                         })?;
                     self.use_epoch(s, open).await?
@@ -652,8 +659,19 @@ impl PqChat {
         let sealed = &out.sealed;
         self.chains()
             .add_id(&out.epoch.epoch.session_id, sealed.message_id.clone());
-        let p = Content::parse(v.to_string().as_bytes());
-        self.show(&out.epoch, &sealed.record, &sealed.message_id, p);
+        let v = v.to_string();
+        let Ok(h) = SecretBytes::new(v.len()) else {
+            return;
+        };
+        h.with_mut(|b| b.copy_from_slice(v.as_bytes()));
+        let p = Content::parse(v.as_bytes());
+        self.show(
+            &out.epoch,
+            &sealed.record,
+            &sealed.message_id,
+            p,
+            Arc::new(h),
+        );
     }
 
     pub(crate) async fn seal_under(

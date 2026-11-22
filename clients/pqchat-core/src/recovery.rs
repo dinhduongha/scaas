@@ -13,6 +13,7 @@ use crate::session::Me;
 use crate::{Event, PqChat, PqChatError};
 use serde_json::json;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 /// The factory index's page.
 pub const INSTANCES_PAGE: u64 = 64;
@@ -24,14 +25,14 @@ pub const INSTANCES_MAX: u64 = 4096;
 pub const SESSIONS_MAX: u64 = 65_536;
 
 /// A session found in state, as the app lists it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct SessionSummary {
     pub s: SessionRef,
     pub latest: String,
     pub epochs: u64,
     pub consent: Consent,
-    /// the latest epoch's name, opened for an accepted session only
-    pub name: Option<String>,
+    /// the latest epoch's `sealedInfo` JSON (its name), opened for an accepted session only, as the SDK's handle
+    pub info: Option<Arc<scaas_sdk::SecretBytes>>,
 }
 
 impl PqChat {
@@ -197,9 +198,9 @@ impl PqChat {
         } else {
             self.set_consent(&s, Consent::Pending, false)?
         };
-        let name = if consent == Consent::Accepted {
+        let info = if consent == Consent::Accepted {
             match self.open_epoch(&s, &latest, &me.key, &ua, None).await {
-                Ok(ep) => self.info(&ep).ok().map(|i| i.name),
+                Ok(ep) => self.info(&ep).ok(),
                 Err(_) => None,
             }
         } else {
@@ -210,7 +211,7 @@ impl PqChat {
             latest,
             epochs,
             consent,
-            name,
+            info,
         }))
     }
 

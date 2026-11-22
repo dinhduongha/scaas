@@ -22,9 +22,10 @@ use pqchat_core::message::{
 use pqchat_core::model::{hex, Epoch, ZERO32};
 use pqchat_core::order::{self, display_order, Shown};
 use pqchat_core::session::Me;
-use pqchat_core::{Drop, Items, MemoryStore, PqChat};
+use pqchat_core::{DropReason, Items, MemoryStore, PqChat};
 use scaas_sdk::app_core::AppKey;
 use scaas_sdk::pqchat_keys::{PqMessageHeader, PqSealedMessage};
+use scaas_sdk::SecretBytes;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -132,11 +133,13 @@ async fn bob_reads(w: &World, o: &Opened) -> (Arc<PqChat>, Arc<OpenEpoch>) {
     (pq, ep)
 }
 
-fn body(m: &order::Message) -> &str {
-    match &m.content {
-        Content::Text { body, .. } => body,
-        _ => "<unsupported>",
+/// A shown message's text, read from its content handle (an edit's own body when edited).
+fn body(m: &order::Message) -> String {
+    if !m.supported {
+        return "<unsupported>".into();
     }
+    let v: serde_json::Value = serde_json::from_str(&text(&m.content)).unwrap();
+    v["body"].as_str().unwrap().to_string()
 }
 
 /// Counters from 0 per epoch and device, the device id kept; bob reads both, in order.
@@ -169,7 +172,7 @@ async fn counters_from_zero_per_epoch_and_device() {
     // alice's own copy from a store: a duplicate, nothing shown twice
     assert_eq!(
         w.pq.receive(&ep, a.sealed.env.clone()).await.err(),
-        Some(Drop::Duplicate)
+        Some(DropReason::Duplicate)
     );
     assert_eq!(w.pq.timeline(&o.e.session_id).len(), 2);
     assert_eq!(w.net.writes(), 0);
@@ -296,7 +299,10 @@ async fn long_chain_fresh_store() {
         vec![],
     )
     .await;
-    assert_eq!(bob.receive(&ep, far.env).await.err(), Some(Drop::TooFar));
+    assert_eq!(
+        bob.receive(&ep, far.env).await.err(),
+        Some(DropReason::TooFar)
+    );
     let edge = sealed_at(
         &w,
         &w.alice,
@@ -312,7 +318,7 @@ async fn long_chain_fresh_store() {
         bob.receive(&ep, edge.env).await.is_ok(),
         "2^20 steps are read"
     );
-    assert_eq!(bob.dropped(sid), BTreeMap::from([(Drop::TooFar, 1)]));
+    assert_eq!(bob.dropped(sid), BTreeMap::from([(DropReason::TooFar, 1)]));
     assert_eq!(w.net.writes(), 0);
 }
 
@@ -370,7 +376,7 @@ async fn walk_only_after_signature_and_membership() {
     register(&w.chain, &w.carol, &w.bob);
     assert_eq!(
         bob.receive(&ep, c.env.clone()).await.err(),
-        Some(Drop::Signature)
+        Some(DropReason::Signature)
     );
     assert_eq!(bob.held_positions(sid), 0);
     register(&w.chain, &w.carol, &w.carol);
@@ -381,7 +387,7 @@ async fn walk_only_after_signature_and_membership() {
     };
     assert_eq!(
         bob.receive(&ep2, c.env.clone()).await.err(),
-        Some(Drop::Member)
+        Some(DropReason::Member)
     );
     assert_eq!(bob.held_positions(sid), 0);
     // twin: a member's record walks and holds its position
@@ -557,7 +563,8 @@ async fn unknown_type_shown_unsupported() {
     .await;
     assert!(bob.receive(&ep, m.env).await.is_ok());
     let t = bob.timeline(&o.e.session_id);
-    assert_eq!((t.len(), &t[0].content), (1, &Content::Unsupported));
+    assert_eq!((t.len(), t[0].supported), (1, false));
+    assert_eq!(text(&t[0].content), r#"{"q":1,"type":"poll"}"#);
     assert_eq!(w.net.writes(), 0);
 }
 
@@ -627,8 +634,10 @@ fn shown(id: u8, parents: &[u8], ts: Option<u64>) -> Shown {
         counter: u64::from(id),
         parents: parents.iter().map(|p| hex(&[*p; 32])).collect(),
         ts,
-        content: txt("x"),
         on_behalf_of: None,
+        kind: "text",
+        target: None,
+        content: Arc::new(SecretBytes::new(0).unwrap()),
     }
 }
 
@@ -773,7 +782,7 @@ async fn edit_and_redact_from_another_ua_ignored() {
     pq.receive(&ep, bob_edit.env).await.unwrap();
     assert_eq!(
         (body(&pq.timeline(sid)[0]), pq.timeline(sid)[0].edited),
-        ("orig", false)
+        ("orig".to_string(), false)
     );
     let own_edit = seal(
         &w.alice,
@@ -784,7 +793,7 @@ async fn edit_and_redact_from_another_ua_ignored() {
     pq.receive(&ep, own_edit.env).await.unwrap();
     assert_eq!(
         (body(&pq.timeline(sid)[0]), pq.timeline(sid)[0].edited),
-        ("fixed", true)
+        ("fixed".to_string(), true)
     );
     let bob_redact = seal(
         &w.bob,
@@ -802,6 +811,48 @@ async fn edit_and_redact_from_another_ua_ignored() {
     .await;
     pq.receive(&ep, own_redact.env).await.unwrap();
     assert!(pq.timeline(sid).is_empty());
+    assert_eq!(w.net.writes(), 0);
+}
+
+/// Decrypted content leaves only as the SDK's `SecretBytes` handles (owner 2026-11-22, "Handle SecretBytes"): a received
+/// message's content, a shown message's (its newest own edit's when edited), each reaction's; their bytes the canonical JSON;
+/// one reaction per UA and value.
+#[tokio::test(flavor = "multi_thread")]
+async fn content_leaves_only_as_handles() {
+    let _one = ONE.lock().await;
+    let w = world().await;
+    let o = opened(&w, &[&w.alice, &w.bob]).await;
+    let (pq, ep) = bob_reads(&w, &o).await;
+    let sid = &o.e.session_id;
+    let seal = |from: &Acc, c: u64, j: String| {
+        let from = from.clone();
+        let (w, o) = (&w, &o);
+        async move { sealed_at(w, &from, &o.e, &o.k, DEVICE, c, &j, vec![]).await }
+    };
+    let orig = r#"{"body":"orig","ts":1,"type":"text"}"#;
+    let a = seal(&w.alice, 0, orig.into()).await;
+    let t = &a.message_id;
+    let got = pq.receive(&ep, a.env.clone()).await.unwrap();
+    let h: Arc<SecretBytes> = got.content.clone();
+    assert_eq!(text(&h), orig);
+    for (from, c, ts) in [(&w.bob, 0, 2), (&w.alice, 1, 3), (&w.bob, 1, 4)] {
+        let j = format!(r#"{{"reaction":"ok","target":"{t}","ts":{ts},"type":"react"}}"#);
+        pq.receive(&ep, seal(from, c, j).await.env).await.unwrap();
+    }
+    let edit = format!(r#"{{"body":"fixed","target":"{t}","ts":5,"type":"edit"}}"#);
+    pq.receive(&ep, seal(&w.alice, 2, edit.clone()).await.env)
+        .await
+        .unwrap();
+    let tl = pq.timeline(sid);
+    assert_eq!(tl.len(), 1);
+    let m = &tl[0];
+    assert_eq!(
+        (m.supported, m.edited, text(&m.content)),
+        (true, true, edit)
+    );
+    assert_eq!(m.reactions.len(), 1);
+    assert_eq!(m.reactions[0].count, 2);
+    assert!(text(&m.reactions[0].content).contains(r#""reaction":"ok""#));
     assert_eq!(w.net.writes(), 0);
 }
 

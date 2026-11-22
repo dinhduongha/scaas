@@ -10,7 +10,7 @@
 //! and removals go only to ids bound so, by the epoch's author's client, once the epoch is complete at home; no Matrix power
 //! level is a PqChat right. The room id lives only in `sealedInfo` and this device's store (D10). The codec is a transport
 //! encoding; the envelope's bytes are opened and decoded in `ua-rs` (K4).
-use crate::drops::Drop;
+use crate::drops::DropReason;
 use crate::message::{Incoming, OpenEpoch};
 use crate::model::at;
 use crate::reads::SessionRef;
@@ -89,25 +89,25 @@ pub fn event(hint: &[u8], env: &[u8]) -> Value {
 /// A received event's content (its JSON bytes): the hint and the envelope, or `decode` for an event over [`EVENT_MAX`], not
 /// one flat object of exactly `v`, `hint`, `env`, a `v` other than 1, a base64 form other than the padded standard one, a
 /// hint other than 8 bytes, an empty envelope.
-pub fn parse(content: &[u8]) -> Result<([u8; 8], Vec<u8>), Drop> {
+pub fn parse(content: &[u8]) -> Result<([u8; 8], Vec<u8>), DropReason> {
     if content.len() > EVENT_MAX {
-        return Err(Drop::Decode);
+        return Err(DropReason::Decode);
     }
     // a flat object: three string or number members; a nested value is refused before any depth is reached
     let v: serde_json::Map<String, Value> =
-        serde_json::from_slice(content).map_err(|_| Drop::Decode)?;
+        serde_json::from_slice(content).map_err(|_| DropReason::Decode)?;
     if v.len() != 3 || v.get("v").and_then(Value::as_u64) != Some(1) {
-        return Err(Drop::Decode);
+        return Err(DropReason::Decode);
     }
-    let field = |k: &str| v.get(k).and_then(Value::as_str).ok_or(Drop::Decode);
+    let field = |k: &str| v.get(k).and_then(Value::as_str).ok_or(DropReason::Decode);
     let (h, e) = (field("hint")?, field("env")?);
-    let hint = STANDARD.decode(h).map_err(|_| Drop::Decode)?;
-    let env = STANDARD.decode(e).map_err(|_| Drop::Decode)?;
+    let hint = STANDARD.decode(h).map_err(|_| DropReason::Decode)?;
+    let env = STANDARD.decode(e).map_err(|_| DropReason::Decode)?;
     // the one canonical form: encoding the bytes again gives the text read
     if STANDARD.encode(&hint) != h || STANDARD.encode(&env) != e || env.is_empty() {
-        return Err(Drop::Decode);
+        return Err(DropReason::Decode);
     }
-    Ok((hint.try_into().map_err(|_| Drop::Decode)?, env))
+    Ok((hint.try_into().map_err(|_| DropReason::Decode)?, env))
 }
 
 /// A room as this device's store knows it: the session it serves (`None`: created here, no session yet) and whether this
@@ -292,7 +292,7 @@ impl PqChat {
     pub async fn join_room(&self, ep: &OpenEpoch) -> Result<RoomUse, PqChatError> {
         self.require_accepted(&ep.epoch.session_id)?;
         let sid = ep.epoch.session_id.to_ascii_lowercase();
-        let info = self.info(ep)?;
+        let info = self.info_of(ep)?;
         let Some(room) = room_of(&info.stores) else {
             return Ok(RoomUse::None);
         };
@@ -420,7 +420,7 @@ impl PqChat {
         if ep.epoch.author != ua {
             return Ok(out);
         }
-        let info = self.info(ep)?;
+        let info = self.info_of(ep)?;
         let Some(room) = room_of(&info.stores) else {
             return Ok(out);
         };
@@ -455,7 +455,7 @@ impl PqChat {
         }
         if let Some(p) = parent {
             let admin = p.epoch.admins.contains(&ua);
-            let pinfo = self.info(p)?;
+            let pinfo = self.info_of(p)?;
             for m in p
                 .epoch
                 .members

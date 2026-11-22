@@ -313,7 +313,7 @@ async fn post_and_reply() {
             &t,
             &me(&w.carol),
             1,
-            Some(&pid),
+            Some(pid.clone()),
             Some(r.clone()),
             b"re",
             &p,

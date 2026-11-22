@@ -4,7 +4,9 @@
 //! target's sender UA; a reference to a message not seen yet waits for it (the timeline is computed over every message held).
 use crate::content::Content;
 use crate::PqChatError;
+use scaas_sdk::SecretBytes;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 
 /// At most this many parents (UA-7 §4.2).
 pub const PARENTS_MAX: usize = 8;
@@ -25,8 +27,10 @@ pub fn parents(heads: &[String]) -> Result<Vec<String>, PqChatError> {
     Ok(v)
 }
 
-/// A message that passed every check (or an own one sent), as the timeline holds it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A message that passed every check (or an own one sent), as the timeline holds it: what the crate acts on (its type,
+/// target, `ts`), and the content itself only as the SDK's handle (Rust-only, plan T12).
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+#[derive(Clone)]
 pub struct Shown {
     pub id: String,
     pub epoch: String,
@@ -35,13 +39,19 @@ pub struct Shown {
     pub counter: u64,
     pub parents: Vec<String>,
     pub ts: Option<u64>,
-    pub content: Content,
     /// the `msig` seat the sender writes for, only when the sender is its leaf in the epoch (`via`)
     pub on_behalf_of: Option<String>,
+    /// [`Content::kind`]
+    pub kind: &'static str,
+    /// [`Content::target`]
+    pub target: Option<String>,
+    /// the canonical JSON content
+    pub content: Arc<SecretBytes>,
 }
 
 /// The display order of `msgs`: a message after its parents that are held, then by `ts` (an absent `ts` sorts as 0, a
 /// controller call), then by `messageId`.
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub fn display_order(msgs: &[Shown]) -> Vec<&Shown> {
     let at: HashMap<&str, usize> = msgs
         .iter()
@@ -80,17 +90,40 @@ pub fn display_order(msgs: &[Shown]) -> Vec<&Shown> {
     out
 }
 
-/// A message as the user sees it: a `text` (its newest own edit applied) or an unsupported one, with its reactions.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A message as the user sees it: a `text` (its newest own edit applied) or an unsupported one, with its reactions. Its
+/// content only as the SDK's `SecretBytes` handle, read through the SDK's copy calls (owner 2026-11-22, spec §11).
+#[derive(Clone)]
 pub struct Message {
     pub id: String,
     pub sender: String,
     pub ts: Option<u64>,
-    pub content: Content,
     pub on_behalf_of: Option<String>,
+    /// a `text`; else shown as unsupported, never acted on
+    pub supported: bool,
     pub edited: bool,
-    /// reaction → how many UAs
-    pub reactions: BTreeMap<String, usize>,
+    /// the canonical JSON content: the `text`'s, or its newest own `edit`'s when `edited`
+    pub content: Arc<SecretBytes>,
+    /// one per reaction value, in the values' order
+    pub reactions: Vec<Reaction>,
+}
+
+/// A reaction value on a message and how many UAs gave it.
+#[derive(Clone)]
+pub struct Reaction {
+    /// the canonical JSON content of one `react` giving it
+    pub content: Arc<SecretBytes>,
+    pub count: u64,
+}
+
+/// A message's reactions: value → (the UAs giving it, one `react`'s content).
+type Givers<'a> = BTreeMap<String, (BTreeSet<&'a str>, &'a Arc<SecretBytes>)>;
+
+/// `react`'s value, read where the crate acts on it (one reaction per UA and value).
+fn reaction(m: &Shown) -> Option<String> {
+    match m.content.with(Content::parse).content {
+        Content::React { reaction, .. } => Some(reaction),
+        _ => None,
+    }
 }
 
 /// A session's messages held on this device, and its heads (the messages no held message names as a parent).
@@ -124,60 +157,63 @@ impl Timeline {
         let order = display_order(&self.msgs);
         let by_id: HashMap<&str, &Shown> = order.iter().map(|m| (m.id.as_str(), *m)).collect();
         let own = |a: &Shown| {
-            a.content
-                .target()
+            a.target
+                .as_deref()
                 .and_then(|t| by_id.get(t))
                 .filter(|t| t.sender == a.sender)
                 .copied()
         };
         let redacted: BTreeSet<&str> = order
             .iter()
-            .filter(|a| matches!(a.content, Content::Redact { .. }))
+            .filter(|a| a.kind == "redact")
             .filter_map(|a| own(a))
             .map(|t| t.id.as_str())
             .collect();
-        let mut edits: HashMap<&str, Content> = HashMap::new();
-        let mut reacts: HashMap<&str, BTreeSet<(&str, &str)>> = HashMap::new();
+        let mut edits: HashMap<&str, &Arc<SecretBytes>> = HashMap::new();
+        let mut reacts: HashMap<&str, Givers> = HashMap::new();
         for a in &order {
             if redacted.contains(a.id.as_str()) {
                 continue;
             }
-            match &a.content {
-                Content::Edit {
-                    media_type, body, ..
-                } => {
-                    if let Some(t) = own(a).filter(|t| matches!(t.content, Content::Text { .. })) {
-                        let body = body.clone();
-                        let media_type = media_type.clone();
-                        edits.insert(t.id.as_str(), Content::Text { media_type, body });
+            match (a.kind, a.target.as_deref()) {
+                ("edit", _) => {
+                    if let Some(t) = own(a).filter(|t| t.kind == "text") {
+                        edits.insert(t.id.as_str(), &a.content);
                     }
                 }
-                Content::React { target, reaction } => {
-                    reacts
-                        .entry(target.as_str())
-                        .or_default()
-                        .insert((a.sender.as_str(), reaction.as_str()));
+                ("react", Some(target)) => {
+                    if let Some(r) = reaction(a) {
+                        let v = reacts.entry(target).or_default();
+                        let e = v.entry(r).or_insert_with(|| (BTreeSet::new(), &a.content));
+                        e.0.insert(a.sender.as_str());
+                    }
                 }
                 _ => {}
             }
         }
         order
             .iter()
-            .filter(|m| matches!(m.content, Content::Text { .. } | Content::Unsupported))
+            .filter(|m| matches!(m.kind, "text" | "unsupported"))
             .filter(|m| !redacted.contains(m.id.as_str()))
             .map(|m| {
-                let mut reactions = BTreeMap::new();
-                for (_, r) in reacts.get(m.id.as_str()).into_iter().flatten() {
-                    *reactions.entry(r.to_string()).or_insert(0) += 1;
-                }
+                let reactions = reacts
+                    .get(m.id.as_str())
+                    .into_iter()
+                    .flatten()
+                    .map(|(_, (uas, c))| Reaction {
+                        content: Arc::clone(c),
+                        count: uas.len() as u64,
+                    })
+                    .collect();
                 let edit = edits.get(m.id.as_str());
                 Message {
                     id: m.id.clone(),
                     sender: m.sender.clone(),
                     ts: m.ts,
-                    content: edit.cloned().unwrap_or_else(|| m.content.clone()),
                     on_behalf_of: m.on_behalf_of.clone(),
+                    supported: m.kind == "text",
                     edited: edit.is_some(),
+                    content: Arc::clone(edit.copied().unwrap_or(&m.content)),
                     reactions,
                 }
             })

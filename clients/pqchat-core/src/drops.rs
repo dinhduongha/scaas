@@ -10,7 +10,7 @@ use std::sync::Mutex;
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]
 #[serde(rename_all = "kebab-case")]
-pub enum Drop {
+pub enum DropReason {
     Envelope,
     Decode,
     Signature,
@@ -25,46 +25,46 @@ pub enum Drop {
     Control,
 }
 
-impl Drop {
-    pub const ALL: [Drop; 12] = [
-        Drop::Envelope,
-        Drop::Decode,
-        Drop::Signature,
-        Drop::Member,
-        Drop::Counter,
-        Drop::Duplicate,
-        Drop::Replica,
-        Drop::Unlisted,
-        Drop::WrapHash,
-        Drop::Content,
-        Drop::TooFar,
-        Drop::Control,
+impl DropReason {
+    pub const ALL: [DropReason; 12] = [
+        DropReason::Envelope,
+        DropReason::Decode,
+        DropReason::Signature,
+        DropReason::Member,
+        DropReason::Counter,
+        DropReason::Duplicate,
+        DropReason::Replica,
+        DropReason::Unlisted,
+        DropReason::WrapHash,
+        DropReason::Content,
+        DropReason::TooFar,
+        DropReason::Control,
     ];
     /// The reason's name as CLI-PQC-07 writes it.
     pub fn name(self) -> &'static str {
         match self {
-            Drop::Envelope => "envelope",
-            Drop::Decode => "decode",
-            Drop::Signature => "signature",
-            Drop::Member => "member",
-            Drop::Counter => "counter",
-            Drop::Duplicate => "duplicate",
-            Drop::Replica => "replica",
-            Drop::Unlisted => "unlisted",
-            Drop::WrapHash => "wrap-hash",
-            Drop::Content => "content",
-            Drop::TooFar => "too-far",
-            Drop::Control => "control",
+            DropReason::Envelope => "envelope",
+            DropReason::Decode => "decode",
+            DropReason::Signature => "signature",
+            DropReason::Member => "member",
+            DropReason::Counter => "counter",
+            DropReason::Duplicate => "duplicate",
+            DropReason::Replica => "replica",
+            DropReason::Unlisted => "unlisted",
+            DropReason::WrapHash => "wrap-hash",
+            DropReason::Content => "content",
+            DropReason::TooFar => "too-far",
+            DropReason::Control => "control",
         }
     }
 }
 
 /// Drops counted per session and reason, on the device only (never written, never sent).
 #[derive(Default)]
-pub struct DropCounts(Mutex<BTreeMap<(String, Drop), u64>>);
+pub struct DropCounts(Mutex<BTreeMap<(String, DropReason), u64>>);
 
 impl DropCounts {
-    pub fn add(&self, session: &str, d: Drop) {
+    pub fn add(&self, session: &str, d: DropReason) {
         tracing::debug!(reason = d.name(), "dropped");
         let mut m = self
             .0
@@ -73,7 +73,7 @@ impl DropCounts {
         *m.entry((session.to_string(), d)).or_default() += 1;
     }
     /// The counts of `session` by reason.
-    pub fn of(&self, session: &str) -> BTreeMap<Drop, u64> {
+    pub fn of(&self, session: &str) -> BTreeMap<DropReason, u64> {
         let m = self
             .0
             .lock()

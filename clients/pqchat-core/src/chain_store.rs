@@ -7,7 +7,7 @@ use crate::message::{OpenEpoch, Outgoing};
 use crate::model::{at, bytes, hex};
 use crate::reads::SessionRef;
 use crate::session::StoreEntry;
-use crate::{ChainConf, Drop, Items, PqChat, PqChatError};
+use crate::{ChainConf, DropReason, Items, PqChat, PqChatError};
 use scaas_sdk::op::KeyRef;
 use serde_json::json;
 
@@ -85,7 +85,7 @@ impl PqChat {
     ) -> Result<usize, PqChatError> {
         let sid = ep.epoch.session_id.clone();
         self.require_accepted(&sid)?;
-        if !self.info(ep)?.stores.contains(e) || !self.prefs(&sid)?.confirmed.contains(e) {
+        if !self.info_of(ep)?.stores.contains(e) || !self.prefs(&sid)?.confirmed.contains(e) {
             return Err(PqChatError::StoreUnconfirmed);
         }
         let (c, contract) = self.chain_store(e).await?;
@@ -114,7 +114,7 @@ impl PqChat {
                     .filter(|pl| pl.hint == hint);
                 match env {
                     Some(pl) => shown += usize::from(self.receive(ep, pl.env).await.is_ok()),
-                    None => self.drops.add(&sid, Drop::Decode),
+                    None => self.drops.add(&sid, DropReason::Decode),
                 }
             }
             offset += page.len() as u64;

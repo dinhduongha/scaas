@@ -12,10 +12,12 @@ use crate::reads::SessionRef;
 use crate::session::{check_stores, Info, Me, StoreEntry};
 use crate::{Event, Items, PqChat, PqChatError};
 use scaas_sdk::op::KeyRef;
+use scaas_sdk::SecretBytes;
+use std::sync::Arc;
 
 /// The user's choices for a session on this device (spec §7): the stores confirmed, the chain-store spend consent, receipts.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Prefs {
+pub(crate) struct Prefs {
     pub confirmed: Vec<StoreEntry>,
     pub chain_spend: bool,
     /// `None`: on unless a chain store is listed
@@ -47,8 +49,16 @@ pub enum Delivery {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SendReport {
     pub message_id: Option<String>,
-    pub stores: Vec<(StoreEntry, Delivery)>,
+    /// each store by its index in the epoch's list (the list itself is `sealedInfo` plaintext, read through
+    /// [`PqChat::info`])
+    pub stores: Vec<(u32, Delivery)>,
     pub post: Option<Delivery>,
+}
+
+/// A `sealedInfo` handle read by its named fields.
+pub(crate) fn read_info(h: &SecretBytes) -> Result<Info, PqChatError> {
+    h.with(|b| serde_json::from_slice(b))
+        .map_err(|_| PqChatError::Internal)
 }
 
 fn prefs_key(session: &str) -> String {
@@ -64,8 +74,8 @@ fn is_matrix(e: &StoreEntry) -> bool {
 }
 
 impl PqChat {
-    /// The user's choices for `session` on this device.
-    pub fn prefs(&self, session: &str) -> Result<Prefs, PqChatError> {
+    /// The user's choices for `session` on this device (its confirmed stores are `sealedInfo` plaintext: crate-only).
+    pub(crate) fn prefs(&self, session: &str) -> Result<Prefs, PqChatError> {
         Ok(Items(&*self.store)
             .get(&prefs_key(session))?
             .unwrap_or_default())
@@ -92,7 +102,7 @@ impl PqChat {
 
     /// Every store `ep`'s list names, confirmed by the user: written to and read from from now on.
     pub fn confirm_stores(&self, ep: &OpenEpoch) -> Result<(), PqChatError> {
-        let stores = self.info(ep)?.stores;
+        let stores = self.info_of(ep)?.stores;
         self.set_prefs(&ep.epoch.session_id, |p| {
             for s in &stores {
                 if !p.confirmed.contains(s) {
@@ -102,16 +112,19 @@ impl PqChat {
         })
     }
 
-    /// `ep`'s `sealedInfo` opened (K5) and read by its named fields.
-    pub fn info(&self, ep: &OpenEpoch) -> Result<Info, PqChatError> {
-        let pt = self.app.pqchat_open_info(
+    /// `ep`'s `sealedInfo` opened (K5), its JSON only as the SDK's handle (owner 2026-11-22, spec §11).
+    pub fn info(&self, ep: &OpenEpoch) -> Result<Arc<SecretBytes>, PqChatError> {
+        Ok(Arc::new(self.app.pqchat_open_info(
             ep.k.clone(),
             ep.epoch.session_id.clone(),
             ep.epoch.id.clone(),
             ep.epoch.sealed_info.clone(),
-        )?;
-        pt.with(|b| serde_json::from_slice(b))
-            .map_err(|_| PqChatError::Internal)
+        )?))
+    }
+
+    /// `ep`'s `sealedInfo` read by its named fields, where the crate acts on it.
+    pub(crate) fn info_of(&self, ep: &OpenEpoch) -> Result<Info, PqChatError> {
+        read_info(&*self.info(ep)?)
     }
 
     /// The chain stores of `info` on a test chain the app serves (its profile key `…-testnet`): warned about, since a test
@@ -136,7 +149,7 @@ impl PqChat {
         if ep.epoch.epoch == 0 {
             return;
         }
-        let (Ok(info), Ok(p)) = (self.info(ep), self.prefs(&ep.epoch.session_id)) else {
+        let (Ok(info), Ok(p)) = (self.info_of(ep), self.prefs(&ep.epoch.session_id)) else {
             return;
         };
         if p.confirmed.is_empty() || info.stores.iter().all(|s| p.confirmed.contains(s)) {
@@ -168,7 +181,7 @@ impl PqChat {
         self.require_accepted(&s.session_id)?;
         let v = content.value(ts)?;
         let ep = self.send_under(s, me).await?;
-        let info = self.info(&ep)?;
+        let info = self.info_of(&ep)?;
         check_stores(&info)?;
         let prefs = self.prefs(&ep.epoch.session_id)?;
         let mut report = SendReport {
@@ -181,20 +194,16 @@ impl PqChat {
         if matches!(content, Content::Receipt { .. }) && !prefs.receipts.unwrap_or(!chain_listed) {
             return Ok(report);
         }
-        // (store, confirmed) in the list's order
+        // (index in the list, store, confirmed) in the list's order
         let mut plan = vec![];
-        for e in info.stores.iter().filter(|e| e.holds_messages()) {
+        for (i, e) in (0u32..).zip(&info.stores) {
             // `typing`: the room only (P49)
-            if typing && !is_matrix(e) {
+            if !e.holds_messages() || (typing && !is_matrix(e)) {
                 continue;
             }
-            if prefs.confirmed.contains(e) {
-                plan.push((e.clone(), true));
-            } else {
-                plan.push((e.clone(), false));
-            }
+            plan.push((i, e.clone(), prefs.confirmed.contains(e)));
         }
-        let targets: Vec<&StoreEntry> = plan.iter().filter(|(_, c)| *c).map(|(e, _)| e).collect();
+        let targets: Vec<&StoreEntry> = plan.iter().filter(|p| p.2).map(|p| &p.1).collect();
         let post = o.post && !typing;
         if targets.is_empty() && !post {
             return if plan.is_empty() {
@@ -214,7 +223,7 @@ impl PqChat {
             return Err(PqChatError::ContentTooLarge);
         }
         self.mine(&out, &v);
-        for (e, confirmed) in plan {
+        for (i, e, confirmed) in plan {
             let d = if !confirmed {
                 Delivery::Unconfirmed
             } else {
@@ -223,7 +232,7 @@ impl PqChat {
                     Err(x) => Delivery::Failed(x.code()),
                 }
             };
-            report.stores.push((e, d));
+            report.stores.push((i, d));
         }
         if post {
             report.post = Some(match self.post_message(s, &out, &o.payer).await {

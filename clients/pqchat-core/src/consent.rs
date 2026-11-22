@@ -9,7 +9,7 @@ use crate::message::OpenEpoch;
 use crate::model::{at, h};
 use crate::reads::SessionRef;
 use crate::session::{Me, StoreEntry};
-use crate::{Drop, Items, PqChat, PqChatError};
+use crate::{DropReason, Items, PqChat, PqChatError};
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -30,14 +30,14 @@ pub struct Known {
 }
 
 /// What the user sees of a pending session before accepting it: from its latest epoch, opened locally.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct Preview {
     pub creator: String,
     pub epoch: String,
     pub members: Vec<String>,
     pub admins: Vec<String>,
-    pub name: String,
-    pub topic: String,
+    /// the epoch's `sealedInfo` JSON (its name and topic), only as the SDK's handle (owner 2026-11-22, spec §11)
+    pub info: Arc<scaas_sdk::SecretBytes>,
     /// the chain stores a send writes (each costs gas per message, CLI-PQC-06)
     pub chain_stores: usize,
     /// the session lists a Matrix room (its invite held until acceptance)
@@ -55,10 +55,10 @@ pub struct Opened {
 
 const KNOWN: &str = "sessions";
 
-fn drop_err(d: Drop) -> PqChatError {
+fn drop_err(d: DropReason) -> PqChatError {
     match d {
-        Drop::Member => PqChatError::NotMember,
-        Drop::Unlisted => PqChatError::InstanceUnlisted,
+        DropReason::Member => PqChatError::NotMember,
+        DropReason::Unlisted => PqChatError::InstanceUnlisted,
         _ => PqChatError::SessionUnknown,
     }
 }
@@ -149,7 +149,8 @@ impl PqChat {
             .open_epoch(s, &latest, &me.key, &me.ua.to_ascii_lowercase(), None)
             .await
             .map_err(drop_err)?;
-        let info = self.info(&ep)?;
+        let handle = self.info(&ep)?;
+        let info = crate::stores::read_info(&handle)?;
         if let (Some(room), Some(t)) = (room_of(&info.stores), self.matrix()) {
             t.hold_invite(room, true).await;
         }
@@ -167,8 +168,7 @@ impl PqChat {
             epoch: ep.epoch.id.clone(),
             members: ep.epoch.members.iter().map(|m| m.ua.clone()).collect(),
             admins: ep.epoch.admins.clone(),
-            name: info.name,
-            topic: info.topic,
+            info: handle,
             chain_stores: info
                 .stores
                 .iter()
@@ -190,7 +190,7 @@ impl PqChat {
             .map_err(drop_err)?;
         let ep = self.use_epoch(s, ep).await?;
         self.confirm_stores(&ep)?;
-        let info = self.info(&ep)?;
+        let info = self.info_of(&ep)?;
         let mut shown = 0;
         for e in info
             .stores

@@ -44,7 +44,7 @@ pub mod store;
 pub mod stores;
 pub mod topics;
 
-pub use drops::{Drop, DropCounts};
+pub use drops::{DropCounts, DropReason};
 pub use error::PqChatError;
 pub use store::{Item, Items, MemoryStore, PqChatStore, StoreFault};
 
@@ -186,7 +186,7 @@ impl PqChat {
     }
 
     /// The drops of `session` per reason, on this device only (CLI-PQC-07).
-    pub fn dropped(&self, session: &str) -> std::collections::BTreeMap<Drop, u64> {
+    pub fn dropped(&self, session: &str) -> std::collections::BTreeMap<DropReason, u64> {
         self.drops.of(&session.to_ascii_lowercase())
     }
 

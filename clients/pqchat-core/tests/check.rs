@@ -10,12 +10,12 @@
 mod common;
 
 use common::sdk::*;
-use pqchat_core::check::{self, Drop};
+use pqchat_core::check::{self, DropReason};
 use pqchat_core::model::{hex, Epoch};
 use pqchat_core::PqChat;
 use std::collections::BTreeMap;
 
-fn only(d: Drop) -> BTreeMap<Drop, u64> {
+fn only(d: DropReason) -> BTreeMap<DropReason, u64> {
     BTreeMap::from([(d, 1)])
 }
 
@@ -67,8 +67,11 @@ async fn envelope_a_flipped_byte() {
     let mut bad = m.env.clone();
     let n = bad.len() - 1;
     bad[n] ^= 1;
-    assert_eq!(w.pq.receive(&ep, bad).await.err(), Some(Drop::Envelope));
-    assert_eq!(w.pq.dropped(&o.e.session_id), only(Drop::Envelope));
+    assert_eq!(
+        w.pq.receive(&ep, bad).await.err(),
+        Some(DropReason::Envelope)
+    );
+    assert_eq!(w.pq.dropped(&o.e.session_id), only(DropReason::Envelope));
     // twin: the unflipped envelope is shown
     assert!(w.pq.receive(&ep, m.env).await.is_ok());
     assert_eq!(w.net.writes(), 0);
@@ -88,9 +91,9 @@ async fn signature_of_another_key() {
     register(&w.chain, &w.carol, &w.bob);
     assert_eq!(
         w.pq.receive(&ep, m.env.clone()).await.err(),
-        Some(Drop::Signature)
+        Some(DropReason::Signature)
     );
-    assert_eq!(w.pq.dropped(&o.e.session_id), only(Drop::Signature));
+    assert_eq!(w.pq.dropped(&o.e.session_id), only(DropReason::Signature));
     // twin: carol's own key registered
     register(&w.chain, &w.carol, &w.carol);
     assert!(w.pq.receive(&ep, m.env).await.is_ok());
@@ -108,11 +111,14 @@ async fn member_a_sender_outside_the_epoch() {
             .await
             .unwrap();
     let c = sealed(&w, &w.carol, &o.e, &o.k, 0, r#"{"body":"c","type":"text"}"#).await;
-    assert_eq!(w.pq.receive(&ep, c.env).await.err(), Some(Drop::Member));
+    assert_eq!(
+        w.pq.receive(&ep, c.env).await.err(),
+        Some(DropReason::Member)
+    );
     // twin: a member's message
     let a = sealed(&w, &w.alice, &o.e, &o.k, 0, r#"{"body":"a","type":"text"}"#).await;
     assert!(w.pq.receive(&ep, a.env).await.is_ok());
-    assert_eq!(w.pq.dropped(&o.e.session_id), only(Drop::Member));
+    assert_eq!(w.pq.dropped(&o.e.session_id), only(DropReason::Member));
     assert_eq!(w.net.writes(), 0);
 }
 
@@ -146,7 +152,10 @@ async fn counter_two_records_one_counter() {
     .await;
     assert_ne!(a.message_id, b.message_id);
     assert!(w.pq.receive(&ep, a.env).await.is_ok());
-    assert_eq!(w.pq.receive(&ep, b.env).await.err(), Some(Drop::Counter));
+    assert_eq!(
+        w.pq.receive(&ep, b.env).await.err(),
+        Some(DropReason::Counter)
+    );
     // twin: the next counter
     let c = sealed(
         &w,
@@ -158,7 +167,7 @@ async fn counter_two_records_one_counter() {
     )
     .await;
     assert!(w.pq.receive(&ep, c.env).await.is_ok());
-    assert_eq!(w.pq.dropped(&o.e.session_id), only(Drop::Counter));
+    assert_eq!(w.pq.dropped(&o.e.session_id), only(DropReason::Counter));
 }
 
 /// `duplicate`: one record arriving on two stores: the second dropped before the counter check.
@@ -181,8 +190,11 @@ async fn duplicate_one_record_twice() {
     )
     .await;
     assert!(w.pq.receive(&ep, a.env.clone()).await.is_ok());
-    assert_eq!(w.pq.receive(&ep, a.env).await.err(), Some(Drop::Duplicate));
-    assert_eq!(w.pq.dropped(&o.e.session_id), only(Drop::Duplicate));
+    assert_eq!(
+        w.pq.receive(&ep, a.env).await.err(),
+        Some(DropReason::Duplicate)
+    );
+    assert_eq!(w.pq.dropped(&o.e.session_id), only(DropReason::Duplicate));
 }
 
 /// `replica`: a replica's record differing from the home's under the same id; twin: an equal one.
@@ -195,17 +207,17 @@ async fn replica_differs_from_home() {
     put_record(&w.net, REPLICA, &o.e);
     assert!(w
         .pq
-        .open_epoch(&o.s, &o.e.id, &w.bob.key, &w.bob.ua, Some(REPLICA))
+        .open_epoch(&o.s, &o.e.id, &w.bob.key, &w.bob.ua, Some(REPLICA.into()))
         .await
         .is_ok());
     let mut other = o.e.clone();
     other.sig_hash = hex(&[0x77; 32]);
     put_record(&w.net, REPLICA, &other);
     let r =
-        w.pq.open_epoch(&o.s, &o.e.id, &w.bob.key, &w.bob.ua, Some(REPLICA))
+        w.pq.open_epoch(&o.s, &o.e.id, &w.bob.key, &w.bob.ua, Some(REPLICA.into()))
             .await;
-    assert_eq!(r.err(), Some(Drop::Replica));
-    assert_eq!(w.pq.dropped(&o.e.session_id), only(Drop::Replica));
+    assert_eq!(r.err(), Some(DropReason::Replica));
+    assert_eq!(w.pq.dropped(&o.e.session_id), only(DropReason::Replica));
 }
 
 /// Membership is the home's: a replica holding a competing record with carol as a member gives carol nothing.
@@ -230,12 +242,15 @@ async fn member_read_at_home_not_at_the_replica() {
             .await
             .unwrap();
     let c = sealed(&w, &w.carol, &o.e, &o.k, 0, r#"{"body":"c","type":"text"}"#).await;
-    assert_eq!(w.pq.receive(&ep, c.env).await.err(), Some(Drop::Member));
+    assert_eq!(
+        w.pq.receive(&ep, c.env).await.err(),
+        Some(DropReason::Member)
+    );
     // named, the differing replica is refused, and still nothing of carol's counts
     let r =
-        w.pq.open_epoch(&o.s, &o.e.id, &w.bob.key, &w.bob.ua, Some(REPLICA))
+        w.pq.open_epoch(&o.s, &o.e.id, &w.bob.key, &w.bob.ua, Some(REPLICA.into()))
             .await;
-    assert_eq!(r.err(), Some(Drop::Replica));
+    assert_eq!(r.err(), Some(DropReason::Replica));
 }
 
 /// `unlisted`: a home the factory lists with version 0, or as another class: dropped; the user's own action
@@ -252,7 +267,7 @@ async fn unlisted_instance() {
         let r =
             w.pq.open_epoch(&o.s, &o.e.id, &w.bob.key, &w.bob.ua, None)
                 .await;
-        assert_eq!(r.err(), Some(Drop::Unlisted));
+        assert_eq!(r.err(), Some(DropReason::Unlisted));
         assert_eq!(
             w.pq.require_listed(CHAIN, HOME).await.unwrap_err().code(),
             "InstanceUnlisted"
@@ -260,7 +275,7 @@ async fn unlisted_instance() {
     }
     assert_eq!(
         w.pq.dropped(&o.e.session_id),
-        BTreeMap::from([(Drop::Unlisted, 2)])
+        BTreeMap::from([(DropReason::Unlisted, 2)])
     );
     assert_eq!(w.pq.unwrap_calls(), 0);
 }
@@ -278,7 +293,7 @@ async fn wrap_hash_before_any_decapsulation() {
     let r =
         w.pq.open_epoch(&o.s, &o.e.id, &w.bob.key, &w.bob.ua, None)
             .await;
-    assert_eq!(r.err(), Some(Drop::WrapHash));
+    assert_eq!(r.err(), Some(DropReason::WrapHash));
     assert_eq!(w.pq.unwrap_calls(), 0);
     // twin: the signed wrap opens
     put_wrap(&w.net, HOME, &o.e.id, i, &o.wrap);
@@ -288,7 +303,7 @@ async fn wrap_hash_before_any_decapsulation() {
         .await
         .is_ok());
     assert_eq!(w.pq.unwrap_calls(), 1);
-    assert_eq!(w.pq.dropped(&o.e.session_id), only(Drop::WrapHash));
+    assert_eq!(w.pq.dropped(&o.e.session_id), only(DropReason::WrapHash));
 }
 
 fn child_of(
@@ -322,18 +337,18 @@ async fn control_plane_rules() {
     // the creator absent from admins
     let mut x = p.clone();
     x.admins = vec![w.bob.ua.clone()];
-    assert_eq!(check::shapes(&x), Err(Drop::Control));
+    assert_eq!(check::shapes(&x), Err(DropReason::Control));
     // unsorted members
     let mut x = p.clone();
     x.members.reverse();
-    assert_eq!(check::shapes(&x), Err(Drop::Control));
+    assert_eq!(check::shapes(&x), Err(DropReason::Control));
     // a plain rekey by a member (bob, no admin): accepted
     let plain = child_of(&p, &w.bob.ua, p.members.clone(), p.admins.clone());
     assert_eq!(check::child(&plain, &p, &[], &[]), Ok(()));
     // its number not the parent's plus one
     let mut x = plain.clone();
     x.epoch = p.epoch;
-    assert_eq!(check::child(&x, &p, &[], &[]), Err(Drop::Control));
+    assert_eq!(check::child(&x, &p, &[], &[]), Err(DropReason::Control));
     // a membership change (bob drops alice) by a non-admin
     let change = child_of(
         &p,
@@ -341,7 +356,10 @@ async fn control_plane_rules() {
         vec![member(&w.bob)],
         vec![w.alice.ua.clone()],
     );
-    assert_eq!(check::child(&change, &p, &[], &[]), Err(Drop::Control));
+    assert_eq!(
+        check::child(&change, &p, &[], &[]),
+        Err(DropReason::Control)
+    );
     // the same change by the admin: accepted
     let by_admin = child_of(
         &p,
@@ -359,11 +377,11 @@ async fn control_plane_rules() {
     );
     assert_eq!(
         check::child(&without, &p, std::slice::from_ref(&w.bob.ua), &[]),
-        Err(Drop::Control)
+        Err(DropReason::Control)
     );
     assert_eq!(
         check::child(&plain, &p, &[], std::slice::from_ref(&w.bob.ua)),
-        Err(Drop::Control)
+        Err(DropReason::Control)
     );
     // through the reads: a child at home whose number breaks the rule is dropped (`control`)
     let o = opened(&w, &[&w.alice, &w.bob]).await;
@@ -373,7 +391,7 @@ async fn control_plane_rules() {
     let r =
         w.pq.open_epoch(&o.s, &bad.id, &w.bob.key, &w.bob.ua, None)
             .await;
-    assert_eq!(r.err(), Some(Drop::Control));
+    assert_eq!(r.err(), Some(DropReason::Control));
     let _ = PqChat::replica;
 }
 
@@ -406,13 +424,16 @@ async fn posted_message_from_a_listed_instance() {
     let c = sealed(&w, &w.carol, &o.e, &o.k, 0, r#"{"body":"c","type":"text"}"#).await;
     list(&w.net, REPLICA, 3, 1);
     put(0, &c, REPLICA);
-    assert_eq!(w.pq.posted(REPLICA, 0, &ep).await.err(), Some(Drop::Member));
+    assert_eq!(
+        w.pq.posted(REPLICA, 0, &ep).await.err(),
+        Some(DropReason::Member)
+    );
     // an unlisted instance's
     put(0, &a, UNLISTED);
     list(&w.net, UNLISTED, 3, 0);
     assert_eq!(
         w.pq.posted(UNLISTED, 0, &ep).await.err(),
-        Some(Drop::Unlisted)
+        Some(DropReason::Unlisted)
     );
     assert_eq!(w.net.reads_of("IPqChat.messageAt"), 2);
 }

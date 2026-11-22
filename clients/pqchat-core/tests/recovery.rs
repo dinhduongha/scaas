@@ -31,6 +31,13 @@ use std::sync::Arc;
 const ALICE: &str = "@alice:fake.local";
 const BOB: &str = "@bob:fake.local";
 
+/// A `sealedInfo` handle's name.
+fn name_of(i: &scaas_sdk::SecretBytes) -> String {
+    i.with(|b| serde_json::from_slice::<pqchat_core::session::Info>(b))
+        .unwrap()
+        .name
+}
+
 fn txt(s: &str) -> Content {
     Content::Text {
         media_type: None,
@@ -152,7 +159,8 @@ async fn finds_every_session_once() {
     at_home(&w, &s.e, 1, &s.e.id);
     let bob = device(&w, Arc::new(MemoryStore::new()));
     let found = bob.sessions(&me(&w.bob)).await.unwrap();
-    assert_eq!(found.len(), 1, "{found:?}");
+    let ids: Vec<_> = found.iter().map(|f| &f.s).collect();
+    assert_eq!(found.len(), 1, "{ids:?}");
     assert_eq!(
         (found[0].consent, &found[0].latest, found[0].epochs),
         (Consent::Pending, &s.e.id, 1)
@@ -279,7 +287,7 @@ async fn pending_session_reaches_nothing() {
     let p = bob.preview(&sr, &me(&w.bob)).await.unwrap();
     assert_eq!(
         (
-            p.name.as_str(),
+            name_of(&p.info).as_str(),
             p.creator.as_str(),
             p.chain_stores,
             p.matrix
@@ -390,13 +398,13 @@ async fn fresh_device_asks_again() {
     w.pq.accept(&sref(&s.e), true).unwrap();
     let kept = w.pq.sessions(&me(&w.alice)).await.unwrap();
     assert_eq!(
-        (kept[0].consent, kept[0].name.as_deref()),
-        (Consent::Accepted, Some("t8"))
+        (kept[0].consent, kept[0].info.as_deref().map(name_of)),
+        (Consent::Accepted, Some("t8".to_string()))
     );
     let fresh = device(&w, Arc::new(MemoryStore::new()));
     let f = fresh.sessions(&me(&w.alice)).await.unwrap();
     assert_eq!(
-        (f[0].consent, f[0].name.as_deref()),
+        (f[0].consent, f[0].info.as_deref().map(name_of)),
         (Consent::Pending, None)
     );
 }
@@ -407,8 +415,8 @@ async fn fresh_device_asks_again() {
 async fn device_bound_to_its_anchor() {
     let _one = ONE.lock().await;
     let w = ready().await;
-    let d1 = w.pq.start_device(Some("anchor-a")).unwrap();
-    assert_eq!(w.pq.start_device(Some("anchor-a")).unwrap(), d1);
+    let d1 = w.pq.start_device(Some("anchor-a".into())).unwrap();
+    assert_eq!(w.pq.start_device(Some("anchor-a".into())).unwrap(), d1);
     assert_eq!(w.pq.device().unwrap(), d1);
     let copied = device(&w, Arc::new(w.store.copy()));
     assert_eq!(
@@ -416,7 +424,7 @@ async fn device_bound_to_its_anchor() {
         d1,
         "the copy holds the id until its start"
     );
-    let d2 = copied.start_device(Some("anchor-b")).unwrap();
+    let d2 = copied.start_device(Some("anchor-b".into())).unwrap();
     assert_ne!(d2, d1);
     let missing = device(&w, Arc::new(w.store.copy()));
     let d3 = missing.start_device(None).unwrap();

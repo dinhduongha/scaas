@@ -14,7 +14,7 @@ use common::sdk::*;
 use pqchat_core::message::OpenEpoch;
 use pqchat_core::model::{hex, Epoch, ZERO32};
 use pqchat_core::session::{Built, CreateSession, Info, Me, Rekey, Skipped, StoreEntry, MSIG};
-use pqchat_core::{Drop, Event, PqChatError};
+use pqchat_core::{DropReason, Event, PqChatError};
 use scaas_sdk::op::KeyRef;
 use serde_json::json;
 use std::sync::atomic::Ordering;
@@ -528,8 +528,11 @@ async fn own_wrap_that_does_not_open_starts_nothing() {
     let r =
         w.pq.open_epoch(&o.s, &e.id, &w.bob.key, &w.bob.ua, None)
             .await;
-    assert_eq!(r.err(), Some(Drop::Envelope));
-    assert_eq!(w.pq.dropped(&e.session_id).get(&Drop::Envelope), Some(&1));
+    assert_eq!(r.err(), Some(DropReason::Envelope));
+    assert_eq!(
+        w.pq.dropped(&e.session_id).get(&DropReason::Envelope),
+        Some(&1)
+    );
     assert_eq!(w.net.writes(), 0);
 }
 

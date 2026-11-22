@@ -16,7 +16,7 @@ mod common;
 use common::sdk::*;
 use pqchat_core::model::{hex, ZERO32};
 use pqchat_core::reads::SessionRef;
-use pqchat_core::Drop;
+use pqchat_core::DropReason;
 use scaas_sdk::pqchat_records::{PqChatSession, PqMemberKey, PqWrap};
 
 fn random(n: usize) -> Vec<u8> {
@@ -118,12 +118,12 @@ async fn stand_in_wraps_refused_at_open() {
     let before = w.pq.unwrap_calls();
     let (s, sid) = session_with(&w, 2, stand_in(&w.bob.ua)).await;
     let r = w.pq.open_epoch(&s, &sid, &w.bob.key, &w.bob.ua, None).await;
-    assert_eq!(r.err(), Some(Drop::Envelope));
+    assert_eq!(r.err(), Some(DropReason::Envelope));
     assert_eq!(
         w.pq.unwrap_calls(),
         before + 1,
         "the hashes hold: the wrap reached the KEM"
     );
-    assert_eq!(w.pq.dropped(&sid).get(&Drop::Envelope), Some(&1));
+    assert_eq!(w.pq.dropped(&sid).get(&DropReason::Envelope), Some(&1));
     assert_eq!(w.net.writes(), 0);
 }

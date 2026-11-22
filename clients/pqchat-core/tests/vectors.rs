@@ -14,7 +14,7 @@
 mod fake_chain;
 
 use fake_chain::{fake, keccak_hex, serve, Fake};
-use pqchat_core::{matrix, order, Drop, PqChatError};
+use pqchat_core::{matrix, order, DropReason, PqChatError};
 use scaas_sdk::app_core::{AppCore, AppKeyUsage, AppUaSig};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_keys::PqMessageHeader;
@@ -160,7 +160,7 @@ fn matrix_event_row() {
         serde_json::json!({"v": 1, "hint": s(&ev["hint"]).trim_end_matches('='), "env": ev["env"]});
     assert_eq!(
         matrix::parse(&serde_json::to_vec(&unpadded).unwrap()),
-        Err(Drop::Decode)
+        Err(DropReason::Decode)
     );
 }
 

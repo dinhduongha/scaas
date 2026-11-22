@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Trusted reads, instances and replicas (CLI-PQC-07, CLI-PQC-13): the factory's listing, the control-plane records at an
 //! instance, a replica against its home, the highest KEM version seen per UA, and an own wrap opened only after its hash check.
-use crate::check::{self, Drop};
+use crate::check::{self, DropReason};
 use crate::model::at;
 use crate::model::{self, Epoch};
 use crate::{Items, PqChat, PqChatError};
@@ -75,11 +75,11 @@ impl PqChat {
     }
 
     /// A record read at a replica counts only when it equals the home's record and `sigHash` under the same id (P32).
-    pub fn replica(home: &Epoch, rep: &Epoch) -> Result<(), Drop> {
+    pub fn replica(home: &Epoch, rep: &Epoch) -> Result<(), DropReason> {
         if home == rep {
             Ok(())
         } else {
-            Err(Drop::Replica)
+            Err(DropReason::Replica)
         }
     }
 
@@ -137,8 +137,8 @@ impl PqChat {
         e: &Epoch,
         account: &KeyRef,
         me: &str,
-    ) -> Result<Arc<AppKey>, Drop> {
-        let i = e.index_of(me).ok_or(Drop::Member)?;
+    ) -> Result<Arc<AppKey>, DropReason> {
+        let i = e.index_of(me).ok_or(DropReason::Member)?;
         let v = self
             .net
             .read(
@@ -148,26 +148,26 @@ impl PqChat {
                 json!({ "epochId": e.id, "i": i.to_string() }),
             )
             .await
-            .map_err(|_| Drop::Decode)?;
+            .map_err(|_| DropReason::Decode)?;
         let w = &at(&v, "0");
         let wrap = PqWrap {
-            member: model::h(at(w, "member")).map_err(|_| Drop::Decode)?,
-            key_id: model::num(at(w, "keyId")).map_err(|_| Drop::Decode)?,
-            mlkem_ct: model::bytes(at(w, "mlkemCt")).map_err(|_| Drop::Decode)?,
-            x25519_eph: model::h(at(w, "x25519Eph")).map_err(|_| Drop::Decode)?,
-            sealed_key: model::bytes(at(w, "sealedKey")).map_err(|_| Drop::Decode)?,
+            member: model::h(at(w, "member")).map_err(|_| DropReason::Decode)?,
+            key_id: model::num(at(w, "keyId")).map_err(|_| DropReason::Decode)?,
+            mlkem_ct: model::bytes(at(w, "mlkemCt")).map_err(|_| DropReason::Decode)?,
+            x25519_eph: model::h(at(w, "x25519Eph")).map_err(|_| DropReason::Decode)?,
+            sealed_key: model::bytes(at(w, "sealedKey")).map_err(|_| DropReason::Decode)?,
         };
         let read = self
             .app
             .pqchat_wrap_hash(wrap.clone())
-            .map_err(|_| Drop::Decode)?;
-        let signed = e.wrap_hashes.get(i).ok_or(Drop::WrapHash)?;
+            .map_err(|_| DropReason::Decode)?;
+        let signed = e.wrap_hashes.get(i).ok_or(DropReason::WrapHash)?;
         check::wrap_hash(&read, signed)?;
         self.unwraps
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.app
             .pqchat_unwrap(account.clone(), e.session_id.clone(), e.id.clone(), wrap)
-            .map_err(|_| Drop::Envelope)
+            .map_err(|_| DropReason::Envelope)
     }
 }
 
@@ -190,10 +190,10 @@ impl PqChat {
         epoch_id: &str,
         account: &KeyRef,
         me: &str,
-        replica: Option<&str>,
-    ) -> Result<crate::message::OpenEpoch, Drop> {
+        replica: Option<String>,
+    ) -> Result<crate::message::OpenEpoch, DropReason> {
         let r = self
-            .open_epoch_inner(s, epoch_id, account, me, replica)
+            .open_epoch_inner(s, epoch_id, account, me, replica.as_deref())
             .await;
         if let Err(d) = &r {
             self.drops.add(&s.session_id.to_ascii_lowercase(), *d);
@@ -208,7 +208,7 @@ impl PqChat {
         account: &KeyRef,
         me: &str,
         replica: Option<&str>,
-    ) -> Result<crate::message::OpenEpoch, Drop> {
+    ) -> Result<crate::message::OpenEpoch, DropReason> {
         let home = self.checked_at(s, &s.home, epoch_id).await?;
         if let Some(rep) = replica {
             let r = self.checked_at(s, rep, epoch_id).await?;
@@ -230,23 +230,23 @@ impl PqChat {
         s: &SessionRef,
         contract: &str,
         epoch_id: &str,
-    ) -> Result<Epoch, Drop> {
+    ) -> Result<Epoch, DropReason> {
         if !self
             .listed(&s.chain, contract)
             .await
-            .map_err(|_| Drop::Unlisted)?
+            .map_err(|_| DropReason::Unlisted)?
         {
-            return Err(Drop::Unlisted);
+            return Err(DropReason::Unlisted);
         }
         let read = |id: String| async move {
             self.record_at(&s.chain, contract, &s.session_id, &id)
                 .await
-                .map_err(|_| Drop::Decode)?
-                .ok_or(Drop::Control)
+                .map_err(|_| DropReason::Decode)?
+                .ok_or(DropReason::Control)
         };
         let e = read(epoch_id.to_string()).await?;
         if e.session_id != s.session_id.to_ascii_lowercase() {
-            return Err(Drop::Control);
+            return Err(DropReason::Control);
         }
         check::shapes(&e)?;
         if e.epoch > 0 {
@@ -263,12 +263,12 @@ impl PqChat {
                     .net
                     .read(&s.chain, contract, "IPqChat.leftIn", a.clone())
                     .await
-                    .map_err(|_| Drop::Decode)?;
+                    .map_err(|_| DropReason::Decode)?;
                 let r = self
                     .net
                     .read(&s.chain, contract, "IPqChat.removedIn", a)
                     .await
-                    .map_err(|_| Drop::Decode)?;
+                    .map_err(|_| DropReason::Decode)?;
                 if at(&l, "0") == true {
                     left.push(m.clone());
                 }

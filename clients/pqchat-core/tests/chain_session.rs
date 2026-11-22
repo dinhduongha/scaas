@@ -13,7 +13,7 @@ mod common;
 use common::chain::*;
 use pqchat_core::reads::SessionRef;
 use pqchat_core::session::{Built, CreateSession, Info, Me, Rekey, StoreEntry};
-use pqchat_core::{Drop, PqChat};
+use pqchat_core::{DropReason, PqChat};
 use std::sync::Arc;
 
 fn info(l: &Local) -> Info {
@@ -202,7 +202,7 @@ async fn chain_sessions_epochs_removal_leave() {
         pq.open_epoch(&s, &r2.epoch_id, &bob.key, &bob.ua, None)
             .await
             .err(),
-        Some(Drop::Member)
+        Some(DropReason::Member)
     );
     let ep2 = pq
         .open_epoch(&s, &r2.epoch_id, &carol.key, &carol.ua, None)

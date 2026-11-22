@@ -89,13 +89,13 @@ async fn chain_topics() {
 
     // replies: open (a stranger's lands, depth 1, then 2); closed: the stranger refused, the writer lands
     let c1 = pq
-        .post(&on, &tid, &carol, 1, Some(&b1_id), None, b"re", p)
+        .post(&on, &tid, &carol, 1, Some(b1_id.clone()), None, b"re", p)
         .await
         .unwrap();
     let c1_id = c1.id.clone().unwrap();
     land(&l, c1.call).await;
     let c2 = pq
-        .post(&on, &tid, &carol, 2, Some(&c1_id), None, b"re re", p)
+        .post(&on, &tid, &carol, 2, Some(c1_id.clone()), None, b"re re", p)
         .await
         .unwrap();
     let c2_id = c2.id.clone().unwrap();
@@ -109,13 +109,31 @@ async fn chain_topics() {
     let topic = pq.topic(&on, &tid).await.unwrap();
     assert_eq!((topic.open_replies, topic.seq), (false, 1));
     let e = refused(
-        pq.post(&on, &tid, &carol, 3, Some(&b1_id), None, b"closed", p)
-            .await,
+        pq.post(
+            &on,
+            &tid,
+            &carol,
+            3,
+            Some(b1_id.clone()),
+            None,
+            b"closed",
+            p,
+        )
+        .await,
         "PqTopicNotWriter",
     );
     println!("[topics] a reply to a closed topic refused: {e}");
     let b2 = pq
-        .post(&on, &tid, &bob, 2, Some(&a1_id), None, b"writer's reply", p)
+        .post(
+            &on,
+            &tid,
+            &bob,
+            2,
+            Some(a1_id.clone()),
+            None,
+            b"writer's reply",
+            p,
+        )
         .await
         .unwrap();
     land(&l, b2.call).await;

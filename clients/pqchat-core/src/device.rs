@@ -28,13 +28,13 @@ pub(crate) fn new_id() -> Result<String, PqChatError> {
 impl PqChat {
     /// At start, with the app's anchor (`None`: the platform holds none): the device id kept when the store's anchor is the
     /// same, else a new one made and kept with this anchor.
-    pub fn start_device(&self, anchor: Option<&str>) -> Result<String, PqChatError> {
+    pub fn start_device(&self, anchor: Option<String>) -> Result<String, PqChatError> {
         let fresh = new_id()?;
         let d = Items(&*self.store).update::<DeviceItem, _>(DEVICE, |d| match d {
-            Some(d) if d.anchor.is_some() && d.anchor.as_deref() == anchor => Ok(d),
+            Some(d) if d.anchor.is_some() && d.anchor == anchor => Ok(d),
             _ => Ok(DeviceItem {
                 id: fresh.clone(),
-                anchor: anchor.map(str::to_string),
+                anchor: anchor.clone(),
             }),
         })?;
         Ok(d.id)

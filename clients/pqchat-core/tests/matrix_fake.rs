@@ -25,7 +25,7 @@ use pqchat_core::message::{Incoming, OpenEpoch};
 use pqchat_core::model::hex;
 use pqchat_core::session::{CreateSession, Info, Rekey, StoreEntry};
 use pqchat_core::stores::Delivery;
-use pqchat_core::{Drop, Event};
+use pqchat_core::{DropReason, Event};
 use scaas_sdk::pqchat_records::PqChatCard;
 use serde_json::{json, Value};
 use std::sync::atomic::Ordering;
@@ -111,7 +111,7 @@ fn event_bounds() {
         json!({"v": 1, "hint": h, "env": e, "x": 1}),
         json!({"v": 1, "hint": h, "env": STANDARD.encode(vec![0u8; 50_000])}),
     ] {
-        assert_eq!(bad(v), Err(Drop::Decode));
+        assert_eq!(bad(v), Err(DropReason::Decode));
     }
 }
 

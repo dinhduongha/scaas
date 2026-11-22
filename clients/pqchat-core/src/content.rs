@@ -3,7 +3,8 @@
 //! The crate builds and reads JSON values only: the SDK canonicalises, pads and seals a content (S5) and checks a received
 //! one canonical (K4); here only P49's fields and bounds. A field the reader does not know is ignored; a type it does not know
 //! or does not act on in this round (`file`, the call types), or a content that breaks a bound or a field's type, is shown as
-//! unsupported and never acted on.
+//! unsupported and never acted on. Rust-only (plan T12, owner 2026-11-22): the bindings get a content only as the SDK's
+//! `SecretBytes` handle; the crate parses it where it acts on it (type, target, bounds).
 use crate::PqChatError;
 use serde_json::{json, Map, Value};
 
@@ -47,6 +48,7 @@ pub enum Content {
 }
 
 /// A received content: its value, and the common fields `ts` and `onBehalfOf` (display only).
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parsed {
     pub content: Content,
@@ -94,6 +96,7 @@ fn media(o: &Obj) -> Result<Option<String>, ()> {
 
 impl Content {
     /// The content of a received value (the SDK's canonical JSON): P49's form and bounds, else `Unsupported`.
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub fn parse(bytes: &[u8]) -> Parsed {
         let unsupported = Parsed {
             content: Content::Unsupported,
@@ -153,6 +156,7 @@ impl Content {
     }
 
     /// The content's `type`.
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub fn kind(&self) -> &'static str {
         match self {
             Content::Text { .. } => "text",
@@ -167,6 +171,7 @@ impl Content {
 
     /// The value to send, with the sender's clock `ts` (milliseconds, display only): a body above [`BODY_MAX`]
     /// `ContentTooLarge`; anything else out of P49's bounds, or `Unsupported`, `ContentInvalid`. The SDK canonicalises it.
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub fn value(&self, ts: Option<u64>) -> Result<Value, PqChatError> {
         let mut v = match self {
             Content::Text { media_type, body } => {
@@ -205,6 +210,7 @@ impl Content {
     }
 
     /// Whether the content acts on its `target` (`edit`, `redact`, `react`, `receipt`).
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub fn target(&self) -> Option<&str> {
         match self {
             Content::Edit { target, .. }

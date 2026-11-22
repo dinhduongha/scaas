@@ -269,14 +269,16 @@ impl PqChat {
         topic_id: &str,
         me: &Me,
         nonce: u64,
-        parent: Option<&str>,
+        parent: Option<String>,
         entry_ref: Option<PqEntryRef>,
         body: &[u8],
         payer: &KeyRef,
     ) -> Result<TopicWrite, PqChatError> {
         seed_of(&me.key)?;
         let (tid, author) = (topic_id.to_ascii_lowercase(), me.ua.to_ascii_lowercase());
-        let parent_id = parent.map_or(ZERO32.to_string(), str::to_ascii_lowercase);
+        let parent_id = parent
+            .as_deref()
+            .map_or(ZERO32.to_string(), str::to_ascii_lowercase);
         let er = entry_ref.unwrap_or_else(no_ref);
         let r = json!({"topicId": tid, "author": author, "nonce": nonce.to_string(), "parentId": parent_id,
             "ref": ref_json(&er), "mediaType": MARKDOWN, "body": model::hex(body)});

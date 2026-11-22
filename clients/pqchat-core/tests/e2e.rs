@@ -58,7 +58,7 @@ use pqchat_core::reads::SessionRef;
 use pqchat_core::session::{CreateSession, Info, Me, Rekey, StoreEntry};
 use pqchat_core::stores::{Delivery, SendOpts};
 use pqchat_core::topics::{At, List, RefFault, RefState, Vote};
-use pqchat_core::{Drop, MemoryStore, PqChat};
+use pqchat_core::{DropReason, MemoryStore, PqChat};
 use scaas_sdk::pqchat_records::PqEntryRef;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -140,10 +140,18 @@ async fn creator_uses(
     ep
 }
 
+/// `ep`'s `sealedInfo`, read from its handle.
+fn info_of(pq: &PqChat, ep: &OpenEpoch) -> pqchat_core::session::Info {
+    pq.info(ep)
+        .unwrap()
+        .with(|b| serde_json::from_slice(b))
+        .unwrap()
+}
+
 fn texts(pq: &PqChat, sid: &str) -> Vec<(String, Content)> {
     pq.timeline(sid)
         .into_iter()
-        .map(|m| (m.sender, m.content))
+        .map(|m| (m.sender, m.content.with(Content::parse).content))
         .collect()
 }
 
@@ -168,7 +176,7 @@ async fn e2e_run() {
     // --- 1:1 session S1: the Matrix room and H's chain store
     let store_a = Arc::new(MemoryStore::new());
     let pa = w.device_with(store_a.clone());
-    pa.start_device(Some("a-1")).unwrap();
+    pa.start_device(Some("a-1".into())).unwrap();
     pa.attach_matrix(ta.clone());
     let room = pa.create_room().await.unwrap();
     w.net.clear();
@@ -210,7 +218,7 @@ async fn e2e_run() {
 
     // B finds it from state, pending; nothing read from a store before accept
     let pb = w.device();
-    let db1 = pb.start_device(Some("b-1")).unwrap();
+    let db1 = pb.start_device(Some("b-1".into())).unwrap();
     pb.attach_matrix(tb.clone());
     w.net.clear();
     let found = pb.sessions(&b).await.unwrap();
@@ -242,8 +250,15 @@ async fn e2e_run() {
     let eb1 = ob.epoch.clone();
     // mutant 7's fixture: one record on two stores (the chain store and postMessage; the room has no peer, see T11's call)
     let posted = pb.posted(&w.l.home, 0, &eb1).await;
-    assert_eq!(posted.err(), Some(Drop::Duplicate), "mutant 7: duplicate");
-    assert_eq!(pb.dropped(&sid1), BTreeMap::from([(Drop::Duplicate, 1)]));
+    assert_eq!(
+        posted.err(),
+        Some(DropReason::Duplicate),
+        "mutant 7: duplicate"
+    );
+    assert_eq!(
+        pb.dropped(&sid1),
+        BTreeMap::from([(DropReason::Duplicate, 1)])
+    );
     assert_eq!(texts(&pb, &sid1), vec![(a.ua.clone(), hello.clone())]);
     // B replies (the room refused: not bound on B's device); A decrypts it from the chain store
     pb.attach_matrix(tb.clone());
@@ -281,7 +296,7 @@ async fn e2e_run() {
 
     // --- group S3 (A admin; B, C), H's chain store
     let pc = w.device();
-    pc.start_device(Some("c-1")).unwrap();
+    pc.start_device(Some("c-1".into())).unwrap();
     let s3b = pa
         .create(create(&w, &a, 3, &[&b, &c], vec![h.clone()], "s3"))
         .await
@@ -314,7 +329,7 @@ async fn e2e_run() {
                 nonce: 1,
                 members: uas(&[&a, &b, &c]),
                 admins: uas(&[&a]),
-                info: pc.info(&ec0).unwrap(),
+                info: info_of(&pc, &ec0),
                 payer: w.l.payer.clone(),
             },
         )
@@ -363,7 +378,7 @@ async fn e2e_run() {
                 nonce: 5,
                 members: uas(&[&a, &b, &c]),
                 admins: uas(&[&a]),
-                info: pa.info(&ea3).unwrap(),
+                info: info_of(&pa, &ea3),
                 payer: w.l.payer.clone(),
             },
         )
@@ -392,7 +407,7 @@ async fn e2e_run() {
         pc.open_epoch(&s3, &r1.epoch_id, &c.key, &c.ua, None)
             .await
             .err(),
-        Some(Drop::Member)
+        Some(DropReason::Member)
     );
     assert_eq!(pc.read_chain_store(&ec0, &h).await.unwrap(), 0);
     assert!(pc.posted(&w.l.home, 0, &ec0).await.is_err());
@@ -414,7 +429,7 @@ async fn e2e_run() {
 
     // --- fresh device for B: same seed, new store, new anchor
     let pb2 = w.device();
-    let d2 = pb2.start_device(Some("b-2")).unwrap();
+    let d2 = pb2.start_device(Some("b-2".into())).unwrap();
     assert_ne!(d2, db1);
     w.net.clear();
     let found = pb2.sessions(&b).await.unwrap();
@@ -472,7 +487,7 @@ async fn e2e_run() {
     // --- replicas: S1's createSession copied to R1 (anyone may submit the signed record)
     w.raw(&w.r1, &s1b.call.quote.data).unwrap();
     assert!(pb
-        .open_epoch(&s1, &sid1, &b.key, &b.ua, Some(&w.r1))
+        .open_epoch(&s1, &sid1, &b.key, &b.ua, Some(w.r1.clone()))
         .await
         .is_ok());
     // A's second, different record with S1's nonce (hostile): refused in R1 (the nonce used), landed in R2
@@ -483,13 +498,13 @@ async fn e2e_run() {
     );
     w.land(conflict).await;
     assert_eq!(
-        pb.open_epoch(&s1, &sid1, &b.key, &b.ua, Some(&w.r2))
+        pb.open_epoch(&s1, &sid1, &b.key, &b.ua, Some(w.r2.clone()))
             .await
             .err(),
-        Some(Drop::Replica),
+        Some(DropReason::Replica),
         "mutant 8: replica"
     );
-    assert_eq!(pb.dropped(&sid1).get(&Drop::Replica), Some(&1));
+    assert_eq!(pb.dropped(&sid1).get(&DropReason::Replica), Some(&1));
     println!("[e2e] replicas: S1 read at R1 equal to H's; the conflicting record in R2 not counted (replica)");
 
     // --- public topic at H; an entry of R1 referenced; one in U unlisted
@@ -511,7 +526,7 @@ async fn e2e_run() {
     let a1 = x.id.clone().unwrap();
     w.land(x.call).await;
     let x = pb
-        .post(&on, &tid, &b, 1, Some(&a1), None, b"B's reply", p)
+        .post(&on, &tid, &b, 1, Some(a1.clone()), None, b"B's reply", p)
         .await
         .unwrap();
     let b1 = x.id.clone().unwrap();
@@ -602,7 +617,7 @@ async fn e2e_run() {
     }
     assert_eq!(pb2.read_chain_store(&o3.epoch, &h).await.unwrap(), 1);
     assert_eq!(
-        pb2.dropped(&sid3).get(&Drop::Counter),
+        pb2.dropped(&sid3).get(&DropReason::Counter),
         Some(&1),
         "mutant 6: counter"
     );
@@ -618,7 +633,7 @@ async fn e2e_run() {
     };
     assert_eq!(
         pb.open_epoch(&su, &sid_u, &b.key, &b.ua, None).await.err(),
-        Some(Drop::Unlisted),
+        Some(DropReason::Unlisted),
         "mutant 9: unlisted"
     );
     assert!(!pb2
@@ -640,7 +655,7 @@ async fn e2e_run() {
     let before = pb.unwrap_calls();
     let r = pb.open_epoch(&s1, &sid1, &b.key, &b.ua, None).await;
     *w.net.tamper.lock().unwrap() = None;
-    assert_eq!(r.err(), Some(Drop::WrapHash), "mutant 10: wrap-hash");
+    assert_eq!(r.err(), Some(DropReason::WrapHash), "mutant 10: wrap-hash");
     assert_eq!(pb.unwrap_calls(), before, "mutant 10: no K2 call");
 
     // --- mutant 14's fixture: a new pending session from C with a room; B's client, Matrix attached, the stores looked

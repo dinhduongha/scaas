@@ -21,7 +21,7 @@ use pqchat_core::model::{hex, unhex, Epoch, Member, ZERO32};
 use pqchat_core::reads::SessionRef;
 use pqchat_core::session::{Me, StoreEntry};
 use pqchat_core::stores::{Delivery, SendOpts};
-use pqchat_core::{ChainConf, Drop, Event, MemoryStore, PqChat, PqChatError};
+use pqchat_core::{ChainConf, DropReason, Event, MemoryStore, PqChat, PqChatError};
 use scaas_sdk::app_core::AppKey;
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_keys::{PqEpochNew, PqSessionNew};
@@ -455,7 +455,7 @@ async fn stored_range_paged_sixteen() {
     assert_eq!(w.pq.read_chain_store(&ep, &st).await.unwrap(), 16);
     assert_eq!(
         w.pq.dropped(&s.session_id),
-        BTreeMap::from([(Drop::Member, 1), (Drop::Decode, 1)])
+        BTreeMap::from([(DropReason::Member, 1), (DropReason::Decode, 1)])
     );
     // the kept position: the next read starts past the end, and its page is empty
     assert_eq!(w.pq.read_chain_store(&ep, &st).await.unwrap(), 0);
@@ -683,10 +683,7 @@ async fn rekey_by_a_member_adds_an_unconfirmed_store() {
             .unwrap();
     assert_eq!(
         rep.stores,
-        [
-            (entry(&chain(HOME)), rep.stores[0].1.clone()),
-            (entry(&chain(REPLICA)), Delivery::Unconfirmed)
-        ]
+        [(0, rep.stores[0].1.clone()), (1, Delivery::Unconfirmed)]
     );
     assert!(sent(&rep.stores[0].1));
     let st = w.net.writes_of("IPqChat.storeMessage");

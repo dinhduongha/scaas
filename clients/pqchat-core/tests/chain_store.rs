@@ -20,7 +20,7 @@ use pqchat_core::net::{Net, SdkNet};
 use pqchat_core::reads::SessionRef;
 use pqchat_core::session::{CreateSession, Info, StoreEntry};
 use pqchat_core::stores::{Delivery, SendOpts};
-use pqchat_core::{Drop, MemoryStore, PqChat};
+use pqchat_core::{DropReason, MemoryStore, PqChat};
 use scaas_sdk::OpState;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -192,7 +192,11 @@ async fn chain_store_post_and_read() {
     assert_eq!(pb.read_chain_store(&eb, &store).await.unwrap(), 1);
     assert_eq!(
         pb.dropped(&sid),
-        BTreeMap::from([(Drop::Duplicate, 1), (Drop::Envelope, 1), (Drop::Decode, 1)])
+        BTreeMap::from([
+            (DropReason::Duplicate, 1),
+            (DropReason::Envelope, 1),
+            (DropReason::Decode, 1)
+        ])
     );
     let t = pb.timeline(&sid);
     assert_eq!(t.len(), 3);

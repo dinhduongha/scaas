@@ -111,7 +111,7 @@ async fn chain_recovery_from_state() {
         home: l.home.clone(),
         session_id: b.session_id.clone(),
     };
-    let d_alice = pa.start_device(Some("alice-anchor")).unwrap();
+    let d_alice = pa.start_device(Some("alice-anchor".into())).unwrap();
     pa.accept(&s, true).unwrap();
     pa.open_session(&s, &alice).await.unwrap();
     let o = SendOpts {
@@ -142,10 +142,11 @@ async fn chain_recovery_from_state() {
     println!("[t9] session {} created, one message stored", s.session_id);
     // bob's fresh store: found from the factory's index and sessionsOf, pending, nothing opened, no store read
     let pb = device();
-    pb.start_device(Some("bob-anchor")).unwrap();
+    pb.start_device(Some("bob-anchor".into())).unwrap();
     net.reads.lock().unwrap().clear();
     let found = pb.sessions(&bob).await.unwrap();
-    assert_eq!(found.len(), 1, "{found:?}");
+    let ids: Vec<_> = found.iter().map(|f| &f.s).collect();
+    assert_eq!(found.len(), 1, "{ids:?}");
     assert_eq!(
         (&found[0].s, found[0].consent, found[0].epochs),
         (&s, Consent::Pending, 1)
@@ -163,8 +164,15 @@ async fn chain_recovery_from_state() {
     assert_eq!(pb.unwrap_calls(), 0);
     let p = pb.preview(&s, &bob).await.unwrap();
     assert_eq!(
-        (p.name.as_str(), p.creator.as_str(), p.chain_stores),
-        ("t9", alice.ua.as_str(), 1)
+        (
+            p.info
+                .with(|b| serde_json::from_slice::<Info>(b))
+                .unwrap()
+                .name,
+            p.creator.as_str(),
+            p.chain_stores
+        ),
+        ("t9".to_string(), alice.ua.as_str(), 1)
     );
     assert!(!net.reads.lock().unwrap().contains(&"IPqChat.storedRange"));
     pb.accept(&s, false).unwrap();
@@ -174,7 +182,7 @@ async fn chain_recovery_from_state() {
     println!("[t9] bob recovered the session from state and read its message after accepting");
     // alice's fresh device: asked again, a new device id
     let pa2 = device();
-    let d2 = pa2.start_device(Some("alice-anchor-2")).unwrap();
+    let d2 = pa2.start_device(Some("alice-anchor-2".into())).unwrap();
     assert_ne!(d2, d_alice);
     let f = pa2.sessions(&alice).await.unwrap();
     assert_eq!((f.len(), f[0].consent), (1, Consent::Pending));

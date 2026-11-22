@@ -436,8 +436,10 @@ reference crate if the SDK plan keeps that library SDK-only.
       library and generate `pqchat-core`'s public API with the SDK's surface rules; no handle type and no byte accessor of one in the
       generated surface (a grep of the generated sources); `attach_matrix` and the storage interface absent from it; decrypted
       content only through the SDK's copy calls; the library's symbols and enabled features hold no vectors-build entry (K30).
-- [ ] Code; green. Gates: `bind`, `pqc-test`.
-- [ ] Commit `pqchat-core T12: bindings check`.
+- [x] Code; green. Gates: `bind`, `pqc-test`. (Round 2, owner 2026-11-22 "Handle SecretBytes": decrypted content and
+      `sealedInfo` plaintext only as the SDK's `SecretBytes` handles, held member by member by `runs/bind_surface.py`;
+      the decisions entry of 2026-11-23.)
+- [x] Commit `pqchat-core T12: bindings check`.
 
 ## T13 — The same end-to-end run on the SCaaS testnet
 
