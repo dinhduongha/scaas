@@ -754,8 +754,17 @@ async fn signed_quote_never_lowers_the_regular_bound() {
         let t = &t;
         async move {
             code(
-                super::quote::signed_quote(&t.sdk, "local", gas::NATIVE_EVM, 100, &q, 100, own)
-                    .await,
+                super::quote::signed_quote(
+                    &t.sdk,
+                    "local",
+                    gas::NATIVE_EVM,
+                    100,
+                    &q,
+                    alloy::primitives::Address::ZERO,
+                    &[0u8; 100],
+                    own,
+                )
+                .await,
             )
         }
     };
