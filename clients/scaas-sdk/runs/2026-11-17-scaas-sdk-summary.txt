@@ -178,7 +178,6 @@ bind-dart | 7104a069f | 0 | dart: +14:
 ffi | 7104a069f | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 mutants-check | cd3b6c03e | 0 | -
 # cli rc=101 at 8f9d35bf1: one_command_per_sdk_call_both_ways names five SDK calls without a command (Account::pqz_decoy_candidates, register_target, ua_line; UaLine::key_target, pqz_target), merged into this branch's base 6e7e71142 from ua-rs-sign (535bf1dcb); fixed on sdk-complete by b7a34aff6, not in T38 / T40's scope
-docs | 83f10a833 | 0 | -
 cli | baf175492 | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
 rpc-test | baf175492 | 0 | 204 passed, 0 failed, 10 ignored (21 binaries)
 rpc-wasm | baf175492 | 0 | -
@@ -190,3 +189,4 @@ sdk-test | baf175492 | 0 | 399 passed, 0 failed, 16 ignored (37 binaries)
 # sdk-test rc=137 at baf175492: systemd-oomd killed it at 08:16 under memory pressure (sdk-complete building beside it), not a test failure; rerun at J=-j1 green (the sdk-test row)
 # cli: the rc=101 note above is closed by baf175492 (git cherry-pick -x of sdk-complete's b7a34aff6): cli rc=0 at baf175492
 # node build at 129380772 (the merged tree, CAPPED_MEM=6G, cargo build --locked --offline -j2): rc=0, Finished in 3m 19s; log runs/2026-11-22-sdk-evm-profiles-node-build.log (git-ignored)
+docs | 1cba8f84a | 0 | -
