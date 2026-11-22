@@ -10,6 +10,7 @@
 use crate::error::SdkError;
 use crate::op::{addr20, final_block, sim, KeyRef};
 use crate::op::{ReviewField, Source};
+use crate::vault::OpenSeed;
 use crate::Sdk;
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, Bytes};
@@ -24,7 +25,7 @@ use scaas_ua::wallet::{
 };
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 /// The prefixes every live app core declared, by core id (one process: §12.3 is about the cores one app links).
 static DECLARED: Mutex<Vec<(u64, Vec<String>)>> = Mutex::new(Vec::new());
@@ -527,8 +528,9 @@ pub struct AppCore {
     app_id: Option<[u8; 32]>,
     class: Option<u16>,
     labels: Vec<String>,
-    /// one `scaas-ua` scope per seed the core used
-    keys: Mutex<HashMap<String, Arc<AppKeys>>>,
+    /// one `scaas-ua` scope per seed the core used, over the arena of the seed's open session it was made in (a lock and
+    /// the next unlock open a new arena: the scope is made again there)
+    keys: Mutex<HashMap<String, (Weak<OpenSeed>, Arc<AppKeys>)>>,
 }
 
 impl Drop for AppCore {
@@ -584,9 +586,14 @@ impl AppCore {
     pub(crate) fn scope(&self, seed: &str) -> Result<Arc<AppKeys>, SdkError> {
         let open = self.sdk.open_seed(seed)?;
         let mut m = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
-        Ok(m.entry(seed.to_string())
-            .or_insert_with(|| Arc::new(open.wallet.app_keys()))
-            .clone())
+        if let Some((o, k)) = m.get(seed) {
+            if std::ptr::eq(o.as_ptr(), Arc::as_ptr(&open)) {
+                return Ok(k.clone());
+            }
+        }
+        let k = Arc::new(open.wallet.app_keys());
+        m.insert(seed.to_string(), (Arc::downgrade(&open), k.clone()));
+        Ok(k)
     }
 
     pub(crate) fn label(&self, label: &[u8]) -> Result<(), SdkError> {

@@ -1058,3 +1058,33 @@ async fn prepare_app_call_builds_named_calldata() {
     );
     assert!(call(APP_CONTRACT, args).await.is_ok());
 }
+
+/// A scope's calls after the seed's lock and the next unlock: served again from the new arena (the scope over the old one
+/// is not kept), the old handles revoked; between the two `WalletLocked`.
+#[tokio::test(flavor = "multi_thread")]
+async fn scope_after_lock_and_unlock() {
+    let (s, seed) = sdk().await;
+    let a = AppCore::new(s.clone(), desc(None, &["scaas/appz/v1/"])).unwrap();
+    let k = a.random_key(&seed, AppKeyUsage::Derive).unwrap();
+    assert!(a
+        .mac_derive(k.clone(), vec![1], AppKeyUsage::Derive)
+        .is_ok());
+    s.vault().lock(seed.clone()).await;
+    assert_eq!(
+        code(a.random_key(&seed, AppKeyUsage::Derive)),
+        "WalletLocked"
+    );
+    s.vault()
+        .unlock(
+            seed.clone(),
+            scaas_sdk::vault::Unlock::Passphrase(sec(PASS)),
+        )
+        .await
+        .unwrap();
+    let k2 = a.random_key(&seed, AppKeyUsage::Derive).unwrap();
+    assert!(a.mac_derive(k2, vec![1], AppKeyUsage::Derive).is_ok());
+    assert!(matches!(
+        code(a.mac_derive(k, vec![1], AppKeyUsage::Derive)),
+        "KeyRevoked" | "AppHandleForeign"
+    ));
+}

@@ -12002,6 +12002,8 @@ Change (controller, 2026-11-21, pqchat-core T1's SDK rows; owner: no; status: BU
 
 Change (controller, 2026-11-22, pqchat-core T3 to T5 on `pqchat-core-impl`; owner: no; status: BUILT, UNAUDITED): four pure PqChat entries the crate needed and the SDK lacked (gaps of T1's surface, reported here): `pqchat_wrap_hash` (V2's wrap hash, CLI-PQC-07's `wrap-hash` check), `pqchat_message_id` (the dedupe id of a received message, P19), `pqchat_session_id` and `pqchat_epoch_id` (S4); each with its CLI command; `SecretBytes` re-exported by the SDK (CLI-PQC-01: no `scaas-ua` dependency in an app core).
 
+Change (controller, 2026-11-22, found in pqchat-core T6, fixed in T8 on `pqchat-core-impl`; owner: no; status: BUILT, UNAUDITED): an `AppCore` kept each seed's `scaas-ua` scope for its whole life, made over the arena of the seed's open session it first used; a lock and the next unlock open a new arena, so every later call of that core was `WalletLocked` until a new core was made. The scope is now kept with a weak reference to the open session it was made over and made again when the seed's open session is another one; handles of the old arena stay revoked (test `app_core::scope_after_lock_and_unlock`, red before the fix).
+
 ### CLI-SDK-21 — `upload_file` / `fetch_file`: the free tier for the smallest bucket, the operator payer for the rest
 - old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/scaas-sdk.md#CLI-SDK-21 · superseded-by: —
 
