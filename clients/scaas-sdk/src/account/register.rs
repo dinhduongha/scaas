@@ -1372,6 +1372,87 @@ impl Account {
     }
 }
 
+/// `setKemKey(ua, version, kem, sig)` of the UA key `k` at KEM key version `version` ≥ 1 (KEM key rotation, owner
+/// 2026-11-22): the key `k.kem_key(version)` derives, `sig` its signature over `uaMessage(kind, PURPOSE_KEM,
+/// kemRecordDigest(ua, version, kemPk))` (no key data, no members: the registry's `setKemKey` check, `scaas-ua`
+/// `check_kem_record`, which runs here before anything is returned). Version 0 (`register`'s key) or a kind that holds no KEM
+/// key: `Argument`.
+pub(crate) fn set_kem_key_args(
+    k: &scaas_ua::wallet::UaKey,
+    version: u64,
+) -> Result<Value, SdkError> {
+    use scaas_ua::wallet::Signer;
+    let scaas_ua::wallet::KeyRef::Ua { kind, key_data } = k.key_ref() else {
+        return Err(SdkError::Argument);
+    };
+    let ua = k.ua().ok_or(SdkError::Argument)?;
+    if version == 0 || !scaas_ua::ua_portable::is_kem_holder(kind) {
+        return Err(SdkError::Argument);
+    }
+    let kem_pk = k.kem_key(version)?.kem_pk();
+    let digest = scaas_ua::ua_portable::kem_record_digest(&ua, version, &kem_pk)
+        .map_err(|_| SdkError::Argument)?;
+    let tag = scaas_ua::purpose_tag("kem").map_err(|_| SdkError::Argument)?;
+    let sig = k.sign_ua(&tag, &digest)?;
+    // the registry's own check of the record, here first: nothing is returned that `setKemKey` would refuse
+    let none = |_: [u8; 32]| None;
+    scaas_ua::ua_portable::check_kem_record(kind, &key_data, &ua, version, &kem_pk, &sig, &none)
+        .map_err(|_| SdkError::Argument)?;
+    let (Some(ek), Some(x)) = (kem_pk.get(1..1 + 1568), kem_pk.get(1 + 1568..)) else {
+        return Err(SdkError::Argument);
+    };
+    Ok(json!({
+        "ua": hex(&ua), "version": version,
+        "kem": {"scheme": 1, "mlkemEk": hex(ek), "x25519": hex(x)},
+        "sig": {"keyData": "0x", "signature": hex(&sig), "members": []},
+    }))
+}
+
+impl Account {
+    /// KEM key rotation (owner 2026-11-22): the `setKemKey(ua, version, kem, sig)` that stores `key`'s KEM key of version
+    /// `version` ≥ 1 ([`set_kem_key_args`]), quoted and landed by its record (`kemKeyAt(ua, version)` non-empty) as every
+    /// registry write; `None` when that version is already stored. An unregistered UA: `Argument` (the registry refuses it).
+    /// No PqVault name: any app core wraps to the new version once it lands (`kemKeyOf` follows the highest).
+    pub async fn prepare_set_kem_key(
+        &self,
+        key: KeyRef,
+        chain: String,
+        version: u64,
+        payer: KeyRef,
+    ) -> Result<Option<Arc<RegistryWrite>>, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                let Key::Ua(_, k) = crate::op::key(&sdk, &key)? else {
+                    return Err(SdkError::Argument);
+                };
+                let args = set_kem_key_args(&k, version)?;
+                let ua = k.ua().ok_or(SdkError::Argument)?;
+                let (_, _, pool) = evm(&sdk, &chain)?;
+                let registry = registry_of(&sdk, &chain)?;
+                if !read_record(&pool, registry, Landed::Registered, &ua).await? {
+                    return Err(SdkError::Argument);
+                }
+                if read_record(&pool, registry, Landed::Kem(version), &ua).await? {
+                    return Ok(None);
+                }
+                Ok(Some(
+                    keep(
+                        &sdk,
+                        &chain,
+                        "setKemKey",
+                        ua,
+                        &args,
+                        &payer,
+                        Landed::Kem(version),
+                    )
+                    .await?,
+                ))
+            })
+            .await
+    }
+}
+
 #[cfg(test)]
 #[path = "register_tests.rs"]
 mod tests;
