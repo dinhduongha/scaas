@@ -105,6 +105,10 @@ Moonbeam's SDK and Self-relay (the SDK's `pinnedReads` wiring: a new `ChainProfi
 Soroban's Self-relay and Native cells ran on a local Protocol 30 network too (plan T39: a hand-off landed by the payee, the blob
 then `ImportConsumed`, an own op self-relayed from another key of the same seed, a native XLM send); a self-relay paid by the
 op's own subject key is open for the Soroban round (the simulation's `SourceAccount` auth entry, refused by `scaas-rpc`).
+`pqvault-core` (merged at b0ee76349; [CLI-PQV-14](../decisions.md#CLI-PQV-14), [CLI-PQV-15](../decisions.md#CLI-PQV-15)) is
+an app core above the SDK, not a column: it reaches chains only through the SDK's EVM calls (`read_app`, the PqVault signing
+calls, the KEM wrap, the generic KEM key rotation `Account::prepare_set_kem_key`), tested on anvil with a two-generation
+registry line, so it adds no cell and moves none; on the other families it waits for their SDK writes (after the freeze).
 
 ## 4. Notes on the cells
 

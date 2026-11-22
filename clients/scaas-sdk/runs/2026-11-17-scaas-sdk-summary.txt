@@ -270,3 +270,9 @@ sdk-clippy | 5eeed4adf | 0 | -
 mutants-check | 7c637b66f | 0 | -
 gas-gen | 7c637b66f | 0 | -
 sdk-test | 7c637b66f | 0 | 437 passed, 0 failed, 18 ignored (42 binaries)
+# T39 / T25 (2026-11-22, branch sdk-round-end): every step's last row above is rc 0 (sdk-test 437 passed at 363151f8d, after
+# the 101 of 76bdb5865); bind-cpp has no row (clients/scaas-sdk/bindings/cpp does not exist yet: T20b-T20h on sdk-binding) and
+# ua-fam has none (CI's ua-rs-features runs the size probe). PR #29's CI is the round's matrix (owner 2026-11-22); its two reds
+# (docs, node) fixed on ua-rs-sign at fe435934b. Local only: the Nethermind copy (PQZ debit green; e2e_bls_multi_64_on_a_node
+# red GasAboveTxCap, open: runs/2026-11-20-m20-nethermind-summary.txt), the Soroban e2e (sdk-soroban-e2e, green).
+# Mutants: 70 reruns, 70 killed (plan T39). origin/ua-rs-sign b0ee76349 (pqvault-core, url 2.5.9) merged before T25.
