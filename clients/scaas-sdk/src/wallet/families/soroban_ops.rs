@@ -22,7 +22,7 @@ use scaas_rpc::{EndpointFailure, FailureKind, RpcError};
 use scaas_ua::families::soroban::{
     check_terms, network_id, pay_nonce, signed_op, Checked, OpFields, OpKind, Shown, Terms,
 };
-use scaas_ua::wallet::soroban_tx::{SorobanData, SorobanTx, TxOp};
+use scaas_ua::wallet::soroban_tx::{InvokeAuth, SorobanData, SorobanTx, TxOp};
 use scaas_ua::wallet::NativeKey;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -538,7 +538,7 @@ fn invoke(
     seq: i64,
     max_time: u64,
     c: &Checked,
-    sig: Option<[u8; 64]>,
+    auth: InvokeAuth,
     data: Option<SorobanData>,
 ) -> SorobanTx {
     SorobanTx {
@@ -549,7 +549,7 @@ fn invoke(
         max_time,
         op: TxOp::Invoke {
             op: Some(c.clone()),
-            signature: sig,
+            auth,
             data,
         },
     }
@@ -560,6 +560,7 @@ fn invoke(
 fn priced(
     sim: Simulation,
     c: &Checked,
+    payer: &[u8; 32],
     inclusion: u64,
     imported: bool,
 ) -> Result<(SorobanData, u64), SdkError> {
@@ -579,14 +580,21 @@ fn priced(
         Simulation::Restore => return Err(refused("archived entries need a restore first".into())),
         Simulation::Ok { data, auth, .. } => (data, auth),
     };
+    // the subject's one entry: its Address credentials, or (owner 2026-11-22, "accept SourceAccount when self-paying") the
+    // source account's own when the transaction's source is the subject itself
+    use scaas_rpc::soroban::{auth_credential, AuthCredential};
+    let subject = account_holder(&c.from());
     let mut want = vec![0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0];
-    want.extend_from_slice(&account_holder(&c.from()));
-    if auth.len() != 1
-        || auth
-            .first()
-            .and_then(|a| scaas_rpc::soroban::auth_signer(a))
-            != Some(want.as_slice())
-    {
+    want.extend_from_slice(&subject);
+    let ok = match auth.as_slice() {
+        [one] => match auth_credential(one) {
+            Some(AuthCredential::Address(s)) => s == want.as_slice(),
+            Some(AuthCredential::SourceAccount) => *payer == subject,
+            None => false,
+        },
+        _ => false,
+    };
+    if !ok {
         return Err(refused(
             "the call needs a signer other than the op's subject".into(),
         ));
@@ -729,8 +737,21 @@ impl Wallet {
                 let seq = seq.checked_add(1).ok_or(SdkError::Argument)?;
                 let inclusion = inclusion_fee(sor, true).await?;
                 let sig = signature(&p)?;
-                let env = invoke(&pk, 0, seq, max_time, &op, sig, None).unsigned_envelope()?;
-                let (_, fee) = priced(simulate(sor, &env).await?, &op, inclusion, sig.is_some())?;
+                // no signature at quote time: an op not yet signed is simulated in the recording mode, or, paid by its own
+                // subject, under the SourceAccount credentials its transaction will carry (owner 2026-11-22)
+                let auth = match sig {
+                    Some(s) => InvokeAuth::Address(s),
+                    None if pk == account_holder(&op.from()) => InvokeAuth::SourceAccount,
+                    None => InvokeAuth::None,
+                };
+                let env = invoke(&pk, 0, seq, max_time, &op, auth, None).unsigned_envelope()?;
+                let (_, fee) = priced(
+                    simulate(sor, &env).await?,
+                    &op,
+                    &pk,
+                    inclusion,
+                    sig.is_some(),
+                )?;
                 if fee > cap(&sdk, &p.chain)? {
                     return Err(SdkError::FeeAboveCap);
                 }
@@ -762,11 +783,14 @@ impl Wallet {
                 let c = sdk.chain(&p.chain)?;
                 let (sor, nid, passphrase) = soroban(c)?;
                 let op = rebuilt(&p, passphrase)?;
-                let sig = match signature(&p)? {
-                    Some(s) => s,
-                    None => {
-                        let k = p.subject.as_ref().ok_or(SdkError::Argument)?;
-                        stellar(&sdk, k)?.1.sign_soroban_auth(&op)?
+                // the subject's signature, made once when the path needs it (an op signed already is never signed again)
+                let sign = || -> Result<[u8; 64], SdkError> {
+                    match signature(&p)? {
+                        Some(s) => Ok(s),
+                        None => {
+                            let k = p.subject.as_ref().ok_or(SdkError::Argument)?;
+                            Ok(stellar(&sdk, k)?.1.sign_soroban_auth(&op)?)
+                        }
                     }
                 };
                 let id = match &p.op {
@@ -777,10 +801,11 @@ impl Wallet {
                     Some(id) => state::row(&sdk, id).await?,
                     None => row_of(&p, &op, &id, "gateway", "signed"),
                 };
-                put(&mut row.extra, "signature", json!(hex(&sig)));
                 put(&mut row.extra, "subject", json!(p.subject));
                 match &q.path {
                     SorobanPath::Gateway => {
+                        let sig = sign()?;
+                        put(&mut row.extra, "signature", json!(hex(&sig)));
                         let list = c.gateways.clone().ok_or(SdkError::SubmitPathNone)?;
                         let body = signed_op(&op, &sig, q.max_time);
                         row.op_json = body.clone();
@@ -814,18 +839,28 @@ impl Wallet {
                             .fee
                             .parse()
                             .map_err(|_| SdkError::Argument)?;
-                        let env = invoke(&pk, 0, seq, q.max_time, &op, Some(sig), None)
-                            .unsigned_envelope()?;
+                        // owner 2026-11-22: an own op paid by its own subject goes under SourceAccount credentials (the
+                        // transaction's signature authorizes it); any other is the subject's signed Address entry
+                        let auth = if p.signature.is_none() && pk == account_holder(&op.from()) {
+                            InvokeAuth::SourceAccount
+                        } else {
+                            let sig = sign()?;
+                            put(&mut row.extra, "signature", json!(hex(&sig)));
+                            InvokeAuth::Address(sig)
+                        };
+                        let env =
+                            invoke(&pk, 0, seq, q.max_time, &op, auth, None).unsigned_envelope()?;
                         let (data, fee) = priced(
                             simulate(sor, &env).await?,
                             &op,
+                            &pk,
                             q.inclusion_fee,
                             p.signature.is_some(),
                         )?;
                         if fee > quoted || fee > cap(&sdk, &p.chain)? {
                             return Err(SdkError::FeeAboveCap);
                         }
-                        let tx = invoke(&pk, fee, seq, q.max_time, &op, Some(sig), Some(data));
+                        let tx = invoke(&pk, fee, seq, q.max_time, &op, auth, Some(data));
                         let signed = key.sign_soroban_tx(&nid, &tx)?;
                         row.path = "self".into();
                         row.payer = Some(g_of(&pk));

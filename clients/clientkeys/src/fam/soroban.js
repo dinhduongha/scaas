@@ -201,8 +201,11 @@ export function accountSignature(g, sig) {
   const { payload } = S.decodeStrkey(g);
   return S.vec([S.struct({ public_key: S.bytes(payload), signature: S.bytes(fromHex(sig)) })]);
 }
-/** `SorobanAuthorizationEntry` of a `{payload, from, signature}` (Address credentials). */
-export function authEntry({ payload, from, signature }) {
+/** `SorobanAuthorizationEntry` of a `{payload, from, signature}` (Address credentials), or of `{source: true, invocation}`
+ *  (SourceAccount credentials: the transaction's source authorizes, its own signature covering it). */
+export function authEntry({ source, invocation, payload, from, signature }) {
+  // the transaction's source account's own authorization (owner 2026-11-22: a self-paid op, its subject the source)
+  if (source === true) return concatBytes(u32(0), S.invocationXdr(invocation));
   return concatBytes(
     u32(1),
     scAddress(from),
@@ -243,6 +246,9 @@ export function nativeTx({ source, fee, seq, minTime, maxTime, op }) {
   if (op.invoke) {
     const { invocation, auth, data } = op.invoke;
     if (invocation.sub_invocations.length) refuse("a host call is one contract function");
+    // a SourceAccount entry only when the transaction's source is the op's subject (its `from`)
+    if (auth.some((a) => a.source === true) && invocation.args[0]?.value !== source)
+      refuse("a SourceAccount entry under a source that is not the subject");
     const call = S.invocationXdr(invocation).slice(4, -4); // InvokeContractArgs: the invocation without its tag and sub list
     body = concatBytes(u32(24), u32(0), call, array(auth.map(authEntry)));
     ext = concatBytes(u32(1), sorobanData(data));

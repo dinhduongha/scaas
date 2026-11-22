@@ -5,7 +5,7 @@
 use scaas_ua::families::soroban::{
     check_terms, network_id, pay_nonce, signed_op, OpFields, Shown, Terms,
 };
-use scaas_ua::wallet::soroban_tx::{SorobanData, SorobanTx, TxOp};
+use scaas_ua::wallet::soroban_tx::{InvokeAuth, SorobanData, SorobanTx, TxOp};
 use scaas_ua::wallet::{Network, Wallet};
 use serde_json::Value;
 
@@ -155,12 +155,14 @@ fn tx(r: &Value, fam: &Value) -> SorobanTx {
     } else {
         let i = &r["op"]["invoke"];
         let a = &i["auth"][0];
-        // the pay of T27's rows that this entry carries
+        // the pay of T27's rows that this entry carries (by its function: a SourceAccount entry names no payload)
         let pay = fam["ops"]
             .as_array()
             .unwrap()
             .iter()
-            .find(|o| o["signed_op"]["payload"] == a["payload"])
+            .find(|o| {
+                o["signed_op"]["payload"]["invocation"]["function"] == i["invocation"]["function"]
+            })
             .unwrap();
         let mut t = terms(&pay["terms"]);
         if !i["invocation"]["sub_invocations"]
@@ -174,7 +176,11 @@ fn tx(r: &Value, fam: &Value) -> SorobanTx {
         let keys = |k: &str| d[k].as_array().unwrap().iter().map(b64).collect();
         TxOp::Invoke {
             op: check_terms(&t, &shown(&pay["shown"])).ok(),
-            signature: Some(hexb(&a["signature"]).try_into().unwrap()),
+            auth: if a["source"] == true {
+                InvokeAuth::SourceAccount
+            } else {
+                InvokeAuth::Address(hexb(&a["signature"]).try_into().unwrap())
+            },
             data: Some(SorobanData {
                 read_only: keys("readOnly"),
                 read_write: keys("readWrite"),
@@ -209,17 +215,23 @@ fn native_rows_byte_for_byte_and_signed_by_the_source_only() {
     let payer = w.native_key(Network::Stellar, 2, None).unwrap();
     let subject = w.native_key(Network::Stellar, 0, None).unwrap();
     let nid = b32(&n["networkId"]);
-    assert_eq!(n["rows"].as_array().unwrap().len(), 4);
+    assert_eq!(n["rows"].as_array().unwrap().len(), 5);
     for r in n["rows"].as_array().unwrap() {
         let t = tx(r, &fam);
         assert_eq!(t.xdr().unwrap(), hexb(&r["tx"]), "{}", r["what"]);
         assert_eq!(t.hash(&nid).unwrap().to_vec(), hexb(&r["hash"]));
-        let signed = payer.sign_soroban_tx(&nid, &t).unwrap();
+        // the row's source signs (the payer, or the subject of a self-paid op); the other key is refused
+        assert_eq!(r["signer"], r["source"]);
+        let (signer, other) = if r["source"] == n["payer"] {
+            (&payer, &subject)
+        } else {
+            (&subject, &payer)
+        };
+        let signed = signer.sign_soroban_tx(&nid, &t).unwrap();
         assert_eq!(signed.signature.to_vec(), hexb(&r["signature"]));
         assert_eq!(signed.envelope, hexb(&r["envelope"]));
         assert_eq!(signed.tx, hexb(&r["tx"]));
-        // the subject is not the source: refused
-        assert!(subject.sign_soroban_tx(&nid, &t).is_err());
+        assert!(other.sign_soroban_tx(&nid, &t).is_err());
     }
 }
 
@@ -250,19 +262,14 @@ fn a_transaction_signs_only_with_its_data_and_auth() {
     let full = tx(&n["rows"][0], &fam);
     assert!(payer.sign_soroban_tx(&nid, &full).is_ok(), "control");
     // the simulation's form: no data (ext v0) and no auth (recording), never signed
-    let TxOp::Invoke {
-        op,
-        signature,
-        data,
-    } = full.op.clone()
-    else {
+    let TxOp::Invoke { op, auth, data } = full.op.clone() else {
         panic!()
     };
-    for (s, d) in [(None, data.clone()), (signature, None)] {
+    for (s, d) in [(InvokeAuth::None, data.clone()), (auth, None)] {
         let t = SorobanTx {
             op: TxOp::Invoke {
                 op: op.clone(),
-                signature: s,
+                auth: s,
                 data: d,
             },
             ..full.clone()
@@ -270,4 +277,25 @@ fn a_transaction_signs_only_with_its_data_and_auth() {
         assert!(t.unsigned_envelope().is_ok(), "simulated");
         assert!(payer.sign_soroban_tx(&nid, &t).is_err(), "never signed");
     }
+}
+
+/// Owner 2026-11-22: a SourceAccount entry only when the transaction's source is the op's subject; the self-paid row under the
+/// payer's source is refused, the row itself the control.
+#[test]
+fn a_source_account_entry_only_under_its_subject() {
+    let n = file("native/soroban-tx.json");
+    let fam = file("families/soroban.json");
+    let row = n["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["op"]["invoke"]["auth"][0]["source"] == true)
+        .unwrap();
+    let t = tx(row, &fam);
+    assert!(t.xdr().is_ok(), "control");
+    let moved = SorobanTx {
+        source: n["payer"].as_str().unwrap().into(),
+        ..t
+    };
+    assert!(moved.xdr().is_err());
 }

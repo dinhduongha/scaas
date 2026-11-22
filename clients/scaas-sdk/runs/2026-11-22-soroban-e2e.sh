@@ -4,7 +4,8 @@
 #   clients/scaas-sdk/runs/2026-11-22-soroban-e2e.sh
 # Builds the Wasm (`build.sh soroban`, capped), starts the pinned Protocol 30 quickstart (quickstart.sh: one container,
 # --memory 3g; removed on every exit), then the ignored test `tests/soroban_e2e.rs` (capped, -j2): A hands a pay off to B, B lands
-# it, the same blob is ImportConsumed, A's own self-relay lands, a native XLM send lands. Gate step `sdk-soroban-e2e`.
+# it, the same blob is ImportConsumed, A's own self-relay lands (paid by key 2, then by A's own key), a native XLM send lands.
+# Gate step `sdk-soroban-e2e`.
 set -euo pipefail
 W=$(git rev-parse --show-toplevel)
 QS=$W/smartcontracts/soroban/scripts/quickstart.sh

@@ -258,7 +258,6 @@ ua-arweave | 028da021c | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 cli | 028da021c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 sdk-clippy-default | 5eeed4adf | 0 | -
 sdk-clippy-min | 5eeed4adf | 0 | -
-sdk-soroban-e2e | 5eeed4adf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 sdk-min | 5eeed4adf | 0 | 74 passed, 0 failed, 0 ignored (16 binaries)
 sdk-noevm | 5eeed4adf | 0 | 157 passed, 0 failed, 1 ignored (23 binaries)
 sdk-clippy-noevm | 5eeed4adf | 0 | -
@@ -278,3 +277,11 @@ mutants-check | 88e469e6b | 0 | -
 features | 88e469e6b | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 # The BLS red above is closed by the owner's ruling of 2026-11-22 (the raise stays regular gas): e2e_bls_multi_group_limit_on_a_node
 # (64 and 48 refused, 45 lands) green on a fresh Nethermind copy; runs/2026-11-20-m20-nethermind-summary.txt.
+sdk-soroban-e2e | 9f8c4570e | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+# 9f8c4570e (owner 2026-11-22, "accept SourceAccount when self-paying"; on ua-rs-sign 977435769): sdk-soroban-e2e above green,
+# A's self-relay paid by A's own key landing beside the key-2 payer (the first run, at ded031a59, reached submit and was refused
+# FeeAboveCap: the quote recorded no signature check; the self-paid op now carries the SourceAccount entry, 9f8c4570e). Beside
+# it, not runner steps, at 9f8c4570e: clientkeys fam-soroban 10, ua-rs families_soroban 7, scaas-rpc soroban_send 9, scaas-sdk
+# soroban_ops 9, scaas-node families_vectors 5; clippy -D warnings of ua-rs (default), scaas-rpc (--all-features), scaas-sdk
+# (the full set with vectors, the non-EVM set); docs; format.sh --check rust js py sh after git add -N. Mutants t41sor 23 of
+# 23 killed at 9f8c4570e (the new one: a SourceAccount entry taken from another payer).
