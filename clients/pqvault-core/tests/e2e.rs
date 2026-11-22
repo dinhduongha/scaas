@@ -714,6 +714,21 @@ async fn personal_vault_recovery_conflict_passphrase() {
         .unwrap();
     assert_eq!(un.readable().len(), 2, "the old epoch through prev");
     assert_eq!(values(&pv.open_latest(&un).await.unwrap()), want);
+    // an item under the new epoch beside those under the old: each opens under its own epoch's key only
+    let it = pv
+        .create_item(&un, &login("after the change", "c1"))
+        .await
+        .unwrap();
+    assert_ne!(it.record.epoch_id, per.vault_id);
+    send(
+        &d2,
+        pv.prepare_item(&at, &it, d2.payer.clone()).await.unwrap(),
+    )
+    .await;
+    let mut want = want;
+    want.push(login("after the change", "c1"));
+    want.sort_by_key(|x| x["title"].as_str().unwrap_or_default().to_string());
+    assert_eq!(values(&pv.open_latest(&un).await.unwrap()), want);
     let old = pv
         .unlock(&k1b, s.clone(), &Passphrase::Given(sec(PASS.as_bytes())))
         .await
