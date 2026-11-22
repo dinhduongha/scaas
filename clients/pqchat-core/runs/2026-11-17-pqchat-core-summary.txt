@@ -45,3 +45,9 @@ T9 | pqc-test | 5462652f3 | 0 | 90 passed, 0 failed, 4 ignored (17 binaries)
 T9 | pqc-clippy | 5462652f3 | 0 | -
 T9 | pqc-reads | 5462652f3 | 0 | reads 33 (23 trusted), writes 13, R2 23; 0 refused
 T9 | pqc-chain | 5462652f3 | 0 | 4 passed, 0 failed, 0 ignored (17 binaries)
+T10 | pqc-test | bc814812f | 0 | 101 passed, 0 failed, 5 ignored (19 binaries)
+T10 | pqc-clippy | bc814812f | 0 | -
+T10 | pqc-reads | bc814812f | 0 | reads 37 (23 trusted), writes 13, R2 23; 0 refused
+T10 | pqc-wasm | bc814812f | 0 | -
+T10 | mutants-check | bc814812f | 0 | -
+T10 | pqc-chain | bc814812f | 0 | 5 passed, 0 failed, 0 ignored (19 binaries)
