@@ -42,8 +42,8 @@ tokio runtime and one Matrix login ([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12)'s one 
 topics; attachments (owner 2026-11-21); no calls, no HCS, Waku or libp2p, no `msig` author** (owner 2026-11-10: the 2-person chat is the main case;
 controller call for the cut, owner may override; SPECIFIED). In: sessions, epochs and rekeys, wraps in chunks, `leave`, `remove`,
 the home rule and replicas, `msig` expansion of members, the sender chains, the envelope, `postMessage` and `storeMessage`, dedupe
-and order, recovery from state, pending until accepted, the content types `text`, `edit`, `redact`, `react`, `receipt` and
-`typing` (UA-7 §6.4.1), and public topics. Out, PLANNED in later tasks of the UA-7 plan: calls and their content types
+and order, recovery from state, pending until accepted, the content types `text`, `edit`, `redact`, `react`, `receipt`,
+`typing` and `file` (UA-7 §6.4.1), and public topics. Out, PLANNED in later tasks of the UA-7 plan: calls and their content types
 (`callMember`, `callOffer`, `callAnswer`, `callCandidates`, `callKey`), the HCS, Waku and libp2p adapters,
 device linking and the epoch-key export (UA-7 P6, §14 O5), and records authored by an `msig` (an `msig` admin's epoch or removal,
 an `msig` topic owner), whose co-signers need the full record on other devices (`MsigAuthorPlanned`). A content of a type out of
@@ -53,7 +53,7 @@ scope is shown as unsupported and never acted on (UA-7 P49).
 
 Status: **SPECIFIED** (the SDK surface it needs: the SDK spec's App cores section, SPECIFIED on branch `scaas-sdk`).
 
-**Attachments are in this round** (owner 2026-11-21, "put it in" after "images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave"; O9 (b)): the `file` content (UA-7 `file`, P28) is sent and read; the file is sealed under a fresh file key by an SDK call so no key byte leaves `ua-rs`, its ciphertext stored on Arweave (`url` = `ar://<id>`), `ctSha256` checked before it is opened, its size padded to buckets. SPECIFIED; the Arweave format, reader and upload path follow the research of TODO 8i, and the attachment task (plan T10b) waits for it.
+**Attachments are in this round** (owner 2026-11-21, "put it in" after "images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave"; O9 (b); owner 2026-11-22: two new calls and an app id for PqChat): the `file` content (UA-7 §6.4.1 with its 2026-11-21 Change, P28) is sent and read; the file is sealed under a fresh file key by the SDK's `seal_for_arweave` under PqChat's app id (`keccak256("scaas.pqchat.v1")`), framed to its power-of-two bucket inside the AEAD, its key entered into the content inside `ua-rs` by `pqchat_seal_file_message`, so no key byte reaches the crate; the signed item is returned for the app to post to Arweave (`url` = `ar://<id>`) and keep, the crate posts nothing; a reader opens the object by `pqchat_open_file`, which checks its length and `ctSha256` before any decryption and reads the key from the opened content inside `ua-rs`; a failed file is shown on the device only. BUILT (plan T10b, `src/file.rs`: `send_file`, `file_info`, `open_file`; tests `tests/stores.rs`; the form and the controller calls in CLI-PQC-02's Change of 2026-11-23 in [decisions](../decisions.md)), UNAUDITED; a `file` without an `ar://` url is not built or read in this round.
 
 <a id="CLI-PQC-03"></a>**CLI-PQC-03** — **Secrets stay below the SDK: `pqchat-core` holds key handles only, and only decrypted
 plaintext leaves** (coordinator condition 1, 2026-11-17; SPECIFIED). The epoch key `K` and the sender chains' positions are `ua-rs`
