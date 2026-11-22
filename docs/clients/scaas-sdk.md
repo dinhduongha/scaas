@@ -289,7 +289,8 @@ the SDK and its app cores in one Rust library** (owner 2026-11-17: "agreed to re
 An app core (`pqchat-core`, `pqvault-core`, a third party's) depends on `scaas-sdk` with the feature `app-core` and on nothing
 below it that touches a key or a node; the SDK names no app core and holds no app logic, while the record types of SCaaS
 contracts (`PqChat`'s among them, behind the feature `pqchat-records`) are named, typed SDK entries as every SCaaS
-contract's are under [CLI-SDK-08](#CLI-SDK-08). scaas-app's one
+contract's are under [CLI-SDK-08](#CLI-SDK-08); `PqVault`'s records have two signing calls, `sign_pqvault_record` and
+`verify_pqvault_record`, and no other PqVault logic (owner 2026-11-22, [CLI-PQV-13](../decisions.md#CLI-PQV-13)). scaas-app's one
 library is `app-core-rust` (scaas-app's contract section 12), with the features `native-core` (on by default), `scaas`,
 `pqchat` and `pqvault` (each implying `scaas`); the SDK defines no aggregating crate.
 

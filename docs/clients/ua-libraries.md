@@ -837,7 +837,9 @@ the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)).
 first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-12 controller calls (owner may override):
 
 <a id="CLI-PQV-01"></a>**CLI-PQV-01** — **`pqvault-core`, a Rust crate of its own, builds, encrypts, opens and merges vault
-records as an app core above `scaas-sdk`: it depends on the SDK, the SDK knows nothing about PqVault, and every signature,
+records as an app core above `scaas-sdk`: it depends on the SDK, the SDK holds no PqVault logic beyond its two signing calls
+`sign_pqvault_record` / `verify_pqvault_record` (all vault logic stays in `pqvault-core`; owner 2026-11-22,
+[CLI-PQV-13](../decisions.md#CLI-PQV-13)), and every signature,
 KEM, KDF and AEAD still runs in `ua-rs`, reached through the SDK ([CLI-UAL-01](#CLI-UAL-01)); scaas-app links it in its one
 Rust library `app-core-rust` with the feature `pqvault` (which implies `scaas`; scaas-app's contract section 12)** (owner
 2026-11-17, N2: "agreed to reverse the dependency", which replaced V11's SDK module `pqvault` the same day). SPECIFIED. The
