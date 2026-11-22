@@ -1,12 +1,12 @@
-# gasG2 mutants at commit 8fa642a5f (name | outcome | test)
+# gasG2 mutants (name | outcome | commit | test | first failure line)
 G2: a variant without a derived run not listed | killed | python3 clients/scaas-sdk/gas/test_generate.py
 G2: the fallback takes the smallest on another kind | killed | python3 clients/scaas-sdk/gas/test_generate.py
 G2: a row with no donor left without ua_extra | killed | python3 clients/scaas-sdk/gas/test_generate.py
 G2: a native-only entry measured with a derived signer accepted | killed | python3 clients/scaas-sdk/gas/test_generate.py
 Q1: the second party's verify delta not taken off | killed | python3 clients/scaas-sdk/gas/test_generate.py
-G2: a measured row's ua_extra dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib reference_ua_extra_covers_every_variant
+G2: a measured row's ua_extra dropped | killed | 5eeed4adf | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib reference_ua_extra_covers_every_variant | panicked at src/op/gas.rs:1501:17:
 G2: a native-only kind given a ua_extra | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib reference_ua_extra_covers_every_variant
-G2: a measured row marked unmeasured | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib reference_ua_extra_covers_every_variant
+G2: a measured row marked unmeasured | killed | 5eeed4adf | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib reference_ua_extra_covers_every_variant | panicked at src/op/gas.rs:1508:21:
 Q2: WebAuthn back on the longest vector | killed | ../../scripts/capped forge test --match-path test/gas/SdkGasVerify.t.sol --match-test '^test_sdkGas_verify\('
 Q2: the cap's worst case replaced by the cap vector's shape | killed | ../../scripts/capped forge test --match-path test/gas/SdkGasVerify.t.sol --match-test '^test_sdkGas_verify\('
-10 mutants, 10 killed, 0 survived, 0 not loaded
+10 mutants, 10 killed, 0 survived, 0 not loaded, 0 other failure

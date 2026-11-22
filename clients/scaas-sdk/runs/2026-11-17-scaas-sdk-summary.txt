@@ -194,13 +194,9 @@ node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
 ck-xcheck | 0736ad763 | 0 | -
 # merged tree 4175c2d43 (origin/ua-rs-sign cc45679e8 into sdk-complete): node-e2e at --test-threads=10, wall 84 s, the capped scope's memory.peak 3.75 GB read at 60 s (cap 6 GiB); two reds before it were the runner's inputs, not the tree: a forge recovery snapshot of chain 31918 left by an interrupted earlier run (moved aside), and zether-cli built without `--features hazmat` (CI's e2e builds it with hazmat)
-sdk-min | 54ddfcb33 | 0 | 74 passed, 0 failed, 0 ignored (13 binaries)
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
 ua-c | e90f26685 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | e90f26685 | 0 | ctest: 0 tests failed out of 45
-mutants-check | 0011b40e4 | 0 | -
-sdk-noevm | 0011b40e4 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
-sdk-wasm | 0011b40e4 | 0 | -
 bind-dart | 0011b40e4 | 0 | dart: +14:
 rpc-wasm | 0011b40e4 | 0 | -
 
@@ -215,20 +211,14 @@ ua-core | 0736ad763 | 0 | 75 passed, 0 failed, 0 ignored (8 binaries)
 # T41.arweave fam-arweave size (clients/ua-rs/runs/fam-sizes.sh, release, the probe now reaching DataItem::parse) at 0736ad763: none 2212040 B; fam-arweave 2205712 → 2265656 B (delta −72 → +53616 B, old the empty feature at 61c5bb014); all 2342744 → 2379296 B (delta +136960 → +167256 B)
 rpc-test | 6f2eb3dbd | 0 | 219 passed, 0 failed, 10 ignored (22 binaries)
 rpc-wasm | 6f2eb3dbd | 0 | -
-sdk-min | 7daa8b2bc | 0 | 74 passed, 0 failed, 0 ignored (14 binaries)
-sdk-noevm | 7daa8b2bc | 0 | 149 passed, 0 failed, 0 ignored (21 binaries)
-sdk-test | 7daa8b2bc | 0 | 420 passed, 0 failed, 16 ignored (39 binaries)
 bind-gen | 7daa8b2bc | 0 | -
 ck-test | 898fa1ebc | 0 | node: 568 pass, 0 fail, 4 skipped
-mutants-check | 898fa1ebc | 0 | -
 # T41.arweave's scaas-rpc and SDK parts (CA-T19, CA-T20): code 6f2eb3dbd, the shared ArweaveItem code 7daa8b2bc (error_codes_are_names was red at 6f2eb3dbd in sdk-test, sdk-noevm, sdk-min: fixed, rows above at 7daa8b2bc), the notC9 rows 291a864b2 (the survivor of t41arw2 killed); the rpc rows at 6f2eb3dbd are unchanged by the two later code commits (scaas-rpc untouched)
 rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
-mutants-check | 7992a33e7 | 0 | -
 ua-appcore | 7992a33e7 | 0 | 14 passed, 0 failed, 0 ignored (1 binaries)
 ua-test | 7992a33e7 | 0 | 622 passed, 0 failed, 3 ignored (63 binaries)
 ua-vectors | 7992a33e7 | 0 | 732 passed, 0 failed, 6 ignored (71 binaries)
 ua-verify-only | 7992a33e7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
-sdk-test | 7992a33e7 | 0 | 417 passed, 0 failed, 17 ignored (39 binaries)
 bind-gen | 7992a33e7 | 0 | -
 ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # PqVault's dedicated signing path (owner 2026-11-22, CLI-PQV-13) 4f64cf766, merged with origin/ua-rs-sign a97cce414 at
@@ -241,7 +231,6 @@ ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # worktree; untouched). Mutants pqvsign 14/14 killed at 7992a33e7. No pin moved: no vector row, typehash, gas or size pin
 # changes (records.json is read, not regenerated; the purpose P_V enters no new digest).
 rpc-test | 76bdb5865 | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
-sdk-test | 76bdb5865 | 101 | 181 passed, 4 failed, 0 ignored (6 binaries)
 node-test | 76bdb5865 | 0 | 902 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 76bdb5865 (origin/ua-rs-sign a97cce414): sdk-test's 4 reds are app_core_vault_records' (AppDomainRefused: ua-rs-sign's PqVault domain refusal of 7da6fbb32; branch pqvault-sign fixes them, inherited, not touched); the same set with --no-fail-fast: 412 passed, those 4 failed, 17 ignored in 39 binaries; scripts/format.sh --check: every part ok but tact (tact-fmt not installed in this worktree)
@@ -264,12 +253,20 @@ node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # vectors, and the non-EVM set), its tests handoff 8 and soroban_ops 8; scaas-cli clippy --all-targets --features dev-profiles
 # and tests/cli.rs 13 passed (one_command_per_sdk_call_both_ways, every_signing_command_asks_first: its missing run of
 # pqvault-sign's `app-core sign-pqvault-record` added); docs; format.sh --check rust js py after git add -N.
-docs | 028da021c | 0 | -
 features | 028da021c | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 rpc-clippy | 028da021c | 0 | -
 ua-clippy | 028da021c | 0 | -
 ua-arweave | 028da021c | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
-sdk-arweave | 028da021c | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
-sdk-clippy-noevm | 028da021c | 0 | -
-sdk-clippy | 028da021c | 0 | -
 cli | 028da021c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+sdk-clippy-default | 5eeed4adf | 0 | -
+sdk-clippy-min | 5eeed4adf | 0 | -
+sdk-soroban-e2e | 5eeed4adf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+docs | 5eeed4adf | 0 | -
+mutants-check | 5eeed4adf | 0 | -
+sdk-min | 5eeed4adf | 0 | 74 passed, 0 failed, 0 ignored (16 binaries)
+sdk-noevm | 5eeed4adf | 0 | 157 passed, 0 failed, 1 ignored (23 binaries)
+sdk-clippy-noevm | 5eeed4adf | 0 | -
+sdk-arweave | 5eeed4adf | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
+sdk-wasm | 5eeed4adf | 0 | -
+sdk-clippy | 5eeed4adf | 0 | -
+sdk-test | 5eeed4adf | 0 | 437 passed, 0 failed, 18 ignored (42 binaries)
