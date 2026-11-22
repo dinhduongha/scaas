@@ -209,8 +209,6 @@ sdk-wasm | 0011b40e4 | 0 | -
 bind-gen | 0011b40e4 | 0 | -
 bind-dart | 0011b40e4 | 0 | dart: +14:
 rpc-wasm | 0011b40e4 | 0 | -
-rpc-test | 0011b40e4 | 0 | 205 passed, 0 failed, 10 ignored (21 binaries)
-sdk-test | 0011b40e4 | 0 | 416 passed, 0 failed, 17 ignored (39 binaries)
 # faecafcd2 (T41.evm): sdk-e2e's e2e_hand_off_on_anvil alone (CAPPED_MEM=6G, --ignored): 1 passed (A hands off, B lands it, the same blob ImportConsumed, a blob bound to C ImportRelayerBound, A's own self-relay lands); the whole sdk-e2e is the round's matrix (T39). Mutants: t41evm0 9 of 9, t41evm 13 of 13 killed
 ck-test | 0736ad763 | 0 | node: 567 pass, 0 fail, 4 skipped
 ck-xcheck | 0736ad763 | 0 | -
@@ -224,3 +222,5 @@ ua-vectors | 0736ad763 | 0 | 726 passed, 0 failed, 6 ignored (70 binaries)
 ua-test | 0736ad763 | 0 | 616 passed, 0 failed, 3 ignored (62 binaries)
 # T41.arweave's ua-rs part at 0736ad763 (CA-T16, CA-T17): the rows above; mutants t41arw1 20/20 killed (the ua-rs rows at 0736ad763, the clientkeys rows at 9764de7c0, their command through capped with the TAP reporter); every mutant script loads (mutants-check's commands, run by hand at 9764de7c0: rc 0)
 # T41.arweave fam-arweave size (clients/ua-rs/runs/fam-sizes.sh, release, the probe now reaching DataItem::parse) at 0736ad763: none 2212040 B; fam-arweave 2205712 → 2265656 B (delta −72 → +53616 B, old the empty feature at 61c5bb014); all 2342744 → 2379296 B (delta +136960 → +167256 B)
+rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
+sdk-test | 1eeb8561c | 101 | 181 passed, 4 failed, 0 ignored (6 binaries)
