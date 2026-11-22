@@ -2,11 +2,23 @@
 //! CLI-PQC-01's dependency rule (plan T2, gate `pqc-tree`): the crate depends on `scaas-sdk` and on nothing else that touches a
 //! key, a node or Matrix (no direct `scaas-ua`, `scaas-rpc`, Matrix SDK), and its feature graph holds at most one PQZ set. Each
 //! check runs on `cargo tree`'s real output and, as its positive control, on that output with one forbidden line added.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 use std::process::Command;
 
 /// Crates the crate may not depend on directly (CLI-PQC-01).
-const FORBIDDEN: &[&str] = &["scaas-ua", "scaas-rpc", "matrix-sdk", "matrix-sdk-base", "ruma", "alloy"];
+const FORBIDDEN: &[&str] = &[
+    "scaas-ua",
+    "scaas-rpc",
+    "matrix-sdk",
+    "matrix-sdk-base",
+    "ruma",
+    "alloy",
+];
 
 fn tree(args: &[&str]) -> String {
     let out = Command::new(env!("CARGO"))
@@ -15,7 +27,11 @@ fn tree(args: &[&str]) -> String {
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     String::from_utf8(out.stdout).unwrap()
 }
 

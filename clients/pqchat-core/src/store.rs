@@ -42,7 +42,12 @@ impl MemoryStore {
 
 impl PqChatStore for MemoryStore {
     fn load(&self, key: &str) -> Result<Option<Item>, StoreFault> {
-        Ok(self.items.lock().unwrap_or_else(PoisonError::into_inner).get(key).cloned())
+        Ok(self
+            .items
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(key)
+            .cloned())
     }
 
     fn replace(&self, key: &str, expected: u64, value: &[u8]) -> Result<bool, StoreFault> {
@@ -51,7 +56,13 @@ impl PqChatStore for MemoryStore {
         if revision != expected {
             return Ok(false);
         }
-        items.insert(key.to_string(), Item { revision: expected + 1, value: value.to_vec() });
+        items.insert(
+            key.to_string(),
+            Item {
+                revision: expected + 1,
+                value: value.to_vec(),
+            },
+        );
         Ok(true)
     }
 }
@@ -72,7 +83,9 @@ impl Items<'_> {
     pub fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, PqChatError> {
         match self.0.load(key).map_err(io)? {
             None => Ok(None),
-            Some(i) => serde_json::from_slice(&i.value).map(Some).map_err(|_| io(StoreFault)),
+            Some(i) => serde_json::from_slice(&i.value)
+                .map(Some)
+                .map_err(|_| io(StoreFault)),
         }
     }
 
@@ -87,9 +100,10 @@ impl Items<'_> {
             let cur = self.0.load(key).map_err(io)?;
             let (revision, old) = match cur {
                 None => (0, None),
-                Some(i) => {
-                    (i.revision, Some(serde_json::from_slice(&i.value).map_err(|_| io(StoreFault))?))
-                }
+                Some(i) => (
+                    i.revision,
+                    Some(serde_json::from_slice(&i.value).map_err(|_| io(StoreFault))?),
+                ),
             };
             let new = f(old)?;
             let bytes = serde_json::to_vec(&new).map_err(|_| PqChatError::Internal)?;

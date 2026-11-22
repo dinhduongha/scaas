@@ -1113,6 +1113,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90dbd31c98227229239363921e60fcf5e558e43ec69094d46fc4996f08d1d5bc"
 dependencies = [
  "bitcoin_hashes",
+ "serde",
  "unicode-normalization",
  "zeroize",
 ]
@@ -3230,15 +3231,20 @@ dependencies = [
 name = "pqchat-core"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "async-trait",
+ "base64 0.22.1",
  "getrandom 0.2.17",
+ "scaas-rpc",
  "scaas-sdk",
+ "scaas-ua",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
  "tracing-core",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
@@ -3861,6 +3867,7 @@ dependencies = [
  "slh-dsa",
  "unicode-normalization",
  "zeroize",
+ "zether-prover",
 ]
 
 [[package]]
@@ -5174,4 +5181,31 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.8",
+]
+
+[[package]]
+name = "zether-prover"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "ark-bls12-381",
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "ark-std 0.5.0",
+ "bip39",
+ "getrandom 0.2.17",
+ "hex",
+ "hkdf",
+ "hmac 0.12.1",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "scaas-ct",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sha3 0.10.8",
+ "thiserror",
+ "wasm-bindgen",
+ "zeroize",
 ]

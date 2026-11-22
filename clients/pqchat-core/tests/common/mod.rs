@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Test helpers shared by the crate's tests: a log capture and faulty stores.
-#![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#![allow(
+    dead_code,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 use pqchat_core::{Item, MemoryStore, PqChatStore, StoreFault};
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -58,7 +64,13 @@ pub struct Faulty {
 
 impl Faulty {
     fn new(fail_load: bool, fail_replace: bool, race: bool) -> Self {
-        Faulty { inner: MemoryStore::new(), fail_load, fail_replace, race, replaces: AtomicU64::new(0) }
+        Faulty {
+            inner: MemoryStore::new(),
+            fail_load,
+            fail_replace,
+            race,
+            replaces: AtomicU64::new(0),
+        }
     }
     pub fn load() -> Self {
         Self::new(true, false, false)

@@ -23,6 +23,13 @@ getrandom = "0.2"
 tracing = "0.1"
 # the transport trait's and the chain port's async methods as trait objects (in the SDK's graph already)
 async-trait = "0.1"
+# the Matrix event's transport encoding (RFC 4648 §4 with padding, CLI-PQC-05; the SDK's version)
+base64 = "0.22"
+
+[features]
+# test-only (plan T3, CLI-PQC-11): the SDK's vectors build (fixed randomness, key import); never in a release build nor a
+# binding (the SDK refuses it without debug_assertions); only the vectors test needs it
+vectors = ["scaas-sdk/vectors"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
@@ -30,6 +37,16 @@ getrandom = { version = "0.2", features = ["js"] }
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "net", "io-util"] }
 tracing-core = "0.1"
+# the tests' world: the SDK's fake chain (its tests/common/fake_chain.rs), the repository seed's keys and KEM keys, the
+# endpoint classes; never in the crate's normal graph (tests/deps.rs)
+scaas-ua = { path = "../ua-rs", default-features = false, features = ["wallet"] }
+scaas-rpc = { path = "../scaas-rpc", default-features = false }
+alloy = { version = "~1.6", default-features = false, features = ["std"] }
+zeroize = "=1.8.2"
+
+[[test]]
+name = "vectors"
+required-features = ["vectors"]
 
 # the SDK's: the dependencies built at opt-level 3 (scrypt and ML-KEM crawl unoptimised)
 [profile.dev.package."*"]

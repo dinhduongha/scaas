@@ -104,7 +104,11 @@ impl fmt::Debug for PqChatError {
 impl std::error::Error for PqChatError {}
 
 impl From<SdkError> for PqChatError {
+    /// The SDK's code, except a KEM key that P14's checks refuse (`KemCheck`): `KemKeyInvalid`.
     fn from(e: SdkError) -> Self {
+        if e.code() == "KemCheck" {
+            return PqChatError::KemKeyInvalid;
+        }
         PqChatError::Sdk(e)
     }
 }
