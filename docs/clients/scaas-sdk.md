@@ -321,7 +321,12 @@ take the sender, creator or author from the account and never a digest or a ciph
 `vectors` (bit 28) adds test-only entries (key bytes in and out, fixed randomness): a release build refuses it
 (`compile_error!`), `scripts/check_test_features.py` keeps it out of every shipped artifact and the bind-gen check out of
 every binding. It runs alone, in its own test (`--test pqchat_keys`): a `vectors` build of `ua-rs` refuses key handles until
-a test unlocks them (no-decryption-oracle §4.8), so the whole suite runs without it and clippy builds it.
+a test unlocks them (no-decryption-oracle §4.8), so the whole suite runs without it and clippy builds it. Four
+pure PqChat hashes join them (pqchat-core T3 to T5, 2026-11-22; BUILT, UNAUDITED): `pqchat_wrap_hash` (V2's `hashStruct(Wrap)` of a
+wrap read from state, checked by the app core against `wrapHashes[i]` before it enters a decapsulation),
+`pqchat_message_id` (a received message's `typed(PqChatMessage)`, its dedupe id), `pqchat_session_id` and
+`pqchat_epoch_id` (S4: the ids the wraps' AAD binds, before signing); no key, no network. `SecretBytes` is re-exported so
+an app core holds its plaintexts without a `scaas-ua` dependency of its own.
 `argon2id_passphrase` (PqVault V9, 2026-11-21; BUILT, UNAUDITED) is `argon2id` of a typed passphrase after RFC 8265's
 OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control character or bytes that are not UTF-8: `Argument`), so
 a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`. PqVault's V1 vectors

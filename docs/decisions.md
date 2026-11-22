@@ -12000,6 +12000,8 @@ Change (coordinator, 2026-11-17, findings K4 and K5 of Fable's `pqchat-core` spe
 
 Change (controller, 2026-11-21, pqchat-core T1's SDK rows; owner: no; status: BUILT, UNAUDITED): `read_app` added (a bounded, ABI-driven view read of named JSON at the final block, `Purpose::FeedsDecryption` when trusted: the views of CLI-PQC-13 and pqvault-core's reads); PqChat's key entries K1–K6, S1, S2, S5, V1, V2 on the scope's handles under PqChat's declared prefix; the test feature `vectors` (bit 28) refused in a release build and kept out of every shipped artifact and binding.
 
+Change (controller, 2026-11-22, pqchat-core T3 to T5 on `pqchat-core-impl`; owner: no; status: BUILT, UNAUDITED): four pure PqChat entries the crate needed and the SDK lacked (gaps of T1's surface, reported here): `pqchat_wrap_hash` (V2's wrap hash, CLI-PQC-07's `wrap-hash` check), `pqchat_message_id` (the dedupe id of a received message, P19), `pqchat_session_id` and `pqchat_epoch_id` (S4); each with its CLI command; `SecretBytes` re-exported by the SDK (CLI-PQC-01: no `scaas-ua` dependency in an app core).
+
 ### CLI-SDK-21 — `upload_file` / `fetch_file`: the free tier for the smallest bucket, the operator payer for the rest
 - old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/scaas-sdk.md#CLI-SDK-21 · superseded-by: —
 
