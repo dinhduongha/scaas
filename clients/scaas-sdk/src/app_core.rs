@@ -1424,6 +1424,7 @@ impl AppCore {
     }
 
     /// The entry under both verifying calls: `f` judges the record on the registry state read.
+    #[allow(clippy::too_many_arguments)]
     async fn verify_with(
         self: &Arc<Self>,
         chain: String,
