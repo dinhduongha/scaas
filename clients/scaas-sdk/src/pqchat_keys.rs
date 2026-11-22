@@ -623,6 +623,84 @@ impl AppCore {
         })
     }
 
+    /// pqchat-core T11's hostile harness: S5 from a given padded plaintext `padded` (a non-zero fill stays: what an honest
+    /// sealer never writes), signed by `account` (the sender its UA), the envelope under `k` with a fixed nonce.
+    pub async fn pqchat_vectors_seal_padded(
+        self: &Arc<Self>,
+        account: KeyRef,
+        k: Arc<AppKey>,
+        pos: Arc<AppKey>,
+        header: PqMessageHeader,
+        padded: Vec<u8>,
+        env_nonce: [u8; 12],
+    ) -> Result<PqSealedMessage, SdkError> {
+        self.label(pk::ENV)?;
+        let crate::op::Key::Ua(_, signer) = crate::op::key(&self.sdk, &account)? else {
+            return Err(SdkError::Argument);
+        };
+        let h = Header {
+            session_id: h32(&header.session_id)?,
+            epoch_id: h32(&header.epoch_id)?,
+            sender: signer.ua().ok_or(SdkError::Argument)?,
+            device: h16(&header.device)?,
+            counter: header.counter,
+            parents: header
+                .parents
+                .iter()
+                .map(|p| h32(p))
+                .collect::<Result<_, _>>()?,
+        };
+        let s = self.with(&[&k, &pos], |sc, hs| {
+            sc.pqchat_vectors_seal_padded(at(hs, 0)?, at(hs, 1)?, &h, &padded, &signer, &env_nonce)
+                .map_err(SdkError::Ua)
+        })?;
+        Ok(PqSealedMessage {
+            record: record_of(&s.header, s.ciphertext),
+            sig: sig_of(&s.sig),
+            message_id: hex(&s.message_id),
+            inner: s.inner,
+            hint: s.hint.to_vec(),
+            env: s.env,
+            payload: s.payload,
+        })
+    }
+
+    /// pqchat-core T11's hostile harness: a `sealedInfo` of the given padded plaintext `padded` under `k` (neither
+    /// canonicalised nor padded here), with a fixed nonce.
+    pub fn pqchat_vectors_seal_info_raw(
+        &self,
+        k: Arc<AppKey>,
+        session_id: String,
+        epoch_id: String,
+        padded: Vec<u8>,
+        nonce: [u8; 12],
+    ) -> Result<Vec<u8>, SdkError> {
+        self.label(pk::INFO)?;
+        let (s, e) = (h32(&session_id)?, h32(&epoch_id)?);
+        self.with(&[&k], |sc, hs| {
+            sc.pqchat_vectors_seal_info_raw(at(hs, 0)?, &s, &e, &padded, &nonce)
+                .map_err(SdkError::Ua)
+        })
+    }
+
+    /// pqchat-core T11's hostile harness: the envelope under `k` of a record and a signature given apart (a record signed by
+    /// a UA other than its sender, through the generic `sign_pqchat_message`), with a fixed nonce.
+    pub fn pqchat_vectors_envelope(
+        &self,
+        k: Arc<AppKey>,
+        record: PqChatMessage,
+        sig: AppUaSig,
+        nonce: [u8; 12],
+    ) -> Result<Vec<u8>, SdkError> {
+        self.label(pk::ENV)?;
+        let h = header_of(&record)?;
+        let inner = pk::encode_inner(&h, &record.ciphertext, &UASig::from(&sig));
+        self.with(&[&k], |sc, hs| {
+            sc.pqchat_vectors_envelope(at(hs, 0)?, &h.session_id, &h.epoch_id, &inner, &nonce)
+                .map_err(SdkError::Ua)
+        })
+    }
+
     /// [`AppCore::pqchat_seal_message`] with a fixed envelope nonce.
     pub async fn pqchat_vectors_seal_message(
         self: &Arc<Self>,
