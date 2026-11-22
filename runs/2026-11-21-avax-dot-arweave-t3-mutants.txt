@@ -1,0 +1,6 @@
+# t3 mutants at commit a3b05fc95 (name | outcome | test)
+`dead` on a missing receipt | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib an_earlier_replaced_hash_that_mines_settles_the_nonce
+the in-flight cap ignored | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib a_lane_keeps_at_most_max_inflight_in_flight
+a fixed gas padding | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib gas_floor_and_settle_sizing
+the in-flight cost alert dropped | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib balance_below_the_in_flight_cost_is_alerted
+4 mutants, 4 killed, 0 survived (0 killed elsewhere), 0 not loaded

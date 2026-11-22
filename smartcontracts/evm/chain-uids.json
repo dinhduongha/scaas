@@ -339,6 +339,66 @@
       "note": "same genesis as Avalanche C-Chain (43114): chainId separates them"
     },
     {
+      "key": "polkadot-hub-mainnet",
+      "name": "Polkadot Hub",
+      "chainId": 420420419,
+      "network": "mainnet",
+      "testnet": false,
+      "private": false,
+      "chainUid": "0x68d56f15f85d3136970ec16946040bc1752654e906147f7e43e9d539d7c3de2f",
+      "genesisTimestamp": null,
+      "sources": [
+        "https://polkadot-asset-hub-rpc.polkadot.io",
+        "https://statemint.api.onfinality.io/public"
+      ],
+      "note": "read 2026-11-22: chain_getBlockHash(0) of the Substrate side on both sources (Substrate JSON-RPC, not eth-rpc), equal; Westend Hub's eth-rpc answered block 0 with its Substrate genesis hash (the cross-check), and this chain's eth-rpc (https://eth-rpc.polkadot.io/, the one public eth-rpc provider listed) answers block 0 null (it serves no early blocks; scaas-rpc refuses such an endpoint ChainIdentityUnreadable unless its entry names a checkpoint, CLI-RPC-03), so NET-EVM-19 H1 does not pass on the eth-rpc; the owner accepted the Substrate genesis as this chain's identity (2026-11-22, decisions ARCH-POS-20)"
+    },
+    {
+      "key": "polkadot-hub-testnet",
+      "name": "Polkadot Hub TestNet (Paseo)",
+      "chainId": 420420417,
+      "network": "testnet",
+      "testnet": true,
+      "private": false,
+      "chainUid": "0xd6eec26135305a8ad257a20d003357284c8aa03d0bdb2b357ab0a22371e11ef2",
+      "genesisTimestamp": null,
+      "sources": [
+        "https://asset-hub-paseo-rpc.n.dwellir.com",
+        "https://sys.turboflakes.io/asset-hub-paseo"
+      ],
+      "note": "read 2026-11-22: chain_getBlockHash(0) of the Substrate side on both sources (system_chain \"Paseo Asset Hub\"), equal; its eth-rpc (https://eth-rpc-testnet.polkadot.io/, the one public eth-rpc provider listed) answers block 0 null, as on mainnet (the owner accepted the Substrate genesis as the identity, 2026-11-22, decisions ARCH-POS-20)"
+    },
+    {
+      "key": "moonbeam-mainnet",
+      "name": "Moonbeam",
+      "chainId": 1284,
+      "network": "mainnet",
+      "testnet": false,
+      "private": false,
+      "chainUid": "0x7e6b3bbed86828a558271c9c9f62354b1d8b5aa15ff85fd6f1e7cbe9af9dde7e",
+      "genesisTimestamp": 0,
+      "sources": [
+        "http://rpc.api.moonbeam.network",
+        "https://moonbeam.api.onfinality.io/public"
+      ],
+      "note": "read 2026-11-22 on both sources, equal (Frontier's Ethereum block 0, not the Substrate genesis 0xfe58ea77…b76d); rpc.api.moonbeam.network refused this client's TLS handshake that day, so it was read over plain HTTP, the second source over TLS; an independent second source is to be found before any deploy (owner 2026-11-22)"
+    },
+    {
+      "key": "moonbeam-testnet",
+      "name": "Moonbase Alpha",
+      "chainId": 1287,
+      "network": "testnet",
+      "testnet": true,
+      "private": false,
+      "chainUid": "0x33638dde636f9264b6472b9d976d58e757fe88badac53f204f3f530ecc5aacfa",
+      "genesisTimestamp": 0,
+      "sources": [
+        "https://moonbeam-alpha.api.onfinality.io/public",
+        "https://moonbase-alpha.drpc.org"
+      ],
+      "note": "read 2026-11-22 on both sources, equal (and on http://rpc.api.moonbase.moonbeam.network)"
+    },
+    {
       "key": "linea-mainnet",
       "name": "Linea",
       "chainId": 59144,

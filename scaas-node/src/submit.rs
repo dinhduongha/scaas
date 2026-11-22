@@ -804,6 +804,7 @@ impl Submitter {
             }
             if let Some(b) = bal {
                 k.balance(b);
+                k.below_cost(b, self.inflight_cost());
             }
         }
     }
@@ -1654,6 +1655,19 @@ impl Submitter {
         self.inflight.len()
     }
 
+    /// The in-flight transactions' cost an EVM pool checks the balance against: Σ gas limit × max fee per gas (no value).
+    fn inflight_cost(&self) -> u128 {
+        self.inflight
+            .values()
+            .map(|s| u128::from(s.gas).saturating_mul(s.fees.0))
+            .fold(0, u128::saturating_add)
+    }
+
+    /// NODE-LANE-24: a slot below `max_inflight` is free.
+    fn room(&self) -> bool {
+        self.inflight.len() < self.cfg.max_inflight
+    }
+
     /// Việc đang chờ ghi journal được thử lại trước việc mới.
     pub async fn drain_retry(&mut self) {
         for _ in 0..self.retry.len() {
@@ -1976,6 +1990,9 @@ impl Submitter {
     }
 
     pub async fn poll_outbox(&mut self) {
+        if !self.room() {
+            return;
+        }
         let jobs = match self
             .external_pull
             .relay_poll(self.cfg.evm_chain_number, 10)
@@ -1988,6 +2005,10 @@ impl Submitter {
             }
         };
         for job in jobs {
+            // NODE-LANE-24: the lane is full; the rest stays queued, unclaimed
+            if !self.room() {
+                break;
+            }
             // N2: digest đang bay ở đường khác ⇒ bỏ qua TRƯỚC claim (không claim, không báo, `attempt_count` giữ nguyên).
             if self.held(&job).await {
                 continue;
@@ -2030,10 +2051,13 @@ pub async fn run(mut s: Submitter, mut rx: mpsc::Receiver<Work>, poll: Duration)
         if accepting {
             s.drain_retry().await;
             s.poll_outbox().await;
-            while let Ok(w) = rx.try_recv() {
+            while s.room() {
+                let Ok(w) = rx.try_recv() else { break };
                 s.submit(w).await;
             }
         }
+        // NODE-LANE-24: a full lane takes no gateway work either (it waits in the channel)
+        let accepting = accepting && s.room();
         s.track().await;
         tokio::select! {
             _ = tokio::time::sleep(poll) => {}
@@ -2657,6 +2681,58 @@ pub(crate) mod tests {
             .iter()
             .map(|r| r["chain_state"].as_str().unwrap().to_string())
             .collect()
+    }
+
+    /// NODE-LANE-24 (chains-arweave T3): a lane keeps at most `max_inflight` transactions in flight; a job beyond it stays
+    /// queued, unclaimed; a receipt frees the slot. Control: the default (16) takes both jobs of one poll.
+    #[tokio::test]
+    async fn a_lane_keeps_at_most_max_inflight_in_flight() {
+        let second = |id: i64| {
+            let mut j = job(id);
+            let (kind, wire) = meta(8).to_wire();
+            j["struct"] = json!(kind);
+            j["m"] = wire;
+            j
+        };
+        for (cap, want) in [(1, 1), (crate::config::ChainCfg::default().max_inflight, 2)] {
+            let (url, rpc) = fake_evm(Evm {
+                mtx_nonce: Some(0),
+                ..Default::default()
+            })
+            .await;
+            let (external_pull, o) = fake_external_pull(Fake {
+                jobs: vec![job(7), second(8)],
+                tokens: toks(),
+                ..Default::default()
+            })
+            .await;
+            let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
+                c.max_inflight = cap
+            })
+            .await
+            .unwrap();
+            s.poll_outbox().await;
+            assert_eq!(
+                (s.inflight_count(), rpc.lock().unwrap().sent.len()),
+                (want, want),
+                "max_inflight {cap}: {:?}",
+                states(&o)
+            );
+            assert!(
+                !states(&o).contains(&"dead".to_string()),
+                "{:?}",
+                states(&o)
+            );
+            if cap == 1 {
+                // the second job stayed queued, never claimed; the slot frees on the receipt
+                assert_eq!(states(&o), ["signed", "broadcast"]);
+                let h = rpc.lock().unwrap().sent[0].0;
+                rpc.lock().unwrap().receipts.insert(h, true);
+                s.track().await;
+                assert!(s.room() && s.inflight_count() == 0, "{:?}", states(&o));
+            }
+        }
+        assert_eq!(crate::config::ChainCfg::default().max_inflight, 16);
     }
 
     /// R80: kẹt mà nonce chủ thể đã bị dùng ⇒ `consumed`, nonce vỏ lấp bằng gap-filler, meta-tx KHÔNG bao giờ gửi lại.

@@ -103,6 +103,8 @@ pub enum RpcError {
     NoTrustedEndpoint,
     /// the same under strict majority with a `discovered` endpoint and `n < 3`
     AgreementNeedsThree,
+    /// a pinned read on a chain whose pinned reads are not trusted (the profile's `pinnedReads` false)
+    PinnedReadsUntrusted,
     /// the first endpoint's revert (failover) or the agreed revert (strict majority), its data as bytes
     Revert {
         endpoint: usize,
@@ -134,6 +136,7 @@ impl RpcError {
             RpcError::EndpointNoMajority { .. } => "EndpointNoMajority",
             RpcError::NoTrustedEndpoint => "NoTrustedEndpoint",
             RpcError::AgreementNeedsThree => "AgreementNeedsThree",
+            RpcError::PinnedReadsUntrusted => "PinnedReadsUntrusted",
             RpcError::Revert { .. } => "Revert",
             RpcError::NodeRefused { .. } => "NodeRefused",
             RpcError::NodeApiVersion { .. } => "NodeApiVersion",
@@ -219,6 +222,10 @@ mod tests {
         );
         assert_eq!(RpcError::EndpointListEmpty.code(), "EndpointListEmpty");
         assert_eq!(RpcError::NoTrustedEndpoint.code(), "NoTrustedEndpoint");
+        assert_eq!(
+            RpcError::PinnedReadsUntrusted.code(),
+            "PinnedReadsUntrusted"
+        );
         assert_eq!(RpcError::AgreementNeedsThree.code(), "AgreementNeedsThree");
         assert!(RpcError::argument("x")
             .to_string()

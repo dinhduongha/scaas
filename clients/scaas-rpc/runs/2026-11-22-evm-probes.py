@@ -52,7 +52,7 @@ PREFIX = "2026-11-22-evm-probes-"
 SUMMARY = HERE / f"{PREFIX}summary.txt"
 QUIET = False
 MAX_ANSWER = 4 << 20  # bytes of one answer read at most
-NO_METHOD = re.compile(r"does not exist|not available|not found|not supported|unsupported|unknown method", re.I)
+NO_METHOD = re.compile(r"does not exist|not available|not found|not supported|not served|unsupported|unknown method", re.I)
 RATE = re.compile(r"rate.?limit|too many requests|quota|upgrade to paid|exceeded the limit", re.I)
 
 ARB_GAS_INFO = "0x000000000000000000000000000000000000006c"
@@ -364,7 +364,9 @@ def eip2537(ctx):
 
 
 def accepts(u, gas):
-    return ask(u, "eth_call", [{"from": ZERO, "to": ZERO, "gas": hex(gas)}, "latest"])[0] == "ok"
+    # no `from`: a node that checks a named sender's balance against gas x price (Polkadot Hub's eth-rpc) would cap the
+    # answer at that balance, which is no limit of the chain
+    return ask(u, "eth_call", [{"to": ZERO, "gas": hex(gas)}, "latest"])[0] == "ok"
 
 
 def tx_cap(u, block):
@@ -585,18 +587,25 @@ def short(probe, fs):
 
 
 def summary(logdir, out):
-    rows = []
+    """The summary of the logs in `logdir`; a row of `out` whose key and probe have no log here stays (the logs are
+    git-ignored, so another checkout's samples live only in its rows)."""
+    rows, have = [], set()
     for p in sorted(Path(logdir).glob(f"{PREFIX}*.log")):
         key, probe = p.name[len(PREFIX):-4].rsplit("-", 1)
         lines = [json.loads(x) for x in open(p)]
         if not lines:
             continue
+        have.add(f"{key} | {probe} |")
         v = lines[-1]["verdict"]
         tally = {x["verdict"] for x in lines[:-1]} - {v}
         if tally:  # an earlier sample's other verdict stays visible
             v += " (earlier: " + ", ".join(f"{t} {sum(x['verdict'] == t for x in lines)}" for t in sorted(tally)) + ")"
         rows.append(f"{key} | {probe} | {len(lines)} | {v} | {short(probe, [x['facts'] for x in lines])} | "
                     f"{lines[0]['t']} .. {lines[-1]['t']}")
+    if Path(out).exists():
+        kept = Path(out).read_text().splitlines()[1:]
+        rows += [r for r in kept if r and " | ".join(r.split(" | ", 2)[:2]) + " |" not in have]
+        rows.sort()
     head = ("# EVM probes (NET-EVM-19 H1-H8; SDK plan T40), rewritten by `2026-11-22-evm-probes.py --summary` from the git-ignored "
             "logs; key | probe | samples | last verdict | facts | first .. last sample (UTC)")
     Path(out).write_text(head + "\n" + "\n".join(rows) + "\n")

@@ -152,6 +152,8 @@ governance_routers = ["0xB6507C187BAc79eE48Bc55272Bf4aa6696555f70"]
 # rpc_simulate_timeout_ms = 120000               # each request of a simulation (eth_call, eth_estimateGas; a PQZ or Zether proof check); > 0
 poll_ms = 1000
 stuck_after_secs = 60
+# max_inflight = 16       # NODE-LANE-24: transactions one lane keeps in flight at most (an execution client's per-sender
+#                         # pool slots; Avalanche's pool keeps 16 executable per account); a job beyond it stays queued
 max_gas_per_tx = 64000000 # regular + state gas (Amsterdam): PQZ op 1 ≈ 43 M (owner 2026-10-22);
 # regular stays ≤ 2^24, and the block gas limit is read from the chain
 # PQ signers need a higher cap than the default 3000000: each SCaaS
@@ -196,6 +198,25 @@ breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_re
 # [[chains]] # linea-mainnet: family = "evm", evm_chain_number = 59144, chain_uid = "0xb6762a65689107b2326364aefc18f94cda413209fab35c00d4af51eaa20ffbc6",
 #   finality = { mode = "tag", quorum = 2 }
 # [[chains]] # linea-testnet: family = "evm", evm_chain_number = 59141, chain_uid = "0x65a64c825d7c13ce1bf077801d0b6b2a89853e19e4a89a5433d7d85d2102a20b",
+#   finality = { mode = "tag", quorum = 2 }
+
+# ---- chains-arweave plan T2 and T11 profiles, `draft` (smartcontracts/evm/src/chains/<key>/): no SCaaS set deploys there
+# before NET-EVM-06 holds (Avalanche is Cancun; Hub and Moonbeam cap runtime code at 24,576 B). Avalanche shares one block 0
+# between C-Chain and Fuji (the chain id separates them, NET-ALL-25). Hub's eth-rpc serves no block 0: each rpc endpoint needs a
+# checkpoint (CLI-RPC-03), and Hub gas is no Ethereum gas (max_gas_per_tx waits for the Paseo measurement, chains-arweave T13).
+# Westend Hub is dropped (owner 2026-11-22, decisions ARCH-POS-20). Fuji disables mldsa44, mldsa65, mldsa87 and PQZ (its 32 M
+# block); Moonbeam's pinned reads are not trusted (profile.json pinnedReads false).
+# [[chains]] # avalanche-mainnet: family = "evm", evm_chain_number = 43114, chain_uid = "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # avalanche-testnet: family = "evm", evm_chain_number = 43113, chain_uid = "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # polkadot-hub-mainnet: family = "evm", evm_chain_number = 420420419, chain_uid = "0x68d56f15f85d3136970ec16946040bc1752654e906147f7e43e9d539d7c3de2f",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # polkadot-hub-testnet: family = "evm", evm_chain_number = 420420417, chain_uid = "0xd6eec26135305a8ad257a20d003357284c8aa03d0bdb2b357ab0a22371e11ef2",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # moonbeam-mainnet: family = "evm", evm_chain_number = 1284, chain_uid = "0x7e6b3bbed86828a558271c9c9f62354b1d8b5aa15ff85fd6f1e7cbe9af9dde7e",
+#   finality = { mode = "tag", quorum = 2 }
+# [[chains]] # moonbeam-testnet: family = "evm", evm_chain_number = 1287, chain_uid = "0x33638dde636f9264b6472b9d976d58e757fe88badac53f204f3f530ecc5aacfa",
 #   finality = { mode = "tag", quorum = 2 }
 
 # ---- Other network families (R58): one [[chains]] each; delete the ones you do not run. ----
