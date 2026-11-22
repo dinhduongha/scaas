@@ -18,6 +18,9 @@ pqz-core/pqzl/src/pqz_aes_gen.h
 clients/ua-c/include/scaas_ua.h
 # uniffi-bindgen-cpp (scaas-sdk plan T20b; runs/2026-11-17-scaas-sdk-gen.sh)
 clients/scaas-sdk/bindings/cpp/generated/*
+# uniffi-bindgen-go and UniFFI's Swift generator: their C headers (same script)
+clients/scaas-sdk/bindings/go/generated/*/*
+clients/scaas-sdk/bindings/swift/generated/*
 # text read by a harness (a sed revert / mutant, a header test): formatted once the harness matches the new text
 #   pqz_sv.c: pqzl/sv/check_sv_fixes.sh (gate step sv), pqzl/sv/review/review.sh; pqz_rel.c: artifact/reproduce.sh;
 #   pqz_ffi.h: ffi/tests/ffi.rs header_matches
