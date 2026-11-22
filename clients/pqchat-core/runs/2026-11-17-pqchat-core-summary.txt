@@ -61,3 +61,4 @@ T12 | pqc-test | 9e8e17e59 | 0 | 101 passed, 0 failed, 7 ignored (20 binaries)
 T12 | pqc-clippy | 9e8e17e59 | 0 | -
 T12 | mutants-check | 9e8e17e59 | 0 | -
 # T12 bind at 9e8e17e59: the SDK's drift check ok; pqchat-core's check red by name: decrypted content through the codec (Content_value), the T12 finding
+R2.1 | docs | 7c8c64950 | 0 | -
