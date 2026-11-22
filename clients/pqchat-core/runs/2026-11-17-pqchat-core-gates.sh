@@ -16,6 +16,9 @@ R=clients/pqchat-core/runs
 SUMMARY=$R/2026-11-17-pqchat-core-summary.txt
 TASK=${TASK:--}
 export PATH="$HOME/.foundry/bin:$PATH"
+# `bind` runs the SDK's generator, which needs the pinned UniFFI generators (as the SDK's gate runner puts them on PATH)
+TOOLS="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/scratchpad/tools"
+export PATH="$TOOLS/uniffi/bin:$PATH"
 C="--locked --offline ${J:--j2}"
 cap="$W/scripts/capped"
 # the SDK's CI feature set (its gate runner's F)
