@@ -191,7 +191,6 @@ ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
 node-test | 4175c2d43 | 0 | 897 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 4175c2d43 (origin/ua-rs-sign cc45679e8 into sdk-complete): node-e2e at --test-threads=10, wall 84 s, the capped scope's memory.peak 3.75 GB read at 60 s (cap 6 GiB); two reds before it were the runner's inputs, not the tree: a forge recovery snapshot of chain 31918 left by an interrupted earlier run (moved aside), and zether-cli built without `--features hazmat` (CI's e2e builds it with hazmat)
-mutants-check | 54ddfcb33 | 1 | -
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
 ck-xcheck | 0736ad763 | 0 | -
 ua-core | 0736ad763 | 0 | 75 passed, 0 failed, 0 ignored (8 binaries)
@@ -201,18 +200,20 @@ ua-vectors | 0736ad763 | 0 | 726 passed, 0 failed, 6 ignored (70 binaries)
 ua-test | 0736ad763 | 0 | 616 passed, 0 failed, 3 ignored (62 binaries)
 # T41.arweave's ua-rs part at 0736ad763 (CA-T16, CA-T17): the rows above; mutants t41arw1 20/20 killed (the ua-rs rows at 0736ad763, the clientkeys rows at 9764de7c0, their command through capped with the TAP reporter); every mutant script loads (mutants-check's commands, run by hand at 9764de7c0: rc 0)
 # T41.arweave fam-arweave size (clients/ua-rs/runs/fam-sizes.sh, release, the probe now reaching DataItem::parse) at 0736ad763: none 2212040 B; fam-arweave 2205712 → 2265656 B (delta −72 → +53616 B, old the empty feature at 61c5bb014); all 2342744 → 2379296 B (delta +136960 → +167256 B)
-ck-test | 6f2eb3dbd | 0 | node: 567 pass, 0 fail, 4 skipped
-ua-arweave | 6f2eb3dbd | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 rpc-test | 6f2eb3dbd | 0 | 219 passed, 0 failed, 10 ignored (22 binaries)
 rpc-clippy | 6f2eb3dbd | 0 | -
 rpc-wasm | 6f2eb3dbd | 0 | -
-docs | 7daa8b2bc | 0 | -
 sdk-min | 7daa8b2bc | 0 | 74 passed, 0 failed, 0 ignored (14 binaries)
 sdk-noevm | 7daa8b2bc | 0 | 149 passed, 0 failed, 0 ignored (21 binaries)
-sdk-arweave | 7daa8b2bc | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 sdk-test | 7daa8b2bc | 0 | 420 passed, 0 failed, 16 ignored (39 binaries)
 sdk-clippy | 7daa8b2bc | 0 | -
 sdk-clippy-noevm | 7daa8b2bc | 0 | -
 features | 7daa8b2bc | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 cli | 7daa8b2bc | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
 bind-gen | 7daa8b2bc | 0 | -
+docs | 898fa1ebc | 0 | -
+sdk-arweave | 898fa1ebc | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
+ua-arweave | 898fa1ebc | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
+ck-test | 898fa1ebc | 0 | node: 568 pass, 0 fail, 4 skipped
+mutants-check | 898fa1ebc | 0 | -
+# T41.arweave's scaas-rpc and SDK parts (CA-T19, CA-T20): code 6f2eb3dbd, the shared ArweaveItem code 7daa8b2bc (error_codes_are_names was red at 6f2eb3dbd in sdk-test, sdk-noevm, sdk-min: fixed, rows above at 7daa8b2bc), the notC9 rows 291a864b2 (the survivor of t41arw2 killed); the rpc rows at 6f2eb3dbd are unchanged by the two later code commits (scaas-rpc untouched)
