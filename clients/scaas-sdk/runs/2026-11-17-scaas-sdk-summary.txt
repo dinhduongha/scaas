@@ -265,8 +265,8 @@ ua-core | b7313d702 | 0 | 75 passed, 0 failed, 0 ignored (8 binaries)
 ua-clippy | b7313d702 | 0 | -
 sdk-vectors | b7313d702 | 0 | 17 passed, 0 failed, 0 ignored (2 binaries)
 sdk-clippy | b7313d702 | 0 | -
-cli | b7313d702 | 101 | 45 passed, 1 failed, 0 ignored (5 binaries)
 bind-gen | b7313d702 | 0 | -
 ua-test | b7313d702 | 0 | 628 passed, 0 failed, 3 ignored (64 binaries)
 ua-vectors | b7313d702 | 0 | 738 passed, 0 failed, 6 ignored (72 binaries)
 sdk-test | b7313d702 | 0 | 438 passed, 0 failed, 17 ignored (41 binaries)
+cli | aa33d7838 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
