@@ -163,7 +163,6 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 bind-dart | 7104a069f | 0 | dart: +14:
-gas-gen | 6e7e71142 | 0 | -
 ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
 ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
@@ -262,11 +261,12 @@ sdk-clippy-default | 5eeed4adf | 0 | -
 sdk-clippy-min | 5eeed4adf | 0 | -
 sdk-soroban-e2e | 5eeed4adf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 docs | 5eeed4adf | 0 | -
-mutants-check | 5eeed4adf | 0 | -
 sdk-min | 5eeed4adf | 0 | 74 passed, 0 failed, 0 ignored (16 binaries)
 sdk-noevm | 5eeed4adf | 0 | 157 passed, 0 failed, 1 ignored (23 binaries)
 sdk-clippy-noevm | 5eeed4adf | 0 | -
 sdk-arweave | 5eeed4adf | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 sdk-wasm | 5eeed4adf | 0 | -
 sdk-clippy | 5eeed4adf | 0 | -
-sdk-test | 5eeed4adf | 0 | 437 passed, 0 failed, 18 ignored (42 binaries)
+mutants-check | 7c637b66f | 0 | -
+gas-gen | 7c637b66f | 0 | -
+sdk-test | 7c637b66f | 0 | 437 passed, 0 failed, 18 ignored (42 binaries)
