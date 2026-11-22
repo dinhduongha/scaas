@@ -77,5 +77,14 @@ T12 | pqc-clippy | a010e6496 | 0 | -
 T12 | pqc-wasm | a010e6496 | 0 | -
 T12 | bind | a010e6496 | 0 | -
 T12 | pqc-test | a010e6496 | 0 | 105 passed, 0 failed, 7 ignored (20 binaries)
-T10b | ck-test | 8a2f56fcc | 0 | node: 585 pass, 0 fail, 4 skipped
-T10b | ck-vectors | 8a2f56fcc | 0 | -
+T10b | ck-test | 14441e690 | 0 | node: 585 pass, 0 fail, 4 skipped
+T10b | ck-vectors | 14441e690 | 0 | -
+T10b | ua-appcore | 14441e690 | 0 | 28 passed, 0 failed, 0 ignored (2 binaries)
+T10b | pqc-test | 14441e690 | 0 | 107 passed, 0 failed, 7 ignored (20 binaries)
+T10b | pqc-clippy | 14441e690 | 0 | -
+T10b | pqc-tree | 14441e690 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
+T10b | pqc-reads | 14441e690 | 0 | reads 37 (23 trusted), writes 13, R2 23; 0 refused
+T10b | pqc-wasm | 14441e690 | 0 | -
+T10b | pqc-vectors | 14441e690 | 0 | 7 passed, 0 failed, 0 ignored (1 binaries)
+T10b | bind | 14441e690 | 0 | -
+T10b | docs | 14441e690 | 0 | -
