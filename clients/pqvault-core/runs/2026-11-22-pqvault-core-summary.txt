@@ -13,3 +13,18 @@ V10 | docs_check check / paths / test_docs_check | 50144b73c | 0 | 0 errors (7 b
 V10 | check_test_features.py | 65d22edc6 tree | 0 | ok (pqvault-core listed, shipped features)
 V10 | format.sh --check | 50144b73c | 1 | every step ok but tact (tact-fmt absent: smartcontracts/ton/node_modules not installed here; no Tact file touched)
 V10 mutants | runs/2026-11-22-pqvault-core-mutants.py run | c776e38b6, 50144b73c | - | 21 mutants, 21 killed (one survived at c776e38b6, killed at 50144b73c after the e2e wrote an item under each epoch)
+# Owner rulings 2026-11-22 (CLI-PQV-15): KEM rotation, PqVault msig signing, the generated passphrase; red first, then green
+R2 red | ua-rs app_core pqvault_msig_signs_both_paths, generated_passphrase_six_bip39_words (stubs) | f7782d7a8 tree | 101 | 2 failed (unwrap on the stubs' Argument)
+R2 red | scaas-sdk lib set_kem_key_args_pass_the_registry_check (stub) | f7782d7a8 tree | 101 | 1 failed
+R2 red | e2e kem_rotation_and_msig_admin (the SDK's msig routing disabled) | f7782d7a8 tree | 101 | rotation ok, then Sdk(Argument) at the msig admin's rekey
+R2 | ua-rs app_core (--features app-core,vectors) | f7782d7a8 | 0 | 16 passed
+R2 | ua-rs clippy --all-targets -D warnings, app-core,vectors and default | f7782d7a8 | 0 | -
+R2 | sdk-test (CI's full feature set) | f7782d7a8 | 0 | 420 passed 0 failed 17 ignored
+R2 | sdk-vectors (+ app_core_vault_records) | f7782d7a8 | 0 | 20 passed
+R2 | sdk-clippy | efd055c9e | 0 | - (red at f7782d7a8: clippy::panic in register_tests, fixed in 1671441f7)
+R2 | cli test / cli clippy --features dev-profiles (account prepare-set-kem-key, app-core generate-passphrase) | f7782d7a8 | 0 | 22 passed / -
+R2 | pqvault-core lib + core + vectors; clippy default and vectors | f7782d7a8 | 0 | lib 8, core 7, vectors 4 passed; e2e 4 ignored
+R2 | e2e: personal, shared, kem_rotation_and_msig_admin (the mutant runner's baselines) | efd055c9e | 0 | 3 passed; a_second_app_core_is_kept_apart ok 30 s
+R2 | format.sh --check rust py sh; docs_check | efd055c9e | 0 | ok; 0 errors
+R2 mutants | runs/2026-11-22-pqvault-core-mutants.py --r2 run | efd055c9e | - | 11 mutants, 11 killed
+R2 mutants | the v10 mutants on vault.rs rerun | efd055c9e | - | 21 of 21 killed (record updated)
