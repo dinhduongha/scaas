@@ -14,3 +14,9 @@ T3 | sdk-vectors | bda67c257 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 T3 | sdk-test | bda67c257 | 0 | 347 passed, 0 failed, 17 ignored (35 binaries)
 T3 | sdk-clippy | bda67c257 | 0 | -
 T3 | bind | bda67c257 | 0 | -
+T4 | pqc-wasm | a4e39f770 | 0 | -
+T4 | pqc-test | a4e39f770 | 0 | 24 passed, 0 failed, 0 ignored (7 binaries)
+T4 | pqc-clippy | a4e39f770 | 0 | -
+T4 | pqc-reads | b947598f4 | 0 | reads 32 (22 trusted), writes 13, R2 22; 0 refused
+T4 | pqc-tree | b947598f4 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
+T4 | docs | b947598f4 | 0 | -
