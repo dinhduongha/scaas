@@ -16487,8 +16487,8 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   Limits dco_decode_limits(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return Limits(
       maxFeePerGas: dco_decode_String(arr[0]),
       maxGas: dco_decode_u_64(arr[1]),
@@ -16499,6 +16499,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       maxValidSecs: dco_decode_u_64(arr[6]),
       eventQueue: dco_decode_u_32(arr[7]),
       stateRetentionSecs: dco_decode_u_64(arr[8]),
+      maxNativeCost: dco_decode_list_native_cap(arr[9]),
     );
   }
 
@@ -16670,6 +16671,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   List<MsigSlotState> dco_decode_list_msig_slot_state(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_msig_slot_state).toList();
+  }
+
+  @protected
+  List<NativeCap> dco_decode_list_native_cap(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_native_cap).toList();
   }
 
   @protected
@@ -16931,6 +16938,18 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       ss58: dco_decode_opt_String(arr[3]),
       witnessVersion: dco_decode_opt_box_autoadd_u_8(arr[4]),
       witnessProgram: dco_decode_opt_String(arr[5]),
+    );
+  }
+
+  @protected
+  NativeCap dco_decode_native_cap(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return NativeCap(
+      chain: dco_decode_String(arr[0]),
+      max: dco_decode_String(arr[1]),
     );
   }
 
@@ -23003,6 +23022,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     var var_maxValidSecs = sse_decode_u_64(deserializer);
     var var_eventQueue = sse_decode_u_32(deserializer);
     var var_stateRetentionSecs = sse_decode_u_64(deserializer);
+    var var_maxNativeCost = sse_decode_list_native_cap(deserializer);
     return Limits(
       maxFeePerGas: var_maxFeePerGas,
       maxGas: var_maxGas,
@@ -23013,6 +23033,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       maxValidSecs: var_maxValidSecs,
       eventQueue: var_eventQueue,
       stateRetentionSecs: var_stateRetentionSecs,
+      maxNativeCost: var_maxNativeCost,
     );
   }
 
@@ -23332,6 +23353,18 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     var ans_ = <MsigSlotState>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_msig_slot_state(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<NativeCap> sse_decode_list_native_cap(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <NativeCap>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_native_cap(deserializer));
     }
     return ans_;
   }
@@ -23660,6 +23693,14 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       witnessVersion: var_witnessVersion,
       witnessProgram: var_witnessProgram,
     );
+  }
+
+  @protected
+  NativeCap sse_decode_native_cap(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_chain = sse_decode_String(deserializer);
+    var var_max = sse_decode_String(deserializer);
+    return NativeCap(chain: var_chain, max: var_max);
   }
 
   @protected
@@ -30678,6 +30719,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     sse_encode_u_64(self.maxValidSecs, serializer);
     sse_encode_u_32(self.eventQueue, serializer);
     sse_encode_u_64(self.stateRetentionSecs, serializer);
+    sse_encode_list_native_cap(self.maxNativeCost, serializer);
   }
 
   @protected
@@ -30954,6 +30996,18 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_msig_slot_state(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_native_cap(
+    List<NativeCap> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_native_cap(item, serializer);
     }
   }
 
@@ -31241,6 +31295,13 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     sse_encode_opt_String(self.ss58, serializer);
     sse_encode_opt_box_autoadd_u_8(self.witnessVersion, serializer);
     sse_encode_opt_String(self.witnessProgram, serializer);
+  }
+
+  @protected
+  void sse_encode_native_cap(NativeCap self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.chain, serializer);
+    sse_encode_String(self.max, serializer);
   }
 
   @protected

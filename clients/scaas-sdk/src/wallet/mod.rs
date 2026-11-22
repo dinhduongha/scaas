@@ -18,6 +18,12 @@ mod raw;
 pub(crate) mod tokens;
 
 pub use balances::{Balances, TokenBalance};
+#[cfg(feature = "soroban")]
+pub use families::soroban_ops::{
+    Arg, HandOff, ImportExpect, Invocation, NativeCost, OpPayload, SignedOpBlob,
+    SorobanNativeQuote, SorobanNativeSend, SorobanOpKind, SorobanOpRequest, SorobanPath,
+    SorobanPrepared, SorobanQuote,
+};
 #[cfg(feature = "evm")]
 pub use history::{Cursor, HistoryItem, HistoryPage, OpItem};
 pub use native::{NativeAddress, NativeKeyRef};

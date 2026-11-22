@@ -16804,6 +16804,7 @@ const _: fn() = || {
         let _: u64 = Limits.max_valid_secs;
         let _: u32 = Limits.event_queue;
         let _: u64 = Limits.state_retention_secs;
+        let _: Vec<scaas_sdk::config::NativeCap> = Limits.max_native_cost;
     }
     {
         let LiquidityOrder = None::<scaas_sdk::dex::LiquidityOrder>.unwrap();
@@ -16921,6 +16922,11 @@ const _: fn() = || {
         let _: Option<String> = NativeAddress.ss58;
         let _: Option<u8> = NativeAddress.witness_version;
         let _: Option<String> = NativeAddress.witness_program;
+    }
+    {
+        let NativeCap = None::<scaas_sdk::config::NativeCap>.unwrap();
+        let _: String = NativeCap.chain;
+        let _: String = NativeCap.max;
     }
     {
         let NativeKeyRef = None::<scaas_sdk::wallet::NativeKeyRef>.unwrap();
@@ -20663,6 +20669,7 @@ impl SseDecode for scaas_sdk::config::Limits {
         let mut var_maxValidSecs = <u64>::sse_decode(deserializer);
         let mut var_eventQueue = <u32>::sse_decode(deserializer);
         let mut var_stateRetentionSecs = <u64>::sse_decode(deserializer);
+        let mut var_maxNativeCost = <Vec<scaas_sdk::config::NativeCap>>::sse_decode(deserializer);
         return scaas_sdk::config::Limits {
             max_fee_per_gas: var_maxFeePerGas,
             max_gas: var_maxGas,
@@ -20673,6 +20680,7 @@ impl SseDecode for scaas_sdk::config::Limits {
             max_valid_secs: var_maxValidSecs,
             event_queue: var_eventQueue,
             state_retention_secs: var_stateRetentionSecs,
+            max_native_cost: var_maxNativeCost,
         };
     }
 }
@@ -20984,6 +20992,18 @@ impl SseDecode for Vec<scaas_sdk::account::msig::MsigSlotState> {
             ans_.push(<scaas_sdk::account::msig::MsigSlotState>::sse_decode(
                 deserializer,
             ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<scaas_sdk::config::NativeCap> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<scaas_sdk::config::NativeCap>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -21359,6 +21379,18 @@ impl SseDecode for scaas_sdk::wallet::NativeAddress {
             ss58: var_ss58,
             witness_version: var_witnessVersion,
             witness_program: var_witnessProgram,
+        };
+    }
+}
+
+impl SseDecode for scaas_sdk::config::NativeCap {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_chain = <String>::sse_decode(deserializer);
+        let mut var_max = <String>::sse_decode(deserializer);
+        return scaas_sdk::config::NativeCap {
+            chain: var_chain,
+            max: var_max,
         };
     }
 }
@@ -28532,6 +28564,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::Limits> {
             self.0.max_valid_secs.into_into_dart().into_dart(),
             self.0.event_queue.into_into_dart().into_dart(),
             self.0.state_retention_secs.into_into_dart().into_dart(),
+            self.0.max_native_cost.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -28894,6 +28927,27 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::wallet::NativeAddre
     for scaas_sdk::wallet::NativeAddress
 {
     fn into_into_dart(self) -> FrbWrapper<scaas_sdk::wallet::NativeAddress> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::NativeCap> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.chain.into_into_dart().into_dart(),
+            self.0.max.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<scaas_sdk::config::NativeCap>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::config::NativeCap>>
+    for scaas_sdk::config::NativeCap
+{
+    fn into_into_dart(self) -> FrbWrapper<scaas_sdk::config::NativeCap> {
         self.into()
     }
 }
@@ -34480,6 +34534,7 @@ impl SseEncode for scaas_sdk::config::Limits {
         <u64>::sse_encode(self.max_valid_secs, serializer);
         <u32>::sse_encode(self.event_queue, serializer);
         <u64>::sse_encode(self.state_retention_secs, serializer);
+        <Vec<scaas_sdk::config::NativeCap>>::sse_encode(self.max_native_cost, serializer);
     }
 }
 
@@ -34714,6 +34769,16 @@ impl SseEncode for Vec<scaas_sdk::account::msig::MsigSlotState> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <scaas_sdk::account::msig::MsigSlotState>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<scaas_sdk::config::NativeCap> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <scaas_sdk::config::NativeCap>::sse_encode(item, serializer);
         }
     }
 }
@@ -34978,6 +35043,14 @@ impl SseEncode for scaas_sdk::wallet::NativeAddress {
         <Option<String>>::sse_encode(self.ss58, serializer);
         <Option<u8>>::sse_encode(self.witness_version, serializer);
         <Option<String>>::sse_encode(self.witness_program, serializer);
+    }
+}
+
+impl SseEncode for scaas_sdk::config::NativeCap {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.chain, serializer);
+        <String>::sse_encode(self.max, serializer);
     }
 }
 

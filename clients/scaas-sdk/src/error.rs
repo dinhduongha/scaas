@@ -142,6 +142,21 @@ own_codes! {
     /// registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
     /// sent.
     GasAboveBlockShare,
+    /// A hand-off's op of a kind the importer's family cannot show and check before sending (spec §27.5 (c), owner 2026-11-22,
+    /// Q-R3): refused before anything is quoted.
+    ImportKindRefused,
+    /// A hand-off's payment whose `to` is none of the importer's own ids (spec §27.5 (c)).
+    ImportNotPayee,
+    /// A hand-off bound to a relayer other than the importer's payer (spec §27.5 (c)).
+    ImportRelayerBound,
+    /// A hand-off with a fee (spec §27.5 (b), (c)).
+    ImportFeeRefused,
+    /// A hand-off valid for less than the profile's margin (the node's 120 s; spec §27.5 (c)).
+    ImportExpired,
+    /// A hand-off whose nonce (or `pay_ref`) is spent at the final height (spec §27.5 (c)).
+    ImportConsumed,
+    /// A hand-off the importer's simulation refused, with the chain's reason (spec §27.5 (c)).
+    ImportedOpRefused,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

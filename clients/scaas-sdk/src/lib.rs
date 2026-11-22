@@ -54,6 +54,11 @@ pub mod frb;
 pub mod line;
 #[cfg(feature = "evm")]
 pub mod op;
+/// Without `evm`: the operation rows alone (spec §13.4), which the families' operations write ahead (plan T41.soroban)
+#[cfg(all(feature = "soroban", not(feature = "evm")))]
+pub(crate) mod op {
+    pub(crate) mod state;
+}
 pub mod platform;
 #[cfg(feature = "pqchat-records")]
 pub mod pqchat_keys;
@@ -70,7 +75,7 @@ mod watch;
 pub use config::{
     ChainProfile, Clock, EndpointConfig, Family, FamilyParams, Finality, GasBase, GasLine,
     GasPerByte, GasPerItem, GasRows, GasTable, GasVerify, L1Fee, Limits, ListedDex, ListedToken,
-    PositionReader, RuntimeChoice, SdkConfig,
+    NativeCap, PositionReader, RuntimeChoice, SdkConfig,
 };
 pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};

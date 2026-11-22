@@ -1362,6 +1362,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   List<MsigSlotState> dco_decode_list_msig_slot_state(dynamic raw);
 
   @protected
+  List<NativeCap> dco_decode_list_native_cap(dynamic raw);
+
+  @protected
   List<OpItem> dco_decode_list_op_item(dynamic raw);
 
   @protected
@@ -1438,6 +1441,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   NativeAddress dco_decode_native_address(dynamic raw);
+
+  @protected
+  NativeCap dco_decode_native_cap(dynamic raw);
 
   @protected
   NativeKeyRef dco_decode_native_key_ref(dynamic raw);
@@ -3402,6 +3408,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  List<NativeCap> sse_decode_list_native_cap(SseDeserializer deserializer);
+
+  @protected
   List<OpItem> sse_decode_list_op_item(SseDeserializer deserializer);
 
   @protected
@@ -3484,6 +3493,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   NativeAddress sse_decode_native_address(SseDeserializer deserializer);
+
+  @protected
+  NativeCap sse_decode_native_cap(SseDeserializer deserializer);
 
   @protected
   NativeKeyRef sse_decode_native_key_ref(SseDeserializer deserializer);
@@ -5939,6 +5951,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  void sse_encode_list_native_cap(
+    List<NativeCap> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_op_item(List<OpItem> self, SseSerializer serializer);
 
   @protected
@@ -6054,6 +6072,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void sse_encode_native_address(NativeAddress self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_native_cap(NativeCap self, SseSerializer serializer);
 
   @protected
   void sse_encode_native_key_ref(NativeKeyRef self, SseSerializer serializer);

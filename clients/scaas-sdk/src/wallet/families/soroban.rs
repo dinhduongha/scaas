@@ -228,7 +228,7 @@ fn read_entry(x: &[u8], key: &[u8], form: Form) -> Option<String> {
 }
 
 /// A family error as endpoint `i`'s failure.
-fn failed(i: usize, e: FamilyError) -> ReadError {
+pub(crate) fn failed(i: usize, e: FamilyError) -> ReadError {
     match e {
         FamilyError::Failure(f) => ReadError::Failure(f),
         e => ReadError::Failure(EndpointFailure::new(
