@@ -40,6 +40,7 @@ pub const SCAAS_DOMAIN_NAMES: &[&str] = &[
     "SCaaS MandateWallet",
     "SCaaS MetaToken",
     "SCaaS PqChat",
+    "SCaaS PqVault",
     "SCaaS PqzToken",
     "SCaaS RescueVault",
     "SCaaS SmartKeyAccount",
