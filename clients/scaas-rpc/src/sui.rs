@@ -3,10 +3,14 @@
 //! the network identity (`sui_getChainIdentifier`, compared with the first endpoint's: the configuration names no chain
 //! identifier, as EVM without a pinned `chain_uid` compares with the first endpoint's block 0, CLI-RPC-03) and the head (the
 //! latest checkpoint's sequence number) for the failover's floor. Objects, coins, dry runs and events are the caller's to read.
+//!
+//! [`SuiGraphql`] (SDK plan rpc T24.sui-graphql): the same three reads over Sui GraphQL, which public fullnodes serve instead
+//! of JSON-RPC (docs/networks/sui.md §14), through the family client's `graphql_at`.
 use crate::family::{Client, FamilyError};
 use crate::pool::{BlockChoice, Probe};
 use crate::{EndpointFailure, FailureKind};
 use serde_json::{json, Value};
+use std::future::Future;
 use std::sync::OnceLock;
 use web_time::Instant;
 
@@ -89,20 +93,7 @@ impl Probe for Sui {
     /// `sui_getChainIdentifier` against the configured one (T24.11), else against the first endpoint's (read first; unread, no
     /// later endpoint is this network yet; the first endpoint is then its own reference).
     async fn same_chain(&self, i: usize, _: Option<Instant>) -> Result<bool, EndpointFailure> {
-        let want = match self.first.get() {
-            Some(w) => w.clone(),
-            None => {
-                let w = self.chain_identifier(0).await.map_err(|e| {
-                    EndpointFailure::new(
-                        i,
-                        FailureKind::IdentityUnread,
-                        &format!("the first endpoint's chain identifier: {}", e.text()),
-                    )
-                })?;
-                self.first.get_or_init(|| w).clone()
-            }
-        };
-        Ok(self.chain_identifier(i).await? == want)
+        same_as_reference(&self.first, i, |j| self.chain_identifier(j)).await
     }
     /// The latest checkpoint's sequence number.
     async fn head(&self, i: usize, _: Option<Instant>) -> Result<u64, EndpointFailure> {
@@ -124,6 +115,147 @@ impl Probe for Sui {
     ) -> Result<String, EndpointFailure> {
         self.checkpoint_digest(i, n).await.map_err(|e| unread(i, e))
     }
+}
+
+/// Endpoint `i`'s chain identifier (`read(i)`) against the reference: the configured one, else the first endpoint's (read
+/// first; unread, no later endpoint is this network yet).
+async fn same_as_reference<F, Fut>(
+    first: &OnceLock<String>,
+    i: usize,
+    read: F,
+) -> Result<bool, EndpointFailure>
+where
+    F: Fn(usize) -> Fut,
+    Fut: Future<Output = Result<String, EndpointFailure>>,
+{
+    let want = match first.get() {
+        Some(w) => w.clone(),
+        None => {
+            let w = read(0).await.map_err(|e| {
+                EndpointFailure::new(
+                    i,
+                    FailureKind::IdentityUnread,
+                    &format!("the first endpoint's chain identifier: {}", e.text()),
+                )
+            })?;
+            first.get_or_init(|| w).clone()
+        }
+    };
+    Ok(read(i).await? == want)
+}
+
+/// The family client of one Sui network over GraphQL (SDK plan rpc T24.sui-graphql): its identity is `chainIdentifier`, the
+/// genesis checkpoint's digest in base58 (32 bytes: the profile's `chain_uid`; JSON-RPC's `sui_getChainIdentifier` is its
+/// first 4 bytes in hex), its head the latest checkpoint's `sequenceNumber` (a JSON number, `UInt53`), a header a
+/// checkpoint's `digest`.
+pub struct SuiGraphql {
+    pub client: Client,
+    /// the reference chain identifier: the configured one, else the first endpoint's, once read
+    first: OnceLock<String>,
+}
+
+impl SuiGraphql {
+    pub fn new(client: Client) -> Self {
+        Self::pinned(client, None)
+    }
+
+    /// The client of a network named by its chain identifier (base58): every endpoint, the first included, is checked against
+    /// it before its first read; `None` is [`SuiGraphql::new`] (the first endpoint's is the reference).
+    pub fn pinned(client: Client, chain_identifier: Option<&str>) -> Self {
+        let first = OnceLock::new();
+        if let Some(c) = chain_identifier {
+            let _ = first.set(c.to_string());
+        }
+        Self { client, first }
+    }
+
+    /// One GraphQL query to endpoint `i`: its `data` (endpoint 0's identity checked first).
+    pub async fn query(
+        &self,
+        i: usize,
+        query: &str,
+        variables: Value,
+    ) -> Result<Value, FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
+        self.client.graphql_at(i, query, variables).await
+    }
+
+    /// The latest checkpoint's sequence number on endpoint `i`.
+    pub async fn latest_checkpoint(&self, i: usize) -> Result<u64, FamilyError> {
+        let d = self
+            .query(i, "{ checkpoint { sequenceNumber } }", json!({}))
+            .await?;
+        d.pointer("/checkpoint/sequenceNumber")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| bad(i, "a checkpoint sequence number that is not a number"))
+    }
+
+    /// The digest (base58) of checkpoint `seq` on endpoint `i`; an answer naming another checkpoint is malformed.
+    pub async fn checkpoint_digest(&self, i: usize, seq: u64) -> Result<String, FamilyError> {
+        let d = self
+            .query(
+                i,
+                "query($s: UInt53!) { checkpoint(sequenceNumber: $s) { sequenceNumber digest } }",
+                json!({"s": seq}),
+            )
+            .await?;
+        if d.pointer("/checkpoint/sequenceNumber")
+            .and_then(Value::as_u64)
+            != Some(seq)
+        {
+            return Err(bad(i, &format!("not checkpoint {seq}")));
+        }
+        d.pointer("/checkpoint/digest")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| bad(i, &format!("checkpoint {seq} without digest")))
+    }
+
+    async fn chain_identifier(&self, i: usize) -> Result<String, EndpointFailure> {
+        let d = self
+            .client
+            .graphql_at(i, "{ chainIdentifier }", json!({}))
+            .await
+            .map_err(|e| unread(i, e))?;
+        d["chainIdentifier"]
+            .as_str()
+            .map(str::to_string)
+            .ok_or_else(|| {
+                EndpointFailure::new(i, FailureKind::IdentityUnread, "not a chain identifier")
+            })
+    }
+}
+
+impl Probe for SuiGraphql {
+    type Hash = String;
+    /// `chainIdentifier` against the configured one, else against the first endpoint's.
+    async fn same_chain(&self, i: usize, _: Option<Instant>) -> Result<bool, EndpointFailure> {
+        same_as_reference(&self.first, i, |j| self.chain_identifier(j)).await
+    }
+    /// The latest checkpoint's sequence number.
+    async fn head(&self, i: usize, _: Option<Instant>) -> Result<u64, EndpointFailure> {
+        self.latest_checkpoint(i).await.map_err(|e| unread(i, e))
+    }
+    async fn named(
+        &self,
+        i: usize,
+        _: BlockChoice,
+        d: Option<Instant>,
+    ) -> Result<u64, EndpointFailure> {
+        self.head(i, d).await
+    }
+    async fn header(
+        &self,
+        i: usize,
+        n: u64,
+        _: Option<Instant>,
+    ) -> Result<String, EndpointFailure> {
+        self.checkpoint_digest(i, n).await.map_err(|e| unread(i, e))
+    }
+}
+
+fn bad(i: usize, why: &str) -> FamilyError {
+    FamilyError::Failure(EndpointFailure::new(i, FailureKind::AnswerMalformed, why))
 }
 
 /// A family error as the pool's endpoint failure.

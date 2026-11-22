@@ -751,6 +751,22 @@ pub trait Backend: Send + Sync {
     /// path's journal (T21 L63b, owner O8 2026-11-16: the node's own jobs, namespace `~node`).
     async fn lane_journal(&self, chain_key: &str, lane: &str) -> Result<Vec<JobRow>>;
 
+    /// Plan T28 (the node's own queue for `/v1/ops`): the `queued` rows of `namespace` on `chain_key` with `hold = 0`, oldest
+    /// first, at most `limit`.
+    async fn queued_jobs(
+        &self,
+        namespace: &str,
+        chain_key: &str,
+        limit: i64,
+    ) -> Result<Vec<JobRow>>;
+
+    /// Plan T28: the rows of `namespace` on `chain_key` a lane leased and has not ended (`leased`, `signed`, `broadcast`): what the
+    /// lane picks up after a restart.
+    async fn lane_live(&self, namespace: &str, chain_key: &str, lane: &str) -> Result<Vec<JobRow>>;
+
+    /// Plan T28 (`GET /v1/intents/{id}`): the newest row of an origin, if any.
+    async fn job_by_origin(&self, namespace: &str, origin: &Origin) -> Result<Option<JobRow>>;
+
     /// `max(journal_max, n)` có fencing — cho báo cáo `signed` của đường legacy (R104).
     async fn bump_journal_max(&self, chain_key: &str, lane: &str, nonce: i64) -> Result<()>;
 

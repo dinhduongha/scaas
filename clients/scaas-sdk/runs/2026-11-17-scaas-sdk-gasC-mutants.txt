@@ -1,7 +1,7 @@
-# gasC mutants at commit 2326503ea (name | outcome | test)
-an ordinary ed25519 signature above the table (safety) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib sampled_end_to_end_check
-the worst-case ed25519 cell above the composition (lower bound) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib sampled_end_to_end_check
-the worst-case ed25519 cell 3,000 below the composition (upper bound) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib sampled_end_to_end_check
+# gasC mutants (name | outcome | commit | test | first failure line)
+an ordinary ed25519 signature above the table (safety) | killed | e2d9383a5 dirty | ../../scripts/capped cargo test --locked --offline -j2 --lib sampled_end_to_end_check | panicked at src/op/gas.rs:1568:25:
+the worst-case ed25519 cell above the composition (lower bound) | killed | e2d9383a5 dirty | ../../scripts/capped cargo test --locked --offline -j2 --lib sampled_end_to_end_check | panicked at src/op/gas.rs:1588:9:
+the worst-case ed25519 cell 3,000 below the composition (upper bound) | killed | e2d9383a5 dirty | ../../scripts/capped cargo test --locked --offline -j2 --lib sampled_end_to_end_check | panicked at src/op/gas.rs:1588:9:
 an FN-DSA-512 salt above the row with its margin (safety) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib sampled_end_to_end_check
 ua_extra not added: the composition under | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib sampled_end_to_end_check
-5 mutants, 5 killed, 0 survived, 0 not loaded
+5 mutants, 5 killed, 0 survived, 0 not loaded, 0 other failure

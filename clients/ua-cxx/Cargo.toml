@@ -22,6 +22,19 @@ scaas-ua = { path = "../ua-rs", default-features = false, features = [
   "zether",
   "pqz",
   "pqz-set-n2304-kmax4096",
+  "fam-evm",
+  "fam-hedera",
+  "fam-near",
+  "fam-algorand",
+  "fam-cosmos",
+  "fam-aptos",
+  "fam-solana",
+  "fam-soroban",
+  "fam-sui",
+  "fam-ton",
+  "fam-dot",
+  "fam-btc",
+  "fam-arweave",
 ] }
 cxx = "=1.0.202"
 zeroize = "=1.8.2"

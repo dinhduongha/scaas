@@ -780,3 +780,71 @@ async fn a_verifier_redirect_is_not_followed_and_answers_are_bounded() {
     assert_eq!(c.verdict(&huge).await.unwrap_err().code(), "BodyTooLarge");
     assert!(seen.lock().unwrap().is_empty());
 }
+
+// ---------------------------------------------------------------- `POST /v1/ops` (plan T28)
+
+fn family_op() -> Value {
+    json!({"family": "sui", "contract": "0x2", "from": "0x3", "op_kind": "pay", "payload": "0x01", "signature": "0x02",
+        "public_key": null, "auth_kind": "seed", "valid_until": 99})
+}
+
+/// Plan T28: `submit_ops` sends `{chain, op}` to `/v1/ops` byte for byte, the same bytes to every selected gateway, merged as
+/// `submit_op`'s: one `queued` is queued, a refusal and an unreachable gateway kept apart, never counted as accepting; an op that
+/// is not an object is `Argument`, nothing sent.
+#[tokio::test]
+async fn submit_ops_sends_the_same_bytes_and_merges() {
+    let (a, sa) = gateway(Arc::new(|_, _| {
+        (
+            400,
+            json!({"error": "TOKEN_NOT_SERVED", "code": "TOKEN_NOT_SERVED"}),
+        )
+    }))
+    .await;
+    let (b, sb) = gateway(Arc::new(|_, _| {
+        (202, json!({"status": "queued", "intent_id": "0x77"}))
+    }))
+    .await;
+    let cl = client(&[(&a, None), (&b, None), ("http://127.0.0.1:9", None)]);
+    let o = family_op();
+    match cl.submit_ops("sui:testnet", &o, Fanout::All).await.unwrap() {
+        SubmitOutcome::Queued {
+            by,
+            refused,
+            unreachable,
+        } => {
+            assert_eq!(by, vec![1]);
+            assert_eq!(refused.iter().map(|r| r.0).collect::<Vec<_>>(), vec![0]);
+            assert_eq!(unreachable.iter().map(|r| r.0).collect::<Vec<_>>(), vec![2]);
+        }
+        x => panic!("{x:?}"),
+    }
+    let want = serde_json::to_vec(&json!({"chain": "sui:testnet", "op": o})).unwrap();
+    for s in [sa, sb] {
+        let s = s.lock().unwrap()[0].clone();
+        assert_eq!((s.path.as_str(), &s.body), ("/v1/ops", &want));
+    }
+    // only unreachable gateways: not queued, not final
+    let o2 = client(&[("http://127.0.0.1:9", None)])
+        .submit_ops("sui:testnet", &family_op(), Fanout::All)
+        .await
+        .unwrap();
+    assert!(matches!(o2, SubmitOutcome::NotQueued { .. }), "{o2:?}");
+    assert!(!o2.is_terminal());
+    let (g, seen) = gateway(queued()).await;
+    assert_eq!(
+        client(&[(&g, None)])
+            .submit_ops_at(0, "sui:testnet", &json!([1]))
+            .await
+            .unwrap_err()
+            .code(),
+        "Argument"
+    );
+    assert!(seen.lock().unwrap().is_empty(), "nothing sent");
+    // a 2xx without the job's status is no node answer
+    let (h, _) = gateway(Arc::new(|_, _| (200, json!({"ok": true})))).await;
+    let x = client(&[(&h, None)])
+        .submit_ops_at(0, "sui:testnet", &family_op())
+        .await
+        .unwrap();
+    assert!(matches!(x, NodeOutcome::Unreachable(_)), "{x:?}");
+}

@@ -695,6 +695,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Execute dco_decode_box_autoadd_execute(dynamic raw);
 
   @protected
+  FamilyParams dco_decode_box_autoadd_family_params(dynamic raw);
+
+  @protected
   GasPerByte dco_decode_box_autoadd_gas_per_byte(dynamic raw);
 
   @protected
@@ -723,6 +726,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   KeyRef dco_decode_box_autoadd_key_ref(dynamic raw);
+
+  @protected
+  L1Fee dco_decode_box_autoadd_l_1_fee(dynamic raw);
 
   @protected
   Limits dco_decode_box_autoadd_limits(dynamic raw);
@@ -1203,6 +1209,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Family dco_decode_family(dynamic raw);
 
   @protected
+  FamilyParams dco_decode_family_params(dynamic raw);
+
+  @protected
   Finality dco_decode_finality(dynamic raw);
 
   @protected
@@ -1276,6 +1285,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   KeyRef dco_decode_key_ref(dynamic raw);
+
+  @protected
+  L1Fee dco_decode_l_1_fee(dynamic raw);
 
   @protected
   Limits dco_decode_limits(dynamic raw);
@@ -1484,6 +1496,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Event? dco_decode_opt_box_autoadd_event(dynamic raw);
 
   @protected
+  FamilyParams? dco_decode_opt_box_autoadd_family_params(dynamic raw);
+
+  @protected
   GasPerByte? dco_decode_opt_box_autoadd_gas_per_byte(dynamic raw);
 
   @protected
@@ -1503,6 +1518,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   KeyRef? dco_decode_opt_box_autoadd_key_ref(dynamic raw);
+
+  @protected
+  L1Fee? dco_decode_opt_box_autoadd_l_1_fee(dynamic raw);
 
   @protected
   PasskeyCreated? dco_decode_opt_box_autoadd_passkey_created(dynamic raw);
@@ -2553,6 +2571,11 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Execute sse_decode_box_autoadd_execute(SseDeserializer deserializer);
 
   @protected
+  FamilyParams sse_decode_box_autoadd_family_params(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   GasPerByte sse_decode_box_autoadd_gas_per_byte(SseDeserializer deserializer);
 
   @protected
@@ -2581,6 +2604,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   KeyRef sse_decode_box_autoadd_key_ref(SseDeserializer deserializer);
+
+  @protected
+  L1Fee sse_decode_box_autoadd_l_1_fee(SseDeserializer deserializer);
 
   @protected
   Limits sse_decode_box_autoadd_limits(SseDeserializer deserializer);
@@ -3207,6 +3233,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Family sse_decode_family(SseDeserializer deserializer);
 
   @protected
+  FamilyParams sse_decode_family_params(SseDeserializer deserializer);
+
+  @protected
   Finality sse_decode_finality(SseDeserializer deserializer);
 
   @protected
@@ -3280,6 +3309,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   KeyRef sse_decode_key_ref(SseDeserializer deserializer);
+
+  @protected
+  L1Fee sse_decode_l_1_fee(SseDeserializer deserializer);
 
   @protected
   Limits sse_decode_limits(SseDeserializer deserializer);
@@ -3512,6 +3544,11 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Event? sse_decode_opt_box_autoadd_event(SseDeserializer deserializer);
 
   @protected
+  FamilyParams? sse_decode_opt_box_autoadd_family_params(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   GasPerByte? sse_decode_opt_box_autoadd_gas_per_byte(
     SseDeserializer deserializer,
   );
@@ -3543,6 +3580,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   KeyRef? sse_decode_opt_box_autoadd_key_ref(SseDeserializer deserializer);
+
+  @protected
+  L1Fee? sse_decode_opt_box_autoadd_l_1_fee(SseDeserializer deserializer);
 
   @protected
   PasskeyCreated? sse_decode_opt_box_autoadd_passkey_created(
@@ -4827,6 +4867,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_box_autoadd_execute(Execute self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_family_params(
+    FamilyParams self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_gas_per_byte(
     GasPerByte self,
     SseSerializer serializer,
@@ -4879,6 +4925,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void sse_encode_box_autoadd_key_ref(KeyRef self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_l_1_fee(L1Fee self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_limits(Limits self, SseSerializer serializer);
@@ -5688,6 +5737,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_family(Family self, SseSerializer serializer);
 
   @protected
+  void sse_encode_family_params(FamilyParams self, SseSerializer serializer);
+
+  @protected
   void sse_encode_finality(Finality self, SseSerializer serializer);
 
   @protected
@@ -5761,6 +5813,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void sse_encode_key_ref(KeyRef self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_l_1_fee(L1Fee self, SseSerializer serializer);
 
   @protected
   void sse_encode_limits(Limits self, SseSerializer serializer);
@@ -6070,6 +6125,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_opt_box_autoadd_event(Event? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_family_params(
+    FamilyParams? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_gas_per_byte(
     GasPerByte? self,
     SseSerializer serializer,
@@ -6108,6 +6169,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   @protected
   void sse_encode_opt_box_autoadd_key_ref(
     KeyRef? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_l_1_fee(
+    L1Fee? self,
     SseSerializer serializer,
   );
 

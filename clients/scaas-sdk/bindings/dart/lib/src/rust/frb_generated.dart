@@ -14848,6 +14848,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  FamilyParams dco_decode_box_autoadd_family_params(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_family_params(raw);
+  }
+
+  @protected
   GasPerByte dco_decode_box_autoadd_gas_per_byte(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_gas_per_byte(raw);
@@ -14905,6 +14911,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   KeyRef dco_decode_box_autoadd_key_ref(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_key_ref(raw);
+  }
+
+  @protected
+  L1Fee dco_decode_box_autoadd_l_1_fee(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_l_1_fee(raw);
   }
 
   @protected
@@ -15793,8 +15805,8 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   ChainProfile dco_decode_chain_profile(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 20)
-      throw Exception('unexpected arr length: expect 20 but see ${arr.length}');
+    if (arr.length != 23)
+      throw Exception('unexpected arr length: expect 23 but see ${arr.length}');
     return ChainProfile(
       key: dco_decode_String(arr[0]),
       family: dco_decode_family(arr[1]),
@@ -15816,6 +15828,9 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       verifierPolicy: dco_decode_policy(arr[17]),
       dexes: dco_decode_list_listed_dex(arr[18]),
       wrappers: dco_decode_list_String(arr[19]),
+      familyParams: dco_decode_opt_box_autoadd_family_params(arr[20]),
+      l1Fee: dco_decode_opt_box_autoadd_l_1_fee(arr[21]),
+      disabledKinds: dco_decode_list_String(arr[22]),
     );
   }
 
@@ -16066,6 +16081,47 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   Family dco_decode_family(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return Family.values[raw as int];
+  }
+
+  @protected
+  FamilyParams dco_decode_family_params(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return FamilyParams_Cosmos(
+          chainId: dco_decode_String(raw[1]),
+          rest: dco_decode_list_endpoint_config(raw[2]),
+          restPolicy: dco_decode_policy(raw[3]),
+          denom: dco_decode_String(raw[4]),
+          prefix: dco_decode_String(raw[5]),
+        );
+      case 1:
+        return FamilyParams_Aptos(
+          chainId: dco_decode_u_8(raw[1]),
+          package: dco_decode_String(raw[2]),
+        );
+      case 2:
+        return FamilyParams_Solana(program: dco_decode_String(raw[1]));
+      case 3:
+        return FamilyParams_Soroban(
+          passphrase: dco_decode_String(raw[1]),
+          xlmSac: dco_decode_String(raw[2]),
+        );
+      case 4:
+        return FamilyParams_Sui(
+          graphql: dco_decode_list_endpoint_config(raw[1]),
+          graphqlPolicy: dco_decode_policy(raw[2]),
+        );
+      case 5:
+        return FamilyParams_Substrate(
+          rpc: dco_decode_list_endpoint_config(raw[1]),
+          rpcPolicy: dco_decode_policy(raw[2]),
+          genesis: dco_decode_String(raw[3]),
+          ss58Prefix: dco_decode_u_16(raw[4]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
   }
 
   @protected
@@ -16419,6 +16475,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       default:
         throw Exception("unreachable");
     }
+  }
+
+  @protected
+  L1Fee dco_decode_l_1_fee(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return L1Fee.values[raw as int];
   }
 
   @protected
@@ -17056,6 +17118,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  FamilyParams? dco_decode_opt_box_autoadd_family_params(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_family_params(raw);
+  }
+
+  @protected
   GasPerByte? dco_decode_opt_box_autoadd_gas_per_byte(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_gas_per_byte(raw);
@@ -17095,6 +17163,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   KeyRef? dco_decode_opt_box_autoadd_key_ref(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_key_ref(raw);
+  }
+
+  @protected
+  L1Fee? dco_decode_opt_box_autoadd_l_1_fee(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_l_1_fee(raw);
   }
 
   @protected
@@ -21053,6 +21127,14 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  FamilyParams sse_decode_box_autoadd_family_params(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_family_params(deserializer));
+  }
+
+  @protected
   GasPerByte sse_decode_box_autoadd_gas_per_byte(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_gas_per_byte(deserializer));
@@ -21112,6 +21194,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   KeyRef sse_decode_box_autoadd_key_ref(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_key_ref(deserializer));
+  }
+
+  @protected
+  L1Fee sse_decode_box_autoadd_l_1_fee(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_l_1_fee(deserializer));
   }
 
   @protected
@@ -22182,6 +22270,11 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     var var_verifierPolicy = sse_decode_policy(deserializer);
     var var_dexes = sse_decode_list_listed_dex(deserializer);
     var var_wrappers = sse_decode_list_String(deserializer);
+    var var_familyParams = sse_decode_opt_box_autoadd_family_params(
+      deserializer,
+    );
+    var var_l1Fee = sse_decode_opt_box_autoadd_l_1_fee(deserializer);
+    var var_disabledKinds = sse_decode_list_String(deserializer);
     return ChainProfile(
       key: var_key,
       family: var_family,
@@ -22203,6 +22296,9 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       verifierPolicy: var_verifierPolicy,
       dexes: var_dexes,
       wrappers: var_wrappers,
+      familyParams: var_familyParams,
+      l1Fee: var_l1Fee,
+      disabledKinds: var_disabledKinds,
     );
   }
 
@@ -22471,6 +22567,62 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
     return Family.values[inner];
+  }
+
+  @protected
+  FamilyParams sse_decode_family_params(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_chainId = sse_decode_String(deserializer);
+        var var_rest = sse_decode_list_endpoint_config(deserializer);
+        var var_restPolicy = sse_decode_policy(deserializer);
+        var var_denom = sse_decode_String(deserializer);
+        var var_prefix = sse_decode_String(deserializer);
+        return FamilyParams_Cosmos(
+          chainId: var_chainId,
+          rest: var_rest,
+          restPolicy: var_restPolicy,
+          denom: var_denom,
+          prefix: var_prefix,
+        );
+      case 1:
+        var var_chainId = sse_decode_u_8(deserializer);
+        var var_package = sse_decode_String(deserializer);
+        return FamilyParams_Aptos(chainId: var_chainId, package: var_package);
+      case 2:
+        var var_program = sse_decode_String(deserializer);
+        return FamilyParams_Solana(program: var_program);
+      case 3:
+        var var_passphrase = sse_decode_String(deserializer);
+        var var_xlmSac = sse_decode_String(deserializer);
+        return FamilyParams_Soroban(
+          passphrase: var_passphrase,
+          xlmSac: var_xlmSac,
+        );
+      case 4:
+        var var_graphql = sse_decode_list_endpoint_config(deserializer);
+        var var_graphqlPolicy = sse_decode_policy(deserializer);
+        return FamilyParams_Sui(
+          graphql: var_graphql,
+          graphqlPolicy: var_graphqlPolicy,
+        );
+      case 5:
+        var var_rpc = sse_decode_list_endpoint_config(deserializer);
+        var var_rpcPolicy = sse_decode_policy(deserializer);
+        var var_genesis = sse_decode_String(deserializer);
+        var var_ss58Prefix = sse_decode_u_16(deserializer);
+        return FamilyParams_Substrate(
+          rpc: var_rpc,
+          rpcPolicy: var_rpcPolicy,
+          genesis: var_genesis,
+          ss58Prefix: var_ss58Prefix,
+        );
+      default:
+        throw UnimplementedError('');
+    }
   }
 
   @protected
@@ -22830,6 +22982,13 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       default:
         throw UnimplementedError('');
     }
+  }
+
+  @protected
+  L1Fee sse_decode_l_1_fee(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return L1Fee.values[inner];
   }
 
   @protected
@@ -23737,6 +23896,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  FamilyParams? sse_decode_opt_box_autoadd_family_params(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_family_params(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   GasPerByte? sse_decode_opt_box_autoadd_gas_per_byte(
     SseDeserializer deserializer,
   ) {
@@ -23820,6 +23992,17 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_key_ref(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  L1Fee? sse_decode_opt_box_autoadd_l_1_fee(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_l_1_fee(deserializer));
     } else {
       return null;
     }
@@ -28622,6 +28805,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_family_params(
+    FamilyParams self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_family_params(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_gas_per_byte(
     GasPerByte self,
     SseSerializer serializer,
@@ -28706,6 +28898,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   void sse_encode_box_autoadd_key_ref(KeyRef self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_key_ref(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_l_1_fee(L1Fee self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_l_1_fee(self, serializer);
   }
 
   @protected
@@ -29904,6 +30102,9 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     sse_encode_policy(self.verifierPolicy, serializer);
     sse_encode_list_listed_dex(self.dexes, serializer);
     sse_encode_list_String(self.wrappers, serializer);
+    sse_encode_opt_box_autoadd_family_params(self.familyParams, serializer);
+    sse_encode_opt_box_autoadd_l_1_fee(self.l1Fee, serializer);
+    sse_encode_list_String(self.disabledKinds, serializer);
   }
 
   @protected
@@ -30129,6 +30330,58 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   void sse_encode_family(Family self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_family_params(FamilyParams self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case FamilyParams_Cosmos(
+        chainId: final chainId,
+        rest: final rest,
+        restPolicy: final restPolicy,
+        denom: final denom,
+        prefix: final prefix,
+      ):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(chainId, serializer);
+        sse_encode_list_endpoint_config(rest, serializer);
+        sse_encode_policy(restPolicy, serializer);
+        sse_encode_String(denom, serializer);
+        sse_encode_String(prefix, serializer);
+      case FamilyParams_Aptos(chainId: final chainId, package: final package):
+        sse_encode_i_32(1, serializer);
+        sse_encode_u_8(chainId, serializer);
+        sse_encode_String(package, serializer);
+      case FamilyParams_Solana(program: final program):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(program, serializer);
+      case FamilyParams_Soroban(
+        passphrase: final passphrase,
+        xlmSac: final xlmSac,
+      ):
+        sse_encode_i_32(3, serializer);
+        sse_encode_String(passphrase, serializer);
+        sse_encode_String(xlmSac, serializer);
+      case FamilyParams_Sui(
+        graphql: final graphql,
+        graphqlPolicy: final graphqlPolicy,
+      ):
+        sse_encode_i_32(4, serializer);
+        sse_encode_list_endpoint_config(graphql, serializer);
+        sse_encode_policy(graphqlPolicy, serializer);
+      case FamilyParams_Substrate(
+        rpc: final rpc,
+        rpcPolicy: final rpcPolicy,
+        genesis: final genesis,
+        ss58Prefix: final ss58Prefix,
+      ):
+        sse_encode_i_32(5, serializer);
+        sse_encode_list_endpoint_config(rpc, serializer);
+        sse_encode_policy(rpcPolicy, serializer);
+        sse_encode_String(genesis, serializer);
+        sse_encode_u_16(ss58Prefix, serializer);
+    }
   }
 
   @protected
@@ -30405,6 +30658,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         sse_encode_u_32(index, serializer);
         sse_encode_String(keyData, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_l_1_fee(L1Fee self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
   }
 
   @protected
@@ -31184,6 +31443,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_family_params(
+    FamilyParams? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_family_params(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_gas_per_byte(
     GasPerByte? self,
     SseSerializer serializer,
@@ -31271,6 +31543,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_key_ref(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_l_1_fee(
+    L1Fee? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_l_1_fee(self, serializer);
     }
   }
 
@@ -35734,8 +36019,10 @@ class WalletImpl extends RustOpaque implements Wallet {
         ScaasSdk.instance.api.rust_arc_decrement_strong_count_WalletPtr,
   );
 
-  /// The balances of `id` (a `0x` 20-byte address or a `0x` 32-byte UA) on `chain` at one block. `ChainUnknown`,
-  /// `ProfileMismatch` (a listed token's `chainUid()`), `Argument` (an id of another length).
+  /// The balances of `id` on `chain` at one block. EVM: `id` a `0x` 20-byte address or a `0x` 32-byte UA; another family
+  /// (spec §8.7): the family's printed form, or a `0x` 32-byte UA id where the family keeps a UA ledger, read at one final
+  /// height. `ChainUnknown`, `ProfileMismatch` (a listed token's `chainUid()`), `Argument` (an id of another form),
+  /// `FeatureMissing` (a family this build does not read).
   Future<Balances> balances({required String id, required String chain}) =>
       ScaasSdk.instance.api.scaasSdkWalletWalletBalances(
         that: this,

@@ -1330,6 +1330,85 @@ pub(crate) mod tests {
             .contains("sequence mismatch"));
     }
 
+    /// Plan T28: a `~gateway` job runs on the family's lane through the same calls as a pulled one: leased by the lane's label,
+    /// `signed` journaled with its nonce, back to `queued` on a refused broadcast (the Mock's `Rejected`), nothing reported to the
+    /// pull path; after a restart a row leased and never signed goes back to the queue.
+    #[tokio::test]
+    async fn a_gateway_job_runs_on_the_lane_through_the_store() {
+        use crate::external_pull::tests::{own_job, own_store};
+        use crate::store::State;
+        let st = own_store("cosmos:t", "cosmos", "pk:aa").await;
+        let uid = own_job(
+            &st,
+            "cosmos:t",
+            7,
+            serde_json::json!({"family": "cosmos", "valid_until": now() + 600}),
+        )
+        .await;
+        let (pull, o) = fake_external_pull(Fake {
+            tokens: serde_json::json!([]),
+            ..Default::default()
+        })
+        .await;
+        let queue = |labels: &[(&str, &str)]| crate::external_pull::OwnQueue {
+            store: st.clone(),
+            chain_key: "cosmos:t".into(),
+            labels: labels
+                .iter()
+                .map(|(w, l)| (w.to_string(), l.to_string()))
+                .collect(),
+        };
+        // the control: a lane the queue does not know leases nothing
+        let other = pull.clone().with_queue(queue(&[]));
+        assert!(!lane_step(&Mock::default(), &other, 0, "n#0").await.unwrap());
+        assert_eq!(st.job(uid).await.unwrap().unwrap().state, State::Queued);
+        let pull = pull.with_queue(queue(&[("n#0", "pk:aa")]));
+        assert!(tokio::time::timeout(
+            Duration::from_secs(5),
+            lane_step(&Mock::default(), &pull, 0, "n#0")
+        )
+        .await
+        .expect("lane held")
+        .unwrap());
+        let row = st.job(uid).await.unwrap().unwrap();
+        assert_eq!((row.state, row.attempt_count), (State::Queued, 1));
+        assert!(row
+            .last_error
+            .unwrap_or_default()
+            .contains("sequence mismatch"));
+        let states: Vec<String> = st
+            .job_events(0, 100)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|e| e.job_uid == uid)
+            .map(|e| e.state)
+            .collect();
+        assert_eq!(states, ["queued", "leased", "signed", "queued"]);
+        assert!(
+            o.lock().unwrap().reports.is_empty(),
+            "nothing to the pull path"
+        );
+        // a restart: leased by the lane, never signed ⇒ back in the queue
+        let lease = crate::store::Fields {
+            lane_label: Some("pk:aa".into()),
+            ..Default::default()
+        };
+        st.transition(
+            uid,
+            State::Queued,
+            State::Leased,
+            &lease,
+            crate::store::now_ms(),
+        )
+        .await
+        .unwrap();
+        recover_lane(&Mock::default(), &pull, 0, "n#0")
+            .await
+            .unwrap();
+        assert_eq!(st.job(uid).await.unwrap().unwrap().state, State::Queued);
+    }
+
     /// CTR-MTX-86, one rule on every family (Fable N-4): a job carrying `payee_fee` or `receiver_fee` is refused by name (`dead`)
     /// before any build on a non-EVM adapter, never relayed without it; the plain job is built (the control).
     #[tokio::test]

@@ -171,6 +171,21 @@ pub(super) fn app_request(kind: u16, app_id: &[u8; 32], digest: &[u8; 32]) -> Re
     ))
 }
 
+/// The request of a single key of `kind` over an app's chain-bound record under the app's own `purpose` (scaas-sdk spec §12.4,
+/// path B): `uaMessage(kind, purpose, digest)`, role `Authorization` (`requireAuthorized`); the caller refused SCaaS purposes.
+#[cfg(feature = "app-core")]
+pub(super) fn app_chain_request(
+    kind: u16,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+) -> Result<SignRequest> {
+    Ok(request(
+        kind,
+        ua_message(kind, purpose, digest)?,
+        SigRole::Authorization,
+    ))
+}
+
 /// The request of `sign_member` for a key of `kind` (the `msig` builder's too): always `Authorization`.
 pub(super) fn member_request(
     kind: u16,

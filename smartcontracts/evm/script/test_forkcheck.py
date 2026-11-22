@@ -184,7 +184,9 @@ def profile_and_set_gate():
 
 def real_tree_profiles():
     """The committed profiles: Avalanche at cancun with its caps; every chain-uids.json key has a profile or is refused by
-    name (none falls back to amsterdam but the reset chain)."""
+    name (none falls back to amsterdam but the reset chain); a profile naming a fork this script has no opcode table for
+    (SDK plan T40's `osaka` and `prague` profiles) is refused by name, FORKCHECK_FORK_UNKNOWN (fail closed, the plan's
+    merge note (1))."""
     for k in ("avalanche-mainnet", "avalanche-testnet"):
         pr = f.profile(k)
         assert (pr["evmFork"], pr["codeSizeLimit"], pr["initCodeSizeLimit"]) == ("cancun", 24576, 49152), (k, pr)
@@ -192,11 +194,18 @@ def real_tree_profiles():
         refused("FORKCHECK_SET_FORK", f.set_gate, k)
     assert f.profile("scaas-testnet") == {"evmFork": "amsterdam"}
     keys = [r["key"] for r in json.load(open(os.path.join(f.EVM, "chain-uids.json")))["chains"]]
+    unknown = []
     for k in keys:
-        if os.path.exists(os.path.join(f.EVM, "src", "chains", k, "profile.json")) or k == "scaas-testnet":
+        p = os.path.join(f.EVM, "src", "chains", k, "profile.json")
+        if os.path.exists(p) and json.load(open(p))["evmFork"] not in f.FORKS:
+            refused("FORKCHECK_FORK_UNKNOWN", f.profile, k)
+            unknown.append(k)
+        elif os.path.exists(p) or k == "scaas-testnet":
             f.profile(k)
         else:
             refused("FORKCHECK_PROFILE", f.profile, k)
+    # T40's profiles at osaka and prague are among them (control: the refusal is by fork, not by key)
+    assert {"ethereum-mainnet", "op-mainnet", "celo-mainnet"} <= set(unknown), unknown
 
 
 # ---- checks (2) and (5) against fake nodes

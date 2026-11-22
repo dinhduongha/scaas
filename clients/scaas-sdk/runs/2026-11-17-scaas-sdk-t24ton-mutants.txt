@@ -1,0 +1,20 @@
+# t24ton mutants (name | outcome | commit | test | first failure line)
+the TON dispatch off | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_balances_at_one_masterchain_block | panicked at tests/ton.rs:323:42:
+read the second endpoint first | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_two_endpoints_one_down | panicked at tests/ton.rs:544:5:
+exit code 1 not a success | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_malformed_answers_are_refused | panicked at tests/ton.rs:489:46:
+a failed get_wallet_address read | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_malformed_answers_are_refused | panicked at tests/ton.rs:465:9:
+a failed get_wallet_data read | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_malformed_answers_are_refused | panicked at tests/ton.rs:465:9:
+the master asked for its own wallet | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_balances_at_one_masterchain_block | panicked at tests/ton.rs:323:42:
+an uninitialized wallet asked, not 0 | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_balances_at_one_masterchain_block | panicked at tests/ton.rs:323:42:
+a frozen wallet read | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_malformed_answers_are_refused | panicked at tests/ton.rs:465:9:
+a wallet of another owner read | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_malformed_answers_are_refused | panicked at tests/ton.rs:465:9:
+a wallet of another master read | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_malformed_answers_are_refused | panicked at tests/ton.rs:465:9:
+a jetton balance that is no number read as 0 | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_malformed_answers_are_refused | panicked at tests/ton.rs:465:9:
+the native balance not bounded | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_malformed_answers_are_refused | panicked at tests/ton.rs:465:9:
+the set read one block before the head | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_balances_at_one_masterchain_block | panicked at tests/ton.rs:346:5:
+the majority read at its own head | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_strict_majority_agrees_at_one_block | panicked at tests/ton.rs:614:46:
+endpoint 0's block not the identity reference | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_two_endpoints_one_down | panicked at tests/ton.rs:558:48:
+a token out of form skipped | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_holder_and_token_forms | panicked at tests/ton.rs:376:5:
+the TON policy ignored | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --features ton --test ton -- --exact ton_strict_majority_agrees_at_one_block | panicked at tests/ton.rs:620:5:
+the CLI's SDK without TON reads | killed | ddb52c33b | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas family_profiles_open_and_read | panicked at src/config.rs:632:9:
+18 mutants, 18 killed, 0 survived, 0 not loaded, 0 other failure

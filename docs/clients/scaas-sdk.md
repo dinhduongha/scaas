@@ -309,6 +309,24 @@ purpose constant (the guard on the chain-bound path) and every domain of a SCaaS
 address, by chain), each refusal tested with a positive control and a mutant. Reads of ciphertexts the app core decrypts are decryption reads under
 [CLI-SDK-10](#CLI-SDK-10); writes are operations under [CLI-SDK-08](#CLI-SDK-08). Design: spec §12.
 
+Built additions (pqchat-core T1, 2026-11-21; BUILT, UNAUDITED): `read_app(chain, contract, entry, args, trusted)` reads a
+`view` or `pure` entry of any contract by its JSON ABI item and named arguments at the profile's final block and answers
+named JSON (outputs and tuple components by name, integers as decimal strings, bytes and addresses as `0x` hex), bounded
+(entry 64 KiB, arguments 128 KiB, answer 1 MiB, output types nesting at most 16 levels: `Argument`), as a read that feeds a
+decryption when `trusted`. PqChat's key entries (`pqchat_*`, feature `pqchat-records`) are thin calls of `ua-rs`
+`pqchat_keys` on the scope's handles, only in a scope that declared `scaas/pqchat/v1/` (`AppLabelRefused`); the signing ones
+take the sender, creator or author from the account and never a digest or a ciphertext of the caller's. The feature
+`vectors` (bit 28) adds test-only entries (key bytes in and out, fixed randomness): a release build refuses it
+(`compile_error!`), `scripts/check_test_features.py` keeps it out of every shipped artifact and the bind-gen check out of
+every binding. It runs alone, in its own test (`--test pqchat_keys`): a `vectors` build of `ua-rs` refuses key handles until
+a test unlocks them (no-decryption-oracle §4.8), so the whole suite runs without it and clippy builds it.
+`argon2id_passphrase` (PqVault V9, 2026-11-21; BUILT, UNAUDITED) is `argon2id` of a typed passphrase after RFC 8265's
+OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control character or bytes that are not UTF-8: `Argument`), so
+a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`. PqVault's V1 vectors
+(`smartcontracts/vectors/pqvault/`) run through this surface only (BUILT, UNAUDITED; `tests/app_core_vault_rows.rs` under
+`vectors`, `tests/app_core_vault_records.rs` in the main suite: typed digests in both domains, both signing paths,
+`verify_app_record`); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](ua-libraries.md#CLI-PQV-12) in decisions.md.
+
 <a id="CLI-SDK-21"></a>**CLI-SDK-21** — **`seal_for_arweave`, `upload_file`, `fetch_file` and `open_file` put an app core's
 file on Arweave and read it back; the upload key signs only the item `ua-rs` built; the client keeps the signed bytes until
 the item is settled; the free tier carries the smallest bucket, the operator payer the rest, and the client never holds an
@@ -432,7 +450,8 @@ Polkadot networks join when `ua-rs` has them (PLANNED).
 
 ## 11. The CLI
 
-<a id="CLI-SDK-17"></a>**CLI-SDK-17** — **The CLI `scaas` is a thin client of the SDK** (PLANNED). One subcommand per SDK call, named
+<a id="CLI-SDK-17"></a>**CLI-SDK-17** — **The CLI `scaas` is a thin client of the SDK** (BUILT: `clients/scaas-cli`, tests
+`clients/scaas-cli/tests/cli.rs`; the means are the T22 controller calls in decisions.md, CLI-SDK-17). One subcommand per SDK call, named
 flags, JSON or a table; it shows the review and the quote and asks before submitting. Passphrases, words and keys come from the
 terminal without echo or from a file descriptor, never from the command line or the environment; nothing secret is printed except a
 new seed's one reveal. It shares its data directory with the TUI and the app under the keystore's lock, holds no logic of its own and

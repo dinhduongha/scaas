@@ -87,6 +87,9 @@ async fn pq_registration_split() {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     };
     let sdk = crate::Sdk::open(SdkConfig {
         profiles: vec![profile],
@@ -346,6 +349,9 @@ async fn reg_setup(name: &str, block: u64, rows: Vec<crate::GasBase>) -> Reg {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     };
     let sdk = crate::Sdk::open(SdkConfig {
         profiles: vec![profile],
@@ -831,6 +837,9 @@ async fn write_targets_follow_the_line() {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
     };
     let sdk = crate::Sdk::open(SdkConfig {
         profiles: vec![p],

@@ -1,0 +1,11 @@
+# t24cosmos mutants (name | outcome | commit | test | first failure line)
+read the second endpoint first | killed | 787eb0aa6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features cosmos --test cosmos -- --exact cosmos_two_endpoints_one_down | panicked at tests/cosmos.rs:351:49:
+the SDK's reads not pinned to the height | killed | 787eb0aa6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features cosmos --test cosmos -- --exact cosmos_strict_majority_agrees_at_one_height | panicked at tests/cosmos.rs:402:46:
+scaas-rpc sends no height header | killed | 787eb0aa6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features cosmos --test cosmos -- --exact a_rest_read_at_a_height_sends_the_height_header | panicked at tests/cosmos.rs:159:5:
+strict majority: the others read at their own head | killed | 787eb0aa6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features cosmos --test cosmos -- --exact cosmos_strict_majority_agrees_at_one_height | panicked at tests/cosmos.rs:402:46:
+a balance string read without the amount rule | killed | 787eb0aa6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features cosmos --test cosmos -- --exact cosmos_malformed_answers_are_refused | panicked at tests/cosmos.rs:308:9:
+the bech32 checksum not checked | killed | 787eb0aa6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features cosmos --test cosmos -- --exact cosmos_holder_and_token_forms | panicked at tests/cosmos.rs:260:9:
+the padding bits not checked | killed | 787eb0aa6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features cosmos --test cosmos -- --exact cosmos_holder_and_token_forms | panicked at tests/cosmos.rs:260:9:
+params of another family accepted | killed | 787eb0aa6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features cosmos --test cosmos -- --exact cosmos_holder_and_token_forms | panicked at tests/cosmos.rs:268:5:
+a denom's first byte not checked | killed | 787eb0aa6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features cosmos --test cosmos -- --exact cosmos_holder_and_token_forms | panicked at tests/cosmos.rs:281:9:
+9 mutants, 9 killed, 0 survived, 0 not loaded, 0 other failure

@@ -146,7 +146,8 @@ macro_rules! router_ops {
     ($( $req:ident, $f:ident, $name:literal { $( $field:ident : $k:ident => $json:literal ),* } )*) => {
         $(
             #[doc = concat!("`", $name, "` on the profile's `GovernanceRouter` (spec §11).")]
-            #[derive(Debug, Clone, PartialEq, Eq)]
+            #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+            #[serde(deny_unknown_fields)]
             pub struct $req {
                 pub signer: KeyRef,
                 pub chain: String,
@@ -250,7 +251,7 @@ UaGrantRole, admin_ua_grant_role, "UAGrantRole" { target: s => "target", bit: n 
 }
 
 /// A rescue vault's admin operation (CTR-GOV-25): `seq` the vault's shared order, from 1.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum RescueOp {
     /// `setRescuer(seq, newRescuer)`, `new_rescuer` an address (not 0)
@@ -260,7 +261,8 @@ pub enum RescueOp {
 }
 
 /// The rescue vault's signature request: the vault's admin key (a native EVM key) and the operation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RescueVault {
     pub signer: KeyRef,
     pub vault: String,
@@ -268,14 +270,16 @@ pub struct RescueVault {
 }
 
 /// A signed rescue-vault operation: its typed digest and the admin's 65-byte signature, both `0x` hex.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SignedRescue {
     pub digest: String,
     pub signature: String,
 }
 
 /// A creation's CREATE3 addresses (`scaas-ua` `create3_address`): the salt `s`, the proxy, the instance.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Create3Preview {
     pub s: String,
     pub proxy: String,
@@ -284,7 +288,8 @@ pub struct Create3Preview {
 
 /// The new auditor's consent to a set-auditor (spec 2026-11-18 set-auditor §5.2): `AuditorConsent(token, auditor, epoch,
 /// chainUid)` in the confidential token's domain.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AuditorConsent {
     /// PQZ: the auditor's UA key; Zether: the auditor's Zether UA (`kind` 0x0141)
     pub signer: KeyRef,

@@ -219,10 +219,10 @@ contract PqChat is IPqChat, PqChatCore {
         uint256 n = r.members.length;
         if (n == 0 || n > REMOVE_MAX) revert PqChatShape();
         (bytes32[] memory admins, MemberKey[] memory m,) = _lists(ep);
-        if (!_has(admins, r.admin)) revert PqChatNotAdmin(r.admin);
+        if (!_liveAdmin(ep, admins, r.admin)) revert PqChatNotAdmin(r.admin); // F2, F7 (controller call 2026-11-21)
         for (uint256 i; i < n; ++i) {
             if (i > 0 && r.members[i] <= r.members[i - 1]) revert PqChatShape();
-            if (_memberAt(m, r.members[i]) == type(uint256).max) revert PqChatNotMember(r.members[i]);
+            if (!_removable(m, admins, r.members[i])) revert PqChatNotMember(r.members[i]); // F3
         }
         _auth(reg, r.admin, PqChatTypes.hashRemove(r), sig);
         _useNonce(PqChatTypes.scopeEpoch(r.sessionId, r.admin), r.nonce);

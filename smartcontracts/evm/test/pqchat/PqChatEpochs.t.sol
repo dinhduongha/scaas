@@ -496,4 +496,82 @@ contract PqChatEpochsTest is PqChatBase {
         );
         chat.leave(l, sig);
     }
+
+    // ----- Fable code review of PqVault V1-V8, F1 / F2 / F7 in the shared base (controller call 2026-11-21) -----
+
+    /// A session whose admins are `ids[0]` and `ids[1]` (sorted), three members.
+    function _twoAdmins() internal returns (bytes32 sid2, bytes32[] memory admins) {
+        (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(3, 9, address(chat));
+        admins = ids[0] < ids[1] ? _list(ids[0], ids[1]) : _list(ids[1], ids[0]);
+        s.admins = admins;
+        sid2 = _create(chat, s, w);
+    }
+
+    /// F1: admin `ids[1]` stages a child that leaves itself out (incomplete), `ids[0]` removes it; the child no longer completes
+    /// (`PqChatRemovedKept(parent, ids[1])`). The control: not removed, the same child completes.
+    function test_removedAuthorsStagedChildCannotComplete() public {
+        (bytes32 sid2,) = _twoAdmins();
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(sid2, ids[1], 1, 1, sid2, _list(ids[0]), _without(_members(3), ids[1]));
+        bytes32 staged = chat.rekey(e, _slice(w, 0, 1), _sig(e.author, h.epoch(e)));
+        IPqChat.Wrap[] memory rest = _slice(w, 1, 2);
+        uint256 snap = vm.snapshotState();
+        chat.addWraps(staged, 1, rest); // the control
+        assertEq(chat.childOf(sid2), staged);
+        vm.revertToState(snap);
+        IPqChat.PqChatRemove memory r = IPqChat.PqChatRemove(sid2, sid2, 1, _list(ids[1]), ids[0], 2);
+        chat.remove(r, _sig(r.admin, h.remove(r)));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatRemovedKept.selector, sid2, ids[1]));
+        chat.addWraps(staged, 1, rest);
+    }
+
+    /// F2: once removed, an admin removes nobody (`PqChatNotAdmin`); the other admin still does.
+    function test_removedAdminRemovesNobody() public {
+        (bytes32 sid2,) = _twoAdmins();
+        IPqChat.PqChatRemove memory r = IPqChat.PqChatRemove(sid2, sid2, 1, _list(ids[1]), ids[0], 2);
+        chat.remove(r, _sig(r.admin, h.remove(r)));
+        IPqChat.PqChatRemove memory back = IPqChat.PqChatRemove(sid2, sid2, 1, _list(ids[0]), ids[1], 3);
+        IUARegistry.UASig memory sig = _sig(back.admin, h.remove(back));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNotAdmin.selector, ids[1]));
+        chat.remove(back, sig);
+        r = IPqChat.PqChatRemove(sid2, sid2, 1, _list(ids[2]), ids[0], 4);
+        chat.remove(r, _sig(r.admin, h.remove(r))); // the control
+    }
+
+    /// F7 (as O3 (b)): an admin that left makes no membership change and removes nobody (`PqChatNotAdmin`); the controls run the
+    /// same calls before the leave.
+    function test_leftAdminNeitherChangesNorRemoves() public {
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(sid, ids[0], 1, 1, sid, _admins(), _without(_members(3), ids[2]));
+        IPqChat.PqChatRemove memory r = _rm(sid, 1, _list(ids[2]), ids[0], 2);
+        uint256 snap = vm.snapshotState();
+        _rekey(chat, e, w);
+        vm.revertToState(snap);
+        _remove(chat, r);
+        vm.revertToState(snap);
+        _leave(chat, sid, ids[0], 3);
+        IUARegistry.UASig memory sig = _sig(e.author, h.epoch(e));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNotAdmin.selector, ids[0]));
+        chat.rekey(e, w, sig);
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatNotAdmin.selector, ids[0]));
+    }
+
+    /// F3 (controller call 2026-11-21, one rule everywhere): an admin that is no member (an `msig`, which holds no KEM key) is
+    /// removable, and a child keeping it as an admin is then `PqChatRemovedKept`; the child without it lands.
+    function test_adminOnlyMsigRemovable() public {
+        (bytes32 ms,,) = _msig2();
+        (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(3, 6, address(chat));
+        s.admins = ms < ids[0] ? _list(ms, ids[0]) : _list(ids[0], ms);
+        bytes32 sid2 = _create(chat, s, w);
+        IPqChat.PqChatRemove memory r = IPqChat.PqChatRemove(sid2, sid2, 1, _list(ms), ids[0], 1);
+        chat.remove(r, _sig(r.admin, h.remove(r)));
+        assertTrue(chat.removedIn(sid2, ms));
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) =
+            _epoch(sid2, ids[0], 2, 1, sid2, s.admins, _members(3));
+        IUARegistry.UASig memory sig = _sig(e.author, h.epoch(e));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatRemovedKept.selector, sid2, ms));
+        chat.rekey(e, ew, sig);
+        (e, ew) = _epoch(sid2, ids[0], 3, 1, sid2, _admins(), _members(3));
+        _rekey(chat, e, ew); // the control
+    }
 }

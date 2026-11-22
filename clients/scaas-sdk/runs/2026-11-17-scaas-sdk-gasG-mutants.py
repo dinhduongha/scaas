@@ -43,7 +43,7 @@ MUTANTS = [
      [(G, "        0 => quoted,\n",
        "        0 => quoted.saturating_sub(with_margin(counted.saturating_sub(signed).saturating_mul(PER_BYTE))),\n")],
      U + "signed_gas_counts_the_real_signature"),
-    ("G3: the verify row's sig_bytes not counted", [(G, "                    .map(|v| v.sig_bytes)\n", "                    .map(|_| 0)\n")],
+    ("G3: the verify row's sig_bytes not counted", [(G, "verify_row(r, signer, registry).map(|v| v.sig_bytes)", "verify_row(r, signer, registry).map(|_| 0)")],
      U + T),
     ("G3: an app's figure read as counting sig_bytes",
      [(G, "        Some(GasFrom::Chain | GasFrom::Module(_) | GasFrom::Reference) => {", "        Some(_) => {")],

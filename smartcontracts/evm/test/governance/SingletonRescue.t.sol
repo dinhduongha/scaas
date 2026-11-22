@@ -7,31 +7,34 @@ import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {PqChatBase} from "../pqchat/PqChatBase.sol";
+import {PqVault} from "../../src/pqvault/PqVault.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {HookLeg} from "../zether/ZetherWrapped.t.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 
 /// CTR-GOV-26 (owner 2026-11-12): `rescue(asset)` on the chain singletons `UARegistry`, `OpenFactory`, `GovernanceRouter`,
-/// `RelayFeeRouter` and `PqChat`, each holding nothing by design. Anyone; the whole balance of an ERC-20 or (`address(0)`)
+/// `RelayFeeRouter`, `PqChat` and `PqVault` (PqVault plan V3), each holding nothing by design. Anyone; the whole balance of an ERC-20 or (`address(0)`)
 /// the native coin to `RescueLib.SCAAS_DEV_RESCUE`, `IRescuable.Rescued`; the native coin refused to a designator there.
 contract SingletonRescueTest is PqChatBase {
     address constant ANYONE = address(0xA11);
     address constant DEV = RescueLib.SCAAS_DEV_RESCUE;
     MockERC20 internal foo = new MockERC20("FOO", "FOO", 18);
 
-    function _five() internal returns (address[5] memory s) {
+    function _six() internal returns (address[6] memory s) {
         s = [
             address(p),
             address(f),
             address(new GovernanceRouter(chainUidA, REG_P, address(0), false)),
             address(new RelayFeeRouter()),
-            address(chat)
+            address(chat),
+            address(new PqVault(IOpenFactory.ReleaseId(4, 0, 1), address(f), ""))
         ];
     }
 
     function test_eachSingletonRescuesToTheDevAddress() public {
-        address[5] memory s = _five();
+        address[6] memory s = _six();
         uint256 sent;
-        for (uint256 i; i < 5; ++i) {
+        for (uint256 i; i < 6; ++i) {
             foo.mint(s[i], 10 + i);
             vm.expectEmit(s[i]);
             emit IRescuable.Rescued(address(foo), DEV, 10 + i);
@@ -50,16 +53,16 @@ contract SingletonRescueTest is PqChatBase {
 
     /// The tokens' guard (`RescueLib.send`): the native coin is refused to an EIP-7702 designator; an ERC-20 still goes.
     function test_singletonNativeRefusedToADesignator() public {
-        address[5] memory s = _five();
+        address[6] memory s = _six();
         vm.etch(DEV, abi.encodePacked(hex"ef0100", address(0xC0DE)));
-        for (uint256 i; i < 5; ++i) {
+        for (uint256 i; i < 6; ++i) {
             vm.deal(s[i], 1 ether);
             vm.expectRevert(abi.encodeWithSelector(IRescuable.RescueAssetInvalid.selector, address(0)));
             IRescuable(s[i]).rescue(address(0));
             foo.mint(s[i], 1); // control
             IRescuable(s[i]).rescue(address(foo));
         }
-        assertEq(foo.balanceOf(DEV), 5);
+        assertEq(foo.balanceOf(DEV), 6);
     }
 
     /// `RelayFeeRouter` holds a payment for an instant inside `relay` (open mode), so its rescue runs under its entry

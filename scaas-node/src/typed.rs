@@ -49,6 +49,9 @@ const FACT: &[&str] = &["factory"];
 /// `PqChat` (UA-7 P17 / P32, topics spec P45): a factory kind's thirteen writes, plain rows (each record is signed in the portable
 /// domain and checked by the contract); the target is an instance of the factory's class 3 (`guard::Rule::FactoryClass`).
 const PC: &[&str] = &["pqchat"];
+/// `PqVault` (CTR-PQV-11, CTR-PQV-13): a factory kind's eight writes, plain rows (each record is signed in its vault's domain and
+/// checked by the contract); the target is an instance of the factory's class 4 (`guard::Rule::FactoryClass`).
+const PV: &[&str] = &["pqvault"];
 /// `PqChatStore` (CTR-CHAT-22): the store part of `PqChat` alone, its one write `storeMessage` (unsigned); the target's runtime code
 /// hash is the release data's (`guard::Rule::ChatStore`).
 const PCS: &[&str] = &["pqchatstore"];
@@ -157,6 +160,14 @@ const NESTED: &[(&str, &str)] = &[
     ("PqTopicEntry", "bytes32 topicId,bytes32 author,uint64 nonce,bytes32 parentId,EntryRef ref,string mediaType,bytes body"),
     ("PqTopicEdit", "bytes32 entryId,bytes32 author,uint64 nonce,uint32 version,string mediaType,bytes body"),
     ("PqTopicVote", "bytes32 entryId,bytes32 voter,int8 value,uint64 seq"),
+    // `IPqVault`'s records (pqvault spec §5.2), by the contract's field names; `MemberKey` and `Wrap` are PqChat's
+    ("PqVaultCreate", "bytes32 creator,uint64 nonce,uint8 mode,bytes32 homeChain,address homeVaultContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo"),
+    ("PqVaultEpoch", "bytes32 vaultId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo"),
+    ("PqVaultLeave", "bytes32 vaultId,bytes32 epochId,bytes32 member,uint64 nonce"),
+    ("PqVaultRemove", "bytes32 vaultId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce"),
+    ("PqVaultItem", "bytes32 vaultId,bytes32 epochId,bytes32 author,uint64 nonce,bytes ciphertext"),
+    ("PqVaultEdit", "bytes32 itemId,bytes32 epochId,bytes32 author,uint64 nonce,uint32 version,bytes ciphertext"),
+    ("PqVaultBatch", "bytes32 vaultId,bytes32 epochId,bytes32 author,uint64 nonce,PqVaultItem[] items"),
 ];
 
 /// `(struct, entry, contract kinds, fields, plan)`. `E` = the envelope fields. The plan is the entry's arguments in order;
@@ -388,6 +399,16 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("postEntry", PC, "PqTopicEntry e,UASig sig"),
     ("editEntry", PC, "PqTopicEdit e,UASig sig"),
     ("voteEntry", PC, "PqTopicVote v,UASig sig"),
+    // `PqVault` (CTR-PQV-11): the seven signed writes take their record and its `UASig`; `addVaultWraps` carries none (the guard's
+    // unsigned-write rule, `params.relay_unsigned_pqvault`)
+    ("createVault", PV, "PqVaultCreate v,Wrap[] wraps,UASig sig"),
+    ("rekeyVault", PV, "PqVaultEpoch e,Wrap[] wraps,UASig sig"),
+    ("addVaultWraps", PV, "bytes32 epochId,uint32 first,Wrap[] wraps"),
+    ("leaveVault", PV, "PqVaultLeave l,UASig sig"),
+    ("removeVaultMembers", PV, "PqVaultRemove r,UASig sig"),
+    ("createItem", PV, "PqVaultItem it,UASig sig"),
+    ("editItem", PV, "PqVaultEdit d,UASig sig"),
+    ("createItems", PV, "PqVaultBatch b,UASig sig"),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1464,15 +1485,23 @@ const INIT_CALL: &str = "initCall";
 pub const MAX_INIT_CALL: usize = 4096;
 
 /// The classes whose `mtxCreateInstance` a job may name by fields (`args.config`): `(contractClass, kind)`, the initializer.
-pub const INSTANCE_CONFIGS: &[(u16, u16, &str)] = &[(
-    crate::guard::CLASS_PQCHAT,
-    0,
-    "PqChat initialize(bytes32 owner)",
-)];
+pub const INSTANCE_CONFIGS: &[(u16, u16, &str)] = &[
+    (
+        crate::guard::CLASS_PQCHAT,
+        0,
+        "PqChat initialize(bytes32 owner)",
+    ),
+    (
+        crate::guard::CLASS_PQVAULT,
+        0,
+        "PqVault initialize(bytes32 owner)",
+    ),
+];
 
 /// Owner 2026-11-12 (`mtxCreateInstance`, both forms): the initializer call of a generic creation, either `args.init_call` (bytes,
 /// at most [`MAX_INIT_CALL`]) or built from a known class's named `args.config` ([`INSTANCE_CONFIGS`]), never both. `PqChat`
-/// (class 3, kind 0): `{owner}`, 0 or the creator (`envelope.from`; the instance refuses any other, `PqChatOwnerNotCreator`).
+/// (class 3, kind 0) and `PqVault` (class 4, kind 0, CTR-PQV-02): `{owner}`, 0 or the creator (`envelope.from`; the instance
+/// refuses any other, `PqChatOwnerNotCreator` / `PqVaultOwnerNotCreator`).
 fn instance_init_call(a: &Map<String, Value>, e: &Map<String, Value>) -> Result<Vec<u8>> {
     match (a.get("config"), a.get("init_call")) {
         (Some(_), Some(_)) => {
@@ -1510,9 +1539,10 @@ fn instance_init_call(a: &Map<String, Value>, e: &Map<String, Value>) -> Result<
                 .as_object()
                 .ok_or_else(|| anyhow!("BAD_PAYLOAD: args.config: not an object"))?;
             match (class, kind) {
-                (3, 0) => {
+                (3, 0) | (4, 0) => {
+                    let name = if class == 3 { "PqChat" } else { "PqVault" };
                     if let Some(k) = c.keys().find(|k| *k != "owner") {
-                        bail!("BAD_PAYLOAD: args.config.{k}: unknown field (PqChat takes owner)");
+                        bail!("BAD_PAYLOAD: args.config.{k}: unknown field ({name} takes owner)");
                     }
                     let owner = parse("bytes32", c.get("owner").ok_or_else(|| anyhow!("BAD_PAYLOAD: args.config.owner: missing"))?,
                         "args.config.owner")?;
@@ -1977,8 +2007,8 @@ impl Op {
         }
         let (row, contract) = find(entry, text("contract")?, text("struct")?)?;
         // T93 (topics P45): a `PqChat` job is its records' named fields; `args`, a record, a list or `sig` as one hex string is the
-        // old hex form
-        if contract == "pqchat" || contract == "pqchatstore" {
+        // old hex form; a `PqVault` job the same (CTR-PQV-11, no old form: a hex form is refused alike), and a `PqChatStore` job
+        if contract == "pqchat" || contract == "pqvault" || contract == "pqchatstore" {
             let args = o.get("args");
             let hexed = |t: &str, n: &str| {
                 (t.ends_with("[]") || nested(t).is_some())
@@ -2715,6 +2745,16 @@ pub mod testkit {
     /// T93: a `PqChat` job of `entry` on `instance`, every argument named, each value from its type and a running counter (a
     /// list holds one element, an `int8` is -1), so no two fields carry the same bytes.
     pub fn pqchat_op(entry: &str, instance: Address) -> Value {
+        factory_kind_op("pqchat", entry, instance)
+    }
+
+    /// A `PqVault` job of `entry` on `instance`, as [`pqchat_op`].
+    pub fn pqvault_op(entry: &str, instance: Address) -> Value {
+        factory_kind_op("pqvault", entry, instance)
+    }
+
+    /// A job of a factory kind (`pqchat`, `pqvault`), every argument named, each value from its type and a running counter.
+    pub fn factory_kind_op(kind: &str, entry: &str, instance: Address) -> Value {
         fn sample(ty: &str, n: &mut u8) -> Value {
             *n += 1;
             if let Some(el) = ty.strip_suffix("[]") {
@@ -2737,10 +2777,10 @@ pub mod testkit {
         }
         let row = rows()
             .iter()
-            .find(|r| r.entry == entry && r.contracts == ["pqchat"])
-            .unwrap_or_else(|| panic!("no pqchat {entry}"));
+            .find(|r| r.entry == entry && r.contracts == [kind])
+            .unwrap_or_else(|| panic!("no {kind} {entry}"));
         let mut n = 0;
-        json!({"entry": entry, "contract": "pqchat", "token": format!("{instance:#x}"), "validUntil": "4000000000",
+        json!({"entry": entry, "contract": kind, "token": format!("{instance:#x}"), "validUntil": "4000000000",
             "args": Value::Object(row.fields.iter().map(|(t, k)| (k.clone(), sample(t, &mut n))).collect())})
     }
 }
@@ -2877,11 +2917,11 @@ mod tests {
         // (CTR-DEX-30)
         // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
         // CTR-UA-44 (TODO 3ze): -> 35, the registry's `updateMsig`; NODE-JOB-29 (TODO 3zh MD-14): -> 36, the registry's `cacheExpandedKey`
-        // bls-multi Task 10: -> 37, the registry's `registerBlsMulti`; chains-arweave T9: -> 38, `PqChatStore`'s `storeMessage`
-        // (contract kind `pqchatstore`)
+        // bls-multi Task 10: -> 37, the registry's `registerBlsMulti`; PqVault plan V8 (CTR-PQV-11): -> 45, `PqVault`'s eight writes;
+        // chains-arweave T9: -> 46, `PqChatStore`'s `storeMessage` (contract kind `pqchatstore`)
         assert_eq!(
             rows().iter().filter(|r| !r.typed).count(),
-            38,
+            46,
             "the wallet's three flat builders are gone (MD-11 (a))"
         );
     }
@@ -4948,6 +4988,26 @@ mod tests {
             .starts_with("INSTANCE_CONFIG_UNKNOWN: class 7 kind 0"));
         on(&seven, &[("init_call", k["initCall"].clone())])
             .expect("control: any class by init_call");
+        // PqVault plan V8 (CTR-PQV-02): class 4, kind 0 names the same `initialize(bytes32 owner)`, its owner rule and fields
+        let mut four = args.clone();
+        four.insert("contractClass".into(), json!(4));
+        let named4 = on(&four, &[("config", k["config"].clone())]).expect("PqVault's named config");
+        let raw4 = on(&four, &[("init_call", k["initCall"].clone())]).unwrap();
+        assert_eq!(
+            named4.data, raw4.data,
+            "class 4: the named config builds the same call"
+        );
+        let bad4 = |c: Value| on(&four, &[("config", c)]).unwrap_err().to_string();
+        assert!(bad4(json!({"owner": z32(0), "admin": z32(0)})).contains("(PqVault takes owner)"));
+        assert!(
+            bad4(json!({"owner": format!("{:#x}", B256::repeat_byte(0x0b))}))
+                .contains("args.config.owner: 0 or the creator")
+        );
+        four.insert("kind".into(), json!(1));
+        assert!(on(&four, &[("config", k["config"].clone())])
+            .unwrap_err()
+            .to_string()
+            .starts_with("INSTANCE_CONFIG_UNKNOWN: class 4 kind 1"));
     }
 
     /// CTR-MTX-27: `call` is a named op, not hex: the router's calldata carries its bytes, `callDataHash` their hash, and the
@@ -5365,5 +5425,109 @@ mod tests {
             format!("{:#x}", keccak256(th("PqTopic"))),
             "0x66954727fc72dc7660d7951b1a698a5f2fe331ec190195d0b0908f659510828e"
         ); // 3r: `admin`
+    }
+    /// PqVault plan V8 (CTR-PQV-11): the eight `PqVault` rows are plain rows of kind `pqvault` alone, no envelope, no fee, no
+    /// signature outside `args`; every job is named fields, its calldata decodes back to the same fields and rebuilds the same
+    /// bytes; a record, a list or `args` as hex is `HEX_ARGS_REFUSED`, each beside the control that parses.
+    #[test]
+    fn pqvault_jobs_name_their_fields() {
+        let at = Address::repeat_byte(0xc4);
+        let ours: Vec<&Row> = rows()
+            .iter()
+            .filter(|r| r.contracts.contains(&"pqvault"))
+            .collect();
+        assert_eq!(ours.len(), 8);
+        for r in &ours {
+            assert_eq!(
+                (r.typed, r.enveloped, r.sig, r.contracts, r.sent),
+                (false, false, None, &["pqvault"][..], r.selector),
+                "{}",
+                r.entry
+            );
+            let op = pqvault_op(r.entry, at);
+            let p = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{}: {e:#}", r.entry));
+            assert_eq!(
+                (
+                    p.to,
+                    &p.data[..4],
+                    p.typed.contract,
+                    p.typed.struct_hash,
+                    p.lane,
+                    p.valid_until
+                ),
+                (at, &r.selector[..], "pqvault", None, None, 4_000_000_000),
+                "{}",
+                r.entry
+            );
+            let back = call_op("pqvault", at, &p.data, "4000000000")
+                .unwrap_or_else(|e| panic!("{}: {e:#}", r.entry));
+            assert_eq!(
+                back["args"], op["args"],
+                "{}: the calldata's named fields",
+                r.entry
+            );
+            assert_eq!(Op::parse(&back, FEE).unwrap().data, p.data, "{}", r.entry);
+        }
+        let refused = |entry: &str, path: &str| {
+            let mut o = pqvault_op(entry, at);
+            Op::parse(&o, FEE).unwrap_or_else(|e| panic!("{entry}: the control: {e:#}"));
+            let blob = json!(format!("0x{}", "00".repeat(256)));
+            if path == "args" {
+                o["args"] = blob
+            } else {
+                o["args"][path] = blob
+            }
+            Op::parse(&o, FEE).unwrap_err().to_string()
+        };
+        for (entry, path) in [
+            ("createVault", "args"),
+            ("createVault", "v"),
+            ("createVault", "wraps"),
+            ("createVault", "sig"),
+            ("rekeyVault", "e"),
+            ("addVaultWraps", "wraps"),
+            ("leaveVault", "l"),
+            ("removeVaultMembers", "r"),
+            ("createItem", "it"),
+            ("editItem", "d"),
+            ("createItems", "b"),
+        ] {
+            let e = refused(entry, path);
+            assert!(e.starts_with("HEX_ARGS_REFUSED"), "{entry} {path}: {e}");
+        }
+    }
+
+    /// The `PqVault` records' type strings and typehashes against `smartcontracts/vectors/pqvault/records.json` (written by
+    /// clientkeys), and a literal pin of the vault record (`mode`, the home, the passphrase flag).
+    #[test]
+    fn pqvault_typehashes_are_the_vectors() {
+        let th = |name: &str| {
+            type_string(
+                name,
+                nested(name).unwrap_or_else(|| panic!("{name}: no node struct")),
+            )
+        };
+        let v: Value = serde_json::from_str(include_str!(
+            "../../smartcontracts/vectors/pqvault/records.json"
+        ))
+        .unwrap();
+        let mut n = 0;
+        for (name, t) in v["typehashes"].as_object().unwrap() {
+            let s = th(name);
+            assert_eq!(
+                (s.as_str(), format!("{:#x}", keccak256(&s))),
+                (
+                    t["type"].as_str().unwrap(),
+                    t["hash"].as_str().unwrap().into()
+                ),
+                "{name}"
+            );
+            n += 1;
+        }
+        assert_eq!(n, 9);
+        assert_eq!(
+            format!("{:#x}", keccak256(th("PqVaultCreate"))),
+            "0xb5e6f0323db4eb92065a67dedef66888c5936a3fda2508c66728db676184d587"
+        );
     }
 }

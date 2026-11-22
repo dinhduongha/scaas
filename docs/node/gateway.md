@@ -3,8 +3,9 @@
 The gateway is the node's public intake: anyone — a wallet, the console app, a partner, an agent — may post a signed
 meta-transaction, a signed family op, a UA meta-transaction or a DEX order. It is served on `[modules] gateway_bind`
 (default `127.0.0.1:8547`, normally behind a reverse proxy). Status: `/v1/op`, `/v1/ua-metatx` (EVM), `/v1/metatx` (a refusal by
-name since the `ua*` / `mtx*` merge) and `/v1/dex/*` **BUILT**; durable door-A jobs, `/v1/gateway`, `/v1/ops`,
-`/v1/ua/register`, the UA record cache, CORS and the error contract **SPECIFIED**.
+name since the `ua*` / `mtx*` merge), `/v1/dex/*`, and `/v1/ops` with `GET /v1/intents/{intent_id}` (plan T28) **BUILT**; durable
+EVM door-A jobs, `/v1/gateway`, `/v1/ua/register`, the UA record cache, CORS and the error contract on the other routes
+**SPECIFIED**.
 
 **Contents**
 
@@ -101,11 +102,14 @@ A duplicate returns `200` with the stored state (idempotent).
 | `POST /v1/ops {chain, op}` | `op` = the job API `signed_op` payload; `202 {"status": "queued", "intent_id": "<digest hex>"}` | below |
 | `POST /v1/ua-metatx {chain, token, contract?, struct?, m: WireUAMetaTransfer, auth}` (BUILT, ua-mtx-merge T15) | `202 {"status":"queued"}` | the job API's `ua_metatx` struct job with the same checks: token served; `m` a `UAMetaTransfer` on ids and `auth` its `UASig`, relayed as `mtxExecuteTransfer` (any `entryRef`, no `PayMeta`: a pay with its metadata is the entry `mtxPay` on `/v1/op`); `struct = call` and a `data` field refused `HEX_DATA_REFUSED`; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)); expiry; the guard: a derived `from` or `to` needs `registry() ≠ 0` (`FEATURE_UNSUPPORTED`), an all-native transfer runs at `registry() == 0`; the simulation; the typed digest, computed locally. Tests: `ua_metatx_door_runs_an_eoa_at_registry_zero`, `ua_metatx_door_refuses_a_derived_side_at_registry_zero_by_name`. SPECIFIED: the registry-record read of a derived `from` (`from >> 160 ≠ 0`; [UA record cache](#ua-cache), `UA_NOT_REGISTERED`) and the local verify of cheap kinds ([NODE-GSP-15](gossip.md#NODE-GSP-15)) |
 | `POST /v1/ua/register {chain, entry, …args}` (the [CTR-UA-36](../contracts/accounts.md#CTR-UA-36) arguments as named fields, the shape of clientkeys `registrationArgs`: `{chain, entry, kind?, keyData? \| structure? \| key?, attrs: {pqzKey?: 0x…, pqzPopHash?: 0x…, kem?: {scheme: n, mlkemEk: 0x…, x25519: 0x…}, kemPkHash?: 0x…}, pop, pqzPop?: 0x…}`; the PQZ and KEM attributes only for a PQ holder, [CTR-UA-16](../contracts/accounts.md#CTR-UA-16), [CTR-UA-32](../contracts/accounts.md#CTR-UA-32); `pqzPop` may be omitted and given later by a `storePqzPop` call job) | `call` job to `chain.ua_registry` ([NODE-GW-03](#NODE-GW-03)) with the entry's selector; a PQ registration whose full-call estimate exceeds min(block gas limit, relayer cap) is relayed split: `register` without the proof, then `storePqzPop` | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); the node recomputes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)` and the KEM record hash and verifies the PoP of cheap kinds over the portable `registrationDigest` ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07): no `chain_uid` in it); it never verifies `R_REG` locally (simulation does); body limit 160 KiB; per-chain registration quota |
-| `GET /v1/intents/{intent_id}` | the `~gateway` job: `{"intent_id", "state", "consumed_kind"?, "tx_hash"?, "updated_at"}` | **only for gateway-origin rows**: rows from peers or from the job API (incl. private-chain intents) answer 404, the same as unknown or expired ids |
+| `GET /v1/intents/{intent_id}` (BUILT for `/v1/ops` rows, plan T28; `consumed_kind` SPECIFIED) | the `~gateway` job: `{"intent_id", "state", "consumed_kind"?, "tx_hash"?, "updated_at"}` | **only for gateway-origin rows**: rows from peers or from the job API (incl. private-chain intents) answer 404, the same as unknown or expired ids |
 | `POST /v1/dex/orders`, `…/cancel`, `…/cancel-all`; `GET /v1/dex/{markets,depth,trades,ticker,orders}` (`GET /v1/dex/orders?maker=`), `GET /v1/dex/exchanges/{ref}` (SPECIFIED) | [dex-venue.md#routes](dex-venue.md#routes) | managed markets add `NOT_ELIGIBLE {reason}`, `UNBOUND_FORBIDDEN`, `FEE_FORBIDDEN`, `PAUSED`, `ATTESTATION_SHORTER`; mesh `route_order` ⇒ `MANAGED_LOCAL` ([dex-venue.md#managed-markets](dex-venue.md#managed-markets)) |
 | `GET /v1/dex/depth?scope=network`, `GET /v1/dex/homes` | network depth and DEX homes ([dex-venue.md#gossip](dex-venue.md#gossip)) | — |
 
-`POST /v1/ops` (six non-EVM families):
+`POST /v1/ops` (the non-EVM families; BUILT, plan T28: `scaas-node/src/gateway.rs` `post_ops`, the lanes' queue
+`external_pull::OwnQueue`; tests `ops_accept_checks_in_order_each_by_its_code`, `a_client_digest_other_than_the_nodes_is_bad_payload`,
+`the_build_refusal_is_named_and_a_transport_failure_is_503`, `ton_is_refused_by_name`, `ops_body_cap_and_depth`,
+`the_own_queue_hands_out_claims_and_moves_gateway_rows`, `a_gateway_job_runs_on_the_lane_through_the_store`; UNAUDITED):
 
 ```json
 {"chain": "sui:testnet",
@@ -156,9 +160,23 @@ In words:
 9. INSERT a `signed_op` job in `~gateway`, origin key = digest (G2 durable).
 
 Soroban: accepted with its named `payload` ([job-api.md](job-api.md#soroban-signed-op)), never published on the mesh ([NODE-MESH-07](mesh.md#NODE-MESH-07)). GRAM: `attach_nanoton` is the
-node's. Limits: 64 KiB body, the per-chain breaker and the gateway concurrency limit. `/v1/ops` needs lanes that lease
-from the store: before that, the built gateway's in-memory `mpsc` feeds only the EVM submitter (Transitional (BUILT):
-door A work is not journaled and has no digest guard until it becomes a `~gateway` job).
+node's. Limits: 64 KiB body (a body nested past serde_json's depth limit is refused at parse), the per-chain breaker
+(`BREAKER_OPEN`) and the gateway concurrency limit. Errors follow [NODE-GW-06](#NODE-GW-06) (`{error, code, detail}`).
+
+As built (plan T28): the chain is the family's chain key (`sui:testnet`); Hedera is not served here (its EVM side is
+`/v1/op`'s). **GRAM is refused by name**, `FAMILY_NOT_SUPPORTED`, before any other check, until the node half of the
+forward cap is in code ([NET-TON-14](../networks/ton.md#NET-TON-14), blocking). Step 3's digest is the family adapter's
+(`ChainAdapter::digest`): Soroban computes its own op digest; the other families take the op's `digest` as their lanes do, so
+an op without one is `BAD_PAYLOAD` (the node's own digest for them is SPECIFIED). Step 4 reads the chain's registered tokens
+in the family's canonical form (refreshed every 30 s; none while the chain is paused). Steps 6–8 are the lane's own build on
+lane 0 (build and simulation, as the lane runs it again at lease): a refusal starting `BAD_SIGNATURE`, `RELAYER_NOT_OURS`
+or `TOKEN_NOT_SERVED` keeps that code, any other is `SIMULATION_REVERT` (422), an RPC failure `RPC_UNAVAILABLE` (503). Step
+9 inserts the `signed_op` row in `~gateway` (origin `gateway/gateway/<digest>`, `bus_scope = restricted`); a second
+submission of the same op answers `200` with the stored state. The family's lanes take these rows through the same calls as
+the pull path (poll, claim = the store's `queued → leased` CAS by the lane's label, report = the store's transition, restart
+recovery from the lane's live rows); on the lane a row's job id is `-uid`. The EVM doors (`/v1/op`, `/v1/ua-metatx`) still
+feed the EVM submitter's in-memory `mpsc` (Transitional (BUILT): that work is not journaled and has no digest guard until it
+becomes a `~gateway` job).
 
 <a id="ua-register"></a><a id="NODE-GW-03"></a>**NODE-GW-03** — **Gateway `call` jobs exist only for the UA
 registry's writes.** `POST /v1/op` is no such door: it takes a registered token's signed `mtx*` entries only (typed-signing N1). Gateway `call` jobs in `~gateway` go only to the chain's `ua_registry` (node config `[[chains]] ua_registry`), for the

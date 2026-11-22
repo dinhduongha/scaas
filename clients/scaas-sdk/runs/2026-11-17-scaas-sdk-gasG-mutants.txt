@@ -1,11 +1,11 @@
-# gasG mutants at commit b0c917a2c (name | outcome | test); run in four parts, merged
+# gasG mutants (name | outcome | commit | test | first failure line)
 G1: the attached owner ignored (signer only, as before) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_ua_extra_for_a_derived_signer
 G1: an attached signature of unknown kind read as native | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_ua_extra_for_a_derived_signer
 G1: a native attached owner counted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_ua_extra_for_a_derived_signer
 G1: added twice when both are derived | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_ua_extra_for_a_derived_signer
 G3: nothing recomputed | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib signed_gas_is_recomputed_from_the_signature
 G3: lowered when the signature is shorter than counted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib signed_gas_counts_the_real_signature
-G3: the verify row's sig_bytes not counted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib signed_gas_is_recomputed_from_the_signature
+G3: the verify row's sig_bytes not counted | killed | e2d9383a5 dirty | ../../scripts/capped cargo test --locked --offline -j2 --lib signed_gas_is_recomputed_from_the_signature | panicked at src/op/tests.rs:2586:9:
 G3: an app's figure read as counting sig_bytes | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib signed_gas_counts_the_real_signature
 G3: the transaction signed with the old quote | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib signed_gas_is_recomputed_from_the_signature
 G3: max_gas not checked by name | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib signed_gas_is_recomputed_from_the_signature
@@ -16,4 +16,4 @@ G3 ua-rs: the cap off by one | killed | ../../scripts/capped cargo test --locked
 G3 ua-rs: refused without its name | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_webauthn sign_json_refusals
 G3 ua-rs: an external device's assertion uncapped | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_external an_external_assertion_above_the_cap_is_refused
 G3 clientkeys: the cap removed | killed | ../../scripts/capped node --test test/ua-wallet.test.js
-17 mutants, 17 killed, 0 survived, 0 not loaded
+17 mutants, 17 killed, 0 survived, 0 not loaded, 0 other failure

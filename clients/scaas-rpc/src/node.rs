@@ -68,6 +68,15 @@ impl std::fmt::Debug for NodeClient {
     }
 }
 
+/// `{"chain": <key>, "op": <op>}`, the op serialised once.
+fn ops_body(chain: &str, op: &Value) -> Result<Vec<u8>, RpcError> {
+    object(op, "op")?;
+    Ok(
+        serde_json::to_vec(&serde_json::json!({"chain": chain, "op": op}))
+            .expect("a Value serialises"),
+    )
+}
+
 fn object(v: &Value, what: &str) -> Result<(), RpcError> {
     if v.is_object() {
         Ok(())
@@ -102,6 +111,17 @@ impl NodeClient {
         )
         .into_bytes();
         self.submit_at(i, "/v1/op", body).await
+    }
+
+    /// `POST /v1/ops {chain, op}` to gateway `i` (plan T28): `chain` a family chain key (`sui:testnet`), `op` the family's
+    /// `signed_op` payload, serialised once, byte for byte.
+    pub async fn submit_ops_at(
+        &self,
+        i: usize,
+        chain: &str,
+        op: &Value,
+    ) -> Result<NodeOutcome, RpcError> {
+        self.submit_at(i, "/v1/ops", ops_body(chain, op)?).await
     }
 
     /// `POST /v1/ua-metatx` to gateway `i`.
@@ -239,7 +259,7 @@ impl NodeClient {
                 // any other 2xx JSON is no answer of the node's
                 Ok((status, v))
                     if (200..300).contains(&status)
-                        && matches!(route, "/v1/op" | "/v1/ua-metatx")
+                        && matches!(route, "/v1/op" | "/v1/ops" | "/v1/ua-metatx")
                         && !v["status"].is_string() =>
                 {
                     NodeOutcome::Unreachable(EndpointFailure::new(
@@ -395,6 +415,17 @@ impl NodeClient {
         )
         .into_bytes();
         self.fan(fanout, "/v1/op", body).await
+    }
+
+    /// `POST /v1/ops {chain, op}` (plan T28): the same bytes to the gateways `fanout` selects, concurrently, merged as
+    /// `submit_op`'s (CLI-RPC-08).
+    pub async fn submit_ops(
+        &self,
+        chain: &str,
+        op: &Value,
+        fanout: Fanout,
+    ) -> Result<SubmitOutcome, RpcError> {
+        self.fan(fanout, "/v1/ops", ops_body(chain, op)?).await
     }
 
     /// `POST /v1/ua-metatx`: the same bytes to the gateways `fanout` selects.

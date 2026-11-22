@@ -22,7 +22,7 @@ MUTANTS = [
     # the quote: gas + per_item × count
     ("base per_item not added", [(G, "        g = g.saturating_add(items(&b.per_item, reg, op.count)?);\n", "")], ADD),
     ("verify per_item not added", [(G, "                .saturating_add(items(&v.per_item)?),\n", ",\n")], ADD),
-    ("the signer's verify row reads no count", [(G, "signer, true, &own);", "signer, true, &attached);")], ADD),
+    ("the signer's verify row reads no count", [(G, "signer, op.registry, true, &own);", "signer, op.registry, true, &attached);")], ADD),
     ("an attached signature's count read as the operation's",
      [(G, "    let attached = |p: &Option<GasPerItem>| items(p, false, &|_| None);", "    let attached = |p: &Option<GasPerItem>| items(p, false, op.count);")],
      ADD),

@@ -1,0 +1,12 @@
+# t24algorand mutants (name | outcome | commit | test | first failure line)
+read the second endpoint first | killed | ab9fa3041 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features algorand --test algorand -- --exact algorand_two_endpoints_one_down | panicked at tests/algorand.rs:376:49:
+a box value of another length read | killed | ab9fa3041 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features algorand --test algorand -- --exact algorand_malformed_answers_are_refused | panicked at tests/algorand.rs:328:9:
+an account amount as a string read | killed | ab9fa3041 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features algorand --test algorand -- --exact algorand_malformed_answers_are_refused | panicked at tests/algorand.rs:328:9:
+an absent box an error | killed | ab9fa3041 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features algorand --test algorand -- --exact algorand_ua_id_reads_the_u_box | panicked at tests/algorand.rs:264:10:
+answers at two rounds accepted | killed | ab9fa3041 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features algorand --test algorand -- --exact algorand_answers_at_two_rounds_are_retried_once | panicked at tests/algorand.rs:367:5:
+no second pass | killed | ab9fa3041 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features algorand --test algorand -- --exact algorand_answers_at_two_rounds_are_retried_once | panicked at tests/algorand.rs:358:42:
+strict majority: another endpoint's round not compared | killed | ab9fa3041 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features algorand --test algorand -- --exact algorand_strict_majority_agrees_at_one_round | panicked at tests/algorand.rs:425:5:
+an app id with a leading zero read | killed | ab9fa3041 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features algorand --test algorand -- --exact algorand_holder_and_token_forms | panicked at tests/algorand.rs:296:9:
+app id 0 read | killed | ab9fa3041 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features algorand --test algorand -- --exact algorand_holder_and_token_forms | panicked at tests/algorand.rs:296:9:
+the genesis as hex, not base64 | killed | ab9fa3041 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features algorand --test algorand -- --exact algorand_balances_at_one_round | panicked at tests/algorand.rs:237:42:
+10 mutants, 10 killed, 0 survived, 0 not loaded, 0 other failure

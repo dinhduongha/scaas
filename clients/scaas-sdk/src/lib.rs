@@ -31,11 +31,15 @@ macro_rules! frb_hint {
 
 #[cfg(not(feature = "vault"))]
 compile_error!("scaas-sdk needs the feature `vault` (every module does)");
+#[cfg(all(feature = "vectors", not(debug_assertions)))]
+compile_error!("scaas-sdk's feature `vectors` is test-only: never in a release build");
 
 #[cfg(feature = "account")]
 pub mod account;
 #[cfg(feature = "admin")]
 pub mod admin;
+#[cfg(feature = "app-core")]
+pub mod app_core;
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub mod confidential;
 pub mod config;
@@ -51,6 +55,10 @@ pub mod line;
 #[cfg(feature = "wallet")]
 pub mod op;
 pub mod platform;
+#[cfg(feature = "pqchat-records")]
+pub mod pqchat_keys;
+#[cfg(feature = "pqchat-records")]
+pub mod pqchat_records;
 pub mod surface;
 pub(crate) mod text;
 pub mod vault;
@@ -60,9 +68,9 @@ pub mod wallet;
 mod watch;
 
 pub use config::{
-    ChainProfile, Clock, EndpointConfig, Family, Finality, GasBase, GasLine, GasPerByte,
-    GasPerItem, GasRows, GasTable, GasVerify, Limits, ListedDex, ListedToken, PositionReader,
-    RuntimeChoice, SdkConfig,
+    ChainProfile, Clock, EndpointConfig, Family, FamilyParams, Finality, GasBase, GasLine,
+    GasPerByte, GasPerItem, GasRows, GasTable, GasVerify, L1Fee, Limits, ListedDex, ListedToken,
+    PositionReader, RuntimeChoice, SdkConfig,
 };
 pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};
@@ -107,6 +115,12 @@ pub mod bits {
     pub const RAW_NATIVE: u64 = 1 << 23;
     pub const CLASSICAL_ROOTS: u64 = 1 << 24;
     pub const OPAQUE_CALLS: u64 = 1 << 25;
+    pub const APP_CORE: u64 = 1 << 26;
+    pub const PQCHAT_RECORDS: u64 = 1 << 27;
+    /// test-only entry points (pqchat-core T1): never in a release build nor a binding
+    pub const VECTORS: u64 = 1 << 28;
+    /// T32's read part: native DOT on Polkadot Hub's Substrate side
+    pub const SUBSTRATE: u64 = 1 << 29;
 }
 
 /// The bits of this build's features.
@@ -151,6 +165,10 @@ pub fn features() -> u64 {
         (cfg!(feature = "raw-native"), RAW_NATIVE),
         (cfg!(feature = "classical-roots"), CLASSICAL_ROOTS),
         (cfg!(feature = "opaque-calls"), OPAQUE_CALLS),
+        (cfg!(feature = "app-core"), APP_CORE),
+        (cfg!(feature = "pqchat-records"), PQCHAT_RECORDS),
+        (cfg!(feature = "vectors"), VECTORS),
+        (cfg!(feature = "substrate"), SUBSTRATE),
     ];
     on.iter()
         .filter(|(enabled, _)| *enabled)
@@ -169,6 +187,35 @@ pub(crate) struct Chain {
     /// the profile's PQZ verifiers (spec §9.3; owner 2026-11-19, T16-a)
     #[cfg(feature = "pqz")]
     pub(crate) verifiers: Option<scaas_rpc::node::VerifierClient>,
+    /// a NEAR profile's family client (plan T24), named by its genesis hash: `chain_uid`'s 32 bytes in base58
+    #[cfg(all(feature = "wallet", feature = "near"))]
+    pub(crate) near: Option<Arc<scaas_rpc::near::Near>>,
+    /// an Algorand profile's family client (plan T24), named by its genesis hash: `chain_uid`'s 32 bytes in base64
+    #[cfg(all(feature = "wallet", feature = "algorand"))]
+    pub(crate) algorand: Option<Arc<scaas_rpc::algorand::Algorand>>,
+    /// a Cosmos profile's family client (plan T24), named by its params' chain id
+    #[cfg(all(feature = "wallet", feature = "cosmos"))]
+    pub(crate) cosmos: Option<Arc<scaas_rpc::cosmos::Cosmos>>,
+    /// an Aptos profile's family client (plan T24), named by its params' chain id
+    #[cfg(all(feature = "wallet", feature = "aptos"))]
+    pub(crate) aptos: Option<Arc<scaas_rpc::aptos::Aptos>>,
+    /// a Solana profile's family client (plan T24.solana), named by its genesis hash (`chain_uid`'s 32 bytes in base58), and
+    /// its params' program
+    #[cfg(all(feature = "wallet", feature = "solana"))]
+    pub(crate) solana: Option<(Arc<scaas_rpc::solana::Solana>, [u8; 32])>,
+    /// a Soroban profile's family client (plan T24.soroban), named by its params' passphrase, and the XLM SAC's contract id
+    #[cfg(all(feature = "wallet", feature = "soroban"))]
+    pub(crate) soroban: Option<(Arc<scaas_rpc::soroban::Soroban>, [u8; 32])>,
+    /// a Sui profile's GraphQL client (plan T24.sui), named by `chain_uid` (the genesis checkpoint's digest) in base58
+    #[cfg(all(feature = "wallet", feature = "sui"))]
+    pub(crate) sui: Option<Arc<scaas_rpc::sui::SuiGraphql>>,
+    /// a TON profile's family client (plan T24.ton): its TON Center endpoints (`rpc`); endpoint 0 is this network by the
+    /// profile constant, the later ones by its masterchain block's root hash (scaas-rpc T24.6)
+    #[cfg(all(feature = "wallet", feature = "ton"))]
+    pub(crate) ton: Option<Arc<scaas_rpc::ton::Ton>>,
+    /// a profile's Substrate side (T32's read part: Polkadot Hub), named by its params' genesis, and its SS58 prefix
+    #[cfg(all(feature = "wallet", feature = "substrate"))]
+    pub(crate) substrate: Option<(Arc<scaas_rpc::substrate::Substrate>, u16)>,
 }
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
@@ -272,6 +319,20 @@ impl Sdk {
             if !keys.insert(p.key.clone()) {
                 return Err(SdkError::Argument);
             }
+            if p.family_params.as_ref().is_some_and(|f| !f.fits(p.family)) {
+                return Err(SdkError::Argument);
+            }
+            // an L1 data fee model is an EVM chain's (plan T38)
+            if p.l1_fee.is_some() && p.family != Family::Evm {
+                return Err(SdkError::Argument);
+            }
+            // a disabled kind is a UA kind's name or `pqz` (owner 2026-11-22)
+            if p.disabled_kinds
+                .iter()
+                .any(|k| k != "pqz" && !scaas_ua::KINDS.iter().any(|x| x.name == k))
+            {
+                return Err(SdkError::Argument);
+            }
             // the DEX list and the wrapper list hold addresses (CLI-SGN-35)
             let readers = p.dexes.iter().flat_map(|d| {
                 d.position_readers
@@ -302,6 +363,145 @@ impl Sdk {
                 None
             } else {
                 Some(list(&p.gateways, scaas_rpc::Policy::Failover)?)
+            };
+            #[cfg(all(feature = "wallet", feature = "near"))]
+            let near = match p.family {
+                Family::Near => {
+                    let uid = op::unhex(&p.chain_uid.to_ascii_lowercase())?;
+                    let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
+                    Some(Arc::new(scaas_rpc::near::Near::new(
+                        client,
+                        &bs58::encode(uid).into_string(),
+                    )))
+                }
+                _ => None,
+            };
+            #[cfg(all(feature = "wallet", feature = "algorand"))]
+            let algorand = match p.family {
+                Family::Algorand => {
+                    use base64::Engine;
+                    let uid = op::unhex(&p.chain_uid.to_ascii_lowercase())?;
+                    let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
+                    Some(Arc::new(scaas_rpc::algorand::Algorand::new(
+                        client,
+                        &base64::engine::general_purpose::STANDARD.encode(uid),
+                    )))
+                }
+                _ => None,
+            };
+            // a Cosmos profile's family client (plan T24.cosmos): its CometBFT endpoints (`rpc`) and its REST gateways, named by
+            // the chain id of its params
+            #[cfg(all(feature = "wallet", feature = "cosmos"))]
+            let cosmos = match &p.family_params {
+                Some(FamilyParams::Cosmos {
+                    chain_id,
+                    rest,
+                    rest_policy,
+                    ..
+                }) => Some(Arc::new(scaas_rpc::cosmos::Cosmos::new(
+                    scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?,
+                    scaas_rpc::family::Client::new(list(rest, *rest_policy)?)?,
+                    chain_id,
+                ))),
+                _ => None,
+            };
+            // an Aptos profile's family client (plan T24.aptos): its REST endpoints (`rpc`), named by the chain id of its
+            // params; the reads use no Indexer API, so the indexer slot holds the same list, never asked
+            #[cfg(all(feature = "wallet", feature = "aptos"))]
+            let aptos = match &p.family_params {
+                Some(FamilyParams::Aptos { chain_id, .. }) => {
+                    Some(Arc::new(scaas_rpc::aptos::Aptos::new(
+                        scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?,
+                        scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?,
+                        *chain_id,
+                    )))
+                }
+                _ => None,
+            };
+            // a Solana profile's family client (plan T24.solana): its JSON-RPC endpoints (`rpc`), named by the genesis hash;
+            // the params' program decoded to its 32 bytes, else `Argument`
+            #[cfg(all(feature = "wallet", feature = "solana"))]
+            let solana = match &p.family_params {
+                Some(FamilyParams::Solana { program }) => {
+                    let program: [u8; 32] = bs58::decode(program)
+                        .into_vec()
+                        .ok()
+                        .and_then(|v| v.try_into().ok())
+                        .ok_or(SdkError::Argument)?;
+                    let genesis =
+                        bs58::encode(op::unhex(&p.chain_uid.to_ascii_lowercase())?).into_string();
+                    let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
+                    Some((
+                        Arc::new(scaas_rpc::solana::Solana::new(client, &genesis)),
+                        program,
+                    ))
+                }
+                _ => None,
+            };
+            // a Soroban profile's family client (plan T24.soroban): its RPC endpoints (`rpc`), named by the params' passphrase,
+            // whose SHA-256 (`ua-rs`'s) must be `chain_uid`; the XLM SAC decoded from its strkey, else `Argument`
+            #[cfg(all(feature = "wallet", feature = "soroban"))]
+            let soroban = match &p.family_params {
+                Some(FamilyParams::Soroban {
+                    passphrase,
+                    xlm_sac,
+                }) => {
+                    let uid = op::unhex(&p.chain_uid.to_ascii_lowercase())?;
+                    if scaas_ua::sha256(passphrase.as_bytes()).as_slice() != uid.as_slice() {
+                        return Err(SdkError::Argument);
+                    }
+                    let sac = match wallet::families::soroban::holder(xlm_sac) {
+                        Some(wallet::families::soroban::Holder::Contract(k)) => k,
+                        _ => return Err(SdkError::Argument),
+                    };
+                    let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
+                    Some((
+                        Arc::new(scaas_rpc::soroban::Soroban::new(client, passphrase)),
+                        sac,
+                    ))
+                }
+                _ => None,
+            };
+            // a Sui profile's GraphQL client (plan T24.sui): its params' endpoints, pinned to `chain_uid` in base58
+            #[cfg(all(feature = "wallet", feature = "sui"))]
+            let sui = match &p.family_params {
+                Some(FamilyParams::Sui {
+                    graphql,
+                    graphql_policy,
+                }) => {
+                    let uid =
+                        bs58::encode(op::unhex(&p.chain_uid.to_ascii_lowercase())?).into_string();
+                    Some(Arc::new(scaas_rpc::sui::SuiGraphql::pinned(
+                        scaas_rpc::family::Client::new(list(graphql, *graphql_policy)?)?,
+                        Some(&uid),
+                    )))
+                }
+                _ => None,
+            };
+            // a TON profile's family client (plan T24.ton): its TON Center endpoints (`rpc`)
+            #[cfg(all(feature = "wallet", feature = "ton"))]
+            let ton = match p.family {
+                Family::Ton => Some(Arc::new(scaas_rpc::ton::Ton::new(
+                    scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?,
+                ))),
+                _ => None,
+            };
+            // a profile's Substrate side (T32's read part): its params' endpoints, named by the params' genesis
+            #[cfg(all(feature = "wallet", feature = "substrate"))]
+            let substrate = match &p.family_params {
+                Some(FamilyParams::Substrate {
+                    rpc,
+                    rpc_policy,
+                    genesis,
+                    ss58_prefix,
+                }) => Some((
+                    Arc::new(scaas_rpc::substrate::Substrate::new(
+                        scaas_rpc::family::Client::new(list(rpc, *rpc_policy)?)?,
+                        genesis,
+                    )),
+                    *ss58_prefix,
+                )),
+                _ => None,
             };
             #[cfg(any(feature = "account", feature = "wallet"))]
             let pool = match (p.family, p.chain_id) {
@@ -334,6 +534,24 @@ impl Sdk {
                 gateways,
                 #[cfg(feature = "pqz")]
                 verifiers,
+                #[cfg(all(feature = "wallet", feature = "near"))]
+                near,
+                #[cfg(all(feature = "wallet", feature = "algorand"))]
+                algorand,
+                #[cfg(all(feature = "wallet", feature = "cosmos"))]
+                cosmos,
+                #[cfg(all(feature = "wallet", feature = "aptos"))]
+                aptos,
+                #[cfg(all(feature = "wallet", feature = "solana"))]
+                solana,
+                #[cfg(all(feature = "wallet", feature = "soroban"))]
+                soroban,
+                #[cfg(all(feature = "wallet", feature = "sui"))]
+                sui,
+                #[cfg(all(feature = "wallet", feature = "ton"))]
+                ton,
+                #[cfg(all(feature = "wallet", feature = "substrate"))]
+                substrate,
             });
         }
         let rt = runtime(config.runtime)?;
@@ -499,6 +717,15 @@ impl Sdk {
             .find(|c| c.profile.key == chain)
             .ok_or(SdkError::ChainUnknown)?;
         c.verifiers.clone().ok_or(SdkError::VerdictRefused)
+    }
+
+    /// The chain of profile `chain` (`ChainUnknown`).
+    #[cfg(feature = "wallet")]
+    pub(crate) fn chain(&self, chain: &str) -> Result<&Chain, SdkError> {
+        self.chains
+            .iter()
+            .find(|c| c.profile.key == chain)
+            .ok_or(SdkError::ChainUnknown)
     }
 
     /// An EVM chain's profile, chain id and the session's pool (`ChainUnknown`; `Argument`: not an EVM profile with a chain id).

@@ -13,7 +13,8 @@ use scaas_rpc::evm::{EvmPool, SimError};
 
 /// `restore`: seed `seed` on chain `chain` (a profile key): the UA keys `kinds` of wallet `account`, `gap` (at most 1024, the
 /// usual 20) past the last registered index.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Restore {
     pub seed: String,
     pub chain: String,

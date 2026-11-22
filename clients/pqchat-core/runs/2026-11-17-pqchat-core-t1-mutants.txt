@@ -1,0 +1,12 @@
+# t1 mutants (name | outcome | commit | test | first failure line)
+K2's info without kemPkHash | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys wraps_and_p14 | panicked at tests/pqchat_keys.rs:115:9:
+K2's AAD without keyId | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys wraps_and_p14 | panicked at tests/pqchat_keys.rs:115:9:
+K3 with a salt | killed | 376af4a1a | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys chains_and_the_far_read | panicked at tests/pqchat_keys.rs:157:9:
+advance swapping the 0x01 and 0x02 messages | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys chains_and_the_far_read | panicked at tests/pqchat_keys.rs:161:13:
+S5 dropping the AAD | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys message_envelope_payload | panicked at tests/pqchat_keys.rs:279:5:
+the canonical check sorting by UTF-8 | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys canonical_json_rows | panicked at tests/pqchat_keys.rs:239:9:
+unpad accepting a non-zero fill | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys padding_rows_and_unpad_refusals | panicked at tests/pqchat_keys.rs:218:9:
+V2 without the members bound | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys bounded_decoders | panicked at tests/pqchat_keys.rs:523:5:
+the hint call accepting a chain position | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys refusals_one_change_at_a_time | panicked at tests/pqchat_keys.rs:368:5:
+the walk bound off by a factor | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys the_walk_bound | panicked at tests/pqchat_keys.rs:195:5:
+10 mutants, 10 killed, 0 survived, 0 not loaded, 0 other failure

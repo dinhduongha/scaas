@@ -52,7 +52,7 @@ MUTANTS = [
      U + "gas_table_extra_fields_parse"),
     # ruling 4: the second signature
     ("a known second signature ignored",
-     [(G, "Some(Some(k)) => verify_part(chain, opt_in, tables, k, false, &attached).map(|v| v.0),", "Some(Some(_)) => Some(0),")],
+     [(G, "Some(Some(k)) => {\n            verify_part(chain, opt_in, tables, k, op.registry, false, &attached).map(|v| v.0)\n        }", "Some(Some(_)) => Some(0),")],
      U + "gas_second_signature"),
     ("an unknown second signature: the cheapest",
      [(G, ".try_fold(0, |m, v| v.map(|v| m.max(v))),", ".try_fold(u64::MAX, |m, v| v.map(|v| m.min(v))),")],
@@ -77,7 +77,7 @@ MUTANTS = [
      U + "gas_execute_inner_call"),
     ("execute: the app figure as a total", [(G, "        _ if execute => None,\n", "")], U + "gas_execute_inner_call"),
     # item 6: the PQ verify rows
-    ("reference: a PQ verify row away from its measurement", [(R, "\"measured\": 4823423", "\"measured\": 4822985")],
+    ("reference: a PQ verify row away from its measurement", [(R, "\"measured\": 4823727", "\"measured\": 4823289")],
      U + "reference_rows_hold_their_sources"),
 ]
 

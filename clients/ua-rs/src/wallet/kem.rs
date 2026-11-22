@@ -123,7 +123,7 @@ fn combine(ss_m: &[u8], ss_x: &[u8; 32], e: &[u8; 32], pk_x: &[u8]) -> Zeroizing
     Zeroizing::new(h.finalize().into())
 }
 
-fn encaps(kem_pk: &[u8], m: &[u8; 32], e: &[u8; 32]) -> Result<Encapsulated> {
+pub(super) fn encaps(kem_pk: &[u8], m: &[u8; 32], e: &[u8; 32]) -> Result<Encapsulated> {
     if kem_pk.first() != Some(&1) || kem_pk.len() != KEM_PK_LEN {
         return Err(Error::KemCheck);
     }
