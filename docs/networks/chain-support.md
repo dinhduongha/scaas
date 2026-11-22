@@ -73,9 +73,9 @@ Status: SPECIFIED.
 | 10 | Arbitrum One (42161; Arbitrum Sepolia 421614) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | M T41.evm | B |
 | 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
 | 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | M T41.evm (EVM side; the native side's: P T41.hedera) | B (EVM side; native side: P T41.hedera read and ed25519 sends, gRPC-web by default, `tonic` under `fam-hedera-grpc`, owner Q-R5) |
-| 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | P CA-T3 | P CA-T3 | B | P CA-T2 | B | P CA-T2 | M ARCH-POS-18 | B‡ | B‡ | M T41.evm | P CA-T2 |
-| 14 | Polkadot Hub (EVM and Substrate sides; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 | M T41.evm | P T41.dot (read B; the sends, owner 2026-11-22) |
-| 15 | Moonbeam (Moonbase Alpha) | B‡ | P CA-T3, T15 | P CA-T3 | B | P CA-T11 | B | P CA-T11 | B‡ | P CA-T15 | P CA-T15 | M T41.evm | P CA-T11 |
+| 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | B‡ (`mldsa44`, `mldsa65`, `mldsa87` above Fuji's 32 M block: to the owner, none disabled) | B‡ (above Fuji's block: to the owner) | M T41.evm | B |
+| 14 | Polkadot Hub (EVM and Substrate sides; Paseo, Westend) | B‡ | P CA-T14 | B | B | B (`max_tx_gas`: P CA-T14) | B | B (`max_tx_gas`: P CA-T14) | M ARCH-POS-18 (no EIP-2537, CA-T12) | P CA-T13 | P CA-T14 | M T41.evm | P T41.dot (read B; the sends, owner 2026-11-22) |
+| 15 | Moonbeam (Moonbase Alpha) | B‡ | B | B | B | B | B | B | B‡ | B‡ (T15 checks its storage gas) | B‡ (T15) | M T41.evm | B |
 | 16 | NEAR (SCaaS family) | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-near` | M family round | M T41.near | M T41.near (read B) |
 | 17 | Algorand | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-algorand` | M family round | M T41.algorand | M T41.algorand (read B) |
 | 18 | Cosmos (CosmWasm) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.cosmos | M T41.cosmos (read B) |
@@ -119,8 +119,16 @@ Status: SPECIFIED.
   contract that needs none of them can deploy. Classical Zether needs EIP-2537 ([CTR-ZTH-32](../contracts/zether.md#CTR-ZTH-32)),
   PQZ is refused there ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)) and `mldsa87` does not fit the 10.5 M verify
   budget: none of the three is a confirmed disablement under ARCH-POS-18, so each waits for its numbers.
-- **Avalanche, Polkadot Hub, Moonbeam (rows 13–15).** The chains-arweave plan's profile, probe and node lane tasks; Avalanche's
-  Zether needs a software BLS12-381 path (no EIP-2537), measured first; Hub's precompiles are unknown until its probes.
+- **Avalanche, Polkadot Hub, Moonbeam (rows 13–15).** Draft profiles (chains-arweave T2, T11; `src/chains/<key>/`) with their
+  `scaas-rpc` and SDK profile tests, the node's lanes and indexer audited (T3: `max_inflight` and the in-flight cost alert
+  built; the rest held), and one sample of every probe (T12; `clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt`).
+  Relay, Index, rpc and SDK are the chain-neutral EVM code on these profiles, tested against fakes answering each profile's
+  identity, no deploy: every profile stays `draft` until NET-EVM-19's windows pass and the owner decides the failures: H1 on Hub
+  (one public eth-rpc provider; no block 0 on mainnet and Paseo, so each endpoint needs a checkpoint), H2 on Moonbeam (a
+  made-up block hash answered), Westend Hub's eth-rpc refusing `eth_call`. Avalanche and Hub have no EIP-2537: Zether needs
+  the software BLS12-381 path (ARCH-POS-18). Hub's gas is no Ethereum gas: its relay cap, PQ and PQZ cells wait for the Paseo
+  measurement (T13, a deploy, on the owner's word) and T14. Fuji's 32 M block is below `mldsa44`, `mldsa65`, `mldsa87` and PQZ;
+  nothing is disabled without the owner.
 - **SCaaS families (rows 16–23).** The node relays and indexes all eight; the public gateway door for them (`POST /v1/ops`) is SDK
   plan T28. The SDK reads balances on all eight (plan T24; TON last, T24.ton); its cell stays `M` for the writes (T28, T29). `ua-rs` signs NEAR's and Algorand's operations; the other six families' envelopes are SDK plan T27. TON's paths other
   than the job API's pull path stay blocked until the forward-TON cap lands ([NET-TON-14](ton.md#NET-TON-14)).

@@ -193,18 +193,38 @@ that `arbundles` builds differently from ours or refuses (type 3's `v` included)
 - [ ] Profiles seeded `draft`; the SDK's profile data gains both with `chain_uid` and chain id.
 - Mutants: the identity check on chain id only; the not-final label dropped.
 - Gates: `rpc-test`, `rpc-wasm`, `sdk-test`, `docs`.
+- **Done (2026-11-22, BUILT on `chains-arweave`):** `src/chains/avalanche-{mainnet,testnet}/{profile.json,README.md}` in the SDK
+  plan T40 format (`finality` `tag`, `txType` 2, `l1Fee` none, `eip2537` false, `disabledKinds` none), from T12's probes; both
+  keys in `clients/scaas-rpc/tests/evm_profiles.rs` (the 43114 / 43113 pair dropped both ways, `finalized` pinned by hash, and
+  `a_log_read_above_finalized_is_not_final_and_gas_is_the_receipts`: the new `EvmPool::logs_range_labelled`, final only at or
+  below the answering endpoint's `finalized`; the receipt's gas, never the header's) and in
+  `clients/scaas-sdk/tests/evm_profiles.rs`; the node's commented rows. **Misfit, not disabled** (no owner ruling for
+  Avalanche): on Fuji's 32 M block, `mldsa44` 43,528,138, `mldsa65` 45,687,694, `mldsa87` 47,857,750 and PQZ ≈ 45,150,000
+  (Amsterdam figures × 1.05); C-Chain's 80 M fits every kind.
 
 ## T3 — Node lanes on an Avalanche-like chain
 
-**Files:** `scaas-node/src/` lanes and indexer, `scaas-node/tests/`.
+**Owner 2026-11-22** ("Đồng ý, thu gọn T3": agreed, slim down T3; owner: yes): audit first, writing nothing; a test only where no
+test covers a point the node meets; a real gap built as a profile value, never a chain-id branch, test first, with its mutant;
+no local chain and no e2e run for T3 itself; gates `node-test` and `docs`, plus `node-clippy` and `node-e2e` (10 threads) when node
+code changes. The original steps (a mock chain delaying receipts, written first) are replaced by the audit below.
 
-- [ ] Tests first, against a mock chain that accepts a transaction and delays its receipt: the job stays `Pending`, never `dead`; the
-  indexer reads logs only at or below its final block; the lane's gas limit is the estimate with its margin; a lane keeps at most 16
-  in flight on a profile that sets it; the balance alert uses gas limit × worst-case price + value; the deploy gate reads the live
-  block cap.
-- [ ] Implement as profile values, never as a chain-id branch (one rule on every chain).
-- Mutants: `dead` on a missing receipt; the in-flight cap ignored; a fixed gas padding.
-- Gates: `node-test`, `docs`.
+**Files:** `scaas-node/src/{submit,config,breaker}.rs`, `scaas-node/node.example.toml`, `docs/node/submit-lanes.md`.
+
+**Audit** (2026-11-22, at the merge of `origin/main` 18bdfa9b5; lines as of the T3 commit):
+
+| Point | In code | Test that covers it | Gap |
+|---|---|---|---|
+| (a) a delayed receipt stays `Pending`, never `dead` | `submit.rs:1693` (`track`: no receipt ⇒ the nonce stays in flight, bumped after `stuck_after_secs`; `dead` only from a landed gap-fill or an expiry before sending) | `submit::tests::an_earlier_replaced_hash_that_mines_settles_the_nonce`, `own_rows_live_until_a_receipt` | none: BUILT |
+| (b) the indexer reads logs at or below the final block only | `indexer.rs:1151` (`safe_head` of `finality.rs:13`: under `tag` the `finalized` block, never above `latest`; no tag ⇒ waits) | `finality::tests::tag_mode_waits_without_a_finalized_block`, `ranges_are_contiguous_and_bounded` | none: BUILT |
+| (c) the lane gas limit is the estimate plus its margin | `guard.rs:1091` (`gas_limit`: estimate + 20 %, at least the ERC-1271 floor, at most the cap) | `guard::tests::gas_floor_and_settle_sizing`, `submit::tests::gas_follows_the_two_dimensional_model` | none: BUILT |
+| (d) a per-profile in-flight cap (16 where set) | none before T3 (NODE-LANE-24 PLANNED) | none | **gap, built:** `[[chains]] max_inflight` (`config.rs:375`, default 16, at least 1), `Submitter::room` (`submit.rs:1667`) gates `poll_outbox` and the gateway channel; test `submit::tests::a_lane_keeps_at_most_max_inflight_in_flight`, `config::tests::parses_with_defaults` |
+| (e) the balance alert is gas limit × worst-case price + value | the floor breaker used the operator's static `min_relayer_balance` only (`breaker.rs`) | `breaker::tests::balance_floor_per_lane` (the floor only) | **gap, built:** `Breaker::below_cost` (`breaker.rs:111`) warns when the balance is below Σ in-flight gas limit × max fee per gas (+ value: lane transactions carry none), `Submitter::inflight_cost` (`submit.rs:1659`) at each sample; an alert, the floor breaker unchanged; test `breaker::tests::balance_below_the_in_flight_cost_is_alerted` |
+| (f) the deploy gate reads the live block cap | `submit.rs:685`, `submit.rs:1506` (`guard::total_cap` of `guard.rs:773` over `Chain::block_gas`, `chain.rs:195`, read each time; regular gas also ≤ 2^24 before Amsterdam, the MD-5 rule of every chain); the contract deploy script's check (2) reads the live block (T4) | `submit::tests::gas_follows_the_two_dimensional_model` (`TX_EXCEEDS_CHAIN_LIMIT` at a 30 M block) | none: BUILT |
+
+- Mutants (`runs/2026-11-21-avax-dot-arweave-t3-mutants.txt`): `dead` on a missing receipt; the in-flight cap ignored; a fixed
+  gas padding; the cost alert dropped.
+- Gates: `node-test`, `node-clippy`, `node-e2e` (10 threads), `docs`.
 
 ## T4 — NET-EVM-18: the deploy checks
 
@@ -298,6 +318,12 @@ that `arbundles` builds differently from ours or refuses (type 3's `v` included)
 
 - [ ] Each row's block 0 hash read from two independent sources and equal; `network` per NET-EVM-13; seeded `draft`.
 - Gates: `deploy-py`, `sdk-test`, `docs`.
+- **Done (2026-11-22, BUILT on `chains-arweave`):** the five rows, `src/chains/<key>/{profile.json,README.md}` in the T40 format,
+  the node's commented rows, the keys in both profile tests. Controller calls (ARCH-POS-20 Change of 2026-11-22): Hub's eth-rpc
+  answers block 0 `null` on mainnet and Paseo, so their `chainUid` is the Substrate genesis hash (`chain_getBlockHash(0)` on two
+  Substrate providers, equal), as Westend Hub's eth-rpc answers block 0 with it; `moonbeam-mainnet`'s second source answered
+  only over plain HTTP through a third-party metered gateway (its TLS refused this client), named in the row's note. Owner
+  questions: below, T12.
 
 ## T12 — Probes H1–H8 on every new profile **[public reads]**
 
@@ -311,6 +337,14 @@ that `arbundles` builds differently from ours or refuses (type 3's `v` included)
 - [ ] One foreground sample per invocation (`--probe <H> --profile <key>`), appended to its log; the 24-h and 7-day windows are
   the owner's scheduler calling it; no background shell, no sleep loop. Each probe resumable; a failure stops the task (stop
   condition).
+- **Done (2026-11-22, one sample each; the 24-h and 7-day windows are the scheduler's, not run):** the SDK plan T40 runner
+  (`clients/scaas-rpc/runs/2026-11-22-evm-probes.py`, no second runner), every probe on the seven keys; summary rows in
+  `clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt` (`--summary` now keeps the rows of keys logged in another checkout).
+  Runner fixes, test first: `caps` asks `eth_call` without a sender (Hub refuses a named sender without gas × price, which read
+  as a 21,000 cap); a gateway's "not served" is no method (`l1fee`). **Failures (stop conditions, to the owner):** H1 on the three
+  Hub keys (one public eth-rpc provider each; mainnet and Paseo serve no block 0); H2 on both Moonbeam keys (a read pinned by a
+  made-up block hash is answered from an empty state, not refused); Westend Hub's eth-rpc refused every `eth_call` ("Metadata
+  error"), so H2, `fork`, `codesize`, `eip2537` and `caps` failed or are unread there. Avalanche passed H1, H2, H4 and H7.
 
 ## T13 — Hub weight-to-gas measurement on Paseo **[owner's word]**
 
