@@ -69,6 +69,8 @@ pub mod sign;
 #[cfg(not(feature = "vectors"))]
 mod sign;
 mod signer;
+#[cfg(feature = "fam-soroban")]
+pub mod soroban_tx;
 mod store;
 mod substrate;
 mod tx;

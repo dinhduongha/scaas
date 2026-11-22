@@ -476,3 +476,8 @@ required-features = ["fam-near", "fam-algorand"]
 [[test]]
 name = "app_core"
 required-features = ["app-core", "vectors"]
+
+# plan T27.soroban / T41.soroban: the op envelope and the native transaction against the clientkeys rows
+[[test]]
+name = "families_soroban"
+required-features = ["wallet", "fam-soroban"]
