@@ -113,8 +113,9 @@ empty-passphrase HKDF salt SHA-256 of its label and the numbers as 4-byte big-en
 biometrics only gate** (BUILT: plan T4, T7, `tests/vault.rs`, `passkey.rs`; UNAUDITED). A seed unlocks with its vault passphrase, its passkey's PRF output or a platform secret (the
 HMAC of a Keychain or Android Keystore key under a biometric access policy), the last two through vault v1's `prf` envelope. At unlock
 no public key of the unlock credential exists, so user verification is enforced by the authenticator (separate secrets with and
-without it) and by the AEAD (a wrong output is `VaultOpen`); an answer without an output is `AuthenticatorRefused` and the passphrase
-remains. Signing keys' assertions are checked in full by `ua-rs` ([CLI-UAL-16](ua-libraries.md#CLI-UAL-16)); the app's `Authenticator`
+without it) and by the AEAD (a wrong output is `VaultOpen`); an answer without an output, or with the 32 zero bytes the SDK lent
+(an output the app never wrote: a forgotten write, a copy call's refused write whose status was dropped; review T26 C-1,
+`an_output_never_written_is_refused`), is `AuthenticatorRefused`, nothing is sealed under it, and the passphrase remains. Signing keys' assertions are checked in full by `ua-rs` ([CLI-UAL-16](ua-libraries.md#CLI-UAL-16)); the app's `Authenticator`
 and `SecureStore` are never trusted for policy. The passkey RP ID is the deployment's, never a SCaaS constant
 ([CLI-APP-14](app.md#CLI-APP-14)): `SdkConfig.rp_id`, which `create_passkey_key(seed, name)` and every passkey signing read, never a
 parameter (owner 2026-11-19, T4; none configured: `AuthenticatorRefused`). Every change of a sealed record after unlock (the manifest, a backup generation) is re-sealed by

@@ -22,6 +22,9 @@ struct Fake {
     no_uv: AtomicBool,
     no_prf: AtomicBool,
     enrollment_changed: AtomicBool,
+    /// answers as if it wrote its output and leaves the SDK's secret as it was (review T26 C-1: a copy call's refused write
+    /// whose status the app dropped)
+    no_write: AtomicBool,
     /// every secret output written, to look for it elsewhere
     outputs: Mutex<Vec<[u8; 32]>>,
     /// the policy of each platform-secret call
@@ -30,6 +33,9 @@ struct Fake {
 
 impl Fake {
     fn write(&self, out: &SecretBytes, v: [u8; 32]) {
+        if self.no_write.load(Ordering::SeqCst) {
+            return;
+        }
         out.with_mut(|b| b.copy_from_slice(&v));
         self.outputs.lock().unwrap().push(v);
     }
@@ -187,6 +193,65 @@ async fn no_prf_is_refused() {
         "Ok",
         "the passphrase still opens"
     );
+}
+
+/// Review T26 C-1: an authenticator that answers `prf: true` (or a platform secret) without writing its output leaves the
+/// SDK's 32 zero bytes; nothing is sealed under them and no unlock is tried with them (`AuthenticatorRefused`, the keystore
+/// unchanged). The twin: the same calls with the output written succeed.
+#[tokio::test]
+async fn an_output_never_written_is_refused() {
+    let (s, m, f) = sdk().await;
+    let id = seed(&s).await;
+    let before = keystore_text(&m).await;
+    f.no_write.store(true, Ordering::SeqCst);
+    assert_eq!(
+        code(s.vault().enable_passkey_unlock(id.clone(), sec(PASS)).await),
+        "AuthenticatorRefused"
+    );
+    let policy = KeyPolicy {
+        biometry_current_set: true,
+        invalidated_by_enrollment: true,
+    };
+    assert_eq!(
+        code(
+            s.vault()
+                .enable_platform_unlock(id.clone(), sec(PASS), policy)
+                .await
+        ),
+        "AuthenticatorRefused"
+    );
+    assert_eq!(keystore_text(&m).await, before, "no envelope sealed");
+    // the twins: written, both enable and open
+    f.no_write.store(false, Ordering::SeqCst);
+    s.vault()
+        .enable_passkey_unlock(id.clone(), sec(PASS))
+        .await
+        .unwrap();
+    s.vault().lock(id.clone()).await;
+    f.no_write.store(true, Ordering::SeqCst);
+    assert_eq!(
+        code(s.vault().unlock(id.clone(), Unlock::Passkey).await),
+        "AuthenticatorRefused",
+        "an unwritten passkey output is not tried"
+    );
+    f.no_write.store(false, Ordering::SeqCst);
+    assert_eq!(
+        code(s.vault().unlock(id.clone(), Unlock::Passkey).await),
+        "Ok"
+    );
+    s.vault()
+        .enable_platform_unlock(id.clone(), sec(PASS), policy)
+        .await
+        .unwrap();
+    s.vault().lock(id.clone()).await;
+    f.no_write.store(true, Ordering::SeqCst);
+    assert_eq!(
+        code(s.vault().unlock(id.clone(), Unlock::Platform).await),
+        "AuthenticatorRefused",
+        "an unwritten platform secret is not tried"
+    );
+    f.no_write.store(false, Ordering::SeqCst);
+    assert_eq!(code(s.vault().unlock(id, Unlock::Platform).await), "Ok");
 }
 
 #[tokio::test]

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Passkey and platform unlock (spec §6.10, CLI-SDK-06): vault v1's PRF envelope on every vault of a seed, one credential and
 //! one per-seed salt, so one assertion (or one platform secret) opens them all. The output is written by the app's
-//! `Authenticator` into a `SecretBytes` the SDK passes in, and only reaches `scaas-ua`. An answer without a PRF output is
-//! `AuthenticatorRefused`; the passphrase still opens. Changes keep the data key (CLI-UAL-19): a passphrase change re-wraps the
+//! `Authenticator` into a `SecretBytes` the SDK passes in, and only reaches `scaas-ua`. An answer without a PRF output, or an
+//! output the app never wrote (still the 32 zero bytes lent), is `AuthenticatorRefused`; the passphrase still opens. Changes keep the data key (CLI-UAL-19): a passphrase change re-wraps the
 //! pin envelope, removing the PRF unlock drops the envelope; neither revokes an earlier copy.
 
 use super::keystore::SeedEntry;
@@ -26,6 +26,18 @@ pub(crate) fn unhex(s: &str) -> Option<Vec<u8>> {
         .step_by(2)
         .map(|i| s.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok()))
         .collect()
+}
+
+/// Review T26 C-1: the authenticator's output in `out`, refused (`AuthenticatorRefused`) when the app never wrote it. The SDK
+/// lends a fresh secret of 32 zero bytes; a PRF or platform secret of all zeros is one no write reached (a forgotten write, a
+/// copy call's refused write whose status was dropped, in any language), and sealing or opening under it would be a key of
+/// zeros. Read without an early exit.
+fn written(out: &SecretBytes) -> Result<(), SdkError> {
+    if out.with(|b| b.len() == 32 && b.iter().fold(0u8, |a, x| a | x) != 0) {
+        Ok(())
+    } else {
+        Err(SdkError::AuthenticatorRefused)
+    }
 }
 
 fn random32() -> Result<Vec<u8>, SdkError> {
@@ -98,6 +110,7 @@ impl Sdk {
                 .await
                 .map_err(|_| SdkError::AuthenticatorRefused)?;
         }
+        written(&out)?;
         Ok(Key::Prf(out))
     }
 
@@ -199,8 +212,8 @@ impl Sdk {
 
 impl Vault {
     /// Adds a passkey PRF envelope to every vault of the seed (one credential, one fresh per-seed salt, one assertion),
-    /// opened by the vault passphrase once. `AuthenticatorRefused` for no authenticator, no RP ID or an answer without a PRF
-    /// output (nothing written).
+    /// opened by the vault passphrase once. `AuthenticatorRefused` for no authenticator, no RP ID, an answer without a PRF
+    /// output or an output the app never wrote (nothing written to the keystore).
     pub async fn enable_passkey_unlock(
         &self,
         seed: String,
@@ -242,7 +255,7 @@ impl Vault {
     }
 
     /// Adds a platform-secret envelope (a Keychain / Android Keystore key under `policy`, research decision 8) to every vault of
-    /// the seed, opened by the vault passphrase once.
+    /// the seed, opened by the vault passphrase once. `AuthenticatorRefused` for a refusal or a secret the app never wrote.
     pub async fn enable_platform_unlock(
         &self,
         seed: String,
@@ -320,6 +333,7 @@ async fn enable(
     salt: Vec<u8>,
     pass: Arc<SecretBytes>,
 ) -> Result<(), SdkError> {
+    written(&out)?;
     let p2 = pass.clone();
     sdk.rewrite_vaults(seed, Some(pass.clone()), move |v| {
         out.with(|b| {
