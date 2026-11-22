@@ -201,18 +201,18 @@ ua-vectors | 0736ad763 | 0 | 726 passed, 0 failed, 6 ignored (70 binaries)
 ua-test | 0736ad763 | 0 | 616 passed, 0 failed, 3 ignored (62 binaries)
 # T41.arweave's ua-rs part at 0736ad763 (CA-T16, CA-T17): the rows above; mutants t41arw1 20/20 killed (the ua-rs rows at 0736ad763, the clientkeys rows at 9764de7c0, their command through capped with the TAP reporter); every mutant script loads (mutants-check's commands, run by hand at 9764de7c0: rc 0)
 # T41.arweave fam-arweave size (clients/ua-rs/runs/fam-sizes.sh, release, the probe now reaching DataItem::parse) at 0736ad763: none 2212040 B; fam-arweave 2205712 → 2265656 B (delta −72 → +53616 B, old the empty feature at 61c5bb014); all 2342744 → 2379296 B (delta +136960 → +167256 B)
-docs | 6f2eb3dbd | 0 | -
 ck-test | 6f2eb3dbd | 0 | node: 567 pass, 0 fail, 4 skipped
 ua-arweave | 6f2eb3dbd | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 rpc-test | 6f2eb3dbd | 0 | 219 passed, 0 failed, 10 ignored (22 binaries)
 rpc-clippy | 6f2eb3dbd | 0 | -
 rpc-wasm | 6f2eb3dbd | 0 | -
-sdk-arweave | 6f2eb3dbd | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
-sdk-test | 6f2eb3dbd | 101 | 266 passed, 1 failed, 0 ignored (14 binaries)
-sdk-clippy | 6f2eb3dbd | 0 | -
-sdk-noevm | 6f2eb3dbd | 101 | 59 passed, 1 failed, 0 ignored (7 binaries)
-sdk-clippy-noevm | 6f2eb3dbd | 0 | -
-sdk-min | 6f2eb3dbd | 101 | 30 passed, 1 failed, 0 ignored (5 binaries)
-features | 6f2eb3dbd | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
-cli | 6f2eb3dbd | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
-bind-gen | 6f2eb3dbd | 0 | -
+docs | 7daa8b2bc | 0 | -
+sdk-min | 7daa8b2bc | 0 | 74 passed, 0 failed, 0 ignored (14 binaries)
+sdk-noevm | 7daa8b2bc | 0 | 149 passed, 0 failed, 0 ignored (21 binaries)
+sdk-arweave | 7daa8b2bc | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
+sdk-test | 7daa8b2bc | 0 | 420 passed, 0 failed, 16 ignored (39 binaries)
+sdk-clippy | 7daa8b2bc | 0 | -
+sdk-clippy-noevm | 7daa8b2bc | 0 | -
+features | 7daa8b2bc | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+cli | 7daa8b2bc | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
+bind-gen | 7daa8b2bc | 0 | -
