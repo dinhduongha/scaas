@@ -125,6 +125,13 @@ T5 and T10 may run beside each other; T7 and T8 too. Every other task in order.
 4. merge `origin/ua-rs-sign` into `pqchat-core-impl` and run the reconciliation checks;
 5. only then the rest of T11 over Matrix and the T11 mutants that need the hostile-envelope and reorg fixtures.
 
+**Open owner questions** (current behaviour kept until the owner answers):
+- `send` takes the content JSON as `SecretBytes`, so a Dart app can send?
+- should PqChat's app purpose join the refused SCaaS purposes?
+- a `file` without `ar://` is neither sealed nor read this round;
+- should a contact card name a chain (its `kemVersion` is unused)? Cards have no expiry or revocation;
+- an ordinary room whose members exactly match a session may be taken for it.
+
 ## T0 — Gate runner and baseline
 
 **Files:** `clients/pqchat-core/runs/2026-11-17-pqchat-core-gates.sh`, the summary file.
