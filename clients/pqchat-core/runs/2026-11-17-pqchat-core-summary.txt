@@ -77,3 +77,5 @@ T12 | pqc-clippy | a010e6496 | 0 | -
 T12 | pqc-wasm | a010e6496 | 0 | -
 T12 | bind | a010e6496 | 0 | -
 T12 | pqc-test | a010e6496 | 0 | 105 passed, 0 failed, 7 ignored (20 binaries)
+T10b | ck-test | 8a2f56fcc | 0 | node: 585 pass, 0 fail, 4 skipped
+T10b | ck-vectors | 8a2f56fcc | 0 | -
