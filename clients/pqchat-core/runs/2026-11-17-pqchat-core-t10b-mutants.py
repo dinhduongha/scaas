@@ -32,7 +32,7 @@ MUTANTS = [
      TUA + "--test file_seal open_file_checks_ct_sha256_before_decryption"),
     ("ua-rs: pqchat_open_file's ctSha256 not the content's (the object's own)",
      [(PF, "open_object(&f.key, object, f.size, &f.sha256, &f.ct_sha256)",
-       "open_object(&f.key, object, f.size, &f.sha256, &sha2::Digest::digest::<sha2::Sha256>(object).into())")],
+       "open_object(&f.key, object, f.size, &f.sha256, &<[u8; 32]>::from(<sha2::Sha256 as sha2::Digest>::digest(object)))")],
      TUA + "--test pqchat_keys file_message_rows"),
     ("ua-rs: the ctSha256 comparison skipped (check_object)",
      [(OB, "    if h.iter().zip(ct_sha256).fold(0u8, |a, (x, y)| a | (x ^ y)) != 0 {",
