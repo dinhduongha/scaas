@@ -312,7 +312,6 @@ gas-gen | 7c637b66f | 0 | -
 # red GasAboveTxCap, open: runs/2026-11-20-m20-nethermind-summary.txt), the Soroban e2e (sdk-soroban-e2e, green).
 # Mutants: 70 reruns, 70 killed (plan T39). origin/ua-rs-sign b0ee76349 (pqvault-core, url 2.5.9) merged before T25.
 features | 88e469e6b | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
-docs | 4a96991f4 | 0 | -
 sdk-deny | 4a96991f4 | 0 | -
 sdk-clippy-noevm | 4a96991f4 | 0 | -
 sdk-clippy-default | 4a96991f4 | 0 | -
@@ -350,10 +349,15 @@ sdk-clippy-noevm | 028da021c | 0 | -
 # pqchat-core T8 (on pqchat-core-impl): the app core scope made again after an unlock (d6abf1f97, test app_core::scope_after_lock_and_unlock); sdk-clippy red at e5573b3d6 (type_complexity on that cache), its type named at f238113b8 (no behaviour change), sdk-clippy green there; sdk-test and sdk-vectors at e5573b3d6.
 sdk-test | e5573b3d6 | 0 | 438 passed, 0 failed, 17 ignored (41 binaries)
 sdk-vectors | e5573b3d6 | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
-bind-gen | e9682c492 | 0 | -
 cli | e9682c492 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 sdk-clippy | e9682c492 | 0 | -
-mutants-check | e9682c492 | 0 | -
 # the rows above at e9682c492 (the merge of ua-rs-sign 70c2a3633): bind-gen no drift (pqchat-records is not a default
 # feature), cli 46 (the binding adapters skipped by its completeness test, d7910088b), sdk-clippy, mutants-check green;
 # pqchat-core `cargo check --tests` rc 0 (its three ChainProfile literals state pinned_reads).
+docs | 79994e9a5 | 0 | -
+mutants-check | 79994e9a5 | 0 | -
+bind-gen | 79994e9a5 | 0 | -
+# the rows above at 79994e9a5 (the bindings per language, decisions CLI-SDK-33 (102)): docs, mutants-check, bind-gen (each of
+# the eight generated parts checked through the list) green; ci_changes.py's self-tests and actionlint green; the controls:
+# an unknown name in the list refused by the generator and the runner (rc 2), go left out: gen.sh skips its part, the runner
+# skips bind-go and runs bind-python (7 ran, OK; tree dirty, no row).
