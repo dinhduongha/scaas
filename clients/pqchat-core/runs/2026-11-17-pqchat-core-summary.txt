@@ -73,3 +73,4 @@ R2 | pqc-test | 1ba45e725 | 0 | 104 passed, 0 failed, 7 ignored (20 binaries)
 R2 | ck-test | 1ba45e725 | 0 | node: 583 pass, 0 fail, 4 skipped
 R2 | mutants-check | cfb61a0e1 | 0 | -
 R2 | bind | cfb61a0e1 | 1 | -
+R2 | ua-appcore | b4b4dbbd0 | 0 | 27 passed, 0 failed, 0 ignored (2 binaries)
