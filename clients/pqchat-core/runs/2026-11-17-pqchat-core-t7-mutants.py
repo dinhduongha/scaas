@@ -29,8 +29,8 @@ MUTANTS = [
      T + "store_list_invalid"),
     ("sign before the store-list check",
      [(ST, "        check_stores(&info)?;\n", ""),
-      (ST, "        let out = self.seal_under(&ep, me, &v).await?;\n",
-       "        let out = self.seal_under(&ep, me, &v).await?;\n        check_stores(&info)?;\n")],
+      (ST, "        let out = self.seal_under(&ep, me, &v, key.clone()).await;\n",
+       "        let out = self.seal_under(&ep, me, &v, key.clone()).await;\n        check_stores(&info)?;\n")],
      T + "hcs_listed_refused_before_signing"),
 ]
 

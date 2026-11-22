@@ -13,8 +13,8 @@ MUTANTS = [
     ("counter persisted after the send",
      [(MS, "        let counter = self.take_counter(&ep.epoch.id, &device)?;",
        "        let counter = self.next_counter(&ep.epoch.id, &device)?;"),
-      (MS, "            .await?;\n        if sealed.record.sender.to_ascii_lowercase() != ua {",
-       "            .await?;\n        self.take_counter(&ep.epoch.id, &sealed.record.device)?;\n"
+      (MS, "            }\n        };\n        if sealed.record.sender.to_ascii_lowercase() != ua {",
+       "            }\n        };\n        self.take_counter(&ep.epoch.id, &sealed.record.device)?;\n"
        "        if sealed.record.sender.to_ascii_lowercase() != ua {")],
      T + "counter_taken_before_the_seal"),
     ("a walk before the signature check",
