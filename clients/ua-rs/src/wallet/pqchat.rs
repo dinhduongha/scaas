@@ -245,7 +245,7 @@ pub fn check_matrix_id(id: &str) -> Result<()> {
     let colon = id.find(':');
     if b.len() > MATRIX_ID_MAX
         || b.iter().any(|c| !(0x21..=0x7e).contains(c))
-        || b[0] != b'@'
+        || !id.starts_with('@')
         || colon.is_none_or(|i| i < 2 || i == b.len() - 1)
     {
         return Err(Error::Argument);
