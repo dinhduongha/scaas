@@ -349,6 +349,18 @@ impl MatrixTransport for Http {
             .as_array()
             .is_some_and(|a| a.iter().any(|r| r == room)))
     }
+    async fn members(&self, room: &str) -> Result<Vec<String>, PqChatError> {
+        let v = self
+            .go(self.c.get(self.url(&["rooms", room, "members"])))
+            .await?;
+        Ok(v["chunk"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|e| matches!(e["content"]["membership"].as_str(), Some("join" | "invite")))
+            .filter_map(|e| e["state_key"].as_str().map(String::from))
+            .collect())
+    }
     async fn join(&self, room: &str) -> Result<(), PqChatError> {
         self.rec(format!("join {room}"));
         self.go(self.c.post(self.url(&["join", room])).json(&json!({})))

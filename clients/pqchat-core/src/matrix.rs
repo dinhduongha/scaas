@@ -3,8 +3,10 @@
 //! (UA-7 P15: type `net.scaas.pqchat.v1`, content `{"v": 1, "hint": <base64>, "env": <base64>}`, base64 of RFC 4648 §4 with
 //! padding, the `matrixEvent` row's form, and only that form read back), and the binding of rooms and Matrix ids (§6.2,
 //! Fable K8). A room counts for a session only if this client created it for that session or joined it through that
-//! session's acceptance, never a room the account had joined before, one session per room (the first bound keeps it); a
-//! Matrix id counts for a UA only when that UA asserted it (an envelope signed by that UA received from that sender); invites
+//! session's acceptance, a room the account had joined before only once its members check against the epoch (state-only
+//! recovery: a fresh device), one session per room (the first bound keeps it); a
+//! Matrix id counts for a UA only when that UA asserted it (its signed contact card, UA-7 §14 O7, or an envelope signed by that
+//! UA received from that sender); invites
 //! and removals go only to ids bound so, by the epoch's author's client, once the epoch is complete at home; no Matrix power
 //! level is a PqChat right. The room id lives only in `sealedInfo` and this device's store (D10). The codec is a transport
 //! encoding; the envelope's bytes are opened and decoded in `ua-rs` (K4).
@@ -17,6 +19,8 @@ use crate::{Event, Items, PqChat, PqChatError};
 use async_trait::async_trait;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
+use scaas_sdk::app_core::AppUaSig;
+use scaas_sdk::pqchat_records::PqChatCard;
 use serde_json::{json, Value};
 
 /// One `net.scaas.pqchat.v1` event of a room as the transport hands it: its sender's Matrix id and its content's JSON bytes.
@@ -47,6 +51,8 @@ pub trait MatrixTransport: Send + Sync {
     async fn create_room(&self) -> Result<String, PqChatError>;
     /// Whether the account is joined to `room` now.
     async fn joined(&self, room: &str) -> Result<bool, PqChatError>;
+    /// The Matrix ids `room` holds now, joined or invited (a room the account is joined to).
+    async fn members(&self, room: &str) -> Result<Vec<String>, PqChatError>;
     /// Joins `room` (an invite held by [`MatrixTransport::hold_invite`] is answered by this call only).
     async fn join(&self, room: &str) -> Result<(), PqChatError>;
     async fn invite(&self, room: &str, user: &str) -> Result<(), PqChatError>;
@@ -226,7 +232,8 @@ impl PqChat {
         Ok(())
     }
 
-    /// The Matrix ids `ua` asserted (each by an envelope signed by `ua` received from that sender), at most [`MXIDS_MAX`].
+    /// The Matrix ids `ua` asserted (each by its contact card or an envelope signed by `ua` received from that sender), at
+    /// most [`MXIDS_MAX`].
     pub fn matrix_ids_of(&self, ua: &str) -> Result<Vec<String>, PqChatError> {
         Ok(Items(&*self.store).get(&mxid_key(ua))?.unwrap_or_default())
     }
@@ -247,6 +254,30 @@ impl PqChat {
         Ok(())
     }
 
+    /// A contact card the user received out of band (UA-7 §14 O7): checked by the SDK for its own UA (V1 on `chain`'s
+    /// registry at the final block, a trusted read); its Matrix id then counts for that UA (CLI-PQC-05) beside those its
+    /// envelopes bound. `CardRefused` when it does not count; `false` for a card without a Matrix id (nothing bound).
+    pub async fn add_card(
+        &self,
+        chain: &str,
+        card: &PqChatCard,
+        sig: &AppUaSig,
+    ) -> Result<bool, PqChatError> {
+        self.conf(chain)?;
+        let ok = self
+            .app
+            .verify_pqchat_card(chain.into(), card.ua.clone(), card.clone(), sig.clone())
+            .await?;
+        if !ok {
+            return Err(PqChatError::CardRefused);
+        }
+        if card.matrix_id.is_empty() {
+            return Ok(false);
+        }
+        self.bind_mxid(&card.ua, &card.matrix_id)?;
+        Ok(true)
+    }
+
     /// `ua`'s Matrix id as `claimed` (an epoch's `sealedInfo` map, the author's claim) when `ua` asserted it.
     fn bound_id(&self, ua: &str, claimed: Option<&String>) -> Result<Option<String>, PqChatError> {
         let held = self.matrix_ids_of(ua)?;
@@ -254,8 +285,10 @@ impl PqChat {
     }
 
     /// The Matrix room of `ep`'s list put to use for its session (an accepted one): neither joined nor read while the user
-    /// has not confirmed it; refused (shown with the reason, `RoomNotUsed`) when another session holds it or the account had
-    /// joined it before this client bound it; else joined (an invite held answered) and bound.
+    /// has not confirmed it; refused (shown with the reason, `RoomNotUsed`) when another session holds it, or when the
+    /// account had joined it before this client bound it and one of its members does not check against `ep` (a fresh
+    /// device's room: every id it holds, joined or invited, is the account's own or one `ep`'s `sealedInfo` maps to a member
+    /// of `ep`); else joined (an invite held answered) and bound.
     pub async fn join_room(&self, ep: &OpenEpoch) -> Result<RoomUse, PqChatError> {
         self.require_accepted(&ep.epoch.session_id)?;
         let sid = ep.epoch.session_id.to_ascii_lowercase();
@@ -290,10 +323,21 @@ impl PqChat {
         }
         let t = self.transport()?;
         if t.joined(room).await? {
-            return refuse(RoomRefusal::JoinedBefore);
+            let me = t.user_id();
+            let known: Vec<&String> = info
+                .matrix
+                .iter()
+                .filter(|(ua, _)| ep.epoch.has_member(ua))
+                .map(|(_, id)| id)
+                .collect();
+            let members = t.members(room).await?;
+            if !members.iter().all(|m| *m == me || known.contains(&m)) {
+                return refuse(RoomRefusal::JoinedBefore);
+            }
+        } else {
+            t.join(room).await?;
+            t.hold_invite(room, false).await;
         }
-        t.join(room).await?;
-        t.hold_invite(room, false).await;
         Items(&*self.store).update::<RoomBind, _>(&room_key(room), |_| {
             Ok(RoomBind {
                 session: Some(sid.clone()),

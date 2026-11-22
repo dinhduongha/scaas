@@ -97,6 +97,9 @@ impl MatrixTransport for Room {
     async fn joined(&self, _: &str) -> Result<bool, PqChatError> {
         Ok(false)
     }
+    async fn members(&self, _: &str) -> Result<Vec<String>, PqChatError> {
+        Ok(vec![])
+    }
     async fn join(&self, _: &str) -> Result<(), PqChatError> {
         Ok(())
     }

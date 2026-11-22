@@ -26,6 +26,7 @@ use pqchat_core::model::hex;
 use pqchat_core::session::{CreateSession, Info, Rekey, StoreEntry};
 use pqchat_core::stores::Delivery;
 use pqchat_core::{Drop, Event};
+use scaas_sdk::pqchat_records::PqChatCard;
 use serde_json::{json, Value};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -647,4 +648,142 @@ async fn chain_store_read_while_detached() {
         ),
         "MatrixDetached"
     );
+}
+
+/// A contact card (UA-7 §14 O7) binds its Matrix id to its UA once the SDK verifies it for that UA (V1 on the registry);
+/// a forged one (another UA's key) binds nothing (`CardRefused`), nor does a card without a Matrix id; invites follow.
+#[tokio::test(flavor = "multi_thread")]
+async fn card_binds_its_matrix_id() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let (server, _) = attach(&w);
+    let card = |a: &Acc, id: &str| w.app.sign_pqchat_card(a.key.clone(), 1, id.into());
+    let b = card(&w.bob, BOB).await.unwrap();
+    assert!(w.pq.add_card(CHAIN, &b.card, &b.sig).await.unwrap());
+    assert_eq!(w.pq.matrix_ids_of(&w.bob.ua).unwrap(), [BOB]);
+    let none = card(&w.alice, "").await.unwrap();
+    assert!(!w.pq.add_card(CHAIN, &none.card, &none.sig).await.unwrap());
+    // carol's card, signed by bob's key
+    let by_bob = card(&w.bob, "@mallory:fake.local").await.unwrap();
+    let forged = PqChatCard {
+        ua: w.carol.ua.clone(),
+        ..by_bob.card.clone()
+    };
+    assert_eq!(
+        code(w.pq.add_card(CHAIN, &forged, &by_bob.sig).await),
+        "CardRefused"
+    );
+    assert!(w.pq.matrix_ids_of(&w.carol.ua).unwrap().is_empty());
+    let (room, ep) = alice_creates(
+        &w,
+        &[&w.bob, &w.carol],
+        &[(&w.bob, BOB), (&w.carol, "@mallory:fake.local")],
+        1,
+    )
+    .await;
+    let s = sref(&ep.epoch);
+    let ep = w.pq.use_epoch(&s, ep).await.unwrap();
+    complete(&w.net, &ep.epoch.id, true);
+    let r = w.pq.sync_room(&s, &ep, None, &me(&w.alice)).await.unwrap();
+    assert_eq!(
+        (r.invited, r.unbound),
+        (vec![w.bob.ua.clone()], vec![w.carol.ua.clone()])
+    );
+    assert!(server.is_invited(&room, BOB));
+    assert!(!server.is_invited(&room, "@mallory:fake.local"));
+}
+
+/// A card binds the Matrix id it asserts, no other: an epoch mapping its UA to another id leaves that UA unbound (not
+/// invited); the same UA mapped to the card's id is invited (the control).
+#[tokio::test(flavor = "multi_thread")]
+async fn card_binds_only_its_own_matrix_id() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let (server, _) = attach(&w);
+    let c = w
+        .app
+        .sign_pqchat_card(w.carol.key.clone(), 1, CAROL.into())
+        .await
+        .unwrap();
+    assert!(w.pq.add_card(CHAIN, &c.card, &c.sig).await.unwrap());
+    for (nonce, claimed, bound) in [(1, "@carol2:fake.local", false), (2, CAROL, true)] {
+        let (room, ep) = alice_creates(&w, &[&w.carol], &[(&w.carol, claimed)], nonce).await;
+        let s = sref(&ep.epoch);
+        let ep = w.pq.use_epoch(&s, ep).await.unwrap();
+        complete(&w.net, &ep.epoch.id, true);
+        let r = w.pq.sync_room(&s, &ep, None, &me(&w.alice)).await.unwrap();
+        assert_eq!(r.invited.is_empty(), !bound, "{claimed}");
+        assert_eq!(r.unbound.is_empty(), bound, "{claimed}");
+        assert_eq!(server.is_invited(&room, claimed), bound, "{claimed}");
+    }
+}
+
+/// A room the account had joined before (a fresh device's) is used once its members check against the epoch: each one,
+/// joined or invited, the account's own id or one the epoch's `sealedInfo` maps to a member of that epoch; its history is
+/// then read under the session without a join. A room holding any other member is not used: a stranger joined, a
+/// stranger invited, or an id mapped to a UA the epoch does not list.
+#[tokio::test(flavor = "multi_thread")]
+async fn room_joined_before_used_when_its_members_check() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let (server, c) = attach(&w);
+    let map = [(&w.alice, ALICE), (&w.bob, BOB)];
+    let old = server.ordinary(BOB, &[ALICE], false);
+    let s = signed(
+        &w,
+        &w.bob,
+        None,
+        1,
+        &[&w.alice, &w.bob],
+        &[&w.bob],
+        info(vec![room_entry(&old)], &map),
+    )
+    .await;
+    let e = ev_of(&w, &w.bob, &s, 0, BOB).await;
+    server.post_as(&old, BOB, serde_json::from_slice(&e.content).unwrap());
+    let ep = in_use(&w, &s).await;
+    assert_eq!(w.pq.join_room(&ep).await.unwrap(), RoomUse::Bound);
+    assert!(c.calls_of("join").is_empty());
+    assert_eq!(w.pq.read_room(&old).await.unwrap(), 1);
+    // each room holds one member the epoch does not check
+    let joined = server.ordinary(BOB, &[ALICE, CAROL], false);
+    let invited = server.ordinary(BOB, &[ALICE], false);
+    server
+        .rooms
+        .lock()
+        .unwrap()
+        .get_mut(&invited)
+        .unwrap()
+        .invited
+        .insert(CAROL.into());
+    let unlisted = server.ordinary(BOB, &[ALICE, CAROL], false);
+    let cases = [
+        (2, joined, &map[..]),
+        (3, invited, &map[..]),
+        (
+            4,
+            unlisted,
+            &[(&w.alice, ALICE), (&w.bob, BOB), (&w.carol, CAROL)][..],
+        ),
+    ];
+    for (nonce, room, m) in cases {
+        let s = signed(
+            &w,
+            &w.bob,
+            None,
+            nonce,
+            &[&w.alice, &w.bob],
+            &[&w.bob],
+            info(vec![room_entry(&room)], m),
+        )
+        .await;
+        let ep = in_use(&w, &s).await;
+        assert_eq!(
+            w.pq.join_room(&ep).await.unwrap(),
+            RoomUse::Refused(RoomRefusal::JoinedBefore),
+            "nonce {nonce}"
+        );
+        assert_eq!(w.pq.room_session(&room).unwrap(), None);
+    }
+    assert!(c.calls_of("join").is_empty());
 }

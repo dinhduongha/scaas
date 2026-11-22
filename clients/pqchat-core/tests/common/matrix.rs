@@ -141,13 +141,13 @@ impl Client {
             .map(|(_, r)| r.clone())
             .collect()
     }
-    /// Every call but `user_id`, `joined` and `hold_invite` (the network calls that answer or act).
+    /// Every call but `user_id`, `joined`, `members` and `hold_invite` (the network calls that answer or act).
     pub fn acting(&self) -> usize {
         self.calls
             .lock()
             .unwrap()
             .iter()
-            .filter(|(c, _)| !matches!(c.as_str(), "joined" | "hold_invite"))
+            .filter(|(c, _)| !matches!(c.as_str(), "joined" | "members" | "hold_invite"))
             .count()
     }
 }
@@ -176,6 +176,12 @@ impl MatrixTransport for Client {
     async fn joined(&self, room: &str) -> Result<bool, PqChatError> {
         self.rec("joined", room);
         Ok(self.server.is_member(room, &self.user))
+    }
+    async fn members(&self, room: &str) -> Result<Vec<String>, PqChatError> {
+        self.rec("members", room);
+        let rooms = self.server.rooms.lock().unwrap();
+        let r = rooms.get(room).ok_or_else(no_room)?;
+        Ok(r.members.iter().chain(&r.invited).cloned().collect())
     }
     async fn join(&self, room: &str) -> Result<(), PqChatError> {
         self.rec("join", room);

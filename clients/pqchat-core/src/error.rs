@@ -87,6 +87,8 @@ codes! {
     StoreConflict,
     /// no better name; carries nothing
     Internal,
+    /// a contact card that does not count for its UA (UA-7 §14 O7, CLI-PQC-05)
+    CardRefused,
 }
 
 impl fmt::Display for PqChatError {

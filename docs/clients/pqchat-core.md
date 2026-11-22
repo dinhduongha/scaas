@@ -99,9 +99,11 @@ the binding rules a controller call after Fable's review, owner may override; SP
 sync loop of its own and links no second Matrix SDK. It sends each envelope as one `net.scaas.pqchat.v1` event `{v, hint, env}`
 (UA-7 P15; `hint` and `env` in RFC 4648 §4 base64 with padding, the `matrixEvent` row's form, and only that form read back).
 **Binding.** A room counts for a session only if this client created it for that session, or joined it through that session's
-acceptance; never a room the account had joined before; one room serves one session, the first accepted keeps it. A Matrix id counts
-for a UA only when that UA asserted it: its signed contact card (UA-7 §14 O7), or an envelope signed by that UA and received from
-that Matrix sender; invites and removals go only to ids bound so, and only as an epoch's members and `sealedInfo` say. The room id
+acceptance; a room the account had joined before only once its members check against the epoch (every Matrix id it holds, joined
+or invited, is the account's own or one the epoch's `sealedInfo` maps to a member of that epoch: a fresh device's state-only
+recovery, controller call 2026-11-22), else not used; one room serves one session, the first accepted keeps it. A Matrix id counts
+for a UA only when that UA asserted it: its signed contact card (UA-7 §14 O7; `add_card`, checked through the SDK's
+`verify_pqchat_card`), or an envelope signed by that UA and received from that Matrix sender; invites and removals go only to ids bound so, and only as an epoch's members and `sealedInfo` say. The room id
 goes only in `sealedInfo` (never on chain in the clear, D10); no PqChat right comes from a Matrix power level. **In a bound room the
 transport sends no Matrix read receipt, read marker, typing notice or presence update, and joins only on `pqchat-core`'s call**
 (UA-7 P15: never Matrix's plaintext ephemeral events, D10); the trait states it and the crate's conformance test holds every

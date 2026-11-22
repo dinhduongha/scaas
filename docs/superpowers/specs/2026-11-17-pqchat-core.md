@@ -265,8 +265,10 @@ Whichever form the SDK takes (§13 O3), it must hold:
 ### 6.2 Rooms and sessions apart (the app's contract §11; binding by Fable K8)
 
 - **A room counts for a session** only if this client created it for that session, or joined it through that session's acceptance.
-  Never a room the account had joined before: a session whose `sealedInfo` names such a room is shown with that warning and its
-  room is not used. One room serves one session; the first accepted keeps it, a second session naming it is warned about and its
+  A room the account had joined before counts only once its members check against the epoch: every Matrix id it holds, joined
+  or invited, is the account's own or one the epoch's `sealedInfo` maps to a member of that epoch (a fresh device's state-only
+  recovery; controller call 2026-11-22); a session whose `sealedInfo` names such a room with any other member is shown with that
+  warning and its room is not used. One room serves one session; the first accepted keeps it, a second session naming it is warned about and its
   room not used.
 - **A Matrix id counts for a UA** only when that UA asserted it: its signed contact card (UA-7 §14 O7) or an envelope signed by that
   UA and received from that Matrix sender. `sealedInfo`'s `matrix` map is the author's claim: an id it maps that is not bound so is
@@ -360,6 +362,7 @@ operation states).
 | `CounterExhausted` | an own chain at `2^64 − 1` (a rekey is needed) |
 | `StoreIo`, `StoreConflict` | the app's storage interface failed; the item changed under the crate three times |
 | `Internal` | no better name; carries nothing |
+| `CardRefused` | a contact card that does not count for its UA (UA-7 §14 O7, CLI-PQC-05): not its signature, or not well formed |
 
 ## 9. Threat model
 

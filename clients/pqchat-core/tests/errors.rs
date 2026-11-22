@@ -39,7 +39,7 @@ fn spec_codes() -> Vec<String> {
 #[test]
 fn codes_are_spec_8_in_order() {
     let want = spec_codes();
-    assert_eq!(want.len(), 26, "{want:?}");
+    assert_eq!(want.len(), 27, "{want:?}");
     assert_eq!(
         CODES,
         want.iter()

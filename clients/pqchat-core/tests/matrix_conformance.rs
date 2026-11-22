@@ -67,6 +67,9 @@ impl MatrixTransport for Leaky {
     async fn joined(&self, room: &str) -> Result<bool, PqChatError> {
         self.inner.joined(room).await
     }
+    async fn members(&self, room: &str) -> Result<Vec<String>, PqChatError> {
+        self.inner.members(room).await
+    }
     async fn join(&self, room: &str) -> Result<(), PqChatError> {
         self.inner.join(room).await
     }
