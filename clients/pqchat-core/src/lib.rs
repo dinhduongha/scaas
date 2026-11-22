@@ -11,7 +11,9 @@
     clippy::indexing_slicing
 )]
 
+pub mod chain_state;
 pub mod check;
+pub mod content;
 pub mod drops;
 pub mod error;
 pub mod matrix;
@@ -79,6 +81,8 @@ pub struct PqChat {
     pub(crate) events: Mutex<Events>,
     /// complete children seen before their finality, by parent (CLI-PQC-07: sends held)
     pub(crate) unfinal: Mutex<std::collections::HashMap<String, String>>,
+    pub(crate) in_use: Mutex<message::InUse>,
+    pub(crate) timelines: Mutex<std::collections::HashMap<String, order::Timeline>>,
 }
 
 /// What the crate tells the app (spec §8); ids and UAs only, never a secret, handle, ciphertext, room id or Matrix id.
@@ -132,6 +136,8 @@ impl PqChat {
             unwraps: AtomicU64::new(0),
             events: Mutex::new(Events::default()),
             unfinal: Mutex::new(Default::default()),
+            in_use: Mutex::new(Default::default()),
+            timelines: Mutex::new(Default::default()),
         })
     }
 

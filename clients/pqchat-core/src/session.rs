@@ -182,7 +182,7 @@ fn field<'a>(s: &'a PqChatSigned, name: &str) -> Result<&'a str, PqChatError> {
         .ok_or(PqChatError::Internal)
 }
 
-fn sig_json(s: &AppUaSig) -> Value {
+pub(crate) fn sig_json(s: &AppUaSig) -> Value {
     let inner = |m: &scaas_sdk::app_core::AppMemberSig| -> Vec<Value> {
         m.members
             .iter()
@@ -216,7 +216,7 @@ fn as_members(m: &[PqMemberKey]) -> Vec<Member> {
 }
 
 /// The seed of a single UA key; an `msig` author is out of this round (CLI-PQC-02).
-fn seed_of(k: &KeyRef) -> Result<&str, PqChatError> {
+pub(crate) fn seed_of(k: &KeyRef) -> Result<&str, PqChatError> {
     match k {
         KeyRef::Ua { seed, .. } => Ok(seed),
         KeyRef::Msig { .. } => Err(PqChatError::MsigAuthorPlanned),

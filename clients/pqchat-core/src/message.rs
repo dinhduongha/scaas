@@ -6,12 +6,18 @@
 //! 2^20 steps from the nearest held position (`too-far`), and its content opened, unpadded and checked canonical in `ua-rs`
 //! (`content`). A failure is a drop reason: no error, no write, no network call that depends on it.
 use crate::check::Drop;
+use crate::content::Content;
 use crate::model::at;
-use crate::model::{bytes, h, list, num, Epoch};
-use crate::{Items, PqChat};
+use crate::model::{bytes, h, list, num, Epoch, ZERO32};
+use crate::order::{self, Shown};
+use crate::reads::SessionRef;
+use crate::session::Me;
+use crate::{Items, PqChat, PqChatError};
 use scaas_sdk::app_core::AppKey;
+use scaas_sdk::pqchat_keys::{PqMessageHeader, PqSealedMessage};
 use scaas_sdk::pqchat_records::PqChatMessage;
 use scaas_sdk::SecretBytes;
+use serde_json::{json, Value};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -23,8 +29,17 @@ pub const POSITIONS_MAX: usize = 64;
 pub const SEEN_MAX: usize = 1024;
 /// Message ids remembered per session for the dedupe.
 pub const IDS_MAX: usize = 4096;
+/// Envelopes of an epoch not open yet kept per session (the oldest dropped; read again from the stores).
+pub const PENDING_MAX: usize = 64;
+/// The 1,024-B bucket: a `postMessage` above it only with the user's cost confirmation (UA-7 §6.5).
+pub const POST_BUCKET: usize = 1024;
+/// AES-256-GCM-SIV's tag: a ciphertext is its padded plaintext's bucket and this (UA-7 §6.4).
+pub const TAG: usize = 16;
+/// Epochs followed at home in one send before it gives up (`EpochNotFinal`).
+pub const EPOCH_STEPS: usize = 64;
 
 /// An epoch the user can read: its record at home and its key handle (unwrapped or drawn), on the home chain's profile.
+#[derive(Clone)]
 pub struct OpenEpoch {
     pub chain: String,
     pub epoch: Epoch,
@@ -244,6 +259,8 @@ impl PqChat {
             })
             .map_err(|_| Drop::Counter)?;
         self.chains().add_id(sid, id.clone());
+        let p = content.with(Content::parse);
+        self.show(ep, &r, &id, p);
         Ok(Received {
             message_id: id,
             record: r,
@@ -296,5 +313,359 @@ impl PqChat {
         self.chains
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+/// A message sealed and signed for every store of its epoch (S5): the bytes each store takes are the same.
+pub struct Outgoing {
+    pub epoch: Arc<OpenEpoch>,
+    pub sealed: PqSealedMessage,
+}
+
+impl Outgoing {
+    /// The padded plaintext's bucket: the ciphertext less its tag.
+    pub fn bucket(&self) -> usize {
+        self.sealed.record.ciphertext.len().saturating_sub(TAG)
+    }
+
+    /// `postMessage`'s arguments by name: the envelope's own record and signature (their ABI encoding is the SDK's `inner`,
+    /// the envelope's inner bytes), so the message has one `messageId` on every store.
+    pub fn post_args(&self) -> Value {
+        let r = &self.sealed.record;
+        json!({"m": {"sessionId": r.session_id, "epochId": r.epoch_id, "sender": r.sender, "device": r.device,
+            "counter": r.counter.to_string(), "parents": r.parents, "ciphertext": crate::model::hex(&r.ciphertext)},
+            "sig": crate::session::sig_json(&self.sealed.sig)})
+    }
+}
+
+/// What became of an envelope handed in from a store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Incoming {
+    Shown(String),
+    /// kept until its epoch is open (bounded)
+    Buffered,
+    Dropped(Drop),
+}
+
+/// An epoch in use and its hint.
+type Hinted = (Vec<u8>, Arc<OpenEpoch>);
+
+/// The epochs in use on this device (in memory: handles die at the lock), per session, with their hints.
+#[derive(Default)]
+pub(crate) struct InUse(HashMap<String, Vec<Hinted>>);
+
+fn pending_key(session: &str) -> String {
+    format!("pending/{session}")
+}
+
+impl PqChat {
+    /// How many chain positions `session` holds (CLI-PQC-14's bound: [`POSITIONS_MAX`]).
+    pub fn held_positions(&self, session: &str) -> usize {
+        self.chains().held(&session.to_ascii_lowercase())
+    }
+
+    /// The seed was locked: every chain position and epoch key handle released; positions are derived again, lazily, when
+    /// a message needs one after the epochs are open again.
+    pub fn locked(&self) {
+        self.chains().clear();
+        self.in_use().0.clear();
+    }
+
+    fn in_use(&self) -> std::sync::MutexGuard<'_, InUse> {
+        self.in_use
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn timelines(&self) -> std::sync::MutexGuard<'_, HashMap<String, order::Timeline>> {
+        self.timelines
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// `session`'s messages in display order (UA-7 P19, P49).
+    pub fn timeline(&self, session: &str) -> Vec<order::Message> {
+        self.timelines()
+            .get(&session.to_ascii_lowercase())
+            .map(order::Timeline::view)
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn show(
+        &self,
+        ep: &OpenEpoch,
+        r: &PqChatMessage,
+        id: &str,
+        p: crate::content::Parsed,
+    ) {
+        let sender = r.sender.to_ascii_lowercase();
+        // display only, and only from a leaf of that seat in the epoch
+        let on_behalf_of = p.on_behalf_of.filter(|seat| {
+            *seat != ZERO32
+                && ep
+                    .epoch
+                    .members
+                    .iter()
+                    .any(|m| m.ua == sender && m.via == *seat)
+        });
+        let m = Shown {
+            id: id.to_string(),
+            epoch: ep.epoch.id.clone(),
+            sender,
+            device: r.device.to_ascii_lowercase(),
+            counter: r.counter,
+            parents: r.parents.iter().map(|x| x.to_ascii_lowercase()).collect(),
+            ts: p.ts,
+            content: p.content,
+            on_behalf_of,
+        };
+        self.timelines()
+            .entry(ep.epoch.session_id.clone())
+            .or_default()
+            .add(m);
+    }
+
+    /// `ep` of `s` in use on this device: its envelopes read from now on, those kept for it read now; when it is a complete
+    /// child of an epoch in use, sends under the parent are held until the home's final block shows it (CLI-PQC-07).
+    pub async fn use_epoch(
+        &self,
+        s: &SessionRef,
+        ep: OpenEpoch,
+    ) -> Result<Arc<OpenEpoch>, PqChatError> {
+        let hint = self.app.pqchat_hint(ep.k.clone())?;
+        let sid = ep.epoch.session_id.clone();
+        let ep = Arc::new(ep);
+        let parent_in_use = {
+            let mut u = self.in_use();
+            let v = u.0.entry(sid.clone()).or_default();
+            v.retain(|(_, e)| e.epoch.id != ep.epoch.id);
+            v.push((hint.clone(), ep.clone()));
+            v.iter().any(|(_, e)| e.epoch.id == ep.epoch.parent)
+        };
+        if parent_in_use && ep.epoch.epoch > 0 {
+            let c = self
+                .net
+                .read(
+                    &s.chain,
+                    &s.home,
+                    "IPqChat.epochComplete",
+                    json!({ "epochId": ep.epoch.id }),
+                )
+                .await?;
+            if at(&c, "0") == true {
+                self.saw_child(&ep.epoch.parent, &ep.epoch.id);
+            }
+        }
+        let mut kept = vec![];
+        let key = pending_key(&sid);
+        let ours = |h: &String| *h == crate::model::hex(&hint);
+        let waiting: Option<Vec<(String, String)>> = Items(&*self.store).get(&key)?;
+        if waiting.is_some_and(|v| v.iter().any(|(h, _)| ours(h))) {
+            Items(&*self.store).update::<Vec<(String, String)>, _>(&key, |v| {
+                let (mine, rest): (Vec<_>, Vec<_>) = v
+                    .unwrap_or_default()
+                    .into_iter()
+                    .partition(|(h, _)| ours(h));
+                kept = mine;
+                Ok(rest)
+            })?;
+        }
+        for (_, env) in kept {
+            if let Ok(env) = crate::model::unhex(&env) {
+                let _ = self.receive(&ep, env).await;
+            }
+        }
+        Ok(ep)
+    }
+
+    /// An envelope under `hint` handed in from a store of `session`: read under its epoch, or kept (at most
+    /// [`PENDING_MAX`] per session, the oldest dropped) until that epoch is in use.
+    pub async fn incoming(
+        &self,
+        session: &str,
+        hint: &[u8],
+        env: Vec<u8>,
+    ) -> Result<Incoming, PqChatError> {
+        let sid = session.to_ascii_lowercase();
+        if hint.len() != 8 {
+            self.drops.add(&sid, Drop::Decode);
+            return Ok(Incoming::Dropped(Drop::Decode));
+        }
+        let ep = self.in_use().0.get(&sid).and_then(|v| {
+            v.iter()
+                .find(|(h, _)| h.as_slice() == hint)
+                .map(|(_, e)| e.clone())
+        });
+        if let Some(ep) = ep {
+            return Ok(match self.receive(&ep, env).await {
+                Ok(r) => Incoming::Shown(r.message_id),
+                Err(d) => Incoming::Dropped(d),
+            });
+        }
+        let item = (crate::model::hex(hint), crate::model::hex(&env));
+        Items(&*self.store).update::<Vec<(String, String)>, _>(&pending_key(&sid), |v| {
+            let mut v = v.unwrap_or_default();
+            v.push(item.clone());
+            while v.len() > PENDING_MAX {
+                v.remove(0);
+            }
+            Ok(v)
+        })?;
+        Ok(Incoming::Buffered)
+    }
+
+    /// How many envelopes `session` keeps for epochs not in use.
+    pub fn pending(&self, session: &str) -> Result<usize, PqChatError> {
+        Ok(Items(&*self.store)
+            .get::<Vec<(String, String)>>(&pending_key(&session.to_ascii_lowercase()))?
+            .map_or(0, |v| v.len()))
+    }
+
+    /// The epoch a send of `s` goes under: the latest in use, followed at home to its final child (opened for `me`, then in
+    /// use); `EpochNotFinal` while a complete child seen is not final; `NotMember` when `me` is no member of it.
+    async fn send_under(&self, s: &SessionRef, me: &Me) -> Result<Arc<OpenEpoch>, PqChatError> {
+        let sid = s.session_id.to_ascii_lowercase();
+        let latest = |u: &InUse| {
+            u.0.get(&sid)
+                .and_then(|v| v.iter().max_by_key(|(_, e)| e.epoch.epoch))
+                .map(|(_, e)| e.clone())
+        };
+        let in_use = |id: &str| {
+            self.in_use().0.get(&sid).and_then(|v| {
+                v.iter()
+                    .find(|(_, e)| e.epoch.id == id)
+                    .map(|(_, e)| e.clone())
+            })
+        };
+        let mut ep = latest(&self.in_use()).ok_or(PqChatError::SessionUnknown)?;
+        // a child seen and not final yet: its parent's final state at home decides
+        let parent = self
+            .unfinal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .find(|(_, c)| **c == ep.epoch.id)
+            .map(|(p, _)| p.clone());
+        if let Some(p) = parent.and_then(|p| in_use(&p)) {
+            ep = p;
+        }
+        for _ in 0..EPOCH_STEPS {
+            let id = self.send_epoch(s, &ep.epoch.id).await?;
+            if id == ep.epoch.id {
+                return Ok(ep);
+            }
+            ep = match in_use(&id) {
+                Some(e) => e,
+                None => {
+                    let open = self
+                        .open_epoch(s, &id, &me.key, &me.ua, None)
+                        .await
+                        .map_err(|d| match d {
+                            Drop::Member => PqChatError::NotMember,
+                            _ => PqChatError::Internal,
+                        })?;
+                    self.use_epoch(s, open).await?
+                }
+            };
+        }
+        Err(PqChatError::EpochNotFinal)
+    }
+
+    /// The own chain's position at `counter`: from the nearest held one at or below it, else from `ck_0`, in steps of at
+    /// most [`WALK_MAX`].
+    fn own_position(
+        &self,
+        ep: &OpenEpoch,
+        ua: &str,
+        device: &str,
+        counter: u64,
+    ) -> Result<Arc<AppKey>, PqChatError> {
+        let sid = &ep.epoch.session_id;
+        let scope = format!("{}/{ua}/{device}", ep.epoch.id);
+        let near = self.chains().nearest(sid, &scope, counter);
+        let (mut at, mut p) = match near {
+            Some(x) => x,
+            None => (
+                0,
+                self.app.pqchat_chain(
+                    ep.k.clone(),
+                    sid.clone(),
+                    ep.epoch.id.clone(),
+                    ua.into(),
+                    device.into(),
+                )?,
+            ),
+        };
+        while at < counter {
+            let n = (counter - at).min(WALK_MAX);
+            p = self.app.pqchat_advance(p, n)?;
+            at += n;
+        }
+        self.chains().hold(sid, &scope, counter, p.clone());
+        Ok(p)
+    }
+
+    /// `content` sealed and signed for every store of `s` by `me` (S5, no per-message prompt): under the epoch
+    /// [`PqChat::send_under`] gives, at the own chain's next counter, **taken before the seal**, its `parents` the session's
+    /// heads; shown at once, its id seen (its copy from a store is a duplicate).
+    pub async fn seal(
+        &self,
+        s: &SessionRef,
+        me: &Me,
+        content: &Content,
+        ts: Option<u64>,
+    ) -> Result<Outgoing, PqChatError> {
+        crate::session::seed_of(&me.key)?;
+        let v = content.value(ts)?;
+        let ep = self.send_under(s, me).await?;
+        self.seal_under(&ep, me, &v).await
+    }
+
+    pub(crate) async fn seal_under(
+        &self,
+        ep: &Arc<OpenEpoch>,
+        me: &Me,
+        v: &Value,
+    ) -> Result<Outgoing, PqChatError> {
+        let ua = me.ua.to_ascii_lowercase();
+        let sid = ep.epoch.session_id.clone();
+        if !ep.epoch.has_member(&ua) {
+            return Err(PqChatError::NotMember);
+        }
+        let device = self.device()?;
+        let counter = self.take_counter(&ep.epoch.id, &device)?;
+        let heads = self
+            .timelines()
+            .get(&sid)
+            .map(|t| t.heads().to_vec())
+            .unwrap_or_default();
+        let parents = order::parents(&heads)?;
+        let pos = self.own_position(ep, &ua, &device, counter)?;
+        let sealed = self
+            .app
+            .pqchat_seal_message(
+                me.key.clone(),
+                ep.k.clone(),
+                pos,
+                PqMessageHeader {
+                    session_id: sid.clone(),
+                    epoch_id: ep.epoch.id.clone(),
+                    device,
+                    counter,
+                    parents,
+                },
+                v.to_string(),
+            )
+            .await?;
+        if sealed.record.sender.to_ascii_lowercase() != ua {
+            return Err(PqChatError::Internal);
+        }
+        self.chains().add_id(&sid, sealed.message_id.clone());
+        let p = Content::parse(v.to_string().as_bytes());
+        self.show(ep, &sealed.record, &sealed.message_id, p);
+        Ok(Outgoing {
+            epoch: ep.clone(),
+            sealed,
+        })
     }
 }
