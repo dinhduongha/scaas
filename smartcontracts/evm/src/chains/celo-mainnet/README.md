@@ -1,4 +1,25 @@
+# Celo (`celo-mainnet`)
 
+Public EVM mainnet. Row `celo-mainnet` of [`chain-uids.json`](../../../chain-uids.json): chain id **42220**, chain_uid
+`0x19ea3339d3c8cda97235bc8293240d5b9dadcdfbb5d4b0b90ee731cac1bd11c3`, network `mainnet`. A chain is (chainId, chain_uid) (NET-ALL-22).
+
+Profile [`profile.json`](profile.json) (`draft`, SDK plan T40), from the probes of 2026-11-22
+(`clients/scaas-rpc/runs/2026-11-22-evm-probes.py`; summary `2026-11-22-evm-probes-summary.txt` beside it; one sample each, the
+24-h and 7-day windows of NET-EVM-19 still to run):
+
+- **Fork:** `prague` by the head's `requestsHash`; no CLZ. A SCaaS set deploys after the chain's Amsterdam fork (NET-EVM-06).
+- **Caps:** runtime 65,536 B, init code 131,072 B; block gas limit 30,000,000 (read 2026-11-22);
+  per-transaction cap none detected.
+- **Finality:** `tag finalized`: H7 served it and never moved back in the first sample.
+- **Transaction type:** 2 (the head carries an EIP-1559 base fee).
+- **L1 fee:** `op-stack`: `GasPriceOracle.getL1Fee` (0x420…000F) over the unsigned transaction, added to the quote (the node: `params.l1_fee = "op-stack"`; the SDK: plan T38).
+- **EIP-2537:** present (Zether on the precompile).
+- **Note:** no CLZ (fork prague by requestsHash); runtime 65,536 B and init 131,072 B measured; celo-rpc.publicnode.com answered a head 1,586,281 blocks above the others' (H5 FAIL); txGasCap none detected.
+- **No PQZ or ML-DSA precompile** on this chain: PQZ runs OFFCHAIN (the proof checked by the contract verifier) or the PQZ
+  kinds stay off; ML-DSA runs on the registry's expanded-key cache; nothing here assumes a precompile.
+- **Explorer:** Celoscan (Etherscan v2), `celoscan.io`; verification (NET-EVM-12) with the API key named by `VERIFY_API_KEY_ENV`; the key
+  itself never enters the repo.
+- **RPC:** from the environment, passed to `smartcontracts/scripts/deploy.sh evm <rpc>`; no URL or key committed.
 - **Disabled kinds** (owner 2026-11-22, "disable the kinds that do not fit on Base and Celo": ARCH-POS-18 confirmed,
   decisions CLI-SDK-32 (2)): each PQ kind's largest transaction, regular and regular + EIP-8037 state gas (Amsterdam,
   measured), against this chain's block gas limit 30,000,000 by accounts.md's MD-5 rule (regular × 1.05 < 2^24, total × 1.05
