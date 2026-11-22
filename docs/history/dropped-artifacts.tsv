@@ -1273,3 +1273,5 @@ freeze(subject, ref)	renamed	the regulated build added recordId, the Change of C
 rpc_urls = [CometBFT RPC]	renamed	owner 2026-11-18 (scaas-rpc T21): every endpoint list is a list, `rpc_urls = [CometBFT RPC, …]`: networks/cosmos.md#6-relayer
 params = {rest, prefix, denom, gas_price, zero_fee?}	renamed	owner 2026-11-18 (scaas-rpc T21): `rest` is a list of REST gateways, `params = {rest = [REST gateway, …], …}`: networks/cosmos.md#6-relayer
 vaultV1	renamed	owner 2026-11-19 (CLI-SGN-17 is vault v3, dd2c570ef): the device layer seals the v2 vault, `sealDevice(vaultV2, key)`: clients/signers-clientkeys.md#CLI-SGN-17
+sealPqKey({account, index})	renamed	P6h (3), 2026-11-22: the key version is an argument, `sealPqKey({account, index, version})`: clients/signers-clientkeys.md#CLI-SGN-55
+openPqKey({account, index})	renamed	P6h (3), 2026-11-22: the key version is an argument, `openPqKey({account, index, version})`: clients/signers-clientkeys.md#CLI-SGN-55

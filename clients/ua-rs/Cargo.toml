@@ -372,6 +372,10 @@ required-features = ["pqz"]
 name = "pqz_backup"
 required-features = ["pqz"]
 
+[[test]]
+name = "pqz_leaf"
+required-features = ["pqz"]
+
 # ua-rs-sign T15e: PQZ on raw words (spec no-decryption-oracle §4.3–§4.6)
 [[test]]
 name = "facade_pqz_state"
@@ -476,3 +480,18 @@ required-features = ["fam-near", "fam-algorand"]
 [[test]]
 name = "app_core"
 required-features = ["app-core", "vectors"]
+
+# chains-arweave plan T17 (T41.arweave): the ANS-104 rows, the parser's refusals, buckets, ar:// (and seal_for_arweave with app-core)
+[[test]]
+name = "arweave"
+required-features = ["fam-arweave"]
+
+# the same rows built byte for byte through the test-only entry points
+[[test]]
+name = "arweave_rows"
+required-features = ["app-core", "fam-arweave", "vectors"]
+
+# the core's generic file seal: a build without fam-arweave seals and opens a file (decisions CLI-SDK-33 (35))
+[[test]]
+name = "file_seal"
+required-features = ["app-core"]

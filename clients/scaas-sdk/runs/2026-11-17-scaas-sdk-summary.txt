@@ -94,7 +94,6 @@ frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
 # T20 first part (at 5d206063c + the uncommitted T20 files): bind-gen (gen.sh --check, no drift) ok; ci_changes.py self-tests ok; actionlint 1.7.12 with shellcheck 0.11.0 clean; format.sh --check yaml sh py clean; docs check 0 errors, test_docs_check ok. Mutants t20 2/2 killed (the drift check on a source change without regeneration; the Dart load_check test).
 sdk-deny | 7f5e03caf | 0 | -; tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
-ua-vectors | c1a17c82f | 0 | 665 passed, 0 failed, 6 ignored (62 binaries)
 # T20 rest and the native auditor's PQZ consent (1233ed00d, c1a17c82f): the rows at 7f5e03caf "tree dirty" ran on the working
 # tree that became those two commits (the SDK, ffi, Dart and ua-rs files); ua-test ran before a clippy-only rewrite of one
 # lookup in policy.rs (ua-clippy at 1233ed00d + it), the touched ua-rs tests (wallet_uasig, sign_scaas, wallet_typed) rerun
@@ -165,12 +164,13 @@ sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 rpc-clippy | cd3b6c03e | 0 | -
 gas-gen | 6e7e71142 | 0 | -
-ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
 ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
 ua-clippy | 7765d3e64 | 0 | -
 ua-test | 95badea99 | 0 | 608 passed, 0 failed, 3 ignored (61 binaries)
 ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
+ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
+ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
 # node-e2e rc=143 at 7f156ac72: 25 tests in parallel OOM-killed at the 6 GB cap (kernel oom-kill in capped's scope); the step runs 10 at a time since e80c39854, on the merged tree
 # sdk-evm-profiles: ck-test | 46eabe7f5 | 0 | node: 537 pass, 0 fail, 4 skipped
 # sdk-evm-profiles: ua-test | 287e83eb2 | 0 | 601 passed, 0 failed, 3 ignored (59 binaries)
@@ -206,6 +206,7 @@ sdk-wasm | 0011b40e4 | 0 | -
 bind-gen | 0011b40e4 | 0 | -
 bind-dart | 0011b40e4 | 0 | dart: +14:
 rpc-wasm | 0011b40e4 | 0 | -
+
 sdk-test | 0011b40e4 | 0 | 416 passed, 0 failed, 17 ignored (39 binaries)
 # faecafcd2 (T41.evm): sdk-e2e's e2e_hand_off_on_anvil alone (CAPPED_MEM=6G, --ignored): 1 passed (A hands off, B lands it, the same blob ImportConsumed, a blob bound to C ImportRelayerBound, A's own self-relay lands); the whole sdk-e2e is the round's matrix (T39). Mutants: t41evm0 9 of 9, t41evm 13 of 13 killed
 node-test | 48514e797 | 0 | 900 passed, 0 failed, 75 ignored (19 binaries)
@@ -213,3 +214,18 @@ node-e2e | e71d44d42 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 rpc-test | e71d44d42 | 0 | 205 passed, 0 failed, 10 ignored (21 binaries)
 # T28 digest fix (b312a2e8e): node-test and its clippy at 48514e797 (the next commit, e71d44d42, changes one ignored e2e test's chain id only); node-e2e red twice at 10 threads before e71d44d42 (ua_line_two_generations_on_anvil's DeployUAGen reverted: chain 31920 shared with pqvault_vault_items_and_recovery; it passed alone), green after; zether-cli built with --features hazmat
 cli | d16da54e6 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+# merged from origin/ua-rs-sign a97cce414 (sdk-arweave's rows, kept as they were):
+ck-test | 0736ad763 | 0 | node: 567 pass, 0 fail, 4 skipped
+ck-xcheck | 0736ad763 | 0 | -
+docs | 0736ad763 | 0 | -
+features | 0736ad763 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+ua-arweave | 0736ad763 | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
+ua-core | 0736ad763 | 0 | 75 passed, 0 failed, 0 ignored (8 binaries)
+ua-clippy | 0736ad763 | 0 | -
+ua-verify-only | 0736ad763 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
+ua-vectors | 0736ad763 | 0 | 726 passed, 0 failed, 6 ignored (70 binaries)
+ua-test | 0736ad763 | 0 | 616 passed, 0 failed, 3 ignored (62 binaries)
+# T41.arweave's ua-rs part at 0736ad763 (CA-T16, CA-T17): the rows above; mutants t41arw1 20/20 killed (the ua-rs rows at 0736ad763, the clientkeys rows at 9764de7c0, their command through capped with the TAP reporter); every mutant script loads (mutants-check's commands, run by hand at 9764de7c0: rc 0)
+# T41.arweave fam-arweave size (clients/ua-rs/runs/fam-sizes.sh, release, the probe now reaching DataItem::parse) at 0736ad763: none 2212040 B; fam-arweave 2205712 → 2265656 B (delta −72 → +53616 B, old the empty feature at 61c5bb014); all 2342744 → 2379296 B (delta +136960 → +167256 B)
+rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
+sdk-test | 1eeb8561c | 101 | 181 passed, 4 failed, 0 ignored (6 binaries)

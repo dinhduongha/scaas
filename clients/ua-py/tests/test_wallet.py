@@ -1034,6 +1034,32 @@ class Pqz(Case):
         self.assertEqual(pks[0], self.keep(w.pqz_key()).public(), "version 0 is the default")
         self.assertEqual(len(set(pks)), 3, "one key per version")
 
+    def open_leaf(self, vault, at, u):
+        pin = u["pin"].encode() if "pin" in u else None
+        prf = b(u["prfOutput"]) if "prfOutput" in u else None
+        return self.keep(W.pqz_open_leaf(json.dumps(vault), at["account"], at["index"], at["version"], pin, prf))
+
+    def test_pqz_leaf_json_rows(self):
+        """P6h (3), CLI-SGN-55: pqz_leaf.json's leaves open to the wallet's key at their path; every refusal is UAVaultOpen and
+        its control opens; seal_pq_key's vault carries the path's label."""
+        f = json.loads((VEC / "pqz_leaf.json").read_text())
+        w = self.new_wallet("pq_kat")
+        for r in f["leaves"]:
+            with self.subTest(r["id"]):
+                want = self.keep(w.pqz_key(r["account"], r["index"], r["version"])).public()
+                self.assertEqual(self.open_leaf(r["vault"], r, r["unlock"]).public(), want)
+        self.assertEqual(len(f["refusals"]), 17)
+        for x in f["refusals"]:
+            with self.subTest(x["id"]):
+                self.assertEqual(code(lambda: self.open_leaf(x["vault"], x["open"], x["unlock"])), "UAVaultOpen")
+                c = x["control"]
+                self.assertEqual(code(lambda: self.open_leaf(c["vault"], c["open"], c["unlock"])), "", "control")
+        v = json.loads(w.seal_pq_key(1, 2, 3, "river-otter-7 ünï".encode()))
+        self.assertEqual(v["label"], "pqz:registry:1:2:3")
+        at, u = {"account": 1, "index": 2, "version": 3}, {"pin": "river-otter-7 ünï"}
+        self.assertEqual(self.open_leaf(v, at, u).public(), self.keep(w.pqz_key(1, 2, 3)).public())
+        self.assertEqual(code(lambda: self.open_leaf(v, dict(at, version=2), u)), "UAVaultOpen")
+
     def test_register_set_mismatch_and_key_field(self):
         k = self.keep(self.new_wallet("pq_kat").pqz_key())
         out = json.loads(k.call("proveRegister", self.REQ))
