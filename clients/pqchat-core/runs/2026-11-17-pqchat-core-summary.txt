@@ -88,3 +88,10 @@ T10b | pqc-wasm | 14441e690 | 0 | -
 T10b | pqc-vectors | 14441e690 | 0 | 7 passed, 0 failed, 0 ignored (1 binaries)
 T10b | bind | 14441e690 | 0 | -
 T10b | docs | 14441e690 | 0 | -
+merge-ua-rs-sign | pqc-reads | d38491843 | 0 | reads 37 (23 trusted), writes 13, R2 23; 0 refused
+merge-ua-rs-sign | mutants-check | d38491843 | 1 | -
+merge-ua-rs-sign | docs | d38491843 | 0 | -
+merge-ua-rs-sign | ck-vectors | d38491843 | 0 | -
+merge-ua-rs-sign | pqc-test | d38491843 | 101 | -
+merge-ua-rs-sign | pqc-clippy | d38491843 | 101 | -
+merge-ua-rs-sign | pqc-tree | d38491843 | 101 | -
