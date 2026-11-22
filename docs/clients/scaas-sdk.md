@@ -223,6 +223,15 @@ was included (`gasUsed` 28,600,373), and a call whose regular gas has no bound s
 limit; a PQZ debit (`mtxConfidentialTransferSingle`, quoted 46,445,076 with a regular bound of
 13,733,076) was included (`gasUsed` 27,049,355) after two ML-DSA-65 + PQZ-key registrations sent in two steps each (the
 one-transaction form quoted above half the block and above 2^24 regular).
+**The group limit on a chain capping the regular gas at 2^24** (owner 2026-11-22, "keep it as it is", decisions CLI-SDK-32's
+Change of that date; BUILT, `tests/e2e.rs` `e2e_bls_multi_group_limit_on_a_node`): `register_bls_multi` counts the whole raise
+of the gas limit above the table's quote (to the node's estimate with the margin) as regular gas, so on such a chain a group
+of at most **45 members** registers in one transaction (an unweighted group, threshold n / 2 + 1, measured on the local
+Nethermind copy, `runs/2026-11-20-m20-nethermind-summary.txt`: 45 landed in every run, 46 on the edge, landed in one run and
+refused in another as the node's estimate moved with the chain's state, 47, 48 and 64 refused). A larger group is refused
+`GasAboveTxCap` before anything is signed or sent, and the app splits it into smaller groups (a group is one UA; there is no
+two-step `registerBlsMulti`). The contract's cap stays 64 ([CTR-UA-52](../contracts/accounts.md#CTR-UA-52)); a chain without
+that per-transaction cap holds the registration to half its block gas limit and `Limits::max_gas` only, up to the 64.
 
 <a id="CLI-SDK-18"></a>**CLI-SDK-18** — **An operation ends only on a chain fact** (follows [CLI-RPC-09](scaas-rpc.md#CLI-RPC-09);
 BUILT: plan T10, T11b, `src/op/follow.rs`, `src/op/tests.rs`, `tests/wallet.rs`, `soroban_ops.rs`; PLANNED (review 2026-11-20,
@@ -339,7 +348,12 @@ take the sender, creator or author from the account and never a digest or a ciph
 `vectors` (bit 28) adds test-only entries (key bytes in and out, fixed randomness): a release build refuses it
 (`compile_error!`), `scripts/check_test_features.py` keeps it out of every shipped artifact and the bind-gen check out of
 every binding. It runs alone, in its own test (`--test pqchat_keys`): a `vectors` build of `ua-rs` refuses key handles until
-a test unlocks them (no-decryption-oracle §4.8), so the whole suite runs without it and clippy builds it.
+a test unlocks them (no-decryption-oracle §4.8), so the whole suite runs without it and clippy builds it. Four
+pure PqChat hashes join them (pqchat-core T3 to T5, 2026-11-22; BUILT, UNAUDITED): `pqchat_wrap_hash` (V2's `hashStruct(Wrap)` of a
+wrap read from state, checked by the app core against `wrapHashes[i]` before it enters a decapsulation),
+`pqchat_message_id` (a received message's `typed(PqChatMessage)`, its dedupe id), `pqchat_session_id` and
+`pqchat_epoch_id` (S4: the ids the wraps' AAD binds, before signing); no key, no network. `SecretBytes` is re-exported so
+an app core holds its plaintexts without a `scaas-ua` dependency of its own.
 `argon2id_passphrase` (PqVault V9, 2026-11-21; BUILT, UNAUDITED) is `argon2id` of a typed passphrase after RFC 8265's
 OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control character or bytes that are not UTF-8: `Argument`), so
 a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`. PqVault's V1 vectors

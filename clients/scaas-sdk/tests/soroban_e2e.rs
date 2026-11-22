@@ -2,8 +2,8 @@
 //! Plan T39 (open from T41.soroban): the SDK's Soroban paths on a live local network, the pinned Protocol 30 quickstart
 //! (`smartcontracts/soroban/scripts/quickstart.sh`), the token built by `smartcontracts/scripts/build.sh soroban`:
 //! A hands a pay off to B; B, holding only XLM, imports, quotes, submits and sees `landed`; the same blob again is
-//! `ImportConsumed`; A's own self-relay lands; a native XLM send lands. Ignored: `cargo test --features soroban --test
-//! soroban_e2e -- --ignored` with the quickstart up. Env (defaults: the local quickstart): `STELLAR_URL`, `STELLAR_FRIENDBOT`,
+//! `ImportConsumed`; A's own self-relay lands, paid by another key of its seed and by its own key; a native XLM send lands.
+//! Ignored: `cargo test --features soroban --test soroban_e2e -- --ignored` with the quickstart up. Env (defaults: the local quickstart): `STELLAR_URL`, `STELLAR_FRIENDBOT`,
 //! `STELLAR_PASSPHRASE`, `STELLAR_BIN` (the pinned CLI, `quickstart.sh cli`), `SOROBAN_TOKEN_WASM`.
 //! A and B are the vectors' keys 0 and 1 (smartcontracts/vectors/families/soroban.json); the token's admin is a CLI key in a
 //! temporary config directory.
@@ -322,9 +322,7 @@ async fn a_hand_off_a_self_relay_and_a_native_send_land_on_the_local_network() {
     );
     assert_eq!(follow(&w, &h.op).await, "landed", "A's handed-off row");
 
-    // 3. A's own self-relay: A signs its own pay and pays for it from its own payer key (key 2, as the vectors' payer). The
-    // payer A's key 0 itself is not this test's: a simulation records the source account's own auth as `SourceAccount`
-    // credentials, which `scaas-rpc` refuses ("an auth entry out of its form"; open, plan T39)
+    // 3. A's own self-relay: A signs its own pay and pays for it from another key of its seed (key 2, as the vectors' payer)
     let p = w.soroban_prepare(pay(&b, "2000000", 0xB2)).await.unwrap();
     let q = w
         .soroban_quote(
@@ -354,6 +352,45 @@ async fn a_hand_off_a_self_relay_and_a_native_send_land_on_the_local_network() {
         ],
     );
     assert_eq!(bal.trim_matches('"'), "3000000", "B holds both pays");
+    // 3b. A's self-relay paid by A's own key (owner 2026-11-22, "accept SourceAccount when self-paying"): the transaction's
+    // source is the subject, whose simulation records a `SourceAccount` entry
+    let p = w.soroban_prepare(pay(&b, "4000000", 0xC3)).await.unwrap();
+    let q = w
+        .soroban_quote(
+            p.clone(),
+            SorobanPath::SelfRelay {
+                payer: key(&seed, 0),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        q.payer.as_deref(),
+        Some(a.as_str()),
+        "A pays its own transaction"
+    );
+    let id = w.soroban_submit(p, q).await.unwrap();
+    assert_eq!(
+        follow(&w, &id).await,
+        "landed",
+        "A's self-relay by its own key"
+    );
+    let bal = cli(
+        d,
+        &[
+            "contract",
+            "invoke",
+            "--id",
+            &token,
+            "--source-account",
+            "admin",
+            "--",
+            "balance",
+            "--id",
+            &b,
+        ],
+    );
+    assert_eq!(bal.trim_matches('"'), "7000000", "B holds the three pays");
 
     // 4. a native XLM send from A to B
     let q = w

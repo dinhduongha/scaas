@@ -693,6 +693,71 @@ async fn sealed_info_rows_and_s1() {
     );
 }
 
+/// V2's wrap hash (every `wraps` row's `hashStruct`) and a received message's id (the `message` row's `id`), each with a
+/// one-change twin (pqchat-core T4's wrap-hash check and dedupe read them).
+#[tokio::test(flavor = "multi_thread")]
+async fn wrap_hash_and_message_id_rows() {
+    let _one = ONE.lock().await;
+    let (sdk, _seed, _c) = on_fake().await;
+    let a = AppCore::new(sdk, desc(&[PQC])).unwrap();
+    let keys = pq("keys");
+    let rows = keys["wraps"].as_array().unwrap();
+    assert!(!rows.is_empty());
+    for x in rows {
+        let w = PqWrap {
+            member: s(&x["wrap"]["member"]),
+            key_id: x["wrap"]["keyId"].as_u64().unwrap(),
+            mlkem_ct: unhex(&x["wrap"]["mlkemCt"]),
+            x25519_eph: s(&x["wrap"]["x25519Eph"]),
+            sealed_key: unhex(&x["wrap"]["sealedKey"]),
+        };
+        assert_eq!(
+            a.pqchat_wrap_hash(w.clone()).unwrap(),
+            s(&x["hashStruct"]),
+            "{}",
+            x["name"]
+        );
+        let mut flip = w;
+        flip.sealed_key[0] ^= 1;
+        assert_ne!(a.pqchat_wrap_hash(flip).unwrap(), s(&x["hashStruct"]));
+    }
+    let m = &pq("records")["message"];
+    let r = record_of(&m["record"]);
+    assert_eq!(a.pqchat_message_id(r.clone()).unwrap(), s(&m["id"]));
+    let other = PqChatMessage {
+        counter: r.counter + 1,
+        ..r.clone()
+    };
+    assert_ne!(a.pqchat_message_id(other).unwrap(), s(&m["id"]));
+    let bad = PqChatMessage {
+        device: "0x01".into(),
+        ..r
+    };
+    assert_eq!(code(a.pqchat_message_id(bad)), "Argument");
+    // S4: the session and epoch rows' ids before signing; one change each
+    let rec = pq("records");
+    let (sr, er) = (&rec["session"], &rec["epoch"]["record"]);
+    let sid = a
+        .pqchat_session_id(
+            s(&sr["record"]["creator"]),
+            sr["record"]["nonce"].as_u64().unwrap(),
+        )
+        .unwrap();
+    assert_eq!(sid, s(&sr["id"]));
+    assert_eq!(sid, s(&er["sessionId"]));
+    let nonce = er["nonce"].as_u64().unwrap();
+    let eid = a
+        .pqchat_epoch_id(sid.clone(), s(&er["author"]), nonce)
+        .unwrap();
+    assert_eq!(eid, s(&rec["epoch"]["id"]));
+    assert_ne!(
+        a.pqchat_epoch_id(sid.clone(), s(&er["author"]), nonce + 1)
+            .unwrap(),
+        eid
+    );
+    assert_eq!(code(a.pqchat_session_id("0x01".into(), 1)), "Argument");
+}
+
 /// V1 on the fake registry: every record row of `records.json` and `topics.json` verified at the final block; a flipped byte,
 /// another signer, an unregistered signer refused (false).
 #[tokio::test(flavor = "multi_thread")]

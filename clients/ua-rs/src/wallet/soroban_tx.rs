@@ -31,15 +31,24 @@ pub struct SorobanData {
     pub archived: Vec<u32>,
 }
 
+/// A host call's auth entry: none (a simulation's recording mode, never signed), the source account's own (owner 2026-11-22:
+/// a self-paid op, the transaction's source its subject), or the subject's Address credentials with its signature.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InvokeAuth {
+    None,
+    SourceAccount,
+    Address([u8; 64]),
+}
+
 /// The transaction's one operation.
 #[allow(clippy::large_enum_variant)] // one per transaction, short-lived
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TxOp {
-    /// the checked op as a host call, with the subject's signature as its auth entry and the simulation's data; `signature` and
-    /// `data` absent only in a transaction that is simulated, never signed (`op` absent: the terms were refused)
+    /// the checked op as a host call, with its auth entry and the simulation's data; `InvokeAuth::None` and no `data` only in a
+    /// transaction that is simulated, never signed (`op` absent: the terms were refused)
     Invoke {
         op: Option<Checked>,
-        signature: Option<[u8; 64]>,
+        auth: InvokeAuth,
         data: Option<SorobanData>,
     },
     /// a payment of `amount` stroops of XLM to a `G…`
@@ -148,18 +157,23 @@ impl SorobanTx {
                 o.extend_from_slice(&amount.to_be_bytes());
                 u32be(&mut o, 0); // ext v0
             }
-            TxOp::Invoke {
-                op,
-                signature,
-                data,
-            } => {
+            TxOp::Invoke { op, auth, data } => {
                 let op = op.as_ref().ok_or(Error::Argument)?;
                 u32be(&mut o, OP_INVOKE_HOST_FUNCTION);
                 u32be(&mut o, 0); // HOST_FUNCTION_TYPE_INVOKE_CONTRACT
                 op.call(&mut o);
-                match signature {
-                    None => u32be(&mut o, 0),
-                    Some(sig) => {
+                match auth {
+                    InvokeAuth::None => u32be(&mut o, 0),
+                    InvokeAuth::SourceAccount => {
+                        // only when the transaction's source is the op's subject
+                        if op.subject_key() != source {
+                            return Err(Error::Argument);
+                        }
+                        u32be(&mut o, 1);
+                        u32be(&mut o, 0); // SOROBAN_CREDENTIALS_SOURCE_ACCOUNT
+                        op.invocation(&mut o);
+                    }
+                    InvokeAuth::Address(sig) => {
                         u32be(&mut o, 1);
                         u32be(&mut o, 1); // SOROBAN_CREDENTIALS_ADDRESS
                         Address::Account(op.subject_key()).sc_address(&mut o);
@@ -234,7 +248,7 @@ impl NativeKey {
     }
 
     /// The source's signature of `tx` (T41.soroban): ed25519 over its id, on the `stellar` key that is `tx.source` only, and a
-    /// host call only with its auth entry and its simulation's data (`Argument` otherwise). The key signs only [`SorobanTx::xdr`]'s
+    /// host call only with an auth entry (the subject's, or the source's own when it is the subject) and its simulation's data (`Argument` otherwise). The key signs only [`SorobanTx::xdr`]'s
     /// own output.
     pub fn sign_soroban_tx(
         &self,
@@ -247,7 +261,7 @@ impl NativeKey {
         if matches!(
             &tx.op,
             TxOp::Invoke {
-                signature: None,
+                auth: InvokeAuth::None,
                 ..
             } | TxOp::Invoke { data: None, .. }
         ) {

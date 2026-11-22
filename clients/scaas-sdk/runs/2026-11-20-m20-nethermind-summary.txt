@@ -77,3 +77,15 @@ mtxConfidentialTransferSingle (the PQZ debit) | 46,448,148 | 13,736,148 | 27,050
 # (src/op/bls_multi.rs) raises the gas limit to that and counts the whole raise as regular gas ("the gas the PoP check asks up
 # front"), so 9,492,384 + the raise exceeds 2^24 and the SDK refuses a transaction the earlier run landed with regular gas
 # quoted at 14,240,076. CI does not run this test. The control part did not run: the runner stops when no `M20 tx` line exists.
+# The owner's ruling of 2026-11-22 on the BLS red above ("keep it as it is": the whole raise stays regular gas; decisions
+# CLI-SDK-32's Change): the test is e2e_bls_multi_group_limit_on_a_node. Measured on fresh copies (SCAAS_M20_BLS_FIND=1, a
+# binary search; quote gas_limit / regular_gas per group size, unweighted, threshold n / 2 + 1):
+#   n = 33: 16,381,789 / 5,036,816 sent; 40: 19,454,152 / 6,042,912 sent; 44: 21,209,788 / 6,617,824 sent;
+#   45: 21,648,697 / 6,761,552 sent; 46: 22,087,606 / 6,905,280 refused in run 1 (members partly registered), sent in run 2
+#   (fresh members); 47: 22,526,515 / 7,049,008 refused; 48: 22,965,424 / 7,192,736 refused; 64: 29,987,968 / 9,492,384 refused.
+# Pinned: 45 lands, 48 and 64 refused GasAboveTxCap with the payer's pending nonce unchanged (nothing sent).
+step | quote gas_limit | quote regular_gas | receipt gasUsed | status
+register_bls_multi n = 64 | 29,987,968 | 9,492,384 | - | GasAboveTxCap, nothing sent
+register_bls_multi n = 48 | 22,965,424 | 7,192,736 | - | GasAboveTxCap, nothing sent
+register_bls_multi n = 45 | 21,648,697 | 6,761,552 | 20,607,819 | 1 (block 49)
+negative control: the looping initcode, gas limit 30,000,000 | | | 16,777,216 = 2^24 | 0

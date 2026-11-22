@@ -1152,7 +1152,8 @@ kind ([CTR-UA-46](#CTR-UA-46)). No membership change: new members, weights or th
 state 2,096,100 / 6,251,580 / 11,000,700 / 20,498,940; state = 1,530 × (new code bytes + 120 × new accounts) + 97,920 × new
 slots (183,600 a new SSTORE2 account). The cap gate (owner ruling Q4): regular gas at n = 64 within 75 % of 2^24 (8,003,477, 63.6 %):
 the cap stays 64, one constant on every chain, never lowered per chain; inclusion needs regular + state within a block's limit,
-which no figure assumes. Verifier caps: `CHECK_GAS` 300,000 (worst measured 252,564), `POP_GAS` 6,700,000 (worst 5,578,617, n =
+which no figure assumes. What a client registers in one transaction is the SDK's: on a chain capping the regular gas at 2^24 its
+`register_bls_multi` registers at most 45 members (owner 2026-11-22; [scaas-sdk](../clients/scaas-sdk.md#sdk-bls-multi)). Verifier caps: `CHECK_GAS` 300,000 (worst measured 252,564), `POP_GAS` 6,700,000 (worst 5,578,617, n =
 64), `CAP_BLS12381_MULTI` 330,000 (least `verifyCap` at n = 64, k = 33: 310,778 hot / 310,823 stored); `MSIG_MEMBER_GAS`
 unchanged (an `msig` of 16 groups of 64 registers and authorises at `verifyBudget`). The SDK quotes from the gas table's
 `item: "members"` / `per_item` rows (`gas + per_item × n`; scaas-sdk spec §13.3); the node's sponsorship books and caps regular

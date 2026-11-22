@@ -104,9 +104,13 @@ test("each native row: the tx, its id, the payer's signature and the envelope", 
     assert.equal(hex(tx), r.tx, r.what);
     const id = sor.txHash(N.networkId, tx);
     assert.equal(hex(id), r.hash);
-    assert.ok(ed25519.verify(fromHex(r.signature), id, pk(N.payer)));
-    assert.equal(hex(sor.envelope(tx, N.payer, r.signature)), r.envelope);
+    assert.equal(r.signer, r.source, "the source signs");
+    assert.ok(ed25519.verify(fromHex(r.signature), id, pk(r.signer)));
+    assert.equal(hex(sor.envelope(tx, r.signer, r.signature)), r.envelope);
   }
+  // owner 2026-11-22: the self-paid row's one entry is SourceAccount credentials, its source the op's subject
+  const self = N.rows.find((r) => r.op.invoke?.auth[0].source === true);
+  assert.equal(self.source, self.op.invoke.invocation.args[0].value);
   // the self-relay carries T27's signed pay as its auth entry, unchanged
   const op = V.ops.find((o) => o.kind === "pay").signed_op;
   assert.deepEqual(N.rows[0].op.invoke.auth[0], { payload: op.payload, from: op.from, signature: op.signature });

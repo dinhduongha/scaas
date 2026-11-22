@@ -7,7 +7,8 @@
 # (scaas/nethermind-pqz:2.2.0-pqz11) with Amsterdam from block 1 (copygen.py), chain id 31990; the live stack,
 # its containers, volumes and port are never touched. The signer alone (2,500 MiB, 2 CPUs) behind an unthrottled proxy;
 # the copy is stopped and its data removed on exit. Steps: the contracts' Deploy.s.sol, then the SDK's ignored test
-# `e2e_bls_multi_64_on_a_node` (register_bls_multi, n = 64, self-relayed), then the negative control (a call whose
+# `e2e_bls_multi_group_limit_on_a_node` (register_bls_multi self-relayed: 64 members refused, the largest group that fits
+# lands; SCAAS_M20_BLS_FIND=1 measures that count again), then the negative control (a call whose
 # regular gas exceeds 2^24). Progress on stdout; the full output in 2026-11-20-m20-nethermind.log (git-ignored).
 set -euo pipefail
 W=$(git rev-parse --show-toplevel)
@@ -122,8 +123,8 @@ e2e() { # one ignored e2e test of the SDK against the copy
 rc=0
 PARTS=${M20_PARTS:-bls,pqz,control}
 if [[ ,$PARTS, == *,bls,* ]]; then
-    e2e e2e_bls_multi_64_on_a_node && r=0 || r=$?
-    say "register_bls_multi n = 64: rc=$r"
+    e2e e2e_bls_multi_group_limit_on_a_node && r=0 || r=$?
+    say "register_bls_multi: 64 refused, the largest group lands: rc=$r"
     rc=$((rc | r))
 fi
 if [[ ,$PARTS, == *,pqz,* ]]; then

@@ -109,6 +109,9 @@ pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};
 #[cfg(feature = "evm")]
 pub use line::UaLine;
+/// The plaintexts the SDK hands out (an app core's decrypted content, `open`'s output): named here so an app core above the SDK
+/// holds them without a `scaas-ua` dependency of its own (CLI-PQC-01).
+pub use scaas_ua::wallet::SecretBytes;
 pub use vault::Vault;
 
 use scaas_rpc::endpoint::{READ_TIMEOUT_MS, SLOW_TIMEOUT_MS, TIMEOUT_MS};
