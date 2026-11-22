@@ -28,3 +28,17 @@ R2 | e2e: personal, shared, kem_rotation_and_msig_admin (the mutant runner's bas
 R2 | format.sh --check rust py sh; docs_check | efd055c9e | 0 | ok; 0 errors
 R2 mutants | runs/2026-11-22-pqvault-core-mutants.py --r2 run | efd055c9e | - | 11 mutants, 11 killed
 R2 mutants | the v10 mutants on vault.rs rerun | efd055c9e | - | 21 of 21 killed (record updated)
+# The coordinator's controller calls of 2026-11-22 (CLI-PQV-15 (5)-(8), CLI-SDK-33): red first, then green
+R3 red | scaas-sdk app_core a_handle_twice_in_one_call_is_refused (before the fix) | 2d842906a tree | 101 | "hung" (20-s bound)
+R3 red | e2e pqvault_records_on_a_two_generation_line (chain 31930) | 45edfb941 | 101 | Argument from the generation-1-only domain
+R3 | scaas-sdk app_core + app_core_vault_records (pqvault_records_chain_is_explicit) | 45edfb941 | 0 | 9 + 6 passed
+R3 | sdk-test (CI's full feature set) | deb0c1f7d | 0 | 422 passed 0 failed 17 ignored
+R3 | sdk-vectors (+ app_core_vault_records) | deb0c1f7d | 0 | 21 passed
+R3 | sdk-clippy | 03378a237 | 0 | - (red at deb0c1f7d: too_many_arguments on verify_with, fixed in 03378a237)
+R3 | ua-rs app_core (pqvault_msig_signs_both_paths with the disabled slot) / clippy app-core,vectors | deb0c1f7d | 0 | 16 passed / -
+R3 | cli test / clippy dev-profiles (app-core sign-pqvault-record takes records) | deb0c1f7d | 0 | 22 passed / -
+R3 | pqvault-core tests; clippy default and vectors | deb0c1f7d | 0 | 19 passed, 5 e2e ignored / -
+R3 | e2e, all five (anvil; the two-generation one on chain 31930) | deb0c1f7d | 0 | personal 85 s, shared 34 s, second app core 17 s, kem/msig 27 s, two generations 22 s
+R3 | format.sh --check rust py sh; docs_check | 03378a237 | 0 | ok; 0 errors
+R3 mutants | --r3 run | deb0c1f7d | - | 7 mutants, 7 killed
+R3 mutants | the v10 and v10-r2 rows whose files changed, rerun | deb0c1f7d | - | v10 21 of 21, v10-r2 11 of 11 killed
