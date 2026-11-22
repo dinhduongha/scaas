@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """pqchat-core T10b's mutants (the `file` content, UA-7 §6.4.1 with its 2026-11-21 Change; owner 2026-11-22): one per check,
 each killed by its own named test: ctSha256 skipped on each open path, the length check skipped, the size not padded, a key
-entering the content from above `ua-rs`, the file key not entered:
+entering the content from above `ua-rs`, the key handed to the app, the file key not entered:
 python3 clients/pqchat-core/runs/2026-11-17-pqchat-core-t10b-mutants.py check | run"""
 import sys
 from pathlib import Path
@@ -14,6 +14,7 @@ OB = "clients/ua-rs/src/file.rs"
 WF = "clients/ua-rs/src/wallet/file.rs"
 PF = "clients/ua-rs/src/wallet/pqchat_file.rs"
 ST = "clients/pqchat-core/src/message.rs"
+FI = "clients/pqchat-core/src/file.rs"
 TAR = "cd clients/clientkeys && node --test --test-reporter=tap --test-name-pattern 'open_file checks the length' test/arweave.test.js"
 TCK = "cd clients/clientkeys && node --test --test-reporter=tap --test-name-pattern 'file content' test/pqchat.test.js"
 TUA = "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors "
@@ -51,6 +52,10 @@ MUTANTS = [
      [(PF, "    ar_url(text(o.get(\"url\"), 1, 2048)?).ok_or(Error::PqChatContent)?;\n",
        "    text(o.get(\"url\"), 1, 2048)?;\n")],
      TUA + "--test pqchat_keys file_message_rows"),
+    ("crate: file_info hands out the content itself (the key leaving ua-rs to the app)",
+     [(FI, "        let v = serde_json::json!({\"mediaType\": media_type, \"name\": name, \"size\": size, \"url\": url,\n            \"ctSha256\": ct_sha256})\n        .to_string();",
+       "        let _ = (media_type, name, size, url, ct_sha256);\n        let v = content.with(|b| String::from_utf8_lossy(b).into_owned());")],
+     TPQ + "a_file_is_sent_and_read"),
     ("crate: the file sealed as a plain content (its key never entered)",
      [(ST, "                    .pqchat_seal_file_message(key, k, pos, header, v.to_string(), f)",
        "                    .pqchat_seal_message(key, k, pos, header, v.to_string())")],

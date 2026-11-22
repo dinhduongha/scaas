@@ -6,7 +6,7 @@
 //! `pqchat_open_file` checks the object's length and `ctSha256` before any decryption, reading the key from the opened
 //! content inside `scaas-ua`. The signed item is returned for the app to post and keep (`ArweaveFiles::upload_file`,
 //! `keep_up`); the crate posts nothing to Arweave. The reader fetches the object on its user's action only, with
-//! [`FileInfo`]'s `url`, `size` and `ct_sha256` (`ArweaveFiles::fetch_file`); a failed file is shown on the device only and
+//! [`PqChat::file_info`]'s `url`, `size` and `ctSha256` (`ArweaveFiles::fetch_file`); a failed file is shown on the device only and
 //! nothing sent depends on it (ARCH-POS-13).
 use crate::content::Content;
 use crate::model::hex;
@@ -39,19 +39,6 @@ pub struct FileUpload {
     pub url: String,
     pub item: Vec<u8>,
     pub size: u64,
-    /// `0x` hex
-    pub ct_sha256: String,
-}
-
-/// A received `file`'s public fields: what the app shows and fetches by (no key).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FileInfo {
-    pub media_type: String,
-    /// display only: never a path without making it safe
-    pub name: String,
-    pub size: u64,
-    /// `ar://<id>`
-    pub url: String,
     /// `0x` hex
     pub ct_sha256: String,
 }
@@ -125,25 +112,28 @@ impl PqChat {
         Ok((v, a.key, up))
     }
 
-    /// A received content's `file` fields (no key), or `None` for another content.
-    pub fn file_info(&self, content: Arc<SecretBytes>) -> Option<FileInfo> {
-        match content.with(Content::parse).content {
-            Content::File {
-                media_type,
-                name,
-                size,
-                url,
-                ct_sha256,
-                ..
-            } => Some(FileInfo {
-                media_type,
-                name,
-                size,
-                url,
-                ct_sha256,
-            }),
-            _ => None,
-        }
+    /// A received content's `file` fields without its key, as a handle (decrypted content leaves only as a handle, owner
+    /// 2026-11-22): the JSON `{"mediaType", "name", "size", "url", "ctSha256"}` the app shows and fetches by (`name` display
+    /// only, never a path without making it safe); another content `ContentInvalid`. The app never needs the content's own
+    /// bytes, which hold the key.
+    pub fn file_info(&self, content: Arc<SecretBytes>) -> Result<Arc<SecretBytes>, PqChatError> {
+        let Content::File {
+            media_type,
+            name,
+            size,
+            url,
+            ct_sha256,
+            ..
+        } = content.with(Content::parse).content
+        else {
+            return Err(PqChatError::ContentInvalid);
+        };
+        let v = serde_json::json!({"mediaType": media_type, "name": name, "size": size, "url": url,
+            "ctSha256": ct_sha256})
+        .to_string();
+        let h = SecretBytes::new(v.len()).map_err(|_| PqChatError::Internal)?;
+        h.with_mut(|b| b.copy_from_slice(v.as_bytes()));
+        Ok(Arc::new(h))
     }
 
     /// The file of `object` (fetched by the app on its user's action) named by the received `content`: the SDK checks the

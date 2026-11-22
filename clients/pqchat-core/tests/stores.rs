@@ -795,7 +795,7 @@ async fn a_file_is_sent_and_read() {
     let mine = w.pq.timeline(&s.session_id);
     let own = mine
         .iter()
-        .find(|m| w.pq.file_info(m.content.clone()).is_some())
+        .find(|m| w.pq.file_info(m.content.clone()).is_ok())
         .unwrap();
     assert!(own.supported);
     let shown: Value = own.content.with(|c| serde_json::from_slice(c).unwrap());
@@ -816,12 +816,30 @@ async fn a_file_is_sent_and_read() {
         k: b.k.clone(),
     };
     let got = bob.receive(&ep, env).await.unwrap();
-    let info = bob.file_info(got.content.clone()).unwrap();
+    let info: Value = bob
+        .file_info(got.content.clone())
+        .unwrap()
+        .with(|b| serde_json::from_slice(b).unwrap());
     assert_eq!(
-        (info.url.as_str(), info.size, info.name.as_str()),
-        (up.url.as_str(), 1000, "a.bin")
+        (
+            &info["url"],
+            &info["size"],
+            &info["name"],
+            &info["ctSha256"]
+        ),
+        (
+            &json!(up.url),
+            &json!(1000),
+            &json!("a.bin"),
+            &json!(up.ct_sha256)
+        )
     );
-    assert_eq!(info.ct_sha256, up.ct_sha256);
+    // the key stays in the content's own handle, never in what the app reads
+    assert!(info.get("key").is_none(), "{info}");
+    assert!(got
+        .content
+        .with(|b| serde_json::from_slice::<Value>(b).unwrap())["key"]
+        .is_string());
     let writes = w.net.writes();
     let mut flip = object.clone();
     flip[1000] ^= 1;
@@ -837,7 +855,7 @@ async fn a_file_is_sent_and_read() {
     assert_eq!(opened.with(|b| b.to_vec()), file, "control");
     assert_eq!(w.net.writes(), writes, "no write from a read");
     // a text content is no file
-    assert!(bob.file_info(own.content.clone()).is_some());
+    assert!(bob.file_info(own.content.clone()).is_ok());
     let t =
         w.pq.send(&s, &me(&w.alice), &txt("hi"), None, &opts(&w))
             .await
@@ -848,7 +866,7 @@ async fn a_file_is_sent_and_read() {
             .into_iter()
             .find(|m| m.id == t.message_id.clone().unwrap())
             .unwrap();
-    assert!(bob.file_info(text.content).is_none());
+    assert_eq!(code(bob.file_info(text.content)), "ContentInvalid");
 }
 
 /// PqChat's scope carries its app id (owner 2026-11-22): `scaas-ua`'s `keccak256("scaas.pqchat.v1")`, the root
