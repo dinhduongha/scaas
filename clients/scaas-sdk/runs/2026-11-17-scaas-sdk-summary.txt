@@ -276,3 +276,5 @@ sdk-test | 7c637b66f | 0 | 437 passed, 0 failed, 18 ignored (42 binaries)
 docs | 88e469e6b | 0 | -
 mutants-check | 88e469e6b | 0 | -
 features | 88e469e6b | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+# The BLS red above is closed by the owner's ruling of 2026-11-22 (the raise stays regular gas): e2e_bls_multi_group_limit_on_a_node
+# (64 and 48 refused, 45 lands) green on a fresh Nethermind copy; runs/2026-11-20-m20-nethermind-summary.txt.

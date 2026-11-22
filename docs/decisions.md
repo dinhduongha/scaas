@@ -12200,6 +12200,18 @@ others by `mutants-check`, the full rerun moved to the audit-fix batch; the SDK'
 under clippy `-D warnings`, fixed and added to the gate runner.
 **Source.** 2026-11-22 (the Change above), the owner's word relayed by the coordinator: "Đồng ý" (agreed) to the coordinator's
 proposal.
+
+Change (owner 2026-11-22, relayed by the coordinator; owner: yes; status: BUILT, `clients/scaas-sdk/tests/e2e.rs`
+`e2e_bls_multi_group_limit_on_a_node`, run by `runs/2026-11-20-m20-nethermind.sh`): **A `bls12381-multi` registration keeps
+counting the whole raise above the table's quote as regular gas; a group that then exceeds the per-transaction cap is refused
+and must be split.** On the local Nethermind copy (Amsterdam, EIP-7825 on the regular gas, 2^24 = 16,777,216), a 64-member
+group quotes a gas limit of 29,987,968 with a regular bound of 9,492,384; `register_bls_multi` raises the gas limit to the
+node's estimate with the margin (the PoP check asks the verifier's whole `POP_GAS` up front) and adds that raise, more than
+7,284,832 gas, to the regular bound, which then exceeds 2^24: `GasAboveTxCap` before anything is signed or sent. The largest
+unweighted group (threshold n / 2 + 1) that registered in every run is 45 members (quote 21,648,697 / regular 6,761,552,
+`gasUsed` 20,607,819); 46 landed in one run and was refused in another, 47, 48 and 64 were refused. The contract's member cap
+stays 64 (CTR-UA-52); the SDK's limit is the cap's consequence on such a chain, stated in [scaas-sdk](clients/scaas-sdk.md#sdk-bls-multi).
+**Source.** 2026-11-22 (the Change above), the owner's words relayed by the coordinator: "Giữ như hiện tại" (keep it as it is).
 Change (owner 2026-11-22, relayed by the coordinator; owner: yes; status: SPECIFIED, plan T41.arweave (CA-T20), chains-arweave plan T24 on branch `chains-arweave` (commits bd45f1613, ff7552ff4); the means are CLI-SDK-33's (60)–(66)): **Arweave never depends on the node; three payment paths; the node's payer service optional.** The rulings as relayed, in English: the node payer service NODE-SPN-05 (chains-arweave T24) is optional, an operator convenience; Arweave must never depend on the node; the paths are (1) the free tier, (2) the user's self-pay (Turbo credits funded from the user's own wallet, or a per-upload payment: the uploader signs its own ANS-104 item, and the bundler's HTTP 402 surfaces as `PaymentRequired`), (3) operator-sponsored through `x-paid-by`, sent to that bundler only, the SDK asking the node's payer route through `scaas-rpc`'s `NodeClient` (no payer: `PayerUnavailable`); the operator path sends only the upload address, the signature type and the bucket, with the gateway credential (an env var or a file name, never the keystore), and no UA, no UA signature and no file content. Self-pay's privacy cost is stated in the spec's threat notes and the client warns: the paying wallet links the user's upload keys at Turbo. **The ua-rs part first:** when the `ua-rs` part of T41.arweave (CA-T16, CA-T17) is done it is merged into `ua-rs-sign` first; `scaas-rpc` (CA-T19) and the SDK (CA-T20) follow on `sdk-arweave`, the `ua-rs` commits free of SDK or `scaas-rpc` changes.
 **Source.** 2026-11-22 (the Change above), the owner's words relayed by the coordinator: the payer service optional and self-pay, as written on branch `chains-arweave` (plan T24's paragraph "Optional since 2026-11-22 (owner)"); and "T41.arweave: Làm xong phần ua-rs thì merge vào ua-rs-sign trước."
 
