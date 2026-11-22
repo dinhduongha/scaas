@@ -794,6 +794,37 @@ func (w *Wallet) ExportPqzLeafRawVersion(account, index uint32, version uint64) 
 	return leaf, nil
 }
 
+// SealPqKey is P6h (3), CLI-SGN-55 (clientkeys sealPqKey): the PQZ leaf of account / index / version sealed as a vault v2
+// JSON of label pqz:registry:<account>:<index>:<version>; open it with PqzOpenLeaf.
+func (w *Wallet) SealPqKey(account, index uint32, version uint64, passphrase []byte) (string, error) {
+	var a args
+	defer a.done()
+	return w.str(1<<14, func(p, o unsafe.Pointer, n *C.size_t) C.ScaasUaStatus {
+		return C.scaas_ua_wallet_seal_pq_key(wp(p), C.uint32_t(account), C.uint32_t(index), C.uint64_t(version), a.secret(passphrase), (*C.char)(o), n)
+	})
+}
+
+// PqzOpenLeaf is P6h (3), CLI-SGN-55 (clientkeys openPqKey): the PQZ key of a leaf vault of SealPqKey, with no wallet; every
+// refusal of the vault is UAVaultOpen.
+func PqzOpenLeaf(vaultJSON string, passphrase, prf32 []byte, account, index uint32, version uint64) (*PqzKey, error) {
+	if err := Load(); err != nil {
+		return nil, err
+	}
+	prf, err := optSized(prf32, 32, "prf32")
+	if err != nil {
+		return nil, err
+	}
+	var a args
+	defer a.done()
+	var k *C.ScaasUaPqzKey
+	if err := call(func() C.ScaasUaStatus {
+		return C.scaas_ua_pqz_open_leaf(a.str(vaultJSON), a.secret(passphrase), prf, C.uint32_t(account), C.uint32_t(index), C.uint64_t(version), &k)
+	}); err != nil {
+		return nil, err
+	}
+	return track(&PqzKey{h: handle{p: unsafe.Pointer(k), free: func(p unsafe.Pointer) { C.scaas_ua_pqz_key_free((*C.ScaasUaPqzKey)(p)) }}}), nil
+}
+
 // ExportPqzLeafRaw returns a secret in the clear: the 32-byte PQZ leaf seed32. The caller wipes it (Wipe).
 func (w *Wallet) ExportPqzLeafRaw(account, index uint32) ([]byte, error) {
 	leaf := make([]byte, 32)

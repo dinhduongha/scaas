@@ -212,6 +212,22 @@ mod ffi {
             key_use: u32,
         ) -> Result<Box<ZetherKey>>;
         fn wallet_pqz_key(w: &Wallet, account: u32, index: u32) -> Result<Box<PqzKey>>;
+        // P6h (3), CLI-SGN-55: the registry-class leaf sealed in vault v2 (sealPqKey) and opened alone (openPqKey)
+        fn wallet_seal_pq_key(
+            w: &Wallet,
+            account: u32,
+            index: u32,
+            version: u64,
+            vault_passphrase: &mut [u8],
+        ) -> Result<String>;
+        fn pqz_open_leaf(
+            vault_json: &str,
+            vault_passphrase: &mut [u8],
+            prf32: &mut [u8],
+            account: u32,
+            index: u32,
+            version: u64,
+        ) -> Result<Box<PqzKey>>;
         fn wallet_export_pqz_leaf_raw(w: &Wallet, account: u32, index: u32) -> Result<Vec<u8>>;
         fn wallet_pqz_key_version(
             w: &Wallet,
@@ -867,6 +883,45 @@ fn wallet_export_pqz_leaf_raw(w: &Wallet, account: u32, index: u32) -> R<Vec<u8>
             .export_pqz_leaf_raw(account, index, fpqz::AllowSecretExport)?
             .to_vec())
     })
+}
+fn wallet_seal_pq_key(
+    w: &Wallet,
+    account: u32,
+    index: u32,
+    version: u64,
+    vault_passphrase: &mut [u8],
+) -> R<String> {
+    let r = guard(|| {
+        Ok(w.0
+            .seal_pq_key(account, index, version, text(vault_passphrase)?, None)?
+            .to_json())
+    });
+    wipe(&mut [vault_passphrase]);
+    r
+}
+/// Every refusal of the vault is `UAVaultOpen` (CLI-SGN-55).
+fn pqz_open_leaf(
+    vault_json: &str,
+    vault_passphrase: &mut [u8],
+    prf32: &mut [u8],
+    account: u32,
+    index: u32,
+    version: u64,
+) -> R<Box<PqzKey>> {
+    let r = guard(|| {
+        Ok(Box::new(PqzKey(
+            fpqz::PqzKey::open_leaf(
+                vault_json.as_bytes(),
+                unlock(vault_passphrase, prf32)?,
+                account,
+                index,
+                version,
+            )?,
+            Live::new(),
+        )))
+    });
+    wipe(&mut [vault_passphrase, prf32]);
+    r
 }
 /// Group 3g (T15o): the PQZ key and leaf of a key version.
 fn wallet_pqz_key_version(w: &Wallet, account: u32, index: u32, version: u64) -> R<Box<PqzKey>> {

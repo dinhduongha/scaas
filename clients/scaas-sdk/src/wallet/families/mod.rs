@@ -32,6 +32,8 @@ pub(crate) mod near;
 pub(crate) mod solana;
 #[cfg(feature = "soroban")]
 pub(crate) mod soroban;
+#[cfg(feature = "soroban")]
+pub(crate) mod soroban_ops;
 #[cfg(all(feature = "wallet", feature = "substrate"))]
 pub(crate) mod substrate;
 #[cfg(feature = "sui")]

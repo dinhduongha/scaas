@@ -242,7 +242,7 @@ class Smoke(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(await sdk.vault().seeds()), 1)
 
     async def test_evm_profile(self):
-        # the bindings build the SDK's `evm` (decisions CLI-SDK-33 (49)): an EVM profile opens
+        # the bindings build the SDK's `evm` (decisions CLI-SDK-33 (100)): an EVM profile opens
         self.assertNotEqual(s.features() & (1 << 30), 0, "the evm bit")
 
         def profile(**more):

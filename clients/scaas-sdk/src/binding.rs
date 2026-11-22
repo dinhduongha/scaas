@@ -187,6 +187,10 @@ pub enum SlotKey {
         index: u32,
         key_data: String,
     },
+    /// another party's signer (as `KeyRef::Signed`, a hand-off): never a slot's key, refused at signing
+    Signed {
+        signer: String,
+    },
 }
 
 #[cfg(feature = "evm")]
@@ -235,6 +239,7 @@ impl From<KeyRef> for SlotKey {
                 index,
                 key_data,
             },
+            KeyRef::Signed { signer } => SlotKey::Signed { signer },
         }
     }
 }
@@ -285,6 +290,7 @@ impl From<SlotKey> for KeyRef {
                 index,
                 key_data,
             },
+            SlotKey::Signed { signer } => KeyRef::Signed { signer },
         }
     }
 }
@@ -878,6 +884,20 @@ pub fn registration_blob_from_json(text: String) -> Result<RegistrationBlob, Sdk
 #[cfg(all(feature = "account", feature = "evm"))]
 #[uniffi::export]
 pub fn registration_blob_to_json(blob: RegistrationBlob) -> Result<String, SdkError> {
+    blob.to_json()
+}
+
+/// A signed operation's hand-off blob from its JSON (spec §27.5 (c)).
+#[cfg(feature = "wallet")]
+#[uniffi::export]
+pub fn signed_op_blob_from_json(text: String) -> Result<SignedOpBlob, SdkError> {
+    SignedOpBlob::from_json(&text)
+}
+
+/// A hand-off blob's JSON (spec §27.5 (c)).
+#[cfg(feature = "wallet")]
+#[uniffi::export]
+pub fn signed_op_blob_to_json(blob: SignedOpBlob) -> Result<String, SdkError> {
     blob.to_json()
 }
 

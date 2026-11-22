@@ -1,0 +1,4 @@
+# t12-owner mutants at commit 374bbec7d (name | outcome | test)
+rpc: the pinned-reads refusal dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_profiles a_pinned_read_is_refused_where_pinned_reads_are_not_trusted
+profile: Fuji's disabled kinds dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records --test evm_profiles a_disabled_kind_is_refused_before_signing
+2 mutants, 2 killed, 0 survived (0 killed elsewhere), 0 not loaded

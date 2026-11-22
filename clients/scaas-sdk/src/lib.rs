@@ -39,7 +39,7 @@ compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 #[cfg(all(feature = "vectors", not(debug_assertions)))]
 compile_error!("scaas-sdk's feature `vectors` is test-only: never in a release build");
 
-// decisions CLI-SDK-33 (49): the UniFFI surface is built over `evm` (the reference library's default features); UniFFI's
+// decisions CLI-SDK-33 (100): the UniFFI surface is built over `evm` (the reference library's default features); UniFFI's
 // `#[uniffi::export]` on an impl block exports every method whatever its `#[cfg]`, so a list entry under `evm` cannot drop out
 #[cfg(all(feature = "uniffi", not(feature = "evm")))]
 compile_error!(
@@ -54,6 +54,8 @@ pub mod account;
 pub mod admin;
 #[cfg(feature = "app-core")]
 pub mod app_core;
+#[cfg(feature = "arweave")]
+pub mod arweave;
 #[cfg(feature = "uniffi")]
 #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub mod binding;
@@ -74,6 +76,11 @@ pub mod frb;
 pub mod line;
 #[cfg(feature = "evm")]
 pub mod op;
+/// Without `evm`: the operation rows alone (spec §13.4), which the families' operations write ahead (plan T41.soroban)
+#[cfg(all(feature = "soroban", not(feature = "evm")))]
+pub(crate) mod op {
+    pub(crate) mod state;
+}
 pub mod platform;
 #[cfg(feature = "pqchat-records")]
 pub mod pqchat_keys;
@@ -96,7 +103,7 @@ mod watch;
 pub use config::{
     ChainProfile, Clock, EndpointConfig, Family, FamilyParams, Finality, GasBase, GasLine,
     GasPerByte, GasPerItem, GasRows, GasTable, GasVerify, L1Fee, Limits, ListedDex, ListedToken,
-    PositionReader, RuntimeChoice, SdkConfig,
+    NativeCap, PositionReader, RuntimeChoice, SdkConfig,
 };
 pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};
@@ -149,6 +156,8 @@ pub mod bits {
     pub const SUBSTRATE: u64 = 1 << 29;
     /// T41.evm step 0: the EVM part (alloy's providers, the operations, the registry); `account` and `wallet` hold none
     pub const EVM: u64 = 1 << 30;
+    /// T41.arweave: Arweave uploads and reads (CLI-SDK-21)
+    pub const ARWEAVE: u64 = 1 << 31;
 }
 
 /// The load check of a binding (spec §16.3): `AbiMismatch` unless this library's `api_version` is `expect_api`, it has every
@@ -210,6 +219,7 @@ pub fn features() -> u64 {
         (cfg!(feature = "vectors"), VECTORS),
         (cfg!(feature = "substrate"), SUBSTRATE),
         (cfg!(feature = "evm"), EVM),
+        (cfg!(feature = "arweave"), ARWEAVE),
     ];
     on.iter()
         .filter(|(enabled, _)| *enabled)

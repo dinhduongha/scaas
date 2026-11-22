@@ -8,6 +8,7 @@ pub(crate) mod bls_multi;
 pub(crate) mod external;
 mod follow;
 pub(crate) mod gas;
+mod handoff;
 mod prepared;
 pub(crate) mod quote;
 pub(crate) mod state;
@@ -18,6 +19,7 @@ mod tests;
 pub use crate::events::{InFlight, OpState};
 pub use bls_multi::BlsMultiPart;
 pub use gas::{GasFrom, GasSources};
+pub use handoff::{ImportExpect, SignedOpBlob, HANDOFF_MAX};
 pub(crate) use prepared::{domain_name, field, flatten, Draft, ExpectFn};
 pub use prepared::{Prepared, ReviewField, Source};
 pub use quote::{SubmitPath, SubmitQuote};
@@ -70,6 +72,9 @@ pub enum KeyRef {
         index: u32,
         key_data: String,
     },
+    /// an operation another party signed and handed off (`Op::import_signed`, spec §27.5 (c)): its signer's subject id (`0x`
+    /// hex); nothing in this SDK signs for it
+    Signed { signer: String },
 }
 
 /// One slot of an `msig` signature (`KeyRef::Msig`; `scaas-ua` `Slot`).
@@ -188,7 +193,9 @@ pub(crate) fn key(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             Key::Native(s, k)
         }
         // a stored key row is read from the keystore: `key_opened`; an `msig` signs by its slots (`account::msig`)
-        KeyRef::Key { .. } | KeyRef::Msig { .. } => return Err(SdkError::Argument),
+        KeyRef::Key { .. } | KeyRef::Msig { .. } | KeyRef::Signed { .. } => {
+            return Err(SdkError::Argument)
+        }
         KeyRef::BlsMulti {
             seed,
             account,

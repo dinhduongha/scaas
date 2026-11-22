@@ -33,6 +33,10 @@ pub const SCAAS_PURPOSES: &[(&str, &str)] = &[
     ("APP_PURPOSE_NS", "scaas.ua.purpose.app.v1"),
 ];
 
+/// Every SCaaS app id of a contract library (`APP_ID = keccak256(s)`): its name and `s`; `appPurpose(keccak256(s))` is a
+/// SCaaS purpose.
+pub const SCAAS_APP_IDS: &[(&str, &str)] = &[("PqVaultTypes.APP_ID", "scaas.pqvault.v1")];
+
 /// Every EIP-712 domain name "SCaaS ..." the contracts write.
 pub const SCAAS_DOMAIN_NAMES: &[&str] = &[
     "SCaaS Dex",
@@ -40,6 +44,7 @@ pub const SCAAS_DOMAIN_NAMES: &[&str] = &[
     "SCaaS MandateWallet",
     "SCaaS MetaToken",
     "SCaaS PqChat",
+    "SCaaS PqVault",
     "SCaaS PqzToken",
     "SCaaS RescueVault",
     "SCaaS SmartKeyAccount",

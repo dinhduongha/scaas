@@ -116,6 +116,8 @@ macro_rules! binding_list {
                 async register_bls_multi / register_bls_multi_blocking (chain: String, key_data: String, parts: Vec<BlsMultiPart>, quote: SubmitQuote) -> String;
                 async resume / resume_blocking () -> u32;
                 async resend / resend_blocking (op: String, quote: SubmitQuote) -> ();
+                async hand_off / hand_off_blocking (prepared: Arc<Prepared>) -> SignedOpBlob;
+                async import_signed / import_signed_blocking (blob: SignedOpBlob, expect: ImportExpect) -> Arc<Prepared>;
             }
             /// Zether and PQZ (spec §9).
             #[cfg(any(feature = "zether", feature = "pqz"))]

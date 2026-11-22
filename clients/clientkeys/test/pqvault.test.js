@@ -16,6 +16,7 @@ import * as pv from "../src/pqvault.js";
 import * as ua from "../src/ua.js";
 import { pqKeygen, pqSeed, verifyUA } from "../src/pq.js";
 import { kemKey } from "../src/pqchat.js";
+import { hashTypedData } from "../src/evm.js";
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode } from "../src/bytes.js";
 
 const dir = new URL("../../../smartcontracts/vectors/pqvault/", import.meta.url);
@@ -125,6 +126,25 @@ test("PQV_ACCOUNT: the per-vault UA derivation (FN-DSA-512) from a 24-word seed"
     assert.equal(h(k.publicKey), row.publicKey);
     assert.equal(h(k.ua), row.ua);
   }
+});
+
+test("typedData: each record's EIP-712 JSON hashes to its typed digest; a name outside SIGNED or another mode refused", () => {
+  let n = 0;
+  for (const { v, r } of allRecords()) {
+    const td = pv.typedData(r.struct, r.record, v.mode, R.domains.B);
+    assert.equal(h(hashTypedData(td)), r.typed, r.name);
+    n++;
+  }
+  assert.equal(n, 23);
+  const { v, r } = allRecords()[0];
+  assert.equal(
+    code(() => pv.typedData("MemberKey", r.record, v.mode, R.domains.B)),
+    "PqVaultShape",
+  );
+  assert.equal(
+    code(() => pv.typedData(r.struct, r.record, 2, R.domains.B)),
+    "PqVaultShape",
+  );
 });
 
 test("records: digests in their vault's domain, ids, scopes, signatures, sigHash, stored blobs", () => {

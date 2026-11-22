@@ -144,13 +144,22 @@ pub trait ChainAdapter: Send + Sync {
         None
     }
 
-    /// G2's in-flight key of a claimed job. Default: the job's own digest; an EVM meta-tx answers the typed digest the node
-    /// computes, never the job's field (review T2 m6). `Revert` = no key (its simulation answers for it).
+    /// G2's in-flight key of a claimed job, stated by every adapter (no default, so none inherits the job's field silently):
+    /// the digest the node computes where the family has one (an EVM meta-tx's typed digest, review T2 m6; Soroban's), else
+    /// the pull path's job field, said so in the adapter. `Revert` = no key (its simulation answers for it).
     async fn digest(
         &self,
         job: &Job,
+    ) -> std::result::Result<Option<alloy::primitives::B256>, SimError>;
+    /// `POST /v1/ops`' intent digest (gateway.md step 3): the digest the node computes from the op's named fields, never the
+    /// client's `op.digest`. `Ok(None)`: this family computes none, and the gateway refuses it by name
+    /// (`FAMILY_NOT_SUPPORTED`). The default refuses (fail closed); only a family that rebuilds what the subject signed
+    /// overrides it (Soroban today).
+    async fn ops_digest(
+        &self,
+        _job: &Job,
     ) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
-        Ok(job_digest(job))
+        Ok(None)
     }
     /// Review I2: the subject hold key of a claimed job and whether it is a relay-fee job (EVM / Hedera). Default: none.
     fn subject(&self, _job: &Job) -> Option<(alloy::primitives::B256, bool)> {
@@ -1083,6 +1092,22 @@ pub(crate) mod tests {
         assert_eq!(Family::parse("algorand"), Some(Family::Algorand));
     }
 
+    /// T28 fail closed: an adapter that states no `ops_digest` refuses `/v1/ops` (`None`), whatever digest its job names; its
+    /// G2 key, stated, is the job's (the control: the job does name one).
+    #[tokio::test]
+    async fn the_default_ops_digest_refuses() {
+        let job: Job = serde_json::from_value(
+            serde_json::json!({"id": 0, "kind": "signed_op", "op": {"digest": format!("0x{}", "77".repeat(32))}}),
+        )
+        .unwrap();
+        let m = Mock::default();
+        assert_eq!(m.ops_digest(&job).await.unwrap(), None);
+        assert!(
+            m.digest(&job).await.unwrap().is_some(),
+            "control: the job names a digest"
+        );
+    }
+
     /// Adapter giả: lane luôn bị CheckTx từ chối, indexer ghi lại tập contract được đưa vào; `.1` đếm `refresh_tokens`.
     #[derive(Default)]
     struct Mock(
@@ -1092,6 +1117,12 @@ pub(crate) mod tests {
 
     #[async_trait]
     impl ChainAdapter for Mock {
+        async fn digest(
+            &self,
+            job: &Job,
+        ) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
+            Ok(job_digest(job))
+        }
         fn family(&self) -> Family {
             Family::Cosmos
         }
@@ -1455,6 +1486,12 @@ pub(crate) mod tests {
 
     #[async_trait]
     impl ChainAdapter for Scripted {
+        async fn digest(
+            &self,
+            job: &Job,
+        ) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
+            Ok(job_digest(job))
+        }
         fn family(&self) -> Family {
             Family::Ton
         }
@@ -1659,6 +1696,12 @@ pub(crate) mod tests {
 
     #[async_trait]
     impl ChainAdapter for Racy {
+        async fn digest(
+            &self,
+            job: &Job,
+        ) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
+            Ok(job_digest(job))
+        }
         fn family(&self) -> Family {
             Family::Sui
         }

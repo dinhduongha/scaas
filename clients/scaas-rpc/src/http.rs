@@ -287,6 +287,94 @@ impl Http {
         .await
     }
 
+    /// GET `path` of endpoint `i` whose 2xx body must be exactly `len` bytes (CLI-RPC-13): no `Range`; an announced length other
+    /// than `len` refused unread, a body longer than `len` refused as it arrives, a shorter one refused at its end; SHA-256
+    /// computed as the bytes arrive. The bytes and their SHA-256.
+    pub async fn get_exact(
+        &self,
+        list: &NodeList,
+        i: usize,
+        path: &str,
+        len: usize,
+        deadline: Option<Instant>,
+    ) -> Result<(Vec<u8>, [u8; 32]), EndpointFailure> {
+        use sha2::Digest as _;
+        let (_, req) = self.build(
+            list,
+            i,
+            reqwest::Method::GET,
+            Some(path),
+            None,
+            deadline,
+            "application/octet-stream",
+            None,
+        )?;
+        let net = |err: reqwest::Error| {
+            let kind = if err.is_timeout() {
+                FailureKind::Timeout
+            } else {
+                FailureKind::Transport
+            };
+            self.fail(list, i, kind, &err.without_url().to_string())
+        };
+        #[allow(unused_mut)]
+        let mut r = req.send().await.map_err(net)?;
+        let status = r.status().as_u16();
+        if !(200..300).contains(&status) {
+            return Err(self.fail(list, i, FailureKind::Http, &format!("HTTP {status}")));
+        }
+        if r.content_length().is_some_and(|n| n != len as u64) {
+            return Err(self.fail(
+                list,
+                i,
+                FailureKind::AnswerMalformed,
+                "an announced length other than the object's",
+            ));
+        }
+        let mut h = sha2::Sha256::new();
+        #[cfg(not(target_arch = "wasm32"))]
+        let buf = {
+            let mut buf = Vec::with_capacity(len);
+            while let Some(c) = r.chunk().await.map_err(net)? {
+                if buf.len() + c.len() > len {
+                    return Err(self.fail(
+                        list,
+                        i,
+                        FailureKind::AnswerTooLarge,
+                        "a body longer than the object",
+                    ));
+                }
+                h.update(&c);
+                buf.extend_from_slice(&c);
+            }
+            buf
+        };
+        // wasm32: no streams in the fetch backend; the announced length was checked, the whole body is read, then bounded
+        #[cfg(target_arch = "wasm32")]
+        let buf = {
+            let b = r.bytes().await.map_err(net)?;
+            if b.len() > len {
+                return Err(self.fail(
+                    list,
+                    i,
+                    FailureKind::AnswerTooLarge,
+                    "a body longer than the object",
+                ));
+            }
+            h.update(&b);
+            b.to_vec()
+        };
+        if buf.len() != len {
+            return Err(self.fail(
+                list,
+                i,
+                FailureKind::AnswerMalformed,
+                "a body shorter than the object",
+            ));
+        }
+        Ok((buf, h.finalize().into()))
+    }
+
     #[allow(clippy::too_many_arguments)]
     async fn send(
         &self,

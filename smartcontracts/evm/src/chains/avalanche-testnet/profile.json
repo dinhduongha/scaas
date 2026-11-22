@@ -4,6 +4,16 @@
   "initCodeSizeLimit": 49152,
   "txGasCap": null,
   "blockGasLimit": 32000000,
+  "finality": "tag",
+  "txType": 2,
+  "l1Fee": null,
+  "eip2537": false,
   "status": "draft",
-  "source": "docs/research/2026-11-21-avax-polkadot-arweave.md section 2: libevm v1.13.14 (Cancun), subnet-evm MaxCodeSize 24,576 B, EIP-3860 init code 49,152 B (ACP-24), no per-transaction cap (ACP-176), block gas limit live 2026-11-21 (Routescan)"
+  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (chains-arweave T12, probes of 2026-11-22, one sample each: H1-H8, fork, eip2537, caps, codesize, basefee, l1fee); docs/research/2026-11-21-avax-polkadot-arweave.md section 2: libevm v1.13.14 (Cancun), no per-transaction cap (ACP-176); the block gas limit is the live sum of gas limits (ACP-194), read again by the deploy gate; disabledKinds: the owner's ruling of 2026-11-22 (decisions ARCH-POS-20): the kinds above the 32 M block (Amsterdam figures x 1.05; Fuji is Cancun without EIP-8037, its own figures re-measured at deploy)",
+  "disabledKinds": [
+    "mldsa44",
+    "mldsa65",
+    "mldsa87",
+    "pqz"
+  ]
 }

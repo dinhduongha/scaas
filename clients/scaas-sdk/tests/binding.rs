@@ -17,7 +17,7 @@ const MODULES: [&str; 8] = [
 ];
 
 /// `(object, call)` of every `pub async fn` (`asynchronous`) or plain `pub fn` in an `impl <Module>` block of `src/`, the
-/// binding modules excluded. A macro-made call reads as `$f`: [`entry_points`] names those.
+/// binding modules and the calls of a feature outside the SDK's default ones excluded. A macro-made call reads as `$f`: [`entry_points`] names those.
 fn exported(asynchronous: bool) -> BTreeSet<(String, String)> {
     let prefix = if asynchronous {
         "pub async fn "
@@ -38,6 +38,9 @@ fn exported(asynchronous: bool) -> BTreeSet<(String, String)> {
                 || name.ends_with("tests.rs")
                 || name.ends_with("binding.rs")
                 || name.contains("/wasm")
+                // decisions CLI-SDK-33 (100): the bindings expose the SDK's default features; the `soroban_*` wallet calls
+                // are feature `soroban`'s, outside them (the reference library builds without it)
+                || name.ends_with("soroban_ops.rs")
             {
                 continue;
             }
@@ -473,10 +476,22 @@ mod sync {
         // the call runs until released, so its return can only be the cancel's (no wall-clock bound; review B15)
         let (started_tx, started_rx) = std::sync::mpsc::channel::<()>();
         let (release_tx, release_rx) = tokio::sync::oneshot::channel::<()>();
+        let release = Arc::new(Mutex::new(Some(release_tx)));
         let t = token.clone();
         let canceller = std::thread::spawn(move || {
             started_rx.recv().unwrap();
             t.cancel();
+        });
+        // a watchdog, never the verdict: a twin that ignores the token is released after 60 s and returns Ok, so the assertion
+        // below fails instead of the test hanging (the t20b-sync mutant); a twin that honours it returns long before
+        let (returned_tx, returned_rx) = std::sync::mpsc::channel::<()>();
+        let w = release.clone();
+        let watchdog = std::thread::spawn(move || {
+            if returned_rx.recv_timeout(Duration::from_secs(60)).is_err() {
+                if let Some(tx) = w.lock().unwrap().take() {
+                    let _ = tx.send(());
+                }
+            }
         });
         let d = done.clone();
         let r = s.run_blocking(Some(token), async move {
@@ -485,6 +500,8 @@ mod sync {
             d.store(true, Ordering::SeqCst);
             Ok(())
         });
+        let _ = returned_tx.send(());
+        watchdog.join().unwrap();
         canceller.join().unwrap();
         assert_eq!(r.map_err(|e| e.code()), Err("Cancelled"));
         assert!(
@@ -492,7 +509,7 @@ mod sync {
             "returned at the cancel, the call still running"
         );
         // the effect of a dropped future (spec §13.4): the work goes on on the SDK's runtime
-        release_tx.send(()).unwrap();
+        release.lock().unwrap().take().unwrap().send(()).unwrap();
         let start = Instant::now();
         while !done.load(Ordering::SeqCst) && start.elapsed() < Duration::from_secs(30) {
             std::thread::sleep(Duration::from_millis(20));

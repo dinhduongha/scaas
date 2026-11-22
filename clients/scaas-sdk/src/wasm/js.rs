@@ -213,6 +213,10 @@ free! {
     fn registration_blob_from_json(text: String) -> RegistrationBlob = RegistrationBlob::from_json(&text);
     #[cfg(all(feature = "account", feature = "evm"))]
     fn registration_blob_to_json(blob: RegistrationBlob) -> String = blob.to_json();
+    #[cfg(feature = "wallet")]
+    fn signed_op_blob_from_json(text: String) -> SignedOpBlob = SignedOpBlob::from_json(&text);
+    #[cfg(feature = "wallet")]
+    fn signed_op_blob_to_json(blob: SignedOpBlob) -> String = blob.to_json();
     #[cfg(feature = "evm")]
     fn ua_line_key_target(line: crate::UaLine) -> String = Ok(line.key_target());
     #[cfg(feature = "evm")]

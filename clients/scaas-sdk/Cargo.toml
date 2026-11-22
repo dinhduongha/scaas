@@ -45,7 +45,8 @@ dex = ["evm"]
 admin = ["evm"]
 mlock = ["vault", "scaas-ua/mlock"]
 # T24.soroban: the ledger keys and entries in base64 (an encoding; the XDR read by fixed templates in the SDK)
-soroban = ["scaas-rpc/soroban", "dep:base64", "scaas-ua/fam-soroban"]
+# T41.soroban: the operations through `/v1/ops` (`scaas-rpc`'s node client, no alloy) and the self-relay
+soroban = ["wallet", "scaas-rpc/soroban", "scaas-rpc/node-client", "dep:base64", "scaas-ua/fam-soroban"]
 # T24.solana: the genesis hash, the program, the holder and the mints in base58 (an encoding; the PDA is ua-rs's)
 solana = ["scaas-rpc/solana", "dep:bs58", "scaas-ua/fam-solana"]
 # T24 (spec §8.7): the family's balance reads; base58 (the genesis hash the endpoint names) and base64 (a view's arguments) are
@@ -78,6 +79,9 @@ vectors = ["app-core", "scaas-ua/vectors"]
 # non-EVM chain (spec §8.6), off by default and never in the default generated surface
 native-networks = ["wallet", "scaas-ua/fam-btc", "scaas-ua/fam-near", "scaas-ua/fam-dot"]
 raw-native = ["wallet"]
+# T41.arweave (chains-arweave plan T20; CLI-SDK-21): Arweave uploads, settlement, re-posts and reads (`src/arweave.rs`), without
+# the EVM part; the seal and the open are the app core's (`app-core`); bit 31
+arweave = ["vault", "scaas-rpc/arweave", "scaas-rpc/node-client", "scaas-ua/fam-arweave"]
 # the Dart adapter (src/frb.rs): the platform interfaces as records of async closures; no dependency of its own
 frb = []
 # T20b-T20h (spec §16.1): the UniFFI surface (src/binding.rs), async (Python, Kotlin, Swift, Java, C# and Go where their
@@ -187,6 +191,10 @@ required-features = ["evm"]
 [[test]]
 name = "evm_profiles"
 required-features = ["account", "evm"]
+
+[[test]]
+name = "handoff"
+required-features = ["evm"]
 
 [[test]]
 name = "evm_feature"

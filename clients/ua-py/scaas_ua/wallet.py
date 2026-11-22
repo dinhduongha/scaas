@@ -206,6 +206,8 @@ _SIGNATURES = [
     ("export_pqz_leaf_raw", st, [P, u32, u32, P]),
     ("wallet_pqz_key_version", st, [P, u32, u32, u64, P]),
     ("export_pqz_leaf_raw_version", st, [P, u32, u32, u64, P]),
+    ("wallet_seal_pq_key", st, [P, u32, u32, u64, P, P, P]),
+    ("pqz_open_leaf", st, [P, P, P, u32, u32, u64, P]),
 ]
 
 _lib = None
@@ -607,6 +609,12 @@ class Wallet(_Handle):
             out = s.buf(32)
             _ok(_c("export_pqz_leaf_raw_version")(w, account, index, version, out))
             return s.out(out, 32)
+
+    def seal_pq_key(self, account, index, version, passphrase):
+        """P6h (3), CLI-SGN-55 (clientkeys ``sealPqKey``): the PQZ leaf of ``account`` / ``index`` / ``version`` sealed as a
+        vault v2 JSON of label ``pqz:registry:<account>:<index>:<version>``; open it with ``pqz_open_leaf``."""
+        with _Secrets() as s, _hold(self) as (w,):
+            return _str(_c("wallet_seal_pq_key"), w, account, index, version, s.bytes_in(passphrase, True))
 
     @staticmethod
     def _restore(fn, kem_key, container, expect, members, accepted, current, bip39_passphrase):
@@ -1059,6 +1067,22 @@ def pqz_check(request):
     out, n = C.create_string_buffer(PQZ_OUT_MAX), sz(PQZ_OUT_MAX)
     _ok(_c("pqz_check")(_text(request), out, C.byref(n)))
     return out.raw[: n.value - 1].decode()
+
+
+def pqz_open_leaf(vault_json, account, index, version=0, passphrase=None, prf32=None):
+    """P6h (3), CLI-SGN-55 (clientkeys ``openPqKey``): the PQZ key of a leaf vault of ``Wallet.seal_pq_key``, with no wallet;
+    every refusal of the vault is ``UAVaultOpen``."""
+    with _Secrets() as s:
+        return _new(
+            PqzKey,
+            _c("pqz_open_leaf"),
+            _text(vault_json),
+            s.bytes_in(passphrase, True),
+            s.bytes_in(prf32, n=32),
+            account,
+            index,
+            version,
+        )
 
 
 def pqz_check_set(deployed):

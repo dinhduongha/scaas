@@ -20,7 +20,7 @@
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 #   clients/scaas-rpc: cargo test --locked --all-features; cargo clippy --locked --all-targets --all-features -- -D warnings;
 #                  cargo test --locked --features evm --test anvil -- --ignored (three anvils, foundry's);
-#                  cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client (compiles for
+#                  cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client,arweave (compiles for
 #                  wasm32, not run); ! git grep -n 'tokio::time' -- src (no tokio timer in the crate, F18)
 #   pqz:           in pqz-core: params/sets/gen_set.py --all --check, pqzl/params/to_rust.py --check (generated files in sync);
 #                  sh gate-controls.sh (the gate scripts' negative controls, stubs only);
@@ -71,7 +71,8 @@
 #   scaas-sdk:             in clients/scaas-sdk: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton;
 #                          cargo test --locked --no-default-features --features vault,file-store; without evm (T41.evm step 0) cargo test and cargo clippy --all-targets
 #                          -- -D warnings --no-default-features --features vault,account,wallet,file-store,mlock,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native;
-#                          cargo test --locked --lib --features <the same>,native-networks,raw-native;
+#                          with arweave (T41.arweave) the same set's test --test arweave --test feature_tree and clippy, and --features
+#                          app-core,arweave,vectors --test arweave; cargo test --locked --lib --features <the same>,native-networks,raw-native;
 #                          cargo test --locked --features <the same>,vectors --test pqchat_keys --test app_core_vault_rows (the test feature alone: a vectors build refuses
 #                          scaas-ua key handles until a test unlocks them); cargo clippy --locked --all-targets --features <the same>,vectors,native-networks,raw-native -- -D warnings; per PQZ set
 #                          (n2048-kmax1024, n2560-kmax16384, n2816-kmax65536): cargo test --locked --no-default-features --features vault,account,wallet,pqz,pqz-set-<set> --test sets;
@@ -527,7 +528,7 @@ jobs:
       - name: strict majority, broadcast and transaction state on three anvils
         run: cargo test --locked --features evm --test anvil -- --ignored
       - name: compiles for wasm32 (not run)
-        run: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client
+        run: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client,arweave
       - name: no tokio timer in the crate (F18)
         run: "! git grep -n 'tokio::time' -- src"
 
@@ -876,6 +877,14 @@ jobs:
           - cell: core
             features: --no-default-features --features wallet
             tests: --lib --test core_only --test wallet_pairing --test bls_multi --test wallet_webauthn --test bip85 --test wallet_pq
+          # T41.arweave (chains-arweave T17): the core's generic file seal without fam-arweave (decisions CLI-SDK-33 (35)), and the
+          # core with fam-arweave alone: the ANS-104 rows, the parser's refusals, buckets, ar://
+          - cell: file-core
+            features: --no-default-features --features app-core
+            tests: --test file_seal
+          - cell: core-arweave
+            features: --no-default-features --features wallet,fam-arweave
+            tests: --lib --test arweave
           - cell: zether-only
             features: --no-default-features --features wallet,zether,mlock
             tests: --lib --test facade_zether
@@ -890,7 +899,7 @@ jobs:
             tests: --test roots
           - cell: app-core
             features: --features app-core,vectors
-            tests: --test app_core
+            tests: --test app_core --test arweave --test arweave_rows --test file_seal
           - cell: pqvault
             features: --no-default-features --features pqvault
             tests: --test pqvault_pass
@@ -1258,6 +1267,12 @@ jobs:
           NE=vault,account,wallet,file-store,mlock,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native
           cargo test --locked --no-default-features --features "$NE"
           cargo clippy --locked --all-targets --no-default-features --features "$NE" -- -D warnings
+      - name: Arweave without evm, and with the app core and its spy (T41.arweave)
+        run: |
+          NE=vault,account,wallet,file-store,mlock,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native
+          cargo test --locked --no-default-features --features "$NE,arweave" --test arweave --test feature_tree
+          cargo clippy --locked --all-targets --no-default-features --features "$NE,arweave" -- -D warnings
+          cargo test --locked --features app-core,arweave,vectors --test arweave
       - name: the raw native entry and native networks
         run: cargo test --locked --lib --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton,native-networks,raw-native
       - name: cargo clippy

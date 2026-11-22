@@ -86,6 +86,9 @@ class Chain:
             if not self.at_ok(blk):
                 raise RpcErr(-32000, "header not found")
             gas = int(tx.get("gas", "0x0"), 16)
+            # a node that checks the sender's balance against gas x price when `from` is named (Polkadot Hub's eth-rpc)
+            if "from" in tx and f.get("sender_funds") is not None and gas > f["sender_funds"]:
+                raise RpcErr(-32000, "insufficient funds for gas * price + value")
             if f.get("tx_cap") and gas > f["tx_cap"]:
                 raise RpcErr(-32000, "gas limit too high")
             to = (tx.get("to") or "").lower()
@@ -104,6 +107,8 @@ class Chain:
         if method == "linea_estimateGas":
             if not f.get("linea"):
                 raise RpcErr(-32601, "the method linea_estimateGas does not exist")
+            if f["linea"] == "gateway":
+                raise RpcErr(-32601, "a gateway: linea_estimateGas is not served")
             if f["linea"] == "unfunded":
                 raise RpcErr(-32000, "transaction up-front gas cost 0x23e38 exceeds transaction sender account balance 0x0")
             return {"gasLimit": "0x5208", "baseFeePerGas": "0x7", "priorityFeePerGas": "0x3b9aca00"}
@@ -344,6 +349,9 @@ def caps_and_pq_fit():
     assert not f["pq"]["mldsa65"]["fits"] and f["pq"]["slhdsa128s"]["fits"], f["pq"]
     (v, f), _ = go("caps", Chain(gas_limit=1 << 50), Chain(gas_limit=1 << 50))
     assert f["published_tx_limit"] is None and f["pq"]["mldsa65"]["fits"], "control"
+    # the sender's balance is never read as the chain's cap: the zero address funds 21,000 gas, the chain caps none
+    (v, f), _ = go("caps", Chain(sender_funds=21_000), Chain(sender_funds=21_000))
+    assert f["tx_gas_cap"] is None, f
 
 
 def code_size_limits():
@@ -378,6 +386,9 @@ def l1_fee_model():
     # the method served (a refusal for the sender's balance is not "no such method") by one provider and not the other
     (v, f), _ = go("l1fee", Chain(linea="unfunded"), Chain())
     assert v == "INFO" and f["model"] == "linea", f
+    # a gateway naming the method as not served has no such method (Moonbeam, 2026-11-22)
+    (v, f), _ = go("l1fee", Chain(linea="gateway"), Chain())
+    assert f["model"] == "none", f
     (v, f), _ = go("l1fee", Chain(arb_tx_limit=32_000_000), Chain(arb_tx_limit=32_000_000))
     assert f["model"] == "in-estimate", "Arbitrum's ArbGasInfo, whatever its L1 price today"
     (v, f), _ = go("l1fee", Chain(), Chain())
@@ -414,6 +425,13 @@ def logs_and_summary():
     assert "x-mainnet | H1 | 1 | PASS" in s and "x-mainnet | H5 | 1 | INFO" in s, s
     assert "p99 100 blocks" in s, s
     assert "/" not in s.split("\n", 1)[1].replace("2^24", ""), s
+    # another checkout's row (no log here) stays; a row of a key and probe logged here is replaced (control)
+    with open(out, "a") as fh:
+        fh.write("a-mainnet | H1 | 3 | PASS | elsewhere | t .. t\nx-mainnet | H5 | 9 | FAIL | stale | t .. t\n")
+    P.summary(d, out)
+    s = open(out).read()
+    assert "a-mainnet | H1 | 3 | PASS | elsewhere" in s and "stale" not in s, s
+    assert "x-mainnet | H5 | 1 | INFO" in s, s
 
 
 TESTS = [h1_block0_and_chain_id, h2_eip1898, h3_replaced_heads_counted, h4_block_by_hash, h5_gap, h6_log_span,

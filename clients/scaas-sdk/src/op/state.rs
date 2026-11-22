@@ -2,6 +2,8 @@
 //! `sdk.state`'s operation rows (spec §13.4): public data only, `{"rev": N, "ops": [row …]}`, each change a read-modify-write
 //! under the store's lock at the read `rev` (`StoreConflict` after three tries), as the keystore's (§6.3); beside them the watch's
 //! history cursors (spec §8.4: the last block read per watched `(chain, account, token)`; never for a hidden set).
+// without `evm` only the families' rows are written: the watch's cursors and the split registration's proofs are EVM's
+#![cfg_attr(not(feature = "evm"), allow(dead_code))]
 use crate::vault::{StoreError, StorePolicy};
 use crate::{Sdk, SdkError};
 use serde::{Deserialize, Serialize};
@@ -206,6 +208,8 @@ async fn update(sdk: &Sdk, f: impl Fn(&mut State)) -> Result<(), SdkError> {
         {
             Err(StoreError::Conflict) => continue,
             Ok(()) => {
+                // the watch's own write is no `StateChanged` (EVM's poll; a build without `evm` polls nothing)
+                #[cfg(feature = "evm")]
                 sdk.note_state_rev(rev, st.rev);
                 return Ok(());
             }

@@ -1063,6 +1063,37 @@ static void pqz_key_versions() {
     CHECK(pks.size() == 3 && pks.count(w.pqzKey(0, 0).pk()), "one key per version, version 0 the default");
 }
 
+// P6h (3), CLI-SGN-55: pqz_leaf.json's leaves open to the wallet's key at their path; every refusal is UAVaultOpen beside its
+// control; sealPqKey's vault carries the path's label and opens.
+static PqzKey open_leaf(const json &vault, const json &at, const json &u) {
+    Secret pin = u.contains("pin") ? Secret(u["pin"].get<std::string>()) : Secret();
+    Secret prf = u.contains("prfOutput") ? Secret(bytes(u["prfOutput"])) : Secret();
+    return pqzOpenLeaf(vault.dump(), pin, prf, at["account"].get<uint32_t>(), at["index"].get<uint32_t>(),
+                       at["version"].get<uint64_t>());
+}
+static void pqz_leaf_json() {
+    json f = vec("pqz_leaf.json");
+    Wallet w = wallet_of("pq_kat");
+    for (auto &r : f["leaves"])
+        CHECK(open_leaf(r["vault"], r, r["unlock"]).pk() ==
+                  w.pqzKey(r["account"].get<uint32_t>(), r["index"].get<uint32_t>(), r["version"].get<uint64_t>()).pk(),
+              r["id"].get<std::string>());
+    CHECK(f["refusals"].size() == 17, "17 refusals");
+    for (auto &x : f["refusals"]) {
+        CHECK(code_of([&] { open_leaf(x["vault"], x["open"], x["unlock"]); }) == "UAVaultOpen",
+              x["id"].get<std::string>());
+        CHECK(code_of([&] { open_leaf(x["control"]["vault"], x["control"]["open"], x["control"]["unlock"]); }) == "",
+              "control " + x["id"].get<std::string>());
+    }
+    Secret pin("river-otter-7 ünï");
+    json v = json::parse(w.sealPqKey(1, 2, 3, pin));
+    CHECK(v["label"] == "pqz:registry:1:2:3", "label");
+    json at = {{"account", 1}, {"index", 2}, {"version", 3}}, u = {{"pin", "river-otter-7 ünï"}};
+    CHECK(open_leaf(v, at, u).pk() == w.pqzKey(1, 2, 3).pk(), "sealPqKey round trip");
+    at["version"] = 2;
+    CHECK(code_of([&] { open_leaf(v, at, u); }) == "UAVaultOpen", "another version");
+}
+
 // --- PQZ facade ------------------------------------------------------------------------------------------------------------
 
 static void pqz_facade() {
@@ -1283,6 +1314,7 @@ int main(int argc, char **argv) {
         {"zether_words", zether_words},
         {"pqz_words", pqz_words},
         {"pqz_key_versions", pqz_key_versions},
+        {"pqz_leaf_json", pqz_leaf_json},
         {"imported_ua_key", imported_ua_key},
         {"native_json", native_json},
         {"bls_multi_json", bls_multi_json}};

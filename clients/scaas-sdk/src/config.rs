@@ -786,6 +786,22 @@ pub struct Limits {
     /// how long a terminal operation row stays in `sdk.state` after it ended, in seconds (default 90 days); a non-terminal row
     /// is never pruned (owner 2026-11-19, T13b ruling 2)
     pub state_retention_secs: u64,
+    /// the most a family's native transaction may cost its payer, per chain profile, as a decimal string in the chain's
+    /// smallest unit (spec §27.5 (e): fee + storage + forward; plan T41): never from an endpoint. A chain without its row
+    /// spends nothing natively (`FeeAboveCap`: fail closed). EVM's self-relay keeps `max_cost`
+    #[serde(default)]
+    pub max_native_cost: Vec<NativeCap>,
+}
+
+/// One chain's native cost cap (`Limits::max_native_cost`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[serde(deny_unknown_fields)]
+pub struct NativeCap {
+    /// the profile's key
+    pub chain: String,
+    /// decimal, the chain's smallest unit (stroops on Soroban)
+    pub max: String,
 }
 
 impl Default for Limits {
@@ -800,6 +816,7 @@ impl Default for Limits {
             max_valid_secs: 86_400,
             event_queue: 1_024,
             state_retention_secs: 90 * 86_400,
+            max_native_cost: vec![],
         }
     }
 }

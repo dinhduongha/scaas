@@ -1,0 +1,14 @@
+{
+  "name": "@scaas/xcheck-arbundles",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The ANS-104 cross-check of clientkeys' Arweave data items against a pinned arbundles, outside clientkeys' dependency tree (chains-arweave plan T16).",
+  "license": "SEE LICENSE IN ../../../../LICENSE",
+  "type": "module",
+  "scripts": {
+    "check": "node check.mjs"
+  },
+  "dependencies": {
+    "@dha-team/arbundles": "1.2.0"
+  }
+}

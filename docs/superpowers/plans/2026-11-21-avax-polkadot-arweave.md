@@ -104,14 +104,15 @@ only `TODO.md`.
 | T19 | `scaas-rpc` module `arweave`: gateway reader (CLI-RPC-13), bundler uploader (CLI-RPC-14) | D | T16 | |
 | T20 | SDK `seal_for_arweave`, `upload_file`, `fetch_file`, `open_file`, settlement and re-posts (CLI-SDK-21) | D | T17, T18, T19; `seal_file` in the branch | |
 | T21 | Live round trip: one 2^16-B object through the free tier, read from two gateways | D | T20 | **[owner's word]**: a permanent public upload |
-| T22 | Docs and status; the round-end matrix | all | T1–T21 | |
+| T24 | Node: the Arweave credit payer service (NODE-SPN-05) | D | T19 (mock first); T18's approval answer for the live call | live approvals **[owner's word]** (credits spent) |
+| T22 | Docs and status; the round-end matrix | all | T1–T21, T24 | |
 | T23 | Closing review (Fable; Codex only on the owner's request) | all | T22 | |
 
 T2–T4, T5, T11 and T16 may run beside each other once their waits are met; T19 beside T17; T12's windows run beside everything. Every other task in order.
 **`pqchat-core` T10b (attachments) waits for part D**: T16, T17, T19, T20 and the T18 answer (its plan names "TODO 8i research + its
 `ua-rs` / `scaas-rpc` parts"); PqVault's `file` items ([spec](../specs/2026-11-21-avax-polkadot-arweave.md) §7.10) wait for the same.
-The operator payer service is not built here: O1 and O2 are settled and its rule is [NODE-SPN-05](../../node/sponsorship.md#NODE-SPN-05)
-(off by default, a gateway credential, per-IP budgets, no UA-signed fallback); it gets its own plan. `x-paid-by` is plumbed and
+The operator payer service is task T24 (owner 2026-11-22: added to this plan): O1 and O2 are settled and its rule is
+[NODE-SPN-05](../../node/sponsorship.md#NODE-SPN-05) (off by default, a gateway credential, per-IP budgets, no UA-signed fallback). `x-paid-by` is plumbed and
 `PayerUnavailable` stands until the service runs; until then objects above 2^16 B serve tests only. O3 gates T1 and T7; O4 gates
 nothing; O5 shapes T20's re-post. The software BLS12-381 path (Q3) belongs to the `bls12381-multi` plan.
 
@@ -186,24 +187,44 @@ that `arbundles` builds differently from ours or refuses (type 3's `v` included)
 **Files:** `smartcontracts/evm/src/chains/avalanche-{mainnet,testnet}/README.md` (the facts of spec §4.1, as `base-testnet`'s);
 `scaas-node/node.example.toml` (commented rows, `finality.mode = "tag"`); the SDK's pinned profile data; `clients/scaas-rpc/tests/`.
 
-- [ ] `scaas-rpc` tests against a mock server: an endpoint answering `eth_chainId` 43113 with C-Chain's block 0 hash is dropped from a
+- [x] `scaas-rpc` tests against a mock server: an endpoint answering `eth_chainId` 43113 with C-Chain's block 0 hash is dropped from a
   43114 list and the reverse (CLI-RPC-03); a `finalized` read pins the settled block by hash (EIP-1898); a log read above
   `finalized` is labelled not final; real gas is read from receipts, never from a header's `gasUsed`.
-- [ ] Profiles seeded `draft`; the SDK's profile data gains both with `chain_uid` and chain id.
+- [x] Profiles seeded `draft`; the SDK's profile data gains both with `chain_uid` and chain id.
 - Mutants: the identity check on chain id only; the not-final label dropped.
 - Gates: `rpc-test`, `rpc-wasm`, `sdk-test`, `docs`.
+- **Done (2026-11-22, BUILT on `chains-arweave`):** `src/chains/avalanche-{mainnet,testnet}/{profile.json,README.md}` in the SDK
+  plan T40 format (`finality` `tag`, `txType` 2, `l1Fee` none, `eip2537` false, `disabledKinds` none), from T12's probes; both
+  keys in `clients/scaas-rpc/tests/evm_profiles.rs` (the 43114 / 43113 pair dropped both ways, `finalized` pinned by hash, and
+  `a_log_read_above_finalized_is_not_final_and_gas_is_the_receipts`: the new `EvmPool::logs_range_labelled`, final only at or
+  below the answering endpoint's `finalized`; the receipt's gas, never the header's) and in
+  `clients/scaas-sdk/tests/evm_profiles.rs`; the node's commented rows. **Misfit, not disabled** (no owner ruling for
+  Avalanche): on Fuji's 32 M block, `mldsa44` 43,528,138, `mldsa65` 45,687,694, `mldsa87` 47,857,750 and PQZ ≈ 45,150,000
+  (Amsterdam figures × 1.05); C-Chain's 80 M fits every kind.
 
 ## T3 — Node lanes on an Avalanche-like chain
 
-**Files:** `scaas-node/src/` lanes and indexer, `scaas-node/tests/`.
+**Owner 2026-11-22** ("Đồng ý, thu gọn T3": agreed, slim down T3; owner: yes): audit first, writing nothing; a test only where no
+test covers a point the node meets; a real gap built as a profile value, never a chain-id branch, test first, with its mutant;
+no local chain and no e2e run for T3 itself; gates `node-test` and `docs`, plus `node-clippy` and `node-e2e` (10 threads) when node
+code changes. The original steps (a mock chain delaying receipts, written first) are replaced by the audit below.
 
-- [ ] Tests first, against a mock chain that accepts a transaction and delays its receipt: the job stays `Pending`, never `dead`; the
-  indexer reads logs only at or below its final block; the lane's gas limit is the estimate with its margin; a lane keeps at most 16
-  in flight on a profile that sets it; the balance alert uses gas limit × worst-case price + value; the deploy gate reads the live
-  block cap.
-- [ ] Implement as profile values, never as a chain-id branch (one rule on every chain).
-- Mutants: `dead` on a missing receipt; the in-flight cap ignored; a fixed gas padding.
-- Gates: `node-test`, `docs`.
+**Files:** `scaas-node/src/{submit,config,breaker}.rs`, `scaas-node/node.example.toml`, `docs/node/submit-lanes.md`.
+
+**Audit** (2026-11-22, at the merge of `origin/main` 18bdfa9b5; lines as of the T3 commit):
+
+| Point | In code | Test that covers it | Gap |
+|---|---|---|---|
+| (a) a delayed receipt stays `Pending`, never `dead` | `submit.rs:1693` (`track`: no receipt ⇒ the nonce stays in flight, bumped after `stuck_after_secs`; `dead` only from a landed gap-fill or an expiry before sending) | `submit::tests::an_earlier_replaced_hash_that_mines_settles_the_nonce`, `own_rows_live_until_a_receipt` | none: BUILT |
+| (b) the indexer reads logs at or below the final block only | `indexer.rs:1151` (`safe_head` of `finality.rs:13`: under `tag` the `finalized` block, never above `latest`; no tag ⇒ waits) | `finality::tests::tag_mode_waits_without_a_finalized_block`, `ranges_are_contiguous_and_bounded` | none: BUILT |
+| (c) the lane gas limit is the estimate plus its margin | `guard.rs:1091` (`gas_limit`: estimate + 20 %, at least the ERC-1271 floor, at most the cap) | `guard::tests::gas_floor_and_settle_sizing`, `submit::tests::gas_follows_the_two_dimensional_model` | none: BUILT |
+| (d) a per-profile in-flight cap (16 where set) | none before T3 (NODE-LANE-24 PLANNED) | none | **gap, built:** `[[chains]] max_inflight` (`config.rs:375`, default 16, at least 1), `Submitter::room` (`submit.rs:1667`) gates `poll_outbox` and the gateway channel; test `submit::tests::a_lane_keeps_at_most_max_inflight_in_flight`, `config::tests::parses_with_defaults` |
+| (e) the balance alert is gas limit × worst-case price + value | the floor breaker used the operator's static `min_relayer_balance` only (`breaker.rs`) | `breaker::tests::balance_floor_per_lane` (the floor only) | **gap, built:** `Breaker::below_cost` (`breaker.rs:111`) warns when the balance is below Σ in-flight gas limit × max fee per gas (+ value: lane transactions carry none), `Submitter::inflight_cost` (`submit.rs:1659`) at each sample; an alert, the floor breaker unchanged; test `breaker::tests::balance_below_the_in_flight_cost_is_alerted` |
+| (f) the deploy gate reads the live block cap | `submit.rs:685`, `submit.rs:1506` (`guard::total_cap` of `guard.rs:773` over `Chain::block_gas`, `chain.rs:195`, read each time; regular gas also ≤ 2^24 before Amsterdam, the MD-5 rule of every chain); the contract deploy script's check (2) reads the live block (T4) | `submit::tests::gas_follows_the_two_dimensional_model` (`TX_EXCEEDS_CHAIN_LIMIT` at a 30 M block) | none: BUILT |
+
+- Mutants (`runs/2026-11-21-avax-dot-arweave-t3-mutants.txt`): `dead` on a missing receipt; the in-flight cap ignored; a fixed
+  gas padding; the cost alert dropped.
+- Gates: `node-test`, `node-clippy`, `node-e2e` (10 threads), `docs`.
 
 ## T4 — NET-EVM-18: the deploy checks
 
@@ -297,6 +318,12 @@ that `arbundles` builds differently from ours or refuses (type 3's `v` included)
 
 - [ ] Each row's block 0 hash read from two independent sources and equal; `network` per NET-EVM-13; seeded `draft`.
 - Gates: `deploy-py`, `sdk-test`, `docs`.
+- **Done (2026-11-22, BUILT on `chains-arweave`):** the five rows, `src/chains/<key>/{profile.json,README.md}` in the T40 format,
+  the node's commented rows, the keys in both profile tests. Controller calls (ARCH-POS-20 Change of 2026-11-22): Hub's eth-rpc
+  answers block 0 `null` on mainnet and Paseo, so their `chainUid` is the Substrate genesis hash (`chain_getBlockHash(0)` on two
+  Substrate providers, equal), as Westend Hub's eth-rpc answers block 0 with it; `moonbeam-mainnet`'s second source answered
+  only over plain HTTP through a third-party metered gateway (its TLS refused this client), named in the row's note. Owner
+  questions: below, T12.
 
 ## T12 — Probes H1–H8 on every new profile **[public reads]**
 
@@ -310,6 +337,20 @@ that `arbundles` builds differently from ours or refuses (type 3's `v` included)
 - [ ] One foreground sample per invocation (`--probe <H> --profile <key>`), appended to its log; the 24-h and 7-day windows are
   the owner's scheduler calling it; no background shell, no sleep loop. Each probe resumable; a failure stops the task (stop
   condition).
+- **Done (2026-11-22, one sample each; the 24-h and 7-day windows are the scheduler's, not run):** the SDK plan T40 runner
+  (`clients/scaas-rpc/runs/2026-11-22-evm-probes.py`, no second runner), every probe on the seven keys; summary rows in
+  `clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt` (`--summary` now keeps the rows of keys logged in another checkout).
+  Runner fixes, test first: `caps` asks `eth_call` without a sender (Hub refuses a named sender without gas × price, which read
+  as a 21,000 cap); a gateway's "not served" is no method (`l1fee`). **Failures (stop conditions, to the owner):** H1 on the three
+  Hub keys (one public eth-rpc provider each; mainnet and Paseo serve no block 0); H2 on both Moonbeam keys (a read pinned by a
+  made-up block hash is answered from an empty state, not refused); Westend Hub's eth-rpc refused every `eth_call` ("Metadata
+  error"), so H2, `fork`, `codesize`, `eip2537` and `caps` failed or are unread there. Avalanche passed H1, H2, H4 and H7.
+- **Owner 2026-11-22** ("5 câu hỏi: theo đề xuất": the five questions, as proposed; owner: yes; decisions ARCH-POS-20):
+  (1) Hub's `chainUid` is the Substrate genesis; (2) Moonbeam's pinned reads are not trusted: `profile.json` `pinnedReads`
+  false, `scaas-rpc` refuses pinned reads on such a pool (`PinnedReadsUntrusted`), plain reads work; **follow-up (T41 family,
+  PLANNED):** the SDK reads `pinnedReads` from its profile and builds the pool with it; (3) Westend Hub dropped
+  (`smartcontracts/evm/legacy/chains/polkadot-hub-westend/`); (4) Moonbeam mainnet needs an independent second source before
+  any deploy; (5) Fuji disables `mldsa44`, `mldsa65`, `mldsa87` and PQZ, C-Chain keeps every kind.
 
 ## T13 — Hub weight-to-gas measurement on Paseo **[owner's word]**
 
@@ -332,23 +373,26 @@ that `arbundles` builds differently from ours or refuses (type 3's `v` included)
 
 ## T16 — clientkeys: Arweave vectors
 
+**Done 2026-11-22** as T41.arweave on branch `sdk-arweave` (decisions CLI-SDK-33 (60)–(63)): the rows, the vectors and the both-way
+cross-check (72 checks); type 4 signs the deep hash's hex text, as `arbundles` does (CLI-SDK-33 (60)).
+
 **Files:** `clients/clientkeys/src/arweave.js` (new), `test/arweave.test.js`, `smartcontracts/vectors/arweave/*.json` (data items,
 deep hashes, ids, upload keys, frames, buckets, objects), `smartcontracts/vectors/pqchat/` (`ar://` `file` rows); the `arbundles`
 cross-check in its own generator directory with its own lock file (`clients/clientkeys/xcheck/arbundles/`, a pinned version),
 outside clientkeys' dependency tree.
 
-- [ ] The deep hash, layout and id as spec §7.2; types 2, 3 and 4 signed and verified; type 3 with `v ∈ {27, 28}` and low `s`.
-- [ ] Cross-check both ways, for each of types 2, 3 and 4 and the same key and data: our item byte-identical to the one `arbundles`
+- [x] The deep hash, layout and id as spec §7.2; types 2, 3 and 4 signed and verified; type 3 with `v ∈ {27, 28}` and low `s`.
+- [x] Cross-check both ways, for each of types 2, 3 and 4 and the same key and data: our item byte-identical to the one `arbundles`
   builds, `arbundles`' own verification accepting ours, and an `arbundles`-built item parsing with its id matching. Rows with one
   tag, 64 tags, a 64-byte name (the two-byte varint edge), a target, an anchor; refusals: a negative block count, trailing tag bytes,
   a header tag count other than the Avro count, an empty name, a presence byte 2, type 3 with `v` 0 or 1 or a high `s`.
-- [ ] Upload keys (spec §7.3) from the existing app-root-key rows and fixed file keys, `ctSha256` computed from the object; the
+- [x] Upload keys (spec §7.3) from the existing app-root-key rows and fixed file keys, `ctSha256` computed from the object; the
   secp256k1 counter path forced by a fixture; a row showing that another file key gives another upload key for the same `ctSha256`.
-- [ ] Frames, buckets and objects (spec §7.4), integer arithmetic: `size = 0`; `size + 8 = 2^k − 1, 2^k, 2^k + 1` for every `k` from 16
+- [x] Frames, buckets and objects (spec §7.4), integer arithmetic: `size = 0`; `size + 8 = 2^k − 1, 2^k, 2^k + 1` for every `k` from 16
   to 31 (above the cap: `FileTooLarge`); the frame's `len`, the zero pad, the object length bucket + 16; read refusals: a length other
   than bucket + 16, a flipped byte (`ctSha256`), and after decryption a `len` other than `size`, a non-zero pad byte, a plaintext
   `sha256` mismatch, each with its positive control.
-- [ ] `ar://` rows: accepted; refused at 42 and 44 characters, with `+` or `/`, with `=`, a non-canonical last character, a
+- [x] `ar://` rows: accepted; refused at 42 and 44 characters, with `+` or `/`, with `=`, a non-canonical last character, a
   trailing path, an upper-case scheme.
 - Mutants: the type string left out of the deep hash; the type as a binary byte instead of decimal text; an empty tag list as
   `0x00`; `"blob"` with a binary length; the id as SHA-256 of the item; `v` written as 0 or 1; the bucket floor at 2^15; the bucket
@@ -357,6 +401,9 @@ outside clientkeys' dependency tree.
 
 ## T17 — `ua-rs`: ANS-104, the sealed upload and the upload key
 
+**Done 2026-11-22** as T41.arweave on branch `sdk-arweave` (CLI-SDK-33 (61), (62)); mutants
+`clients/scaas-sdk/runs/2026-11-17-scaas-sdk-t41arw1-mutants.txt`.
+
 Placement (SDK plan T42, decisions CLI-SDK-33 (35), on branch `sdk-complete`): the generic file seal (the frame inside the
 AEAD, the buckets, `open_file`'s `size` and `sha256` checks, the file-key handle) is in the app-core core; ANS-104, the deep
 hash, `UploadSign`, the upload key, `seal_for_arweave`, `ar://` and `scaas-rpc`'s `arweave` module are behind `fam-arweave`.
@@ -364,15 +411,15 @@ Test: a build without `fam-arweave` seals and opens a file; a build with it uplo
 
 **Files:** `clients/ua-rs/src/arweave.rs` (new), the app-core handle usages, `tests/arweave.rs`.
 
-- [ ] Reproduce every T16 row byte for byte. The parser's bounds and refusals of spec §7.2; the signature verified before an item is
+- [x] Reproduce every T16 row byte for byte. The parser's bounds and refusals of spec §7.2; the signature verified before an item is
   returned.
-- [ ] `seal_for_arweave` as one call: a fresh file key handle, the frame, the object, `ctSha256` computed there, the upload key from
+- [x] `seal_for_arweave` as one call: a fresh file key handle, the frame, the object, `ctSha256` computed there, the upload key from
   the app root key and the file key, the item built, signed and verified. No parameter carries a hash.
-- [ ] The usage `UploadSign`: created only inside that call, bound to one type and one `ctSha256`; its one operation signs an item
+- [x] The usage `UploadSign`: created only inside that call, bound to one type and one `ctSha256`; its one operation signs an item
   `ua-rs` built after recomputing the item's data hash and refusing (`AppKeyUsage`) another; no byte accessor; the label prefix
   `scaas/arweave/` refused to app cores. Test: a handle bound to object A refuses an item over object B (a test-only constructor
   under `cfg(test)` builds that item).
-- [ ] `open_file` for the framed form: the tag, `len` equal to `size`, the zero pad, SHA-256 of the file equal to `sha256`, before any
+- [x] `open_file` for the framed form: the tag, `len` equal to `size`, the zero pad, SHA-256 of the file equal to `sha256`, before any
   plaintext leaves `ua-rs`; the same `size` and `sha256` check for UA-7's form; and the `ar://` parser.
 - Mutants: the presence byte 2 accepted; `UploadSign` signing without re-checking the item's data hash against its bound `ctSha256`
   (killed by the A/B test); the upload key derived without the file key; the pad check skipped; the plaintext `sha256` check skipped.
@@ -395,6 +442,9 @@ Keys and data are throwaway and derived from no real root; no key in any committ
 
 ## T19 — `scaas-rpc` module `arweave`
 
+**Done 2026-11-22** as T41.arweave on branch `sdk-arweave` (decisions CLI-SDK-33 (64), (65)); the payer route's client call
+with it (owner 2026-11-22).
+
 **Files:** `clients/scaas-rpc/src/arweave/` (new), `tests/arweave.rs` with a local mock server.
 
 - [ ] Tests first: identity by `GET /info`; an id checked before any request; `len` above the platform cap refused before any
@@ -410,6 +460,9 @@ Keys and data are throwaway and derived from no real root; no key in any committ
 - Gates: `rpc-test`, `rpc-wasm`, `docs`.
 
 ## T20 — SDK `seal_for_arweave`, `upload_file`, `fetch_file`, `open_file`
+
+**Done 2026-11-22** as T41.arweave on branch `sdk-arweave` (CLI-SDK-33 (66)); the three payment paths (owner 2026-11-22). The
+bindings are unchanged: neither `app-core` nor `arweave` is in the FRB surface's features (an open point for the owner).
 
 **Files:** `clients/scaas-sdk/src/` (the app-core surface), `tests/arweave.rs`, the bindings' regeneration.
 
@@ -433,6 +486,30 @@ Keys and data are throwaway and derived from no real root; no key in any committ
   free tier; `settled` sampled once per invocation until true (strict majority of two gateways of different operators, the depth,
   the bytes read back); fetched from two gateways of the default list, the check passing on both, `open_file` passing. Evidence: the
   id, the block, the depth and timings, no key.
+
+## T24 — Node: the Arweave credit payer service (NODE-SPN-05)
+
+Owner 2026-11-22: the payer service is part of this plan, on branch `chains-arweave` (the plan's node tasks stay there). Until it is
+built, an upload above the free tier is `PayerUnavailable` (T20); T20 does not wait for it.
+
+**Optional since 2026-11-22 (owner):** the user may pay for an upload themselves (self-pay: Turbo credits topped up from
+the user's own wallet, or a per-upload payment), as self-relay on every chain; T20 builds that path, so Arweave never depends on
+the node. The payer service stays an operator convenience. Self-pay links the user's upload keys at Turbo through the paying
+wallet: stated in the spec's threat notes, and the client warns.
+
+**Files:** `scaas-node/src/` (a gateway route, its policy and budgets, the payer key's config by env var, file or keystore name),
+`scaas-node/node.example.toml` (the route, off, commented), `scaas-node/tests/`, `docs/node/sponsorship.md` (NODE-SPN-05 to BUILT
+once tested), `docs/node/gateway.md` (the route).
+- [ ] Tests first: the route answers nothing while disabled; enabled, a request without a gateway credential refused by name, one
+  over the per-credential or per-IP budget (per hour, per day) refused by name, one carrying a UA, a UA signature, file bytes or a
+  message or session id refused (`deny_unknown_fields`); a request with the upload address, the signature type and the bucket
+  approves credits to that address for one object with a short expiry, against a mock Turbo payment API (the approval call as
+  T18 records it); the payer key never logged, never in an answer; the approval amount bounded by the bucket's price; the same
+  address and bucket approved once per expiry window.
+- [ ] Live approvals against Turbo only on the owner's word (credits spent), after T18.
+- Mutants: the credential check dropped; the per-IP budget dropped; the unknown-field refusal dropped; the amount bound dropped;
+  the route on by default.
+- Gates: `node-test`, `node-clippy`, `docs`. Commit `avax-dot-arweave T24: the Arweave credit payer service`.
 
 ## T22 — Docs and status; the round-end matrix
 

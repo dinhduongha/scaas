@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""scaas-sdk bindings on the merge of sdk-complete e90f26685 (decisions CLI-SDK-33 (49)) mutants:
-python3 clients/scaas-sdk/runs/2026-11-17-scaas-sdk-bind49-mutants.py check | run [name]"""
+"""scaas-sdk bindings on the merge of sdk-complete e90f26685 (decisions CLI-SDK-33 (100)) mutants:
+python3 clients/scaas-sdk/runs/2026-11-17-scaas-sdk-bind100-mutants.py check | run [name]"""
 
 import sys
 from pathlib import Path
@@ -40,4 +40,4 @@ MUTANTS = [
 ]
 
 if __name__ == "__main__":
-    main("bind49", MUTANTS)
+    main("bind100", MUTANTS)

@@ -765,6 +765,7 @@ fn confirm_class(sdk: &str) -> Option<&'static str> {
         || f.starts_with("submit")
         || [
             "member_sign",
+            "hand_off",
             "place",
             "cancel_all",
             "resend",
@@ -773,12 +774,16 @@ fn confirm_class(sdk: &str) -> Option<&'static str> {
             "bls_multi_pop_part",
             "pqchat_seal_message",
             "prepare_app_call",
+            // SDK plan T41.soroban: the signer's hand-off, the subject's op signed, the payer's native send signed
+            "soroban_submit",
+            "soroban_hand_off",
+            "soroban_submit_native_send",
         ]
         .contains(&f)
         || sdk == "Vault::remove";
     if signs {
         Some("sign")
-    } else if f.starts_with("prepare_") || f.starts_with("admin_ua_") {
+    } else if f.starts_with("prepare_") || f.starts_with("admin_ua_") || f == "import_signed" {
         Some("op")
     } else {
         None
@@ -1188,6 +1193,7 @@ fn every_signing_command_asks_first() {
                 "op submit" => Run::Session(prepared(), json!(["op", "submit", "--prepared", "p", "--quote", "q"])),
                 "op resend" => Run::Session(prepared(), json!(["op", "resend", "--op", "x", "--quote", "q"])),
                 "op member-sign" => Run::Session(prepared(), json!(["op", "member-sign", "--prepared", "p"])),
+                "op hand-off" => Run::Session(prepared(), json!(["op", "hand-off", "--prepared", "p"])),
                 "op bls-multi-part" => Run::Session(prepared(), json!(["op", "bls-multi-part", "--prepared", "p", "--member", sg])),
                 "op submit-bls-multi" => Run::Session(prepared(), json!(["op", "submit-bls-multi", "--prepared", "p", "--quote", "q", "--parts", "[]", "--surplus", "false"])),
                 "op bls-multi-pop-part" => Run::One(s(&["op", "bls-multi-pop-part", "--member", &sg])),
@@ -1198,6 +1204,10 @@ fn every_signing_command_asks_first() {
                     Run::Session(l, json!(["account", "submit-registry-write", "--write", "w.0", "--quote", "q"]))
                 }
                 "wallet submit-native-send" => zf(&["wallet", "submit-native-send"], zero::<scaas_sdk::wallet::NativeQuote>()),
+                "wallet soroban-submit" => zf(&["wallet", "soroban-submit"], json!({"prepared": zero::<scaas_sdk::wallet::SorobanPrepared>(),
+                    "quote": zero::<scaas_sdk::wallet::SorobanQuote>()})),
+                "wallet soroban-hand-off" => zf(&["wallet", "soroban-hand-off"], zero::<scaas_sdk::wallet::SorobanPrepared>()),
+                "wallet soroban-submit-native-send" => zf(&["wallet", "soroban-submit-native-send"], zero::<scaas_sdk::wallet::SorobanNativeQuote>()),
                 "dex sign-order" => Run::Session(vec![order.clone()], json!(["dex", "sign-order", "--order", "o"])),
                 "dex place" => Run::Session(vec![order.clone()], json!(["dex", "place", "--order", "o"])),
                 "dex cancel-all" => zf(&["dex", "cancel-all"], zero::<scaas_sdk::dex::CancelAll>()),
@@ -1205,6 +1215,7 @@ fn every_signing_command_asks_first() {
                 "admin sign-pqz-auditor-consent" => zf(&["admin", "sign-pqz-auditor-consent"], zero::<scaas_sdk::admin::AuditorConsent>()),
                 "admin sign-zether-auditor-consent" => zf(&["admin", "sign-zether-auditor-consent"], zero::<scaas_sdk::admin::AuditorConsent>()),
                 "app-core sign-app-record" => Run::One(s(&["app-core", "sign-app-record", "--account", &sg, "--path", "Portable", "--typed-json", "{}"])),
+                "app-core sign-pqvault-record" => Run::One(s(&["app-core", "sign-pqvault-record", "--account", &sg, "--path", "Portable", "--typed-json", "{}"])),
                 "app-core prepare-app-call" => {
                     let entry = json!({"type": "function", "name": "ping", "stateMutability": "nonpayable", "outputs": [],
                         "inputs": [{"name": "x", "type": "uint64"}]});
@@ -1290,4 +1301,88 @@ fn every_signing_command_asks_first() {
         }
     });
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// T41.evm: the hand-off blob's two commands (its bounds are the SDK's, `tests/handoff.rs`): `from-json` reads a blob's text
+/// into its named fields, `to-json` writes them back, the same blob; an unknown field is the SDK's `Argument`. And `op
+/// import-signed` of a blob for a chain the CLI does not hold is `ChainUnknown`, nothing read (the import's checks are the
+/// SDK's, `tests/handoff.rs`).
+#[test]
+fn signed_op_blob_commands() {
+    let blob = serde_json::json!({"v": 1, "chain_uid": format!("0x{}", "60".repeat(32)), "family": "evm",
+        "contract": "0x5ca00000000000000000000000000000000000a1", "entry": "mtxCancelNonce", "struct": "UACancelNonce",
+        "kind": "token", "message": {"lane": "7"}, "extra": {}, "signature": "0x01", "signer": format!("0x{}", "00".repeat(32)),
+        "signer_kind": 0, "ids": false});
+    let o = run(
+        &[
+            "--json",
+            "signed-op-blob",
+            "from-json",
+            "--text",
+            &blob.to_string(),
+        ],
+        "",
+        &[],
+    );
+    assert!(o.status.success(), "{}", err(&o));
+    let read = lines(&o)[0].clone();
+    assert_eq!(read, blob, "the named fields");
+    let mut a = vec![
+        "--json".to_string(),
+        "signed-op-blob".into(),
+        "to-json".into(),
+    ];
+    for (k, x) in read.as_object().unwrap() {
+        a.push(format!("--{}", k.replace('_', "-")));
+        a.push(x.as_str().map_or_else(|| x.to_string(), String::from));
+    }
+    let a: Vec<&str> = a.iter().map(String::as_str).collect();
+    let o = run(&a, "", &[]);
+    assert!(o.status.success(), "{}", err(&o));
+    let text = lines(&o)[0]["json"].as_str().unwrap().to_string();
+    assert_eq!(
+        serde_json::from_str::<Value>(&text).unwrap(),
+        blob,
+        "the same blob back"
+    );
+    let mut bad = blob.clone();
+    bad["unknown"] = serde_json::json!(1);
+    let o = run(
+        &[
+            "--json",
+            "signed-op-blob",
+            "from-json",
+            "--text",
+            &bad.to_string(),
+        ],
+        "",
+        &[],
+    );
+    assert!(
+        !o.status.success() && err(&o).contains("Argument"),
+        "{}",
+        err(&o)
+    );
+    let expect = serde_json::json!({"chain": "nowhere", "payee": [], "payer": {"Native": {"seed": "s", "network": "evm", "index": 0}}});
+    let dd = data_dir("import-signed");
+    let o = run(
+        &[
+            "--json",
+            "--data-dir",
+            dd.to_str().unwrap(),
+            "op",
+            "import-signed",
+            "--blob",
+            &blob.to_string(),
+            "--expect",
+            &expect.to_string(),
+        ],
+        "",
+        &[],
+    );
+    assert!(
+        !o.status.success() && err(&o).contains("ChainUnknown"),
+        "{}",
+        err(&o)
+    );
 }

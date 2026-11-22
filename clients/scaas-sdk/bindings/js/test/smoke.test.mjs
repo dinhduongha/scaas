@@ -226,7 +226,7 @@ test("store, authenticator, PRF, events, copy calls", async () => {
   assert.equal(await failure(s.vault().unlock(id, { Passphrase: h })), "Argument");
 });
 
-test("an EVM profile opens: the bindings build the SDK's `evm` (decisions CLI-SDK-33 (49))", async () => {
+test("an EVM profile opens: the bindings build the SDK's `evm` (decisions CLI-SDK-33 (100))", async () => {
   assert.notEqual(sdk.features() & (1n << 30n), 0n, "the evm bit");
   const profile = (more) => ({
     key: "local",

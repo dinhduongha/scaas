@@ -27,6 +27,34 @@ arbitrum-testnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11
 arbitrum-testnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:05:41Z .. 2026-11-21T23:05:41Z
 arbitrum-testnet | fork | 1 | INFO | fork osaka | 2026-11-21T23:05:40Z .. 2026-11-21T23:05:40Z
 arbitrum-testnet | l1fee | 2 | INFO | model in-estimate | 2026-11-21T23:05:56Z .. 2026-11-21T23:08:20Z
+avalanche-mainnet | H1 | 1 | PASS | chain id 43114, block 0 0x31ced5b9…, 1 distinct block 0 over 1 samples | 2026-11-22T02:26:43Z .. 2026-11-22T02:26:43Z
+avalanche-mainnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-22T02:26:50Z .. 2026-11-22T02:26:50Z
+avalanche-mainnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-22T02:26:51Z .. 2026-11-22T02:26:51Z
+avalanche-mainnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-22T02:26:53Z .. 2026-11-22T02:26:53Z
+avalanche-mainnet | H5 | 1 | INFO | p99 3 blocks, 6 s over 2 endpoint samples (last [3, 3] blocks) | 2026-11-22T02:26:54Z .. 2026-11-22T02:26:54Z
+avalanche-mainnet | H6 | 1 | INFO | largest span 10000, 100 | 2026-11-22T02:26:57Z .. 2026-11-22T02:26:57Z
+avalanche-mainnet | H7 | 1 | PASS | finalized 101030026; finalized 101030028 | 2026-11-22T02:26:58Z .. 2026-11-22T02:26:58Z
+avalanche-mainnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-22T02:26:59Z .. 2026-11-22T02:26:59Z
+avalanche-mainnet | basefee | 1 | INFO | type 2 | 2026-11-22T02:27:10Z .. 2026-11-22T02:27:10Z
+avalanche-mainnet | caps | 2 | INFO | block 80,000,000, tx cap none; mldsa44 fits, mldsa65 fits, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 fits | 2026-11-22T02:27:05Z .. 2026-11-22T02:30:52Z
+avalanche-mainnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-22T02:27:10Z .. 2026-11-22T02:27:10Z
+avalanche-mainnet | eip2537 | 1 | INFO | EIP-2537 absent | 2026-11-22T02:27:02Z .. 2026-11-22T02:27:02Z
+avalanche-mainnet | fork | 1 | INFO | fork cancun | 2026-11-22T02:27:02Z .. 2026-11-22T02:27:02Z
+avalanche-mainnet | l1fee | 1 | INFO | model none | 2026-11-22T02:27:13Z .. 2026-11-22T02:27:13Z
+avalanche-testnet | H1 | 1 | PASS | chain id 43113, block 0 0x31ced5b9…, 1 distinct block 0 over 1 samples | 2026-11-22T02:27:14Z .. 2026-11-22T02:27:14Z
+avalanche-testnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-22T02:27:21Z .. 2026-11-22T02:27:21Z
+avalanche-testnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-22T02:27:22Z .. 2026-11-22T02:27:22Z
+avalanche-testnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-22T02:27:24Z .. 2026-11-22T02:27:24Z
+avalanche-testnet | H5 | 1 | INFO | p99 4 blocks, 8 s over 2 endpoint samples (last [3, 4] blocks) | 2026-11-22T02:27:25Z .. 2026-11-22T02:27:25Z
+avalanche-testnet | H6 | 1 | INFO | largest span 10000, 100 | 2026-11-22T02:27:28Z .. 2026-11-22T02:27:28Z
+avalanche-testnet | H7 | 1 | PASS | finalized 61452349; finalized 61452351 | 2026-11-22T02:27:29Z .. 2026-11-22T02:27:29Z
+avalanche-testnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-22T02:27:30Z .. 2026-11-22T02:27:30Z
+avalanche-testnet | basefee | 1 | INFO | type 2 | 2026-11-22T02:27:42Z .. 2026-11-22T02:27:42Z
+avalanche-testnet | caps | 2 | INFO | block 32,000,000, tx cap none; mldsa44 NO, mldsa65 NO, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 NO | 2026-11-22T02:27:36Z .. 2026-11-22T02:30:55Z
+avalanche-testnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-22T02:27:42Z .. 2026-11-22T02:27:42Z
+avalanche-testnet | eip2537 | 1 | INFO | EIP-2537 absent | 2026-11-22T02:27:33Z .. 2026-11-22T02:27:33Z
+avalanche-testnet | fork | 1 | INFO | fork cancun | 2026-11-22T02:27:33Z .. 2026-11-22T02:27:33Z
+avalanche-testnet | l1fee | 1 | INFO | model none | 2026-11-22T02:27:44Z .. 2026-11-22T02:27:44Z
 base-mainnet | H1 | 1 | FAIL | chain id 8453, block 0 None…, 2 distinct block 0 over 1 samples | 2026-11-21T23:37:25Z .. 2026-11-21T23:37:25Z
 base-mainnet | H5 | 1 | INFO | p99 7674 blocks, 1535 s over 2 endpoint samples (last [7674, 5806] blocks) | 2026-11-21T23:37:26Z .. 2026-11-21T23:37:26Z
 base-mainnet | H7 | 1 | PASS | finalized 60563548; finalized 60563548 | 2026-11-21T23:37:27Z .. 2026-11-21T23:37:27Z
@@ -147,6 +175,34 @@ linea-testnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21
 linea-testnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:09:19Z .. 2026-11-21T23:09:19Z
 linea-testnet | fork | 1 | INFO | fork osaka | 2026-11-21T23:09:17Z .. 2026-11-21T23:09:17Z
 linea-testnet | l1fee | 1 | INFO | model linea | 2026-11-21T23:09:43Z .. 2026-11-21T23:09:43Z
+moonbeam-mainnet | H1 | 1 | PASS | chain id 1284, block 0 0x7e6b3bbe…, 1 distinct block 0 over 1 samples | 2026-11-22T02:31:12Z .. 2026-11-22T02:31:12Z
+moonbeam-mainnet | H2 | 1 | FAIL | 5 of 5 answered, 0 of 5 refused; 5 of 5 answered, 0 of 5 refused | 2026-11-22T02:31:56Z .. 2026-11-22T02:31:56Z
+moonbeam-mainnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-22T02:32:01Z .. 2026-11-22T02:32:01Z
+moonbeam-mainnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-22T02:32:07Z .. 2026-11-22T02:32:07Z
+moonbeam-mainnet | H5 | 1 | INFO | p99 3 blocks, 15 s over 2 endpoint samples (last [0, 3] blocks) | 2026-11-22T02:32:09Z .. 2026-11-22T02:32:09Z
+moonbeam-mainnet | H6 | 1 | INFO | largest span 1000, 1000 | 2026-11-22T02:32:20Z .. 2026-11-22T02:32:20Z
+moonbeam-mainnet | H7 | 1 | PASS | finalized 16796699; finalized 16796696 | 2026-11-22T02:32:21Z .. 2026-11-22T02:32:21Z
+moonbeam-mainnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-22T02:32:26Z .. 2026-11-22T02:32:26Z
+moonbeam-mainnet | basefee | 1 | INFO | type 2 | 2026-11-22T02:32:59Z .. 2026-11-22T02:32:59Z
+moonbeam-mainnet | caps | 1 | INFO | block 60,000,000, tx cap none; mldsa44 fits, mldsa65 fits, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 fits | 2026-11-22T02:32:53Z .. 2026-11-22T02:32:53Z
+moonbeam-mainnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-22T02:32:58Z .. 2026-11-22T02:32:58Z
+moonbeam-mainnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-22T02:32:40Z .. 2026-11-22T02:32:40Z
+moonbeam-mainnet | fork | 1 | INFO | fork osaka | 2026-11-22T02:32:35Z .. 2026-11-22T02:32:35Z
+moonbeam-mainnet | l1fee | 2 | INFO | model none | 2026-11-22T02:33:08Z .. 2026-11-22T02:35:19Z
+moonbeam-testnet | H1 | 1 | PASS | chain id 1287, block 0 0x33638dde…, 1 distinct block 0 over 1 samples | 2026-11-22T02:33:11Z .. 2026-11-22T02:33:11Z
+moonbeam-testnet | H2 | 1 | FAIL | 5 of 5 answered, 0 of 5 refused; 5 of 5 answered, 0 of 5 refused | 2026-11-22T02:33:26Z .. 2026-11-22T02:33:26Z
+moonbeam-testnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-22T02:33:29Z .. 2026-11-22T02:33:29Z
+moonbeam-testnet | H4 | 1 | PASS | canonical ok, made-up null; canonical ok, made-up null | 2026-11-22T02:33:33Z .. 2026-11-22T02:33:33Z
+moonbeam-testnet | H5 | 1 | INFO | p99 3 blocks, 1350 s over 2 endpoint samples (last [3, 3] blocks) | 2026-11-22T02:33:36Z .. 2026-11-22T02:33:36Z
+moonbeam-testnet | H6 | 1 | INFO | largest span 1000, 100 | 2026-11-22T02:33:42Z .. 2026-11-22T02:33:42Z
+moonbeam-testnet | H7 | 1 | PASS | finalized 17159871; finalized 17159871 | 2026-11-22T02:33:43Z .. 2026-11-22T02:33:43Z
+moonbeam-testnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 2 pending | 2026-11-22T02:33:46Z .. 2026-11-22T02:33:46Z
+moonbeam-testnet | basefee | 1 | INFO | type 2 | 2026-11-22T02:34:14Z .. 2026-11-22T02:34:14Z
+moonbeam-testnet | caps | 1 | INFO | block 60,000,000, tx cap none; mldsa44 fits, mldsa65 fits, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 fits | 2026-11-22T02:34:01Z .. 2026-11-22T02:34:01Z
+moonbeam-testnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-22T02:34:13Z .. 2026-11-22T02:34:13Z
+moonbeam-testnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-22T02:33:53Z .. 2026-11-22T02:33:53Z
+moonbeam-testnet | fork | 1 | INFO | fork osaka | 2026-11-22T02:33:51Z .. 2026-11-22T02:33:51Z
+moonbeam-testnet | l1fee | 1 | INFO | model none | 2026-11-22T02:34:20Z .. 2026-11-22T02:34:20Z
 op-mainnet | H1 | 1 | PASS | chain id 10, block 0 0x7ca38a19…, 1 distinct block 0 over 1 samples | 2026-11-21T23:00:34Z .. 2026-11-21T23:00:34Z
 op-mainnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused; 5 of 5 answered, 5 of 5 refused | 2026-11-21T23:00:44Z .. 2026-11-21T23:00:44Z
 op-mainnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-21T23:00:46Z .. 2026-11-21T23:00:46Z
@@ -175,3 +231,45 @@ op-testnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-21T23
 op-testnet | eip2537 | 1 | INFO | EIP-2537 present | 2026-11-21T23:02:16Z .. 2026-11-21T23:02:16Z
 op-testnet | fork | 1 | INFO | fork osaka | 2026-11-21T23:02:15Z .. 2026-11-21T23:02:15Z
 op-testnet | l1fee | 1 | INFO | model op-stack | 2026-11-21T23:02:33Z .. 2026-11-21T23:02:33Z
+polkadot-hub-mainnet | H1 | 1 | FAIL | H1 needs two independent providers | 2026-11-22T02:27:52Z .. 2026-11-22T02:27:52Z
+polkadot-hub-mainnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused | 2026-11-22T02:28:02Z .. 2026-11-22T02:28:02Z
+polkadot-hub-mainnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-22T02:28:04Z .. 2026-11-22T02:28:04Z
+polkadot-hub-mainnet | H4 | 1 | PASS | canonical ok, made-up null | 2026-11-22T02:28:06Z .. 2026-11-22T02:28:06Z
+polkadot-hub-mainnet | H5 | 1 | INFO | p99 17 blocks, 24 s over 1 endpoint samples (last [17] blocks) | 2026-11-22T02:28:07Z .. 2026-11-22T02:28:07Z
+polkadot-hub-mainnet | H6 | 1 | INFO | largest span 100000 | 2026-11-22T02:28:09Z .. 2026-11-22T02:28:09Z
+polkadot-hub-mainnet | H7 | 1 | PASS | finalized 23443738 | 2026-11-22T02:28:10Z .. 2026-11-22T02:28:10Z
+polkadot-hub-mainnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 1 pending | 2026-11-22T02:28:12Z .. 2026-11-22T02:28:12Z
+polkadot-hub-mainnet | basefee | 1 | INFO | type 2 | 2026-11-22T02:28:34Z .. 2026-11-22T02:28:34Z
+polkadot-hub-mainnet | caps | 2 | INFO | block 18,446,744,073,709,551,615, tx cap none; mldsa44 fits, mldsa65 fits, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 fits | 2026-11-22T02:28:28Z .. 2026-11-22T02:30:58Z
+polkadot-hub-mainnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-22T02:28:33Z .. 2026-11-22T02:28:33Z
+polkadot-hub-mainnet | eip2537 | 1 | INFO | EIP-2537 absent | 2026-11-22T02:28:15Z .. 2026-11-22T02:28:15Z
+polkadot-hub-mainnet | fork | 1 | INFO | fork osaka | 2026-11-22T02:28:14Z .. 2026-11-22T02:28:14Z
+polkadot-hub-mainnet | l1fee | 1 | INFO | model none | 2026-11-22T02:28:36Z .. 2026-11-22T02:28:36Z
+polkadot-hub-testnet | H1 | 1 | FAIL | H1 needs two independent providers | 2026-11-22T02:28:36Z .. 2026-11-22T02:28:36Z
+polkadot-hub-testnet | H2 | 1 | PASS | 5 of 5 answered, 5 of 5 refused | 2026-11-22T02:28:41Z .. 2026-11-22T02:28:41Z
+polkadot-hub-testnet | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-22T02:28:42Z .. 2026-11-22T02:28:42Z
+polkadot-hub-testnet | H4 | 1 | PASS | canonical ok, made-up null | 2026-11-22T02:28:45Z .. 2026-11-22T02:28:45Z
+polkadot-hub-testnet | H5 | 1 | INFO | p99 14 blocks, 36 s over 1 endpoint samples (last [14] blocks) | 2026-11-22T02:28:51Z .. 2026-11-22T02:28:51Z
+polkadot-hub-testnet | H6 | 1 | INFO | largest span 100000 | 2026-11-22T02:28:54Z .. 2026-11-22T02:28:54Z
+polkadot-hub-testnet | H7 | 1 | PASS | finalized 16061173 | 2026-11-22T02:28:54Z .. 2026-11-22T02:28:54Z
+polkadot-hub-testnet | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 1 pending | 2026-11-22T02:28:56Z .. 2026-11-22T02:28:56Z
+polkadot-hub-testnet | basefee | 1 | INFO | type 2 | 2026-11-22T02:29:19Z .. 2026-11-22T02:29:19Z
+polkadot-hub-testnet | caps | 2 | INFO | block 18,446,744,073,709,551,615, tx cap none; mldsa44 fits, mldsa65 fits, fndsa512 fits, slhdsa128s fits, fndsa1024 fits, mldsa87 fits | 2026-11-22T02:29:14Z .. 2026-11-22T02:31:00Z
+polkadot-hub-testnet | codesize | 1 | INFO | runtime 24576 B, init 49152 B | 2026-11-22T02:29:19Z .. 2026-11-22T02:29:19Z
+polkadot-hub-testnet | eip2537 | 1 | INFO | EIP-2537 absent | 2026-11-22T02:28:58Z .. 2026-11-22T02:28:58Z
+polkadot-hub-testnet | fork | 1 | INFO | fork osaka | 2026-11-22T02:28:58Z .. 2026-11-22T02:28:58Z
+polkadot-hub-testnet | l1fee | 1 | INFO | model none | 2026-11-22T02:29:21Z .. 2026-11-22T02:29:21Z
+polkadot-hub-westend | H1 | 1 | FAIL | H1 needs two independent providers | 2026-11-22T02:29:21Z .. 2026-11-22T02:29:21Z
+polkadot-hub-westend | H2 | 1 | FAIL | 3 of 5 answered, 5 of 5 refused | 2026-11-22T02:29:27Z .. 2026-11-22T02:29:27Z
+polkadot-hub-westend | H3 | 1 | INFO | 0 checked, 0 replaced | 2026-11-22T02:29:28Z .. 2026-11-22T02:29:28Z
+polkadot-hub-westend | H4 | 1 | PASS | canonical ok, made-up null | 2026-11-22T02:29:29Z .. 2026-11-22T02:29:29Z
+polkadot-hub-westend | H5 | 1 | INFO | p99 14 blocks, 24 s over 1 endpoint samples (last [14] blocks) | 2026-11-22T02:29:30Z .. 2026-11-22T02:29:30Z
+polkadot-hub-westend | H6 | 1 | INFO | largest span 100000 | 2026-11-22T02:29:32Z .. 2026-11-22T02:29:32Z
+polkadot-hub-westend | H7 | 1 | PASS | finalized 19711912 | 2026-11-22T02:29:32Z .. 2026-11-22T02:29:32Z
+polkadot-hub-westend | H8 | 1 | INFO | 0 compared once final, 0 mismatched, 0 replaced; 1 pending | 2026-11-22T02:29:33Z .. 2026-11-22T02:29:33Z
+polkadot-hub-westend | basefee | 1 | INFO | type 2 | 2026-11-22T02:29:47Z .. 2026-11-22T02:29:47Z
+polkadot-hub-westend | caps | 1 | INFO | block 18,446,744,073,709,551,615, tx cap 21000; mldsa44 NO, mldsa65 NO, fndsa512 NO, slhdsa128s NO, fndsa1024 NO, mldsa87 NO | 2026-11-22T02:29:45Z .. 2026-11-22T02:29:45Z
+polkadot-hub-westend | codesize | 1 | INFO | runtime None B, init None B | 2026-11-22T02:29:46Z .. 2026-11-22T02:29:46Z
+polkadot-hub-westend | eip2537 | 1 | FAIL | no agreed answer | 2026-11-22T02:29:35Z .. 2026-11-22T02:29:35Z
+polkadot-hub-westend | fork | 1 | INFO | fork before shanghai | 2026-11-22T02:29:35Z .. 2026-11-22T02:29:35Z
+polkadot-hub-westend | l1fee | 1 | INFO | model none | 2026-11-22T02:29:48Z .. 2026-11-22T02:29:48Z

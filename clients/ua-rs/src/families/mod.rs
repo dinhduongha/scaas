@@ -3,5 +3,7 @@
 //! `src/fam/<family>.js` and its rows in `smartcontracts/vectors/families/`. UNAUDITED.
 #[cfg(feature = "fam-solana")]
 pub mod solana;
+#[cfg(all(feature = "wallet", feature = "fam-soroban"))]
+pub mod soroban;
 #[cfg(all(feature = "wallet", feature = "fam-sui"))]
 pub mod sui;
