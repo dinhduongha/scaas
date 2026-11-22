@@ -190,6 +190,8 @@ pub fn features() -> u64 {
 
 /// A chain as the SDK holds it once its profile passed `Sdk::open`'s checks: the profile, its EVM pool, its gateway list.
 pub(crate) struct Chain {
+    // read by the chain calls of `account` and `wallet`; a build of `vault` alone holds the profile and reads none of it
+    #[cfg_attr(not(any(feature = "account", feature = "wallet")), allow(dead_code))]
     pub(crate) profile: ChainProfile,
     /// an EVM chain's one pool for the session (closing review P2-3): its identity checks, head floors and failover counts
     /// hold across calls; pinned to the profile's `chain_uid`

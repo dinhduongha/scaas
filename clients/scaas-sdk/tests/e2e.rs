@@ -14,6 +14,7 @@ use scaas_sdk::{
     ListedToken, RuntimeChoice, Sdk, SdkConfig,
 };
 use scaas_ua::wallet::{Network, SecretBytes, Wallet};
+#[cfg(feature = "app-core")]
 use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
@@ -2305,6 +2306,7 @@ async fn e2e_pqz_debit_on_a_node() {
 
 /// An operation's end with its transaction's receipt (status, `gasUsed`) when it landed (the M20 record), and that
 /// `gasUsed`: a `Landed` names the block of the operation's fact (its hash), so the payer's transaction is found in that block.
+#[cfg(feature = "pqz")]
 fn receipt_line(rpc: &str, payer: &str, s: &OpState) -> (String, Option<u64>) {
     match s {
         OpState::Landed { block, .. } => {

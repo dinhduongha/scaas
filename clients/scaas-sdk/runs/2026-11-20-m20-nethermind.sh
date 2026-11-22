@@ -104,8 +104,10 @@ say "the seed's EVM key 0 funded ($HOLDER)"
 NAME=local-31990-testnet
 # the chain's deploy as every chain gets it (smartcontracts/scripts/deploy.sh evm: the PQ verifiers probed on the copy's
 # precompiles first, then Deploy.s.sol simulated and DeploySend.s.sol sending each transaction with its measured gas),
-# the PQZ releases included (DEPLOY_PQZ); its book and logs moved out of the tree after
-(cd smartcontracts && PRIVATE_KEY=$PK FOUNDRY_PROFILE=scaas-testnet DEPLOY_NAME=$NAME CHAIN_CODE_LIMIT=131072 DEPLOY_PQZ=1 VERIFY=none VERIFY_REASON="a throwaway local copy" \
+# the PQZ releases included (DEPLOY_PQZ); its book and logs moved out of the tree after. TX_GAS_CAP is the book's owner-set
+# value deploy.sh's probe takes where it finds no cap (smartcontracts/evm/script/tx_gas_cap.py): the copy accepts an empty
+# eth_call up to its block limit, so the copy's book names EIP-7825's 2^24, its Amsterdam rule (plan T39, 2026-11-22)
+(cd smartcontracts && PRIVATE_KEY=$PK TX_GAS_CAP=16777216 FOUNDRY_PROFILE=scaas-testnet DEPLOY_NAME=$NAME CHAIN_CODE_LIMIT=131072 DEPLOY_PQZ=1 VERIFY=none VERIFY_REASON="a throwaway local copy" \
     DEPLOY_LOG=$COPY/deploy.log "$W/scripts/capped" bash scripts/deploy.sh evm "$RPC") >>"$LOG" 2>&1
 BOOK=$W/smartcontracts/evm/deployments/$NAME.json
 cp "$BOOK" "$COPY/book.json"
@@ -143,9 +145,10 @@ if [[ ,$PARTS, == *,pqz,* ]]; then
     say "PQZ debit (mtxConfidentialTransferSingle): rc=$r"
     rc=$((rc | r))
 fi
-grep '^M20 ' "$LOG" | sed 's/^/[m20] /'
+grep '^M20 ' "$LOG" | sed 's/^/[m20] /' || true
 [[ ,$PARTS, == *,control,* ]] || exit "$rc"
-TX=$(grep '^M20 tx ' "$LOG" | awk '{print $3}')
+# no `M20 tx` line when the BLS part failed: the control still runs
+TX=$(grep '^M20 tx ' "$LOG" | awk '{print $3}' || true)
 [ -n "$TX" ] && say "receipt: $(cast receipt "$TX" --rpc-url "$RPC" --json | python3 -I -c 'import json,sys; r=json.load(sys.stdin); print({k: r.get(k) for k in ("status","gasUsed","blockNumber","blockGasUsed","gasUsedRegular","gasUsedState")})')"
 # the negative control: initcode that loops for ever (JUMPDEST PUSH1 0 JUMP). Its regular gas has no bound but the cap:
 # the estimate is refused, and a transaction with a gas limit of 30 M, above 2^24, stops at the cap (status 0)
