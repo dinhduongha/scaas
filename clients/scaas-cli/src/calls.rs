@@ -338,6 +338,7 @@ calls! { cx;
     };
     "account registration-of" "Account::registration_of" {chain: String, ua: String} => js(sdk(cx).account().registration_of(chain, ua).await?);
     "account prepare-kem-repair" "Account::prepare_kem_repair" {key: KeyRef, chain: String, payer: KeyRef} @op => sdk(cx).account().prepare_kem_repair(key, chain, payer).await?.into_iter().collect::<Vec<_>>();
+    "account prepare-set-kem-key" "Account::prepare_set_kem_key" {key: KeyRef, chain: String, version: u64, payer: KeyRef} @op => sdk(cx).account().prepare_set_kem_key(key, chain, version, payer).await?.into_iter().collect::<Vec<_>>();
     "account marks" "Account::marks" {seed: String, chain: String} => js(sdk(cx).account().marks(seed, chain).await?);
     "account restore" "Account::restore" (r: Restore) => js(sdk(cx).account().restore(r).await?);
     "account prepare-smart-add-key" "Account::prepare_smart_add_key" {op: SmartOp, key: SubjectKeyArgs} @op => sdk(cx).account().prepare_smart_add_key(op, key).await?;
@@ -584,6 +585,15 @@ calls! { cx;
 
     // ---- app-core (spec §12): key handles live in this process, named by `--as` in a session
     "app-core random-bytes" "AppCore::random_bytes" {seed: String, n: u32} => hexed("bytes", &cx.app()?.random_bytes(&seed, n)?);
+    "app-core generate-passphrase" "AppCore::generate_passphrase" {seed: String} => {
+        // the words shown on the user's own terminal after the typed confirmation, as a seed backup's reveal
+        if !cx.typed_reveal() {
+            return Err(Fail::cli("NotConfirmed", "the words stay hidden"));
+        }
+        let p = cx.app()?.generate_passphrase(&seed)?;
+        let text = p.with(|w| String::from_utf8_lossy(w).into_owned());
+        named("passphrase", zeroize::Zeroizing::new(text).as_str())
+    };
     "app-core random-key" "AppCore::random_key" {seed: String, usage: AppKeyUsage} => handle(cx.app()?.random_key(&seed, usage)?, key_shown());
     "app-core derive" "AppCore::derive" {keys: Vec<H<Arc<AppKey>>>, salt: Vec<u8>, label: Vec<u8>, context: Vec<u8>, usage: AppKeyUsage, nonce: bool} =>
         handle(cx.app()?.derive(keys.into_iter().map(|k| k.0).collect(), salt, label, context, usage, nonce)?, key_shown());

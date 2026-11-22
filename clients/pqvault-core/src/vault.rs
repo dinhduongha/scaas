@@ -232,6 +232,10 @@ impl Unlocked {
     pub fn readable(&self) -> Vec<B32> {
         self.keys.keys().copied().collect()
     }
+    /// The handle of epoch `epoch`'s `K_v` (no byte: a key of PqVault's scope, wiped at [`PqVault::lock`]).
+    pub fn epoch_key(&self, epoch: B32) -> Option<Arc<AppKey>> {
+        self.keys.get(&epoch).cloned()
+    }
     pub fn info(&self) -> Option<&Value> {
         self.newest_open().and_then(|e| self.infos.get(&e.id))
     }
@@ -338,7 +342,7 @@ fn sig_of_signed(s: AppSigned) -> UaSig {
     UaSig {
         key_data: s.key_data,
         signature: s.signature,
-        members: vec![],
+        members: s.members,
     }
 }
 
@@ -369,6 +373,64 @@ impl PqVault {
             )
             .await?;
         get(v.get("info").ok_or(Error::ChainUnverified)?, "chainUid")
+    }
+
+    /// `ua`'s member entry at its newest KEM key (`kemKeyOf` of the instance's registry, `chainEnv`): a read that chooses the
+    /// key a wrap goes to, so one that feeds a decryption. A UA without a KEM key: `NotMember`.
+    pub async fn member_key(&self, at: &Instance, ua: B32) -> Result<MemberKey> {
+        let env = self
+            .read(
+                at,
+                "function chainEnv() view returns ((bytes32 chainUid,address registry,address govRouter,\
+                 address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params) env)",
+                json!({}),
+            )
+            .await?;
+        let registry: Addr = get(env.get("env").ok_or(Error::ChainUnverified)?, "registry")?;
+        let k = self
+            .net
+            .read(
+                &at.chain,
+                registry,
+                "function kemKeyOf(bytes32 ua) view returns (uint64 version,(uint8 scheme,bytes mlkemEk,\
+                 bytes32 x25519) kem,bytes sig)",
+                json!({"ua": ua}),
+            )
+            .await?;
+        let scheme: Num = get(k.get("kem").ok_or(Error::ChainUnverified)?, "scheme")?;
+        if scheme.0 != 1 {
+            return Err(Error::NotMember);
+        }
+        Ok(MemberKey {
+            ua,
+            key_id: get(&k, "version")?,
+            via: B32::default(),
+        })
+    }
+
+    /// A generated vault passphrase (owner 2026-11-22): 6 BIP-39 English words drawn in `scaas-ua` (about 66 bits), as the
+    /// secret buffer the SDK gives; shown once for the user to keep, never stored here.
+    pub fn generate_passphrase(&self, seed: &str) -> Result<Passphrase> {
+        Ok(Passphrase::Given(self.core.generate_passphrase(seed)?))
+    }
+
+    /// The share box for `recipients` (spec §6.7, controller call 2026-11-21): among the user's unlocked vaults, the shared
+    /// one the user created whose newest epoch's members are exactly the user and `recipients`, the user its one admin;
+    /// `None` when the first share makes one.
+    pub fn share_box(vaults: &[&Unlocked], recipients: &[B32]) -> Option<B32> {
+        vaults.iter().find_map(|v| {
+            let e = v.state.newest()?;
+            let mut want: Vec<B32> = recipients.iter().copied().chain([v.state.me]).collect();
+            want.sort();
+            want.dedup();
+            let have: Vec<B32> = e.members.iter().map(|m| m.ua).collect();
+            let shared = v.info()?.get("shared").and_then(Value::as_bool) == Some(true);
+            (shared
+                && v.state.create.creator == v.state.me
+                && have == want
+                && e.admins == [v.state.me])
+            .then_some(v.state.vault_id)
+        })
     }
 
     /// The vaults that list `ua` (`vaultsOf`, every page).
@@ -973,8 +1035,27 @@ impl PqVault {
         pass: Option<&Passphrase>,
         link: Link,
     ) -> Result<(Signed<VaultEpoch>, Vec<Wrap>, Exposure)> {
+        let (signer, me) = (v.account.clone(), v.state.me);
+        self.rekey_by(v, &signer, me, members, admins, pass, link)
+            .await
+    }
+
+    /// [`Self::rekey`] authored by another admin of the newest epoch, `author`, signing by `signer` (an `msig` admin by its
+    /// member slots, `KeyRef::Msig`); the keys are the unlocking user's (`v`), the author's admin right checked as the
+    /// contract checks it.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn rekey_by(
+        &self,
+        v: &Unlocked,
+        signer: &KeyRef,
+        author: B32,
+        members: &[MemberKey],
+        admins: &[B32],
+        pass: Option<&Passphrase>,
+        link: Link,
+    ) -> Result<(Signed<VaultEpoch>, Vec<Wrap>, Exposure)> {
         self.p1(&v.account).await?;
-        let me = v.state.me;
+        let me = author;
         let parent = v.write_epoch()?;
         if !parent.admins.contains(&me) || parent.removed().contains(&me) {
             return Err(Error::NotAdmin);
@@ -1064,7 +1145,7 @@ impl PqVault {
         };
         let home = v.state.create.home_vault_contract;
         Ok((
-            self.sign(&v.account, v.state.mode(), at, home, rec).await?,
+            self.sign(signer, v.state.mode(), at, home, rec).await?,
             wraps,
             exposure,
         ))

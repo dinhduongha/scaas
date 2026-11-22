@@ -206,5 +206,92 @@ MUTANTS = [
     ),
 ]
 
+UA = "clients/ua-rs/src/wallet/pqvault.rs"
+AK = "clients/ua-rs/src/wallet/appkey.rs"
+REG = "clients/scaas-sdk/src/account/register.rs"
+UAT = "cd clients/ua-rs && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core "
+SDKT = (
+    "cd clients/scaas-sdk && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 --lib --features "
+    "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,"
+    "cosmos,aptos,solana,soroban,sui,ton "
+)
+
+# CLI-PQV-15 (owner 2026-11-22): the KEM rotation call, PqVault msig signing, the generated passphrase, and the round's
+# pqvault-core checks (share box, exposure, lock, member keys, the msig author)
+MUTANTS15 = [
+    (
+        "an msig's path-B record signed in the portable form",
+        [
+            (
+                UA,
+                "            super::uasig::msig_sig_app_chain(first, current, inner, purpose, &d, registry, slots)",
+                "            super::msig_sig_app(first, current, inner, &app_id(), typed, slots)",
+            )
+        ],
+        UAT + "pqvault_msig_signs_both_paths",
+    ),
+    (
+        "the passphrase's words from 8 bits",
+        [(AK, "list.get(usize::from(n & 0x7ff))", "list.get(usize::from(n & 0xff))")],
+        UAT + "generated_passphrase_six_bip39_words",
+    ),
+    (
+        "a 5-word passphrase",
+        [(AK, "const PASSPHRASE_WORDS: usize = 6;", "const PASSPHRASE_WORDS: usize = 5;")],
+        UAT + "generated_passphrase_six_bip39_words",
+    ),
+    (
+        "the KEM record signed under another purpose",
+        [(REG, 'scaas_ua::purpose_tag("kem")', 'scaas_ua::purpose_tag("pop")')],
+        SDKT + "set_kem_key_args_pass_the_registry_check",
+    ),
+    (
+        "the KEM record of version 0's key",
+        [(REG, "    let kem_pk = k.kem_key(version)?.kem_pk();", "    let kem_pk = k.kem_key(0)?.kem_pk();")],
+        SDKT + "set_kem_key_args_pass_the_registry_check",
+    ),
+    (
+        "an msig's member signatures dropped from the record",
+        [(V, "        members: s.members,", "        members: vec![],")],
+        E2E + "kem_rotation_and_msig_admin",
+    ),
+    (
+        "a member key without its scheme check",
+        [(V, "        if scheme.0 != 1 {", "        if false {")],
+        E2E + "kem_rotation_and_msig_admin",
+    ),
+    (
+        "a rekey author not checked an admin",
+        [
+            (
+                V,
+                "        if !parent.admins.contains(&me) || parent.removed().contains(&me) {",
+                "        if parent.removed().contains(&me) {",
+            )
+        ],
+        E2E + "kem_rotation_and_msig_admin",
+    ),
+    (
+        "the share box of any member set",
+        [(V, "                && have == want", "                && !have.is_empty()")],
+        E2E + "kem_rotation_and_msig_admin",
+    ),
+    (
+        "no exposure counted",
+        [(V, "            exposure.items = seen.len() as u64;", "            exposure.items = 0;")],
+        E2E + "personal_vault_recovery_conflict_passphrase",
+    ),
+    (
+        "lock leaving the handles",
+        [(V, "            let _ = self.core.destroy(k);", "            drop(k);")],
+        E2E + "personal_vault_recovery_conflict_passphrase",
+    ),
+]
+
 if __name__ == "__main__":
-    L.main("v10", MUTANTS)
+    # `v10` the first round's, `v10-r2` the owner's rulings of 2026-11-22 (CLI-PQV-15): one record each
+    if len(sys.argv) > 1 and sys.argv[1] == "--r2":
+        del sys.argv[1]
+        L.main("v10-r2", MUTANTS15)
+    else:
+        L.main("v10", MUTANTS)

@@ -848,9 +848,10 @@ and typed data of both modes, the key schedule on the SDK's handles, the state r
 chain of spec §6.9 verified before an unlock, unlock with the unopenable-epoch and history rules, rekey, leave, remove with
 the affected list, items, edits, merge, batches sized by the chain's limits, recovery from the index vault and the scan,
 the replica check, the migration plan; `tests/vectors.rs` reproduces `smartcontracts/vectors/pqvault/`, `tests/e2e.rs`
-runs the real client on a local `anvil`. Not built yet: the generated 5-word passphrase, the biometric `P_k` (CLI-PQV-07),
-the members' kind flags, reads spread over the node list, the share box's lookup, the migration's run, a KEM key rotation
-and an `msig` admin in the e2e (the SDK has no call for either yet). The SDK's `vault` stays the seed vault; `pqvault-core`'s
+runs the real client on a local `anvil`, a KEM key rotation and an `msig` admin with a native member in both modes included
+(owner 2026-11-22, [CLI-PQV-15](../decisions.md#CLI-PQV-15)); the generated passphrase is 6 BIP-39 words drawn in `ua-rs`,
+the share box is found among the unlocked vaults. Not built yet: the members' kind flags, the migration's run; reads spread
+over the node list (a `scaas-rpc` / SDK follow-up) and the biometric `P_k` (CLI-PQV-07, scaas-app's) are not this crate's. The SDK's `vault` stays the seed vault; `pqvault-core`'s
 calls are the spec's [§8](../superpowers/specs/2026-11-17-pqvault.md#8-the-app-facing-api-of-pqvault-core).
 
 <a id="CLI-PQV-02"></a>**CLI-PQV-02** — **A personal vault uses the same path as a shared one: a random 32-byte epoch key
@@ -919,9 +920,10 @@ does not enforce it. BUILT in clientkeys (`padInfo`), reproduced by `ua-rs`.
 of the same members with a fresh salt; the history is as strong as the weakest epoch that links to it, so before a rekey
 that weakens it (passphrase off or weaker, a member added) the client shows what it would expose and offers the rekey
 without `prev`; a downgrade is accepted only from a verified admin record; Argon2id without associated data at a parameter
-set pinned after a measured run; a generated 5-word passphrase offered, a user-chosen one at least 16 characters with a
+set pinned after a measured run; a generated passphrase offered (6 BIP-39 words, owner 2026-11-22), a user-chosen one at least 16 characters with a
 strength meter, nothing more enforced; a shared vault's passphrase never equal to the user's personal one** (controller
-call, owner may override). SPECIFIED. Design: [spec §6.5](../superpowers/specs/2026-11-17-pqvault.md#65-the-vault-passphrase-p2).
+call, owner may override). SPECIFIED. The generated passphrase is 6 BIP-39 English words (about 66 bits) drawn in `ua-rs`
+(owner 2026-11-22, [CLI-PQV-15](../decisions.md#CLI-PQV-15)); BUILT. Design: [spec §6.5](../superpowers/specs/2026-11-17-pqvault.md#65-the-vault-passphrase-p2).
 
 <a id="CLI-PQV-12"></a>**CLI-PQV-12** — **`pqvault-core` holds key handles only and signs only under PqVault's app purpose:
 the KEM-unwrapped epoch key, the passphrase output, the effective key and every key derived from them stay in `ua-rs`

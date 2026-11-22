@@ -331,7 +331,12 @@ the verification); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](u
 PqVault's records are signed and verified by `sign_pqvault_record` and `verify_pqvault_record` (owner 2026-11-22,
 [CLI-PQV-13](../decisions.md#CLI-PQV-13); BUILT, UNAUDITED): thin calls of `ua-rs`'s `wallet::pqvault` with the generic
 calls' profile checks, accepting PqVault's domains `DS_V` / `DS_B` and its seven structs only; `sign_app_record` and
-`verify_app_record` refuse every PqVault record (its domain name, its app id, its purpose `P_V`).
+`verify_app_record` refuse every PqVault record (its domain name, its app id, its purpose `P_V`). `sign_pqvault_record`
+signs as an `msig` too (`KeyRef::Msig`; owner 2026-11-22, [CLI-PQV-15](../decisions.md#CLI-PQV-15); BUILT, UNAUDITED):
+the `msig`'s records read as the generic `msig` path reads them, local key slots only, `ua-rs`'s `pqvault::sign_msig`;
+`AppSigned.members` carries the slots. `AppCore::generate_passphrase` gives 6 BIP-39 words drawn in `ua-rs`; the generic
+KEM key rotation is `Account::prepare_set_kem_key` (`setKemKey` at a version ≥ 1, checked by `ua-rs`'s `check_kem_record`
+first). Same entry: BUILT, UNAUDITED.
 
 <a id="CLI-SDK-21"></a>**CLI-SDK-21** — **`seal_for_arweave`, `upload_file`, `fetch_file` and `open_file` put an app core's
 file on Arweave and read it back; the upload key signs only the item `ua-rs` built; the client keeps the signed bytes until

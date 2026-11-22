@@ -729,6 +729,31 @@ async fn personal_vault_recovery_conflict_passphrase() {
     want.push(login("after the change", "c1"));
     want.sort_by_key(|x| x["title"].as_str().unwrap_or_default().to_string());
     assert_eq!(values(&pv.open_latest(&un).await.unwrap()), want);
+    // the exposure of a weaker rekey that links prev (passphrase off): every item and version it would open (built, not sent)
+    let latest = pv.open_latest(&un).await.unwrap();
+    let (_, _, x) = pv
+        .rekey(
+            &un,
+            &un.state.newest().unwrap().members,
+            &[un.state.me],
+            Some(&Passphrase::Off),
+            Link::Prev,
+        )
+        .await
+        .unwrap();
+    assert!(x.weaker);
+    assert_eq!(x.items, latest.len() as u64);
+    assert_eq!(
+        x.versions,
+        latest
+            .iter()
+            .map(|v| u64::from(v.version_count))
+            .sum::<u64>()
+    );
+    assert!(
+        x.versions > x.items,
+        "an edited item counts all its versions"
+    );
     let old = pv
         .unlock(&k1b, s.clone(), &Passphrase::Given(sec(PASS.as_bytes())))
         .await
@@ -841,6 +866,22 @@ async fn personal_vault_recovery_conflict_passphrase() {
     // the forged epoch and, by the user's own wrap, its parent (no passphrase): the parent's key is its own, not prev's
     assert_eq!(f.readable().len(), 2);
     assert_eq!(f.infos.get(&parent.id), off.infos.get(&parent.id));
+    // handles wiped at lock (VC13): a key handle kept past the lock no longer works
+    // (one handle given once per call: the SDK locks each handle it is given, so `same_key(k, k)` would wait on itself)
+    let k = f.epoch_key(f.readable()[0]).unwrap();
+    let use_it = |k: Arc<scaas_sdk::app_core::AppKey>| {
+        pv.core.derive(
+            vec![k],
+            vec![],
+            b"scaas/pqvault/v1/info".to_vec(),
+            vec![],
+            scaas_sdk::app_core::AppKeyUsage::Data,
+            false,
+        )
+    };
+    assert!(use_it(k.clone()).is_ok());
+    pv.lock(f);
+    assert!(use_it(k).is_err(), "wiped at lock");
     say("a wrong prev key named: ok");
 }
 
@@ -1214,4 +1255,330 @@ async fn a_second_app_core_is_kept_apart() {
         .map(|e| e.code()),
         Some("AppLabelRefused")
     );
+}
+
+/// Owner 2026-11-22 (CLI-PQV-15 (1)): KEM key rotation and an `msig` admin with a native member, V10e's rows. B stores
+/// KEM key version 1 through the SDK's `prepare_set_kem_key` (the registry's `setKemKey` check); A wraps the next epoch to it
+/// (`member_key` reads `kemKeyOf`); B opens the old epoch by its version-0 key and the new one by version 1, and reads every
+/// item. Then, in both modes, an `msig` M of A's UA and A's native EVM key (threshold 2, both slots accepted at registration)
+/// is made an admin and authors a rekey through `sign_pqvault_record` (path A: the native member over the record itself;
+/// path B: over `UAAuth` in the registry's domain); the vault verifies (spec §6.9: M's signature by its members) and opens.
+/// The share box: the shared vault of exactly {A, B} found, none for another set.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib"]
+async fn kem_rotation_and_msig_admin() {
+    use scaas_sdk::account::{msig_structure, MsigMemberArgs, MsigRegister};
+    use scaas_sdk::op::MsigSlot;
+    let c = chain().await;
+    let at = instance(&c);
+    let (da, db) = (device(&c, REPO).await, device(&c, OTHER).await);
+    let ka = KeyRef::Ua {
+        seed: da.seed.clone(),
+        kind: FNDSA512,
+        account: 0,
+        index: 0,
+    };
+    let kb = KeyRef::Ua {
+        seed: db.seed.clone(),
+        kind: FNDSA512,
+        account: 0,
+        index: 0,
+    };
+    register(&da, &ka).await;
+    register(&db, &kb).await;
+    let given = || Passphrase::Given(sec(PASS.as_bytes()));
+    // KEM rotation
+    let pa = PqVault::new(da.sdk.clone()).unwrap();
+    let ua = pa.ua(&ka).unwrap();
+    drop(pa);
+    let pb = PqVault::new(db.sdk.clone()).unwrap();
+    let ub = pb.ua(&kb).unwrap();
+    drop(pb);
+    let pa = PqVault::new(da.sdk.clone()).unwrap();
+    let mb0 = pa.member_key(&at, ub).await.unwrap();
+    assert_eq!(mb0.key_id.0, 0);
+    let s = create(
+        &pa,
+        &da,
+        &at,
+        &ka,
+        &[member(ua), mb0],
+        Mode::Portable,
+        &Passphrase::On(sec(PASS.as_bytes())),
+        &info("rotation", true),
+    )
+    .await;
+    let vid = s.vault_id;
+    let u = pa.unlock(&ka, s, &given()).await.unwrap();
+    assert_eq!(
+        PqVault::share_box(&[&u], &[ub]),
+        Some(vid),
+        "the share box of A and B"
+    );
+    assert_eq!(
+        PqVault::share_box(&[&u], &[ua]),
+        None,
+        "no box for another set"
+    );
+    let it = pa
+        .create_item(&u, &login("before rotation", "r0"))
+        .await
+        .unwrap();
+    send(
+        &da,
+        pa.prepare_item(&at, &it, da.payer.clone()).await.unwrap(),
+    )
+    .await;
+    drop((u, pa));
+    let w = db
+        .sdk
+        .account()
+        .prepare_set_kem_key(kb.clone(), "anvil".into(), 1, db.payer.clone())
+        .await
+        .unwrap()
+        .expect("version 1 not stored yet");
+    let acc = db.sdk.account();
+    let q = acc.quote_registry_write(w.clone()).await.unwrap();
+    let op = acc.submit_registry_write(w, q).await.unwrap();
+    assert!(matches!(follow(&db.sdk, op).await, OpState::Landed { .. }));
+    assert!(
+        acc.prepare_set_kem_key(kb.clone(), "anvil".into(), 1, db.payer.clone())
+            .await
+            .unwrap()
+            .is_none(),
+        "stored"
+    );
+    say("B's KEM key version 1 stored");
+    let pa = PqVault::new(da.sdk.clone()).unwrap();
+    let mb1 = pa.member_key(&at, ub).await.unwrap();
+    assert_eq!(mb1.key_id.0, 1, "kemKeyOf follows the highest version");
+    let u = pa
+        .unlock(&ka, pa.load(&at, vid, ua).await.unwrap(), &given())
+        .await
+        .unwrap();
+    let ma = u
+        .state
+        .newest()
+        .unwrap()
+        .members
+        .iter()
+        .find(|m| m.ua == ua)
+        .unwrap()
+        .clone();
+    let (e, wraps, _) = pa
+        .rekey(&u, &[ma, mb1], &[ua], None, Link::Prev)
+        .await
+        .unwrap();
+    assert_eq!(wraps.iter().find(|w| w.member == ub).unwrap().key_id.0, 1);
+    send(
+        &da,
+        pa.prepare_rekey(&at, &e, &wraps, da.payer.clone())
+            .await
+            .unwrap(),
+    )
+    .await;
+    let u = pa
+        .unlock(&ka, pa.load(&at, vid, ua).await.unwrap(), &given())
+        .await
+        .unwrap();
+    let it = pa
+        .create_item(&u, &login("after rotation", "r1"))
+        .await
+        .unwrap();
+    send(
+        &da,
+        pa.prepare_item(&at, &it, da.payer.clone()).await.unwrap(),
+    )
+    .await;
+    drop((u, pa));
+    let pb = PqVault::new(db.sdk.clone()).unwrap();
+    let mut sb = pb.load(&at, vid, ub).await.unwrap();
+    sb.pending = false;
+    let wb: Vec<u64> = sb
+        .epochs
+        .iter()
+        .map(|e| e.own_wrap.as_ref().unwrap().key_id.0)
+        .collect();
+    assert_eq!(
+        wb,
+        vec![0, 1],
+        "an old wrap under version 0, the new epoch under version 1"
+    );
+    let u = pb.unlock(&kb, sb, &given()).await.unwrap();
+    assert_eq!(u.readable().len(), 2);
+    assert_eq!(
+        values(&pb.open_latest(&u).await.unwrap()),
+        vec![
+            login("after rotation", "r1"),
+            login("before rotation", "r0")
+        ]
+    );
+    drop((u, pb));
+    say("KEM rotation: B reads both epochs");
+
+    // the msig admin M = {A's UA, A's native EVM key}, threshold 2, both slots accepted at registration
+    let native = KeyRef::Native {
+        seed: da.seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let addr = da
+        .sdk
+        .account()
+        .accounts(da.seed.clone())
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.shape == "native")
+        .unwrap()
+        .id_text
+        .to_ascii_lowercase();
+    let nid = format!("0x{}{}", "00".repeat(12), addr.trim_start_matches("0x"));
+    let st = msig_structure(
+        vec![
+            MsigMemberArgs {
+                kind: FNDSA512,
+                id: hex(&ua.0),
+                weight: 1,
+            },
+            MsigMemberArgs {
+                kind: 1,
+                id: nid.clone(),
+                weight: 1,
+            },
+        ],
+        2,
+    )
+    .unwrap();
+    let m = B32(unhex(&st.ua().unwrap(), 32).unwrap().try_into().unwrap());
+    let idx =
+        |id: &str| u16::try_from(st.members.iter().position(|x| x.id == id).unwrap()).unwrap();
+    let slots = vec![
+        MsigSlot::Member {
+            index: idx(&hex(&ua.0)),
+            key: ka.clone(),
+        },
+        MsigSlot::Member {
+            index: idx(&nid),
+            key: native.clone(),
+        },
+    ];
+    let mut slots = slots;
+    slots.sort_by_key(|s| match s {
+        MsigSlot::Member { index, .. } => *index,
+        _ => 0,
+    });
+    let acc = da.sdk.account();
+    for w in acc
+        .prepare_msig_register(MsigRegister {
+            chain: "anvil".into(),
+            structure: st.clone(),
+            slots: slots.clone(),
+            payer: da.payer.clone(),
+        })
+        .await
+        .unwrap()
+    {
+        let q = acc.quote_registry_write(w.clone()).await.unwrap();
+        let op = acc.submit_registry_write(w, q).await.unwrap();
+        assert!(matches!(follow(&da.sdk, op).await, OpState::Landed { .. }));
+    }
+    assert!(
+        acc.msig_state("anvil".into(), hex(&m.0))
+            .await
+            .unwrap()
+            .active,
+        "both slots accepted"
+    );
+    say("msig admin registered");
+    let pa = PqVault::new(da.sdk.clone()).unwrap();
+    assert!(
+        matches!(pa.member_key(&at, m).await, Err(Error::NotMember)),
+        "an msig holds no KEM key"
+    );
+    drop(pa);
+    let msig = KeyRef::Msig {
+        ua: hex(&m.0),
+        slots,
+    };
+    for mode in [Mode::Portable, Mode::ChainBound] {
+        let pa = PqVault::new(da.sdk.clone()).unwrap();
+        let s = create(
+            &pa,
+            &da,
+            &at,
+            &ka,
+            &[member(ua)],
+            mode,
+            &Passphrase::Off,
+            &info("msig", true),
+        )
+        .await;
+        let vid = s.vault_id;
+        let u = pa.unlock(&ka, s, &Passphrase::Off).await.unwrap();
+        let it = pa
+            .create_item(&u, &login("under epoch 0", "m0"))
+            .await
+            .unwrap();
+        send(
+            &da,
+            pa.prepare_item(&at, &it, da.payer.clone()).await.unwrap(),
+        )
+        .await;
+        let ms0 = u.state.newest().unwrap().members.clone();
+        assert!(
+            matches!(
+                pa.rekey_by(&u, &msig, m, &ms0, &[ua], None, Link::Prev)
+                    .await,
+                Err(Error::NotAdmin)
+            ),
+            "M before it is an admin"
+        );
+        // A adds M as an admin
+        let mut admins = vec![ua, m];
+        admins.sort();
+        let ms = u.state.newest().unwrap().members.clone();
+        let (e, wraps, _) = pa.rekey(&u, &ms, &admins, None, Link::Prev).await.unwrap();
+        send(
+            &da,
+            pa.prepare_rekey(&at, &e, &wraps, da.payer.clone())
+                .await
+                .unwrap(),
+        )
+        .await;
+        let u = pa
+            .unlock(&ka, pa.load(&at, vid, ua).await.unwrap(), &Passphrase::Off)
+            .await
+            .unwrap();
+        // M authors the next epoch, signed by both its members
+        let (e, wraps, _) = pa
+            .rekey_by(&u, &msig, m, &ms, &admins, None, Link::Prev)
+            .await
+            .unwrap();
+        assert_eq!(e.record.author, m);
+        assert!(
+            e.sig.key_data.is_empty() && e.sig.signature.is_empty() && e.sig.members.len() == 2
+        );
+        send(
+            &da,
+            pa.prepare_rekey(&at, &e, &wraps, da.payer.clone())
+                .await
+                .unwrap(),
+        )
+        .await;
+        let s = pa.load(&at, vid, ua).await.unwrap();
+        assert_eq!(
+            s.newest().unwrap().author,
+            m,
+            "verified with M's signature by its members"
+        );
+        let u = pa.unlock(&ka, s, &Passphrase::Off).await.unwrap();
+        assert_eq!(u.readable().len(), 3);
+        assert_eq!(
+            values(&pa.open_latest(&u).await.unwrap()),
+            vec![login("under epoch 0", "m0")]
+        );
+        drop((u, pa));
+        say(&format!("{mode:?}: the msig admin's epoch verified"));
+    }
 }

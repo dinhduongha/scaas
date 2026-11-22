@@ -178,6 +178,9 @@ fn wrap_kek(ss: &[u8; 32], label: &[u8], aad: &[u8], kem_pk: &[u8]) -> Result<Ze
     key32(&hkdf_sha256(ss, &[], &info, 32)?)
 }
 
+/// The words of a generated vault passphrase (owner 2026-11-22): 6 × 11 bits, about 66 bits.
+const PASSPHRASE_WORDS: usize = 6;
+
 impl AppKeys {
     pub(super) fn check(&self, h: &KeyHandle) -> Result<()> {
         if h.scope != self.scope || !h.h.same_store(&self.store) {
@@ -223,6 +226,27 @@ impl AppKeys {
         let mut out = vec![0u8; n];
         rng(&mut out)?;
         Ok(out)
+    }
+
+    /// A generated vault passphrase (owner 2026-11-22, CLI-PQV-15 (2)): 6 words of the BIP-39 English list drawn uniformly from
+    /// the OS generator (11 bits each, about 66 bits), separated by one space, as a secret buffer: the words never leave
+    /// `ua-rs` but in it.
+    pub fn generated_passphrase(&self) -> Result<super::SecretBytes> {
+        let list = bip39::Language::English.word_list();
+        let r = Zeroizing::new(self.random_bytes(2 * PASSPHRASE_WORDS)?);
+        let mut s = Zeroizing::new(String::with_capacity(PASSPHRASE_WORDS * 9));
+        for (i, c) in r.chunks_exact(2).enumerate() {
+            if i > 0 {
+                s.push(' ');
+            }
+            let n = u16::from_be_bytes([
+                *c.first().ok_or(Error::Argument)?,
+                *c.get(1).ok_or(Error::Argument)?,
+            ]);
+            // 2^16 is a multiple of 2,048: the low 11 bits are uniform
+            s.push_str(list.get(usize::from(n & 0x7ff)).ok_or(Error::Argument)?);
+        }
+        super::SecretBytes::from_zeroizing(Zeroizing::new(s.as_bytes().to_vec()))
     }
 
     /// A fresh random 32-byte key of `usage`.

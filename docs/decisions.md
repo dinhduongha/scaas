@@ -11512,6 +11512,15 @@ Change (owner 2026-11-22, CLI-PQV-13; status: BUILT, UNAUDITED): condition C2 is
 **Cost if wrong.** (7): a seed thief reads which vaults the user accepted (not their contents); a passphrase for the index vault is a rekey away.
 **Source.** Plan [V10, V10e](superpowers/plans/2026-11-17-pqvault.md#v10--pqvault-core); spec [§7](superpowers/specs/2026-11-17-pqvault.md#7-pqvault-core).
 
+<a id="CLI-PQV-15"></a>
+### CLI-PQV-15 — Owner rulings 2026-11-22 on `pqvault-core`'s open points: KEM rotation, `msig` signing, the generated passphrase, biometrics, read spreading
+- old: — · status: current · owner: yes · date: 2026-11-22 · normative: decisions.md#CLI-PQV-15 · superseded-by: —
+
+**Rule.** (1) Do both now, in branch `pqvault-core`: (a) a generic SDK call that stores a UA's KEM key at a version ≥ 1 for KEM key rotation, no PqVault name, on the existing KEM-key path: `Account::prepare_set_kem_key(key, chain, version, payer)`, the registry's `setKemKey(ua, version, kem, sig)` with `sig` over `uaMessage(kind, PURPOSE_KEM, kemRecordDigest(ua, version, kemPk))`, checked first by `scaas-ua`'s `check_kem_record` (the registry's own order), landed by `kemKeyAt(ua, version)`; `None` when the version is stored; the bytes are `ua/portable.json`'s `kemRecords` (no new vector). (b) PqVault's dedicated path signs as an `msig`: `scaas-ua` `wallet::pqvault::sign_msig` (path A the generic `msig_sig_app`; path B the members over `memberDigest(ua, uaMessage(msig, P_V, digest))` under `member`, a native member over `UAAuth` in the registry generation's domain; the same minimality and enabled-slot checks), and `AppCore::sign_pqvault_record` with `KeyRef::Msig` reading the `msig`'s records as the generic `msig` path does; `AppSigned` gains `members`. (2) The generated vault passphrase is 6 words of the BIP-39 English list `scaas-ua` already has (11 bits each, about 66 bits), drawn in `scaas-ua` (`AppKeys::generated_passphrase`) and given as a secret buffer through `AppCore::generate_passphrase`; no new word file. (3) Biometric unlock (O7 (b)) is built in scaas-app before the freeze, not in `pqvault-core`. (4) Reads spread over the node list: not now; a follow-up of `scaas-rpc` / the SDK. Controller calls under (1) (owner may override): `sign_pqvault_record` by an `msig` on the portable path reads its records on the SDK's one profile that names a registry (several or none: `Argument`); local key slots only (a slot signed elsewhere or a stored key row: `Argument`).
+**Status.** (1), (2) BUILT, UNAUDITED (branch `pqvault-core`); (3) PLANNED in scaas-app; (4) PLANNED.
+**Why.** The V10e rows that waited for the SDK (a rotated KEM key, an `msig` admin with a native member in both modes) now run; a generated passphrase without a new list.
+**Source.** Owner 2026-11-22 (chat, through the coordinator), verbatim: (1) "Làm cả hai ngay"; (2) "BIP-39, 6 từ"; (3) "Trong scaas-app"; (4) not now.
+
 <a id="CLI-UAL-62"></a>
 ### CLI-UAL-62 — Owner rulings of the native round, 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-UAL-62 · superseded-by: —

@@ -359,3 +359,26 @@ fn migration_plan_and_warning() {
     assert_eq!(p.skipped_tombstones, 1);
     assert!(p.warning.contains("stay on chain") && p.warning.contains("changed at its service"));
 }
+
+/// Owner 2026-11-22 (CLI-PQV-15 (2)): `generate_passphrase` gives 6 BIP-39 English words, drawn below the SDK, with no
+/// network call.
+#[tokio::test(flavor = "multi_thread")]
+async fn generated_passphrase_is_six_bip39_words() {
+    let _one = ONE.lock().await;
+    let (pv, rec, full, _) = setup().await;
+    let Passphrase::Given(s) = pv.generate_passphrase(&full).unwrap() else {
+        panic!("a given passphrase")
+    };
+    let words: Vec<String> = s.with(|b| {
+        std::str::from_utf8(b)
+            .unwrap()
+            .split(' ')
+            .map(str::to_string)
+            .collect()
+    });
+    assert_eq!(words.len(), 6);
+    for w in &words {
+        assert!(pv.sdk.vault().word_in_list(sec(w.as_bytes())), "{w}");
+    }
+    assert!(rec.0.lock().unwrap().is_empty());
+}
