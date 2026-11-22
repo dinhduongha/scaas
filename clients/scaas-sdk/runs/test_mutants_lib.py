@@ -23,6 +23,8 @@ assert intended("forge test --match-test '^test_sdkGas_verify\\('") == "test_sdk
 assert intended("forge test --match-test 'test_sdkGas_pqzConfRoll\\('") == "test_sdkGas_pqzConfRoll"
 # node's spec reporter marks a failing test with ✖ (no `not ok` line): its line is the failure line
 assert failure_line("✔ a (1ms)\n✖ finding 5: capped by their bytes (0.6ms)\n  AssertionError [ERR_ASSERTION]: x\n").startswith("✖ finding 5")
+assert killed_by("✖ Q4: capped at 1,024 bytes (0.4ms)\n  Error: WebAuthnTooLong: above 1024 bytes\n", None), "a test that throws"
+assert not killed_by("✔ Q4: capped at 1,024 bytes (0.4ms)\n", None), "control: a passing test"
 assert ran_nothing("Warning: no tests match the provided pattern:\n")
 assert ran_nothing("test result: ok. 0 passed; 0 failed; 0 ignored\ntest result: ok. 0 passed; 0 failed; 3 ignored\n")
 assert not ran_nothing("test result: ok. 0 passed; 0 failed; 0 ignored\ntest result: ok. 1 passed; 0 failed; 0 ignored\n")

@@ -98,7 +98,7 @@ def killed_by(text, want):
     """Whether `text` shows a failing test, `want`'s when it is named: a Rust `test … FAILED` / `panicked`, a forge
     `[FAIL…]`, a node `not ok`, a Python `FAIL:` / `AssertionError` line."""
     fails = [ln for ln in text.splitlines()
-             if re.search(r"\.\.\. FAILED|^\[FAIL|panicked at|^not ok|^FAIL:|AssertionError|^failures:|---- .* stdout ----", ln)]
+             if re.search(r"\.\.\. FAILED|^\[FAIL|panicked at|^not ok|^\s*✖ |^FAIL:|AssertionError|^failures:|---- .* stdout ----", ln)]
     if not fails:
         return False
     return want is None or any(want in ln for ln in fails)
