@@ -28,6 +28,10 @@ use std::sync::Arc;
 /// SDK calls without a command of their own, each with its reason.
 pub const EXCLUDED: &[(&str, &str)] = &[
     (
+        "lib::load_check",
+        "a binding's load check against the library it loads (spec §16.3); the CLI links the SDK it was built with",
+    ),
+    (
         "Sdk::open",
         "every command opens the SDK over the data directory, the profiles and the overlay",
     ),
