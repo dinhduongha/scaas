@@ -117,6 +117,16 @@ JOBS = {
         "smartcontracts/vectors/",
     ]
     + UARS,
+    # PqChat's app core (pqchat-core plan T2, CLI-PQC-01) over the SDK: the same inputs as pqvault-core's, and its own crate
+    "pqchat-core": [
+        "clients/pqchat-core/",
+        "clients/scaas-sdk/",
+        "clients/scaas-rpc/",
+        "clients/zether-prover/",
+        "clients/scaas-ct/",
+        "smartcontracts/vectors/",
+    ]
+    + UARS,
     "keystore-vectors": ["clients/scaas-sdk/", "clients/clientkeys/", "smartcontracts/vectors/keystore/"] + UARS,
     # ARCH-POS-13 (ua-rs-sign T15c2): no test feature in a production artifact; every manifest that can reach scaas-ua,
     # zether-prover or pqz-ffi
@@ -134,6 +144,7 @@ GROUPS = {
         "keystore-vectors",
         "scaas-cli",
         "pqvault-core",
+        "pqchat-core",
     ]
     + [j for j in JOBS if j.startswith("scaas-sdk")]
     + [j for j in JOBS if j.startswith("ua-")],
@@ -304,6 +315,7 @@ if __name__ == "__main__":
         "keystore-vectors",
         "scaas-cli",
         "pqvault-core",
+        "pqchat-core",
     }
     # plan T20: the SDK's jobs; its generator under runs/ starts the bindings' drift check, other runs/ files nothing
     sdk = {j for j, r in needed(["clients/scaas-sdk/src/lib.rs"]).items() if r}
@@ -313,6 +325,7 @@ if __name__ == "__main__":
         "keystore-vectors",
         "scaas-cli",
         "pqvault-core",
+        "pqchat-core",
     }, sdk
     assert not needed(["clients/scaas-sdk/runs/2026-11-17-scaas-sdk-summary.txt"])["scaas-sdk"]
     assert needed(["smartcontracts/vectors/keystore/keystore.json"])["keystore-vectors"]
@@ -367,6 +380,7 @@ if __name__ == "__main__":
         "keystore-vectors",
         "scaas-cli",
         "pqvault-core",
+        "pqchat-core",
     }
     # the network crate: its own job and the node's (the node builds it); ua-rs (its depth scan) runs it too
     assert {j for j, r in needed(["clients/scaas-rpc/src/evm.rs"]).items() if r} >= {"scaas-rpc", "node"}

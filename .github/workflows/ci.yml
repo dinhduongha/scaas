@@ -127,6 +127,10 @@
 #   pqvault-core:          in clients/pqvault-core (PqVault plan V10): cargo test --locked; cargo test --locked --features vectors --test vectors;
 #                          cargo clippy --locked --all-targets -- -D warnings, default and --features vectors; the real-crypto e2e on anvil
 #                          (cargo test --test e2e -- --ignored, V10e) stays local (runs/2026-11-22-pqvault-e2e.sh)
+#   pqchat-core:           in clients/pqchat-core (pqchat-core plan T2-T12): cargo test --locked; the vectors (--features vectors
+#                          --test vectors); cargo clippy --locked --all-targets -- -D warnings; cargo check --target wasm32-unknown-unknown;
+#                          python3 -I runs/check_reads.py (gate pqc-reads); cargo deny check and cargo audit (its deny.toml, .cargo/audit.toml);
+#                          the chain_ and e2e runs (anvil, Docker, Synapse: gates pqc-chain, pqc-e2e) stay local
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
 #                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
@@ -251,6 +255,7 @@ jobs:
       scaas_sdk_bind_langs: ${{ steps.f.outputs.scaas_sdk_bind_langs }}
       scaas_cli: ${{ steps.f.outputs.scaas_cli }}
       pqvault_core: ${{ steps.f.outputs.pqvault_core }}
+      pqchat_core: ${{ steps.f.outputs.pqchat_core }}
       keystore_vectors: ${{ steps.f.outputs.keystore_vectors }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
@@ -1351,6 +1356,44 @@ jobs:
         run: |
           cargo clippy --locked --all-targets -- -D warnings
           cargo clippy --locked --all-targets --features vectors -- -D warnings
+
+  # PqChat's app core above the SDK (pqchat-core plan T2-T12, CLI-PQC-01): its tests, the vectors through it, its wasm build,
+  # its read list, its dependency check
+  pqchat-core:
+    needs: changes
+    if: needs.changes.outputs.pqchat_core == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/pqchat-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/pqchat-core
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2,cargo-audit@0.22.2
+      - name: cargo test
+        run: cargo test --locked
+      - name: the vectors through pqchat-core
+        run: cargo test --locked --features vectors --test vectors
+      - name: cargo clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: the wasm32 build
+        run: cargo check --locked --target wasm32-unknown-unknown
+      - name: every read with its mark (gate pqc-reads)
+        working-directory: .
+        run: python3 -I clients/pqchat-core/runs/check_reads.py
+      - name: cargo deny and cargo audit
+        run: |
+          cargo deny check
+          cargo audit
 
   # the bindings (plan T20, T20b-T20h; spec §16.1, §16.4), one matrix cell per language enabled in
   # clients/scaas-sdk/bindings/langs (owner 2026-11-22, decisions CLI-SDK-33 (102)); the changes job lists the cells a change
