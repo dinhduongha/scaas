@@ -372,6 +372,10 @@ required-features = ["pqz"]
 name = "pqz_backup"
 required-features = ["pqz"]
 
+[[test]]
+name = "pqz_leaf"
+required-features = ["pqz"]
+
 # ua-rs-sign T15e: PQZ on raw words (spec no-decryption-oracle §4.3–§4.6)
 [[test]]
 name = "facade_pqz_state"

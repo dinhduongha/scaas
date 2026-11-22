@@ -2303,7 +2303,44 @@ pub(crate) fn held(store: &Arc<SecretStore>, pqz_key_hash: &[u8; 32]) -> Result<
     })
 }
 
+/// The vault v2 label of the registry-class PQZ leaf of `account` / `index` / key `version` (CLI-SGN-55; clientkeys
+/// `pqzLeafLabel`): `pqz:registry:<account>:<index>:<version>`, decimal.
+pub fn pqz_leaf_label(account: u32, index: u32, version: u64) -> String {
+    format!("pqz:registry:{account}:{index}:{version}")
+}
+
 impl PqzKey {
+    /// The Zether worker's / `pqz-cli`'s side of CLI-SGN-55 (clientkeys `openPqKey`): the leaf of a vault v2 JSON (bounded: 2 MiB,
+    /// depth 2) sealed by [`crate::wallet::Wallet::seal_pq_key`] or clientkeys `sealPqKey`, whose label must be exactly
+    /// [`pqz_leaf_label`] of `account` / `index` / `version` and whose payload is 32 bytes, into a store of its own (no wallet,
+    /// no seed; wiped when the last handle drops). Every refusal is `VaultOpen` (ARCH-POS-13: one class for a wrong unlock,
+    /// another leaf, an altered or truncated vault, another vault version or parameters).
+    pub fn open_leaf(
+        vault_json: &[u8],
+        unlock: crate::wallet::Unlock,
+        account: u32,
+        index: u32,
+        version: u64,
+    ) -> Result<PqzKey> {
+        super::release_or_unlocked()?;
+        let open = || {
+            let vault = crate::wallet::Vault::from_json(vault_json)?;
+            if vault.label() != pqz_leaf_label(account, index, version) {
+                return Err(Error::VaultOpen);
+            }
+            let seed32 = vault.open(unlock)?;
+            let pk = keygen(&seed32)?.0.pk.to_vec();
+            Ok(PqzKey {
+                account,
+                index,
+                pk,
+                secret: SecretStore::single(&seed32)?,
+                session: Default::default(),
+            })
+        };
+        open().map_err(|_| Error::VaultOpen)
+    }
+
     /// The derivation account (`u32::MAX` for a key rebuilt from a k-of-n backup).
     pub fn account(&self) -> u32 {
         self.account
