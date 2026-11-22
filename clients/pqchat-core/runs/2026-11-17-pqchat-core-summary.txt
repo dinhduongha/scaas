@@ -51,3 +51,7 @@ T10 | pqc-reads | bc814812f | 0 | reads 37 (23 trusted), writes 13, R2 23; 0 ref
 T10 | pqc-wasm | bc814812f | 0 | -
 T10 | mutants-check | bc814812f | 0 | -
 T10 | pqc-chain | bc814812f | 0 | 5 passed, 0 failed, 0 ignored (19 binaries)
+T11 | pqc-e2e | c515730db | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
+T11 | pqc-test | c515730db | 0 | 101 passed, 0 failed, 7 ignored (20 binaries)
+T11 | pqc-clippy | c515730db | 0 | -
+T11 | mutants-check | c515730db | 0 | -
