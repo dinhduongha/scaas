@@ -45,6 +45,7 @@ fn profile(key: &str, family: Family) -> ChainProfile {
         wrappers: vec![],
         tokens: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }
@@ -83,6 +84,13 @@ async fn an_evm_profile_needs_the_evm_feature() {
         near.is_ok(),
         "control: a NEAR profile opens in either build"
     );
+    // `pinned_reads` false is an EVM pool's setting (decisions ARCH-POS-20 (2)): on another family it is refused
+    let mut untrusted = profile("near-testnet", Family::Near);
+    untrusted.pinned_reads = false;
+    assert!(matches!(
+        open(vec![untrusted]).await,
+        Err(SdkError::Argument)
+    ));
     // one refused profile refuses the configuration, whatever its place
     let both = open(vec![
         profile("near-testnet", Family::Near),

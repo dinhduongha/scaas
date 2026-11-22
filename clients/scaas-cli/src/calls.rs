@@ -28,6 +28,10 @@ use std::sync::Arc;
 /// SDK calls without a command of their own, each with its reason.
 pub const EXCLUDED: &[(&str, &str)] = &[
     (
+        "lib::load_check",
+        "a binding's load check against the library it loads (spec §16.3); the CLI links the SDK it was built with",
+    ),
+    (
         "Sdk::open",
         "every command opens the SDK over the data directory, the profiles and the overlay",
     ),
@@ -338,6 +342,7 @@ calls! { cx;
     };
     "account registration-of" "Account::registration_of" {chain: String, ua: String} => js(sdk(cx).account().registration_of(chain, ua).await?);
     "account prepare-kem-repair" "Account::prepare_kem_repair" {key: KeyRef, chain: String, payer: KeyRef} @op => sdk(cx).account().prepare_kem_repair(key, chain, payer).await?.into_iter().collect::<Vec<_>>();
+    "account prepare-set-kem-key" "Account::prepare_set_kem_key" {key: KeyRef, chain: String, version: u64, payer: KeyRef} @op => sdk(cx).account().prepare_set_kem_key(key, chain, version, payer).await?.into_iter().collect::<Vec<_>>();
     "account marks" "Account::marks" {seed: String, chain: String} => js(sdk(cx).account().marks(seed, chain).await?);
     "account restore" "Account::restore" (r: Restore) => js(sdk(cx).account().restore(r).await?);
     "account prepare-smart-add-key" "Account::prepare_smart_add_key" {op: SmartOp, key: SubjectKeyArgs} @op => sdk(cx).account().prepare_smart_add_key(op, key).await?;
@@ -584,6 +589,15 @@ calls! { cx;
 
     // ---- app-core (spec §12): key handles live in this process, named by `--as` in a session
     "app-core random-bytes" "AppCore::random_bytes" {seed: String, n: u32} => hexed("bytes", &cx.app()?.random_bytes(&seed, n)?);
+    "app-core generate-passphrase" "AppCore::generate_passphrase" {seed: String} => {
+        // the words shown on the user's own terminal after the typed confirmation, as a seed backup's reveal
+        if !cx.typed_reveal() {
+            return Err(Fail::cli("NotConfirmed", "the words stay hidden"));
+        }
+        let p = cx.app()?.generate_passphrase(&seed)?;
+        let text = p.with(|w| String::from_utf8_lossy(w).into_owned());
+        named("passphrase", zeroize::Zeroizing::new(text).as_str())
+    };
     "app-core random-key" "AppCore::random_key" {seed: String, usage: AppKeyUsage} => handle(cx.app()?.random_key(&seed, usage)?, key_shown());
     "app-core derive" "AppCore::derive" {keys: Vec<H<Arc<AppKey>>>, salt: Vec<u8>, label: Vec<u8>, context: Vec<u8>, usage: AppKeyUsage, nonce: bool} =>
         handle(cx.app()?.derive(keys.into_iter().map(|k| k.0).collect(), salt, label, context, usage, nonce)?, key_shown());
@@ -618,6 +632,7 @@ calls! { cx;
     "app-core kem-wrap-to-key" "AppCore::kem_wrap_to_key" {kem_pk: Vec<u8>, key: H<Arc<AppKey>>, label: Vec<u8>, aad: Vec<u8>} => js(cx.app()?.kem_wrap_to_key(kem_pk, key.0, label, aad)?);
     "app-core kem-unwrap" "AppCore::kem_unwrap" {account: KeyRef, key_version: u64, wrap: AppWrap, label: Vec<u8>, aad: Vec<u8>, usage: AppKeyUsage} => handle(cx.app()?.kem_unwrap(account, key_version, wrap, label, aad, usage)?, key_shown());
     "app-core app-root-key" "AppCore::app_root_key" {account: KeyRef} => handle(cx.app()?.app_root_key(account)?, key_shown());
+    "app-core account-ua" "AppCore::account_ua" {account: KeyRef} => hexed("ua", &cx.app()?.account_ua(&account)?);
     "app-core destroy" "AppCore::destroy" {key: H<Arc<AppKey>>} => { cx.app()?.destroy(key.0)?; ok() };
     "app-core sign-app-record" "AppCore::sign_app_record" {account: KeyRef, path: AppPath, typed_json: String} @sign => {
         cx.confirm(json!({"sign": "an app record", "account": account, "path": path, "typed_data": typed_json}))?;
@@ -625,9 +640,9 @@ calls! { cx;
     };
     "app-core kem-wrap" "AppCore::kem_wrap" {chain: String, recipient: String, kem_version: u64, key: H<Arc<AppKey>>, label: Vec<u8>, aad: Vec<u8>} => js(cx.app()?.kem_wrap(chain, recipient, kem_version, key.0, label, aad).await?);
     "app-core verify-app-record" "AppCore::verify_app_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_app_record(chain, ua, path, typed_json, sig).await?);
-    "app-core sign-pqvault-record" "AppCore::sign_pqvault_record" {account: KeyRef, path: AppPath, typed_json: String} @sign => {
-        cx.confirm(json!({"sign": "a PqVault record", "account": account, "path": path, "typed_data": typed_json}))?;
-        js(cx.app()?.sign_pqvault_record(account, path, typed_json).await?)
+    "app-core sign-pqvault-record" "AppCore::sign_pqvault_record" {account: KeyRef, path: AppPath, records: Option<String>, typed_json: String} @sign => {
+        cx.confirm(json!({"sign": "a PqVault record", "account": account, "path": path, "records": records, "typed_data": typed_json}))?;
+        js(cx.app()?.sign_pqvault_record(account, path, records, typed_json).await?)
     };
     "app-core verify-pqvault-record" "AppCore::verify_pqvault_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_pqvault_record(chain, ua, path, typed_json, sig).await?);
     "app-core verify-app-record-key" "AppCore::verify_app_record_key" {kind: u16, key_data: Vec<u8>, path: AppPath, purpose: Option<String>, typed_json: String, signature: Vec<u8>} => named("valid", cx.app()?.verify_app_record_key(kind, key_data, path, purpose, typed_json, signature)?);

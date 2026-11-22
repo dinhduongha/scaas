@@ -1,10 +1,10 @@
-# t15b mutants at commit 98b4eeb1d (name | outcome | test)
+# t15b mutants (name | outcome | commit | test | first failure line)
 decoys may be the holder or a real recipient | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential zether_transfer_multi_pairs
 expectedPendingSeq taken from accSeq | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential zether_owner_statements
 a roll-over with nothing pending | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential zether_owner_statements
 the Zether signer refuses zether-owner | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential zether_owner_statements
-the relayed form's ownerSig left unsigned | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential zether_owner_statements
+the relayed form's ownerSig left unsigned | killed | 5eeed4adf | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential zether_owner_statements | panicked at tests/confidential.rs:1353:9:
 the owner statement's modeNonce not read | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential zether_owner_statements
 the watch loop skips the Zether words | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential watch_reads_a_zether_account
 the unwrap's leg not reviewed as touched | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential zether_unshield_unwrap_pair
-8 mutants, 8 killed, 0 survived, 0 not loaded
+8 mutants, 8 killed, 0 survived, 0 not loaded, 0 other failure

@@ -15,6 +15,7 @@ use {
 
 /// One token's balance.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct TokenBalance {
     pub address: String,
@@ -26,6 +27,7 @@ pub struct TokenBalance {
 
 /// An account's balances at one block.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct Balances {
     pub block: u64,

@@ -21,9 +21,13 @@ use scaas_rpc::Purpose;
 use scaas_ua::ua_portable::{InnerSig, MemberSig, UASig};
 use scaas_ua::wallet::{
     AppKeys, AppPath as UaPath, AppRecordState, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce,
-    SecretBytes, Signer, TypedData,
+    Signer, TypedData,
 };
 use std::collections::{BTreeMap, HashMap};
+
+/// The secret buffer an app core hands the SDK (a passphrase) and gets back (a plaintext [`AppCore::open`] gives): `scaas-ua`'s,
+/// so an app core above the SDK names it without depending on `scaas-ua` (CLI-PQV-01).
+pub use scaas_ua::wallet::SecretBytes;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
@@ -164,6 +168,9 @@ pub enum AppPath {
 pub struct AppSigned {
     pub key_data: Vec<u8>,
     pub signature: Vec<u8>,
+    /// an `msig` signer's slots (`key_data` and `signature` then empty); empty for a single key
+    #[serde(default)]
+    pub members: Vec<AppMemberSig>,
     pub digest: String,
     pub review: Vec<ReviewField>,
 }
@@ -193,6 +200,23 @@ pub struct AppMemberSig {
 pub struct AppInnerSig {
     pub index: u16,
     pub sig: Vec<u8>,
+}
+
+impl From<&MemberSig> for AppMemberSig {
+    fn from(m: &MemberSig) -> AppMemberSig {
+        AppMemberSig {
+            index: m.index,
+            members: m
+                .members
+                .iter()
+                .map(|x| AppInnerSig {
+                    index: x.index,
+                    sig: x.sig.clone(),
+                })
+                .collect(),
+            sig: m.sig.clone(),
+        }
+    }
 }
 
 impl From<&AppUaSig> for UASig {
@@ -620,6 +644,14 @@ impl AppCore {
             .first()
             .map(|k| k.seed.clone())
             .ok_or(SdkError::Argument)?;
+        // one handle twice would wait on its own lock (controller call 2026-11-22, CLI-SDK-33): refused before any lock
+        if ks
+            .iter()
+            .enumerate()
+            .any(|(i, a)| ks.iter().take(i).any(|b| std::ptr::eq(*a, *b)))
+        {
+            return Err(SdkError::Argument);
+        }
         for k in ks {
             self.mine(k)?;
             if k.seed != seed {
@@ -658,6 +690,14 @@ impl AppCore {
     pub fn random_key(&self, seed: &str, usage: AppKeyUsage) -> Result<Arc<AppKey>, SdkError> {
         let h = self.scope(seed)?.random_key(usage.into()).map_err(ua)?;
         Ok(self.wrap(seed, h))
+    }
+
+    /// A generated passphrase (owner 2026-11-22): 6 BIP-39 English words from `scaas-ua`'s generator, one space apart (about
+    /// 66 bits), as a secret buffer: the words are made and kept below the SDK.
+    pub fn generate_passphrase(&self, seed: &str) -> Result<Arc<SecretBytes>, SdkError> {
+        Ok(Arc::new(
+            self.scope(seed)?.generated_passphrase().map_err(ua)?,
+        ))
     }
 
     /// HKDF-SHA-256 over the `Derive` handles `keys`, `info = label ‖ context` exactly, `label` under the scope's prefixes;
@@ -1048,6 +1088,7 @@ impl AppCore {
             typed_json,
             scaas_ua::wallet::app_record_digest,
             scaas_ua::wallet::sign_app_record,
+            false,
         )
         .await
     }
@@ -1056,21 +1097,87 @@ impl AppCore {
     /// (owner 2026-11-22, CLI-PQV-12; `scaas-ua` `wallet::pqvault`): a scope of PqVault's `app_id`, a primary type and
     /// `encodeType` of PqVault's records (`Argument`), the domain `DS_V` on the portable path or `DS_B` on the chain-bound one
     /// under `P_V` (`purpose` none or `P_V`; `AppDomainRefused`), the profile's checks of a chain-bound domain as
-    /// [`Self::sign_app_record`]'s. The generic call refuses every PqVault record.
+    /// [`Self::sign_app_record`]'s. The generic call refuses every PqVault record. `records`: the profile whose registry holds
+    /// an `msig` signer's records on the portable path (controller call 2026-11-22, explicit parameters: required there,
+    /// `Argument` without); on the chain-bound path the path's chain (`records` none or that chain); for a single key on the
+    /// portable path none (`Argument` when given: nothing reads it).
     pub async fn sign_pqvault_record(
         self: &Arc<Self>,
         account: KeyRef,
         path: AppPath,
+        records: Option<String>,
         typed_json: String,
     ) -> Result<AppSigned, SdkError> {
+        let chain = match (&path, &account, records) {
+            (AppPath::ChainBound { chain, .. }, _, r) if r.as_ref().is_none_or(|r| r == chain) => {
+                Some(chain.clone())
+            }
+            (AppPath::Portable, KeyRef::Msig { .. }, Some(r)) => Some(r),
+            (AppPath::Portable, KeyRef::Msig { .. }, None) => return Err(SdkError::Argument),
+            (AppPath::Portable, _, None) => None,
+            _ => return Err(SdkError::Argument),
+        };
+        if let (KeyRef::Msig { ua, slots }, Some(chain)) = (&account, chain) {
+            return self
+                .sign_pqvault_msig(chain, ua.clone(), slots.clone(), path, typed_json)
+                .await;
+        }
         self.sign_with(
             account,
             path,
             typed_json,
             scaas_ua::wallet::pqvault::digest,
             scaas_ua::wallet::pqvault::sign,
+            true,
         )
         .await
+    }
+
+    /// [`Self::sign_pqvault_record`] by the `msig` `ua` (owner 2026-11-22): the chain-bound domain's profile checks first, then
+    /// the `msig`'s records read as the generic `msig` path reads them (its structures, its `msig` members', their enabled and
+    /// accepted bits: `MsigSlotInactive`), the slots' keys opened (local keys only: a slot signed elsewhere or a stored key row
+    /// `Argument`), the registry generation's domain for a native member, then `scaas-ua`'s `pqvault::sign_msig` (its refusals:
+    /// the record, the path, a set not minimal, a disabled slot). The records are read on `chain`'s registry.
+    async fn sign_pqvault_msig(
+        self: &Arc<Self>,
+        chain: String,
+        ua_hex: String,
+        slots: Vec<crate::op::MsigSlot>,
+        path: AppPath,
+        typed_json: String,
+    ) -> Result<AppSigned, SdkError> {
+        let me = self.clone();
+        let sdk = self.sdk.clone();
+        sdk.clone()
+            .spawn(async move {
+                let typed = TypedData::from_json(typed_json.as_bytes()).map_err(ua)?;
+                let account = KeyRef::Msig {
+                    ua: ua_hex.clone(),
+                    slots: slots.clone(),
+                };
+                let (ua_path, _) = me.ua_path(&path, &typed, &account, true).await?;
+                let digest = scaas_ua::wallet::pqvault::digest(&ua_path, &typed).map_err(ua)?;
+                let sig = crate::account::msig::app_msig(
+                    &sdk,
+                    &chain,
+                    &hex32(&ua_hex)?,
+                    &slots,
+                    |first, current, inner, domain, s| {
+                        scaas_ua::wallet::pqvault::sign_msig(
+                            first, current, inner, domain, &ua_path, &typed, s,
+                        )
+                    },
+                )
+                .await?;
+                Ok(AppSigned {
+                    key_data: vec![],
+                    signature: vec![],
+                    members: sig.members.iter().map(AppMemberSig::from).collect(),
+                    digest: hex(&digest),
+                    review: Self::review(&path, &typed),
+                })
+            })
+            .await
     }
 
     /// The entry under both signing calls: `digest` states the record's typed digest after its refusals, `sign` signs it.
@@ -1086,13 +1193,14 @@ impl AppCore {
             &UaPath,
             &TypedData,
         ) -> scaas_ua::wallet::Result<UASig>,
+        line: bool,
     ) -> Result<AppSigned, SdkError> {
         let me = self.clone();
         let sdk = self.sdk.clone();
         sdk.clone()
             .spawn(async move {
                 let typed = TypedData::from_json(typed_json.as_bytes()).map_err(ua)?;
-                let (ua_path, registry) = me.ua_path(&path, &typed, &account).await?;
+                let (ua_path, registry) = me.ua_path(&path, &typed, &account, line).await?;
                 let digest = digest(&ua_path, &typed).map_err(ua)?;
                 let review = Self::review(&path, &typed);
                 let key = crate::op::key(&sdk, &account)?;
@@ -1106,6 +1214,7 @@ impl AppCore {
                 Ok(AppSigned {
                     key_data: sig.key_data,
                     signature: sig.signature,
+                    members: vec![],
                     digest: hex(&digest),
                     review,
                 })
@@ -1120,6 +1229,7 @@ impl AppCore {
         path: &AppPath,
         typed: &TypedData,
         account: &KeyRef,
+        line: bool,
     ) -> Result<(UaPath, Option<scaas_ua::Domain>), SdkError> {
         let app_id = self.app_id.ok_or(SdkError::Argument)?;
         let (chain, purpose) = match path {
@@ -1155,7 +1265,14 @@ impl AppCore {
             KeyRef::Native { .. } => {
                 let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
                 let addr = r.parse().map_err(|_| SdkError::Argument)?;
-                Some(crate::account::msig::domain(&self.sdk, chain, &pool, addr).await?)
+                // F2 (PqVault's dedicated path, `line`): the registry's own domain at its generation
+                Some(match line {
+                    true => {
+                        crate::account::msig::line_domain(&self.sdk, chain, &pool, addr, None)
+                            .await?
+                    }
+                    false => crate::account::msig::domain(&self.sdk, chain, &pool, addr).await?,
+                })
             }
             _ => None,
         };
@@ -1251,8 +1368,8 @@ impl AppCore {
         kem_pk_of(&out)
     }
 
-    /// The UA of `account` (a UA key; any other: `Argument`).
-    pub(crate) fn account_ua(&self, account: &KeyRef) -> Result<[u8; 32], SdkError> {
+    /// The UA of `account` (a UA key; any other: `Argument`): the id `scaas-ua` derives, no read.
+    pub fn account_ua(&self, account: &KeyRef) -> Result<[u8; 32], SdkError> {
         let KeyRef::Ua {
             seed,
             kind,
@@ -1291,6 +1408,7 @@ impl AppCore {
             typed_json,
             sig,
             scaas_ua::wallet::verify_app_record,
+            false,
         )
         .await
     }
@@ -1313,11 +1431,13 @@ impl AppCore {
             typed_json,
             sig,
             scaas_ua::wallet::pqvault::verify,
+            true,
         )
         .await
     }
 
     /// The entry under both verifying calls: `f` judges the record on the registry state read.
+    #[allow(clippy::too_many_arguments)]
     async fn verify_with(
         self: &Arc<Self>,
         chain: String,
@@ -1326,6 +1446,7 @@ impl AppCore {
         typed_json: String,
         sig: AppUaSig,
         f: fn(&[u8; 32], &UaPath, &TypedData, &UASig, &AppRecordState) -> bool,
+        line: bool,
     ) -> Result<bool, SdkError> {
         let id = hex32(&ua)?;
         let typed = TypedData::from_json(typed_json.as_bytes()).map_err(SdkError::Ua)?;
@@ -1349,7 +1470,7 @@ impl AppCore {
             }
         };
         let chain_bound = matches!(p, UaPath::ChainBound { .. });
-        self.with_records(&chain, id, chain_bound, |state| {
+        self.with_records(&chain, id, chain_bound, line, |state| {
             f(&id, &p, &typed, &UASig::from(&sig), state)
         })
         .await
@@ -1363,6 +1484,7 @@ impl AppCore {
         chain: &str,
         id: [u8; 32],
         chain_bound: bool,
+        line: bool,
         f: impl FnOnce(&AppRecordState) -> R,
     ) -> Result<R, SdkError> {
         let (profile, _, pool) = crate::op::evm(&self.sdk, chain)?;
@@ -1380,7 +1502,14 @@ impl AppCore {
         let needs_domain = chain_bound
             && (scaas_ua::in_native_space(&id) || recs.get(&id).is_some_and(|r| r.kind == MSIG));
         let domain = if needs_domain {
-            Some(crate::account::msig::domain(&self.sdk, chain, &pool, registry).await?)
+            // F2 (`line`, PqVault's dedicated path): the domain of the generation that holds `id`, at its generation
+            Some(match line {
+                true => {
+                    crate::account::msig::line_domain(&self.sdk, chain, &pool, registry, Some(id))
+                        .await?
+                }
+                false => crate::account::msig::domain(&self.sdk, chain, &pool, registry).await?,
+            })
         } else {
             None
         };

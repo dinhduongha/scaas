@@ -24,6 +24,7 @@ pub(crate) const REFERENCE_FILE: &str = include_str!("../../gas/reference.json")
 /// the chain.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum GasFrom {
     /// a row of the chain profile, measured on that chain
     Chain,
@@ -40,6 +41,7 @@ pub enum GasFrom {
 /// The sources of a quote's figure: its base row's and its verify row's (owner 2026-11-19, part 3b). An app's figure, one
 /// total, is `App` for both; a native send's estimate `Estimate` for both.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct GasSources {
     pub base: GasFrom,
@@ -484,6 +486,7 @@ pub(crate) fn lookup(
 
 /// The verify row of `signer` alone, in the lookup order (chain → module → reference), else the app's figure `app` (owner
 /// 2026-11-19, P1: the Zether UA's verify gas a multi-recipient proof adds; the table row wins when present).
+#[cfg(feature = "zether")]
 pub(crate) fn verify_or(
     chain: &GasRows,
     opt_in: &[String],

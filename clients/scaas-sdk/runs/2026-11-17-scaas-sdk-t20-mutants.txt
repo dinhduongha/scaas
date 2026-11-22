@@ -1,4 +1,4 @@
-# t20 mutants at commit 5d206063c (name | outcome | test)
-a stale generated file | killed | bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check; rc=$?; git checkout -- clients/scaas-sdk/bindings/dart/lib/src/rust clients/scaas-sdk/ffi/src/frb_generated.rs; exit $rc
-a binding without its load check | killed | bash ./run.sh
-2 mutants, 2 killed, 0 survived, 0 not loaded
+# t20 mutants (name | outcome | commit | test | first failure line)
+a stale generated file | killed | cb4d7e52d | bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check | [gen] FAIL a generated file differs from the committed one (run this script without --check and commit)
+a binding without its load check | killed | cb4d7e52d | bash ./run.sh | 00:00 +0 -1: test/binding_test.dart: load_check: this library passes; another api_version or a missing feature is AbiMismatch [E]
+2 mutants, 2 killed, 0 survived, 0 not loaded, 0 other failure

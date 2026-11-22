@@ -109,6 +109,7 @@ fn native(ua: &W) -> bool {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(frb_expand, doc = frb_hint!(opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct PqzVerdictRequest {
     pub chain: String,
     pub token: String,

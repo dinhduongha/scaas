@@ -2,7 +2,12 @@
 //! `scaas-sdk`: the one API apps call (CLI-SDK-01, docs/clients/scaas-sdk.md; spec docs/superpowers/specs/2026-11-17-scaas-sdk.md).
 //! Every signature comes from `scaas-ua`, every chain read and send goes through `scaas-rpc`; the SDK holds no cryptography of
 //! its own and no transport. UNAUDITED.
-#![forbid(unsafe_code)]
+// The SDK's own code has no unsafe: held by every build without `uniffi` or `wasm`; UniFFI's generated scaffolding (feature
+// `uniffi`, spec §16.1) carries the FFI's unsafe, which a crate-level forbid would refuse, so the two UniFFI modules
+// (`binding`, `sync_cpp`) deny it themselves; under `wasm` (spec §16.4) unsafe is denied but for the one-thread `Send` items
+// of `wasm::js`, each allowed where it stands.
+#![cfg_attr(not(any(feature = "uniffi", feature = "wasm")), forbid(unsafe_code))]
+#![cfg_attr(all(feature = "wasm", not(feature = "uniffi")), deny(unsafe_code))]
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -34,6 +39,15 @@ compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 #[cfg(all(feature = "vectors", not(debug_assertions)))]
 compile_error!("scaas-sdk's feature `vectors` is test-only: never in a release build");
 
+// decisions CLI-SDK-33 (100): the UniFFI surface is built over `evm` (the reference library's default features); UniFFI's
+// `#[uniffi::export]` on an impl block exports every method whatever its `#[cfg]`, so a list entry under `evm` cannot drop out
+#[cfg(all(feature = "uniffi", not(feature = "evm")))]
+compile_error!(
+    "scaas-sdk's feature `uniffi` needs `evm`: the bindings build the SDK's default features"
+);
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!("scaas_sdk");
+
 #[cfg(feature = "account")]
 pub mod account;
 #[cfg(feature = "admin")]
@@ -42,6 +56,12 @@ pub mod admin;
 pub mod app_core;
 #[cfg(feature = "arweave")]
 pub mod arweave;
+#[cfg(feature = "uniffi")]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+pub mod binding;
+#[cfg(any(feature = "uniffi", all(feature = "wasm", target_arch = "wasm32")))]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+mod binding_list;
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub mod confidential;
 pub mod config;
@@ -67,10 +87,16 @@ pub mod pqchat_keys;
 #[cfg(feature = "pqchat-records")]
 pub mod pqchat_records;
 pub mod surface;
+#[cfg(feature = "sync-api")]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+pub mod sync_cpp;
 pub(crate) mod text;
 pub mod vault;
 #[cfg(feature = "wallet")]
 pub mod wallet;
+#[cfg(feature = "wasm")]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+pub mod wasm;
 #[cfg(feature = "evm")]
 mod watch;
 
@@ -137,6 +163,18 @@ pub mod bits {
     pub const ARWEAVE: u64 = 1 << 31;
 }
 
+/// The load check of a binding (spec §16.3): `AbiMismatch` unless this library's `api_version` is `expect_api`, it has every
+/// bit of `need_features`, and `scaas-ua` is not the test-only `vectors` build (ARCH-POS-13). Every binding's opening runs it
+/// first (`BindingConfig`'s `expect_api` and `need_features`); Dart runs its own in its loader.
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+pub fn load_check(expect_api: u32, need_features: u64) -> Result<(), SdkError> {
+    if expect_api != API_VERSION || features() & need_features != need_features || scaas_ua::VECTORS
+    {
+        return Err(SdkError::AbiMismatch);
+    }
+    Ok(())
+}
+
 /// The bits of this build's features.
 #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub fn features() -> u64 {
@@ -193,6 +231,8 @@ pub fn features() -> u64 {
 
 /// A chain as the SDK holds it once its profile passed `Sdk::open`'s checks: the profile, its EVM pool, its gateway list.
 pub(crate) struct Chain {
+    // read by the chain calls of `account` and `wallet`; a build of `vault` alone holds the profile and reads none of it
+    #[cfg_attr(not(any(feature = "account", feature = "wallet")), allow(dead_code))]
     pub(crate) profile: ChainProfile,
     /// an EVM chain's one pool for the session (closing review P2-3): its identity checks, head floors and failover counts
     /// hold across calls; pinned to the profile's `chain_uid`
@@ -237,6 +277,8 @@ pub(crate) struct Chain {
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
 /// dropping the SDK from inside an async context never blocks.
 pub(crate) struct Rt {
+    // wasm32: no runtime of the SDK's own (the page's event loop), so never read there
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) handle: tokio::runtime::Handle,
     #[cfg(not(target_arch = "wasm32"))]
     owned: Option<tokio::runtime::Runtime>,
@@ -262,6 +304,7 @@ pub struct Sdk {
     pub(crate) gas_tables: Vec<GasTable>,
     #[cfg_attr(not(feature = "evm"), allow(dead_code))] // read by the EVM operations
     clock: Option<Clock>,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) rt: Option<Rt>,
     pub(crate) authenticator: Option<Arc<dyn platform::Authenticator>>,
     pub(crate) rp_id: Option<String>,
@@ -341,6 +384,10 @@ impl Sdk {
             }
             // an L1 data fee model is an EVM chain's (plan T38)
             if p.l1_fee.is_some() && p.family != Family::Evm {
+                return Err(SdkError::Argument);
+            }
+            // pinned reads untrusted is an EVM pool's setting (decisions ARCH-POS-20 (2)); no other family reads by it
+            if !p.pinned_reads && p.family != Family::Evm {
                 return Err(SdkError::Argument);
             }
             // a disabled kind is a UA kind's name or `pqz` (owner 2026-11-22)
@@ -529,11 +576,10 @@ impl Sdk {
             let pool = match (p.family, p.chain_id) {
                 (Family::Evm, Some(id)) => {
                     let uid = p.chain_uid.parse().map_err(|_| SdkError::Argument)?;
-                    Some(Arc::new(scaas_rpc::evm::EvmPool::connect(
-                        rpc,
-                        id,
-                        Some(uid),
-                    )?))
+                    Some(Arc::new(
+                        scaas_rpc::evm::EvmPool::connect(rpc, id, Some(uid))?
+                            .with_pinned_reads(p.pinned_reads),
+                    ))
                 }
                 _ => None,
             };

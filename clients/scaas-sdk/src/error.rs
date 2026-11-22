@@ -8,6 +8,8 @@ macro_rules! own_codes {
         /// An SDK error. `Display` is the code; no variant carries an input, a URL, a body, a key or a ciphertext.
         #[derive(Debug)]
         #[non_exhaustive]
+        // a binding sees each variant by name, its message the code (`Ua` / `Rpc`: the layer's own code)
+        #[cfg_attr(feature = "uniffi", derive(uniffi::Error), uniffi(flat_error))]
         pub enum SdkError {
             $($(#[$m])* $v,)*
             /// A `scaas-ua` wallet error, by its own code.
@@ -175,6 +177,8 @@ own_codes! {
     FileTooLarge,
     /// A file object or plaintext whose SHA-256 is not the signed one (CLI-UAL-65): `scaas-ua`'s code.
     FileHashMismatch,
+    /// a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
+    Cancelled,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

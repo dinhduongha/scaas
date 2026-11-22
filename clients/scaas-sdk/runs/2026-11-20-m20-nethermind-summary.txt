@@ -60,3 +60,32 @@ mtxConfidentialTransferSingle (the PQZ debit) | 46,445,076 | 13,733,076 | 27,049
 #   shield 771,324 -> 771,324 vs 656,790 (x1.174); unchanged (an operation keeps its margin)
 #   prepare_acc 35,529,168 / 35,382,168 -> the same vs 23,482,253 / 23,176,405 (x1.513, x1.527); unchanged
 #   mtxConfidentialTransferSingle 46,445,076 -> 46,445,076 vs 27,049,699 (x1.717); unchanged
+# SDK plan T39 rerun (2026-11-22), the tree of fe435934b plus T39's changes (uncommitted then: the runner's TX_GAS_CAP and
+# T39's clippy gates; no SDK quote or register code changed), a fresh copy as above. deploy.sh's tx-cap probe (added after
+# the runs above) found no cap on the copy (an empty eth_call is accepted up to the block limit): the runner passes the
+# copy's owner-set value TX_GAS_CAP = 2^24 (book row "tx-cap 16777216 (3 probe rows, 1 nodes)"). 85 deploy transactions.
+step | quote gas_limit | quote regular_gas | receipt gasUsed | status
+register_bls_multi n = 64 (threshold 33), SDK self-relay | 29,987,968 | 9,492,384 | - | refused before signing: GasAboveTxCap
+register UA 1 (one transaction) | 97,766,240 | 12,602,240 | 89,353,054 | 1
+register UA 2 (one transaction) | 97,766,240 | 12,602,240 | 89,154,622 | 1
+shield | 771,324 | 330,324 | 656,773 | 1
+prepare_acc UA 1 | 35,529,168 | 4,537,668 | 23,482,608 | 1
+prepare_acc UA 2 | 35,382,168 | 4,537,668 | 23,176,712 | 1
+mtxConfidentialTransferSingle (the PQZ debit) | 46,448,148 | 13,736,148 | 27,050,161 | 1
+# The BLS red, open (to the owner, with T26): since efaee68d0 (registry writes quoted without the margin on fixed-cost rows,
+# owner 2026-11-20) the group's quote is 29,987,968, below what the node's estimate with the margin asks; register_bls_multi
+# (src/op/bls_multi.rs) raises the gas limit to that and counts the whole raise as regular gas ("the gas the PoP check asks up
+# front"), so 9,492,384 + the raise exceeds 2^24 and the SDK refuses a transaction the earlier run landed with regular gas
+# quoted at 14,240,076. CI does not run this test. The control part did not run: the runner stops when no `M20 tx` line exists.
+# The owner's ruling of 2026-11-22 on the BLS red above ("keep it as it is": the whole raise stays regular gas; decisions
+# CLI-SDK-32's Change): the test is e2e_bls_multi_group_limit_on_a_node. Measured on fresh copies (SCAAS_M20_BLS_FIND=1, a
+# binary search; quote gas_limit / regular_gas per group size, unweighted, threshold n / 2 + 1):
+#   n = 33: 16,381,789 / 5,036,816 sent; 40: 19,454,152 / 6,042,912 sent; 44: 21,209,788 / 6,617,824 sent;
+#   45: 21,648,697 / 6,761,552 sent; 46: 22,087,606 / 6,905,280 refused in run 1 (members partly registered), sent in run 2
+#   (fresh members); 47: 22,526,515 / 7,049,008 refused; 48: 22,965,424 / 7,192,736 refused; 64: 29,987,968 / 9,492,384 refused.
+# Pinned: 45 lands, 48 and 64 refused GasAboveTxCap with the payer's pending nonce unchanged (nothing sent).
+step | quote gas_limit | quote regular_gas | receipt gasUsed | status
+register_bls_multi n = 64 | 29,987,968 | 9,492,384 | - | GasAboveTxCap, nothing sent
+register_bls_multi n = 48 | 22,965,424 | 7,192,736 | - | GasAboveTxCap, nothing sent
+register_bls_multi n = 45 | 21,648,697 | 6,761,552 | 20,607,819 | 1 (block 49)
+negative control: the looping initcode, gas limit 30,000,000 | | | 16,777,216 = 2^24 | 0

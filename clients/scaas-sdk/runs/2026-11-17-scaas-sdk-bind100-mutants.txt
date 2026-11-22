@@ -1,0 +1,4 @@
+# bind100 mutants (name | outcome | commit | test | first failure line)
+a merged Account call left out of the binding list | killed | eff2aa3e5 | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,uniffi --test binding every_async_call_has_a_blocking_twin | panicked at tests/binding.rs:107:5:
+UaLine's method without its JS export | killed | eff2aa3e5 | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,uniffi --test binding wasm_exports_every_binding_call | panicked at tests/binding.rs:306:5:
+2 mutants, 2 killed, 0 survived, 0 not loaded, 0 other failure

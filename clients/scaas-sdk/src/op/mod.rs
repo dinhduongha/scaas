@@ -20,7 +20,9 @@ pub use crate::events::{InFlight, OpState};
 pub use bls_multi::BlsMultiPart;
 pub use gas::{GasFrom, GasSources};
 pub use handoff::{ImportExpect, SignedOpBlob, HANDOFF_MAX};
-pub(crate) use prepared::{domain_name, field, flatten, Draft, ExpectFn};
+#[cfg(feature = "dex")]
+pub(crate) use prepared::flatten;
+pub(crate) use prepared::{domain_name, field, Draft, ExpectFn};
 pub use prepared::{Prepared, ReviewField, Source};
 pub use quote::{SubmitPath, SubmitQuote};
 
@@ -36,6 +38,7 @@ use std::sync::Arc;
 /// authenticator (a passkey or a secure-element key, a row of the seed: owner 2026-11-19, S1).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum KeyRef {
     Ua {
         seed: String,

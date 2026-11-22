@@ -63,6 +63,8 @@ ARTIFACTS = [
     ("clients/scaas-sdk/ffi", []),
     # the CLI `scaas` (plan T22): every feature it ships (dev-profiles included); the SDK's `vectors` never reaches it
     ("clients/scaas-cli", "shipped"),
+    # PqVault's app core (plan V10): every feature it ships; its own test feature `vectors` excepted
+    ("clients/pqvault-core", "shipped"),
 ]
 
 

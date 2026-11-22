@@ -103,6 +103,13 @@ struct Profile {
     /// the kinds the chain cannot carry, disabled by the owner (2026-11-22): UA kind names and `pqz`
     #[serde(default)]
     disabled_kinds: Vec<String>,
+    /// whether a read pinned by block hash is trusted (decisions ARCH-POS-20 (2)): false on Moonbeam and Moonbase; absent: true
+    #[serde(default = "yes")]
+    pinned_reads: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// [`scaas_sdk::FamilyParams`] by name, one family per profile.
@@ -230,6 +237,7 @@ pub fn parse_profiles(text: &str) -> Result<Vec<ChainProfile>, Fail> {
             wrappers: p.wrappers,
             l1_fee: p.l1_fee,
             disabled_kinds: p.disabled_kinds,
+            pinned_reads: p.pinned_reads,
             family_params: p.family_params.map(fam),
         })
         .collect())

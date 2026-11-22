@@ -249,6 +249,7 @@ async fn sdk_at(rpc: &str, uid: &str, registry: &str, factory: &str) -> (Arc<Sdk
         wrappers: vec![],
         tokens: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };

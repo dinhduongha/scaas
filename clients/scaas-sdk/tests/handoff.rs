@@ -140,6 +140,7 @@ async fn party(url: &str, uid: &str, disabled: Vec<String>) -> (Arc<Sdk>, String
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: disabled,
         family_params: None,
     };

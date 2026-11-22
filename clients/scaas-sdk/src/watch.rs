@@ -38,6 +38,7 @@ pub(crate) struct Watching {
     /// the watched Zether UAs (rows of kind `0x0141`), lower case
     zether: std::collections::HashSet<String>,
     /// `chain|token` of listed tokens the factory does not catalogue as Zether (public: not read again)
+    #[cfg(feature = "zether")]
     not_zether: std::collections::HashSet<String>,
 }
 

@@ -15,6 +15,7 @@ const HANDOFF_DEPTH: usize = 8;
 /// A signed operation handed off (spec §27.5 (c)): the operation's named fields as signed (canonical), its signature in the
 /// entry's form, the signer's subject id and kind. It holds no secret; who holds it can land it, never redirect it.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(frb_expand, doc = frb_hint!(opaque))]
 pub struct SignedOpBlob {

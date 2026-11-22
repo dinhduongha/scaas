@@ -29,7 +29,7 @@
 #                  ffi pqz-vectors --check, smartcontracts/vectors/pqz/pqz_kat.py --check, ffi/vectors/tamper.py; cargo test --release (stmt, pqzh/ligero, ffi);
 #                  fuzz smoke (fuzz/run.sh precompile, mutate, codec: 60 s each on the committed corpora)
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths; ... consumer;
-#                  ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' (no temp path, AGENTS.md Security)
+#                  ! git grep -nE '(^|[^[:alnum:]_.-])/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' (no temp path, AGENTS.md Security; a URL segment such as npm's package `tmp` is not a path)
 #                  python3 -I smartcontracts/evm/script/pqz/gas-inputs.py --check (the PQZ gas table's inputs = the calibrated or
 #                  provisional precompile rows and each set's proofs; T21 L67)
 #   format:        scripts/format.sh --check (check only, at the pinned versions: rustfmt of rust-toolchain.toml, forge 1.8.5, clientkeys'
@@ -78,12 +78,55 @@
 #                          (n2048-kmax1024, n2560-kmax16384, n2816-kmax65536): cargo test --locked --no-default-features --features vault,account,wallet,pqz,pqz-set-<set> --test sets;
 #                          cargo test --locked --test feature_tree (the e2e on anvil, 6 GB, stays the local gate sdk-e2e)
 #   scaas-sdk-wasm:        in clients/scaas-sdk: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet,evm
-#   scaas-sdk-bindings:    clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check (flutter_rust_bridge_codegen 2.13.0 with cargo-expand 1.0.127: the
+#   scaas-sdk-bindings     one matrix cell per language of clients/scaas-sdk/bindings/langs (decisions CLI-SDK-33 (102)):
+#   [dart]:                SCAAS_GEN=dart clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check (flutter_rust_bridge_codegen 2.13.0 with cargo-expand 1.0.127: the
 #                          generated FRB Dart surface of the whole SDK equals the committed one); in clients/scaas-sdk/ffi: cargo clippy --locked --all-targets
 #                          -- -D warnings; cargo build --locked; in clients/scaas-sdk/bindings/dart: dart pub get --enforce-lockfile; dart test (the load check,
 #                          the vault and keystore rows, the e2e smoke on a local anvil: foundry v1.8.5)
+#   [cpp]:                 uniffi-bindgen-cpp v0.10.0+v0.31.0 (cargo install --git --tag --locked); bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh
+#                          --check (its C++ part: the generated sync surface equals the committed one; FRB skipped by SCAAS_GEN=cpp); in
+#                          clients/scaas-sdk/ffi: cargo clippy --locked --all-targets --features sync-api -- -D warnings; in clients/scaas-sdk:
+#                          cargo test --locked --features <the scaas-sdk set>,sync-api --test binding; in clients/scaas-sdk/bindings/cpp:
+#                          cmake -B build && cmake --build build && ctest --test-dir build (the keystore and vault rows, a C++ store and
+#                          authenticator, a panic as Internal, a C++ exception as the SDK's error, a cancel token)
+#   [cs]:                  uniffi-bindgen-cs v0.11.1+v0.31.0 (cargo install --git --tag --locked); SCAAS_GEN=cs
+#                          clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check (the generated C# over the async API equals
+#                          the committed one; it builds the reference library with `uniffi`); in clients/scaas-sdk/bindings/cs:
+#                          dotnet test (the keystore and vault rows, a C# async store and authenticator, the PRF by the copy call,
+#                          a panic as Internal, C# exceptions as the SDK's errors)
+#   [python]:              uniffi 0.31.0 (cargo install uniffi --version =0.31.0 --features cli --locked: uniffi-bindgen);
+#                          SCAAS_GEN=python clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check (the generated Python over
+#                          the async API equals the committed one; it builds the reference library with `uniffi`); in
+#                          clients/scaas-sdk/bindings/python: python3 -I test_smoke.py (the keystore and vault rows, a Python
+#                          async store and authenticator, the PRF by the copy call, a panic as Internal, Python exceptions)
+#   [kotlin]:              uniffi 0.31.0 (as [python]); SCAAS_GEN=kotlin clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh
+#                          --check; JDK 17, kotlinc 2.4.21 (the compiler zip of its GitHub release, KOTLINC); in
+#                          clients/scaas-sdk/bindings/kotlin: bash run.sh (JNA 5.17.0 and kotlinx-coroutines-core-jvm 1.10.2 from
+#                          Maven Central by sha256; the keystore and vault rows, a Kotlin async store and authenticator, the PRF
+#                          by the copy call, a panic as Internal, Kotlin exceptions as the SDK's errors)
+#   [swift]:               uniffi 0.31.0 (as [python]); SCAAS_GEN=swift clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh
+#                          --check; Swift 6.4.2 (swift.org's Ubuntu 24.04 tarball, SWIFTC); in clients/scaas-sdk/bindings/swift:
+#                          bash run.sh (the keystore and vault rows, a Swift async store and authenticator, the PRF by the copy
+#                          call, a panic as Internal, Swift errors as the SDK's errors)
+#   [js]:                  wasm-bindgen-cli 0.2.130 (cargo install --version =0.2.130 --locked, the crate's pin); in
+#                          clients/scaas-sdk: cargo clippy --target wasm32-unknown-unknown --no-default-features --features
+#                          <the set>,wasm -- -D warnings; in clients/scaas-sdk/bindings/js: bash run.sh (the cdylib for wasm32,
+#                          wasm-bindgen for Node, node --test: the keystore and vault rows, a JS store and authenticator, the PRF
+#                          by the copy call, the caller's array zeroed, a released handle refused)
+#   [java]:                uniffi-bindgen-java 0.4.2 (cargo install --version =0.4.2 --locked); SCAAS_GEN=java
+#                          clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check (with bindings/java/fix_generated.py);
+#                          JDK 25 (Java's FFM API); in clients/scaas-sdk/bindings/java: python3 -I test_fix_generated.py, bash
+#                          run.sh (the keystore and vault rows, a Java async store and authenticator, the PRF by the copy call, a
+#                          panic as Internal, Java exceptions as the SDK's errors)
+#   [go]:                  uniffi-bindgen-go v0.7.1+v0.31.0 (cargo install --git --tag --locked); SCAAS_GEN=go
+#                          clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check; Go 1.22; in clients/scaas-sdk/bindings/go:
+#                          bash run.sh (go vet, go test ./smoke with cgo over the reference library: the keystore and vault rows, a
+#                          Go store and authenticator, the PRF by the copy call, a panic as Internal, Go errors as the SDK's)
 #   scaas-cli:             in clients/scaas-cli: cargo test --locked; cargo test --locked --features dev-profiles (the review and the quote
 #                          before a submit, against the SDK tests' fake chain); cargo clippy --locked --all-targets --features dev-profiles -- -D warnings
+#   pqvault-core:          in clients/pqvault-core (PqVault plan V10): cargo test --locked; cargo test --locked --features vectors --test vectors;
+#                          cargo clippy --locked --all-targets -- -D warnings, default and --features vectors; the real-crypto e2e on anvil
+#                          (cargo test --test e2e -- --ignored, V10e) stays local (runs/2026-11-22-pqvault-e2e.sh)
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
 #                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
@@ -204,8 +247,10 @@ jobs:
       ua_dart: ${{ steps.f.outputs.ua_dart }}
       scaas_sdk: ${{ steps.f.outputs.scaas_sdk }}
       scaas_sdk_wasm: ${{ steps.f.outputs.scaas_sdk_wasm }}
-      scaas_sdk_bindings: ${{ steps.f.outputs.scaas_sdk_bindings }}
+      # the bindings' matrix cells: a JSON list of the enabled languages a change needs (decisions CLI-SDK-33 (102))
+      scaas_sdk_bind_langs: ${{ steps.f.outputs.scaas_sdk_bind_langs }}
       scaas_cli: ${{ steps.f.outputs.scaas_cli }}
+      pqvault_core: ${{ steps.f.outputs.pqvault_core }}
       keystore_vectors: ${{ steps.f.outputs.keystore_vectors }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
@@ -554,7 +599,7 @@ jobs:
       # AGENTS.md Security: no temp path in a committed file ([t]: the step does not match itself)
       - name: no temp paths in tracked files
         run: |
-          ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*'
+          ! git grep -nE '(^|[^[:alnum:]_.-])/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*'
       # T21 L67: test/vectors/pqz-gas/<set>.json is what the gas table reads; it must equal what the script makes of the
       # precompile rows (pqz-core/nethermind/chain/engine-pqz.json or the provisional ones) and each set's proofs
       - name: PQZ gas table inputs (gas-inputs.py --check)
@@ -1281,92 +1326,187 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --locked --all-targets --features dev-profiles -- -D warnings
 
-  # the generated bindings (spec §16): the FRB Dart surface regenerated equals the committed one; the reference library and
-  # the Dart tests over it
-  scaas-sdk-bindings:
+  # PqVault's app core above the SDK (plan V10, CLI-PQV-01): its tests and the vectors through it
+  pqvault-core:
     needs: changes
-    if: needs.changes.outputs.scaas_sdk_bindings == 'true'
+    if: needs.changes.outputs.pqvault_core == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/pqvault-core
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/pqvault-core
+      - name: cargo test
+        run: cargo test --locked
+      - name: the vectors through pqvault-core
+        run: cargo test --locked --features vectors --test vectors
+      - name: cargo clippy
+        run: |
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --all-targets --features vectors -- -D warnings
+
+  # the bindings (plan T20, T20b-T20h; spec §16.1, §16.4), one matrix cell per language enabled in
+  # clients/scaas-sdk/bindings/langs (owner 2026-11-22, decisions CLI-SDK-33 (102)); the changes job lists the cells a change
+  # needs: a change under bindings/<lang>/ runs that cell only, a change to the SDK, ffi, lib.sh, the generator or the shared
+  # rows runs every enabled cell. Each cell: its generator at its pin, the drift check of its part (SCAAS_GEN=<lang>; JS has no
+  # generated part), its smoke test.
+  scaas-sdk-bindings:
+    needs: changes
+    if: needs.changes.outputs.scaas_sdk_bind_langs != '[]'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        lang: ${{ fromJSON(needs.changes.outputs.scaas_sdk_bind_langs) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: clients/scaas-sdk/ffi
+          key: ${{ matrix.lang }}
+          workspaces: |
+            clients/scaas-sdk
+            clients/scaas-sdk/ffi
+            clients/scaas-sdk/bindings/js
+      # the generators at their pins
+      - name: flutter_rust_bridge_codegen 2.13.0 and cargo-expand 1.0.127 (its scan of the scaas-sdk crate)
+        if: matrix.lang == 'dart'
+        run: |
+          cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
+          cargo install cargo-expand --version 1.0.127 --locked
+      - name: uniffi-bindgen-cpp v0.10.0+v0.31.0
+        if: matrix.lang == 'cpp'
+        run: cargo install --git https://github.com/NordSecurity/uniffi-bindgen-cpp --rev c592133cac069d4e870744c1cdf09558b148c9fc --locked uniffi-bindgen-cpp
+      - name: uniffi-bindgen-cs v0.11.1+v0.31.0
+        if: matrix.lang == 'cs'
+        run: cargo install --git https://github.com/NordSecurity/uniffi-bindgen-cs --rev 7b1aaae16388a8d1e739114a632f357e1926296e --locked uniffi-bindgen-cs
+      - name: uniffi-bindgen 0.31.0
+        if: contains(fromJSON('["python","kotlin","swift"]'), matrix.lang)
+        run: cargo install uniffi --version =0.31.0 --features cli --locked
+      - name: uniffi-bindgen-java 0.4.2
+        if: matrix.lang == 'java'
+        run: cargo install uniffi-bindgen-java --version =0.4.2 --locked
+      - name: uniffi-bindgen-go v0.7.1+v0.31.0
+        if: matrix.lang == 'go'
+        run: cargo install uniffi-bindgen-go --git https://github.com/NordSecurity/uniffi-bindgen-go --rev 0b7fb4ceef12021bd7f790cc516fa9133e001813 --locked
+      - name: wasm-bindgen-cli 0.2.130
+        if: matrix.lang == 'js'
+        run: cargo install wasm-bindgen-cli --version =0.2.130 --locked
+      # the toolchains
       - uses: dart-lang/setup-dart@v1
+        if: matrix.lang == 'dart'
         with:
           sdk: 3.12.2
       # the Dart test's e2e smoke runs a local anvil
       - uses: foundry-rs/foundry-toolchain@v1
+        if: matrix.lang == 'dart'
         with:
           version: v1.8.5
-      - name: flutter_rust_bridge_codegen 2.13.0 and cargo-expand 1.0.127 (its scan of the scaas-sdk crate)
+      - uses: actions/setup-dotnet@v4
+        if: matrix.lang == 'cs'
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-java@v4
+        if: matrix.lang == 'kotlin'
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-java@v4
+        if: matrix.lang == 'java'
+        with:
+          distribution: temurin
+          java-version: "25"
+      - name: kotlinc 2.4.21
+        if: matrix.lang == 'kotlin'
         run: |
-          cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
-          cargo install cargo-expand --version 1.0.127 --locked
-      - name: the generated FRB surface has no drift
-        run: bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check
-      - name: the reference library
+          curl -fsSL -o "$RUNNER_TEMP/kotlinc.zip" https://github.com/JetBrains/kotlin/releases/download/v2.4.21/kotlin-compiler-2.4.21.zip
+          echo "7cc140e76daf416a0424a5557f99afd7ca89ebd463ea1101261e3e01c33e75cd  $RUNNER_TEMP/kotlinc.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/kotlinc.zip" -d "$RUNNER_TEMP"
+          echo "KOTLINC=$RUNNER_TEMP/kotlinc/bin/kotlinc" >> "$GITHUB_ENV"
+      - name: Swift 6.4.2
+        if: matrix.lang == 'swift'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/swift.tar.gz" https://download.swift.org/swift-6.4.2-release/ubuntu2404/swift-6.4.2-RELEASE/swift-6.4.2-RELEASE-ubuntu24.04.tar.gz
+          echo "2e9ebec040ad459dd89a6d093a02d8314939135104850fae4d5c0f174fb3ba8c  $RUNNER_TEMP/swift.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/swift"
+          tar -xzf "$RUNNER_TEMP/swift.tar.gz" -C "$RUNNER_TEMP/swift" --strip-components=1
+          echo "SWIFTC=$RUNNER_TEMP/swift/usr/bin/swiftc" >> "$GITHUB_ENV"
+      - uses: actions/setup-go@v5
+        if: matrix.lang == 'go'
+        with:
+          go-version: "1.22"
+      - uses: actions/setup-node@v4
+        if: matrix.lang == 'js'
+        with:
+          node-version: 26.8.1
+      # the drift check of this language's part (JS: no generated part)
+      - name: the generated ${{ matrix.lang }} has no drift
+        if: matrix.lang != 'js'
+        run: SCAAS_GEN=${{ matrix.lang }} bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check
+      # the reference library's clippy
+      - name: the reference library (FRB)
+        if: matrix.lang == 'dart'
         working-directory: clients/scaas-sdk/ffi
         run: |
           cargo clippy --locked --all-targets -- -D warnings
           cargo build --locked
+      - name: the reference library with each UniFFI surface (review B16)
+        if: matrix.lang == 'cpp'
+        working-directory: clients/scaas-sdk/ffi
+        run: |
+          cargo clippy --locked --all-targets --features sync-api -- -D warnings
+          cargo clippy --locked --all-targets --features uniffi -- -D warnings
+      - name: the SDK with each UniFFI surface, the sync surface's Rust tests
+        if: matrix.lang == 'cpp'
+        working-directory: clients/scaas-sdk
+        run: |
+          cargo clippy --locked --all-targets --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,uniffi -- -D warnings
+          cargo clippy --locked --all-targets --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,sync-api -- -D warnings
+          cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,sync-api --test binding
+      - name: the SDK with feature wasm for wasm32
+        if: matrix.lang == 'js'
+        working-directory: clients/scaas-sdk
+        run: cargo clippy --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,wasm -- -D warnings
+      # the smoke test
       - name: dart test
+        if: matrix.lang == 'dart'
         working-directory: clients/scaas-sdk/bindings/dart
         run: |
           dart pub get --enforce-lockfile
           dart test --reporter expanded
-
-  # the keystore container's vectors (plan T2b, T2c): clientkeys writes them, the SDK reads every row
-  keystore-vectors:
-    needs: changes
-    if: needs.changes.outputs.keystore_vectors == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26.8.1
-          cache: npm
-          cache-dependency-path: clients/clientkeys/package-lock.json
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: clients/scaas-sdk
-      - name: clientkeys
-        working-directory: clients/clientkeys
+      - name: the C++ smoke test
+        if: matrix.lang == 'cpp'
+        working-directory: clients/scaas-sdk/bindings/cpp
         run: |
-          npm ci --ignore-scripts
-          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js
-      - name: scaas-sdk
-        working-directory: clients/scaas-sdk
-        run: cargo test --locked --test keystore_vectors
-
-  ua-dart:
-    needs: changes
-    if: needs.changes.outputs.ua_dart == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dart-lang/setup-dart@v1
-        with:
-          sdk: 3.12.2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: dart pub get
-        working-directory: clients/ua-dart
-      - run: dart analyze
-        working-directory: clients/ua-dart
-      - run: dart test
-        working-directory: clients/ua-dart
-      - run: dart test -p node
-        working-directory: clients/ua-dart
-      # asserts are off here (plain `dart run`), like a release build
-      - run: dart run test/vectors_test.dart
-        working-directory: clients/ua-dart
+          cmake -B build
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure
+      - name: the C# smoke test
+        if: matrix.lang == 'cs'
+        working-directory: clients/scaas-sdk/bindings/cs
+        run: dotnet test
+      - name: the Python smoke test
+        if: matrix.lang == 'python'
+        working-directory: clients/scaas-sdk/bindings/python
+        run: |
+          python3 -I test_fix_generated.py
+          python3 -I test_smoke.py
+      - name: the fixup scripts' tests
+        if: contains(fromJSON('["java","go"]'), matrix.lang)
+        working-directory: clients/scaas-sdk/bindings/${{ matrix.lang }}
+        run: python3 -I test_fix_generated.py
+      - name: the ${{ matrix.lang }} smoke test
+        if: contains(fromJSON('["kotlin","swift","js","java","go"]'), matrix.lang)
+        working-directory: clients/scaas-sdk/bindings/${{ matrix.lang }}
+        run: bash run.sh

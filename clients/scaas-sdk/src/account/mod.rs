@@ -58,6 +58,7 @@ impl Sdk {
 
 /// One account row as the app shows it.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct AccountInfo {
     pub id: String,
@@ -81,6 +82,7 @@ pub struct AccountInfo {
 
 /// `add_ua`: the UA key `kind` of wallet `account` at `index`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct AddUa {
     pub seed: String,
@@ -92,6 +94,7 @@ pub struct AddUa {
 
 /// `add_native`: the native key of `network` (a `scaas-ua` network name) at `index`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct AddNative {
     pub seed: String,
@@ -102,6 +105,7 @@ pub struct AddNative {
 
 /// `add_watch`: an id to watch (a `0x` 32-byte UA or a `0x` 20-byte address); no key.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct AddWatch {
     pub seed: String,
@@ -111,6 +115,7 @@ pub struct AddWatch {
 
 /// `create_passkey_key`: a new passkey of the deployment's RP ID (`SdkConfig::rp_id`), named `name` beside seed `seed`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct CreatePasskeyKey {
     pub seed: String,
@@ -119,6 +124,7 @@ pub struct CreatePasskeyKey {
 
 /// `create_se_key`: a new secure-element P-256 key under `policy`, named `name` beside seed `seed`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct CreateSeKey {
     pub seed: String,

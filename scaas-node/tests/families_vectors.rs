@@ -183,7 +183,7 @@ fn soroban_native_transactions_through_the_official_xdr() {
     let n: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
     let fam = rows("soroban");
     let nid: [u8; 32] = unhex(n["networkId"].as_str().unwrap()).try_into().unwrap();
-    assert_eq!(n["rows"].as_array().unwrap().len(), 4);
+    assert_eq!(n["rows"].as_array().unwrap().len(), 5);
     for r in n["rows"].as_array().unwrap() {
         let b = unhex(r["tx"].as_str().unwrap());
         let tx = Transaction::from_xdr(&b, Limits::none()).unwrap();
@@ -193,7 +193,7 @@ fn soroban_native_transactions_through_the_official_xdr() {
             unhex(r["hash"].as_str().unwrap())
         );
         let TransactionEnvelope::Tx(e) =
-            TransactionEnvelope::from_xdr(&unhex(r["envelope"].as_str().unwrap()), Limits::none())
+            TransactionEnvelope::from_xdr(unhex(r["envelope"].as_str().unwrap()), Limits::none())
                 .unwrap()
         else {
             panic!("a v1 envelope")
@@ -214,16 +214,26 @@ fn soroban_native_transactions_through_the_official_xdr() {
                 .find(|o| o["kind"] == "pay")
                 .unwrap();
             let (_, auth) = scaas_node::adapters::soroban::host_call(&pay["signed_op"]).unwrap();
-            assert_eq!(
-                op.auth.as_slice(),
-                auth.as_slice(),
-                "the adapter's own entry"
-            );
+            if r["op"]["invoke"]["auth"][0]["source"] == true {
+                // owner 2026-11-22: a self-paid pay, SourceAccount credentials over the same invocation, the subject its source
+                assert!(matches!(
+                    op.auth[0].credentials,
+                    stellar_xdr::SorobanCredentials::SourceAccount
+                ));
+                assert_eq!(op.auth[0].root_invocation, auth[0].root_invocation);
+                assert_eq!(r["source"], pay["signed_op"]["from"]);
+            } else {
+                assert_eq!(
+                    op.auth.as_slice(),
+                    auth.as_slice(),
+                    "the adapter's own entry"
+                );
+            }
             let TransactionExt::V1(d) = &tx.ext else {
                 panic!("soroban data")
             };
             let want = SorobanTransactionData::from_xdr(
-                &unhex(r["dataXdr"].as_str().unwrap()),
+                unhex(r["dataXdr"].as_str().unwrap()),
                 Limits::none(),
             )
             .unwrap();

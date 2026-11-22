@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+[package]
+name = "pqvault-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../LICENSE"
+description = "PqVault's app core above scaas-sdk (CLI-PQV-01): vault records, keys on handles, verification, recovery, merge. UNAUDITED."
+
+# Spec docs/superpowers/specs/2026-11-17-pqvault.md §7 (CLI-PQV-01, CLI-PQV-12, CLI-PQV-13): the SDK (feature `app-core`) is the
+# only SCaaS dependency; every signature, KEM, HKDF, Argon2id and AEAD runs in `scaas-ua` behind the SDK's handles.
+# tests/deps.rs checks that `scaas-ua` and `scaas-rpc` are no direct dependency.
+[features]
+default = []
+# test-only (the vectors' fixed key bytes through the SDK's `vectors` entries); a release build refuses it (the SDK's
+# `compile_error!`)
+vectors = ["scaas-sdk/vectors"]
+
+[dependencies]
+scaas-sdk = { path = "../scaas-sdk", default-features = false, features = ["app-core", "mlock"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-trait = "0.1"
+# ids, the wrap hash and the AAD (keccak256 and `abi.encode`, no key), the contract entries' JSON ABI items: the version and
+# features the SDK takes (no crate added to the graph)
+alloy = { version = "~1.6", default-features = false, features = ["std", "sol-types", "dyn-abi", "json-abi"] }
+
+[dev-dependencies]
+# the tests' chain profiles name scaas-rpc's endpoint class and policy (never a dependency of the library: tests/deps.rs)
+scaas-rpc = { path = "../scaas-rpc", default-features = false }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
+
+# the ML-KEM and Argon2id code crawls unoptimised: dependencies at opt-level 3, as the SDK
+[profile.dev.package."*"]
+opt-level = 3
+
+[[test]]
+name = "vectors"
+required-features = ["vectors"]
+
+[lints.rust]
+unsafe_code = "forbid"

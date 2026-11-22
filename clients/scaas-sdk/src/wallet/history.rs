@@ -16,6 +16,7 @@ use std::collections::HashSet;
 
 /// A position in a chain's logs: a page holds items strictly older than it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct Cursor {
     pub block: u64,
@@ -24,6 +25,7 @@ pub struct Cursor {
 
 /// One log naming the account in an indexed field.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct HistoryItem {
     pub block: u64,
@@ -39,6 +41,7 @@ pub struct HistoryItem {
 
 /// One of the account's operations in `sdk.state` (spec §13.4).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct OpItem {
     pub op: String,
@@ -50,6 +53,7 @@ pub struct OpItem {
 
 /// A page of history.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct HistoryPage {
     pub items: Vec<HistoryItem>,

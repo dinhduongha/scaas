@@ -1,0 +1,4 @@
+# pinned mutants (name | outcome | commit | test | first failure line)
+the profile's pinned_reads never reaches the pool | killed | d7910088b | ../../scripts/capped cargo test --locked --offline -j2 --test evm_profiles pinned_reads_follow_the_profile | panicked at tests/evm_profiles.rs:287:17:
+pinned_reads false accepted on a non-EVM profile | killed | d7910088b | ../../scripts/capped cargo test --locked --offline -j2 --test evm_feature an_evm_profile_needs_the_evm_feature | panicked at tests/evm_feature.rs:90:5:
+2 mutants, 2 killed, 0 survived, 0 not loaded, 0 other failure

@@ -113,6 +113,8 @@ struct Node {
     spends: Vec<Vec<u8>>,
     sim_error: Option<String>,
     fee_p90: &'static str,
+    /// the simulation records the source account's own `SourceAccount` entry (a self-paid op), not the subject's Address one
+    auth_source: bool,
 }
 type Fake = Arc<Mutex<Node>>;
 
@@ -133,6 +135,14 @@ fn recorded_auth() -> Vec<u8> {
         .position(|w| w == prefix.as_slice())
         .unwrap();
     tx[at..tx.len() - data.len() - 4].to_vec()
+}
+
+/// A `SourceAccount` auth entry of the token's `pay` (what a simulation records for the transaction's own source).
+fn source_auth() -> Vec<u8> {
+    let mut e = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+    e.extend_from_slice(&strkey_key(fam()["token"].as_str().unwrap()));
+    e.extend_from_slice(&[0, 0, 0, 3, b'p', b'a', b'y', 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    e
 }
 
 fn answer(n: &mut Node, body: &[u8]) -> (u16, Vec<u8>) {
@@ -170,7 +180,7 @@ fn answer(n: &mut Node, body: &[u8]) -> (u16, Vec<u8>) {
                     "latestLedger": n.ledger,
                     "minResourceFee": "1234567",
                     "transactionData": b64(&hexb(nr["rows"][0]["dataXdr"].as_str().unwrap())),
-                    "results": [{"auth": [b64(&recorded_auth())], "xdr": "AAAAAQ=="}],
+                    "results": [{"auth": [b64(&if n.auth_source { source_auth() } else { recorded_auth() })], "xdr": "AAAAAQ=="}],
                 }),
             }
         }
@@ -261,6 +271,7 @@ async fn setup(cap: Option<&str>, policy: scaas_rpc::Policy, extra_rpc: Option<F
         spends: vec![],
         sim_error: None,
         fee_p90: "100",
+        auth_source: false,
     }));
     let up = |f: Fake| async move {
         serve(Arc::new(move |_m: &str, _p: &str, b: &[u8]| {
@@ -309,6 +320,7 @@ async fn setup(cap: Option<&str>, policy: scaas_rpc::Policy, extra_rpc: Option<F
             decimals: 7,
         }],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: Some(FamilyParams::Soroban {
             passphrase: PASSPHRASE.into(),
@@ -802,6 +814,7 @@ async fn strict_majority_compares_the_quotes_reads() {
             spends: vec![],
             sim_error: None,
             fee_p90: p90,
+            auth_source: false,
         }));
         for i in 0..3 {
             other.lock().unwrap().entries.insert(
@@ -821,4 +834,50 @@ async fn strict_majority_compares_the_quotes_reads() {
                 .await;
         assert_eq!(code(q), want);
     }
+}
+
+/// Owner 2026-11-22 ("accept SourceAccount when self-paying"): a pay self-relayed by its own subject (the transaction's
+/// source is A) is simulated with A's `SourceAccount` entry, accepted, and lands; the same entry when another key pays
+/// (the source is not the subject) is refused before anything is signed.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_source_account_entry_only_when_the_subject_pays() {
+    let t = setup(Some("100000000"), scaas_rpc::Policy::Failover, None).await;
+    t.node.lock().unwrap().auth_source = true;
+    let p = t.w.soroban_prepare(pay(&t)).await.unwrap();
+    let other =
+        t.w.soroban_quote(p.clone(), SorobanPath::SelfRelay { payer: key(&t, 2) })
+            .await;
+    assert_eq!(
+        code(other),
+        "Revert",
+        "another payer: the call needs a signer other than its source"
+    );
+    let q =
+        t.w.soroban_quote(p.clone(), SorobanPath::SelfRelay { payer: key(&t, 0) })
+            .await
+            .unwrap();
+    assert_eq!(
+        q.payer.as_deref(),
+        Some(g(0).as_str()),
+        "A pays its own transaction"
+    );
+    assert_eq!(q.seq.as_deref(), Some("8"), "A's sequence + 1");
+    t.node.lock().unwrap().spends = pay_spends();
+    let id = t.w.soroban_submit(p, q).await.unwrap();
+    let env = t.node.lock().unwrap().sent[0].clone();
+    assert_eq!(&env[8..40], &strkey_key(&g(0)), "the source is the subject");
+    let sig = hexb(pay_row()["signature"].as_str().unwrap());
+    assert!(
+        !env.windows(64).any(|w| w == sig.as_slice()),
+        "no op signature: the transaction's authorizes it"
+    );
+    // the auth list of one, SOROBAN_CREDENTIALS_SOURCE_ACCOUNT, a contract function of the token
+    let mut source_entry = vec![0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+    source_entry.extend_from_slice(&strkey_key(fam()["token"].as_str().unwrap()));
+    assert!(
+        env.windows(source_entry.len())
+            .any(|w| w == source_entry.as_slice()),
+        "one SourceAccount entry"
+    );
+    assert_eq!(t.w.soroban_follow(id).await.unwrap(), "landed");
 }

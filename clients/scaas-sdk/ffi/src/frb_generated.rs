@@ -52,7 +52,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -147879544;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1290797094;
 
 // Section: executor
 
@@ -1018,6 +1018,72 @@ fn wire__scaas_sdk__account__Account_prepare_register_impl(
                         let output_ok = scaas_sdk::account::Account::prepare_register(
                             &*api_that_guard,
                             api_req,
+                        )
+                        .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__scaas_sdk__account__Account_prepare_set_kem_key_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "Account_prepare_set_kem_key",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Account>,
+            >>::sse_decode(&mut deserializer);
+            let api_key = <scaas_sdk::op::KeyRef>::sse_decode(&mut deserializer);
+            let api_chain = <String>::sse_decode(&mut deserializer);
+            let api_version = <u64>::sse_decode(&mut deserializer);
+            let api_payer = <scaas_sdk::op::KeyRef>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, SdkError>(
+                    (move || async move {
+                        let mut api_that_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_that, 0, false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_that_guard =
+                                        Some(api_that.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_that_guard = api_that_guard.unwrap();
+                        let output_ok = scaas_sdk::account::Account::prepare_set_kem_key(
+                            &*api_that_guard,
+                            api_key,
+                            api_chain,
+                            api_version,
+                            api_payer,
                         )
                         .await?;
                         std::result::Result::Ok(output_ok)
@@ -17888,6 +17954,7 @@ const _: fn() = || {
         let _: Option<scaas_sdk::config::FamilyParams> = ChainProfile.family_params;
         let _: Option<scaas_sdk::config::L1Fee> = ChainProfile.l1_fee;
         let _: Vec<String> = ChainProfile.disabled_kinds;
+        let _: bool = ChainProfile.pinned_reads;
     }
     {
         let ConfirmRemove = None::<scaas_sdk::vault::seeds::ConfirmRemove>.unwrap();
@@ -21287,6 +21354,7 @@ impl SseDecode for scaas_sdk::config::ChainProfile {
             <Option<scaas_sdk::config::FamilyParams>>::sse_decode(deserializer);
         let mut var_l1Fee = <Option<scaas_sdk::config::L1Fee>>::sse_decode(deserializer);
         let mut var_disabledKinds = <Vec<String>>::sse_decode(deserializer);
+        let mut var_pinnedReads = <bool>::sse_decode(deserializer);
         return scaas_sdk::config::ChainProfile {
             key: var_key,
             family: var_family,
@@ -21311,6 +21379,7 @@ impl SseDecode for scaas_sdk::config::ChainProfile {
             family_params: var_familyParams,
             l1_fee: var_l1Fee,
             disabled_kinds: var_disabledKinds,
+            pinned_reads: var_pinnedReads,
         };
     }
 }
@@ -26891,979 +26960,985 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        17 => wire__scaas_sdk__account__Account_prepare_smart_add_key_impl(
+        17 => wire__scaas_sdk__account__Account_prepare_set_kem_key_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        18 => wire__scaas_sdk__account__Account_prepare_smart_cancel_nonce_impl(
+        18 => wire__scaas_sdk__account__Account_prepare_smart_add_key_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        19 => wire__scaas_sdk__account__Account_prepare_smart_cancel_recovery_impl(
+        19 => wire__scaas_sdk__account__Account_prepare_smart_cancel_nonce_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        20 => wire__scaas_sdk__account__Account_prepare_smart_deploy_impl(
+        20 => wire__scaas_sdk__account__Account_prepare_smart_cancel_recovery_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        21 => wire__scaas_sdk__account__Account_prepare_smart_execute_impl(
+        21 => wire__scaas_sdk__account__Account_prepare_smart_deploy_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        22 => wire__scaas_sdk__account__Account_prepare_smart_remove_key_impl(
+        22 => wire__scaas_sdk__account__Account_prepare_smart_execute_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        23 => wire__scaas_sdk__account__Account_prepare_smart_rotate_key_impl(
+        23 => wire__scaas_sdk__account__Account_prepare_smart_remove_key_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        24 => wire__scaas_sdk__account__Account_prepare_smart_set_guardian_impl(
+        24 => wire__scaas_sdk__account__Account_prepare_smart_rotate_key_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        25 => wire__scaas_sdk__account__Account_prepare_submit_registration_impl(
+        25 => wire__scaas_sdk__account__Account_prepare_smart_set_guardian_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        26 => wire__scaas_sdk__account__Account_prepare_update_msig_impl(
+        26 => wire__scaas_sdk__account__Account_prepare_submit_registration_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        27 => wire__scaas_sdk__account__Account_quote_registry_write_impl(
+        27 => wire__scaas_sdk__account__Account_prepare_update_msig_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        28 => wire__scaas_sdk__account__Account_register_target_impl(
+        28 => wire__scaas_sdk__account__Account_quote_registry_write_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        29 => wire__scaas_sdk__account__Account_registration_blob_impl(
+        29 => wire__scaas_sdk__account__Account_register_target_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        30 => wire__scaas_sdk__account__Account_registration_of_impl(
+        30 => wire__scaas_sdk__account__Account_registration_blob_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        31 => wire__scaas_sdk__account__Account_restore_impl(port, ptr, rust_vec_len, data_len),
-        32 => wire__scaas_sdk__account__Account_signs_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__scaas_sdk__account__Account_submit_registry_write_impl(
+        31 => wire__scaas_sdk__account__Account_registration_of_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        34 => wire__scaas_sdk__account__Account_ua_line_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__scaas_sdk__admin__Admin_admin_ua_accept_admin_impl(
+        32 => wire__scaas_sdk__account__Account_restore_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__scaas_sdk__account__Account_signs_impl(port, ptr, rust_vec_len, data_len),
+        34 => wire__scaas_sdk__account__Account_submit_registry_write_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        36 => wire__scaas_sdk__admin__Admin_admin_ua_approve_dex_release_impl(
+        35 => wire__scaas_sdk__account__Account_ua_line_impl(port, ptr, rust_vec_len, data_len),
+        36 => wire__scaas_sdk__admin__Admin_admin_ua_accept_admin_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        37 => wire__scaas_sdk__admin__Admin_admin_ua_approve_release_impl(
+        37 => wire__scaas_sdk__admin__Admin_admin_ua_approve_dex_release_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        38 => wire__scaas_sdk__admin__Admin_admin_ua_approve_token_release_impl(
+        38 => wire__scaas_sdk__admin__Admin_admin_ua_approve_release_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        39 => wire__scaas_sdk__admin__Admin_admin_ua_cancel_grant_impl(
+        39 => wire__scaas_sdk__admin__Admin_admin_ua_approve_token_release_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        40 => wire__scaas_sdk__admin__Admin_admin_ua_cancel_nonce_impl(
+        40 => wire__scaas_sdk__admin__Admin_admin_ua_cancel_grant_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        41 => wire__scaas_sdk__admin__Admin_admin_ua_cancel_rate_impl(
+        41 => wire__scaas_sdk__admin__Admin_admin_ua_cancel_nonce_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        42 => wire__scaas_sdk__admin__Admin_admin_ua_create_dex_impl(
+        42 => wire__scaas_sdk__admin__Admin_admin_ua_cancel_rate_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        43 => wire__scaas_sdk__admin__Admin_admin_ua_create_instance_impl(
+        43 => wire__scaas_sdk__admin__Admin_admin_ua_create_dex_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        44 => wire__scaas_sdk__admin__Admin_admin_ua_create_token_impl(
+        44 => wire__scaas_sdk__admin__Admin_admin_ua_create_instance_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        45 => wire__scaas_sdk__admin__Admin_admin_ua_deprecate_dex_impl(
+        45 => wire__scaas_sdk__admin__Admin_admin_ua_create_token_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        46 => wire__scaas_sdk__admin__Admin_admin_ua_deprecate_release_impl(
+        46 => wire__scaas_sdk__admin__Admin_admin_ua_deprecate_dex_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        47 => wire__scaas_sdk__admin__Admin_admin_ua_deprecate_token_impl(
+        47 => wire__scaas_sdk__admin__Admin_admin_ua_deprecate_release_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        48 => wire__scaas_sdk__admin__Admin_admin_ua_disable_feature_impl(
+        48 => wire__scaas_sdk__admin__Admin_admin_ua_deprecate_token_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        49 => wire__scaas_sdk__admin__Admin_admin_ua_disable_wrap_impl(
+        49 => wire__scaas_sdk__admin__Admin_admin_ua_disable_feature_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        50 => wire__scaas_sdk__admin__Admin_admin_ua_enable_feature_impl(
+        50 => wire__scaas_sdk__admin__Admin_admin_ua_disable_wrap_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        51 => wire__scaas_sdk__admin__Admin_admin_ua_execute_rate_impl(
+        51 => wire__scaas_sdk__admin__Admin_admin_ua_enable_feature_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        52 => wire__scaas_sdk__admin__Admin_admin_ua_force_transfer_impl(
+        52 => wire__scaas_sdk__admin__Admin_admin_ua_execute_rate_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        53 => wire__scaas_sdk__admin__Admin_admin_ua_freeze_impl(port, ptr, rust_vec_len, data_len),
-        54 => wire__scaas_sdk__admin__Admin_admin_ua_grant_role_impl(
+        53 => wire__scaas_sdk__admin__Admin_admin_ua_force_transfer_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        55 => wire__scaas_sdk__admin__Admin_admin_ua_mint_impl(port, ptr, rust_vec_len, data_len),
-        56 => wire__scaas_sdk__admin__Admin_admin_ua_mint_to_ua_impl(
+        54 => wire__scaas_sdk__admin__Admin_admin_ua_freeze_impl(port, ptr, rust_vec_len, data_len),
+        55 => wire__scaas_sdk__admin__Admin_admin_ua_grant_role_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        57 => wire__scaas_sdk__admin__Admin_admin_ua_operator_transfer_impl(
+        56 => wire__scaas_sdk__admin__Admin_admin_ua_mint_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__scaas_sdk__admin__Admin_admin_ua_mint_to_ua_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        58 => wire__scaas_sdk__admin__Admin_admin_ua_pause_impl(port, ptr, rust_vec_len, data_len),
-        59 => wire__scaas_sdk__admin__Admin_admin_ua_pqz_cancel_verifier_impl(
+        58 => wire__scaas_sdk__admin__Admin_admin_ua_operator_transfer_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        60 => wire__scaas_sdk__admin__Admin_admin_ua_pqz_revoke_verifier_impl(
+        59 => wire__scaas_sdk__admin__Admin_admin_ua_pause_impl(port, ptr, rust_vec_len, data_len),
+        60 => wire__scaas_sdk__admin__Admin_admin_ua_pqz_cancel_verifier_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        61 => wire__scaas_sdk__admin__Admin_admin_ua_pqz_set_verifier_impl(
+        61 => wire__scaas_sdk__admin__Admin_admin_ua_pqz_revoke_verifier_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        62 => wire__scaas_sdk__admin__Admin_admin_ua_propose_rate_impl(
+        62 => wire__scaas_sdk__admin__Admin_admin_ua_pqz_set_verifier_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        63 => wire__scaas_sdk__admin__Admin_admin_ua_publish_class_env_impl(
+        63 => wire__scaas_sdk__admin__Admin_admin_ua_propose_rate_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        64 => wire__scaas_sdk__admin__Admin_admin_ua_publish_dex_env_impl(
+        64 => wire__scaas_sdk__admin__Admin_admin_ua_publish_class_env_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        65 => wire__scaas_sdk__admin__Admin_admin_ua_publish_token_env_impl(
+        65 => wire__scaas_sdk__admin__Admin_admin_ua_publish_dex_env_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        66 => wire__scaas_sdk__admin__Admin_admin_ua_record_order_impl(
+        66 => wire__scaas_sdk__admin__Admin_admin_ua_publish_token_env_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        67 => wire__scaas_sdk__admin__Admin_admin_ua_renounce_admin_impl(
+        67 => wire__scaas_sdk__admin__Admin_admin_ua_record_order_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        68 => wire__scaas_sdk__admin__Admin_admin_ua_renounce_role_impl(
+        68 => wire__scaas_sdk__admin__Admin_admin_ua_renounce_admin_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        69 => wire__scaas_sdk__admin__Admin_admin_ua_revoke_approval_impl(
+        69 => wire__scaas_sdk__admin__Admin_admin_ua_renounce_role_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        70 => wire__scaas_sdk__admin__Admin_admin_ua_revoke_order_impl(
+        70 => wire__scaas_sdk__admin__Admin_admin_ua_revoke_approval_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        71 => wire__scaas_sdk__admin__Admin_admin_ua_revoke_role_impl(
+        71 => wire__scaas_sdk__admin__Admin_admin_ua_revoke_order_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        72 => wire__scaas_sdk__admin__Admin_admin_ua_set_allowed_impl(
+        72 => wire__scaas_sdk__admin__Admin_admin_ua_revoke_role_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        73 => wire__scaas_sdk__admin__Admin_admin_ua_set_auditor_key_impl(
+        73 => wire__scaas_sdk__admin__Admin_admin_ua_set_allowed_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        74 => wire__scaas_sdk__admin__Admin_admin_ua_set_auditor_ua_impl(
+        74 => wire__scaas_sdk__admin__Admin_admin_ua_set_auditor_key_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        75 => wire__scaas_sdk__admin__Admin_admin_ua_set_chain_entries_impl(
+        75 => wire__scaas_sdk__admin__Admin_admin_ua_set_auditor_ua_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        76 => wire__scaas_sdk__admin__Admin_admin_ua_set_class_kind_enabled_impl(
+        76 => wire__scaas_sdk__admin__Admin_admin_ua_set_chain_entries_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        77 => wire__scaas_sdk__admin__Admin_admin_ua_set_compliance_impl(
+        77 => wire__scaas_sdk__admin__Admin_admin_ua_set_class_kind_enabled_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        78 => wire__scaas_sdk__admin__Admin_admin_ua_set_denied_impl(
+        78 => wire__scaas_sdk__admin__Admin_admin_ua_set_compliance_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        79 => wire__scaas_sdk__admin__Admin_admin_ua_set_exchange_target_impl(
+        79 => wire__scaas_sdk__admin__Admin_admin_ua_set_denied_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        80 => wire__scaas_sdk__admin__Admin_admin_ua_set_fee_split_impl(
+        80 => wire__scaas_sdk__admin__Admin_admin_ua_set_exchange_target_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        81 => {
+        81 => wire__scaas_sdk__admin__Admin_admin_ua_set_fee_split_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        82 => {
             wire__scaas_sdk__admin__Admin_admin_ua_set_grant_impl(port, ptr, rust_vec_len, data_len)
         }
-        82 => wire__scaas_sdk__admin__Admin_admin_ua_set_kyc_provider_impl(
+        83 => wire__scaas_sdk__admin__Admin_admin_ua_set_kyc_provider_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        83 => wire__scaas_sdk__admin__Admin_admin_ua_set_listed_only_impl(
+        84 => wire__scaas_sdk__admin__Admin_admin_ua_set_listed_only_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        84 => wire__scaas_sdk__admin__Admin_admin_ua_set_market_impl(
+        85 => wire__scaas_sdk__admin__Admin_admin_ua_set_market_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        85 => wire__scaas_sdk__admin__Admin_admin_ua_set_max_supply_impl(
+        86 => wire__scaas_sdk__admin__Admin_admin_ua_set_max_supply_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        86 => wire__scaas_sdk__admin__Admin_admin_ua_set_max_wrap_supply_impl(
+        87 => wire__scaas_sdk__admin__Admin_admin_ua_set_max_wrap_supply_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        87 => wire__scaas_sdk__admin__Admin_admin_ua_set_proof_store_impl(
+        88 => wire__scaas_sdk__admin__Admin_admin_ua_set_proof_store_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        88 => wire__scaas_sdk__admin__Admin_admin_ua_set_tax_rate_impl(
+        89 => wire__scaas_sdk__admin__Admin_admin_ua_set_tax_rate_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        89 => wire__scaas_sdk__admin__Admin_admin_ua_set_tax_recipient_impl(
+        90 => wire__scaas_sdk__admin__Admin_admin_ua_set_tax_recipient_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        90 => wire__scaas_sdk__admin__Admin_admin_ua_set_token_kind_enabled_impl(
+        91 => wire__scaas_sdk__admin__Admin_admin_ua_set_token_kind_enabled_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        91 => wire__scaas_sdk__admin__Admin_admin_ua_set_verifier_fee_impl(
+        92 => wire__scaas_sdk__admin__Admin_admin_ua_set_verifier_fee_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        92 => wire__scaas_sdk__admin__Admin_admin_ua_set_wrap_limits_impl(
+        93 => wire__scaas_sdk__admin__Admin_admin_ua_set_wrap_limits_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        93 => wire__scaas_sdk__admin__Admin_admin_ua_set_wrap_member_impl(
+        94 => wire__scaas_sdk__admin__Admin_admin_ua_set_wrap_member_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        94 => wire__scaas_sdk__admin__Admin_admin_ua_transfer_admin_impl(
+        95 => wire__scaas_sdk__admin__Admin_admin_ua_transfer_admin_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        95 => {
+        96 => {
             wire__scaas_sdk__admin__Admin_admin_ua_unfreeze_impl(port, ptr, rust_vec_len, data_len)
         }
-        96 => {
+        97 => {
             wire__scaas_sdk__admin__Admin_admin_ua_unpause_impl(port, ptr, rust_vec_len, data_len)
         }
-        97 => wire__scaas_sdk__admin__Admin_create3_address_impl(port, ptr, rust_vec_len, data_len),
-        98 => {
+        98 => wire__scaas_sdk__admin__Admin_create3_address_impl(port, ptr, rust_vec_len, data_len),
+        99 => {
             wire__scaas_sdk__admin__Admin_governance_delay_impl(port, ptr, rust_vec_len, data_len)
         }
-        99 => wire__scaas_sdk__admin__Admin_sign_pqz_auditor_consent_impl(
+        100 => wire__scaas_sdk__admin__Admin_sign_pqz_auditor_consent_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        100 => {
+        101 => {
             wire__scaas_sdk__admin__Admin_sign_rescue_vault_impl(port, ptr, rust_vec_len, data_len)
         }
-        101 => wire__scaas_sdk__admin__Admin_sign_zether_auditor_consent_impl(
+        102 => wire__scaas_sdk__admin__Admin_sign_zether_auditor_consent_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        102 => wire__scaas_sdk__confidential__Confidential_pqz_balance_impl(
+        103 => wire__scaas_sdk__confidential__Confidential_pqz_balance_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        103 => wire__scaas_sdk__confidential__Confidential_pqz_balance_all_impl(
+        104 => wire__scaas_sdk__confidential__Confidential_pqz_balance_all_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        104 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_prepare_acc_impl(
+        105 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_prepare_acc_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        105 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_roll_over_impl(
+        106 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_roll_over_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        106 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_shield_impl(
+        107 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_shield_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        107 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_transfer_impl(
+        108 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_transfer_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        108 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_transfer_compact_impl(
+        109 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_transfer_compact_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        109 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_transfer_multi_impl(
+        110 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_transfer_multi_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        110 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_transfer_multi_compact_impl(
+        111 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_transfer_multi_compact_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        111 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_unshield_impl(
+        112 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_unshield_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        112 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_unshield_unwrap_impl(
+        113 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_unshield_unwrap_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        113 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_wrap_shield_impl(
+        114 => wire__scaas_sdk__confidential__Confidential_prepare_pqz_wrap_shield_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        114 => wire__scaas_sdk__confidential__Confidential_prepare_zether_owner_roll_over_impl(
+        115 => wire__scaas_sdk__confidential__Confidential_prepare_zether_owner_roll_over_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        115 => wire__scaas_sdk__confidential__Confidential_prepare_zether_owner_set_mode_impl(
+        116 => wire__scaas_sdk__confidential__Confidential_prepare_zether_owner_set_mode_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        116 => wire__scaas_sdk__confidential__Confidential_prepare_zether_roll_over_impl(
+        117 => wire__scaas_sdk__confidential__Confidential_prepare_zether_roll_over_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        117 => wire__scaas_sdk__confidential__Confidential_prepare_zether_roll_over_batch_impl(
+        118 => wire__scaas_sdk__confidential__Confidential_prepare_zether_roll_over_batch_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        118 => wire__scaas_sdk__confidential__Confidential_prepare_zether_roll_over_signed_impl(
+        119 => wire__scaas_sdk__confidential__Confidential_prepare_zether_roll_over_signed_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        119 => wire__scaas_sdk__confidential__Confidential_prepare_zether_set_roll_over_mode_impl(
+        120 => wire__scaas_sdk__confidential__Confidential_prepare_zether_set_roll_over_mode_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        120 => wire__scaas_sdk__confidential__Confidential_prepare_zether_shield_impl(
+        121 => wire__scaas_sdk__confidential__Confidential_prepare_zether_shield_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        121 => wire__scaas_sdk__confidential__Confidential_prepare_zether_transfer_impl(
+        122 => wire__scaas_sdk__confidential__Confidential_prepare_zether_transfer_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        122 => wire__scaas_sdk__confidential__Confidential_prepare_zether_transfer_compact_impl(
+        123 => wire__scaas_sdk__confidential__Confidential_prepare_zether_transfer_compact_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        123 => wire__scaas_sdk__confidential__Confidential_prepare_zether_transfer_multi_impl(
+        124 => wire__scaas_sdk__confidential__Confidential_prepare_zether_transfer_multi_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        124 => wire__scaas_sdk__confidential__Confidential_prepare_zether_unshield_impl(
+        125 => wire__scaas_sdk__confidential__Confidential_prepare_zether_unshield_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        125 => wire__scaas_sdk__confidential__Confidential_prepare_zether_unshield_unwrap_impl(
+        126 => wire__scaas_sdk__confidential__Confidential_prepare_zether_unshield_unwrap_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        126 => wire__scaas_sdk__confidential__Confidential_prepare_zether_wrap_shield_impl(
+        127 => wire__scaas_sdk__confidential__Confidential_prepare_zether_wrap_shield_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        127 => wire__scaas_sdk__confidential__Confidential_request_verdict_impl(
+        128 => wire__scaas_sdk__confidential__Confidential_request_verdict_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        128 => wire__scaas_sdk__confidential__Confidential_zether_balance_impl(
+        129 => wire__scaas_sdk__confidential__Confidential_zether_balance_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        129 => wire__scaas_sdk__confidential__Confidential_zether_key_impl(
+        130 => wire__scaas_sdk__confidential__Confidential_zether_key_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        156 => wire__scaas_sdk__dex__Dex_cancel_all_impl(port, ptr, rust_vec_len, data_len),
-        157 => wire__scaas_sdk__dex__Dex_depth_impl(port, ptr, rust_vec_len, data_len),
-        158 => wire__scaas_sdk__dex__Dex_markets_impl(port, ptr, rust_vec_len, data_len),
-        159 => wire__scaas_sdk__dex__Dex_orders_impl(port, ptr, rust_vec_len, data_len),
-        160 => wire__scaas_sdk__dex__Dex_place_impl(port, ptr, rust_vec_len, data_len),
-        161 => {
+        157 => wire__scaas_sdk__dex__Dex_cancel_all_impl(port, ptr, rust_vec_len, data_len),
+        158 => wire__scaas_sdk__dex__Dex_depth_impl(port, ptr, rust_vec_len, data_len),
+        159 => wire__scaas_sdk__dex__Dex_markets_impl(port, ptr, rust_vec_len, data_len),
+        160 => wire__scaas_sdk__dex__Dex_orders_impl(port, ptr, rust_vec_len, data_len),
+        161 => wire__scaas_sdk__dex__Dex_place_impl(port, ptr, rust_vec_len, data_len),
+        162 => {
             wire__scaas_sdk__dex__Dex_prepare_cancel_order_impl(port, ptr, rust_vec_len, data_len)
         }
-        162 => wire__scaas_sdk__dex__Dex_prepare_cancel_wrap_order_impl(
+        163 => wire__scaas_sdk__dex__Dex_prepare_cancel_wrap_order_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        163 => wire__scaas_sdk__dex__Dex_prepare_liquidity_order_impl(
+        164 => wire__scaas_sdk__dex__Dex_prepare_liquidity_order_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        164 => {
+        165 => {
             wire__scaas_sdk__dex__Dex_prepare_trade_order_impl(port, ptr, rust_vec_len, data_len)
         }
-        165 => wire__scaas_sdk__dex__Dex_prepare_wrap_order_impl(port, ptr, rust_vec_len, data_len),
-        166 => wire__scaas_sdk__dex__Dex_sign_order_impl(port, ptr, rust_vec_len, data_len),
-        167 => wire__scaas_sdk__dex__Dex_ticker_impl(port, ptr, rust_vec_len, data_len),
-        168 => wire__scaas_sdk__dex__Dex_trades_impl(port, ptr, rust_vec_len, data_len),
-        169 => wire__scaas_sdk__op__Op_bls_multi_part_impl(port, ptr, rust_vec_len, data_len),
-        170 => wire__scaas_sdk__op__Op_bls_multi_part_ok_impl(port, ptr, rust_vec_len, data_len),
-        171 => wire__scaas_sdk__op__Op_bls_multi_pop_part_impl(port, ptr, rust_vec_len, data_len),
-        172 => {
+        166 => wire__scaas_sdk__dex__Dex_prepare_wrap_order_impl(port, ptr, rust_vec_len, data_len),
+        167 => wire__scaas_sdk__dex__Dex_sign_order_impl(port, ptr, rust_vec_len, data_len),
+        168 => wire__scaas_sdk__dex__Dex_ticker_impl(port, ptr, rust_vec_len, data_len),
+        169 => wire__scaas_sdk__dex__Dex_trades_impl(port, ptr, rust_vec_len, data_len),
+        170 => wire__scaas_sdk__op__Op_bls_multi_part_impl(port, ptr, rust_vec_len, data_len),
+        171 => wire__scaas_sdk__op__Op_bls_multi_part_ok_impl(port, ptr, rust_vec_len, data_len),
+        172 => wire__scaas_sdk__op__Op_bls_multi_pop_part_impl(port, ptr, rust_vec_len, data_len),
+        173 => {
             wire__scaas_sdk__op__Op_bls_multi_pop_part_ok_impl(port, ptr, rust_vec_len, data_len)
         }
-        173 => wire__scaas_sdk__op__Op_hand_off_impl(port, ptr, rust_vec_len, data_len),
-        174 => wire__scaas_sdk__op__Op_import_signed_impl(port, ptr, rust_vec_len, data_len),
-        175 => wire__scaas_sdk__op__Op_member_sign_impl(port, ptr, rust_vec_len, data_len),
-        176 => wire__scaas_sdk__op__Op_quote_impl(port, ptr, rust_vec_len, data_len),
-        177 => {
+        174 => wire__scaas_sdk__op__Op_hand_off_impl(port, ptr, rust_vec_len, data_len),
+        175 => wire__scaas_sdk__op__Op_import_signed_impl(port, ptr, rust_vec_len, data_len),
+        176 => wire__scaas_sdk__op__Op_member_sign_impl(port, ptr, rust_vec_len, data_len),
+        177 => wire__scaas_sdk__op__Op_quote_impl(port, ptr, rust_vec_len, data_len),
+        178 => {
             wire__scaas_sdk__op__Op_quote_register_bls_multi_impl(port, ptr, rust_vec_len, data_len)
         }
-        178 => wire__scaas_sdk__op__Op_quote_with_gas_impl(port, ptr, rust_vec_len, data_len),
-        179 => wire__scaas_sdk__op__Op_register_bls_multi_impl(port, ptr, rust_vec_len, data_len),
-        180 => wire__scaas_sdk__op__Op_resend_impl(port, ptr, rust_vec_len, data_len),
-        181 => wire__scaas_sdk__op__Op_resume_impl(port, ptr, rust_vec_len, data_len),
-        182 => wire__scaas_sdk__op__Op_state_impl(port, ptr, rust_vec_len, data_len),
-        183 => wire__scaas_sdk__op__Op_submit_impl(port, ptr, rust_vec_len, data_len),
-        184 => wire__scaas_sdk__op__Op_submit_bls_multi_impl(port, ptr, rust_vec_len, data_len),
-        201 => wire__crate__api__SdkHandle_state_rev_impl(port, ptr, rust_vec_len, data_len),
-        205 => wire__crate__api__SdkHandle_watch_impl(port, ptr, rust_vec_len, data_len),
-        232 => {
+        179 => wire__scaas_sdk__op__Op_quote_with_gas_impl(port, ptr, rust_vec_len, data_len),
+        180 => wire__scaas_sdk__op__Op_register_bls_multi_impl(port, ptr, rust_vec_len, data_len),
+        181 => wire__scaas_sdk__op__Op_resend_impl(port, ptr, rust_vec_len, data_len),
+        182 => wire__scaas_sdk__op__Op_resume_impl(port, ptr, rust_vec_len, data_len),
+        183 => wire__scaas_sdk__op__Op_state_impl(port, ptr, rust_vec_len, data_len),
+        184 => wire__scaas_sdk__op__Op_submit_impl(port, ptr, rust_vec_len, data_len),
+        185 => wire__scaas_sdk__op__Op_submit_bls_multi_impl(port, ptr, rust_vec_len, data_len),
+        202 => wire__crate__api__SdkHandle_state_rev_impl(port, ptr, rust_vec_len, data_len),
+        206 => wire__crate__api__SdkHandle_watch_impl(port, ptr, rust_vec_len, data_len),
+        233 => {
             wire__scaas_sdk__wallet__SignedOpBlob_from_json_impl(port, ptr, rust_vec_len, data_len)
         }
-        233 => {
+        234 => {
             wire__scaas_sdk__wallet__SignedOpBlob_to_json_impl(port, ptr, rust_vec_len, data_len)
         }
-        234 => wire__scaas_sdk__vault__seeds__Vault_change_passphrase_impl(
+        235 => wire__scaas_sdk__vault__seeds__Vault_change_passphrase_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        235 => wire__scaas_sdk__vault__seeds__Vault_confirm_backup_impl(
+        236 => wire__scaas_sdk__vault__seeds__Vault_confirm_backup_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        236 => wire__scaas_sdk__vault__seeds__Vault_derive_child_impl(
+        237 => wire__scaas_sdk__vault__seeds__Vault_derive_child_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        237 => wire__scaas_sdk__vault__seeds__Vault_derive_from_key_impl(
+        238 => wire__scaas_sdk__vault__seeds__Vault_derive_from_key_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        238 => wire__scaas_sdk__vault__seeds__Vault_derive_from_signature_impl(
+        239 => wire__scaas_sdk__vault__seeds__Vault_derive_from_signature_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        239 => wire__scaas_sdk__vault__seeds__Vault_disable_prf_unlock_impl(
+        240 => wire__scaas_sdk__vault__seeds__Vault_disable_prf_unlock_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        240 => wire__scaas_sdk__vault__seeds__Vault_enable_passkey_unlock_impl(
+        241 => wire__scaas_sdk__vault__seeds__Vault_enable_passkey_unlock_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        241 => wire__scaas_sdk__vault__seeds__Vault_enable_platform_unlock_impl(
+        242 => wire__scaas_sdk__vault__seeds__Vault_enable_platform_unlock_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        242 => {
+        243 => {
             wire__scaas_sdk__vault__seeds__Vault_generate_impl(port, ptr, rust_vec_len, data_len)
         }
-        243 => {
+        244 => {
             wire__scaas_sdk__vault__seeds__Vault_import_key_impl(port, ptr, rust_vec_len, data_len)
         }
-        244 => wire__scaas_sdk__vault__seeds__Vault_import_words_impl(
+        245 => wire__scaas_sdk__vault__seeds__Vault_import_words_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        245 => wire__scaas_sdk__vault__seeds__Vault_key_derivation_typed_data_impl(
+        246 => wire__scaas_sdk__vault__seeds__Vault_key_derivation_typed_data_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        246 => wire__scaas_sdk__vault__seeds__Vault_keystore_rollback_impl(
+        247 => wire__scaas_sdk__vault__seeds__Vault_keystore_rollback_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        247 => wire__scaas_sdk__vault__seeds__Vault_lock_impl(port, ptr, rust_vec_len, data_len),
-        248 => {
+        248 => wire__scaas_sdk__vault__seeds__Vault_lock_impl(port, ptr, rust_vec_len, data_len),
+        249 => {
             wire__scaas_sdk__vault__seeds__Vault_lock_all_impl(port, ptr, rust_vec_len, data_len)
         }
-        249 => wire__scaas_sdk__vault__seeds__Vault_memory_protection_impl(
+        250 => wire__scaas_sdk__vault__seeds__Vault_memory_protection_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        250 => {
+        251 => {
             wire__scaas_sdk__vault__seeds__Vault_open_hidden_impl(port, ptr, rust_vec_len, data_len)
         }
-        251 => wire__scaas_sdk__vault__seeds__Vault_remove_impl(port, ptr, rust_vec_len, data_len),
-        252 => wire__scaas_sdk__vault__seeds__Vault_rename_impl(port, ptr, rust_vec_len, data_len),
-        253 => wire__scaas_sdk__vault__seeds__Vault_seed_impl(port, ptr, rust_vec_len, data_len),
-        254 => wire__scaas_sdk__vault__seeds__Vault_seeds_impl(port, ptr, rust_vec_len, data_len),
-        255 => wire__scaas_sdk__vault__seeds__Vault_signature_from_compact_impl(
+        252 => wire__scaas_sdk__vault__seeds__Vault_remove_impl(port, ptr, rust_vec_len, data_len),
+        253 => wire__scaas_sdk__vault__seeds__Vault_rename_impl(port, ptr, rust_vec_len, data_len),
+        254 => wire__scaas_sdk__vault__seeds__Vault_seed_impl(port, ptr, rust_vec_len, data_len),
+        255 => wire__scaas_sdk__vault__seeds__Vault_seeds_impl(port, ptr, rust_vec_len, data_len),
+        256 => wire__scaas_sdk__vault__seeds__Vault_signature_from_compact_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        256 => wire__scaas_sdk__vault__seeds__Vault_unlock_impl(port, ptr, rust_vec_len, data_len),
-        257 => wire__scaas_sdk__vault__seeds__Vault_word_in_list_impl(
+        257 => wire__scaas_sdk__vault__seeds__Vault_unlock_impl(port, ptr, rust_vec_len, data_len),
+        258 => wire__scaas_sdk__vault__seeds__Vault_word_in_list_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        258 => wire__scaas_sdk__wallet__Wallet_balances_impl(port, ptr, rust_vec_len, data_len),
-        259 => wire__scaas_sdk__wallet__Wallet_history_impl(port, ptr, rust_vec_len, data_len),
-        260 => {
+        259 => wire__scaas_sdk__wallet__Wallet_balances_impl(port, ptr, rust_vec_len, data_len),
+        260 => wire__scaas_sdk__wallet__Wallet_history_impl(port, ptr, rust_vec_len, data_len),
+        261 => {
             wire__scaas_sdk__wallet__Wallet_native_address_impl(port, ptr, rust_vec_len, data_len)
         }
-        261 => wire__scaas_sdk__wallet__Wallet_prepare_add_reserve_impl(
+        262 => wire__scaas_sdk__wallet__Wallet_prepare_add_reserve_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        262 => wire__scaas_sdk__wallet__Wallet_prepare_burn_impl(port, ptr, rust_vec_len, data_len),
-        263 => wire__scaas_sdk__wallet__Wallet_prepare_cancel_nonce_impl(
+        263 => wire__scaas_sdk__wallet__Wallet_prepare_burn_impl(port, ptr, rust_vec_len, data_len),
+        264 => wire__scaas_sdk__wallet__Wallet_prepare_cancel_nonce_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        264 => wire__scaas_sdk__wallet__Wallet_prepare_delegate_revoke_impl(
+        265 => wire__scaas_sdk__wallet__Wallet_prepare_delegate_revoke_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        265 => {
+        266 => {
             wire__scaas_sdk__wallet__Wallet_prepare_execute_impl(port, ptr, rust_vec_len, data_len)
         }
-        266 => wire__scaas_sdk__wallet__Wallet_prepare_native_send_impl(
+        267 => wire__scaas_sdk__wallet__Wallet_prepare_native_send_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        267 => wire__scaas_sdk__wallet__Wallet_prepare_pay_impl(port, ptr, rust_vec_len, data_len),
-        268 => wire__scaas_sdk__wallet__Wallet_prepare_pay_under_mandate_impl(
+        268 => wire__scaas_sdk__wallet__Wallet_prepare_pay_impl(port, ptr, rust_vec_len, data_len),
+        269 => wire__scaas_sdk__wallet__Wallet_prepare_pay_under_mandate_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        269 => wire__scaas_sdk__wallet__Wallet_prepare_pay_with_tax_impl(
+        270 => wire__scaas_sdk__wallet__Wallet_prepare_pay_with_tax_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        270 => wire__scaas_sdk__wallet__Wallet_prepare_payee_fee_impl(
+        271 => wire__scaas_sdk__wallet__Wallet_prepare_payee_fee_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        271 => wire__scaas_sdk__wallet__Wallet_prepare_relay_fee_impl(
+        272 => wire__scaas_sdk__wallet__Wallet_prepare_relay_fee_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        272 => wire__scaas_sdk__wallet__Wallet_prepare_revoke_mandate_impl(
+        273 => wire__scaas_sdk__wallet__Wallet_prepare_revoke_mandate_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        273 => wire__scaas_sdk__wallet__Wallet_prepare_set_mandate_impl(
+        274 => wire__scaas_sdk__wallet__Wallet_prepare_set_mandate_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        274 => wire__scaas_sdk__wallet__Wallet_prepare_set_payee_impl(
+        275 => wire__scaas_sdk__wallet__Wallet_prepare_set_payee_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        275 => {
+        276 => {
             wire__scaas_sdk__wallet__Wallet_prepare_transfer_impl(port, ptr, rust_vec_len, data_len)
         }
-        276 => {
+        277 => {
             wire__scaas_sdk__wallet__Wallet_prepare_unwrap_impl(port, ptr, rust_vec_len, data_len)
         }
-        277 => wire__scaas_sdk__wallet__Wallet_prepare_unwrap_leg_impl(
+        278 => wire__scaas_sdk__wallet__Wallet_prepare_unwrap_leg_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        278 => wire__scaas_sdk__wallet__Wallet_prepare_unwrap_to_ua_impl(
+        279 => wire__scaas_sdk__wallet__Wallet_prepare_unwrap_to_ua_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        279 => wire__scaas_sdk__wallet__Wallet_prepare_wrap_impl(port, ptr, rust_vec_len, data_len),
-        280 => {
+        280 => wire__scaas_sdk__wallet__Wallet_prepare_wrap_impl(port, ptr, rust_vec_len, data_len),
+        281 => {
             wire__scaas_sdk__wallet__Wallet_prepare_wrap_leg_impl(port, ptr, rust_vec_len, data_len)
         }
-        281 => wire__scaas_sdk__wallet__Wallet_prepare_wrap_to_ua_impl(
+        282 => wire__scaas_sdk__wallet__Wallet_prepare_wrap_to_ua_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        282 => wire__scaas_sdk__wallet__Wallet_submit_native_send_impl(
+        283 => wire__scaas_sdk__wallet__Wallet_submit_native_send_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        283 => wire__scaas_sdk__wallet__Wallet_tokens_impl(port, ptr, rust_vec_len, data_len),
-        284 => {
+        284 => wire__scaas_sdk__wallet__Wallet_tokens_impl(port, ptr, rust_vec_len, data_len),
+        285 => {
             wire__scaas_sdk__vault__keystore__accounts_json_impl(port, ptr, rust_vec_len, data_len)
         }
-        293 => wire__crate__api__events_next_impl(port, ptr, rust_vec_len, data_len),
-        295 => wire__scaas_sdk__config__gas_line_default_impl(port, ptr, rust_vec_len, data_len),
-        296 => wire__scaas_sdk__config__gas_rows_default_impl(port, ptr, rust_vec_len, data_len),
-        297 => wire__scaas_sdk__config__gas_table_parse_impl(port, ptr, rust_vec_len, data_len),
-        298 => wire__scaas_sdk__vault__keystore__is_uuid4_impl(port, ptr, rust_vec_len, data_len),
-        301 => wire__scaas_sdk__vault__keystore__label_ok_impl(port, ptr, rust_vec_len, data_len),
-        302 => wire__scaas_sdk__config__limits_default_impl(port, ptr, rust_vec_len, data_len),
-        304 => {
+        294 => wire__crate__api__events_next_impl(port, ptr, rust_vec_len, data_len),
+        296 => wire__scaas_sdk__config__gas_line_default_impl(port, ptr, rust_vec_len, data_len),
+        297 => wire__scaas_sdk__config__gas_rows_default_impl(port, ptr, rust_vec_len, data_len),
+        298 => wire__scaas_sdk__config__gas_table_parse_impl(port, ptr, rust_vec_len, data_len),
+        299 => wire__scaas_sdk__vault__keystore__is_uuid4_impl(port, ptr, rust_vec_len, data_len),
+        302 => wire__scaas_sdk__vault__keystore__label_ok_impl(port, ptr, rust_vec_len, data_len),
+        303 => wire__scaas_sdk__config__limits_default_impl(port, ptr, rust_vec_len, data_len),
+        305 => {
             wire__scaas_sdk__account__msig__msig_structure_impl(port, ptr, rust_vec_len, data_len)
         }
-        305 => wire__scaas_sdk__account__msig__msig_structure_args_default_impl(
+        306 => wire__scaas_sdk__account__msig__msig_structure_args_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        306 => wire__scaas_sdk__account__msig__msig_structure_args_ua_impl(
+        307 => wire__scaas_sdk__account__msig__msig_structure_args_ua_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        307 => {
+        308 => {
             wire__scaas_sdk__vault__keystore__new_label_ok_impl(port, ptr, rust_vec_len, data_len)
         }
-        308 => {
+        309 => {
             wire__scaas_sdk__events__op_state_is_terminal_impl(port, ptr, rust_vec_len, data_len)
         }
-        312 => {
+        313 => {
             wire__scaas_sdk__vault__store__presence_default_impl(port, ptr, rust_vec_len, data_len)
         }
-        313 => {
+        314 => {
             wire__scaas_sdk__account__register_attrs_default_impl(port, ptr, rust_vec_len, data_len)
         }
-        314 => wire__scaas_sdk__account__registration_blob_from_json_impl(
+        315 => wire__scaas_sdk__account__registration_blob_from_json_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        315 => wire__scaas_sdk__account__registration_blob_to_json_impl(
+        316 => wire__scaas_sdk__account__registration_blob_to_json_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        316 => wire__scaas_sdk__account__registration_state_default_impl(
+        317 => wire__scaas_sdk__account__registration_state_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        318 => wire__scaas_sdk__vault__store__rev_of_impl(port, ptr, rust_vec_len, data_len),
-        319 => wire__crate__api__sdk_open_impl(port, ptr, rust_vec_len, data_len),
-        323 => wire__scaas_sdk__account__smart__smart_account_address_impl(
+        319 => wire__scaas_sdk__vault__store__rev_of_impl(port, ptr, rust_vec_len, data_len),
+        320 => wire__crate__api__sdk_open_impl(port, ptr, rust_vec_len, data_len),
+        324 => wire__scaas_sdk__account__smart__smart_account_address_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        324 => wire__scaas_sdk__vault__store__store_policy_default_impl(
+        325 => wire__scaas_sdk__vault__store__store_policy_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        325 => wire__scaas_sdk__account__smart__subject_key_args_secp256k1_impl(
+        326 => wire__scaas_sdk__account__smart__subject_key_args_secp256k1_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        326 => wire__scaas_sdk__line__ua_line_key_target_impl(port, ptr, rust_vec_len, data_len),
-        327 => wire__scaas_sdk__line__ua_line_pqz_target_impl(port, ptr, rust_vec_len, data_len),
+        327 => wire__scaas_sdk__line__ua_line_key_target_impl(port, ptr, rust_vec_len, data_len),
+        328 => wire__scaas_sdk__line__ua_line_pqz_target_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -27876,348 +27951,348 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        130 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_derivation_passphrase_impl(
+        131 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_derivation_passphrase_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        131 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_index_impl(
+        132 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_index_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        132 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_key_impl(
+        133 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_key_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        133 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_label_impl(
+        134 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_label_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        134 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_network_impl(
+        135 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_network_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        135 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_vault_passphrase_impl(
+        136 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_get_vault_passphrase_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        136 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_derivation_passphrase_impl(
+        137 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_derivation_passphrase_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        137 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_index_impl(
+        138 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_index_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        138 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_key_impl(
+        139 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_key_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        139 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_label_impl(
+        140 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_label_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        140 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_network_impl(
+        141 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_network_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        141 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_vault_passphrase_impl(
+        142 => wire__scaas_sdk__vault__DeriveFromKey_auto_accessor_set_vault_passphrase_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        142 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_account_impl(
+        143 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_account_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        143 => {
+        144 => {
             wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_derivation_passphrase_impl(
                 ptr,
                 rust_vec_len,
                 data_len,
             )
         }
-        144 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_label_impl(
+        145 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_label_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        145 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_set_impl(
+        146 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_set_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        146 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_signature1_impl(
+        147 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_signature1_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        147 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_signature2_impl(
+        148 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_signature2_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        148 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_vault_passphrase_impl(
+        149 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_get_vault_passphrase_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        149 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_account_impl(
+        150 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_account_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        150 => {
+        151 => {
             wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_derivation_passphrase_impl(
                 ptr,
                 rust_vec_len,
                 data_len,
             )
         }
-        151 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_label_impl(
+        152 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_label_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        152 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_set_impl(
+        153 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_set_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        153 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_signature1_impl(
+        154 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_signature1_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        154 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_signature2_impl(
+        155 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_signature2_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        155 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_vault_passphrase_impl(
+        156 => wire__scaas_sdk__vault__DeriveFromSignature_auto_accessor_set_vault_passphrase_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        185 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_chain_impl(
+        186 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_chain_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        186 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_op_impl(
+        187 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_op_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        187 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_proof_impl(
+        188 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_proof_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        188 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_statement_impl(
+        189 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_statement_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        189 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_token_impl(
+        190 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_token_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        190 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_chain_impl(
+        191 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_chain_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        191 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_op_impl(
+        192 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_op_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        192 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_proof_impl(
+        193 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_proof_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        193 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_statement_impl(
+        194 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_statement_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        194 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_token_impl(
+        195 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_token_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        195 => wire__crate__api__SdkHandle_account_impl(ptr, rust_vec_len, data_len),
-        196 => wire__crate__api__SdkHandle_admin_impl(ptr, rust_vec_len, data_len),
-        197 => wire__crate__api__SdkHandle_confidential_impl(ptr, rust_vec_len, data_len),
-        198 => wire__crate__api__SdkHandle_dex_impl(ptr, rust_vec_len, data_len),
-        199 => wire__crate__api__SdkHandle_limits_impl(ptr, rust_vec_len, data_len),
-        200 => wire__crate__api__SdkHandle_op_impl(ptr, rust_vec_len, data_len),
-        202 => wire__crate__api__SdkHandle_subscribe_impl(ptr, rust_vec_len, data_len),
-        203 => wire__crate__api__SdkHandle_vault_impl(ptr, rust_vec_len, data_len),
-        204 => wire__crate__api__SdkHandle_wallet_impl(ptr, rust_vec_len, data_len),
-        206 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_chain_uid_impl(
+        196 => wire__crate__api__SdkHandle_account_impl(ptr, rust_vec_len, data_len),
+        197 => wire__crate__api__SdkHandle_admin_impl(ptr, rust_vec_len, data_len),
+        198 => wire__crate__api__SdkHandle_confidential_impl(ptr, rust_vec_len, data_len),
+        199 => wire__crate__api__SdkHandle_dex_impl(ptr, rust_vec_len, data_len),
+        200 => wire__crate__api__SdkHandle_limits_impl(ptr, rust_vec_len, data_len),
+        201 => wire__crate__api__SdkHandle_op_impl(ptr, rust_vec_len, data_len),
+        203 => wire__crate__api__SdkHandle_subscribe_impl(ptr, rust_vec_len, data_len),
+        204 => wire__crate__api__SdkHandle_vault_impl(ptr, rust_vec_len, data_len),
+        205 => wire__crate__api__SdkHandle_wallet_impl(ptr, rust_vec_len, data_len),
+        207 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_chain_uid_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        207 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_contract_impl(
+        208 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_contract_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        208 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_entry_impl(
+        209 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_entry_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        209 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_extra_impl(
+        210 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_extra_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        210 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_family_impl(
+        211 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_family_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        211 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_ids_impl(
+        212 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_ids_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        212 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_kind_impl(
+        213 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_kind_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        213 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_message_impl(
+        214 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_message_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        214 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_name_impl(
+        215 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_name_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        215 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signature_impl(
+        216 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signature_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        216 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signer_impl(
+        217 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signer_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        217 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signer_kind_impl(
+        218 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signer_kind_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        218 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_v_impl(
+        219 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_v_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        219 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_chain_uid_impl(
+        220 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_chain_uid_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        220 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_contract_impl(
+        221 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_contract_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        221 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_entry_impl(
+        222 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_entry_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        222 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_extra_impl(
+        223 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_extra_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        223 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_family_impl(
+        224 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_family_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        224 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_ids_impl(
+        225 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_ids_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        225 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_kind_impl(
+        226 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_kind_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        226 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_message_impl(
+        227 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_message_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        227 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_name_impl(
+        228 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_name_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        228 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signature_impl(
+        229 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signature_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        229 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signer_impl(
+        230 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signer_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        230 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signer_kind_impl(
+        231 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signer_kind_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        231 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_v_impl(
+        232 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_v_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        285 => wire__crate__api__api_version_impl(ptr, rust_vec_len, data_len),
-        286 => wire__crate__api__backup_challenge_impl(ptr, rust_vec_len, data_len),
-        287 => wire__crate__api__backup_reveal_impl(ptr, rust_vec_len, data_len),
-        288 => wire__crate__api__backup_verify_impl(ptr, rust_vec_len, data_len),
-        289 => wire__crate__api__endpoint_auth_bearer_impl(ptr, rust_vec_len, data_len),
-        290 => wire__crate__api__endpoint_auth_header_impl(ptr, rust_vec_len, data_len),
-        291 => wire__crate__api__endpoint_auth_hmac_impl(ptr, rust_vec_len, data_len),
-        292 => wire__crate__api__error_code_impl(ptr, rust_vec_len, data_len),
-        294 => wire__crate__api__features_impl(ptr, rust_vec_len, data_len),
-        299 => wire__crate__api__json_parse_impl(ptr, rust_vec_len, data_len),
-        300 => wire__crate__api__json_text_impl(ptr, rust_vec_len, data_len),
-        303 => wire__crate__api__limits_default_impl(ptr, rust_vec_len, data_len),
-        309 => wire__crate__api__pqz_verdict_request_impl(ptr, rust_vec_len, data_len),
-        310 => wire__crate__api__prepared_order_view_impl(ptr, rust_vec_len, data_len),
-        311 => wire__crate__api__prepared_view_impl(ptr, rust_vec_len, data_len),
-        317 => wire__crate__api__registry_write_view_impl(ptr, rust_vec_len, data_len),
-        320 => wire__crate__api__secret_id_impl(ptr, rust_vec_len, data_len),
-        321 => wire__crate__api__secret_len_impl(ptr, rust_vec_len, data_len),
-        322 => wire__crate__api__secret_new_impl(ptr, rust_vec_len, data_len),
+        286 => wire__crate__api__api_version_impl(ptr, rust_vec_len, data_len),
+        287 => wire__crate__api__backup_challenge_impl(ptr, rust_vec_len, data_len),
+        288 => wire__crate__api__backup_reveal_impl(ptr, rust_vec_len, data_len),
+        289 => wire__crate__api__backup_verify_impl(ptr, rust_vec_len, data_len),
+        290 => wire__crate__api__endpoint_auth_bearer_impl(ptr, rust_vec_len, data_len),
+        291 => wire__crate__api__endpoint_auth_header_impl(ptr, rust_vec_len, data_len),
+        292 => wire__crate__api__endpoint_auth_hmac_impl(ptr, rust_vec_len, data_len),
+        293 => wire__crate__api__error_code_impl(ptr, rust_vec_len, data_len),
+        295 => wire__crate__api__features_impl(ptr, rust_vec_len, data_len),
+        300 => wire__crate__api__json_parse_impl(ptr, rust_vec_len, data_len),
+        301 => wire__crate__api__json_text_impl(ptr, rust_vec_len, data_len),
+        304 => wire__crate__api__limits_default_impl(ptr, rust_vec_len, data_len),
+        310 => wire__crate__api__pqz_verdict_request_impl(ptr, rust_vec_len, data_len),
+        311 => wire__crate__api__prepared_order_view_impl(ptr, rust_vec_len, data_len),
+        312 => wire__crate__api__prepared_view_impl(ptr, rust_vec_len, data_len),
+        318 => wire__crate__api__registry_write_view_impl(ptr, rust_vec_len, data_len),
+        321 => wire__crate__api__secret_id_impl(ptr, rust_vec_len, data_len),
+        322 => wire__crate__api__secret_len_impl(ptr, rust_vec_len, data_len),
+        323 => wire__crate__api__secret_new_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -29108,6 +29183,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::ChainProfil
             self.0.family_params.into_into_dart().into_dart(),
             self.0.l1_fee.into_into_dart().into_dart(),
             self.0.disabled_kinds.into_into_dart().into_dart(),
+            self.0.pinned_reads.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -35548,6 +35624,7 @@ impl SseEncode for scaas_sdk::config::ChainProfile {
         <Option<scaas_sdk::config::FamilyParams>>::sse_encode(self.family_params, serializer);
         <Option<scaas_sdk::config::L1Fee>>::sse_encode(self.l1_fee, serializer);
         <Vec<String>>::sse_encode(self.disabled_kinds, serializer);
+        <bool>::sse_encode(self.pinned_reads, serializer);
     }
 }
 

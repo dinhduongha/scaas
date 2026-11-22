@@ -191,6 +191,7 @@ fn profile(url: String, genesis: String) -> ChainProfile {
         wrappers: vec![],
         tokens: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }
@@ -301,7 +302,7 @@ async fn typed_digests_in_both_domains() {
     let key = pqv_key(&d, &seed, 0);
     let digest = |p: AppPath, t: String| {
         let (a, key) = (a.clone(), key.clone());
-        async move { a.sign_pqvault_record(key, p, t).await.unwrap().digest }
+        async move { a.sign_pqvault_record(key, p, None, t).await.unwrap().digest }
     };
     let all = rows(&d);
     assert_eq!(all.len(), 23);
@@ -369,14 +370,14 @@ async fn signing_paths_by_the_pqv_account() {
             assert_eq!(r["signer"], who);
             let t = typed(&d, r["struct"].as_str().unwrap(), &r["record"], &dom);
             let sg = a
-                .sign_pqvault_record(pqv_key(&d, &seed, index), p.clone(), t.clone())
+                .sign_pqvault_record(pqv_key(&d, &seed, index), p.clone(), None, t.clone())
                 .await
                 .unwrap();
             assert_eq!(sg.digest, s(&r["typed"]));
             assert!(sg.key_data.is_empty());
             // randomized: a second signature differs, from the SDK's and from the committed one
             let again = a
-                .sign_pqvault_record(pqv_key(&d, &seed, index), p.clone(), t.clone())
+                .sign_pqvault_record(pqv_key(&d, &seed, index), p.clone(), None, t.clone())
                 .await
                 .unwrap();
             assert_ne!(again.signature, sg.signature);
@@ -648,7 +649,11 @@ async fn pqvault_path_refusals() {
     };
     let sign_v = |p: AppPath, t: String| {
         let (a, key) = (a.clone(), key.clone());
-        async move { a.sign_pqvault_record(key, p, t).await.map(|s| s.digest) }
+        async move {
+            a.sign_pqvault_record(key, p, None, t)
+                .await
+                .map(|s| s.digest)
+        }
     };
     for name in ["index0.item-0", "personal1.item-0"] {
         let (mode, r) = named(&d, name);
@@ -736,8 +741,81 @@ async fn pqvault_path_refusals() {
     let (_, r) = named(&d, "index0.item-0");
     let t = typed(&d, "PqVaultItem", &r["record"], &ds_v(&d));
     let e = other
-        .sign_pqvault_record(pqv_key(&d, &seed, 0), AppPath::Portable, t)
+        .sign_pqvault_record(pqv_key(&d, &seed, 0), AppPath::Portable, None, t)
         .await
         .unwrap_err();
     assert_eq!(code(e), "AppDomainRefused");
+}
+
+/// Controller call 2026-11-22 (CLI-PQV-15, explicit parameters): the registry an `msig` signer's records are read on is named,
+/// never searched for. On the portable path an `msig` without `records` is `Argument` (no read made), a single key with one
+/// `Argument` (nothing reads it); on the chain-bound path `records` naming another chain is `Argument`; each beside its control
+/// (the single key's portable signature without `records`, its chain-bound one with the path's own chain).
+#[tokio::test(flavor = "multi_thread")]
+async fn pqvault_records_chain_is_explicit() {
+    use scaas_sdk::op::MsigSlot;
+    let _one = ONE.lock().await;
+    let d = doc();
+    let (a, seed, chain) = on_fake(&d).await;
+    register_all(&chain, &d);
+    let key = pqv_key(&d, &seed, 0);
+    let (mode, r) = named(&d, "index0.item-0");
+    let (p, dom) = by_mode(&d, mode);
+    assert!(matches!(p, AppPath::Portable));
+    let t = typed(&d, "PqVaultItem", &r["record"], &dom);
+    let msig = KeyRef::Msig {
+        ua: format!("0x{}", "77".repeat(32)),
+        slots: vec![MsigSlot::Member {
+            index: 0,
+            key: key.clone(),
+        }],
+    };
+    let sign = |k: KeyRef, p: AppPath, rec: Option<&str>| {
+        let (a, t) = (a.clone(), t.clone());
+        let rec = rec.map(str::to_string);
+        async move { a.sign_pqvault_record(k, p, rec, t).await.map(|s| s.digest) }
+    };
+    assert_eq!(
+        sign(msig.clone(), AppPath::Portable, None)
+            .await
+            .err()
+            .map(code),
+        Some("Argument")
+    );
+    assert_eq!(
+        sign(key.clone(), AppPath::Portable, Some("local"))
+            .await
+            .err()
+            .map(code),
+        Some("Argument")
+    );
+    assert_eq!(
+        sign(key.clone(), AppPath::Portable, None).await.unwrap(),
+        s(&r["typed"]),
+        "the control"
+    );
+    let (mode1, r1) = named(&d, "personal1.item-0");
+    let (pb, dom1) = by_mode(&d, mode1);
+    let t1 = typed(&d, "PqVaultItem", &r1["record"], &dom1);
+    let sign1 = |rec: Option<&str>| {
+        let (a, t1, pb, key) = (a.clone(), t1.clone(), pb.clone(), key.clone());
+        let rec = rec.map(str::to_string);
+        async move {
+            a.sign_pqvault_record(key, pb, rec, t1)
+                .await
+                .map(|s| s.digest)
+        }
+    };
+    assert_eq!(
+        sign1(Some("elsewhere")).await.err().map(code),
+        Some("Argument")
+    );
+    assert_eq!(
+        sign1(Some("local")).await.unwrap(),
+        s(&r1["typed"]),
+        "the control: the path's own chain"
+    );
+    assert_eq!(sign1(None).await.unwrap(), s(&r1["typed"]));
+    // the portable msig with its records named reaches the registry read (an msig the fake registry does not hold)
+    assert!(sign(msig, AppPath::Portable, Some("local")).await.is_err());
 }

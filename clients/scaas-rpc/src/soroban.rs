@@ -329,18 +329,33 @@ pub fn tx_data(b: &[u8]) -> Option<TxData> {
     (r.at == b.len() && d.resource_fee >= 0).then_some(d)
 }
 
-/// The first 44 bytes of a `SorobanAuthorizationEntry` XDR `b` of Address credentials, after a bounded read of the whole entry:
-/// `SOROBAN_CREDENTIALS_ADDRESS ‖ ScAddress` (the signer). `None` for source-account credentials or any other form.
-pub fn auth_signer(b: &[u8]) -> Option<&[u8]> {
+/// A `SorobanAuthorizationEntry`'s credentials, read by [`auth_credential`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthCredential<'a> {
+    /// Address credentials: the entry's first 44 bytes, `SOROBAN_CREDENTIALS_ADDRESS ‖ ScAddress` (the signer)
+    Address(&'a [u8]),
+    /// the transaction's source account's own authorization (owner 2026-11-22: accepted when the source is the op's subject)
+    SourceAccount,
+}
+
+/// The credentials of the `SorobanAuthorizationEntry` XDR `b`, after a bounded read of the whole entry (nothing after it);
+/// `None` for any other form.
+pub fn auth_credential(b: &[u8]) -> Option<AuthCredential<'_>> {
     if b.len() > XDR_MAX {
         return None;
     }
     let mut r = Xdr { b, at: 0 };
-    (r.u32()? == 1).then_some(())?;
-    r.sc_address()?;
-    let signer_end = r.at;
-    r.take(12)?; // nonce, signature expiration ledger
-    r.sc_val(XDR_DEPTH)?;
+    let cred = match r.u32()? {
+        0 => None,
+        1 => {
+            r.sc_address()?;
+            let signer_end = r.at;
+            r.take(12)?; // nonce, signature expiration ledger
+            r.sc_val(XDR_DEPTH)?;
+            Some(signer_end)
+        }
+        _ => return None,
+    };
     fn invocation(r: &mut Xdr<'_>, depth: u32) -> Option<()> {
         let depth = depth.checked_sub(1)?;
         (r.u32()? == 0).then_some(())?; // a contract function
@@ -350,11 +365,26 @@ pub fn auth_signer(b: &[u8]) -> Option<&[u8]> {
         (0..r.count()?).try_for_each(|_| invocation(r, depth))
     }
     invocation(&mut r, XDR_DEPTH)?;
-    (r.at == b.len()).then(|| b.get(..signer_end)).flatten()
+    if r.at != b.len() {
+        return None;
+    }
+    Some(match cred {
+        None => AuthCredential::SourceAccount,
+        Some(end) => AuthCredential::Address(b.get(..end)?),
+    })
+}
+
+/// The signer of an Address-credentials entry ([`auth_credential`]'s `Address`); `None` for source-account credentials or any
+/// other form.
+pub fn auth_signer(b: &[u8]) -> Option<&[u8]> {
+    match auth_credential(b)? {
+        AuthCredential::Address(s) => Some(s),
+        AuthCredential::SourceAccount => None,
+    }
 }
 
 /// A simulation's answer, read (spec §27.5 (d)): the host refused the call (its error, capped), it needs archived entries restored,
-/// or its transaction data, its minimum resource fee and the auth entries it recorded (raw XDR, each read by [`auth_signer`]).
+/// or its transaction data, its minimum resource fee and the auth entries it recorded (raw XDR, each read by [`auth_credential`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Simulation {
     Refused {
@@ -484,7 +514,7 @@ impl Soroban {
                     .map(|x| {
                         x.as_str()
                             .and_then(b64d)
-                            .filter(|b| auth_signer(b).is_some())
+                            .filter(|b| auth_credential(b).is_some())
                     })
                     .collect::<Option<_>>()
                     .ok_or_else(|| Self::bad(i, "an auth entry out of its form"))?,

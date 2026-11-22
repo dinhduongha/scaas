@@ -1,9 +1,9 @@
-# t11 mutants at commit 523479bb7 (name | outcome | test)
+# t11 mutants (name | outcome | commit | test | first failure line)
 skip the token chainUid check | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet token_chain_uid_mismatch_is_refused
 read balances at latest per token | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet balances_at_one_block
 show an unlisted name unmarked | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet unlisted_name_is_sanitised
 an unlisted name not stripped | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet unlisted_name_is_sanitised
 the gateway's chain_uid not compared | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::gateway_chain_uid_mismatch_is_refused
-only type 4 refused | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet native_send_refuses_type4
+only type 4 refused | killed | 56dc7e864 | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet native_send_types | panicked at tests/wallet.rs:326:9:
 the index's tokens shown listed | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet factory_index_token_off_list_is_unlisted
-7 mutants, 7 killed, 0 survived, 0 not loaded
+7 mutants, 7 killed, 0 survived, 0 not loaded, 0 other failure

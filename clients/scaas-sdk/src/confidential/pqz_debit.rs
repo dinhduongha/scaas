@@ -41,6 +41,7 @@ const ZERO20: &str = "0x0000000000000000000000000000000000000000";
 /// `UAPqzTransferSingle` / `UAPqzTransferSingleCompact`: `amount` from the holder's account (the UA key `signer`, PQZ key
 /// version `key_version`) to `to_ua`, a registered PQZ holder; the proof valid until block `valid_until_block`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct PqzTransfer {
     pub signer: KeyRef,
@@ -56,6 +57,7 @@ pub struct PqzTransfer {
 
 /// One leg of an op 7: a registered PQZ holder and its amount (`"0"`: a decoy).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct PqzLeg {
     pub to_ua: String,
@@ -65,6 +67,7 @@ pub struct PqzLeg {
 /// `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
 /// fee (decimal; at least the token's `minDecoyFee`, the contract's check).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct PqzTransferMulti {
     pub signer: KeyRef,
@@ -80,6 +83,7 @@ pub struct PqzTransferMulti {
 
 /// `UAPqzUnshield`: `amount` out of the holder's account to `recipient` (a 32-byte id: a padded address or a registered UA).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct PqzUnshield {
     pub signer: KeyRef,
@@ -95,6 +99,7 @@ pub struct PqzUnshield {
 
 /// `UAPqzUnshieldUnwrap` (`WRAPPED_PQZ`): `amount` out, unwrapped by leg `underlying` to `recipient`, at least `min_out`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct PqzUnshieldUnwrap {
     pub signer: KeyRef,

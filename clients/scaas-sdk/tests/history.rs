@@ -94,6 +94,7 @@ async fn open(url: &str, n: usize, store: Arc<dyn SecureStore>, limits: Limits) 
             })
             .collect(),
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };

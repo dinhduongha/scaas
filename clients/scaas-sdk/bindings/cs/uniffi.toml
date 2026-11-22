@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# uniffi-bindgen-cs (plan T20c): a variant's field named as a sibling variant collides in C# (the variant is a nested record type
+# of the same name), so such a field takes the suffix `Value`, as the generator names a field that repeats its own variant
+# (`AccountRow.Watch.watch` is `WatchValue`). Keyed by the item's module path, then `Enum.Variant.field` (uniffi_bindgen's rename table).
+[bindings.csharp.rename."scaas_sdk::vault::keystore"]
+"AccountRow.Key.ua" = "ua_value"
+
+[bindings.csharp.rename."scaas_sdk::op"]
+"KeyRef.Msig.ua" = "ua_value"
+
+[bindings.csharp.rename."scaas_sdk::binding"]
+"SlotKey.Msig.ua" = "ua_value"
+"MsigSlotValue.Signed.member" = "member_value"

@@ -1,0 +1,31 @@
+package uniffi.scaas_sdk;
+
+
+public enum FfiConverterSequenceTypePqzBalance implements FfiConverterRustBuffer<java.util.List<PqzBalance>> {
+  INSTANCE;
+
+  @Override
+  public java.util.List<PqzBalance> read(java.nio.ByteBuffer buf) {
+    int len = buf.getInt();
+    return java.util.stream.IntStream.range(0, len).mapToObj(_i -> FfiConverterTypePqzBalance.INSTANCE.read(buf)).toList();
+  }
+
+  @Override
+  public long allocationSize(java.util.List<PqzBalance> value) {
+    long sizeForLength = 4L;
+    long sizeForItems = value.stream().mapToLong(inner -> FfiConverterTypePqzBalance.INSTANCE.allocationSize(inner)).sum();
+    return sizeForLength + sizeForItems;
+  }
+
+  @Override
+  public void write(java.util.List<PqzBalance> value, java.nio.ByteBuffer buf) {
+    buf.putInt(value.size());
+    value.forEach(inner -> FfiConverterTypePqzBalance.INSTANCE.write(inner, buf));
+  }
+}
+
+
+
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */

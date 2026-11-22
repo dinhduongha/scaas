@@ -22,6 +22,7 @@ pub use crate::wallet::handoff::{SignedOpBlob, HANDOFF_MAX};
 /// What the payee expects of an imported operation: its chain, its own ids (`0x` + 64 hex: a pay or transfer must name one as
 /// `to`), and the native key that will submit it (`SubmitPath::SelfRelay`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct ImportExpect {
     pub chain: String,

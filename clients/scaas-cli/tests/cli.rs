@@ -63,7 +63,8 @@ fn commands() -> Value {
 }
 
 /// The SDK's public calls from its source: `Type::fn` of each `pub fn` in an `impl Type` block, `<file>::fn` of a free one, and
-/// the macro-made entries of `surface::ENTRY_POINTS`; the test feature's entries (`vectors`) and `frb` excepted.
+/// the macro-made entries of `surface::ENTRY_POINTS`; the test feature's entries (`vectors`) and the binding adapters (`frb`,
+/// `binding`, `binding_list`, `sync_cpp`, `wasm`) excepted.
 fn sdk_calls() -> BTreeSet<String> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../scaas-sdk/src");
     let mut files = vec![root.clone()];
@@ -78,6 +79,9 @@ fn sdk_calls() -> BTreeSet<String> {
             || name.ends_with("_tests.rs")
             || name == "tests.rs"
             || name == "frb.rs"
+            // the other bindings' adapters (spec §16.1, plan T20b-T20h): the bindings' own surface over the SDK's calls
+            || ["binding.rs", "binding_list.rs", "sync_cpp.rs", "wasm.rs"].contains(&name.as_str())
+            || p.parent().is_some_and(|d| d.ends_with("wasm"))
         {
             continue;
         }

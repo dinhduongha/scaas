@@ -3,10 +3,12 @@
 `scaas-sdk` is the one Rust crate through which an app (scaas-app's `scaas` build, `scaas-tui`, the CLI `scaas`, an integrator's
 service) reaches every SCaaS feature: seeds and keys, Universal Accounts, tokens and payments, Zether and PQZ, the DEX, governance,
 and the generic surface that app cores above it use (`pqchat-core`, `pqvault-core`, a third party's). Every signature comes from `ua-rs` ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01)), every chain read and send goes through
-`scaas-rpc` ([CLI-RPC-01](scaas-rpc.md#CLI-RPC-01)), and the bindings are generated from its one API. Status: **SPECIFIED**, partly
-built: `vault`, `account` (rows, restore, marks, registration), `wallet` (tokens, balances, native sends, the token and mandate-wallet operations)
-and the operations core in `clients/scaas-sdk` on branch `sdk-code` (plan tasks T0–T12 and the T13 fix round of the closing review);
-the Dart binding (`flutter_rust_bridge`, the whole public surface generated, plan T20) is BUILT, the other bindings are not (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed
+`scaas-rpc` ([CLI-RPC-01](scaas-rpc.md#CLI-RPC-01)), and the bindings are generated from its one API. Status: **BUILT** in
+`clients/scaas-sdk` and `clients/scaas-cli` (plan T0–T24, T38, T40, T41.evm, T41.soroban, T41.arweave; each rule below states its
+own status and what stays PLANNED): `vault`, `account`, `wallet`, `confidential`, `dex`, `admin`, `app_core`, the EVM and Soroban
+operations with self-relay, the non-EVM families' reads, Arweave files, the CLI and the Dart binding (`flutter_rust_bridge`, plan
+T20). PLANNED: the other bindings (plan T20b–T20h), the other families' operations, self-relay and native sends (after the freeze,
+owner 2026-11-22), the native DOT and BTC sends (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed
 by Fable on 2026-11-17 with every finding applied; plan `docs/superpowers/plans/2026-11-17-scaas-sdk.md`). UNAUDITED.
 
 **Contents**
@@ -26,7 +28,8 @@ by Fable on 2026-11-17 with every finding applied; plan `docs/superpowers/plans/
 ## 1. Scope
 
 <a id="CLI-SDK-01"></a>**CLI-SDK-01** — **One crate is the only API apps call; it signs through `ua-rs`, talks through `scaas-rpc`,
-and holds no cryptography of its own** (owner 2026-11-11, 2026-11-17; SPECIFIED). Modules: `vault` (several seeds), `account` (UA,
+and holds no cryptography of its own** (owner 2026-11-11, 2026-11-17; BUILT: plan T1, T21, T41.evm step 0, T42,
+`tests/feature_tree.rs`, `evm_feature.rs`). Modules: `vault` (several seeds), `account` (UA,
 key references, `msig`, passkey and `SmartKeyAccount`, recovery), `wallet` (balances, tokens, history, the token and mandate-wallet
 `mtx*` entries, native keys), `confidential` (Zether and PQZ provers, verdicts, disclosure), `dex`, `admin`, and `app_core`, the
 generic surface for app cores above it ([CLI-SDK-19](#CLI-SDK-19)); each module and each guarded entry a compile-time feature,
@@ -39,7 +42,8 @@ this crate (the library) and its `wallet` module; the end-user app is scaas-app.
 ## 2. Secrets and references
 
 <a id="CLI-SDK-02"></a>**CLI-SDK-02** — **Secrets never leave the SDK; apps hold references** (owner 2026-11-11, 2026-11-17;
-SPECIFIED). An app names keys by plain records with string ids (a seed id and a kind, account and index; a network and index; a
+BUILT: plan T2a, T4, T9, T20, `tests/vault.rs`, `tests/config.rs` `credentials_never_in_debug`, the Dart `binding_test.dart`;
+UNAUDITED). An app names keys by plain records with string ids (a seed id and a kind, account and index; a network and index; a
 passkey's credential and key data; a watch-only id), never by key objects; each resolves inside the SDK to a `ua-rs` handle of an
 unlocked seed (`WalletLocked` otherwise, `KeyRevoked` after a lock). A hidden set has its own session id, so no reference names both
 sets. A secret crosses the API only as an explicit input (a vault, BIP-39 or derivation passphrase, an imported mnemonic or private
@@ -56,8 +60,10 @@ a raw key. No error, event, log line or `Debug` output carries a secret, an inpu
 
 <a id="CLI-SDK-03"></a>**CLI-SDK-03** — **The keystore holds several seeds, each as clientkeys / `ua-rs` vault v2 objects byte for
 byte, in one authenticated `scaas.keystore` container** (owner 2026-11-11, 2026-11-17; container and integrity controller calls;
-SPECIFIED; vault v2 and container v 2 BUILT, owner 2026-11-19, T13b ruling 3: every vault's AAD binds its seed's id, the index MAC
-covers the vault texts, v 1 refused by name, no migration). The container is one item `{format: "scaas.keystore", v: 2, rev, seeds:
+BUILT: plan T2a, T2b, T2c, T4, `tests/vault.rs`, `tests/keystore_vectors.rs`, `src/vault/tests.rs`; UNAUDITED; vault v2 and
+container v 2 BUILT, owner 2026-11-19, T13b ruling 3: every vault's AAD binds its seed's id, the index MAC
+covers the vault texts, v 1 refused by name, no migration; PLANNED: the `AccountUnverified` refusal, which no call returns yet,
+while the rows' unverified mark is built). The container is one item `{format: "scaas.keystore", v: 2, rev, seeds:
 [...]}`. Each seed entry has a UUID `id`, the
 user's `label` (1 to 64 scalar values, NFC, unique), `words`, the main set's BIP-32 master `fingerprint`, `origin`, `class` (`full` or
 `classical-rooted`), `warnings` (`short_seed`, `imported_key`), `backup` (`pending` or `verified`), `vaults` (label → the exact vault
@@ -77,7 +83,8 @@ ciphertext and public fields only, and a failed write keeps the old item (`Vault
 (`smartcontracts/vectors/keystore/`); scaas-app's default build, which has no `ua-rs`, reads and writes the same container.
 
 <a id="CLI-SDK-04"></a>**CLI-SDK-04** — **Seeds are made with 24 words; shorter imports carry a warning; passphrases are the
-user's** (owner 2026-11-11; the child index and hidden-set rules controller calls; SPECIFIED). Every seed the SDK makes is 24 words
+user's** (owner 2026-11-11; the child index and hidden-set rules controller calls; BUILT: plan T4, T5, T23, `tests/vault.rs`,
+`children.rs`, `confidential.rs` `short_seed_zether_key_is_the_provers`; UNAUDITED). Every seed the SDK makes is 24 words
 from 32 bytes of the OS generator inside `ua-rs`, written with `backup: pending` until the three-word check passes. BIP-85 children
 (`m/83696968'/39'/0'/24'/i'`, 24 words only) come from the parent's main set at its high-water mark `bip85Next`, kept in the parent's
 sealed manifest and never lowered, so a removed child's words never return. An imported phrase of 12 to 24 valid English words is
@@ -103,7 +110,7 @@ empty-passphrase HKDF salt SHA-256 of its label and the numbers as 4-byte big-en
 `smartcontracts/vectors/keys/roots.json`); both calls are in the feature `classical-roots` (bit 24, off by default; BUILT, UNAUDITED).
 
 <a id="CLI-SDK-06"></a>**CLI-SDK-06** — **Seeds unlock and lock one by one; changes are re-sealed under the same data key;
-biometrics only gate** (SPECIFIED). A seed unlocks with its vault passphrase, its passkey's PRF output or a platform secret (the
+biometrics only gate** (BUILT: plan T4, T7, `tests/vault.rs`, `passkey.rs`; UNAUDITED). A seed unlocks with its vault passphrase, its passkey's PRF output or a platform secret (the
 HMAC of a Keychain or Android Keystore key under a biometric access policy), the last two through vault v1's `prf` envelope. At unlock
 no public key of the unlock credential exists, so user verification is enforced by the authenticator (separate secrets with and
 without it) and by the AEAD (a wrong output is `VaultOpen`); an answer without an output is `AuthenticatorRefused` and the passphrase
@@ -123,8 +130,9 @@ is not an export and the words are never shown again.
 ## 4. Accounts
 
 <a id="CLI-SDK-07"></a>**CLI-SDK-07** — **Every account names its seed; keys are derived as clientkeys derives them; passkeys sit
-beside seeds** (owner 2026-11-11; the index rule a controller call; SPECIFIED). A UA key is `(seed, kind, account, index)`, a native
-key `(seed, network, index)` (plus Bitcoin's change chain and Polkadot's path and SS58 prefix once `ua-rs` has them), derived byte for
+beside seeds** (owner 2026-11-11; the index rule a controller call; BUILT: plan T9, T13, T13b, T19, `tests/account.rs`,
+`account_ops.rs`, the parts named PLANNED below excepted; UNAUDITED). A UA key is `(seed, kind, account, index)`, a native
+key `(seed, network, index)` (plus Bitcoin's change chain and Polkadot's path and SS58 prefix, BUILT in plan T19), derived byte for
 byte as clientkeys `seed.js` and the vectors fix ([signers-clientkeys §9](signers-clientkeys.md#9-derivation-and-role-keys)). A passkey
 (`webauthn-p256`) or a secure-element P-256 key is not derived: it is held by the platform and signs through the app's
 `Authenticator`, the SDK building every message and verifying every answer ([CLI-UAL-07](ua-libraries.md#CLI-UAL-07)). An imported
@@ -138,13 +146,14 @@ registry, collecting a `registerMsig` PoP slot from another device, and the loca
 checks them; PLANNED). PLANNED (review 2026-11-20, F26): SDK calls for the registry entries `setPqzKey` (a new PQZ key version),
 `setPqzScopedKey`, `storePqzScopedPop`, `registerMuSig2` and `registerFrost`; their rows exist in `ua-rs`
 (`wallet/entries/registry.rs`). PLANNED (F2): registry records read from a generation-2 registry, which answers a UA
-registered in its predecessor from there; it waits for the cross-generation rule of branch `multi-gen-verify`. **Sponsored registration** (owner 2026-11-17, "OK, all four points as proposed"): a payment to an unregistered derived UA is `ReceiverUnregistered`; the receiver's app makes its portable registration blob (the `register` arguments with the PoP, which binds no caller, and the KEM record when set), the sender's app checks it (the UA equals the intended receiver and its key data, the kind is enabled on the chain, the PoP verifies locally, the KEM record is present and verifies when `kemPkHash` is set) before anything is sent, submits it paying the gas, adds the KEM key by `setKemKey`, and pays only after the registration lands. BUILT (plan T13b; `clients/scaas-sdk/src/account/sponsor.rs`, clientkeys `registrationBlob` and `smartcontracts/vectors/ua/registration_blobs.json`, `tests/account_ops.rs`, the `sdk-e2e` sponsored registration then pay): `registration_blob` and `prepare_submit_registration` for the single-key entries (`register`, `registerWebAuthn`); a blob is the typed `RegistrationBlob` (`from_json` / `to_json`, the named-field JSON text), at most 768 KiB, the largest registration any parameter set allows with headroom (spec §7.1 gives the derivation), depth 4, so a registration carrying a PQZ key's proof fits one and is split by the sender as §7's; `prepare_submit_registration` takes the payer and returns `RegistryWrite` values; `wallet`'s `prepare_pay` answers `ReceiverUnregistered` for a derived UA the profile's registry does not hold, and for any derived UA on a profile naming no registry (fail closed); a registry write whose payer transaction fails to sign stays submittable (owner 2026-11-19, the four rulings recorded under CLI-SDK-30 in decisions.md).
+registered in its predecessor from there; it waits for the cross-generation rule of branch `multi-gen-verify`. On PqVault's dedicated path BUILT (controller call 2026-11-22, [CLI-PQV-15](../decisions.md#CLI-PQV-15) (8), UNAUDITED): a native member of an `msig` signs `UAAuth` in the domain of the generation that holds the `msig` (`holderOf`), a native signer in the profile's registry's own, each at its `generation()`; `verify_pqvault_record` reads the same; tested on a two-generation anvil (`clients/pqvault-core/tests/e2e.rs` `pqvault_records_on_a_two_generation_line`). The generic paths keep generation 1 only. **Sponsored registration** (owner 2026-11-17, "OK, all four points as proposed"): a payment to an unregistered derived UA is `ReceiverUnregistered`; the receiver's app makes its portable registration blob (the `register` arguments with the PoP, which binds no caller, and the KEM record when set), the sender's app checks it (the UA equals the intended receiver and its key data, the kind is enabled on the chain, the PoP verifies locally, the KEM record is present and verifies when `kemPkHash` is set) before anything is sent, submits it paying the gas, adds the KEM key by `setKemKey`, and pays only after the registration lands. BUILT (plan T13b; `clients/scaas-sdk/src/account/sponsor.rs`, clientkeys `registrationBlob` and `smartcontracts/vectors/ua/registration_blobs.json`, `tests/account_ops.rs`, the `sdk-e2e` sponsored registration then pay): `registration_blob` and `prepare_submit_registration` for the single-key entries (`register`, `registerWebAuthn`); a blob is the typed `RegistrationBlob` (`from_json` / `to_json`, the named-field JSON text), at most 768 KiB, the largest registration any parameter set allows with headroom (spec §7.1 gives the derivation), depth 4, so a registration carrying a PQZ key's proof fits one and is split by the sender as §7's; `prepare_submit_registration` takes the payer and returns `RegistryWrite` values; `wallet`'s `prepare_pay` answers `ReceiverUnregistered` for a derived UA the profile's registry does not hold, and for any derived UA on a profile naming no registry (fail closed); a registry write whose payer transaction fails to sign stays submittable (owner 2026-11-19, the four rulings recorded under CLI-SDK-30 in decisions.md).
 
 ## 5. Operations
 
 <a id="CLI-SDK-08"></a>**CLI-SDK-08** — **One entry point per signed struct and domain; the user reviews every field before it is
 signed; calls are decoded** (explicit parameters, every `mtx*` relayable, no EIP-7702: owner rules; the rest controller calls;
-SPECIFIED). Each `(struct, domain kind)` pair of `smartcontracts/vectors/typed/typed_ops.json` (and the transfer on ids, `PayMeta`
+BUILT: plan T10, T12, T13, T17, T18, `tests/completeness.rs`, `wallet_ops.rs`, `src/op/tests.rs`; PLANNED (review 2026-11-20, F20):
+`sign_rescue_vault`, the two auditor consents and `cancel_all` sign without a prepared value and its review). Each `(struct, domain kind)` pair of `smartcontracts/vectors/typed/typed_ops.json` (and the transfer on ids, `PayMeta`
 pays, trade and liquidity orders, registry writes) has exactly one SDK entry point whose request carries the struct's named fields; an
 entry point's pairs lie in one module and one feature (`PqzAuth`, attached by the PQZ facade, is the one exclusion). A call prepares
 first and returns an opaque prepared value kept by the SDK (a value rebuilt outside it is `PreparedUnknown`) whose review lists every
@@ -158,7 +167,9 @@ allow-list; an undecoded call exists only behind its own feature and marker, fla
 ([CLI-SGN-40](signers-clientkeys.md#CLI-SGN-40); `TxTypeRefused`). The review lists every token or market the operation touches, with its address and its listed or unlisted mark (owner 2026-11-17, "OK, all four points as proposed").
 
 <a id="CLI-SDK-09"></a>**CLI-SDK-09** — **An operation is quoted and confirmed, written ahead, then sent to a gateway that takes it
-or relayed by the holder** (SPECIFIED). Paths: a scaas-node gateway, for the entries the gateway takes
+or relayed by the holder** (BUILT on EVM: plan T10, T10b, T12, T13, T38, T41.evm, `src/op/tests.rs`, `tests/wallet_ops.rs`,
+`handoff.rs`, `l1_fee.rs`, the `sdk-e2e` tests; on Soroban: plan T41.soroban, `tests/soroban_ops.rs`; the other families after the
+freeze, owner 2026-11-22). Paths: a scaas-node gateway, for the entries the gateway takes
 ([NODE-GW-03](../node/gateway.md#NODE-GW-03): a registered token's `mtx*` entries, the transfer on ids, the DEX routes, and UA
 registration once served), with the same body to the gateways chosen ([CLI-RPC-08](scaas-rpc.md#CLI-RPC-08)); or self-relay, for any
 entry, as a transaction (type 2 where the chain has a base fee, else 0) from the holder's own native account, which pays the gas, with the
@@ -212,9 +223,19 @@ was included (`gasUsed` 28,600,373), and a call whose regular gas has no bound s
 limit; a PQZ debit (`mtxConfidentialTransferSingle`, quoted 46,445,076 with a regular bound of
 13,733,076) was included (`gasUsed` 27,049,355) after two ML-DSA-65 + PQZ-key registrations sent in two steps each (the
 one-transaction form quoted above half the block and above 2^24 regular).
+**The group limit on a chain capping the regular gas at 2^24** (owner 2026-11-22, "keep it as it is", decisions CLI-SDK-32's
+Change of that date; BUILT, `tests/e2e.rs` `e2e_bls_multi_group_limit_on_a_node`): `register_bls_multi` counts the whole raise
+of the gas limit above the table's quote (to the node's estimate with the margin) as regular gas, so on such a chain a group
+of at most **45 members** registers in one transaction (an unweighted group, threshold n / 2 + 1, measured on the local
+Nethermind copy, `runs/2026-11-20-m20-nethermind-summary.txt`: 45 landed in every run, 46 on the edge, landed in one run and
+refused in another as the node's estimate moved with the chain's state, 47, 48 and 64 refused). A larger group is refused
+`GasAboveTxCap` before anything is signed or sent, and the app splits it into smaller groups (a group is one UA; there is no
+two-step `registerBlsMulti`). The contract's cap stays 64 ([CTR-UA-52](../contracts/accounts.md#CTR-UA-52)); a chain without
+that per-transaction cap holds the registration to half its block gas limit and `Limits::max_gas` only, up to the 64.
 
 <a id="CLI-SDK-18"></a>**CLI-SDK-18** — **An operation ends only on a chain fact** (follows [CLI-RPC-09](scaas-rpc.md#CLI-RPC-09);
-SPECIFIED). Terminal, from a decisive read at the profile's final block only: `Landed` (the executed event of the operation's digest,
+BUILT: plan T10, T11b, `src/op/follow.rs`, `src/op/tests.rs`, `tests/wallet.rs`, `soroban_ops.rs`; PLANNED (review 2026-11-20,
+F12): DEX order and cancel rows ending without their event). Terminal, from a decisive read at the profile's final block only: `Landed` (the executed event of the operation's digest,
 `UAMetaTransactionExecuted` on tokens, mandate wallets and the governance router, `MetaTransactionExecuted` on `SmartKeyAccount`; for a
 registry write, its record present), `Consumed` (the lane nonce spent without that event), `Expired` (`validUntil` passed with the nonce
 unspent), and for an EVM native send `Reverted` (final and reverted; owner 2026-11-18, ruling 4). Everything else is `InFlight` with its detail: queued or sent, the gateways' merged state (never terminal, every node `dead`
@@ -225,7 +246,8 @@ After a restart every operation resumes from the chain.
 ## 6. Confidential tokens
 
 <a id="CLI-SDK-10"></a>**CLI-SDK-10** — **The SDK is a reading layer under the seven requirements; a decryption failure never reaches
-a source; a verdict comes before a send** (ARCH-POS-13 and ARCH-POS-15 as stated; SPECIFIED). Zether and PQZ operations run their proofs
+a source; a verdict comes before a send** (ARCH-POS-13 and ARCH-POS-15 as stated; BUILT: plan T15, T16, as the two paragraphs
+below state, with their PLANNED parts; UNAUDITED). Zether and PQZ operations run their proofs
 inside the `ua-rs` facades, whose requests carry no key. Every read that feeds a decryption is marked so in `scaas-rpc`
 ([CLI-RPC-06](scaas-rpc.md#CLI-RPC-06)) and meets [CLI-UAL-31](ua-libraries.md#CLI-UAL-31) to [CLI-UAL-37](ua-libraries.md#CLI-UAL-37):
 the profile's sources; the pinned chain pair; one block final by the profile's finality rule, by number and hash; storage words and code
@@ -268,13 +290,15 @@ is `PqzOpeningUnsupported`. A native-id verifier is checked (P-T16-3, `verdict_n
 versions (P-T16-5, `pqz_balance_all_versions`). PLANNED (P-T16-7): an `OFFCHAIN` holder's
 debits, once `ua-rs`'s `PqzKeyHandle` can prove a debit with its scoped secret (today it opens one and proves its own
 registration only; until then such a holder is `LegKeyMismatch`), and `PqzRollOver` with the opening-token support it belongs to.
-The PQZ e2e waits for a local Nethermind runner with the precompile (the SDK round-end matrix).
+The PQZ debit e2e (`tests/e2e.rs` `e2e_pqz_debit_on_a_node`, ignored by default) ran on a local Nethermind copy with the
+precompile (review 2026-11-20, M20, `clients/scaas-sdk/runs/2026-11-20-m20-nethermind-summary.txt`); anvil has no precompile.
 
 ## 7. App cores above the SDK
 
 <a id="CLI-SDK-14"></a>**CLI-SDK-14** — **The SDK has no `chat` module: `pqchat-core` is an app core above the SDK and takes
 the app's live Matrix client itself** (owner 2026-11-17: one Matrix stack below both chat paths, then "OK, reverse pqchat-core too"; PLANNED until
-`pqchat-core` exists). The app's one Matrix
+`pqchat-core` exists; the SDK's side BUILT: no `chat` module and no Matrix SDK below it, `tests/app_core.rs`
+`no_app_core_below_the_sdk`, the `PqChat` record and key entries of plan T21 and pqchat-core T1). The app's one Matrix
 client (one matrix-rust-sdk stack, one login, one sync loop) lives in the app's one library and is `pqchat-core`'s to use; the
 SDK starts no Matrix client, links no Matrix SDK, holds no Matrix store and requires no particular runtime. The attachment and
 its release before logout, envelopes kept while a seed is locked, and the runtime shared with the Matrix client are
@@ -285,7 +309,8 @@ needs the HMAC, explicit-destroy, storage-root and ephemeral-wrap calls the spec
 spec confirms.
 
 <a id="CLI-SDK-19"></a>**CLI-SDK-19** — **App cores sit above the SDK: they depend on it, it names none of them, and an app links
-the SDK and its app cores in one Rust library** (owner 2026-11-17: "agreed to reverse the dependency", then "OK, reverse pqchat-core too"; SPECIFIED).
+the SDK and its app cores in one Rust library** (owner 2026-11-17: "agreed to reverse the dependency", then "OK, reverse pqchat-core too"; BUILT on the SDK's side: plan T21, features `app-core`
+and `pqchat-records`, `tests/app_core.rs` `no_app_core_below_the_sdk`; `app-core-rust` is scaas-app's).
 An app core (`pqchat-core`, `pqvault-core`, a third party's) depends on `scaas-sdk` with the feature `app-core` and on nothing
 below it that touches a key or a node; the SDK names no app core and holds no app logic, while the record types of SCaaS
 contracts (`PqChat`'s among them, behind the feature `pqchat-records`) are named, typed SDK entries as every SCaaS
@@ -297,7 +322,9 @@ library is `app-core-rust` (scaas-app's contract section 12), with the features 
 <a id="CLI-SDK-20"></a>**CLI-SDK-20** — **The `app_core` surface gives an app core account handles, app record signing on
 both paths, record verification, key handles, random bytes, reads and relayed submission, under two conditions: secrets
 stay below the SDK, and nothing SCaaS is signed blind for an app; if either cannot be met for an app core, the task stops
-and the owner decides** (coordinator conditions, controller calls, owner may override; SPECIFIED). (1) Key handles only: a
+and the owner decides** (coordinator conditions, controller calls, owner may override; BUILT: plan T21, `src/app_core.rs`,
+`tests/app_core.rs`, the `sdk-e2e` `e2e_app_records_on_anvil`; PLANNED: `seal_to` / `open_sealed`, an `msig` or native signer of
+the generic app records and of `PqChat` records (PqVault's `msig` signing BUILT, below, CLI-PQV-15); UNAUDITED). (1) Key handles only: a
 KEM-unwrapped key, a derived key, an Argon2id output stay in `ua-rs` behind handles of one usage each (`Derive`, `Data`,
 `KeyWrap`, refused for any other use) without `Clone`, `Debug` or a byte accessor, scoped to their app core and released
 by `destroy` or at the seed's lock; wrap, unwrap, HKDF, HMAC, Argon2id, AEAD and key sealing (under a key-wrap constant no
@@ -341,14 +368,23 @@ the verification); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](u
 PqVault's records are signed and verified by `sign_pqvault_record` and `verify_pqvault_record` (owner 2026-11-22,
 [CLI-PQV-13](../decisions.md#CLI-PQV-13); BUILT, UNAUDITED): thin calls of `ua-rs`'s `wallet::pqvault` with the generic
 calls' profile checks, accepting PqVault's domains `DS_V` / `DS_B` and its seven structs only; `sign_app_record` and
-`verify_app_record` refuse every PqVault record (its domain name, its app id, its purpose `P_V`).
+`verify_app_record` refuse every PqVault record (its domain name, its app id, its purpose `P_V`). `sign_pqvault_record`
+signs as an `msig` too (`KeyRef::Msig`; owner 2026-11-22, [CLI-PQV-15](../decisions.md#CLI-PQV-15); BUILT, UNAUDITED):
+the `msig`'s records read as the generic `msig` path reads them, local key slots only, `ua-rs`'s `pqvault::sign_msig`;
+`AppSigned.members` carries the slots; an `msig` signer's records chain is the explicit `records` argument (required on the
+portable path). One key handle twice in one app-core call is `Argument`, before any lock (CLI-SDK-33's Change of
+2026-11-22). `AppCore::generate_passphrase` gives 6 BIP-39 words drawn in `ua-rs`; the generic
+KEM key rotation is `Account::prepare_set_kem_key` (`setKemKey` at a version ≥ 1, checked by `ua-rs`'s `check_kem_record`
+first). Same entry: BUILT, UNAUDITED.
 
 <a id="CLI-SDK-21"></a>**CLI-SDK-21** — **`seal_for_arweave`, `upload_file`, `fetch_file` and `open_file` put an app core's
 file on Arweave and read it back; the upload key signs only the item `ua-rs` built; the client keeps the signed bytes until
 the item is settled; the free tier carries the smallest bucket, the operator payer the rest, and the client never holds an
 operator credential** (owner 2026-11-21, [ARCH-POS-19](../decisions.md#ARCH-POS-19) Q4 (`ar://`) and Q5 (operator payer, free
 tier, no credential in the client); the calls, the bucket split, settlement and the re-post schedule controller calls of
-[ARCH-POS-20](../decisions.md#ARCH-POS-20), owner: no; SPECIFIED, nothing built; design in the
+[ARCH-POS-20](../decisions.md#ARCH-POS-20), owner: no; BUILT in the SDK, as the "As built" line below states, its tests
+against fake bundlers, gateways and payer; the node's payer ([NODE-SPN-05](../node/sponsorship.md#NODE-SPN-05)) SPECIFIED, nothing
+built; UNAUDITED; design in the
 [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part D). Beside the file seal calls of `pqchat-core`'s O9 (b):
 `seal_for_arweave(app, file) -> ArweaveFile {url, ct_sha256, sha256, size, key, item}` runs in one `ua-rs` call: a fresh file key
 handle, the frame and the object of [CLI-UAL-65](ua-libraries.md#CLI-UAL-65), `ctSha256` computed there, the upload key derived
@@ -392,7 +428,7 @@ app's clock.
 
 ## 8. Runtime, events, errors
 
-<a id="CLI-SDK-11"></a>**CLI-SDK-11** — **The SDK is async on tokio and reports by subscription** (SPECIFIED). The API is `async`;
+<a id="CLI-SDK-11"></a>**CLI-SDK-11** — **The SDK is async on tokio and reports by subscription** (BUILT: plan T1, T14, `tests/history.rs`). The API is `async`;
 the SDK adopts the app's tokio runtime or starts its own for a binding, and every exported async call runs its body on that runtime, so a
 generator that polls from a foreign executor never runs I/O outside a reactor. Scrypt, Argon2id, proofs and slow key generation run off
 the async workers, bounded (one at a time by default). A dropped call means: a read is abandoned, a store write completes or leaves the
@@ -407,7 +443,8 @@ on the first page; `watch` takes only an account a keystore row names (a hidden 
 cursor names it), reads at most `max_watch` (account, chain, token) triples per poll in turn, and keeps each triple's cursor in the
 SDK's state; `StateChanged` and `state_rev` are built as stated.
 
-<a id="CLI-SDK-13"></a>**CLI-SDK-13** — **Errors are named, stable codes; the layers below keep their names** (SPECIFIED). An error
+<a id="CLI-SDK-13"></a>**CLI-SDK-13** — **Errors are named, stable codes; the layers below keep their names** (BUILT: plan T1, `src/error.rs`,
+`tests/config.rs` `error_codes_are_names`). An error
 answers `code()`, the variant's name, appended and never reused. `ua-rs`'s and `scaas-rpc`'s codes pass through by their own names (a
 scaas-node refusal keeps its node `code`, [CLI-RPC-10](scaas-rpc.md#CLI-RPC-10)); `ua-rs`'s `Argument` is named per call where
 scaas-app's contract has a name; no code name has two meanings across the layers. A name scaas-app's contract also uses means the same
@@ -430,8 +467,9 @@ warning (`short_seed`, `imported_key`) comes beside a success, never as an error
 ## 9. Bindings
 
 <a id="CLI-SDK-12"></a>**CLI-SDK-12** — **Bindings are generated from the SDK's one API; an app links one Rust library** (owner
-2026-11-11; generators and the C point controller calls; SPECIFIED; the Dart binding BUILT: `clients/scaas-sdk/bindings/dart`, generated
-by `clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh` with its drift check, plan T20, decisions CLI-SDK-30). The public Rust API is the binding surface: module objects
+2026-11-11; generators and the C point controller calls; BUILT for Dart: `clients/scaas-sdk/bindings/dart`, generated
+by `clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh` with its drift check, plan T20, decisions CLI-SDK-30; the sync C++ surface BUILT: `clients/scaas-sdk/bindings/cpp`, plan T20b; the C# binding BUILT over the async API, its spike having shown `uniffi-bindgen-cs` carrying async: `clients/scaas-sdk/bindings/cs`, plan T20c; the Python binding BUILT: `clients/scaas-sdk/bindings/python`, plan T20d; the Kotlin binding BUILT: `clients/scaas-sdk/bindings/kotlin`, plan T20e; the Swift binding BUILT: `clients/scaas-sdk/bindings/swift`, plan T20f; the JS / TS binding BUILT over wasm-bindgen: `clients/scaas-sdk/bindings/js`, plan T20g; the Java binding BUILT over the async API: `clients/scaas-sdk/bindings/java`, plan T20e2; the Go binding BUILT over the async API: `clients/scaas-sdk/bindings/go`, plan T20h; each language switched on and off in
+`clients/scaas-sdk/bindings/langs`, decisions CLI-SDK-33 (102)). The public Rust API is the binding surface: module objects
 shared by reference, owned strings, byte vectors, integers, records and enums, string ids, no fixed-size arrays, lifetimes or generics,
 secrets only as `SecretBytes`, every async call on the SDK's runtime. Generators: `flutter_rust_bridge` 2 for Dart and Flutter (the
 two platform interfaces as one generated record of async closures); official UniFFI for Python, Kotlin and Swift over the async API;
@@ -452,7 +490,8 @@ are for clients that use the signer without the SDK ([the wallet surface](ua-lib
 
 ## 10. Chain profiles and native chains
 
-<a id="CLI-SDK-15"></a>**CLI-SDK-15** — **Chain profiles are the app's pinned data; the chain is asked, never assumed** (SPECIFIED).
+<a id="CLI-SDK-15"></a>**CLI-SDK-15** — **Chain profiles are the app's pinned data; the chain is asked, never assumed** (BUILT: plan T1,
+T11, T24, T40, `tests/config.rs`, `wallet.rs`, `evm_profiles.rs`).
 A profile names its chain key (`<chain>-mainnet`, `<chain>-testnet`, `scaas-testnet`), family, chain id, `chain_uid`
 ([NET-ALL-24](../networks/README.md#NET-ALL-24)), the RPC node list and the gateways with a credential per endpoint where one is
 needed ([CLI-RPC-02](scaas-rpc.md#CLI-RPC-02); an end-user app uses none, and no credential is ever stored in the keystore or the SDK's
@@ -465,7 +504,7 @@ bounded and stripped of control and direction-override characters. Fees, gas lim
 profile's caps; a gas price of 0 is a value like any other; no block limit is configured.
 
 <a id="CLI-SDK-16"></a>**CLI-SDK-16** — **EVM keys sign only built transactions; other native chains sign through one guarded entry**
-(owner 2026-11-17; SPECIFIED). EVM native sends (`evm`, `hedera_ecdsa`) are transactions of type 0, 1 or 2 built and signed in `ua-rs`
+(owner 2026-11-17; BUILT: plan T11, T11b, T19, `tests/wallet.rs`, `src/wallet/raw_tests.rs`; UNAUDITED). EVM native sends (`evm`, `hedera_ecdsa`) are transactions of type 0, 1 or 2 built and signed in `ua-rs`
 (3 and 4 refused; 0 by default where the chain has no base fee; owner 2026-11-18, ruling 3), quoted and capped, a delegated sender's
 quote carrying the delegation mark (ruling 5); no EVM key signs a raw digest. For another chain an app's own encoder builds the transaction and the SDK signs it through
 one entry that exists only behind its own feature and marker and is absent from the default generated surface. The entry, not
@@ -477,12 +516,13 @@ SCaaS identity and whose signed value has its SCaaS payload's form, kept off the
 transactions and protected no payload); a bare 32-byte digest only for the Bitcoin sighash. All refusals are `RawDigestRefused`. The preimage is built in the app's
 process from the transaction the user reviewed, decoded. **Residual:** a Bitcoin sighash is opaque to
 `ua-rs`, and a Bitcoin key's secret also controls an unfunded EVM address; the defence is the caller's obligation. The Bitcoin, NEAR and
-Polkadot networks join when `ua-rs` has them (PLANNED).
+Polkadot keys and addresses are BUILT (plan T19, feature `native-networks`); their native sends are PLANNED (NEAR and Bitcoin after
+the freeze, DOT deferred; owner 2026-11-22).
 
 ## 11. The CLI
 
 <a id="CLI-SDK-17"></a>**CLI-SDK-17** — **The CLI `scaas` is a thin client of the SDK** (BUILT: `clients/scaas-cli`, tests
-`clients/scaas-cli/tests/cli.rs`; the means are the T22 controller calls in decisions.md, CLI-SDK-17). One subcommand per SDK call, named
+`clients/scaas-cli/tests/cli.rs`, `tests/e2e.rs`; the means are the T22 controller calls in decisions.md, CLI-SDK-17). One subcommand per SDK call, named
 flags, JSON or a table; it shows the review and the quote and asks before submitting. Passphrases, words and keys come from the
 terminal without echo or from a file descriptor, never from the command line or the environment; nothing secret is printed except a
 new seed's one reveal. It shares its data directory with the TUI and the app under the keystore's lock, holds no logic of its own and

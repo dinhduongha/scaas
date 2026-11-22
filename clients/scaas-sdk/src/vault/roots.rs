@@ -14,25 +14,36 @@ use std::sync::{Arc, Mutex};
 /// for, its two signatures of [`Vault::key_derivation_typed_data`] (65 bytes each; a 64-byte EIP-2098 one goes through
 /// [`Vault::signature_from_compact`] first), the derivation passphrase (≥ 10 code points), the new seed's label and vault
 /// passphrase.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeriveFromSignature {
     pub label: String,
     /// `0x` and 40 hex digits, any case
     pub account: String,
     pub set: u32,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
     pub signature1: Arc<SecretBytes>,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
     pub signature2: Arc<SecretBytes>,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
     pub derivation_passphrase: Arc<SecretBytes>,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
     pub vault_passphrase: Arc<SecretBytes>,
 }
 
 /// `vault.derive_from_key`'s request (root (d)): a 32-byte key of `network` (`evm` only: `Argument` otherwise), the derivation
 /// passphrase (empty, or ≥ 10 code points), the seed-set number `index`, the new seed's label and vault passphrase.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeriveFromKey {
     pub label: String,
     pub network: String,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
     pub key: Arc<SecretBytes>,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
     pub derivation_passphrase: Arc<SecretBytes>,
     pub index: u32,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
     pub vault_passphrase: Arc<SecretBytes>,
 }
 

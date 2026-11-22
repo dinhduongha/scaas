@@ -14,14 +14,17 @@ use std::sync::{Arc, PoisonError};
 
 /// How a seed opens (spec §6.10). `Passkey` and `Platform` go through the seed's PRF envelope (plan T7).
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum Unlock {
-    Passphrase(Arc<SecretBytes>),
+    Passphrase(#[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))] Arc<SecretBytes>),
     Passkey,
     Platform,
 }
 
 /// A hidden set: its own session id, used in every reference to it; never written.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct SessionSet {
     pub id: String,
