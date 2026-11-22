@@ -99,7 +99,9 @@ pub fn abi(item: &str) -> Result<&'static str, PqChatError> {
 }
 
 /// The crate's chain port.
-#[async_trait]
+// on wasm32 the SDK's futures are not `Send` (the page's one thread), as the SDK's own async traits
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait Net: Send + Sync {
     /// The view `item` of `contract` on `chain` with `args` (its parameters by name), at the final block, by its own mark;
     /// the outputs by name (the SDK's named JSON).
@@ -129,7 +131,8 @@ pub struct SdkNet {
     pub app: Arc<AppCore>,
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl Net for SdkNet {
     async fn read(
         &self,
