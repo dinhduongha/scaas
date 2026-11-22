@@ -68,7 +68,7 @@ MUTANTS = [
      [(C, "                    && !matches!(ss58_prefix, 46 | 47)\n", "")],
      TS + "hub_substrate_params_are_checked_at_open"),
     ("a 0x id read on the Substrate side",
-     [(B, "                if !id.starts_with(\"0x\")\n                    && matches!(", "                if matches!(")],
+     [(B, "                let r = if !id.starts_with(\"0x\")\n                    && matches!(", "                let r = if matches!(")],
      TS + "hub_native_id_at_another_prefix_is_refused"),
 ]
 

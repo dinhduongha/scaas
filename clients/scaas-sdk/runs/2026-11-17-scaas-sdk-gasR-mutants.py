@@ -40,8 +40,8 @@ MUTANTS = [
      [(C, '            "second_party",\n            "unmeasured",\n', '            "unmeasured",\n')], F1),
     # 2
     ("F2: resend ignores the row's own figure",
-     [(S, "                            unhex(&row.calldata)?.len(),\n                            own,\n",
-       "                            unhex(&row.calldata)?.len(),\n                            {\n                                let _ = own;\n                                None\n                            },\n")],
+     [(S, "                            &unhex(&row.calldata)?,\n                            own,\n",
+       "                            &unhex(&row.calldata)?,\n                            None,\n")],
      F2),
     ("F2: the row's figure replaces a higher quote",
      [(Q, "        Some(f) if f.gas > q.gas_limit => (f.gas, f.regular.max(q_regular), Some(f.from)),\n",
