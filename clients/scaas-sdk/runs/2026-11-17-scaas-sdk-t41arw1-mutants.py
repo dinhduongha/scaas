@@ -10,6 +10,7 @@ CK = "cd clients/clientkeys && ../../scripts/capped node --test --test-reporter=
 AR = "clients/ua-rs/src/arweave.rs"
 WA = "clients/ua-rs/src/wallet/arweave.rs"
 WF = "clients/ua-rs/src/wallet/file.rs"
+UF = "clients/ua-rs/src/file.rs"
 UA = "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 "
 CORE = UA + "--no-default-features --features wallet,fam-arweave --test arweave "
 ROWS = UA + "--no-default-features --features app-core,fam-arweave,vectors --test arweave_rows "
@@ -31,10 +32,10 @@ MUTANTS = [
     ("UploadSign without re-checking the data hash", [(WA, "        if h != self.ct_sha256 {\n            return Err(Error::AppKeyUsage);\n        }\n", "        let _ = h;\n")],
      UA + "--no-default-features --features app-core,fam-arweave --lib an_upload_key_signs_only_its_object"),
     ("the upload key without the file key", [(WA, "[&self.bytes(root)?[..], &self.bytes(&sealed.key)?[..]].concat()", "self.bytes(root)?.to_vec()")], ROWS + "upload_keys_and_seal_for_arweave_rows"),
-    ("the pad check skipped (ua-rs)", [(WF, "        if pad.iter().fold(0u8, |a, x| a | x) != 0 {", "        if false && pad.iter().fold(0u8, |a, x| a | x) != 0 {")], ROWS + "sealed_objects_frames_and_checks"),
-    ("the plaintext sha256 check skipped", [(WF, "        if h.iter().zip(sha256).fold(0u8, |a, (x, y)| a | (x ^ y)) != 0 {", "        if false && h.iter().zip(sha256).fold(0u8, |a, (x, y)| a | (x ^ y)) != 0 {")], SEAL + "open_file_refuses_each_mismatch"),
-    ("the frame's len unchecked", [(WF, "        if len != size.to_be_bytes() {", "        if false && len != size.to_be_bytes() {")], SEAL + "open_file_refuses_each_mismatch"),
-    ("the object's length unchecked", [(WF, "        if object.len() as u64 != b + 16 {", "        if false && object.len() as u64 != b + 16 {")], SEAL + "open_file_refuses_each_mismatch"),
+    ("the pad check skipped (ua-rs)", [(WF, "    if pad.iter().fold(0u8, |a, x| a | x) != 0 {", "    if false && pad.iter().fold(0u8, |a, x| a | x) != 0 {")], ROWS + "sealed_objects_frames_and_checks"),
+    ("the plaintext sha256 check skipped", [(WF, "    if h.iter().zip(sha256).fold(0u8, |a, (x, y)| a | (x ^ y)) != 0 {", "    if false && h.iter().zip(sha256).fold(0u8, |a, (x, y)| a | (x ^ y)) != 0 {")], SEAL + "open_file_refuses_each_mismatch"),
+    ("the frame's len unchecked", [(WF, "    if len != size.to_be_bytes() {", "    if false && len != size.to_be_bytes() {")], SEAL + "open_file_refuses_each_mismatch"),
+    ("the object's length unchecked", [(UF, "    if object.len() as u64 != want {", "    if false && object.len() as u64 != want {")], SEAL + "open_file_refuses_each_mismatch"),
     ("a negative block count read", [(AR, "        if n < 0 {\n            return Err(ArweaveError::TagBlockNegative);\n        }\n        if tags.len() as i128 + n > MAX_TAGS as i128 {\n            return Err(ArweaveError::TagCount);\n        }\n        for _ in 0..n {\n            let mut field = |max: usize| -> Result<Vec<u8>, ArweaveError> {\n                let len = long_at", "        if tags.len() as i128 + n > MAX_TAGS as i128 {\n            return Err(ArweaveError::TagCount);\n        }\n        for _ in 0..n.abs() {\n            let mut field = |max: usize| -> Result<Vec<u8>, ArweaveError> {\n                let len = long_at")], CORE + "every_refusal_row"),
     ("type 4 signed over the 48 bytes (ua-rs)", [(AR, "                    .sign(&hex_text(msg))", "                    .sign(msg)")], ROWS + "every_item_row_built_byte_for_byte"),
     ("a high s accepted", [(AR, "            if s.normalize_s() != s {\n                return false;\n            }\n            let Some(rec)", "            let Some(rec)")], CORE + "every_refusal_row"),
