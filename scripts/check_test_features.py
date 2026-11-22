@@ -61,6 +61,8 @@ def shipped(cwd):
     """`--features` with every feature of the crate in `cwd` but its test features."""
     m = tomllib.loads((ROOT / cwd / "Cargo.toml").read_text(encoding="utf-8"))
     return ["--features", ",".join(f for f in m.get("features", {}) if not is_test(f) and f != "default")]
+
+
 DEP_TABLES = ("dependencies", "build-dependencies")
 
 
@@ -227,7 +229,9 @@ def main():
         and any('scaas-sdk feature "vectors"' in x for x in forced)
         and any('scaas-ua feature "vectors"' in x for x in forced)
     )
-    print(f"positive control (graph): clients/scaas-sdk with vectors forced: {len(forced)} findings, both crates found: {ok}")
+    print(
+        f"positive control (graph): clients/scaas-sdk with vectors forced: {len(forced)} findings, both crates found: {ok}"
+    )
     bad += [] if ok else ["positive control (graph, scaas-sdk row) failed"]
     # T15m: the ua-rs row is not vacuous: its own `vectors` forced is found
     forced = check_graph("clients/ua-rs", ["--features", "vectors"])

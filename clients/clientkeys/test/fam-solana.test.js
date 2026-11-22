@@ -48,7 +48,12 @@ test("refusals, each beside its control", () => {
   for (const r of V.refused)
     assert.throws(() => sol.findPda(r.seeds.map(fromHex), fromHex(r.program)), sol.SolanaError, r.why);
   // controls: 15 seeds, a 32-byte seed, a 32-byte program
-  assert.ok(sol.findPda(Array.from({ length: 15 }, () => new Uint8Array(0)), p).address.length === 32);
+  assert.ok(
+    sol.findPda(
+      Array.from({ length: 15 }, () => new Uint8Array(0)),
+      p,
+    ).address.length === 32,
+  );
   assert.ok(sol.findPda([new Uint8Array(32)], p).address.length === 32);
   assert.throws(() => sol.accountOf(p, new Uint8Array(31)), sol.SolanaError);
   // the curve: the ed25519 base point is on it, the rows' addresses are not

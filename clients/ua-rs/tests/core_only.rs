@@ -12,7 +12,10 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 
 fn load(path: &str) -> Value {
-    let p = format!("{}/../../smartcontracts/vectors/{path}", env!("CARGO_MANIFEST_DIR"));
+    let p = format!(
+        "{}/../../smartcontracts/vectors/{path}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
 }
 fn bytes(v: &Value) -> Vec<u8> {
@@ -54,11 +57,24 @@ fn every_seed_kind_derives_signs_and_verifies() {
         let (purpose, digest) = (b32(&r["purposeTag"]), b32(&r["digest"]));
         let msg = ua_message(kind, &purpose, &digest).unwrap();
         let pop = r["role"] == "pop";
-        assert!(verify(kind, &key.key_data(), &msg, &bytes(&r["signature"]), pop, false), "{r}");
+        assert!(
+            verify(
+                kind,
+                &key.key_data(),
+                &msg,
+                &bytes(&r["signature"]),
+                pop,
+                false
+            ),
+            "{r}"
+        );
         let mut sig = key.sign_ua(&purpose, &digest).unwrap();
         assert!(verify(kind, &key.key_data(), &msg, &sig, pop, false), "{r}");
         sig[0] ^= 1;
-        assert!(!verify(kind, &key.key_data(), &msg, &sig, pop, false), "{r}");
+        assert!(
+            !verify(kind, &key.key_data(), &msg, &sig, pop, false),
+            "{r}"
+        );
         kinds.insert(kind);
     }
     // the seed-derived kinds: P-256, ed25519, BIP-340, the two Schnorr and the two BLS kinds, secp256k1, the PQ kinds
@@ -84,7 +100,10 @@ fn bip85_children_derive() {
     assert!(!main.is_empty());
     for c in main {
         let (child, mut backup) = parent.bip85_child().unwrap();
-        assert_eq!(backup.reveal().unwrap().to_string(), c["words"].as_str().unwrap());
+        assert_eq!(
+            backup.reveal().unwrap().to_string(),
+            c["words"].as_str().unwrap()
+        );
         assert!(child.ua_key(0x0102, 0, 0).is_ok());
     }
 }
@@ -110,7 +129,11 @@ fn a_family_that_is_off_is_feature_missing() {
     if Network::Polkadot.built() {
         assert_eq!(bad, Err(Error::Argument), "control: the grammar refuses it");
     } else {
-        assert_eq!(bad, Err(Error::FeatureMissing), "fam-dot's gate before the path is parsed");
+        assert_eq!(
+            bad,
+            Err(Error::FeatureMissing),
+            "fam-dot's gate before the path is parsed"
+        );
     }
     let json = br#"{"type":0,"chainId":"7622","nonce":"0","gasPrice":"1","gasLimit":"21000","to":"0x5ca00000000000000000000000000000000000c0","value":"1","data":"0x"}"#;
     if Network::Evm.built() {
@@ -148,7 +171,11 @@ fn every_network_names_its_feature() {
     for n in Network::all() {
         assert_eq!(n.built(), on(n.feature()), "{n:?}");
     }
-    assert_eq!(Network::HederaEcdsa.feature(), "fam-evm", "Hedera's EVM side");
+    assert_eq!(
+        Network::HederaEcdsa.feature(),
+        "fam-evm",
+        "Hedera's EVM side"
+    );
     assert_eq!(Network::HederaEd25519.feature(), "fam-hedera");
     assert_eq!(Network::Stellar.feature(), "fam-soroban");
     assert_eq!(Network::Polkadot.feature(), "fam-dot");

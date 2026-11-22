@@ -92,8 +92,6 @@ pub use eip712::{
     Erc7739Wallet, RescueVaultOp, TypedData,
 };
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
-#[cfg(feature = "fam-dot")]
-pub use substrate::{ss58_public_key, system_account_key};
 #[cfg(feature = "vectors")]
 pub use manifest::vectors_backup_payload;
 pub use manifest::{
@@ -127,6 +125,8 @@ pub use sign::{
 #[cfg(feature = "vectors")]
 pub use signer::TestExternalKey;
 pub use signer::{AllowRawDigest, ExternalKey, KeyRef, SigRole, SignRequest, Signer};
+#[cfg(feature = "fam-dot")]
+pub use substrate::{ss58_public_key, system_account_key};
 pub use tx::{sign_transaction_by, AccessListItem, EvmTx, SignedTx};
 #[cfg(feature = "app-core")]
 pub use uasig::{

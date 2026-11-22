@@ -8,8 +8,8 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)/clients/scaas-sdk"
 CAP=${CAP-../../scripts/capped}
 sum() { # $1 target args, $2 features: the bytes of the rlibs the build reports
-    $CAP cargo build --locked -q --release --lib $1 --no-default-features --features "$2" --message-format=json \
-        | python3 -c 'import json,os,sys
+    $CAP cargo build --locked -q --release --lib $1 --no-default-features --features "$2" --message-format=json |
+        python3 -c 'import json,os,sys
 seen=set()
 for l in sys.stdin:
     m=json.loads(l)
@@ -19,7 +19,8 @@ print(sum(os.path.getsize(f) for f in seen))'
 }
 (($#)) || set -- native wasm32
 for t in "$@"; do
-    a=""; [[ $t == wasm32 ]] && a="--target wasm32-unknown-unknown"
+    a=""
+    [[ $t == wasm32 ]] && a="--target wasm32-unknown-unknown"
     without=$(sum "$a" "vault,file-store")
     with=$(sum "$a" "vault,account,wallet,file-store")
     echo "$t | without EVM $without | with EVM $with | $((with - without)) | $(((with - without) * 100 / with)) %"

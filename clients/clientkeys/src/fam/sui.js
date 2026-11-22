@@ -38,8 +38,7 @@ const KEY_TYPE = concatBytes(
 export function deriveAccount(registry, owner) {
   const len = new Uint8Array(8);
   len[0] = 32;
-  return blake2b(
-    concatBytes(Uint8Array.of(0xf0), key32(registry, "registry"), len, key32(owner, "owner"), KEY_TYPE),
-    { dkLen: 32 },
-  );
+  return blake2b(concatBytes(Uint8Array.of(0xf0), key32(registry, "registry"), len, key32(owner, "owner"), KEY_TYPE), {
+    dkLen: 32,
+  });
 }

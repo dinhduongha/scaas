@@ -175,7 +175,11 @@ fn features_of(path: &str) -> Vec<(String, Vec<String>)> {
     let body = body.split("\n[").next().unwrap();
     let mut out: Vec<(String, Vec<String>)> = vec![];
     let mut open = false;
-    for l in body.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+    for l in body
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+    {
         if !open {
             let (k, v) = l.split_once(" = ").unwrap();
             out.push((k.to_string(), vec![]));
@@ -244,7 +248,10 @@ fn ua_rows_and_the_core() {
         assert!(default.iter().any(|d| d == r), "{r} on by default");
     }
     for (k, _) in &ua {
-        assert!(!(k.starts_with("xcheck-") && default.contains(k)), "{k} by default");
+        assert!(
+            !(k.starts_with("xcheck-") && default.contains(k)),
+            "{k} by default"
+        );
         if k.starts_with("fam-") {
             assert!(ROWS.contains(&k.as_str()), "{k}: not a row");
         }
@@ -255,7 +262,16 @@ fn ua_rows_and_the_core() {
     }
     assert!(get("fam-evm").iter().any(|d| d == "dep:alloy-rlp"));
     assert!(get("fam-dot").iter().any(|d| d == "dep:schnorrkel"));
-    for core in ["dep:bip39", "dep:bip32", "dep:hkdf", "dep:ml-kem", "dep:aes-gcm", "dep:scrypt", "signers", "pq"] {
+    for core in [
+        "dep:bip39",
+        "dep:bip32",
+        "dep:hkdf",
+        "dep:ml-kem",
+        "dep:aes-gcm",
+        "dep:scrypt",
+        "signers",
+        "pq",
+    ] {
         assert!(wallet.iter().any(|d| d == core), "{core} not in the core");
     }
     assert!(get("signers").iter().any(|d| d == "dep:frost-secp256k1"));
@@ -266,9 +282,15 @@ fn ua_rows_and_the_core() {
 fn ua_feature_missing_is_the_sdks() {
     use scaas_sdk::SdkError;
     use scaas_ua::wallet::Error;
-    assert!(matches!(SdkError::from(Error::FeatureMissing), SdkError::FeatureMissing));
+    assert!(matches!(
+        SdkError::from(Error::FeatureMissing),
+        SdkError::FeatureMissing
+    ));
     assert!(
-        matches!(SdkError::from(Error::Argument), SdkError::Ua(Error::Argument)),
+        matches!(
+            SdkError::from(Error::Argument),
+            SdkError::Ua(Error::Argument)
+        ),
         "control"
     );
 }

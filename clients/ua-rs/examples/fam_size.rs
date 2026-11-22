@@ -31,13 +31,25 @@ fn main() {
         };
         println!("{n:?}: {:?} {}", k.address(), sig.map_or(0, |s| s.len()));
     }
-    println!("evm tx: {:?}", EvmTx::from_json(m).and_then(|t| t.sighash()).is_ok());
+    println!(
+        "evm tx: {:?}",
+        EvmTx::from_json(m).and_then(|t| t.sighash()).is_ok()
+    );
     #[cfg(feature = "fam-near")]
     println!("near: {:?}", scaas_ua::near::metaop_digest(m)[0]);
     #[cfg(feature = "fam-algorand")]
-    println!("algorand: {:?}", scaas_ua::algorand::address_to_key(msg).is_ok());
+    println!(
+        "algorand: {:?}",
+        scaas_ua::algorand::address_to_key(msg).is_ok()
+    );
     #[cfg(feature = "fam-solana")]
-    println!("solana: {:?}", scaas_ua::families::solana::account_of(&[m[0]; 32], &[1; 32]).is_some());
+    println!(
+        "solana: {:?}",
+        scaas_ua::families::solana::account_of(&[m[0]; 32], &[1; 32]).is_some()
+    );
     #[cfg(feature = "fam-sui")]
-    println!("sui: {:?}", scaas_ua::families::sui::account_of(&[m[0]; 32], &[1; 32])[0]);
+    println!(
+        "sui: {:?}",
+        scaas_ua::families::sui::account_of(&[m[0]; 32], &[1; 32])[0]
+    );
 }

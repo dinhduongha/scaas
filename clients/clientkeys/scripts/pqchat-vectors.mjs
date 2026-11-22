@@ -362,7 +362,18 @@ const padContent = (n) => Uint8Array.from({ length: n }, (_, i) => i % 251);
 const chainFar = (who, device, counter) => {
   const c = pc.chainKeys(K1, sid, eid, who.ua, device, counter + 1);
   const s = c.steps[counter];
-  return { K: K1, sessionId: sid, epochId: eid, sender: who.ua, device, counter, ck0: c.ck0, mk: s.mk, n: s.n, ck: s.ck };
+  return {
+    K: K1,
+    sessionId: sid,
+    epochId: eid,
+    sender: who.ua,
+    device,
+    counter,
+    ck0: c.ck0,
+    mk: s.mk,
+    n: s.n,
+    ck: s.ck,
+  };
 };
 /** unpad's refusals, each one change from a valid padded text (its twin). */
 const unpadRows = () => {
