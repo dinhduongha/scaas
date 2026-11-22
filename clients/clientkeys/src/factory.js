@@ -231,10 +231,11 @@ export function creationInitArgs(kind, config) {
 }
 
 /** Owner 2026-11-12 (`mtxCreateInstance`, the per-class named form): the initializer call a known generic class takes from its
- *  named config, the bytes a creation sends as `initCall` (`initHash = keccak256(initCall)`). `PqChat` (class 3, kind 0):
- *  `initialize(bytes32 owner)`, `owner` 0 or the creator. Any other class: send its `initCall` bytes. */
+ *  named config, the bytes a creation sends as `initCall` (`initHash = keccak256(initCall)`). `PqChat` (class 3, kind 0) and
+ *  `PqVault` (class 4, kind 0, CTR-PQV-02): `initialize(bytes32 owner)`, `owner` 0 or the creator. Any other class: send its
+ *  `initCall` bytes. */
 export function instanceInitCall(contractClass, kind, config) {
-  if (Number(contractClass) !== 3 || Number(kind) !== 0)
+  if (![3, 4].includes(Number(contractClass)) || Number(kind) !== 0)
     throw new Error(`class ${contractClass} kind ${kind}: no named config; send initCall`);
   const extra = Object.keys(config).filter((k) => k !== "owner");
   if (extra.length) throw new Error(`config: no field ${extra.join(", ")}`);

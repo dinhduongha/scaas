@@ -1,0 +1,60 @@
+# review mutants at commit 06828cbf1 (name | outcome | test)
+P1-1 a key without a profile defaults to amsterdam | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py profile_and_set_gate
+P1-1 any local- key amsterdam without a profile | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py profile_and_set_gate
+P1-1 txGasCap not checked in the profile | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py profile_and_set_gate
+P1-1 the profile's txGasCap ignored by check (2) | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py gas_against_the_live_caps
+P1-1 deploy_gate drops the profile's txGasCap | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py deploy_gate_runs_every_check
+P1-1 the Fuji profile at amsterdam | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py fuji_dry_run_needs_a_profile
+P2-2 the vote on the whole answer | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py majority_on_the_used_fields
+P2-2 a number: the highest answer | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py majority_on_the_used_fields
+P2-2 a malformed answer counted as a vote | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py majority_on_the_used_fields
+P2-2 the block read at latest | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py majority_on_the_used_fields
+P2-2 a receipt field outside consensus voted on | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py three_honest_nodes_agree
+P1-2 UARegistry off homeChainKinds | killed | python3 -I smartcontracts/evm/script/test_deploybook.py
+P1-2 the gen-1 registry not gated | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_registryRefusedOnSharedGenesis
+P1-2 a later registry generation not gated | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_registryRefusedOnSharedGenesis
+P2-1 cast mktx without --chain | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py cast_signs_what_was_asked
+P2-1 the signed bytes not compared | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py cast_signs_what_was_asked
+P2-1 the chain id from the first node | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py the_transaction_from_the_majority
+P2-1 the chain id not the resolved one | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py the_transaction_from_the_majority
+P2-1 the nonce from the first node | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py the_transaction_from_the_majority
+P2-1 the fee cap from the highest node | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py the_transaction_from_the_majority
+P2-1 a tip above the cap signed | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py the_transaction_from_the_majority
+P2-5 the cases of another artifact accepted | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py cases_bound_to_the_contract
+P2-5 an empty cases file accepted | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py cases_bound_to_the_contract
+P2-5 an entry without a case accepted | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py cases_bound_to_the_contract
+P2-5 the binding not called | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py cases_bound_to_the_contract
+P2-6 a control that did not run counted as red | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py control_red_for_its_reason
+P2-6 a transport error read as an execution error | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py control_red_for_its_reason
+P2-6 one signal enough for red | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py control_red_for_its_reason
+P2-6 the positive run not required green | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py control_red_for_its_reason
+P3-10 exec at a fork with no control unchecked | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py control_green_voids_the_run
+P3-3 an answer above the bound read | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py answers_bounded
+P3-3 a transaction hash of another type taken | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py answers_of_another_type_named
+P3-3 a probe event without an index unnamed | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py answers_of_another_type_named
+P3-1 an unknown kind name passes (Python) | killed | python3 -I smartcontracts/evm/script/test_deploybook.py
+P3-1 an unknown kind name passes (Solidity) | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_kindGateWhereCreated
+P3-1 the factory not gated where created | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_kindGateWhereCreated
+P3-1 PqChat not gated where created | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_kindGateWhereCreated
+P3-2 a row without private unnamed | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_tableCheckedWhole
+P3-2 a pair held twice elsewhere | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_tableCheckedWhole
+P3-2 a private genesis in a second row | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_tableCheckedWhole
+ZetherDeploy fix: the shared-genesis test on the rows read in their own frame | killed | ../../scripts/capped forge test --match-path test/governance/DeployBook.t.sol --match-test test_homeChainKindsRefused
+P3-4 an empty precompile list trusted | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py empty_precompile_list_with_calls_refused
+P3-4 the init code's opcodes not counted | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py empty_precompile_list_with_calls_refused
+P3-8 the deploy's block not waited final | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py book_written_at_the_final_block
+P3-8 the book's code hash read at latest | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py book_written_at_the_final_block
+P3-8 the probe's block not waited final | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py book_written_at_the_final_block
+P3-7 the release data not the build | killed | ../../scripts/capped forge test --match-path test/pqchat/PqChatStore.t.sol --match-test test_releaseDataPinsTheBuild
+P2-3 any address a store | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib pqchatstore
+P2-3 the code read at latest | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib pqchatstore
+P2-3 no code at the final block a policy refusal | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib pqchatstore
+P2-3 a pass kept across a reorg | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib pqchatstore
+P2-3 a pass kept for ever | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib pqchatstore
+P2-4 the resolved pair not checked at lane start | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib an_unpinned_profile
+P2-4 a resolved pair of another key taken | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib resolved_pairs_at_lane_start
+P3-5 a paid storeMessage to the store refused | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib a_paid_store
+P3-5 any PqChat entry relayed to the store | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib a_paid_store
+P3-6 a second write on the store's kind | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib pqchat_rows_equal_the_contract_both_directions
+P3-6 storeMessage without contract taken as pqchat | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib an_op_is_exact
+58 mutants, 58 killed, 0 survived (0 killed elsewhere), 0 not loaded

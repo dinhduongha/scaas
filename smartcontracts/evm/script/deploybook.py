@@ -10,6 +10,11 @@ BOOK_NETWORK_MISMATCH. An old book by chain id with none by the key: BOOK_OLD_NA
 the form of json.dumps(…, indent=2), the header first. script/DeployBook.sol is the same rule for the forge scripts.
   python3 -I script/deploybook.py key <chainId> <chainUid>               the key
   python3 -I script/deploybook.py path <chainId> <chainUid> [<suffix>]   deployments/<key><suffix> (default .json)
+NET-ALL-25: chain-uids.json as read refuses a second row of one (chainId, chainUid) pair (CHAIN_PAIR_TAKEN), a private
+chain's genesis in another row or under another chain id (CHAIN_UID_PRIVATE), a row without `private` (CHAIN_ROW_PRIVATE);
+a kind keeping or checking records bound to chain_uid without the chain id (`homeChainKinds`) on a genesis another row
+shares: HOME_CHAIN_SHARED_GENESIS; a kind on neither that list nor `otherKinds`: KIND_UNKNOWN.
+  python3 -I script/deploybook.py kind-check <kind> <chainId> <chainUid>   the kind may deploy on this chain
 Deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"; NET-EVM-11 Change): one chain may carry more
 than one deploy of the same build, each with its own DEPLOY_SALT, named by a set label (SETS: `mldsa-off`, the deploy with
 MLDSA_PRECOMPILE=off, the default set; `mldsa-on`, MLDSA_PRECOMPILE=on). The chain's one book then holds every set under
@@ -34,14 +39,38 @@ class BookError(SystemExit):
     """A named fail (the message starts with its name); uncaught, it prints the message and exits 1."""
 
 
+def table():
+    """chain-uids.json, checked (NET-ALL-25): every row says `private` (true: a chain SCaaS runs), no two rows share the pair
+    (chainId, chainUid), and a private chain's genesis is in no other row (public chains may share one)."""
+    t = json.load(open(os.path.join(EVM, "chain-uids.json")))
+    seen = {}
+    for r in t["chains"]:
+        if not isinstance(r.get("private"), bool):
+            raise BookError(f"CHAIN_ROW_PRIVATE: {r.get('key')} in chain-uids.json has no private (true | false)")
+        pair = (r["chainId"], r["chainUid"].lower())
+        if pair in seen:
+            raise BookError(
+                f"CHAIN_PAIR_TAKEN: {r['key']} repeats the (chainId, chainUid) pair of {seen[pair]} (NET-ALL-25)"
+            )
+        seen[pair] = r["key"]
+    for r in t["chains"]:
+        other = [o["key"] for o in t["chains"] if o is not r and o["chainUid"].lower() == r["chainUid"].lower()]
+        if r["private"] and other:
+            raise BookError(
+                f"CHAIN_UID_PRIVATE: the private chain {r['key']}'s genesis is also {', '.join(other)}'s (NET-ALL-25)"
+            )
+    return t
+
+
 def rows():
-    return json.load(open(os.path.join(EVM, "chain-uids.json")))["chains"]
+    return table()["chains"]
 
 
 def resolve(chain_id, chain_uid, env=os.environ):
-    """(key, name, network) of the chain (chainId, chain_uid)."""
+    """(key, name, network) of the chain (chainId, chain_uid); a private chain's genesis under another chain id refused."""
     cid, uid, dn = int(chain_id), chain_uid.lower(), env.get("DEPLOY_NAME", "")
-    for r in rows():
+    rs = rows()
+    for r in rs:
         if r["chainId"] == cid and r["chainUid"].lower() == uid:
             if dn and dn != r["key"]:
                 raise BookError(
@@ -50,6 +79,12 @@ def resolve(chain_id, chain_uid, env=os.environ):
             return r["key"], r["name"], r["network"]
         if dn == r["key"]:
             raise BookError(f"DEPLOY_NAME_TAKEN: {dn} names another chain in chain-uids.json")
+    for r in rs:
+        if r["private"] and r["chainUid"].lower() == uid:
+            raise BookError(
+                f"CHAIN_UID_PRIVATE: chain {cid} has the genesis of the private chain {r['key']} ({r['chainId']}); a chain we "
+                "run that forks is a new chain with its own genesis (NET-ALL-25)"
+            )
     if not dn:
         raise BookError(
             f"DEPLOY_NAME_REQUIRED: chain {cid} ({uid[:10]}…) is not in chain-uids.json; set "
@@ -104,6 +139,24 @@ def find(chain_id, chain_uid, suffix=".json", env=os.environ):
             f"BOOK_OLD_NAME: {old} is named by chain id; rename it to {new} and give it its header (NET-EVM-13)"
         )
     return new
+
+
+def kind_check(kind, chain_id, chain_uid):
+    """NET-ALL-25 (C18): a kind keeping or checking records bound to chain_uid without the chain id (chain-uids.json
+    `homeChainKinds`: homeChain records, the registry's portable UAMsigUpdate and scoped keys) is refused on a chain whose
+    chain_uid another row shares, until those records carry the chain id; any other kind passes."""
+    t, cid, uid = table(), int(chain_id), chain_uid.lower()
+    if kind not in t["homeChainKinds"] and kind not in t["otherKinds"]:
+        raise BookError(f"KIND_UNKNOWN: {kind} is on neither homeChainKinds nor otherKinds of chain-uids.json")
+    if kind in t["homeChainKinds"]:
+        other = [r["key"] for r in t["chains"] if r["chainUid"].lower() == uid and r["chainId"] != cid]
+        if other:
+            raise BookError(
+                f"HOME_CHAIN_SHARED_GENESIS: {kind} keeps records bound to chain_uid without the chain id; chain {cid} "
+                f"shares its chain_uid with "
+                f"{', '.join(other)} (NET-ALL-25)"
+            )
+    return kind
 
 
 SETS = {"mldsa-off": "off", "mldsa-on": "on"}  # label -> the deploy's MLDSA_PRECOMPILE
@@ -199,6 +252,8 @@ if __name__ == "__main__":
         print(resolve(a[1], a[2])[0])
     elif a[:1] == ["path"] and len(a) in (3, 4):
         print(find(a[1], a[2], *a[3:]))
+    elif a[:1] == ["kind-check"] and len(a) == 4:
+        print(kind_check(a[1], a[2], a[3]))
     elif a[:1] == ["set-check"] and len(a) in (2, 3):
         print(set_label(a[1], *a[2:]))
     elif a[:1] == ["set-merge"] and len(a) == 5:

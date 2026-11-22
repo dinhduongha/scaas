@@ -1,0 +1,7 @@
+# t4 mutants at commit c0b5a3072 (name | outcome | test)
+the scan as a deny-list without CLZ | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py scan_clz_refused_for_cancun
+immediates not skipped | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py push_data_1e_passes
+the control's result ignored | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py control_green_voids_the_run
+check (5) skipped | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py deploy_gate_runs_every_check
+the size check against 65,536 | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py sizes_against_the_profile
+5 mutants, 5 killed, 0 survived (0 killed elsewhere), 0 not loaded

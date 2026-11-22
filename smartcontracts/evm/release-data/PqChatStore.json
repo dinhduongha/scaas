@@ -1,0 +1,8 @@
+{
+  "contract": "PqChatStore",
+  "note": "CTR-CHAT-22, spec 2026-11-21-avax-polkadot-arweave §5.3 (C23): the amsterdam build (solc 0.8.37, foundry.toml's default profile), deployed through the deterministic deployer 0x4e59b44847b379578588920cA78FbF26c0B4956C with salt 0 by script/deploy_pqchatstore.py; runtime 2,070 B, init 2,098 B; no precompile (NET-EVM-18 (5)).",
+  "initCodeHash": "0x633680a0168944899fc5b1baf413aec52c7b2ed4ad789e82a482556944a8bb64",
+  "runtimeCodeHash": "0xb7c149f0bd0016966b2ddb38eac3da410aca45ab4f24bfb966a4747eb2d23a58",
+  "address": "0x99c0548Cb7e59fEbE6Af924B6d5Bfa4AE2BdDe36",
+  "precompiles": []
+}
