@@ -69,6 +69,25 @@ public class ChainProfile {
      * the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
      */
     private java.util.List<java.lang.String> wrappers;
+    /**
+     * the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+     * family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+     * `Sdk::open`
+     */
+    private FamilyParams familyParams;
+    /**
+     * the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+     * and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+     * `Sdk::open` on another family)
+     */
+    private L1Fee l1Fee;
+    /**
+     * the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+     * and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+     * attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+     * `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+     */
+    private java.util.List<java.lang.String> disabledKinds;
 
     public ChainProfile(
         java.lang.String key, 
@@ -90,7 +109,10 @@ public class ChainProfile {
         java.util.List<EndpointConfig> verifiers, 
         Policy verifierPolicy, 
         java.util.List<ListedDex> dexes, 
-        java.util.List<java.lang.String> wrappers
+        java.util.List<java.lang.String> wrappers, 
+        FamilyParams familyParams, 
+        L1Fee l1Fee, 
+        java.util.List<java.lang.String> disabledKinds
     ) {
         
         this.key = key;
@@ -132,6 +154,12 @@ public class ChainProfile {
         this.dexes = dexes;
         
         this.wrappers = wrappers;
+        
+        this.familyParams = familyParams;
+        
+        this.l1Fee = l1Fee;
+        
+        this.disabledKinds = disabledKinds;
     }
     
     public java.lang.String key() {
@@ -213,6 +241,18 @@ public class ChainProfile {
     public java.util.List<java.lang.String> wrappers() {
         return this.wrappers;
     }
+    
+    public FamilyParams familyParams() {
+        return this.familyParams;
+    }
+    
+    public L1Fee l1Fee() {
+        return this.l1Fee;
+    }
+    
+    public java.util.List<java.lang.String> disabledKinds() {
+        return this.disabledKinds;
+    }
     public void setKey(java.lang.String key) {
         this.key = key;
     }
@@ -273,6 +313,15 @@ public class ChainProfile {
     public void setWrappers(java.util.List<java.lang.String> wrappers) {
         this.wrappers = wrappers;
     }
+    public void setFamilyParams(FamilyParams familyParams) {
+        this.familyParams = familyParams;
+    }
+    public void setL1Fee(L1Fee l1Fee) {
+        this.l1Fee = l1Fee;
+    }
+    public void setDisabledKinds(java.util.List<java.lang.String> disabledKinds) {
+        this.disabledKinds = disabledKinds;
+    }
 
     
 
@@ -320,7 +369,13 @@ public class ChainProfile {
               
               java.util.Objects.equals(dexes, t.dexes) && 
               
-              java.util.Objects.equals(wrappers, t.wrappers)
+              java.util.Objects.equals(wrappers, t.wrappers) && 
+              
+              java.util.Objects.equals(familyParams, t.familyParams) && 
+              
+              java.util.Objects.equals(l1Fee, t.l1Fee) && 
+              
+              java.util.Objects.equals(disabledKinds, t.disabledKinds)
               
             );
         };
@@ -349,6 +404,9 @@ public class ChainProfile {
         result = 31 * result + java.util.Objects.hashCode(verifierPolicy);
         result = 31 * result + java.util.Objects.hashCode(dexes);
         result = 31 * result + java.util.Objects.hashCode(wrappers);
+        result = 31 * result + java.util.Objects.hashCode(familyParams);
+        result = 31 * result + java.util.Objects.hashCode(l1Fee);
+        result = 31 * result + java.util.Objects.hashCode(disabledKinds);
         return result;
     }
 

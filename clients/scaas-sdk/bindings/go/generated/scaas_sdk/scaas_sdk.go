@@ -584,6 +584,24 @@ func uniffiCheckChecksums() {
 	}
 	{
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_func_ua_line_key_target()
+		})
+		if checksum != 60856 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_func_ua_line_key_target: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_func_ua_line_pqz_target()
+		})
+		if checksum != 29446 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_func_ua_line_pqz_target: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_scaas_sdk_checksum_method_registrywrite_calldata()
 		})
 		if checksum != 7040 {
@@ -733,6 +751,15 @@ func uniffiCheckChecksums() {
 		if checksum != 28699 {
 			// If this happens try cleaning and rebuilding your project
 			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_account_next_account: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates()
+		})
+		if checksum != 49782 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates: UniFFI API checksum mismatch")
 		}
 	}
 	{
@@ -890,6 +917,15 @@ func uniffiCheckChecksums() {
 	}
 	{
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_method_account_register_target()
+		})
+		if checksum != 38916 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_account_register_target: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_scaas_sdk_checksum_method_account_registration_blob()
 		})
 		if checksum != 44041 {
@@ -931,6 +967,15 @@ func uniffiCheckChecksums() {
 		if checksum != 40795 {
 			// If this happens try cleaning and rebuilding your project
 			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_account_submit_registry_write: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_method_account_ua_line()
+		})
+		if checksum != 3220 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_account_ua_line: UniFFI API checksum mismatch")
 		}
 	}
 	{
@@ -3161,6 +3206,7 @@ type AccountInterface interface {
 	Marks(seed string, chain string) ([]AccountInfo, error)
 	MsigState(chain string, ua string) (MsigState, error)
 	NextAccount(seed string) (uint32, error)
+	PqzDecoyCandidates(chain string) ([]string, error)
 	PrepareAcceptMembership(req AcceptMembership) (**RegistryWrite, error)
 	PrepareCompleteRecovery(key KeyRef, chain string, account string, newKey SubjectKeyArgs) (NativeQuote, error)
 	PrepareInitiateRecovery(op SmartOp, account string, newKey SubjectKeyArgs) (*Prepared, error)
@@ -3178,11 +3224,13 @@ type AccountInterface interface {
 	PrepareSubmitRegistration(blob RegistrationBlob, chain string, expectedUa string, payer KeyRef) ([]*RegistryWrite, error)
 	PrepareUpdateMsig(req UpdateMsig) (MsigUpdatePlan, error)
 	QuoteRegistryWrite(write *RegistryWrite) (SubmitQuote, error)
+	RegisterTarget(chain string, kind uint16) (string, error)
 	RegistrationBlob(key KeyRef, attrs RegisterAttrs) (RegistrationBlob, error)
 	RegistrationOf(chain string, ua string) (RegistrationState, error)
 	Restore(req Restore) ([]AccountInfo, error)
 	Signs(seed string, id string) (bool, error)
 	SubmitRegistryWrite(write *RegistryWrite, quote SubmitQuote) (string, error)
+	UaLine(chain string, ua string) (UaLine, error)
 }
 
 // Accounts (spec §7).
@@ -3493,6 +3541,41 @@ func (_self *Account) NextAccount(seed string) (uint32, error) {
 		// freeFn
 		func(handle C.uint64_t) {
 			C.ffi_scaas_sdk_rust_future_free_u32(handle)
+		},
+	)
+
+	if err == nil {
+		return res, nil
+	}
+
+	return res, err
+}
+
+func (_self *Account) PqzDecoyCandidates(chain string) ([]string, error) {
+	_pointer := _self.ffiObject.incrementPointer("*Account")
+	defer _self.ffiObject.decrementPointer()
+	res, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
+		// completeFn
+		func(handle C.uint64_t, status *C.RustCallStatus) RustBufferI {
+			res := C.ffi_scaas_sdk_rust_future_complete_rust_buffer(handle, status)
+			return GoRustBuffer{
+				inner: res,
+			}
+		},
+		// liftFn
+		func(ffi RustBufferI) []string {
+			return FfiConverterSequenceStringINSTANCE.Lift(ffi)
+		},
+		C.uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates(
+			_pointer, FfiConverterStringINSTANCE.Lower(chain)),
+		// pollFn
+		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_poll_rust_buffer(handle, continuation, data)
+		},
+		// freeFn
+		func(handle C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_free_rust_buffer(handle)
 		},
 	)
 
@@ -4082,6 +4165,41 @@ func (_self *Account) QuoteRegistryWrite(write *RegistryWrite) (SubmitQuote, err
 	return res, err
 }
 
+func (_self *Account) RegisterTarget(chain string, kind uint16) (string, error) {
+	_pointer := _self.ffiObject.incrementPointer("*Account")
+	defer _self.ffiObject.decrementPointer()
+	res, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
+		// completeFn
+		func(handle C.uint64_t, status *C.RustCallStatus) RustBufferI {
+			res := C.ffi_scaas_sdk_rust_future_complete_rust_buffer(handle, status)
+			return GoRustBuffer{
+				inner: res,
+			}
+		},
+		// liftFn
+		func(ffi RustBufferI) string {
+			return FfiConverterStringINSTANCE.Lift(ffi)
+		},
+		C.uniffi_scaas_sdk_fn_method_account_register_target(
+			_pointer, FfiConverterStringINSTANCE.Lower(chain), FfiConverterUint16INSTANCE.Lower(kind)),
+		// pollFn
+		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_poll_rust_buffer(handle, continuation, data)
+		},
+		// freeFn
+		func(handle C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_free_rust_buffer(handle)
+		},
+	)
+
+	if err == nil {
+		return res, nil
+	}
+
+	return res, err
+}
+
 func (_self *Account) RegistrationBlob(key KeyRef, attrs RegisterAttrs) (RegistrationBlob, error) {
 	_pointer := _self.ffiObject.incrementPointer("*Account")
 	defer _self.ffiObject.decrementPointer()
@@ -4238,6 +4356,41 @@ func (_self *Account) SubmitRegistryWrite(write *RegistryWrite, quote SubmitQuot
 		},
 		C.uniffi_scaas_sdk_fn_method_account_submit_registry_write(
 			_pointer, FfiConverterRegistryWriteINSTANCE.Lower(write), FfiConverterSubmitQuoteINSTANCE.Lower(quote)),
+		// pollFn
+		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_poll_rust_buffer(handle, continuation, data)
+		},
+		// freeFn
+		func(handle C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_free_rust_buffer(handle)
+		},
+	)
+
+	if err == nil {
+		return res, nil
+	}
+
+	return res, err
+}
+
+func (_self *Account) UaLine(chain string, ua string) (UaLine, error) {
+	_pointer := _self.ffiObject.incrementPointer("*Account")
+	defer _self.ffiObject.decrementPointer()
+	res, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
+		// completeFn
+		func(handle C.uint64_t, status *C.RustCallStatus) RustBufferI {
+			res := C.ffi_scaas_sdk_rust_future_complete_rust_buffer(handle, status)
+			return GoRustBuffer{
+				inner: res,
+			}
+		},
+		// liftFn
+		func(ffi RustBufferI) UaLine {
+			return FfiConverterUaLineINSTANCE.Lift(ffi)
+		},
+		C.uniffi_scaas_sdk_fn_method_account_ua_line(
+			_pointer, FfiConverterStringINSTANCE.Lower(chain), FfiConverterStringINSTANCE.Lower(ua)),
 		// pollFn
 		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
 			C.ffi_scaas_sdk_rust_future_poll_rust_buffer(handle, continuation, data)
@@ -13745,6 +13898,19 @@ type ChainProfile struct {
 	Dexes []ListedDex
 	// the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
 	Wrappers []string
+	// the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+	// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+	// `Sdk::open`
+	FamilyParams *FamilyParams
+	// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+	// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+	// `Sdk::open` on another family)
+	L1Fee *L1Fee
+	// the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+	// and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+	// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+	// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+	DisabledKinds []string
 }
 
 func (r *ChainProfile) Destroy() {
@@ -13768,6 +13934,9 @@ func (r *ChainProfile) Destroy() {
 	FfiDestroyerPolicy{}.Destroy(r.VerifierPolicy)
 	FfiDestroyerSequenceListedDex{}.Destroy(r.Dexes)
 	FfiDestroyerSequenceString{}.Destroy(r.Wrappers)
+	FfiDestroyerOptionalFamilyParams{}.Destroy(r.FamilyParams)
+	FfiDestroyerOptionalL1Fee{}.Destroy(r.L1Fee)
+	FfiDestroyerSequenceString{}.Destroy(r.DisabledKinds)
 }
 
 type FfiConverterChainProfile struct{}
@@ -13799,6 +13968,9 @@ func (c FfiConverterChainProfile) Read(reader io.Reader) ChainProfile {
 		FfiConverterSequenceEndpointConfigINSTANCE.Read(reader),
 		FfiConverterPolicyINSTANCE.Read(reader),
 		FfiConverterSequenceListedDexINSTANCE.Read(reader),
+		FfiConverterSequenceStringINSTANCE.Read(reader),
+		FfiConverterOptionalFamilyParamsINSTANCE.Read(reader),
+		FfiConverterOptionalL1FeeINSTANCE.Read(reader),
 		FfiConverterSequenceStringINSTANCE.Read(reader),
 	}
 }
@@ -13832,6 +14004,9 @@ func (c FfiConverterChainProfile) Write(writer io.Writer, value ChainProfile) {
 	FfiConverterPolicyINSTANCE.Write(writer, value.VerifierPolicy)
 	FfiConverterSequenceListedDexINSTANCE.Write(writer, value.Dexes)
 	FfiConverterSequenceStringINSTANCE.Write(writer, value.Wrappers)
+	FfiConverterOptionalFamilyParamsINSTANCE.Write(writer, value.FamilyParams)
+	FfiConverterOptionalL1FeeINSTANCE.Write(writer, value.L1Fee)
+	FfiConverterSequenceStringINSTANCE.Write(writer, value.DisabledKinds)
 }
 
 type FfiDestroyerChainProfile struct{}
@@ -14610,6 +14785,67 @@ func (_ FfiDestroyerGasBase) Destroy(value GasBase) {
 	value.Destroy()
 }
 
+// A verify row's registry-line columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65; §13 Gas): the row is
+// keyed by chain (the table it is in), registry address and signer kind; the verify path, the depth and the write path are
+// columns. Within one table no two verify rows share signer, registry, path, depth and write.
+type GasLine struct {
+	// the registry the row was measured through (`0x` + 40 hex): a quote bound to it takes it first; `None`: a row of no one
+	// registry
+	Registry *string
+	// `cache`, `precompile` or `fallback` (the holder's verdict after the verify-only verifier gave no answer, §5); `None`:
+	// the holder's own check
+	Path *string
+	// the generations between the registry asked and the holder (0: the registry holds the record), at most 15
+	Depth uint8
+	// the write path of W1 (a registry write whose signature the holder checks), never a consumer operation's quote
+	Write bool
+}
+
+func (r *GasLine) Destroy() {
+	FfiDestroyerOptionalString{}.Destroy(r.Registry)
+	FfiDestroyerOptionalString{}.Destroy(r.Path)
+	FfiDestroyerUint8{}.Destroy(r.Depth)
+	FfiDestroyerBool{}.Destroy(r.Write)
+}
+
+type FfiConverterGasLine struct{}
+
+var FfiConverterGasLineINSTANCE = FfiConverterGasLine{}
+
+func (c FfiConverterGasLine) Lift(rb RustBufferI) GasLine {
+	return LiftFromRustBuffer[GasLine](c, rb)
+}
+
+func (c FfiConverterGasLine) Read(reader io.Reader) GasLine {
+	return GasLine{
+		FfiConverterOptionalStringINSTANCE.Read(reader),
+		FfiConverterOptionalStringINSTANCE.Read(reader),
+		FfiConverterUint8INSTANCE.Read(reader),
+		FfiConverterBoolINSTANCE.Read(reader),
+	}
+}
+
+func (c FfiConverterGasLine) Lower(value GasLine) C.RustBuffer {
+	return LowerIntoRustBuffer[GasLine](c, value)
+}
+
+func (c FfiConverterGasLine) LowerExternal(value GasLine) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[GasLine](c, value))
+}
+
+func (c FfiConverterGasLine) Write(writer io.Writer, value GasLine) {
+	FfiConverterOptionalStringINSTANCE.Write(writer, value.Registry)
+	FfiConverterOptionalStringINSTANCE.Write(writer, value.Path)
+	FfiConverterUint8INSTANCE.Write(writer, value.Depth)
+	FfiConverterBoolINSTANCE.Write(writer, value.Write)
+}
+
+type FfiDestroyerGasLine struct{}
+
+func (_ FfiDestroyerGasLine) Destroy(value GasLine) {
+	value.Destroy()
+}
+
 // A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
 // variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
 type GasPerByte struct {
@@ -14810,7 +15046,8 @@ func (_ FfiDestroyerGasSources) Destroy(value GasSources) {
 // verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
 // save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
 // per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
-// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?, registry?, path?, depth?, write?}` (the
+// line's columns, [`GasLine`]), read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 // and the SDK's reference table.
 type GasTable struct {
 	// a module's name, `reference`, or the chain key of a chain's measured rows
@@ -14876,6 +15113,9 @@ type GasVerify struct {
 	Margin uint64
 	// the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
 	PerItem *GasPerItem
+	// the registry line's columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); all absent: the holder's own
+	// check on any registry (every row before the line)
+	Line GasLine
 }
 
 func (r *GasVerify) Destroy() {
@@ -14884,6 +15124,7 @@ func (r *GasVerify) Destroy() {
 	FfiDestroyerUint64{}.Destroy(r.SigBytes)
 	FfiDestroyerUint64{}.Destroy(r.Margin)
 	FfiDestroyerOptionalGasPerItem{}.Destroy(r.PerItem)
+	FfiDestroyerGasLine{}.Destroy(r.Line)
 }
 
 type FfiConverterGasVerify struct{}
@@ -14901,6 +15142,7 @@ func (c FfiConverterGasVerify) Read(reader io.Reader) GasVerify {
 		FfiConverterUint64INSTANCE.Read(reader),
 		FfiConverterUint64INSTANCE.Read(reader),
 		FfiConverterOptionalGasPerItemINSTANCE.Read(reader),
+		FfiConverterGasLineINSTANCE.Read(reader),
 	}
 }
 
@@ -14918,6 +15160,7 @@ func (c FfiConverterGasVerify) Write(writer io.Writer, value GasVerify) {
 	FfiConverterUint64INSTANCE.Write(writer, value.SigBytes)
 	FfiConverterUint64INSTANCE.Write(writer, value.Margin)
 	FfiConverterOptionalGasPerItemINSTANCE.Write(writer, value.PerItem)
+	FfiConverterGasLineINSTANCE.Write(writer, value.Line)
 }
 
 type FfiDestroyerGasVerify struct{}
@@ -15685,7 +15928,7 @@ func (_ FfiDestroyerListedDex) Destroy(value ListedDex) {
 
 // A token of a profile's reviewed list (spec §8.2).
 type ListedToken struct {
-	// `0x` + 40 hex
+	// EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
 	Address  string
 	Symbol   string
 	Decimals uint8
@@ -21242,6 +21485,57 @@ func (c FfiConverterUaGrantRole) Write(writer io.Writer, value UaGrantRole) {
 type FfiDestroyerUaGrantRole struct{}
 
 func (_ FfiDestroyerUaGrantRole) Destroy(value UaGrantRole) {
+	value.Destroy()
+}
+
+// Where a UA's record and its PQZ attachment live, as the bound registry's one walk answers (`holderOf`, §11.1).
+type UaLine struct {
+	// the generation holding the record (`0x` + 40 hex): the target of a key write, where its record is read
+	Holder string
+	Kind   uint16
+	// the record's PQZ home (§11.2): the target of a PQZ write, where its attachment is read; `None`: no home on the walk
+	PqzHome *string
+}
+
+func (r *UaLine) Destroy() {
+	FfiDestroyerString{}.Destroy(r.Holder)
+	FfiDestroyerUint16{}.Destroy(r.Kind)
+	FfiDestroyerOptionalString{}.Destroy(r.PqzHome)
+}
+
+type FfiConverterUaLine struct{}
+
+var FfiConverterUaLineINSTANCE = FfiConverterUaLine{}
+
+func (c FfiConverterUaLine) Lift(rb RustBufferI) UaLine {
+	return LiftFromRustBuffer[UaLine](c, rb)
+}
+
+func (c FfiConverterUaLine) Read(reader io.Reader) UaLine {
+	return UaLine{
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterUint16INSTANCE.Read(reader),
+		FfiConverterOptionalStringINSTANCE.Read(reader),
+	}
+}
+
+func (c FfiConverterUaLine) Lower(value UaLine) C.RustBuffer {
+	return LowerIntoRustBuffer[UaLine](c, value)
+}
+
+func (c FfiConverterUaLine) LowerExternal(value UaLine) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[UaLine](c, value))
+}
+
+func (c FfiConverterUaLine) Write(writer io.Writer, value UaLine) {
+	FfiConverterStringINSTANCE.Write(writer, value.Holder)
+	FfiConverterUint16INSTANCE.Write(writer, value.Kind)
+	FfiConverterOptionalStringINSTANCE.Write(writer, value.PqzHome)
+}
+
+type FfiDestroyerUaLine struct{}
+
+func (_ FfiDestroyerUaLine) Destroy(value UaLine) {
 	value.Destroy()
 }
 
@@ -26891,6 +27185,195 @@ type FfiDestroyerFamily struct{}
 func (_ FfiDestroyerFamily) Destroy(value Family) {
 }
 
+// A family's own profile data (spec §8.7 rule 2; decisions CLI-SDK-15's Changes of 2026-11-21).
+type FamilyParams interface {
+	Destroy()
+}
+
+// Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
+// profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),
+// the native denom and the bech32 prefix of the chain's addresses
+type FamilyParamsCosmos struct {
+	ChainId    string
+	Rest       []EndpointConfig
+	RestPolicy Policy
+	Denom      string
+	Prefix     string
+}
+
+func (e FamilyParamsCosmos) Destroy() {
+	FfiDestroyerString{}.Destroy(e.ChainId)
+	FfiDestroyerSequenceEndpointConfig{}.Destroy(e.Rest)
+	FfiDestroyerPolicy{}.Destroy(e.RestPolicy)
+	FfiDestroyerString{}.Destroy(e.Denom)
+	FfiDestroyerString{}.Destroy(e.Prefix)
+}
+
+// Aptos: the chain id ledger info must name (`aptos_framework::chain_id`, 1 to 255; the identity an Aptos node answers)
+// and the `scaas` package's address, whose view `meta::account_of(owner)` gives the Account an owner's tokens are in
+// (NET-APT-05), as `0x` + 64 lowercase hex (AIP-40's long form)
+type FamilyParamsAptos struct {
+	ChainId uint8
+	Package string
+}
+
+func (e FamilyParamsAptos) Destroy() {
+	FfiDestroyerUint8{}.Destroy(e.ChainId)
+	FfiDestroyerString{}.Destroy(e.Package)
+}
+
+// Solana: the `scaas` program's id (base58 of 32 bytes), under which an owner's SCaaS Account is the `["acct", owner]`
+// program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
+type FamilyParamsSolana struct {
+	Program string
+}
+
+func (e FamilyParamsSolana) Destroy() {
+	FfiDestroyerString{}.Destroy(e.Program)
+}
+
+// Soroban: the network passphrase its RPC endpoints name (`getNetwork`; its SHA-256 is `chain_uid`, checked at `Sdk::open`)
+// and the XLM SAC contract (`C…`), pinned, whose balance entry is a `C…` holder's native XLM (never derived here)
+type FamilyParamsSoroban struct {
+	Passphrase string
+	XlmSac     string
+}
+
+func (e FamilyParamsSoroban) Destroy() {
+	FfiDestroyerString{}.Destroy(e.Passphrase)
+	FfiDestroyerString{}.Destroy(e.XlmSac)
+}
+
+// Sui: the GraphQL endpoints the reads go to, with their policy (public fullnodes refuse JSON-RPC, docs/networks/sui.md
+// §14; the profile's `rpc` are the JSON-RPC endpoints), each named by `chain_uid`, the genesis checkpoint's digest, whose
+// 32 bytes in base58 `chainIdentifier` must answer
+type FamilyParamsSui struct {
+	Graphql       []EndpointConfig
+	GraphqlPolicy Policy
+}
+
+func (e FamilyParamsSui) Destroy() {
+	FfiDestroyerSequenceEndpointConfig{}.Destroy(e.Graphql)
+	FfiDestroyerPolicy{}.Destroy(e.GraphqlPolicy)
+}
+
+// Polkadot Hub's Substrate side on its EVM profile (decisions CLI-SDK-32's Change of 2026-11-22, plan T32's read part): the
+// Substrate JSON-RPC endpoints with their policy, each named by `genesis` (`0x` + 64 hex, `chain_getBlockHash(0)`), and the
+// SS58 prefix of the chain's addresses (0 to 16,383, not 46 or 47); `balances` of an SS58 id reads its `System.Account`
+// there. The same params serve the relay chain's Substrate side
+type FamilyParamsSubstrate struct {
+	Rpc        []EndpointConfig
+	RpcPolicy  Policy
+	Genesis    string
+	Ss58Prefix uint16
+}
+
+func (e FamilyParamsSubstrate) Destroy() {
+	FfiDestroyerSequenceEndpointConfig{}.Destroy(e.Rpc)
+	FfiDestroyerPolicy{}.Destroy(e.RpcPolicy)
+	FfiDestroyerString{}.Destroy(e.Genesis)
+	FfiDestroyerUint16{}.Destroy(e.Ss58Prefix)
+}
+
+type FfiConverterFamilyParams struct{}
+
+var FfiConverterFamilyParamsINSTANCE = FfiConverterFamilyParams{}
+
+func (c FfiConverterFamilyParams) Lift(rb RustBufferI) FamilyParams {
+	return LiftFromRustBuffer[FamilyParams](c, rb)
+}
+
+func (c FfiConverterFamilyParams) Lower(value FamilyParams) C.RustBuffer {
+	return LowerIntoRustBuffer[FamilyParams](c, value)
+}
+
+func (c FfiConverterFamilyParams) LowerExternal(value FamilyParams) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[FamilyParams](c, value))
+}
+func (FfiConverterFamilyParams) Read(reader io.Reader) FamilyParams {
+	id := readInt32(reader)
+	switch id {
+	case 1:
+		return FamilyParamsCosmos{
+			FfiConverterStringINSTANCE.Read(reader),
+			FfiConverterSequenceEndpointConfigINSTANCE.Read(reader),
+			FfiConverterPolicyINSTANCE.Read(reader),
+			FfiConverterStringINSTANCE.Read(reader),
+			FfiConverterStringINSTANCE.Read(reader),
+		}
+	case 2:
+		return FamilyParamsAptos{
+			FfiConverterUint8INSTANCE.Read(reader),
+			FfiConverterStringINSTANCE.Read(reader),
+		}
+	case 3:
+		return FamilyParamsSolana{
+			FfiConverterStringINSTANCE.Read(reader),
+		}
+	case 4:
+		return FamilyParamsSoroban{
+			FfiConverterStringINSTANCE.Read(reader),
+			FfiConverterStringINSTANCE.Read(reader),
+		}
+	case 5:
+		return FamilyParamsSui{
+			FfiConverterSequenceEndpointConfigINSTANCE.Read(reader),
+			FfiConverterPolicyINSTANCE.Read(reader),
+		}
+	case 6:
+		return FamilyParamsSubstrate{
+			FfiConverterSequenceEndpointConfigINSTANCE.Read(reader),
+			FfiConverterPolicyINSTANCE.Read(reader),
+			FfiConverterStringINSTANCE.Read(reader),
+			FfiConverterUint16INSTANCE.Read(reader),
+		}
+	default:
+		panic(fmt.Sprintf("invalid enum value %v in FfiConverterFamilyParams.Read()", id))
+	}
+}
+
+func (FfiConverterFamilyParams) Write(writer io.Writer, value FamilyParams) {
+	switch variant_value := value.(type) {
+	case FamilyParamsCosmos:
+		writeInt32(writer, 1)
+		FfiConverterStringINSTANCE.Write(writer, variant_value.ChainId)
+		FfiConverterSequenceEndpointConfigINSTANCE.Write(writer, variant_value.Rest)
+		FfiConverterPolicyINSTANCE.Write(writer, variant_value.RestPolicy)
+		FfiConverterStringINSTANCE.Write(writer, variant_value.Denom)
+		FfiConverterStringINSTANCE.Write(writer, variant_value.Prefix)
+	case FamilyParamsAptos:
+		writeInt32(writer, 2)
+		FfiConverterUint8INSTANCE.Write(writer, variant_value.ChainId)
+		FfiConverterStringINSTANCE.Write(writer, variant_value.Package)
+	case FamilyParamsSolana:
+		writeInt32(writer, 3)
+		FfiConverterStringINSTANCE.Write(writer, variant_value.Program)
+	case FamilyParamsSoroban:
+		writeInt32(writer, 4)
+		FfiConverterStringINSTANCE.Write(writer, variant_value.Passphrase)
+		FfiConverterStringINSTANCE.Write(writer, variant_value.XlmSac)
+	case FamilyParamsSui:
+		writeInt32(writer, 5)
+		FfiConverterSequenceEndpointConfigINSTANCE.Write(writer, variant_value.Graphql)
+		FfiConverterPolicyINSTANCE.Write(writer, variant_value.GraphqlPolicy)
+	case FamilyParamsSubstrate:
+		writeInt32(writer, 6)
+		FfiConverterSequenceEndpointConfigINSTANCE.Write(writer, variant_value.Rpc)
+		FfiConverterPolicyINSTANCE.Write(writer, variant_value.RpcPolicy)
+		FfiConverterStringINSTANCE.Write(writer, variant_value.Genesis)
+		FfiConverterUint16INSTANCE.Write(writer, variant_value.Ss58Prefix)
+	default:
+		_ = variant_value
+		panic(fmt.Sprintf("invalid enum value `%v` in FfiConverterFamilyParams.Write", value))
+	}
+}
+
+type FfiDestroyerFamilyParams struct{}
+
+func (_ FfiDestroyerFamilyParams) Destroy(value FamilyParams) {
+	value.Destroy()
+}
+
 // The block of every decisive and decryption read (§9.4 requirement 3).
 type Finality interface {
 	Destroy()
@@ -27343,6 +27826,43 @@ type FfiDestroyerKeyRef struct{}
 
 func (_ FfiDestroyerKeyRef) Destroy(value KeyRef) {
 	value.Destroy()
+}
+
+// An L1 data fee model (plan T38).
+type L1Fee uint
+
+const (
+	// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
+	L1FeeOpStack L1Fee = 1
+)
+
+type FfiConverterL1Fee struct{}
+
+var FfiConverterL1FeeINSTANCE = FfiConverterL1Fee{}
+
+func (c FfiConverterL1Fee) Lift(rb RustBufferI) L1Fee {
+	return LiftFromRustBuffer[L1Fee](c, rb)
+}
+
+func (c FfiConverterL1Fee) Lower(value L1Fee) C.RustBuffer {
+	return LowerIntoRustBuffer[L1Fee](c, value)
+}
+
+func (c FfiConverterL1Fee) LowerExternal(value L1Fee) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[L1Fee](c, value))
+}
+func (FfiConverterL1Fee) Read(reader io.Reader) L1Fee {
+	id := readInt32(reader)
+	return L1Fee(id)
+}
+
+func (FfiConverterL1Fee) Write(writer io.Writer, value L1Fee) {
+	writeInt32(writer, int32(value))
+}
+
+type FfiDestroyerL1Fee struct{}
+
+func (_ FfiDestroyerL1Fee) Destroy(value L1Fee) {
 }
 
 // One slot of an `msig` signature (`KeyRef::Msig`), as `MsigSlot`.
@@ -27899,6 +28419,7 @@ var ErrSdkErrorPayerDelegated = fmt.Errorf("SdkErrorPayerDelegated")
 var ErrSdkErrorSubmitPathNone = fmt.Errorf("SdkErrorSubmitPathNone")
 var ErrSdkErrorVerdictRefused = fmt.Errorf("SdkErrorVerdictRefused")
 var ErrSdkErrorTxTypeRefused = fmt.Errorf("SdkErrorTxTypeRefused")
+var ErrSdkErrorKindDisabled = fmt.Errorf("SdkErrorKindDisabled")
 var ErrSdkErrorRawDigestRefused = fmt.Errorf("SdkErrorRawDigestRefused")
 var ErrSdkErrorAppDomainRefused = fmt.Errorf("SdkErrorAppDomainRefused")
 var ErrSdkErrorAppPurposeRefused = fmt.Errorf("SdkErrorAppPurposeRefused")
@@ -27930,6 +28451,9 @@ var ErrSdkErrorGasItemUnknown = fmt.Errorf("SdkErrorGasItemUnknown")
 var ErrSdkErrorGasCountUnknown = fmt.Errorf("SdkErrorGasCountUnknown")
 var ErrSdkErrorBlsMultiBelowThreshold = fmt.Errorf("SdkErrorBlsMultiBelowThreshold")
 var ErrSdkErrorGasFieldUnknown = fmt.Errorf("SdkErrorGasFieldUnknown")
+var ErrSdkErrorRegistrationVerifyOnly = fmt.Errorf("SdkErrorRegistrationVerifyOnly")
+var ErrSdkErrorUaUnregistered = fmt.Errorf("SdkErrorUaUnregistered")
+var ErrSdkErrorPqzHomeNone = fmt.Errorf("SdkErrorPqzHomeNone")
 var ErrSdkErrorDexNotListed = fmt.Errorf("SdkErrorDexNotListed")
 var ErrSdkErrorPqzAuditorNative = fmt.Errorf("SdkErrorPqzAuditorNative")
 var ErrSdkErrorGasAboveBlockShare = fmt.Errorf("SdkErrorGasAboveBlockShare")
@@ -28491,6 +29015,25 @@ func (err SdkErrorTxTypeRefused) Error() string {
 
 func (self SdkErrorTxTypeRefused) Is(target error) bool {
 	return target == ErrSdkErrorTxTypeRefused
+}
+
+type SdkErrorKindDisabled struct {
+	message string
+}
+
+func NewSdkErrorKindDisabled() *SdkError {
+	return &SdkError{err: &SdkErrorKindDisabled{}}
+}
+
+func (e SdkErrorKindDisabled) destroy() {
+}
+
+func (err SdkErrorKindDisabled) Error() string {
+	return fmt.Sprintf("KindDisabled: %s", err.message)
+}
+
+func (self SdkErrorKindDisabled) Is(target error) bool {
+	return target == ErrSdkErrorKindDisabled
 }
 
 type SdkErrorRawDigestRefused struct {
@@ -29130,6 +29673,71 @@ func (self SdkErrorGasFieldUnknown) Is(target error) bool {
 	return target == ErrSdkErrorGasFieldUnknown
 }
 
+// A registration of a kind whose home (`kindHome(kind)`) is another generation than the bound registry: that registry
+// carries it verify-only, or not at all (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); nothing is sent.
+type SdkErrorRegistrationVerifyOnly struct {
+	message string
+}
+
+// A registration of a kind whose home (`kindHome(kind)`) is another generation than the bound registry: that registry
+// carries it verify-only, or not at all (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); nothing is sent.
+func NewSdkErrorRegistrationVerifyOnly() *SdkError {
+	return &SdkError{err: &SdkErrorRegistrationVerifyOnly{}}
+}
+
+func (e SdkErrorRegistrationVerifyOnly) destroy() {
+}
+
+func (err SdkErrorRegistrationVerifyOnly) Error() string {
+	return fmt.Sprintf("RegistrationVerifyOnly: %s", err.message)
+}
+
+func (self SdkErrorRegistrationVerifyOnly) Is(target error) bool {
+	return target == ErrSdkErrorRegistrationVerifyOnly
+}
+
+// A UA no generation of the bound registry's line holds (`holderOf(ua)` answers no holder, §11.1).
+type SdkErrorUaUnregistered struct {
+	message string
+}
+
+// A UA no generation of the bound registry's line holds (`holderOf(ua)` answers no holder, §11.1).
+func NewSdkErrorUaUnregistered() *SdkError {
+	return &SdkError{err: &SdkErrorUaUnregistered{}}
+}
+
+func (e SdkErrorUaUnregistered) destroy() {
+}
+
+func (err SdkErrorUaUnregistered) Error() string {
+	return fmt.Sprintf("UaUnregistered: %s", err.message)
+}
+
+func (self SdkErrorUaUnregistered) Is(target error) bool {
+	return target == ErrSdkErrorUaUnregistered
+}
+
+// A PQZ write or read of a UA whose record has no PQZ home on the bound registry's walk (`pqzHomeOf(ua)` 0, §11.2).
+type SdkErrorPqzHomeNone struct {
+	message string
+}
+
+// A PQZ write or read of a UA whose record has no PQZ home on the bound registry's walk (`pqzHomeOf(ua)` 0, §11.2).
+func NewSdkErrorPqzHomeNone() *SdkError {
+	return &SdkError{err: &SdkErrorPqzHomeNone{}}
+}
+
+func (e SdkErrorPqzHomeNone) destroy() {
+}
+
+func (err SdkErrorPqzHomeNone) Error() string {
+	return fmt.Sprintf("PqzHomeNone: %s", err.message)
+}
+
+func (self SdkErrorPqzHomeNone) Is(target error) bool {
+	return target == ErrSdkErrorPqzHomeNone
+}
+
 // An order, a cancel or a liquidity order naming a DEX that is not on the chain profile's list, or a wrap order whose
 // wrapped token is not on its wrapper list (CLI-SGN-35): refused before anything is signed (plan T17).
 type SdkErrorDexNotListed struct {
@@ -29344,78 +29952,86 @@ func (c FfiConverterSdkError) Read(reader io.Reader) *SdkError {
 	case 29:
 		return &SdkError{&SdkErrorTxTypeRefused{message}}
 	case 30:
-		return &SdkError{&SdkErrorRawDigestRefused{message}}
+		return &SdkError{&SdkErrorKindDisabled{message}}
 	case 31:
-		return &SdkError{&SdkErrorAppDomainRefused{message}}
+		return &SdkError{&SdkErrorRawDigestRefused{message}}
 	case 32:
-		return &SdkError{&SdkErrorAppPurposeRefused{message}}
+		return &SdkError{&SdkErrorAppDomainRefused{message}}
 	case 33:
-		return &SdkError{&SdkErrorAppSaltMismatch{message}}
+		return &SdkError{&SdkErrorAppPurposeRefused{message}}
 	case 34:
-		return &SdkError{&SdkErrorAppHandleForeign{message}}
+		return &SdkError{&SdkErrorAppSaltMismatch{message}}
 	case 35:
-		return &SdkError{&SdkErrorAppLabelRefused{message}}
+		return &SdkError{&SdkErrorAppHandleForeign{message}}
 	case 36:
-		return &SdkError{&SdkErrorAppKeyUsage{message}}
+		return &SdkError{&SdkErrorAppLabelRefused{message}}
 	case 37:
-		return &SdkError{&SdkErrorAppArenaFull{message}}
+		return &SdkError{&SdkErrorAppKeyUsage{message}}
 	case 38:
-		return &SdkError{&SdkErrorKemKeyGone{message}}
+		return &SdkError{&SdkErrorAppArenaFull{message}}
 	case 39:
-		return &SdkError{&SdkErrorReceiverUnregistered{message}}
+		return &SdkError{&SdkErrorKemKeyGone{message}}
 	case 40:
-		return &SdkError{&SdkErrorRegistrationUaMismatch{message}}
+		return &SdkError{&SdkErrorReceiverUnregistered{message}}
 	case 41:
-		return &SdkError{&SdkErrorRegistrationKindDisabled{message}}
+		return &SdkError{&SdkErrorRegistrationUaMismatch{message}}
 	case 42:
-		return &SdkError{&SdkErrorRegistrationPopInvalid{message}}
+		return &SdkError{&SdkErrorRegistrationKindDisabled{message}}
 	case 43:
-		return &SdkError{&SdkErrorRegistrationKemMissing{message}}
+		return &SdkError{&SdkErrorRegistrationPopInvalid{message}}
 	case 44:
-		return &SdkError{&SdkErrorAbiMismatch{message}}
+		return &SdkError{&SdkErrorRegistrationKemMissing{message}}
 	case 45:
-		return &SdkError{&SdkErrorInternal{message}}
+		return &SdkError{&SdkErrorAbiMismatch{message}}
 	case 46:
-		return &SdkError{&SdkErrorAccountExists{message}}
+		return &SdkError{&SdkErrorInternal{message}}
 	case 47:
-		return &SdkError{&SdkErrorGasUnquoted{message}}
+		return &SdkError{&SdkErrorAccountExists{message}}
 	case 48:
-		return &SdkError{&SdkErrorValidUntilRefused{message}}
+		return &SdkError{&SdkErrorGasUnquoted{message}}
 	case 49:
-		return &SdkError{&SdkErrorTokenUncatalogued{message}}
+		return &SdkError{&SdkErrorValidUntilRefused{message}}
 	case 50:
-		return &SdkError{&SdkErrorLegKeyMismatch{message}}
+		return &SdkError{&SdkErrorTokenUncatalogued{message}}
 	case 51:
-		return &SdkError{&SdkErrorSignerNotAccountKey{message}}
+		return &SdkError{&SdkErrorLegKeyMismatch{message}}
 	case 52:
-		return &SdkError{&SdkErrorPqzOpeningUnsupported{message}}
+		return &SdkError{&SdkErrorSignerNotAccountKey{message}}
 	case 53:
-		return &SdkError{&SdkErrorMsigSlotInactive{message}}
+		return &SdkError{&SdkErrorPqzOpeningUnsupported{message}}
 	case 54:
-		return &SdkError{&SdkErrorGasSigBytesMissing{message}}
+		return &SdkError{&SdkErrorMsigSlotInactive{message}}
 	case 55:
-		return &SdkError{&SdkErrorSignedGasAboveCap{message}}
+		return &SdkError{&SdkErrorGasSigBytesMissing{message}}
 	case 56:
-		return &SdkError{&SdkErrorGasItemUnpaired{message}}
+		return &SdkError{&SdkErrorSignedGasAboveCap{message}}
 	case 57:
-		return &SdkError{&SdkErrorGasItemUnknown{message}}
+		return &SdkError{&SdkErrorGasItemUnpaired{message}}
 	case 58:
-		return &SdkError{&SdkErrorGasCountUnknown{message}}
+		return &SdkError{&SdkErrorGasItemUnknown{message}}
 	case 59:
-		return &SdkError{&SdkErrorBlsMultiBelowThreshold{message}}
+		return &SdkError{&SdkErrorGasCountUnknown{message}}
 	case 60:
-		return &SdkError{&SdkErrorGasFieldUnknown{message}}
+		return &SdkError{&SdkErrorBlsMultiBelowThreshold{message}}
 	case 61:
-		return &SdkError{&SdkErrorDexNotListed{message}}
+		return &SdkError{&SdkErrorGasFieldUnknown{message}}
 	case 62:
-		return &SdkError{&SdkErrorPqzAuditorNative{message}}
+		return &SdkError{&SdkErrorRegistrationVerifyOnly{message}}
 	case 63:
-		return &SdkError{&SdkErrorGasAboveBlockShare{message}}
+		return &SdkError{&SdkErrorUaUnregistered{message}}
 	case 64:
-		return &SdkError{&SdkErrorCancelled{message}}
+		return &SdkError{&SdkErrorPqzHomeNone{message}}
 	case 65:
-		return &SdkError{&SdkErrorUa{message}}
+		return &SdkError{&SdkErrorDexNotListed{message}}
 	case 66:
+		return &SdkError{&SdkErrorPqzAuditorNative{message}}
+	case 67:
+		return &SdkError{&SdkErrorGasAboveBlockShare{message}}
+	case 68:
+		return &SdkError{&SdkErrorCancelled{message}}
+	case 69:
+		return &SdkError{&SdkErrorUa{message}}
+	case 70:
 		return &SdkError{&SdkErrorRpc{message}}
 	default:
 		panic(fmt.Sprintf("Unknown error code %d in FfiConverterSdkError.Read()", errorID))
@@ -29483,80 +30099,88 @@ func (c FfiConverterSdkError) Write(writer io.Writer, value *SdkError) {
 		writeInt32(writer, 28)
 	case *SdkErrorTxTypeRefused:
 		writeInt32(writer, 29)
-	case *SdkErrorRawDigestRefused:
+	case *SdkErrorKindDisabled:
 		writeInt32(writer, 30)
-	case *SdkErrorAppDomainRefused:
+	case *SdkErrorRawDigestRefused:
 		writeInt32(writer, 31)
-	case *SdkErrorAppPurposeRefused:
+	case *SdkErrorAppDomainRefused:
 		writeInt32(writer, 32)
-	case *SdkErrorAppSaltMismatch:
+	case *SdkErrorAppPurposeRefused:
 		writeInt32(writer, 33)
-	case *SdkErrorAppHandleForeign:
+	case *SdkErrorAppSaltMismatch:
 		writeInt32(writer, 34)
-	case *SdkErrorAppLabelRefused:
+	case *SdkErrorAppHandleForeign:
 		writeInt32(writer, 35)
-	case *SdkErrorAppKeyUsage:
+	case *SdkErrorAppLabelRefused:
 		writeInt32(writer, 36)
-	case *SdkErrorAppArenaFull:
+	case *SdkErrorAppKeyUsage:
 		writeInt32(writer, 37)
-	case *SdkErrorKemKeyGone:
+	case *SdkErrorAppArenaFull:
 		writeInt32(writer, 38)
-	case *SdkErrorReceiverUnregistered:
+	case *SdkErrorKemKeyGone:
 		writeInt32(writer, 39)
-	case *SdkErrorRegistrationUaMismatch:
+	case *SdkErrorReceiverUnregistered:
 		writeInt32(writer, 40)
-	case *SdkErrorRegistrationKindDisabled:
+	case *SdkErrorRegistrationUaMismatch:
 		writeInt32(writer, 41)
-	case *SdkErrorRegistrationPopInvalid:
+	case *SdkErrorRegistrationKindDisabled:
 		writeInt32(writer, 42)
-	case *SdkErrorRegistrationKemMissing:
+	case *SdkErrorRegistrationPopInvalid:
 		writeInt32(writer, 43)
-	case *SdkErrorAbiMismatch:
+	case *SdkErrorRegistrationKemMissing:
 		writeInt32(writer, 44)
-	case *SdkErrorInternal:
+	case *SdkErrorAbiMismatch:
 		writeInt32(writer, 45)
-	case *SdkErrorAccountExists:
+	case *SdkErrorInternal:
 		writeInt32(writer, 46)
-	case *SdkErrorGasUnquoted:
+	case *SdkErrorAccountExists:
 		writeInt32(writer, 47)
-	case *SdkErrorValidUntilRefused:
+	case *SdkErrorGasUnquoted:
 		writeInt32(writer, 48)
-	case *SdkErrorTokenUncatalogued:
+	case *SdkErrorValidUntilRefused:
 		writeInt32(writer, 49)
-	case *SdkErrorLegKeyMismatch:
+	case *SdkErrorTokenUncatalogued:
 		writeInt32(writer, 50)
-	case *SdkErrorSignerNotAccountKey:
+	case *SdkErrorLegKeyMismatch:
 		writeInt32(writer, 51)
-	case *SdkErrorPqzOpeningUnsupported:
+	case *SdkErrorSignerNotAccountKey:
 		writeInt32(writer, 52)
-	case *SdkErrorMsigSlotInactive:
+	case *SdkErrorPqzOpeningUnsupported:
 		writeInt32(writer, 53)
-	case *SdkErrorGasSigBytesMissing:
+	case *SdkErrorMsigSlotInactive:
 		writeInt32(writer, 54)
-	case *SdkErrorSignedGasAboveCap:
+	case *SdkErrorGasSigBytesMissing:
 		writeInt32(writer, 55)
-	case *SdkErrorGasItemUnpaired:
+	case *SdkErrorSignedGasAboveCap:
 		writeInt32(writer, 56)
-	case *SdkErrorGasItemUnknown:
+	case *SdkErrorGasItemUnpaired:
 		writeInt32(writer, 57)
-	case *SdkErrorGasCountUnknown:
+	case *SdkErrorGasItemUnknown:
 		writeInt32(writer, 58)
-	case *SdkErrorBlsMultiBelowThreshold:
+	case *SdkErrorGasCountUnknown:
 		writeInt32(writer, 59)
-	case *SdkErrorGasFieldUnknown:
+	case *SdkErrorBlsMultiBelowThreshold:
 		writeInt32(writer, 60)
-	case *SdkErrorDexNotListed:
+	case *SdkErrorGasFieldUnknown:
 		writeInt32(writer, 61)
-	case *SdkErrorPqzAuditorNative:
+	case *SdkErrorRegistrationVerifyOnly:
 		writeInt32(writer, 62)
-	case *SdkErrorGasAboveBlockShare:
+	case *SdkErrorUaUnregistered:
 		writeInt32(writer, 63)
-	case *SdkErrorCancelled:
+	case *SdkErrorPqzHomeNone:
 		writeInt32(writer, 64)
-	case *SdkErrorUa:
+	case *SdkErrorDexNotListed:
 		writeInt32(writer, 65)
-	case *SdkErrorRpc:
+	case *SdkErrorPqzAuditorNative:
 		writeInt32(writer, 66)
+	case *SdkErrorGasAboveBlockShare:
+		writeInt32(writer, 67)
+	case *SdkErrorCancelled:
+		writeInt32(writer, 68)
+	case *SdkErrorUa:
+		writeInt32(writer, 69)
+	case *SdkErrorRpc:
+		writeInt32(writer, 70)
 	default:
 		_ = variantValue
 		panic(fmt.Sprintf("invalid error value `%v` in FfiConverterSdkError.Write", value))
@@ -29625,6 +30249,8 @@ func (_ FfiDestroyerSdkError) Destroy(value *SdkError) {
 		variantValue.destroy()
 	case SdkErrorTxTypeRefused:
 		variantValue.destroy()
+	case SdkErrorKindDisabled:
+		variantValue.destroy()
 	case SdkErrorRawDigestRefused:
 		variantValue.destroy()
 	case SdkErrorAppDomainRefused:
@@ -29686,6 +30312,12 @@ func (_ FfiDestroyerSdkError) Destroy(value *SdkError) {
 	case SdkErrorBlsMultiBelowThreshold:
 		variantValue.destroy()
 	case SdkErrorGasFieldUnknown:
+		variantValue.destroy()
+	case SdkErrorRegistrationVerifyOnly:
+		variantValue.destroy()
+	case SdkErrorUaUnregistered:
+		variantValue.destroy()
+	case SdkErrorPqzHomeNone:
 		variantValue.destroy()
 	case SdkErrorDexNotListed:
 		variantValue.destroy()
@@ -31190,6 +31822,47 @@ func (_ FfiDestroyerOptionalEvent) Destroy(value *Event) {
 	}
 }
 
+type FfiConverterOptionalFamilyParams struct{}
+
+var FfiConverterOptionalFamilyParamsINSTANCE = FfiConverterOptionalFamilyParams{}
+
+func (c FfiConverterOptionalFamilyParams) Lift(rb RustBufferI) *FamilyParams {
+	return LiftFromRustBuffer[*FamilyParams](c, rb)
+}
+
+func (_ FfiConverterOptionalFamilyParams) Read(reader io.Reader) *FamilyParams {
+	if readInt8(reader) == 0 {
+		return nil
+	}
+	temp := FfiConverterFamilyParamsINSTANCE.Read(reader)
+	return &temp
+}
+
+func (c FfiConverterOptionalFamilyParams) Lower(value *FamilyParams) C.RustBuffer {
+	return LowerIntoRustBuffer[*FamilyParams](c, value)
+}
+
+func (c FfiConverterOptionalFamilyParams) LowerExternal(value *FamilyParams) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[*FamilyParams](c, value))
+}
+
+func (_ FfiConverterOptionalFamilyParams) Write(writer io.Writer, value *FamilyParams) {
+	if value == nil {
+		writeInt8(writer, 0)
+	} else {
+		writeInt8(writer, 1)
+		FfiConverterFamilyParamsINSTANCE.Write(writer, *value)
+	}
+}
+
+type FfiDestroyerOptionalFamilyParams struct{}
+
+func (_ FfiDestroyerOptionalFamilyParams) Destroy(value *FamilyParams) {
+	if value != nil {
+		FfiDestroyerFamilyParams{}.Destroy(*value)
+	}
+}
+
 type FfiConverterOptionalHolderKind struct{}
 
 var FfiConverterOptionalHolderKindINSTANCE = FfiConverterOptionalHolderKind{}
@@ -31269,6 +31942,47 @@ type FfiDestroyerOptionalKeyRef struct{}
 func (_ FfiDestroyerOptionalKeyRef) Destroy(value *KeyRef) {
 	if value != nil {
 		FfiDestroyerKeyRef{}.Destroy(*value)
+	}
+}
+
+type FfiConverterOptionalL1Fee struct{}
+
+var FfiConverterOptionalL1FeeINSTANCE = FfiConverterOptionalL1Fee{}
+
+func (c FfiConverterOptionalL1Fee) Lift(rb RustBufferI) *L1Fee {
+	return LiftFromRustBuffer[*L1Fee](c, rb)
+}
+
+func (_ FfiConverterOptionalL1Fee) Read(reader io.Reader) *L1Fee {
+	if readInt8(reader) == 0 {
+		return nil
+	}
+	temp := FfiConverterL1FeeINSTANCE.Read(reader)
+	return &temp
+}
+
+func (c FfiConverterOptionalL1Fee) Lower(value *L1Fee) C.RustBuffer {
+	return LowerIntoRustBuffer[*L1Fee](c, value)
+}
+
+func (c FfiConverterOptionalL1Fee) LowerExternal(value *L1Fee) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[*L1Fee](c, value))
+}
+
+func (_ FfiConverterOptionalL1Fee) Write(writer io.Writer, value *L1Fee) {
+	if value == nil {
+		writeInt8(writer, 0)
+	} else {
+		writeInt8(writer, 1)
+		FfiConverterL1FeeINSTANCE.Write(writer, *value)
+	}
+}
+
+type FfiDestroyerOptionalL1Fee struct{}
+
+func (_ FfiDestroyerOptionalL1Fee) Destroy(value *L1Fee) {
+	if value != nil {
+		FfiDestroyerL1Fee{}.Destroy(*value)
 	}
 }
 
@@ -33213,5 +33927,29 @@ func SubjectKeyArgsSecp256k1(address string) (SubjectKeyArgs, error) {
 		return _uniffiDefaultValue, _uniffiErr
 	} else {
 		return FfiConverterSubjectKeyArgsINSTANCE.Lift(_uniffiRV), nil
+	}
+}
+
+// The target of a key write of the UA (`UaLine::key_target`, §12): its holder.
+func UaLineKeyTarget(line UaLine) string {
+	return FfiConverterStringINSTANCE.Lift(rustCall(func(_uniffiStatus *C.RustCallStatus) RustBufferI {
+		return GoRustBuffer{
+			inner: C.uniffi_scaas_sdk_fn_func_ua_line_key_target(FfiConverterUaLineINSTANCE.Lower(line), _uniffiStatus),
+		}
+	}))
+}
+
+// The target of a PQZ write of the UA (`UaLine::pqz_target`, §12): its PQZ home; `PqzHomeNone` where the walk has none.
+func UaLinePqzTarget(line UaLine) (string, error) {
+	_uniffiRV, _uniffiErr := rustCallWithError[*SdkError](FfiConverterSdkError{}, func(_uniffiStatus *C.RustCallStatus) RustBufferI {
+		return GoRustBuffer{
+			inner: C.uniffi_scaas_sdk_fn_func_ua_line_pqz_target(FfiConverterUaLineINSTANCE.Lower(line), _uniffiStatus),
+		}
+	})
+	if _uniffiErr != nil {
+		var _uniffiDefaultValue string
+		return _uniffiDefaultValue, _uniffiErr
+	} else {
+		return FfiConverterStringINSTANCE.Lift(_uniffiRV), nil
 	}
 }

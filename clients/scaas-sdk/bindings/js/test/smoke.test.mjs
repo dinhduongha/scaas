@@ -231,7 +231,7 @@ test("an EVM profile opens: the bindings build the SDK's `evm` (decisions CLI-SD
   const profile = (more) => ({
     key: "local",
     family: "Evm",
-    chain_id: 31337,
+    chain_id: 31337n,
     chain_uid: "0x" + "60".repeat(32),
     rpc: [{ url: "http://127.0.0.1:9", class: "Named", label: null, auth: null }],
     rpc_policy: "Failover",

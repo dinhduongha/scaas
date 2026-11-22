@@ -627,6 +627,8 @@ public protocol AccountProtocol: AnyObject, Sendable {
     
     func nextAccount(seed: String) async throws  -> UInt32
     
+    func pqzDecoyCandidates(chain: String) async throws  -> [String]
+    
     func prepareAcceptMembership(req: AcceptMembership) async throws  -> RegistryWrite?
     
     func prepareCompleteRecovery(key: KeyRef, chain: String, account: String, newKey: SubjectKeyArgs) async throws  -> NativeQuote
@@ -661,6 +663,8 @@ public protocol AccountProtocol: AnyObject, Sendable {
     
     func quoteRegistryWrite(write: RegistryWrite) async throws  -> SubmitQuote
     
+    func registerTarget(chain: String, kind: UInt16) async throws  -> String
+    
     func registrationBlob(key: KeyRef, attrs: RegisterAttrs) async throws  -> RegistrationBlob
     
     func registrationOf(chain: String, ua: String) async throws  -> RegistrationState
@@ -670,6 +674,8 @@ public protocol AccountProtocol: AnyObject, Sendable {
     func signs(seed: String, id: String) async throws  -> Bool
     
     func submitRegistryWrite(write: RegistryWrite, quote: SubmitQuote) async throws  -> String
+    
+    func uaLine(chain: String, ua: String) async throws  -> UaLine
     
 }
 /**
@@ -877,6 +883,23 @@ open func nextAccount(seed: String)async throws  -> UInt32  {
             completeFunc: ffi_scaas_sdk_rust_future_complete_u32,
             freeFunc: ffi_scaas_sdk_rust_future_free_u32,
             liftFunc: FfiConverterUInt32.lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func pqzDecoyCandidates(chain: String)async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(chain)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -1170,6 +1193,23 @@ open func quoteRegistryWrite(write: RegistryWrite)async throws  -> SubmitQuote  
         )
 }
     
+open func registerTarget(chain: String, kind: UInt16)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_account_register_target(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(chain),FfiConverterUInt16.lower(kind)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
 open func registrationBlob(key: KeyRef, attrs: RegisterAttrs)async throws  -> RegistrationBlob  {
     return
         try  await uniffiRustCallAsync(
@@ -1251,6 +1291,23 @@ open func submitRegistryWrite(write: RegistryWrite, quote: SubmitQuote)async thr
             completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
             freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func uaLine(chain: String, ua: String)async throws  -> UaLine  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_account_ua_line(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(chain),FfiConverterString.lower(ua)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUaLine_lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -8872,6 +8929,25 @@ public struct ChainProfile: Equatable, Hashable {
      * the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
      */
     public var wrappers: [String]
+    /**
+     * the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+     * family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+     * `Sdk::open`
+     */
+    public var familyParams: FamilyParams?
+    /**
+     * the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+     * and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+     * `Sdk::open` on another family)
+     */
+    public var l1Fee: L1Fee?
+    /**
+     * the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+     * and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+     * attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+     * `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+     */
+    public var disabledKinds: [String]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -8920,7 +8996,23 @@ public struct ChainProfile: Equatable, Hashable {
          */dexes: [ListedDex], 
         /**
          * the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
-         */wrappers: [String]) {
+         */wrappers: [String], 
+        /**
+         * the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+         * family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+         * `Sdk::open`
+         */familyParams: FamilyParams?, 
+        /**
+         * the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+         * and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+         * `Sdk::open` on another family)
+         */l1Fee: L1Fee?, 
+        /**
+         * the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+         * and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+         * attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+         * `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+         */disabledKinds: [String]) {
         self.key = key
         self.family = family
         self.chainId = chainId
@@ -8941,6 +9033,9 @@ public struct ChainProfile: Equatable, Hashable {
         self.verifierPolicy = verifierPolicy
         self.dexes = dexes
         self.wrappers = wrappers
+        self.familyParams = familyParams
+        self.l1Fee = l1Fee
+        self.disabledKinds = disabledKinds
     }
 
     
@@ -8978,7 +9073,10 @@ public struct FfiConverterTypeChainProfile: FfiConverterRustBuffer {
                 verifiers: FfiConverterSequenceTypeEndpointConfig.read(from: &buf), 
                 verifierPolicy: FfiConverterTypePolicy.read(from: &buf), 
                 dexes: FfiConverterSequenceTypeListedDex.read(from: &buf), 
-                wrappers: FfiConverterSequenceString.read(from: &buf)
+                wrappers: FfiConverterSequenceString.read(from: &buf), 
+                familyParams: FfiConverterOptionTypeFamilyParams.read(from: &buf), 
+                l1Fee: FfiConverterOptionTypeL1Fee.read(from: &buf), 
+                disabledKinds: FfiConverterSequenceString.read(from: &buf)
         )
     }
 
@@ -9003,6 +9101,9 @@ public struct FfiConverterTypeChainProfile: FfiConverterRustBuffer {
         FfiConverterTypePolicy.write(value.verifierPolicy, into: &buf)
         FfiConverterSequenceTypeListedDex.write(value.dexes, into: &buf)
         FfiConverterSequenceString.write(value.wrappers, into: &buf)
+        FfiConverterOptionTypeFamilyParams.write(value.familyParams, into: &buf)
+        FfiConverterOptionTypeL1Fee.write(value.l1Fee, into: &buf)
+        FfiConverterSequenceString.write(value.disabledKinds, into: &buf)
     }
 }
 
@@ -10023,6 +10124,101 @@ public func FfiConverterTypeGasBase_lower(_ value: GasBase) -> RustBuffer {
 
 
 /**
+ * A verify row's registry-line columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65; §13 Gas): the row is
+ * keyed by chain (the table it is in), registry address and signer kind; the verify path, the depth and the write path are
+ * columns. Within one table no two verify rows share signer, registry, path, depth and write.
+ */
+public struct GasLine: Equatable, Hashable {
+    /**
+     * the registry the row was measured through (`0x` + 40 hex): a quote bound to it takes it first; `None`: a row of no one
+     * registry
+     */
+    public var registry: String?
+    /**
+     * `cache`, `precompile` or `fallback` (the holder's verdict after the verify-only verifier gave no answer, §5); `None`:
+     * the holder's own check
+     */
+    public var path: String?
+    /**
+     * the generations between the registry asked and the holder (0: the registry holds the record), at most 15
+     */
+    public var depth: UInt8
+    /**
+     * the write path of W1 (a registry write whose signature the holder checks), never a consumer operation's quote
+     */
+    public var write: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * the registry the row was measured through (`0x` + 40 hex): a quote bound to it takes it first; `None`: a row of no one
+         * registry
+         */registry: String?, 
+        /**
+         * `cache`, `precompile` or `fallback` (the holder's verdict after the verify-only verifier gave no answer, §5); `None`:
+         * the holder's own check
+         */path: String?, 
+        /**
+         * the generations between the registry asked and the holder (0: the registry holds the record), at most 15
+         */depth: UInt8, 
+        /**
+         * the write path of W1 (a registry write whose signature the holder checks), never a consumer operation's quote
+         */write: Bool) {
+        self.registry = registry
+        self.path = path
+        self.depth = depth
+        self.write = write
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension GasLine: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGasLine: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GasLine {
+        return
+            try GasLine(
+                registry: FfiConverterOptionString.read(from: &buf), 
+                path: FfiConverterOptionString.read(from: &buf), 
+                depth: FfiConverterUInt8.read(from: &buf), 
+                write: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GasLine, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.registry, into: &buf)
+        FfiConverterOptionString.write(value.path, into: &buf)
+        FfiConverterUInt8.write(value.depth, into: &buf)
+        FfiConverterBool.write(value.write, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGasLine_lift(_ buf: RustBuffer) throws -> GasLine {
+    return try FfiConverterTypeGasLine.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGasLine_lower(_ value: GasLine) -> RustBuffer {
+    return FfiConverterTypeGasLine.lower(value)
+}
+
+
+/**
  * A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
  * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
  */
@@ -10282,7 +10478,8 @@ public func FfiConverterTypeGasSources_lower(_ value: GasSources) -> RustBuffer 
  * verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
  * save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
  * per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
- * `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+ * `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?, registry?, path?, depth?, write?}` (the
+ * line's columns, [`GasLine`]), read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
  * and the SDK's reference table.
  */
 public struct GasTable: Equatable, Hashable {
@@ -10377,6 +10574,11 @@ public struct GasVerify: Equatable, Hashable {
      * the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
      */
     public var perItem: GasPerItem?
+    /**
+     * the registry line's columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); all absent: the holder's own
+     * check on any registry (every row before the line)
+     */
+    public var line: GasLine
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -10392,12 +10594,17 @@ public struct GasVerify: Equatable, Hashable {
          */margin: UInt64, 
         /**
          * the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
-         */perItem: GasPerItem?) {
+         */perItem: GasPerItem?, 
+        /**
+         * the registry line's columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); all absent: the holder's own
+         * check on any registry (every row before the line)
+         */line: GasLine) {
         self.signer = signer
         self.gas = gas
         self.sigBytes = sigBytes
         self.margin = margin
         self.perItem = perItem
+        self.line = line
     }
 
     
@@ -10420,7 +10627,8 @@ public struct FfiConverterTypeGasVerify: FfiConverterRustBuffer {
                 gas: FfiConverterUInt64.read(from: &buf), 
                 sigBytes: FfiConverterUInt64.read(from: &buf), 
                 margin: FfiConverterUInt64.read(from: &buf), 
-                perItem: FfiConverterOptionTypeGasPerItem.read(from: &buf)
+                perItem: FfiConverterOptionTypeGasPerItem.read(from: &buf), 
+                line: FfiConverterTypeGasLine.read(from: &buf)
         )
     }
 
@@ -10430,6 +10638,7 @@ public struct FfiConverterTypeGasVerify: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.sigBytes, into: &buf)
         FfiConverterUInt64.write(value.margin, into: &buf)
         FfiConverterOptionTypeGasPerItem.write(value.perItem, into: &buf)
+        FfiConverterTypeGasLine.write(value.line, into: &buf)
     }
 }
 
@@ -11464,7 +11673,7 @@ public func FfiConverterTypeListedDex_lower(_ value: ListedDex) -> RustBuffer {
  */
 public struct ListedToken: Equatable, Hashable {
     /**
-     * `0x` + 40 hex
+     * EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
      */
     public var address: String
     public var symbol: String
@@ -11474,7 +11683,7 @@ public struct ListedToken: Equatable, Hashable {
     // declare one manually.
     public init(
         /**
-         * `0x` + 40 hex
+         * EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
          */address: String, symbol: String, decimals: UInt8) {
         self.address = address
         self.symbol = symbol
@@ -18644,6 +18853,79 @@ public func FfiConverterTypeUaGrantRole_lower(_ value: UaGrantRole) -> RustBuffe
 
 
 /**
+ * Where a UA's record and its PQZ attachment live, as the bound registry's one walk answers (`holderOf`, §11.1).
+ */
+public struct UaLine: Equatable, Hashable {
+    /**
+     * the generation holding the record (`0x` + 40 hex): the target of a key write, where its record is read
+     */
+    public var holder: String
+    public var kind: UInt16
+    /**
+     * the record's PQZ home (§11.2): the target of a PQZ write, where its attachment is read; `None`: no home on the walk
+     */
+    public var pqzHome: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * the generation holding the record (`0x` + 40 hex): the target of a key write, where its record is read
+         */holder: String, kind: UInt16, 
+        /**
+         * the record's PQZ home (§11.2): the target of a PQZ write, where its attachment is read; `None`: no home on the walk
+         */pqzHome: String?) {
+        self.holder = holder
+        self.kind = kind
+        self.pqzHome = pqzHome
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension UaLine: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUaLine: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UaLine {
+        return
+            try UaLine(
+                holder: FfiConverterString.read(from: &buf), 
+                kind: FfiConverterUInt16.read(from: &buf), 
+                pqzHome: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UaLine, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.holder, into: &buf)
+        FfiConverterUInt16.write(value.kind, into: &buf)
+        FfiConverterOptionString.write(value.pqzHome, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUaLine_lift(_ buf: RustBuffer) throws -> UaLine {
+    return try FfiConverterTypeUaLine.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUaLine_lower(_ value: UaLine) -> RustBuffer {
+    return FfiConverterTypeUaLine.lower(value)
+}
+
+
+/**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
  * UAMint
  */
@@ -25534,6 +25816,161 @@ public func FfiConverterTypeFamily_lower(_ value: Family) -> RustBuffer {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * A family's own profile data (spec §8.7 rule 2; decisions CLI-SDK-15's Changes of 2026-11-21).
+ */
+
+public enum FamilyParams: Equatable, Hashable {
+    
+    /**
+     * Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
+     * profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),
+     * the native denom and the bech32 prefix of the chain's addresses
+     */
+    case cosmos(chainId: String, rest: [EndpointConfig], restPolicy: Policy, denom: String, prefix: String
+    )
+    /**
+     * Aptos: the chain id ledger info must name (`aptos_framework::chain_id`, 1 to 255; the identity an Aptos node answers)
+     * and the `scaas` package's address, whose view `meta::account_of(owner)` gives the Account an owner's tokens are in
+     * (NET-APT-05), as `0x` + 64 lowercase hex (AIP-40's long form)
+     */
+    case aptos(chainId: UInt8, package: String
+    )
+    /**
+     * Solana: the `scaas` program's id (base58 of 32 bytes), under which an owner's SCaaS Account is the `["acct", owner]`
+     * program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
+     */
+    case solana(program: String
+    )
+    /**
+     * Soroban: the network passphrase its RPC endpoints name (`getNetwork`; its SHA-256 is `chain_uid`, checked at `Sdk::open`)
+     * and the XLM SAC contract (`C…`), pinned, whose balance entry is a `C…` holder's native XLM (never derived here)
+     */
+    case soroban(passphrase: String, xlmSac: String
+    )
+    /**
+     * Sui: the GraphQL endpoints the reads go to, with their policy (public fullnodes refuse JSON-RPC, docs/networks/sui.md
+     * §14; the profile's `rpc` are the JSON-RPC endpoints), each named by `chain_uid`, the genesis checkpoint's digest, whose
+     * 32 bytes in base58 `chainIdentifier` must answer
+     */
+    case sui(graphql: [EndpointConfig], graphqlPolicy: Policy
+    )
+    /**
+     * Polkadot Hub's Substrate side on its EVM profile (decisions CLI-SDK-32's Change of 2026-11-22, plan T32's read part): the
+     * Substrate JSON-RPC endpoints with their policy, each named by `genesis` (`0x` + 64 hex, `chain_getBlockHash(0)`), and the
+     * SS58 prefix of the chain's addresses (0 to 16,383, not 46 or 47); `balances` of an SS58 id reads its `System.Account`
+     * there. The same params serve the relay chain's Substrate side
+     */
+    case substrate(rpc: [EndpointConfig], rpcPolicy: Policy, genesis: String, ss58Prefix: UInt16
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FamilyParams: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFamilyParams: FfiConverterRustBuffer {
+    typealias SwiftType = FamilyParams
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FamilyParams {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .cosmos(chainId: try FfiConverterString.read(from: &buf), rest: try FfiConverterSequenceTypeEndpointConfig.read(from: &buf), restPolicy: try FfiConverterTypePolicy.read(from: &buf), denom: try FfiConverterString.read(from: &buf), prefix: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .aptos(chainId: try FfiConverterUInt8.read(from: &buf), package: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .solana(program: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .soroban(passphrase: try FfiConverterString.read(from: &buf), xlmSac: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 5: return .sui(graphql: try FfiConverterSequenceTypeEndpointConfig.read(from: &buf), graphqlPolicy: try FfiConverterTypePolicy.read(from: &buf)
+        )
+        
+        case 6: return .substrate(rpc: try FfiConverterSequenceTypeEndpointConfig.read(from: &buf), rpcPolicy: try FfiConverterTypePolicy.read(from: &buf), genesis: try FfiConverterString.read(from: &buf), ss58Prefix: try FfiConverterUInt16.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FamilyParams, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .cosmos(chainId,rest,restPolicy,denom,prefix):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(chainId, into: &buf)
+            FfiConverterSequenceTypeEndpointConfig.write(rest, into: &buf)
+            FfiConverterTypePolicy.write(restPolicy, into: &buf)
+            FfiConverterString.write(denom, into: &buf)
+            FfiConverterString.write(prefix, into: &buf)
+            
+        
+        case let .aptos(chainId,package):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt8.write(chainId, into: &buf)
+            FfiConverterString.write(package, into: &buf)
+            
+        
+        case let .solana(program):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(program, into: &buf)
+            
+        
+        case let .soroban(passphrase,xlmSac):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(passphrase, into: &buf)
+            FfiConverterString.write(xlmSac, into: &buf)
+            
+        
+        case let .sui(graphql,graphqlPolicy):
+            writeInt(&buf, Int32(5))
+            FfiConverterSequenceTypeEndpointConfig.write(graphql, into: &buf)
+            FfiConverterTypePolicy.write(graphqlPolicy, into: &buf)
+            
+        
+        case let .substrate(rpc,rpcPolicy,genesis,ss58Prefix):
+            writeInt(&buf, Int32(6))
+            FfiConverterSequenceTypeEndpointConfig.write(rpc, into: &buf)
+            FfiConverterTypePolicy.write(rpcPolicy, into: &buf)
+            FfiConverterString.write(genesis, into: &buf)
+            FfiConverterUInt16.write(ss58Prefix, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFamilyParams_lift(_ buf: RustBuffer) throws -> FamilyParams {
+    return try FfiConverterTypeFamilyParams.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFamilyParams_lower(_ value: FamilyParams) -> RustBuffer {
+    return FfiConverterTypeFamilyParams.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * The block of every decisive and decryption read (§9.4 requirement 3).
  */
 
@@ -26094,6 +26531,72 @@ public func FfiConverterTypeKeyRef_lift(_ buf: RustBuffer) throws -> KeyRef {
 #endif
 public func FfiConverterTypeKeyRef_lower(_ value: KeyRef) -> RustBuffer {
     return FfiConverterTypeKeyRef.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * An L1 data fee model (plan T38).
+ */
+
+public enum L1Fee: Equatable, Hashable {
+    
+    /**
+     * OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
+     */
+    case opStack
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension L1Fee: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeL1Fee: FfiConverterRustBuffer {
+    typealias SwiftType = L1Fee
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> L1Fee {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .opStack
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: L1Fee, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .opStack:
+            writeInt(&buf, Int32(1))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeL1Fee_lift(_ buf: RustBuffer) throws -> L1Fee {
+    return try FfiConverterTypeL1Fee.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeL1Fee_lower(_ value: L1Fee) -> RustBuffer {
+    return FfiConverterTypeL1Fee.lower(value)
 }
 
 
@@ -26712,6 +27215,8 @@ public enum SdkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
     
     case TxTypeRefused(message: String)
     
+    case KindDisabled(message: String)
+    
     case RawDigestRefused(message: String)
     
     case AppDomainRefused(message: String)
@@ -26829,6 +27334,22 @@ public enum SdkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
      * unknown part is refused, never dropped from a quote.
      */
     case GasFieldUnknown(message: String)
+    
+    /**
+     * A registration of a kind whose home (`kindHome(kind)`) is another generation than the bound registry: that registry
+     * carries it verify-only, or not at all (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); nothing is sent.
+     */
+    case RegistrationVerifyOnly(message: String)
+    
+    /**
+     * A UA no generation of the bound registry's line holds (`holderOf(ua)` answers no holder, §11.1).
+     */
+    case UaUnregistered(message: String)
+    
+    /**
+     * A PQZ write or read of a UA whose record has no PQZ home on the bound registry's walk (`pqzHomeOf(ua)` 0, §11.2).
+     */
+    case PqzHomeNone(message: String)
     
     /**
      * An order, a cancel or a liquidity order naming a DEX that is not on the chain profile's list, or a wrap order whose
@@ -27009,151 +27530,167 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 30: return .RawDigestRefused(
+        case 30: return .KindDisabled(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 31: return .AppDomainRefused(
+        case 31: return .RawDigestRefused(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 32: return .AppPurposeRefused(
+        case 32: return .AppDomainRefused(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 33: return .AppSaltMismatch(
+        case 33: return .AppPurposeRefused(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 34: return .AppHandleForeign(
+        case 34: return .AppSaltMismatch(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 35: return .AppLabelRefused(
+        case 35: return .AppHandleForeign(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 36: return .AppKeyUsage(
+        case 36: return .AppLabelRefused(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 37: return .AppArenaFull(
+        case 37: return .AppKeyUsage(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 38: return .KemKeyGone(
+        case 38: return .AppArenaFull(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 39: return .ReceiverUnregistered(
+        case 39: return .KemKeyGone(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 40: return .RegistrationUaMismatch(
+        case 40: return .ReceiverUnregistered(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 41: return .RegistrationKindDisabled(
+        case 41: return .RegistrationUaMismatch(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 42: return .RegistrationPopInvalid(
+        case 42: return .RegistrationKindDisabled(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 43: return .RegistrationKemMissing(
+        case 43: return .RegistrationPopInvalid(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 44: return .AbiMismatch(
+        case 44: return .RegistrationKemMissing(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 45: return .Internal(
+        case 45: return .AbiMismatch(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 46: return .AccountExists(
+        case 46: return .Internal(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 47: return .GasUnquoted(
+        case 47: return .AccountExists(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 48: return .ValidUntilRefused(
+        case 48: return .GasUnquoted(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 49: return .TokenUncatalogued(
+        case 49: return .ValidUntilRefused(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 50: return .LegKeyMismatch(
+        case 50: return .TokenUncatalogued(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 51: return .SignerNotAccountKey(
+        case 51: return .LegKeyMismatch(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 52: return .PqzOpeningUnsupported(
+        case 52: return .SignerNotAccountKey(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 53: return .MsigSlotInactive(
+        case 53: return .PqzOpeningUnsupported(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 54: return .GasSigBytesMissing(
+        case 54: return .MsigSlotInactive(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 55: return .SignedGasAboveCap(
+        case 55: return .GasSigBytesMissing(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 56: return .GasItemUnpaired(
+        case 56: return .SignedGasAboveCap(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 57: return .GasItemUnknown(
+        case 57: return .GasItemUnpaired(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 58: return .GasCountUnknown(
+        case 58: return .GasItemUnknown(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 59: return .BlsMultiBelowThreshold(
+        case 59: return .GasCountUnknown(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 60: return .GasFieldUnknown(
+        case 60: return .BlsMultiBelowThreshold(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 61: return .DexNotListed(
+        case 61: return .GasFieldUnknown(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 62: return .PqzAuditorNative(
+        case 62: return .RegistrationVerifyOnly(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 63: return .GasAboveBlockShare(
+        case 63: return .UaUnregistered(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 64: return .Cancelled(
+        case 64: return .PqzHomeNone(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 65: return .Ua(
+        case 65: return .DexNotListed(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 66: return .Rpc(
+        case 66: return .PqzAuditorNative(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 67: return .GasAboveBlockShare(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 68: return .Cancelled(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 69: return .Ua(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 70: return .Rpc(
             message: try FfiConverterString.read(from: &buf)
         )
         
@@ -27226,80 +27763,88 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(28))
         case .TxTypeRefused(_ /* message is ignored*/):
             writeInt(&buf, Int32(29))
-        case .RawDigestRefused(_ /* message is ignored*/):
+        case .KindDisabled(_ /* message is ignored*/):
             writeInt(&buf, Int32(30))
-        case .AppDomainRefused(_ /* message is ignored*/):
+        case .RawDigestRefused(_ /* message is ignored*/):
             writeInt(&buf, Int32(31))
-        case .AppPurposeRefused(_ /* message is ignored*/):
+        case .AppDomainRefused(_ /* message is ignored*/):
             writeInt(&buf, Int32(32))
-        case .AppSaltMismatch(_ /* message is ignored*/):
+        case .AppPurposeRefused(_ /* message is ignored*/):
             writeInt(&buf, Int32(33))
-        case .AppHandleForeign(_ /* message is ignored*/):
+        case .AppSaltMismatch(_ /* message is ignored*/):
             writeInt(&buf, Int32(34))
-        case .AppLabelRefused(_ /* message is ignored*/):
+        case .AppHandleForeign(_ /* message is ignored*/):
             writeInt(&buf, Int32(35))
-        case .AppKeyUsage(_ /* message is ignored*/):
+        case .AppLabelRefused(_ /* message is ignored*/):
             writeInt(&buf, Int32(36))
-        case .AppArenaFull(_ /* message is ignored*/):
+        case .AppKeyUsage(_ /* message is ignored*/):
             writeInt(&buf, Int32(37))
-        case .KemKeyGone(_ /* message is ignored*/):
+        case .AppArenaFull(_ /* message is ignored*/):
             writeInt(&buf, Int32(38))
-        case .ReceiverUnregistered(_ /* message is ignored*/):
+        case .KemKeyGone(_ /* message is ignored*/):
             writeInt(&buf, Int32(39))
-        case .RegistrationUaMismatch(_ /* message is ignored*/):
+        case .ReceiverUnregistered(_ /* message is ignored*/):
             writeInt(&buf, Int32(40))
-        case .RegistrationKindDisabled(_ /* message is ignored*/):
+        case .RegistrationUaMismatch(_ /* message is ignored*/):
             writeInt(&buf, Int32(41))
-        case .RegistrationPopInvalid(_ /* message is ignored*/):
+        case .RegistrationKindDisabled(_ /* message is ignored*/):
             writeInt(&buf, Int32(42))
-        case .RegistrationKemMissing(_ /* message is ignored*/):
+        case .RegistrationPopInvalid(_ /* message is ignored*/):
             writeInt(&buf, Int32(43))
-        case .AbiMismatch(_ /* message is ignored*/):
+        case .RegistrationKemMissing(_ /* message is ignored*/):
             writeInt(&buf, Int32(44))
-        case .Internal(_ /* message is ignored*/):
+        case .AbiMismatch(_ /* message is ignored*/):
             writeInt(&buf, Int32(45))
-        case .AccountExists(_ /* message is ignored*/):
+        case .Internal(_ /* message is ignored*/):
             writeInt(&buf, Int32(46))
-        case .GasUnquoted(_ /* message is ignored*/):
+        case .AccountExists(_ /* message is ignored*/):
             writeInt(&buf, Int32(47))
-        case .ValidUntilRefused(_ /* message is ignored*/):
+        case .GasUnquoted(_ /* message is ignored*/):
             writeInt(&buf, Int32(48))
-        case .TokenUncatalogued(_ /* message is ignored*/):
+        case .ValidUntilRefused(_ /* message is ignored*/):
             writeInt(&buf, Int32(49))
-        case .LegKeyMismatch(_ /* message is ignored*/):
+        case .TokenUncatalogued(_ /* message is ignored*/):
             writeInt(&buf, Int32(50))
-        case .SignerNotAccountKey(_ /* message is ignored*/):
+        case .LegKeyMismatch(_ /* message is ignored*/):
             writeInt(&buf, Int32(51))
-        case .PqzOpeningUnsupported(_ /* message is ignored*/):
+        case .SignerNotAccountKey(_ /* message is ignored*/):
             writeInt(&buf, Int32(52))
-        case .MsigSlotInactive(_ /* message is ignored*/):
+        case .PqzOpeningUnsupported(_ /* message is ignored*/):
             writeInt(&buf, Int32(53))
-        case .GasSigBytesMissing(_ /* message is ignored*/):
+        case .MsigSlotInactive(_ /* message is ignored*/):
             writeInt(&buf, Int32(54))
-        case .SignedGasAboveCap(_ /* message is ignored*/):
+        case .GasSigBytesMissing(_ /* message is ignored*/):
             writeInt(&buf, Int32(55))
-        case .GasItemUnpaired(_ /* message is ignored*/):
+        case .SignedGasAboveCap(_ /* message is ignored*/):
             writeInt(&buf, Int32(56))
-        case .GasItemUnknown(_ /* message is ignored*/):
+        case .GasItemUnpaired(_ /* message is ignored*/):
             writeInt(&buf, Int32(57))
-        case .GasCountUnknown(_ /* message is ignored*/):
+        case .GasItemUnknown(_ /* message is ignored*/):
             writeInt(&buf, Int32(58))
-        case .BlsMultiBelowThreshold(_ /* message is ignored*/):
+        case .GasCountUnknown(_ /* message is ignored*/):
             writeInt(&buf, Int32(59))
-        case .GasFieldUnknown(_ /* message is ignored*/):
+        case .BlsMultiBelowThreshold(_ /* message is ignored*/):
             writeInt(&buf, Int32(60))
-        case .DexNotListed(_ /* message is ignored*/):
+        case .GasFieldUnknown(_ /* message is ignored*/):
             writeInt(&buf, Int32(61))
-        case .PqzAuditorNative(_ /* message is ignored*/):
+        case .RegistrationVerifyOnly(_ /* message is ignored*/):
             writeInt(&buf, Int32(62))
-        case .GasAboveBlockShare(_ /* message is ignored*/):
+        case .UaUnregistered(_ /* message is ignored*/):
             writeInt(&buf, Int32(63))
-        case .Cancelled(_ /* message is ignored*/):
+        case .PqzHomeNone(_ /* message is ignored*/):
             writeInt(&buf, Int32(64))
-        case .Ua(_ /* message is ignored*/):
+        case .DexNotListed(_ /* message is ignored*/):
             writeInt(&buf, Int32(65))
-        case .Rpc(_ /* message is ignored*/):
+        case .PqzAuditorNative(_ /* message is ignored*/):
             writeInt(&buf, Int32(66))
+        case .GasAboveBlockShare(_ /* message is ignored*/):
+            writeInt(&buf, Int32(67))
+        case .Cancelled(_ /* message is ignored*/):
+            writeInt(&buf, Int32(68))
+        case .Ua(_ /* message is ignored*/):
+            writeInt(&buf, Int32(69))
+        case .Rpc(_ /* message is ignored*/):
+            writeInt(&buf, Int32(70))
 
         
         }
@@ -28391,6 +28936,30 @@ fileprivate struct FfiConverterOptionTypeEvent: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFamilyParams: FfiConverterRustBuffer {
+    typealias SwiftType = FamilyParams?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFamilyParams.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFamilyParams.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeHolderKind: FfiConverterRustBuffer {
     typealias SwiftType = HolderKind?
 
@@ -28431,6 +29000,30 @@ fileprivate struct FfiConverterOptionTypeKeyRef: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeKeyRef.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeL1Fee: FfiConverterRustBuffer {
+    typealias SwiftType = L1Fee?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeL1Fee.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeL1Fee.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -29809,6 +30402,26 @@ public func subjectKeyArgsSecp256k1(address: String)throws  -> SubjectKeyArgs  {
     )
 })
 }
+/**
+ * The target of a key write of the UA (`UaLine::key_target`, §12): its holder.
+ */
+public func uaLineKeyTarget(line: UaLine) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_scaas_sdk_fn_func_ua_line_key_target(
+        FfiConverterTypeUaLine_lower(line),$0
+    )
+})
+}
+/**
+ * The target of a PQZ write of the UA (`UaLine::pqz_target`, §12): its PQZ home; `PqzHomeNone` where the walk has none.
+ */
+public func uaLinePqzTarget(line: UaLine)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
+    uniffi_scaas_sdk_fn_func_ua_line_pqz_target(
+        FfiConverterTypeUaLine_lower(line),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -29894,6 +30507,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_scaas_sdk_checksum_func_subject_key_args_secp256k1() != 20622) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scaas_sdk_checksum_func_ua_line_key_target() != 60856) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_func_ua_line_pqz_target() != 29446) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scaas_sdk_checksum_method_registrywrite_calldata() != 7040) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29943,6 +30562,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_account_next_account() != 28699) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates() != 49782) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_account_prepare_accept_membership() != 50844) {
@@ -29996,6 +30618,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_scaas_sdk_checksum_method_account_quote_registry_write() != 20576) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scaas_sdk_checksum_method_account_register_target() != 38916) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scaas_sdk_checksum_method_account_registration_blob() != 44041) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -30009,6 +30634,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_account_submit_registry_write() != 40795) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_account_ua_line() != 3220) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_accept_admin() != 54249) {

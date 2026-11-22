@@ -191,6 +191,12 @@ public class SdkException extends java.lang.Exception {
       }
     }
     
+    public static class KindDisabled extends SdkException {
+      public KindDisabled(java.lang.String message) {
+        super(message);
+      }
+    }
+    
     public static class RawDigestRefused extends SdkException {
       public RawDigestRefused(java.lang.String message) {
         super(message);
@@ -429,6 +435,34 @@ public class SdkException extends java.lang.Exception {
      */
     public static class GasFieldUnknown extends SdkException {
       public GasFieldUnknown(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * A registration of a kind whose home (`kindHome(kind)`) is another generation than the bound registry: that registry
+     * carries it verify-only, or not at all (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); nothing is sent.
+     */
+    public static class RegistrationVerifyOnly extends SdkException {
+      public RegistrationVerifyOnly(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * A UA no generation of the bound registry's line holds (`holderOf(ua)` answers no holder, §11.1).
+     */
+    public static class UaUnregistered extends SdkException {
+      public UaUnregistered(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * A PQZ write or read of a UA whose record has no PQZ home on the bound registry's walk (`pqzHomeOf(ua)` 0, §11.2).
+     */
+    public static class PqzHomeNone extends SdkException {
+      public PqzHomeNone(java.lang.String message) {
         super(message);
       }
     }

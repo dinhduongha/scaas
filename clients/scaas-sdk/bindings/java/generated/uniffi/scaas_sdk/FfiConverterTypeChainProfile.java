@@ -26,6 +26,9 @@ public enum FfiConverterTypeChainProfile implements FfiConverterRustBuffer<Chain
       FfiConverterSequenceTypeEndpointConfig.INSTANCE.read(buf),
       FfiConverterTypePolicy.INSTANCE.read(buf),
       FfiConverterSequenceTypeListedDex.INSTANCE.read(buf),
+      FfiConverterSequenceString.INSTANCE.read(buf),
+      FfiConverterOptionalTypeFamilyParams.INSTANCE.read(buf),
+      FfiConverterOptionalTypeL1Fee.INSTANCE.read(buf),
       FfiConverterSequenceString.INSTANCE.read(buf)
     );
   }
@@ -52,7 +55,10 @@ public enum FfiConverterTypeChainProfile implements FfiConverterRustBuffer<Chain
             FfiConverterSequenceTypeEndpointConfig.INSTANCE.allocationSize(value.verifiers()) +
             FfiConverterTypePolicy.INSTANCE.allocationSize(value.verifierPolicy()) +
             FfiConverterSequenceTypeListedDex.INSTANCE.allocationSize(value.dexes()) +
-            FfiConverterSequenceString.INSTANCE.allocationSize(value.wrappers())
+            FfiConverterSequenceString.INSTANCE.allocationSize(value.wrappers()) +
+            FfiConverterOptionalTypeFamilyParams.INSTANCE.allocationSize(value.familyParams()) +
+            FfiConverterOptionalTypeL1Fee.INSTANCE.allocationSize(value.l1Fee()) +
+            FfiConverterSequenceString.INSTANCE.allocationSize(value.disabledKinds())
       );
   }
 
@@ -78,6 +84,9 @@ public enum FfiConverterTypeChainProfile implements FfiConverterRustBuffer<Chain
       FfiConverterTypePolicy.INSTANCE.write(value.verifierPolicy(), buf);
       FfiConverterSequenceTypeListedDex.INSTANCE.write(value.dexes(), buf);
       FfiConverterSequenceString.INSTANCE.write(value.wrappers(), buf);
+      FfiConverterOptionalTypeFamilyParams.INSTANCE.write(value.familyParams(), buf);
+      FfiConverterOptionalTypeL1Fee.INSTANCE.write(value.l1Fee(), buf);
+      FfiConverterSequenceString.INSTANCE.write(value.disabledKinds(), buf);
   }
 }
 

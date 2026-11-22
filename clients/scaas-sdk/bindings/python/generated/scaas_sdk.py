@@ -525,6 +525,10 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_func_subject_key_args_secp256k1() != 20622:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_func_ua_line_key_target() != 60856:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_func_ua_line_pqz_target() != 29446:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_account_accounts() != 44679:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_account_add_native() != 12150:
@@ -542,6 +546,8 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_scaas_sdk_checksum_method_account_msig_state() != 50219:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_account_next_account() != 28699:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates() != 49782:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_account_prepare_accept_membership() != 50844:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -577,6 +583,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_account_quote_registry_write() != 20576:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_account_register_target() != 38916:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_account_registration_blob() != 44041:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_account_registration_of() != 3989:
@@ -586,6 +594,8 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_scaas_sdk_checksum_method_account_signs() != 33018:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_account_submit_registry_write() != 40795:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_account_ua_line() != 3220:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_accept_admin() != 54249:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1632,6 +1642,16 @@ _UniffiLib.uniffi_scaas_sdk_fn_func_subject_key_args_secp256k1.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_scaas_sdk_fn_func_subject_key_args_secp256k1.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_scaas_sdk_fn_func_ua_line_key_target.argtypes = (
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_scaas_sdk_fn_func_ua_line_key_target.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_scaas_sdk_fn_func_ua_line_pqz_target.argtypes = (
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_scaas_sdk_fn_func_ua_line_pqz_target.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_scaas_sdk_fn_method_account_accounts.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -1679,6 +1699,11 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_account_next_account.argtypes = (
     _UniffiRustBuffer,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_account_next_account.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_account_prepare_accept_membership.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -1785,6 +1810,12 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_account_quote_registry_write.argtypes = (
     ctypes.c_uint64,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_account_quote_registry_write.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_account_register_target.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.c_uint16,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_account_register_target.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_account_registration_blob.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -1814,6 +1845,12 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_account_submit_registry_write.argtypes = (
     _UniffiRustBuffer,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_account_submit_registry_write.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_account_ua_line.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_account_ua_line.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_accept_admin.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3031,6 +3068,12 @@ _UniffiLib.uniffi_scaas_sdk_checksum_func_store_policy_default.restype = ctypes.
 _UniffiLib.uniffi_scaas_sdk_checksum_func_subject_key_args_secp256k1.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_func_subject_key_args_secp256k1.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_func_ua_line_key_target.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_func_ua_line_key_target.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_func_ua_line_pqz_target.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_func_ua_line_pqz_target.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_accounts.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_accounts.restype = ctypes.c_uint16
@@ -3058,6 +3101,9 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_account_msig_state.restype = ctypes.
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_next_account.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_next_account.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_prepare_accept_membership.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_prepare_accept_membership.restype = ctypes.c_uint16
@@ -3109,6 +3155,9 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_account_prepare_update_msig.restype 
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_quote_registry_write.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_quote_registry_write.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_account_register_target.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_account_register_target.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_registration_blob.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_registration_blob.restype = ctypes.c_uint16
@@ -3124,6 +3173,9 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_account_signs.restype = ctypes.c_uin
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_submit_registry_write.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_account_submit_registry_write.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_account_ua_line.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_account_ua_line.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_accept_admin.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_accept_admin.restype = ctypes.c_uint16
@@ -6949,23 +7001,77 @@ class _UniffiFfiConverterSequenceTypeGasBase(_UniffiConverterRustBuffer):
         ]
 
 @dataclass
-class GasVerify:
+class GasLine:
     """
-    A verify row (gas table v2): what a signer of UA kind `signer` (`0`: a native EVM key, the reference) adds over the
-    reference signer's execution gas.
+    A verify row's registry-line columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65; §13 Gas): the row is
+    keyed by chain (the table it is in), registry address and signer kind; the verify path, the depth and the write path are
+    columns. Within one table no two verify rows share signer, registry, path, depth and write.
 """
-    def __init__(self, *, signer:int, gas:int, sig_bytes:int, margin:int, per_item:typing.Optional[GasPerItem]):
-        self.signer = signer
-        self.gas = gas
-        self.sig_bytes = sig_bytes
-        self.margin = margin
-        self.per_item = per_item
+    def __init__(self, *, registry:typing.Optional[str], path:typing.Optional[str], depth:int, write:bool):
+        self.registry = registry
+        self.path = path
+        self.depth = depth
+        self.write = write
         
         
 
     
     def __str__(self):
-        return "GasVerify(signer={}, gas={}, sig_bytes={}, margin={}, per_item={})".format(self.signer, self.gas, self.sig_bytes, self.margin, self.per_item)
+        return "GasLine(registry={}, path={}, depth={}, write={})".format(self.registry, self.path, self.depth, self.write)
+    def __eq__(self, other):
+        if self.registry != other.registry:
+            return False
+        if self.path != other.path:
+            return False
+        if self.depth != other.depth:
+            return False
+        if self.write != other.write:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeGasLine(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return GasLine(
+            registry=_UniffiFfiConverterOptionalString.read(buf),
+            path=_UniffiFfiConverterOptionalString.read(buf),
+            depth=_UniffiFfiConverterUInt8.read(buf),
+            write=_UniffiFfiConverterBoolean.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterOptionalString.check_lower(value.registry)
+        _UniffiFfiConverterOptionalString.check_lower(value.path)
+        _UniffiFfiConverterUInt8.check_lower(value.depth)
+        _UniffiFfiConverterBoolean.check_lower(value.write)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterOptionalString.write(value.registry, buf)
+        _UniffiFfiConverterOptionalString.write(value.path, buf)
+        _UniffiFfiConverterUInt8.write(value.depth, buf)
+        _UniffiFfiConverterBoolean.write(value.write, buf)
+
+@dataclass
+class GasVerify:
+    """
+    A verify row (gas table v2): what a signer of UA kind `signer` (`0`: a native EVM key, the reference) adds over the
+    reference signer's execution gas.
+"""
+    def __init__(self, *, signer:int, gas:int, sig_bytes:int, margin:int, per_item:typing.Optional[GasPerItem], line:GasLine):
+        self.signer = signer
+        self.gas = gas
+        self.sig_bytes = sig_bytes
+        self.margin = margin
+        self.per_item = per_item
+        self.line = line
+        
+        
+
+    
+    def __str__(self):
+        return "GasVerify(signer={}, gas={}, sig_bytes={}, margin={}, per_item={}, line={})".format(self.signer, self.gas, self.sig_bytes, self.margin, self.per_item, self.line)
     def __eq__(self, other):
         if self.signer != other.signer:
             return False
@@ -6976,6 +7082,8 @@ class GasVerify:
         if self.margin != other.margin:
             return False
         if self.per_item != other.per_item:
+            return False
+        if self.line != other.line:
             return False
         return True
 
@@ -6988,6 +7096,7 @@ class _UniffiFfiConverterTypeGasVerify(_UniffiConverterRustBuffer):
             sig_bytes=_UniffiFfiConverterUInt64.read(buf),
             margin=_UniffiFfiConverterUInt64.read(buf),
             per_item=_UniffiFfiConverterOptionalTypeGasPerItem.read(buf),
+            line=_UniffiFfiConverterTypeGasLine.read(buf),
         )
 
     @staticmethod
@@ -6997,6 +7106,7 @@ class _UniffiFfiConverterTypeGasVerify(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.check_lower(value.sig_bytes)
         _UniffiFfiConverterUInt64.check_lower(value.margin)
         _UniffiFfiConverterOptionalTypeGasPerItem.check_lower(value.per_item)
+        _UniffiFfiConverterTypeGasLine.check_lower(value.line)
 
     @staticmethod
     def write(value, buf):
@@ -7005,6 +7115,7 @@ class _UniffiFfiConverterTypeGasVerify(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.sig_bytes, buf)
         _UniffiFfiConverterUInt64.write(value.margin, buf)
         _UniffiFfiConverterOptionalTypeGasPerItem.write(value.per_item, buf)
+        _UniffiFfiConverterTypeGasLine.write(value.line, buf)
 
 class _UniffiFfiConverterSequenceTypeGasVerify(_UniffiConverterRustBuffer):
     @classmethod
@@ -7222,12 +7333,484 @@ class _UniffiFfiConverterSequenceTypeListedDex(_UniffiConverterRustBuffer):
             _UniffiFfiConverterTypeListedDex.read(buf) for i in range(count)
         ]
 
+
+
+
+
+
+class FamilyParams:
+    """
+    A family's own profile data (spec §8.7 rule 2; decisions CLI-SDK-15's Changes of 2026-11-21).
+"""
+    def __init__(self):
+        raise RuntimeError("FamilyParams cannot be instantiated directly")
+
+    # Each enum variant is a nested class of the enum itself.
+    @dataclass
+    class COSMOS:
+        """
+        Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
+        profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),
+        the native denom and the bech32 prefix of the chain's addresses
+"""
+        
+        def __init__(self, chain_id:str, rest:typing.List[EndpointConfig], rest_policy:Policy, denom:str, prefix:str):
+            self.chain_id = chain_id
+            
+            
+            self.rest = rest
+            
+            
+            self.rest_policy = rest_policy
+            
+            
+            self.denom = denom
+            
+            
+            self.prefix = prefix
+            
+            
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "FamilyParams.COSMOS(chain_id={}, rest={}, rest_policy={}, denom={}, prefix={})".format(self.chain_id, self.rest, self.rest_policy, self.denom, self.prefix)
+        def __eq__(self, other):
+            if not isinstance(other, FamilyParams):
+                return NotImplemented
+            if not other.is_COSMOS():
+                return False
+            if self.chain_id != other.chain_id:
+                return False
+            if self.rest != other.rest:
+                return False
+            if self.rest_policy != other.rest_policy:
+                return False
+            if self.denom != other.denom:
+                return False
+            if self.prefix != other.prefix:
+                return False
+            return True
+
+    @dataclass
+    class APTOS:
+        """
+        Aptos: the chain id ledger info must name (`aptos_framework::chain_id`, 1 to 255; the identity an Aptos node answers)
+        and the `scaas` package's address, whose view `meta::account_of(owner)` gives the Account an owner's tokens are in
+        (NET-APT-05), as `0x` + 64 lowercase hex (AIP-40's long form)
+"""
+        
+        def __init__(self, chain_id:int, package:str):
+            self.chain_id = chain_id
+            
+            
+            self.package = package
+            
+            
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "FamilyParams.APTOS(chain_id={}, package={})".format(self.chain_id, self.package)
+        def __eq__(self, other):
+            if not isinstance(other, FamilyParams):
+                return NotImplemented
+            if not other.is_APTOS():
+                return False
+            if self.chain_id != other.chain_id:
+                return False
+            if self.package != other.package:
+                return False
+            return True
+
+    @dataclass
+    class SOLANA:
+        """
+        Solana: the `scaas` program's id (base58 of 32 bytes), under which an owner's SCaaS Account is the `["acct", owner]`
+        program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
+"""
+        
+        def __init__(self, program:str):
+            self.program = program
+            
+            
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "FamilyParams.SOLANA(program={})".format(self.program)
+        def __eq__(self, other):
+            if not isinstance(other, FamilyParams):
+                return NotImplemented
+            if not other.is_SOLANA():
+                return False
+            if self.program != other.program:
+                return False
+            return True
+
+    @dataclass
+    class SOROBAN:
+        """
+        Soroban: the network passphrase its RPC endpoints name (`getNetwork`; its SHA-256 is `chain_uid`, checked at `Sdk::open`)
+        and the XLM SAC contract (`C…`), pinned, whose balance entry is a `C…` holder's native XLM (never derived here)
+"""
+        
+        def __init__(self, passphrase:str, xlm_sac:str):
+            self.passphrase = passphrase
+            
+            
+            self.xlm_sac = xlm_sac
+            
+            
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "FamilyParams.SOROBAN(passphrase={}, xlm_sac={})".format(self.passphrase, self.xlm_sac)
+        def __eq__(self, other):
+            if not isinstance(other, FamilyParams):
+                return NotImplemented
+            if not other.is_SOROBAN():
+                return False
+            if self.passphrase != other.passphrase:
+                return False
+            if self.xlm_sac != other.xlm_sac:
+                return False
+            return True
+
+    @dataclass
+    class SUI:
+        """
+        Sui: the GraphQL endpoints the reads go to, with their policy (public fullnodes refuse JSON-RPC, docs/networks/sui.md
+        §14; the profile's `rpc` are the JSON-RPC endpoints), each named by `chain_uid`, the genesis checkpoint's digest, whose
+        32 bytes in base58 `chainIdentifier` must answer
+"""
+        
+        def __init__(self, graphql:typing.List[EndpointConfig], graphql_policy:Policy):
+            self.graphql = graphql
+            
+            
+            self.graphql_policy = graphql_policy
+            
+            
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "FamilyParams.SUI(graphql={}, graphql_policy={})".format(self.graphql, self.graphql_policy)
+        def __eq__(self, other):
+            if not isinstance(other, FamilyParams):
+                return NotImplemented
+            if not other.is_SUI():
+                return False
+            if self.graphql != other.graphql:
+                return False
+            if self.graphql_policy != other.graphql_policy:
+                return False
+            return True
+
+    @dataclass
+    class SUBSTRATE:
+        """
+        Polkadot Hub's Substrate side on its EVM profile (decisions CLI-SDK-32's Change of 2026-11-22, plan T32's read part): the
+        Substrate JSON-RPC endpoints with their policy, each named by `genesis` (`0x` + 64 hex, `chain_getBlockHash(0)`), and the
+        SS58 prefix of the chain's addresses (0 to 16,383, not 46 or 47); `balances` of an SS58 id reads its `System.Account`
+        there. The same params serve the relay chain's Substrate side
+"""
+        
+        def __init__(self, rpc:typing.List[EndpointConfig], rpc_policy:Policy, genesis:str, ss58_prefix:int):
+            self.rpc = rpc
+            
+            
+            self.rpc_policy = rpc_policy
+            
+            
+            self.genesis = genesis
+            
+            
+            self.ss58_prefix = ss58_prefix
+            
+            
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "FamilyParams.SUBSTRATE(rpc={}, rpc_policy={}, genesis={}, ss58_prefix={})".format(self.rpc, self.rpc_policy, self.genesis, self.ss58_prefix)
+        def __eq__(self, other):
+            if not isinstance(other, FamilyParams):
+                return NotImplemented
+            if not other.is_SUBSTRATE():
+                return False
+            if self.rpc != other.rpc:
+                return False
+            if self.rpc_policy != other.rpc_policy:
+                return False
+            if self.genesis != other.genesis:
+                return False
+            if self.ss58_prefix != other.ss58_prefix:
+                return False
+            return True
+
+    
+
+    # For each variant, we have `is_NAME` and `is_name` methods for easily checking
+    # whether an instance is that variant.
+    def is_COSMOS(self) -> bool:
+        return isinstance(self, FamilyParams.COSMOS)
+    def is_cosmos(self) -> bool:
+        return isinstance(self, FamilyParams.COSMOS)
+    def is_APTOS(self) -> bool:
+        return isinstance(self, FamilyParams.APTOS)
+    def is_aptos(self) -> bool:
+        return isinstance(self, FamilyParams.APTOS)
+    def is_SOLANA(self) -> bool:
+        return isinstance(self, FamilyParams.SOLANA)
+    def is_solana(self) -> bool:
+        return isinstance(self, FamilyParams.SOLANA)
+    def is_SOROBAN(self) -> bool:
+        return isinstance(self, FamilyParams.SOROBAN)
+    def is_soroban(self) -> bool:
+        return isinstance(self, FamilyParams.SOROBAN)
+    def is_SUI(self) -> bool:
+        return isinstance(self, FamilyParams.SUI)
+    def is_sui(self) -> bool:
+        return isinstance(self, FamilyParams.SUI)
+    def is_SUBSTRATE(self) -> bool:
+        return isinstance(self, FamilyParams.SUBSTRATE)
+    def is_substrate(self) -> bool:
+        return isinstance(self, FamilyParams.SUBSTRATE)
+    
+
+# Now, a little trick - we make each nested variant class be a subclass of the main
+# enum class, so that method calls and instance checks etc will work intuitively.
+# We might be able to do this a little more neatly with a metaclass, but this'll do.
+FamilyParams.COSMOS = type("FamilyParams.COSMOS", (FamilyParams.COSMOS, FamilyParams,), {})  # type: ignore
+FamilyParams.APTOS = type("FamilyParams.APTOS", (FamilyParams.APTOS, FamilyParams,), {})  # type: ignore
+FamilyParams.SOLANA = type("FamilyParams.SOLANA", (FamilyParams.SOLANA, FamilyParams,), {})  # type: ignore
+FamilyParams.SOROBAN = type("FamilyParams.SOROBAN", (FamilyParams.SOROBAN, FamilyParams,), {})  # type: ignore
+FamilyParams.SUI = type("FamilyParams.SUI", (FamilyParams.SUI, FamilyParams,), {})  # type: ignore
+FamilyParams.SUBSTRATE = type("FamilyParams.SUBSTRATE", (FamilyParams.SUBSTRATE, FamilyParams,), {})  # type: ignore
+
+
+
+
+class _UniffiFfiConverterTypeFamilyParams(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return FamilyParams.COSMOS(
+                _UniffiFfiConverterString.read(buf),
+                _UniffiFfiConverterSequenceTypeEndpointConfig.read(buf),
+                _UniffiFfiConverterTypePolicy.read(buf),
+                _UniffiFfiConverterString.read(buf),
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 2:
+            return FamilyParams.APTOS(
+                _UniffiFfiConverterUInt8.read(buf),
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 3:
+            return FamilyParams.SOLANA(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 4:
+            return FamilyParams.SOROBAN(
+                _UniffiFfiConverterString.read(buf),
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 5:
+            return FamilyParams.SUI(
+                _UniffiFfiConverterSequenceTypeEndpointConfig.read(buf),
+                _UniffiFfiConverterTypePolicy.read(buf),
+            )
+        if variant == 6:
+            return FamilyParams.SUBSTRATE(
+                _UniffiFfiConverterSequenceTypeEndpointConfig.read(buf),
+                _UniffiFfiConverterTypePolicy.read(buf),
+                _UniffiFfiConverterString.read(buf),
+                _UniffiFfiConverterUInt16.read(buf),
+            )
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value.is_COSMOS():
+            _UniffiFfiConverterString.check_lower(value.chain_id)
+            _UniffiFfiConverterSequenceTypeEndpointConfig.check_lower(value.rest)
+            _UniffiFfiConverterTypePolicy.check_lower(value.rest_policy)
+            _UniffiFfiConverterString.check_lower(value.denom)
+            _UniffiFfiConverterString.check_lower(value.prefix)
+            return
+        if value.is_APTOS():
+            _UniffiFfiConverterUInt8.check_lower(value.chain_id)
+            _UniffiFfiConverterString.check_lower(value.package)
+            return
+        if value.is_SOLANA():
+            _UniffiFfiConverterString.check_lower(value.program)
+            return
+        if value.is_SOROBAN():
+            _UniffiFfiConverterString.check_lower(value.passphrase)
+            _UniffiFfiConverterString.check_lower(value.xlm_sac)
+            return
+        if value.is_SUI():
+            _UniffiFfiConverterSequenceTypeEndpointConfig.check_lower(value.graphql)
+            _UniffiFfiConverterTypePolicy.check_lower(value.graphql_policy)
+            return
+        if value.is_SUBSTRATE():
+            _UniffiFfiConverterSequenceTypeEndpointConfig.check_lower(value.rpc)
+            _UniffiFfiConverterTypePolicy.check_lower(value.rpc_policy)
+            _UniffiFfiConverterString.check_lower(value.genesis)
+            _UniffiFfiConverterUInt16.check_lower(value.ss58_prefix)
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value.is_COSMOS():
+            buf.write_i32(1)
+            _UniffiFfiConverterString.write(value.chain_id, buf)
+            _UniffiFfiConverterSequenceTypeEndpointConfig.write(value.rest, buf)
+            _UniffiFfiConverterTypePolicy.write(value.rest_policy, buf)
+            _UniffiFfiConverterString.write(value.denom, buf)
+            _UniffiFfiConverterString.write(value.prefix, buf)
+        if value.is_APTOS():
+            buf.write_i32(2)
+            _UniffiFfiConverterUInt8.write(value.chain_id, buf)
+            _UniffiFfiConverterString.write(value.package, buf)
+        if value.is_SOLANA():
+            buf.write_i32(3)
+            _UniffiFfiConverterString.write(value.program, buf)
+        if value.is_SOROBAN():
+            buf.write_i32(4)
+            _UniffiFfiConverterString.write(value.passphrase, buf)
+            _UniffiFfiConverterString.write(value.xlm_sac, buf)
+        if value.is_SUI():
+            buf.write_i32(5)
+            _UniffiFfiConverterSequenceTypeEndpointConfig.write(value.graphql, buf)
+            _UniffiFfiConverterTypePolicy.write(value.graphql_policy, buf)
+        if value.is_SUBSTRATE():
+            buf.write_i32(6)
+            _UniffiFfiConverterSequenceTypeEndpointConfig.write(value.rpc, buf)
+            _UniffiFfiConverterTypePolicy.write(value.rpc_policy, buf)
+            _UniffiFfiConverterString.write(value.genesis, buf)
+            _UniffiFfiConverterUInt16.write(value.ss58_prefix, buf)
+
+
+
+class _UniffiFfiConverterOptionalTypeFamilyParams(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeFamilyParams.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeFamilyParams.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeFamilyParams.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
+
+
+
+
+
+class L1Fee(enum.Enum):
+    """
+    An L1 data fee model (plan T38).
+"""
+    
+    OP_STACK = 0
+    """
+    OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
+"""
+    
+
+
+class _UniffiFfiConverterTypeL1Fee(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return L1Fee.OP_STACK
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == L1Fee.OP_STACK:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == L1Fee.OP_STACK:
+            buf.write_i32(1)
+
+
+
+class _UniffiFfiConverterOptionalTypeL1Fee(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeL1Fee.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeL1Fee.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeL1Fee.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
 @dataclass
 class ChainProfile:
     """
     A chain as the app's release pins it (spec §4).
 """
-    def __init__(self, *, key:str, family:Family, chain_id:typing.Optional[int], chain_uid:str, rpc:typing.List[EndpointConfig], rpc_policy:Policy, gateways:typing.List[EndpointConfig], registry:typing.Optional[str], factory:typing.Optional[str], router:typing.Optional[str], finality:Finality, tx_gas_cap:typing.Optional[int], tokens:typing.List[ListedToken], gas:GasRows, gas_opt_in:typing.List[str], max_valid_secs:typing.Optional[int], verifiers:typing.List[EndpointConfig], verifier_policy:Policy, dexes:typing.List[ListedDex], wrappers:typing.List[str]):
+    def __init__(self, *, key:str, family:Family, chain_id:typing.Optional[int], chain_uid:str, rpc:typing.List[EndpointConfig], rpc_policy:Policy, gateways:typing.List[EndpointConfig], registry:typing.Optional[str], factory:typing.Optional[str], router:typing.Optional[str], finality:Finality, tx_gas_cap:typing.Optional[int], tokens:typing.List[ListedToken], gas:GasRows, gas_opt_in:typing.List[str], max_valid_secs:typing.Optional[int], verifiers:typing.List[EndpointConfig], verifier_policy:Policy, dexes:typing.List[ListedDex], wrappers:typing.List[str], family_params:typing.Optional[FamilyParams], l1_fee:typing.Optional[L1Fee], disabled_kinds:typing.List[str]):
         self.key = key
         self.family = family
         self.chain_id = chain_id
@@ -7248,12 +7831,15 @@ class ChainProfile:
         self.verifier_policy = verifier_policy
         self.dexes = dexes
         self.wrappers = wrappers
+        self.family_params = family_params
+        self.l1_fee = l1_fee
+        self.disabled_kinds = disabled_kinds
         
         
 
     
     def __str__(self):
-        return "ChainProfile(key={}, family={}, chain_id={}, chain_uid={}, rpc={}, rpc_policy={}, gateways={}, registry={}, factory={}, router={}, finality={}, tx_gas_cap={}, tokens={}, gas={}, gas_opt_in={}, max_valid_secs={}, verifiers={}, verifier_policy={}, dexes={}, wrappers={})".format(self.key, self.family, self.chain_id, self.chain_uid, self.rpc, self.rpc_policy, self.gateways, self.registry, self.factory, self.router, self.finality, self.tx_gas_cap, self.tokens, self.gas, self.gas_opt_in, self.max_valid_secs, self.verifiers, self.verifier_policy, self.dexes, self.wrappers)
+        return "ChainProfile(key={}, family={}, chain_id={}, chain_uid={}, rpc={}, rpc_policy={}, gateways={}, registry={}, factory={}, router={}, finality={}, tx_gas_cap={}, tokens={}, gas={}, gas_opt_in={}, max_valid_secs={}, verifiers={}, verifier_policy={}, dexes={}, wrappers={}, family_params={}, l1_fee={}, disabled_kinds={})".format(self.key, self.family, self.chain_id, self.chain_uid, self.rpc, self.rpc_policy, self.gateways, self.registry, self.factory, self.router, self.finality, self.tx_gas_cap, self.tokens, self.gas, self.gas_opt_in, self.max_valid_secs, self.verifiers, self.verifier_policy, self.dexes, self.wrappers, self.family_params, self.l1_fee, self.disabled_kinds)
     def __eq__(self, other):
         if self.key != other.key:
             return False
@@ -7295,6 +7881,12 @@ class ChainProfile:
             return False
         if self.wrappers != other.wrappers:
             return False
+        if self.family_params != other.family_params:
+            return False
+        if self.l1_fee != other.l1_fee:
+            return False
+        if self.disabled_kinds != other.disabled_kinds:
+            return False
         return True
 
 class _UniffiFfiConverterTypeChainProfile(_UniffiConverterRustBuffer):
@@ -7321,6 +7913,9 @@ class _UniffiFfiConverterTypeChainProfile(_UniffiConverterRustBuffer):
             verifier_policy=_UniffiFfiConverterTypePolicy.read(buf),
             dexes=_UniffiFfiConverterSequenceTypeListedDex.read(buf),
             wrappers=_UniffiFfiConverterSequenceString.read(buf),
+            family_params=_UniffiFfiConverterOptionalTypeFamilyParams.read(buf),
+            l1_fee=_UniffiFfiConverterOptionalTypeL1Fee.read(buf),
+            disabled_kinds=_UniffiFfiConverterSequenceString.read(buf),
         )
 
     @staticmethod
@@ -7345,6 +7940,9 @@ class _UniffiFfiConverterTypeChainProfile(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypePolicy.check_lower(value.verifier_policy)
         _UniffiFfiConverterSequenceTypeListedDex.check_lower(value.dexes)
         _UniffiFfiConverterSequenceString.check_lower(value.wrappers)
+        _UniffiFfiConverterOptionalTypeFamilyParams.check_lower(value.family_params)
+        _UniffiFfiConverterOptionalTypeL1Fee.check_lower(value.l1_fee)
+        _UniffiFfiConverterSequenceString.check_lower(value.disabled_kinds)
 
     @staticmethod
     def write(value, buf):
@@ -7368,6 +7966,9 @@ class _UniffiFfiConverterTypeChainProfile(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypePolicy.write(value.verifier_policy, buf)
         _UniffiFfiConverterSequenceTypeListedDex.write(value.dexes, buf)
         _UniffiFfiConverterSequenceString.write(value.wrappers, buf)
+        _UniffiFfiConverterOptionalTypeFamilyParams.write(value.family_params, buf)
+        _UniffiFfiConverterOptionalTypeL1Fee.write(value.l1_fee, buf)
+        _UniffiFfiConverterSequenceString.write(value.disabled_kinds, buf)
 
 class _UniffiFfiConverterSequenceTypeChainProfile(_UniffiConverterRustBuffer):
     @classmethod
@@ -7481,7 +8082,8 @@ class GasTable:
     verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
     save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
     per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
-    `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+    `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?, registry?, path?, depth?, write?}` (the
+    line's columns, [`GasLine`]), read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
     and the SDK's reference table.
 """
     def __init__(self, *, name:str, family:str, rows:GasRows):
@@ -11647,6 +12249,10 @@ class SdkError:  # type: ignore
         def __repr__(self):
             return "SdkError.TxTypeRefused({})".format(repr(str(self)))
     _UniffiTempSdkError.TxTypeRefused = TxTypeRefused # type: ignore
+    class KindDisabled(_UniffiTempSdkError):
+        def __repr__(self):
+            return "SdkError.KindDisabled({})".format(repr(str(self)))
+    _UniffiTempSdkError.KindDisabled = KindDisabled # type: ignore
     class RawDigestRefused(_UniffiTempSdkError):
         def __repr__(self):
             return "SdkError.RawDigestRefused({})".format(repr(str(self)))
@@ -11827,6 +12433,28 @@ class SdkError:  # type: ignore
         def __repr__(self):
             return "SdkError.GasFieldUnknown({})".format(repr(str(self)))
     _UniffiTempSdkError.GasFieldUnknown = GasFieldUnknown # type: ignore
+    class RegistrationVerifyOnly(_UniffiTempSdkError):
+        """
+        A registration of a kind whose home (`kindHome(kind)`) is another generation than the bound registry: that registry
+        carries it verify-only, or not at all (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); nothing is sent.
+"""
+        def __repr__(self):
+            return "SdkError.RegistrationVerifyOnly({})".format(repr(str(self)))
+    _UniffiTempSdkError.RegistrationVerifyOnly = RegistrationVerifyOnly # type: ignore
+    class UaUnregistered(_UniffiTempSdkError):
+        """
+        A UA no generation of the bound registry's line holds (`holderOf(ua)` answers no holder, §11.1).
+"""
+        def __repr__(self):
+            return "SdkError.UaUnregistered({})".format(repr(str(self)))
+    _UniffiTempSdkError.UaUnregistered = UaUnregistered # type: ignore
+    class PqzHomeNone(_UniffiTempSdkError):
+        """
+        A PQZ write or read of a UA whose record has no PQZ home on the bound registry's walk (`pqzHomeOf(ua)` 0, §11.2).
+"""
+        def __repr__(self):
+            return "SdkError.PqzHomeNone({})".format(repr(str(self)))
+    _UniffiTempSdkError.PqzHomeNone = PqzHomeNone # type: ignore
     class DexNotListed(_UniffiTempSdkError):
         """
         An order, a cancel or a liquidity order naming a DEX that is not on the chain profile's list, or a wrap order whose
@@ -11999,150 +12627,166 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 30:
-            return SdkError.RawDigestRefused(
+            return SdkError.KindDisabled(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 31:
-            return SdkError.AppDomainRefused(
+            return SdkError.RawDigestRefused(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 32:
-            return SdkError.AppPurposeRefused(
+            return SdkError.AppDomainRefused(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 33:
-            return SdkError.AppSaltMismatch(
+            return SdkError.AppPurposeRefused(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 34:
-            return SdkError.AppHandleForeign(
+            return SdkError.AppSaltMismatch(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 35:
-            return SdkError.AppLabelRefused(
+            return SdkError.AppHandleForeign(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 36:
-            return SdkError.AppKeyUsage(
+            return SdkError.AppLabelRefused(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 37:
-            return SdkError.AppArenaFull(
+            return SdkError.AppKeyUsage(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 38:
-            return SdkError.KemKeyGone(
+            return SdkError.AppArenaFull(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 39:
-            return SdkError.ReceiverUnregistered(
+            return SdkError.KemKeyGone(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 40:
-            return SdkError.RegistrationUaMismatch(
+            return SdkError.ReceiverUnregistered(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 41:
-            return SdkError.RegistrationKindDisabled(
+            return SdkError.RegistrationUaMismatch(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 42:
-            return SdkError.RegistrationPopInvalid(
+            return SdkError.RegistrationKindDisabled(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 43:
-            return SdkError.RegistrationKemMissing(
+            return SdkError.RegistrationPopInvalid(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 44:
-            return SdkError.AbiMismatch(
+            return SdkError.RegistrationKemMissing(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 45:
-            return SdkError.Internal(
+            return SdkError.AbiMismatch(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 46:
-            return SdkError.AccountExists(
+            return SdkError.Internal(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 47:
-            return SdkError.GasUnquoted(
+            return SdkError.AccountExists(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 48:
-            return SdkError.ValidUntilRefused(
+            return SdkError.GasUnquoted(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 49:
-            return SdkError.TokenUncatalogued(
+            return SdkError.ValidUntilRefused(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 50:
-            return SdkError.LegKeyMismatch(
+            return SdkError.TokenUncatalogued(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 51:
-            return SdkError.SignerNotAccountKey(
+            return SdkError.LegKeyMismatch(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 52:
-            return SdkError.PqzOpeningUnsupported(
+            return SdkError.SignerNotAccountKey(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 53:
-            return SdkError.MsigSlotInactive(
+            return SdkError.PqzOpeningUnsupported(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 54:
-            return SdkError.GasSigBytesMissing(
+            return SdkError.MsigSlotInactive(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 55:
-            return SdkError.SignedGasAboveCap(
+            return SdkError.GasSigBytesMissing(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 56:
-            return SdkError.GasItemUnpaired(
+            return SdkError.SignedGasAboveCap(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 57:
-            return SdkError.GasItemUnknown(
+            return SdkError.GasItemUnpaired(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 58:
-            return SdkError.GasCountUnknown(
+            return SdkError.GasItemUnknown(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 59:
-            return SdkError.BlsMultiBelowThreshold(
+            return SdkError.GasCountUnknown(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 60:
-            return SdkError.GasFieldUnknown(
+            return SdkError.BlsMultiBelowThreshold(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 61:
-            return SdkError.DexNotListed(
+            return SdkError.GasFieldUnknown(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 62:
-            return SdkError.PqzAuditorNative(
+            return SdkError.RegistrationVerifyOnly(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 63:
-            return SdkError.GasAboveBlockShare(
+            return SdkError.UaUnregistered(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 64:
-            return SdkError.Cancelled(
+            return SdkError.PqzHomeNone(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 65:
-            return SdkError.Ua(
+            return SdkError.DexNotListed(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 66:
+            return SdkError.PqzAuditorNative(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 67:
+            return SdkError.GasAboveBlockShare(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 68:
+            return SdkError.Cancelled(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 69:
+            return SdkError.Ua(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 70:
             return SdkError.Rpc(
                 _UniffiFfiConverterString.read(buf),
             )
@@ -12208,6 +12852,8 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
             return
         if isinstance(value, SdkError.TxTypeRefused):
             return
+        if isinstance(value, SdkError.KindDisabled):
+            return
         if isinstance(value, SdkError.RawDigestRefused):
             return
         if isinstance(value, SdkError.AppDomainRefused):
@@ -12269,6 +12915,12 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
         if isinstance(value, SdkError.BlsMultiBelowThreshold):
             return
         if isinstance(value, SdkError.GasFieldUnknown):
+            return
+        if isinstance(value, SdkError.RegistrationVerifyOnly):
+            return
+        if isinstance(value, SdkError.UaUnregistered):
+            return
+        if isinstance(value, SdkError.PqzHomeNone):
             return
         if isinstance(value, SdkError.DexNotListed):
             return
@@ -12343,80 +12995,88 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
             buf.write_i32(28)
         if isinstance(value, SdkError.TxTypeRefused):
             buf.write_i32(29)
-        if isinstance(value, SdkError.RawDigestRefused):
+        if isinstance(value, SdkError.KindDisabled):
             buf.write_i32(30)
-        if isinstance(value, SdkError.AppDomainRefused):
+        if isinstance(value, SdkError.RawDigestRefused):
             buf.write_i32(31)
-        if isinstance(value, SdkError.AppPurposeRefused):
+        if isinstance(value, SdkError.AppDomainRefused):
             buf.write_i32(32)
-        if isinstance(value, SdkError.AppSaltMismatch):
+        if isinstance(value, SdkError.AppPurposeRefused):
             buf.write_i32(33)
-        if isinstance(value, SdkError.AppHandleForeign):
+        if isinstance(value, SdkError.AppSaltMismatch):
             buf.write_i32(34)
-        if isinstance(value, SdkError.AppLabelRefused):
+        if isinstance(value, SdkError.AppHandleForeign):
             buf.write_i32(35)
-        if isinstance(value, SdkError.AppKeyUsage):
+        if isinstance(value, SdkError.AppLabelRefused):
             buf.write_i32(36)
-        if isinstance(value, SdkError.AppArenaFull):
+        if isinstance(value, SdkError.AppKeyUsage):
             buf.write_i32(37)
-        if isinstance(value, SdkError.KemKeyGone):
+        if isinstance(value, SdkError.AppArenaFull):
             buf.write_i32(38)
-        if isinstance(value, SdkError.ReceiverUnregistered):
+        if isinstance(value, SdkError.KemKeyGone):
             buf.write_i32(39)
-        if isinstance(value, SdkError.RegistrationUaMismatch):
+        if isinstance(value, SdkError.ReceiverUnregistered):
             buf.write_i32(40)
-        if isinstance(value, SdkError.RegistrationKindDisabled):
+        if isinstance(value, SdkError.RegistrationUaMismatch):
             buf.write_i32(41)
-        if isinstance(value, SdkError.RegistrationPopInvalid):
+        if isinstance(value, SdkError.RegistrationKindDisabled):
             buf.write_i32(42)
-        if isinstance(value, SdkError.RegistrationKemMissing):
+        if isinstance(value, SdkError.RegistrationPopInvalid):
             buf.write_i32(43)
-        if isinstance(value, SdkError.AbiMismatch):
+        if isinstance(value, SdkError.RegistrationKemMissing):
             buf.write_i32(44)
-        if isinstance(value, SdkError.Internal):
+        if isinstance(value, SdkError.AbiMismatch):
             buf.write_i32(45)
-        if isinstance(value, SdkError.AccountExists):
+        if isinstance(value, SdkError.Internal):
             buf.write_i32(46)
-        if isinstance(value, SdkError.GasUnquoted):
+        if isinstance(value, SdkError.AccountExists):
             buf.write_i32(47)
-        if isinstance(value, SdkError.ValidUntilRefused):
+        if isinstance(value, SdkError.GasUnquoted):
             buf.write_i32(48)
-        if isinstance(value, SdkError.TokenUncatalogued):
+        if isinstance(value, SdkError.ValidUntilRefused):
             buf.write_i32(49)
-        if isinstance(value, SdkError.LegKeyMismatch):
+        if isinstance(value, SdkError.TokenUncatalogued):
             buf.write_i32(50)
-        if isinstance(value, SdkError.SignerNotAccountKey):
+        if isinstance(value, SdkError.LegKeyMismatch):
             buf.write_i32(51)
-        if isinstance(value, SdkError.PqzOpeningUnsupported):
+        if isinstance(value, SdkError.SignerNotAccountKey):
             buf.write_i32(52)
-        if isinstance(value, SdkError.MsigSlotInactive):
+        if isinstance(value, SdkError.PqzOpeningUnsupported):
             buf.write_i32(53)
-        if isinstance(value, SdkError.GasSigBytesMissing):
+        if isinstance(value, SdkError.MsigSlotInactive):
             buf.write_i32(54)
-        if isinstance(value, SdkError.SignedGasAboveCap):
+        if isinstance(value, SdkError.GasSigBytesMissing):
             buf.write_i32(55)
-        if isinstance(value, SdkError.GasItemUnpaired):
+        if isinstance(value, SdkError.SignedGasAboveCap):
             buf.write_i32(56)
-        if isinstance(value, SdkError.GasItemUnknown):
+        if isinstance(value, SdkError.GasItemUnpaired):
             buf.write_i32(57)
-        if isinstance(value, SdkError.GasCountUnknown):
+        if isinstance(value, SdkError.GasItemUnknown):
             buf.write_i32(58)
-        if isinstance(value, SdkError.BlsMultiBelowThreshold):
+        if isinstance(value, SdkError.GasCountUnknown):
             buf.write_i32(59)
-        if isinstance(value, SdkError.GasFieldUnknown):
+        if isinstance(value, SdkError.BlsMultiBelowThreshold):
             buf.write_i32(60)
-        if isinstance(value, SdkError.DexNotListed):
+        if isinstance(value, SdkError.GasFieldUnknown):
             buf.write_i32(61)
-        if isinstance(value, SdkError.PqzAuditorNative):
+        if isinstance(value, SdkError.RegistrationVerifyOnly):
             buf.write_i32(62)
-        if isinstance(value, SdkError.GasAboveBlockShare):
+        if isinstance(value, SdkError.UaUnregistered):
             buf.write_i32(63)
-        if isinstance(value, SdkError.Cancelled):
+        if isinstance(value, SdkError.PqzHomeNone):
             buf.write_i32(64)
-        if isinstance(value, SdkError.Ua):
+        if isinstance(value, SdkError.DexNotListed):
             buf.write_i32(65)
-        if isinstance(value, SdkError.Rpc):
+        if isinstance(value, SdkError.PqzAuditorNative):
             buf.write_i32(66)
+        if isinstance(value, SdkError.GasAboveBlockShare):
+            buf.write_i32(67)
+        if isinstance(value, SdkError.Cancelled):
+            buf.write_i32(68)
+        if isinstance(value, SdkError.Ua):
+            buf.write_i32(69)
+        if isinstance(value, SdkError.Rpc):
+            buf.write_i32(70)
 
 
 class SeedBackupProtocol(typing.Protocol):
@@ -17560,6 +18220,51 @@ class _UniffiFfiConverterTypeUaGrantRole(_UniffiConverterRustBuffer):
         _UniffiFfiConverterString.write(value.account, buf)
         _UniffiFfiConverterOptionalString.write(value.chain_uid, buf)
         _UniffiFfiConverterTypeEnvelope.write(value.envelope, buf)
+
+@dataclass
+class UaLine:
+    """
+    Where a UA's record and its PQZ attachment live, as the bound registry's one walk answers (`holderOf`, §11.1).
+"""
+    def __init__(self, *, holder:str, kind:int, pqz_home:typing.Optional[str]):
+        self.holder = holder
+        self.kind = kind
+        self.pqz_home = pqz_home
+        
+        
+
+    
+    def __str__(self):
+        return "UaLine(holder={}, kind={}, pqz_home={})".format(self.holder, self.kind, self.pqz_home)
+    def __eq__(self, other):
+        if self.holder != other.holder:
+            return False
+        if self.kind != other.kind:
+            return False
+        if self.pqz_home != other.pqz_home:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeUaLine(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return UaLine(
+            holder=_UniffiFfiConverterString.read(buf),
+            kind=_UniffiFfiConverterUInt16.read(buf),
+            pqz_home=_UniffiFfiConverterOptionalString.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterString.check_lower(value.holder)
+        _UniffiFfiConverterUInt16.check_lower(value.kind)
+        _UniffiFfiConverterOptionalString.check_lower(value.pqz_home)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterString.write(value.holder, buf)
+        _UniffiFfiConverterUInt16.write(value.kind, buf)
+        _UniffiFfiConverterOptionalString.write(value.pqz_home, buf)
 
 @dataclass
 class UaMint:
@@ -24804,6 +25509,8 @@ class AccountProtocol(typing.Protocol):
         raise NotImplementedError
     async def next_account(self, seed: str) -> int:
         raise NotImplementedError
+    async def pqz_decoy_candidates(self, chain: str) -> typing.List[str]:
+        raise NotImplementedError
     async def prepare_accept_membership(self, req: AcceptMembership) -> typing.Optional[RegistryWrite]:
         raise NotImplementedError
     async def prepare_complete_recovery(self, key: KeyRef,chain: str,account: str,new_key: SubjectKeyArgs) -> NativeQuote:
@@ -24838,6 +25545,8 @@ class AccountProtocol(typing.Protocol):
         raise NotImplementedError
     async def quote_registry_write(self, write: RegistryWrite) -> SubmitQuote:
         raise NotImplementedError
+    async def register_target(self, chain: str,kind: int) -> str:
+        raise NotImplementedError
     async def registration_blob(self, key: KeyRef,attrs: RegisterAttrs) -> RegistrationBlob:
         raise NotImplementedError
     async def registration_of(self, chain: str,ua: str) -> RegistrationState:
@@ -24847,6 +25556,8 @@ class AccountProtocol(typing.Protocol):
     async def signs(self, seed: str,id: str) -> bool:
         raise NotImplementedError
     async def submit_registry_write(self, write: RegistryWrite,quote: SubmitQuote) -> str:
+        raise NotImplementedError
+    async def ua_line(self, chain: str,ua: str) -> UaLine:
         raise NotImplementedError
 
 class Account(AccountProtocol):
@@ -25032,6 +25743,23 @@ class Account(AccountProtocol):
             _UniffiLib.ffi_scaas_sdk_rust_future_poll_u32,
             _UniffiLib.ffi_scaas_sdk_rust_future_complete_u32,
             _UniffiLib.ffi_scaas_sdk_rust_future_free_u32,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def pqz_decoy_candidates(self, chain: str) -> typing.List[str]:
+        
+        _UniffiFfiConverterString.check_lower(chain)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterString.lower(chain),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterSequenceString.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
             _uniffi_lift_return,
             _uniffi_error_converter,
         )
@@ -25387,6 +26115,26 @@ class Account(AccountProtocol):
             _uniffi_lift_return,
             _uniffi_error_converter,
         )
+    async def register_target(self, chain: str,kind: int) -> str:
+        
+        _UniffiFfiConverterString.check_lower(chain)
+
+        _UniffiFfiConverterUInt16.check_lower(kind)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterString.lower(chain),
+            _UniffiFfiConverterUInt16.lower(kind),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterString.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_account_register_target(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
     async def registration_blob(self, key: KeyRef,attrs: RegisterAttrs) -> RegistrationBlob:
         
         _UniffiFfiConverterTypeKeyRef.check_lower(key)
@@ -25478,6 +26226,26 @@ class Account(AccountProtocol):
         _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
         return await _uniffi_rust_call_async(
             _UniffiLib.uniffi_scaas_sdk_fn_method_account_submit_registry_write(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def ua_line(self, chain: str,ua: str) -> UaLine:
+        
+        _UniffiFfiConverterString.check_lower(chain)
+
+        _UniffiFfiConverterString.check_lower(ua)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterString.lower(chain),
+            _UniffiFfiConverterString.lower(ua),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeUaLine.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_account_ua_line(*_uniffi_lowered_args),
             _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
             _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
             _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
@@ -31319,6 +32087,40 @@ def subject_key_args_secp256k1(address: str) -> SubjectKeyArgs:
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
+def ua_line_key_target(line: UaLine) -> str:
+    """
+    The target of a key write of the UA (`UaLine::key_target`, §12): its holder.
+"""
+    
+    _UniffiFfiConverterTypeUaLine.check_lower(line)
+    _uniffi_lowered_args = (
+        _UniffiFfiConverterTypeUaLine.lower(line),
+    )
+    _uniffi_lift_return = _UniffiFfiConverterString.lift
+    _uniffi_error_converter = None
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_scaas_sdk_fn_func_ua_line_key_target,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
+def ua_line_pqz_target(line: UaLine) -> str:
+    """
+    The target of a PQZ write of the UA (`UaLine::pqz_target`, §12): its PQZ home; `PqzHomeNone` where the walk has none.
+"""
+    
+    _UniffiFfiConverterTypeUaLine.check_lower(line)
+    _uniffi_lowered_args = (
+        _UniffiFfiConverterTypeUaLine.lower(line),
+    )
+    _uniffi_lift_return = _UniffiFfiConverterString.lift
+    _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_scaas_sdk_fn_func_ua_line_pqz_target,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
 
 __all__ = [
     "InternalError",
@@ -31330,6 +32132,8 @@ __all__ = [
     "EndpointAuth",
     "Policy",
     "Finality",
+    "FamilyParams",
+    "L1Fee",
     "ExecuteCall",
     "GasFrom",
     "Source",
@@ -31368,6 +32172,7 @@ __all__ = [
     "GasPerByte",
     "GasPerItem",
     "GasBase",
+    "GasLine",
     "GasVerify",
     "GasRows",
     "PositionReader",
@@ -31489,6 +32294,7 @@ __all__ = [
     "UaForceTransfer",
     "UaFreeze",
     "UaGrantRole",
+    "UaLine",
     "UaMint",
     "UaMintToUa",
     "UaOperatorTransfer",
@@ -31576,6 +32382,8 @@ __all__ = [
     "smart_account_address",
     "store_policy_default",
     "subject_key_args_secp256k1",
+    "ua_line_key_target",
+    "ua_line_pqz_target",
     "SecretBytes",
     "SecretBytesProtocol",
     "RegistryWrite",

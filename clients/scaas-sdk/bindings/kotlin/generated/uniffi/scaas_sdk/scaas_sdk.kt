@@ -781,6 +781,10 @@ external fun uniffi_scaas_sdk_checksum_func_store_policy_default(
 ): Short
 external fun uniffi_scaas_sdk_checksum_func_subject_key_args_secp256k1(
 ): Short
+external fun uniffi_scaas_sdk_checksum_func_ua_line_key_target(
+): Short
+external fun uniffi_scaas_sdk_checksum_func_ua_line_pqz_target(
+): Short
 external fun uniffi_scaas_sdk_checksum_method_registrywrite_calldata(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_registrywrite_chain(
@@ -814,6 +818,8 @@ external fun uniffi_scaas_sdk_checksum_method_account_marks(
 external fun uniffi_scaas_sdk_checksum_method_account_msig_state(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_account_next_account(
+): Short
+external fun uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_account_prepare_accept_membership(
 ): Short
@@ -849,6 +855,8 @@ external fun uniffi_scaas_sdk_checksum_method_account_prepare_update_msig(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_account_quote_registry_write(
 ): Short
+external fun uniffi_scaas_sdk_checksum_method_account_register_target(
+): Short
 external fun uniffi_scaas_sdk_checksum_method_account_registration_blob(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_account_registration_of(
@@ -858,6 +866,8 @@ external fun uniffi_scaas_sdk_checksum_method_account_restore(
 external fun uniffi_scaas_sdk_checksum_method_account_signs(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_account_submit_registry_write(
+): Short
+external fun uniffi_scaas_sdk_checksum_method_account_ua_line(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_admin_admin_ua_accept_admin(
 ): Short
@@ -1337,6 +1347,8 @@ external fun uniffi_scaas_sdk_fn_method_account_msig_state(`ptr`: Long,`chain`: 
 ): Long
 external fun uniffi_scaas_sdk_fn_method_account_next_account(`ptr`: Long,`seed`: RustBuffer.ByValue,
 ): Long
+external fun uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates(`ptr`: Long,`chain`: RustBuffer.ByValue,
+): Long
 external fun uniffi_scaas_sdk_fn_method_account_prepare_accept_membership(`ptr`: Long,`req`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_account_prepare_complete_recovery(`ptr`: Long,`key`: RustBuffer.ByValue,`chain`: RustBuffer.ByValue,`account`: RustBuffer.ByValue,`newKey`: RustBuffer.ByValue,
@@ -1371,6 +1383,8 @@ external fun uniffi_scaas_sdk_fn_method_account_prepare_update_msig(`ptr`: Long,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_account_quote_registry_write(`ptr`: Long,`write`: Long,
 ): Long
+external fun uniffi_scaas_sdk_fn_method_account_register_target(`ptr`: Long,`chain`: RustBuffer.ByValue,`kind`: Short,
+): Long
 external fun uniffi_scaas_sdk_fn_method_account_registration_blob(`ptr`: Long,`key`: RustBuffer.ByValue,`attrs`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_account_registration_of(`ptr`: Long,`chain`: RustBuffer.ByValue,`ua`: RustBuffer.ByValue,
@@ -1380,6 +1394,8 @@ external fun uniffi_scaas_sdk_fn_method_account_restore(`ptr`: Long,`req`: RustB
 external fun uniffi_scaas_sdk_fn_method_account_signs(`ptr`: Long,`seed`: RustBuffer.ByValue,`id`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_account_submit_registry_write(`ptr`: Long,`write`: Long,`quote`: RustBuffer.ByValue,
+): Long
+external fun uniffi_scaas_sdk_fn_method_account_ua_line(`ptr`: Long,`chain`: RustBuffer.ByValue,`ua`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_clone_admin(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
@@ -1903,6 +1919,10 @@ external fun uniffi_scaas_sdk_fn_func_store_policy_default(uniffi_out_err: Uniff
 ): RustBuffer.ByValue
 external fun uniffi_scaas_sdk_fn_func_subject_key_args_secp256k1(`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+external fun uniffi_scaas_sdk_fn_func_ua_line_key_target(`line`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_scaas_sdk_fn_func_ua_line_pqz_target(`line`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun ffi_scaas_sdk_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun ffi_scaas_sdk_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -2091,6 +2111,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_scaas_sdk_checksum_func_subject_key_args_secp256k1() != 20622.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_scaas_sdk_checksum_func_ua_line_key_target() != 60856.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_func_ua_line_pqz_target() != 29446.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_scaas_sdk_checksum_method_registrywrite_calldata() != 7040.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -2140,6 +2166,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_account_next_account() != 28699.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates() != 49782.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_account_prepare_accept_membership() != 50844.toShort()) {
@@ -2193,6 +2222,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_scaas_sdk_checksum_method_account_quote_registry_write() != 20576.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_scaas_sdk_checksum_method_account_register_target() != 38916.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_scaas_sdk_checksum_method_account_registration_blob() != 44041.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -2206,6 +2238,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_account_submit_registry_write() != 40795.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_account_ua_line() != 3220.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_accept_admin() != 54249.toShort()) {
@@ -3505,6 +3540,8 @@ public interface AccountInterface {
     
     suspend fun `nextAccount`(`seed`: kotlin.String): kotlin.UInt
     
+    suspend fun `pqzDecoyCandidates`(`chain`: kotlin.String): List<kotlin.String>
+    
     suspend fun `prepareAcceptMembership`(`req`: AcceptMembership): RegistryWrite?
     
     suspend fun `prepareCompleteRecovery`(`key`: KeyRef, `chain`: kotlin.String, `account`: kotlin.String, `newKey`: SubjectKeyArgs): NativeQuote
@@ -3539,6 +3576,8 @@ public interface AccountInterface {
     
     suspend fun `quoteRegistryWrite`(`write`: RegistryWrite): SubmitQuote
     
+    suspend fun `registerTarget`(`chain`: kotlin.String, `kind`: kotlin.UShort): kotlin.String
+    
     suspend fun `registrationBlob`(`key`: KeyRef, `attrs`: RegisterAttrs): RegistrationBlob
     
     suspend fun `registrationOf`(`chain`: kotlin.String, `ua`: kotlin.String): RegistrationState
@@ -3548,6 +3587,8 @@ public interface AccountInterface {
     suspend fun `signs`(`seed`: kotlin.String, `id`: kotlin.String): kotlin.Boolean
     
     suspend fun `submitRegistryWrite`(`write`: RegistryWrite, `quote`: SubmitQuote): kotlin.String
+    
+    suspend fun `uaLine`(`chain`: kotlin.String, `ua`: kotlin.String): UaLine
     
     companion object
 }
@@ -3835,6 +3876,27 @@ open class Account: Disposable, AutoCloseable, AccountInterface
         { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_u32(future) },
         // lift function
         { FfiConverterUInt.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `pqzDecoyCandidates`(`chain`: kotlin.String) : List<kotlin.String> {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates(
+                uniffiHandle,
+                FfiConverterString.lower(`chain`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceString.lift(it) },
         // Error FFI converter
         SdkException.ErrorHandler,
     )
@@ -4200,6 +4262,27 @@ open class Account: Disposable, AutoCloseable, AccountInterface
     
     @Throws(SdkException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `registerTarget`(`chain`: kotlin.String, `kind`: kotlin.UShort) : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_account_register_target(
+                uniffiHandle,
+                FfiConverterString.lower(`chain`),FfiConverterUShort.lower(`kind`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `registrationBlob`(`key`: KeyRef, `attrs`: RegisterAttrs) : RegistrationBlob {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
@@ -4297,6 +4380,27 @@ open class Account: Disposable, AutoCloseable, AccountInterface
         { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterString.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `uaLine`(`chain`: kotlin.String, `ua`: kotlin.String) : UaLine {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_account_ua_line(
+                uniffiHandle,
+                FfiConverterString.lower(`chain`),FfiConverterString.lower(`ua`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeUaLine.lift(it) },
         // Error FFI converter
         SdkException.ErrorHandler,
     )
@@ -14391,6 +14495,28 @@ data class ChainProfile (
      * the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
      */
     var `wrappers`: List<kotlin.String>
+    , 
+    /**
+     * the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+     * family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+     * `Sdk::open`
+     */
+    var `familyParams`: FamilyParams?
+    , 
+    /**
+     * the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+     * and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+     * `Sdk::open` on another family)
+     */
+    var `l1Fee`: L1Fee?
+    , 
+    /**
+     * the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+     * and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+     * attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+     * `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+     */
+    var `disabledKinds`: List<kotlin.String>
     
 ){
     
@@ -14427,6 +14553,9 @@ public object FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile>
             FfiConverterTypePolicy.read(buf),
             FfiConverterSequenceTypeListedDex.read(buf),
             FfiConverterSequenceString.read(buf),
+            FfiConverterOptionalTypeFamilyParams.read(buf),
+            FfiConverterOptionalTypeL1Fee.read(buf),
+            FfiConverterSequenceString.read(buf),
         )
     }
 
@@ -14450,7 +14579,10 @@ public object FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile>
             FfiConverterSequenceTypeEndpointConfig.allocationSize(value.`verifiers`) +
             FfiConverterTypePolicy.allocationSize(value.`verifierPolicy`) +
             FfiConverterSequenceTypeListedDex.allocationSize(value.`dexes`) +
-            FfiConverterSequenceString.allocationSize(value.`wrappers`)
+            FfiConverterSequenceString.allocationSize(value.`wrappers`) +
+            FfiConverterOptionalTypeFamilyParams.allocationSize(value.`familyParams`) +
+            FfiConverterOptionalTypeL1Fee.allocationSize(value.`l1Fee`) +
+            FfiConverterSequenceString.allocationSize(value.`disabledKinds`)
     )
 
     override fun write(value: ChainProfile, buf: ByteBuffer) {
@@ -14474,6 +14606,9 @@ public object FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile>
             FfiConverterTypePolicy.write(value.`verifierPolicy`, buf)
             FfiConverterSequenceTypeListedDex.write(value.`dexes`, buf)
             FfiConverterSequenceString.write(value.`wrappers`, buf)
+            FfiConverterOptionalTypeFamilyParams.write(value.`familyParams`, buf)
+            FfiConverterOptionalTypeL1Fee.write(value.`l1Fee`, buf)
+            FfiConverterSequenceString.write(value.`disabledKinds`, buf)
     }
 }
 
@@ -15285,6 +15420,73 @@ public object FfiConverterTypeGasBase: FfiConverterRustBuffer<GasBase> {
 
 
 /**
+ * A verify row's registry-line columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65; §13 Gas): the row is
+ * keyed by chain (the table it is in), registry address and signer kind; the verify path, the depth and the write path are
+ * columns. Within one table no two verify rows share signer, registry, path, depth and write.
+ */
+data class GasLine (
+    /**
+     * the registry the row was measured through (`0x` + 40 hex): a quote bound to it takes it first; `None`: a row of no one
+     * registry
+     */
+    var `registry`: kotlin.String?
+    , 
+    /**
+     * `cache`, `precompile` or `fallback` (the holder's verdict after the verify-only verifier gave no answer, §5); `None`:
+     * the holder's own check
+     */
+    var `path`: kotlin.String?
+    , 
+    /**
+     * the generations between the registry asked and the holder (0: the registry holds the record), at most 15
+     */
+    var `depth`: kotlin.UByte
+    , 
+    /**
+     * the write path of W1 (a registry write whose signature the holder checks), never a consumer operation's quote
+     */
+    var `write`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeGasLine: FfiConverterRustBuffer<GasLine> {
+    override fun read(buf: ByteBuffer): GasLine {
+        return GasLine(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: GasLine) = (
+            FfiConverterOptionalString.allocationSize(value.`registry`) +
+            FfiConverterOptionalString.allocationSize(value.`path`) +
+            FfiConverterUByte.allocationSize(value.`depth`) +
+            FfiConverterBoolean.allocationSize(value.`write`)
+    )
+
+    override fun write(value: GasLine, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`registry`, buf)
+            FfiConverterOptionalString.write(value.`path`, buf)
+            FfiConverterUByte.write(value.`depth`, buf)
+            FfiConverterBoolean.write(value.`write`, buf)
+    }
+}
+
+
+
+/**
  * A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
  * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
  */
@@ -15475,7 +15677,8 @@ public object FfiConverterTypeGasSources: FfiConverterRustBuffer<GasSources> {
  * verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
  * save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
  * per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
- * `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+ * `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?, registry?, path?, depth?, write?}` (the
+ * line's columns, [`GasLine`]), read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
  * and the SDK's reference table.
  */
 data class GasTable (
@@ -15553,6 +15756,12 @@ data class GasVerify (
      * the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
      */
     var `perItem`: GasPerItem?
+    , 
+    /**
+     * the registry line's columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); all absent: the holder's own
+     * check on any registry (every row before the line)
+     */
+    var `line`: GasLine
     
 ){
     
@@ -15574,6 +15783,7 @@ public object FfiConverterTypeGasVerify: FfiConverterRustBuffer<GasVerify> {
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterOptionalTypeGasPerItem.read(buf),
+            FfiConverterTypeGasLine.read(buf),
         )
     }
 
@@ -15582,7 +15792,8 @@ public object FfiConverterTypeGasVerify: FfiConverterRustBuffer<GasVerify> {
             FfiConverterULong.allocationSize(value.`gas`) +
             FfiConverterULong.allocationSize(value.`sigBytes`) +
             FfiConverterULong.allocationSize(value.`margin`) +
-            FfiConverterOptionalTypeGasPerItem.allocationSize(value.`perItem`)
+            FfiConverterOptionalTypeGasPerItem.allocationSize(value.`perItem`) +
+            FfiConverterTypeGasLine.allocationSize(value.`line`)
     )
 
     override fun write(value: GasVerify, buf: ByteBuffer) {
@@ -15591,6 +15802,7 @@ public object FfiConverterTypeGasVerify: FfiConverterRustBuffer<GasVerify> {
             FfiConverterULong.write(value.`sigBytes`, buf)
             FfiConverterULong.write(value.`margin`, buf)
             FfiConverterOptionalTypeGasPerItem.write(value.`perItem`, buf)
+            FfiConverterTypeGasLine.write(value.`line`, buf)
     }
 }
 
@@ -16411,7 +16623,7 @@ public object FfiConverterTypeListedDex: FfiConverterRustBuffer<ListedDex> {
  */
 data class ListedToken (
     /**
-     * `0x` + 40 hex
+     * EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
      */
     var `address`: kotlin.String
     , 
@@ -22226,6 +22438,58 @@ public object FfiConverterTypeUaGrantRole: FfiConverterRustBuffer<UaGrantRole> {
             FfiConverterString.write(value.`account`, buf)
             FfiConverterOptionalString.write(value.`chainUid`, buf)
             FfiConverterTypeEnvelope.write(value.`envelope`, buf)
+    }
+}
+
+
+
+/**
+ * Where a UA's record and its PQZ attachment live, as the bound registry's one walk answers (`holderOf`, §11.1).
+ */
+data class UaLine (
+    /**
+     * the generation holding the record (`0x` + 40 hex): the target of a key write, where its record is read
+     */
+    var `holder`: kotlin.String
+    , 
+    var `kind`: kotlin.UShort
+    , 
+    /**
+     * the record's PQZ home (§11.2): the target of a PQZ write, where its attachment is read; `None`: no home on the walk
+     */
+    var `pqzHome`: kotlin.String?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUaLine: FfiConverterRustBuffer<UaLine> {
+    override fun read(buf: ByteBuffer): UaLine {
+        return UaLine(
+            FfiConverterString.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: UaLine) = (
+            FfiConverterString.allocationSize(value.`holder`) +
+            FfiConverterUShort.allocationSize(value.`kind`) +
+            FfiConverterOptionalString.allocationSize(value.`pqzHome`)
+    )
+
+    override fun write(value: UaLine, buf: ByteBuffer) {
+            FfiConverterString.write(value.`holder`, buf)
+            FfiConverterUShort.write(value.`kind`, buf)
+            FfiConverterOptionalString.write(value.`pqzHome`, buf)
     }
 }
 
@@ -28354,6 +28618,257 @@ public object FfiConverterTypeFamily: FfiConverterRustBuffer<Family> {
 
 
 /**
+ * A family's own profile data (spec §8.7 rule 2; decisions CLI-SDK-15's Changes of 2026-11-21).
+ */
+sealed class FamilyParams {
+    
+    /**
+     * Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
+     * profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),
+     * the native denom and the bech32 prefix of the chain's addresses
+     */
+    data class Cosmos(
+        val `chainId`: kotlin.String, 
+        val `rest`: List<uniffi.scaas_sdk.EndpointConfig>, 
+        val `restPolicy`: uniffi.scaas_sdk.Policy, 
+        val `denom`: kotlin.String, 
+        val `prefix`: kotlin.String) : FamilyParams()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Aptos: the chain id ledger info must name (`aptos_framework::chain_id`, 1 to 255; the identity an Aptos node answers)
+     * and the `scaas` package's address, whose view `meta::account_of(owner)` gives the Account an owner's tokens are in
+     * (NET-APT-05), as `0x` + 64 lowercase hex (AIP-40's long form)
+     */
+    data class Aptos(
+        val `chainId`: kotlin.UByte, 
+        val `package`: kotlin.String) : FamilyParams()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Solana: the `scaas` program's id (base58 of 32 bytes), under which an owner's SCaaS Account is the `["acct", owner]`
+     * program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
+     */
+    data class Solana(
+        val `program`: kotlin.String) : FamilyParams()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Soroban: the network passphrase its RPC endpoints name (`getNetwork`; its SHA-256 is `chain_uid`, checked at `Sdk::open`)
+     * and the XLM SAC contract (`C…`), pinned, whose balance entry is a `C…` holder's native XLM (never derived here)
+     */
+    data class Soroban(
+        val `passphrase`: kotlin.String, 
+        val `xlmSac`: kotlin.String) : FamilyParams()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Sui: the GraphQL endpoints the reads go to, with their policy (public fullnodes refuse JSON-RPC, docs/networks/sui.md
+     * §14; the profile's `rpc` are the JSON-RPC endpoints), each named by `chain_uid`, the genesis checkpoint's digest, whose
+     * 32 bytes in base58 `chainIdentifier` must answer
+     */
+    data class Sui(
+        val `graphql`: List<uniffi.scaas_sdk.EndpointConfig>, 
+        val `graphqlPolicy`: uniffi.scaas_sdk.Policy) : FamilyParams()
+        
+    {
+        
+
+        companion object
+    }
+    
+    /**
+     * Polkadot Hub's Substrate side on its EVM profile (decisions CLI-SDK-32's Change of 2026-11-22, plan T32's read part): the
+     * Substrate JSON-RPC endpoints with their policy, each named by `genesis` (`0x` + 64 hex, `chain_getBlockHash(0)`), and the
+     * SS58 prefix of the chain's addresses (0 to 16,383, not 46 or 47); `balances` of an SS58 id reads its `System.Account`
+     * there. The same params serve the relay chain's Substrate side
+     */
+    data class Substrate(
+        val `rpc`: List<uniffi.scaas_sdk.EndpointConfig>, 
+        val `rpcPolicy`: uniffi.scaas_sdk.Policy, 
+        val `genesis`: kotlin.String, 
+        val `ss58Prefix`: kotlin.UShort) : FamilyParams()
+        
+    {
+        
+
+        companion object
+    }
+    
+
+    
+
+    
+    
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFamilyParams : FfiConverterRustBuffer<FamilyParams>{
+    override fun read(buf: ByteBuffer): FamilyParams {
+        return when(buf.getInt()) {
+            1 -> FamilyParams.Cosmos(
+                FfiConverterString.read(buf),
+                FfiConverterSequenceTypeEndpointConfig.read(buf),
+                FfiConverterTypePolicy.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            2 -> FamilyParams.Aptos(
+                FfiConverterUByte.read(buf),
+                FfiConverterString.read(buf),
+                )
+            3 -> FamilyParams.Solana(
+                FfiConverterString.read(buf),
+                )
+            4 -> FamilyParams.Soroban(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            5 -> FamilyParams.Sui(
+                FfiConverterSequenceTypeEndpointConfig.read(buf),
+                FfiConverterTypePolicy.read(buf),
+                )
+            6 -> FamilyParams.Substrate(
+                FfiConverterSequenceTypeEndpointConfig.read(buf),
+                FfiConverterTypePolicy.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterUShort.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: FamilyParams) = when(value) {
+        is FamilyParams.Cosmos -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`chainId`)
+                + FfiConverterSequenceTypeEndpointConfig.allocationSize(value.`rest`)
+                + FfiConverterTypePolicy.allocationSize(value.`restPolicy`)
+                + FfiConverterString.allocationSize(value.`denom`)
+                + FfiConverterString.allocationSize(value.`prefix`)
+            )
+        }
+        is FamilyParams.Aptos -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUByte.allocationSize(value.`chainId`)
+                + FfiConverterString.allocationSize(value.`package`)
+            )
+        }
+        is FamilyParams.Solana -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`program`)
+            )
+        }
+        is FamilyParams.Soroban -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`passphrase`)
+                + FfiConverterString.allocationSize(value.`xlmSac`)
+            )
+        }
+        is FamilyParams.Sui -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeEndpointConfig.allocationSize(value.`graphql`)
+                + FfiConverterTypePolicy.allocationSize(value.`graphqlPolicy`)
+            )
+        }
+        is FamilyParams.Substrate -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeEndpointConfig.allocationSize(value.`rpc`)
+                + FfiConverterTypePolicy.allocationSize(value.`rpcPolicy`)
+                + FfiConverterString.allocationSize(value.`genesis`)
+                + FfiConverterUShort.allocationSize(value.`ss58Prefix`)
+            )
+        }
+    }
+
+    override fun write(value: FamilyParams, buf: ByteBuffer) {
+        when(value) {
+            is FamilyParams.Cosmos -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.`chainId`, buf)
+                FfiConverterSequenceTypeEndpointConfig.write(value.`rest`, buf)
+                FfiConverterTypePolicy.write(value.`restPolicy`, buf)
+                FfiConverterString.write(value.`denom`, buf)
+                FfiConverterString.write(value.`prefix`, buf)
+                Unit
+            }
+            is FamilyParams.Aptos -> {
+                buf.putInt(2)
+                FfiConverterUByte.write(value.`chainId`, buf)
+                FfiConverterString.write(value.`package`, buf)
+                Unit
+            }
+            is FamilyParams.Solana -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.`program`, buf)
+                Unit
+            }
+            is FamilyParams.Soroban -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`passphrase`, buf)
+                FfiConverterString.write(value.`xlmSac`, buf)
+                Unit
+            }
+            is FamilyParams.Sui -> {
+                buf.putInt(5)
+                FfiConverterSequenceTypeEndpointConfig.write(value.`graphql`, buf)
+                FfiConverterTypePolicy.write(value.`graphqlPolicy`, buf)
+                Unit
+            }
+            is FamilyParams.Substrate -> {
+                buf.putInt(6)
+                FfiConverterSequenceTypeEndpointConfig.write(value.`rpc`, buf)
+                FfiConverterTypePolicy.write(value.`rpcPolicy`, buf)
+                FfiConverterString.write(value.`genesis`, buf)
+                FfiConverterUShort.write(value.`ss58Prefix`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
  * The block of every decisive and decryption read (§9.4 requirement 3).
  */
 sealed class Finality {
@@ -28927,6 +29442,45 @@ public object FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * An L1 data fee model (plan T38).
+ */
+
+enum class L1Fee {
+    
+    /**
+     * OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
+     */
+    OP_STACK;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeL1Fee: FfiConverterRustBuffer<L1Fee> {
+    override fun read(buf: ByteBuffer) = try {
+        L1Fee.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: L1Fee) = 4UL
+
+    override fun write(value: L1Fee, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -29629,6 +30183,8 @@ sealed class SdkException(message: String): kotlin.Exception(message) {
         
         class TxTypeRefused(message: String) : SdkException(message)
         
+        class KindDisabled(message: String) : SdkException(message)
+        
         class RawDigestRefused(message: String) : SdkException(message)
         
         class AppDomainRefused(message: String) : SdkException(message)
@@ -29748,6 +30304,22 @@ sealed class SdkException(message: String): kotlin.Exception(message) {
         class GasFieldUnknown(message: String) : SdkException(message)
         
     /**
+     * A registration of a kind whose home (`kindHome(kind)`) is another generation than the bound registry: that registry
+     * carries it verify-only, or not at all (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); nothing is sent.
+     */
+        class RegistrationVerifyOnly(message: String) : SdkException(message)
+        
+    /**
+     * A UA no generation of the bound registry's line holds (`holderOf(ua)` answers no holder, §11.1).
+     */
+        class UaUnregistered(message: String) : SdkException(message)
+        
+    /**
+     * A PQZ write or read of a UA whose record has no PQZ home on the bound registry's walk (`pqzHomeOf(ua)` 0, §11.2).
+     */
+        class PqzHomeNone(message: String) : SdkException(message)
+        
+    /**
      * An order, a cancel or a liquidity order naming a DEX that is not on the chain profile's list, or a wrap order whose
      * wrapped token is not on its wrapper list (CLI-SGN-35): refused before anything is signed (plan T17).
      */
@@ -29823,43 +30395,47 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
             27 -> SdkException.SubmitPathNone(FfiConverterString.read(buf))
             28 -> SdkException.VerdictRefused(FfiConverterString.read(buf))
             29 -> SdkException.TxTypeRefused(FfiConverterString.read(buf))
-            30 -> SdkException.RawDigestRefused(FfiConverterString.read(buf))
-            31 -> SdkException.AppDomainRefused(FfiConverterString.read(buf))
-            32 -> SdkException.AppPurposeRefused(FfiConverterString.read(buf))
-            33 -> SdkException.AppSaltMismatch(FfiConverterString.read(buf))
-            34 -> SdkException.AppHandleForeign(FfiConverterString.read(buf))
-            35 -> SdkException.AppLabelRefused(FfiConverterString.read(buf))
-            36 -> SdkException.AppKeyUsage(FfiConverterString.read(buf))
-            37 -> SdkException.AppArenaFull(FfiConverterString.read(buf))
-            38 -> SdkException.KemKeyGone(FfiConverterString.read(buf))
-            39 -> SdkException.ReceiverUnregistered(FfiConverterString.read(buf))
-            40 -> SdkException.RegistrationUaMismatch(FfiConverterString.read(buf))
-            41 -> SdkException.RegistrationKindDisabled(FfiConverterString.read(buf))
-            42 -> SdkException.RegistrationPopInvalid(FfiConverterString.read(buf))
-            43 -> SdkException.RegistrationKemMissing(FfiConverterString.read(buf))
-            44 -> SdkException.AbiMismatch(FfiConverterString.read(buf))
-            45 -> SdkException.Internal(FfiConverterString.read(buf))
-            46 -> SdkException.AccountExists(FfiConverterString.read(buf))
-            47 -> SdkException.GasUnquoted(FfiConverterString.read(buf))
-            48 -> SdkException.ValidUntilRefused(FfiConverterString.read(buf))
-            49 -> SdkException.TokenUncatalogued(FfiConverterString.read(buf))
-            50 -> SdkException.LegKeyMismatch(FfiConverterString.read(buf))
-            51 -> SdkException.SignerNotAccountKey(FfiConverterString.read(buf))
-            52 -> SdkException.PqzOpeningUnsupported(FfiConverterString.read(buf))
-            53 -> SdkException.MsigSlotInactive(FfiConverterString.read(buf))
-            54 -> SdkException.GasSigBytesMissing(FfiConverterString.read(buf))
-            55 -> SdkException.SignedGasAboveCap(FfiConverterString.read(buf))
-            56 -> SdkException.GasItemUnpaired(FfiConverterString.read(buf))
-            57 -> SdkException.GasItemUnknown(FfiConverterString.read(buf))
-            58 -> SdkException.GasCountUnknown(FfiConverterString.read(buf))
-            59 -> SdkException.BlsMultiBelowThreshold(FfiConverterString.read(buf))
-            60 -> SdkException.GasFieldUnknown(FfiConverterString.read(buf))
-            61 -> SdkException.DexNotListed(FfiConverterString.read(buf))
-            62 -> SdkException.PqzAuditorNative(FfiConverterString.read(buf))
-            63 -> SdkException.GasAboveBlockShare(FfiConverterString.read(buf))
-            64 -> SdkException.Cancelled(FfiConverterString.read(buf))
-            65 -> SdkException.Ua(FfiConverterString.read(buf))
-            66 -> SdkException.Rpc(FfiConverterString.read(buf))
+            30 -> SdkException.KindDisabled(FfiConverterString.read(buf))
+            31 -> SdkException.RawDigestRefused(FfiConverterString.read(buf))
+            32 -> SdkException.AppDomainRefused(FfiConverterString.read(buf))
+            33 -> SdkException.AppPurposeRefused(FfiConverterString.read(buf))
+            34 -> SdkException.AppSaltMismatch(FfiConverterString.read(buf))
+            35 -> SdkException.AppHandleForeign(FfiConverterString.read(buf))
+            36 -> SdkException.AppLabelRefused(FfiConverterString.read(buf))
+            37 -> SdkException.AppKeyUsage(FfiConverterString.read(buf))
+            38 -> SdkException.AppArenaFull(FfiConverterString.read(buf))
+            39 -> SdkException.KemKeyGone(FfiConverterString.read(buf))
+            40 -> SdkException.ReceiverUnregistered(FfiConverterString.read(buf))
+            41 -> SdkException.RegistrationUaMismatch(FfiConverterString.read(buf))
+            42 -> SdkException.RegistrationKindDisabled(FfiConverterString.read(buf))
+            43 -> SdkException.RegistrationPopInvalid(FfiConverterString.read(buf))
+            44 -> SdkException.RegistrationKemMissing(FfiConverterString.read(buf))
+            45 -> SdkException.AbiMismatch(FfiConverterString.read(buf))
+            46 -> SdkException.Internal(FfiConverterString.read(buf))
+            47 -> SdkException.AccountExists(FfiConverterString.read(buf))
+            48 -> SdkException.GasUnquoted(FfiConverterString.read(buf))
+            49 -> SdkException.ValidUntilRefused(FfiConverterString.read(buf))
+            50 -> SdkException.TokenUncatalogued(FfiConverterString.read(buf))
+            51 -> SdkException.LegKeyMismatch(FfiConverterString.read(buf))
+            52 -> SdkException.SignerNotAccountKey(FfiConverterString.read(buf))
+            53 -> SdkException.PqzOpeningUnsupported(FfiConverterString.read(buf))
+            54 -> SdkException.MsigSlotInactive(FfiConverterString.read(buf))
+            55 -> SdkException.GasSigBytesMissing(FfiConverterString.read(buf))
+            56 -> SdkException.SignedGasAboveCap(FfiConverterString.read(buf))
+            57 -> SdkException.GasItemUnpaired(FfiConverterString.read(buf))
+            58 -> SdkException.GasItemUnknown(FfiConverterString.read(buf))
+            59 -> SdkException.GasCountUnknown(FfiConverterString.read(buf))
+            60 -> SdkException.BlsMultiBelowThreshold(FfiConverterString.read(buf))
+            61 -> SdkException.GasFieldUnknown(FfiConverterString.read(buf))
+            62 -> SdkException.RegistrationVerifyOnly(FfiConverterString.read(buf))
+            63 -> SdkException.UaUnregistered(FfiConverterString.read(buf))
+            64 -> SdkException.PqzHomeNone(FfiConverterString.read(buf))
+            65 -> SdkException.DexNotListed(FfiConverterString.read(buf))
+            66 -> SdkException.PqzAuditorNative(FfiConverterString.read(buf))
+            67 -> SdkException.GasAboveBlockShare(FfiConverterString.read(buf))
+            68 -> SdkException.Cancelled(FfiConverterString.read(buf))
+            69 -> SdkException.Ua(FfiConverterString.read(buf))
+            70 -> SdkException.Rpc(FfiConverterString.read(buf))
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
         
@@ -29987,152 +30563,168 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
                 buf.putInt(29)
                 Unit
             }
-            is SdkException.RawDigestRefused -> {
+            is SdkException.KindDisabled -> {
                 buf.putInt(30)
                 Unit
             }
-            is SdkException.AppDomainRefused -> {
+            is SdkException.RawDigestRefused -> {
                 buf.putInt(31)
                 Unit
             }
-            is SdkException.AppPurposeRefused -> {
+            is SdkException.AppDomainRefused -> {
                 buf.putInt(32)
                 Unit
             }
-            is SdkException.AppSaltMismatch -> {
+            is SdkException.AppPurposeRefused -> {
                 buf.putInt(33)
                 Unit
             }
-            is SdkException.AppHandleForeign -> {
+            is SdkException.AppSaltMismatch -> {
                 buf.putInt(34)
                 Unit
             }
-            is SdkException.AppLabelRefused -> {
+            is SdkException.AppHandleForeign -> {
                 buf.putInt(35)
                 Unit
             }
-            is SdkException.AppKeyUsage -> {
+            is SdkException.AppLabelRefused -> {
                 buf.putInt(36)
                 Unit
             }
-            is SdkException.AppArenaFull -> {
+            is SdkException.AppKeyUsage -> {
                 buf.putInt(37)
                 Unit
             }
-            is SdkException.KemKeyGone -> {
+            is SdkException.AppArenaFull -> {
                 buf.putInt(38)
                 Unit
             }
-            is SdkException.ReceiverUnregistered -> {
+            is SdkException.KemKeyGone -> {
                 buf.putInt(39)
                 Unit
             }
-            is SdkException.RegistrationUaMismatch -> {
+            is SdkException.ReceiverUnregistered -> {
                 buf.putInt(40)
                 Unit
             }
-            is SdkException.RegistrationKindDisabled -> {
+            is SdkException.RegistrationUaMismatch -> {
                 buf.putInt(41)
                 Unit
             }
-            is SdkException.RegistrationPopInvalid -> {
+            is SdkException.RegistrationKindDisabled -> {
                 buf.putInt(42)
                 Unit
             }
-            is SdkException.RegistrationKemMissing -> {
+            is SdkException.RegistrationPopInvalid -> {
                 buf.putInt(43)
                 Unit
             }
-            is SdkException.AbiMismatch -> {
+            is SdkException.RegistrationKemMissing -> {
                 buf.putInt(44)
                 Unit
             }
-            is SdkException.Internal -> {
+            is SdkException.AbiMismatch -> {
                 buf.putInt(45)
                 Unit
             }
-            is SdkException.AccountExists -> {
+            is SdkException.Internal -> {
                 buf.putInt(46)
                 Unit
             }
-            is SdkException.GasUnquoted -> {
+            is SdkException.AccountExists -> {
                 buf.putInt(47)
                 Unit
             }
-            is SdkException.ValidUntilRefused -> {
+            is SdkException.GasUnquoted -> {
                 buf.putInt(48)
                 Unit
             }
-            is SdkException.TokenUncatalogued -> {
+            is SdkException.ValidUntilRefused -> {
                 buf.putInt(49)
                 Unit
             }
-            is SdkException.LegKeyMismatch -> {
+            is SdkException.TokenUncatalogued -> {
                 buf.putInt(50)
                 Unit
             }
-            is SdkException.SignerNotAccountKey -> {
+            is SdkException.LegKeyMismatch -> {
                 buf.putInt(51)
                 Unit
             }
-            is SdkException.PqzOpeningUnsupported -> {
+            is SdkException.SignerNotAccountKey -> {
                 buf.putInt(52)
                 Unit
             }
-            is SdkException.MsigSlotInactive -> {
+            is SdkException.PqzOpeningUnsupported -> {
                 buf.putInt(53)
                 Unit
             }
-            is SdkException.GasSigBytesMissing -> {
+            is SdkException.MsigSlotInactive -> {
                 buf.putInt(54)
                 Unit
             }
-            is SdkException.SignedGasAboveCap -> {
+            is SdkException.GasSigBytesMissing -> {
                 buf.putInt(55)
                 Unit
             }
-            is SdkException.GasItemUnpaired -> {
+            is SdkException.SignedGasAboveCap -> {
                 buf.putInt(56)
                 Unit
             }
-            is SdkException.GasItemUnknown -> {
+            is SdkException.GasItemUnpaired -> {
                 buf.putInt(57)
                 Unit
             }
-            is SdkException.GasCountUnknown -> {
+            is SdkException.GasItemUnknown -> {
                 buf.putInt(58)
                 Unit
             }
-            is SdkException.BlsMultiBelowThreshold -> {
+            is SdkException.GasCountUnknown -> {
                 buf.putInt(59)
                 Unit
             }
-            is SdkException.GasFieldUnknown -> {
+            is SdkException.BlsMultiBelowThreshold -> {
                 buf.putInt(60)
                 Unit
             }
-            is SdkException.DexNotListed -> {
+            is SdkException.GasFieldUnknown -> {
                 buf.putInt(61)
                 Unit
             }
-            is SdkException.PqzAuditorNative -> {
+            is SdkException.RegistrationVerifyOnly -> {
                 buf.putInt(62)
                 Unit
             }
-            is SdkException.GasAboveBlockShare -> {
+            is SdkException.UaUnregistered -> {
                 buf.putInt(63)
                 Unit
             }
-            is SdkException.Cancelled -> {
+            is SdkException.PqzHomeNone -> {
                 buf.putInt(64)
                 Unit
             }
-            is SdkException.Ua -> {
+            is SdkException.DexNotListed -> {
                 buf.putInt(65)
                 Unit
             }
-            is SdkException.Rpc -> {
+            is SdkException.PqzAuditorNative -> {
                 buf.putInt(66)
+                Unit
+            }
+            is SdkException.GasAboveBlockShare -> {
+                buf.putInt(67)
+                Unit
+            }
+            is SdkException.Cancelled -> {
+                buf.putInt(68)
+                Unit
+            }
+            is SdkException.Ua -> {
+                buf.putInt(69)
+                Unit
+            }
+            is SdkException.Rpc -> {
+                buf.putInt(70)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -31532,6 +32124,38 @@ public object FfiConverterOptionalTypeEvent: FfiConverterRustBuffer<Event?> {
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeFamilyParams: FfiConverterRustBuffer<FamilyParams?> {
+    override fun read(buf: ByteBuffer): FamilyParams? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFamilyParams.read(buf)
+    }
+
+    override fun allocationSize(value: FamilyParams?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFamilyParams.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FamilyParams?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFamilyParams.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeHolderKind: FfiConverterRustBuffer<HolderKind?> {
     override fun read(buf: ByteBuffer): HolderKind? {
         if (buf.get().toInt() == 0) {
@@ -31586,6 +32210,38 @@ public object FfiConverterOptionalTypeKeyRef: FfiConverterRustBuffer<KeyRef?> {
         } else {
             buf.put(1)
             FfiConverterTypeKeyRef.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeL1Fee: FfiConverterRustBuffer<L1Fee?> {
+    override fun read(buf: ByteBuffer): L1Fee? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeL1Fee.read(buf)
+    }
+
+    override fun allocationSize(value: L1Fee?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeL1Fee.allocationSize(value)
+        }
+    }
+
+    override fun write(value: L1Fee?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeL1Fee.write(value, buf)
         }
     }
 }
@@ -32873,6 +33529,33 @@ public typealias FfiConverterTypeValue = FfiConverterString
     UniffiLib.uniffi_scaas_sdk_fn_func_subject_key_args_secp256k1(
     
         FfiConverterString.lower(`address`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The target of a key write of the UA (`UaLine::key_target`, §12): its holder.
+         */ fun `uaLineKeyTarget`(`line`: UaLine): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_scaas_sdk_fn_func_ua_line_key_target(
+    
+        FfiConverterTypeUaLine.lower(`line`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The target of a PQZ write of the UA (`UaLine::pqz_target`, §12): its PQZ home; `PqzHomeNone` where the walk has none.
+         */
+    @Throws(SdkException::class) fun `uaLinePqzTarget`(`line`: UaLine): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(SdkException) { _status ->
+    UniffiLib.uniffi_scaas_sdk_fn_func_ua_line_pqz_target(
+    
+        FfiConverterTypeUaLine.lower(`line`),_status)
 }
     )
     }

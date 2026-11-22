@@ -324,6 +324,30 @@ public class Account implements AutoCloseable, AccountInterface {
 
   
     @Override
+    public java.util.concurrent.CompletableFuture<java.util.List<java.lang.String>> pqzDecoyCandidates(java.lang.String chain){
+        return pqzDecoyCandidates(chain, java.util.concurrent.ForkJoinPool.commonPool());
+    }public java.util.concurrent.CompletableFuture<java.util.List<java.lang.String>> pqzDecoyCandidates(java.lang.String chain, java.util.concurrent.Executor uniffiExecutor
+    ){
+        return UniffiAsyncHelpers.uniffiRustCallAsync(
+        uniffiExecutor,
+        callWithHandle(uniffiHandle -> {
+            return UniffiLib.uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates(
+                uniffiHandle,
+                FfiConverterString.INSTANCE.lower(chain)
+            );
+        }),
+        (future, callback, continuationHandle) -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuationHandle),
+        (_allocator, future, continuation) -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(_allocator, future, continuation),
+        (future) -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // lift function
+        (it) -> FfiConverterSequenceString.INSTANCE.lift(it),
+        // Error FFI converter
+        new SdkExceptionErrorHandler()
+    );
+    }
+
+  
+    @Override
     public java.util.concurrent.CompletableFuture<RegistryWrite> prepareAcceptMembership(AcceptMembership req){
         return prepareAcceptMembership(req, java.util.concurrent.ForkJoinPool.commonPool());
     }public java.util.concurrent.CompletableFuture<RegistryWrite> prepareAcceptMembership(AcceptMembership req, java.util.concurrent.Executor uniffiExecutor
@@ -732,6 +756,30 @@ public class Account implements AutoCloseable, AccountInterface {
 
   
     @Override
+    public java.util.concurrent.CompletableFuture<java.lang.String> registerTarget(java.lang.String chain, short kind){
+        return registerTarget(chain, kind, java.util.concurrent.ForkJoinPool.commonPool());
+    }public java.util.concurrent.CompletableFuture<java.lang.String> registerTarget(java.lang.String chain, short kind, java.util.concurrent.Executor uniffiExecutor
+    ){
+        return UniffiAsyncHelpers.uniffiRustCallAsync(
+        uniffiExecutor,
+        callWithHandle(uniffiHandle -> {
+            return UniffiLib.uniffi_scaas_sdk_fn_method_account_register_target(
+                uniffiHandle,
+                FfiConverterString.INSTANCE.lower(chain), kind
+            );
+        }),
+        (future, callback, continuationHandle) -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuationHandle),
+        (_allocator, future, continuation) -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(_allocator, future, continuation),
+        (future) -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // lift function
+        (it) -> FfiConverterString.INSTANCE.lift(it),
+        // Error FFI converter
+        new SdkExceptionErrorHandler()
+    );
+    }
+
+  
+    @Override
     public java.util.concurrent.CompletableFuture<RegistrationBlob> registrationBlob(KeyRef key, RegisterAttrs attrs){
         return registrationBlob(key, attrs, java.util.concurrent.ForkJoinPool.commonPool());
     }public java.util.concurrent.CompletableFuture<RegistrationBlob> registrationBlob(KeyRef key, RegisterAttrs attrs, java.util.concurrent.Executor uniffiExecutor
@@ -845,6 +893,30 @@ public class Account implements AutoCloseable, AccountInterface {
         (future) -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
         // lift function
         (it) -> FfiConverterString.INSTANCE.lift(it),
+        // Error FFI converter
+        new SdkExceptionErrorHandler()
+    );
+    }
+
+  
+    @Override
+    public java.util.concurrent.CompletableFuture<UaLine> uaLine(java.lang.String chain, java.lang.String ua){
+        return uaLine(chain, ua, java.util.concurrent.ForkJoinPool.commonPool());
+    }public java.util.concurrent.CompletableFuture<UaLine> uaLine(java.lang.String chain, java.lang.String ua, java.util.concurrent.Executor uniffiExecutor
+    ){
+        return UniffiAsyncHelpers.uniffiRustCallAsync(
+        uniffiExecutor,
+        callWithHandle(uniffiHandle -> {
+            return UniffiLib.uniffi_scaas_sdk_fn_method_account_ua_line(
+                uniffiHandle,
+                FfiConverterString.INSTANCE.lower(chain), FfiConverterString.INSTANCE.lower(ua)
+            );
+        }),
+        (future, callback, continuationHandle) -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuationHandle),
+        (_allocator, future, continuation) -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(_allocator, future, continuation),
+        (future) -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // lift function
+        (it) -> FfiConverterTypeUaLine.INSTANCE.lift(it),
         // Error FFI converter
         new SdkExceptionErrorHandler()
     );

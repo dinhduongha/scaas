@@ -81,6 +81,12 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_func_subject_key_args_secp256k1() != 20622) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_func_ua_line_key_target() != 60856) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
+    if (uniffi_scaas_sdk_checksum_func_ua_line_pqz_target() != 29446) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_func_open_blocking() != 20563) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
@@ -135,6 +141,9 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_account_next_account_blocking() != 12076) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates_blocking() != 39361) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_method_account_prepare_accept_membership_blocking() != 22686) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
@@ -186,6 +195,9 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_account_quote_registry_write_blocking() != 39091) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_method_account_register_target_blocking() != 37685) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_method_account_registration_blob_blocking() != 6912) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
@@ -199,6 +211,9 @@ void ensure_initialized() {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_account_submit_registry_write_blocking() != 11669) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
+    if (uniffi_scaas_sdk_checksum_method_account_ua_line_blocking() != 47229) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_accept_admin_blocking() != 4070) {
@@ -1272,6 +1287,12 @@ uint32_t Account::next_account_blocking(const std::string &seed, std::shared_ptr
         uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(seed), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
 }
+std::vector<std::string> Account::pqz_decoy_candidates_blocking(const std::string &chain, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterSequenceString::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(chain), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
 std::shared_ptr<RegistryWrite> Account::prepare_accept_membership_blocking(const AcceptMembership &req, std::shared_ptr<CancelToken> cancel) {
     return uniffi::FfiConverterOptionalRegistryWrite::lift(uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_account_prepare_accept_membership_blocking,
@@ -1374,6 +1395,12 @@ SubmitQuote Account::quote_registry_write_blocking(const std::shared_ptr<Registr
         uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterRegistryWrite::lower(write), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
 }
+std::string Account::register_target_blocking(const std::string &chain, uint16_t kind, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterString::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_account_register_target_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(chain), uniffi::FfiConverterUInt16::lower(kind), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
 RegistrationBlob Account::registration_blob_blocking(KeyRef key, const RegisterAttrs &attrs, std::shared_ptr<CancelToken> cancel) {
     return uniffi::FfiConverterTypeRegistrationBlob::lift(uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_account_registration_blob_blocking,
@@ -1403,6 +1430,12 @@ std::string Account::submit_registry_write_blocking(const std::shared_ptr<Regist
         uniffi_scaas_sdk_fn_method_account_submit_registry_write_blocking,
         uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterRegistryWrite::lower(write), uniffi::FfiConverterTypeSubmitQuote::lower(quote), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
+UaLine Account::ua_line_blocking(const std::string &chain, const std::string &ua, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterTypeUaLine::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_account_ua_line_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(chain), uniffi::FfiConverterString::lower(ua), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
 }
 
 Account::~Account() {
@@ -4282,6 +4315,20 @@ uint64_t Wallet::_uniffi_internal_clone_handle() const {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 namespace uniffi {
 
 
@@ -5649,6 +5696,9 @@ ChainProfile FfiConverterTypeChainProfile::read(RustStream &stream) {
         FfiConverterSequenceTypeEndpointConfig::read(stream),
         FfiConverterPolicy::read(stream),
         FfiConverterSequenceTypeListedDex::read(stream),
+        FfiConverterSequenceString::read(stream),
+        FfiConverterOptionalFamilyParams::read(stream),
+        FfiConverterOptionalL1Fee::read(stream),
         FfiConverterSequenceString::read(stream)
     };
 }
@@ -5674,6 +5724,9 @@ void FfiConverterTypeChainProfile::write(RustStream &stream, const ChainProfile 
     FfiConverterPolicy::write(stream, val.verifier_policy);
     FfiConverterSequenceTypeListedDex::write(stream, val.dexes);
     FfiConverterSequenceString::write(stream, val.wrappers);
+    FfiConverterOptionalFamilyParams::write(stream, val.family_params);
+    FfiConverterOptionalL1Fee::write(stream, val.l1_fee);
+    FfiConverterSequenceString::write(stream, val.disabled_kinds);
 }
 
 uint64_t FfiConverterTypeChainProfile::allocation_size(const ChainProfile &val) {
@@ -5698,7 +5751,10 @@ uint64_t FfiConverterTypeChainProfile::allocation_size(const ChainProfile &val) 
         FfiConverterSequenceTypeEndpointConfig::allocation_size(val.verifiers) +
         FfiConverterPolicy::allocation_size(val.verifier_policy) +
         FfiConverterSequenceTypeListedDex::allocation_size(val.dexes) +
-        FfiConverterSequenceString::allocation_size(val.wrappers);
+        FfiConverterSequenceString::allocation_size(val.wrappers) +
+        FfiConverterOptionalFamilyParams::allocation_size(val.family_params) +
+        FfiConverterOptionalL1Fee::allocation_size(val.l1_fee) +
+        FfiConverterSequenceString::allocation_size(val.disabled_kinds);
     
 }
 
@@ -6339,6 +6395,51 @@ uint64_t FfiConverterTypeGasBase::allocation_size(const GasBase &val) {
 }
 
 
+GasLine FfiConverterTypeGasLine::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterTypeGasLine::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterTypeGasLine::lower(const GasLine &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterTypeGasLine::write(stream, val);
+
+    return std::move(buf);
+}
+
+GasLine FfiConverterTypeGasLine::read(RustStream &stream) {
+    return {
+        FfiConverterOptionalString::read(stream),
+        FfiConverterOptionalString::read(stream),
+        FfiConverterUInt8::read(stream),
+        FfiConverterBool::read(stream)
+    };
+}
+
+void FfiConverterTypeGasLine::write(RustStream &stream, const GasLine &val) {
+    FfiConverterOptionalString::write(stream, val.registry);
+    FfiConverterOptionalString::write(stream, val.path);
+    FfiConverterUInt8::write(stream, val.depth);
+    FfiConverterBool::write(stream, val.write);
+}
+
+uint64_t FfiConverterTypeGasLine::allocation_size(const GasLine &val) {
+    
+    return 
+        FfiConverterOptionalString::allocation_size(val.registry) +
+        FfiConverterOptionalString::allocation_size(val.path) +
+        FfiConverterUInt8::allocation_size(val.depth) +
+        FfiConverterBool::allocation_size(val.write);
+    
+}
+
+
 GasPerByte FfiConverterTypeGasPerByte::lift(RustBuffer buf) {
     auto stream = RustStream(&buf);
     auto ret = FfiConverterTypeGasPerByte::read(stream);
@@ -6567,7 +6668,8 @@ GasVerify FfiConverterTypeGasVerify::read(RustStream &stream) {
         FfiConverterUInt64::read(stream),
         FfiConverterUInt64::read(stream),
         FfiConverterUInt64::read(stream),
-        FfiConverterOptionalTypeGasPerItem::read(stream)
+        FfiConverterOptionalTypeGasPerItem::read(stream),
+        FfiConverterTypeGasLine::read(stream)
     };
 }
 
@@ -6577,6 +6679,7 @@ void FfiConverterTypeGasVerify::write(RustStream &stream, const GasVerify &val) 
     FfiConverterUInt64::write(stream, val.sig_bytes);
     FfiConverterUInt64::write(stream, val.margin);
     FfiConverterOptionalTypeGasPerItem::write(stream, val.per_item);
+    FfiConverterTypeGasLine::write(stream, val.line);
 }
 
 uint64_t FfiConverterTypeGasVerify::allocation_size(const GasVerify &val) {
@@ -6586,7 +6689,8 @@ uint64_t FfiConverterTypeGasVerify::allocation_size(const GasVerify &val) {
         FfiConverterUInt64::allocation_size(val.gas) +
         FfiConverterUInt64::allocation_size(val.sig_bytes) +
         FfiConverterUInt64::allocation_size(val.margin) +
-        FfiConverterOptionalTypeGasPerItem::allocation_size(val.per_item);
+        FfiConverterOptionalTypeGasPerItem::allocation_size(val.per_item) +
+        FfiConverterTypeGasLine::allocation_size(val.line);
     
 }
 
@@ -11709,6 +11813,48 @@ uint64_t FfiConverterTypeUaGrantRole::allocation_size(const UaGrantRole &val) {
 }
 
 
+UaLine FfiConverterTypeUaLine::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterTypeUaLine::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterTypeUaLine::lower(const UaLine &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterTypeUaLine::write(stream, val);
+
+    return std::move(buf);
+}
+
+UaLine FfiConverterTypeUaLine::read(RustStream &stream) {
+    return {
+        FfiConverterString::read(stream),
+        FfiConverterUInt16::read(stream),
+        FfiConverterOptionalString::read(stream)
+    };
+}
+
+void FfiConverterTypeUaLine::write(RustStream &stream, const UaLine &val) {
+    FfiConverterString::write(stream, val.holder);
+    FfiConverterUInt16::write(stream, val.kind);
+    FfiConverterOptionalString::write(stream, val.pqz_home);
+}
+
+uint64_t FfiConverterTypeUaLine::allocation_size(const UaLine &val) {
+    
+    return 
+        FfiConverterString::allocation_size(val.holder) +
+        FfiConverterUInt16::allocation_size(val.kind) +
+        FfiConverterOptionalString::allocation_size(val.pqz_home);
+    
+}
+
+
 UaMint FfiConverterTypeUaMint::lift(RustBuffer buf) {
     auto stream = RustStream(&buf);
     auto ret = FfiConverterTypeUaMint::read(stream);
@@ -16419,6 +16565,170 @@ uint64_t FfiConverterFamily::allocation_size(const Family &) {
 }
 
 
+FamilyParams FfiConverterFamilyParams::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterFamilyParams::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterFamilyParams::lower(const FamilyParams &val) {
+    auto buf = rustbuffer_alloc(FfiConverterFamilyParams::allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterFamilyParams::write(stream, val);
+
+    return std::move(buf);
+}
+
+FamilyParams FfiConverterFamilyParams::read(RustStream &stream) {
+    int32_t variant_id;
+    stream >> variant_id;
+
+    switch (variant_id) {
+        
+    case 1:
+        return FamilyParams::kCosmos {
+            .chain_id = FfiConverterString::read(stream),
+            .rest = FfiConverterSequenceTypeEndpointConfig::read(stream),
+            .rest_policy = FfiConverterPolicy::read(stream),
+            .denom = FfiConverterString::read(stream),
+            .prefix = FfiConverterString::read(stream),
+        };
+        
+    case 2:
+        return FamilyParams::kAptos {
+            .chain_id = FfiConverterUInt8::read(stream),
+            .package = FfiConverterString::read(stream),
+        };
+        
+    case 3:
+        return FamilyParams::kSolana {
+            .program = FfiConverterString::read(stream),
+        };
+        
+    case 4:
+        return FamilyParams::kSoroban {
+            .passphrase = FfiConverterString::read(stream),
+            .xlm_sac = FfiConverterString::read(stream),
+        };
+        
+    case 5:
+        return FamilyParams::kSui {
+            .graphql = FfiConverterSequenceTypeEndpointConfig::read(stream),
+            .graphql_policy = FfiConverterPolicy::read(stream),
+        };
+        
+    case 6:
+        return FamilyParams::kSubstrate {
+            .rpc = FfiConverterSequenceTypeEndpointConfig::read(stream),
+            .rpc_policy = FfiConverterPolicy::read(stream),
+            .genesis = FfiConverterString::read(stream),
+            .ss58_prefix = FfiConverterUInt16::read(stream),
+        };
+        
+    default:
+        throw std::runtime_error("No matching FamilyParams variant");
+    }
+}
+
+void FfiConverterFamilyParams::write(RustStream &stream, const FamilyParams &val) {
+    int32_t variant_id = static_cast<int32_t>(val.variant.index() + 1);
+
+    stream << variant_id;
+
+    std::visit([&](auto &&arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, FamilyParams::kCosmos>) {
+            FfiConverterString::write(stream, arg.chain_id);
+            FfiConverterSequenceTypeEndpointConfig::write(stream, arg.rest);
+            FfiConverterPolicy::write(stream, arg.rest_policy);
+            FfiConverterString::write(stream, arg.denom);
+            FfiConverterString::write(stream, arg.prefix);
+        }
+        else if constexpr (std::is_same_v<T, FamilyParams::kAptos>) {
+            FfiConverterUInt8::write(stream, arg.chain_id);
+            FfiConverterString::write(stream, arg.package);
+        }
+        else if constexpr (std::is_same_v<T, FamilyParams::kSolana>) {
+            FfiConverterString::write(stream, arg.program);
+        }
+        else if constexpr (std::is_same_v<T, FamilyParams::kSoroban>) {
+            FfiConverterString::write(stream, arg.passphrase);
+            FfiConverterString::write(stream, arg.xlm_sac);
+        }
+        else if constexpr (std::is_same_v<T, FamilyParams::kSui>) {
+            FfiConverterSequenceTypeEndpointConfig::write(stream, arg.graphql);
+            FfiConverterPolicy::write(stream, arg.graphql_policy);
+        }
+        else if constexpr (std::is_same_v<T, FamilyParams::kSubstrate>) {
+            FfiConverterSequenceTypeEndpointConfig::write(stream, arg.rpc);
+            FfiConverterPolicy::write(stream, arg.rpc_policy);
+            FfiConverterString::write(stream, arg.genesis);
+            FfiConverterUInt16::write(stream, arg.ss58_prefix);
+        }
+        else {
+            static_assert(always_false_v<T>, "non-exhaustive FamilyParams visitor");
+        }
+    }, val.variant);
+}
+
+uint64_t FfiConverterFamilyParams::allocation_size(const FamilyParams &val) {
+    uint64_t size = sizeof(int32_t);
+
+    size += std::visit([&](auto &&arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, FamilyParams::kCosmos>) {
+            uint64_t size = 0;
+            size += FfiConverterString::allocation_size(arg.chain_id);
+            size += FfiConverterSequenceTypeEndpointConfig::allocation_size(arg.rest);
+            size += FfiConverterPolicy::allocation_size(arg.rest_policy);
+            size += FfiConverterString::allocation_size(arg.denom);
+            size += FfiConverterString::allocation_size(arg.prefix);
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, FamilyParams::kAptos>) {
+            uint64_t size = 0;
+            size += FfiConverterUInt8::allocation_size(arg.chain_id);
+            size += FfiConverterString::allocation_size(arg.package);
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, FamilyParams::kSolana>) {
+            uint64_t size = 0;
+            size += FfiConverterString::allocation_size(arg.program);
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, FamilyParams::kSoroban>) {
+            uint64_t size = 0;
+            size += FfiConverterString::allocation_size(arg.passphrase);
+            size += FfiConverterString::allocation_size(arg.xlm_sac);
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, FamilyParams::kSui>) {
+            uint64_t size = 0;
+            size += FfiConverterSequenceTypeEndpointConfig::allocation_size(arg.graphql);
+            size += FfiConverterPolicy::allocation_size(arg.graphql_policy);
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, FamilyParams::kSubstrate>) {
+            uint64_t size = 0;
+            size += FfiConverterSequenceTypeEndpointConfig::allocation_size(arg.rpc);
+            size += FfiConverterPolicy::allocation_size(arg.rpc_policy);
+            size += FfiConverterString::allocation_size(arg.genesis);
+            size += FfiConverterUInt16::allocation_size(arg.ss58_prefix);
+            return size;
+        }
+        else {
+            static_assert(always_false_v<T>, "non-exhaustive FamilyParams visitor");
+        }
+    }, val.variant);
+
+    return size;
+}
+
+
 Finality FfiConverterFinality::lift(RustBuffer buf) {
     auto stream = RustStream(&buf);
     auto ret = FfiConverterFinality::read(stream);
@@ -16942,6 +17252,55 @@ uint64_t FfiConverterKeyRef::allocation_size(const KeyRef &val) {
     }, val.variant);
 
     return size;
+}
+
+
+L1Fee FfiConverterL1Fee::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterL1Fee::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterL1Fee::lower(const L1Fee &val) {
+    auto buf = rustbuffer_alloc(FfiConverterL1Fee::allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterL1Fee::write(stream, val);
+
+    return std::move(buf);
+}
+
+L1Fee FfiConverterL1Fee::read(RustStream &stream) {
+    int32_t variant;
+    stream >> variant;
+
+    switch (variant) {
+        
+    case 1:
+        return L1Fee::kOpStack;
+        
+    default:
+        throw std::runtime_error("No matching L1Fee variant");
+    }
+}
+
+void FfiConverterL1Fee::write(RustStream &stream, const L1Fee &val) {
+    switch (val) {
+        
+    case L1Fee::kOpStack:
+        stream << static_cast<int32_t>(1);
+        break;
+        
+    default:
+        throw std::runtime_error("No matching L1Fee variant");
+    }
+}
+
+uint64_t FfiConverterL1Fee::allocation_size(const L1Fee &) {
+    return static_cast<uint64_t>(sizeof(int32_t));
 }
 
 
@@ -17608,114 +17967,126 @@ std::shared_ptr<SdkError> FfiConverterSdkError::read(RustStream &stream) {
         return std::make_shared<sdk_error::TxTypeRefused>(FfiConverterString::read(stream));
     
     case 30:
-        return std::make_shared<sdk_error::RawDigestRefused>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::KindDisabled>(FfiConverterString::read(stream));
     
     case 31:
-        return std::make_shared<sdk_error::AppDomainRefused>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::RawDigestRefused>(FfiConverterString::read(stream));
     
     case 32:
-        return std::make_shared<sdk_error::AppPurposeRefused>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::AppDomainRefused>(FfiConverterString::read(stream));
     
     case 33:
-        return std::make_shared<sdk_error::AppSaltMismatch>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::AppPurposeRefused>(FfiConverterString::read(stream));
     
     case 34:
-        return std::make_shared<sdk_error::AppHandleForeign>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::AppSaltMismatch>(FfiConverterString::read(stream));
     
     case 35:
-        return std::make_shared<sdk_error::AppLabelRefused>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::AppHandleForeign>(FfiConverterString::read(stream));
     
     case 36:
-        return std::make_shared<sdk_error::AppKeyUsage>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::AppLabelRefused>(FfiConverterString::read(stream));
     
     case 37:
-        return std::make_shared<sdk_error::AppArenaFull>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::AppKeyUsage>(FfiConverterString::read(stream));
     
     case 38:
-        return std::make_shared<sdk_error::KemKeyGone>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::AppArenaFull>(FfiConverterString::read(stream));
     
     case 39:
-        return std::make_shared<sdk_error::ReceiverUnregistered>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::KemKeyGone>(FfiConverterString::read(stream));
     
     case 40:
-        return std::make_shared<sdk_error::RegistrationUaMismatch>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::ReceiverUnregistered>(FfiConverterString::read(stream));
     
     case 41:
-        return std::make_shared<sdk_error::RegistrationKindDisabled>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::RegistrationUaMismatch>(FfiConverterString::read(stream));
     
     case 42:
-        return std::make_shared<sdk_error::RegistrationPopInvalid>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::RegistrationKindDisabled>(FfiConverterString::read(stream));
     
     case 43:
-        return std::make_shared<sdk_error::RegistrationKemMissing>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::RegistrationPopInvalid>(FfiConverterString::read(stream));
     
     case 44:
-        return std::make_shared<sdk_error::AbiMismatch>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::RegistrationKemMissing>(FfiConverterString::read(stream));
     
     case 45:
-        return std::make_shared<sdk_error::Internal>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::AbiMismatch>(FfiConverterString::read(stream));
     
     case 46:
-        return std::make_shared<sdk_error::AccountExists>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::Internal>(FfiConverterString::read(stream));
     
     case 47:
-        return std::make_shared<sdk_error::GasUnquoted>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::AccountExists>(FfiConverterString::read(stream));
     
     case 48:
-        return std::make_shared<sdk_error::ValidUntilRefused>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::GasUnquoted>(FfiConverterString::read(stream));
     
     case 49:
-        return std::make_shared<sdk_error::TokenUncatalogued>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::ValidUntilRefused>(FfiConverterString::read(stream));
     
     case 50:
-        return std::make_shared<sdk_error::LegKeyMismatch>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::TokenUncatalogued>(FfiConverterString::read(stream));
     
     case 51:
-        return std::make_shared<sdk_error::SignerNotAccountKey>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::LegKeyMismatch>(FfiConverterString::read(stream));
     
     case 52:
-        return std::make_shared<sdk_error::PqzOpeningUnsupported>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::SignerNotAccountKey>(FfiConverterString::read(stream));
     
     case 53:
-        return std::make_shared<sdk_error::MsigSlotInactive>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::PqzOpeningUnsupported>(FfiConverterString::read(stream));
     
     case 54:
-        return std::make_shared<sdk_error::GasSigBytesMissing>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::MsigSlotInactive>(FfiConverterString::read(stream));
     
     case 55:
-        return std::make_shared<sdk_error::SignedGasAboveCap>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::GasSigBytesMissing>(FfiConverterString::read(stream));
     
     case 56:
-        return std::make_shared<sdk_error::GasItemUnpaired>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::SignedGasAboveCap>(FfiConverterString::read(stream));
     
     case 57:
-        return std::make_shared<sdk_error::GasItemUnknown>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::GasItemUnpaired>(FfiConverterString::read(stream));
     
     case 58:
-        return std::make_shared<sdk_error::GasCountUnknown>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::GasItemUnknown>(FfiConverterString::read(stream));
     
     case 59:
-        return std::make_shared<sdk_error::BlsMultiBelowThreshold>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::GasCountUnknown>(FfiConverterString::read(stream));
     
     case 60:
-        return std::make_shared<sdk_error::GasFieldUnknown>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::BlsMultiBelowThreshold>(FfiConverterString::read(stream));
     
     case 61:
-        return std::make_shared<sdk_error::DexNotListed>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::GasFieldUnknown>(FfiConverterString::read(stream));
     
     case 62:
-        return std::make_shared<sdk_error::PqzAuditorNative>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::RegistrationVerifyOnly>(FfiConverterString::read(stream));
     
     case 63:
-        return std::make_shared<sdk_error::GasAboveBlockShare>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::UaUnregistered>(FfiConverterString::read(stream));
     
     case 64:
-        return std::make_shared<sdk_error::Cancelled>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::PqzHomeNone>(FfiConverterString::read(stream));
     
     case 65:
-        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::DexNotListed>(FfiConverterString::read(stream));
     
     case 66:
+        return std::make_shared<sdk_error::PqzAuditorNative>(FfiConverterString::read(stream));
+    
+    case 67:
+        return std::make_shared<sdk_error::GasAboveBlockShare>(FfiConverterString::read(stream));
+    
+    case 68:
+        return std::make_shared<sdk_error::Cancelled>(FfiConverterString::read(stream));
+    
+    case 69:
+        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+    
+    case 70:
         return std::make_shared<sdk_error::Rpc>(FfiConverterString::read(stream));
     
     default:
@@ -19345,6 +19716,53 @@ uint64_t FfiConverterOptionalEvent::allocation_size(const std::optional<Event> &
     return ret;
 }
 
+std::optional<FamilyParams> FfiConverterOptionalFamilyParams::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterOptionalFamilyParams::read(stream);
+
+    rustbuffer_free(buf);
+
+    return ret;
+}
+
+RustBuffer FfiConverterOptionalFamilyParams::lower(const std::optional<FamilyParams>& val) {
+    auto buf = rustbuffer_alloc(FfiConverterOptionalFamilyParams::allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterOptionalFamilyParams::write(stream, val);
+
+    return buf;
+}
+
+std::optional<FamilyParams> FfiConverterOptionalFamilyParams::read(RustStream &stream) {
+    char has_value;
+
+    stream.get(has_value);
+    if (has_value) {
+        return std::make_optional(FfiConverterFamilyParams::read(stream));
+    } else {
+        return std::nullopt;
+    }
+}
+
+void FfiConverterOptionalFamilyParams::write(RustStream &stream, const std::optional<FamilyParams>& value) {
+    stream.put(static_cast<uint8_t>(!!value));
+
+    if (value) {
+        FfiConverterFamilyParams::write(stream, value.value());
+    }
+}
+
+uint64_t FfiConverterOptionalFamilyParams::allocation_size(const std::optional<FamilyParams> &val) {
+    uint64_t ret = 1;
+
+    if (val) {
+        ret += FfiConverterFamilyParams::allocation_size(val.value());
+    }
+
+    return ret;
+}
+
 std::optional<HolderKind> FfiConverterOptionalHolderKind::lift(RustBuffer buf) {
     auto stream = RustStream(&buf);
     auto ret = FfiConverterOptionalHolderKind::read(stream);
@@ -19434,6 +19852,53 @@ uint64_t FfiConverterOptionalKeyRef::allocation_size(const std::optional<KeyRef>
 
     if (val) {
         ret += FfiConverterKeyRef::allocation_size(val.value());
+    }
+
+    return ret;
+}
+
+std::optional<L1Fee> FfiConverterOptionalL1Fee::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterOptionalL1Fee::read(stream);
+
+    rustbuffer_free(buf);
+
+    return ret;
+}
+
+RustBuffer FfiConverterOptionalL1Fee::lower(const std::optional<L1Fee>& val) {
+    auto buf = rustbuffer_alloc(FfiConverterOptionalL1Fee::allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterOptionalL1Fee::write(stream, val);
+
+    return buf;
+}
+
+std::optional<L1Fee> FfiConverterOptionalL1Fee::read(RustStream &stream) {
+    char has_value;
+
+    stream.get(has_value);
+    if (has_value) {
+        return std::make_optional(FfiConverterL1Fee::read(stream));
+    } else {
+        return std::nullopt;
+    }
+}
+
+void FfiConverterOptionalL1Fee::write(RustStream &stream, const std::optional<L1Fee>& value) {
+    stream.put(static_cast<uint8_t>(!!value));
+
+    if (value) {
+        FfiConverterL1Fee::write(stream, value.value());
+    }
+}
+
+uint64_t FfiConverterOptionalL1Fee::allocation_size(const std::optional<L1Fee> &val) {
+    uint64_t ret = 1;
+
+    if (val) {
+        ret += FfiConverterL1Fee::allocation_size(val.value());
     }
 
     return ret;
@@ -21319,6 +21784,24 @@ SubjectKeyArgs subject_key_args_secp256k1(const std::string &address) {
         uniffi::FfiConverterSdkError::lift, uniffi::FfiConverterString::lower(address));
 
     return uniffi::FfiConverterTypeSubjectKeyArgs::lift(ret);
+}
+
+
+std::string ua_line_key_target(const UaLine &line) {
+    auto ret = uniffi::rust_call(
+        uniffi_scaas_sdk_fn_func_ua_line_key_target,
+        nullptr, uniffi::FfiConverterTypeUaLine::lower(line));
+
+    return uniffi::FfiConverterString::lift(ret);
+}
+
+
+std::string ua_line_pqz_target(const UaLine &line) {
+    auto ret = uniffi::rust_call(
+        uniffi_scaas_sdk_fn_func_ua_line_pqz_target,
+        uniffi::FfiConverterSdkError::lift, uniffi::FfiConverterTypeUaLine::lower(line));
+
+    return uniffi::FfiConverterString::lift(ret);
 }
 
 

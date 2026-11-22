@@ -11,7 +11,8 @@ public enum FfiConverterTypeGasVerify implements FfiConverterRustBuffer<GasVerif
       FfiConverterLong.INSTANCE.read(buf),
       FfiConverterLong.INSTANCE.read(buf),
       FfiConverterLong.INSTANCE.read(buf),
-      FfiConverterOptionalTypeGasPerItem.INSTANCE.read(buf)
+      FfiConverterOptionalTypeGasPerItem.INSTANCE.read(buf),
+      FfiConverterTypeGasLine.INSTANCE.read(buf)
     );
   }
 
@@ -22,7 +23,8 @@ public enum FfiConverterTypeGasVerify implements FfiConverterRustBuffer<GasVerif
             FfiConverterLong.INSTANCE.allocationSize(value.gas()) +
             FfiConverterLong.INSTANCE.allocationSize(value.sigBytes()) +
             FfiConverterLong.INSTANCE.allocationSize(value.margin()) +
-            FfiConverterOptionalTypeGasPerItem.INSTANCE.allocationSize(value.perItem())
+            FfiConverterOptionalTypeGasPerItem.INSTANCE.allocationSize(value.perItem()) +
+            FfiConverterTypeGasLine.INSTANCE.allocationSize(value.line())
       );
   }
 
@@ -33,6 +35,7 @@ public enum FfiConverterTypeGasVerify implements FfiConverterRustBuffer<GasVerif
       FfiConverterLong.INSTANCE.write(value.sigBytes(), buf);
       FfiConverterLong.INSTANCE.write(value.margin(), buf);
       FfiConverterOptionalTypeGasPerItem.INSTANCE.write(value.perItem(), buf);
+      FfiConverterTypeGasLine.INSTANCE.write(value.line(), buf);
   }
 }
 

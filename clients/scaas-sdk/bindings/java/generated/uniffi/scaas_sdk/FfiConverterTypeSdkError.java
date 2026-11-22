@@ -36,43 +36,47 @@ public enum FfiConverterTypeSdkError implements FfiConverterRustBuffer<SdkExcept
             case 27 -> new SdkException.SubmitPathNone(FfiConverterString.INSTANCE.read(buf));
             case 28 -> new SdkException.VerdictRefused(FfiConverterString.INSTANCE.read(buf));
             case 29 -> new SdkException.TxTypeRefused(FfiConverterString.INSTANCE.read(buf));
-            case 30 -> new SdkException.RawDigestRefused(FfiConverterString.INSTANCE.read(buf));
-            case 31 -> new SdkException.AppDomainRefused(FfiConverterString.INSTANCE.read(buf));
-            case 32 -> new SdkException.AppPurposeRefused(FfiConverterString.INSTANCE.read(buf));
-            case 33 -> new SdkException.AppSaltMismatch(FfiConverterString.INSTANCE.read(buf));
-            case 34 -> new SdkException.AppHandleForeign(FfiConverterString.INSTANCE.read(buf));
-            case 35 -> new SdkException.AppLabelRefused(FfiConverterString.INSTANCE.read(buf));
-            case 36 -> new SdkException.AppKeyUsage(FfiConverterString.INSTANCE.read(buf));
-            case 37 -> new SdkException.AppArenaFull(FfiConverterString.INSTANCE.read(buf));
-            case 38 -> new SdkException.KemKeyGone(FfiConverterString.INSTANCE.read(buf));
-            case 39 -> new SdkException.ReceiverUnregistered(FfiConverterString.INSTANCE.read(buf));
-            case 40 -> new SdkException.RegistrationUaMismatch(FfiConverterString.INSTANCE.read(buf));
-            case 41 -> new SdkException.RegistrationKindDisabled(FfiConverterString.INSTANCE.read(buf));
-            case 42 -> new SdkException.RegistrationPopInvalid(FfiConverterString.INSTANCE.read(buf));
-            case 43 -> new SdkException.RegistrationKemMissing(FfiConverterString.INSTANCE.read(buf));
-            case 44 -> new SdkException.AbiMismatch(FfiConverterString.INSTANCE.read(buf));
-            case 45 -> new SdkException.Internal(FfiConverterString.INSTANCE.read(buf));
-            case 46 -> new SdkException.AccountExists(FfiConverterString.INSTANCE.read(buf));
-            case 47 -> new SdkException.GasUnquoted(FfiConverterString.INSTANCE.read(buf));
-            case 48 -> new SdkException.ValidUntilRefused(FfiConverterString.INSTANCE.read(buf));
-            case 49 -> new SdkException.TokenUncatalogued(FfiConverterString.INSTANCE.read(buf));
-            case 50 -> new SdkException.LegKeyMismatch(FfiConverterString.INSTANCE.read(buf));
-            case 51 -> new SdkException.SignerNotAccountKey(FfiConverterString.INSTANCE.read(buf));
-            case 52 -> new SdkException.PqzOpeningUnsupported(FfiConverterString.INSTANCE.read(buf));
-            case 53 -> new SdkException.MsigSlotInactive(FfiConverterString.INSTANCE.read(buf));
-            case 54 -> new SdkException.GasSigBytesMissing(FfiConverterString.INSTANCE.read(buf));
-            case 55 -> new SdkException.SignedGasAboveCap(FfiConverterString.INSTANCE.read(buf));
-            case 56 -> new SdkException.GasItemUnpaired(FfiConverterString.INSTANCE.read(buf));
-            case 57 -> new SdkException.GasItemUnknown(FfiConverterString.INSTANCE.read(buf));
-            case 58 -> new SdkException.GasCountUnknown(FfiConverterString.INSTANCE.read(buf));
-            case 59 -> new SdkException.BlsMultiBelowThreshold(FfiConverterString.INSTANCE.read(buf));
-            case 60 -> new SdkException.GasFieldUnknown(FfiConverterString.INSTANCE.read(buf));
-            case 61 -> new SdkException.DexNotListed(FfiConverterString.INSTANCE.read(buf));
-            case 62 -> new SdkException.PqzAuditorNative(FfiConverterString.INSTANCE.read(buf));
-            case 63 -> new SdkException.GasAboveBlockShare(FfiConverterString.INSTANCE.read(buf));
-            case 64 -> new SdkException.Cancelled(FfiConverterString.INSTANCE.read(buf));
-            case 65 -> new SdkException.Ua(FfiConverterString.INSTANCE.read(buf));
-            case 66 -> new SdkException.Rpc(FfiConverterString.INSTANCE.read(buf));
+            case 30 -> new SdkException.KindDisabled(FfiConverterString.INSTANCE.read(buf));
+            case 31 -> new SdkException.RawDigestRefused(FfiConverterString.INSTANCE.read(buf));
+            case 32 -> new SdkException.AppDomainRefused(FfiConverterString.INSTANCE.read(buf));
+            case 33 -> new SdkException.AppPurposeRefused(FfiConverterString.INSTANCE.read(buf));
+            case 34 -> new SdkException.AppSaltMismatch(FfiConverterString.INSTANCE.read(buf));
+            case 35 -> new SdkException.AppHandleForeign(FfiConverterString.INSTANCE.read(buf));
+            case 36 -> new SdkException.AppLabelRefused(FfiConverterString.INSTANCE.read(buf));
+            case 37 -> new SdkException.AppKeyUsage(FfiConverterString.INSTANCE.read(buf));
+            case 38 -> new SdkException.AppArenaFull(FfiConverterString.INSTANCE.read(buf));
+            case 39 -> new SdkException.KemKeyGone(FfiConverterString.INSTANCE.read(buf));
+            case 40 -> new SdkException.ReceiverUnregistered(FfiConverterString.INSTANCE.read(buf));
+            case 41 -> new SdkException.RegistrationUaMismatch(FfiConverterString.INSTANCE.read(buf));
+            case 42 -> new SdkException.RegistrationKindDisabled(FfiConverterString.INSTANCE.read(buf));
+            case 43 -> new SdkException.RegistrationPopInvalid(FfiConverterString.INSTANCE.read(buf));
+            case 44 -> new SdkException.RegistrationKemMissing(FfiConverterString.INSTANCE.read(buf));
+            case 45 -> new SdkException.AbiMismatch(FfiConverterString.INSTANCE.read(buf));
+            case 46 -> new SdkException.Internal(FfiConverterString.INSTANCE.read(buf));
+            case 47 -> new SdkException.AccountExists(FfiConverterString.INSTANCE.read(buf));
+            case 48 -> new SdkException.GasUnquoted(FfiConverterString.INSTANCE.read(buf));
+            case 49 -> new SdkException.ValidUntilRefused(FfiConverterString.INSTANCE.read(buf));
+            case 50 -> new SdkException.TokenUncatalogued(FfiConverterString.INSTANCE.read(buf));
+            case 51 -> new SdkException.LegKeyMismatch(FfiConverterString.INSTANCE.read(buf));
+            case 52 -> new SdkException.SignerNotAccountKey(FfiConverterString.INSTANCE.read(buf));
+            case 53 -> new SdkException.PqzOpeningUnsupported(FfiConverterString.INSTANCE.read(buf));
+            case 54 -> new SdkException.MsigSlotInactive(FfiConverterString.INSTANCE.read(buf));
+            case 55 -> new SdkException.GasSigBytesMissing(FfiConverterString.INSTANCE.read(buf));
+            case 56 -> new SdkException.SignedGasAboveCap(FfiConverterString.INSTANCE.read(buf));
+            case 57 -> new SdkException.GasItemUnpaired(FfiConverterString.INSTANCE.read(buf));
+            case 58 -> new SdkException.GasItemUnknown(FfiConverterString.INSTANCE.read(buf));
+            case 59 -> new SdkException.GasCountUnknown(FfiConverterString.INSTANCE.read(buf));
+            case 60 -> new SdkException.BlsMultiBelowThreshold(FfiConverterString.INSTANCE.read(buf));
+            case 61 -> new SdkException.GasFieldUnknown(FfiConverterString.INSTANCE.read(buf));
+            case 62 -> new SdkException.RegistrationVerifyOnly(FfiConverterString.INSTANCE.read(buf));
+            case 63 -> new SdkException.UaUnregistered(FfiConverterString.INSTANCE.read(buf));
+            case 64 -> new SdkException.PqzHomeNone(FfiConverterString.INSTANCE.read(buf));
+            case 65 -> new SdkException.DexNotListed(FfiConverterString.INSTANCE.read(buf));
+            case 66 -> new SdkException.PqzAuditorNative(FfiConverterString.INSTANCE.read(buf));
+            case 67 -> new SdkException.GasAboveBlockShare(FfiConverterString.INSTANCE.read(buf));
+            case 68 -> new SdkException.Cancelled(FfiConverterString.INSTANCE.read(buf));
+            case 69 -> new SdkException.Ua(FfiConverterString.INSTANCE.read(buf));
+            case 70 -> new SdkException.Rpc(FfiConverterString.INSTANCE.read(buf));
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };
     }
@@ -172,116 +176,128 @@ public enum FfiConverterTypeSdkError implements FfiConverterRustBuffer<SdkExcept
             case SdkException.TxTypeRefused x -> {
                 buf.putInt(29);
             }
-            case SdkException.RawDigestRefused x -> {
+            case SdkException.KindDisabled x -> {
                 buf.putInt(30);
             }
-            case SdkException.AppDomainRefused x -> {
+            case SdkException.RawDigestRefused x -> {
                 buf.putInt(31);
             }
-            case SdkException.AppPurposeRefused x -> {
+            case SdkException.AppDomainRefused x -> {
                 buf.putInt(32);
             }
-            case SdkException.AppSaltMismatch x -> {
+            case SdkException.AppPurposeRefused x -> {
                 buf.putInt(33);
             }
-            case SdkException.AppHandleForeign x -> {
+            case SdkException.AppSaltMismatch x -> {
                 buf.putInt(34);
             }
-            case SdkException.AppLabelRefused x -> {
+            case SdkException.AppHandleForeign x -> {
                 buf.putInt(35);
             }
-            case SdkException.AppKeyUsage x -> {
+            case SdkException.AppLabelRefused x -> {
                 buf.putInt(36);
             }
-            case SdkException.AppArenaFull x -> {
+            case SdkException.AppKeyUsage x -> {
                 buf.putInt(37);
             }
-            case SdkException.KemKeyGone x -> {
+            case SdkException.AppArenaFull x -> {
                 buf.putInt(38);
             }
-            case SdkException.ReceiverUnregistered x -> {
+            case SdkException.KemKeyGone x -> {
                 buf.putInt(39);
             }
-            case SdkException.RegistrationUaMismatch x -> {
+            case SdkException.ReceiverUnregistered x -> {
                 buf.putInt(40);
             }
-            case SdkException.RegistrationKindDisabled x -> {
+            case SdkException.RegistrationUaMismatch x -> {
                 buf.putInt(41);
             }
-            case SdkException.RegistrationPopInvalid x -> {
+            case SdkException.RegistrationKindDisabled x -> {
                 buf.putInt(42);
             }
-            case SdkException.RegistrationKemMissing x -> {
+            case SdkException.RegistrationPopInvalid x -> {
                 buf.putInt(43);
             }
-            case SdkException.AbiMismatch x -> {
+            case SdkException.RegistrationKemMissing x -> {
                 buf.putInt(44);
             }
-            case SdkException.Internal x -> {
+            case SdkException.AbiMismatch x -> {
                 buf.putInt(45);
             }
-            case SdkException.AccountExists x -> {
+            case SdkException.Internal x -> {
                 buf.putInt(46);
             }
-            case SdkException.GasUnquoted x -> {
+            case SdkException.AccountExists x -> {
                 buf.putInt(47);
             }
-            case SdkException.ValidUntilRefused x -> {
+            case SdkException.GasUnquoted x -> {
                 buf.putInt(48);
             }
-            case SdkException.TokenUncatalogued x -> {
+            case SdkException.ValidUntilRefused x -> {
                 buf.putInt(49);
             }
-            case SdkException.LegKeyMismatch x -> {
+            case SdkException.TokenUncatalogued x -> {
                 buf.putInt(50);
             }
-            case SdkException.SignerNotAccountKey x -> {
+            case SdkException.LegKeyMismatch x -> {
                 buf.putInt(51);
             }
-            case SdkException.PqzOpeningUnsupported x -> {
+            case SdkException.SignerNotAccountKey x -> {
                 buf.putInt(52);
             }
-            case SdkException.MsigSlotInactive x -> {
+            case SdkException.PqzOpeningUnsupported x -> {
                 buf.putInt(53);
             }
-            case SdkException.GasSigBytesMissing x -> {
+            case SdkException.MsigSlotInactive x -> {
                 buf.putInt(54);
             }
-            case SdkException.SignedGasAboveCap x -> {
+            case SdkException.GasSigBytesMissing x -> {
                 buf.putInt(55);
             }
-            case SdkException.GasItemUnpaired x -> {
+            case SdkException.SignedGasAboveCap x -> {
                 buf.putInt(56);
             }
-            case SdkException.GasItemUnknown x -> {
+            case SdkException.GasItemUnpaired x -> {
                 buf.putInt(57);
             }
-            case SdkException.GasCountUnknown x -> {
+            case SdkException.GasItemUnknown x -> {
                 buf.putInt(58);
             }
-            case SdkException.BlsMultiBelowThreshold x -> {
+            case SdkException.GasCountUnknown x -> {
                 buf.putInt(59);
             }
-            case SdkException.GasFieldUnknown x -> {
+            case SdkException.BlsMultiBelowThreshold x -> {
                 buf.putInt(60);
             }
-            case SdkException.DexNotListed x -> {
+            case SdkException.GasFieldUnknown x -> {
                 buf.putInt(61);
             }
-            case SdkException.PqzAuditorNative x -> {
+            case SdkException.RegistrationVerifyOnly x -> {
                 buf.putInt(62);
             }
-            case SdkException.GasAboveBlockShare x -> {
+            case SdkException.UaUnregistered x -> {
                 buf.putInt(63);
             }
-            case SdkException.Cancelled x -> {
+            case SdkException.PqzHomeNone x -> {
                 buf.putInt(64);
             }
-            case SdkException.Ua x -> {
+            case SdkException.DexNotListed x -> {
                 buf.putInt(65);
             }
-            case SdkException.Rpc x -> {
+            case SdkException.PqzAuditorNative x -> {
                 buf.putInt(66);
+            }
+            case SdkException.GasAboveBlockShare x -> {
+                buf.putInt(67);
+            }
+            case SdkException.Cancelled x -> {
+                buf.putInt(68);
+            }
+            case SdkException.Ua x -> {
+                buf.putInt(69);
+            }
+            case SdkException.Rpc x -> {
+                buf.putInt(70);
             }
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };

@@ -1442,6 +1442,16 @@ static class _UniFFILib {
     
     
     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
     static _UniFFILib() {
         _UniFFILib.uniffiCheckContractApiVersion();
@@ -1690,6 +1700,17 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ulong uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates(ulong @ptr,RustBuffer @chain
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ulong uniffi_scaas_sdk_fn_method_account_prepare_accept_membership(ulong @ptr,RustBuffer @req
     );
 
@@ -1877,6 +1898,17 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ulong uniffi_scaas_sdk_fn_method_account_register_target(ulong @ptr,RustBuffer @chain,ushort @kind
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ulong uniffi_scaas_sdk_fn_method_account_registration_blob(ulong @ptr,RustBuffer @key,RustBuffer @attrs
     );
 
@@ -1922,6 +1954,17 @@ static class _UniFFILib {
     public static extern
 #endif
      ulong uniffi_scaas_sdk_fn_method_account_submit_registry_write(ulong @ptr,ulong @write,RustBuffer @quote
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ulong uniffi_scaas_sdk_fn_method_account_ua_line(ulong @ptr,RustBuffer @chain,RustBuffer @ua
     );
 
     #if NET8_0_OR_GREATER
@@ -4803,6 +4846,28 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     RustBuffer uniffi_scaas_sdk_fn_func_ua_line_key_target(RustBuffer @line,ref UniffiRustCallStatus _uniffi_out_err
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     RustBuffer uniffi_scaas_sdk_fn_func_ua_line_pqz_target(RustBuffer @line,ref UniffiRustCallStatus _uniffi_out_err
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      RustBuffer ffi_scaas_sdk_rustbuffer_alloc(ulong @size,ref UniffiRustCallStatus _uniffi_out_err
     );
 
@@ -5628,6 +5693,28 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ushort uniffi_scaas_sdk_checksum_func_ua_line_key_target(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ushort uniffi_scaas_sdk_checksum_func_ua_line_pqz_target(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ushort uniffi_scaas_sdk_checksum_method_registrywrite_calldata(
     );
 
@@ -5805,6 +5892,17 @@ static class _UniFFILib {
     public static extern
 #endif
      ushort uniffi_scaas_sdk_checksum_method_account_next_account(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ushort uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates(
     );
 
     #if NET8_0_OR_GREATER
@@ -6002,6 +6100,17 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ushort uniffi_scaas_sdk_checksum_method_account_register_target(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ushort uniffi_scaas_sdk_checksum_method_account_registration_blob(
     );
 
@@ -6047,6 +6156,17 @@ static class _UniFFILib {
     public static extern
 #endif
      ushort uniffi_scaas_sdk_checksum_method_account_submit_registry_write(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ushort uniffi_scaas_sdk_checksum_method_account_ua_line(
     );
 
     #if NET8_0_OR_GREATER
@@ -8496,6 +8616,18 @@ static class _UniFFILib {
             }
         }
         {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_func_ua_line_key_target();
+            if (checksum != 60856) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_func_ua_line_key_target` checksum `60856`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_func_ua_line_pqz_target();
+            if (checksum != 29446) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_func_ua_line_pqz_target` checksum `29446`, library returned `{checksum}`");
+            }
+        }
+        {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_registrywrite_calldata();
             if (checksum != 7040) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_registrywrite_calldata` checksum `7040`, library returned `{checksum}`");
@@ -8595,6 +8727,12 @@ static class _UniFFILib {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_account_next_account();
             if (checksum != 28699) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_account_next_account` checksum `28699`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates();
+            if (checksum != 49782) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates` checksum `49782`, library returned `{checksum}`");
             }
         }
         {
@@ -8700,6 +8838,12 @@ static class _UniFFILib {
             }
         }
         {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_account_register_target();
+            if (checksum != 38916) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_account_register_target` checksum `38916`, library returned `{checksum}`");
+            }
+        }
+        {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_account_registration_blob();
             if (checksum != 44041) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_account_registration_blob` checksum `44041`, library returned `{checksum}`");
@@ -8727,6 +8871,12 @@ static class _UniFFILib {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_account_submit_registry_write();
             if (checksum != 40795) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_account_submit_registry_write` checksum `40795`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_account_ua_line();
+            if (checksum != 3220) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_account_ua_line` checksum `3220`, library returned `{checksum}`");
             }
         }
         {
@@ -10268,6 +10418,8 @@ internal interface IAccount {
     /// <exception cref="SdkException"></exception>
     Task<uint> NextAccount(string @seed);
     /// <exception cref="SdkException"></exception>
+    Task<string[]> PqzDecoyCandidates(string @chain);
+    /// <exception cref="SdkException"></exception>
     Task<RegistryWrite?> PrepareAcceptMembership(AcceptMembership @req);
     /// <exception cref="SdkException"></exception>
     Task<NativeQuote> PrepareCompleteRecovery(KeyRef @key, string @chain, string @account, SubjectKeyArgs @newKey);
@@ -10302,6 +10454,8 @@ internal interface IAccount {
     /// <exception cref="SdkException"></exception>
     Task<SubmitQuote> QuoteRegistryWrite(RegistryWrite @write);
     /// <exception cref="SdkException"></exception>
+    Task<string> RegisterTarget(string @chain, ushort @kind);
+    /// <exception cref="SdkException"></exception>
     Task<RegistrationBlob> RegistrationBlob(KeyRef @key, RegisterAttrs @attrs);
     /// <exception cref="SdkException"></exception>
     Task<RegistrationState> RegistrationOf(string @chain, string @ua);
@@ -10311,6 +10465,8 @@ internal interface IAccount {
     Task<bool> Signs(string @seed, string @id);
     /// <exception cref="SdkException"></exception>
     Task<string> SubmitRegistryWrite(RegistryWrite @write, SubmitQuote @quote);
+    /// <exception cref="SdkException"></exception>
+    Task<UaLine> UaLine(string @chain, string @ua);
 }
 /// <summary>
 /// Accounts (spec §7).
@@ -10597,6 +10753,28 @@ internal class Account : IAccount, IDisposable {
         (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_u32(future),
         // Lift
         (result) => FfiConverterUInt32.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
+    
+    /// <exception cref="SdkException"></exception>
+    public async Task<string[]> PqzDecoyCandidates(string @chain) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates(thisPtr, FfiConverterString.INSTANCE.Lower(@chain));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // Lift
+        (result) => FfiConverterSequenceString.INSTANCE.Lift(result),
         // Error
         FfiConverterTypeSdkError.INSTANCE
     );
@@ -10977,6 +11155,28 @@ internal class Account : IAccount, IDisposable {
     }
     
     /// <exception cref="SdkException"></exception>
+    public async Task<string> RegisterTarget(string @chain, ushort @kind) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_account_register_target(thisPtr, FfiConverterString.INSTANCE.Lower(@chain), FfiConverterUInt16.INSTANCE.Lower(@kind));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // Lift
+        (result) => FfiConverterString.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
+    
+    /// <exception cref="SdkException"></exception>
     public async Task<RegistrationBlob> RegistrationBlob(KeyRef @key, RegisterAttrs @attrs) {
     return await _UniFFIAsync.UniffiRustCallAsync(
         // Get rust future
@@ -11081,6 +11281,28 @@ internal class Account : IAccount, IDisposable {
         (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
         // Lift
         (result) => FfiConverterString.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
+    
+    /// <exception cref="SdkException"></exception>
+    public async Task<UaLine> UaLine(string @chain, string @ua) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_account_ua_line(thisPtr, FfiConverterString.INSTANCE.Lower(@chain), FfiConverterString.INSTANCE.Lower(@ua));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // Lift
+        (result) => FfiConverterTypeUaLine.INSTANCE.Lift(result),
         // Error
         FfiConverterTypeSdkError.INSTANCE
     );
@@ -19595,6 +19817,22 @@ class FfiConverterTypeCancelWrapOrder: FfiConverterRustBuffer<CancelWrapOrder> {
 /// <param name="Wrappers">
 /// the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
 /// </param>
+/// <param name="FamilyParams">
+/// the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+/// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+/// `Sdk::open`
+/// </param>
+/// <param name="L1Fee">
+/// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+/// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+/// `Sdk::open` on another family)
+/// </param>
+/// <param name="DisabledKinds">
+/// the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+/// and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+/// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+/// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+/// </param>
 internal record ChainProfile (
     /// <summary>
     /// `scaas-testnet`, `<chain>-mainnet`, `<chain>-testnet`
@@ -19660,7 +19898,26 @@ internal record ChainProfile (
     /// <summary>
     /// the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
     /// </summary>
-    string[] Wrappers
+    string[] Wrappers, 
+    /// <summary>
+    /// the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+    /// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+    /// `Sdk::open`
+    /// </summary>
+    FamilyParams? FamilyParams, 
+    /// <summary>
+    /// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+    /// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+    /// `Sdk::open` on another family)
+    /// </summary>
+    L1Fee? L1Fee, 
+    /// <summary>
+    /// the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+    /// and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+    /// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+    /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+    /// </summary>
+    string[] DisabledKinds
 ) {
 }
 
@@ -19688,7 +19945,10 @@ class FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile> {
             Verifiers: FfiConverterSequenceTypeEndpointConfig.INSTANCE.Read(stream),
             VerifierPolicy: FfiConverterTypePolicy.INSTANCE.Read(stream),
             Dexes: FfiConverterSequenceTypeListedDex.INSTANCE.Read(stream),
-            Wrappers: FfiConverterSequenceString.INSTANCE.Read(stream)
+            Wrappers: FfiConverterSequenceString.INSTANCE.Read(stream),
+            FamilyParams: FfiConverterOptionalTypeFamilyParams.INSTANCE.Read(stream),
+            L1Fee: FfiConverterOptionalTypeL1Fee.INSTANCE.Read(stream),
+            DisabledKinds: FfiConverterSequenceString.INSTANCE.Read(stream)
         );
     }
 
@@ -19713,7 +19973,10 @@ class FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile> {
             + FfiConverterSequenceTypeEndpointConfig.INSTANCE.AllocationSize(value.Verifiers)
             + FfiConverterTypePolicy.INSTANCE.AllocationSize(value.VerifierPolicy)
             + FfiConverterSequenceTypeListedDex.INSTANCE.AllocationSize(value.Dexes)
-            + FfiConverterSequenceString.INSTANCE.AllocationSize(value.Wrappers);
+            + FfiConverterSequenceString.INSTANCE.AllocationSize(value.Wrappers)
+            + FfiConverterOptionalTypeFamilyParams.INSTANCE.AllocationSize(value.FamilyParams)
+            + FfiConverterOptionalTypeL1Fee.INSTANCE.AllocationSize(value.L1Fee)
+            + FfiConverterSequenceString.INSTANCE.AllocationSize(value.DisabledKinds);
     }
 
     public override void Write(ChainProfile value, BigEndianStream stream) {
@@ -19737,6 +20000,9 @@ class FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile> {
             FfiConverterTypePolicy.INSTANCE.Write(value.VerifierPolicy, stream);
             FfiConverterSequenceTypeListedDex.INSTANCE.Write(value.Dexes, stream);
             FfiConverterSequenceString.INSTANCE.Write(value.Wrappers, stream);
+            FfiConverterOptionalTypeFamilyParams.INSTANCE.Write(value.FamilyParams, stream);
+            FfiConverterOptionalTypeL1Fee.INSTANCE.Write(value.L1Fee, stream);
+            FfiConverterSequenceString.INSTANCE.Write(value.DisabledKinds, stream);
     }
 }
 
@@ -20434,6 +20700,77 @@ class FfiConverterTypeGasBase: FfiConverterRustBuffer<GasBase> {
 
 
 /// <summary>
+/// A verify row's registry-line columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65; §13 Gas): the row is
+/// keyed by chain (the table it is in), registry address and signer kind; the verify path, the depth and the write path are
+/// columns. Within one table no two verify rows share signer, registry, path, depth and write.
+/// </summary>
+/// <param name="Registry">
+/// the registry the row was measured through (`0x` + 40 hex): a quote bound to it takes it first; `None`: a row of no one
+/// registry
+/// </param>
+/// <param name="Path">
+/// `cache`, `precompile` or `fallback` (the holder's verdict after the verify-only verifier gave no answer, §5); `None`:
+/// the holder's own check
+/// </param>
+/// <param name="Depth">
+/// the generations between the registry asked and the holder (0: the registry holds the record), at most 15
+/// </param>
+/// <param name="Write">
+/// the write path of W1 (a registry write whose signature the holder checks), never a consumer operation's quote
+/// </param>
+internal record GasLine (
+    /// <summary>
+    /// the registry the row was measured through (`0x` + 40 hex): a quote bound to it takes it first; `None`: a row of no one
+    /// registry
+    /// </summary>
+    string? Registry, 
+    /// <summary>
+    /// `cache`, `precompile` or `fallback` (the holder's verdict after the verify-only verifier gave no answer, §5); `None`:
+    /// the holder's own check
+    /// </summary>
+    string? Path, 
+    /// <summary>
+    /// the generations between the registry asked and the holder (0: the registry holds the record), at most 15
+    /// </summary>
+    byte Depth, 
+    /// <summary>
+    /// the write path of W1 (a registry write whose signature the holder checks), never a consumer operation's quote
+    /// </summary>
+    bool Write
+) {
+}
+
+class FfiConverterTypeGasLine: FfiConverterRustBuffer<GasLine> {
+    public static FfiConverterTypeGasLine INSTANCE = new FfiConverterTypeGasLine();
+
+    public override GasLine Read(BigEndianStream stream) {
+        return new GasLine(
+            Registry: FfiConverterOptionalString.INSTANCE.Read(stream),
+            Path: FfiConverterOptionalString.INSTANCE.Read(stream),
+            Depth: FfiConverterUInt8.INSTANCE.Read(stream),
+            Write: FfiConverterBoolean.INSTANCE.Read(stream)
+        );
+    }
+
+    public override int AllocationSize(GasLine value) {
+        return 0
+            + FfiConverterOptionalString.INSTANCE.AllocationSize(value.Registry)
+            + FfiConverterOptionalString.INSTANCE.AllocationSize(value.Path)
+            + FfiConverterUInt8.INSTANCE.AllocationSize(value.Depth)
+            + FfiConverterBoolean.INSTANCE.AllocationSize(value.Write);
+    }
+
+    public override void Write(GasLine value, BigEndianStream stream) {
+            FfiConverterOptionalString.INSTANCE.Write(value.Registry, stream);
+            FfiConverterOptionalString.INSTANCE.Write(value.Path, stream);
+            FfiConverterUInt8.INSTANCE.Write(value.Depth, stream);
+            FfiConverterBoolean.INSTANCE.Write(value.Write, stream);
+    }
+}
+
+
+
+/// <summary>
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
 /// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
 /// </summary>
@@ -20597,7 +20934,8 @@ class FfiConverterTypeGasSources: FfiConverterRustBuffer<GasSources> {
 /// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
 /// save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
 /// per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
-/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?, registry?, path?, depth?, write?}` (the
+/// line's columns, [`GasLine`]), read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 /// </summary>
 /// <param name="Name">
@@ -20662,6 +21000,10 @@ class FfiConverterTypeGasTable: FfiConverterRustBuffer<GasTable> {
 /// <param name="PerItem">
 /// the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
 /// </param>
+/// <param name="Line">
+/// the registry line's columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); all absent: the holder's own
+/// check on any registry (every row before the line)
+/// </param>
 internal record GasVerify (
     ushort Signer, 
     ulong Gas, 
@@ -20679,7 +21021,12 @@ internal record GasVerify (
     /// <summary>
     /// the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
     /// </summary>
-    GasPerItem? PerItem
+    GasPerItem? PerItem, 
+    /// <summary>
+    /// the registry line's columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); all absent: the holder's own
+    /// check on any registry (every row before the line)
+    /// </summary>
+    GasLine Line
 ) {
 }
 
@@ -20692,7 +21039,8 @@ class FfiConverterTypeGasVerify: FfiConverterRustBuffer<GasVerify> {
             Gas: FfiConverterUInt64.INSTANCE.Read(stream),
             SigBytes: FfiConverterUInt64.INSTANCE.Read(stream),
             Margin: FfiConverterUInt64.INSTANCE.Read(stream),
-            PerItem: FfiConverterOptionalTypeGasPerItem.INSTANCE.Read(stream)
+            PerItem: FfiConverterOptionalTypeGasPerItem.INSTANCE.Read(stream),
+            Line: FfiConverterTypeGasLine.INSTANCE.Read(stream)
         );
     }
 
@@ -20702,7 +21050,8 @@ class FfiConverterTypeGasVerify: FfiConverterRustBuffer<GasVerify> {
             + FfiConverterUInt64.INSTANCE.AllocationSize(value.Gas)
             + FfiConverterUInt64.INSTANCE.AllocationSize(value.SigBytes)
             + FfiConverterUInt64.INSTANCE.AllocationSize(value.Margin)
-            + FfiConverterOptionalTypeGasPerItem.INSTANCE.AllocationSize(value.PerItem);
+            + FfiConverterOptionalTypeGasPerItem.INSTANCE.AllocationSize(value.PerItem)
+            + FfiConverterTypeGasLine.INSTANCE.AllocationSize(value.Line);
     }
 
     public override void Write(GasVerify value, BigEndianStream stream) {
@@ -20711,6 +21060,7 @@ class FfiConverterTypeGasVerify: FfiConverterRustBuffer<GasVerify> {
             FfiConverterUInt64.INSTANCE.Write(value.SigBytes, stream);
             FfiConverterUInt64.INSTANCE.Write(value.Margin, stream);
             FfiConverterOptionalTypeGasPerItem.INSTANCE.Write(value.PerItem, stream);
+            FfiConverterTypeGasLine.INSTANCE.Write(value.Line, stream);
     }
 }
 
@@ -21436,11 +21786,11 @@ class FfiConverterTypeListedDex: FfiConverterRustBuffer<ListedDex> {
 /// A token of a profile's reviewed list (spec §8.2).
 /// </summary>
 /// <param name="Address">
-/// `0x` + 40 hex
+/// EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
 /// </param>
 internal record ListedToken (
     /// <summary>
-    /// `0x` + 40 hex
+    /// EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
     /// </summary>
     string Address, 
     string Symbol, 
@@ -26533,6 +26883,55 @@ class FfiConverterTypeUaGrantRole: FfiConverterRustBuffer<UaGrantRole> {
             FfiConverterString.INSTANCE.Write(value.Account, stream);
             FfiConverterOptionalString.INSTANCE.Write(value.ChainUid, stream);
             FfiConverterTypeEnvelope.INSTANCE.Write(value.Envelope, stream);
+    }
+}
+
+
+
+/// <summary>
+/// Where a UA's record and its PQZ attachment live, as the bound registry's one walk answers (`holderOf`, §11.1).
+/// </summary>
+/// <param name="Holder">
+/// the generation holding the record (`0x` + 40 hex): the target of a key write, where its record is read
+/// </param>
+/// <param name="PqzHome">
+/// the record's PQZ home (§11.2): the target of a PQZ write, where its attachment is read; `None`: no home on the walk
+/// </param>
+internal record UaLine (
+    /// <summary>
+    /// the generation holding the record (`0x` + 40 hex): the target of a key write, where its record is read
+    /// </summary>
+    string Holder, 
+    ushort Kind, 
+    /// <summary>
+    /// the record's PQZ home (§11.2): the target of a PQZ write, where its attachment is read; `None`: no home on the walk
+    /// </summary>
+    string? PqzHome
+) {
+}
+
+class FfiConverterTypeUaLine: FfiConverterRustBuffer<UaLine> {
+    public static FfiConverterTypeUaLine INSTANCE = new FfiConverterTypeUaLine();
+
+    public override UaLine Read(BigEndianStream stream) {
+        return new UaLine(
+            Holder: FfiConverterString.INSTANCE.Read(stream),
+            Kind: FfiConverterUInt16.INSTANCE.Read(stream),
+            PqzHome: FfiConverterOptionalString.INSTANCE.Read(stream)
+        );
+    }
+
+    public override int AllocationSize(UaLine value) {
+        return 0
+            + FfiConverterString.INSTANCE.AllocationSize(value.Holder)
+            + FfiConverterUInt16.INSTANCE.AllocationSize(value.Kind)
+            + FfiConverterOptionalString.INSTANCE.AllocationSize(value.PqzHome);
+    }
+
+    public override void Write(UaLine value, BigEndianStream stream) {
+            FfiConverterString.INSTANCE.Write(value.Holder, stream);
+            FfiConverterUInt16.INSTANCE.Write(value.Kind, stream);
+            FfiConverterOptionalString.INSTANCE.Write(value.PqzHome, stream);
     }
 }
 
@@ -31901,6 +32300,206 @@ class FfiConverterTypeFamily: FfiConverterRustBuffer<Family> {
 
 
 /// <summary>
+/// A family's own profile data (spec §8.7 rule 2; decisions CLI-SDK-15's Changes of 2026-11-21).
+/// </summary>
+internal record FamilyParams {
+    
+    /// <summary>
+    /// Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
+    /// profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),
+    /// the native denom and the bech32 prefix of the chain's addresses
+    /// </summary>
+    public record Cosmos (
+        string ChainId,
+        EndpointConfig[] Rest,
+        Policy RestPolicy,
+        string Denom,
+        string Prefix
+    ) : FamilyParams {}
+    
+    /// <summary>
+    /// Aptos: the chain id ledger info must name (`aptos_framework::chain_id`, 1 to 255; the identity an Aptos node answers)
+    /// and the `scaas` package's address, whose view `meta::account_of(owner)` gives the Account an owner's tokens are in
+    /// (NET-APT-05), as `0x` + 64 lowercase hex (AIP-40's long form)
+    /// </summary>
+    public record Aptos (
+        byte ChainId,
+        string Package
+    ) : FamilyParams {}
+    
+    /// <summary>
+    /// Solana: the `scaas` program's id (base58 of 32 bytes), under which an owner's SCaaS Account is the `["acct", owner]`
+    /// program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
+    /// </summary>
+    public record Solana (
+        string Program
+    ) : FamilyParams {}
+    
+    /// <summary>
+    /// Soroban: the network passphrase its RPC endpoints name (`getNetwork`; its SHA-256 is `chain_uid`, checked at `Sdk::open`)
+    /// and the XLM SAC contract (`C…`), pinned, whose balance entry is a `C…` holder's native XLM (never derived here)
+    /// </summary>
+    public record Soroban (
+        string Passphrase,
+        string XlmSac
+    ) : FamilyParams {}
+    
+    /// <summary>
+    /// Sui: the GraphQL endpoints the reads go to, with their policy (public fullnodes refuse JSON-RPC, docs/networks/sui.md
+    /// §14; the profile's `rpc` are the JSON-RPC endpoints), each named by `chain_uid`, the genesis checkpoint's digest, whose
+    /// 32 bytes in base58 `chainIdentifier` must answer
+    /// </summary>
+    public record Sui (
+        EndpointConfig[] Graphql,
+        Policy GraphqlPolicy
+    ) : FamilyParams {}
+    
+    /// <summary>
+    /// Polkadot Hub's Substrate side on its EVM profile (decisions CLI-SDK-32's Change of 2026-11-22, plan T32's read part): the
+    /// Substrate JSON-RPC endpoints with their policy, each named by `genesis` (`0x` + 64 hex, `chain_getBlockHash(0)`), and the
+    /// SS58 prefix of the chain's addresses (0 to 16,383, not 46 or 47); `balances` of an SS58 id reads its `System.Account`
+    /// there. The same params serve the relay chain's Substrate side
+    /// </summary>
+    public record Substrate (
+        EndpointConfig[] Rpc,
+        Policy RpcPolicy,
+        string Genesis,
+        ushort Ss58Prefix
+    ) : FamilyParams {}
+    
+
+    
+}
+
+class FfiConverterTypeFamilyParams : FfiConverterRustBuffer<FamilyParams>{
+    public static FfiConverterRustBuffer<FamilyParams> INSTANCE = new FfiConverterTypeFamilyParams();
+
+    public override FamilyParams Read(BigEndianStream stream) {
+        var value = stream.ReadInt();
+        switch (value) {
+            case 1:
+                return new FamilyParams.Cosmos(
+                    FfiConverterString.INSTANCE.Read(stream),
+                    FfiConverterSequenceTypeEndpointConfig.INSTANCE.Read(stream),
+                    FfiConverterTypePolicy.INSTANCE.Read(stream),
+                    FfiConverterString.INSTANCE.Read(stream),
+                    FfiConverterString.INSTANCE.Read(stream)
+                );
+            case 2:
+                return new FamilyParams.Aptos(
+                    FfiConverterUInt8.INSTANCE.Read(stream),
+                    FfiConverterString.INSTANCE.Read(stream)
+                );
+            case 3:
+                return new FamilyParams.Solana(
+                    FfiConverterString.INSTANCE.Read(stream)
+                );
+            case 4:
+                return new FamilyParams.Soroban(
+                    FfiConverterString.INSTANCE.Read(stream),
+                    FfiConverterString.INSTANCE.Read(stream)
+                );
+            case 5:
+                return new FamilyParams.Sui(
+                    FfiConverterSequenceTypeEndpointConfig.INSTANCE.Read(stream),
+                    FfiConverterTypePolicy.INSTANCE.Read(stream)
+                );
+            case 6:
+                return new FamilyParams.Substrate(
+                    FfiConverterSequenceTypeEndpointConfig.INSTANCE.Read(stream),
+                    FfiConverterTypePolicy.INSTANCE.Read(stream),
+                    FfiConverterString.INSTANCE.Read(stream),
+                    FfiConverterUInt16.INSTANCE.Read(stream)
+                );
+            default:
+                throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeFamilyParams.Read()", value));
+        }
+    }
+
+    public override int AllocationSize(FamilyParams value) {
+        switch (value) {
+            case FamilyParams.Cosmos variant_value:
+                return 4
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.ChainId)
+                    + FfiConverterSequenceTypeEndpointConfig.INSTANCE.AllocationSize(variant_value.Rest)
+                    + FfiConverterTypePolicy.INSTANCE.AllocationSize(variant_value.RestPolicy)
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.Denom)
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.Prefix);
+            case FamilyParams.Aptos variant_value:
+                return 4
+                    + FfiConverterUInt8.INSTANCE.AllocationSize(variant_value.ChainId)
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.Package);
+            case FamilyParams.Solana variant_value:
+                return 4
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.Program);
+            case FamilyParams.Soroban variant_value:
+                return 4
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.Passphrase)
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.XlmSac);
+            case FamilyParams.Sui variant_value:
+                return 4
+                    + FfiConverterSequenceTypeEndpointConfig.INSTANCE.AllocationSize(variant_value.Graphql)
+                    + FfiConverterTypePolicy.INSTANCE.AllocationSize(variant_value.GraphqlPolicy);
+            case FamilyParams.Substrate variant_value:
+                return 4
+                    + FfiConverterSequenceTypeEndpointConfig.INSTANCE.AllocationSize(variant_value.Rpc)
+                    + FfiConverterTypePolicy.INSTANCE.AllocationSize(variant_value.RpcPolicy)
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.Genesis)
+                    + FfiConverterUInt16.INSTANCE.AllocationSize(variant_value.Ss58Prefix);
+            default:
+                throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeFamilyParams.AllocationSize()", value));
+        }
+    }
+
+    public override void Write(FamilyParams value, BigEndianStream stream) {
+        switch (value) {
+            case FamilyParams.Cosmos variant_value:
+                stream.WriteInt(1);
+                FfiConverterString.INSTANCE.Write(variant_value.ChainId, stream);
+                FfiConverterSequenceTypeEndpointConfig.INSTANCE.Write(variant_value.Rest, stream);
+                FfiConverterTypePolicy.INSTANCE.Write(variant_value.RestPolicy, stream);
+                FfiConverterString.INSTANCE.Write(variant_value.Denom, stream);
+                FfiConverterString.INSTANCE.Write(variant_value.Prefix, stream);
+                break;
+            case FamilyParams.Aptos variant_value:
+                stream.WriteInt(2);
+                FfiConverterUInt8.INSTANCE.Write(variant_value.ChainId, stream);
+                FfiConverterString.INSTANCE.Write(variant_value.Package, stream);
+                break;
+            case FamilyParams.Solana variant_value:
+                stream.WriteInt(3);
+                FfiConverterString.INSTANCE.Write(variant_value.Program, stream);
+                break;
+            case FamilyParams.Soroban variant_value:
+                stream.WriteInt(4);
+                FfiConverterString.INSTANCE.Write(variant_value.Passphrase, stream);
+                FfiConverterString.INSTANCE.Write(variant_value.XlmSac, stream);
+                break;
+            case FamilyParams.Sui variant_value:
+                stream.WriteInt(5);
+                FfiConverterSequenceTypeEndpointConfig.INSTANCE.Write(variant_value.Graphql, stream);
+                FfiConverterTypePolicy.INSTANCE.Write(variant_value.GraphqlPolicy, stream);
+                break;
+            case FamilyParams.Substrate variant_value:
+                stream.WriteInt(6);
+                FfiConverterSequenceTypeEndpointConfig.INSTANCE.Write(variant_value.Rpc, stream);
+                FfiConverterTypePolicy.INSTANCE.Write(variant_value.RpcPolicy, stream);
+                FfiConverterString.INSTANCE.Write(variant_value.Genesis, stream);
+                FfiConverterUInt16.INSTANCE.Write(variant_value.Ss58Prefix, stream);
+                break;
+            default:
+                throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeFamilyParams.Write()", value));
+        }
+    }
+}
+
+
+
+
+
+
+
+/// <summary>
 /// The block of every decisive and decryption read (§9.4 requirement 3).
 /// </summary>
 internal record Finality {
@@ -32410,6 +33009,45 @@ class FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                 break;
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeKeyRef.Write()", value));
+        }
+    }
+}
+
+
+
+
+
+
+
+/// <summary>
+/// An L1 data fee model (plan T38).
+/// </summary>
+internal enum L1Fee: int {
+    /// <summary>
+    /// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
+    /// </summary>
+    OpStack
+}
+
+class FfiConverterTypeL1Fee: FfiConverterRustBuffer<L1Fee> {
+    public static FfiConverterTypeL1Fee INSTANCE = new FfiConverterTypeL1Fee();
+
+    public override L1Fee Read(BigEndianStream stream) {
+        var value = stream.ReadInt();
+        switch (value) {
+            case 1: return L1Fee.OpStack;
+            default: throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeL1Fee.Read()", value));
+        }
+    }
+
+    public override int AllocationSize(L1Fee value) {
+        return 4;
+    }
+
+    public override void Write(L1Fee value, BigEndianStream stream) {
+        switch (value) {
+            case L1Fee.OpStack: stream.WriteInt(1); break;
+            default: throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeL1Fee.Write()", value));
         }
     }
 }
@@ -33074,6 +33712,10 @@ internal class SdkException: UniffiException {
         public TxTypeRefused(string message): base(message) {}
     }
     
+    public class KindDisabled: SdkException {
+        public KindDisabled(string message): base(message) {}
+    }
+    
     public class RawDigestRefused: SdkException {
         public RawDigestRefused(string message): base(message) {}
     }
@@ -33255,6 +33897,28 @@ internal class SdkException: UniffiException {
     }
     
     /// <summary>
+    /// A registration of a kind whose home (`kindHome(kind)`) is another generation than the bound registry: that registry
+    /// carries it verify-only, or not at all (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); nothing is sent.
+    /// </summary>
+    public class RegistrationVerifyOnly: SdkException {
+        public RegistrationVerifyOnly(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// A UA no generation of the bound registry's line holds (`holderOf(ua)` answers no holder, §11.1).
+    /// </summary>
+    public class UaUnregistered: SdkException {
+        public UaUnregistered(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// A PQZ write or read of a UA whose record has no PQZ home on the bound registry's walk (`pqzHomeOf(ua)` 0, §11.2).
+    /// </summary>
+    public class PqzHomeNone: SdkException {
+        public PqzHomeNone(string message): base(message) {}
+    }
+    
+    /// <summary>
     /// An order, a cancel or a liquidity order naming a DEX that is not on the chain profile's list, or a wrap order whose
     /// wrapped token is not on its wrapper list (CLI-SGN-35): refused before anything is signed (plan T17).
     /// </summary>
@@ -33337,43 +34001,47 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case 27: return new SdkException.SubmitPathNone(FfiConverterString.INSTANCE.Read(stream));
             case 28: return new SdkException.VerdictRefused(FfiConverterString.INSTANCE.Read(stream));
             case 29: return new SdkException.TxTypeRefused(FfiConverterString.INSTANCE.Read(stream));
-            case 30: return new SdkException.RawDigestRefused(FfiConverterString.INSTANCE.Read(stream));
-            case 31: return new SdkException.AppDomainRefused(FfiConverterString.INSTANCE.Read(stream));
-            case 32: return new SdkException.AppPurposeRefused(FfiConverterString.INSTANCE.Read(stream));
-            case 33: return new SdkException.AppSaltMismatch(FfiConverterString.INSTANCE.Read(stream));
-            case 34: return new SdkException.AppHandleForeign(FfiConverterString.INSTANCE.Read(stream));
-            case 35: return new SdkException.AppLabelRefused(FfiConverterString.INSTANCE.Read(stream));
-            case 36: return new SdkException.AppKeyUsage(FfiConverterString.INSTANCE.Read(stream));
-            case 37: return new SdkException.AppArenaFull(FfiConverterString.INSTANCE.Read(stream));
-            case 38: return new SdkException.KemKeyGone(FfiConverterString.INSTANCE.Read(stream));
-            case 39: return new SdkException.ReceiverUnregistered(FfiConverterString.INSTANCE.Read(stream));
-            case 40: return new SdkException.RegistrationUaMismatch(FfiConverterString.INSTANCE.Read(stream));
-            case 41: return new SdkException.RegistrationKindDisabled(FfiConverterString.INSTANCE.Read(stream));
-            case 42: return new SdkException.RegistrationPopInvalid(FfiConverterString.INSTANCE.Read(stream));
-            case 43: return new SdkException.RegistrationKemMissing(FfiConverterString.INSTANCE.Read(stream));
-            case 44: return new SdkException.AbiMismatch(FfiConverterString.INSTANCE.Read(stream));
-            case 45: return new SdkException.Internal(FfiConverterString.INSTANCE.Read(stream));
-            case 46: return new SdkException.AccountExists(FfiConverterString.INSTANCE.Read(stream));
-            case 47: return new SdkException.GasUnquoted(FfiConverterString.INSTANCE.Read(stream));
-            case 48: return new SdkException.ValidUntilRefused(FfiConverterString.INSTANCE.Read(stream));
-            case 49: return new SdkException.TokenUncatalogued(FfiConverterString.INSTANCE.Read(stream));
-            case 50: return new SdkException.LegKeyMismatch(FfiConverterString.INSTANCE.Read(stream));
-            case 51: return new SdkException.SignerNotAccountKey(FfiConverterString.INSTANCE.Read(stream));
-            case 52: return new SdkException.PqzOpeningUnsupported(FfiConverterString.INSTANCE.Read(stream));
-            case 53: return new SdkException.MsigSlotInactive(FfiConverterString.INSTANCE.Read(stream));
-            case 54: return new SdkException.GasSigBytesMissing(FfiConverterString.INSTANCE.Read(stream));
-            case 55: return new SdkException.SignedGasAboveCap(FfiConverterString.INSTANCE.Read(stream));
-            case 56: return new SdkException.GasItemUnpaired(FfiConverterString.INSTANCE.Read(stream));
-            case 57: return new SdkException.GasItemUnknown(FfiConverterString.INSTANCE.Read(stream));
-            case 58: return new SdkException.GasCountUnknown(FfiConverterString.INSTANCE.Read(stream));
-            case 59: return new SdkException.BlsMultiBelowThreshold(FfiConverterString.INSTANCE.Read(stream));
-            case 60: return new SdkException.GasFieldUnknown(FfiConverterString.INSTANCE.Read(stream));
-            case 61: return new SdkException.DexNotListed(FfiConverterString.INSTANCE.Read(stream));
-            case 62: return new SdkException.PqzAuditorNative(FfiConverterString.INSTANCE.Read(stream));
-            case 63: return new SdkException.GasAboveBlockShare(FfiConverterString.INSTANCE.Read(stream));
-            case 64: return new SdkException.Cancelled(FfiConverterString.INSTANCE.Read(stream));
-            case 65: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
-            case 66: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
+            case 30: return new SdkException.KindDisabled(FfiConverterString.INSTANCE.Read(stream));
+            case 31: return new SdkException.RawDigestRefused(FfiConverterString.INSTANCE.Read(stream));
+            case 32: return new SdkException.AppDomainRefused(FfiConverterString.INSTANCE.Read(stream));
+            case 33: return new SdkException.AppPurposeRefused(FfiConverterString.INSTANCE.Read(stream));
+            case 34: return new SdkException.AppSaltMismatch(FfiConverterString.INSTANCE.Read(stream));
+            case 35: return new SdkException.AppHandleForeign(FfiConverterString.INSTANCE.Read(stream));
+            case 36: return new SdkException.AppLabelRefused(FfiConverterString.INSTANCE.Read(stream));
+            case 37: return new SdkException.AppKeyUsage(FfiConverterString.INSTANCE.Read(stream));
+            case 38: return new SdkException.AppArenaFull(FfiConverterString.INSTANCE.Read(stream));
+            case 39: return new SdkException.KemKeyGone(FfiConverterString.INSTANCE.Read(stream));
+            case 40: return new SdkException.ReceiverUnregistered(FfiConverterString.INSTANCE.Read(stream));
+            case 41: return new SdkException.RegistrationUaMismatch(FfiConverterString.INSTANCE.Read(stream));
+            case 42: return new SdkException.RegistrationKindDisabled(FfiConverterString.INSTANCE.Read(stream));
+            case 43: return new SdkException.RegistrationPopInvalid(FfiConverterString.INSTANCE.Read(stream));
+            case 44: return new SdkException.RegistrationKemMissing(FfiConverterString.INSTANCE.Read(stream));
+            case 45: return new SdkException.AbiMismatch(FfiConverterString.INSTANCE.Read(stream));
+            case 46: return new SdkException.Internal(FfiConverterString.INSTANCE.Read(stream));
+            case 47: return new SdkException.AccountExists(FfiConverterString.INSTANCE.Read(stream));
+            case 48: return new SdkException.GasUnquoted(FfiConverterString.INSTANCE.Read(stream));
+            case 49: return new SdkException.ValidUntilRefused(FfiConverterString.INSTANCE.Read(stream));
+            case 50: return new SdkException.TokenUncatalogued(FfiConverterString.INSTANCE.Read(stream));
+            case 51: return new SdkException.LegKeyMismatch(FfiConverterString.INSTANCE.Read(stream));
+            case 52: return new SdkException.SignerNotAccountKey(FfiConverterString.INSTANCE.Read(stream));
+            case 53: return new SdkException.PqzOpeningUnsupported(FfiConverterString.INSTANCE.Read(stream));
+            case 54: return new SdkException.MsigSlotInactive(FfiConverterString.INSTANCE.Read(stream));
+            case 55: return new SdkException.GasSigBytesMissing(FfiConverterString.INSTANCE.Read(stream));
+            case 56: return new SdkException.SignedGasAboveCap(FfiConverterString.INSTANCE.Read(stream));
+            case 57: return new SdkException.GasItemUnpaired(FfiConverterString.INSTANCE.Read(stream));
+            case 58: return new SdkException.GasItemUnknown(FfiConverterString.INSTANCE.Read(stream));
+            case 59: return new SdkException.GasCountUnknown(FfiConverterString.INSTANCE.Read(stream));
+            case 60: return new SdkException.BlsMultiBelowThreshold(FfiConverterString.INSTANCE.Read(stream));
+            case 61: return new SdkException.GasFieldUnknown(FfiConverterString.INSTANCE.Read(stream));
+            case 62: return new SdkException.RegistrationVerifyOnly(FfiConverterString.INSTANCE.Read(stream));
+            case 63: return new SdkException.UaUnregistered(FfiConverterString.INSTANCE.Read(stream));
+            case 64: return new SdkException.PqzHomeNone(FfiConverterString.INSTANCE.Read(stream));
+            case 65: return new SdkException.DexNotListed(FfiConverterString.INSTANCE.Read(stream));
+            case 66: return new SdkException.PqzAuditorNative(FfiConverterString.INSTANCE.Read(stream));
+            case 67: return new SdkException.GasAboveBlockShare(FfiConverterString.INSTANCE.Read(stream));
+            case 68: return new SdkException.Cancelled(FfiConverterString.INSTANCE.Read(stream));
+            case 69: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
+            case 70: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Read()", value));
         }
@@ -33472,116 +34140,128 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case SdkException.TxTypeRefused:
                 stream.WriteInt(29);
                 break;
-            case SdkException.RawDigestRefused:
+            case SdkException.KindDisabled:
                 stream.WriteInt(30);
                 break;
-            case SdkException.AppDomainRefused:
+            case SdkException.RawDigestRefused:
                 stream.WriteInt(31);
                 break;
-            case SdkException.AppPurposeRefused:
+            case SdkException.AppDomainRefused:
                 stream.WriteInt(32);
                 break;
-            case SdkException.AppSaltMismatch:
+            case SdkException.AppPurposeRefused:
                 stream.WriteInt(33);
                 break;
-            case SdkException.AppHandleForeign:
+            case SdkException.AppSaltMismatch:
                 stream.WriteInt(34);
                 break;
-            case SdkException.AppLabelRefused:
+            case SdkException.AppHandleForeign:
                 stream.WriteInt(35);
                 break;
-            case SdkException.AppKeyUsage:
+            case SdkException.AppLabelRefused:
                 stream.WriteInt(36);
                 break;
-            case SdkException.AppArenaFull:
+            case SdkException.AppKeyUsage:
                 stream.WriteInt(37);
                 break;
-            case SdkException.KemKeyGone:
+            case SdkException.AppArenaFull:
                 stream.WriteInt(38);
                 break;
-            case SdkException.ReceiverUnregistered:
+            case SdkException.KemKeyGone:
                 stream.WriteInt(39);
                 break;
-            case SdkException.RegistrationUaMismatch:
+            case SdkException.ReceiverUnregistered:
                 stream.WriteInt(40);
                 break;
-            case SdkException.RegistrationKindDisabled:
+            case SdkException.RegistrationUaMismatch:
                 stream.WriteInt(41);
                 break;
-            case SdkException.RegistrationPopInvalid:
+            case SdkException.RegistrationKindDisabled:
                 stream.WriteInt(42);
                 break;
-            case SdkException.RegistrationKemMissing:
+            case SdkException.RegistrationPopInvalid:
                 stream.WriteInt(43);
                 break;
-            case SdkException.AbiMismatch:
+            case SdkException.RegistrationKemMissing:
                 stream.WriteInt(44);
                 break;
-            case SdkException.Internal:
+            case SdkException.AbiMismatch:
                 stream.WriteInt(45);
                 break;
-            case SdkException.AccountExists:
+            case SdkException.Internal:
                 stream.WriteInt(46);
                 break;
-            case SdkException.GasUnquoted:
+            case SdkException.AccountExists:
                 stream.WriteInt(47);
                 break;
-            case SdkException.ValidUntilRefused:
+            case SdkException.GasUnquoted:
                 stream.WriteInt(48);
                 break;
-            case SdkException.TokenUncatalogued:
+            case SdkException.ValidUntilRefused:
                 stream.WriteInt(49);
                 break;
-            case SdkException.LegKeyMismatch:
+            case SdkException.TokenUncatalogued:
                 stream.WriteInt(50);
                 break;
-            case SdkException.SignerNotAccountKey:
+            case SdkException.LegKeyMismatch:
                 stream.WriteInt(51);
                 break;
-            case SdkException.PqzOpeningUnsupported:
+            case SdkException.SignerNotAccountKey:
                 stream.WriteInt(52);
                 break;
-            case SdkException.MsigSlotInactive:
+            case SdkException.PqzOpeningUnsupported:
                 stream.WriteInt(53);
                 break;
-            case SdkException.GasSigBytesMissing:
+            case SdkException.MsigSlotInactive:
                 stream.WriteInt(54);
                 break;
-            case SdkException.SignedGasAboveCap:
+            case SdkException.GasSigBytesMissing:
                 stream.WriteInt(55);
                 break;
-            case SdkException.GasItemUnpaired:
+            case SdkException.SignedGasAboveCap:
                 stream.WriteInt(56);
                 break;
-            case SdkException.GasItemUnknown:
+            case SdkException.GasItemUnpaired:
                 stream.WriteInt(57);
                 break;
-            case SdkException.GasCountUnknown:
+            case SdkException.GasItemUnknown:
                 stream.WriteInt(58);
                 break;
-            case SdkException.BlsMultiBelowThreshold:
+            case SdkException.GasCountUnknown:
                 stream.WriteInt(59);
                 break;
-            case SdkException.GasFieldUnknown:
+            case SdkException.BlsMultiBelowThreshold:
                 stream.WriteInt(60);
                 break;
-            case SdkException.DexNotListed:
+            case SdkException.GasFieldUnknown:
                 stream.WriteInt(61);
                 break;
-            case SdkException.PqzAuditorNative:
+            case SdkException.RegistrationVerifyOnly:
                 stream.WriteInt(62);
                 break;
-            case SdkException.GasAboveBlockShare:
+            case SdkException.UaUnregistered:
                 stream.WriteInt(63);
                 break;
-            case SdkException.Cancelled:
+            case SdkException.PqzHomeNone:
                 stream.WriteInt(64);
                 break;
-            case SdkException.Ua:
+            case SdkException.DexNotListed:
                 stream.WriteInt(65);
                 break;
-            case SdkException.Rpc:
+            case SdkException.PqzAuditorNative:
                 stream.WriteInt(66);
+                break;
+            case SdkException.GasAboveBlockShare:
+                stream.WriteInt(67);
+                break;
+            case SdkException.Cancelled:
+                stream.WriteInt(68);
+                break;
+            case SdkException.Ua:
+                stream.WriteInt(69);
+                break;
+            case SdkException.Rpc:
+                stream.WriteInt(70);
                 break;
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Write()", value));
@@ -34846,6 +35526,37 @@ class FfiConverterOptionalTypeEvent: FfiConverterRustBuffer<Event?> {
 
 
 
+class FfiConverterOptionalTypeFamilyParams: FfiConverterRustBuffer<FamilyParams?> {
+    public static FfiConverterOptionalTypeFamilyParams INSTANCE = new FfiConverterOptionalTypeFamilyParams();
+
+    public override FamilyParams? Read(BigEndianStream stream) {
+        if (stream.ReadByte() == 0) {
+            return null;
+        }
+        return FfiConverterTypeFamilyParams.INSTANCE.Read(stream);
+    }
+
+    public override int AllocationSize(FamilyParams? value) {
+        if (value == null) {
+            return 1;
+        } else {
+            return 1 + FfiConverterTypeFamilyParams.INSTANCE.AllocationSize((FamilyParams)value);
+        }
+    }
+
+    public override void Write(FamilyParams? value, BigEndianStream stream) {
+        if (value == null) {
+            stream.WriteByte(0);
+        } else {
+            stream.WriteByte(1);
+            FfiConverterTypeFamilyParams.INSTANCE.Write((FamilyParams)value, stream);
+        }
+    }
+}
+
+
+
+
 class FfiConverterOptionalTypeHolderKind: FfiConverterRustBuffer<HolderKind?> {
     public static FfiConverterOptionalTypeHolderKind INSTANCE = new FfiConverterOptionalTypeHolderKind();
 
@@ -34901,6 +35612,37 @@ class FfiConverterOptionalTypeKeyRef: FfiConverterRustBuffer<KeyRef?> {
         } else {
             stream.WriteByte(1);
             FfiConverterTypeKeyRef.INSTANCE.Write((KeyRef)value, stream);
+        }
+    }
+}
+
+
+
+
+class FfiConverterOptionalTypeL1Fee: FfiConverterRustBuffer<L1Fee?> {
+    public static FfiConverterOptionalTypeL1Fee INSTANCE = new FfiConverterOptionalTypeL1Fee();
+
+    public override L1Fee? Read(BigEndianStream stream) {
+        if (stream.ReadByte() == 0) {
+            return null;
+        }
+        return FfiConverterTypeL1Fee.INSTANCE.Read(stream);
+    }
+
+    public override int AllocationSize(L1Fee? value) {
+        if (value == null) {
+            return 1;
+        } else {
+            return 1 + FfiConverterTypeL1Fee.INSTANCE.AllocationSize((L1Fee)value);
+        }
+    }
+
+    public override void Write(L1Fee? value, BigEndianStream stream) {
+        if (value == null) {
+            stream.WriteByte(0);
+        } else {
+            stream.WriteByte(1);
+            FfiConverterTypeL1Fee.INSTANCE.Write((L1Fee)value, stream);
         }
     }
 }
@@ -36848,6 +37590,29 @@ internal static class ScaasSdkMethods {
         return FfiConverterTypeSubjectKeyArgs.INSTANCE.Lift(
     _UniffiHelpers.RustCallWithError(FfiConverterTypeSdkError.INSTANCE, (ref UniffiRustCallStatus _status) =>
     _UniFFILib.uniffi_scaas_sdk_fn_func_subject_key_args_secp256k1(FfiConverterString.INSTANCE.Lower(@address), ref _status)
+));
+    }
+
+
+    /// <summary>
+    /// The target of a key write of the UA (`UaLine::key_target`, §12): its holder.
+    /// </summary>
+    public static string UaLineKeyTarget(UaLine @line) {
+        return FfiConverterString.INSTANCE.Lift(
+    _UniffiHelpers.RustCall( (ref UniffiRustCallStatus _status) =>
+    _UniFFILib.uniffi_scaas_sdk_fn_func_ua_line_key_target(FfiConverterTypeUaLine.INSTANCE.Lower(@line), ref _status)
+));
+    }
+
+
+    /// <summary>
+    /// The target of a PQZ write of the UA (`UaLine::pqz_target`, §12): its PQZ home; `PqzHomeNone` where the walk has none.
+    /// </summary>
+    /// <exception cref="SdkException"></exception>
+    public static string UaLinePqzTarget(UaLine @line) {
+        return FfiConverterString.INSTANCE.Lift(
+    _UniffiHelpers.RustCallWithError(FfiConverterTypeSdkError.INSTANCE, (ref UniffiRustCallStatus _status) =>
+    _UniFFILib.uniffi_scaas_sdk_fn_func_ua_line_pqz_target(FfiConverterTypeUaLine.INSTANCE.Lower(@line), ref _status)
 ));
     }
 

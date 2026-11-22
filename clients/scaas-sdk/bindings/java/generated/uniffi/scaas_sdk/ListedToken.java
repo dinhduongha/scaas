@@ -5,7 +5,7 @@ package uniffi.scaas_sdk;
  */
 public class ListedToken {
     /**
-     * `0x` + 40 hex
+     * EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
      */
     private java.lang.String address;
     private java.lang.String symbol;

@@ -641,6 +641,11 @@ uint64_t uniffi_scaas_sdk_fn_method_account_msig_state(uint64_t ptr, RustBuffer 
 uint64_t uniffi_scaas_sdk_fn_method_account_next_account(uint64_t ptr, RustBuffer seed
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_PQZ_DECOY_CANDIDATES
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_PQZ_DECOY_CANDIDATES
+uint64_t uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates(uint64_t ptr, RustBuffer chain
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_PREPARE_ACCEPT_MEMBERSHIP
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_PREPARE_ACCEPT_MEMBERSHIP
 uint64_t uniffi_scaas_sdk_fn_method_account_prepare_accept_membership(uint64_t ptr, RustBuffer req
@@ -726,6 +731,11 @@ uint64_t uniffi_scaas_sdk_fn_method_account_prepare_update_msig(uint64_t ptr, Ru
 uint64_t uniffi_scaas_sdk_fn_method_account_quote_registry_write(uint64_t ptr, uint64_t write
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_REGISTER_TARGET
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_REGISTER_TARGET
+uint64_t uniffi_scaas_sdk_fn_method_account_register_target(uint64_t ptr, RustBuffer chain, uint16_t kind
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_REGISTRATION_BLOB
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_REGISTRATION_BLOB
 uint64_t uniffi_scaas_sdk_fn_method_account_registration_blob(uint64_t ptr, RustBuffer key, RustBuffer attrs
@@ -749,6 +759,11 @@ uint64_t uniffi_scaas_sdk_fn_method_account_signs(uint64_t ptr, RustBuffer seed,
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_SUBMIT_REGISTRY_WRITE
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_SUBMIT_REGISTRY_WRITE
 uint64_t uniffi_scaas_sdk_fn_method_account_submit_registry_write(uint64_t ptr, uint64_t write, RustBuffer quote
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_UA_LINE
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ACCOUNT_UA_LINE
+uint64_t uniffi_scaas_sdk_fn_method_account_ua_line(uint64_t ptr, RustBuffer chain, RustBuffer ua
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_CLONE_ADMIN
@@ -2062,6 +2077,16 @@ RustBuffer uniffi_scaas_sdk_fn_func_store_policy_default(RustCallStatus *out_sta
 RustBuffer uniffi_scaas_sdk_fn_func_subject_key_args_secp256k1(RustBuffer address, RustCallStatus *out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FUNC_UA_LINE_KEY_TARGET
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FUNC_UA_LINE_KEY_TARGET
+RustBuffer uniffi_scaas_sdk_fn_func_ua_line_key_target(RustBuffer line, RustCallStatus *out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FUNC_UA_LINE_PQZ_TARGET
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FUNC_UA_LINE_PQZ_TARGET
+RustBuffer uniffi_scaas_sdk_fn_func_ua_line_pqz_target(RustBuffer line, RustCallStatus *out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_FFI_SCAAS_SDK_RUSTBUFFER_ALLOC
 #define UNIFFI_FFIDEF_FFI_SCAAS_SDK_RUSTBUFFER_ALLOC
 RustBuffer ffi_scaas_sdk_rustbuffer_alloc(uint64_t size, RustCallStatus *out_status
@@ -2460,6 +2485,18 @@ uint16_t uniffi_scaas_sdk_checksum_func_subject_key_args_secp256k1(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_FUNC_UA_LINE_KEY_TARGET
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_FUNC_UA_LINE_KEY_TARGET
+uint16_t uniffi_scaas_sdk_checksum_func_ua_line_key_target(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_FUNC_UA_LINE_PQZ_TARGET
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_FUNC_UA_LINE_PQZ_TARGET
+uint16_t uniffi_scaas_sdk_checksum_func_ua_line_pqz_target(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_REGISTRYWRITE_CALLDATA
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_REGISTRYWRITE_CALLDATA
 uint16_t uniffi_scaas_sdk_checksum_method_registrywrite_calldata(void
@@ -2559,6 +2596,12 @@ uint16_t uniffi_scaas_sdk_checksum_method_account_msig_state(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_NEXT_ACCOUNT
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_NEXT_ACCOUNT
 uint16_t uniffi_scaas_sdk_checksum_method_account_next_account(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_PQZ_DECOY_CANDIDATES
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_PQZ_DECOY_CANDIDATES
+uint16_t uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates(void
     
 );
 #endif
@@ -2664,6 +2707,12 @@ uint16_t uniffi_scaas_sdk_checksum_method_account_quote_registry_write(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_REGISTER_TARGET
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_REGISTER_TARGET
+uint16_t uniffi_scaas_sdk_checksum_method_account_register_target(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_REGISTRATION_BLOB
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_REGISTRATION_BLOB
 uint16_t uniffi_scaas_sdk_checksum_method_account_registration_blob(void
@@ -2691,6 +2740,12 @@ uint16_t uniffi_scaas_sdk_checksum_method_account_signs(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_SUBMIT_REGISTRY_WRITE
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_SUBMIT_REGISTRY_WRITE
 uint16_t uniffi_scaas_sdk_checksum_method_account_submit_registry_write(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_UA_LINE
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ACCOUNT_UA_LINE
+uint16_t uniffi_scaas_sdk_checksum_method_account_ua_line(void
     
 );
 #endif

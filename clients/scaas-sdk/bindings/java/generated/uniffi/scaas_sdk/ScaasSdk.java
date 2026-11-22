@@ -534,5 +534,52 @@ public class ScaasSdk {
     }
     
 
+  
+    /**
+     * The target of a key write of the UA (`UaLine::key_target`, §12): its holder.
+     */public static java.lang.String uaLineKeyTarget(UaLine line)  {
+            try {
+                return FfiConverterString.INSTANCE.lift(
+    UniffiHelpers.uniffiRustCall( (_allocator, _status) -> {
+        return UniffiLib.uniffi_scaas_sdk_fn_func_ua_line_key_target(_allocator, 
+            FfiConverterTypeUaLine.INSTANCE.lower(line), _status);
+    })
+    );
+            } catch (java.lang.RuntimeException _uniffi_ex) {
+                
+                
+                if (InternalException.class.isInstance(_uniffi_ex.getCause())) {
+                    throw (InternalException)_uniffi_ex.getCause();
+                }
+                throw _uniffi_ex;
+            }
+    }
+    
+
+  
+    /**
+     * The target of a PQZ write of the UA (`UaLine::pqz_target`, §12): its PQZ home; `PqzHomeNone` where the walk has none.
+     */public static java.lang.String uaLinePqzTarget(UaLine line) throws SdkException {
+            try {
+                return FfiConverterString.INSTANCE.lift(
+    UniffiHelpers.uniffiRustCallWithError(new SdkExceptionErrorHandler(), (_allocator, _status) -> {
+        return UniffiLib.uniffi_scaas_sdk_fn_func_ua_line_pqz_target(_allocator, 
+            FfiConverterTypeUaLine.INSTANCE.lower(line), _status);
+    })
+    );
+            } catch (java.lang.RuntimeException _uniffi_ex) {
+                
+                if (SdkException.class.isInstance(_uniffi_ex.getCause())) {
+                    throw (SdkException)_uniffi_ex.getCause();
+                }
+                
+                if (InternalException.class.isInstance(_uniffi_ex.getCause())) {
+                    throw (InternalException)_uniffi_ex.getCause();
+                }
+                throw _uniffi_ex;
+            }
+    }
+    
+
 }
 

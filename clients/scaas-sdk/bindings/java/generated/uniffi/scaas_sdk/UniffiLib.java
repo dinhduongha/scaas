@@ -209,6 +209,15 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates = findDowncallHandle("uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT));
+
+    static long uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates(long ptr, java.lang.foreign.MemorySegment chain) {
+        try {
+            return (long) MH_uniffi_scaas_sdk_fn_method_account_pqz_decoy_candidates.invokeExact(ptr, chain);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_fn_method_account_prepare_accept_membership
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_account_prepare_accept_membership = findDowncallHandle("uniffi_scaas_sdk_fn_method_account_prepare_accept_membership", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT));
 
@@ -362,6 +371,15 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_fn_method_account_register_target
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_account_register_target = findDowncallHandle("uniffi_scaas_sdk_fn_method_account_register_target", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static long uniffi_scaas_sdk_fn_method_account_register_target(long ptr, java.lang.foreign.MemorySegment chain, short kind) {
+        try {
+            return (long) MH_uniffi_scaas_sdk_fn_method_account_register_target.invokeExact(ptr, chain, kind);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_fn_method_account_registration_blob
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_account_registration_blob = findDowncallHandle("uniffi_scaas_sdk_fn_method_account_registration_blob", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT, RustBuffer.LAYOUT));
 
@@ -404,6 +422,15 @@ final class UniffiLib {
     static long uniffi_scaas_sdk_fn_method_account_submit_registry_write(long ptr, long write, java.lang.foreign.MemorySegment quote) {
         try {
             return (long) MH_uniffi_scaas_sdk_fn_method_account_submit_registry_write.invokeExact(ptr, write, quote);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_fn_method_account_ua_line
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_account_ua_line = findDowncallHandle("uniffi_scaas_sdk_fn_method_account_ua_line", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT, RustBuffer.LAYOUT));
+
+    static long uniffi_scaas_sdk_fn_method_account_ua_line(long ptr, java.lang.foreign.MemorySegment chain, java.lang.foreign.MemorySegment ua) {
+        try {
+            return (long) MH_uniffi_scaas_sdk_fn_method_account_ua_line.invokeExact(ptr, chain, ua);
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
@@ -2756,6 +2783,24 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_fn_func_ua_line_key_target
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_func_ua_line_key_target = findDowncallHandle("uniffi_scaas_sdk_fn_func_ua_line_key_target", java.lang.foreign.FunctionDescriptor.of(RustBuffer.LAYOUT, RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.ADDRESS));
+
+    static java.lang.foreign.MemorySegment uniffi_scaas_sdk_fn_func_ua_line_key_target(java.lang.foreign.SegmentAllocator _allocator, java.lang.foreign.MemorySegment line, java.lang.foreign.MemorySegment uniffiOutErr) {
+        try {
+            return (java.lang.foreign.MemorySegment) MH_uniffi_scaas_sdk_fn_func_ua_line_key_target.invokeExact(_allocator, line, uniffiOutErr);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_fn_func_ua_line_pqz_target
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_func_ua_line_pqz_target = findDowncallHandle("uniffi_scaas_sdk_fn_func_ua_line_pqz_target", java.lang.foreign.FunctionDescriptor.of(RustBuffer.LAYOUT, RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.ADDRESS));
+
+    static java.lang.foreign.MemorySegment uniffi_scaas_sdk_fn_func_ua_line_pqz_target(java.lang.foreign.SegmentAllocator _allocator, java.lang.foreign.MemorySegment line, java.lang.foreign.MemorySegment uniffiOutErr) {
+        try {
+            return (java.lang.foreign.MemorySegment) MH_uniffi_scaas_sdk_fn_func_ua_line_pqz_target.invokeExact(_allocator, line, uniffiOutErr);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // ffi_scaas_sdk_rustbuffer_alloc
     private static final java.lang.invoke.MethodHandle MH_ffi_scaas_sdk_rustbuffer_alloc = findDowncallHandle("ffi_scaas_sdk_rustbuffer_alloc", java.lang.foreign.FunctionDescriptor.of(RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.ADDRESS));
 
@@ -3431,6 +3476,24 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_checksum_func_ua_line_key_target
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_func_ua_line_key_target = findDowncallHandle("uniffi_scaas_sdk_checksum_func_ua_line_key_target", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_func_ua_line_key_target() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_func_ua_line_key_target.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_func_ua_line_pqz_target
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_func_ua_line_pqz_target = findDowncallHandle("uniffi_scaas_sdk_checksum_func_ua_line_pqz_target", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_func_ua_line_pqz_target() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_func_ua_line_pqz_target.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_checksum_method_registrywrite_calldata
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_registrywrite_calldata = findDowncallHandle("uniffi_scaas_sdk_checksum_method_registrywrite_calldata", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
 
@@ -3581,6 +3644,15 @@ final class UniffiLib {
     static short uniffi_scaas_sdk_checksum_method_account_next_account() {
         try {
             return (short) MH_uniffi_scaas_sdk_checksum_method_account_next_account.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates = findDowncallHandle("uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_method_account_pqz_decoy_candidates.invokeExact();
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
@@ -3737,6 +3809,15 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_checksum_method_account_register_target
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_account_register_target = findDowncallHandle("uniffi_scaas_sdk_checksum_method_account_register_target", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_method_account_register_target() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_method_account_register_target.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_checksum_method_account_registration_blob
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_account_registration_blob = findDowncallHandle("uniffi_scaas_sdk_checksum_method_account_registration_blob", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
 
@@ -3779,6 +3860,15 @@ final class UniffiLib {
     static short uniffi_scaas_sdk_checksum_method_account_submit_registry_write() {
         try {
             return (short) MH_uniffi_scaas_sdk_checksum_method_account_submit_registry_write.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_method_account_ua_line
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_account_ua_line = findDowncallHandle("uniffi_scaas_sdk_checksum_method_account_ua_line", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_method_account_ua_line() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_method_account_ua_line.invokeExact();
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 

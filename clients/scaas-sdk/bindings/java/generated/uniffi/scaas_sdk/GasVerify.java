@@ -22,13 +22,19 @@ public class GasVerify {
      * the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
      */
     private GasPerItem perItem;
+    /**
+     * the registry line's columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); all absent: the holder's own
+     * check on any registry (every row before the line)
+     */
+    private GasLine line;
 
     public GasVerify(
         short signer, 
         long gas, 
         long sigBytes, 
         long margin, 
-        GasPerItem perItem
+        GasPerItem perItem, 
+        GasLine line
     ) {
         
         this.signer = signer;
@@ -40,6 +46,8 @@ public class GasVerify {
         this.margin = margin;
         
         this.perItem = perItem;
+        
+        this.line = line;
     }
     
     public short signer() {
@@ -61,6 +69,10 @@ public class GasVerify {
     public GasPerItem perItem() {
         return this.perItem;
     }
+    
+    public GasLine line() {
+        return this.line;
+    }
     public void setSigner(short signer) {
         this.signer = signer;
     }
@@ -75,6 +87,9 @@ public class GasVerify {
     }
     public void setPerItem(GasPerItem perItem) {
         this.perItem = perItem;
+    }
+    public void setLine(GasLine line) {
+        this.line = line;
     }
 
     
@@ -93,7 +108,9 @@ public class GasVerify {
               
               margin == t.margin && 
               
-              java.util.Objects.equals(perItem, t.perItem)
+              java.util.Objects.equals(perItem, t.perItem) && 
+              
+              java.util.Objects.equals(line, t.line)
               
             );
         };
@@ -107,6 +124,7 @@ public class GasVerify {
         result = 31 * result + java.lang.Long.hashCode(sigBytes);
         result = 31 * result + java.lang.Long.hashCode(margin);
         result = 31 * result + java.util.Objects.hashCode(perItem);
+        result = 31 * result + java.util.Objects.hashCode(line);
         return result;
     }
 
