@@ -223,7 +223,6 @@ mutants-check | 898fa1ebc | 0 | -
 rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
 mutants-check | 7992a33e7 | 0 | -
 ua-appcore | 7992a33e7 | 0 | 14 passed, 0 failed, 0 ignored (1 binaries)
-ua-test | 7992a33e7 | 0 | 622 passed, 0 failed, 3 ignored (63 binaries)
 ua-vectors | 7992a33e7 | 0 | 732 passed, 0 failed, 6 ignored (71 binaries)
 ua-verify-only | 7992a33e7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
 bind-gen | 7992a33e7 | 0 | -
@@ -272,3 +271,4 @@ cli | 028da021c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 sdk-test | e5573b3d6 | 0 | 438 passed, 0 failed, 17 ignored (41 binaries)
 sdk-vectors | e5573b3d6 | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 sdk-clippy | f238113b8 | 0 | -
+ua-test | b487eda36 | 0 | 628 passed, 0 failed, 3 ignored (64 binaries)
