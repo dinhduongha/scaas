@@ -426,7 +426,8 @@ impl PqChat {
     }
 
     /// `ep` of `s` in use on this device: its envelopes read from now on, those kept for it read now; when it is a complete
-    /// child of an epoch in use, sends under the parent are held until the home's final block shows it (CLI-PQC-07).
+    /// child of an epoch in use, sends under the parent are held until the home's final block shows it (CLI-PQC-07); a
+    /// rekey naming a store the user has not confirmed is told (`StoresChanged`, CLI-PQC-06).
     pub async fn use_epoch(
         &self,
         s: &SessionRef,
@@ -435,14 +436,17 @@ impl PqChat {
         let hint = self.app.pqchat_hint(ep.k.clone())?;
         let sid = ep.epoch.session_id.clone();
         let ep = Arc::new(ep);
-        let parent_in_use = {
+        let parent = {
             let mut u = self.in_use();
             let v = u.0.entry(sid.clone()).or_default();
             v.retain(|(_, e)| e.epoch.id != ep.epoch.id);
             v.push((hint.clone(), ep.clone()));
-            v.iter().any(|(_, e)| e.epoch.id == ep.epoch.parent)
+            v.iter()
+                .find(|(_, e)| e.epoch.id == ep.epoch.parent)
+                .map(|(_, e)| e.epoch.admins.clone())
         };
-        if parent_in_use && ep.epoch.epoch > 0 {
+        self.stores_changed(&ep, parent.as_deref());
+        if parent.is_some() && ep.epoch.epoch > 0 {
             let c = self
                 .net
                 .read(
@@ -523,7 +527,11 @@ impl PqChat {
 
     /// The epoch a send of `s` goes under: the latest in use, followed at home to its final child (opened for `me`, then in
     /// use); `EpochNotFinal` while a complete child seen is not final; `NotMember` when `me` is no member of it.
-    async fn send_under(&self, s: &SessionRef, me: &Me) -> Result<Arc<OpenEpoch>, PqChatError> {
+    pub(crate) async fn send_under(
+        &self,
+        s: &SessionRef,
+        me: &Me,
+    ) -> Result<Arc<OpenEpoch>, PqChatError> {
         let sid = s.session_id.to_ascii_lowercase();
         let latest = |u: &InUse| {
             u.0.get(&sid)
@@ -618,7 +626,18 @@ impl PqChat {
         crate::session::seed_of(&me.key)?;
         let v = content.value(ts)?;
         let ep = self.send_under(s, me).await?;
-        self.seal_under(&ep, me, &v).await
+        let out = self.seal_under(&ep, me, &v).await?;
+        self.mine(&out, &v);
+        Ok(out)
+    }
+
+    /// An own message sent: shown, its id seen (its copy from a store is a duplicate).
+    pub(crate) fn mine(&self, out: &Outgoing, v: &Value) {
+        let sealed = &out.sealed;
+        self.chains()
+            .add_id(&out.epoch.epoch.session_id, sealed.message_id.clone());
+        let p = Content::parse(v.to_string().as_bytes());
+        self.show(&out.epoch, &sealed.record, &sealed.message_id, p);
     }
 
     pub(crate) async fn seal_under(
@@ -660,9 +679,6 @@ impl PqChat {
         if sealed.record.sender.to_ascii_lowercase() != ua {
             return Err(PqChatError::Internal);
         }
-        self.chains().add_id(&sid, sealed.message_id.clone());
-        let p = Content::parse(v.to_string().as_bytes());
-        self.show(ep, &sealed.record, &sealed.message_id, p);
         Ok(Outgoing {
             epoch: ep.clone(),
             sealed,

@@ -146,10 +146,12 @@ impl Net for FakeNet {
         Ok(call(chain, contract, payer))
     }
     async fn submit(&self, _call: AppCall) -> Result<String, PqChatError> {
-        self.writes
-            .lock()
-            .unwrap()
-            .push((String::new(), "submit".into(), Value::Null));
+        let mut w = self.writes.lock().unwrap();
+        w.push((String::new(), "submit".into(), Value::Null));
+        // a prepare the fake answers is sent too (an operation id of its own)
+        if self.accept.load(Ordering::SeqCst) {
+            return Ok(format!("op-{}", w.len()));
+        }
         Err(PqChatError::Internal)
     }
 }

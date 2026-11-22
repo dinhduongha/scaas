@@ -3,9 +3,19 @@
 //! "env": <base64>}`, base64 of RFC 4648 §4 with padding, the `matrixEvent` row's form, and only that form read back. The
 //! codec is a transport encoding; the envelope's bytes are opened and decoded in `ua-rs` (K4).
 use crate::drops::Drop;
+use crate::PqChatError;
+use async_trait::async_trait;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use serde_json::{json, Value};
+
+/// The app's Matrix client as the crate uses it (spec §6.1; plan T8 adds rooms, invites, history and the conformance test).
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+pub trait MatrixTransport: Send + Sync {
+    /// Sends one [`EVENT_TYPE`] event with `content` (an [`event`]) in `room`.
+    async fn send_event(&self, room: &str, content: Value) -> Result<(), PqChatError>;
+}
 
 /// The event type.
 pub const EVENT_TYPE: &str = "net.scaas.pqchat.v1";

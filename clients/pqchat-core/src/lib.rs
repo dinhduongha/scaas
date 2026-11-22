@@ -12,6 +12,7 @@
 )]
 
 pub mod chain_state;
+pub mod chain_store;
 pub mod check;
 pub mod content;
 pub mod drops;
@@ -24,6 +25,7 @@ pub mod order;
 pub mod reads;
 pub mod session;
 pub mod store;
+pub mod stores;
 
 pub use drops::{Drop, DropCounts};
 pub use error::PqChatError;
@@ -83,6 +85,7 @@ pub struct PqChat {
     pub(crate) unfinal: Mutex<std::collections::HashMap<String, String>>,
     pub(crate) in_use: Mutex<message::InUse>,
     pub(crate) timelines: Mutex<std::collections::HashMap<String, order::Timeline>>,
+    pub(crate) matrix: Mutex<Option<Arc<dyn matrix::MatrixTransport>>>,
 }
 
 /// What the crate tells the app (spec §8); ids and UAs only, never a secret, handle, ciphertext, room id or Matrix id.
@@ -90,6 +93,12 @@ pub struct PqChat {
 pub enum Event {
     /// `member` holds a KEM version above the highest seen: a rekey is the user's choice, never started by the crate
     KemVersionRaised { session: String, member: String },
+    /// a rekey by `author` lists a store the user has not confirmed (CLI-PQC-06); `by_admin` false flags a member's change
+    StoresChanged {
+        session: String,
+        author: String,
+        by_admin: bool,
+    },
     /// `missed` events dropped, the queue full
     Lagged { missed: u64 },
 }
@@ -138,6 +147,7 @@ impl PqChat {
             unfinal: Mutex::new(Default::default()),
             in_use: Mutex::new(Default::default()),
             timelines: Mutex::new(Default::default()),
+            matrix: Mutex::new(None),
         })
     }
 
@@ -176,6 +186,29 @@ impl PqChat {
             e.q.pop_front();
             e.missed += 1;
         }
+    }
+
+    /// The app's Matrix client, after its Matrix login (Rust only, spec §11).
+    pub fn attach_matrix(&self, client: Arc<dyn matrix::MatrixTransport>) {
+        *self
+            .matrix
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(client);
+    }
+
+    /// Before the app's Matrix logout: a session listing Matrix cannot send (`MatrixDetached`); chain stores still serve.
+    pub fn detach_matrix(&self) {
+        *self
+            .matrix
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    }
+
+    pub(crate) fn matrix(&self) -> Option<Arc<dyn matrix::MatrixTransport>> {
+        self.matrix
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     pub(crate) fn conf(&self, chain: &str) -> Result<&ChainConf, PqChatError> {
