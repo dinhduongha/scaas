@@ -31,6 +31,8 @@ mod aead;
 mod app_refusals;
 #[cfg(feature = "app-core")]
 mod appkey;
+#[cfg(all(feature = "app-core", feature = "fam-arweave"))]
+mod arweave;
 pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
@@ -38,6 +40,8 @@ pub mod derive;
 pub(crate) mod derive;
 mod eip712;
 pub mod entries;
+#[cfg(feature = "app-core")]
+mod file;
 #[cfg(feature = "vectors")]
 pub mod kem;
 #[cfg(not(feature = "vectors"))]
@@ -83,6 +87,10 @@ pub use app_refusals::{SCAAS_DOMAIN_NAMES, SCAAS_PURPOSES};
 pub use appkey::{
     AppKeys, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce, APP_KEYS_MAX, APP_ROOT, KEYWRAP,
 };
+#[cfg(all(feature = "app-core", feature = "fam-arweave", feature = "vectors"))]
+pub use arweave::{vectors_sign_count, vectors_upload_key};
+#[cfg(all(feature = "app-core", feature = "fam-arweave"))]
+pub use arweave::{ArweaveFile, UPLOAD_INFO};
 #[cfg(feature = "pqz")]
 pub(crate) use eip712::u256_to_dec; // the PQZ facade's
 #[cfg(any(feature = "zether", feature = "pqz"))]
@@ -91,6 +99,8 @@ pub use eip712::{
     liquidity_order_typed_data, pqz_verdict_typed_data, rescue_vault_typed_data, scaas_typed_data,
     Erc7739Wallet, RescueVaultOp, TypedData,
 };
+#[cfg(feature = "app-core")]
+pub use file::SealedFile;
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 #[cfg(feature = "vectors")]
 pub use manifest::vectors_backup_payload;
@@ -232,6 +242,17 @@ pub enum Error {
     PqChatTooFar,
     /// A network of a family this build leaves out (plan T42: its `fam-<row>` feature is off); nothing derived or signed.
     FeatureMissing,
+    /// A file whose bucket is above the platform's cap or the store's largest object (CLI-UAL-65); nothing sealed or read.
+    FileTooLarge,
+    /// A file object whose length is not exactly `bucket(size) + 16` (CLI-UAL-65): not decrypted.
+    FileLength,
+    /// A file object whose frame, once the tag verified, has a `len` other than the signed `size` or a non-zero pad byte
+    /// (CLI-UAL-65): no plaintext.
+    FileFrame,
+    /// A file whose SHA-256 is not the signed `sha256` (or an object whose SHA-256 is not `ctSha256`): no plaintext.
+    FileHashMismatch,
+    /// An Arweave data item `ua-rs` built that its own verifying parser refused (CLI-UAL-64): nothing returned.
+    ArweaveItem,
     Ua(UAError),
 }
 
@@ -269,6 +290,11 @@ impl Error {
             Error::PqChatContent => "PqChatContent",
             Error::PqChatTooFar => "PqChatTooFar",
             Error::FeatureMissing => "FeatureMissing",
+            Error::FileTooLarge => "FileTooLarge",
+            Error::FileLength => "FileLength",
+            Error::FileFrame => "FileFrame",
+            Error::FileHashMismatch => "FileHashMismatch",
+            Error::ArweaveItem => "ArweaveItem",
             Error::Ua(e) => e.code(),
         }
     }

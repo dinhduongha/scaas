@@ -47,6 +47,11 @@ fn main() {
         "solana: {:?}",
         scaas_ua::families::solana::account_of(&[m[0]; 32], &[1; 32]).is_some()
     );
+    #[cfg(feature = "fam-arweave")]
+    println!(
+        "arweave: {:?}",
+        scaas_ua::arweave::DataItem::parse(m.to_vec()).is_ok()
+    );
     #[cfg(feature = "fam-sui")]
     println!(
         "sui: {:?}",

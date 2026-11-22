@@ -46,6 +46,8 @@ pub enum KeyUsage {
     Data = 2,
     /// `seal_key` / `open_key`.
     KeyWrap = 3,
+    /// A file key: `open_file` (CLI-UAL-65); `seal_file` draws its own, so no caller key seals a file.
+    File = 4,
 }
 
 /// How a handle came to be: the public MAC runs only on a key the scope drew or unwrapped (review K4, pqchat-core §5.3).
