@@ -21,6 +21,8 @@ assert failure_line("all good\n") == "-"
 assert failure_line("x\n[FAIL: pinned: false != true] test_a() (gas: 1)\n").startswith("[FAIL: pinned")
 assert intended("forge test --match-test '^test_sdkGas_verify\\('") == "test_sdkGas_verify"
 assert intended("forge test --match-test 'test_sdkGas_pqzConfRoll\\('") == "test_sdkGas_pqzConfRoll"
+# node's spec reporter marks a failing test with ✖ (no `not ok` line): its line is the failure line
+assert failure_line("✔ a (1ms)\n✖ finding 5: capped by their bytes (0.6ms)\n  AssertionError [ERR_ASSERTION]: x\n").startswith("✖ finding 5")
 assert ran_nothing("Warning: no tests match the provided pattern:\n")
 assert ran_nothing("test result: ok. 0 passed; 0 failed; 0 ignored\ntest result: ok. 0 passed; 0 failed; 3 ignored\n")
 assert not ran_nothing("test result: ok. 0 passed; 0 failed; 0 ignored\ntest result: ok. 1 passed; 0 failed; 0 ignored\n")

@@ -115,6 +115,7 @@ def ran_nothing(text):
 def failure_line(text):
     """The first line that says why the test failed (a panic, a failed test, an error), shortened."""
     for pat in (r"panicked at [^\n]*", r"assertion[^\n]*failed[^\n]*", r"^test \S+ \.\.\. FAILED", r"^\[FAIL[^\n]*", r"^not ok [^\n]*",
+                r"^\s*✖ [^\n]*", r"AssertionError[^\n]*",
                 r"(?i)^\S*error[^\n]*"):
         m = re.search(pat, text, re.M)
         if m:
