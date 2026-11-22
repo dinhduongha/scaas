@@ -39,6 +39,7 @@ extra_output = ["storageLayout"]
 fs_permissions = [
   { access = "read-write", path = "./test/vectors" },
   { access = "read-write", path = "./deployments" },
+  { access = "read-write", path = "./cache/test-fixtures" },   # test fixtures (git-ignored, never beside the books)
   { access = "read", path = "./test/v2/layout" },
   { access = "read", path = "./out" },
   { access = "read", path = "./src" },
@@ -49,6 +50,7 @@ fs_permissions = [
   { access = "read-write", path = "../vectors/zether" },       # test/zether/ZetherStateVectors.t.sol (STATE_VECTORS=1)
   { access = "read-write", path = "../vectors/factory" },      # test/v2/Create3Kat.t.sol (WRITE_CREATE3_KAT=true)
   { access = "read", path = "./size-baseline.json" },
+  { access = "read", path = "./release-data" },                # test/pqchat/PqChatStore.t.sol (the pinned build)
   { access = "read", path = "./broadcast" },                   # script/ZetherE2E.s.sol gasSplit (the e2e broadcast)
   { access = "read", path = "./test" },                        # test/ExpectRevertLint.t.sol scans the tests
   { access = "read", path = "./chain-uids.json" },             # script/DeployBase.sol _setup (chain-neutral spec §3.3)

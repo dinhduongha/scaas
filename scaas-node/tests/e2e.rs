@@ -1209,6 +1209,10 @@ fn plain_rows_match_the_forge_abi() {
                 "account" => "SmartKeyAccount",
                 // T93 (UA-7 P17, topics P45): the twelve `PqChat` writes
                 "pqchat" => "IPqChat",
+                // PqVault plan V8 (CTR-PQV-11): the eight `PqVault` writes
+                "pqvault" => "IPqVault",
+                // chains-arweave T9 (CTR-CHAT-22): `PqChatStore`'s one write, `storeMessage`
+                "pqchatstore" => "IPqChatStore",
                 other => panic!("a plain row on {other}: {}", r.entry),
             };
             let p = format!(
@@ -1233,10 +1237,10 @@ fn plain_rows_match_the_forge_abi() {
             n += 1;
         }
     }
-    assert_eq!(n, 37, "37 rows, one contract each (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
+    assert_eq!(n, 46, "46 rows, one contract each (45 -> 46: PqChatStore's storeMessage, chains-arweave T9; 37 -> 45: PqVault's eight writes, PqVault plan V8; before (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
         30 -> 32: the DEX's mtxLiquidity (CTR-DEX-30) and PqChat's remove (UA-7 P48); 32 -> 34: the registry's setPqzScopedKey, \
         storePqzScopedPop (K3-3); 34 -> 35: the registry's updateMsig (CTR-UA-44); 35 -> 36: the registry's cacheExpandedKey \
-        (NODE-JOB-29, TODO 3zh MD-14); 36 -> 37: the registry's registerBlsMulti (bls-multi Task 10))");
+        (NODE-JOB-29, TODO 3zh MD-14); 36 -> 37: the registry's registerBlsMulti (bls-multi Task 10)))");
 }
 
 /// The `UAEnvelope` of a native signer `from` (its padded id) on lane `batch` at `nonce`, fee 0, open relayer.
@@ -6969,6 +6973,440 @@ async fn liquidity_pre_checks_on_a_chain() {
         "{r5}"
     );
     assert_eq!(sends().await, n0, "no refusal sends");
+}
+
+/// PqVault plan V8: the records of a vault as the contract's EIP-712 structs (alloy computes their typed digests), its views.
+mod pqvault_types {
+    alloy::sol! {
+        struct MemberKey { bytes32 ua; uint64 keyId; bytes32 via; }
+        struct Wrap { bytes32 member; uint64 keyId; bytes mlkemCt; bytes32 x25519Eph; bytes sealedKey; }
+        struct PqVaultCreate {
+            bytes32 creator; uint64 nonce; uint8 mode; bytes32 homeChain; address homeVaultContract; bytes32[] admins;
+            MemberKey[] members; bytes32[] wrapHashes; uint16 passKdf; bytes32 passSalt; bytes sealedInfo;
+        }
+        struct PqVaultItem { bytes32 vaultId; bytes32 epochId; bytes32 author; uint64 nonce; bytes ciphertext; }
+        struct PqVaultEdit { bytes32 itemId; bytes32 epochId; bytes32 author; uint64 nonce; uint32 version; bytes ciphertext; }
+        struct PqVaultBatch { bytes32 vaultId; bytes32 epochId; bytes32 author; uint64 nonce; PqVaultItem[] items; }
+        struct ItemView { bytes32 vaultId; uint32 versionCount; bytes32 batchId; }
+        struct VersionView { bytes32 epochId; bytes32 author; uint64 nonce; uint32 version; bytes ciphertext; bytes32 sigHash; }
+        struct LatestView { bytes32 itemId; uint32 versionCount; bytes32 epochId; bytes32 author; bytes ciphertext; }
+        interface IPqVaultViews {
+            function vaultsOf(bytes32 ua, uint256 offset, uint256 limit) external view returns (bytes32[] memory);
+            function epochComplete(bytes32 epochId) external view returns (bool);
+            function latestEpoch(bytes32 vaultId) external view returns (bytes32);
+            function itemCount(bytes32 vaultId) external view returns (uint256);
+            function itemsOf(bytes32 vaultId, uint256 offset, uint256 limit) external view returns (bytes32[] memory);
+            function itemOf(bytes32 itemId) external view returns (ItemView memory);
+            function versionAt(bytes32 itemId, uint32 version) external view returns (VersionView memory);
+            function latestRange(bytes32 vaultId, uint256 offset, uint256 limit) external view returns (LatestView[] memory);
+        }
+    }
+}
+
+/// PqVault plan V8: an `fndsa512` UA (a fresh Falcon key; the deploy's FN-DSA-512 verifier checks it) with a KEM key at version 0
+/// (stand-in key bytes: the contract checks that the key exists, never runs the KEM), registered by `deployer` with its PoP.
+struct VaultMember {
+    ua: B256,
+    sk: pqcrypto_falcon::falconpadded512::SecretKey,
+}
+
+impl VaultMember {
+    async fn register(rpc: &str, registry: Address, deployer: &PrivateKeySigner, x: u8) -> Self {
+        use pqcrypto_falcon::falconpadded512 as falcon;
+        use pqcrypto_traits::sign::PublicKey as _;
+        let (pk, sk) = falcon::keypair();
+        let pk = pk.as_bytes().to_vec();
+        let ua = view(
+            rpc,
+            registry,
+            uaOfCall {
+                kind: UA_FNDSA512,
+                keyData: pk.clone().into(),
+            },
+        )
+        .await;
+        let kem = KemKey {
+            scheme: 1,
+            mlkemEk: vec![0u8; 1568].into(),
+            x25519: B256::repeat_byte(x),
+        };
+        let krh = view(
+            rpc,
+            registry,
+            kemRecordHashCall {
+                ua,
+                version: 0,
+                kem: kem.clone(),
+            },
+        )
+        .await;
+        let rd = view(
+            rpc,
+            registry,
+            registrationDigestCall {
+                ua,
+                kind: UA_FNDSA512,
+                pqzKeyHash: B256::ZERO,
+                kemRecordHash: krh,
+                pqzPopHash: B256::ZERO,
+            },
+        )
+        .await;
+        let me = Self { ua, sk };
+        let pop = me
+            .sign(rpc, registry, keccak256(b"scaas.ua.purpose.pop.v2"), rd)
+            .await;
+        send(
+            rpc,
+            deployer,
+            registry,
+            registerCall {
+                kind: UA_FNDSA512,
+                keyData: pk.into(),
+                attrs: UAAttrs {
+                    pqzKey: Default::default(),
+                    pqzPopHash: B256::ZERO,
+                    kem,
+                    kemPkHash: B256::ZERO,
+                },
+                pop: pop.into(),
+                pqzPop: Default::default(),
+            }
+            .abi_encode(),
+        )
+        .await;
+        me
+    }
+
+    async fn sign(&self, rpc: &str, registry: Address, purpose: B256, digest: B256) -> Vec<u8> {
+        use pqcrypto_falcon::falconpadded512 as falcon;
+        use pqcrypto_traits::sign::DetachedSignature as _;
+        let m = view(
+            rpc,
+            registry,
+            uaMessageCall {
+                kind: UA_FNDSA512,
+                purposeTag: purpose,
+                digest,
+            },
+        )
+        .await;
+        falcon::detached_sign(m.as_slice(), &self.sk)
+            .as_bytes()
+            .to_vec()
+    }
+
+    /// Its `UASig` (a stored kind: the signature only).
+    async fn auth(&self, rpc: &str, registry: Address, purpose: B256, digest: B256) -> Value {
+        let sig = self.sign(rpc, registry, purpose, digest).await;
+        json!({"keyData": "0x", "signature": format!("0x{}", alloy::hex::encode(sig)), "members": []})
+    }
+}
+
+/// PqVault plan V8 (CTR-PQV-11, CTR-PQV-13, CTR-PQV-10; spec §11 "Node"): `DEPLOY_PQVAULT` registers class 4 and one instance;
+/// two derived UAs with a KEM key (stand-in key bytes, stand-in wraps and ciphertexts: the contract checks shapes, hashes and
+/// signatures, never decrypts) create a chain-bound vault (mode 1: `DS_B(instance)`, `requireAuthorized` under `P_V`), write an
+/// item, edit it, write a batch of two, each a `call` job of named fields relayed at fee 0; then every byte is read back from
+/// the views alone (`vaultsOf`, `latestEpoch`, `itemsOf`, `latestRange`, `versionAt`). A job naming a record as hex is
+/// `HEX_ARGS_REFUSED`, `dead` with nothing sent. Fable code review F11: the same in mode 0 (`DS_V`, `requirePortableApp`
+/// under PqVault's app id), the default of every client.
+#[tokio::test]
+#[ignore]
+async fn pqvault_vault_items_and_recovery() {
+    pqvault_flow(1, 31920).await;
+}
+
+#[tokio::test]
+#[ignore]
+async fn pqvault_vault_items_and_recovery_mode0() {
+    pqvault_flow(0, 31921).await;
+}
+
+async fn pqvault_flow(mode: u8, chain_id: u64) {
+    use alloy::sol_types::SolStruct;
+    use pqvault_types::*;
+    let (_anvil, rpc) = start_anvil(chain_id, chain_id as u16).await;
+    let holder = small_key(0x9a17);
+    let dep = deploy_env(
+        &rpc,
+        chain_id,
+        holder.address(),
+        false,
+        &[("DEPLOY_PQVAULT", "true")],
+    );
+    let inst: Address = dep["pqvault_instance"]
+        .as_str()
+        .expect("PqVault's instance (notice period 0)")
+        .parse()
+        .unwrap();
+    let registry: Address = dep["ua_registry"].as_str().unwrap().parse().unwrap();
+    let factory: Address = dep["token_factory"].as_str().unwrap().parse().unwrap();
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    let deployer = key(DEPLOYER);
+    let (ma, mb) = (
+        VaultMember::register(&rpc, registry, &deployer, 0x0a).await,
+        VaultMember::register(&rpc, registry, &deployer, 0x0b).await,
+    );
+    let (a, b) = (ma.ua, mb.ua);
+    let (lo, hi) = if a < b { (a, b) } else { (b, a) };
+    let domain = if mode == 0 {
+        alloy::sol_types::eip712_domain! {
+            name: "SCaaS PqVault",
+            version: "1",
+            salt: keccak256(b"scaas.pqvault.v1"),
+        }
+    } else {
+        alloy::sol_types::eip712_domain! {
+            name: "SCaaS PqVault",
+            version: "1",
+            chain_id: chain_id,
+            verifying_contract: inst,
+        }
+    };
+    let p_v = keccak256(
+        (
+            keccak256(b"scaas.ua.purpose.app.v1"),
+            keccak256(b"scaas.pqvault.v1"),
+        )
+            .abi_encode(),
+    );
+    let rpc2 = rpc.clone();
+    let sign = |ua: B256, digest: B256| {
+        let m = if ua == a { &ma } else { &mb };
+        let rpc = rpc2.clone();
+        async move { m.auth(&rpc, registry, p_v, digest).await }
+    };
+    let h = |b: &[u8]| format!("0x{}", alloy::hex::encode(b));
+    let hb = |b: B256| format!("{b:#x}");
+
+    // the vault: both members, `a` creator and admin, mode 1 homed at the instance, the passphrase on
+    let nonce = 0x5eed_u64;
+    let vid = keccak256(
+        (
+            keccak256(b"scaas/pqvault/v1/vault"),
+            a,
+            nonce,
+            U256::from(mode),
+            uid,
+            inst,
+        )
+            .abi_encode(),
+    );
+    let members = vec![
+        MemberKey {
+            ua: lo,
+            keyId: 0,
+            via: B256::ZERO,
+        },
+        MemberKey {
+            ua: hi,
+            keyId: 0,
+            via: B256::ZERO,
+        },
+    ];
+    let wraps: Vec<Wrap> = members
+        .iter()
+        .map(|m| Wrap {
+            member: m.ua,
+            keyId: 0,
+            mlkemCt: vec![0x11; 1568].into(),
+            x25519Eph: keccak256(m.ua),
+            sealedKey: vec![0x22; 48].into(),
+        })
+        .collect();
+    let v = PqVaultCreate {
+        creator: a,
+        nonce,
+        mode,
+        homeChain: uid,
+        homeVaultContract: inst,
+        admins: vec![a],
+        members: members.clone(),
+        wrapHashes: wraps.iter().map(|w| w.eip712_hash_struct()).collect(),
+        passKdf: 1,
+        passSalt: B256::repeat_byte(0x5a),
+        sealedInfo: vec![0x5e; 1052].into(), // a nonce, the 1,024-B bucket, a tag (F12)
+    };
+    let jm = |m: &MemberKey| json!({"ua": hb(m.ua), "keyId": "0", "via": hb(m.via)});
+    let jw = |w: &Wrap| {
+        json!({"member": hb(w.member), "keyId": "0", "mlkemCt": h(&w.mlkemCt), "x25519Eph": hb(w.x25519Eph),
+        "sealedKey": h(&w.sealedKey)})
+    };
+    let v_args = json!({
+        "v": {"creator": hb(v.creator), "nonce": nonce.to_string(), "mode": mode, "homeChain": hb(uid),
+            "homeVaultContract": format!("{inst:#x}"), "admins": [hb(a)], "members": members.iter().map(jm).collect::<Vec<_>>(),
+            "wrapHashes": v.wrapHashes.iter().map(|x| hb(*x)).collect::<Vec<_>>(), "passKdf": 1, "passSalt": hb(v.passSalt),
+            "sealedInfo": h(&v.sealedInfo)},
+        "wraps": wraps.iter().map(jw).collect::<Vec<_>>(),
+        "sig": sign(a, v.eip712_signing_hash(&domain)).await,
+    });
+    let it = |author: B256, n: u64, fill: u8| PqVaultItem {
+        vaultId: vid,
+        epochId: vid,
+        author,
+        nonce: n,
+        ciphertext: vec![fill; 288].into(),
+    };
+    let ji = |x: &PqVaultItem| {
+        json!({"vaultId": hb(x.vaultId), "epochId": hb(x.epochId), "author": hb(x.author),
+        "nonce": x.nonce.to_string(), "ciphertext": h(&x.ciphertext)})
+    };
+    let item = it(b, 1, 0x31);
+    let iid = keccak256((keccak256(b"scaas/pqvault/v1/item"), vid, b, 1u64).abi_encode());
+    let item_args =
+        json!({"it": ji(&item), "sig": sign(b, item.eip712_signing_hash(&domain)).await});
+    let edit = PqVaultEdit {
+        itemId: iid,
+        epochId: vid,
+        author: a,
+        nonce: 2,
+        version: 2,
+        ciphertext: vec![0x32; 288].into(),
+    };
+    let edit_args = json!({"d": {"itemId": hb(iid), "epochId": hb(vid), "author": hb(a), "nonce": "2", "version": 2,
+        "ciphertext": h(&edit.ciphertext)}, "sig": sign(a, edit.eip712_signing_hash(&domain)).await});
+    let batch = PqVaultBatch {
+        vaultId: vid,
+        epochId: vid,
+        author: a,
+        nonce: 3,
+        items: vec![it(a, 4, 0x34), it(a, 5, 0x35)],
+    };
+    let batch_args = json!({"b": {"vaultId": hb(vid), "epochId": hb(vid), "author": hb(a), "nonce": "3",
+        "items": batch.items.iter().map(ji).collect::<Vec<_>>()}, "sig": sign(a, batch.eip712_signing_hash(&domain)).await});
+
+    let state = Arc::new(Mutex::new(FakeExternalPull::default()));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
+    let mut cfg = chain_cfg(chain_id, &rpc, None);
+    cfg.token_factory = Some(factory);
+    cfg.max_gas_per_tx = 30_000_000;
+    let mut s = Submitter::start(
+        Chain::with_signer(&cfg, key(RELAYER)).unwrap(),
+        external_pull,
+        cfg.clone(),
+        "e2e-pqvault".into(),
+        Default::default(),
+    )
+    .await
+    .unwrap();
+    let until = (now() + 300).to_string();
+    let last = |id: i64| {
+        state
+            .lock()
+            .unwrap()
+            .reports
+            .iter()
+            .rev()
+            .find(|r| r["job_id"] == id)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let mut id = 0;
+    let mut job = |entry: &str, args: Value| {
+        id += 1;
+        state.lock().unwrap().jobs.push(
+            json!({"id": id, "kind": "call", "op": {"entry": entry, "contract": "pqvault",
+            "token": format!("{inst:#x}"), "validUntil": until, "args": args}}),
+        );
+        id
+    };
+    let mut hexed = v_args.clone();
+    hexed["v"] = json!(format!("0x{}", "00".repeat(64)));
+    let bad = job("createVault", hexed);
+    run_outbox(&mut s).await;
+    assert_eq!(last(bad)["chain_state"], "dead", "{}", last(bad));
+    assert!(
+        last(bad)["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("HEX_ARGS_REFUSED"),
+        "{}",
+        last(bad)
+    );
+    for (entry, args) in [
+        ("createVault", v_args),
+        ("createItem", item_args),
+        ("editItem", edit_args),
+        ("createItems", batch_args),
+    ] {
+        let j = job(entry, args);
+        run_outbox(&mut s).await;
+        assert_eq!(last(j)["chain_state"], "mined", "{entry}: {}", last(j));
+    }
+    // recovery from the views alone
+    use pqvault_types::IPqVaultViews as Q;
+    assert_eq!(
+        view(
+            &rpc,
+            inst,
+            Q::vaultsOfCall {
+                ua: b,
+                offset: U256::ZERO,
+                limit: U256::from(8)
+            }
+        )
+        .await,
+        vec![vid]
+    );
+    assert!(view(&rpc, inst, Q::epochCompleteCall { epochId: vid }).await);
+    assert_eq!(
+        view(&rpc, inst, Q::latestEpochCall { vaultId: vid }).await,
+        vid
+    );
+    assert_eq!(
+        view(&rpc, inst, Q::itemCountCall { vaultId: vid }).await,
+        U256::from(3)
+    );
+    let ids = view(
+        &rpc,
+        inst,
+        Q::itemsOfCall {
+            vaultId: vid,
+            offset: U256::ZERO,
+            limit: U256::from(128),
+        },
+    )
+    .await;
+    assert_eq!(ids[0], iid);
+    let l = view(
+        &rpc,
+        inst,
+        Q::latestRangeCall {
+            vaultId: vid,
+            offset: U256::ZERO,
+            limit: U256::from(16),
+        },
+    )
+    .await;
+    assert_eq!(l.len(), 3);
+    assert_eq!(
+        (l[0].itemId, l[0].versionCount, l[0].author),
+        (iid, 2, a),
+        "the edit is the latest"
+    );
+    assert_eq!(l[0].ciphertext, edit.ciphertext);
+    assert_eq!(l[2].ciphertext, batch.items[1].ciphertext);
+    let first = view(
+        &rpc,
+        inst,
+        Q::versionAtCall {
+            itemId: iid,
+            version: 1,
+        },
+    )
+    .await;
+    assert_eq!(
+        (first.author, first.ciphertext.clone()),
+        (b, item.ciphertext.clone()),
+        "version 1 stays"
+    );
+    let bid = keccak256((keccak256(b"scaas/pqvault/v1/batch"), vid, a, 3u64).abi_encode());
+    assert_eq!(
+        view(&rpc, inst, Q::itemOfCall { itemId: ids[1] })
+            .await
+            .batchId,
+        bid
+    );
 }
 
 /// CTR-UA-65 (plan 2026-11-19-registry-verify-only-kinds Task 16): a registry line of two generations on anvil, generation 2 deployed

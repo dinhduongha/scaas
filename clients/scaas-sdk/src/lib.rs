@@ -69,7 +69,7 @@ mod watch;
 
 pub use config::{
     ChainProfile, Clock, EndpointConfig, Family, FamilyParams, Finality, GasBase, GasLine,
-    GasPerByte, GasPerItem, GasRows, GasTable, GasVerify, Limits, ListedDex, ListedToken,
+    GasPerByte, GasPerItem, GasRows, GasTable, GasVerify, L1Fee, Limits, ListedDex, ListedToken,
     PositionReader, RuntimeChoice, SdkConfig,
 };
 pub use error::SdkError;
@@ -320,6 +320,17 @@ impl Sdk {
                 return Err(SdkError::Argument);
             }
             if p.family_params.as_ref().is_some_and(|f| !f.fits(p.family)) {
+                return Err(SdkError::Argument);
+            }
+            // an L1 data fee model is an EVM chain's (plan T38)
+            if p.l1_fee.is_some() && p.family != Family::Evm {
+                return Err(SdkError::Argument);
+            }
+            // a disabled kind is a UA kind's name or `pqz` (owner 2026-11-22)
+            if p.disabled_kinds
+                .iter()
+                .any(|k| k != "pqz" && !scaas_ua::KINDS.iter().any(|x| x.name == k))
+            {
                 return Err(SdkError::Argument);
             }
             // the DEX list and the wrapper list hold addresses (CLI-SGN-35)

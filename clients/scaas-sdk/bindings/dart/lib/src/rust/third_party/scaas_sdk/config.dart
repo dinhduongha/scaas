@@ -12,7 +12,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'config.freezed.dart';
 
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `RuntimeChoice`, `SdkConfig`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A chain as the app's release pins it (spec §4).
 class ChainProfile {
@@ -74,6 +74,17 @@ class ChainProfile {
   /// `Sdk::open`
   final FamilyParams? familyParams;
 
+  /// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
+  /// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+  /// `Sdk::open` on another family)
+  final L1Fee? l1Fee;
+
+  /// the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
+  /// and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
+  /// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
+  /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
+  final List<String> disabledKinds;
+
   const ChainProfile({
     required this.key,
     required this.family,
@@ -96,6 +107,8 @@ class ChainProfile {
     required this.dexes,
     required this.wrappers,
     this.familyParams,
+    this.l1Fee,
+    required this.disabledKinds,
   });
 
   @override
@@ -120,7 +133,9 @@ class ChainProfile {
       verifierPolicy.hashCode ^
       dexes.hashCode ^
       wrappers.hashCode ^
-      familyParams.hashCode;
+      familyParams.hashCode ^
+      l1Fee.hashCode ^
+      disabledKinds.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -147,7 +162,9 @@ class ChainProfile {
           verifierPolicy == other.verifierPolicy &&
           dexes == other.dexes &&
           wrappers == other.wrappers &&
-          familyParams == other.familyParams;
+          familyParams == other.familyParams &&
+          l1Fee == other.l1Fee &&
+          disabledKinds == other.disabledKinds;
 }
 
 /// One endpoint of a profile's RPC or gateway list (CLI-RPC-02): `{url, class, label, auth}`; `auth` belongs to this endpoint
@@ -545,6 +562,12 @@ class GasVerify {
           margin == other.margin &&
           perItem == other.perItem &&
           line == other.line;
+}
+
+/// An L1 data fee model (plan T38).
+enum L1Fee {
+  /// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
+  opStack,
 }
 
 /// The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor

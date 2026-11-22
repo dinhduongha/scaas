@@ -21,13 +21,17 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
 | SCaaS testnet (private reference chain) | 7622 | `scaas-testnet` (Solidity `amsterdam`, [NET-EVM-06](#NET-EVM-06)) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
 | Anvil (tests) | 31337 (also 1337) | — | — | depth | BUILT (dev only) |
 | Gnosis Chain | 100 | `gnosis` (`amsterdam`; Pectra since 2025-04-30, then Fusaka; deploy after its Glamsterdam fork) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
-| Celo | 42220 | `celo` (`amsterdam`; the chain's fork level is not re-measured; deploy after its Glamsterdam fork) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
+| Celo | 42220 | `celo` (`amsterdam`; `prague` by the probe of 2026-11-22, runtime 65,536 B, block 30 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled, owner 2026-11-22, decisions CLI-SDK-32; deploy after its Glamsterdam fork) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
 | BNB Smart Chain | 56 | `bsc` (`amsterdam`; Mendel = Osaka since 2026-04-28; deploy after its Glamsterdam fork) | BNB (~0.05 gwei) | `tag finalized` (BEP-126 fast finality, ~1 s), quorum ≥ 2 | seeded `draft` |
 | Polygon PoS | 137 | `polygon` (`amsterdam`; runs the Osaka opcode set today; deploy after its Glamsterdam fork) | POL (~250–300 gwei) | `tag finalized` (milestones, ~3–6 s); `safe` unsupported | seeded `draft` |
-| Base | 8453 | `base` (`amsterdam`; Azul since 2026-05-28; deploy after its Glamsterdam fork) | ETH (~0.005 gwei) + L1 data fee | `l1_batch`: `safe` ~90 s, `finalized` ~16 min | seeded `draft` |
+| Base | 8453 | `base` (`amsterdam`; Azul since 2026-05-28; block 40 M on mainnet: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled there, none on Base Sepolia (120 M), owner 2026-11-22, decisions CLI-SDK-32; deploy after its Glamsterdam fork) | ETH (~0.005 gwei) + L1 data fee | `l1_batch`: `safe` ~90 s, `finalized` ~16 min | seeded `draft` |
 | Avalanche C-Chain, Fuji | 43114, 43113 | `avalanche-mainnet`, `avalanche-testnet` (`amsterdam`; Cancun today, no Amsterdam; a single contract earlier under [NET-EVM-18](#NET-EVM-18)) | AVAX; a transaction pays at least half its gas limit | `tag finalized` (= `safe`, the settled block, ~5 s) | seeded `draft`, [NET-EVM-16](#NET-EVM-16) |
 | Polkadot Hub; Paseo; Westend | 420420419; 420420417; 420420421 | `polkadot-hub-mainnet`, `polkadot-hub-testnet`, `polkadot-hub-westend` (`amsterdam`; REVM, 24,576-B runtime cap) | DOT; gas folds weight and the storage deposit | `tag finalized` (GRANDPA) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes and the measurement, [NET-EVM-17](#NET-EVM-17) |
 | Moonbeam; Moonbase Alpha | 1284; 1287 | `moonbeam-mainnet`, `moonbeam-testnet` (second, after Polkadot Hub) | GLMR; storage-growth gas | `tag finalized` (relay-finalized) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes, [NET-EVM-17](#NET-EVM-17) |
+| Ethereum; Sepolia | 1; 11155111 | `ethereum-mainnet`, `ethereum-testnet` (`amsterdam`; mainnet `osaka` today, Sepolia at Amsterdam since its fork: runtime 65,536 B created and 65,537 B refused, init 131,072 B accepted and 131,073 B refused; no contract in `src/` above them, the size study `docs/research/2026-11-22-evm-size-64k.md`, decisions CLI-SDK-32 (3)) | ETH, type 2 | `tag finalized` (gap 61–95 blocks, ~13–19 min, one sample) | seeded `draft` (SDK plan T40; probes H1–H8 first sample 2026-11-22) |
+| OP Mainnet; OP Sepolia | 10; 11155420 | `op-mainnet`, `op-testnet` (`amsterdam`; `osaka` today, block 40 M; `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled, owner 2026-11-22) | ETH, type 2 + L1 data fee (`l1_fee = "op-stack"`) | `tag finalized` (gap 523–654 blocks, ~19–22 min) | seeded `draft` |
+| Arbitrum One; Arbitrum Sepolia | 42161; 421614 | `arbitrum-mainnet`, `arbitrum-testnet` (`amsterdam`; `osaka` today; a transaction at most 32,000,000 gas, ArbGasInfo; the header's 2^50 is no block cap; `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled, owner 2026-11-22) | ETH, type 2; the L1 component inside `eth_estimateGas` | `tag finalized` (gap ~3,200 blocks, ~15–18 min) | seeded `draft` |
+| Linea; Linea Sepolia | 59144; 59141 | `linea-mainnet`, `linea-testnet` (`amsterdam`; `osaka` today, block 2,000 M) | ETH, type 2; `linea_estimateGas` prices the L1 part | `tag finalized` from a provider that serves L1 finality (the chain's own RPC: gap ~400 blocks mainnet, ~5,700 Sepolia); other providers answered `finalized` = head (H5 FAIL) | seeded `draft` |
 
 - **Gnosis Chain (100)** is the recommended public chain for B2B: native gas is xDAI, a stable-value coin, so gas
   costs are predictable in unit, though their size still follows the gas price (the often-quoted < $0.001/tx is not a
@@ -104,7 +108,11 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
   probe runs one foreground sample per invocation; the 24-h and 7-day windows are the operator's scheduler calling it, never a
   background loop.
 
-Other EVM chains (Ethereum L1, Arbitrum, Optimism, Linea) are **unsupported until
+Ethereum L1, OP Mainnet, Arbitrum One and Linea have `draft` profiles since SDK plan T40 (Ethereum Classic dropped by the
+owner on 2026-11-22, decisions CLI-SDK-32: it has no `finalized` block; its profiles in
+`smartcontracts/evm/legacy/chains/`) (the rows above,
+`smartcontracts/evm/src/chains/<key>/profile.json`, SPECIFIED until their 7-day probe windows and a deployment pass; one
+sample of each probe in `clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt`). Any other EVM chain is **unsupported until
 configured**: no profile, no finality gate, no tested deployment. A chain becomes supported only through a chain
 profile with a measured finality gate, an RPC quorum and a passing deployment. Reference values for such a profile,
 to be re-measured before use: Ethereum L1 12-s slots, finality = 2 epochs (~12.8 min); Arbitrum One / Base sequencer
@@ -311,7 +319,9 @@ state gas) exceeds 2^24, up to about 115.7 M simulated for the largest implement
 
 <a id="NET-EVM-18"></a>**NET-EVM-18** — **On a chain without the Amsterdam fork a contract deploys only when its `amsterdam`
 build fits that chain** (owner 2026-11-21, ARCH-POS-19 Q1 "per contract"; the five conditions a controller call of
-[ARCH-POS-20](../decisions.md#ARCH-POS-20) C5, revised after the review; SPECIFIED). NET-EVM-06 is unchanged: one compile
+[ARCH-POS-20](../decisions.md#ARCH-POS-20) C5, revised after the review; the five checks **BUILT** on branch `chains-arweave`
+(plan T4: `smartcontracts/evm/script/forkcheck.py`, its test `script/test_forkcheck.py`, the fixtures `test/forkcheck/`, the gate
+step `forkcheck`; their application to `PqChatStore` is SPECIFIED, plan T6). NET-EVM-06 is unchanged: one compile
 target, `amsterdam`. The deploy script checks before it sends: (1) the runtime and init code are within the chain's caps; (2)
 the deploy transaction is within the chain's live block or transaction cap at the chain's own pricing; (3) an **allow-list**
 scan: every byte in code position of the runtime and init code is an opcode the chain's fork defines, the code walked with each
@@ -327,6 +337,25 @@ deploy time. Before a mainnet deploy, the chain's testnet runs a real round trip
 client). A contract that fails (3) or (5) waits and goes to the owner: a build for an older fork changes NET-EVM-06, and a missing
 precompile means [ARCH-POS-18](../decisions.md#ARCH-POS-18)'s software path, never a disabled kind. A whole
 SCaaS set still waits for the chain's Amsterdam fork. Design: the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §4.5.
+How it is built (controller calls, ARCH-POS-20 Change of T4): a profile states its fork and caps in
+`smartcontracts/evm/src/chains/<key>/profile.json` (`evmFork`, `codeSizeLimit`, `initCodeSizeLimit`, `txGasCap` (null: none) and
+the recorded `blockGasLimit`; a key without the file is refused by name, `FORKCHECK_PROFILE`, except the reset chain `scaas-testnet`
+and a local anvil `local-…-testnet`, which are `amsterdam`; `avalanche-mainnet` and `avalanche-testnet` are `cancun`, 24,576 B and
+49,152 B, no transaction cap), and `deploy.sh` refuses a whole set on any other fork (`FORKCHECK_SET_FORK`); a contract declares its precompiles in
+`smartcontracts/evm/release-data/<Contract>.json` (`precompiles`: address, input, known output; a file without the list is
+refused, and an empty list is refused when the code holds `CALL`, `CALLCODE`, `DELEGATECALL` or `STATICCALL` in code
+position); the scan cannot see code a contract builds at run time (`SSTORE2.write` assembles its blob's init code in memory:
+`PUSH2`, `DUP1`, `PUSH1`, `CODECOPY`, `RETURN`, all Cancun), which check (4) covers by running the writes; the control is red only for its missing opcode (its deploy green, its call an execution error and its receipt status 0;
+else `FORKCHECK_CONTROL`), and the gate step `forkcheck` also runs it green at `osaka`, where that green run under the
+Cancun expectation is void; check (4) runs only the cases of the contract under deploy (each entry's artifact its init code and runtime, at
+least one case; else `FORKCHECK_CASES`); the scan places code by the compiler's source-map instruction count, then solc's `INVALID`, then the runtime (in the
+init code), then the data sections the compiler's legacy assembly lists (`forge build --extra-output evm.legacyAssembly`; none
+without it), then the CBOR metadata (in the runtime), and refuses anything else, a second sub-assembly (code the walk does not
+reach) included; `DUPN`, `SWAPN` and `EXCHANGE`
+(EIP-8024), which solc 0.8.37 does not emit, are bytes the walk cannot place; chain reads take the strict majority of the node
+list on the value used, never a whole answer (a block's hash and gas limit at a number 16 below the head a strict majority
+reaches, a code, a call's answer, a receipt's consensus fields; a height, an estimate or a fee is the number a strict majority
+reports at least). Each refusal is named `FORKCHECK_*`.
 
 **Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before
 Glamsterdam).** A release is one `CREATE2` of the whole implementation in the registrar's transaction. Under EIP-8037 the

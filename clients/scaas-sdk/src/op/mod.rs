@@ -370,6 +370,23 @@ pub(crate) async fn final_number(pool: &EvmPool, p: &ChainProfile) -> Result<u64
     Ok(a.value)
 }
 
+/// `KindDisabled` where the chain's profile disables `name` (owner 2026-11-22, ARCH-POS-18 confirmed): a UA kind's name, or
+/// `pqz` for the PQZ token and key attachment; checked before anything is signed.
+pub(crate) fn kind_enabled(profile: &ChainProfile, name: &str) -> Result<(), SdkError> {
+    if profile.disabled_kinds.iter().any(|k| k == name) {
+        return Err(SdkError::KindDisabled);
+    }
+    Ok(())
+}
+
+/// [`kind_enabled`] of UA kind `kind` (by its name in `scaas-ua`'s table; a kind not in it has no name to disable).
+pub(crate) fn ua_kind_enabled(profile: &ChainProfile, kind: u16) -> Result<(), SdkError> {
+    match scaas_ua::KINDS.iter().find(|k| k.kind == kind) {
+        Some(k) => kind_enabled(profile, k.name),
+        None => Ok(()),
+    }
+}
+
 /// The profile's final block (spec §13.5).
 pub(crate) fn final_block(p: &ChainProfile) -> BlockChoice {
     match p.finality {

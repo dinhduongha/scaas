@@ -834,6 +834,8 @@ SDK's `vault` stays the seed vault; `pqvault-core`'s calls are the spec's
 wrapped once to its own UA KEM key (ML-KEM-1024 + X25519); no seed-derived vault key exists; a personal vault is never
 rekeyed to add a member: sharing from it is a new shared vault and a copy of the chosen live items** (owner 2026-11-17,
 ruling "(a)", its sharing clause replaced by O1 (c) the same day). SPECIFIED. The bytes are [CLI-PQV-09](#CLI-PQV-09)'s.
+Single notes are shared through a share box: one shared vault per recipient set, created on the first share and reused,
+each later share one `createItems` copy (controller call 2026-11-21, within O1 (c)). SPECIFIED.
 
 <a id="CLI-PQV-03"></a>**CLI-PQV-03** — **Metadata reduction: titles, usernames, URLs, folders, tags, item types, vault names
 and settings only inside ciphertexts and `sealedInfo`; padding buckets always; batch writes for imports and migrations;
@@ -864,7 +866,13 @@ record with its parameter set's id; neither the seed nor the passphrase alone op
 a wrong passphrase is detected by an AEAD check before any item is opened; the passphrase is never stored or sent;
 forgetting it loses the vault; the choice is a flag in state with no value and no hint; versions written before a change
 stay under the old passphrase** (owner 2026-11-17, P2, changing V9). SPECIFIED. The mechanics are
-[CLI-PQV-10](#CLI-PQV-10)'s.
+[CLI-PQV-10](#CLI-PQV-10)'s. **Biometric unlock per device, opt-in** (owner 2026-11-21, O7 (b)): a client may keep
+`Argon2id`'s output `P_k`, never the passphrase, wrapped by a device-keystore key behind a biometric access policy; it is
+off by default, turned on per device, and on that device the device key and the seed then open the vault (the client says
+so when it is turned on); `passKdf = 1` is Argon2id 64 MiB / 3 / 4 (owner 2026-11-21, O8). SPECIFIED. **The passphrase's
+bytes** (controller call 2026-11-21, the Fable code review F4): RFC 8265's OpaqueString before Argon2id: non-ASCII spaces to
+U+0020, Unicode NFC, UTF-8; empty or a control character refused (`PassphraseInvalid`). BUILT in clientkeys (`passphraseBytes`)
+and reproduced by `ua-rs` (`tests/pqvault_pass.rs`), pinned by `smartcontracts/vectors/pqvault/pass.json` `normalization`.
 
 <a id="CLI-PQV-08"></a>**CLI-PQV-08** — **A migration tool moves the live items to vaults under a new seed and says that the
 old ciphertexts stay on chain and every secret must be changed at its service; until the audit round that covers the
@@ -879,7 +887,10 @@ from `K_v` with the key-wrap constant and its usage in the AAD, and a `file` ite
 under `K_v`; every key handle has one usage, `Derive`, `Data` or `KeyWrap`; a personal vault held by `ua_secret(seed, FN-DSA-512 by
 default, PQV_ACCOUNT, i)`, index 0 the index vault listing the user's vaults** (controller call, owner may override).
 SPECIFIED. Exact bytes: [spec §6](../superpowers/specs/2026-11-17-pqvault.md#6-cryptography); every client reproduces
-`smartcontracts/vectors/pqvault/`.
+`smartcontracts/vectors/pqvault/`. **`sealedInfo`'s padding** (owner 2026-11-21, the Fable
+code review F12): to 1,024 B, the smallest bucket, so its size does not show `prev` or a longer name; past 1,024 B the next power
+of two, at most 16,384 B; 1,052 B sealed, about 1.18 M state gas more than a 256-B bucket per vault or epoch record. The chain
+does not enforce it. BUILT in clientkeys (`padInfo`), reproduced by `ua-rs`.
 
 <a id="CLI-PQV-10"></a>**CLI-PQV-10** — **The passphrase's mechanics: a change, or turning it on or off, is an admin's rekey
 of the same members with a fresh salt; the history is as strong as the weakest epoch that links to it, so before a rekey

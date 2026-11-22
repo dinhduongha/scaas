@@ -202,18 +202,21 @@ rule names PQZ and Zether. PqChat's own rule is stricter and binds every PqChat 
 an event store would break; reads by `eth_call` on any node, while logs need an index that pruned and public RPCs bound or drop; one
 reader for `chain` and `chainstore`.
 
-**Cost of the choice** ([E], Cancun pricing, derived from opcode costs, to be measured in plan T8):
+**Cost of the choice** (measured in plan T8; envelopes of non-zero bytes; each row at a new hint, then at a warm one). Cancun:
+receipts' `gasUsed` on `anvil --hardfork cancun` (the gate step `chatstore-cancun`). Amsterdam: the pins of
+`test/pqchat/PqChatStoreGas.t.sol` (`isolate = true`), regular + EIP-8037 state gas. The two are never compared. The event-only
+column stays an estimate ([E]).
 
-| Envelope (signer) | State (SSTORE2) | Event only | Ratio |
-|---|---:|---:|---:|
-| 2,400 B (a 1,024-B bucket, FN-DSA-512) | ≈ 0.64 M gas | ≈ 0.08 M | ≈ 8 × |
-| 5,100 B (a 1,024-B bucket, ML-DSA-65) | ≈ 1.22 M gas | ≈ 0.15 M | ≈ 8 × |
-| 24,416 B (the largest) | ≈ 5.4 M gas | ≈ 0.6 M | ≈ 9 × |
+| Envelope (signer) | Cancun, state (SSTORE2) | Amsterdam, regular + state | Event only [E] | Ratio (Cancun) |
+|---|---:|---:|---:|---:|
+| 2,400 B (a 1,024-B bucket, FN-DSA-512) | 618,331 / 601,231 (was ≈ 0.64 M [E]) | 177,048 + 4,248,810 / 177,048 + 4,150,890 | ≈ 0.08 M | ≈ 8 × |
+| 5,100 B (a 1,024-B bucket, ML-DSA-65) | 1,175,119 / 1,158,019 (was ≈ 1.22 M [E]) | 351,128 + 8,410,410 / 351,128 + 8,312,490 | ≈ 0.15 M | ≈ 8 × |
+| 24,416 B (the largest) | 5,422,078 / 5,404,978 (was ≈ 5.4 M [E]) | 1,586,072 + 37,933,290 / 1,586,072 + 37,835,370 | ≈ 0.6 M | ≈ 9 × |
 
-The state figure is dominated by the code deposit (200 gas per byte, 32,000 per `CREATE`), then calldata (16 per byte); the
-list slot and the count add ≈ 27,000–44,000. At C-Chain's live `baseFeePerGas` of 7.5 gwei, an upper bound since Helicon, the
-5,100-B row costs at most ≈ 0.009 AVAX; the price actually paid is lower and is measured. For comparison, the same row on an
-Amsterdam chain is 0.35 M regular + 8.31 M state gas (pqchat.md §12).
+The state figure is dominated by the code deposit (200 gas per byte at Cancun, 32,000 per `CREATE`), then calldata (16 per byte);
+the new hint's list slot costs 17,100 more than a warm one at Cancun. At C-Chain's live `baseFeePerGas` of 7.5 gwei, an upper bound
+since Helicon, the 5,100-B row costs at most ≈ 0.009 AVAX; the price actually paid is lower and is measured. The Amsterdam rows
+equal `PqChat`'s own `storeMessage` rows (pqchat.md §12): the same SSTORE2 write of the same payload.
 
 ### 5.3 The contract (CTR-CHAT-22)
 
@@ -266,9 +269,10 @@ The client sends the same envelope it sends to every other listed store (UA-7 P2
 `postMessage`. `receipt` is off by default while a chain store is listed (CLI-PQC-06); `typing` never goes to a chain store.
 **Relay** (CTR-CHAT-19): the write is unsigned, so the node relays it only when paid through `RelayFeeRouter` or under the operator's
 lane policy, never for unsigned spam by default; the node's call-table row checks the target's runtime code hash against the release
-data, as it checks a `PqChat` instance by the factory (plan T9; the rule goes in `docs/node/job-api.md` when built). No SCaaS set
-is deployed on Avalanche, so no `RelayFeeRouter` is there: the paths today are the operator's lane policy, or the user's own
-account (AVAX), which shows the user's address beside the hint on chain (a stated residual, §9).
+data, as it checks a `PqChat` instance by the factory (plan T9; the rule: [job-api.md](../../node/job-api.md#pqchatstore-calls)); the paid
+path, a `RelayFeeRouter` inner call `storeMessage` to the store's address, is built in the node (review P3-5) for a chain that has
+both. No SCaaS set is deployed on Avalanche, so no `RelayFeeRouter` is there: the paths today are the operator's lane policy, or the
+user's own account (AVAX), which shows the user's address beside the hint on chain (a stated residual, §9).
 
 ### 5.5 Listing and reading (C4)
 
@@ -640,6 +644,30 @@ refuse a duplicate pair; a private genesis hash repeated under a new chain id is
 `OpenFactory` and `PqVault` on `avalanche-mainnet` or `avalanche-testnet`; an audit lists every digest that binds `chain_uid` and
 whether it binds the chain id; and `chain-uids.json` gains the field that marks a chain as private (ours), since its rows carry only
 `network` and `testnet` today.
+
+<a id="t1-digest-audit"></a>**§8.1 T1's digest audit** (branch `chains-arweave`, EVM contracts under `src/`, `legacy/` out). The field
+is `private` (true for a chain SCaaS runs) on every `chain-uids.json` row; `homeChainKinds` there is the deploy gate's one list.
+Revised after Fable's code review (P1-2): the first pass was a grep for hashes over `chainUid` and missed two registry records;
+the second is a full pass over every `portableDigest(` caller, every typehash, every `hex"1901"`, `toTypedDataHash`,
+`ecrecover` / `tryRecover`, `isValidSignature`, `requireAuthorized` and `requirePortable*` site, each domain traced to where it
+is built. The registry's `requireAuthorized` adds no chain to a derived signer's `uaMessage`: its chain binding is the
+caller's digest's.
+
+| Digest or read | Binds `chain_uid` | Binds the chain id | On a shared genesis |
+|---|---|---|---|
+| `SaltedEIP712` domains (`EIP712Domain(name,version,chainId,verifyingContract,salt)`, salt = `chain_uid`): every `mtx*` envelope of `MetaTxBase` / `UAMetaTxBase` (tokens, `GovernanceRouter` and its `UA*` operations with a `chainUid` field, its `UA_SET_*` words), `UARegistry`'s `uaAuthDigest` (native signers), `UAStore`, `SCaaSDex`, `SCaaSDexLiquidityModule`, `MandateWallet`, `SmartKeyAccount`, the ERC-7739 answers of both wallets | yes | yes, `block.chainid` live | told apart |
+| `UAKinds.msigUpdateDigest`: `UAMsigUpdate(ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock)` under the portable domain, checked by `UARegistry.updateMsig` (`chainUid` equal to its own, the next version) | yes | **no** | refused: `UARegistry` in `homeChainKinds` (review P1-2) |
+| `UAKinds.pqzScopedKeyDigest` (`UAPqzScopedKey`, the `R_REG` proof) and `pqzScopedKeyRecordDigest` (`UAPqzScopedKeyRecord`, `setPqzScopedKey`'s signature): `chainUid`, `token` (0 for class 2, `offchain-shared`), no registry address | yes | **no** | refused: `UARegistry` (review P1-2); a token scope also by `OpenFactory` |
+| `LiquidityLib.separator` (the DEX order domain), `UAKinds`' chain-bound domain | yes | yes | told apart |
+| Typed words inside those domains that repeat `chain_uid` (`AuditorConsent`, PQZ `RollOver`, `PqzAuth`, `PqzVerdict` (also a `chainId` field), the governance `UA_SET_ALLOWED` / `UA_SET_DENIED` / `UA_SET_CHAIN_ENTRIES` words); Zether `ZetherRollOver`, `ZetherSetRollOverMode` | yes, or none | yes, by the domain | told apart |
+| The UA registry's other portable records (`UAPortableRecord`, `UARegistration`, `UAKemRecord`, `UAPqzKey`, `UAPqzKeyRecord`, `UAPqzKeyVersion`, `UAPqzKeyVersionRecord`, `UAMembership`) | no | no | chain-neutral by design (CTR-UA-07) |
+| PQZ and Zether transcripts and tags (`PqzCore` entry and op tags, `PqzLayer`, `ZetherLayer`, `ZetherDisclosure`) | where named | yes, `block.chainid` in the hash | told apart |
+| PqChat's portable domain (`EIP712Domain(name,version)`, "SCaaS PqChat"): `PqChatSession`, `PqTopic` (`homeChain`), `EntryRef` (`chainUid`) | yes | **no** | refused: `PqChat` in `homeChainKinds` |
+| `OpenFactory` release, approval and DEX keys (`keccak256(tag, chainUid, factory, …)`): storage keys and addresses, not signatures (approvals are written by the admin's own chain-bound transaction) | yes | no | refused: `OpenFactory` |
+| `ComplianceRegistry` admin operations | a word check | by the caller's transaction or the router's `mtx` | told apart (it checks no signature itself) |
+| PqVault records (`homeChain`; on branch `pqvault-v`, not in this tree) | yes | **no** | refused: `PqVault` |
+| `RescueVault` (`EIP712Domain(name,version,verifyingContract)`), the UA portable domain ("SCaaS UA Portable") | no | no | chain-neutral by design: replay on every chain is the rule |
+| `chainEnv()` reads (`IFactoryToken.ChainEnv.chainUid`) | a read | no field | a read, no digest |
 
 ## 9. Threat model
 

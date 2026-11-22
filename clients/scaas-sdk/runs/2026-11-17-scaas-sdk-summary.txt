@@ -188,3 +188,22 @@ rpc-test | 7f156ac72 | 0 | 203 passed, 0 failed, 10 ignored (20 binaries)
 docs | 7f156ac72 | 0 | -
 node-e2e | 7f156ac72 | 143 | -
 # node-e2e rc=143 at 7f156ac72: 25 tests in parallel OOM-killed at the 6 GB cap (kernel oom-kill in capped's scope); the step runs 10 at a time since e80c39854, on the merged tree
+# sdk-evm-profiles: ck-test | 46eabe7f5 | 0 | node: 537 pass, 0 fail, 4 skipped
+# sdk-evm-profiles: ua-test | 287e83eb2 | 0 | 601 passed, 0 failed, 3 ignored (59 binaries)
+# sdk-evm-profiles: ua-clippy | 287e83eb2 | 0 | -
+# sdk-evm-profiles: bind-dart | 7104a069f | 0 | dart: +14:
+# sdk-evm-profiles: ffi | 7104a069f | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+# sdk-evm-profiles: mutants-check | cd3b6c03e | 0 | -
+# cli rc=101 at 8f9d35bf1: one_command_per_sdk_call_both_ways names five SDK calls without a command (Account::pqz_decoy_candidates, register_target, ua_line; UaLine::key_target, pqz_target), merged into this branch's base 6e7e71142 from ua-rs-sign (535bf1dcb); fixed on sdk-complete by b7a34aff6, not in T38 / T40's scope
+# sdk-evm-profiles: cli | baf175492 | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
+# sdk-evm-profiles: rpc-test | baf175492 | 0 | 204 passed, 0 failed, 10 ignored (21 binaries)
+# sdk-evm-profiles: rpc-wasm | baf175492 | 0 | -
+# sdk-evm-profiles: rpc-clippy | baf175492 | 0 | -
+# sdk-evm-profiles: sdk-clippy | baf175492 | 0 | -
+# sdk-evm-profiles: bind-gen | baf175492 | 0 | -
+# sdk-evm-profiles: features | baf175492 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+# sdk-evm-profiles: sdk-test | baf175492 | 0 | 399 passed, 0 failed, 16 ignored (37 binaries)
+# sdk-test rc=137 at baf175492: systemd-oomd killed it at 08:16 under memory pressure (sdk-complete building beside it), not a test failure; rerun at J=-j1 green (the sdk-test row)
+# cli: the rc=101 note above is closed by baf175492 (git cherry-pick -x of sdk-complete's b7a34aff6): cli rc=0 at baf175492
+# node build at 129380772 (the merged tree, CAPPED_MEM=6G, cargo build --locked --offline -j2): rc=0, Finished in 3m 19s; log runs/2026-11-22-sdk-evm-profiles-node-build.log (git-ignored)
+# sdk-evm-profiles: docs | 1cba8f84a | 0 | -

@@ -129,7 +129,11 @@ calls, owner may override).
   otherwise take the home slot with wraps or a `sealedInfo` the others cannot open. A change of `(passKdf, passSalt)` is
   therefore always an admin's signed record.
 - Dropping a member that left is an admin's rekey; with no admin left, membership and keys are frozen (items stay
-  writable under the last epoch).
+  writable under the last epoch). An admin that left an epoch or was removed from it rekeys and removes no more
+  (`PqVaultNotAdmin`), and a child whose author was removed from the parent no longer completes
+  (`PqVaultRemovedKept(parent, author)`), the same rule as PqChat's in the shared base (controller call 2026-11-21, the
+  Fable code review F1, F2, F7). An admin that is no member (an `msig`) is removable (F3). The admin model itself is the
+  owner's (2026-11-21: several admins, only admins rekey).
 - Views such as `versionAt(bytes32,uint32)` share PqChat's selectors; the node keeps rows for writes only.
 
 ## 6. Items and versions
@@ -159,7 +163,10 @@ PqChat's, [CTR-CHAT-14](pqchat.md#CTR-CHAT-14)). Refusals `PqVaultNotMember`, `P
 padding bucket plus salt and tag) makes `latestRange`'s page bound hold on every chain. A replica takes writes under any
 complete epoch it holds, in its own order; it orders nothing. A member that left an epoch writes no item under it either
 (owner 2026-11-17, the spec's O3 (b); `PqVaultNotMember`). A chain-bound vault has no replica
-([CTR-PQV-17](#CTR-PQV-17)).
+([CTR-PQV-17](#CTR-PQV-17)). A vault's or an epoch's `sealedInfo` is 28 to 16,412 bytes (at least a nonce and a tag, at
+most those around the 16,384-B bucket; `PqVaultShape`), so no write reads an unbounded record; the client's padding policy
+(1,024 B, owner 2026-11-21, CLI-PQV-09; about +1.18 M state gas per vault or epoch record against 256 B) is not the chain's
+(controller call 2026-11-21, the Fable code review F8). `removalAt` past the end is `PqVaultUnknown(epochId)` (F15).
 
 ## 7. Recovery from state alone
 

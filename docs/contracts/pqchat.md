@@ -339,12 +339,15 @@ review's P1-2 fix (b); **BUILT** on `ua-mtx-merge`, plan 3c, UNAUDITED; UA-7 spe
 - `remove(PqChatRemove r, UASig sig)`, `PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,
   bytes32 admin,uint64 nonce)`: `epochId` stored for `sessionId` and complete (`PqChatUnknown`, `PqChatIncomplete`), at
   home with no complete child (`PqChatEpochTaken`); `nextEpoch == epoch(epochId) + 1` (`PqChatEpochNumber`); 1 to
-  `REMOVE_MAX` = 16 members, strictly sorted (`PqChatShape`), each a member of `epochId` (`PqChatNotMember`); `admin` an
+  `REMOVE_MAX` = 16 members, strictly sorted (`PqChatShape`), each a member or an admin of `epochId` (`PqChatNotMember`; an
+  admin that is no member, an `msig`, is removable: controller call 2026-11-21, the PqVault code review F3); `admin` an
   admin of `epochId` (`PqChatNotAdmin`) who signs it; the nonce in the epoch scope `(sessionId, admin)` (`PqChatNonceUsed`).
   Anyone submits it, relayable with a fee of 0. The record and its `sigHash` are kept in state.
 - After it: a child of `epochId` completes (in `rekey` or the last `addWraps`) only if its members and admins hold no
-  removed UA (`PqChatRemovedKept(epochId, ua)`), whoever authors it; a removed member's rekey of `epochId` is refused
-  `PqChatNotMember`; dropping a removed member is a plain rekey, as dropping a leaver is.
+  removed UA and its author is none (`PqChatRemovedKept(epochId, ua)`); a removed member's rekey of `epochId` is refused
+  `PqChatNotMember`; dropping a removed member is a plain rekey, as dropping a leaver is. An admin that was removed from
+  `epochId` or left it makes no membership change and removes nobody (`PqChatNotAdmin`) (controller call 2026-11-21, the
+  PqVault code review F1, F2, F7, one rule in `PqGroupBase`; BUILT on `pqvault-v`, UNAUDITED).
 - `leave` stays the member's own flag (a child may keep a leaver); both may hold for one UA.
 - Recovery: `removedIn(epochId, ua)`, `removalCount(epochId)`, `removalAt(epochId, i)`; `PqChatRemoved(sessionId, epochId,
   admin, members)` notifies. A 2-person chat is unchanged.
@@ -660,7 +663,13 @@ Status: **PLANNED**.
 
 ## 15. The standalone store on 24,576-B chains
 
-Status: **SPECIFIED**, nothing built (the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part B; UNAUDITED).
+Status: **BUILT on branch `chains-arweave`** for the contract and its tests (`src/pqchat/{IPqChatStore,PqChatStore}.sol`,
+`test/pqchat/PqChatStore.t.sol`, the layout pin `test/v2/layout/PqChatStore.json`; plan T5) and for the deploy path
+(`script/deploy_pqchatstore.py` and its test, the release data `release-data/PqChatStore.json`, the gate step `chatstore-cancun`:
+a local `anvil --hardfork cancun --code-size-limit 24576` deploy with NET-EVM-18's five checks, a second deploy taken as done, the
+probes; plan T6), for the gas pins (`test/pqchat/PqChatStoreGas.t.sol`; plan T8) and for the node's row
+(contract kind `pqchatstore`, the code-hash check, [job-api.md](../node/job-api.md#pqchatstore-calls); plan T9); the deploys on public chains and their explorer verification are plan
+T10, on the owner's word (the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part B; UNAUDITED).
 
 <a id="CTR-CHAT-22"></a>**CTR-CHAT-22** — **`PqChatStore` is a standalone contract with exactly the store part of `PqChat`:
 it keeps each payload in state as one SSTORE2 blob of at most 24,576 B, and has no owner, admin, constructor argument or
@@ -680,8 +689,9 @@ store path, as HCS does on Hedera; the contract, its state storage and its bound
   ERC-165 for `IPqChatStore`; storage in the ERC-7201 namespace `scaas.pqchatstore`, its layout pinned; runtime ≤ 24,576 B
   asserted by a test and the size gate.
 - **State, never events only** ([CTR-CHAT-05](#CTR-CHAT-05)): recovery from state ([CTR-CHAT-14](#CTR-CHAT-14)) and one reader
-  for every chain store. Cost, an estimate at Cancun pricing to be measured: about 8 times an event-only store (about 1.22 M gas
-  for a 5,100-B envelope).
+  for every chain store. Cost, measured (plan T8): at Cancun 1,175,119 gas for a 5,100-B envelope at a new hint (about 8 times
+  an event-only store's estimate); at Amsterdam 351,128 regular + 8,410,410 state gas, pinned in `test/pqchat/PqChatStoreGas.t.sol`
+  (the spec's §5.2 holds every row).
 - **Deployment.** Through the deterministic deployer with salt 0, the `amsterdam` build under
   [NET-EVM-18](../networks/evm.md#NET-EVM-18), so one address on every chain. The release data pins the init-code hash, the
   runtime code hash and the address: the script refuses a local build whose init-code hash differs, and treats the address

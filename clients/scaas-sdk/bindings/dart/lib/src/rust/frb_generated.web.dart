@@ -730,6 +730,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   KeyRef dco_decode_box_autoadd_key_ref(dynamic raw);
 
   @protected
+  L1Fee dco_decode_box_autoadd_l_1_fee(dynamic raw);
+
+  @protected
   Limits dco_decode_box_autoadd_limits(dynamic raw);
 
   @protected
@@ -1286,6 +1289,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   KeyRef dco_decode_key_ref(dynamic raw);
 
   @protected
+  L1Fee dco_decode_l_1_fee(dynamic raw);
+
+  @protected
   Limits dco_decode_limits(dynamic raw);
 
   @protected
@@ -1514,6 +1520,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   KeyRef? dco_decode_opt_box_autoadd_key_ref(dynamic raw);
+
+  @protected
+  L1Fee? dco_decode_opt_box_autoadd_l_1_fee(dynamic raw);
 
   @protected
   PasskeyCreated? dco_decode_opt_box_autoadd_passkey_created(dynamic raw);
@@ -2599,6 +2608,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   KeyRef sse_decode_box_autoadd_key_ref(SseDeserializer deserializer);
 
   @protected
+  L1Fee sse_decode_box_autoadd_l_1_fee(SseDeserializer deserializer);
+
+  @protected
   Limits sse_decode_box_autoadd_limits(SseDeserializer deserializer);
 
   @protected
@@ -3301,6 +3313,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   KeyRef sse_decode_key_ref(SseDeserializer deserializer);
 
   @protected
+  L1Fee sse_decode_l_1_fee(SseDeserializer deserializer);
+
+  @protected
   Limits sse_decode_limits(SseDeserializer deserializer);
 
   @protected
@@ -3567,6 +3582,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   KeyRef? sse_decode_opt_box_autoadd_key_ref(SseDeserializer deserializer);
+
+  @protected
+  L1Fee? sse_decode_opt_box_autoadd_l_1_fee(SseDeserializer deserializer);
 
   @protected
   PasskeyCreated? sse_decode_opt_box_autoadd_passkey_created(
@@ -4911,6 +4929,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_box_autoadd_key_ref(KeyRef self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_l_1_fee(L1Fee self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_limits(Limits self, SseSerializer serializer);
 
   @protected
@@ -5796,6 +5817,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_key_ref(KeyRef self, SseSerializer serializer);
 
   @protected
+  void sse_encode_l_1_fee(L1Fee self, SseSerializer serializer);
+
+  @protected
   void sse_encode_limits(Limits self, SseSerializer serializer);
 
   @protected
@@ -6147,6 +6171,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   @protected
   void sse_encode_opt_box_autoadd_key_ref(
     KeyRef? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_l_1_fee(
+    L1Fee? self,
     SseSerializer serializer,
   );
 

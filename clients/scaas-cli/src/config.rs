@@ -97,6 +97,12 @@ struct Profile {
     wrappers: Vec<String>,
     /// a non-EVM family's own data (spec §8.7 rule 2), by its family's name; its fields' forms checked at `Sdk::open`
     family_params: Option<Fam>,
+    /// the chain's L1 data fee model (plan T38): `"OpStack"` on Base, Celo and OP; absent: none
+    #[serde(default)]
+    l1_fee: Option<scaas_sdk::L1Fee>,
+    /// the kinds the chain cannot carry, disabled by the owner (2026-11-22): UA kind names and `pqz`
+    #[serde(default)]
+    disabled_kinds: Vec<String>,
 }
 
 /// [`scaas_sdk::FamilyParams`] by name, one family per profile.
@@ -222,6 +228,8 @@ pub fn parse_profiles(text: &str) -> Result<Vec<ChainProfile>, Fail> {
             verifier_policy: pol(p.verifier_policy),
             dexes: p.dexes,
             wrappers: p.wrappers,
+            l1_fee: p.l1_fee,
+            disabled_kinds: p.disabled_kinds,
             family_params: p.family_params.map(fam),
         })
         .collect())
@@ -530,6 +538,22 @@ mod tests {
     const APTOS: &str = r#"{"aptos":{"chain_id":4,"package":"0x00000000000000000000000000000000000000000000000000000000000000aa"}}"#;
     const SOLANA: &str = r#"{"solana":{"program":"7DYCAhqwQSKqqL1h8V1XmY1BTcMWxrASQYKNMy87jeg3"}}"#;
     const SUI: &str = r#"{"sui":{"graphql":[{"url":"http://127.0.0.1:1","label":"g"},{"url":"http://127.0.0.1:2","label":"h"}],"graphql_policy":"strict_majority"}}"#;
+
+    /// A profile states its finality, the tag or a depth (owner 2026-11-22, ETC dropped, decisions CLI-SDK-32: no chain without
+    /// one): none, or a depth without its number, is `ProfilesRefused` (fail closed). Control: the tag and a depth load.
+    #[test]
+    fn a_profile_without_a_finality_depth_is_refused() {
+        assert_eq!(code(parse_profiles(P)), "Ok");
+        let depth = P.replace(r#""finality":"Finalized""#, r#""finality":{"Depth":12}"#);
+        assert_eq!(code(parse_profiles(&depth)), "Ok");
+        for bad in [
+            P.replace(r#""finality":"Finalized","#, ""),
+            P.replace(r#""finality":"Finalized""#, r#""finality":{"Depth":null}"#),
+            P.replace(r#""finality":"Finalized""#, r#""finality":{"depth":null}"#),
+        ] {
+            assert_eq!(code(parse_profiles(&bad)), "ProfilesRefused", "{bad}");
+        }
+    }
 
     #[test]
     fn family_params_are_read_by_name() {

@@ -154,7 +154,8 @@ impl ChainAdapter for EvmAdapter {
 
     async fn start_check(&self) -> Result<()> {
         for c in &self.chains {
-            c.uid().await?;
+            // NET-ALL-25 over the pair the RPC resolves (review P2-4): a profile without chain_uid is checked too
+            crate::config::check_resolved_pair(&self.key, c.number, c.uid().await?)?;
         }
         // proposed NODE-JOB-25: the configured services equal the contracts' entries, both directions, or the chain stops
         self.guard.load_services(&self.chains[0]).await
@@ -361,6 +362,40 @@ impl ChainAdapter for EvmAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Review P2-4: NET-ALL-25 at lane start over the pair the RPC resolves, so a profile without `chain_uid` is checked: the
+    /// private chain's genesis served under another chain id is `CHAIN_UID_PRIVATE`, the lane does not start; its twin, a
+    /// genesis of its own, starts.
+    #[tokio::test]
+    async fn an_unpinned_profile_is_checked_at_lane_start() {
+        let scaas: B256 = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"
+            .parse()
+            .unwrap();
+        for (id, zero, ok) in [(7623, scaas, false), (7624, B256::repeat_byte(0xa9), true)] {
+            let (url, _) = crate::chain::tests::fake_rpc_on(
+                |_| json!({"error": {"code": -32000, "message": "busy"}}),
+                id,
+                zero,
+            )
+            .await;
+            let cfg = ChainCfg {
+                evm_chain_number: id,
+                rpc_urls: vec![url],
+                chain_uid: None,
+                ..Default::default()
+            };
+            let lane = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random())
+                .unwrap();
+            let a = EvmAdapter::new(&cfg, vec![lane], Default::default()).unwrap();
+            let r = a.start_check().await;
+            if ok {
+                r.unwrap();
+            } else {
+                let e = r.unwrap_err().to_string();
+                assert!(e.contains(crate::config::CHAIN_UID_PRIVATE), "{e}");
+            }
+        }
+    }
 
     /// Fable recheck 3 R3-1: the health probe's first-endpoint head feeds the shared head of the chain's table (the lanes, the
     /// indexer and the venue check a failover endpoint against it). Control: before the probe it is 0.

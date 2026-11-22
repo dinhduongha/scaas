@@ -29,6 +29,11 @@ can start.
 `git commit --only -- <paths>`, with the session's attribution lines; no `Signed-off-by`. **No push, no merge.** No commit holding
 only `TODO.md`.
 
+## Run notes
+
+- 2026-11-21, controller call ([ARCH-POS-20](../../decisions.md#ARCH-POS-20) Change): delivered in two parts. **Part 1** (to `main` first): T0–T9, T11, T12, T16, T19. **Part 2**: T17, T20, and the owner's-word tasks T10, T13, T15, T18, T21. Each part ends with its own round-end matrix and a Fable code review before its pull request (T22 and T23 per part). Part 1 is self-contained: no rule text claims BUILT for a Part 2 piece; a Part 1 piece with no caller yet keeps a status that names its later user.
+- Part 1 runs on branch `chains-arweave` (commits `chains-arweave T<n>: <what>`), gate runner and logs in `runs/`.
+
 ## Global constraints (read before every task)
 
 - AGENTS.md: `cargo`, `forge`, `anvil`, `npm` through `scripts/capped`, **foreground**, never inside `timeout`, never in the
@@ -63,6 +68,7 @@ only `TODO.md`.
 | `forge-sets` | `script/pqz/at-set.sh others sensitive`, then `script/pqz/at-set.sh others modules` (round end; restore `PqzSet.sol`) |
 | `size` | `T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json; python3 ../../scripts/size_gate.py "$T"/sizes.json size-baseline.json` |
 | `deploy-py` | `python3 smartcontracts/evm/script/test_deploybook.py` and the new deploy-check tests |
+| `forkcheck` | `cd smartcontracts/evm && T=$(mktemp -d); cap forge build test/forkcheck --extra-output evm.legacyAssembly --out "$T"/out --cache-path "$T"/cache && cap python3 -I script/forkcheck.py exec cancun test/forkcheck/cases.json --out "$T"/out` (T4) |
 | `ck-test` | `cd clients/clientkeys && cap npm test` |
 | `ua-test` | `cd clients/ua-rs && cap cargo test C --all-features` |
 | `rpc-test` | `cd clients/scaas-rpc && cap cargo test C --all-features`, then `cargo clippy C --all-targets --all-features -- -D warnings` |

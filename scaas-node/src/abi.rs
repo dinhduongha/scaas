@@ -727,7 +727,7 @@ sol! {
     }
 
     /// `IOpenFactory.infoOf` (factory index spec §8.6): the record of a contract the chain's factory made, read for the generic
-    /// factory-class rule (`guard::Rule::FactoryClass`; `PqChat` is class 3, topics spec P45); no owner since round 3r R1.
+    /// factory-class rule (`guard::Rule::FactoryClass`; `PqChat` is class 3, topics spec P45; `PqVault` class 4, CTR-PQV-13); no owner since round 3r R1.
     #[derive(Debug)]
     interface IOpenFactory {
         struct Created {

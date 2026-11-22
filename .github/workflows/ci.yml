@@ -4,6 +4,8 @@
 #                  once, in the n2304-kmax4096 cell (the committed set, so its at-set run is the default-set `forge test`):
 #                  python3 -I ../../pqz-core/params/sets/gen_set.py --all --check (PqzSet.sol and every generated file equal set.toml's);
 #                  forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' (cold gas); FOUNDRY_PROFILE=scaas-testnet forge build;
+#                  python3 script/test_*.py; forge build src/pqchat/PqChatStore.sol test/forkcheck --extra-output evm.legacyAssembly --out "$T"/out;
+#                  script/forkcheck.py exec cancun test/forkcheck/cases.json, forkcheck.py control cancun, deploy_pqchatstore.py local (--out "$T"/out);
 #                  T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json; python3 ../../scripts/size_gate.py "$T"/sizes.json size-baseline.json
 #   contract-<family>: smartcontracts/scripts/test.sh <family> (unit and in-process tests; localnet e2e stays local), toolchains as local:
 #   contract-soroban:  test.sh soroban (cargo test)
@@ -45,7 +47,7 @@
 #                          core (plan T42: wallet with no fam-*: --lib core_only wallet_pairing bls_multi wallet_webauthn bip85 wallet_pq),
 #                          signers (--test groups_verify; tests/groups.rs, the generator, runs in the vectors cell), json (--test json), pq (--test pq --test ua_portable), wallet-mlock (wallet,mlock), zether-only (wallet,zether,mlock: --lib --test facade_zether),
 #                          pqz-n2048 (wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock: --lib --bin pqz-read --test pqz_read facade_pqz_state facade_pqz pqz_backup no_oracle) and the same + vectors
-#                          (facade_pqz_state facade_pqz pqz_backup no_oracle); the vectors cell also: cargo test --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows; git diff --exit-code (wallet_state.json stays what its generator writes)
+#                          (facade_pqz_state facade_pqz pqz_backup no_oracle), pqvault (--test pqvault_pass: the Argon2id reproducer of vectors/pqvault/pass.json); the vectors cell also: cargo test --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows; git diff --exit-code (wallet_state.json stays what its generator writes)
 #   ua-rs-features:        plan T42: in clients/ua-rs, bash runs/fam-sizes.sh: cargo build --locked --release --example fam_size with no family, each
 #                          fam-<row> alone and all on (wallet always), each probe's size printed
 #   ua-rs-targets:         compile only, no run (MD-5, plan T0 / T18), wasm32-unknown-unknown, aarch64-linux-android (NDK clang, API 24), aarch64-apple-ios (macOS): cargo build --locked --lib --target <t> <cell> in ua-rs
@@ -269,6 +271,17 @@ jobs:
       - name: forge build (scaas-testnet profile)
         if: matrix.set == 'n2304-kmax4096'
         run: FOUNDRY_PROFILE=scaas-testnet forge build
+      # the deploy tooling's own tests (script/test_*.py, offline) and NET-EVM-18's anvil runs: the fixtures at cancun with
+      # the CLZ control red, the control green at osaka and void there, PqChatStore's deploy path at cancun (review P3-7)
+      - name: script tests and the NET-EVM-18 anvil runs
+        if: matrix.set == 'n2304-kmax4096'
+        run: |
+          for t in script/test_*.py; do echo "## $t"; python3 "$t" || exit 1; done
+          T="$RUNNER_TEMP"/forkcheck
+          forge build src/pqchat/PqChatStore.sol test/forkcheck --extra-output evm.legacyAssembly --out "$T"/out --cache-path "$T"/cache
+          python3 -I script/forkcheck.py exec cancun test/forkcheck/cases.json --out "$T"/out
+          python3 -I script/forkcheck.py control cancun --out "$T"/out
+          python3 -I script/deploy_pqchatstore.py local --out "$T"/out
 
   contract-soroban:
     needs: changes
@@ -829,6 +842,9 @@ jobs:
           - cell: app-core
             features: --features app-core,vectors
             tests: --test app_core
+          - cell: pqvault
+            features: --no-default-features --features pqvault
+            tests: --test pqvault_pass
     defaults:
       run:
         working-directory: clients/ua-rs

@@ -1,0 +1,145 @@
+# PqVault plan Part V, V1-V9 (docs/superpowers/plans/2026-11-17-pqvault.md): task | step | commit | rc | counts
+# Logs: runs/2026-11-21-pqvault/<task>/<step>.log (git-ignored). "V<n> tree" = the tree of that task's commit.
+V1 | ua-rs-pqvault (clippy -D warnings + --test pqvault_pass, --no-default-features --features pqvault) | V1 tree | 0 | 3 passed 0 failed 0 ignored (cargo)
+V1 | clientkeys (npm test, test/pqvault.test.js included: the generator reproduces the four files) | V1 tree | 0 | 531 passed 0 failed 5 skipped (node)
+V1 mutants | src/pqvault.js, test/pqvault.test.js on the committed vectors | V1 tree | - | 10 of 10 killed: aad-no-home, vaultid-no-mode, keywrap-no-usage, seal-label-allowed, passkdf-unknown-ok, usage-unchecked, ct-max, ct-min, vkey-no-passkdf, mode2-ok
+V2 | forge test/pqvault (PqVaultTypes.t.sol; red first: PqVaultTypes.sol absent, compile error) | V2 tree | 0 | 6 passed 0 failed 0 skipped (forge)
+V3 | forge test/pqvault (red first: PqVault.sol absent, compile error) | V3 tree | 0 | 49 passed 0 failed 0 skipped (forge)
+V3 | forge test/governance --match-path SingletonRescue.t.sol (PqVault's rescue) | V3 tree | 0 | 3 passed 0 failed 0 skipped (forge)
+V3 mutants | runs/2026-11-21-pqvault/mutants.py (22, test/pqvault) | V3 tree | - | 21 killed; create-min-member-0 survived: equivalent (the creator must be a member, so no member is already PqVaultShape); its rekey twin rekey-min-member-0 killed
+V4 | forge test/pqvault (red first: 40 of the new item, batch and mode tests failed against the V3 stubs) | V4 tree | 0 | 70 passed 0 failed 0 skipped (forge)
+V4 mutants | mutants.py, the 19 item mutants (version, member, left, removed, epoch taken, incomplete, the record-vault equality in createItem, createItems and editItem, the three batch field equalities, an empty batch, each nonce mark, the two ciphertext bounds) | V4 tree | - | 19 of 19 killed
+V5 | forge test/pqvault (red first: 3 of PqVaultRecovery.t.sol failed against the itemsOf / latestRange stubs) | V5 tree | 0 | 75 passed 0 failed 0 skipped (forge)
+V5 mutants | latest-range-clamp, items-range-clamp, latest-not-latest, page-end | V5 tree | - | 4 of 4 killed
+V6 | forge test/pqvault PqVaultInvariant.t.sol (64 runs x depth 32, fail_on_revert) | V6 tree | 0 | 2 passed 0 failed 0 skipped (forge)
+V6 | forge test/pqvault PqVaultGas.t.sol (GAS_MEASURE=true, then pinned) | V6 tree | 0 | 8 passed 0 failed 0 skipped (forge)
+V6 | size (size_gate.py --self-test; forge build src --sizes; size_gate.py) | V6 tree | 0 | size gate: 0 error(s), 176 contracts; PqVault 30,152 B runtime, 30,845 B init
+V6 mutants | mutants.py, all 45 on the V6 tree (the gas pins left out of a mutant's run) | V6 tree | - | 44 killed; create-min-member-0 survived: equivalent (see V3)
+V7 | forge test/governance GovDeploy, SelectorAudit, SingletonRescue (red first: setPqVault absent, compile error) | V7 tree | 0 | 33 passed 0 failed 0 skipped (forge)
+V7 mutants | the (4, 0) switch dropped from _deployPqVault; PqVault's createItems row dropped from selector_audit.json | V7 tree | - | 2 of 2 killed (test_deployPqVaultPath; test_everySelectorIsClassified)
+V8 | node cargo test --lib (the pqvault, pqchat and instance-row tests) | V8 tree | 0 | 34 passed 0 failed 0 ignored (cargo)
+V8 | node cargo clippy --all-targets -D warnings | V8 tree | 0 | -
+V8 | node cargo test --test e2e pqvault_vault_items_and_recovery --ignored (anvil) | V8 tree | 0 | 1 passed 0 failed 0 ignored (cargo)
+V8 | clientkeys npm test (typed-ops: class 4; red first: 1 failing with class 3 only) | V8 tree | 0 | 531 passed 0 failed 5 skipped (node)
+V8 mutants | node_mutants.py (7: class, relay branch, unsigned policy x2, HEX_ARGS, class-4 config, a row) | V8 tree | - | 7 of 7 killed
+# Round matrix on the V8 tree (4c3e84f10), paused after forge-ua at the owner's priority (multi-gen-verify first); the rest waits for the go:
+matrix | forge-pqvault | 4c3e84f10 | 0 | 85 passed 0 failed 0 skipped (forge)
+matrix | forge-pqchat | 4c3e84f10 | 0 | 99 passed 0 failed 0 skipped (forge)
+matrix | forge-governance | 4c3e84f10 | 0 | 930 passed 0 failed 0 skipped (forge)
+matrix | forge-ua | 4c3e84f10 | 0 | 910 passed 0 failed 0 skipped (forge)
+V9 | blocked | - | - | the scaas-sdk T21 app-core surface (feature app-core, clients/scaas-sdk/src/app_core/) is not on this branch: no test through it can be written here; no commit
+# Fable code review of V1-V8 (20261121-fable-code-review-v1-v8.md): the fixes, one commit per finding group
+F1-F3,F7 | forge test/pqvault (red first: 4 new tests failed) | F1 tree | 0 | 88 passed 0 failed 0 skipped (forge)
+F1-F3,F7 | forge test/pqchat (red first: 3 new tests failed) | F1 tree | 0 | 102 passed 0 failed 0 skipped (forge)
+F1-F3,F7 mutants | completion-author-removed, live-admin-removed, live-admin-left (each against test/pqvault and test/pqchat), remove-admin-only-removable; rekey-admin-to-member and rekey-removed-admin re-pointed | F1 tree | - | 6 of 6 killed
+F4 | clientkeys node --test test/pqvault.test.js (red first: the new test failed) | F4 tree | 0 | 14 passed 0 failed (node); generator rerun: only pass.json changes (+ normalization)
+F4 | ua-rs --features pqvault clippy -D warnings + --test pqvault_pass (red first: compile error, the crate absent) | F4 tree | 0 | 4 passed 0 failed 0 ignored (cargo)
+F5 | ua-rs --features vectors --test pqvault_keys (a second implementation of keys.json, items.json, pqvAccount, nativeMember) | F5 tree | 0 | 5 passed 0 failed 0 ignored (cargo); clippy --all-targets --features vectors -D warnings rc 0
+F5 control | one byte of items.json's first ciphertext flipped (restored after) | F5 tree | 101 | items_keys_aad_ciphertexts FAILED: the reproducer can fail
+F6 | forge PqVaultInvariant.t.sol (red first: both positive controls failed, the old check() compared nothing between handler writes) | F6 tree | 0 | 4 passed 0 failed 0 skipped (forge), invariants 64 runs x depth 32
+P3 | forge test/pqvault (red first: test_removalAt_pastTheEnd, test_sealedInfoBounds) | P3 tree | 0 | 92 passed 0 failed 0 skipped (forge)
+P3 | clientkeys node --test test/pqvault.test.js (red first: the F12 and F9 tests) | P3 tree | 0 | 16 passed 0 failed (node)
+P3 | ua-rs --features vectors,pqvault --test pqvault_keys --test pqvault_pass (on the regenerated vectors) | P3 tree | 0 | 9 passed 0 failed 0 ignored (cargo)
+P3 mutants | create-info-min, epoch-info-max, removal-at-bound | P3 tree | - | 3 of 3 killed
+F10-F11 | node cargo test --lib (pqvault, pqchat, instance rows) | node tree | 0 | 10 passed 0 failed 0 ignored (cargo)
+F10-F11 | node cargo test --test e2e pqvault --ignored (mode 1 and mode 0 on anvil) | node tree | 0 | 2 passed 0 failed 0 ignored (cargo)
+F10 control | selector_audit.json's PqVault createItems row reclassified FACTORY (restored) | node tree | 101 | pqvault_rows_equal_the_contract_both_directions FAILED
+review | node cargo clippy --all-targets -D warnings (after F10, F11) | ec37cc39f | 0 | -
+F3-PqChat | forge test/pqchat (red first: test_adminOnlyMsigRemovable, PqChatNotMember) | F3c tree | 0 | 103 passed 0 failed 0 skipped (forge)
+F3-PqChat | forge test/pqvault | F3c tree | 0 | 92 passed 0 failed 0 skipped (forge)
+F3-PqChat mutant | remove-admin-only-removable re-pointed to PqGroupBase._removable (test/pqvault and test/pqchat) | F3c tree | - | killed
+F8/F12 rev | forge test/pqvault (red first: test_sealedInfoBounds, PqVaultShape at 28 B) | F12b tree | 0 | 92 passed 0 failed 0 skipped (forge)
+F8/F12 rev | clientkeys node --test test/pqvault.test.js (red first: the F12 test) | F12b tree | 0 | 16 passed 0 failed (node)
+F8/F12 rev | ua-rs --features vectors,pqvault --test pqvault_keys --test pqvault_pass | F12b tree | 0 | 9 passed 0 failed 0 ignored (cargo)
+F8/F12 rev | node cargo test --test e2e pqvault --ignored (both modes) | F12b tree | 0 | 2 passed 0 failed 0 ignored (cargo)
+F8/F12 rev mutants | create-info-min, epoch-info-max | F12b tree | - | 2 of 2 killed
+F12 1,024 B | clientkeys node --test test/pqvault.test.js (red first: the F12 test, 512 != 1024) | F12c tree | 0 | 16 passed 0 failed (node)
+F12 1,024 B | forge test/pqvault (red first: 4 gas rows; re-pinned from GAS_MEASURE) | F12c tree | 0 | 92 passed 0 failed 0 skipped (forge)
+F12 1,024 B | ua-rs --features vectors,pqvault --test pqvault_keys --test pqvault_pass | F12c tree | 0 | 9 passed 0 failed 0 ignored (cargo)
+F12 1,024 B | node cargo test --test e2e pqvault --ignored (both modes) | F12c tree | 0 | 2 passed 0 failed 0 ignored (cargo)
+# Merge of origin/ua-rs-sign (multi-gen-verify, e2842754b) as 08a57caf6, targeted suites on the merged tree (GATE_TAG=final). Between
+# 08a57caf6 and 1c6773d73 only test/pqvault changed (two merge fixes), which only forge-pqvault compiles; format sol rechecked at 1c6773d73.
+# The full round-end matrix was stopped at forge-confidential on the owner's decision (2026-11-21): chains-arweave's contract part merges first, then one matrix.
+merge | format | 08a57caf6 | 0 | -
+merge | docs | 08a57caf6 | 0 | -
+merge | docs-test | 08a57caf6 | 0 | -
+merge | ci-guards | 08a57caf6 | 0 | -
+merge | size | 08a57caf6 | 0 | size gate: 0 error(s), 179 contracts
+merge | clientkeys | af317db9e | 0 | 538 passed 0 failed (node)
+merge | ua-rs-pqvault | af317db9e | 0 | 4 passed 0 failed 0 ignored (cargo)
+merge | ua-rs-pqvault-vectors | af317db9e | 0 | 9 passed 0 failed 0 ignored (cargo)
+merge | node-clippy | af317db9e | 0 | -
+merge | forge-pqchat | af317db9e | 0 | 103 passed 0 failed 0 skipped (forge)
+merge | forge-top | af317db9e | 0 | 29 passed 0 failed 0 skipped (forge)
+merge | forge-modules | 50ca829ee | 0 | 35 passed 0 failed 0 skipped (forge)
+merge | uagas | 50ca829ee | 0 | 29 passed 0 failed 0 skipped (forge)
+merge | forge-account | 50ca829ee | 0 | 103 passed 0 failed 0 skipped (forge)
+merge | forge-pqvault (red first at 50ca829ee: test_gas_perVaultUaRegistration regular 459,203 vs 460,749; at 08a57caf6: compile error 9755, KindConfig arity) | 1c6773d73 | 0 | 92 passed 0 failed 0 skipped (forge)
+# combined round-end matrix after the chains-arweave merge at 74fe8ed74 (merge ddad464b5); final2 at edd582790 (the runner's testnet-build and node-e2e edits uncommitted then, committed in 31fe83b75), final3 at 31fe83b75
+final2 | chatstore-cancun | edd582790 | 0 | ok 3/3 (the CLZ control red at cancun)
+final2 | ci-guards | edd582790 | 0 | -
+final2 | deploy-py | edd582790 | 0 | 5 scripts exit 0; ok 43/43 (the tallies printed)
+final2 | docs | edd582790 | 0 | -
+final2 | docs-test | edd582790 | 0 | -
+final2 | forge-account | edd582790 | 0 | 103 passed 0 failed 0 skipped (forge)
+final2 | forge-as | edd582790 | 0 | 568 passed 0 failed 0 skipped (forge)
+final2 | forge-confidential | edd582790 | 0 | 5 passed 0 failed 0 skipped (forge)
+final2 | forge-factory | edd582790 | 0 | 2 passed 0 failed 0 skipped (forge)
+final2 | forge-fork | edd582790 | 0 | 0 passed 0 failed 1 skipped (forge)
+final2 | forge-gas | edd582790 | 0 | 406 passed 0 failed 1 skipped (forge)
+final2 | forge-governance | edd582790 | 0 | 942 passed 0 failed 0 skipped (forge)
+final2 | forge-hedera | edd582790 | 0 | 20 passed 0 failed 0 skipped (forge)
+final2 | forge-liquidity | edd582790 | 0 | 93 passed 0 failed 1 skipped (forge)
+final2 | forge-merge | edd582790 | 0 | 350 passed 0 failed 0 skipped (forge)
+final2 | forge-metatx | edd582790 | 0 | 549 passed 0 failed 1 skipped (forge)
+final2 | forge-modules | edd582790 | 0 | 35 passed 0 failed 0 skipped (forge)
+final2 | forge-p6f | edd582790 | 0 | 4 passed 0 failed 0 skipped (forge)
+final2 | forge-pqchat | edd582790 | 0 | 124 passed 0 failed 0 skipped (forge)
+final2 | forge-pqvault | edd582790 | 0 | 92 passed 0 failed 0 skipped (forge)
+final2 | forge-pqz | edd582790 | 0 | 694 passed 0 failed 4 skipped (forge)
+final2 | forge-pqzh | edd582790 | 0 | 42 passed 0 failed 0 skipped (forge)
+final2 | forge-research | edd582790 | 0 | 360 passed 0 failed 7 skipped (forge)
+final2 | forge-top | edd582790 | 0 | 29 passed 0 failed 0 skipped (forge)
+final2 | forge-ua | edd582790 | 0 | 1044 passed 0 failed 0 skipped (forge)
+final2 | forge-v2 | edd582790 | 0 | 756 passed 0 failed 0 skipped (forge)
+final2 | forge-wallet | edd582790 | 0 | 185 passed 0 failed 0 skipped (forge)
+final2 | forge-wrap | edd582790 | 0 | 324 passed 0 failed 0 skipped (forge)
+final2 | forge-zether | edd582790 | 0 | 478 passed 0 failed 4 skipped (forge)
+final2 | forkcheck | edd582790 | 0 | ok 9/9 (exec cancun 7/7, control at osaka 2/2; the CLZ control red at cancun)
+final2 | format | edd582790 | 0 | -
+final2 | node-clippy | edd582790 | 0 | -
+final2 | set-n2048-kmax1024-metatx | edd582790 | 0 | 184 passed 0 failed 0 skipped (forge)
+final2 | set-n2048-kmax1024-ua | edd582790 | 0 | 338 passed 0 failed 0 skipped (forge)
+final2 | set-n2560-kmax16384-metatx | edd582790 | 0 | 184 passed 0 failed 0 skipped (forge)
+final2 | set-n2560-kmax16384-ua | edd582790 | 0 | 338 passed 0 failed 0 skipped (forge)
+final2 | set-n2816-kmax65536-metatx | edd582790 | 0 | 184 passed 0 failed 0 skipped (forge)
+final2 | set-n2816-kmax65536-ua | edd582790 | 0 | 338 passed 0 failed 0 skipped (forge)
+final2 | uagas | edd582790 | 0 | 29 passed 0 failed 0 skipped (forge)
+final2 | testnet-build (red first: the whole tree under scaas-testnet OOM-killed at 4 GB, rc 143; now src and script) | edd582790 | 0 | -
+final2 | node (red: 26 adapters::algorand tests, smartcontracts/algorand/out missing in the worktree; rebuilt by build.sh algorand, artifacts.json --check ok) | edd582790 | 101 | 854 passed 26 failed 0 ignored (cargo)
+final2 | node-e2e (red: 26 forge-script deploys refused address(this), fixed in 46fb91a59; plain_rows_match_the_forge_abi without the pqchatstore arm, fixed in f62fa646b) | edd582790 | 101 | 0 passed 27 failed 0 ignored (cargo)
+final3 | node | 31fe83b75 | 0 | 887 passed 0 failed 75 ignored (cargo)
+final3 | node-clippy | 31fe83b75 | 0 | -
+final3 | node-e2e | 31fe83b75 | 0 | 27 passed 0 failed 0 ignored (cargo)
+merge | merge-pqvault mutants (the PqVault gate moved into _deployPqVault) | edd582790 | 0 | 2 mutants, 2 killed
+# final3 reruns after 46fb91a59 (DeployBook's table read under forge script): the 14 forge directories that compile the deploy code at the default set, and the set-sensitive metatx and ua tests at the three other sets, each set in its own git clone --shared of 9eca88a0e (clean, lib identical), side by side (owner 2026-11-22)
+final3 | forge-account | 9eca88a0e | 0 | 103 passed 0 failed 0 skipped (forge)
+final3 | forge-as | 9eca88a0e | 0 | 568 passed 0 failed 0 skipped (forge)
+final3 | forge-gas | 9eca88a0e | 0 | 406 passed 0 failed 1 skipped (forge)
+final3 | forge-governance | 9eca88a0e | 0 | 942 passed 0 failed 0 skipped (forge)
+final3 | forge-hedera | 9eca88a0e | 0 | 20 passed 0 failed 0 skipped (forge)
+final3 | forge-liquidity | 9eca88a0e | 0 | 93 passed 0 failed 1 skipped (forge)
+final3 | forge-merge | 9eca88a0e | 0 | 350 passed 0 failed 0 skipped (forge)
+final3 | forge-metatx | 9eca88a0e | 0 | 549 passed 0 failed 1 skipped (forge)
+final3 | forge-modules | 9eca88a0e | 0 | 35 passed 0 failed 0 skipped (forge)
+final3 | forge-pqz | 9eca88a0e | 0 | 694 passed 0 failed 4 skipped (forge)
+final3 | forge-ua | 9eca88a0e | 0 | 1044 passed 0 failed 0 skipped (forge)
+final3 | forge-v2 | 9eca88a0e | 0 | 756 passed 0 failed 0 skipped (forge)
+final3 | forge-wrap | 9eca88a0e | 0 | 324 passed 0 failed 0 skipped (forge)
+final3 | forge-zether | 9eca88a0e | 0 | 478 passed 0 failed 4 skipped (forge)
+final3 | set-n2048-kmax1024-metatx | 9eca88a0e | 0 | 184 passed 0 failed 0 skipped (forge)
+final3 | set-n2560-kmax16384-metatx | 9eca88a0e | 0 | 184 passed 0 failed 0 skipped (forge)
+final3 | set-n2816-kmax65536-metatx | 9eca88a0e | 0 | 184 passed 0 failed 0 skipped (forge)
+final3 | set-n2048-kmax1024-ua | 9eca88a0e | 0 | 338 passed 0 failed 0 skipped (forge)
+final3 | set-n2560-kmax16384-ua | 9eca88a0e | 0 | 338 passed 0 failed 0 skipped (forge)
+final3 | set-n2816-kmax65536-ua | 9eca88a0e | 0 | 338 passed 0 failed 0 skipped (forge)

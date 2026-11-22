@@ -100,6 +100,8 @@ async fn setup_auth(
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: None,
     };
     let sdk = Sdk::open(SdkConfig {

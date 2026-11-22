@@ -803,6 +803,7 @@ impl Config {
         if v.timeout_ms == 0 || v.max_response_bytes == 0 {
             bail!("pqz_verifier: timeout_ms and max_response_bytes above 0");
         }
+        check_chain_pairs(&self.chains, CHAIN_UIDS)?;
         self.validate_store_sections(&seen)
     }
 
@@ -1311,6 +1312,83 @@ impl ChainCfg {
     }
 }
 
+/// NET-ALL-25's refusals at start, by name: two EVM profiles of one pair (chain id, `chain_uid`); a profile with the genesis of a
+/// private chain of `chain-uids.json` (a chain SCaaS runs) under another chain id.
+pub const CHAIN_PAIR_TAKEN: &str = "CHAIN_PAIR_TAKEN";
+pub const CHAIN_UID_PRIVATE: &str = "CHAIN_UID_PRIVATE";
+/// `smartcontracts/evm/chain-uids.json`: the listed chains, the private ones marked (NET-ALL-25), the deploy gate's table too.
+const CHAIN_UIDS: &str = include_str!("../../smartcontracts/evm/chain-uids.json");
+
+/// NET-ALL-25 at start, over the profiles that set `chain_uid` (an unset one is the RPC's block 0, NODE-GW-07): no two EVM
+/// profiles share the pair (chain id, `chain_uid`), and none has a private chain's genesis under another chain id.
+fn check_chain_pairs(chains: &[ChainCfg], table: &str) -> Result<()> {
+    let private = private_rows(table)?;
+    let mut pairs = std::collections::HashMap::new();
+    for c in chains.iter().filter(|c| c.is_evm()) {
+        let Some(uid) = c.chain_uid else { continue };
+        let key = c.chain_key();
+        if let Some(k) = pairs.insert((c.evm_chain_number, uid), key.clone()) {
+            bail!("{CHAIN_PAIR_TAKEN}: chain {key} repeats the (chain id, chain_uid) pair of {k} (NET-ALL-25)");
+        }
+        check_private(&private, &key, c.evm_chain_number, uid)?;
+    }
+    Ok(())
+}
+
+/// (chain id, chain_uid, key) of the `chain-uids.json` rows marked private.
+fn private_rows(table: &str) -> Result<Vec<(u64, B256, String)>> {
+    let t: serde_json::Value = serde_json::from_str(table).context("chain-uids.json")?;
+    let mut private = Vec::new();
+    for r in t["chains"]
+        .as_array()
+        .context("chain-uids.json: no chains")?
+    {
+        if r["private"].as_bool() == Some(true) {
+            let id = r["chainId"]
+                .as_u64()
+                .context("chain-uids.json: a chainId")?;
+            let uid: B256 = r["chainUid"]
+                .as_str()
+                .unwrap_or_default()
+                .parse()
+                .context("chain-uids.json: a chainUid")?;
+            private.push((id, uid, r["key"].as_str().unwrap_or_default().to_string()));
+        }
+    }
+    Ok(private)
+}
+
+fn check_private(private: &[(u64, B256, String)], key: &str, id: u64, uid: B256) -> Result<()> {
+    if let Some((_, _, p)) = private.iter().find(|(i, u, _)| *u == uid && *i != id) {
+        bail!("{CHAIN_UID_PRIVATE}: chain {key} has the genesis of the private chain {p}; a chain we run that forks is a new chain with its own genesis (NET-ALL-25)");
+    }
+    Ok(())
+}
+
+/// The pairs the lanes resolved at start (process-wide: every adapter's), by chain key.
+static RESOLVED_PAIRS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<(u64, B256), String>>,
+> = std::sync::LazyLock::new(Default::default);
+
+/// NET-ALL-25 at lane start (review P2-4), over the pair as the RPC resolved it (block 0's hash, NODE-GW-07), so a profile
+/// without `chain_uid` is checked too: a private chain's genesis under another chain id is `CHAIN_UID_PRIVATE`; a pair another
+/// chain key resolved first is `CHAIN_PAIR_TAKEN`. Fail closed: the lane does not start.
+pub fn check_resolved_pair(key: &str, id: u64, uid: B256) -> Result<()> {
+    check_private(&private_rows(CHAIN_UIDS)?, key, id, uid)?;
+    let mut m = RESOLVED_PAIRS
+        .lock()
+        .map_err(|_| anyhow::anyhow!("{CHAIN_PAIR_TAKEN}: the resolved pairs are unreadable"))?;
+    match m.get(&(id, uid)) {
+        Some(k) if k != key => {
+            bail!("{CHAIN_PAIR_TAKEN}: chain {key} resolves the (chain id, chain_uid) pair of {k} (NET-ALL-25)")
+        }
+        _ => {
+            m.insert((id, uid), key.to_string());
+        }
+    }
+    Ok(())
+}
+
 /// `UARegistry.MAX_GENERATION`: the deepest generation of a line (spec 2026-11-19-registry-verify-only-kinds §11.1).
 pub const MAX_GENERATION: u8 = 16;
 /// CTR-UA-65's refusals of `ua_registries` at start, by name: an entry of another chain (`chainUid()`), not exactly one generation
@@ -1458,6 +1536,61 @@ rpc_urls = ["http://a"]
 signer_key_env = "K"
 finality = { mode = "depth", depth = 1, quorum = 1 }
 "#;
+
+    /// NET-ALL-25 at start: no two EVM profiles share the pair (chain id, `chain_uid`), and a profile with a private chain's
+    /// genesis (`chain-uids.json` `private`) under another chain id is refused; the two Avalanche profiles (one genesis, 43114
+    /// and 43113) are accepted. Each refusal beside its twin.
+    #[test]
+    fn chain_pair_and_private_genesis_at_start() {
+        const AVAX: &str = "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b";
+        const SCAAS: &str = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13";
+        let (u, v) = (
+            format!("{:#x}", B256::repeat_byte(0x77)),
+            format!("{:#x}", B256::repeat_byte(0x78)),
+        );
+        let two = |a: (&str, u64, &str), b: (&str, u64, &str)| -> Result<Config> {
+            let chain = |(fam, id, uid): (&str, u64, &str)| {
+                format!("[[chains]]\nfamily = \"{fam}\"\nevm_chain_number = {id}\nchain_uid = \"{uid}\"\nrpc_urls = [\"http://a\"]\nsigner_key_env = \"K\"\nfinality = {{ mode = \"depth\", depth = 1, quorum = 1 }}\n")
+            };
+            let head = OK.split("[[chains]]").next().unwrap();
+            let c: Config = toml::from_str(&format!("{head}{}{}", chain(a), chain(b)))?;
+            c.validate().map(|_| c)
+        };
+        let err = |r: Result<Config>| r.map(|_| ()).unwrap_err().to_string();
+        two(("evm", 43114, AVAX), ("evm", 43113, AVAX)).unwrap();
+        // one pair in two profiles: within a family one chain key (held before NET-ALL-25), across families by the pair
+        assert!(err(two(("evm", 43114, AVAX), ("evm", 43114, AVAX))).contains("configured twice"));
+        let e = err(two(("evm", 296, &u), ("hedera", 296, &u)));
+        assert!(e.contains(CHAIN_PAIR_TAKEN), "{e}");
+        two(("evm", 296, &u), ("hedera", 296, &v)).unwrap(); // twin: another genesis
+                                                             // the private chain's genesis under another chain id, with or without its own profile beside it
+        let e = err(two(("evm", 7623, SCAAS), ("evm", 43114, AVAX)));
+        assert!(e.contains(CHAIN_UID_PRIVATE), "{e}");
+        let e = err(two(("evm", 7622, SCAAS), ("evm", 7623, SCAAS)));
+        assert!(e.contains(CHAIN_UID_PRIVATE), "{e}");
+        two(("evm", 7622, SCAAS), ("evm", 7623, &u)).unwrap(); // twin: the private chain itself, a new chain its own genesis
+    }
+
+    /// Review P2-4: the pair as resolved at lane start: a second chain key on a pair another resolved is refused, the same key
+    /// again is not (every lane of a chain resolves it), the private chain's genesis under another chain id is refused.
+    #[test]
+    fn resolved_pairs_at_lane_start() {
+        let u = B256::repeat_byte(0xa7);
+        check_resolved_pair("evm:4242", 4242, u).unwrap();
+        check_resolved_pair("evm:4242", 4242, u).unwrap();
+        let e = check_resolved_pair("hedera:4242", 4242, u)
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains(CHAIN_PAIR_TAKEN), "{e}");
+        check_resolved_pair("hedera:4242", 4242, B256::repeat_byte(0xa8)).unwrap(); // twin: another genesis
+        let scaas: B256 = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"
+            .parse()
+            .unwrap();
+        let e = check_resolved_pair("evm:7623", 7623, scaas)
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains(CHAIN_UID_PRIVATE), "{e}");
+    }
 
     #[test]
     fn parses_with_defaults() {

@@ -1610,4 +1610,8 @@ test("the router creations: the instance row, named config and initCall", () => 
   assert.throws(() => op.call(td, d.signature, { initCall: d.extra.initCall }), /not the signed initHash/);
   assert.throws(() => instanceInitCall(7, 0, config), /class 7 kind 0: no named config/);
   assert.throws(() => instanceInitCall(3, 0, { ...config, admin: 1 }), /no field admin/);
+  // PqVault plan V8 (CTR-PQV-02): class 4, kind 0 names the same `initialize(bytes32 owner)`; kind 1 of it has no named config
+  assert.equal(instanceInitCall(4, 0, config), initCall);
+  assert.throws(() => instanceInitCall(4, 1, config), /class 4 kind 1: no named config/);
+  assert.throws(() => instanceInitCall(4, 0, { ...config, admin: 1 }), /no field admin/);
 });

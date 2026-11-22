@@ -205,6 +205,8 @@ fn profile(graphql: &[&str], policy: scaas_rpc::Policy) -> ChainProfile {
         dexes: vec![],
         wrappers: vec![],
         tokens: vec![token(&reg(0), "USDC", 6), token(&reg(1), "VND", 0)],
+        l1_fee: None,
+        disabled_kinds: vec![],
         family_params: Some(FamilyParams::Sui {
             graphql: graphql.iter().map(|u| endpoint(u)).collect(),
             graphql_policy: policy,
