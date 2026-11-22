@@ -4,7 +4,9 @@
 //! (`mldsa65`, the registry's cached expanded key) and C (`fndsa512`), each with a KEM key; the home H and the replicas R1,
 //! R2 listed through the factory; U, the home's code at an address the factory never made (`anvil_setCode`: unlisted); the
 //! SDK's port with every read and prepared write recorded, and a read rewritten when a fixture asks (a named endpoint
-//! serving another answer, mutants 10 and 11).
+//! serving another answer, mutants 10 and 11). Two more profiles of the same chain: [`FINAL`] reads two blocks below the
+//! latest (mutant 13's reorg), [`DISC`] lists a discovered endpoint first, a JSON-RPC [`Proxy`] that serves `kemKeyAt` of
+//! B as C's (mutant 15), the named anvil second.
 use crate::common::chain::*;
 use async_trait::async_trait;
 use pqchat_core::net::{Net, SdkNet};
@@ -16,7 +18,117 @@ use scaas_sdk::app_core::{AppCall, AppCore};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::OpState;
 use serde_json::Value;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+/// The profile whose final block is two below the latest (mutant 13).
+pub const FINAL: &str = "anvil-final";
+/// The depth of [`FINAL`]'s final block.
+pub const DEPTH: u64 = 2;
+/// The profile whose first endpoint is a discovered one, the [`Proxy`] (mutant 15).
+pub const DISC: &str = "anvil-disc";
+
+/// A discovered endpoint in front of the anvil: every JSON-RPC request forwarded, an `eth_call` whose calldata starts with
+/// `swap.0` sent as `swap.1` instead (the substituted answer), counted.
+pub struct Proxy {
+    pub url: String,
+    target: Arc<Mutex<String>>,
+    pub swap: Arc<Mutex<Option<(String, String)>>>,
+    pub swapped: Arc<AtomicU64>,
+}
+
+fn rewrite(v: &mut Value, swap: &Option<(String, String)>, n: &AtomicU64) {
+    if let Value::Array(a) = v {
+        a.iter_mut().for_each(|x| rewrite(x, swap, n));
+        return;
+    }
+    let Some((from, to)) = swap else { return };
+    if v["method"] != "eth_call" {
+        return;
+    }
+    for k in ["data", "input"] {
+        if let Some(d) = v["params"][0][k].as_str() {
+            if d.to_ascii_lowercase().starts_with(from.as_str()) {
+                v["params"][0][k] = Value::String(to.clone());
+                n.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+    }
+}
+
+async fn serve(
+    mut s: tokio::net::TcpStream,
+    target: Arc<Mutex<String>>,
+    swap: Arc<Mutex<Option<(String, String)>>>,
+    n: Arc<AtomicU64>,
+) {
+    let mut buf = vec![];
+    let mut chunk = [0u8; 8192];
+    let (head, len) = loop {
+        let Ok(k) = s.read(&mut chunk).await else {
+            return;
+        };
+        if k == 0 {
+            return;
+        }
+        buf.extend_from_slice(&chunk[..k]);
+        if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+            let head = String::from_utf8_lossy(&buf[..i]).to_ascii_lowercase();
+            let len = head
+                .lines()
+                .find_map(|l| l.strip_prefix("content-length:"))
+                .and_then(|x| x.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            break (i + 4, len);
+        }
+    };
+    while buf.len() < head + len {
+        let Ok(k) = s.read(&mut chunk).await else {
+            return;
+        };
+        if k == 0 {
+            return;
+        }
+        buf.extend_from_slice(&chunk[..k]);
+    }
+    let Ok(mut v) = serde_json::from_slice::<Value>(&buf[head..head + len]) else {
+        return;
+    };
+    rewrite(&mut v, &swap.lock().unwrap().clone(), &n);
+    let url = target.lock().unwrap().clone();
+    let Ok(r) = reqwest::Client::new().post(url).json(&v).send().await else {
+        return;
+    };
+    let body = r.bytes().await.unwrap_or_default();
+    let h = format!(
+        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+        body.len()
+    );
+    let _ = s.write_all(h.as_bytes()).await;
+    let _ = s.write_all(&body).await;
+}
+
+impl Proxy {
+    /// Listening on `127.0.0.1:0`; its target set later (the anvil's URL is known once it runs).
+    pub async fn start() -> Proxy {
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        let p = Proxy {
+            url,
+            target: Arc::new(Mutex::new(String::new())),
+            swap: Arc::new(Mutex::new(None)),
+            swapped: Arc::new(AtomicU64::new(0)),
+        };
+        let (t, sw, n) = (p.target.clone(), p.swap.clone(), p.swapped.clone());
+        tokio::spawn(async move {
+            while let Ok((s, _)) = l.accept().await {
+                tokio::spawn(serve(s, t.clone(), sw.clone(), n.clone()));
+            }
+        });
+        p
+    }
+}
 
 /// A read's answer rewritten: `(item, answer) -> answer`.
 pub type Tamper = Box<dyn Fn(&str, Value) -> Value + Send + Sync>;
@@ -79,6 +191,7 @@ impl Rec {
 
 pub struct World {
     pub l: Local,
+    pub proxy: Proxy,
     pub a: Me,
     pub b: Me,
     pub c: Me,
@@ -95,9 +208,34 @@ pub struct World {
 const U: &str = "0x00000000000000000000000000000000000e2e00";
 
 pub async fn world() -> World {
-    let (l, m, more) = local_with(
+    let proxy = Proxy::start().await;
+    let (purl, ptarget) = (proxy.url.clone(), proxy.target.clone());
+    let extra = move |rpc: &str, uid: &str, reg: &str, fac: &str| {
+        *ptarget.lock().unwrap() = rpc.to_string();
+        use scaas_rpc::Class::{Discovered, Named};
+        vec![
+            profile_of(
+                FINAL,
+                &[(rpc, Named)],
+                uid,
+                reg,
+                fac,
+                scaas_sdk::Finality::Depth(DEPTH),
+            ),
+            profile_of(
+                DISC,
+                &[(&purl, Discovered), (rpc, Named)],
+                uid,
+                reg,
+                fac,
+                scaas_sdk::Finality::Depth(0),
+            ),
+        ]
+    };
+    let (l, m, more) = local_with_extra(
         &[(0, true, FNDSA512), (1, true, KIND), (2, true, FNDSA512)],
         2,
+        &extra,
     )
     .await;
     let code = cast(&["code", "--rpc-url", &l.rpc, &l.home]);
@@ -124,6 +262,7 @@ pub async fn world() -> World {
         r2: more[1].clone(),
         u: U.into(),
         l,
+        proxy,
         app,
         net,
         txs: Mutex::new(vec![]),
@@ -139,6 +278,18 @@ impl World {
     /// A device over `store`.
     pub fn device_with(&self, store: Arc<MemoryStore>) -> Arc<PqChat> {
         PqChat::with_net(self.app.clone(), self.net.clone(), store, self.l.conf())
+    }
+
+    /// A device over a fresh store serving only the profile `chain` of the same chain (its contracts the same).
+    pub fn device_on(&self, chain: &str) -> Arc<PqChat> {
+        let mut conf = self.l.conf();
+        conf.chains[0].chain = chain.into();
+        PqChat::with_net(
+            self.app.clone(),
+            self.net.clone(),
+            Arc::new(MemoryStore::new()),
+            conf,
+        )
     }
 
     pub fn sref(&self, sid: &str) -> SessionRef {
@@ -191,13 +342,20 @@ impl World {
     }
 
     /// `b` landed with every `addWraps` the quote sizes.
-    pub async fn land_all(&self, pq: &Arc<PqChat>, mut b: Built) -> Built {
+    pub async fn land_all(&self, pq: &Arc<PqChat>, b: Built) -> Built {
+        self.land_all_calls(pq, b).await.0
+    }
+
+    /// [`World::land_all`], with the writes it landed in their order (a replica's copy sends the same calldata).
+    pub async fn land_all_calls(&self, pq: &Arc<PqChat>, mut b: Built) -> (Built, Vec<AppCall>) {
         self.land(b.call.clone()).await;
+        let mut calls = vec![b.call.clone()];
         let s = self.sref(&b.session_id);
         while let Some(c) = pq.next_wraps(&s, &mut b, &self.l.payer).await.unwrap() {
-            self.land(c).await;
+            self.land(c.clone()).await;
+            calls.push(c);
         }
-        b
+        (b, calls)
     }
 
     /// Raw calldata `data` sent to `to` by anvil's funded deployer (the hostile harness and the replicas' copies): its
