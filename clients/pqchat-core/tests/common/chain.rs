@@ -33,7 +33,10 @@ pub const PASS: &str = "river-otter-7 ünï";
 pub const DEPLOYER: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 pub const DEPLOYER_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 pub const CHAIN: &str = "anvil";
+/// `mldsa65` (cached expanded key)
 pub const KIND: u16 = 0x0131;
+/// `fndsa512`
+pub const FNDSA512: u16 = 0x0132;
 /// EIP-7825's per-transaction cap
 pub const TX_CAP: u64 = 1 << 24;
 
@@ -282,9 +285,47 @@ fn payer_of(seed: &str) -> KeyRef {
     }
 }
 
-/// The deployed chain with the seed's UAs `accounts` registered (`(account, with a KEM key)`), then reloaded under
-/// `--enable-tx-gas-limit` after its positive control; the SDK over it and the UAs in their order.
+/// The deployed chain with the seed's UAs `accounts` registered (`(account, with a KEM key)`, `mldsa65`), then reloaded
+/// under `--enable-tx-gas-limit` after its positive control; the SDK over it and the UAs in their order.
 pub async fn local(accounts: &[(u32, bool)]) -> (Local, Vec<Me>) {
+    let a: Vec<(u32, bool, u16)> = accounts.iter().map(|(n, k)| (*n, *k, KIND)).collect();
+    let (l, m, _) = local_with(&a, 0).await;
+    (l, m)
+}
+
+/// `instances` more `PqChat` instances listed through the factory's `createInstance` (anyone may call it; release
+/// `(3, 0, 1)`, no owner), each by its own salt: their addresses.
+fn create_instances(rpc: &str, factory: &str, instances: usize) -> Vec<String> {
+    let init = cast(&["calldata", "initialize(bytes32)", ZERO]);
+    (0..instances)
+        .map(|i| {
+            let salt = cast(&["keccak", &format!("scaas.pqchat.e2e.{i}")]);
+            let args = [
+                factory,
+                "createInstance((uint16,uint16,uint64),bytes32,bytes)(address)",
+                "(3,0,1)",
+                &salt,
+                &init,
+            ];
+            let mut c = vec!["call", "--rpc-url", rpc, "--from", DEPLOYER_ADDRESS];
+            c.extend_from_slice(&args);
+            let at = cast(&c).to_ascii_lowercase();
+            let mut s = vec!["send", "--rpc-url", rpc, "--private-key", DEPLOYER];
+            s.extend_from_slice(&args);
+            cast(&s);
+            at
+        })
+        .collect()
+}
+
+const ZERO: &str = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+/// [`local`] with each UA's signer kind (`(account, with a KEM key, kind)`) and `instances` more listed instances (their
+/// addresses, created before the reload).
+pub async fn local_with(
+    accounts: &[(u32, bool, u16)],
+    instances: usize,
+) -> (Local, Vec<Me>, Vec<String>) {
     let port = std::net::TcpListener::bind("127.0.0.1:0")
         .and_then(|l| l.local_addr())
         .expect("a free port")
@@ -322,11 +363,15 @@ pub async fn local(accounts: &[(u32, bool)]) -> (Local, Vec<Me>) {
         "0x8ac7230489e80000",
     ]);
     println!("[chain] deployed: registry {registry}, factory {factory}, PqChat {home}");
+    let more = create_instances(&rpc, &factory, instances);
+    if !more.is_empty() {
+        println!("[chain] instances listed through the factory: {more:?}");
+    }
     let mut mes = vec![];
     {
         let (sdk, seed) = sdk_at(&rpc, &uid, &registry, &factory).await;
-        for (account, kem) in accounts {
-            mes.push(register(&sdk, &seed, *account, *kem).await);
+        for (account, kem, kind) in accounts {
+            mes.push(register_kind(&sdk, &seed, *account, *kem, *kind).await);
         }
         println!("[chain] {} UAs registered", mes.len());
     }
@@ -368,6 +413,7 @@ pub async fn local(accounts: &[(u32, bool)]) -> (Local, Vec<Me>) {
             payer,
         },
         mes,
+        more,
     )
 }
 
@@ -398,10 +444,15 @@ pub async fn land(l: &Local, call: scaas_sdk::app_core::AppCall) -> u64 {
 
 /// The seed's UA of `account` registered on `sdk`'s chain (with a KEM key, version 0, or without), self-relayed: its `Me`.
 pub async fn register(sdk: &Arc<Sdk>, seed: &str, account: u32, kem: bool) -> Me {
+    register_kind(sdk, seed, account, kem, KIND).await
+}
+
+/// [`register`] with the signer `kind`.
+pub async fn register_kind(sdk: &Arc<Sdk>, seed: &str, account: u32, kem: bool, kind: u16) -> Me {
     use scaas_sdk::account::{Register, RegisterAttrs};
     let key = KeyRef::Ua {
         seed: seed.into(),
-        kind: KIND,
+        kind,
         account,
         index: 0,
     };
