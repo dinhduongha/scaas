@@ -618,6 +618,7 @@ calls! { cx;
     "app-core kem-wrap-to-key" "AppCore::kem_wrap_to_key" {kem_pk: Vec<u8>, key: H<Arc<AppKey>>, label: Vec<u8>, aad: Vec<u8>} => js(cx.app()?.kem_wrap_to_key(kem_pk, key.0, label, aad)?);
     "app-core kem-unwrap" "AppCore::kem_unwrap" {account: KeyRef, key_version: u64, wrap: AppWrap, label: Vec<u8>, aad: Vec<u8>, usage: AppKeyUsage} => handle(cx.app()?.kem_unwrap(account, key_version, wrap, label, aad, usage)?, key_shown());
     "app-core app-root-key" "AppCore::app_root_key" {account: KeyRef} => handle(cx.app()?.app_root_key(account)?, key_shown());
+    "app-core account-ua" "AppCore::account_ua" {account: KeyRef} => hexed("ua", &cx.app()?.account_ua(&account)?);
     "app-core destroy" "AppCore::destroy" {key: H<Arc<AppKey>>} => { cx.app()?.destroy(key.0)?; ok() };
     "app-core sign-app-record" "AppCore::sign_app_record" {account: KeyRef, path: AppPath, typed_json: String} @sign => {
         cx.confirm(json!({"sign": "an app record", "account": account, "path": path, "typed_data": typed_json}))?;

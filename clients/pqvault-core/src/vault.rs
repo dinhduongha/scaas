@@ -316,6 +316,8 @@ pub struct Seen {
 pub struct MigrationPlan {
     pub items: Vec<(B32, B32)>,
     pub skipped_tombstones: u64,
+    /// latest versions that do not open on this device: they cannot be copied (shown, not moved)
+    pub unreadable: Vec<(B32, B32)>,
     pub warning: &'static str,
 }
 
@@ -1693,6 +1695,7 @@ impl PqVault {
     /// user reads before anything is signed.
     pub fn migration_plan(from: &[(B32, Vec<ItemVersion>)]) -> MigrationPlan {
         let mut items = vec![];
+        let mut unreadable = vec![];
         let mut skipped = 0;
         for (vault, latest) in from {
             for x in latest {
@@ -1700,13 +1703,15 @@ impl PqVault {
                     Ok(v) if v.get("type").and_then(Value::as_str) == Some("deleted") => {
                         skipped += 1
                     }
-                    _ => items.push((*vault, x.item_id)),
+                    Ok(_) => items.push((*vault, x.item_id)),
+                    Err(_) => unreadable.push((*vault, x.item_id)),
                 }
             }
         }
         MigrationPlan {
             items,
             skipped_tombstones: skipped,
+            unreadable,
             warning: MIGRATION_WARNING,
         }
     }

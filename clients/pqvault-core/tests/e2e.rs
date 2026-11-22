@@ -404,6 +404,8 @@ struct Seam {
     calls: Mutex<Vec<String>>,
     lie: Mutex<bool>,
     lie_wrap: Mutex<bool>,
+    /// answer every `latestRange` item one version lower (a node rolling back)
+    lie_count: Mutex<bool>,
 }
 #[async_trait::async_trait]
 impl Net for Seam {
@@ -423,6 +425,12 @@ impl Net for Seam {
             let s = v["sig"]["signature"].as_str().unwrap().to_string();
             let flip = if s.ends_with('0') { '1' } else { '0' };
             v["sig"]["signature"] = json!(format!("{}{flip}", &s[..s.len() - 1]));
+        }
+        if *self.lie_count.lock().unwrap() && sig.starts_with("function latestRange") {
+            for x in v["items"].as_array_mut().unwrap() {
+                let n: u64 = x["versionCount"].as_str().unwrap().parse().unwrap();
+                x["versionCount"] = json!(n.saturating_sub(1).to_string());
+            }
         }
         if *self.lie_wrap.lock().unwrap() && sig.starts_with("function wrapAt") {
             let s = v["w"]["mlkemCt"].as_str().unwrap().to_string();
@@ -478,6 +486,7 @@ fn seamed(d: &Device) -> (PqVault, Arc<Seam>) {
         calls: Mutex::new(vec![]),
         lie: Mutex::new(false),
         lie_wrap: Mutex::new(false),
+        lie_count: Mutex::new(false),
     });
     (PqVault::with_net(d.sdk.clone(), core, seam.clone()), seam)
 }
@@ -627,6 +636,10 @@ async fn personal_vault_recovery_conflict_passphrase() {
         .expect("the personal vault from the index vault")
         .clone();
     assert!(!per2.pending);
+    assert!(matches!(
+        pv2.unlock(&k1b, per2.clone(), &Passphrase::Off).await,
+        Err(Error::PassphraseRequired)
+    ));
     assert!(matches!(
         pv2.unlock(
             &k1b,
@@ -1044,12 +1057,21 @@ async fn shared_vault_both_modes() {
         }
         drop((u, pa, seam));
         // B: reads what it read before, nothing written after its removal
-        let pb = PqVault::new(db.sdk.clone()).unwrap();
+        let (pb, seam) = seamed(&db);
         let mut sb = pb.load(&at, vid, ub).await.unwrap();
         sb.pending = false;
         let u = pb.unlock(&kb, sb, &given()).await.unwrap();
         assert!(u.unopenable.is_some(), "B has no wrap of the new epoch");
+        let n = seam.calls.lock().unwrap().len();
         let seen = pb.open_latest(&u).await.unwrap();
+        assert_eq!(
+            seam.calls.lock().unwrap()[n..],
+            [
+                "read function itemCount".to_string(),
+                "read function latestRange".to_string()
+            ],
+            "an unreadable version changes nothing read or sent"
+        );
         assert_eq!(
             seen.iter().filter(|x| x.value.is_ok()).count(),
             2,
@@ -1060,7 +1082,12 @@ async fn shared_vault_both_modes() {
             1,
             "and nothing written after its removal"
         );
-        drop((u, pb));
+        // a node answering lower version counts than seen: refused
+        *seam.lie_count.lock().unwrap() = true;
+        assert!(matches!(pb.open_latest(&u).await, Err(Error::Rollback)));
+        *seam.lie_count.lock().unwrap() = false;
+        assert!(pb.open_latest(&u).await.is_ok());
+        drop((u, pb, seam));
         say(&format!(
             "{mode:?}: removal, rekey, replica / home checks ok"
         ));

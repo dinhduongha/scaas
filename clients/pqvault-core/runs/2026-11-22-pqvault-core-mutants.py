@@ -127,6 +127,17 @@ MUTANTS = [
         ],
         VEC + "key_schedule",
     ),
+    (
+        "a tombstone migrated",
+        [
+            (
+                V,
+                '== Some("deleted") => {\n                        skipped += 1\n                    }',
+                '== Some("never") => {}',
+            )
+        ],
+        CORE + "migration_plan_and_warning",
+    ),
     # V10e's decryption checks, on anvil
     (
         "the wrap-hash check skipped",
@@ -176,6 +187,17 @@ MUTANTS = [
             )
         ],
         E2E + "personal_vault_recovery_conflict_passphrase",
+    ),
+    (
+        "a lower version count taken (rollback)",
+        [
+            (
+                V,
+                "let prev = seen.items.entry(id).or_insert(n);\n        if n < *prev {",
+                "let prev = seen.items.entry(id).or_insert(n);\n        if false {",
+            )
+        ],
+        E2E + "shared_vault_both_modes",
     ),
     (
         "the prev key not checked against its epoch",

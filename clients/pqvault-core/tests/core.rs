@@ -328,3 +328,34 @@ fn no_key_bytes_in_the_surface() {
         }
     }
 }
+
+/// VC12: the migration plan moves every live item's latest version, skips tombstones, lists what does not open, and carries
+/// the warning.
+#[test]
+fn migration_plan_and_warning() {
+    use pqvault_core::ItemVersion;
+    let v = |id: u8, value: Value| ItemVersion {
+        item_id: B32([id; 32]),
+        version: 1,
+        version_count: 1,
+        epoch_id: B32([9; 32]),
+        author: B32([8; 32]),
+        value: Ok(value),
+    };
+    let from = vec![(
+        B32([1; 32]),
+        vec![
+            v(1, serde_json::json!({"type": "login", "title": "a"})),
+            v(2, serde_json::json!({"type": "deleted"})),
+            ItemVersion {
+                value: Err(Error::Unreadable),
+                ..v(3, Value::Null)
+            },
+        ],
+    )];
+    let p = PqVault::migration_plan(&from);
+    assert_eq!(p.items, vec![(B32([1; 32]), B32([1; 32]))]);
+    assert_eq!(p.unreadable, vec![(B32([1; 32]), B32([3; 32]))]);
+    assert_eq!(p.skipped_tombstones, 1);
+    assert!(p.warning.contains("stay on chain") && p.warning.contains("changed at its service"));
+}
