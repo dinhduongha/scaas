@@ -336,6 +336,9 @@ script (`script/DeployBase.sol` with `DEPLOY_PQCHAT`) into a test `anvil --enabl
 - [ ] Code; green. Gates: `pqc-test`, `pqc-chain`.
 - Mutants: skip the factory listing of the `ref`'s instance; skip the home check; accept a `seq` jump.
 - [ ] Commit `pqchat-core T10: public topics`.
+- **For the next `PqChat` release, after the audit** (owner 2026-11-22, "Để sau audit"): a view returning a version's `nonce`
+  (`entryOf`, `versionAt` return none), so that a reader rebuilds the referenced `PqTopicEntry` / `PqTopicEdit` typed digest and
+  checks a pinned `contentHash`. Until then no contract change: a pinned `contentHash` stays shown as unchecked (`HashUnchecked`).
 
 ## T11 — Real-crypto end-to-end run, local
 
