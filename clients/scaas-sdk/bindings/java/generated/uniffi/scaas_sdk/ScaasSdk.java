@@ -464,6 +464,56 @@ public class ScaasSdk {
 
   
     /**
+     * A signed operation's hand-off blob from its JSON (spec §27.5 (c)).
+     */public static SignedOpBlob signedOpBlobFromJson(java.lang.String text) throws SdkException {
+            try {
+                return FfiConverterTypeSignedOpBlob.INSTANCE.lift(
+    UniffiHelpers.uniffiRustCallWithError(new SdkExceptionErrorHandler(), (_allocator, _status) -> {
+        return UniffiLib.uniffi_scaas_sdk_fn_func_signed_op_blob_from_json(_allocator, 
+            FfiConverterString.INSTANCE.lower(text), _status);
+    })
+    );
+            } catch (java.lang.RuntimeException _uniffi_ex) {
+                
+                if (SdkException.class.isInstance(_uniffi_ex.getCause())) {
+                    throw (SdkException)_uniffi_ex.getCause();
+                }
+                
+                if (InternalException.class.isInstance(_uniffi_ex.getCause())) {
+                    throw (InternalException)_uniffi_ex.getCause();
+                }
+                throw _uniffi_ex;
+            }
+    }
+    
+
+  
+    /**
+     * A hand-off blob's JSON (spec §27.5 (c)).
+     */public static java.lang.String signedOpBlobToJson(SignedOpBlob blob) throws SdkException {
+            try {
+                return FfiConverterString.INSTANCE.lift(
+    UniffiHelpers.uniffiRustCallWithError(new SdkExceptionErrorHandler(), (_allocator, _status) -> {
+        return UniffiLib.uniffi_scaas_sdk_fn_func_signed_op_blob_to_json(_allocator, 
+            FfiConverterTypeSignedOpBlob.INSTANCE.lower(blob), _status);
+    })
+    );
+            } catch (java.lang.RuntimeException _uniffi_ex) {
+                
+                if (SdkException.class.isInstance(_uniffi_ex.getCause())) {
+                    throw (SdkException)_uniffi_ex.getCause();
+                }
+                
+                if (InternalException.class.isInstance(_uniffi_ex.getCause())) {
+                    throw (InternalException)_uniffi_ex.getCause();
+                }
+                throw _uniffi_ex;
+            }
+    }
+    
+
+  
+    /**
      * A `SmartKeyAccount`'s address before its deployment (spec §7).
      */public static java.lang.String smartAccountAddress(java.lang.String factory, java.lang.String implementation, SubjectKeyArgs firstKey, java.lang.String guardian) throws SdkException {
             try {

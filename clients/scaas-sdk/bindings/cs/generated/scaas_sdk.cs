@@ -1452,6 +1452,14 @@ static class _UniFFILib {
     
     
     
+    
+    
+    
+    
+    
+    
+    
+    
 
     static _UniFFILib() {
         _UniFFILib.uniffiCheckContractApiVersion();
@@ -3471,6 +3479,28 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ulong uniffi_scaas_sdk_fn_method_op_hand_off(ulong @ptr,ulong @prepared
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ulong uniffi_scaas_sdk_fn_method_op_import_signed(ulong @ptr,RustBuffer @blob,RustBuffer @expect
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ulong uniffi_scaas_sdk_fn_method_op_member_sign(ulong @ptr,ulong @prepared
     );
 
@@ -4813,6 +4843,28 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     RustBuffer uniffi_scaas_sdk_fn_func_signed_op_blob_from_json(RustBuffer @text,ref UniffiRustCallStatus _uniffi_out_err
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     RustBuffer uniffi_scaas_sdk_fn_func_signed_op_blob_to_json(RustBuffer @blob,ref UniffiRustCallStatus _uniffi_out_err
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      RustBuffer uniffi_scaas_sdk_fn_func_smart_account_address(RustBuffer @factory,RustBuffer @implementation,RustBuffer @firstKey,RustBuffer @guardian,ref UniffiRustCallStatus _uniffi_out_err
     );
 
@@ -5650,6 +5702,28 @@ static class _UniFFILib {
     public static extern
 #endif
      ushort uniffi_scaas_sdk_checksum_func_secret_new(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ushort uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ushort uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json(
     );
 
     #if NET8_0_OR_GREATER
@@ -7519,6 +7593,28 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ushort uniffi_scaas_sdk_checksum_method_op_hand_off(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ushort uniffi_scaas_sdk_checksum_method_op_import_signed(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ushort uniffi_scaas_sdk_checksum_method_op_member_sign(
     );
 
@@ -8598,6 +8694,18 @@ static class _UniFFILib {
             }
         }
         {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json();
+            if (checksum != 43577) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json` checksum `43577`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json();
+            if (checksum != 49602) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json` checksum `49602`, library returned `{checksum}`");
+            }
+        }
+        {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_func_smart_account_address();
             if (checksum != 22486) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_func_smart_account_address` checksum `22486`, library returned `{checksum}`");
@@ -9609,6 +9717,18 @@ static class _UniFFILib {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok();
             if (checksum != 1443) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok` checksum `1443`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_hand_off();
+            if (checksum != 2688) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_hand_off` checksum `2688`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_import_signed();
+            if (checksum != 37279) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_import_signed` checksum `37279`, library returned `{checksum}`");
             }
         }
         {
@@ -15704,6 +15824,10 @@ internal interface IOp {
     /// </summary>
     bool BlsMultiPopPartOk(string @keyData, BlsMultiPart @part);
     /// <exception cref="SdkException"></exception>
+    Task<SignedOpBlob> HandOff(Prepared @prepared);
+    /// <exception cref="SdkException"></exception>
+    Task<Prepared> ImportSigned(SignedOpBlob @blob, ImportExpect @expect);
+    /// <exception cref="SdkException"></exception>
     Task<string> MemberSign(Prepared @prepared);
     /// <exception cref="SdkException"></exception>
     Task<SubmitQuote> Quote(Prepared @prepared, SubmitPath @path);
@@ -15871,6 +15995,50 @@ internal class Op : IOp, IDisposable {
 )));
     }
     
+    
+    /// <exception cref="SdkException"></exception>
+    public async Task<SignedOpBlob> HandOff(Prepared @prepared) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_op_hand_off(thisPtr, FfiConverterTypePrepared.INSTANCE.Lower(@prepared));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // Lift
+        (result) => FfiConverterTypeSignedOpBlob.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
+    
+    /// <exception cref="SdkException"></exception>
+    public async Task<Prepared> ImportSigned(SignedOpBlob @blob, ImportExpect @expect) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_op_import_signed(thisPtr, FfiConverterTypeSignedOpBlob.INSTANCE.Lower(@blob), FfiConverterTypeImportExpect.INSTANCE.Lower(@expect));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_u64(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_u64(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_u64(future),
+        // Lift
+        (result) => FfiConverterTypePrepared.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
     
     /// <exception cref="SdkException"></exception>
     public async Task<string> MemberSign(Prepared @prepared) {
@@ -21219,6 +21387,44 @@ class FfiConverterTypeHistoryPage: FfiConverterRustBuffer<HistoryPage> {
 
 
 /// <summary>
+/// What the payee expects of an imported operation: its chain, its own ids (`0x` + 64 hex: a pay or transfer must name one as
+/// `to`), and the native key that will submit it (`SubmitPath::SelfRelay`).
+/// </summary>
+internal record ImportExpect (
+    string Chain, 
+    string[] Payee, 
+    KeyRef Payer
+) {
+}
+
+class FfiConverterTypeImportExpect: FfiConverterRustBuffer<ImportExpect> {
+    public static FfiConverterTypeImportExpect INSTANCE = new FfiConverterTypeImportExpect();
+
+    public override ImportExpect Read(BigEndianStream stream) {
+        return new ImportExpect(
+            Chain: FfiConverterString.INSTANCE.Read(stream),
+            Payee: FfiConverterSequenceString.INSTANCE.Read(stream),
+            Payer: FfiConverterTypeKeyRef.INSTANCE.Read(stream)
+        );
+    }
+
+    public override int AllocationSize(ImportExpect value) {
+        return 0
+            + FfiConverterString.INSTANCE.AllocationSize(value.Chain)
+            + FfiConverterSequenceString.INSTANCE.AllocationSize(value.Payee)
+            + FfiConverterTypeKeyRef.INSTANCE.AllocationSize(value.Payer);
+    }
+
+    public override void Write(ImportExpect value, BigEndianStream stream) {
+            FfiConverterString.INSTANCE.Write(value.Chain, stream);
+            FfiConverterSequenceString.INSTANCE.Write(value.Payee, stream);
+            FfiConverterTypeKeyRef.INSTANCE.Write(value.Payer, stream);
+    }
+}
+
+
+
+/// <summary>
 /// `vault.import_key`'s request (spec §6.7): a classical private key of `network` (32 bytes) as a leaf of a seed, sealed as the
 /// new label vault `native-import:<network>:<n>` under the seed's vault passphrase.
 /// </summary>
@@ -21482,6 +21688,11 @@ class FfiConverterTypeKeyPolicy: FfiConverterRustBuffer<KeyPolicy> {
 /// how long a terminal operation row stays in `sdk.state` after it ended, in seconds (default 90 days); a non-terminal row
 /// is never pruned (owner 2026-11-19, T13b ruling 2)
 /// </param>
+/// <param name="MaxNativeCost">
+/// the most a family's native transaction may cost its payer, per chain profile, as a decimal string in the chain's
+/// smallest unit (spec §27.5 (e): fee + storage + forward; plan T41): never from an endpoint. A chain without its row
+/// spends nothing natively (`FeeAboveCap`: fail closed). EVM's self-relay keeps `max_cost`
+/// </param>
 internal record Limits (
     /// <summary>
     /// decimal wei
@@ -21511,7 +21722,13 @@ internal record Limits (
     /// how long a terminal operation row stays in `sdk.state` after it ended, in seconds (default 90 days); a non-terminal row
     /// is never pruned (owner 2026-11-19, T13b ruling 2)
     /// </summary>
-    ulong StateRetentionSecs
+    ulong StateRetentionSecs, 
+    /// <summary>
+    /// the most a family's native transaction may cost its payer, per chain profile, as a decimal string in the chain's
+    /// smallest unit (spec §27.5 (e): fee + storage + forward; plan T41): never from an endpoint. A chain without its row
+    /// spends nothing natively (`FeeAboveCap`: fail closed). EVM's self-relay keeps `max_cost`
+    /// </summary>
+    NativeCap[] MaxNativeCost
 ) {
 }
 
@@ -21528,7 +21745,8 @@ class FfiConverterTypeLimits: FfiConverterRustBuffer<Limits> {
             MaxConcurrentHeavy: FfiConverterUInt32.INSTANCE.Read(stream),
             MaxValidSecs: FfiConverterUInt64.INSTANCE.Read(stream),
             EventQueue: FfiConverterUInt32.INSTANCE.Read(stream),
-            StateRetentionSecs: FfiConverterUInt64.INSTANCE.Read(stream)
+            StateRetentionSecs: FfiConverterUInt64.INSTANCE.Read(stream),
+            MaxNativeCost: FfiConverterSequenceTypeNativeCap.INSTANCE.Read(stream)
         );
     }
 
@@ -21542,7 +21760,8 @@ class FfiConverterTypeLimits: FfiConverterRustBuffer<Limits> {
             + FfiConverterUInt32.INSTANCE.AllocationSize(value.MaxConcurrentHeavy)
             + FfiConverterUInt64.INSTANCE.AllocationSize(value.MaxValidSecs)
             + FfiConverterUInt32.INSTANCE.AllocationSize(value.EventQueue)
-            + FfiConverterUInt64.INSTANCE.AllocationSize(value.StateRetentionSecs);
+            + FfiConverterUInt64.INSTANCE.AllocationSize(value.StateRetentionSecs)
+            + FfiConverterSequenceTypeNativeCap.INSTANCE.AllocationSize(value.MaxNativeCost);
     }
 
     public override void Write(Limits value, BigEndianStream stream) {
@@ -21555,6 +21774,7 @@ class FfiConverterTypeLimits: FfiConverterRustBuffer<Limits> {
             FfiConverterUInt64.INSTANCE.Write(value.MaxValidSecs, stream);
             FfiConverterUInt32.INSTANCE.Write(value.EventQueue, stream);
             FfiConverterUInt64.INSTANCE.Write(value.StateRetentionSecs, stream);
+            FfiConverterSequenceTypeNativeCap.INSTANCE.Write(value.MaxNativeCost, stream);
     }
 }
 
@@ -22281,6 +22501,51 @@ class FfiConverterTypeNativeAddress: FfiConverterRustBuffer<NativeAddress> {
             FfiConverterOptionalString.INSTANCE.Write(value.Ss58, stream);
             FfiConverterOptionalUInt8.INSTANCE.Write(value.WitnessVersion, stream);
             FfiConverterOptionalString.INSTANCE.Write(value.WitnessProgram, stream);
+    }
+}
+
+
+
+/// <summary>
+/// One chain's native cost cap (`Limits::max_native_cost`).
+/// </summary>
+/// <param name="Chain">
+/// the profile's key
+/// </param>
+/// <param name="Max">
+/// decimal, the chain's smallest unit (stroops on Soroban)
+/// </param>
+internal record NativeCap (
+    /// <summary>
+    /// the profile's key
+    /// </summary>
+    string Chain, 
+    /// <summary>
+    /// decimal, the chain's smallest unit (stroops on Soroban)
+    /// </summary>
+    string Max
+) {
+}
+
+class FfiConverterTypeNativeCap: FfiConverterRustBuffer<NativeCap> {
+    public static FfiConverterTypeNativeCap INSTANCE = new FfiConverterTypeNativeCap();
+
+    public override NativeCap Read(BigEndianStream stream) {
+        return new NativeCap(
+            Chain: FfiConverterString.INSTANCE.Read(stream),
+            Max: FfiConverterString.INSTANCE.Read(stream)
+        );
+    }
+
+    public override int AllocationSize(NativeCap value) {
+        return 0
+            + FfiConverterString.INSTANCE.AllocationSize(value.Chain)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Max);
+    }
+
+    public override void Write(NativeCap value, BigEndianStream stream) {
+            FfiConverterString.INSTANCE.Write(value.Chain, stream);
+            FfiConverterString.INSTANCE.Write(value.Max, stream);
     }
 }
 
@@ -24653,6 +24918,162 @@ class FfiConverterTypeSetPayee: FfiConverterRustBuffer<SetPayee> {
             FfiConverterString.INSTANCE.Write(value.Payee, stream);
             FfiConverterBoolean.INSTANCE.Write(value.Allowed, stream);
             FfiConverterTypeEnvelope.INSTANCE.Write(value.Envelope, stream);
+    }
+}
+
+
+
+/// <summary>
+/// A signed operation handed off (spec §27.5 (c)): the operation's named fields as signed (canonical), its signature in the
+/// entry's form, the signer's subject id and kind. It holds no secret; who holds it can land it, never redirect it.
+/// </summary>
+/// <param name="V">
+/// 1
+/// </param>
+/// <param name="ChainUid">
+/// the profile's `chain_uid` (`0x` + 64 hex)
+/// </param>
+/// <param name="Family">
+/// `evm`, `soroban`
+/// </param>
+/// <param name="Contract">
+/// the domain's contract, the token (`0x` + 40 hex; a `C…` on Soroban)
+/// </param>
+/// <param name="Entry">
+/// the contract function (`mtxPay`, `mtxCancelNonce`, …; `pay`, `transfer`, `burn` on Soroban)
+/// </param>
+/// <param name="Name">
+/// the signed struct
+/// </param>
+/// <param name="Kind">
+/// the domain kind (`token`)
+/// </param>
+/// <param name="Message">
+/// the struct's fields, canonical (an unbound `relayer` and `feeRecipient` 0)
+/// </param>
+/// <param name="Extra">
+/// what the entry takes unsigned beside them (a pay's `meta`, …)
+/// </param>
+/// <param name="Signature">
+/// the signature in the entry's form (`bytes`, a `UASig`)
+/// </param>
+/// <param name="Signer">
+/// the signer's subject id (the lane's `from`)
+/// </param>
+/// <param name="SignerKind">
+/// the signer's kind (a UA kind, 0 a native EVM key)
+/// </param>
+/// <param name="Ids">
+/// the transfer on ids (`mtxExecuteTransfer`)
+/// </param>
+internal record SignedOpBlob (
+    /// <summary>
+    /// 1
+    /// </summary>
+    uint V, 
+    /// <summary>
+    /// the profile's `chain_uid` (`0x` + 64 hex)
+    /// </summary>
+    string ChainUid, 
+    /// <summary>
+    /// `evm`, `soroban`
+    /// </summary>
+    string Family, 
+    /// <summary>
+    /// the domain's contract, the token (`0x` + 40 hex; a `C…` on Soroban)
+    /// </summary>
+    string Contract, 
+    /// <summary>
+    /// the contract function (`mtxPay`, `mtxCancelNonce`, …; `pay`, `transfer`, `burn` on Soroban)
+    /// </summary>
+    string Entry, 
+    /// <summary>
+    /// the signed struct
+    /// </summary>
+    string Name, 
+    /// <summary>
+    /// the domain kind (`token`)
+    /// </summary>
+    string Kind, 
+    /// <summary>
+    /// the struct's fields, canonical (an unbound `relayer` and `feeRecipient` 0)
+    /// </summary>
+    Value Message, 
+    /// <summary>
+    /// what the entry takes unsigned beside them (a pay's `meta`, …)
+    /// </summary>
+    Value Extra, 
+    /// <summary>
+    /// the signature in the entry's form (`bytes`, a `UASig`)
+    /// </summary>
+    Value Signature, 
+    /// <summary>
+    /// the signer's subject id (the lane's `from`)
+    /// </summary>
+    string Signer, 
+    /// <summary>
+    /// the signer's kind (a UA kind, 0 a native EVM key)
+    /// </summary>
+    ushort SignerKind, 
+    /// <summary>
+    /// the transfer on ids (`mtxExecuteTransfer`)
+    /// </summary>
+    bool Ids
+) {
+}
+
+class FfiConverterTypeSignedOpBlob: FfiConverterRustBuffer<SignedOpBlob> {
+    public static FfiConverterTypeSignedOpBlob INSTANCE = new FfiConverterTypeSignedOpBlob();
+
+    public override SignedOpBlob Read(BigEndianStream stream) {
+        return new SignedOpBlob(
+            V: FfiConverterUInt32.INSTANCE.Read(stream),
+            ChainUid: FfiConverterString.INSTANCE.Read(stream),
+            Family: FfiConverterString.INSTANCE.Read(stream),
+            Contract: FfiConverterString.INSTANCE.Read(stream),
+            Entry: FfiConverterString.INSTANCE.Read(stream),
+            Name: FfiConverterString.INSTANCE.Read(stream),
+            Kind: FfiConverterString.INSTANCE.Read(stream),
+            Message: FfiConverterTypeValue.INSTANCE.Read(stream),
+            Extra: FfiConverterTypeValue.INSTANCE.Read(stream),
+            Signature: FfiConverterTypeValue.INSTANCE.Read(stream),
+            Signer: FfiConverterString.INSTANCE.Read(stream),
+            SignerKind: FfiConverterUInt16.INSTANCE.Read(stream),
+            Ids: FfiConverterBoolean.INSTANCE.Read(stream)
+        );
+    }
+
+    public override int AllocationSize(SignedOpBlob value) {
+        return 0
+            + FfiConverterUInt32.INSTANCE.AllocationSize(value.V)
+            + FfiConverterString.INSTANCE.AllocationSize(value.ChainUid)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Family)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Contract)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Entry)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Name)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Kind)
+            + FfiConverterTypeValue.INSTANCE.AllocationSize(value.Message)
+            + FfiConverterTypeValue.INSTANCE.AllocationSize(value.Extra)
+            + FfiConverterTypeValue.INSTANCE.AllocationSize(value.Signature)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Signer)
+            + FfiConverterUInt16.INSTANCE.AllocationSize(value.SignerKind)
+            + FfiConverterBoolean.INSTANCE.AllocationSize(value.Ids);
+    }
+
+    public override void Write(SignedOpBlob value, BigEndianStream stream) {
+            FfiConverterUInt32.INSTANCE.Write(value.V, stream);
+            FfiConverterString.INSTANCE.Write(value.ChainUid, stream);
+            FfiConverterString.INSTANCE.Write(value.Family, stream);
+            FfiConverterString.INSTANCE.Write(value.Contract, stream);
+            FfiConverterString.INSTANCE.Write(value.Entry, stream);
+            FfiConverterString.INSTANCE.Write(value.Name, stream);
+            FfiConverterString.INSTANCE.Write(value.Kind, stream);
+            FfiConverterTypeValue.INSTANCE.Write(value.Message, stream);
+            FfiConverterTypeValue.INSTANCE.Write(value.Extra, stream);
+            FfiConverterTypeValue.INSTANCE.Write(value.Signature, stream);
+            FfiConverterString.INSTANCE.Write(value.Signer, stream);
+            FfiConverterUInt16.INSTANCE.Write(value.SignerKind, stream);
+            FfiConverterBoolean.INSTANCE.Write(value.Ids, stream);
     }
 }
 
@@ -32881,6 +33302,14 @@ internal record KeyRef {
         string KeyData
     ) : KeyRef {}
     
+    /// <summary>
+    /// an operation another party signed and handed off (`Op::import_signed`, spec §27.5 (c)): its signer's subject id (`0x`
+    /// hex); nothing in this SDK signs for it
+    /// </summary>
+    public record Signed (
+        string Signer
+    ) : KeyRef {}
+    
 
     
 }
@@ -32927,6 +33356,10 @@ class FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                     FfiConverterUInt32.INSTANCE.Read(stream),
                     FfiConverterString.INSTANCE.Read(stream)
                 );
+            case 7:
+                return new KeyRef.Signed(
+                    FfiConverterString.INSTANCE.Read(stream)
+                );
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeKeyRef.Read()", value));
         }
@@ -32964,6 +33397,9 @@ class FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                     + FfiConverterUInt32.INSTANCE.AllocationSize(variant_value.Account)
                     + FfiConverterUInt32.INSTANCE.AllocationSize(variant_value.Index)
                     + FfiConverterString.INSTANCE.AllocationSize(variant_value.KeyData);
+            case KeyRef.Signed variant_value:
+                return 4
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.Signer);
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeKeyRef.AllocationSize()", value));
         }
@@ -33006,6 +33442,10 @@ class FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                 FfiConverterUInt32.INSTANCE.Write(variant_value.Account, stream);
                 FfiConverterUInt32.INSTANCE.Write(variant_value.Index, stream);
                 FfiConverterString.INSTANCE.Write(variant_value.KeyData, stream);
+                break;
+            case KeyRef.Signed variant_value:
+                stream.WriteInt(7);
+                FfiConverterString.INSTANCE.Write(variant_value.Signer, stream);
                 break;
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeKeyRef.Write()", value));
@@ -33944,6 +34384,109 @@ internal class SdkException: UniffiException {
     }
     
     /// <summary>
+    /// An imported operation (spec §27.5 (c), owner 2026-11-22, Q-R3) of a kind the importer's family cannot show and check
+    /// before sending, a confidential one (Zether, PQZ), or a struct or entry the family's rows do not hold.
+    /// </summary>
+    public class ImportKindRefused: SdkException {
+        public ImportKindRefused(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// An imported pay or transfer whose `to` is none of the importer's ids.
+    /// </summary>
+    public class ImportNotPayee: SdkException {
+        public ImportNotPayee(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// An imported operation whose signed `relayer` is bound to another address than the importer's payer (Soroban binds none).
+    /// </summary>
+    public class ImportRelayerBound: SdkException {
+        public ImportRelayerBound(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// An imported operation with a fee to anyone: a hand-off is fee 0 (spec §27.5 (b)).
+    /// </summary>
+    public class ImportFeeRefused: SdkException {
+        public ImportFeeRefused(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// An imported operation valid for less than the node's 120 s: its `validUntil` on the chain's clock (EVM, a Soroban
+    /// pay), or its auth entry's expiry ledger (Soroban, a ledger at most each second).
+    /// </summary>
+    public class ImportExpired: SdkException {
+        public ImportExpired(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// An imported operation already spent at the final height: its lane nonce (EVM), its host nonce or `pay_ref` entry
+    /// (Soroban); it landed, or another operation took the nonce.
+    /// </summary>
+    public class ImportConsumed: SdkException {
+        public ImportConsumed(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// An imported operation the simulation from the payer refused: the chain's judgement of the signature and the effect.
+    /// </summary>
+    public class ImportedOpRefused: SdkException {
+        public ImportedOpRefused(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// An Arweave upload above the free tier, or refused there, with no payer: none configured, or the operator's node payer
+    /// off (NODE-SPN-05; CLI-SDK-21).
+    /// </summary>
+    public class PayerUnavailable: SdkException {
+        public PayerUnavailable(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// An Arweave upload the bundler refused for payment (HTTP 402): the user's own credits, or a payer's approval, are missing.
+    /// </summary>
+    public class PaymentRequired: SdkException {
+        public PaymentRequired(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// An Arweave upload no bundler accepted, for a reason other than payment.
+    /// </summary>
+    public class UploadRejected: SdkException {
+        public UploadRejected(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// A kept Arweave upload still unsettled after its last re-post (C20): shown; the bytes stay kept.
+    /// </summary>
+    public class UploadUnsettled: SdkException {
+        public UploadUnsettled(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// A data item that is not one `scaas-ua` built: its verifying parser refused it, or it carries a target, an anchor or a
+    /// tag, or its object is no bucket's (CLI-UAL-64): `scaas-ua`'s code for an item it built.
+    /// </summary>
+    public class ArweaveItem: SdkException {
+        public ArweaveItem(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// A file or object above the platform's cap or the store's largest object (CLI-UAL-65): `scaas-ua`'s code.
+    /// </summary>
+    public class FileTooLarge: SdkException {
+        public FileTooLarge(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// A file object or plaintext whose SHA-256 is not the signed one (CLI-UAL-65): `scaas-ua`'s code.
+    /// </summary>
+    public class FileHashMismatch: SdkException {
+        public FileHashMismatch(string message): base(message) {}
+    }
+    
+    /// <summary>
     /// a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
     /// </summary>
     public class Cancelled: SdkException {
@@ -34039,9 +34582,23 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case 65: return new SdkException.DexNotListed(FfiConverterString.INSTANCE.Read(stream));
             case 66: return new SdkException.PqzAuditorNative(FfiConverterString.INSTANCE.Read(stream));
             case 67: return new SdkException.GasAboveBlockShare(FfiConverterString.INSTANCE.Read(stream));
-            case 68: return new SdkException.Cancelled(FfiConverterString.INSTANCE.Read(stream));
-            case 69: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
-            case 70: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
+            case 68: return new SdkException.ImportKindRefused(FfiConverterString.INSTANCE.Read(stream));
+            case 69: return new SdkException.ImportNotPayee(FfiConverterString.INSTANCE.Read(stream));
+            case 70: return new SdkException.ImportRelayerBound(FfiConverterString.INSTANCE.Read(stream));
+            case 71: return new SdkException.ImportFeeRefused(FfiConverterString.INSTANCE.Read(stream));
+            case 72: return new SdkException.ImportExpired(FfiConverterString.INSTANCE.Read(stream));
+            case 73: return new SdkException.ImportConsumed(FfiConverterString.INSTANCE.Read(stream));
+            case 74: return new SdkException.ImportedOpRefused(FfiConverterString.INSTANCE.Read(stream));
+            case 75: return new SdkException.PayerUnavailable(FfiConverterString.INSTANCE.Read(stream));
+            case 76: return new SdkException.PaymentRequired(FfiConverterString.INSTANCE.Read(stream));
+            case 77: return new SdkException.UploadRejected(FfiConverterString.INSTANCE.Read(stream));
+            case 78: return new SdkException.UploadUnsettled(FfiConverterString.INSTANCE.Read(stream));
+            case 79: return new SdkException.ArweaveItem(FfiConverterString.INSTANCE.Read(stream));
+            case 80: return new SdkException.FileTooLarge(FfiConverterString.INSTANCE.Read(stream));
+            case 81: return new SdkException.FileHashMismatch(FfiConverterString.INSTANCE.Read(stream));
+            case 82: return new SdkException.Cancelled(FfiConverterString.INSTANCE.Read(stream));
+            case 83: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
+            case 84: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Read()", value));
         }
@@ -34254,14 +34811,56 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case SdkException.GasAboveBlockShare:
                 stream.WriteInt(67);
                 break;
-            case SdkException.Cancelled:
+            case SdkException.ImportKindRefused:
                 stream.WriteInt(68);
                 break;
-            case SdkException.Ua:
+            case SdkException.ImportNotPayee:
                 stream.WriteInt(69);
                 break;
-            case SdkException.Rpc:
+            case SdkException.ImportRelayerBound:
                 stream.WriteInt(70);
+                break;
+            case SdkException.ImportFeeRefused:
+                stream.WriteInt(71);
+                break;
+            case SdkException.ImportExpired:
+                stream.WriteInt(72);
+                break;
+            case SdkException.ImportConsumed:
+                stream.WriteInt(73);
+                break;
+            case SdkException.ImportedOpRefused:
+                stream.WriteInt(74);
+                break;
+            case SdkException.PayerUnavailable:
+                stream.WriteInt(75);
+                break;
+            case SdkException.PaymentRequired:
+                stream.WriteInt(76);
+                break;
+            case SdkException.UploadRejected:
+                stream.WriteInt(77);
+                break;
+            case SdkException.UploadUnsettled:
+                stream.WriteInt(78);
+                break;
+            case SdkException.ArweaveItem:
+                stream.WriteInt(79);
+                break;
+            case SdkException.FileTooLarge:
+                stream.WriteInt(80);
+                break;
+            case SdkException.FileHashMismatch:
+                stream.WriteInt(81);
+                break;
+            case SdkException.Cancelled:
+                stream.WriteInt(82);
+                break;
+            case SdkException.Ua:
+                stream.WriteInt(83);
+                break;
+            case SdkException.Rpc:
+                stream.WriteInt(84);
                 break;
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Write()", value));
@@ -34319,6 +34918,13 @@ internal record SlotKey {
         string KeyData
     ) : SlotKey {}
     
+    /// <summary>
+    /// another party's signer (as `KeyRef::Signed`, a hand-off): never a slot's key, refused at signing
+    /// </summary>
+    public record Signed (
+        string Signer
+    ) : SlotKey {}
+    
 
     
 }
@@ -34364,6 +34970,10 @@ class FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
                     FfiConverterUInt32.INSTANCE.Read(stream),
                     FfiConverterString.INSTANCE.Read(stream)
                 );
+            case 7:
+                return new SlotKey.Signed(
+                    FfiConverterString.INSTANCE.Read(stream)
+                );
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeSlotKey.Read()", value));
         }
@@ -34400,6 +35010,9 @@ class FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
                     + FfiConverterUInt32.INSTANCE.AllocationSize(variant_value.Account)
                     + FfiConverterUInt32.INSTANCE.AllocationSize(variant_value.Index)
                     + FfiConverterString.INSTANCE.AllocationSize(variant_value.KeyData);
+            case SlotKey.Signed variant_value:
+                return 4
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.Signer);
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeSlotKey.AllocationSize()", value));
         }
@@ -34441,6 +35054,10 @@ class FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
                 FfiConverterUInt32.INSTANCE.Write(variant_value.Account, stream);
                 FfiConverterUInt32.INSTANCE.Write(variant_value.Index, stream);
                 FfiConverterString.INSTANCE.Write(variant_value.KeyData, stream);
+                break;
+            case SlotKey.Signed variant_value:
+                stream.WriteInt(7);
+                FfiConverterString.INSTANCE.Write(variant_value.Signer, stream);
                 break;
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeSlotKey.Write()", value));
@@ -36555,6 +37172,52 @@ class FfiConverterSequenceTypeMsigSlotState: FfiConverterRustBuffer<MsigSlotStat
 
 
 
+class FfiConverterSequenceTypeNativeCap: FfiConverterRustBuffer<NativeCap[]> {
+    public static FfiConverterSequenceTypeNativeCap INSTANCE = new FfiConverterSequenceTypeNativeCap();
+
+    public override NativeCap[]  Read(BigEndianStream stream) {
+        var length = stream.ReadInt();
+        if (length == 0) {
+            return [];
+        }
+
+        var result = new NativeCap[length];
+        var readFn = FfiConverterTypeNativeCap.INSTANCE.Read;
+        for (int i = 0; i < length; i++) {
+            result[i] = readFn(stream);
+        }
+        return result;
+    }
+
+    public override int AllocationSize(NativeCap[]  value) {
+        var sizeForLength = 4;
+
+        // details/1-empty-list-as-default-method-parameter.md
+        if (value == null) {
+            return sizeForLength;
+        }
+
+        var allocationSizeFn = FfiConverterTypeNativeCap.INSTANCE.AllocationSize;
+        var sizeForItems = value.Sum(item => allocationSizeFn(item));
+        return sizeForLength + sizeForItems;
+    }
+
+    public override void Write(NativeCap[] value, BigEndianStream stream) {
+        // details/1-empty-list-as-default-method-parameter.md
+        if (value == null) {
+            stream.WriteInt(0);
+            return;
+        }
+
+        stream.WriteInt(value.Length);
+        var writerFn = FfiConverterTypeNativeCap.INSTANCE.Write;
+        value.ForEach(item => writerFn(item, stream));
+    }
+}
+
+
+
+
 class FfiConverterSequenceTypeOpItem: FfiConverterRustBuffer<OpItem[]> {
     public static FfiConverterSequenceTypeOpItem INSTANCE = new FfiConverterSequenceTypeOpItem();
 
@@ -37555,6 +38218,30 @@ internal static class ScaasSdkMethods {
         return FfiConverterTypeSecretBytes.INSTANCE.Lift(
     _UniffiHelpers.RustCallWithError(FfiConverterTypeSdkError.INSTANCE, (ref UniffiRustCallStatus _status) =>
     _UniFFILib.uniffi_scaas_sdk_fn_func_secret_new(FfiConverterUInt32.INSTANCE.Lower(@len), ref _status)
+));
+    }
+
+
+    /// <summary>
+    /// A signed operation's hand-off blob from its JSON (spec §27.5 (c)).
+    /// </summary>
+    /// <exception cref="SdkException"></exception>
+    public static SignedOpBlob SignedOpBlobFromJson(string @text) {
+        return FfiConverterTypeSignedOpBlob.INSTANCE.Lift(
+    _UniffiHelpers.RustCallWithError(FfiConverterTypeSdkError.INSTANCE, (ref UniffiRustCallStatus _status) =>
+    _UniFFILib.uniffi_scaas_sdk_fn_func_signed_op_blob_from_json(FfiConverterString.INSTANCE.Lower(@text), ref _status)
+));
+    }
+
+
+    /// <summary>
+    /// A hand-off blob's JSON (spec §27.5 (c)).
+    /// </summary>
+    /// <exception cref="SdkException"></exception>
+    public static string SignedOpBlobToJson(SignedOpBlob @blob) {
+        return FfiConverterString.INSTANCE.Lift(
+    _UniffiHelpers.RustCallWithError(FfiConverterTypeSdkError.INSTANCE, (ref UniffiRustCallStatus _status) =>
+    _UniFFILib.uniffi_scaas_sdk_fn_func_signed_op_blob_to_json(FfiConverterTypeSignedOpBlob.INSTANCE.Lower(@blob), ref _status)
 ));
     }
 

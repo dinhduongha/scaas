@@ -17,6 +17,8 @@ public interface OpInterface {
     /**
      * Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
      */public boolean blsMultiPopPartOk(java.lang.String keyData, BlsMultiPart part);
+    public java.util.concurrent.CompletableFuture<SignedOpBlob> handOff(Prepared prepared) ;
+    public java.util.concurrent.CompletableFuture<Prepared> importSigned(SignedOpBlob blob, ImportExpect expect) ;
     public java.util.concurrent.CompletableFuture<java.lang.String> memberSign(Prepared prepared) ;
     public java.util.concurrent.CompletableFuture<SubmitQuote> quote(Prepared prepared, SubmitPath path) ;
     public java.util.concurrent.CompletableFuture<SubmitQuote> quoteRegisterBlsMulti(java.lang.String chain, java.lang.String keyData, KeyRef payer) ;

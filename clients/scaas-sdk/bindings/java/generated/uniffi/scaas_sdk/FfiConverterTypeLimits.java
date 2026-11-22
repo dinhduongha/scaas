@@ -15,7 +15,8 @@ public enum FfiConverterTypeLimits implements FfiConverterRustBuffer<Limits> {
       FfiConverterInteger.INSTANCE.read(buf),
       FfiConverterLong.INSTANCE.read(buf),
       FfiConverterInteger.INSTANCE.read(buf),
-      FfiConverterLong.INSTANCE.read(buf)
+      FfiConverterLong.INSTANCE.read(buf),
+      FfiConverterSequenceTypeNativeCap.INSTANCE.read(buf)
     );
   }
 
@@ -30,7 +31,8 @@ public enum FfiConverterTypeLimits implements FfiConverterRustBuffer<Limits> {
             FfiConverterInteger.INSTANCE.allocationSize(value.maxConcurrentHeavy()) +
             FfiConverterLong.INSTANCE.allocationSize(value.maxValidSecs()) +
             FfiConverterInteger.INSTANCE.allocationSize(value.eventQueue()) +
-            FfiConverterLong.INSTANCE.allocationSize(value.stateRetentionSecs())
+            FfiConverterLong.INSTANCE.allocationSize(value.stateRetentionSecs()) +
+            FfiConverterSequenceTypeNativeCap.INSTANCE.allocationSize(value.maxNativeCost())
       );
   }
 
@@ -45,6 +47,7 @@ public enum FfiConverterTypeLimits implements FfiConverterRustBuffer<Limits> {
       FfiConverterLong.INSTANCE.write(value.maxValidSecs(), buf);
       FfiConverterInteger.INSTANCE.write(value.eventQueue(), buf);
       FfiConverterLong.INSTANCE.write(value.stateRetentionSecs(), buf);
+      FfiConverterSequenceTypeNativeCap.INSTANCE.write(value.maxNativeCost(), buf);
   }
 }
 

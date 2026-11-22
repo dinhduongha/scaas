@@ -4742,6 +4742,10 @@ public protocol OpProtocol: AnyObject, Sendable {
      */
     func blsMultiPopPartOk(keyData: String, part: BlsMultiPart)  -> Bool
     
+    func handOff(prepared: Prepared) async throws  -> SignedOpBlob
+    
+    func importSigned(blob: SignedOpBlob, expect: ImportExpect) async throws  -> Prepared
+    
     func memberSign(prepared: Prepared) async throws  -> String
     
     func quote(prepared: Prepared, path: SubmitPath) async throws  -> SubmitQuote
@@ -4872,6 +4876,40 @@ open func blsMultiPopPartOk(keyData: String, part: BlsMultiPart) -> Bool  {
         FfiConverterTypeBlsMultiPart_lower(part),$0
     )
 })
+}
+    
+open func handOff(prepared: Prepared)async throws  -> SignedOpBlob  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_op_hand_off(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypePrepared_lower(prepared)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSignedOpBlob_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func importSigned(blob: SignedOpBlob, expect: ImportExpect)async throws  -> Prepared  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_op_import_signed(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeSignedOpBlob_lower(blob),FfiConverterTypeImportExpect_lower(expect)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_u64,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_u64,
+            freeFunc: ffi_scaas_sdk_rust_future_free_u64,
+            liftFunc: FfiConverterTypePrepared_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
 }
     
 open func memberSign(prepared: Prepared)async throws  -> String  {
@@ -10878,6 +10916,68 @@ public func FfiConverterTypeHistoryPage_lower(_ value: HistoryPage) -> RustBuffe
 
 
 /**
+ * What the payee expects of an imported operation: its chain, its own ids (`0x` + 64 hex: a pay or transfer must name one as
+ * `to`), and the native key that will submit it (`SubmitPath::SelfRelay`).
+ */
+public struct ImportExpect: Equatable, Hashable {
+    public var chain: String
+    public var payee: [String]
+    public var payer: KeyRef
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(chain: String, payee: [String], payer: KeyRef) {
+        self.chain = chain
+        self.payee = payee
+        self.payer = payer
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ImportExpect: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportExpect: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportExpect {
+        return
+            try ImportExpect(
+                chain: FfiConverterString.read(from: &buf), 
+                payee: FfiConverterSequenceString.read(from: &buf), 
+                payer: FfiConverterTypeKeyRef.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ImportExpect, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.chain, into: &buf)
+        FfiConverterSequenceString.write(value.payee, into: &buf)
+        FfiConverterTypeKeyRef.write(value.payer, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportExpect_lift(_ buf: RustBuffer) throws -> ImportExpect {
+    return try FfiConverterTypeImportExpect.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportExpect_lower(_ value: ImportExpect) -> RustBuffer {
+    return FfiConverterTypeImportExpect.lower(value)
+}
+
+
+/**
  * `vault.import_key`'s request (spec §6.7): a classical private key of `network` (32 bytes) as a leaf of a seed, sealed as the
  * new label vault `native-import:<network>:<n>` under the seed's vault passphrase.
  */
@@ -11282,6 +11382,12 @@ public struct Limits: Equatable, Hashable {
      * is never pruned (owner 2026-11-19, T13b ruling 2)
      */
     public var stateRetentionSecs: UInt64
+    /**
+     * the most a family's native transaction may cost its payer, per chain profile, as a decimal string in the chain's
+     * smallest unit (spec §27.5 (e): fee + storage + forward; plan T41): never from an endpoint. A chain without its row
+     * spends nothing natively (`FeeAboveCap`: fail closed). EVM's self-relay keeps `max_cost`
+     */
+    public var maxNativeCost: [NativeCap]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -11305,7 +11411,12 @@ public struct Limits: Equatable, Hashable {
         /**
          * how long a terminal operation row stays in `sdk.state` after it ended, in seconds (default 90 days); a non-terminal row
          * is never pruned (owner 2026-11-19, T13b ruling 2)
-         */stateRetentionSecs: UInt64) {
+         */stateRetentionSecs: UInt64, 
+        /**
+         * the most a family's native transaction may cost its payer, per chain profile, as a decimal string in the chain's
+         * smallest unit (spec §27.5 (e): fee + storage + forward; plan T41): never from an endpoint. A chain without its row
+         * spends nothing natively (`FeeAboveCap`: fail closed). EVM's self-relay keeps `max_cost`
+         */maxNativeCost: [NativeCap]) {
         self.maxFeePerGas = maxFeePerGas
         self.maxGas = maxGas
         self.maxCost = maxCost
@@ -11315,6 +11426,7 @@ public struct Limits: Equatable, Hashable {
         self.maxValidSecs = maxValidSecs
         self.eventQueue = eventQueue
         self.stateRetentionSecs = stateRetentionSecs
+        self.maxNativeCost = maxNativeCost
     }
 
     
@@ -11341,7 +11453,8 @@ public struct FfiConverterTypeLimits: FfiConverterRustBuffer {
                 maxConcurrentHeavy: FfiConverterUInt32.read(from: &buf), 
                 maxValidSecs: FfiConverterUInt64.read(from: &buf), 
                 eventQueue: FfiConverterUInt32.read(from: &buf), 
-                stateRetentionSecs: FfiConverterUInt64.read(from: &buf)
+                stateRetentionSecs: FfiConverterUInt64.read(from: &buf), 
+                maxNativeCost: FfiConverterSequenceTypeNativeCap.read(from: &buf)
         )
     }
 
@@ -11355,6 +11468,7 @@ public struct FfiConverterTypeLimits: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.maxValidSecs, into: &buf)
         FfiConverterUInt32.write(value.eventQueue, into: &buf)
         FfiConverterUInt64.write(value.stateRetentionSecs, into: &buf)
+        FfiConverterSequenceTypeNativeCap.write(value.maxNativeCost, into: &buf)
     }
 }
 
@@ -12404,6 +12518,75 @@ public func FfiConverterTypeNativeAddress_lift(_ buf: RustBuffer) throws -> Nati
 #endif
 public func FfiConverterTypeNativeAddress_lower(_ value: NativeAddress) -> RustBuffer {
     return FfiConverterTypeNativeAddress.lower(value)
+}
+
+
+/**
+ * One chain's native cost cap (`Limits::max_native_cost`).
+ */
+public struct NativeCap: Equatable, Hashable {
+    /**
+     * the profile's key
+     */
+    public var chain: String
+    /**
+     * decimal, the chain's smallest unit (stroops on Soroban)
+     */
+    public var max: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * the profile's key
+         */chain: String, 
+        /**
+         * decimal, the chain's smallest unit (stroops on Soroban)
+         */max: String) {
+        self.chain = chain
+        self.max = max
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NativeCap: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNativeCap: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NativeCap {
+        return
+            try NativeCap(
+                chain: FfiConverterString.read(from: &buf), 
+                max: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NativeCap, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.chain, into: &buf)
+        FfiConverterString.write(value.max, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNativeCap_lift(_ buf: RustBuffer) throws -> NativeCap {
+    return try FfiConverterTypeNativeCap.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNativeCap_lower(_ value: NativeCap) -> RustBuffer {
+    return FfiConverterTypeNativeCap.lower(value)
 }
 
 
@@ -15851,6 +16034,186 @@ public func FfiConverterTypeSetPayee_lift(_ buf: RustBuffer) throws -> SetPayee 
 #endif
 public func FfiConverterTypeSetPayee_lower(_ value: SetPayee) -> RustBuffer {
     return FfiConverterTypeSetPayee.lower(value)
+}
+
+
+/**
+ * A signed operation handed off (spec §27.5 (c)): the operation's named fields as signed (canonical), its signature in the
+ * entry's form, the signer's subject id and kind. It holds no secret; who holds it can land it, never redirect it.
+ */
+public struct SignedOpBlob: Equatable, Hashable {
+    /**
+     * 1
+     */
+    public var v: UInt32
+    /**
+     * the profile's `chain_uid` (`0x` + 64 hex)
+     */
+    public var chainUid: String
+    /**
+     * `evm`, `soroban`
+     */
+    public var family: String
+    /**
+     * the domain's contract, the token (`0x` + 40 hex; a `C…` on Soroban)
+     */
+    public var contract: String
+    /**
+     * the contract function (`mtxPay`, `mtxCancelNonce`, …; `pay`, `transfer`, `burn` on Soroban)
+     */
+    public var entry: String
+    /**
+     * the signed struct
+     */
+    public var name: String
+    /**
+     * the domain kind (`token`)
+     */
+    public var kind: String
+    /**
+     * the struct's fields, canonical (an unbound `relayer` and `feeRecipient` 0)
+     */
+    public var message: Value
+    /**
+     * what the entry takes unsigned beside them (a pay's `meta`, …)
+     */
+    public var extra: Value
+    /**
+     * the signature in the entry's form (`bytes`, a `UASig`)
+     */
+    public var signature: Value
+    /**
+     * the signer's subject id (the lane's `from`)
+     */
+    public var signer: String
+    /**
+     * the signer's kind (a UA kind, 0 a native EVM key)
+     */
+    public var signerKind: UInt16
+    /**
+     * the transfer on ids (`mtxExecuteTransfer`)
+     */
+    public var ids: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * 1
+         */v: UInt32, 
+        /**
+         * the profile's `chain_uid` (`0x` + 64 hex)
+         */chainUid: String, 
+        /**
+         * `evm`, `soroban`
+         */family: String, 
+        /**
+         * the domain's contract, the token (`0x` + 40 hex; a `C…` on Soroban)
+         */contract: String, 
+        /**
+         * the contract function (`mtxPay`, `mtxCancelNonce`, …; `pay`, `transfer`, `burn` on Soroban)
+         */entry: String, 
+        /**
+         * the signed struct
+         */name: String, 
+        /**
+         * the domain kind (`token`)
+         */kind: String, 
+        /**
+         * the struct's fields, canonical (an unbound `relayer` and `feeRecipient` 0)
+         */message: Value, 
+        /**
+         * what the entry takes unsigned beside them (a pay's `meta`, …)
+         */extra: Value, 
+        /**
+         * the signature in the entry's form (`bytes`, a `UASig`)
+         */signature: Value, 
+        /**
+         * the signer's subject id (the lane's `from`)
+         */signer: String, 
+        /**
+         * the signer's kind (a UA kind, 0 a native EVM key)
+         */signerKind: UInt16, 
+        /**
+         * the transfer on ids (`mtxExecuteTransfer`)
+         */ids: Bool) {
+        self.v = v
+        self.chainUid = chainUid
+        self.family = family
+        self.contract = contract
+        self.entry = entry
+        self.name = name
+        self.kind = kind
+        self.message = message
+        self.extra = extra
+        self.signature = signature
+        self.signer = signer
+        self.signerKind = signerKind
+        self.ids = ids
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SignedOpBlob: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSignedOpBlob: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignedOpBlob {
+        return
+            try SignedOpBlob(
+                v: FfiConverterUInt32.read(from: &buf), 
+                chainUid: FfiConverterString.read(from: &buf), 
+                family: FfiConverterString.read(from: &buf), 
+                contract: FfiConverterString.read(from: &buf), 
+                entry: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                kind: FfiConverterString.read(from: &buf), 
+                message: FfiConverterTypeValue.read(from: &buf), 
+                extra: FfiConverterTypeValue.read(from: &buf), 
+                signature: FfiConverterTypeValue.read(from: &buf), 
+                signer: FfiConverterString.read(from: &buf), 
+                signerKind: FfiConverterUInt16.read(from: &buf), 
+                ids: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SignedOpBlob, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.v, into: &buf)
+        FfiConverterString.write(value.chainUid, into: &buf)
+        FfiConverterString.write(value.family, into: &buf)
+        FfiConverterString.write(value.contract, into: &buf)
+        FfiConverterString.write(value.entry, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.kind, into: &buf)
+        FfiConverterTypeValue.write(value.message, into: &buf)
+        FfiConverterTypeValue.write(value.extra, into: &buf)
+        FfiConverterTypeValue.write(value.signature, into: &buf)
+        FfiConverterString.write(value.signer, into: &buf)
+        FfiConverterUInt16.write(value.signerKind, into: &buf)
+        FfiConverterBool.write(value.ids, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignedOpBlob_lift(_ buf: RustBuffer) throws -> SignedOpBlob {
+    return try FfiConverterTypeSignedOpBlob.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignedOpBlob_lower(_ value: SignedOpBlob) -> RustBuffer {
+    return FfiConverterTypeSignedOpBlob.lower(value)
 }
 
 
@@ -26426,6 +26789,12 @@ public enum KeyRef: Equatable, Hashable {
      */
     case blsMulti(seed: String, account: UInt32, index: UInt32, keyData: String
     )
+    /**
+     * an operation another party signed and handed off (`Op::import_signed`, spec §27.5 (c)): its signer's subject id (`0x`
+     * hex); nothing in this SDK signs for it
+     */
+    case signed(signer: String
+    )
 
 
 
@@ -26463,6 +26832,9 @@ public struct FfiConverterTypeKeyRef: FfiConverterRustBuffer {
         )
         
         case 6: return .blsMulti(seed: try FfiConverterString.read(from: &buf), account: try FfiConverterUInt32.read(from: &buf), index: try FfiConverterUInt32.read(from: &buf), keyData: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 7: return .signed(signer: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -26513,6 +26885,11 @@ public struct FfiConverterTypeKeyRef: FfiConverterRustBuffer {
             FfiConverterUInt32.write(account, into: &buf)
             FfiConverterUInt32.write(index, into: &buf)
             FfiConverterString.write(keyData, into: &buf)
+            
+        
+        case let .signed(signer):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(signer, into: &buf)
             
         }
     }
@@ -27371,6 +27748,81 @@ public enum SdkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
     case GasAboveBlockShare(message: String)
     
     /**
+     * An imported operation (spec §27.5 (c), owner 2026-11-22, Q-R3) of a kind the importer's family cannot show and check
+     * before sending, a confidential one (Zether, PQZ), or a struct or entry the family's rows do not hold.
+     */
+    case ImportKindRefused(message: String)
+    
+    /**
+     * An imported pay or transfer whose `to` is none of the importer's ids.
+     */
+    case ImportNotPayee(message: String)
+    
+    /**
+     * An imported operation whose signed `relayer` is bound to another address than the importer's payer (Soroban binds none).
+     */
+    case ImportRelayerBound(message: String)
+    
+    /**
+     * An imported operation with a fee to anyone: a hand-off is fee 0 (spec §27.5 (b)).
+     */
+    case ImportFeeRefused(message: String)
+    
+    /**
+     * An imported operation valid for less than the node's 120 s: its `validUntil` on the chain's clock (EVM, a Soroban
+     * pay), or its auth entry's expiry ledger (Soroban, a ledger at most each second).
+     */
+    case ImportExpired(message: String)
+    
+    /**
+     * An imported operation already spent at the final height: its lane nonce (EVM), its host nonce or `pay_ref` entry
+     * (Soroban); it landed, or another operation took the nonce.
+     */
+    case ImportConsumed(message: String)
+    
+    /**
+     * An imported operation the simulation from the payer refused: the chain's judgement of the signature and the effect.
+     */
+    case ImportedOpRefused(message: String)
+    
+    /**
+     * An Arweave upload above the free tier, or refused there, with no payer: none configured, or the operator's node payer
+     * off (NODE-SPN-05; CLI-SDK-21).
+     */
+    case PayerUnavailable(message: String)
+    
+    /**
+     * An Arweave upload the bundler refused for payment (HTTP 402): the user's own credits, or a payer's approval, are missing.
+     */
+    case PaymentRequired(message: String)
+    
+    /**
+     * An Arweave upload no bundler accepted, for a reason other than payment.
+     */
+    case UploadRejected(message: String)
+    
+    /**
+     * A kept Arweave upload still unsettled after its last re-post (C20): shown; the bytes stay kept.
+     */
+    case UploadUnsettled(message: String)
+    
+    /**
+     * A data item that is not one `scaas-ua` built: its verifying parser refused it, or it carries a target, an anchor or a
+     * tag, or its object is no bucket's (CLI-UAL-64): `scaas-ua`'s code for an item it built.
+     */
+    case ArweaveItem(message: String)
+    
+    /**
+     * A file or object above the platform's cap or the store's largest object (CLI-UAL-65): `scaas-ua`'s code.
+     */
+    case FileTooLarge(message: String)
+    
+    /**
+     * A file object or plaintext whose SHA-256 is not the signed one (CLI-UAL-65): `scaas-ua`'s code.
+     */
+    case FileHashMismatch(message: String)
+    
+    /**
      * a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
      */
     case Cancelled(message: String)
@@ -27682,15 +28134,71 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 68: return .Cancelled(
+        case 68: return .ImportKindRefused(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 69: return .Ua(
+        case 69: return .ImportNotPayee(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 70: return .Rpc(
+        case 70: return .ImportRelayerBound(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 71: return .ImportFeeRefused(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 72: return .ImportExpired(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 73: return .ImportConsumed(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 74: return .ImportedOpRefused(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 75: return .PayerUnavailable(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 76: return .PaymentRequired(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 77: return .UploadRejected(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 78: return .UploadUnsettled(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 79: return .ArweaveItem(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 80: return .FileTooLarge(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 81: return .FileHashMismatch(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 82: return .Cancelled(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 83: return .Ua(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 84: return .Rpc(
             message: try FfiConverterString.read(from: &buf)
         )
         
@@ -27839,12 +28347,40 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(66))
         case .GasAboveBlockShare(_ /* message is ignored*/):
             writeInt(&buf, Int32(67))
-        case .Cancelled(_ /* message is ignored*/):
+        case .ImportKindRefused(_ /* message is ignored*/):
             writeInt(&buf, Int32(68))
-        case .Ua(_ /* message is ignored*/):
+        case .ImportNotPayee(_ /* message is ignored*/):
             writeInt(&buf, Int32(69))
-        case .Rpc(_ /* message is ignored*/):
+        case .ImportRelayerBound(_ /* message is ignored*/):
             writeInt(&buf, Int32(70))
+        case .ImportFeeRefused(_ /* message is ignored*/):
+            writeInt(&buf, Int32(71))
+        case .ImportExpired(_ /* message is ignored*/):
+            writeInt(&buf, Int32(72))
+        case .ImportConsumed(_ /* message is ignored*/):
+            writeInt(&buf, Int32(73))
+        case .ImportedOpRefused(_ /* message is ignored*/):
+            writeInt(&buf, Int32(74))
+        case .PayerUnavailable(_ /* message is ignored*/):
+            writeInt(&buf, Int32(75))
+        case .PaymentRequired(_ /* message is ignored*/):
+            writeInt(&buf, Int32(76))
+        case .UploadRejected(_ /* message is ignored*/):
+            writeInt(&buf, Int32(77))
+        case .UploadUnsettled(_ /* message is ignored*/):
+            writeInt(&buf, Int32(78))
+        case .ArweaveItem(_ /* message is ignored*/):
+            writeInt(&buf, Int32(79))
+        case .FileTooLarge(_ /* message is ignored*/):
+            writeInt(&buf, Int32(80))
+        case .FileHashMismatch(_ /* message is ignored*/):
+            writeInt(&buf, Int32(81))
+        case .Cancelled(_ /* message is ignored*/):
+            writeInt(&buf, Int32(82))
+        case .Ua(_ /* message is ignored*/):
+            writeInt(&buf, Int32(83))
+        case .Rpc(_ /* message is ignored*/):
+            writeInt(&buf, Int32(84))
 
         
         }
@@ -27892,6 +28428,11 @@ public enum SlotKey: Equatable, Hashable {
      */
     case blsMulti(seed: String, account: UInt32, index: UInt32, keyData: String
     )
+    /**
+     * another party's signer (as `KeyRef::Signed`, a hand-off): never a slot's key, refused at signing
+     */
+    case signed(signer: String
+    )
 
 
 
@@ -27929,6 +28470,9 @@ public struct FfiConverterTypeSlotKey: FfiConverterRustBuffer {
         )
         
         case 6: return .blsMulti(seed: try FfiConverterString.read(from: &buf), account: try FfiConverterUInt32.read(from: &buf), index: try FfiConverterUInt32.read(from: &buf), keyData: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 7: return .signed(signer: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -27978,6 +28522,11 @@ public struct FfiConverterTypeSlotKey: FfiConverterRustBuffer {
             FfiConverterUInt32.write(account, into: &buf)
             FfiConverterUInt32.write(index, into: &buf)
             FfiConverterString.write(keyData, into: &buf)
+            
+        
+        case let .signed(signer):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(signer, into: &buf)
             
         }
     }
@@ -29531,6 +30080,31 @@ fileprivate struct FfiConverterSequenceTypeMsigSlotState: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeNativeCap: FfiConverterRustBuffer {
+    typealias SwiftType = [NativeCap]
+
+    public static func write(_ value: [NativeCap], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNativeCap.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NativeCap] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NativeCap]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNativeCap.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeOpItem: FfiConverterRustBuffer {
     typealias SwiftType = [OpItem]
 
@@ -30371,6 +30945,26 @@ public func secretNew(len: UInt32)throws  -> SecretBytes  {
 })
 }
 /**
+ * A signed operation's hand-off blob from its JSON (spec §27.5 (c)).
+ */
+public func signedOpBlobFromJson(text: String)throws  -> SignedOpBlob  {
+    return try  FfiConverterTypeSignedOpBlob_lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
+    uniffi_scaas_sdk_fn_func_signed_op_blob_from_json(
+        FfiConverterString.lower(text),$0
+    )
+})
+}
+/**
+ * A hand-off blob's JSON (spec §27.5 (c)).
+ */
+public func signedOpBlobToJson(blob: SignedOpBlob)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
+    uniffi_scaas_sdk_fn_func_signed_op_blob_to_json(
+        FfiConverterTypeSignedOpBlob_lower(blob),$0
+    )
+})
+}
+/**
  * A `SmartKeyAccount`'s address before its deployment (spec §7).
  */
 public func smartAccountAddress(factory: String, implementation: String, firstKey: SubjectKeyArgs, guardian: String)throws  -> String  {
@@ -30496,6 +31090,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_func_secret_new() != 26347) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json() != 43577) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json() != 49602) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_func_smart_account_address() != 22486) {
@@ -31003,6 +31603,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok() != 1443) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_hand_off() != 2688) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_import_signed() != 37279) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_op_member_sign() != 30667) {

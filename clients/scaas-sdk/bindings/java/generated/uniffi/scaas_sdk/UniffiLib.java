@@ -1658,6 +1658,24 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_fn_method_op_hand_off
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_op_hand_off = findDowncallHandle("uniffi_scaas_sdk_fn_method_op_hand_off", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG));
+
+    static long uniffi_scaas_sdk_fn_method_op_hand_off(long ptr, long prepared) {
+        try {
+            return (long) MH_uniffi_scaas_sdk_fn_method_op_hand_off.invokeExact(ptr, prepared);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_fn_method_op_import_signed
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_op_import_signed = findDowncallHandle("uniffi_scaas_sdk_fn_method_op_import_signed", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT, RustBuffer.LAYOUT));
+
+    static long uniffi_scaas_sdk_fn_method_op_import_signed(long ptr, java.lang.foreign.MemorySegment blob, java.lang.foreign.MemorySegment expect) {
+        try {
+            return (long) MH_uniffi_scaas_sdk_fn_method_op_import_signed.invokeExact(ptr, blob, expect);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_fn_method_op_member_sign
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_op_member_sign = findDowncallHandle("uniffi_scaas_sdk_fn_method_op_member_sign", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG));
 
@@ -2756,6 +2774,24 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_fn_func_signed_op_blob_from_json
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_func_signed_op_blob_from_json = findDowncallHandle("uniffi_scaas_sdk_fn_func_signed_op_blob_from_json", java.lang.foreign.FunctionDescriptor.of(RustBuffer.LAYOUT, RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.ADDRESS));
+
+    static java.lang.foreign.MemorySegment uniffi_scaas_sdk_fn_func_signed_op_blob_from_json(java.lang.foreign.SegmentAllocator _allocator, java.lang.foreign.MemorySegment text, java.lang.foreign.MemorySegment uniffiOutErr) {
+        try {
+            return (java.lang.foreign.MemorySegment) MH_uniffi_scaas_sdk_fn_func_signed_op_blob_from_json.invokeExact(_allocator, text, uniffiOutErr);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_fn_func_signed_op_blob_to_json
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_func_signed_op_blob_to_json = findDowncallHandle("uniffi_scaas_sdk_fn_func_signed_op_blob_to_json", java.lang.foreign.FunctionDescriptor.of(RustBuffer.LAYOUT, RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.ADDRESS));
+
+    static java.lang.foreign.MemorySegment uniffi_scaas_sdk_fn_func_signed_op_blob_to_json(java.lang.foreign.SegmentAllocator _allocator, java.lang.foreign.MemorySegment blob, java.lang.foreign.MemorySegment uniffiOutErr) {
+        try {
+            return (java.lang.foreign.MemorySegment) MH_uniffi_scaas_sdk_fn_func_signed_op_blob_to_json.invokeExact(_allocator, blob, uniffiOutErr);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_fn_func_smart_account_address
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_func_smart_account_address = findDowncallHandle("uniffi_scaas_sdk_fn_func_smart_account_address", java.lang.foreign.FunctionDescriptor.of(RustBuffer.LAYOUT, RustBuffer.LAYOUT, RustBuffer.LAYOUT, RustBuffer.LAYOUT, RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.ADDRESS));
 
@@ -3446,6 +3482,24 @@ final class UniffiLib {
     static short uniffi_scaas_sdk_checksum_func_secret_new() {
         try {
             return (short) MH_uniffi_scaas_sdk_checksum_func_secret_new.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json = findDowncallHandle("uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json = findDowncallHandle("uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json.invokeExact();
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
@@ -4967,6 +5021,24 @@ final class UniffiLib {
     static short uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok() {
         try {
             return (short) MH_uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_method_op_hand_off
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_op_hand_off = findDowncallHandle("uniffi_scaas_sdk_checksum_method_op_hand_off", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_method_op_hand_off() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_method_op_hand_off.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_method_op_import_signed
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_op_import_signed = findDowncallHandle("uniffi_scaas_sdk_checksum_method_op_import_signed", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_method_op_import_signed() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_method_op_import_signed.invokeExact();
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 

@@ -72,6 +72,12 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_func_secret_new() != 26347) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json() != 43577) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
+    if (uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json() != 49602) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_func_smart_account_address() != 22486) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
@@ -550,6 +556,12 @@ void ensure_initialized() {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok() != 1443) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_hand_off_blocking() != 33758) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_import_signed_blocking() != 58244) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_op_member_sign_blocking() != 16375) {
@@ -2304,6 +2316,18 @@ bool Op::bls_multi_pop_part_ok(const std::string &key_data, const BlsMultiPart &
         nullptr,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(key_data), uniffi::FfiConverterTypeBlsMultiPart::lower(part)));
 }
+SignedOpBlob Op::hand_off_blocking(const std::shared_ptr<Prepared> &prepared, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterTypeSignedOpBlob::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_op_hand_off_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterPrepared::lower(prepared), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
+std::shared_ptr<Prepared> Op::import_signed_blocking(const SignedOpBlob &blob, const ImportExpect &expect, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterPrepared::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_op_import_signed_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterTypeSignedOpBlob::lower(blob), uniffi::FfiConverterTypeImportExpect::lower(expect), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
 std::string Op::member_sign_blocking(const std::shared_ptr<Prepared> &prepared, std::shared_ptr<CancelToken> cancel) {
     return uniffi::FfiConverterString::lift(uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_op_member_sign_blocking,
@@ -3559,6 +3583,16 @@ uint64_t Wallet::_uniffi_internal_clone_handle() const {
         this->instance
     );
 }
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -6830,6 +6864,48 @@ uint64_t FfiConverterTypeHistoryPage::allocation_size(const HistoryPage &val) {
 }
 
 
+ImportExpect FfiConverterTypeImportExpect::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterTypeImportExpect::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterTypeImportExpect::lower(const ImportExpect &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterTypeImportExpect::write(stream, val);
+
+    return std::move(buf);
+}
+
+ImportExpect FfiConverterTypeImportExpect::read(RustStream &stream) {
+    return {
+        FfiConverterString::read(stream),
+        FfiConverterSequenceString::read(stream),
+        FfiConverterKeyRef::read(stream)
+    };
+}
+
+void FfiConverterTypeImportExpect::write(RustStream &stream, const ImportExpect &val) {
+    FfiConverterString::write(stream, val.chain);
+    FfiConverterSequenceString::write(stream, val.payee);
+    FfiConverterKeyRef::write(stream, val.payer);
+}
+
+uint64_t FfiConverterTypeImportExpect::allocation_size(const ImportExpect &val) {
+    
+    return 
+        FfiConverterString::allocation_size(val.chain) +
+        FfiConverterSequenceString::allocation_size(val.payee) +
+        FfiConverterKeyRef::allocation_size(val.payer);
+    
+}
+
+
 ImportKey FfiConverterTypeImportKey::lift(RustBuffer buf) {
     auto stream = RustStream(&buf);
     auto ret = FfiConverterTypeImportKey::read(stream);
@@ -7104,7 +7180,8 @@ Limits FfiConverterTypeLimits::read(RustStream &stream) {
         FfiConverterUInt32::read(stream),
         FfiConverterUInt64::read(stream),
         FfiConverterUInt32::read(stream),
-        FfiConverterUInt64::read(stream)
+        FfiConverterUInt64::read(stream),
+        FfiConverterSequenceTypeNativeCap::read(stream)
     };
 }
 
@@ -7118,6 +7195,7 @@ void FfiConverterTypeLimits::write(RustStream &stream, const Limits &val) {
     FfiConverterUInt64::write(stream, val.max_valid_secs);
     FfiConverterUInt32::write(stream, val.event_queue);
     FfiConverterUInt64::write(stream, val.state_retention_secs);
+    FfiConverterSequenceTypeNativeCap::write(stream, val.max_native_cost);
 }
 
 uint64_t FfiConverterTypeLimits::allocation_size(const Limits &val) {
@@ -7131,7 +7209,8 @@ uint64_t FfiConverterTypeLimits::allocation_size(const Limits &val) {
         FfiConverterUInt32::allocation_size(val.max_concurrent_heavy) +
         FfiConverterUInt64::allocation_size(val.max_valid_secs) +
         FfiConverterUInt32::allocation_size(val.event_queue) +
-        FfiConverterUInt64::allocation_size(val.state_retention_secs);
+        FfiConverterUInt64::allocation_size(val.state_retention_secs) +
+        FfiConverterSequenceTypeNativeCap::allocation_size(val.max_native_cost);
     
 }
 
@@ -7753,6 +7832,45 @@ uint64_t FfiConverterTypeNativeAddress::allocation_size(const NativeAddress &val
         FfiConverterOptionalString::allocation_size(val.ss58) +
         FfiConverterOptionalUInt8::allocation_size(val.witness_version) +
         FfiConverterOptionalString::allocation_size(val.witness_program);
+    
+}
+
+
+NativeCap FfiConverterTypeNativeCap::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterTypeNativeCap::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterTypeNativeCap::lower(const NativeCap &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterTypeNativeCap::write(stream, val);
+
+    return std::move(buf);
+}
+
+NativeCap FfiConverterTypeNativeCap::read(RustStream &stream) {
+    return {
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream)
+    };
+}
+
+void FfiConverterTypeNativeCap::write(RustStream &stream, const NativeCap &val) {
+    FfiConverterString::write(stream, val.chain);
+    FfiConverterString::write(stream, val.max);
+}
+
+uint64_t FfiConverterTypeNativeCap::allocation_size(const NativeCap &val) {
+    
+    return 
+        FfiConverterString::allocation_size(val.chain) +
+        FfiConverterString::allocation_size(val.max);
     
 }
 
@@ -10006,6 +10124,78 @@ uint64_t FfiConverterTypeSetPayee::allocation_size(const SetPayee &val) {
         FfiConverterString::allocation_size(val.payee) +
         FfiConverterBool::allocation_size(val.allowed) +
         FfiConverterTypeEnvelope::allocation_size(val.envelope);
+    
+}
+
+
+SignedOpBlob FfiConverterTypeSignedOpBlob::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterTypeSignedOpBlob::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterTypeSignedOpBlob::lower(const SignedOpBlob &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterTypeSignedOpBlob::write(stream, val);
+
+    return std::move(buf);
+}
+
+SignedOpBlob FfiConverterTypeSignedOpBlob::read(RustStream &stream) {
+    return {
+        FfiConverterUInt32::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterTypeValue::read(stream),
+        FfiConverterTypeValue::read(stream),
+        FfiConverterTypeValue::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterUInt16::read(stream),
+        FfiConverterBool::read(stream)
+    };
+}
+
+void FfiConverterTypeSignedOpBlob::write(RustStream &stream, const SignedOpBlob &val) {
+    FfiConverterUInt32::write(stream, val.v);
+    FfiConverterString::write(stream, val.chain_uid);
+    FfiConverterString::write(stream, val.family);
+    FfiConverterString::write(stream, val.contract);
+    FfiConverterString::write(stream, val.entry);
+    FfiConverterString::write(stream, val.name);
+    FfiConverterString::write(stream, val.kind);
+    FfiConverterTypeValue::write(stream, val.message);
+    FfiConverterTypeValue::write(stream, val.extra);
+    FfiConverterTypeValue::write(stream, val.signature);
+    FfiConverterString::write(stream, val.signer);
+    FfiConverterUInt16::write(stream, val.signer_kind);
+    FfiConverterBool::write(stream, val.ids);
+}
+
+uint64_t FfiConverterTypeSignedOpBlob::allocation_size(const SignedOpBlob &val) {
+    
+    return 
+        FfiConverterUInt32::allocation_size(val.v) +
+        FfiConverterString::allocation_size(val.chain_uid) +
+        FfiConverterString::allocation_size(val.family) +
+        FfiConverterString::allocation_size(val.contract) +
+        FfiConverterString::allocation_size(val.entry) +
+        FfiConverterString::allocation_size(val.name) +
+        FfiConverterString::allocation_size(val.kind) +
+        FfiConverterTypeValue::allocation_size(val.message) +
+        FfiConverterTypeValue::allocation_size(val.extra) +
+        FfiConverterTypeValue::allocation_size(val.signature) +
+        FfiConverterString::allocation_size(val.signer) +
+        FfiConverterUInt16::allocation_size(val.signer_kind) +
+        FfiConverterBool::allocation_size(val.ids);
     
 }
 
@@ -17151,6 +17341,11 @@ KeyRef FfiConverterKeyRef::read(RustStream &stream) {
             .key_data = FfiConverterString::read(stream),
         };
         
+    case 7:
+        return KeyRef::kSigned {
+            .signer = FfiConverterString::read(stream),
+        };
+        
     default:
         throw std::runtime_error("No matching KeyRef variant");
     }
@@ -17192,6 +17387,9 @@ void FfiConverterKeyRef::write(RustStream &stream, const KeyRef &val) {
             FfiConverterUInt32::write(stream, arg.account);
             FfiConverterUInt32::write(stream, arg.index);
             FfiConverterString::write(stream, arg.key_data);
+        }
+        else if constexpr (std::is_same_v<T, KeyRef::kSigned>) {
+            FfiConverterString::write(stream, arg.signer);
         }
         else {
             static_assert(always_false_v<T>, "non-exhaustive KeyRef visitor");
@@ -17244,6 +17442,11 @@ uint64_t FfiConverterKeyRef::allocation_size(const KeyRef &val) {
             size += FfiConverterUInt32::allocation_size(arg.account);
             size += FfiConverterUInt32::allocation_size(arg.index);
             size += FfiConverterString::allocation_size(arg.key_data);
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, KeyRef::kSigned>) {
+            uint64_t size = 0;
+            size += FfiConverterString::allocation_size(arg.signer);
             return size;
         }
         else {
@@ -18081,12 +18284,54 @@ std::shared_ptr<SdkError> FfiConverterSdkError::read(RustStream &stream) {
         return std::make_shared<sdk_error::GasAboveBlockShare>(FfiConverterString::read(stream));
     
     case 68:
-        return std::make_shared<sdk_error::Cancelled>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::ImportKindRefused>(FfiConverterString::read(stream));
     
     case 69:
-        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::ImportNotPayee>(FfiConverterString::read(stream));
     
     case 70:
+        return std::make_shared<sdk_error::ImportRelayerBound>(FfiConverterString::read(stream));
+    
+    case 71:
+        return std::make_shared<sdk_error::ImportFeeRefused>(FfiConverterString::read(stream));
+    
+    case 72:
+        return std::make_shared<sdk_error::ImportExpired>(FfiConverterString::read(stream));
+    
+    case 73:
+        return std::make_shared<sdk_error::ImportConsumed>(FfiConverterString::read(stream));
+    
+    case 74:
+        return std::make_shared<sdk_error::ImportedOpRefused>(FfiConverterString::read(stream));
+    
+    case 75:
+        return std::make_shared<sdk_error::PayerUnavailable>(FfiConverterString::read(stream));
+    
+    case 76:
+        return std::make_shared<sdk_error::PaymentRequired>(FfiConverterString::read(stream));
+    
+    case 77:
+        return std::make_shared<sdk_error::UploadRejected>(FfiConverterString::read(stream));
+    
+    case 78:
+        return std::make_shared<sdk_error::UploadUnsettled>(FfiConverterString::read(stream));
+    
+    case 79:
+        return std::make_shared<sdk_error::ArweaveItem>(FfiConverterString::read(stream));
+    
+    case 80:
+        return std::make_shared<sdk_error::FileTooLarge>(FfiConverterString::read(stream));
+    
+    case 81:
+        return std::make_shared<sdk_error::FileHashMismatch>(FfiConverterString::read(stream));
+    
+    case 82:
+        return std::make_shared<sdk_error::Cancelled>(FfiConverterString::read(stream));
+    
+    case 83:
+        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+    
+    case 84:
         return std::make_shared<sdk_error::Rpc>(FfiConverterString::read(stream));
     
     default:
@@ -18169,6 +18414,11 @@ SlotKey FfiConverterSlotKey::read(RustStream &stream) {
             .key_data = FfiConverterString::read(stream),
         };
         
+    case 7:
+        return SlotKey::kSigned {
+            .signer = FfiConverterString::read(stream),
+        };
+        
     default:
         throw std::runtime_error("No matching SlotKey variant");
     }
@@ -18209,6 +18459,9 @@ void FfiConverterSlotKey::write(RustStream &stream, const SlotKey &val) {
             FfiConverterUInt32::write(stream, arg.account);
             FfiConverterUInt32::write(stream, arg.index);
             FfiConverterString::write(stream, arg.key_data);
+        }
+        else if constexpr (std::is_same_v<T, SlotKey::kSigned>) {
+            FfiConverterString::write(stream, arg.signer);
         }
         else {
             static_assert(always_false_v<T>, "non-exhaustive SlotKey visitor");
@@ -18260,6 +18513,11 @@ uint64_t FfiConverterSlotKey::allocation_size(const SlotKey &val) {
             size += FfiConverterUInt32::allocation_size(arg.account);
             size += FfiConverterUInt32::allocation_size(arg.index);
             size += FfiConverterString::allocation_size(arg.key_data);
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, SlotKey::kSigned>) {
+            uint64_t size = 0;
+            size += FfiConverterString::allocation_size(arg.signer);
             return size;
         }
         else {
@@ -20921,6 +21179,57 @@ uint64_t FfiConverterSequenceTypeMsigSlotState::allocation_size(const std::vecto
 }
 
 
+std::vector<NativeCap> FfiConverterSequenceTypeNativeCap::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = read(stream);
+
+    rustbuffer_free(buf);
+
+    return ret;
+}
+
+RustBuffer FfiConverterSequenceTypeNativeCap::lower(const std::vector<NativeCap> &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    write(stream, val);
+
+    return buf;
+}
+
+std::vector<NativeCap> FfiConverterSequenceTypeNativeCap::read(RustStream &stream) {
+    std::vector<NativeCap> ret;
+    int32_t count;
+    stream >> count;
+
+    ret.reserve(count);
+
+    for (decltype(count) i = 0; i < count; i++) {
+        ret.push_back(FfiConverterTypeNativeCap::read(stream));
+    }
+
+    return ret;
+}
+
+void FfiConverterSequenceTypeNativeCap::write(RustStream &stream, const std::vector<NativeCap> &val) {
+    stream << static_cast<int32_t>(val.size());
+
+    for (const auto &elem : val) {
+        FfiConverterTypeNativeCap::write(stream, elem);
+    }
+}
+
+uint64_t FfiConverterSequenceTypeNativeCap::allocation_size(const std::vector<NativeCap> &val) {
+    uint64_t size = sizeof(int32_t);
+
+    for (const auto &elem : val) {
+        size += FfiConverterTypeNativeCap::allocation_size(elem);
+    }
+
+    return size;
+}
+
+
 std::vector<OpItem> FfiConverterSequenceTypeOpItem::lift(RustBuffer buf) {
     auto stream = RustStream(&buf);
     auto ret = read(stream);
@@ -21757,6 +22066,24 @@ std::shared_ptr<SecretBytes> secret_new(uint32_t len) {
         uniffi::FfiConverterSdkError::lift, uniffi::FfiConverterUInt32::lower(len));
 
     return uniffi::FfiConverterSecretBytes::lift(ret);
+}
+
+
+SignedOpBlob signed_op_blob_from_json(const std::string &text) {
+    auto ret = uniffi::rust_call(
+        uniffi_scaas_sdk_fn_func_signed_op_blob_from_json,
+        uniffi::FfiConverterSdkError::lift, uniffi::FfiConverterString::lower(text));
+
+    return uniffi::FfiConverterTypeSignedOpBlob::lift(ret);
+}
+
+
+std::string signed_op_blob_to_json(const SignedOpBlob &blob) {
+    auto ret = uniffi::rust_call(
+        uniffi_scaas_sdk_fn_func_signed_op_blob_to_json,
+        uniffi::FfiConverterSdkError::lift, uniffi::FfiConverterTypeSignedOpBlob::lower(blob));
+
+    return uniffi::FfiConverterString::lift(ret);
 }
 
 

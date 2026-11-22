@@ -557,6 +557,24 @@ func uniffiCheckChecksums() {
 	}
 	{
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json()
+		})
+		if checksum != 43577 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json()
+		})
+		if checksum != 49602 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_scaas_sdk_checksum_func_smart_account_address()
 		})
 		if checksum != 22486 {
@@ -2074,6 +2092,24 @@ func uniffiCheckChecksums() {
 		if checksum != 1443 {
 			// If this happens try cleaning and rebuilding your project
 			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_method_op_hand_off()
+		})
+		if checksum != 2688 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_op_hand_off: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_method_op_import_signed()
+		})
+		if checksum != 37279 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_op_import_signed: UniFFI API checksum mismatch")
 		}
 	}
 	{
@@ -9589,6 +9625,8 @@ type OpInterface interface {
 	BlsMultiPopPart(member KeyRef) (BlsMultiPart, error)
 	// Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
 	BlsMultiPopPartOk(keyData string, part BlsMultiPart) bool
+	HandOff(prepared *Prepared) (SignedOpBlob, error)
+	ImportSigned(blob SignedOpBlob, expect ImportExpect) (*Prepared, error)
 	MemberSign(prepared *Prepared) (string, error)
 	Quote(prepared *Prepared, path SubmitPath) (SubmitQuote, error)
 	QuoteRegisterBlsMulti(chain string, keyData string, payer KeyRef) (SubmitQuote, error)
@@ -9677,6 +9715,74 @@ func (_self *Op) BlsMultiPopPartOk(keyData string, part BlsMultiPart) bool {
 		return C.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok(
 			_pointer, FfiConverterStringINSTANCE.Lower(keyData), FfiConverterBlsMultiPartINSTANCE.Lower(part), _uniffiStatus)
 	}))
+}
+
+func (_self *Op) HandOff(prepared *Prepared) (SignedOpBlob, error) {
+	_pointer := _self.ffiObject.incrementPointer("*Op")
+	defer _self.ffiObject.decrementPointer()
+	res, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
+		// completeFn
+		func(handle C.uint64_t, status *C.RustCallStatus) RustBufferI {
+			res := C.ffi_scaas_sdk_rust_future_complete_rust_buffer(handle, status)
+			return GoRustBuffer{
+				inner: res,
+			}
+		},
+		// liftFn
+		func(ffi RustBufferI) SignedOpBlob {
+			return FfiConverterSignedOpBlobINSTANCE.Lift(ffi)
+		},
+		C.uniffi_scaas_sdk_fn_method_op_hand_off(
+			_pointer, FfiConverterPreparedINSTANCE.Lower(prepared)),
+		// pollFn
+		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_poll_rust_buffer(handle, continuation, data)
+		},
+		// freeFn
+		func(handle C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_free_rust_buffer(handle)
+		},
+	)
+
+	if err == nil {
+		return res, nil
+	}
+
+	return res, err
+}
+
+func (_self *Op) ImportSigned(blob SignedOpBlob, expect ImportExpect) (*Prepared, error) {
+	_pointer := _self.ffiObject.incrementPointer("*Op")
+	defer _self.ffiObject.decrementPointer()
+	res, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
+		// completeFn
+		func(handle C.uint64_t, status *C.RustCallStatus) C.uint64_t {
+			res := C.ffi_scaas_sdk_rust_future_complete_u64(handle, status)
+			return res
+		},
+		// liftFn
+		func(ffi C.uint64_t) *Prepared {
+			return FfiConverterPreparedINSTANCE.Lift(ffi)
+		},
+		C.uniffi_scaas_sdk_fn_method_op_import_signed(
+			_pointer, FfiConverterSignedOpBlobINSTANCE.Lower(blob), FfiConverterImportExpectINSTANCE.Lower(expect)),
+		// pollFn
+		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_poll_u64(handle, continuation, data)
+		},
+		// freeFn
+		func(handle C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_free_u64(handle)
+		},
+	)
+
+	if err == nil {
+		return res, nil
+	}
+
+	return res, err
 }
 
 func (_self *Op) MemberSign(prepared *Prepared) (string, error) {
@@ -15332,6 +15438,56 @@ func (_ FfiDestroyerHistoryPage) Destroy(value HistoryPage) {
 	value.Destroy()
 }
 
+// What the payee expects of an imported operation: its chain, its own ids (`0x` + 64 hex: a pay or transfer must name one as
+// `to`), and the native key that will submit it (`SubmitPath::SelfRelay`).
+type ImportExpect struct {
+	Chain string
+	Payee []string
+	Payer KeyRef
+}
+
+func (r *ImportExpect) Destroy() {
+	FfiDestroyerString{}.Destroy(r.Chain)
+	FfiDestroyerSequenceString{}.Destroy(r.Payee)
+	FfiDestroyerKeyRef{}.Destroy(r.Payer)
+}
+
+type FfiConverterImportExpect struct{}
+
+var FfiConverterImportExpectINSTANCE = FfiConverterImportExpect{}
+
+func (c FfiConverterImportExpect) Lift(rb RustBufferI) ImportExpect {
+	return LiftFromRustBuffer[ImportExpect](c, rb)
+}
+
+func (c FfiConverterImportExpect) Read(reader io.Reader) ImportExpect {
+	return ImportExpect{
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterSequenceStringINSTANCE.Read(reader),
+		FfiConverterKeyRefINSTANCE.Read(reader),
+	}
+}
+
+func (c FfiConverterImportExpect) Lower(value ImportExpect) C.RustBuffer {
+	return LowerIntoRustBuffer[ImportExpect](c, value)
+}
+
+func (c FfiConverterImportExpect) LowerExternal(value ImportExpect) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[ImportExpect](c, value))
+}
+
+func (c FfiConverterImportExpect) Write(writer io.Writer, value ImportExpect) {
+	FfiConverterStringINSTANCE.Write(writer, value.Chain)
+	FfiConverterSequenceStringINSTANCE.Write(writer, value.Payee)
+	FfiConverterKeyRefINSTANCE.Write(writer, value.Payer)
+}
+
+type FfiDestroyerImportExpect struct{}
+
+func (_ FfiDestroyerImportExpect) Destroy(value ImportExpect) {
+	value.Destroy()
+}
+
 // `vault.import_key`'s request (spec §6.7): a classical private key of `network` (32 bytes) as a leaf of a seed, sealed as the
 // new label vault `native-import:<network>:<n>` under the seed's vault passphrase.
 type ImportKey struct {
@@ -15641,6 +15797,10 @@ type Limits struct {
 	// how long a terminal operation row stays in `sdk.state` after it ended, in seconds (default 90 days); a non-terminal row
 	// is never pruned (owner 2026-11-19, T13b ruling 2)
 	StateRetentionSecs uint64
+	// the most a family's native transaction may cost its payer, per chain profile, as a decimal string in the chain's
+	// smallest unit (spec §27.5 (e): fee + storage + forward; plan T41): never from an endpoint. A chain without its row
+	// spends nothing natively (`FeeAboveCap`: fail closed). EVM's self-relay keeps `max_cost`
+	MaxNativeCost []NativeCap
 }
 
 func (r *Limits) Destroy() {
@@ -15653,6 +15813,7 @@ func (r *Limits) Destroy() {
 	FfiDestroyerUint64{}.Destroy(r.MaxValidSecs)
 	FfiDestroyerUint32{}.Destroy(r.EventQueue)
 	FfiDestroyerUint64{}.Destroy(r.StateRetentionSecs)
+	FfiDestroyerSequenceNativeCap{}.Destroy(r.MaxNativeCost)
 }
 
 type FfiConverterLimits struct{}
@@ -15674,6 +15835,7 @@ func (c FfiConverterLimits) Read(reader io.Reader) Limits {
 		FfiConverterUint64INSTANCE.Read(reader),
 		FfiConverterUint32INSTANCE.Read(reader),
 		FfiConverterUint64INSTANCE.Read(reader),
+		FfiConverterSequenceNativeCapINSTANCE.Read(reader),
 	}
 }
 
@@ -15695,6 +15857,7 @@ func (c FfiConverterLimits) Write(writer io.Writer, value Limits) {
 	FfiConverterUint64INSTANCE.Write(writer, value.MaxValidSecs)
 	FfiConverterUint32INSTANCE.Write(writer, value.EventQueue)
 	FfiConverterUint64INSTANCE.Write(writer, value.StateRetentionSecs)
+	FfiConverterSequenceNativeCapINSTANCE.Write(writer, value.MaxNativeCost)
 }
 
 type FfiDestroyerLimits struct{}
@@ -16462,6 +16625,53 @@ func (c FfiConverterNativeAddress) Write(writer io.Writer, value NativeAddress) 
 type FfiDestroyerNativeAddress struct{}
 
 func (_ FfiDestroyerNativeAddress) Destroy(value NativeAddress) {
+	value.Destroy()
+}
+
+// One chain's native cost cap (`Limits::max_native_cost`).
+type NativeCap struct {
+	// the profile's key
+	Chain string
+	// decimal, the chain's smallest unit (stroops on Soroban)
+	Max string
+}
+
+func (r *NativeCap) Destroy() {
+	FfiDestroyerString{}.Destroy(r.Chain)
+	FfiDestroyerString{}.Destroy(r.Max)
+}
+
+type FfiConverterNativeCap struct{}
+
+var FfiConverterNativeCapINSTANCE = FfiConverterNativeCap{}
+
+func (c FfiConverterNativeCap) Lift(rb RustBufferI) NativeCap {
+	return LiftFromRustBuffer[NativeCap](c, rb)
+}
+
+func (c FfiConverterNativeCap) Read(reader io.Reader) NativeCap {
+	return NativeCap{
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+	}
+}
+
+func (c FfiConverterNativeCap) Lower(value NativeCap) C.RustBuffer {
+	return LowerIntoRustBuffer[NativeCap](c, value)
+}
+
+func (c FfiConverterNativeCap) LowerExternal(value NativeCap) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[NativeCap](c, value))
+}
+
+func (c FfiConverterNativeCap) Write(writer io.Writer, value NativeCap) {
+	FfiConverterStringINSTANCE.Write(writer, value.Chain)
+	FfiConverterStringINSTANCE.Write(writer, value.Max)
+}
+
+type FfiDestroyerNativeCap struct{}
+
+func (_ FfiDestroyerNativeCap) Destroy(value NativeCap) {
 	value.Destroy()
 }
 
@@ -19207,6 +19417,109 @@ func (c FfiConverterSetPayee) Write(writer io.Writer, value SetPayee) {
 type FfiDestroyerSetPayee struct{}
 
 func (_ FfiDestroyerSetPayee) Destroy(value SetPayee) {
+	value.Destroy()
+}
+
+// A signed operation handed off (spec §27.5 (c)): the operation's named fields as signed (canonical), its signature in the
+// entry's form, the signer's subject id and kind. It holds no secret; who holds it can land it, never redirect it.
+type SignedOpBlob struct {
+	// 1
+	V uint32
+	// the profile's `chain_uid` (`0x` + 64 hex)
+	ChainUid string
+	// `evm`, `soroban`
+	Family string
+	// the domain's contract, the token (`0x` + 40 hex; a `C…` on Soroban)
+	Contract string
+	// the contract function (`mtxPay`, `mtxCancelNonce`, …; `pay`, `transfer`, `burn` on Soroban)
+	Entry string
+	// the signed struct
+	Name string
+	// the domain kind (`token`)
+	Kind string
+	// the struct's fields, canonical (an unbound `relayer` and `feeRecipient` 0)
+	Message Value
+	// what the entry takes unsigned beside them (a pay's `meta`, …)
+	Extra Value
+	// the signature in the entry's form (`bytes`, a `UASig`)
+	Signature Value
+	// the signer's subject id (the lane's `from`)
+	Signer string
+	// the signer's kind (a UA kind, 0 a native EVM key)
+	SignerKind uint16
+	// the transfer on ids (`mtxExecuteTransfer`)
+	Ids bool
+}
+
+func (r *SignedOpBlob) Destroy() {
+	FfiDestroyerUint32{}.Destroy(r.V)
+	FfiDestroyerString{}.Destroy(r.ChainUid)
+	FfiDestroyerString{}.Destroy(r.Family)
+	FfiDestroyerString{}.Destroy(r.Contract)
+	FfiDestroyerString{}.Destroy(r.Entry)
+	FfiDestroyerString{}.Destroy(r.Name)
+	FfiDestroyerString{}.Destroy(r.Kind)
+	FfiDestroyerTypeValue{}.Destroy(r.Message)
+	FfiDestroyerTypeValue{}.Destroy(r.Extra)
+	FfiDestroyerTypeValue{}.Destroy(r.Signature)
+	FfiDestroyerString{}.Destroy(r.Signer)
+	FfiDestroyerUint16{}.Destroy(r.SignerKind)
+	FfiDestroyerBool{}.Destroy(r.Ids)
+}
+
+type FfiConverterSignedOpBlob struct{}
+
+var FfiConverterSignedOpBlobINSTANCE = FfiConverterSignedOpBlob{}
+
+func (c FfiConverterSignedOpBlob) Lift(rb RustBufferI) SignedOpBlob {
+	return LiftFromRustBuffer[SignedOpBlob](c, rb)
+}
+
+func (c FfiConverterSignedOpBlob) Read(reader io.Reader) SignedOpBlob {
+	return SignedOpBlob{
+		FfiConverterUint32INSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterTypeValueINSTANCE.Read(reader),
+		FfiConverterTypeValueINSTANCE.Read(reader),
+		FfiConverterTypeValueINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterUint16INSTANCE.Read(reader),
+		FfiConverterBoolINSTANCE.Read(reader),
+	}
+}
+
+func (c FfiConverterSignedOpBlob) Lower(value SignedOpBlob) C.RustBuffer {
+	return LowerIntoRustBuffer[SignedOpBlob](c, value)
+}
+
+func (c FfiConverterSignedOpBlob) LowerExternal(value SignedOpBlob) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[SignedOpBlob](c, value))
+}
+
+func (c FfiConverterSignedOpBlob) Write(writer io.Writer, value SignedOpBlob) {
+	FfiConverterUint32INSTANCE.Write(writer, value.V)
+	FfiConverterStringINSTANCE.Write(writer, value.ChainUid)
+	FfiConverterStringINSTANCE.Write(writer, value.Family)
+	FfiConverterStringINSTANCE.Write(writer, value.Contract)
+	FfiConverterStringINSTANCE.Write(writer, value.Entry)
+	FfiConverterStringINSTANCE.Write(writer, value.Name)
+	FfiConverterStringINSTANCE.Write(writer, value.Kind)
+	FfiConverterTypeValueINSTANCE.Write(writer, value.Message)
+	FfiConverterTypeValueINSTANCE.Write(writer, value.Extra)
+	FfiConverterTypeValueINSTANCE.Write(writer, value.Signature)
+	FfiConverterStringINSTANCE.Write(writer, value.Signer)
+	FfiConverterUint16INSTANCE.Write(writer, value.SignerKind)
+	FfiConverterBoolINSTANCE.Write(writer, value.Ids)
+}
+
+type FfiDestroyerSignedOpBlob struct{}
+
+func (_ FfiDestroyerSignedOpBlob) Destroy(value SignedOpBlob) {
 	value.Destroy()
 }
 
@@ -27725,6 +28038,16 @@ func (e KeyRefBlsMulti) Destroy() {
 	FfiDestroyerString{}.Destroy(e.KeyData)
 }
 
+// an operation another party signed and handed off (`Op::import_signed`, spec §27.5 (c)): its signer's subject id (`0x`
+// hex); nothing in this SDK signs for it
+type KeyRefSigned struct {
+	Signer string
+}
+
+func (e KeyRefSigned) Destroy() {
+	FfiDestroyerString{}.Destroy(e.Signer)
+}
+
 type FfiConverterKeyRef struct{}
 
 var FfiConverterKeyRefINSTANCE = FfiConverterKeyRef{}
@@ -27779,6 +28102,10 @@ func (FfiConverterKeyRef) Read(reader io.Reader) KeyRef {
 			FfiConverterUint32INSTANCE.Read(reader),
 			FfiConverterStringINSTANCE.Read(reader),
 		}
+	case 7:
+		return KeyRefSigned{
+			FfiConverterStringINSTANCE.Read(reader),
+		}
 	default:
 		panic(fmt.Sprintf("invalid enum value %v in FfiConverterKeyRef.Read()", id))
 	}
@@ -27816,6 +28143,9 @@ func (FfiConverterKeyRef) Write(writer io.Writer, value KeyRef) {
 		FfiConverterUint32INSTANCE.Write(writer, variant_value.Account)
 		FfiConverterUint32INSTANCE.Write(writer, variant_value.Index)
 		FfiConverterStringINSTANCE.Write(writer, variant_value.KeyData)
+	case KeyRefSigned:
+		writeInt32(writer, 7)
+		FfiConverterStringINSTANCE.Write(writer, variant_value.Signer)
 	default:
 		_ = variant_value
 		panic(fmt.Sprintf("invalid enum value `%v` in FfiConverterKeyRef.Write", value))
@@ -28457,6 +28787,20 @@ var ErrSdkErrorPqzHomeNone = fmt.Errorf("SdkErrorPqzHomeNone")
 var ErrSdkErrorDexNotListed = fmt.Errorf("SdkErrorDexNotListed")
 var ErrSdkErrorPqzAuditorNative = fmt.Errorf("SdkErrorPqzAuditorNative")
 var ErrSdkErrorGasAboveBlockShare = fmt.Errorf("SdkErrorGasAboveBlockShare")
+var ErrSdkErrorImportKindRefused = fmt.Errorf("SdkErrorImportKindRefused")
+var ErrSdkErrorImportNotPayee = fmt.Errorf("SdkErrorImportNotPayee")
+var ErrSdkErrorImportRelayerBound = fmt.Errorf("SdkErrorImportRelayerBound")
+var ErrSdkErrorImportFeeRefused = fmt.Errorf("SdkErrorImportFeeRefused")
+var ErrSdkErrorImportExpired = fmt.Errorf("SdkErrorImportExpired")
+var ErrSdkErrorImportConsumed = fmt.Errorf("SdkErrorImportConsumed")
+var ErrSdkErrorImportedOpRefused = fmt.Errorf("SdkErrorImportedOpRefused")
+var ErrSdkErrorPayerUnavailable = fmt.Errorf("SdkErrorPayerUnavailable")
+var ErrSdkErrorPaymentRequired = fmt.Errorf("SdkErrorPaymentRequired")
+var ErrSdkErrorUploadRejected = fmt.Errorf("SdkErrorUploadRejected")
+var ErrSdkErrorUploadUnsettled = fmt.Errorf("SdkErrorUploadUnsettled")
+var ErrSdkErrorArweaveItem = fmt.Errorf("SdkErrorArweaveItem")
+var ErrSdkErrorFileTooLarge = fmt.Errorf("SdkErrorFileTooLarge")
+var ErrSdkErrorFileHashMismatch = fmt.Errorf("SdkErrorFileHashMismatch")
 var ErrSdkErrorCancelled = fmt.Errorf("SdkErrorCancelled")
 var ErrSdkErrorUa = fmt.Errorf("SdkErrorUa")
 var ErrSdkErrorRpc = fmt.Errorf("SdkErrorRpc")
@@ -29809,6 +30153,310 @@ func (self SdkErrorGasAboveBlockShare) Is(target error) bool {
 	return target == ErrSdkErrorGasAboveBlockShare
 }
 
+// An imported operation (spec §27.5 (c), owner 2026-11-22, Q-R3) of a kind the importer's family cannot show and check
+// before sending, a confidential one (Zether, PQZ), or a struct or entry the family's rows do not hold.
+type SdkErrorImportKindRefused struct {
+	message string
+}
+
+// An imported operation (spec §27.5 (c), owner 2026-11-22, Q-R3) of a kind the importer's family cannot show and check
+// before sending, a confidential one (Zether, PQZ), or a struct or entry the family's rows do not hold.
+func NewSdkErrorImportKindRefused() *SdkError {
+	return &SdkError{err: &SdkErrorImportKindRefused{}}
+}
+
+func (e SdkErrorImportKindRefused) destroy() {
+}
+
+func (err SdkErrorImportKindRefused) Error() string {
+	return fmt.Sprintf("ImportKindRefused: %s", err.message)
+}
+
+func (self SdkErrorImportKindRefused) Is(target error) bool {
+	return target == ErrSdkErrorImportKindRefused
+}
+
+// An imported pay or transfer whose `to` is none of the importer's ids.
+type SdkErrorImportNotPayee struct {
+	message string
+}
+
+// An imported pay or transfer whose `to` is none of the importer's ids.
+func NewSdkErrorImportNotPayee() *SdkError {
+	return &SdkError{err: &SdkErrorImportNotPayee{}}
+}
+
+func (e SdkErrorImportNotPayee) destroy() {
+}
+
+func (err SdkErrorImportNotPayee) Error() string {
+	return fmt.Sprintf("ImportNotPayee: %s", err.message)
+}
+
+func (self SdkErrorImportNotPayee) Is(target error) bool {
+	return target == ErrSdkErrorImportNotPayee
+}
+
+// An imported operation whose signed `relayer` is bound to another address than the importer's payer (Soroban binds none).
+type SdkErrorImportRelayerBound struct {
+	message string
+}
+
+// An imported operation whose signed `relayer` is bound to another address than the importer's payer (Soroban binds none).
+func NewSdkErrorImportRelayerBound() *SdkError {
+	return &SdkError{err: &SdkErrorImportRelayerBound{}}
+}
+
+func (e SdkErrorImportRelayerBound) destroy() {
+}
+
+func (err SdkErrorImportRelayerBound) Error() string {
+	return fmt.Sprintf("ImportRelayerBound: %s", err.message)
+}
+
+func (self SdkErrorImportRelayerBound) Is(target error) bool {
+	return target == ErrSdkErrorImportRelayerBound
+}
+
+// An imported operation with a fee to anyone: a hand-off is fee 0 (spec §27.5 (b)).
+type SdkErrorImportFeeRefused struct {
+	message string
+}
+
+// An imported operation with a fee to anyone: a hand-off is fee 0 (spec §27.5 (b)).
+func NewSdkErrorImportFeeRefused() *SdkError {
+	return &SdkError{err: &SdkErrorImportFeeRefused{}}
+}
+
+func (e SdkErrorImportFeeRefused) destroy() {
+}
+
+func (err SdkErrorImportFeeRefused) Error() string {
+	return fmt.Sprintf("ImportFeeRefused: %s", err.message)
+}
+
+func (self SdkErrorImportFeeRefused) Is(target error) bool {
+	return target == ErrSdkErrorImportFeeRefused
+}
+
+// An imported operation valid for less than the node's 120 s: its `validUntil` on the chain's clock (EVM, a Soroban
+// pay), or its auth entry's expiry ledger (Soroban, a ledger at most each second).
+type SdkErrorImportExpired struct {
+	message string
+}
+
+// An imported operation valid for less than the node's 120 s: its `validUntil` on the chain's clock (EVM, a Soroban
+// pay), or its auth entry's expiry ledger (Soroban, a ledger at most each second).
+func NewSdkErrorImportExpired() *SdkError {
+	return &SdkError{err: &SdkErrorImportExpired{}}
+}
+
+func (e SdkErrorImportExpired) destroy() {
+}
+
+func (err SdkErrorImportExpired) Error() string {
+	return fmt.Sprintf("ImportExpired: %s", err.message)
+}
+
+func (self SdkErrorImportExpired) Is(target error) bool {
+	return target == ErrSdkErrorImportExpired
+}
+
+// An imported operation already spent at the final height: its lane nonce (EVM), its host nonce or `pay_ref` entry
+// (Soroban); it landed, or another operation took the nonce.
+type SdkErrorImportConsumed struct {
+	message string
+}
+
+// An imported operation already spent at the final height: its lane nonce (EVM), its host nonce or `pay_ref` entry
+// (Soroban); it landed, or another operation took the nonce.
+func NewSdkErrorImportConsumed() *SdkError {
+	return &SdkError{err: &SdkErrorImportConsumed{}}
+}
+
+func (e SdkErrorImportConsumed) destroy() {
+}
+
+func (err SdkErrorImportConsumed) Error() string {
+	return fmt.Sprintf("ImportConsumed: %s", err.message)
+}
+
+func (self SdkErrorImportConsumed) Is(target error) bool {
+	return target == ErrSdkErrorImportConsumed
+}
+
+// An imported operation the simulation from the payer refused: the chain's judgement of the signature and the effect.
+type SdkErrorImportedOpRefused struct {
+	message string
+}
+
+// An imported operation the simulation from the payer refused: the chain's judgement of the signature and the effect.
+func NewSdkErrorImportedOpRefused() *SdkError {
+	return &SdkError{err: &SdkErrorImportedOpRefused{}}
+}
+
+func (e SdkErrorImportedOpRefused) destroy() {
+}
+
+func (err SdkErrorImportedOpRefused) Error() string {
+	return fmt.Sprintf("ImportedOpRefused: %s", err.message)
+}
+
+func (self SdkErrorImportedOpRefused) Is(target error) bool {
+	return target == ErrSdkErrorImportedOpRefused
+}
+
+// An Arweave upload above the free tier, or refused there, with no payer: none configured, or the operator's node payer
+// off (NODE-SPN-05; CLI-SDK-21).
+type SdkErrorPayerUnavailable struct {
+	message string
+}
+
+// An Arweave upload above the free tier, or refused there, with no payer: none configured, or the operator's node payer
+// off (NODE-SPN-05; CLI-SDK-21).
+func NewSdkErrorPayerUnavailable() *SdkError {
+	return &SdkError{err: &SdkErrorPayerUnavailable{}}
+}
+
+func (e SdkErrorPayerUnavailable) destroy() {
+}
+
+func (err SdkErrorPayerUnavailable) Error() string {
+	return fmt.Sprintf("PayerUnavailable: %s", err.message)
+}
+
+func (self SdkErrorPayerUnavailable) Is(target error) bool {
+	return target == ErrSdkErrorPayerUnavailable
+}
+
+// An Arweave upload the bundler refused for payment (HTTP 402): the user's own credits, or a payer's approval, are missing.
+type SdkErrorPaymentRequired struct {
+	message string
+}
+
+// An Arweave upload the bundler refused for payment (HTTP 402): the user's own credits, or a payer's approval, are missing.
+func NewSdkErrorPaymentRequired() *SdkError {
+	return &SdkError{err: &SdkErrorPaymentRequired{}}
+}
+
+func (e SdkErrorPaymentRequired) destroy() {
+}
+
+func (err SdkErrorPaymentRequired) Error() string {
+	return fmt.Sprintf("PaymentRequired: %s", err.message)
+}
+
+func (self SdkErrorPaymentRequired) Is(target error) bool {
+	return target == ErrSdkErrorPaymentRequired
+}
+
+// An Arweave upload no bundler accepted, for a reason other than payment.
+type SdkErrorUploadRejected struct {
+	message string
+}
+
+// An Arweave upload no bundler accepted, for a reason other than payment.
+func NewSdkErrorUploadRejected() *SdkError {
+	return &SdkError{err: &SdkErrorUploadRejected{}}
+}
+
+func (e SdkErrorUploadRejected) destroy() {
+}
+
+func (err SdkErrorUploadRejected) Error() string {
+	return fmt.Sprintf("UploadRejected: %s", err.message)
+}
+
+func (self SdkErrorUploadRejected) Is(target error) bool {
+	return target == ErrSdkErrorUploadRejected
+}
+
+// A kept Arweave upload still unsettled after its last re-post (C20): shown; the bytes stay kept.
+type SdkErrorUploadUnsettled struct {
+	message string
+}
+
+// A kept Arweave upload still unsettled after its last re-post (C20): shown; the bytes stay kept.
+func NewSdkErrorUploadUnsettled() *SdkError {
+	return &SdkError{err: &SdkErrorUploadUnsettled{}}
+}
+
+func (e SdkErrorUploadUnsettled) destroy() {
+}
+
+func (err SdkErrorUploadUnsettled) Error() string {
+	return fmt.Sprintf("UploadUnsettled: %s", err.message)
+}
+
+func (self SdkErrorUploadUnsettled) Is(target error) bool {
+	return target == ErrSdkErrorUploadUnsettled
+}
+
+// A data item that is not one `scaas-ua` built: its verifying parser refused it, or it carries a target, an anchor or a
+// tag, or its object is no bucket's (CLI-UAL-64): `scaas-ua`'s code for an item it built.
+type SdkErrorArweaveItem struct {
+	message string
+}
+
+// A data item that is not one `scaas-ua` built: its verifying parser refused it, or it carries a target, an anchor or a
+// tag, or its object is no bucket's (CLI-UAL-64): `scaas-ua`'s code for an item it built.
+func NewSdkErrorArweaveItem() *SdkError {
+	return &SdkError{err: &SdkErrorArweaveItem{}}
+}
+
+func (e SdkErrorArweaveItem) destroy() {
+}
+
+func (err SdkErrorArweaveItem) Error() string {
+	return fmt.Sprintf("ArweaveItem: %s", err.message)
+}
+
+func (self SdkErrorArweaveItem) Is(target error) bool {
+	return target == ErrSdkErrorArweaveItem
+}
+
+// A file or object above the platform's cap or the store's largest object (CLI-UAL-65): `scaas-ua`'s code.
+type SdkErrorFileTooLarge struct {
+	message string
+}
+
+// A file or object above the platform's cap or the store's largest object (CLI-UAL-65): `scaas-ua`'s code.
+func NewSdkErrorFileTooLarge() *SdkError {
+	return &SdkError{err: &SdkErrorFileTooLarge{}}
+}
+
+func (e SdkErrorFileTooLarge) destroy() {
+}
+
+func (err SdkErrorFileTooLarge) Error() string {
+	return fmt.Sprintf("FileTooLarge: %s", err.message)
+}
+
+func (self SdkErrorFileTooLarge) Is(target error) bool {
+	return target == ErrSdkErrorFileTooLarge
+}
+
+// A file object or plaintext whose SHA-256 is not the signed one (CLI-UAL-65): `scaas-ua`'s code.
+type SdkErrorFileHashMismatch struct {
+	message string
+}
+
+// A file object or plaintext whose SHA-256 is not the signed one (CLI-UAL-65): `scaas-ua`'s code.
+func NewSdkErrorFileHashMismatch() *SdkError {
+	return &SdkError{err: &SdkErrorFileHashMismatch{}}
+}
+
+func (e SdkErrorFileHashMismatch) destroy() {
+}
+
+func (err SdkErrorFileHashMismatch) Error() string {
+	return fmt.Sprintf("FileHashMismatch: %s", err.message)
+}
+
+func (self SdkErrorFileHashMismatch) Is(target error) bool {
+	return target == ErrSdkErrorFileHashMismatch
+}
+
 // a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
 type SdkErrorCancelled struct {
 	message string
@@ -30028,10 +30676,38 @@ func (c FfiConverterSdkError) Read(reader io.Reader) *SdkError {
 	case 67:
 		return &SdkError{&SdkErrorGasAboveBlockShare{message}}
 	case 68:
-		return &SdkError{&SdkErrorCancelled{message}}
+		return &SdkError{&SdkErrorImportKindRefused{message}}
 	case 69:
-		return &SdkError{&SdkErrorUa{message}}
+		return &SdkError{&SdkErrorImportNotPayee{message}}
 	case 70:
+		return &SdkError{&SdkErrorImportRelayerBound{message}}
+	case 71:
+		return &SdkError{&SdkErrorImportFeeRefused{message}}
+	case 72:
+		return &SdkError{&SdkErrorImportExpired{message}}
+	case 73:
+		return &SdkError{&SdkErrorImportConsumed{message}}
+	case 74:
+		return &SdkError{&SdkErrorImportedOpRefused{message}}
+	case 75:
+		return &SdkError{&SdkErrorPayerUnavailable{message}}
+	case 76:
+		return &SdkError{&SdkErrorPaymentRequired{message}}
+	case 77:
+		return &SdkError{&SdkErrorUploadRejected{message}}
+	case 78:
+		return &SdkError{&SdkErrorUploadUnsettled{message}}
+	case 79:
+		return &SdkError{&SdkErrorArweaveItem{message}}
+	case 80:
+		return &SdkError{&SdkErrorFileTooLarge{message}}
+	case 81:
+		return &SdkError{&SdkErrorFileHashMismatch{message}}
+	case 82:
+		return &SdkError{&SdkErrorCancelled{message}}
+	case 83:
+		return &SdkError{&SdkErrorUa{message}}
+	case 84:
 		return &SdkError{&SdkErrorRpc{message}}
 	default:
 		panic(fmt.Sprintf("Unknown error code %d in FfiConverterSdkError.Read()", errorID))
@@ -30175,12 +30851,40 @@ func (c FfiConverterSdkError) Write(writer io.Writer, value *SdkError) {
 		writeInt32(writer, 66)
 	case *SdkErrorGasAboveBlockShare:
 		writeInt32(writer, 67)
-	case *SdkErrorCancelled:
+	case *SdkErrorImportKindRefused:
 		writeInt32(writer, 68)
-	case *SdkErrorUa:
+	case *SdkErrorImportNotPayee:
 		writeInt32(writer, 69)
-	case *SdkErrorRpc:
+	case *SdkErrorImportRelayerBound:
 		writeInt32(writer, 70)
+	case *SdkErrorImportFeeRefused:
+		writeInt32(writer, 71)
+	case *SdkErrorImportExpired:
+		writeInt32(writer, 72)
+	case *SdkErrorImportConsumed:
+		writeInt32(writer, 73)
+	case *SdkErrorImportedOpRefused:
+		writeInt32(writer, 74)
+	case *SdkErrorPayerUnavailable:
+		writeInt32(writer, 75)
+	case *SdkErrorPaymentRequired:
+		writeInt32(writer, 76)
+	case *SdkErrorUploadRejected:
+		writeInt32(writer, 77)
+	case *SdkErrorUploadUnsettled:
+		writeInt32(writer, 78)
+	case *SdkErrorArweaveItem:
+		writeInt32(writer, 79)
+	case *SdkErrorFileTooLarge:
+		writeInt32(writer, 80)
+	case *SdkErrorFileHashMismatch:
+		writeInt32(writer, 81)
+	case *SdkErrorCancelled:
+		writeInt32(writer, 82)
+	case *SdkErrorUa:
+		writeInt32(writer, 83)
+	case *SdkErrorRpc:
+		writeInt32(writer, 84)
 	default:
 		_ = variantValue
 		panic(fmt.Sprintf("invalid error value `%v` in FfiConverterSdkError.Write", value))
@@ -30325,6 +31029,34 @@ func (_ FfiDestroyerSdkError) Destroy(value *SdkError) {
 		variantValue.destroy()
 	case SdkErrorGasAboveBlockShare:
 		variantValue.destroy()
+	case SdkErrorImportKindRefused:
+		variantValue.destroy()
+	case SdkErrorImportNotPayee:
+		variantValue.destroy()
+	case SdkErrorImportRelayerBound:
+		variantValue.destroy()
+	case SdkErrorImportFeeRefused:
+		variantValue.destroy()
+	case SdkErrorImportExpired:
+		variantValue.destroy()
+	case SdkErrorImportConsumed:
+		variantValue.destroy()
+	case SdkErrorImportedOpRefused:
+		variantValue.destroy()
+	case SdkErrorPayerUnavailable:
+		variantValue.destroy()
+	case SdkErrorPaymentRequired:
+		variantValue.destroy()
+	case SdkErrorUploadRejected:
+		variantValue.destroy()
+	case SdkErrorUploadUnsettled:
+		variantValue.destroy()
+	case SdkErrorArweaveItem:
+		variantValue.destroy()
+	case SdkErrorFileTooLarge:
+		variantValue.destroy()
+	case SdkErrorFileHashMismatch:
+		variantValue.destroy()
 	case SdkErrorCancelled:
 		variantValue.destroy()
 	case SdkErrorUa:
@@ -30413,6 +31145,15 @@ func (e SlotKeyBlsMulti) Destroy() {
 	FfiDestroyerString{}.Destroy(e.KeyData)
 }
 
+// another party's signer (as `KeyRef::Signed`, a hand-off): never a slot's key, refused at signing
+type SlotKeySigned struct {
+	Signer string
+}
+
+func (e SlotKeySigned) Destroy() {
+	FfiDestroyerString{}.Destroy(e.Signer)
+}
+
 type FfiConverterSlotKey struct{}
 
 var FfiConverterSlotKeyINSTANCE = FfiConverterSlotKey{}
@@ -30466,6 +31207,10 @@ func (FfiConverterSlotKey) Read(reader io.Reader) SlotKey {
 			FfiConverterUint32INSTANCE.Read(reader),
 			FfiConverterStringINSTANCE.Read(reader),
 		}
+	case 7:
+		return SlotKeySigned{
+			FfiConverterStringINSTANCE.Read(reader),
+		}
 	default:
 		panic(fmt.Sprintf("invalid enum value %v in FfiConverterSlotKey.Read()", id))
 	}
@@ -30502,6 +31247,9 @@ func (FfiConverterSlotKey) Write(writer io.Writer, value SlotKey) {
 		FfiConverterUint32INSTANCE.Write(writer, variant_value.Account)
 		FfiConverterUint32INSTANCE.Write(writer, variant_value.Index)
 		FfiConverterStringINSTANCE.Write(writer, variant_value.KeyData)
+	case SlotKeySigned:
+		writeInt32(writer, 7)
+		FfiConverterStringINSTANCE.Write(writer, variant_value.Signer)
 	default:
 		_ = variant_value
 		panic(fmt.Sprintf("invalid enum value `%v` in FfiConverterSlotKey.Write", value))
@@ -32920,6 +33668,53 @@ func (FfiDestroyerSequenceMsigSlotState) Destroy(sequence []MsigSlotState) {
 	}
 }
 
+type FfiConverterSequenceNativeCap struct{}
+
+var FfiConverterSequenceNativeCapINSTANCE = FfiConverterSequenceNativeCap{}
+
+func (c FfiConverterSequenceNativeCap) Lift(rb RustBufferI) []NativeCap {
+	return LiftFromRustBuffer[[]NativeCap](c, rb)
+}
+
+func (c FfiConverterSequenceNativeCap) Read(reader io.Reader) []NativeCap {
+	length := readInt32(reader)
+	if length == 0 {
+		return nil
+	}
+	result := make([]NativeCap, 0, length)
+	for i := int32(0); i < length; i++ {
+		result = append(result, FfiConverterNativeCapINSTANCE.Read(reader))
+	}
+	return result
+}
+
+func (c FfiConverterSequenceNativeCap) Lower(value []NativeCap) C.RustBuffer {
+	return LowerIntoRustBuffer[[]NativeCap](c, value)
+}
+
+func (c FfiConverterSequenceNativeCap) LowerExternal(value []NativeCap) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[[]NativeCap](c, value))
+}
+
+func (c FfiConverterSequenceNativeCap) Write(writer io.Writer, value []NativeCap) {
+	if len(value) > math.MaxInt32 {
+		panic("[]NativeCap is too large to fit into Int32")
+	}
+
+	writeInt32(writer, int32(len(value)))
+	for _, item := range value {
+		FfiConverterNativeCapINSTANCE.Write(writer, item)
+	}
+}
+
+type FfiDestroyerSequenceNativeCap struct{}
+
+func (FfiDestroyerSequenceNativeCap) Destroy(sequence []NativeCap) {
+	for _, value := range sequence {
+		FfiDestroyerNativeCap{}.Destroy(value)
+	}
+}
+
 type FfiConverterSequenceOpItem struct{}
 
 var FfiConverterSequenceOpItemINSTANCE = FfiConverterSequenceOpItem{}
@@ -33888,6 +34683,36 @@ func SecretNew(len uint32) (*SecretBytes, error) {
 		return _uniffiDefaultValue, _uniffiErr
 	} else {
 		return FfiConverterSecretBytesINSTANCE.Lift(_uniffiRV), nil
+	}
+}
+
+// A signed operation's hand-off blob from its JSON (spec §27.5 (c)).
+func SignedOpBlobFromJson(text string) (SignedOpBlob, error) {
+	_uniffiRV, _uniffiErr := rustCallWithError[*SdkError](FfiConverterSdkError{}, func(_uniffiStatus *C.RustCallStatus) RustBufferI {
+		return GoRustBuffer{
+			inner: C.uniffi_scaas_sdk_fn_func_signed_op_blob_from_json(FfiConverterStringINSTANCE.Lower(text), _uniffiStatus),
+		}
+	})
+	if _uniffiErr != nil {
+		var _uniffiDefaultValue SignedOpBlob
+		return _uniffiDefaultValue, _uniffiErr
+	} else {
+		return FfiConverterSignedOpBlobINSTANCE.Lift(_uniffiRV), nil
+	}
+}
+
+// A hand-off blob's JSON (spec §27.5 (c)).
+func SignedOpBlobToJson(blob SignedOpBlob) (string, error) {
+	_uniffiRV, _uniffiErr := rustCallWithError[*SdkError](FfiConverterSdkError{}, func(_uniffiStatus *C.RustCallStatus) RustBufferI {
+		return GoRustBuffer{
+			inner: C.uniffi_scaas_sdk_fn_func_signed_op_blob_to_json(FfiConverterSignedOpBlobINSTANCE.Lower(blob), _uniffiStatus),
+		}
+	})
+	if _uniffiErr != nil {
+		var _uniffiDefaultValue string
+		return _uniffiDefaultValue, _uniffiErr
+	} else {
+		return FfiConverterStringINSTANCE.Lift(_uniffiRV), nil
 	}
 }
 

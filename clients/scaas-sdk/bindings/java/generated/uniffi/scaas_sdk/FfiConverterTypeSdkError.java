@@ -74,9 +74,23 @@ public enum FfiConverterTypeSdkError implements FfiConverterRustBuffer<SdkExcept
             case 65 -> new SdkException.DexNotListed(FfiConverterString.INSTANCE.read(buf));
             case 66 -> new SdkException.PqzAuditorNative(FfiConverterString.INSTANCE.read(buf));
             case 67 -> new SdkException.GasAboveBlockShare(FfiConverterString.INSTANCE.read(buf));
-            case 68 -> new SdkException.Cancelled(FfiConverterString.INSTANCE.read(buf));
-            case 69 -> new SdkException.Ua(FfiConverterString.INSTANCE.read(buf));
-            case 70 -> new SdkException.Rpc(FfiConverterString.INSTANCE.read(buf));
+            case 68 -> new SdkException.ImportKindRefused(FfiConverterString.INSTANCE.read(buf));
+            case 69 -> new SdkException.ImportNotPayee(FfiConverterString.INSTANCE.read(buf));
+            case 70 -> new SdkException.ImportRelayerBound(FfiConverterString.INSTANCE.read(buf));
+            case 71 -> new SdkException.ImportFeeRefused(FfiConverterString.INSTANCE.read(buf));
+            case 72 -> new SdkException.ImportExpired(FfiConverterString.INSTANCE.read(buf));
+            case 73 -> new SdkException.ImportConsumed(FfiConverterString.INSTANCE.read(buf));
+            case 74 -> new SdkException.ImportedOpRefused(FfiConverterString.INSTANCE.read(buf));
+            case 75 -> new SdkException.PayerUnavailable(FfiConverterString.INSTANCE.read(buf));
+            case 76 -> new SdkException.PaymentRequired(FfiConverterString.INSTANCE.read(buf));
+            case 77 -> new SdkException.UploadRejected(FfiConverterString.INSTANCE.read(buf));
+            case 78 -> new SdkException.UploadUnsettled(FfiConverterString.INSTANCE.read(buf));
+            case 79 -> new SdkException.ArweaveItem(FfiConverterString.INSTANCE.read(buf));
+            case 80 -> new SdkException.FileTooLarge(FfiConverterString.INSTANCE.read(buf));
+            case 81 -> new SdkException.FileHashMismatch(FfiConverterString.INSTANCE.read(buf));
+            case 82 -> new SdkException.Cancelled(FfiConverterString.INSTANCE.read(buf));
+            case 83 -> new SdkException.Ua(FfiConverterString.INSTANCE.read(buf));
+            case 84 -> new SdkException.Rpc(FfiConverterString.INSTANCE.read(buf));
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };
     }
@@ -290,14 +304,56 @@ public enum FfiConverterTypeSdkError implements FfiConverterRustBuffer<SdkExcept
             case SdkException.GasAboveBlockShare x -> {
                 buf.putInt(67);
             }
-            case SdkException.Cancelled x -> {
+            case SdkException.ImportKindRefused x -> {
                 buf.putInt(68);
             }
-            case SdkException.Ua x -> {
+            case SdkException.ImportNotPayee x -> {
                 buf.putInt(69);
             }
-            case SdkException.Rpc x -> {
+            case SdkException.ImportRelayerBound x -> {
                 buf.putInt(70);
+            }
+            case SdkException.ImportFeeRefused x -> {
+                buf.putInt(71);
+            }
+            case SdkException.ImportExpired x -> {
+                buf.putInt(72);
+            }
+            case SdkException.ImportConsumed x -> {
+                buf.putInt(73);
+            }
+            case SdkException.ImportedOpRefused x -> {
+                buf.putInt(74);
+            }
+            case SdkException.PayerUnavailable x -> {
+                buf.putInt(75);
+            }
+            case SdkException.PaymentRequired x -> {
+                buf.putInt(76);
+            }
+            case SdkException.UploadRejected x -> {
+                buf.putInt(77);
+            }
+            case SdkException.UploadUnsettled x -> {
+                buf.putInt(78);
+            }
+            case SdkException.ArweaveItem x -> {
+                buf.putInt(79);
+            }
+            case SdkException.FileTooLarge x -> {
+                buf.putInt(80);
+            }
+            case SdkException.FileHashMismatch x -> {
+                buf.putInt(81);
+            }
+            case SdkException.Cancelled x -> {
+                buf.putInt(82);
+            }
+            case SdkException.Ua x -> {
+                buf.putInt(83);
+            }
+            case SdkException.Rpc x -> {
+                buf.putInt(84);
             }
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };

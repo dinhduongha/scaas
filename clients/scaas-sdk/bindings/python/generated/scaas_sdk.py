@@ -519,6 +519,10 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_func_secret_new() != 26347:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json() != 43577:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json() != 49602:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_func_smart_account_address() != 22486:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_func_store_policy_default() != 49095:
@@ -840,6 +844,10 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part() != 56760:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok() != 1443:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_op_hand_off() != 2688:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_op_import_signed() != 37279:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_op_member_sign() != 30667:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1625,6 +1633,16 @@ _UniffiLib.uniffi_scaas_sdk_fn_func_secret_new.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_scaas_sdk_fn_func_secret_new.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_func_signed_op_blob_from_json.argtypes = (
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_scaas_sdk_fn_func_signed_op_blob_from_json.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_scaas_sdk_fn_func_signed_op_blob_to_json.argtypes = (
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_scaas_sdk_fn_func_signed_op_blob_to_json.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_scaas_sdk_fn_func_smart_account_address.argtypes = (
     _UniffiRustBuffer,
     _UniffiRustBuffer,
@@ -2496,6 +2514,17 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok.restype = ctypes.c_int8
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_hand_off.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_hand_off.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_import_signed.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_import_signed.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_op_member_sign.argtypes = (
     ctypes.c_uint64,
     ctypes.c_uint64,
@@ -3059,6 +3088,12 @@ _UniffiLib.uniffi_scaas_sdk_checksum_func_secret_len.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_func_secret_new.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_func_secret_new.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_func_smart_account_address.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_func_smart_account_address.restype = ctypes.c_uint16
@@ -3542,6 +3577,12 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part.restype = ctyp
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_hand_off.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_hand_off.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_import_signed.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_import_signed.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_member_sign.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_member_sign.restype = ctypes.c_uint16
@@ -4233,6 +4274,33 @@ class SlotKey:
                 return False
             return True
 
+    @dataclass
+    class SIGNED:
+        """
+        another party's signer (as `KeyRef::Signed`, a hand-off): never a slot's key, refused at signing
+"""
+        
+        def __init__(self, signer:str):
+            self.signer = signer
+            
+            
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "SlotKey.SIGNED(signer={})".format(self.signer)
+        def __eq__(self, other):
+            if not isinstance(other, SlotKey):
+                return NotImplemented
+            if not other.is_SIGNED():
+                return False
+            if self.signer != other.signer:
+                return False
+            return True
+
     
 
     # For each variant, we have `is_NAME` and `is_name` methods for easily checking
@@ -4261,6 +4329,10 @@ class SlotKey:
         return isinstance(self, SlotKey.BLS_MULTI)
     def is_bls_multi(self) -> bool:
         return isinstance(self, SlotKey.BLS_MULTI)
+    def is_SIGNED(self) -> bool:
+        return isinstance(self, SlotKey.SIGNED)
+    def is_signed(self) -> bool:
+        return isinstance(self, SlotKey.SIGNED)
     
 
 # Now, a little trick - we make each nested variant class be a subclass of the main
@@ -4272,6 +4344,7 @@ SlotKey.IMPORTED = type("SlotKey.IMPORTED", (SlotKey.IMPORTED, SlotKey,), {})  #
 SlotKey.KEY = type("SlotKey.KEY", (SlotKey.KEY, SlotKey,), {})  # type: ignore
 SlotKey.MSIG = type("SlotKey.MSIG", (SlotKey.MSIG, SlotKey,), {})  # type: ignore
 SlotKey.BLS_MULTI = type("SlotKey.BLS_MULTI", (SlotKey.BLS_MULTI, SlotKey,), {})  # type: ignore
+SlotKey.SIGNED = type("SlotKey.SIGNED", (SlotKey.SIGNED, SlotKey,), {})  # type: ignore
 
 
 
@@ -4315,6 +4388,10 @@ class _UniffiFfiConverterTypeSlotKey(_UniffiConverterRustBuffer):
                 _UniffiFfiConverterUInt32.read(buf),
                 _UniffiFfiConverterString.read(buf),
             )
+        if variant == 7:
+            return SlotKey.SIGNED(
+                _UniffiFfiConverterString.read(buf),
+            )
         raise InternalError("Raw enum value doesn't match any cases")
 
     @staticmethod
@@ -4347,6 +4424,9 @@ class _UniffiFfiConverterTypeSlotKey(_UniffiConverterRustBuffer):
             _UniffiFfiConverterUInt32.check_lower(value.account)
             _UniffiFfiConverterUInt32.check_lower(value.index)
             _UniffiFfiConverterString.check_lower(value.key_data)
+            return
+        if value.is_SIGNED():
+            _UniffiFfiConverterString.check_lower(value.signer)
             return
         raise ValueError(value)
 
@@ -4381,6 +4461,9 @@ class _UniffiFfiConverterTypeSlotKey(_UniffiConverterRustBuffer):
             _UniffiFfiConverterUInt32.write(value.account, buf)
             _UniffiFfiConverterUInt32.write(value.index, buf)
             _UniffiFfiConverterString.write(value.key_data, buf)
+        if value.is_SIGNED():
+            buf.write_i32(7)
+            _UniffiFfiConverterString.write(value.signer, buf)
 
 
 
@@ -4923,6 +5006,34 @@ class KeyRef:
                 return False
             return True
 
+    @dataclass
+    class SIGNED:
+        """
+        an operation another party signed and handed off (`Op::import_signed`, spec §27.5 (c)): its signer's subject id (`0x`
+        hex); nothing in this SDK signs for it
+"""
+        
+        def __init__(self, signer:str):
+            self.signer = signer
+            
+            
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "KeyRef.SIGNED(signer={})".format(self.signer)
+        def __eq__(self, other):
+            if not isinstance(other, KeyRef):
+                return NotImplemented
+            if not other.is_SIGNED():
+                return False
+            if self.signer != other.signer:
+                return False
+            return True
+
     
 
     # For each variant, we have `is_NAME` and `is_name` methods for easily checking
@@ -4951,6 +5062,10 @@ class KeyRef:
         return isinstance(self, KeyRef.BLS_MULTI)
     def is_bls_multi(self) -> bool:
         return isinstance(self, KeyRef.BLS_MULTI)
+    def is_SIGNED(self) -> bool:
+        return isinstance(self, KeyRef.SIGNED)
+    def is_signed(self) -> bool:
+        return isinstance(self, KeyRef.SIGNED)
     
 
 # Now, a little trick - we make each nested variant class be a subclass of the main
@@ -4962,6 +5077,7 @@ KeyRef.IMPORTED = type("KeyRef.IMPORTED", (KeyRef.IMPORTED, KeyRef,), {})  # typ
 KeyRef.KEY = type("KeyRef.KEY", (KeyRef.KEY, KeyRef,), {})  # type: ignore
 KeyRef.MSIG = type("KeyRef.MSIG", (KeyRef.MSIG, KeyRef,), {})  # type: ignore
 KeyRef.BLS_MULTI = type("KeyRef.BLS_MULTI", (KeyRef.BLS_MULTI, KeyRef,), {})  # type: ignore
+KeyRef.SIGNED = type("KeyRef.SIGNED", (KeyRef.SIGNED, KeyRef,), {})  # type: ignore
 
 
 
@@ -5006,6 +5122,10 @@ class _UniffiFfiConverterTypeKeyRef(_UniffiConverterRustBuffer):
                 _UniffiFfiConverterUInt32.read(buf),
                 _UniffiFfiConverterString.read(buf),
             )
+        if variant == 7:
+            return KeyRef.SIGNED(
+                _UniffiFfiConverterString.read(buf),
+            )
         raise InternalError("Raw enum value doesn't match any cases")
 
     @staticmethod
@@ -5039,6 +5159,9 @@ class _UniffiFfiConverterTypeKeyRef(_UniffiConverterRustBuffer):
             _UniffiFfiConverterUInt32.check_lower(value.account)
             _UniffiFfiConverterUInt32.check_lower(value.index)
             _UniffiFfiConverterString.check_lower(value.key_data)
+            return
+        if value.is_SIGNED():
+            _UniffiFfiConverterString.check_lower(value.signer)
             return
         raise ValueError(value)
 
@@ -5074,6 +5197,9 @@ class _UniffiFfiConverterTypeKeyRef(_UniffiConverterRustBuffer):
             _UniffiFfiConverterUInt32.write(value.account, buf)
             _UniffiFfiConverterUInt32.write(value.index, buf)
             _UniffiFfiConverterString.write(value.key_data, buf)
+        if value.is_SIGNED():
+            buf.write_i32(7)
+            _UniffiFfiConverterString.write(value.signer, buf)
 
 
 
@@ -7994,12 +8120,74 @@ class _UniffiFfiConverterSequenceTypeChainProfile(_UniffiConverterRustBuffer):
         ]
 
 @dataclass
+class NativeCap:
+    """
+    One chain's native cost cap (`Limits::max_native_cost`).
+"""
+    def __init__(self, *, chain:str, max:str):
+        self.chain = chain
+        self.max = max
+        
+        
+
+    
+    def __str__(self):
+        return "NativeCap(chain={}, max={})".format(self.chain, self.max)
+    def __eq__(self, other):
+        if self.chain != other.chain:
+            return False
+        if self.max != other.max:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeNativeCap(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return NativeCap(
+            chain=_UniffiFfiConverterString.read(buf),
+            max=_UniffiFfiConverterString.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterString.check_lower(value.chain)
+        _UniffiFfiConverterString.check_lower(value.max)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterString.write(value.chain, buf)
+        _UniffiFfiConverterString.write(value.max, buf)
+
+class _UniffiFfiConverterSequenceTypeNativeCap(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeNativeCap.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeNativeCap.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeNativeCap.read(buf) for i in range(count)
+        ]
+
+@dataclass
 class Limits:
     """
     The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor
     against a runaway quote, never a value assumed of a chain.
 """
-    def __init__(self, *, max_fee_per_gas:str, max_gas:int, max_cost:str, watch_poll_ms:int, max_watch:int, max_concurrent_heavy:int, max_valid_secs:int, event_queue:int, state_retention_secs:int):
+    def __init__(self, *, max_fee_per_gas:str, max_gas:int, max_cost:str, watch_poll_ms:int, max_watch:int, max_concurrent_heavy:int, max_valid_secs:int, event_queue:int, state_retention_secs:int, max_native_cost:typing.List[NativeCap]):
         self.max_fee_per_gas = max_fee_per_gas
         self.max_gas = max_gas
         self.max_cost = max_cost
@@ -8009,12 +8197,13 @@ class Limits:
         self.max_valid_secs = max_valid_secs
         self.event_queue = event_queue
         self.state_retention_secs = state_retention_secs
+        self.max_native_cost = max_native_cost
         
         
 
     
     def __str__(self):
-        return "Limits(max_fee_per_gas={}, max_gas={}, max_cost={}, watch_poll_ms={}, max_watch={}, max_concurrent_heavy={}, max_valid_secs={}, event_queue={}, state_retention_secs={})".format(self.max_fee_per_gas, self.max_gas, self.max_cost, self.watch_poll_ms, self.max_watch, self.max_concurrent_heavy, self.max_valid_secs, self.event_queue, self.state_retention_secs)
+        return "Limits(max_fee_per_gas={}, max_gas={}, max_cost={}, watch_poll_ms={}, max_watch={}, max_concurrent_heavy={}, max_valid_secs={}, event_queue={}, state_retention_secs={}, max_native_cost={})".format(self.max_fee_per_gas, self.max_gas, self.max_cost, self.watch_poll_ms, self.max_watch, self.max_concurrent_heavy, self.max_valid_secs, self.event_queue, self.state_retention_secs, self.max_native_cost)
     def __eq__(self, other):
         if self.max_fee_per_gas != other.max_fee_per_gas:
             return False
@@ -8034,6 +8223,8 @@ class Limits:
             return False
         if self.state_retention_secs != other.state_retention_secs:
             return False
+        if self.max_native_cost != other.max_native_cost:
+            return False
         return True
 
 class _UniffiFfiConverterTypeLimits(_UniffiConverterRustBuffer):
@@ -8049,6 +8240,7 @@ class _UniffiFfiConverterTypeLimits(_UniffiConverterRustBuffer):
             max_valid_secs=_UniffiFfiConverterUInt64.read(buf),
             event_queue=_UniffiFfiConverterUInt32.read(buf),
             state_retention_secs=_UniffiFfiConverterUInt64.read(buf),
+            max_native_cost=_UniffiFfiConverterSequenceTypeNativeCap.read(buf),
         )
 
     @staticmethod
@@ -8062,6 +8254,7 @@ class _UniffiFfiConverterTypeLimits(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.check_lower(value.max_valid_secs)
         _UniffiFfiConverterUInt32.check_lower(value.event_queue)
         _UniffiFfiConverterUInt64.check_lower(value.state_retention_secs)
+        _UniffiFfiConverterSequenceTypeNativeCap.check_lower(value.max_native_cost)
 
     @staticmethod
     def write(value, buf):
@@ -8074,6 +8267,7 @@ class _UniffiFfiConverterTypeLimits(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt64.write(value.max_valid_secs, buf)
         _UniffiFfiConverterUInt32.write(value.event_queue, buf)
         _UniffiFfiConverterUInt64.write(value.state_retention_secs, buf)
+        _UniffiFfiConverterSequenceTypeNativeCap.write(value.max_native_cost, buf)
 
 @dataclass
 class GasTable:
@@ -10132,6 +10326,52 @@ class _UniffiFfiConverterTypeHistoryPage(_UniffiConverterRustBuffer):
         _UniffiFfiConverterSequenceTypeHistoryItem.write(value.items, buf)
         _UniffiFfiConverterSequenceTypeOpItem.write(value.ops, buf)
         _UniffiFfiConverterOptionalTypeCursor.write(value.next, buf)
+
+@dataclass
+class ImportExpect:
+    """
+    What the payee expects of an imported operation: its chain, its own ids (`0x` + 64 hex: a pay or transfer must name one as
+    `to`), and the native key that will submit it (`SubmitPath::SelfRelay`).
+"""
+    def __init__(self, *, chain:str, payee:typing.List[str], payer:KeyRef):
+        self.chain = chain
+        self.payee = payee
+        self.payer = payer
+        
+        
+
+    
+    def __str__(self):
+        return "ImportExpect(chain={}, payee={}, payer={})".format(self.chain, self.payee, self.payer)
+    def __eq__(self, other):
+        if self.chain != other.chain:
+            return False
+        if self.payee != other.payee:
+            return False
+        if self.payer != other.payer:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeImportExpect(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return ImportExpect(
+            chain=_UniffiFfiConverterString.read(buf),
+            payee=_UniffiFfiConverterSequenceString.read(buf),
+            payer=_UniffiFfiConverterTypeKeyRef.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterString.check_lower(value.chain)
+        _UniffiFfiConverterSequenceString.check_lower(value.payee)
+        _UniffiFfiConverterTypeKeyRef.check_lower(value.payer)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterString.write(value.chain, buf)
+        _UniffiFfiConverterSequenceString.write(value.payee, buf)
+        _UniffiFfiConverterTypeKeyRef.write(value.payer, buf)
 
 @dataclass
 class ImportKey:
@@ -12480,6 +12720,109 @@ class SdkError:  # type: ignore
         def __repr__(self):
             return "SdkError.GasAboveBlockShare({})".format(repr(str(self)))
     _UniffiTempSdkError.GasAboveBlockShare = GasAboveBlockShare # type: ignore
+    class ImportKindRefused(_UniffiTempSdkError):
+        """
+        An imported operation (spec §27.5 (c), owner 2026-11-22, Q-R3) of a kind the importer's family cannot show and check
+        before sending, a confidential one (Zether, PQZ), or a struct or entry the family's rows do not hold.
+"""
+        def __repr__(self):
+            return "SdkError.ImportKindRefused({})".format(repr(str(self)))
+    _UniffiTempSdkError.ImportKindRefused = ImportKindRefused # type: ignore
+    class ImportNotPayee(_UniffiTempSdkError):
+        """
+        An imported pay or transfer whose `to` is none of the importer's ids.
+"""
+        def __repr__(self):
+            return "SdkError.ImportNotPayee({})".format(repr(str(self)))
+    _UniffiTempSdkError.ImportNotPayee = ImportNotPayee # type: ignore
+    class ImportRelayerBound(_UniffiTempSdkError):
+        """
+        An imported operation whose signed `relayer` is bound to another address than the importer's payer (Soroban binds none).
+"""
+        def __repr__(self):
+            return "SdkError.ImportRelayerBound({})".format(repr(str(self)))
+    _UniffiTempSdkError.ImportRelayerBound = ImportRelayerBound # type: ignore
+    class ImportFeeRefused(_UniffiTempSdkError):
+        """
+        An imported operation with a fee to anyone: a hand-off is fee 0 (spec §27.5 (b)).
+"""
+        def __repr__(self):
+            return "SdkError.ImportFeeRefused({})".format(repr(str(self)))
+    _UniffiTempSdkError.ImportFeeRefused = ImportFeeRefused # type: ignore
+    class ImportExpired(_UniffiTempSdkError):
+        """
+        An imported operation valid for less than the node's 120 s: its `validUntil` on the chain's clock (EVM, a Soroban
+        pay), or its auth entry's expiry ledger (Soroban, a ledger at most each second).
+"""
+        def __repr__(self):
+            return "SdkError.ImportExpired({})".format(repr(str(self)))
+    _UniffiTempSdkError.ImportExpired = ImportExpired # type: ignore
+    class ImportConsumed(_UniffiTempSdkError):
+        """
+        An imported operation already spent at the final height: its lane nonce (EVM), its host nonce or `pay_ref` entry
+        (Soroban); it landed, or another operation took the nonce.
+"""
+        def __repr__(self):
+            return "SdkError.ImportConsumed({})".format(repr(str(self)))
+    _UniffiTempSdkError.ImportConsumed = ImportConsumed # type: ignore
+    class ImportedOpRefused(_UniffiTempSdkError):
+        """
+        An imported operation the simulation from the payer refused: the chain's judgement of the signature and the effect.
+"""
+        def __repr__(self):
+            return "SdkError.ImportedOpRefused({})".format(repr(str(self)))
+    _UniffiTempSdkError.ImportedOpRefused = ImportedOpRefused # type: ignore
+    class PayerUnavailable(_UniffiTempSdkError):
+        """
+        An Arweave upload above the free tier, or refused there, with no payer: none configured, or the operator's node payer
+        off (NODE-SPN-05; CLI-SDK-21).
+"""
+        def __repr__(self):
+            return "SdkError.PayerUnavailable({})".format(repr(str(self)))
+    _UniffiTempSdkError.PayerUnavailable = PayerUnavailable # type: ignore
+    class PaymentRequired(_UniffiTempSdkError):
+        """
+        An Arweave upload the bundler refused for payment (HTTP 402): the user's own credits, or a payer's approval, are missing.
+"""
+        def __repr__(self):
+            return "SdkError.PaymentRequired({})".format(repr(str(self)))
+    _UniffiTempSdkError.PaymentRequired = PaymentRequired # type: ignore
+    class UploadRejected(_UniffiTempSdkError):
+        """
+        An Arweave upload no bundler accepted, for a reason other than payment.
+"""
+        def __repr__(self):
+            return "SdkError.UploadRejected({})".format(repr(str(self)))
+    _UniffiTempSdkError.UploadRejected = UploadRejected # type: ignore
+    class UploadUnsettled(_UniffiTempSdkError):
+        """
+        A kept Arweave upload still unsettled after its last re-post (C20): shown; the bytes stay kept.
+"""
+        def __repr__(self):
+            return "SdkError.UploadUnsettled({})".format(repr(str(self)))
+    _UniffiTempSdkError.UploadUnsettled = UploadUnsettled # type: ignore
+    class ArweaveItem(_UniffiTempSdkError):
+        """
+        A data item that is not one `scaas-ua` built: its verifying parser refused it, or it carries a target, an anchor or a
+        tag, or its object is no bucket's (CLI-UAL-64): `scaas-ua`'s code for an item it built.
+"""
+        def __repr__(self):
+            return "SdkError.ArweaveItem({})".format(repr(str(self)))
+    _UniffiTempSdkError.ArweaveItem = ArweaveItem # type: ignore
+    class FileTooLarge(_UniffiTempSdkError):
+        """
+        A file or object above the platform's cap or the store's largest object (CLI-UAL-65): `scaas-ua`'s code.
+"""
+        def __repr__(self):
+            return "SdkError.FileTooLarge({})".format(repr(str(self)))
+    _UniffiTempSdkError.FileTooLarge = FileTooLarge # type: ignore
+    class FileHashMismatch(_UniffiTempSdkError):
+        """
+        A file object or plaintext whose SHA-256 is not the signed one (CLI-UAL-65): `scaas-ua`'s code.
+"""
+        def __repr__(self):
+            return "SdkError.FileHashMismatch({})".format(repr(str(self)))
+    _UniffiTempSdkError.FileHashMismatch = FileHashMismatch # type: ignore
     class Cancelled(_UniffiTempSdkError):
         """
         a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
@@ -12779,14 +13122,70 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 68:
-            return SdkError.Cancelled(
+            return SdkError.ImportKindRefused(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 69:
-            return SdkError.Ua(
+            return SdkError.ImportNotPayee(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 70:
+            return SdkError.ImportRelayerBound(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 71:
+            return SdkError.ImportFeeRefused(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 72:
+            return SdkError.ImportExpired(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 73:
+            return SdkError.ImportConsumed(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 74:
+            return SdkError.ImportedOpRefused(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 75:
+            return SdkError.PayerUnavailable(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 76:
+            return SdkError.PaymentRequired(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 77:
+            return SdkError.UploadRejected(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 78:
+            return SdkError.UploadUnsettled(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 79:
+            return SdkError.ArweaveItem(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 80:
+            return SdkError.FileTooLarge(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 81:
+            return SdkError.FileHashMismatch(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 82:
+            return SdkError.Cancelled(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 83:
+            return SdkError.Ua(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 84:
             return SdkError.Rpc(
                 _UniffiFfiConverterString.read(buf),
             )
@@ -12927,6 +13326,34 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
         if isinstance(value, SdkError.PqzAuditorNative):
             return
         if isinstance(value, SdkError.GasAboveBlockShare):
+            return
+        if isinstance(value, SdkError.ImportKindRefused):
+            return
+        if isinstance(value, SdkError.ImportNotPayee):
+            return
+        if isinstance(value, SdkError.ImportRelayerBound):
+            return
+        if isinstance(value, SdkError.ImportFeeRefused):
+            return
+        if isinstance(value, SdkError.ImportExpired):
+            return
+        if isinstance(value, SdkError.ImportConsumed):
+            return
+        if isinstance(value, SdkError.ImportedOpRefused):
+            return
+        if isinstance(value, SdkError.PayerUnavailable):
+            return
+        if isinstance(value, SdkError.PaymentRequired):
+            return
+        if isinstance(value, SdkError.UploadRejected):
+            return
+        if isinstance(value, SdkError.UploadUnsettled):
+            return
+        if isinstance(value, SdkError.ArweaveItem):
+            return
+        if isinstance(value, SdkError.FileTooLarge):
+            return
+        if isinstance(value, SdkError.FileHashMismatch):
             return
         if isinstance(value, SdkError.Cancelled):
             return
@@ -13071,12 +13498,40 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
             buf.write_i32(66)
         if isinstance(value, SdkError.GasAboveBlockShare):
             buf.write_i32(67)
-        if isinstance(value, SdkError.Cancelled):
+        if isinstance(value, SdkError.ImportKindRefused):
             buf.write_i32(68)
-        if isinstance(value, SdkError.Ua):
+        if isinstance(value, SdkError.ImportNotPayee):
             buf.write_i32(69)
-        if isinstance(value, SdkError.Rpc):
+        if isinstance(value, SdkError.ImportRelayerBound):
             buf.write_i32(70)
+        if isinstance(value, SdkError.ImportFeeRefused):
+            buf.write_i32(71)
+        if isinstance(value, SdkError.ImportExpired):
+            buf.write_i32(72)
+        if isinstance(value, SdkError.ImportConsumed):
+            buf.write_i32(73)
+        if isinstance(value, SdkError.ImportedOpRefused):
+            buf.write_i32(74)
+        if isinstance(value, SdkError.PayerUnavailable):
+            buf.write_i32(75)
+        if isinstance(value, SdkError.PaymentRequired):
+            buf.write_i32(76)
+        if isinstance(value, SdkError.UploadRejected):
+            buf.write_i32(77)
+        if isinstance(value, SdkError.UploadUnsettled):
+            buf.write_i32(78)
+        if isinstance(value, SdkError.ArweaveItem):
+            buf.write_i32(79)
+        if isinstance(value, SdkError.FileTooLarge):
+            buf.write_i32(80)
+        if isinstance(value, SdkError.FileHashMismatch):
+            buf.write_i32(81)
+        if isinstance(value, SdkError.Cancelled):
+            buf.write_i32(82)
+        if isinstance(value, SdkError.Ua):
+            buf.write_i32(83)
+        if isinstance(value, SdkError.Rpc):
+            buf.write_i32(84)
 
 
 class SeedBackupProtocol(typing.Protocol):
@@ -15994,6 +16449,112 @@ class _UniffiFfiConverterTypeSetPayee(_UniffiConverterRustBuffer):
         _UniffiFfiConverterString.write(value.payee, buf)
         _UniffiFfiConverterBoolean.write(value.allowed, buf)
         _UniffiFfiConverterTypeEnvelope.write(value.envelope, buf)
+
+@dataclass
+class SignedOpBlob:
+    """
+    A signed operation handed off (spec §27.5 (c)): the operation's named fields as signed (canonical), its signature in the
+    entry's form, the signer's subject id and kind. It holds no secret; who holds it can land it, never redirect it.
+"""
+    def __init__(self, *, v:int, chain_uid:str, family:str, contract:str, entry:str, name:str, kind:str, message:Value, extra:Value, signature:Value, signer:str, signer_kind:int, ids:bool):
+        self.v = v
+        self.chain_uid = chain_uid
+        self.family = family
+        self.contract = contract
+        self.entry = entry
+        self.name = name
+        self.kind = kind
+        self.message = message
+        self.extra = extra
+        self.signature = signature
+        self.signer = signer
+        self.signer_kind = signer_kind
+        self.ids = ids
+        
+        
+
+    
+    def __str__(self):
+        return "SignedOpBlob(v={}, chain_uid={}, family={}, contract={}, entry={}, name={}, kind={}, message={}, extra={}, signature={}, signer={}, signer_kind={}, ids={})".format(self.v, self.chain_uid, self.family, self.contract, self.entry, self.name, self.kind, self.message, self.extra, self.signature, self.signer, self.signer_kind, self.ids)
+    def __eq__(self, other):
+        if self.v != other.v:
+            return False
+        if self.chain_uid != other.chain_uid:
+            return False
+        if self.family != other.family:
+            return False
+        if self.contract != other.contract:
+            return False
+        if self.entry != other.entry:
+            return False
+        if self.name != other.name:
+            return False
+        if self.kind != other.kind:
+            return False
+        if self.message != other.message:
+            return False
+        if self.extra != other.extra:
+            return False
+        if self.signature != other.signature:
+            return False
+        if self.signer != other.signer:
+            return False
+        if self.signer_kind != other.signer_kind:
+            return False
+        if self.ids != other.ids:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeSignedOpBlob(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return SignedOpBlob(
+            v=_UniffiFfiConverterUInt32.read(buf),
+            chain_uid=_UniffiFfiConverterString.read(buf),
+            family=_UniffiFfiConverterString.read(buf),
+            contract=_UniffiFfiConverterString.read(buf),
+            entry=_UniffiFfiConverterString.read(buf),
+            name=_UniffiFfiConverterString.read(buf),
+            kind=_UniffiFfiConverterString.read(buf),
+            message=_UniffiFfiConverterTypeValue.read(buf),
+            extra=_UniffiFfiConverterTypeValue.read(buf),
+            signature=_UniffiFfiConverterTypeValue.read(buf),
+            signer=_UniffiFfiConverterString.read(buf),
+            signer_kind=_UniffiFfiConverterUInt16.read(buf),
+            ids=_UniffiFfiConverterBoolean.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt32.check_lower(value.v)
+        _UniffiFfiConverterString.check_lower(value.chain_uid)
+        _UniffiFfiConverterString.check_lower(value.family)
+        _UniffiFfiConverterString.check_lower(value.contract)
+        _UniffiFfiConverterString.check_lower(value.entry)
+        _UniffiFfiConverterString.check_lower(value.name)
+        _UniffiFfiConverterString.check_lower(value.kind)
+        _UniffiFfiConverterTypeValue.check_lower(value.message)
+        _UniffiFfiConverterTypeValue.check_lower(value.extra)
+        _UniffiFfiConverterTypeValue.check_lower(value.signature)
+        _UniffiFfiConverterString.check_lower(value.signer)
+        _UniffiFfiConverterUInt16.check_lower(value.signer_kind)
+        _UniffiFfiConverterBoolean.check_lower(value.ids)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt32.write(value.v, buf)
+        _UniffiFfiConverterString.write(value.chain_uid, buf)
+        _UniffiFfiConverterString.write(value.family, buf)
+        _UniffiFfiConverterString.write(value.contract, buf)
+        _UniffiFfiConverterString.write(value.entry, buf)
+        _UniffiFfiConverterString.write(value.name, buf)
+        _UniffiFfiConverterString.write(value.kind, buf)
+        _UniffiFfiConverterTypeValue.write(value.message, buf)
+        _UniffiFfiConverterTypeValue.write(value.extra, buf)
+        _UniffiFfiConverterTypeValue.write(value.signature, buf)
+        _UniffiFfiConverterString.write(value.signer, buf)
+        _UniffiFfiConverterUInt16.write(value.signer_kind, buf)
+        _UniffiFfiConverterBoolean.write(value.ids, buf)
 
 @dataclass
 class SignedOrder:
@@ -29693,6 +30254,10 @@ class OpProtocol(typing.Protocol):
         Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
 """
         raise NotImplementedError
+    async def hand_off(self, prepared: Prepared) -> SignedOpBlob:
+        raise NotImplementedError
+    async def import_signed(self, blob: SignedOpBlob,expect: ImportExpect) -> Prepared:
+        raise NotImplementedError
     async def member_sign(self, prepared: Prepared) -> str:
         raise NotImplementedError
     async def quote(self, prepared: Prepared,path: SubmitPath) -> SubmitQuote:
@@ -29821,6 +30386,43 @@ class Op(OpProtocol):
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
+    async def hand_off(self, prepared: Prepared) -> SignedOpBlob:
+        
+        _UniffiFfiConverterTypePrepared.check_lower(prepared)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypePrepared.lower(prepared),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeSignedOpBlob.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_op_hand_off(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def import_signed(self, blob: SignedOpBlob,expect: ImportExpect) -> Prepared:
+        
+        _UniffiFfiConverterTypeSignedOpBlob.check_lower(blob)
+
+        _UniffiFfiConverterTypeImportExpect.check_lower(expect)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeSignedOpBlob.lower(blob),
+            _UniffiFfiConverterTypeImportExpect.lower(expect),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypePrepared.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_op_import_signed(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_u64,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_u64,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_u64,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
     async def member_sign(self, prepared: Prepared) -> str:
         
         _UniffiFfiConverterTypePrepared.check_lower(prepared)
@@ -32030,6 +32632,40 @@ def secret_new(len: int) -> SecretBytes:
         *_uniffi_lowered_args,
     )
     return _uniffi_lift_return(_uniffi_ffi_result)
+def signed_op_blob_from_json(text: str) -> SignedOpBlob:
+    """
+    A signed operation's hand-off blob from its JSON (spec §27.5 (c)).
+"""
+    
+    _UniffiFfiConverterString.check_lower(text)
+    _uniffi_lowered_args = (
+        _UniffiFfiConverterString.lower(text),
+    )
+    _uniffi_lift_return = _UniffiFfiConverterTypeSignedOpBlob.lift
+    _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_scaas_sdk_fn_func_signed_op_blob_from_json,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
+def signed_op_blob_to_json(blob: SignedOpBlob) -> str:
+    """
+    A hand-off blob's JSON (spec §27.5 (c)).
+"""
+    
+    _UniffiFfiConverterTypeSignedOpBlob.check_lower(blob)
+    _uniffi_lowered_args = (
+        _UniffiFfiConverterTypeSignedOpBlob.lower(blob),
+    )
+    _uniffi_lift_return = _UniffiFfiConverterString.lift
+    _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+    _uniffi_ffi_result = _uniffi_rust_call_with_error(
+        _uniffi_error_converter,
+        _UniffiLib.uniffi_scaas_sdk_fn_func_signed_op_blob_to_json,
+        *_uniffi_lowered_args,
+    )
+    return _uniffi_lift_return(_uniffi_ffi_result)
 def smart_account_address(factory: str,implementation: str,first_key: SubjectKeyArgs,guardian: str) -> str:
     """
     A `SmartKeyAccount`'s address before its deployment (spec §7).
@@ -32178,6 +32814,7 @@ __all__ = [
     "PositionReader",
     "ListedDex",
     "ChainProfile",
+    "NativeCap",
     "Limits",
     "GasTable",
     "BindingConfig",
@@ -32206,6 +32843,7 @@ __all__ = [
     "HistoryItem",
     "OpItem",
     "HistoryPage",
+    "ImportExpect",
     "ImportKey",
     "ImportWords",
     "ImportedKey",
@@ -32265,6 +32903,7 @@ __all__ = [
     "SessionSet",
     "SetMandate",
     "SetPayee",
+    "SignedOpBlob",
     "SignedOrder",
     "SignedRescue",
     "SmartOp",
@@ -32379,6 +33018,8 @@ __all__ = [
     "secret_id",
     "secret_len",
     "secret_new",
+    "signed_op_blob_from_json",
+    "signed_op_blob_to_json",
     "smart_account_address",
     "store_policy_default",
     "subject_key_args_secp256k1",

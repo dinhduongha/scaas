@@ -1446,6 +1446,16 @@ RustBuffer uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part(uint64_t ptr, RustBu
 int8_t uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok(uint64_t ptr, RustBuffer key_data, RustBuffer part, RustCallStatus *out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_HAND_OFF
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_HAND_OFF
+uint64_t uniffi_scaas_sdk_fn_method_op_hand_off(uint64_t ptr, uint64_t prepared
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_IMPORT_SIGNED
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_IMPORT_SIGNED
+uint64_t uniffi_scaas_sdk_fn_method_op_import_signed(uint64_t ptr, RustBuffer blob, RustBuffer expect
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_MEMBER_SIGN
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_MEMBER_SIGN
 uint64_t uniffi_scaas_sdk_fn_method_op_member_sign(uint64_t ptr, uint64_t prepared
@@ -2061,6 +2071,16 @@ uint32_t uniffi_scaas_sdk_fn_func_secret_len(uint64_t s, RustCallStatus *out_sta
 uint64_t uniffi_scaas_sdk_fn_func_secret_new(uint32_t len, RustCallStatus *out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FUNC_SIGNED_OP_BLOB_FROM_JSON
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FUNC_SIGNED_OP_BLOB_FROM_JSON
+RustBuffer uniffi_scaas_sdk_fn_func_signed_op_blob_from_json(RustBuffer text, RustCallStatus *out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FUNC_SIGNED_OP_BLOB_TO_JSON
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FUNC_SIGNED_OP_BLOB_TO_JSON
+RustBuffer uniffi_scaas_sdk_fn_func_signed_op_blob_to_json(RustBuffer blob, RustCallStatus *out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FUNC_SMART_ACCOUNT_ADDRESS
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FUNC_SMART_ACCOUNT_ADDRESS
 RustBuffer uniffi_scaas_sdk_fn_func_smart_account_address(RustBuffer factory, RustBuffer implementation, RustBuffer first_key, RustBuffer guardian, RustCallStatus *out_status
@@ -2464,6 +2484,18 @@ uint16_t uniffi_scaas_sdk_checksum_func_secret_len(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_FUNC_SECRET_NEW
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_FUNC_SECRET_NEW
 uint16_t uniffi_scaas_sdk_checksum_func_secret_new(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_FUNC_SIGNED_OP_BLOB_FROM_JSON
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_FUNC_SIGNED_OP_BLOB_FROM_JSON
+uint16_t uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_FUNC_SIGNED_OP_BLOB_TO_JSON
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_FUNC_SIGNED_OP_BLOB_TO_JSON
+uint16_t uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json(void
     
 );
 #endif
@@ -3478,6 +3510,18 @@ uint16_t uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_BLS_MULTI_POP_PART_OK
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_BLS_MULTI_POP_PART_OK
 uint16_t uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_HAND_OFF
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_HAND_OFF
+uint16_t uniffi_scaas_sdk_checksum_method_op_hand_off(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_IMPORT_SIGNED
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_IMPORT_SIGNED
+uint16_t uniffi_scaas_sdk_checksum_method_op_import_signed(void
     
 );
 #endif

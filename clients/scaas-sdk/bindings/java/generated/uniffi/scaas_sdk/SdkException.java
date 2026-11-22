@@ -499,6 +499,137 @@ public class SdkException extends java.lang.Exception {
     }
     
     /**
+     * An imported operation (spec §27.5 (c), owner 2026-11-22, Q-R3) of a kind the importer's family cannot show and check
+     * before sending, a confidential one (Zether, PQZ), or a struct or entry the family's rows do not hold.
+     */
+    public static class ImportKindRefused extends SdkException {
+      public ImportKindRefused(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * An imported pay or transfer whose `to` is none of the importer's ids.
+     */
+    public static class ImportNotPayee extends SdkException {
+      public ImportNotPayee(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * An imported operation whose signed `relayer` is bound to another address than the importer's payer (Soroban binds none).
+     */
+    public static class ImportRelayerBound extends SdkException {
+      public ImportRelayerBound(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * An imported operation with a fee to anyone: a hand-off is fee 0 (spec §27.5 (b)).
+     */
+    public static class ImportFeeRefused extends SdkException {
+      public ImportFeeRefused(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * An imported operation valid for less than the node's 120 s: its `validUntil` on the chain's clock (EVM, a Soroban
+     * pay), or its auth entry's expiry ledger (Soroban, a ledger at most each second).
+     */
+    public static class ImportExpired extends SdkException {
+      public ImportExpired(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * An imported operation already spent at the final height: its lane nonce (EVM), its host nonce or `pay_ref` entry
+     * (Soroban); it landed, or another operation took the nonce.
+     */
+    public static class ImportConsumed extends SdkException {
+      public ImportConsumed(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * An imported operation the simulation from the payer refused: the chain's judgement of the signature and the effect.
+     */
+    public static class ImportedOpRefused extends SdkException {
+      public ImportedOpRefused(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * An Arweave upload above the free tier, or refused there, with no payer: none configured, or the operator's node payer
+     * off (NODE-SPN-05; CLI-SDK-21).
+     */
+    public static class PayerUnavailable extends SdkException {
+      public PayerUnavailable(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * An Arweave upload the bundler refused for payment (HTTP 402): the user's own credits, or a payer's approval, are missing.
+     */
+    public static class PaymentRequired extends SdkException {
+      public PaymentRequired(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * An Arweave upload no bundler accepted, for a reason other than payment.
+     */
+    public static class UploadRejected extends SdkException {
+      public UploadRejected(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * A kept Arweave upload still unsettled after its last re-post (C20): shown; the bytes stay kept.
+     */
+    public static class UploadUnsettled extends SdkException {
+      public UploadUnsettled(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * A data item that is not one `scaas-ua` built: its verifying parser refused it, or it carries a target, an anchor or a
+     * tag, or its object is no bucket's (CLI-UAL-64): `scaas-ua`'s code for an item it built.
+     */
+    public static class ArweaveItem extends SdkException {
+      public ArweaveItem(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * A file or object above the platform's cap or the store's largest object (CLI-UAL-65): `scaas-ua`'s code.
+     */
+    public static class FileTooLarge extends SdkException {
+      public FileTooLarge(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
+     * A file object or plaintext whose SHA-256 is not the signed one (CLI-UAL-65): `scaas-ua`'s code.
+     */
+    public static class FileHashMismatch extends SdkException {
+      public FileHashMismatch(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
      * a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
      */
     public static class Cancelled extends SdkException {

@@ -91,6 +91,12 @@ final class NamespaceLibrary {
         if (UniffiLib.uniffi_scaas_sdk_checksum_func_secret_new() != ((short) 26347)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
+        if (UniffiLib.uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json() != ((short) 43577)) {
+            throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+        }
+        if (UniffiLib.uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json() != ((short) 49602)) {
+            throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+        }
         if (UniffiLib.uniffi_scaas_sdk_checksum_func_smart_account_address() != ((short) 22486)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
@@ -596,6 +602,12 @@ final class NamespaceLibrary {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
         if (UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok() != ((short) 1443)) {
+            throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+        }
+        if (UniffiLib.uniffi_scaas_sdk_checksum_method_op_hand_off() != ((short) 2688)) {
+            throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+        }
+        if (UniffiLib.uniffi_scaas_sdk_checksum_method_op_import_signed() != ((short) 37279)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
         if (UniffiLib.uniffi_scaas_sdk_checksum_method_op_member_sign() != ((short) 30667)) {

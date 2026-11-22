@@ -234,6 +234,54 @@ public class Op implements AutoCloseable, OpInterface {
 
   
     @Override
+    public java.util.concurrent.CompletableFuture<SignedOpBlob> handOff(Prepared prepared){
+        return handOff(prepared, java.util.concurrent.ForkJoinPool.commonPool());
+    }public java.util.concurrent.CompletableFuture<SignedOpBlob> handOff(Prepared prepared, java.util.concurrent.Executor uniffiExecutor
+    ){
+        return UniffiAsyncHelpers.uniffiRustCallAsync(
+        uniffiExecutor,
+        callWithHandle(uniffiHandle -> {
+            return UniffiLib.uniffi_scaas_sdk_fn_method_op_hand_off(
+                uniffiHandle,
+                FfiConverterTypePrepared.INSTANCE.lower(prepared)
+            );
+        }),
+        (future, callback, continuationHandle) -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuationHandle),
+        (_allocator, future, continuation) -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(_allocator, future, continuation),
+        (future) -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // lift function
+        (it) -> FfiConverterTypeSignedOpBlob.INSTANCE.lift(it),
+        // Error FFI converter
+        new SdkExceptionErrorHandler()
+    );
+    }
+
+  
+    @Override
+    public java.util.concurrent.CompletableFuture<Prepared> importSigned(SignedOpBlob blob, ImportExpect expect){
+        return importSigned(blob, expect, java.util.concurrent.ForkJoinPool.commonPool());
+    }public java.util.concurrent.CompletableFuture<Prepared> importSigned(SignedOpBlob blob, ImportExpect expect, java.util.concurrent.Executor uniffiExecutor
+    ){
+        return UniffiAsyncHelpers.uniffiRustCallAsync(
+        uniffiExecutor,
+        callWithHandle(uniffiHandle -> {
+            return UniffiLib.uniffi_scaas_sdk_fn_method_op_import_signed(
+                uniffiHandle,
+                FfiConverterTypeSignedOpBlob.INSTANCE.lower(blob), FfiConverterTypeImportExpect.INSTANCE.lower(expect)
+            );
+        }),
+        (future, callback, continuationHandle) -> UniffiLib.ffi_scaas_sdk_rust_future_poll_u64(future, callback, continuationHandle),
+        (_allocator, future, continuation) -> UniffiLib.ffi_scaas_sdk_rust_future_complete_u64(future, continuation),
+        (future) -> UniffiLib.ffi_scaas_sdk_rust_future_free_u64(future),
+        // lift function
+        (it) -> FfiConverterTypePrepared.INSTANCE.lift(it),
+        // Error FFI converter
+        new SdkExceptionErrorHandler()
+    );
+    }
+
+  
+    @Override
     public java.util.concurrent.CompletableFuture<java.lang.String> memberSign(Prepared prepared){
         return memberSign(prepared, java.util.concurrent.ForkJoinPool.commonPool());
     }public java.util.concurrent.CompletableFuture<java.lang.String> memberSign(Prepared prepared, java.util.concurrent.Executor uniffiExecutor

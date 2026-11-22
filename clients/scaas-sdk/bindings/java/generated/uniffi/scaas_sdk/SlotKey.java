@@ -70,6 +70,17 @@ public sealed interface SlotKey {
 
   }
   
+    /**
+     * another party's signer (as `KeyRef::Signed`, a hand-off): never a slot's key, refused at signing
+     */
+  record Signed(
+    java.lang.String signer) implements SlotKey {
+    
+    
+    
+
+  }
+  
 
   
 }

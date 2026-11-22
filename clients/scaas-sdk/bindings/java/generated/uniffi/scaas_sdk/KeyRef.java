@@ -86,6 +86,18 @@ public sealed interface KeyRef {
 
   }
   
+    /**
+     * an operation another party signed and handed off (`Op::import_signed`, spec §27.5 (c)): its signer's subject id (`0x`
+     * hex); nothing in this SDK signs for it
+     */
+  record Signed(
+    java.lang.String signer) implements KeyRef {
+    
+    
+    
+
+  }
+  
 
   
 }

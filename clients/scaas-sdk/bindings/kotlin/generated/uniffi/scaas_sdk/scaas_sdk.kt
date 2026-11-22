@@ -775,6 +775,10 @@ external fun uniffi_scaas_sdk_checksum_func_secret_len(
 ): Short
 external fun uniffi_scaas_sdk_checksum_func_secret_new(
 ): Short
+external fun uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json(
+): Short
+external fun uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json(
+): Short
 external fun uniffi_scaas_sdk_checksum_func_smart_account_address(
 ): Short
 external fun uniffi_scaas_sdk_checksum_func_store_policy_default(
@@ -1112,6 +1116,10 @@ external fun uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok(
 external fun uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok(
+): Short
+external fun uniffi_scaas_sdk_checksum_method_op_hand_off(
+): Short
+external fun uniffi_scaas_sdk_checksum_method_op_import_signed(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_op_member_sign(
 ): Short
@@ -1669,6 +1677,10 @@ external fun uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part(`ptr`: Long,`membe
 ): RustBuffer.ByValue
 external fun uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok(`ptr`: Long,`keyData`: RustBuffer.ByValue,`part`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
+external fun uniffi_scaas_sdk_fn_method_op_hand_off(`ptr`: Long,`prepared`: Long,
+): Long
+external fun uniffi_scaas_sdk_fn_method_op_import_signed(`ptr`: Long,`blob`: RustBuffer.ByValue,`expect`: RustBuffer.ByValue,
+): Long
 external fun uniffi_scaas_sdk_fn_method_op_member_sign(`ptr`: Long,`prepared`: Long,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_op_quote(`ptr`: Long,`prepared`: Long,`path`: RustBuffer.ByValue,
@@ -1913,6 +1925,10 @@ external fun uniffi_scaas_sdk_fn_func_secret_len(`s`: Long,uniffi_out_err: Uniff
 ): Int
 external fun uniffi_scaas_sdk_fn_func_secret_new(`len`: Int,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
+external fun uniffi_scaas_sdk_fn_func_signed_op_blob_from_json(`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_scaas_sdk_fn_func_signed_op_blob_to_json(`blob`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 external fun uniffi_scaas_sdk_fn_func_smart_account_address(`factory`: RustBuffer.ByValue,`implementation`: RustBuffer.ByValue,`firstKey`: RustBuffer.ByValue,`guardian`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_scaas_sdk_fn_func_store_policy_default(uniffi_out_err: UniffiRustCallStatus, 
@@ -2100,6 +2116,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_func_secret_new() != 26347.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_func_signed_op_blob_from_json() != 43577.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_func_signed_op_blob_to_json() != 49602.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_func_smart_account_address() != 22486.toShort()) {
@@ -2607,6 +2629,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok() != 1443.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_op_hand_off() != 2688.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_op_import_signed() != 37279.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_op_member_sign() != 30667.toShort()) {
@@ -8937,6 +8965,10 @@ public interface OpInterface {
      */
     fun `blsMultiPopPartOk`(`keyData`: kotlin.String, `part`: BlsMultiPart): kotlin.Boolean
     
+    suspend fun `handOff`(`prepared`: Prepared): SignedOpBlob
+    
+    suspend fun `importSigned`(`blob`: SignedOpBlob, `expect`: ImportExpect): Prepared
+    
     suspend fun `memberSign`(`prepared`: Prepared): kotlin.String
     
     suspend fun `quote`(`prepared`: Prepared, `path`: SubmitPath): SubmitQuote
@@ -9128,6 +9160,48 @@ open class Op: Disposable, AutoCloseable, OpInterface
     )
     }
     
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `handOff`(`prepared`: Prepared) : SignedOpBlob {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_op_hand_off(
+                uniffiHandle,
+                FfiConverterTypePrepared.lower(`prepared`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeSignedOpBlob.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `importSigned`(`blob`: SignedOpBlob, `expect`: ImportExpect) : Prepared {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_op_import_signed(
+                uniffiHandle,
+                FfiConverterTypeSignedOpBlob.lower(`blob`),FfiConverterTypeImportExpect.lower(`expect`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypePrepared.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
 
     
     @Throws(SdkException::class)
@@ -15983,6 +16057,53 @@ public object FfiConverterTypeHistoryPage: FfiConverterRustBuffer<HistoryPage> {
 
 
 /**
+ * What the payee expects of an imported operation: its chain, its own ids (`0x` + 64 hex: a pay or transfer must name one as
+ * `to`), and the native key that will submit it (`SubmitPath::SelfRelay`).
+ */
+data class ImportExpect (
+    var `chain`: kotlin.String
+    , 
+    var `payee`: List<kotlin.String>
+    , 
+    var `payer`: KeyRef
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeImportExpect: FfiConverterRustBuffer<ImportExpect> {
+    override fun read(buf: ByteBuffer): ImportExpect {
+        return ImportExpect(
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterTypeKeyRef.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ImportExpect) = (
+            FfiConverterString.allocationSize(value.`chain`) +
+            FfiConverterSequenceString.allocationSize(value.`payee`) +
+            FfiConverterTypeKeyRef.allocationSize(value.`payer`)
+    )
+
+    override fun write(value: ImportExpect, buf: ByteBuffer) {
+            FfiConverterString.write(value.`chain`, buf)
+            FfiConverterSequenceString.write(value.`payee`, buf)
+            FfiConverterTypeKeyRef.write(value.`payer`, buf)
+    }
+}
+
+
+
+/**
  * `vault.import_key`'s request (spec §6.7): a classical private key of `network` (32 bytes) as a leaf of a seed, sealed as the
  * new label vault `native-import:<network>:<n>` under the seed's vault passphrase.
  */
@@ -16318,6 +16439,13 @@ data class Limits (
      * is never pruned (owner 2026-11-19, T13b ruling 2)
      */
     var `stateRetentionSecs`: kotlin.ULong
+    , 
+    /**
+     * the most a family's native transaction may cost its payer, per chain profile, as a decimal string in the chain's
+     * smallest unit (spec §27.5 (e): fee + storage + forward; plan T41): never from an endpoint. A chain without its row
+     * spends nothing natively (`FeeAboveCap`: fail closed). EVM's self-relay keeps `max_cost`
+     */
+    var `maxNativeCost`: List<NativeCap>
     
 ){
     
@@ -16343,6 +16471,7 @@ public object FfiConverterTypeLimits: FfiConverterRustBuffer<Limits> {
             FfiConverterULong.read(buf),
             FfiConverterUInt.read(buf),
             FfiConverterULong.read(buf),
+            FfiConverterSequenceTypeNativeCap.read(buf),
         )
     }
 
@@ -16355,7 +16484,8 @@ public object FfiConverterTypeLimits: FfiConverterRustBuffer<Limits> {
             FfiConverterUInt.allocationSize(value.`maxConcurrentHeavy`) +
             FfiConverterULong.allocationSize(value.`maxValidSecs`) +
             FfiConverterUInt.allocationSize(value.`eventQueue`) +
-            FfiConverterULong.allocationSize(value.`stateRetentionSecs`)
+            FfiConverterULong.allocationSize(value.`stateRetentionSecs`) +
+            FfiConverterSequenceTypeNativeCap.allocationSize(value.`maxNativeCost`)
     )
 
     override fun write(value: Limits, buf: ByteBuffer) {
@@ -16368,6 +16498,7 @@ public object FfiConverterTypeLimits: FfiConverterRustBuffer<Limits> {
             FfiConverterULong.write(value.`maxValidSecs`, buf)
             FfiConverterUInt.write(value.`eventQueue`, buf)
             FfiConverterULong.write(value.`stateRetentionSecs`, buf)
+            FfiConverterSequenceTypeNativeCap.write(value.`maxNativeCost`, buf)
     }
 }
 
@@ -17171,6 +17302,53 @@ public object FfiConverterTypeNativeAddress: FfiConverterRustBuffer<NativeAddres
             FfiConverterOptionalString.write(value.`ss58`, buf)
             FfiConverterOptionalUByte.write(value.`witnessVersion`, buf)
             FfiConverterOptionalString.write(value.`witnessProgram`, buf)
+    }
+}
+
+
+
+/**
+ * One chain's native cost cap (`Limits::max_native_cost`).
+ */
+data class NativeCap (
+    /**
+     * the profile's key
+     */
+    var `chain`: kotlin.String
+    , 
+    /**
+     * decimal, the chain's smallest unit (stroops on Soroban)
+     */
+    var `max`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNativeCap: FfiConverterRustBuffer<NativeCap> {
+    override fun read(buf: ByteBuffer): NativeCap {
+        return NativeCap(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NativeCap) = (
+            FfiConverterString.allocationSize(value.`chain`) +
+            FfiConverterString.allocationSize(value.`max`)
+    )
+
+    override fun write(value: NativeCap, buf: ByteBuffer) {
+            FfiConverterString.write(value.`chain`, buf)
+            FfiConverterString.write(value.`max`, buf)
     }
 }
 
@@ -19971,6 +20149,142 @@ public object FfiConverterTypeSetPayee: FfiConverterRustBuffer<SetPayee> {
             FfiConverterString.write(value.`payee`, buf)
             FfiConverterBoolean.write(value.`allowed`, buf)
             FfiConverterTypeEnvelope.write(value.`envelope`, buf)
+    }
+}
+
+
+
+/**
+ * A signed operation handed off (spec §27.5 (c)): the operation's named fields as signed (canonical), its signature in the
+ * entry's form, the signer's subject id and kind. It holds no secret; who holds it can land it, never redirect it.
+ */
+data class SignedOpBlob (
+    /**
+     * 1
+     */
+    var `v`: kotlin.UInt
+    , 
+    /**
+     * the profile's `chain_uid` (`0x` + 64 hex)
+     */
+    var `chainUid`: kotlin.String
+    , 
+    /**
+     * `evm`, `soroban`
+     */
+    var `family`: kotlin.String
+    , 
+    /**
+     * the domain's contract, the token (`0x` + 40 hex; a `C…` on Soroban)
+     */
+    var `contract`: kotlin.String
+    , 
+    /**
+     * the contract function (`mtxPay`, `mtxCancelNonce`, …; `pay`, `transfer`, `burn` on Soroban)
+     */
+    var `entry`: kotlin.String
+    , 
+    /**
+     * the signed struct
+     */
+    var `name`: kotlin.String
+    , 
+    /**
+     * the domain kind (`token`)
+     */
+    var `kind`: kotlin.String
+    , 
+    /**
+     * the struct's fields, canonical (an unbound `relayer` and `feeRecipient` 0)
+     */
+    var `message`: Value
+    , 
+    /**
+     * what the entry takes unsigned beside them (a pay's `meta`, …)
+     */
+    var `extra`: Value
+    , 
+    /**
+     * the signature in the entry's form (`bytes`, a `UASig`)
+     */
+    var `signature`: Value
+    , 
+    /**
+     * the signer's subject id (the lane's `from`)
+     */
+    var `signer`: kotlin.String
+    , 
+    /**
+     * the signer's kind (a UA kind, 0 a native EVM key)
+     */
+    var `signerKind`: kotlin.UShort
+    , 
+    /**
+     * the transfer on ids (`mtxExecuteTransfer`)
+     */
+    var `ids`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSignedOpBlob: FfiConverterRustBuffer<SignedOpBlob> {
+    override fun read(buf: ByteBuffer): SignedOpBlob {
+        return SignedOpBlob(
+            FfiConverterUInt.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeValue.read(buf),
+            FfiConverterTypeValue.read(buf),
+            FfiConverterTypeValue.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SignedOpBlob) = (
+            FfiConverterUInt.allocationSize(value.`v`) +
+            FfiConverterString.allocationSize(value.`chainUid`) +
+            FfiConverterString.allocationSize(value.`family`) +
+            FfiConverterString.allocationSize(value.`contract`) +
+            FfiConverterString.allocationSize(value.`entry`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterString.allocationSize(value.`kind`) +
+            FfiConverterTypeValue.allocationSize(value.`message`) +
+            FfiConverterTypeValue.allocationSize(value.`extra`) +
+            FfiConverterTypeValue.allocationSize(value.`signature`) +
+            FfiConverterString.allocationSize(value.`signer`) +
+            FfiConverterUShort.allocationSize(value.`signerKind`) +
+            FfiConverterBoolean.allocationSize(value.`ids`)
+    )
+
+    override fun write(value: SignedOpBlob, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`v`, buf)
+            FfiConverterString.write(value.`chainUid`, buf)
+            FfiConverterString.write(value.`family`, buf)
+            FfiConverterString.write(value.`contract`, buf)
+            FfiConverterString.write(value.`entry`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterString.write(value.`kind`, buf)
+            FfiConverterTypeValue.write(value.`message`, buf)
+            FfiConverterTypeValue.write(value.`extra`, buf)
+            FfiConverterTypeValue.write(value.`signature`, buf)
+            FfiConverterString.write(value.`signer`, buf)
+            FfiConverterUShort.write(value.`signerKind`, buf)
+            FfiConverterBoolean.write(value.`ids`, buf)
     }
 }
 
@@ -29290,6 +29604,19 @@ sealed class KeyRef {
         companion object
     }
     
+    /**
+     * an operation another party signed and handed off (`Op::import_signed`, spec §27.5 (c)): its signer's subject id (`0x`
+     * hex); nothing in this SDK signs for it
+     */
+    data class Signed(
+        val `signer`: kotlin.String) : KeyRef()
+        
+    {
+        
+
+        companion object
+    }
+    
 
     
 
@@ -29334,6 +29661,9 @@ public object FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                 FfiConverterString.read(buf),
                 FfiConverterUInt.read(buf),
                 FfiConverterUInt.read(buf),
+                FfiConverterString.read(buf),
+                )
+            7 -> KeyRef.Signed(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -29395,6 +29725,13 @@ public object FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                 + FfiConverterString.allocationSize(value.`keyData`)
             )
         }
+        is KeyRef.Signed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`signer`)
+            )
+        }
     }
 
     override fun write(value: KeyRef, buf: ByteBuffer) {
@@ -29439,6 +29776,11 @@ public object FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                 FfiConverterUInt.write(value.`account`, buf)
                 FfiConverterUInt.write(value.`index`, buf)
                 FfiConverterString.write(value.`keyData`, buf)
+                Unit
+            }
+            is KeyRef.Signed -> {
+                buf.putInt(7)
+                FfiConverterString.write(value.`signer`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -30339,6 +30681,81 @@ sealed class SdkException(message: String): kotlin.Exception(message) {
         class GasAboveBlockShare(message: String) : SdkException(message)
         
     /**
+     * An imported operation (spec §27.5 (c), owner 2026-11-22, Q-R3) of a kind the importer's family cannot show and check
+     * before sending, a confidential one (Zether, PQZ), or a struct or entry the family's rows do not hold.
+     */
+        class ImportKindRefused(message: String) : SdkException(message)
+        
+    /**
+     * An imported pay or transfer whose `to` is none of the importer's ids.
+     */
+        class ImportNotPayee(message: String) : SdkException(message)
+        
+    /**
+     * An imported operation whose signed `relayer` is bound to another address than the importer's payer (Soroban binds none).
+     */
+        class ImportRelayerBound(message: String) : SdkException(message)
+        
+    /**
+     * An imported operation with a fee to anyone: a hand-off is fee 0 (spec §27.5 (b)).
+     */
+        class ImportFeeRefused(message: String) : SdkException(message)
+        
+    /**
+     * An imported operation valid for less than the node's 120 s: its `validUntil` on the chain's clock (EVM, a Soroban
+     * pay), or its auth entry's expiry ledger (Soroban, a ledger at most each second).
+     */
+        class ImportExpired(message: String) : SdkException(message)
+        
+    /**
+     * An imported operation already spent at the final height: its lane nonce (EVM), its host nonce or `pay_ref` entry
+     * (Soroban); it landed, or another operation took the nonce.
+     */
+        class ImportConsumed(message: String) : SdkException(message)
+        
+    /**
+     * An imported operation the simulation from the payer refused: the chain's judgement of the signature and the effect.
+     */
+        class ImportedOpRefused(message: String) : SdkException(message)
+        
+    /**
+     * An Arweave upload above the free tier, or refused there, with no payer: none configured, or the operator's node payer
+     * off (NODE-SPN-05; CLI-SDK-21).
+     */
+        class PayerUnavailable(message: String) : SdkException(message)
+        
+    /**
+     * An Arweave upload the bundler refused for payment (HTTP 402): the user's own credits, or a payer's approval, are missing.
+     */
+        class PaymentRequired(message: String) : SdkException(message)
+        
+    /**
+     * An Arweave upload no bundler accepted, for a reason other than payment.
+     */
+        class UploadRejected(message: String) : SdkException(message)
+        
+    /**
+     * A kept Arweave upload still unsettled after its last re-post (C20): shown; the bytes stay kept.
+     */
+        class UploadUnsettled(message: String) : SdkException(message)
+        
+    /**
+     * A data item that is not one `scaas-ua` built: its verifying parser refused it, or it carries a target, an anchor or a
+     * tag, or its object is no bucket's (CLI-UAL-64): `scaas-ua`'s code for an item it built.
+     */
+        class ArweaveItem(message: String) : SdkException(message)
+        
+    /**
+     * A file or object above the platform's cap or the store's largest object (CLI-UAL-65): `scaas-ua`'s code.
+     */
+        class FileTooLarge(message: String) : SdkException(message)
+        
+    /**
+     * A file object or plaintext whose SHA-256 is not the signed one (CLI-UAL-65): `scaas-ua`'s code.
+     */
+        class FileHashMismatch(message: String) : SdkException(message)
+        
+    /**
      * a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
      */
         class Cancelled(message: String) : SdkException(message)
@@ -30433,9 +30850,23 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
             65 -> SdkException.DexNotListed(FfiConverterString.read(buf))
             66 -> SdkException.PqzAuditorNative(FfiConverterString.read(buf))
             67 -> SdkException.GasAboveBlockShare(FfiConverterString.read(buf))
-            68 -> SdkException.Cancelled(FfiConverterString.read(buf))
-            69 -> SdkException.Ua(FfiConverterString.read(buf))
-            70 -> SdkException.Rpc(FfiConverterString.read(buf))
+            68 -> SdkException.ImportKindRefused(FfiConverterString.read(buf))
+            69 -> SdkException.ImportNotPayee(FfiConverterString.read(buf))
+            70 -> SdkException.ImportRelayerBound(FfiConverterString.read(buf))
+            71 -> SdkException.ImportFeeRefused(FfiConverterString.read(buf))
+            72 -> SdkException.ImportExpired(FfiConverterString.read(buf))
+            73 -> SdkException.ImportConsumed(FfiConverterString.read(buf))
+            74 -> SdkException.ImportedOpRefused(FfiConverterString.read(buf))
+            75 -> SdkException.PayerUnavailable(FfiConverterString.read(buf))
+            76 -> SdkException.PaymentRequired(FfiConverterString.read(buf))
+            77 -> SdkException.UploadRejected(FfiConverterString.read(buf))
+            78 -> SdkException.UploadUnsettled(FfiConverterString.read(buf))
+            79 -> SdkException.ArweaveItem(FfiConverterString.read(buf))
+            80 -> SdkException.FileTooLarge(FfiConverterString.read(buf))
+            81 -> SdkException.FileHashMismatch(FfiConverterString.read(buf))
+            82 -> SdkException.Cancelled(FfiConverterString.read(buf))
+            83 -> SdkException.Ua(FfiConverterString.read(buf))
+            84 -> SdkException.Rpc(FfiConverterString.read(buf))
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
         
@@ -30715,16 +31146,72 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
                 buf.putInt(67)
                 Unit
             }
-            is SdkException.Cancelled -> {
+            is SdkException.ImportKindRefused -> {
                 buf.putInt(68)
                 Unit
             }
-            is SdkException.Ua -> {
+            is SdkException.ImportNotPayee -> {
                 buf.putInt(69)
                 Unit
             }
-            is SdkException.Rpc -> {
+            is SdkException.ImportRelayerBound -> {
                 buf.putInt(70)
+                Unit
+            }
+            is SdkException.ImportFeeRefused -> {
+                buf.putInt(71)
+                Unit
+            }
+            is SdkException.ImportExpired -> {
+                buf.putInt(72)
+                Unit
+            }
+            is SdkException.ImportConsumed -> {
+                buf.putInt(73)
+                Unit
+            }
+            is SdkException.ImportedOpRefused -> {
+                buf.putInt(74)
+                Unit
+            }
+            is SdkException.PayerUnavailable -> {
+                buf.putInt(75)
+                Unit
+            }
+            is SdkException.PaymentRequired -> {
+                buf.putInt(76)
+                Unit
+            }
+            is SdkException.UploadRejected -> {
+                buf.putInt(77)
+                Unit
+            }
+            is SdkException.UploadUnsettled -> {
+                buf.putInt(78)
+                Unit
+            }
+            is SdkException.ArweaveItem -> {
+                buf.putInt(79)
+                Unit
+            }
+            is SdkException.FileTooLarge -> {
+                buf.putInt(80)
+                Unit
+            }
+            is SdkException.FileHashMismatch -> {
+                buf.putInt(81)
+                Unit
+            }
+            is SdkException.Cancelled -> {
+                buf.putInt(82)
+                Unit
+            }
+            is SdkException.Ua -> {
+                buf.putInt(83)
+                Unit
+            }
+            is SdkException.Rpc -> {
+                buf.putInt(84)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -30810,6 +31297,18 @@ sealed class SlotKey {
         companion object
     }
     
+    /**
+     * another party's signer (as `KeyRef::Signed`, a hand-off): never a slot's key, refused at signing
+     */
+    data class Signed(
+        val `signer`: kotlin.String) : SlotKey()
+        
+    {
+        
+
+        companion object
+    }
+    
 
     
 
@@ -30853,6 +31352,9 @@ public object FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
                 FfiConverterString.read(buf),
                 FfiConverterUInt.read(buf),
                 FfiConverterUInt.read(buf),
+                FfiConverterString.read(buf),
+                )
+            7 -> SlotKey.Signed(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -30913,6 +31415,13 @@ public object FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
                 + FfiConverterString.allocationSize(value.`keyData`)
             )
         }
+        is SlotKey.Signed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`signer`)
+            )
+        }
     }
 
     override fun write(value: SlotKey, buf: ByteBuffer) {
@@ -30956,6 +31465,11 @@ public object FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
                 FfiConverterUInt.write(value.`account`, buf)
                 FfiConverterUInt.write(value.`index`, buf)
                 FfiConverterString.write(value.`keyData`, buf)
+                Unit
+            }
+            is SlotKey.Signed -> {
+                buf.putInt(7)
+                FfiConverterString.write(value.`signer`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -32816,6 +33330,34 @@ public object FfiConverterSequenceTypeMsigSlotState: FfiConverterRustBuffer<List
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeNativeCap: FfiConverterRustBuffer<List<NativeCap>> {
+    override fun read(buf: ByteBuffer): List<NativeCap> {
+        val len = buf.getInt()
+        return List<NativeCap>(len) {
+            FfiConverterTypeNativeCap.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<NativeCap>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeNativeCap.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<NativeCap>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeNativeCap.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeOpItem: FfiConverterRustBuffer<List<OpItem>> {
     override fun read(buf: ByteBuffer): List<OpItem> {
         val len = buf.getInt()
@@ -33488,6 +34030,34 @@ public typealias FfiConverterTypeValue = FfiConverterString
     UniffiLib.uniffi_scaas_sdk_fn_func_secret_new(
     
         FfiConverterUInt.lower(`len`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * A signed operation's hand-off blob from its JSON (spec §27.5 (c)).
+         */
+    @Throws(SdkException::class) fun `signedOpBlobFromJson`(`text`: kotlin.String): SignedOpBlob {
+            return FfiConverterTypeSignedOpBlob.lift(
+    uniffiRustCallWithError(SdkException) { _status ->
+    UniffiLib.uniffi_scaas_sdk_fn_func_signed_op_blob_from_json(
+    
+        FfiConverterString.lower(`text`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * A hand-off blob's JSON (spec §27.5 (c)).
+         */
+    @Throws(SdkException::class) fun `signedOpBlobToJson`(`blob`: SignedOpBlob): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(SdkException) { _status ->
+    UniffiLib.uniffi_scaas_sdk_fn_func_signed_op_blob_to_json(
+    
+        FfiConverterTypeSignedOpBlob.lower(`blob`),_status)
 }
     )
     }

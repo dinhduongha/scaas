@@ -30,6 +30,8 @@ public enum FfiConverterTypeSlotKey implements FfiConverterRustBuffer<SlotKey> {
           FfiConverterInteger.INSTANCE.read(buf),
           FfiConverterString.INSTANCE.read(buf)
           );
+        case 7 -> new SlotKey.Signed(FfiConverterString.INSTANCE.read(buf)
+          );
         default ->
           throw new java.lang.RuntimeException("invalid enum value, something is very wrong!");
       };
@@ -67,6 +69,9 @@ public enum FfiConverterTypeSlotKey implements FfiConverterRustBuffer<SlotKey> {
             + FfiConverterInteger.INSTANCE.allocationSize(account)
             + FfiConverterInteger.INSTANCE.allocationSize(index)
             + FfiConverterString.INSTANCE.allocationSize(keyData));
+          case SlotKey.Signed(var signer) ->
+            (4L
+            + FfiConverterString.INSTANCE.allocationSize(signer));
         };
     }
 
@@ -107,6 +112,10 @@ public enum FfiConverterTypeSlotKey implements FfiConverterRustBuffer<SlotKey> {
           FfiConverterInteger.INSTANCE.write(account, buf);
           FfiConverterInteger.INSTANCE.write(index, buf);
           FfiConverterString.INSTANCE.write(keyData, buf);
+        }
+        case SlotKey.Signed(var signer) -> {
+          buf.putInt(7);
+          FfiConverterString.INSTANCE.write(signer, buf);
         }
       };
     }

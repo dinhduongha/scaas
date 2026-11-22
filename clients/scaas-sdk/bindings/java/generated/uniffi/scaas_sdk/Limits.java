@@ -34,6 +34,12 @@ public class Limits {
      * is never pruned (owner 2026-11-19, T13b ruling 2)
      */
     private long stateRetentionSecs;
+    /**
+     * the most a family's native transaction may cost its payer, per chain profile, as a decimal string in the chain's
+     * smallest unit (spec §27.5 (e): fee + storage + forward; plan T41): never from an endpoint. A chain without its row
+     * spends nothing natively (`FeeAboveCap`: fail closed). EVM's self-relay keeps `max_cost`
+     */
+    private java.util.List<NativeCap> maxNativeCost;
 
     public Limits(
         java.lang.String maxFeePerGas, 
@@ -44,7 +50,8 @@ public class Limits {
         int maxConcurrentHeavy, 
         long maxValidSecs, 
         int eventQueue, 
-        long stateRetentionSecs
+        long stateRetentionSecs, 
+        java.util.List<NativeCap> maxNativeCost
     ) {
         
         this.maxFeePerGas = maxFeePerGas;
@@ -64,6 +71,8 @@ public class Limits {
         this.eventQueue = eventQueue;
         
         this.stateRetentionSecs = stateRetentionSecs;
+        
+        this.maxNativeCost = maxNativeCost;
     }
     
     public java.lang.String maxFeePerGas() {
@@ -101,6 +110,10 @@ public class Limits {
     public long stateRetentionSecs() {
         return this.stateRetentionSecs;
     }
+    
+    public java.util.List<NativeCap> maxNativeCost() {
+        return this.maxNativeCost;
+    }
     public void setMaxFeePerGas(java.lang.String maxFeePerGas) {
         this.maxFeePerGas = maxFeePerGas;
     }
@@ -128,6 +141,9 @@ public class Limits {
     public void setStateRetentionSecs(long stateRetentionSecs) {
         this.stateRetentionSecs = stateRetentionSecs;
     }
+    public void setMaxNativeCost(java.util.List<NativeCap> maxNativeCost) {
+        this.maxNativeCost = maxNativeCost;
+    }
 
     
 
@@ -153,7 +169,9 @@ public class Limits {
               
               eventQueue == t.eventQueue && 
               
-              stateRetentionSecs == t.stateRetentionSecs
+              stateRetentionSecs == t.stateRetentionSecs && 
+              
+              java.util.Objects.equals(maxNativeCost, t.maxNativeCost)
               
             );
         };
@@ -171,6 +189,7 @@ public class Limits {
         result = 31 * result + java.lang.Long.hashCode(maxValidSecs);
         result = 31 * result + java.lang.Integer.hashCode(eventQueue);
         result = 31 * result + java.lang.Long.hashCode(stateRetentionSecs);
+        result = 31 * result + java.util.Objects.hashCode(maxNativeCost);
         return result;
     }
 

@@ -31,6 +31,8 @@ public enum FfiConverterTypeKeyRef implements FfiConverterRustBuffer<KeyRef> {
           FfiConverterInteger.INSTANCE.read(buf),
           FfiConverterString.INSTANCE.read(buf)
           );
+        case 7 -> new KeyRef.Signed(FfiConverterString.INSTANCE.read(buf)
+          );
         default ->
           throw new java.lang.RuntimeException("invalid enum value, something is very wrong!");
       };
@@ -69,6 +71,9 @@ public enum FfiConverterTypeKeyRef implements FfiConverterRustBuffer<KeyRef> {
             + FfiConverterInteger.INSTANCE.allocationSize(account)
             + FfiConverterInteger.INSTANCE.allocationSize(index)
             + FfiConverterString.INSTANCE.allocationSize(keyData));
+          case KeyRef.Signed(var signer) ->
+            (4L
+            + FfiConverterString.INSTANCE.allocationSize(signer));
         };
     }
 
@@ -110,6 +115,10 @@ public enum FfiConverterTypeKeyRef implements FfiConverterRustBuffer<KeyRef> {
           FfiConverterInteger.INSTANCE.write(account, buf);
           FfiConverterInteger.INSTANCE.write(index, buf);
           FfiConverterString.INSTANCE.write(keyData, buf);
+        }
+        case KeyRef.Signed(var signer) -> {
+          buf.putInt(7);
+          FfiConverterString.INSTANCE.write(signer, buf);
         }
       };
     }
