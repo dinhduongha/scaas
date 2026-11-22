@@ -181,7 +181,8 @@ export function jobValue({ type, value }) {
   return make(value);
 }
 
-const invocationXdr = ({ contract, function: fn, args, sub_invocations: subs }) =>
+/** `SorobanAuthorizedInvocation` XDR of a named invocation (a contract function and what it calls under the same signature). */
+export const invocationXdr = ({ contract, function: fn, args, sub_invocations: subs }) =>
   concatBytes(
     u32be(0),
     addr(contract).xdr.subarray(4),

@@ -837,7 +837,9 @@ the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)).
 first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-12 controller calls (owner may override):
 
 <a id="CLI-PQV-01"></a>**CLI-PQV-01** — **`pqvault-core`, a Rust crate of its own, builds, encrypts, opens and merges vault
-records as an app core above `scaas-sdk`: it depends on the SDK, the SDK knows nothing about PqVault, and every signature,
+records as an app core above `scaas-sdk`: it depends on the SDK, the SDK holds no PqVault logic beyond its two signing calls
+`sign_pqvault_record` / `verify_pqvault_record` (all vault logic stays in `pqvault-core`; owner 2026-11-22,
+[CLI-PQV-13](../decisions.md#CLI-PQV-13)), and every signature,
 KEM, KDF and AEAD still runs in `ua-rs`, reached through the SDK ([CLI-UAL-01](#CLI-UAL-01)); scaas-app links it in its one
 Rust library `app-core-rust` with the feature `pqvault` (which implies `scaas`; scaas-app's contract section 12)** (owner
 2026-11-17, N2: "agreed to reverse the dependency", which replaced V11's SDK module `pqvault` the same day). SPECIFIED. The
@@ -918,9 +920,12 @@ call, owner may override). SPECIFIED. Design: [spec §6.5](../superpowers/specs/
 the KEM-unwrapped epoch key, the passphrase output, the effective key and every key derived from them stay in `ua-rs`
 behind handles of one usage each (`Derive`, `Data`, `KeyWrap`), and wrap, unwrap, HKDF, Argon2id, AEAD and key sealing
 run there on those handles; the only bytes that come out are plaintexts it asks to decrypt for the user, which hold no
-key (earlier and file keys are sealed); it signs typed data of its own domain through the SDK's app signing call, which
-refuses every SCaaS purpose and every SCaaS contract's or the registry's domain by name; if either cannot be met, the task
-stops and the owner decides** (coordinator conditions, controller calls, owner may override). App scoping avoids
+key (earlier and file keys are sealed); it signs its records only through the SDK's PqVault signing call
+(`sign_pqvault_record`, over `ua-rs`'s dedicated path `wallet::pqvault`, which accepts the domain "SCaaS PqVault" and
+PqVault's structs only), while the SDK's generic app signing call refuses every SCaaS purpose (PqVault's `P_V` included) and
+every SCaaS contract's or the registry's domain by name (PqVault's included); if either cannot be met, the task stops and the
+owner decides** (coordinator conditions, controller calls, owner may override; the dedicated path is the owner's ruling of
+2026-11-22, [CLI-PQV-13](../decisions.md#CLI-PQV-13), BUILT, UNAUDITED). App scoping avoids
 collisions among the cores an app links; it does not isolate: an app holding the user's unlocked seed set acts for that UA
 in every app namespace, PqVault's included, so only reviewed app cores are linked. SPECIFIED. Design: the spec's
 [§7](../superpowers/specs/2026-11-17-pqvault.md#7-pqvault-core).

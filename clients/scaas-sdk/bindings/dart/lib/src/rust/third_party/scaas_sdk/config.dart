@@ -12,7 +12,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'config.freezed.dart';
 
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `RuntimeChoice`, `SdkConfig`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A chain as the app's release pins it (spec §4).
 class ChainProfile {
@@ -596,6 +596,11 @@ class Limits {
   /// is never pruned (owner 2026-11-19, T13b ruling 2)
   final BigInt stateRetentionSecs;
 
+  /// the most a family's native transaction may cost its payer, per chain profile, as a decimal string in the chain's
+  /// smallest unit (spec §27.5 (e): fee + storage + forward; plan T41): never from an endpoint. A chain without its row
+  /// spends nothing natively (`FeeAboveCap`: fail closed). EVM's self-relay keeps `max_cost`
+  final List<NativeCap> maxNativeCost;
+
   const Limits({
     required this.maxFeePerGas,
     required this.maxGas,
@@ -606,6 +611,7 @@ class Limits {
     required this.maxValidSecs,
     required this.eventQueue,
     required this.stateRetentionSecs,
+    required this.maxNativeCost,
   });
 
   static Future<Limits> default_() =>
@@ -621,7 +627,8 @@ class Limits {
       maxConcurrentHeavy.hashCode ^
       maxValidSecs.hashCode ^
       eventQueue.hashCode ^
-      stateRetentionSecs.hashCode;
+      stateRetentionSecs.hashCode ^
+      maxNativeCost.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -636,7 +643,8 @@ class Limits {
           maxConcurrentHeavy == other.maxConcurrentHeavy &&
           maxValidSecs == other.maxValidSecs &&
           eventQueue == other.eventQueue &&
-          stateRetentionSecs == other.stateRetentionSecs;
+          stateRetentionSecs == other.stateRetentionSecs &&
+          maxNativeCost == other.maxNativeCost;
 }
 
 /// A DEX of the chain profile (NET-ALL-24): its address, its liquidity mark (a module of group 11 among its `modules()`,
@@ -691,6 +699,28 @@ class ListedToken {
           address == other.address &&
           symbol == other.symbol &&
           decimals == other.decimals;
+}
+
+/// One chain's native cost cap (`Limits::max_native_cost`).
+class NativeCap {
+  /// the profile's key
+  final String chain;
+
+  /// decimal, the chain's smallest unit (stroops on Soroban)
+  final String max;
+
+  const NativeCap({required this.chain, required this.max});
+
+  @override
+  int get hashCode => chain.hashCode ^ max.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NativeCap &&
+          runtimeType == other.runtimeType &&
+          chain == other.chain &&
+          max == other.max;
 }
 
 /// A reviewed position reader of a position manager (a liquidity order that receives a position names one).

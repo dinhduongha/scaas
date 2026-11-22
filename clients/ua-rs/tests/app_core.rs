@@ -1152,3 +1152,345 @@ fn pqchat_sign_records_only() {
     );
     assert!(pqchat::typed("Nope", Value::Null).is_err());
 }
+
+// --- PqVault's dedicated signing path (owner 2026-11-22, CLI-PQV-12): smartcontracts/vectors/pqvault/records.json ---
+
+use scaas_ua::wallet::{pqvault, SCAAS_APP_IDS};
+
+fn pqv() -> Value {
+    let p = format!(
+        "{}/../../smartcontracts/vectors/pqvault/records.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
+}
+
+/// An `encodeType` string as JSON `types` entries.
+fn types_of(enc: &str, out: &mut serde_json::Map<String, Value>) {
+    let mut rest = enc;
+    while let Some(open) = rest.find('(') {
+        let close = open + rest[open..].find(')').unwrap();
+        let fields: Vec<Value> = rest[open + 1..close]
+            .split(',')
+            .map(|f| {
+                let (t, n) = f.split_once(' ').unwrap();
+                serde_json::json!({"name": n, "type": t})
+            })
+            .collect();
+        out.insert(rest[..open].to_string(), Value::Array(fields));
+        rest = &rest[close + 1..];
+    }
+}
+
+/// A record's typed data: its struct's type string `enc`, `domain` with its `EIP712Domain` type string `denc`.
+fn pqv_typed(enc: &str, st: &str, record: &Value, denc: &str, domain: &Value) -> TypedData {
+    let mut types = serde_json::Map::new();
+    types_of(enc, &mut types);
+    types_of(denc, &mut types);
+    let v =
+        serde_json::json!({"types": types, "primaryType": st, "domain": domain, "message": record});
+    TypedData::from_json(&serde_json::to_vec(&v).unwrap()).unwrap()
+}
+
+/// A vault mode's path, domain and domain type string: 0 `DS_V` portable under `APP_ID`, 1 `DS_B` chain-bound under `P_V`.
+fn pqv_mode(d: &Value, mode: u64) -> (AppPath, Value, String) {
+    let (k, path) = match mode {
+        0 => (
+            "V",
+            AppPath::Portable {
+                app_id: pqvault::app_id(),
+            },
+        ),
+        _ => (
+            "B",
+            AppPath::ChainBound {
+                purpose: pqvault::purpose(),
+            },
+        ),
+    };
+    let x = &d["domains"][k];
+    let mut dom = serde_json::json!({"name": x["name"], "version": x["version"]});
+    for f in ["salt", "chainId", "verifyingContract"] {
+        if let Some(v) = x.get(f) {
+            dom[f] = v.clone();
+        }
+    }
+    (path, dom, x["type"].as_str().unwrap().to_string())
+}
+
+/// Every record row of the vectors through `pqvault`: its typed digest in its vault's domain, its committed signature
+/// verified on its path; the generic path refuses every one of them (`AppDomainRefused`); the pinned constants.
+#[test]
+fn pqvault_records_reproduce_the_vectors() {
+    let d = pqv();
+    assert_eq!(pqvault::app_id(), a32(&d["purpose"]["appId"]));
+    assert_eq!(pqvault::purpose(), a32(&d["purpose"]["purpose"]));
+    assert_eq!(pqvault::RECORDS.len(), 7);
+    for (n, s) in pqvault::RECORDS {
+        assert_eq!(d["typehashes"][n]["type"], *s, "{n}");
+        assert_eq!(
+            scaas_ua::keccak256(s.as_bytes()),
+            a32(&d["typehashes"][n]["hash"]),
+            "{n}"
+        );
+    }
+    let signers: HashMap<String, (u16, Vec<u8>)> = d["signers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| {
+            (
+                s["ua"].as_str().unwrap().to_string(),
+                (s["kind"].as_u64().unwrap() as u16, unhex(&s["publicKey"])),
+            )
+        })
+        .collect();
+    let by_name = |n: &str| {
+        d["signers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["name"] == n)
+            .unwrap()["ua"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let st = St {
+        recs: signers
+            .iter()
+            .map(|(u, r)| (a32(&Value::String(u.clone())), r.clone()))
+            .collect(),
+        refused: None,
+    };
+    let mut n = 0;
+    for v in d["vaults"].as_array().unwrap() {
+        let (path, dom, denc) = pqv_mode(&d, v["mode"].as_u64().unwrap());
+        for r in v["records"].as_array().unwrap() {
+            let s = r["struct"].as_str().unwrap();
+            let enc = d["typehashes"][s]["type"].as_str().unwrap();
+            let td = pqv_typed(enc, s, &r["record"], &denc, &dom);
+            assert_eq!(
+                pqvault::digest(&path, &td).unwrap(),
+                a32(&r["typed"]),
+                "{}",
+                r["name"]
+            );
+            // the generic path: refused by the domain's name (positive twin: the dedicated digest above)
+            assert_eq!(
+                app_record_digest(&path, &td).err(),
+                Some(Error::AppDomainRefused),
+                "{}",
+                r["name"]
+            );
+            let ua = a32(&Value::String(by_name(r["signer"].as_str().unwrap())));
+            let sig = UASig {
+                key_data: unhex(&r["uaSig"]["keyData"]),
+                signature: unhex(&r["uaSig"]["signature"]),
+                members: vec![],
+            };
+            let ok = |sig: &UASig| {
+                let members = |id: [u8; 32]| st.recs.get(&id).cloned();
+                pqvault::verify(
+                    &ua,
+                    &path,
+                    &td,
+                    sig,
+                    &AppRecordState {
+                        members: &members,
+                        current: &|_| None,
+                        accepted: &|_, _| true,
+                        domain: None,
+                    },
+                )
+            };
+            assert!(ok(&sig), "{}", r["name"]);
+            let mut bad = sig.clone();
+            bad.signature[5] ^= 1;
+            assert!(!ok(&bad), "{}: a changed signature", r["name"]);
+            n += 1;
+        }
+    }
+    assert_eq!(n, 23);
+}
+
+/// Each refusal one change at a time beside its control: the generic path in PqVault's domain or under its purpose; the
+/// dedicated path outside PqVault's domains, structs and paths, and with a key that has no portable record.
+#[test]
+fn pqvault_sign_refusals() {
+    let d = pqv();
+    let w = Wallet::from_mnemonic(d["pqvAccount"]["mnemonic"].as_str().unwrap(), "").unwrap();
+    let key = w.ua_key(0x0132, 0x7071_7600, 0).unwrap();
+    let (ua, kind, kd) = id_of(&key);
+    let item = d["vaults"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|v| v["records"].as_array().unwrap().iter())
+        .find(|r| r["struct"] == "PqVaultItem")
+        .unwrap()["record"]
+        .clone();
+    let enc = d["typehashes"]["PqVaultItem"]["type"].as_str().unwrap();
+    let (pa, dv, venc) = pqv_mode(&d, 0);
+    let (pb, db, benc) = pqv_mode(&d, 1);
+    let tv = pqv_typed(enc, "PqVaultItem", &item, &venc, &dv);
+    let tb = pqv_typed(enc, "PqVaultItem", &item, &benc, &db);
+    let members = |id: [u8; 32]| (id == ua).then(|| (kind, kd.clone()));
+    let state = AppRecordState {
+        members: &members,
+        current: &|_| None,
+        accepted: &|_, _| true,
+        domain: None,
+    };
+    // the controls: both paths sign and verify
+    let sv = pqvault::sign(&key, None, &pa, &tv).unwrap();
+    assert!(sv.key_data.is_empty() && sv.members.is_empty());
+    assert!(pqvault::verify(&ua, &pa, &tv, &sv, &state));
+    let sb = pqvault::sign(&key, None, &pb, &tb).unwrap();
+    assert!(pqvault::verify(&ua, &pb, &tb, &sb, &state));
+    // the generic path: PqVault's domain on either path
+    assert_eq!(
+        sign_app_record(&key, None, &pa, &tv).err(),
+        Some(Error::AppDomainRefused)
+    );
+    assert_eq!(
+        sign_app_record(&key, None, &pb, &tb).err(),
+        Some(Error::AppDomainRefused)
+    );
+    // the generic path under PqVault's app id or purpose with an app's own domain name (control: another app id)
+    let mine = portable(&pqvault::app_id(), "My App", None);
+    assert_eq!(
+        sign_app_record(&key, None, &pa, &mine).err(),
+        Some(Error::AppPurposeRefused)
+    );
+    assert_eq!(
+        sign_app_record(&key, None, &pb, &chain_bound("My App", true)).err(),
+        Some(Error::AppPurposeRefused)
+    );
+    assert!(is_scaas_purpose(&pqvault::purpose()));
+    assert!(sign_app_record(
+        &key,
+        None,
+        &AppPath::Portable { app_id: APP },
+        &portable(&APP, "My App", None)
+    )
+    .is_ok());
+    // the dedicated path: another domain name, version or salt, on each path
+    for (k, v, mode) in [
+        ("name", serde_json::json!("SCaaS PqChat"), 0),
+        ("name", serde_json::json!("My App"), 0),
+        ("version", serde_json::json!("2"), 0),
+        (
+            "salt",
+            serde_json::json!(format!("0x{}", "11".repeat(32))),
+            0,
+        ),
+        ("name", serde_json::json!("SCaaS PqChat"), 1),
+        ("name", serde_json::json!("My App"), 1),
+        ("version", serde_json::json!("2"), 1),
+    ] {
+        let (p, base, denc, s) = if mode == 0 {
+            (&pa, &dv, &venc, &sv)
+        } else {
+            (&pb, &db, &benc, &sb)
+        };
+        let mut dom = base.clone();
+        dom[k] = v;
+        let t = pqv_typed(enc, "PqVaultItem", &item, denc, &dom);
+        assert_eq!(
+            pqvault::sign(&key, None, p, &t).err(),
+            Some(Error::AppDomainRefused),
+            "{k} {mode}"
+        );
+        assert!(!pqvault::verify(&ua, p, &t, s, &state), "{k} {mode}");
+    }
+    let mut extra = db.clone();
+    extra["salt"] = dv["salt"].clone();
+    let t = pqv_typed(
+        enc,
+        "PqVaultItem",
+        &item,
+        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)",
+        &extra,
+    );
+    assert_eq!(
+        pqvault::sign(&key, None, &pb, &t).err(),
+        Some(Error::AppDomainRefused),
+        "DS_B with a salt"
+    );
+    // the dedicated path: a domain on the other path, the chain-bound path under the app id, another app
+    assert_eq!(
+        pqvault::sign(&key, None, &pb, &tv).err(),
+        Some(Error::AppDomainRefused)
+    );
+    assert_eq!(
+        pqvault::sign(&key, None, &pa, &tb).err(),
+        Some(Error::AppDomainRefused)
+    );
+    let under_id = AppPath::ChainBound {
+        purpose: pqvault::app_id(),
+    };
+    assert_eq!(
+        pqvault::sign(&key, None, &under_id, &tb).err(),
+        Some(Error::AppDomainRefused)
+    );
+    assert!(!pqvault::verify(&ua, &under_id, &tb, &sb, &state));
+    assert_eq!(
+        pqvault::sign(&key, None, &AppPath::Portable { app_id: APP }, &tv).err(),
+        Some(Error::AppDomainRefused)
+    );
+    // the dedicated path: a struct that is not PqVault's, a PqVault name with other fields, a nested one alone
+    let note = TypedData::from_json(
+        &serde_json::to_vec(&serde_json::json!({
+            "types": {"EIP712Domain": [{"name": "name", "type": "string"}, {"name": "version", "type": "string"},
+                {"name": "salt", "type": "bytes32"}], "Note": [{"name": "id", "type": "bytes32"}]},
+            "primaryType": "Note", "domain": dv, "message": {"id": format!("0x{}", "11".repeat(32))},
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        pqvault::sign(&key, None, &pa, &note).err(),
+        Some(Error::Argument)
+    );
+    let wide = enc.replace("uint64 nonce", "uint256 nonce");
+    let t = pqv_typed(&wide, "PqVaultItem", &item, &venc, &dv);
+    assert_eq!(
+        pqvault::sign(&key, None, &pa, &t).err(),
+        Some(Error::Argument),
+        "another field type"
+    );
+    let mk = pqv_typed(
+        d["typehashes"]["MemberKey"]["type"].as_str().unwrap(),
+        "MemberKey",
+        &serde_json::json!({"ua": format!("0x{}", "11".repeat(32)), "keyId": 1, "via": format!("0x{}", "00".repeat(32))}),
+        &venc,
+        &dv,
+    );
+    assert_eq!(
+        pqvault::sign(&key, None, &pa, &mk).err(),
+        Some(Error::Argument),
+        "a nested struct"
+    );
+    // a key with no portable record (a native EVM key) on the portable path
+    let nat = w.native_key(Network::Evm, 0, None).unwrap();
+    assert_eq!(
+        pqvault::sign(&nat, None, &pa, &tv).err(),
+        Some(Error::Argument)
+    );
+}
+
+/// Drift: `SCAAS_APP_IDS` is exactly `PqVaultTypes.sol`'s `APP_ID` (the generator's list), its hash `pqvault::app_id()`.
+#[test]
+fn scaas_app_ids_match_the_contracts() {
+    let t = src("pqvault/PqVaultTypes.sol");
+    assert!(t.contains("bytes32 internal constant APP_ID = keccak256(\"scaas.pqvault.v1\");"));
+    assert_eq!(
+        SCAAS_APP_IDS,
+        &[("PqVaultTypes.APP_ID", "scaas.pqvault.v1")]
+    );
+    assert_eq!(
+        scaas_ua::keccak256(SCAAS_APP_IDS[0].1.as_bytes()),
+        pqvault::app_id()
+    );
+}

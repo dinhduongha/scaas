@@ -372,6 +372,10 @@ required-features = ["pqz"]
 name = "pqz_backup"
 required-features = ["pqz"]
 
+[[test]]
+name = "pqz_leaf"
+required-features = ["pqz"]
+
 # ua-rs-sign T15e: PQZ on raw words (spec no-decryption-oracle §4.3–§4.6)
 [[test]]
 name = "facade_pqz_state"
@@ -476,6 +480,11 @@ required-features = ["fam-near", "fam-algorand"]
 [[test]]
 name = "app_core"
 required-features = ["app-core", "vectors"]
+
+# plan T27.soroban / T41.soroban: the op envelope and the native transaction against the clientkeys rows
+[[test]]
+name = "families_soroban"
+required-features = ["wallet", "fam-soroban"]
 
 # chains-arweave plan T17 (T41.arweave): the ANS-104 rows, the parser's refusals, buckets, ar:// (and seal_for_arweave with app-core)
 [[test]]

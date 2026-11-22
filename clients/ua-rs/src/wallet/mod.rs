@@ -60,6 +60,8 @@ pub mod pqchat_keys;
 pub mod pqsign;
 #[cfg(not(feature = "vectors"))]
 mod pqsign;
+#[cfg(feature = "app-core")]
+pub mod pqvault;
 #[cfg(feature = "roots")]
 pub mod roots;
 #[cfg(feature = "vectors")]
@@ -73,6 +75,8 @@ pub mod sign;
 #[cfg(not(feature = "vectors"))]
 mod sign;
 mod signer;
+#[cfg(feature = "fam-soroban")]
+pub mod soroban_tx;
 mod store;
 mod substrate;
 mod tx;
@@ -82,7 +86,7 @@ mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
 #[cfg(feature = "app-core")]
-pub use app_refusals::{SCAAS_DOMAIN_NAMES, SCAAS_PURPOSES};
+pub use app_refusals::{SCAAS_APP_IDS, SCAAS_DOMAIN_NAMES, SCAAS_PURPOSES};
 #[cfg(feature = "app-core")]
 pub use appkey::{
     AppKeys, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce, APP_KEYS_MAX, APP_ROOT, KEYWRAP,
@@ -1202,6 +1206,30 @@ impl Wallet {
         marker: crate::facade::pqz::AllowSecretExport,
     ) -> Result<Zeroizing<[u8; 32]>> {
         self.export_pqz_leaf_raw_version(account, index, 0, marker)
+    }
+
+    /// The key worker's side of CLI-SGN-55 (clientkeys `sealPqKey`): the leaf `seed32` of `account` / `index` / `version`
+    /// ([`Wallet::pqz_key_version`]'s) sealed as vault v2 under [`crate::facade::pqz::pqz_leaf_label`] and this wallet's vault
+    /// id, as [`Wallet::seal_vault`] (the new-passphrase policy, `Argument`; the PRF envelope if given); open it with
+    /// [`crate::facade::pqz::PqzKey::open_leaf`]. `Argument` for an index of 2^31 or more, `WalletLocked` while locked.
+    pub fn seal_pq_key(
+        &self,
+        account: u32,
+        index: u32,
+        version: u64,
+        vault_passphrase: &str,
+        prf: Option<&PrfEnvelope>,
+    ) -> Result<Vault> {
+        let _lease = self.store.lease();
+        let leaf = crate::facade::pqz::derive(&self.store, account, index, version)?.leaf()?;
+        store::copied();
+        Vault::seal(
+            &self.vault_id()?,
+            &crate::facade::pqz::pqz_leaf_label(account, index, version),
+            &*leaf,
+            vault_passphrase,
+            prf,
+        )
     }
 
     /// [`Wallet::export_pqz_leaf_raw`] of key version `version` ([`Wallet::pqz_key_version`]; T15o).

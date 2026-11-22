@@ -11,7 +11,9 @@ use scaas_sdk::app_core::*;
 use scaas_sdk::confidential::*;
 use scaas_sdk::dex::*;
 use scaas_sdk::events::Subscription;
-use scaas_sdk::op::{BlsMultiPart, KeyRef, OpState, Prepared, SubmitPath, SubmitQuote};
+use scaas_sdk::op::{
+    BlsMultiPart, ImportExpect, KeyRef, OpState, Prepared, SignedOpBlob, SubmitPath, SubmitQuote,
+};
 use scaas_sdk::pqchat_keys::*;
 use scaas_sdk::pqchat_records::*;
 use scaas_sdk::vault::{
@@ -378,6 +380,15 @@ calls! { cx;
     "op submit" "Op::submit" {prepared: H<Arc<Prepared>>, quote: H<SubmitQuote>} @sign => { cx.confirm_op(&prepared.0, &quote.0)?; { let op = sdk(cx).op().submit(prepared.0, quote.0).await?; cx.sent(op).await } };
     "op resume" "Op::resume" {} => named("resumed", sdk(cx).op().resume().await?);
     "op resend" "Op::resend" {op: String, quote: H<SubmitQuote>} @sign => { cx.confirm(json!({"resend": op, "quote": quote.0}))?; sdk(cx).op().resend(op.clone(), quote.0).await?; cx.sent(op).await };
+    // T41.evm (spec §27.5 (c)): the signer's hand-off signs once and sends nothing; the payee's import is an operation object,
+    // quoted and submitted as any (`op quote`, `op submit`)
+    "op hand-off" "Op::hand_off" {prepared: H<Arc<Prepared>>} @sign => {
+        cx.confirm(json!({"review": review(&prepared.0.review()), "op": prepared.0.id(), "sign": "a hand-off: signed once, sent by its payee"}))?;
+        js(sdk(cx).op().hand_off(prepared.0).await?)
+    };
+    "op import-signed" "Op::import_signed" {blob: SignedOpBlob, expect: ImportExpect} @op => sdk(cx).op().import_signed(blob, expect).await?;
+    "signed-op-blob from-json" "SignedOpBlob::from_json" {text: String} => js(SignedOpBlob::from_json(&text)?);
+    "signed-op-blob to-json" "SignedOpBlob::to_json" (b: SignedOpBlob) => named("json", b.to_json()?);
     "op member-sign" "Op::member_sign" {prepared: H<Arc<Prepared>>} @sign => {
         cx.confirm(json!({"review": review(&prepared.0.review()), "op": prepared.0.id(), "sign": "as an msig member"}))?;
         named("signature", sdk(cx).op().member_sign(prepared.0).await?)
@@ -416,6 +427,16 @@ calls! { cx;
     "wallet native-address" "Wallet::native_address" {key: NativeKeyRef, ss58_prefix: Option<u16>} => js(sdk(cx).wallet().native_address(key, ss58_prefix).await?);
     "wallet prepare-native-send" "Wallet::prepare_native_send" (r: NativeSend) @op => sdk(cx).wallet().prepare_native_send(r).await?;
     "wallet submit-native-send" "Wallet::submit_native_send" (q: NativeQuote) @sign => { cx.confirm(json!({"quote": q}))?; named("tx", sdk(cx).wallet().submit_native_send(q).await?) };
+    // SDK plan T41.soroban: a G… subject's ops through `/v1/ops` or by self-relay, the hand-off, the native XLM send
+    "wallet soroban-prepare" "Wallet::soroban_prepare" (r: SorobanOpRequest) => js(sdk(cx).wallet().soroban_prepare(r).await?);
+    "wallet soroban-quote" "Wallet::soroban_quote" {prepared: SorobanPrepared, path: SorobanPath} => js(sdk(cx).wallet().soroban_quote(prepared, path).await?);
+    "wallet soroban-submit" "Wallet::soroban_submit" {prepared: SorobanPrepared, quote: SorobanQuote} @sign => { cx.confirm(json!({"prepared": prepared, "quote": quote}))?; named("op", sdk(cx).wallet().soroban_submit(prepared, quote).await?) };
+    "wallet soroban-hand-off" "Wallet::soroban_hand_off" (p: SorobanPrepared) @sign => { cx.confirm(json!({"hand_off": p}))?; js(sdk(cx).wallet().soroban_hand_off(p).await?) };
+    "wallet soroban-import" "Wallet::soroban_import" {blob: SignedOpBlob, expect: SorobanImportExpect} => js(sdk(cx).wallet().soroban_import(blob, expect).await?);
+    "wallet soroban-resend" "Wallet::soroban_resend" {op: String} => js(sdk(cx).wallet().soroban_resend(op).await?);
+    "wallet soroban-follow" "Wallet::soroban_follow" {op: String} => named("state", sdk(cx).wallet().soroban_follow(op).await?);
+    "wallet soroban-prepare-native-send" "Wallet::soroban_prepare_native_send" (r: SorobanNativeSend) => js(sdk(cx).wallet().soroban_prepare_native_send(r).await?);
+    "wallet soroban-submit-native-send" "Wallet::soroban_submit_native_send" (q: SorobanNativeQuote) @sign => { cx.confirm(json!({"quote": q}))?; named("op", sdk(cx).wallet().soroban_submit_native_send(q).await?) };
     "wallet prepare-transfer" "Wallet::prepare_transfer" (r: Transfer) @op => sdk(cx).wallet().prepare_transfer(r).await?;
     "wallet prepare-pay" "Wallet::prepare_pay" (r: Pay) @op => sdk(cx).wallet().prepare_pay(r).await?;
     "wallet prepare-pay-with-tax" "Wallet::prepare_pay_with_tax" (r: PayWithTax) @op => sdk(cx).wallet().prepare_pay_with_tax(r).await?;
@@ -604,6 +625,11 @@ calls! { cx;
     };
     "app-core kem-wrap" "AppCore::kem_wrap" {chain: String, recipient: String, kem_version: u64, key: H<Arc<AppKey>>, label: Vec<u8>, aad: Vec<u8>} => js(cx.app()?.kem_wrap(chain, recipient, kem_version, key.0, label, aad).await?);
     "app-core verify-app-record" "AppCore::verify_app_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_app_record(chain, ua, path, typed_json, sig).await?);
+    "app-core sign-pqvault-record" "AppCore::sign_pqvault_record" {account: KeyRef, path: AppPath, typed_json: String} @sign => {
+        cx.confirm(json!({"sign": "a PqVault record", "account": account, "path": path, "typed_data": typed_json}))?;
+        js(cx.app()?.sign_pqvault_record(account, path, typed_json).await?)
+    };
+    "app-core verify-pqvault-record" "AppCore::verify_pqvault_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_pqvault_record(chain, ua, path, typed_json, sig).await?);
     "app-core verify-app-record-key" "AppCore::verify_app_record_key" {kind: u16, key_data: Vec<u8>, path: AppPath, purpose: Option<String>, typed_json: String, signature: Vec<u8>} => named("valid", cx.app()?.verify_app_record_key(kind, key_data, path, purpose, typed_json, signature)?);
     "app-core prepare-app-call" "AppCore::prepare_app_call" {chain: String, contract: String, entry: String, args: String, payer: KeyRef} @sign => {
         let call = cx.app()?.prepare_app_call(chain, contract, entry, args, payer).await?;

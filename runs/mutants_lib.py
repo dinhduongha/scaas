@@ -24,9 +24,9 @@ def check(mutants):
     return bad
 
 
-def run(task, mutants, only=None):
-    out = Path(__file__).with_name(f"2026-11-21-avax-dot-arweave-{task}-mutants.txt")
-    log = Path(__file__).with_name(f"2026-11-21-avax-dot-arweave-{task}-mutants.log")
+def run(task, mutants, only=None, prefix="2026-11-21-avax-dot-arweave"):
+    out = Path(__file__).with_name(f"{prefix}-{task}-mutants.txt")
+    log = Path(__file__).with_name(f"{prefix}-{task}-mutants.log")
     sha = subprocess.run(["git", "rev-parse", "--short=9", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     rows, counts = [], {"killed": 0, "survived": 0, "killed elsewhere": 0, "not loaded": 0}
     with log.open("w") as lg:
@@ -73,13 +73,13 @@ def run(task, mutants, only=None):
     return 0 if counts["killed"] == total else 1
 
 
-def main(task, mutants):
+def main(task, mutants, prefix="2026-11-21-avax-dot-arweave"):
     mode = sys.argv[1] if len(sys.argv) > 1 else "check"
     if mode == "check":
         bad = check(mutants)
         print("\n".join(bad) or f"{len(mutants)} mutants load")
         sys.exit(1 if bad else 0)
     if mode == "run":
-        sys.exit(run(task, mutants, set(sys.argv[2:]) or None))
+        sys.exit(run(task, mutants, set(sys.argv[2:]) or None, prefix))
     print("modes: check | run [name…]")
     sys.exit(2)

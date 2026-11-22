@@ -193,6 +193,17 @@ std::string Wallet::linkSeal(const Key &sender, const Bytes &sessionKemPk, const
 ZetherKey Wallet::zetherKey(uint32_t coin, uint32_t account, uint32_t keyUse) const {
     return call([&] { return adopt<ZetherKey>(ffi::wallet_zether_key(ffi(), coin, account, keyUse)); });
 }
+std::string Wallet::sealPqKey(uint32_t account, uint32_t index, uint64_t version, Secret &vaultPassphrase) const {
+    return call(
+        [&] { return std::string(ffi::wallet_seal_pq_key(ffi(), account, index, version, sec(vaultPassphrase))); });
+}
+PqzKey pqzOpenLeaf(const std::string &vaultJson, Secret &vaultPassphrase, Secret &prf32, uint32_t account,
+                   uint32_t index, uint64_t version) {
+    return call([&] {
+        return adopt<PqzKey>(
+            ffi::pqz_open_leaf(str(vaultJson), sec(vaultPassphrase), sec(prf32), account, index, version));
+    });
+}
 PqzKey Wallet::pqzKey(uint32_t account, uint32_t index, uint64_t version) const {
     return call([&] { return adopt<PqzKey>(ffi::wallet_pqz_key_version(ffi(), account, index, version)); });
 }

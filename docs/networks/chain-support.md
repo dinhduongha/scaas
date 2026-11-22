@@ -42,7 +42,8 @@ Status: SPECIFIED.
 | `M` | MISSING: the named task or round is to build it |
 | `n/a` | not applicable, for the reason in §4 |
 | `deferred` | deferred by the owner (Polkadot Hub's Substrate sends, 2026-11-22) |
-| `disabled` | disabled by the owner (ARCH-POS-18 confirmed: OP, Arbitrum, Base and Celo, the kinds above the chain's limit, 2026-11-22) |
+| `after the freeze (owner 2026-11-22)` | moved by the owner to after the freeze: this round's T41 is `evm`, `soroban` and `arweave` only; neither BUILT nor failed (decisions CLI-SDK-32) |
+| `disabled` | disabled by the owner (ARCH-POS-18 confirmed: OP, Arbitrum, Base, Celo and Avalanche Fuji, the kinds above the chain's limit, 2026-11-22) |
 | `T<n>` | task T<n> of the SDK plan (`docs/superpowers/plans/2026-11-17-scaas-sdk.md`); `rpc T24.<x>` its `scaas-rpc` tasks |
 | `CA-T<n>` | task T<n> of the chains-arweave plan (`docs/superpowers/plans/2026-11-21-avax-polkadot-arweave.md`) |
 | `ARCH-POS-18` | a software path to measure, or a disablement for the owner to confirm ([ARCH-POS-18](../decisions.md#ARCH-POS-18)) |
@@ -62,36 +63,36 @@ Status: SPECIFIED.
 
 | # | Chain (testnet in the same row) | Contract | Relay | Index | Signing | rpc read | rpc write | SDK | Zether | PQ | PQZ | Self-relay | Native |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | scaas-testnet (7622) | B | B | B | B | B | B | B | B | B | B | M T41.evm | B |
-| 2 | Ethereum L1 (1; Sepolia, Hoodi; Holesky unreachable) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
-| 3 | BNB Smart Chain (56; 97) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
-| 4 | Polygon PoS (137; Amoy 80002) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
-| 5 | Base (8453; Base Sepolia 84532) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled on Base mainnet) | B‡ (disabled on Base mainnet) | M T41.evm | B |
-| 6 | Gnosis (100; Chiado 10200) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
-| 7 | Celo (42220; Celo Sepolia 11142220; Alfajores unreachable) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | M T41.evm | B |
-| 9 | OP Mainnet (10; OP Sepolia 11155420) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | M T41.evm | B |
-| 10 | Arbitrum One (42161; Arbitrum Sepolia 421614) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | M T41.evm | B |
-| 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
-| 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | M T41.evm (EVM side; the native side's: P T41.hedera) | B (EVM side; native side: P T41.hedera read and ed25519 sends, gRPC-web by default, `tonic` under `fam-hedera-grpc`, owner Q-R5) |
-| 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | P CA-T3 | P CA-T3 | B | P CA-T2 | B | P CA-T2 | M ARCH-POS-18 | B‡ | B‡ | M T41.evm | P CA-T2 |
-| 14 | Polkadot Hub (EVM and Substrate sides; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 | M T41.evm | P T41.dot (read B; the sends, owner 2026-11-22) |
-| 15 | Moonbeam (Moonbase Alpha) | B‡ | P CA-T3, T15 | P CA-T3 | B | P CA-T11 | B | P CA-T11 | B‡ | P CA-T15 | P CA-T15 | M T41.evm | P CA-T11 |
-| 16 | NEAR (SCaaS family) | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-near` | M family round | M T41.near | M T41.near (read B) |
-| 17 | Algorand | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-algorand` | M family round | M T41.algorand | M T41.algorand (read B) |
-| 18 | Cosmos (CosmWasm) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.cosmos | M T41.cosmos (read B) |
-| 19 | Aptos | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.aptos | M T41.aptos (read B) |
-| 20 | Solana | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.solana | M T41.solana (read B) |
-| 21 | Soroban (Stellar; Pi) | B | B | B | M T27 | B | M T30 | M T28, T29 | P `zether-soroban` | M family round | M family round | M T41.soroban | M T41.soroban (read B) |
-| 22 | Sui | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.sui | M T41.sui (read B) |
-| 23 | TON (GRAM) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.ton | M T41.ton (read B) |
-| 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | M T35 (sign), T36 (send; its reads B), T37 (SDK) |
+| 1 | scaas-testnet (7622) | B | B | B | B | B | B | B | B | B | B | B T41.evm | B |
+| 2 | Ethereum L1 (1; Sepolia, Hoodi; Holesky unreachable) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
+| 3 | BNB Smart Chain (56; 97) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
+| 4 | Polygon PoS (137; Amoy 80002) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
+| 5 | Base (8453; Base Sepolia 84532) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled on Base mainnet) | B‡ (disabled on Base mainnet) | B T41.evm | B |
+| 6 | Gnosis (100; Chiado 10200) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
+| 7 | Celo (42220; Celo Sepolia 11142220; Alfajores unreachable) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
+| 9 | OP Mainnet (10; OP Sepolia 11155420) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
+| 10 | Arbitrum One (42161; Arbitrum Sepolia 421614) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
+| 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
+| 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | B T41.evm (EVM side, a `hedera_ecdsa` payer; the native side's: after the freeze (owner 2026-11-22)) | B (EVM side; native side: after the freeze (owner 2026-11-22), T41.hedera read and ed25519 sends, gRPC-web by default, `tonic` under `fam-hedera-grpc`, owner Q-R5) |
+| 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled on Fuji) | B‡ (disabled on Fuji) | P T41.evm (after CA-T2's profile) | B |
+| 14 | Polkadot Hub (EVM and Substrate sides; Paseo; Westend dropped, owner 2026-11-22) | B‡ | P CA-T14 | B | B | B (`max_tx_gas`: P CA-T14) | B | B (`max_tx_gas`: P CA-T14) | M ARCH-POS-18 (no EIP-2537, CA-T12) | P CA-T13 | P CA-T14 | P T41.evm (after CA-T14's profile) | P T41.dot (read B; the sends, owner 2026-11-22) |
+| 15 | Moonbeam (Moonbase Alpha) | B‡ | B | B | B | B (pinned reads refused: `pinnedReads` false) | B | P T41 (the SDK's `pinnedReads` wiring) | B‡ | B‡ (T15 checks its storage gas) | B‡ (T15) | P T41.evm (after CA-T11's profile) | B |
+| 16 | NEAR (SCaaS family) | B | B | B | B | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | P `ua-near` | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 17 | Algorand | B | B | B | B | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | P `ua-algorand` | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 18 | Cosmos (CosmWasm) | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 19 | Aptos | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 20 | Solana | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 21 | Soroban (Stellar; Pi) | B | B | B | B T27.soroban | B | B T30.soroban | B T28, T29.soroban | P `zether-soroban` | M family round | M family round | B T41.soroban | B T41.soroban |
+| 22 | Sui | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 23 | TON (GRAM) | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | after the freeze (owner 2026-11-22): T35 (sign), T36 (send; its reads B), T37 (SDK) |
 | 25 | Arweave (store) | n/a | n/a | n/a | B | B | B | B | n/a | n/a | n/a | n/a | B |
 
 
 Row 8 (Ethereum Classic, 61; Mordor 63) is removed: the owner dropped ETC on 2026-11-22 (decisions CLI-SDK-32, "ETC has no
 finalized block"); its profiles are in `smartcontracts/evm/legacy/chains/`. The other rows keep their numbers.
 
-Counts (24 rows): Contract B 22 (13 B‡), n/a 2. Relay B 19, P 3, n/a 2. Index B 19, P 3, n/a 2. Signing B 16, P 1, M 6, n/a 1. rpc read B 19, P 4, n/a 1. rpc write B 14, P 1, M 8, n/a 1. SDK B 11, P 4, M 8, n/a 1. Zether B 11 (10 B‡), P 2, M 9, n/a 2. PQ B 11 (10 B‡; on 4 of them kinds disabled), P 4, M 7, n/a 2. PQZ B 8 (7 B‡; on 1 of them disabled on mainnet), P 2, M 9, disabled 3, n/a 2. Self-relay M 22, n/a 2. Native B 11, P 3, deferred 1 (its read built), M 9 (8 of them with the read built).
+Counts (24 rows): Contract B 22 (13 B‡), n/a 2. Relay B 19, P 3, n/a 2. Index B 19, P 3, n/a 2. Signing B 17, P 1, after the freeze 5, n/a 1. rpc read B 19, P 4, n/a 1. rpc write B 15, P 1, after the freeze 7, n/a 1. SDK B 12, P 4, after the freeze 7, n/a 1. Zether B 11 (10 B‡), P 2, M 9, n/a 2. PQ B 11 (10 B‡; on 4 of them kinds disabled), P 4, M 7, n/a 2. PQZ B 8 (7 B‡; on 1 of them disabled on mainnet), P 2, M 9, disabled 3, n/a 2. Self-relay B 12, P 3, after the freeze 7, n/a 2. Native B 12, P 3, after the freeze 9 (8 of them with the read built).
 
 ## 4. Notes on the cells
 
@@ -119,10 +120,20 @@ Status: SPECIFIED.
   contract that needs none of them can deploy. Classical Zether needs EIP-2537 ([CTR-ZTH-32](../contracts/zether.md#CTR-ZTH-32)),
   PQZ is refused there ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)) and `mldsa87` does not fit the 10.5 M verify
   budget: none of the three is a confirmed disablement under ARCH-POS-18, so each waits for its numbers.
-- **Avalanche, Polkadot Hub, Moonbeam (rows 13–15).** The chains-arweave plan's profile, probe and node lane tasks; Avalanche's
-  Zether needs a software BLS12-381 path (no EIP-2537), measured first; Hub's precompiles are unknown until its probes.
-- **SCaaS families (rows 16–23).** The node relays and indexes all eight; the public gateway door for them (`POST /v1/ops`) is SDK
-  plan T28. The SDK reads balances on all eight (plan T24; TON last, T24.ton); its cell stays `M` for the writes (T28, T29). `ua-rs` signs NEAR's and Algorand's operations; the other six families' envelopes are SDK plan T27. TON's paths other
+- **Avalanche, Polkadot Hub, Moonbeam (rows 13–15).** Draft profiles (chains-arweave T2, T11; `src/chains/<key>/`) with their
+  `scaas-rpc` and SDK profile tests, the node's lanes and indexer audited (T3: `max_inflight` and the in-flight cost alert
+  built; the rest held), and one sample of every probe (T12; `clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt`).
+  Relay, Index, rpc and SDK are the chain-neutral EVM code on these profiles, tested against fakes answering each profile's
+  identity, no deploy: every profile stays `draft` until NET-EVM-19's windows pass. The owner's answers of 2026-11-22
+  ([ARCH-POS-20](../decisions.md#ARCH-POS-20)): Hub's identity is its Substrate genesis (its eth-rpc serves no block 0 on
+  mainnet and Paseo, so each endpoint needs a checkpoint); Moonbeam's pinned reads are not trusted (H2: a made-up block hash
+  answered), so `scaas-rpc` refuses them there; Westend Hub is dropped; Moonbeam mainnet needs an independent second source
+  before any deploy; Fuji disables `mldsa44`, `mldsa65`, `mldsa87` and PQZ (above its 32 M block), C-Chain keeps every kind.
+  Avalanche and Hub have no EIP-2537: Zether needs the software BLS12-381 path (ARCH-POS-18). Hub's gas is no Ethereum gas:
+  its relay cap, PQ and PQZ cells wait for the Paseo measurement (T13, a deploy, on the owner's word) and T14.
+- **SCaaS families (rows 16–23).** The node relays and indexes all eight (the job API's pull path); the public gateway door
+  (`POST /v1/ops`, SDK plan T28) takes Soroban only, keyed on the digest the node rebuilds; the other seven are
+  `FAMILY_NOT_SUPPORTED` there until their slice builds the node-side digest (after the freeze). The SDK reads balances on all eight (plan T24; TON last, T24.ton); its cell stays `M` for the writes (T28, T29). `ua-rs` signs NEAR's and Algorand's operations; the other six families' envelopes are SDK plan T27. TON's paths other
   than the job API's pull path stay blocked until the forward-TON cap lands ([NET-TON-14](ton.md#NET-TON-14)).
 - **Native BTC (row 24).** No SCaaS contract, so every column but Native is n/a (owner 2026-11-22; Relay and Index were n/a by the
   owner's rule of 2026-11-21). Its Native cell: `ua-rs` `BitcoinTx` (SDK plan T35), the `scaas-rpc` `bitcoin` module (T36: Esplora
@@ -147,10 +158,10 @@ Status: SPECIFIED.
   in the submitter's group ([NET-ALG-02](algorand.md#NET-ALG-02)); Cosmos `relayer` empty = any, else `info.sender`; Aptos and
   Sui `@0x0` = any, else the sender; Solana `relayer` 0 = any, else exactly the fee payer, who pays the lane PDA's rent
   (refunded to it at `prune`) and any missing ATA; Soroban's `pay` is unbound (the host does not bind the transaction
-  source); TON `relayer` = `addr_none` or the sending wallet. So no contract change is needed; the SDK is MISSING everywhere.
-  On EVM the SDK self-relays the holder's **own** operations today (`SubmitPath::SelfRelay`, BUILT on rows 1, 3, 4, 6, 12);
-  what is missing is the hand-off: a signed operation exported by its signer and imported, checked and relayed by its payee
-  (SDK plan T41.evm). On the eight families the SDK has the native balance read (T24) and no native transaction and no
+  source); TON `relayer` = `addr_none` or the sending wallet. So no contract change is needed. On EVM the SDK self-relays the
+  holder's **own** operations (`SubmitPath::SelfRelay`) and, since T41.evm, the hand-off: `Op::hand_off` signs and writes the
+  row, `Op::import_signed` checks the blob in order and relays it by the payee's key, an `evm` or `hedera_ecdsa` payer
+  (decisions CLI-SDK-33 (49)); BUILT on every EVM row whose profile and SDK are. On the eight families the SDK has the native balance read (T24) and no native transaction and no
   self-relay path (T41.<family>, which also builds the Native column's send on the same builder). Design: SDK spec §27.5.
 - **Arweave (row 25).** A store: no SCaaS contract, and a client posts its signed item to a bundler and reads from gateways itself,
   so the node has nothing to relay or index; Self-relay is n/a (no SCaaS operation; the client pays for its own item); Native is

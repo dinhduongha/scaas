@@ -162,7 +162,8 @@ or relayed by the holder** (SPECIFIED). Paths: a scaas-node gateway, for the ent
 ([NODE-GW-03](../node/gateway.md#NODE-GW-03): a registered token's `mtx*` entries, the transfer on ids, the DEX routes, and UA
 registration once served), with the same body to the gateways chosen ([CLI-RPC-08](scaas-rpc.md#CLI-RPC-08)); or self-relay, for any
 entry, as a transaction (type 2 where the chain has a base fee, else 0) from the holder's own native account, which pays the gas, with the
-entry's calldata from `ua-rs`. The quote never makes or sends a signature (owner 2026-11-18, ruling 1); its gas comes from the gas table (execution gas: regular plus EIP-8037 state gas,
+entry's calldata from `ua-rs`. A signed operation handed off to its payee is self-relayed by the payee's key after the import's checks (`Op::hand_off`,
+`Op::import_signed`; spec §27.5 (c), decisions CLI-SDK-33 (49); BUILT on EVM, plan T41.evm). The quote never makes or sends a signature (owner 2026-11-18, ruling 1); its gas comes from the gas table (execution gas: regular plus EIP-8037 state gas,
 so the gas limit covers both; owner 2026-11-19; measured with the registry, the router and the release envs as a real deploy configures
 them, G4): a base row for (entry, domain kind, fresh lane), with an optional per-byte part for an input that grows (ruling B), a saved record's `save`, a fee's `fee_extra` (owner 2026-11-19, rulings 1 and 3; a wrap-in entry's measured against a signer who already holds units, A6) and, once when either party the entry debits is a derived UA (the signer, or the attached signature's owner: `mtxPayWithPayeeFee`'s payer), the row's `ua_extra` (A1, G1; measured on every variant a derived signer can sign, else the largest measured for the entry, G2), plus a verify row for the signer kind with 64 gas a byte of its `sig_bytes` (ruling 2; every verify row carries it, a row without it is refused as `GasSigBytesMissing`, A4; a variable-length kind's longest or worst case, A5; every kind's verify gas at its worst case, or where that cannot be determined the most expensive of many measurements plus its `margin`, added) and, for `mtxPayWithPayeeFee`'s attached signature (the payer's, A2), its kind's verify gas without its bytes (they are in the unsigned calldata already, A3) or the dearest accepted kind's (ruling 4), each rounded up to 1,000 and each looked up on its
 own in the order the chain's measured rows, the module tables and the SCaaS reference table the profile opts in to; without
@@ -288,7 +289,8 @@ the SDK and its app cores in one Rust library** (owner 2026-11-17: "agreed to re
 An app core (`pqchat-core`, `pqvault-core`, a third party's) depends on `scaas-sdk` with the feature `app-core` and on nothing
 below it that touches a key or a node; the SDK names no app core and holds no app logic, while the record types of SCaaS
 contracts (`PqChat`'s among them, behind the feature `pqchat-records`) are named, typed SDK entries as every SCaaS
-contract's are under [CLI-SDK-08](#CLI-SDK-08). scaas-app's one
+contract's are under [CLI-SDK-08](#CLI-SDK-08); `PqVault`'s records have two signing calls, `sign_pqvault_record` and
+`verify_pqvault_record`, and no other PqVault logic (owner 2026-11-22, [CLI-PQV-13](../decisions.md#CLI-PQV-13)). scaas-app's one
 library is `app-core-rust` (scaas-app's contract section 12), with the features `native-core` (on by default), `scaas`,
 `pqchat` and `pqvault` (each implying `scaas`); the SDK defines no aggregating crate.
 
@@ -325,7 +327,11 @@ OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control charac
 a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`. PqVault's V1 vectors
 (`smartcontracts/vectors/pqvault/`) run through this surface only (BUILT, UNAUDITED; `tests/app_core_vault_rows.rs` under
 `vectors`, `tests/app_core_vault_records.rs` in the main suite: typed digests in both domains, both signing paths,
-`verify_app_record`); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](ua-libraries.md#CLI-PQV-12) in decisions.md.
+the verification); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](ua-libraries.md#CLI-PQV-12) in decisions.md.
+PqVault's records are signed and verified by `sign_pqvault_record` and `verify_pqvault_record` (owner 2026-11-22,
+[CLI-PQV-13](../decisions.md#CLI-PQV-13); BUILT, UNAUDITED): thin calls of `ua-rs`'s `wallet::pqvault` with the generic
+calls' profile checks, accepting PqVault's domains `DS_V` / `DS_B` and its seven structs only; `sign_app_record` and
+`verify_app_record` refuse every PqVault record (its domain name, its app id, its purpose `P_V`).
 
 <a id="CLI-SDK-21"></a>**CLI-SDK-21** — **`seal_for_arweave`, `upload_file`, `fetch_file` and `open_file` put an app core's
 file on Arweave and read it back; the upload key signs only the item `ua-rs` built; the client keeps the signed bytes until

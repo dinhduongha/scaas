@@ -5,6 +5,7 @@
 
 import '../../frb_generated.dart';
 import 'account/smart.dart';
+import 'dart:convert';
 import 'error.dart';
 import 'op.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
@@ -16,6 +17,68 @@ part 'wallet.freezed.dart';
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AllowOpaqueCall>>
 abstract class AllowOpaqueCall implements RustOpaqueInterface {}
+
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>>
+abstract class SignedOpBlob implements RustOpaqueInterface {
+  String get chainUid;
+
+  String get contract;
+
+  String get entry;
+
+  Object? get extra;
+
+  String get family;
+
+  bool get ids;
+
+  String get kind;
+
+  Object? get message;
+
+  String get name;
+
+  Object? get signature;
+
+  String get signer;
+
+  int get signerKind;
+
+  int get v;
+
+  set chainUid(String chainUid);
+
+  set contract(String contract);
+
+  set entry(String entry);
+
+  set extra(Object? extra);
+
+  set family(String family);
+
+  set ids(bool ids);
+
+  set kind(String kind);
+
+  set message(Object? message);
+
+  set name(String name);
+
+  set signature(Object? signature);
+
+  set signer(String signer);
+
+  set signerKind(int signerKind);
+
+  set v(int v);
+
+  /// The blob from its JSON text: `Argument` above [`HANDOFF_MAX`] bytes, deeper than 8, with an unknown or missing field.
+  static Future<SignedOpBlob> fromJson({required String text}) =>
+      ScaasSdk.instance.api.scaasSdkWalletSignedOpBlobFromJson(text: text);
+
+  /// Its JSON text.
+  Future<String> toJson();
+}
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Wallet>>
 abstract class Wallet implements RustOpaqueInterface {

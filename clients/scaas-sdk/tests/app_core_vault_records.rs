@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! PqVault plan V9, part 2 (spec §5.2–§5.4, §6.9; CLI-PQV-12): `smartcontracts/vectors/pqvault/records.json` through the SDK's
-//! generic app-core surface only (no `scaas-ua` call, no PqVault name below the test). Every record's typed digest in its
-//! vault's domain (portable `DS_V` for mode 0, chain-bound `DS_B` for mode 1) as `sign_app_record` gives it; the two signing
-//! paths by the `PQV_ACCOUNT` keys the SDK opens from the vectors' mnemonic; every committed signature (the `mldsa65` signers
-//! come from a raw 64-byte seed the SDK never opens, so their signatures are verified, not reproduced) judged by
-//! `verify_app_record` against a fake registry; the mode refusals (a mode flipped after signing, another instance); a native
+//! PqVault signing path (owner 2026-11-22: `sign_pqvault_record`, `verify_pqvault_record`; no `scaas-ua` call below the test).
+//! Every record's typed digest in its vault's domain (portable `DS_V` for mode 0, chain-bound `DS_B` for mode 1) as
+//! `sign_pqvault_record` gives it; the two signing paths by the `PQV_ACCOUNT` keys the SDK opens from the vectors' mnemonic;
+//! every committed signature (the `mldsa65` signers come from a raw 64-byte seed the SDK never opens, so their signatures are
+//! verified, not reproduced) judged by `verify_pqvault_record` against a fake registry; the generic app calls refusing every
+//! PqVault record and the dedicated ones refusing what is not one, each beside its control; the mode refusals (a mode flipped after signing, another instance); a native
 //! EVM key's mode-0 seat signature inside an `msig`. Not here: ids, scopes, `sigHash` and blobs (`pqvault-core`'s encodings,
 //! V10), and the native member's mode-1 row (its `msig` is a random id with no structure, and its registry is a
 //! generation-2 one, whose `UAAuth` domain the SDK does not build yet: docs/clients/scaas-sdk.md, F2).
@@ -197,6 +198,21 @@ fn profile(url: String, genesis: String) -> ChainProfile {
 
 /// The SDK on the fake chain with `pqvAccount`'s mnemonic imported, and PqVault's scope (its `app_id`, its prefix).
 async fn on_fake(d: &Value) -> (Arc<AppCore>, String, Fake) {
+    let (sdk, seed, chain) = open_fake(d).await;
+    let a = AppCore::new(
+        sdk,
+        AppDesc {
+            app_id: Some(s(&d["purpose"]["appId"])),
+            name: "PqVault".into(),
+            class: None,
+            labels: vec![PQV.into()],
+        },
+    )
+    .unwrap();
+    (a, seed, chain)
+}
+/// The SDK on the fake chain with `pqvAccount`'s mnemonic imported.
+async fn open_fake(d: &Value) -> (Arc<Sdk>, String, Fake) {
     let chain = fake();
     let url = serve(chain.clone()).await;
     let genesis = chain.lock().unwrap().genesis.clone();
@@ -222,17 +238,7 @@ async fn on_fake(d: &Value) -> (Arc<AppCore>, String, Fake) {
         .await
         .unwrap()
         .id;
-    let a = AppCore::new(
-        sdk,
-        AppDesc {
-            app_id: Some(s(&d["purpose"]["appId"])),
-            name: "PqVault".into(),
-            class: None,
-            labels: vec![PQV.into()],
-        },
-    )
-    .unwrap();
-    (a, seed, chain)
+    (sdk, seed, chain)
 }
 /// A `PQV_ACCOUNT` key of the imported mnemonic (FN-DSA-512): index 0 the index vault's UA, 1 the personal vault's.
 fn pqv_key(d: &Value, seed: &str, index: u32) -> KeyRef {
@@ -285,7 +291,7 @@ fn register_all(c: &Fake, d: &Value) {
     }
 }
 
-/// Each record's typed digest in its vault's domain, as `sign_app_record` states it (`digest`), equals the row's `typed`; the
+/// Each record's typed digest in its vault's domain, as `sign_pqvault_record` states it (`digest`), equals the row's `typed`; the
 /// flipped and other-instance rows' digests too, each beside the one signed.
 #[tokio::test(flavor = "multi_thread")]
 async fn typed_digests_in_both_domains() {
@@ -295,7 +301,7 @@ async fn typed_digests_in_both_domains() {
     let key = pqv_key(&d, &seed, 0);
     let digest = |p: AppPath, t: String| {
         let (a, key) = (a.clone(), key.clone());
-        async move { a.sign_app_record(key, p, t).await.unwrap().digest }
+        async move { a.sign_pqvault_record(key, p, t).await.unwrap().digest }
     };
     let all = rows(&d);
     assert_eq!(all.len(), 23);
@@ -363,14 +369,14 @@ async fn signing_paths_by_the_pqv_account() {
             assert_eq!(r["signer"], who);
             let t = typed(&d, r["struct"].as_str().unwrap(), &r["record"], &dom);
             let sg = a
-                .sign_app_record(pqv_key(&d, &seed, index), p.clone(), t.clone())
+                .sign_pqvault_record(pqv_key(&d, &seed, index), p.clone(), t.clone())
                 .await
                 .unwrap();
             assert_eq!(sg.digest, s(&r["typed"]));
             assert!(sg.key_data.is_empty());
             // randomized: a second signature differs, from the SDK's and from the committed one
             let again = a
-                .sign_app_record(pqv_key(&d, &seed, index), p.clone(), t.clone())
+                .sign_pqvault_record(pqv_key(&d, &seed, index), p.clone(), t.clone())
                 .await
                 .unwrap();
             assert_ne!(again.signature, sg.signature);
@@ -383,7 +389,7 @@ async fn signing_paths_by_the_pqv_account() {
             let ok = |sig: AppUaSig| {
                 let (a, ua, p, t) = (a.clone(), ua.clone(), p.clone(), t.clone());
                 async move {
-                    a.verify_app_record("local".into(), ua, p, t, sig)
+                    a.verify_pqvault_record("local".into(), ua, p, t, sig)
                         .await
                         .unwrap()
                 }
@@ -412,7 +418,7 @@ async fn verify_app_record_on_the_committed_rows() {
     let verify = |ua: String, p: AppPath, t: String, sig: AppUaSig| {
         let a = a.clone();
         async move {
-            a.verify_app_record("local".into(), ua, p, t, sig)
+            a.verify_pqvault_record("local".into(), ua, p, t, sig)
                 .await
                 .unwrap()
         }
@@ -520,7 +526,7 @@ async fn verify_app_record_on_the_committed_rows() {
     }
 }
 
-/// `nativeMember` mode 0: an EVM key holding a seat of an `msig` signs the record's typed digest itself; `verify_app_record`
+/// `nativeMember` mode 0: an EVM key holding a seat of an `msig` signs the record's typed digest itself; `verify_pqvault_record`
 /// on the portable path takes it inside an `msig` whose structure holds that native id (the seat's `msig` in the vectors is a
 /// random id, so this structure is the test's, the signature the vectors'); the mode-1 signature presented in mode 0 refused
 /// (`UAUnauthorized` at the contract), and a seat not accepted.
@@ -593,7 +599,7 @@ async fn native_member_in_an_msig() {
     let verify = |sig: AppUaSig| {
         let (a, ms, t) = (a.clone(), ms.clone(), t.clone());
         async move {
-            a.verify_app_record("local".into(), ms, AppPath::Portable, t, sig)
+            a.verify_pqvault_record("local".into(), ms, AppPath::Portable, t, sig)
                 .await
                 .unwrap()
         }
@@ -618,4 +624,120 @@ async fn native_member_in_an_msig() {
     );
     state(0b11);
     assert!(verify(seat(&nm["mode0"]["signature"])).await);
+}
+
+fn code(e: scaas_sdk::SdkError) -> &'static str {
+    e.code()
+}
+
+/// The two signing calls kept apart (owner 2026-11-22), each refusal beside its control: the generic call in PqVault's domain
+/// on either path, and under PqVault's app id with an app's own domain name (control: the dedicated call on the same record);
+/// the generic verification of a committed row (control: the dedicated one); the dedicated call in another domain (control:
+/// `DS_V`), with a struct that is not PqVault's or a PqVault name with other fields (control: the record's own), and in a
+/// scope of another app (control: PqVault's scope).
+#[tokio::test(flavor = "multi_thread")]
+async fn pqvault_path_refusals() {
+    let _one = ONE.lock().await;
+    let d = doc();
+    let (a, seed, chain) = on_fake(&d).await;
+    register_all(&chain, &d);
+    let key = pqv_key(&d, &seed, 0);
+    let sign_g = |p: AppPath, t: String| {
+        let (a, key) = (a.clone(), key.clone());
+        async move { a.sign_app_record(key, p, t).await.map(|s| s.digest) }
+    };
+    let sign_v = |p: AppPath, t: String| {
+        let (a, key) = (a.clone(), key.clone());
+        async move { a.sign_pqvault_record(key, p, t).await.map(|s| s.digest) }
+    };
+    for name in ["index0.item-0", "personal1.item-0"] {
+        let (mode, r) = named(&d, name);
+        let (p, dom) = by_mode(&d, mode);
+        let t = typed(&d, "PqVaultItem", &r["record"], &dom);
+        assert_eq!(
+            sign_v(p.clone(), t.clone()).await.unwrap(),
+            s(&r["typed"]),
+            "{name}"
+        );
+        assert_eq!(
+            code(sign_g(p.clone(), t.clone()).await.unwrap_err()),
+            "AppDomainRefused",
+            "{name}"
+        );
+        // PqVault's app id or purpose under an app's own domain name: refused by the purpose
+        let mut mine = dom.clone();
+        mine["name"] = json!("My App");
+        let tm = typed(&d, "PqVaultItem", &r["record"], &mine);
+        assert_eq!(
+            code(sign_g(p.clone(), tm.clone()).await.unwrap_err()),
+            "AppPurposeRefused",
+            "{name}"
+        );
+        // the dedicated call in that domain
+        assert_eq!(
+            code(sign_v(p.clone(), tm).await.unwrap_err()),
+            "AppDomainRefused",
+            "{name}"
+        );
+        // a struct that is not PqVault's, and PqVault's name with another field type
+        let enc = d["typehashes"]["PqVaultItem"]["type"].as_str().unwrap();
+        let mut types = Map::new();
+        types_of(&enc.replace("PqVaultItem", "Note"), &mut types);
+        let dk = if mode == 0 { "V" } else { "B" };
+        types_of(d["domains"][dk]["type"].as_str().unwrap(), &mut types);
+        let note =
+            json!({"types": types, "primaryType": "Note", "domain": dom, "message": r["record"]})
+                .to_string();
+        assert_eq!(
+            code(sign_v(p.clone(), note).await.unwrap_err()),
+            "Argument",
+            "{name}"
+        );
+        let mut types = Map::new();
+        types_of(&enc.replace("uint64 nonce", "uint256 nonce"), &mut types);
+        types_of(d["domains"][dk]["type"].as_str().unwrap(), &mut types);
+        let wide =
+            json!({"types": types, "primaryType": "PqVaultItem", "domain": dom, "message": r["record"]}).to_string();
+        assert_eq!(
+            code(sign_v(p.clone(), wide).await.unwrap_err()),
+            "Argument",
+            "{name}"
+        );
+        // a committed row: the generic verification false, the dedicated one true
+        let ua = s(&signer(&d, r["signer"].as_str().unwrap())["ua"]);
+        let sig = ua_sig(&r["uaSig"]);
+        assert!(!a
+            .verify_app_record(
+                "local".into(),
+                ua.clone(),
+                p.clone(),
+                t.clone(),
+                sig.clone()
+            )
+            .await
+            .unwrap());
+        assert!(a
+            .verify_pqvault_record("local".into(), ua, p, t, sig)
+            .await
+            .unwrap());
+    }
+    // a scope of another app: its path is not PqVault's (control: PqVault's scope above)
+    let (sdk, seed, _chain) = open_fake(&d).await;
+    let other = AppCore::new(
+        sdk,
+        AppDesc {
+            app_id: Some(format!("0x{}", "5a".repeat(32))),
+            name: "Other".into(),
+            class: None,
+            labels: vec!["scaas/other/v1/".into()],
+        },
+    )
+    .unwrap();
+    let (_, r) = named(&d, "index0.item-0");
+    let t = typed(&d, "PqVaultItem", &r["record"], &ds_v(&d));
+    let e = other
+        .sign_pqvault_record(pqv_key(&d, &seed, 0), AppPath::Portable, t)
+        .await
+        .unwrap_err();
+    assert_eq!(code(e), "AppDomainRefused");
 }

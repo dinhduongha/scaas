@@ -385,6 +385,9 @@ struct Held {
 
 #[async_trait]
 impl ChainAdapter for Held {
+    async fn digest(&self, job: &Job) -> Result<Option<alloy::primitives::B256>, SimError> {
+        self.inner.digest(job).await
+    }
     fn family(&self) -> Family {
         self.inner.family()
     }

@@ -2550,3 +2550,181 @@ async fn e2e_app_records_on_anvil() {
     );
     assert!(v(b(), cb, nid, vec![], sn.signature.clone()).await);
 }
+
+/// Plan T41.evm (spec §27.5 (c)) on `anvil`: A (the seed's EVM key 0, the token holder) signs a pay to B (key 1, holding only
+/// ether) and hands it off; B imports it, quotes a self-relay by its own key, submits it and sees `Landed`, and A's handed-off
+/// row ends `Landed` by the same fact; the same blob again is `ImportConsumed`; a blob bound to C (key 2) is
+/// `ImportRelayerBound` for B; A's own self-relay of its own pay lands.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_hand_off_on_anvil() {
+    use scaas_sdk::op::ImportExpect;
+    let (_anvil, rpc) = anvil().await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    let holder = funded_holder(rpc);
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let addr = |i| {
+        w.native_key(Network::Evm, i, None)
+            .unwrap()
+            .address()
+            .unwrap()
+            .to_ascii_lowercase()
+    };
+    let (b, c) = (addr(1), addr(2));
+    cast(&[
+        "rpc",
+        "--rpc-url",
+        rpc,
+        "anvil_setBalance",
+        &b,
+        "0x8ac7230489e80000",
+    ]);
+    let name = format!("local-31337-{port}-testnet");
+    let dep = deploy(
+        rpc,
+        &name,
+        &[("DEMO_SUPPLY", "1000000000000"), ("DEMO_HOLDER", &holder)],
+    );
+    let token = dep["demo_token"].as_str().unwrap().to_ascii_lowercase();
+    let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", rpc]);
+    let row = |fresh| GasBase {
+        entry: "mtxPay".into(),
+        kind: "token".into(),
+        fresh,
+        gas: 400_000,
+        per_byte: None,
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
+        regular: None,
+    };
+    let profile = ChainProfile {
+        key: "anvil".into(),
+        family: Family::Evm,
+        chain_id: Some(31337),
+        chain_uid: uid,
+        rpc: vec![endpoint(rpc)],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: None,
+        factory: None,
+        router: None,
+        finality: Finality::Depth(0),
+        tx_gas_cap: Some(1 << 24),
+        tokens: vec![ListedToken {
+            address: token.clone(),
+            symbol: "DEMO".into(),
+            decimals: 0,
+        }],
+        gas: GasRows {
+            base: vec![row(true), row(false)],
+            verify: vec![GasVerify {
+                line: Default::default(),
+                signer: 0,
+                gas: 0,
+                sig_bytes: 0,
+                margin: 0,
+                per_item: None,
+            }],
+        },
+        max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
+        gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
+        l1_fee: None,
+        disabled_kinds: vec![],
+        family_params: None,
+    };
+    let (sa, seed_a) = sdk_on(profile.clone()).await;
+    let (sb, seed_b) = sdk_on(profile).await;
+    let key = |seed: &str, index| KeyRef::Native {
+        seed: seed.into(),
+        network: "evm".into(),
+        index,
+    };
+    let to_b = format!("0x{}{}", "00".repeat(12), &b[2..]);
+    let pay = |no: &str, mode: u32, relayer: Option<String>| Pay {
+        signer: key(&seed_a, 0),
+        chain: "anvil".into(),
+        token: token.clone(),
+        to: to_b.clone(),
+        value: "1000".into(),
+        meta: PayMeta {
+            salt: None,
+            pay_no: Some(format!("0x{no:0>64}")),
+            save: false,
+            body: PayBody::Note {
+                note: "hand-off".into(),
+            },
+        },
+        envelope: Envelope {
+            valid_until: now() + 600,
+            mode,
+            relayer,
+            fee: "0".into(),
+            fee_recipient: None,
+        },
+    };
+    let expect = ImportExpect {
+        chain: "anvil".into(),
+        payee: vec![to_b.clone()],
+        payer: key(&seed_b, 1),
+    };
+    // A hands off; B imports, quotes, submits: Landed, and A's row with it
+    let p = sa.wallet().prepare_pay(pay("1", 0, None)).await.unwrap();
+    let blob = sa.op().hand_off(p.clone()).await.unwrap();
+    let imported = sb
+        .op()
+        .import_signed(blob.clone(), expect.clone())
+        .await
+        .unwrap();
+    let q = sb
+        .op()
+        .quote(
+            imported.clone(),
+            SubmitPath::SelfRelay {
+                payer: key(&seed_b, 1),
+            },
+        )
+        .await
+        .unwrap();
+    let op = sb.op().submit(imported, q).await.unwrap();
+    let last = follow(&sb, op).await;
+    assert!(
+        matches!(last, OpState::Landed { .. }),
+        "B's import: {last:?}"
+    );
+    assert!(
+        matches!(follow(&sa, p.id()).await, OpState::Landed { .. }),
+        "A's handed-off row"
+    );
+    // the same blob again
+    let again = sb.op().import_signed(blob, expect.clone()).await;
+    assert_eq!(again.err().map(|e| e.code()), Some("ImportConsumed"));
+    // a blob bound to C
+    let p = sa.wallet().prepare_pay(pay("2", 1, Some(c))).await.unwrap();
+    let bound = sa.op().hand_off(p).await.unwrap();
+    let r = sb.op().import_signed(bound, expect).await;
+    assert_eq!(r.err().map(|e| e.code()), Some("ImportRelayerBound"));
+    // A's own self-relay of its own pay
+    let p = sa.wallet().prepare_pay(pay("3", 0, None)).await.unwrap();
+    let q = sa
+        .op()
+        .quote(
+            p.clone(),
+            SubmitPath::SelfRelay {
+                payer: key(&seed_a, 0),
+            },
+        )
+        .await
+        .unwrap();
+    let op = sa.op().submit(p, q).await.unwrap();
+    assert!(
+        matches!(follow(&sa, op).await, OpState::Landed { .. }),
+        "A's own self-relay"
+    );
+}

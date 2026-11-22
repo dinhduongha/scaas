@@ -25,16 +25,17 @@ use sha2::{Digest, Sha256};
 use stellar_xdr::{
     AccountId, ConfigSettingEntry, ConfigSettingId, ContractDataDurability, ContractDataEntry,
     ContractExecutable, DecoratedSignature, FeeBumpTransaction, FeeBumpTransactionEnvelope,
-    FeeBumpTransactionExt, FeeBumpTransactionInnerTx, Hash, HostFunction,
-    InnerTransactionResultResult, Int128Parts, Int256Parts, InvokeContractArgs,
-    InvokeHostFunctionOp, LedgerEntry, LedgerEntryData, LedgerKey, LedgerKeyAccount,
-    LedgerKeyConfigSetting, LedgerKeyContractData, Limits, Memo, MuxedAccount, Operation,
-    OperationBody, Preconditions, PublicKey, ReadXdr, ScAddress, ScMap, ScMapEntry, ScString,
-    ScSymbol, ScVal, ScVec, SequenceNumber, Signature, SignatureHint, SorobanAddressCredentials,
-    SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanAuthorizedInvocation,
-    SorobanCredentials, SorobanTransactionData, SorobanTransactionDataExt, TimeBounds, TimePoint,
-    Transaction, TransactionEnvelope, TransactionExt, TransactionResult, TransactionResultResult,
-    TransactionV1Envelope, UInt128Parts, UInt256Parts, Uint256, WriteXdr,
+    FeeBumpTransactionExt, FeeBumpTransactionInnerTx, Hash, HashIdPreimage,
+    HashIdPreimageSorobanAuthorization, HostFunction, InnerTransactionResultResult, Int128Parts,
+    Int256Parts, InvokeContractArgs, InvokeHostFunctionOp, LedgerEntry, LedgerEntryData, LedgerKey,
+    LedgerKeyAccount, LedgerKeyConfigSetting, LedgerKeyContractData, Limits, Memo, MuxedAccount,
+    Operation, OperationBody, Preconditions, PublicKey, ReadXdr, ScAddress, ScMap, ScMapEntry,
+    ScString, ScSymbol, ScVal, ScVec, SequenceNumber, Signature, SignatureHint,
+    SorobanAddressCredentials, SorobanAuthorizationEntry, SorobanAuthorizedFunction,
+    SorobanAuthorizedInvocation, SorobanCredentials, SorobanTransactionData,
+    SorobanTransactionDataExt, TimeBounds, TimePoint, Transaction, TransactionEnvelope,
+    TransactionExt, TransactionResult, TransactionResultResult, TransactionV1Envelope,
+    UInt128Parts, UInt256Parts, Uint256, WriteXdr,
 };
 
 use crate::adapter::{
@@ -1393,7 +1394,8 @@ impl ChainAdapter for SorobanAdapter {
         (crate::adapter::call_share_by_kind(job) || is_accept(job)) && !payment
     }
 
-    /// Spec §9.1: a `ua_metatx` job's id is its op digest, recomputed from its arguments (`settle`: none, the job's own).
+    /// Spec §9.1: a `ua_metatx` job's id is its op digest, recomputed from its arguments (`settle`: none, the job's own); a
+    /// `signed_op`'s is [`signed_op_digest`], what its subject signed; a `call` job keeps the pull path's job field.
     async fn digest(
         &self,
         job: &Job,
@@ -1405,8 +1407,50 @@ impl ChainAdapter for SorobanAdapter {
                 }
             }
         }
+        if matches!(job.kind.as_deref(), None | Some("signed_op")) {
+            if let Some(Ok(d)) = job
+                .op
+                .as_ref()
+                .map(|op| signed_op_digest(&self.network_id, op))
+            {
+                return Ok(Some(d.into()));
+            }
+        }
         Ok(crate::submit::job_digest(job))
     }
+
+    /// `POST /v1/ops` (gateway.md step 3): a `signed_op`'s [`signed_op_digest`], never the client's `op.digest`; an op whose
+    /// main entry does not build is the payload's refusal.
+    async fn ops_digest(
+        &self,
+        job: &Job,
+    ) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
+        let op = job
+            .op
+            .as_ref()
+            .ok_or_else(|| SimError::Revert("no op".into()))?;
+        signed_op_digest(&self.network_id, op)
+            .map(|d| Some(d.into()))
+            .map_err(|e| SimError::Revert(format!("{e:#}")))
+    }
+}
+
+/// A `signed_op`'s digest, rebuilt from its named fields (T28; owner ruling 2026-11-02): `sha256` of its main entry's
+/// `HashIdPreimage::SorobanAuthorization` on this chain's network id, the bytes the subject's signature covers; the job's
+/// `digest` field is never read.
+fn signed_op_digest(network: &[u8; 32], op: &Value) -> Result<[u8; 32]> {
+    let (main, _) = auth_entry(op)?;
+    let SorobanCredentials::Address(c) = &main.credentials else {
+        bail!("a subject's entry has address credentials")
+    };
+    let preimage = HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
+        network_id: Hash(*network),
+        nonce: c.nonce,
+        signature_expiration_ledger: c.signature_expiration_ledger,
+        invocation: main.root_invocation.clone(),
+    })
+    .to_xdr(Limits::none())?;
+    Ok(Sha256::digest(&preimage).into())
 }
 
 /// Trang `getEvents`: trang sau chỉ mang cursor — stellar-rpc từ chối khoảng ledger kèm cursor
@@ -3776,6 +3820,32 @@ mod tests {
         };
         let ScVal::Map(Some(m)) = &v[0] else { panic!() };
         assert_eq!(m.0.len(), 2);
+    }
+
+    /// T28 `/v1/ops` (gateway.md step 3): a `signed_op`'s digest is the node's, the `sha256` of the bytes its subject signed
+    /// (the cross vector's preimage), whatever `op.digest` the client names; the adapter's `ops_digest` and G2 key are it.
+    #[tokio::test]
+    async fn a_signed_ops_digest_is_the_nodes() {
+        let mut o = op(cross_payload(), &sig());
+        let want: [u8; 32] = Sha256::digest(unhex(PREIMAGE).unwrap()).into();
+        assert_eq!(signed_op_digest(&network_id(NETWORK), &o).unwrap(), want);
+        o["digest"] = json!(format!("0x{}", "ee".repeat(32)));
+        assert_eq!(
+            signed_op_digest(&network_id(NETWORK), &o).unwrap(),
+            want,
+            "the client's field is never read"
+        );
+        let (a, _) = allow_adapter().await;
+        let job: Job =
+            serde_json::from_value(json!({"id": 0, "kind": "signed_op", "op": o})).unwrap();
+        let node = alloy::primitives::B256::from(signed_op_digest(&network_id("x"), &o).unwrap());
+        assert_eq!(a.ops_digest(&job).await.unwrap(), Some(node));
+        assert_eq!(a.digest(&job).await.unwrap(), Some(node), "G2's key");
+        assert_ne!(
+            Some(node),
+            crate::submit::job_digest(&job),
+            "control: not the client's"
+        );
     }
 
     /// Owner ruling 2026-11-02: from the named fields alone the node rebuilds the exact bytes the subject signed, a sub-invocation

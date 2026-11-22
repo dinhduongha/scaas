@@ -142,6 +142,23 @@ own_codes! {
     /// registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
     /// sent.
     GasAboveBlockShare,
+    /// An imported operation (spec §27.5 (c), owner 2026-11-22, Q-R3) of a kind the importer's family cannot show and check
+    /// before sending, a confidential one (Zether, PQZ), or a struct or entry the family's rows do not hold.
+    ImportKindRefused,
+    /// An imported pay or transfer whose `to` is none of the importer's ids.
+    ImportNotPayee,
+    /// An imported operation whose signed `relayer` is bound to another address than the importer's payer (Soroban binds none).
+    ImportRelayerBound,
+    /// An imported operation with a fee to anyone: a hand-off is fee 0 (spec §27.5 (b)).
+    ImportFeeRefused,
+    /// An imported operation valid for less than the node's 120 s: its `validUntil` on the chain's clock (EVM, a Soroban
+    /// pay), or its auth entry's expiry ledger (Soroban, a ledger at most each second).
+    ImportExpired,
+    /// An imported operation already spent at the final height: its lane nonce (EVM), its host nonce or `pay_ref` entry
+    /// (Soroban); it landed, or another operation took the nonce.
+    ImportConsumed,
+    /// An imported operation the simulation from the payer refused: the chain's judgement of the signature and the effect.
+    ImportedOpRefused,
     /// An Arweave upload above the free tier, or refused there, with no payer: none configured, or the operator's node payer
     /// off (NODE-SPN-05; CLI-SDK-21).
     PayerUnavailable,

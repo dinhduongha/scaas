@@ -133,7 +133,7 @@ means "the node holds a job under this key", never "dead".
 | `origin.generation` | `0` initially; `+1` on an operator requeue of a dead job |
 | `client_ref` | Echoed in feeds; for the client's own lookup |
 | `kind` | below |
-| `payload.digest` / `op.digest` | Optional; if present must equal the node's digest |
+| `payload.digest` / `op.digest` | Optional; if present must equal the node's digest, never the key. `POST /v1/ops` takes only the families whose node computes the digest (Soroban today; the others `FAMILY_NOT_SUPPORTED`, [gateway.md](gateway.md#routes)) |
 | `bus.scope` | `restricted` (own lanes only; default), `open` (admitted peers after the window), `public` (also the open mesh) ([NODE-MESH-15](mesh.md#NODE-MESH-15)) |
 
 Payload by kind:

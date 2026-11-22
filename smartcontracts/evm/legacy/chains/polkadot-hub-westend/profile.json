@@ -1,0 +1,14 @@
+{
+  "evmFork": "osaka",
+  "codeSizeLimit": 24576,
+  "initCodeSizeLimit": 49152,
+  "txGasCap": null,
+  "blockGasLimit": 18446744073709551615,
+  "finality": "tag",
+  "txType": 2,
+  "l1Fee": null,
+  "eip2537": false,
+  "status": "draft",
+  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (chains-arweave T12, probes of 2026-11-22, one sample each: H1-H8, fork, eip2537, caps, codesize, basefee, l1fee); its eth-rpc refused every eth_call that day (\"Metadata error: The generated code is not compatible with the node\"), so fork, codesize, eip2537 and caps are unread there: evmFork, the code caps and eip2537 are Polkadot Hub's (pallet-revive REVM, the research note section 3.1), not measured on Westend; disabledKinds: none, no owner ruling",
+  "disabledKinds": []
+}

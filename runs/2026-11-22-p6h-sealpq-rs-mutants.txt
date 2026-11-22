@@ -1,0 +1,7 @@
+# rs mutants at commit ba15a6766 (name | outcome | test)
+open_leaf takes another leaf's label | killed | CAPPED_SLOTS=4 CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --test pqz_leaf
+open_leaf keeps each refusal's own class | killed | CAPPED_SLOTS=4 CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --test pqz_leaf
+the label names no key version | killed | CAPPED_SLOTS=4 CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --test pqz_leaf
+seal_pq_key seals version 0's label | killed | CAPPED_SLOTS=4 CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --test pqz_leaf
+seal_pq_key seals under a fresh vault id | killed | CAPPED_SLOTS=4 CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --test pqz_leaf
+5 mutants, 5 killed, 0 survived (0 killed elsewhere), 0 not loaded
