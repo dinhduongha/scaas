@@ -16,7 +16,7 @@ MUTANTS = [
        "        let Some(sid) = self.room_session(room)?.or_else(|| self.timelines.lock().ok()?.keys().next().cloned()) else {")],
      T + "matrix_fake events_of_an_unbound_room_ignored"),
     ("use a room joined before",
-     [(MX, "        if t.joined(room).await? {\n            return refuse(RoomRefusal::JoinedBefore);\n        }\n", "")],
+     [(MX, "            if !members.iter().all(|m| *m == me || known.contains(&m)) {\n                return refuse(RoomRefusal::JoinedBefore);\n            }\n", "")],
      T + "matrix_fake room_joined_before_not_used"),
     ("invite an unbound id",
      [(MX, "        Ok(claimed.filter(|c| held.contains(c)).cloned())", "        Ok(claimed.cloned())")],
