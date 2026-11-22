@@ -42,6 +42,7 @@ Status: SPECIFIED.
 | `M` | MISSING: the named task or round is to build it |
 | `n/a` | not applicable, for the reason in §4 |
 | `deferred` | deferred by the owner (Polkadot Hub's Substrate sends, 2026-11-22) |
+| `after the freeze (owner 2026-11-22)` | moved by the owner to after the freeze: this round's T41 is `evm`, `soroban` and `arweave` only; neither BUILT nor failed (decisions CLI-SDK-32) |
 | `disabled` | disabled by the owner (ARCH-POS-18 confirmed: OP, Arbitrum, Base and Celo, the kinds above the chain's limit, 2026-11-22) |
 | `T<n>` | task T<n> of the SDK plan (`docs/superpowers/plans/2026-11-17-scaas-sdk.md`); `rpc T24.<x>` its `scaas-rpc` tasks |
 | `CA-T<n>` | task T<n> of the chains-arweave plan (`docs/superpowers/plans/2026-11-21-avax-polkadot-arweave.md`) |
@@ -72,26 +73,26 @@ Status: SPECIFIED.
 | 9 | OP Mainnet (10; OP Sepolia 11155420) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
 | 10 | Arbitrum One (42161; Arbitrum Sepolia 421614) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
 | 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
-| 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | B T41.evm (EVM side, a `hedera_ecdsa` payer; the native side's: P T41.hedera) | B (EVM side; native side: P T41.hedera read and ed25519 sends, gRPC-web by default, `tonic` under `fam-hedera-grpc`, owner Q-R5) |
+| 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | B T41.evm (EVM side, a `hedera_ecdsa` payer; the native side's: after the freeze (owner 2026-11-22)) | B (EVM side; native side: after the freeze (owner 2026-11-22), T41.hedera read and ed25519 sends, gRPC-web by default, `tonic` under `fam-hedera-grpc`, owner Q-R5) |
 | 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | P CA-T3 | P CA-T3 | B | P CA-T2 | B | P CA-T2 | M ARCH-POS-18 | B‡ | B‡ | P T41.evm (after CA-T2's profile) | P CA-T2 |
-| 14 | Polkadot Hub (EVM and Substrate sides; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 | P T41.evm (after CA-T14's profile) | P T41.dot (read B; the sends, owner 2026-11-22) |
+| 14 | Polkadot Hub (EVM and Substrate sides; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 | P T41.evm (after CA-T14's profile) | after the freeze (owner 2026-11-22): T41.dot sends (read B) |
 | 15 | Moonbeam (Moonbase Alpha) | B‡ | P CA-T3, T15 | P CA-T3 | B | P CA-T11 | B | P CA-T11 | B‡ | P CA-T15 | P CA-T15 | P T41.evm (after CA-T11's profile) | P CA-T11 |
-| 16 | NEAR (SCaaS family) | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-near` | M family round | M T41.near | M T41.near (read B) |
-| 17 | Algorand | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-algorand` | M family round | M T41.algorand | M T41.algorand (read B) |
-| 18 | Cosmos (CosmWasm) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.cosmos | M T41.cosmos (read B) |
-| 19 | Aptos | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.aptos | M T41.aptos (read B) |
-| 20 | Solana | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.solana | M T41.solana (read B) |
+| 16 | NEAR (SCaaS family) | B | B | B | B | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | P `ua-near` | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 17 | Algorand | B | B | B | B | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | P `ua-algorand` | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 18 | Cosmos (CosmWasm) | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 19 | Aptos | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 20 | Solana | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
 | 21 | Soroban (Stellar; Pi) | B | B | B | M T27 | B | M T30 | M T28, T29 | P `zether-soroban` | M family round | M family round | M T41.soroban | M T41.soroban (read B) |
-| 22 | Sui | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.sui | M T41.sui (read B) |
-| 23 | TON (GRAM) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.ton | M T41.ton (read B) |
-| 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | M T35 (sign), T36 (send; its reads B), T37 (SDK) |
+| 22 | Sui | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 23 | TON (GRAM) | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
+| 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | after the freeze (owner 2026-11-22): T35 (sign), T36 (send; its reads B), T37 (SDK) |
 | 25 | Arweave (store) | n/a | n/a | n/a | P CA-T16, T17 | P CA-T19 | P CA-T19 | P CA-T20 | n/a | n/a | n/a | n/a | P CA-T17, T19, T20 |
 
 
 Row 8 (Ethereum Classic, 61; Mordor 63) is removed: the owner dropped ETC on 2026-11-22 (decisions CLI-SDK-32, "ETC has no
 finalized block"); its profiles are in `smartcontracts/evm/legacy/chains/`. The other rows keep their numbers.
 
-Counts (24 rows): Contract B 22 (13 B‡), n/a 2. Relay B 19, P 3, n/a 2. Index B 19, P 3, n/a 2. Signing B 16, P 1, M 6, n/a 1. rpc read B 19, P 4, n/a 1. rpc write B 14, P 1, M 8, n/a 1. SDK B 11, P 4, M 8, n/a 1. Zether B 11 (10 B‡), P 2, M 9, n/a 2. PQ B 11 (10 B‡; on 4 of them kinds disabled), P 4, M 7, n/a 2. PQZ B 8 (7 B‡; on 1 of them disabled on mainnet), P 2, M 9, disabled 3, n/a 2. Self-relay B 11, P 3, M 8, n/a 2. Native B 11, P 3, deferred 1 (its read built), M 9 (8 of them with the read built).
+Counts (24 rows): Contract B 22 (13 B‡), n/a 2. Relay B 19, P 3, n/a 2. Index B 19, P 3, n/a 2. Signing B 16, P 1, M 1, after the freeze 5, n/a 1. rpc read B 19, P 4, n/a 1. rpc write B 14, P 1, M 1, after the freeze 7, n/a 1. SDK B 11, P 4, M 1, after the freeze 7, n/a 1. Zether B 11 (10 B‡), P 2, M 9, n/a 2. PQ B 11 (10 B‡; on 4 of them kinds disabled), P 4, M 7, n/a 2. PQZ B 8 (7 B‡; on 1 of them disabled on mainnet), P 2, M 9, disabled 3, n/a 2. Self-relay B 11, P 3, M 1, after the freeze 7, n/a 2. Native B 11, P 3, M 1 (its read built), after the freeze 9 (8 of them with the read built).
 
 ## 4. Notes on the cells
 
