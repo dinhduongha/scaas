@@ -116,6 +116,15 @@ only `TODO.md`.
 
 T5 and T10 may run beside each other; T7 and T8 too. Every other task in order.
 
+**Round 2 order (owner 2026-11-22).** After T11's local run and T12's first bindings check (red by its finding):
+1. the round-2 mutants for the contact card and the room check (done: `0f78ce0aa`);
+2. T12: decrypted content reaches the bindings only as the SDK's `SecretBytes` handles, plus the glue fixes (the crate's
+   `Drop` enum renamed, the SDK `use` lines in the reference library's `api`);
+3. T10b: the two new calls (vectors first), PqChat's `app_id`, `open_file`'s `ctSha256` check on every open path, the
+   `file` content rows;
+4. merge `origin/ua-rs-sign` into `pqchat-core-impl` and run the reconciliation checks;
+5. only then the rest of T11 over Matrix and the T11 mutants that need the hostile-envelope and reorg fixtures.
+
 ## T0 — Gate runner and baseline
 
 **Files:** `clients/pqchat-core/runs/2026-11-17-pqchat-core-gates.sh`, the summary file.
