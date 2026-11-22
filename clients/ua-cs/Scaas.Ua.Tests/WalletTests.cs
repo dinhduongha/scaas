@@ -940,6 +940,32 @@ public class WalletTests : IDisposable
         Assert.Contains(Convert.ToHexString(Keep(w.PqzKey(0, 0)).PublicKey()), pks);
     }
 
+    /// <summary>P6h (3), CLI-SGN-55: pqz_leaf.json's leaves open to the wallet's key at their path; every refusal is
+    /// UAVaultOpen beside its control; <c>SealPqKey</c>'s vault carries the path's label and opens.</summary>
+    [Fact]
+    public void PqzLeafRows()
+    {
+        var f = Load("smartcontracts/vectors/ua/pqz_leaf.json");
+        var w = Fresh("pq_kat");
+        PqzKey Open(JsonElement vault, JsonElement at, JsonElement u) => Keep(UaLib.PqzOpenLeaf(vault.GetRawText(), U(at, "account"), U(at, "index"),
+            at.GetProperty("version").GetUInt64(), Has(u, "pin") ? Utf8(S(u, "pin")) : null, Has(u, "prfOutput") ? B(u.GetProperty("prfOutput")) : null));
+        foreach (var r in Rows(f, "leaves"))
+            Assert.Equal(Keep(w.PqzKey(U(r, "account"), U(r, "index"), r.GetProperty("version").GetUInt64())).PublicKey(),
+                Open(r.GetProperty("vault"), r, r.GetProperty("unlock")).PublicKey());
+        Assert.Equal(17, f.GetProperty("refusals").GetArrayLength());
+        foreach (var x in Rows(f, "refusals"))
+        {
+            Assert.Equal("UAVaultOpen", Code(() => Open(x.GetProperty("vault"), x.GetProperty("open"), x.GetProperty("unlock"))));
+            var c = x.GetProperty("control");
+            Assert.Equal("", Code(() => Open(c.GetProperty("vault"), c.GetProperty("open"), c.GetProperty("unlock"))));
+        }
+        var v = JsonDocument.Parse(w.SealPqKey(1, 2, 3, Utf8("river-otter-7 ünï"))).RootElement;
+        Assert.Equal("pqz:registry:1:2:3", S(v, "label"));
+        var u = JsonDocument.Parse("{\"pin\":\"river-otter-7 ünï\"}").RootElement;
+        Assert.Equal(Keep(w.PqzKey(1, 2, 3)).PublicKey(), Open(v, JsonDocument.Parse("{\"account\":1,\"index\":2,\"version\":3}").RootElement, u).PublicKey());
+        Assert.Equal("UAVaultOpen", Code(() => Open(v, JsonDocument.Parse("{\"account\":1,\"index\":2,\"version\":2}").RootElement, u)));
+    }
+
     // --- the PQZ facade ---
 
     [Fact]

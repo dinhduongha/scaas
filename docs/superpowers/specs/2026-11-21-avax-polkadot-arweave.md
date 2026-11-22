@@ -425,8 +425,9 @@ sequenceDiagram
   bytes>, data]`; an absent target or anchor is an empty blob; an empty tag list is 0 bytes. Deep hash (SHA-384): a blob →
   `SHA384(SHA384("blob" ‖ decimal length) ‖ SHA384(data))`; a list → `acc = SHA384("list" ‖ decimal count)`, then
   `acc = SHA384(acc ‖ deepHash(item))` per item.
-- Types: **2** (ed25519: raw signature over the 48 bytes, owner the 32-byte key) or **4** (the same bytes, the type Turbo documents)
-  as the Q7 probe decides, default ed25519; **3** (secp256k1: EIP-191 `personal_sign` over the 48 bytes, prefix
+- Types: **2** (ed25519: raw signature over the 48 bytes, owner the 32-byte key) or **4** (ed25519 over the deep hash's lowercase
+  hex text, 96 ASCII bytes, as `arbundles`' Solana signers sign it: corrected 2026-11-22 by the T16 cross-check, decisions CLI-SDK-33
+  (60); revision 2 said "the same bytes"; the type Turbo documents) as the Q7 probe decides, default ed25519; **3** (secp256k1: EIP-191 `personal_sign` over the 48 bytes, prefix
   `"\x19Ethereum Signed Message:\n48"`, signature `r ‖ s ‖ v` 65 B with **`v ∈ {27, 28}` and low `s`** (`s ≤ n/2`), both produced
   by the builder and checked by the parser, owner the uncompressed 65-byte key) built and tested for a bundler that takes only EVM
   signers. No type 1 (RSA-PSS), no other type.

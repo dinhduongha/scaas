@@ -58,7 +58,11 @@ STEPS=(
     "ua-verify-only|clients/ua-rs|$cap cargo test $C --no-default-features"
     # plan T42: the core with no family (every UA kind, the seed standards, FeatureMissing) and its clippy; then none, each
     # fam-<row> alone and all on, in release, the size probe's bytes (runs/fam-sizes.sh prints `RESULT` rows for the summary)
-    "ua-core|clients/ua-rs|$cap cargo clippy $C --all-targets --no-default-features --features wallet -- -D warnings && $cap cargo test $C --no-default-features --features wallet --lib --test core_only --test wallet_pairing --test bls_multi --test wallet_webauthn --test bip85 --test wallet_pq"
+    "ua-core|clients/ua-rs|$cap cargo clippy $C --all-targets --no-default-features --features wallet -- -D warnings && $cap cargo test $C --no-default-features --features wallet --lib --test core_only --test wallet_pairing --test bls_multi --test wallet_webauthn --test bip85 --test wallet_pq && $cap cargo test $C --no-default-features --features app-core --test file_seal"
+    # T41.arweave (chains-arweave T17): the core's file seal without fam-arweave; the core with fam-arweave; the rows built
+    # byte for byte (vectors); the clientkeys cross-check against the pinned arbundles (its own lock, outside clientkeys' tree)
+    "ua-arweave|clients/ua-rs|$cap cargo clippy $C --all-targets --no-default-features --features app-core -- -D warnings && $cap cargo test $C --no-default-features --features app-core --test file_seal && $cap cargo clippy $C --all-targets --no-default-features --features wallet,fam-arweave -- -D warnings && $cap cargo test $C --no-default-features --features wallet,fam-arweave --lib --test arweave && $cap cargo clippy $C --all-targets --features app-core,vectors -- -D warnings && $cap cargo test $C --features app-core,vectors --test arweave --test arweave_rows --test file_seal"
+    "ck-xcheck|clients/clientkeys/xcheck/arbundles|$cap npm ci --ignore-scripts --no-audit --no-fund && node check.mjs"
     "ua-fam|clients/ua-rs|bash runs/fam-sizes.sh | sed 's/^/RESULT /'"
     "ua-wallet-rows|clients/ua-rs|$cap cargo test $C --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows && git diff --exit-code -- ../../smartcontracts/vectors"
     "rpc-clippy|clients/scaas-rpc|$cap cargo clippy $C --all-targets --all-features -- -D warnings"

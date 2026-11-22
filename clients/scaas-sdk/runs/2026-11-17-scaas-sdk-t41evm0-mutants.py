@@ -27,7 +27,7 @@ MUTANTS = [
     ("alloy's providers back in account", [(SC, 'account = ["vault"]\n', 'account = ["vault", "scaas-rpc/evm"]\n')],
      NOEVM + "--test feature_tree alloy_only_under_evm"),
     # the decimals that replace alloy's U256 in the family reads
-    ("a decimal above 2^256 - 1 taken", [(FM, "(t.len() < 78 || (t.len() == 78 && t <= U256_MAX))", "t.len() <= 78")],
+    ("a decimal above 2^256 - 1 taken", [(FM, "(t.len() < 78 || (t.len() == 78 && t <= U256_MAX))", "(t.len() <= 78)")],
      NOEVM + "--lib u256_decimals"),
     ("a sum's carry dropped", [(SOL, "    if carry > 0 {\n        out.push(b'0' + carry);\n    }\n", "")], NOEVM + "--lib dec_add_carries_and_caps"),
     ("a box word's high bytes dropped", [(ALG, "    let mut n = b.to_vec();", "    let mut n = b.get(b.len().saturating_sub(8)..).unwrap_or(b).to_vec();")],

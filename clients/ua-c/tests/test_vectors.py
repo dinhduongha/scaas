@@ -1535,6 +1535,8 @@ for name, res, args in [
     ("export_pqz_leaf_raw", st, [P, u32, u32, P]),
     ("wallet_pqz_key_version", st, [P, u32, u32, u64, P]),
     ("export_pqz_leaf_raw_version", st, [P, u32, u32, u64, P]),
+    ("wallet_seal_pq_key", st, [P, u32, u32, u64, u8, P, P]),
+    ("pqz_open_leaf", st, [u8, u8, u8, u32, u32, u64, P]),
     ("pqz_seed_backup", st, [P, P, u8, sz, u64, C.c_uint8, P, sz, P, P]),
     ("pqz_share_reseal", st, [P, u8, u8, u8, u8, P, P, P, P]),
     ("wallet_pqz_reconstruct", st, [P, P, u8, u8, u8, u8, u8, u64, u8, P]),
@@ -2951,6 +2953,48 @@ class WalletPqz(WalletCase):
         self.assertEqual(len(set(pks)), 3, "one key per version")
         self.assertEqual(name_of(L.wallet_pqz_key_version(w, 1 << 31, 0, 1, C.byref(P()))), "UAArgument")
         self.assertEqual(name_of(L.export_pqz_leaf_raw_version(w, 0, 0, 1, None)), "UAArgument")
+
+    def open_leaf(self, vault, at, u):
+        """scaas_ua_pqz_open_leaf of a row: (status name, pk or None)."""
+        pin = u["pin"].encode() if "pin" in u else None
+        prf = b(u["prfOutput"]) if "prfOutput" in u else None
+        k = P()
+        st_ = L.pqz_open_leaf(jb(vault), pin, prf, at["account"], at["index"], at["version"], C.byref(k))
+        if st_ != OK:
+            return name_of(st_), None
+        self.addCleanup(L.pqz_key_free, k)
+        return "", var(L.pqz_public, k)
+
+    def test_pqz_leaf_json_rows(self):
+        """P6h (3), CLI-SGN-55: every pqz_leaf.json leaf opens to the wallet's own key at its path; every refusal is
+        UAVaultOpen and its control opens."""
+        f = json.loads((VEC / "pqz_leaf.json").read_text())
+        self.assertEqual(f["mnemonic"], MN["pq_kat"]["words"])
+        w = self.qw()
+        for r in f["leaves"]:
+            with self.subTest(r["id"]):
+                st_, pk = self.open_leaf(r["vault"], r, r["unlock"])
+                self.assertEqual(st_, "")
+                self.assertEqual(pk, var(L.pqz_public, self.qk(w, r["account"], r["index"], r["version"])))
+        self.assertEqual(len(f["refusals"]), 17)
+        for x in f["refusals"]:
+            with self.subTest(x["id"]):
+                self.assertEqual(self.open_leaf(x["vault"], x["open"], x["unlock"])[0], "UAVaultOpen")
+                c = x["control"]
+                self.assertEqual(self.open_leaf(c["vault"], c["open"], c["unlock"])[0], "", "control")
+
+    def test_seal_pq_key_round_trip(self):
+        """scaas_ua_wallet_seal_pq_key: the label of the path, the wallet's leaf; another version is UAVaultOpen."""
+        w = self.qw()
+        pin = "river-otter-7 ünï".encode()
+        v = json.loads(text(L.wallet_seal_pq_key, w, 1, 2, 3, pin))
+        self.assertEqual(v["label"], "pqz:registry:1:2:3")
+        at = {"account": 1, "index": 2, "version": 3}
+        st_, pk = self.open_leaf(v, at, {"pin": pin.decode()})
+        self.assertEqual(st_, "")
+        self.assertEqual(pk, var(L.pqz_public, self.qk(w, 1, 2, 3)))
+        self.assertEqual(self.open_leaf(v, {**at, "version": 2}, {"pin": pin.decode()})[0], "UAVaultOpen")
+        self.assertEqual(name_of(L.wallet_seal_pq_key(w, 0, 0, 0, b"1234567", None, C.byref(sz(0)))), "UAArgument")
 
     def test_register_set_mismatch_and_key_field(self):
         k = self.qk(self.qw())

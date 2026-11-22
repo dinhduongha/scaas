@@ -1,0 +1,9 @@
+# js mutants at commit 16c674c46 (name | outcome | test)
+the label check skipped | killed | node --test test/pqz-leaf.test.js
+the 32-byte check skipped | killed | node --test test/pqz-leaf.test.js
+the label names no key version | killed | node --test test/pqz-leaf.test.js
+refusals keep their own class | killed | node --test test/pqz-leaf.test.js
+sealPqKey seals version 0 always | killed | node --test test/pqz-leaf.test.js
+sealPqKey drops the seed vault's id | killed | node --test test/pqz-leaf.test.js
+sealPqKey takes an index past 2^31 | killed | node --test test/pqz-leaf.test.js
+7 mutants, 7 killed, 0 survived (0 killed elsewhere), 0 not loaded

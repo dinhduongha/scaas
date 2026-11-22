@@ -14,7 +14,7 @@ use super::soroban::{account_key, failed, holder, Holder, ACCOUNT_MAX};
 use crate::op::state::{self, Row};
 use crate::vault::OpenSeed;
 use crate::wallet::native::{derive, NativeKeyRef};
-use crate::wallet::Wallet;
+use crate::wallet::{SignedOpBlob, Wallet};
 use crate::{Chain, FamilyParams, Sdk, SdkError};
 use scaas_rpc::pool::ReadError;
 use scaas_rpc::soroban::{Broadcast, Simulation, Soroban, TxStatus};
@@ -34,9 +34,6 @@ const MARGIN_PCT: u64 = 15;
 const IMPORT_MARGIN_SECS: u64 = 120;
 /// A native transaction's time bound at most this far ahead (NET-SOR-15's hour): a lost one holds its source's sequence.
 const TX_WINDOW_SECS: u64 = 3_600;
-/// A hand-off blob's bounds (spec §27.5 (c)).
-pub const BLOB_MAX: usize = 256 << 10;
-pub const BLOB_DEPTH: usize = 8;
 
 /// A Soroban op's entry and its own fields (amounts: canonical decimals of the token's units).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -141,76 +138,46 @@ pub struct SorobanQuote {
     pub max_time: u64,
 }
 
-/// A signed op handed to its payee (spec §27.5 (c)): named fields only, no secret.
+/// A `signed_op` payload by name (docs/node/job-api.md#soroban-signed-op): a Soroban blob's `message`, read with every field
+/// known.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SignedOpBlob {
-    pub v: u32,
-    pub chain_uid: String,
-    pub family: String,
-    pub contract: String,
-    pub entry: String,
-    /// the `signed_op`'s named `payload` (`{nonce, expiry, invocation}`)
-    pub op: OpPayload,
-    /// `0x` + 128 hex
-    pub signature: String,
-    /// the subject (`G…`)
-    pub signer: String,
-}
-
-/// A `signed_op` payload by name (docs/node/job-api.md#soroban-signed-op).
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct OpPayload {
-    pub nonce: String,
-    pub expiry: u32,
-    pub invocation: Invocation,
+struct OpPayload {
+    nonce: String,
+    expiry: u32,
+    invocation: Invocation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Invocation {
-    pub contract: String,
-    pub function: String,
-    pub args: Vec<Arg>,
-    pub sub_invocations: Vec<Value>,
+struct Invocation {
+    contract: String,
+    function: String,
+    args: Vec<Arg>,
+    sub_invocations: Vec<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Arg {
+struct Arg {
     #[serde(rename = "type")]
-    pub ty: String,
-    pub value: Value,
-}
-
-impl SignedOpBlob {
-    /// A blob from its JSON: at most [`BLOB_MAX`] bytes and [`BLOB_DEPTH`] deep, every field known (`Argument`).
-    pub fn from_json(text: &str) -> Result<SignedOpBlob, SdkError> {
-        if text.len() > BLOB_MAX {
-            return Err(SdkError::Argument);
-        }
-        scaas_ua::json::depth_within(text.as_bytes(), BLOB_DEPTH)
-            .map_err(|_| SdkError::Argument)?;
-        serde_json::from_str(text).map_err(|_| SdkError::Argument)
-    }
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_default()
-    }
+    ty: String,
+    value: Value,
 }
 
 /// A hand-off: the signer's row (followed by [`Wallet::soroban_follow`]) and the blob for the payee.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HandOff {
     pub op: String,
     pub blob: SignedOpBlob,
 }
 
-/// What the importer expects: its chain and its own ids (`G…`), one of which a payment's `to` must be.
+/// What a Soroban importer expects: its chain and its own ids (`G…`), one of which a payment's `to` must be (its payer is the
+/// quote's `SorobanPath::SelfRelay`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ImportExpect {
+pub struct SorobanImportExpect {
     pub chain: String,
     pub payee: Vec<String>,
 }
@@ -907,17 +874,20 @@ impl Wallet {
                 let mut row = row_of(&p, &op, &id, "handed_off", "handed_off");
                 put(&mut row.extra, "signature", json!(hex(&sig)));
                 state::put(&sdk, &row).await?;
-                let payload: OpPayload =
-                    serde_json::from_value(op.payload_json()).map_err(|_| SdkError::Internal)?;
                 let blob = SignedOpBlob {
                     v: 1,
                     chain_uid: c.profile.chain_uid.clone(),
                     family: "soroban".into(),
                     contract: p.contract,
                     entry: p.entry,
-                    op: payload,
-                    signature: hex(&sig),
+                    name: "signed_op".into(),
+                    kind: "token".into(),
+                    message: op.payload_json(),
+                    extra: Value::Null,
+                    signature: json!(hex(&sig)),
                     signer: p.from,
+                    signer_kind: 0,
+                    ids: false,
                 };
                 Ok(HandOff { op: id, blob })
             })
@@ -933,7 +903,7 @@ impl Wallet {
     pub async fn soroban_import(
         &self,
         blob: SignedOpBlob,
-        expect: ImportExpect,
+        expect: SorobanImportExpect,
     ) -> Result<SorobanPrepared, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
@@ -944,7 +914,23 @@ impl Wallet {
                 {
                     return Err(SdkError::ProfileMismatch);
                 }
-                let inv = &blob.op.invocation;
+                // the shared form's other fields as Soroban writes them; the payload by name, every field known
+                if blob.name != "signed_op"
+                    || blob.kind != "token"
+                    || !blob.extra.is_null()
+                    || blob.signer_kind != 0
+                    || blob.ids
+                {
+                    return Err(SdkError::Argument);
+                }
+                let payload: OpPayload =
+                    serde_json::from_value(blob.message.clone()).map_err(|_| SdkError::Argument)?;
+                let sig_hex = blob
+                    .signature
+                    .as_str()
+                    .ok_or(SdkError::Argument)?
+                    .to_string();
+                let inv = &payload.invocation;
                 listed(c, &blob.contract)?;
                 if inv.contract != blob.contract {
                     return Err(SdkError::ProfileMismatch);
@@ -1000,7 +986,7 @@ impl Wallet {
                 };
                 let now = sdk.now();
                 let ledger = latest(sor).await?;
-                if u64::from(blob.op.expiry) < ledger.saturating_add(IMPORT_MARGIN_SECS)
+                if u64::from(payload.expiry) < ledger.saturating_add(IMPORT_MARGIN_SECS)
                     || (kind == OpKind::Pay && valid_until < now.saturating_add(IMPORT_MARGIN_SECS))
                 {
                     return Err(SdkError::ImportExpired);
@@ -1009,7 +995,7 @@ impl Wallet {
                 let valid_until = if kind == OpKind::Pay {
                     valid_until
                 } else {
-                    now.saturating_add(u64::from(blob.op.expiry).saturating_sub(ledger))
+                    now.saturating_add(u64::from(payload.expiry).saturating_sub(ledger))
                 };
                 let p = SorobanPrepared {
                     chain: expect.chain,
@@ -1020,10 +1006,10 @@ impl Wallet {
                     amount,
                     pay_ref,
                     valid_until,
-                    nonce: blob.op.nonce,
-                    expiry: blob.op.expiry,
+                    nonce: payload.nonce,
+                    expiry: payload.expiry,
                     subject: None,
-                    signature: Some(blob.signature),
+                    signature: Some(sig_hex),
                     relayer_bound: false,
                     op: None,
                 };

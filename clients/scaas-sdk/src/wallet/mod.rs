@@ -5,6 +5,7 @@
 //! mark. Values are decimal strings of the smallest unit; no floating point. UNAUDITED.
 pub(crate) mod balances;
 pub(crate) mod families;
+pub(crate) mod handoff;
 #[cfg(feature = "evm")]
 pub(crate) mod history;
 pub(crate) mod native;
@@ -20,10 +21,10 @@ pub(crate) mod tokens;
 pub use balances::{Balances, TokenBalance};
 #[cfg(feature = "soroban")]
 pub use families::soroban_ops::{
-    Arg, HandOff, ImportExpect, Invocation, NativeCost, OpPayload, SignedOpBlob,
-    SorobanNativeQuote, SorobanNativeSend, SorobanOpKind, SorobanOpRequest, SorobanPath,
-    SorobanPrepared, SorobanQuote,
+    HandOff, NativeCost, SorobanImportExpect, SorobanNativeQuote, SorobanNativeSend, SorobanOpKind,
+    SorobanOpRequest, SorobanPath, SorobanPrepared, SorobanQuote,
 };
+pub use handoff::{SignedOpBlob, HANDOFF_MAX};
 #[cfg(feature = "evm")]
 pub use history::{Cursor, HistoryItem, HistoryPage, OpItem};
 pub use native::{NativeAddress, NativeKeyRef};

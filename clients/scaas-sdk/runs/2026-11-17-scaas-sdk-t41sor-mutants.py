@@ -11,6 +11,7 @@ UF = "clients/ua-rs/src/families/soroban.rs"
 UT = "clients/ua-rs/src/wallet/soroban_tx.rs"
 RS = "clients/scaas-rpc/src/soroban.rs"
 SO = "clients/scaas-sdk/src/wallet/families/soroban_ops.rs"
+HB = "clients/scaas-sdk/src/wallet/handoff.rs"
 CK = "cd clients/clientkeys && node --test --test-reporter=tap test/fam-soroban.test.js"
 UA = "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 --test families_soroban "
 RPC = "cd clients/scaas-rpc && ../../scripts/capped cargo test --locked --offline -j2 --features soroban --test soroban_send "
@@ -55,11 +56,11 @@ MUTANTS = [
     ("sdk: the consumed check dropped", [(SO, "                if spent(sor, &op).await? {\n                    return Err(SdkError::ImportConsumed);",
                                           "                if false && spent(sor, &op).await? {\n                    return Err(SdkError::ImportConsumed);")],
      SDK + "a_handed_off_pay_imports_with_each_check_and_lands"),
-    ("sdk: the expiry check dropped", [(SO, "                if u64::from(blob.op.expiry) < ledger.saturating_add(IMPORT_MARGIN_SECS)",
-                                        "                if false && u64::from(blob.op.expiry) < ledger.saturating_add(IMPORT_MARGIN_SECS)")],
+    ("sdk: the expiry check dropped", [(SO, "                if u64::from(payload.expiry) < ledger.saturating_add(IMPORT_MARGIN_SECS)",
+                                        "                if false && u64::from(payload.expiry) < ledger.saturating_add(IMPORT_MARGIN_SECS)")],
      SDK + "a_handed_off_pay_imports_with_each_check_and_lands"),
-    ("sdk: a blob's unknown field taken (a footprint from the blob)", [(SO, "#[serde(deny_unknown_fields)]\npub struct SignedOpBlob {",
-                                                                       "pub struct SignedOpBlob {")],
+    ("sdk: a blob's unknown field taken (a footprint from the blob)", [(HB, "#[serde(deny_unknown_fields)]\n#[cfg_attr(frb_expand, doc = frb_hint!(opaque))]\npub struct SignedOpBlob {",
+                                                                       "#[cfg_attr(frb_expand, doc = frb_hint!(opaque))]\npub struct SignedOpBlob {")],
      SDK + "a_handed_off_pay_imports_with_each_check_and_lands"),
     ("sdk: the resource fee left out of the cost", [(SO, "    let total = resource\n        .checked_add(inclusion)",
                                                      "    let total = 0u64\n        .checked_add(inclusion)")],

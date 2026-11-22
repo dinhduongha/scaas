@@ -10,7 +10,10 @@ use scaas_ua::wallet::{Network, Wallet};
 use serde_json::Value;
 
 fn file(p: &str) -> Value {
-    let p = format!("{}/../../smartcontracts/vectors/{p}", env!("CARGO_MANIFEST_DIR"));
+    let p = format!(
+        "{}/../../smartcontracts/vectors/{p}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
 }
 fn hexb(v: &Value) -> Vec<u8> {
@@ -26,7 +29,8 @@ fn opt(v: &Value) -> Option<String> {
     v.as_str().map(str::to_string)
 }
 fn u(v: &Value) -> u64 {
-    v.as_u64().unwrap_or_else(|| v.as_str().unwrap().parse().unwrap())
+    v.as_u64()
+        .unwrap_or_else(|| v.as_str().unwrap().parse().unwrap())
 }
 
 fn terms(t: &Value) -> Terms {
@@ -81,10 +85,19 @@ fn op_rows_byte_for_byte_and_signed_by_the_subject_only() {
     assert_eq!(v["ops"].as_array().unwrap().len(), 3);
     for o in v["ops"].as_array().unwrap() {
         let c = check_terms(&terms(&o["terms"]), &shown(&o["shown"])).unwrap();
-        assert_eq!(c.preimage(), hexb(&o["preimage"]).as_slice(), "{}", o["kind"]);
+        assert_eq!(
+            c.preimage(),
+            hexb(&o["preimage"]).as_slice(),
+            "{}",
+            o["kind"]
+        );
         assert_eq!(c.digest().to_vec(), hexb(&o["digest"]));
         let sig = subject.sign_soroban_auth(&c).unwrap();
-        assert_eq!(sig.to_vec(), hexb(&o["signature"]), "ed25519 is deterministic");
+        assert_eq!(
+            sig.to_vec(),
+            hexb(&o["signature"]),
+            "ed25519 is deterministic"
+        );
         let vu = o["signed_op"]["valid_until"].as_u64().unwrap();
         assert_eq!(signed_op(&c, &sig, vu), o["signed_op"]);
         // another key of the seed is not the subject: refused, nothing signed
@@ -150,7 +163,11 @@ fn tx(r: &Value, fam: &Value) -> SorobanTx {
             .find(|o| o["signed_op"]["payload"] == a["payload"])
             .unwrap();
         let mut t = terms(&pay["terms"]);
-        if !i["invocation"]["sub_invocations"].as_array().unwrap().is_empty() {
+        if !i["invocation"]["sub_invocations"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+        {
             t.fields.extra.push("sub_invocations".into());
         }
         let d = &i["data"];
@@ -233,7 +250,12 @@ fn a_transaction_signs_only_with_its_data_and_auth() {
     let full = tx(&n["rows"][0], &fam);
     assert!(payer.sign_soroban_tx(&nid, &full).is_ok(), "control");
     // the simulation's form: no data (ext v0) and no auth (recording), never signed
-    let TxOp::Invoke { op, signature, data } = full.op.clone() else {
+    let TxOp::Invoke {
+        op,
+        signature,
+        data,
+    } = full.op.clone()
+    else {
         panic!()
     };
     for (s, d) in [(None, data.clone()), (signature, None)] {

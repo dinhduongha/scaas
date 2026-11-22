@@ -31,6 +31,8 @@ mod aead;
 mod app_refusals;
 #[cfg(feature = "app-core")]
 mod appkey;
+#[cfg(all(feature = "app-core", feature = "fam-arweave"))]
+mod arweave;
 pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
@@ -38,6 +40,8 @@ pub mod derive;
 pub(crate) mod derive;
 mod eip712;
 pub mod entries;
+#[cfg(feature = "app-core")]
+mod file;
 #[cfg(feature = "vectors")]
 pub mod kem;
 #[cfg(not(feature = "vectors"))]
@@ -85,6 +89,10 @@ pub use app_refusals::{SCAAS_DOMAIN_NAMES, SCAAS_PURPOSES};
 pub use appkey::{
     AppKeys, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce, APP_KEYS_MAX, APP_ROOT, KEYWRAP,
 };
+#[cfg(all(feature = "app-core", feature = "fam-arweave", feature = "vectors"))]
+pub use arweave::{vectors_sign_count, vectors_upload_key};
+#[cfg(all(feature = "app-core", feature = "fam-arweave"))]
+pub use arweave::{ArweaveFile, UPLOAD_INFO};
 #[cfg(feature = "pqz")]
 pub(crate) use eip712::u256_to_dec; // the PQZ facade's
 #[cfg(any(feature = "zether", feature = "pqz"))]
@@ -93,6 +101,8 @@ pub use eip712::{
     liquidity_order_typed_data, pqz_verdict_typed_data, rescue_vault_typed_data, scaas_typed_data,
     Erc7739Wallet, RescueVaultOp, TypedData,
 };
+#[cfg(feature = "app-core")]
+pub use file::SealedFile;
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 #[cfg(feature = "vectors")]
 pub use manifest::vectors_backup_payload;
@@ -234,6 +244,17 @@ pub enum Error {
     PqChatTooFar,
     /// A network of a family this build leaves out (plan T42: its `fam-<row>` feature is off); nothing derived or signed.
     FeatureMissing,
+    /// A file whose bucket is above the platform's cap or the store's largest object (CLI-UAL-65); nothing sealed or read.
+    FileTooLarge,
+    /// A file object whose length is not exactly `bucket(size) + 16` (CLI-UAL-65): not decrypted.
+    FileLength,
+    /// A file object whose frame, once the tag verified, has a `len` other than the signed `size` or a non-zero pad byte
+    /// (CLI-UAL-65): no plaintext.
+    FileFrame,
+    /// A file whose SHA-256 is not the signed `sha256` (or an object whose SHA-256 is not `ctSha256`): no plaintext.
+    FileHashMismatch,
+    /// An Arweave data item `ua-rs` built that its own verifying parser refused (CLI-UAL-64): nothing returned.
+    ArweaveItem,
     Ua(UAError),
 }
 
@@ -271,6 +292,11 @@ impl Error {
             Error::PqChatContent => "PqChatContent",
             Error::PqChatTooFar => "PqChatTooFar",
             Error::FeatureMissing => "FeatureMissing",
+            Error::FileTooLarge => "FileTooLarge",
+            Error::FileLength => "FileLength",
+            Error::FileFrame => "FileFrame",
+            Error::FileHashMismatch => "FileHashMismatch",
+            Error::ArweaveItem => "ArweaveItem",
             Error::Ua(e) => e.code(),
         }
     }
@@ -1178,6 +1204,30 @@ impl Wallet {
         marker: crate::facade::pqz::AllowSecretExport,
     ) -> Result<Zeroizing<[u8; 32]>> {
         self.export_pqz_leaf_raw_version(account, index, 0, marker)
+    }
+
+    /// The key worker's side of CLI-SGN-55 (clientkeys `sealPqKey`): the leaf `seed32` of `account` / `index` / `version`
+    /// ([`Wallet::pqz_key_version`]'s) sealed as vault v2 under [`crate::facade::pqz::pqz_leaf_label`] and this wallet's vault
+    /// id, as [`Wallet::seal_vault`] (the new-passphrase policy, `Argument`; the PRF envelope if given); open it with
+    /// [`crate::facade::pqz::PqzKey::open_leaf`]. `Argument` for an index of 2^31 or more, `WalletLocked` while locked.
+    pub fn seal_pq_key(
+        &self,
+        account: u32,
+        index: u32,
+        version: u64,
+        vault_passphrase: &str,
+        prf: Option<&PrfEnvelope>,
+    ) -> Result<Vault> {
+        let _lease = self.store.lease();
+        let leaf = crate::facade::pqz::derive(&self.store, account, index, version)?.leaf()?;
+        store::copied();
+        Vault::seal(
+            &self.vault_id()?,
+            &crate::facade::pqz::pqz_leaf_label(account, index, version),
+            &*leaf,
+            vault_passphrase,
+            prf,
+        )
     }
 
     /// [`Wallet::export_pqz_leaf_raw`] of key version `version` ([`Wallet::pqz_key_version`]; T15o).

@@ -142,20 +142,22 @@ own_codes! {
     /// registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
     /// sent.
     GasAboveBlockShare,
-    /// A hand-off's op of a kind the importer's family cannot show and check before sending (spec §27.5 (c), owner 2026-11-22,
-    /// Q-R3): refused before anything is quoted.
+    /// An imported operation (spec §27.5 (c), owner 2026-11-22, Q-R3) of a kind the importer's family cannot show and check
+    /// before sending, a confidential one (Zether, PQZ), or a struct or entry the family's rows do not hold.
     ImportKindRefused,
-    /// A hand-off's payment whose `to` is none of the importer's own ids (spec §27.5 (c)).
+    /// An imported pay or transfer whose `to` is none of the importer's ids.
     ImportNotPayee,
-    /// A hand-off bound to a relayer other than the importer's payer (spec §27.5 (c)).
+    /// An imported operation whose signed `relayer` is bound to another address than the importer's payer (Soroban binds none).
     ImportRelayerBound,
-    /// A hand-off with a fee (spec §27.5 (b), (c)).
+    /// An imported operation with a fee to anyone: a hand-off is fee 0 (spec §27.5 (b)).
     ImportFeeRefused,
-    /// A hand-off valid for less than the profile's margin (the node's 120 s; spec §27.5 (c)).
+    /// An imported operation valid for less than the node's 120 s: its `validUntil` on the chain's clock (EVM, a Soroban
+    /// pay), or its auth entry's expiry ledger (Soroban, a ledger at most each second).
     ImportExpired,
-    /// A hand-off whose nonce (or `pay_ref`) is spent at the final height (spec §27.5 (c)).
+    /// An imported operation already spent at the final height: its lane nonce (EVM), its host nonce or `pay_ref` entry
+    /// (Soroban); it landed, or another operation took the nonce.
     ImportConsumed,
-    /// A hand-off the importer's simulation refused, with the chain's reason (spec §27.5 (c)).
+    /// An imported operation the simulation from the payer refused: the chain's judgement of the signature and the effect.
     ImportedOpRefused,
 }
 

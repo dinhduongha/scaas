@@ -20,7 +20,9 @@ const must = (c, what) => {
 };
 
 // ---- Soroban: the self-relay of T27's signed pay (families/soroban.json) and a plain XLM payment
-const fam = JSON.parse(readFileSync(new URL("../../../smartcontracts/vectors/families/soroban.json", import.meta.url), "utf8"));
+const fam = JSON.parse(
+  readFileSync(new URL("../../../smartcontracts/vectors/families/soroban.json", import.meta.url), "utf8"),
+);
 const seed = seedFromWords(fam.mnemonic);
 const payer = deriveKey(seed, "stellar", 2);
 const passphrase = fam.ops[0].shown.passphrase;
@@ -84,7 +86,10 @@ const rows = [
   row("the self-relay of a signed pay (T27's row), ext v0", invoke()),
   row("the same with archived entries to restore (ext v1)", withData(data([1, 3]))),
   row("a native XLM payment", payment()),
-  row("a payment of i64 max with a time window", payment({ minTime: 1789999000, op: { payment: { destination: f.to, amount: String((1n << 63n) - 1n) } } })),
+  row(
+    "a payment of i64 max with a time window",
+    payment({ minTime: 1789999000, op: { payment: { destination: f.to, amount: String((1n << 63n) - 1n) } } }),
+  ),
 ];
 const refused = [
   { why: "a sequence of 0", t: payment({ seq: "0" }) },

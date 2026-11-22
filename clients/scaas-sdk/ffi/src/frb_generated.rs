@@ -52,7 +52,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -464983045;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -147879544;
 
 // Section: executor
 
@@ -10047,6 +10047,125 @@ fn wire__scaas_sdk__op__Op_bls_multi_pop_part_ok_impl(
         },
     )
 }
+fn wire__scaas_sdk__op__Op_hand_off_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "Op_hand_off",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Op>,
+            >>::sse_decode(&mut deserializer);
+            let api_prepared = <Arc<Prepared>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, SdkError>(
+                    (move || async move {
+                        let mut api_that_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_that, 0, false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_that_guard =
+                                        Some(api_that.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_that_guard = api_that_guard.unwrap();
+                        let output_ok =
+                            scaas_sdk::op::Op::hand_off(&*api_that_guard, api_prepared).await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__scaas_sdk__op__Op_import_signed_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "Op_import_signed",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Op>,
+            >>::sse_decode(&mut deserializer);
+            let api_blob = <SignedOpBlob>::sse_decode(&mut deserializer);
+            let api_expect = <scaas_sdk::op::ImportExpect>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, SdkError>(
+                    (move || async move {
+                        let mut api_that_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_that, 0, false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_that_guard =
+                                        Some(api_that.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_that_guard = api_that_guard.unwrap();
+                        let output_ok = scaas_sdk::op::Op::import_signed(
+                            &*api_that_guard,
+                            api_blob,
+                            api_expect,
+                        )
+                        .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__scaas_sdk__op__Op_member_sign_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -11660,6 +11779,1349 @@ fn wire__crate__api__SdkHandle_watch_impl(
                     })()
                     .await,
                 )
+            }
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_chain_uid_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_chain_uid",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.chain_uid.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_contract_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_contract",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.contract.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_entry_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_entry",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.entry.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_extra_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_extra",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.extra.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_family_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_family",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.family.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_ids_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_ids",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.ids.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_kind_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_kind",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.kind.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_message_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_message",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.message.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_name_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_name",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.name.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signature_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_signature",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.signature.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signer_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_signer",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.signer.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signer_kind_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_signer_kind",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.signer_kind.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_v_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_get_v",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>(api_that_guard.v.clone())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_chain_uid_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_chain_uid",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_chain_uid = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.chain_uid = api_chain_uid;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_contract_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_contract",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_contract = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.contract = api_contract;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_entry_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_entry",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_entry = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.entry = api_entry;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_extra_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_extra",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_extra = <serde_json::Value>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.extra = api_extra;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_family_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_family",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_family = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.family = api_family;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_ids_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_ids",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_ids = <bool>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.ids = api_ids;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_kind_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_kind",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_kind = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.kind = api_kind;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_message_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_message",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_message = <serde_json::Value>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.message = api_message;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_name_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_name",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_name = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.name = api_name;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signature_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_signature",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_signature = <serde_json::Value>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.signature = api_signature;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signer_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_signer",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_signer = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.signer = api_signer;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signer_kind_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_signer_kind",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_signer_kind = <u16>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.signer_kind = api_signer_kind;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_v_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_auto_accessor_set_v",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            let api_v = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok = Ok::<_, ()>({
+                    {
+                        api_that_guard.v = api_v;
+                    };
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_from_json_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_from_json",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_text = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, SdkError>((move || {
+                    let output_ok = scaas_sdk::wallet::SignedOpBlob::from_json(&api_text)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__scaas_sdk__wallet__SignedOpBlob_to_json_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SignedOpBlob_to_json",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, SdkError>((move || {
+                    let mut api_that_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_that, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_that_guard = api_that_guard.unwrap();
+                    let output_ok = scaas_sdk::wallet::SignedOpBlob::to_json(&*api_that_guard)?;
+                    std::result::Result::Ok(output_ok)
+                })())
             }
         },
     )
@@ -16710,6 +18172,12 @@ const _: fn() = || {
         let _: Option<scaas_sdk::wallet::Cursor> = HistoryPage.next;
     }
     {
+        let ImportExpect = None::<scaas_sdk::op::ImportExpect>.unwrap();
+        let _: String = ImportExpect.chain;
+        let _: Vec<String> = ImportExpect.payee;
+        let _: scaas_sdk::op::KeyRef = ImportExpect.payer;
+    }
+    {
         let ImportKey = None::<scaas_sdk::vault::seeds::ImportKey>.unwrap();
         let _: String = ImportKey.seed;
         let _: String = ImportKey.network;
@@ -16791,6 +18259,9 @@ const _: fn() = || {
             let _: u32 = account;
             let _: u32 = index;
             let _: String = key_data;
+        }
+        scaas_sdk::op::KeyRef::Signed { signer } => {
+            let _: String = signer;
         }
     }
     {
@@ -18921,6 +20392,9 @@ flutter_rust_bridge::frb_generated_moi_arc_impl_value!(
     flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SdkHandle>
 );
 flutter_rust_bridge::frb_generated_moi_arc_impl_value!(
+    flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>
+);
+flutter_rust_bridge::frb_generated_moi_arc_impl_value!(
     flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Vault>
 );
 flutter_rust_bridge::frb_generated_moi_arc_impl_value!(
@@ -19108,6 +20582,16 @@ impl SseDecode for SdkHandle {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut inner = <RustOpaqueMoi<
             flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SdkHandle>,
+        >>::sse_decode(deserializer);
+        return flutter_rust_bridge::for_generated::rust_auto_opaque_decode_owned(inner);
+    }
+}
+
+impl SseDecode for SignedOpBlob {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <RustOpaqueMoi<
+            flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>,
         >>::sse_decode(deserializer);
         return flutter_rust_bridge::for_generated::rust_auto_opaque_decode_owned(inner);
     }
@@ -19315,6 +20799,16 @@ impl SseDecode
 
 impl SseDecode
     for RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SdkHandle>>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <usize>::sse_decode(deserializer);
+        return decode_rust_opaque_moi(inner);
+    }
+}
+
+impl SseDecode
+    for RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -20468,6 +21962,20 @@ impl SseDecode for i64 {
     }
 }
 
+impl SseDecode for scaas_sdk::op::ImportExpect {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_chain = <String>::sse_decode(deserializer);
+        let mut var_payee = <Vec<String>>::sse_decode(deserializer);
+        let mut var_payer = <scaas_sdk::op::KeyRef>::sse_decode(deserializer);
+        return scaas_sdk::op::ImportExpect {
+            chain: var_chain,
+            payee: var_payee,
+            payer: var_payer,
+        };
+    }
+}
+
 impl SseDecode for scaas_sdk::vault::seeds::ImportKey {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -20638,6 +22146,10 @@ impl SseDecode for scaas_sdk::op::KeyRef {
                     index: var_index,
                     key_data: var_keyData,
                 };
+            }
+            6 => {
+                let mut var_signer = <String>::sse_decode(deserializer);
+                return scaas_sdk::op::KeyRef::Signed { signer: var_signer };
             }
             _ => {
                 unimplemented!("");
@@ -26040,310 +27552,318 @@ fn pde_ffi_dispatcher_primary_impl(
         172 => {
             wire__scaas_sdk__op__Op_bls_multi_pop_part_ok_impl(port, ptr, rust_vec_len, data_len)
         }
-        173 => wire__scaas_sdk__op__Op_member_sign_impl(port, ptr, rust_vec_len, data_len),
-        174 => wire__scaas_sdk__op__Op_quote_impl(port, ptr, rust_vec_len, data_len),
-        175 => {
+        173 => wire__scaas_sdk__op__Op_hand_off_impl(port, ptr, rust_vec_len, data_len),
+        174 => wire__scaas_sdk__op__Op_import_signed_impl(port, ptr, rust_vec_len, data_len),
+        175 => wire__scaas_sdk__op__Op_member_sign_impl(port, ptr, rust_vec_len, data_len),
+        176 => wire__scaas_sdk__op__Op_quote_impl(port, ptr, rust_vec_len, data_len),
+        177 => {
             wire__scaas_sdk__op__Op_quote_register_bls_multi_impl(port, ptr, rust_vec_len, data_len)
         }
-        176 => wire__scaas_sdk__op__Op_quote_with_gas_impl(port, ptr, rust_vec_len, data_len),
-        177 => wire__scaas_sdk__op__Op_register_bls_multi_impl(port, ptr, rust_vec_len, data_len),
-        178 => wire__scaas_sdk__op__Op_resend_impl(port, ptr, rust_vec_len, data_len),
-        179 => wire__scaas_sdk__op__Op_resume_impl(port, ptr, rust_vec_len, data_len),
-        180 => wire__scaas_sdk__op__Op_state_impl(port, ptr, rust_vec_len, data_len),
-        181 => wire__scaas_sdk__op__Op_submit_impl(port, ptr, rust_vec_len, data_len),
-        182 => wire__scaas_sdk__op__Op_submit_bls_multi_impl(port, ptr, rust_vec_len, data_len),
-        199 => wire__crate__api__SdkHandle_state_rev_impl(port, ptr, rust_vec_len, data_len),
-        203 => wire__crate__api__SdkHandle_watch_impl(port, ptr, rust_vec_len, data_len),
-        204 => wire__scaas_sdk__vault__seeds__Vault_change_passphrase_impl(
+        178 => wire__scaas_sdk__op__Op_quote_with_gas_impl(port, ptr, rust_vec_len, data_len),
+        179 => wire__scaas_sdk__op__Op_register_bls_multi_impl(port, ptr, rust_vec_len, data_len),
+        180 => wire__scaas_sdk__op__Op_resend_impl(port, ptr, rust_vec_len, data_len),
+        181 => wire__scaas_sdk__op__Op_resume_impl(port, ptr, rust_vec_len, data_len),
+        182 => wire__scaas_sdk__op__Op_state_impl(port, ptr, rust_vec_len, data_len),
+        183 => wire__scaas_sdk__op__Op_submit_impl(port, ptr, rust_vec_len, data_len),
+        184 => wire__scaas_sdk__op__Op_submit_bls_multi_impl(port, ptr, rust_vec_len, data_len),
+        201 => wire__crate__api__SdkHandle_state_rev_impl(port, ptr, rust_vec_len, data_len),
+        205 => wire__crate__api__SdkHandle_watch_impl(port, ptr, rust_vec_len, data_len),
+        232 => {
+            wire__scaas_sdk__wallet__SignedOpBlob_from_json_impl(port, ptr, rust_vec_len, data_len)
+        }
+        233 => {
+            wire__scaas_sdk__wallet__SignedOpBlob_to_json_impl(port, ptr, rust_vec_len, data_len)
+        }
+        234 => wire__scaas_sdk__vault__seeds__Vault_change_passphrase_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        205 => wire__scaas_sdk__vault__seeds__Vault_confirm_backup_impl(
+        235 => wire__scaas_sdk__vault__seeds__Vault_confirm_backup_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        206 => wire__scaas_sdk__vault__seeds__Vault_derive_child_impl(
+        236 => wire__scaas_sdk__vault__seeds__Vault_derive_child_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        207 => wire__scaas_sdk__vault__seeds__Vault_derive_from_key_impl(
+        237 => wire__scaas_sdk__vault__seeds__Vault_derive_from_key_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        208 => wire__scaas_sdk__vault__seeds__Vault_derive_from_signature_impl(
+        238 => wire__scaas_sdk__vault__seeds__Vault_derive_from_signature_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        209 => wire__scaas_sdk__vault__seeds__Vault_disable_prf_unlock_impl(
+        239 => wire__scaas_sdk__vault__seeds__Vault_disable_prf_unlock_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        210 => wire__scaas_sdk__vault__seeds__Vault_enable_passkey_unlock_impl(
+        240 => wire__scaas_sdk__vault__seeds__Vault_enable_passkey_unlock_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        211 => wire__scaas_sdk__vault__seeds__Vault_enable_platform_unlock_impl(
+        241 => wire__scaas_sdk__vault__seeds__Vault_enable_platform_unlock_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        212 => {
+        242 => {
             wire__scaas_sdk__vault__seeds__Vault_generate_impl(port, ptr, rust_vec_len, data_len)
         }
-        213 => {
+        243 => {
             wire__scaas_sdk__vault__seeds__Vault_import_key_impl(port, ptr, rust_vec_len, data_len)
         }
-        214 => wire__scaas_sdk__vault__seeds__Vault_import_words_impl(
+        244 => wire__scaas_sdk__vault__seeds__Vault_import_words_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        215 => wire__scaas_sdk__vault__seeds__Vault_key_derivation_typed_data_impl(
+        245 => wire__scaas_sdk__vault__seeds__Vault_key_derivation_typed_data_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        216 => wire__scaas_sdk__vault__seeds__Vault_keystore_rollback_impl(
+        246 => wire__scaas_sdk__vault__seeds__Vault_keystore_rollback_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        217 => wire__scaas_sdk__vault__seeds__Vault_lock_impl(port, ptr, rust_vec_len, data_len),
-        218 => {
+        247 => wire__scaas_sdk__vault__seeds__Vault_lock_impl(port, ptr, rust_vec_len, data_len),
+        248 => {
             wire__scaas_sdk__vault__seeds__Vault_lock_all_impl(port, ptr, rust_vec_len, data_len)
         }
-        219 => wire__scaas_sdk__vault__seeds__Vault_memory_protection_impl(
+        249 => wire__scaas_sdk__vault__seeds__Vault_memory_protection_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        220 => {
+        250 => {
             wire__scaas_sdk__vault__seeds__Vault_open_hidden_impl(port, ptr, rust_vec_len, data_len)
         }
-        221 => wire__scaas_sdk__vault__seeds__Vault_remove_impl(port, ptr, rust_vec_len, data_len),
-        222 => wire__scaas_sdk__vault__seeds__Vault_rename_impl(port, ptr, rust_vec_len, data_len),
-        223 => wire__scaas_sdk__vault__seeds__Vault_seed_impl(port, ptr, rust_vec_len, data_len),
-        224 => wire__scaas_sdk__vault__seeds__Vault_seeds_impl(port, ptr, rust_vec_len, data_len),
-        225 => wire__scaas_sdk__vault__seeds__Vault_signature_from_compact_impl(
+        251 => wire__scaas_sdk__vault__seeds__Vault_remove_impl(port, ptr, rust_vec_len, data_len),
+        252 => wire__scaas_sdk__vault__seeds__Vault_rename_impl(port, ptr, rust_vec_len, data_len),
+        253 => wire__scaas_sdk__vault__seeds__Vault_seed_impl(port, ptr, rust_vec_len, data_len),
+        254 => wire__scaas_sdk__vault__seeds__Vault_seeds_impl(port, ptr, rust_vec_len, data_len),
+        255 => wire__scaas_sdk__vault__seeds__Vault_signature_from_compact_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        226 => wire__scaas_sdk__vault__seeds__Vault_unlock_impl(port, ptr, rust_vec_len, data_len),
-        227 => wire__scaas_sdk__vault__seeds__Vault_word_in_list_impl(
+        256 => wire__scaas_sdk__vault__seeds__Vault_unlock_impl(port, ptr, rust_vec_len, data_len),
+        257 => wire__scaas_sdk__vault__seeds__Vault_word_in_list_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        228 => wire__scaas_sdk__wallet__Wallet_balances_impl(port, ptr, rust_vec_len, data_len),
-        229 => wire__scaas_sdk__wallet__Wallet_history_impl(port, ptr, rust_vec_len, data_len),
-        230 => {
+        258 => wire__scaas_sdk__wallet__Wallet_balances_impl(port, ptr, rust_vec_len, data_len),
+        259 => wire__scaas_sdk__wallet__Wallet_history_impl(port, ptr, rust_vec_len, data_len),
+        260 => {
             wire__scaas_sdk__wallet__Wallet_native_address_impl(port, ptr, rust_vec_len, data_len)
         }
-        231 => wire__scaas_sdk__wallet__Wallet_prepare_add_reserve_impl(
+        261 => wire__scaas_sdk__wallet__Wallet_prepare_add_reserve_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        232 => wire__scaas_sdk__wallet__Wallet_prepare_burn_impl(port, ptr, rust_vec_len, data_len),
-        233 => wire__scaas_sdk__wallet__Wallet_prepare_cancel_nonce_impl(
+        262 => wire__scaas_sdk__wallet__Wallet_prepare_burn_impl(port, ptr, rust_vec_len, data_len),
+        263 => wire__scaas_sdk__wallet__Wallet_prepare_cancel_nonce_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        234 => wire__scaas_sdk__wallet__Wallet_prepare_delegate_revoke_impl(
+        264 => wire__scaas_sdk__wallet__Wallet_prepare_delegate_revoke_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        235 => {
+        265 => {
             wire__scaas_sdk__wallet__Wallet_prepare_execute_impl(port, ptr, rust_vec_len, data_len)
         }
-        236 => wire__scaas_sdk__wallet__Wallet_prepare_native_send_impl(
+        266 => wire__scaas_sdk__wallet__Wallet_prepare_native_send_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        237 => wire__scaas_sdk__wallet__Wallet_prepare_pay_impl(port, ptr, rust_vec_len, data_len),
-        238 => wire__scaas_sdk__wallet__Wallet_prepare_pay_under_mandate_impl(
+        267 => wire__scaas_sdk__wallet__Wallet_prepare_pay_impl(port, ptr, rust_vec_len, data_len),
+        268 => wire__scaas_sdk__wallet__Wallet_prepare_pay_under_mandate_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        239 => wire__scaas_sdk__wallet__Wallet_prepare_pay_with_tax_impl(
+        269 => wire__scaas_sdk__wallet__Wallet_prepare_pay_with_tax_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        240 => wire__scaas_sdk__wallet__Wallet_prepare_payee_fee_impl(
+        270 => wire__scaas_sdk__wallet__Wallet_prepare_payee_fee_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        241 => wire__scaas_sdk__wallet__Wallet_prepare_relay_fee_impl(
+        271 => wire__scaas_sdk__wallet__Wallet_prepare_relay_fee_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        242 => wire__scaas_sdk__wallet__Wallet_prepare_revoke_mandate_impl(
+        272 => wire__scaas_sdk__wallet__Wallet_prepare_revoke_mandate_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        243 => wire__scaas_sdk__wallet__Wallet_prepare_set_mandate_impl(
+        273 => wire__scaas_sdk__wallet__Wallet_prepare_set_mandate_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        244 => wire__scaas_sdk__wallet__Wallet_prepare_set_payee_impl(
+        274 => wire__scaas_sdk__wallet__Wallet_prepare_set_payee_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        245 => {
+        275 => {
             wire__scaas_sdk__wallet__Wallet_prepare_transfer_impl(port, ptr, rust_vec_len, data_len)
         }
-        246 => {
+        276 => {
             wire__scaas_sdk__wallet__Wallet_prepare_unwrap_impl(port, ptr, rust_vec_len, data_len)
         }
-        247 => wire__scaas_sdk__wallet__Wallet_prepare_unwrap_leg_impl(
+        277 => wire__scaas_sdk__wallet__Wallet_prepare_unwrap_leg_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        248 => wire__scaas_sdk__wallet__Wallet_prepare_unwrap_to_ua_impl(
+        278 => wire__scaas_sdk__wallet__Wallet_prepare_unwrap_to_ua_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        249 => wire__scaas_sdk__wallet__Wallet_prepare_wrap_impl(port, ptr, rust_vec_len, data_len),
-        250 => {
+        279 => wire__scaas_sdk__wallet__Wallet_prepare_wrap_impl(port, ptr, rust_vec_len, data_len),
+        280 => {
             wire__scaas_sdk__wallet__Wallet_prepare_wrap_leg_impl(port, ptr, rust_vec_len, data_len)
         }
-        251 => wire__scaas_sdk__wallet__Wallet_prepare_wrap_to_ua_impl(
+        281 => wire__scaas_sdk__wallet__Wallet_prepare_wrap_to_ua_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        252 => wire__scaas_sdk__wallet__Wallet_submit_native_send_impl(
+        282 => wire__scaas_sdk__wallet__Wallet_submit_native_send_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        253 => wire__scaas_sdk__wallet__Wallet_tokens_impl(port, ptr, rust_vec_len, data_len),
-        254 => {
+        283 => wire__scaas_sdk__wallet__Wallet_tokens_impl(port, ptr, rust_vec_len, data_len),
+        284 => {
             wire__scaas_sdk__vault__keystore__accounts_json_impl(port, ptr, rust_vec_len, data_len)
         }
-        263 => wire__crate__api__events_next_impl(port, ptr, rust_vec_len, data_len),
-        265 => wire__scaas_sdk__config__gas_line_default_impl(port, ptr, rust_vec_len, data_len),
-        266 => wire__scaas_sdk__config__gas_rows_default_impl(port, ptr, rust_vec_len, data_len),
-        267 => wire__scaas_sdk__config__gas_table_parse_impl(port, ptr, rust_vec_len, data_len),
-        268 => wire__scaas_sdk__vault__keystore__is_uuid4_impl(port, ptr, rust_vec_len, data_len),
-        271 => wire__scaas_sdk__vault__keystore__label_ok_impl(port, ptr, rust_vec_len, data_len),
-        272 => wire__scaas_sdk__config__limits_default_impl(port, ptr, rust_vec_len, data_len),
-        274 => {
+        293 => wire__crate__api__events_next_impl(port, ptr, rust_vec_len, data_len),
+        295 => wire__scaas_sdk__config__gas_line_default_impl(port, ptr, rust_vec_len, data_len),
+        296 => wire__scaas_sdk__config__gas_rows_default_impl(port, ptr, rust_vec_len, data_len),
+        297 => wire__scaas_sdk__config__gas_table_parse_impl(port, ptr, rust_vec_len, data_len),
+        298 => wire__scaas_sdk__vault__keystore__is_uuid4_impl(port, ptr, rust_vec_len, data_len),
+        301 => wire__scaas_sdk__vault__keystore__label_ok_impl(port, ptr, rust_vec_len, data_len),
+        302 => wire__scaas_sdk__config__limits_default_impl(port, ptr, rust_vec_len, data_len),
+        304 => {
             wire__scaas_sdk__account__msig__msig_structure_impl(port, ptr, rust_vec_len, data_len)
         }
-        275 => wire__scaas_sdk__account__msig__msig_structure_args_default_impl(
+        305 => wire__scaas_sdk__account__msig__msig_structure_args_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        276 => wire__scaas_sdk__account__msig__msig_structure_args_ua_impl(
+        306 => wire__scaas_sdk__account__msig__msig_structure_args_ua_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        277 => {
+        307 => {
             wire__scaas_sdk__vault__keystore__new_label_ok_impl(port, ptr, rust_vec_len, data_len)
         }
-        278 => {
+        308 => {
             wire__scaas_sdk__events__op_state_is_terminal_impl(port, ptr, rust_vec_len, data_len)
         }
-        282 => {
+        312 => {
             wire__scaas_sdk__vault__store__presence_default_impl(port, ptr, rust_vec_len, data_len)
         }
-        283 => {
+        313 => {
             wire__scaas_sdk__account__register_attrs_default_impl(port, ptr, rust_vec_len, data_len)
         }
-        284 => wire__scaas_sdk__account__registration_blob_from_json_impl(
+        314 => wire__scaas_sdk__account__registration_blob_from_json_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        285 => wire__scaas_sdk__account__registration_blob_to_json_impl(
+        315 => wire__scaas_sdk__account__registration_blob_to_json_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        286 => wire__scaas_sdk__account__registration_state_default_impl(
+        316 => wire__scaas_sdk__account__registration_state_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        288 => wire__scaas_sdk__vault__store__rev_of_impl(port, ptr, rust_vec_len, data_len),
-        289 => wire__crate__api__sdk_open_impl(port, ptr, rust_vec_len, data_len),
-        293 => wire__scaas_sdk__account__smart__smart_account_address_impl(
+        318 => wire__scaas_sdk__vault__store__rev_of_impl(port, ptr, rust_vec_len, data_len),
+        319 => wire__crate__api__sdk_open_impl(port, ptr, rust_vec_len, data_len),
+        323 => wire__scaas_sdk__account__smart__smart_account_address_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        294 => wire__scaas_sdk__vault__store__store_policy_default_impl(
+        324 => wire__scaas_sdk__vault__store__store_policy_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        295 => wire__scaas_sdk__account__smart__subject_key_args_secp256k1_impl(
+        325 => wire__scaas_sdk__account__smart__subject_key_args_secp256k1_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        296 => wire__scaas_sdk__line__ua_line_key_target_impl(port, ptr, rust_vec_len, data_len),
-        297 => wire__scaas_sdk__line__ua_line_pqz_target_impl(port, ptr, rust_vec_len, data_len),
+        326 => wire__scaas_sdk__line__ua_line_key_target_impl(port, ptr, rust_vec_len, data_len),
+        327 => wire__scaas_sdk__line__ua_line_pqz_target_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -26490,84 +28010,214 @@ fn pde_ffi_dispatcher_sync_impl(
             rust_vec_len,
             data_len,
         ),
-        183 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_chain_impl(
+        185 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_chain_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        184 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_op_impl(
+        186 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_op_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        185 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_proof_impl(
+        187 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_proof_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        186 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_statement_impl(
+        188 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_statement_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        187 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_token_impl(
+        189 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_get_token_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        188 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_chain_impl(
+        190 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_chain_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        189 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_op_impl(
+        191 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_op_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        190 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_proof_impl(
+        192 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_proof_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        191 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_statement_impl(
+        193 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_statement_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        192 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_token_impl(
+        194 => wire__scaas_sdk__confidential__PqzVerdictRequest_auto_accessor_set_token_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        193 => wire__crate__api__SdkHandle_account_impl(ptr, rust_vec_len, data_len),
-        194 => wire__crate__api__SdkHandle_admin_impl(ptr, rust_vec_len, data_len),
-        195 => wire__crate__api__SdkHandle_confidential_impl(ptr, rust_vec_len, data_len),
-        196 => wire__crate__api__SdkHandle_dex_impl(ptr, rust_vec_len, data_len),
-        197 => wire__crate__api__SdkHandle_limits_impl(ptr, rust_vec_len, data_len),
-        198 => wire__crate__api__SdkHandle_op_impl(ptr, rust_vec_len, data_len),
-        200 => wire__crate__api__SdkHandle_subscribe_impl(ptr, rust_vec_len, data_len),
-        201 => wire__crate__api__SdkHandle_vault_impl(ptr, rust_vec_len, data_len),
-        202 => wire__crate__api__SdkHandle_wallet_impl(ptr, rust_vec_len, data_len),
-        255 => wire__crate__api__api_version_impl(ptr, rust_vec_len, data_len),
-        256 => wire__crate__api__backup_challenge_impl(ptr, rust_vec_len, data_len),
-        257 => wire__crate__api__backup_reveal_impl(ptr, rust_vec_len, data_len),
-        258 => wire__crate__api__backup_verify_impl(ptr, rust_vec_len, data_len),
-        259 => wire__crate__api__endpoint_auth_bearer_impl(ptr, rust_vec_len, data_len),
-        260 => wire__crate__api__endpoint_auth_header_impl(ptr, rust_vec_len, data_len),
-        261 => wire__crate__api__endpoint_auth_hmac_impl(ptr, rust_vec_len, data_len),
-        262 => wire__crate__api__error_code_impl(ptr, rust_vec_len, data_len),
-        264 => wire__crate__api__features_impl(ptr, rust_vec_len, data_len),
-        269 => wire__crate__api__json_parse_impl(ptr, rust_vec_len, data_len),
-        270 => wire__crate__api__json_text_impl(ptr, rust_vec_len, data_len),
-        273 => wire__crate__api__limits_default_impl(ptr, rust_vec_len, data_len),
-        279 => wire__crate__api__pqz_verdict_request_impl(ptr, rust_vec_len, data_len),
-        280 => wire__crate__api__prepared_order_view_impl(ptr, rust_vec_len, data_len),
-        281 => wire__crate__api__prepared_view_impl(ptr, rust_vec_len, data_len),
-        287 => wire__crate__api__registry_write_view_impl(ptr, rust_vec_len, data_len),
-        290 => wire__crate__api__secret_id_impl(ptr, rust_vec_len, data_len),
-        291 => wire__crate__api__secret_len_impl(ptr, rust_vec_len, data_len),
-        292 => wire__crate__api__secret_new_impl(ptr, rust_vec_len, data_len),
+        195 => wire__crate__api__SdkHandle_account_impl(ptr, rust_vec_len, data_len),
+        196 => wire__crate__api__SdkHandle_admin_impl(ptr, rust_vec_len, data_len),
+        197 => wire__crate__api__SdkHandle_confidential_impl(ptr, rust_vec_len, data_len),
+        198 => wire__crate__api__SdkHandle_dex_impl(ptr, rust_vec_len, data_len),
+        199 => wire__crate__api__SdkHandle_limits_impl(ptr, rust_vec_len, data_len),
+        200 => wire__crate__api__SdkHandle_op_impl(ptr, rust_vec_len, data_len),
+        202 => wire__crate__api__SdkHandle_subscribe_impl(ptr, rust_vec_len, data_len),
+        203 => wire__crate__api__SdkHandle_vault_impl(ptr, rust_vec_len, data_len),
+        204 => wire__crate__api__SdkHandle_wallet_impl(ptr, rust_vec_len, data_len),
+        206 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_chain_uid_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        207 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_contract_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        208 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_entry_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        209 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_extra_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        210 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_family_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        211 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_ids_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        212 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_kind_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        213 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_message_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        214 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_name_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        215 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signature_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        216 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signer_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        217 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_signer_kind_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        218 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_get_v_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        219 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_chain_uid_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        220 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_contract_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        221 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_entry_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        222 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_extra_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        223 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_family_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        224 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_ids_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        225 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_kind_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        226 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_message_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        227 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_name_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        228 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signature_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        229 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signer_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        230 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_signer_kind_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        231 => wire__scaas_sdk__wallet__SignedOpBlob_auto_accessor_set_v_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        285 => wire__crate__api__api_version_impl(ptr, rust_vec_len, data_len),
+        286 => wire__crate__api__backup_challenge_impl(ptr, rust_vec_len, data_len),
+        287 => wire__crate__api__backup_reveal_impl(ptr, rust_vec_len, data_len),
+        288 => wire__crate__api__backup_verify_impl(ptr, rust_vec_len, data_len),
+        289 => wire__crate__api__endpoint_auth_bearer_impl(ptr, rust_vec_len, data_len),
+        290 => wire__crate__api__endpoint_auth_header_impl(ptr, rust_vec_len, data_len),
+        291 => wire__crate__api__endpoint_auth_hmac_impl(ptr, rust_vec_len, data_len),
+        292 => wire__crate__api__error_code_impl(ptr, rust_vec_len, data_len),
+        294 => wire__crate__api__features_impl(ptr, rust_vec_len, data_len),
+        299 => wire__crate__api__json_parse_impl(ptr, rust_vec_len, data_len),
+        300 => wire__crate__api__json_text_impl(ptr, rust_vec_len, data_len),
+        303 => wire__crate__api__limits_default_impl(ptr, rust_vec_len, data_len),
+        309 => wire__crate__api__pqz_verdict_request_impl(ptr, rust_vec_len, data_len),
+        310 => wire__crate__api__prepared_order_view_impl(ptr, rust_vec_len, data_len),
+        311 => wire__crate__api__prepared_view_impl(ptr, rust_vec_len, data_len),
+        317 => wire__crate__api__registry_write_view_impl(ptr, rust_vec_len, data_len),
+        320 => wire__crate__api__secret_id_impl(ptr, rust_vec_len, data_len),
+        321 => wire__crate__api__secret_len_impl(ptr, rust_vec_len, data_len),
+        322 => wire__crate__api__secret_new_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -26849,6 +28499,21 @@ impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for FrbWrapper<
 
 impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<SdkHandle>> for SdkHandle {
     fn into_into_dart(self) -> FrbWrapper<SdkHandle> {
+        self.into()
+    }
+}
+
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<SignedOpBlob> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        flutter_rust_bridge::for_generated::rust_auto_opaque_encode::<_, MoiArc<_>>(self.0)
+            .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for FrbWrapper<SignedOpBlob> {}
+
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<SignedOpBlob>> for SignedOpBlob {
+    fn into_into_dart(self) -> FrbWrapper<SignedOpBlob> {
         self.into()
     }
 }
@@ -28290,6 +29955,28 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::admin::delay::Holde
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::op::ImportExpect> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.chain.into_into_dart().into_dart(),
+            self.0.payee.into_into_dart().into_dart(),
+            self.0.payer.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<scaas_sdk::op::ImportExpect>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::op::ImportExpect>>
+    for scaas_sdk::op::ImportExpect
+{
+    fn into_into_dart(self) -> FrbWrapper<scaas_sdk::op::ImportExpect> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::vault::seeds::ImportKey> {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -28514,6 +30201,9 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::op::KeyRef> {
                 key_data.into_into_dart().into_dart(),
             ]
             .into_dart(),
+            scaas_sdk::op::KeyRef::Signed { signer } => {
+                [6.into_dart(), signer.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -33264,6 +34954,13 @@ impl SseEncode for SdkHandle {
     }
 }
 
+impl SseEncode for SignedOpBlob {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>>>::sse_encode(flutter_rust_bridge::for_generated::rust_auto_opaque_encode::<_, MoiArc<_>>(self), serializer);
+    }
+}
+
 impl SseEncode for Vault {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -33480,6 +35177,17 @@ impl SseEncode
 
 impl SseEncode
     for RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SdkHandle>>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        let (ptr, size) = self.sse_encode_raw();
+        <usize>::sse_encode(ptr, serializer);
+        <i32>::sse_encode(size, serializer);
+    }
+}
+
+impl SseEncode
+    for RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -34357,6 +36065,15 @@ impl SseEncode for i64 {
     }
 }
 
+impl SseEncode for scaas_sdk::op::ImportExpect {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.chain, serializer);
+        <Vec<String>>::sse_encode(self.payee, serializer);
+        <scaas_sdk::op::KeyRef>::sse_encode(self.payer, serializer);
+    }
+}
+
 impl SseEncode for scaas_sdk::vault::seeds::ImportKey {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -34499,6 +36216,10 @@ impl SseEncode for scaas_sdk::op::KeyRef {
                 <u32>::sse_encode(account, serializer);
                 <u32>::sse_encode(index, serializer);
                 <String>::sse_encode(key_data, serializer);
+            }
+            scaas_sdk::op::KeyRef::Signed { signer } => {
+                <i32>::sse_encode(6, serializer);
+                <String>::sse_encode(signer, serializer);
             }
             _ => {
                 unimplemented!("");
@@ -37871,6 +39592,20 @@ mod io {
     }
 
     #[unsafe(no_mangle)]
+    pub extern "C" fn frbgen_scaas_sdk_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>>::increment_strong_count(ptr as _);
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn frbgen_scaas_sdk_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>>::decrement_strong_count(ptr as _);
+    }
+
+    #[unsafe(no_mangle)]
     pub extern "C" fn frbgen_scaas_sdk_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
         ptr: *const std::ffi::c_void,
     ) {
@@ -38199,6 +39934,20 @@ mod web {
         ptr: *const std::ffi::c_void,
     ) {
         MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SdkHandle>>::decrement_strong_count(ptr as _);
+    }
+
+    #[wasm_bindgen]
+    pub fn rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>>::increment_strong_count(ptr as _);
+    }
+
+    #[wasm_bindgen]
+    pub fn rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SignedOpBlob>>::decrement_strong_count(ptr as _);
     }
 
     #[wasm_bindgen]

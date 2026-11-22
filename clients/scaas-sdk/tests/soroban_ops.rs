@@ -18,8 +18,8 @@ mod fake_http;
 use fake_http::serve;
 use scaas_sdk::vault::{ImportWords, MemoryStore};
 use scaas_sdk::wallet::{
-    ImportExpect, NativeKeyRef, SignedOpBlob, SorobanNativeSend, SorobanOpKind, SorobanOpRequest,
-    SorobanPath, Wallet,
+    NativeKeyRef, SignedOpBlob, SorobanImportExpect, SorobanNativeSend, SorobanOpKind,
+    SorobanOpRequest, SorobanPath, Wallet,
 };
 use scaas_sdk::{
     ChainProfile, EndpointConfig, Family, FamilyParams, Finality, Limits, ListedToken, NativeCap,
@@ -553,17 +553,17 @@ async fn a_handed_off_pay_imports_with_each_check_and_lands() {
         "handed_off",
         "unspent: the signer's row waits"
     );
-    assert_eq!(blob.signature, pay_row()["signature"].as_str().unwrap());
-    let me = ImportExpect {
+    assert_eq!(blob.signature.as_str(), pay_row()["signature"].as_str());
+    let me = SorobanImportExpect {
         chain: CHAIN.into(),
         payee: vec![g(1)],
     };
-    let import = |b: SignedOpBlob, e: ImportExpect| {
+    let import = |b: SignedOpBlob, e: SorobanImportExpect| {
         let w = t.w.clone();
         async move { code(w.soroban_import(b, e).await) }
     };
     assert_eq!(import(blob.clone(), me.clone()).await, "Ok", "control");
-    let json = blob.to_json();
+    let json = blob.to_json().unwrap();
     assert_eq!(SignedOpBlob::from_json(&json).unwrap(), blob);
     // the bounds and the unknown field
     let mut v: Value = serde_json::from_str(&json).unwrap();
@@ -574,7 +574,7 @@ async fn a_handed_off_pay_imports_with_each_check_and_lands() {
         "no footprint from the blob"
     );
     let mut v: Value = serde_json::from_str(&json).unwrap();
-    v["op"]["invocation"]["sub_invocations"] = json!([[[[[[[[1]]]]]]]]);
+    v["message"]["invocation"]["sub_invocations"] = json!([[[[[[[[1]]]]]]]]);
     assert_eq!(
         code(SignedOpBlob::from_json(&v.to_string())),
         "Argument",
@@ -596,7 +596,7 @@ async fn a_handed_off_pay_imports_with_each_check_and_lands() {
     assert_eq!(import(b, me.clone()).await, "ProfileMismatch");
     let mut b = blob.clone();
     b.contract = fam()["sac"].as_str().unwrap().into();
-    b.op.invocation.contract = b.contract.clone();
+    b.message["invocation"]["contract"] = json!(b.contract);
     assert_eq!(
         import(b, me.clone()).await,
         "ProfileMismatch",
@@ -604,12 +604,12 @@ async fn a_handed_off_pay_imports_with_each_check_and_lands() {
     );
     let mut b = blob.clone();
     b.entry = "approve".into();
-    b.op.invocation.function = "approve".into();
+    b.message["invocation"]["function"] = json!("approve");
     assert_eq!(import(b, me.clone()).await, "ImportKindRefused");
     assert_eq!(
         import(
             blob.clone(),
-            ImportExpect {
+            SorobanImportExpect {
                 chain: CHAIN.into(),
                 payee: vec![g(2)]
             }
@@ -618,7 +618,7 @@ async fn a_handed_off_pay_imports_with_each_check_and_lands() {
         "ImportNotPayee"
     );
     let mut b = blob.clone();
-    b.op.expiry = (L + 119) as u32;
+    b.message["expiry"] = json!(L + 119);
     assert_eq!(import(b, me.clone()).await, "ImportExpired");
     t.clock.store(1_790_000_300 - 119, SeqCst);
     assert_eq!(
@@ -657,7 +657,7 @@ async fn a_pay_landed_by_another_first_is_consumed_for_the_payee() {
     let t = setup(Some("100000000"), scaas_rpc::Policy::Failover, None).await;
     let p = t.w.soroban_prepare(pay(&t)).await.unwrap();
     let blob = t.w.soroban_hand_off(p).await.unwrap().blob;
-    let me = ImportExpect {
+    let me = SorobanImportExpect {
         chain: CHAIN.into(),
         payee: vec![g(1)],
     };

@@ -773,7 +773,8 @@ fn confirm_class(sdk: &str) -> Option<&'static str> {
             "bls_multi_pop_part",
             "pqchat_seal_message",
             "prepare_app_call",
-            // SDK plan T41.soroban: the subject's op signed (submit, hand-off), the payer's native send signed
+            // SDK plan T41: the signer's hand-off (EVM, Soroban), the subject's op signed, the payer's native send signed
+            "hand_off",
             "soroban_submit",
             "soroban_hand_off",
             "soroban_submit_native_send",
@@ -1195,6 +1196,7 @@ fn every_signing_command_asks_first() {
                 "op bls-multi-part" => Run::Session(prepared(), json!(["op", "bls-multi-part", "--prepared", "p", "--member", sg])),
                 "op submit-bls-multi" => Run::Session(prepared(), json!(["op", "submit-bls-multi", "--prepared", "p", "--quote", "q", "--parts", "[]", "--surplus", "false"])),
                 "op bls-multi-pop-part" => Run::One(s(&["op", "bls-multi-pop-part", "--member", &sg])),
+                "op hand-off" => Run::Session(prepared(), json!(["op", "hand-off", "--prepared", "p"])),
                 "op register-bls-multi" => Run::Session(prepared(), json!(["op", "register-bls-multi", "--chain", "local", "--key-data", "0x00", "--parts", "[]", "--quote", "q"])),
                 "account submit-registry-write" => {
                     let mut l = prepared();

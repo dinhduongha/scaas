@@ -296,7 +296,10 @@ gate. `final` of a job never comes from the runner: it comes from the event feed
 chain entry (`[[chains]] max_inflight` in node.toml, column `chain.max_inflight`, [store.md](store.md#NODE-STO-03)), **default 16** (owner 2026-10-07). An execution client keeps at most
 `txpool.accountslots` (16 by default) pending transactions per sender, so the default follows that network ceiling; it
 is not a design constant — an operator raises it where the chain's nodes accept deeper per-sender pools and lowers it
-where they accept fewer. As built the runner does not cap it (PLANNED).
+where they accept fewer. BUILT for EVM lanes (chains-arweave T3): `[[chains]]
+max_inflight` (default 16, at least 1) caps the runner; at the cap a lane claims no job and takes no gateway work until a
+receipt frees a slot (`submit::tests::a_lane_keeps_at_most_max_inflight_in_flight`). Generic lanes keep one in flight. The
+store column `chain.max_inflight` stays PLANNED.
 
 ## <a id="simulation"></a>6. Simulation
 
@@ -434,6 +437,7 @@ never indexing, tracking or replacing signed transactions, rescues or gap-filler
 | `base_fee_spike` (EVM) | current `baseFeePerGas` > `spike_ratio` × 1 h trailing mean, with ≥ 4 samples and fee > `spike_min_base_fee_gwei`; reopens when back below | ratio 3.0 (0 disables), min 1 gwei |
 | `gas_budget` | gas spent in the fixed hour window ≥ `gas_budget_per_hour` (smallest gas-coin unit, per lane × chain); metered per [NODE-LANE-13](#NODE-LANE-13) | warn (log + metric) at 90 %; stop new work until the window ends at 100 %; Soroban `call` jobs and a plain `signed_op` that is no token payment stop at `call_budget_pct`, default 50 %, everything else runs on ([NET-SOR-14](../networks/soroban.md#NET-SOR-14)) |
 | `balance_floor` | balance of the account that pays the lane's fee < `min_relayer_balance` ⇒ that lane takes no new job | warn below 120 % of the floor |
+| in-flight cost alert (EVM) | balance < Σ of the lane's in-flight gas limit × max fee per gas + value (lane transactions carry none): an EVM pool accepts a transaction only while the balance covers that ([NET-EVM-16](../networks/evm.md#NET-EVM-16)) | warn only, at each sample; BUILT (chains-arweave T3) |
 | structural | simulated gas (regular + state) > `max_gas_per_tx` or > the block gas limit ⇒ job `dead` ([Amsterdam gas](#amsterdam-gas)) | 3 000 000 (classical Zether chains ≥ 4 500 000, multi-recipient Zether ≥ 40 000 000; SCaaS testnet 64 000 000; [NODE-STO-10](store.md#NODE-STO-10)) |
 | `revert_streak` (chain) | ≥ 3 post-simulation reverts of class `other` in 15 min | [NODE-OPS-06](ops.md#NODE-OPS-06), latched |
 

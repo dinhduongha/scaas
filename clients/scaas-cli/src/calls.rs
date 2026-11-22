@@ -11,7 +11,9 @@ use scaas_sdk::app_core::*;
 use scaas_sdk::confidential::*;
 use scaas_sdk::dex::*;
 use scaas_sdk::events::Subscription;
-use scaas_sdk::op::{BlsMultiPart, KeyRef, OpState, Prepared, SubmitPath, SubmitQuote};
+use scaas_sdk::op::{
+    BlsMultiPart, ImportExpect, KeyRef, OpState, Prepared, SubmitPath, SubmitQuote,
+};
 use scaas_sdk::pqchat_keys::*;
 use scaas_sdk::pqchat_records::*;
 use scaas_sdk::vault::{
@@ -359,6 +361,12 @@ calls! { cx;
     "op quote-with-gas" "Op::quote_with_gas" {prepared: H<Arc<Prepared>>, path: SubmitPath, gas: u64} => { let q = sdk(cx).op().quote_with_gas(prepared.0, path, gas).await?; let v = serde_json::to_value(&q).unwrap_or(Value::Null); handle(q, v) };
     "op submit" "Op::submit" {prepared: H<Arc<Prepared>>, quote: H<SubmitQuote>} @sign => { cx.confirm_op(&prepared.0, &quote.0)?; { let op = sdk(cx).op().submit(prepared.0, quote.0).await?; cx.sent(op).await } };
     "op resume" "Op::resume" {} => named("resumed", sdk(cx).op().resume().await?);
+    // the hand-off (spec §27.5 (c), plan T41.evm): the signer signs and hands the blob off; the payee imports it as a prepared op
+    "op hand-off" "Op::hand_off" {prepared: H<Arc<Prepared>>} @sign => {
+        cx.confirm(json!({"review": review(&prepared.0.review()), "op": prepared.0.id(), "sign": "a hand-off"}))?;
+        js(sdk(cx).op().hand_off(prepared.0).await?)
+    };
+    "op import-signed" "Op::import_signed" {blob: SignedOpBlob, expect: ImportExpect} => { let p = sdk(cx).op().import_signed(blob, expect).await?; let v = json!({"id": p.id(), "review": review(&p.review())}); handle(p, v) };
     "op resend" "Op::resend" {op: String, quote: H<SubmitQuote>} @sign => { cx.confirm(json!({"resend": op, "quote": quote.0}))?; sdk(cx).op().resend(op.clone(), quote.0).await?; cx.sent(op).await };
     "op member-sign" "Op::member_sign" {prepared: H<Arc<Prepared>>} @sign => {
         cx.confirm(json!({"review": review(&prepared.0.review()), "op": prepared.0.id(), "sign": "as an msig member"}))?;
@@ -403,13 +411,13 @@ calls! { cx;
     "wallet soroban-quote" "Wallet::soroban_quote" {prepared: SorobanPrepared, path: SorobanPath} => js(sdk(cx).wallet().soroban_quote(prepared, path).await?);
     "wallet soroban-submit" "Wallet::soroban_submit" {prepared: SorobanPrepared, quote: SorobanQuote} @sign => { cx.confirm(json!({"prepared": prepared, "quote": quote}))?; named("op", sdk(cx).wallet().soroban_submit(prepared, quote).await?) };
     "wallet soroban-hand-off" "Wallet::soroban_hand_off" (p: SorobanPrepared) @sign => { cx.confirm(json!({"hand_off": p}))?; js(sdk(cx).wallet().soroban_hand_off(p).await?) };
-    "wallet soroban-import" "Wallet::soroban_import" {blob: SignedOpBlob, expect: ImportExpect} => js(sdk(cx).wallet().soroban_import(blob, expect).await?);
+    "wallet soroban-import" "Wallet::soroban_import" {blob: SignedOpBlob, expect: SorobanImportExpect} => js(sdk(cx).wallet().soroban_import(blob, expect).await?);
     "wallet soroban-resend" "Wallet::soroban_resend" {op: String} => js(sdk(cx).wallet().soroban_resend(op).await?);
     "wallet soroban-follow" "Wallet::soroban_follow" {op: String} => named("state", sdk(cx).wallet().soroban_follow(op).await?);
     "wallet soroban-prepare-native-send" "Wallet::soroban_prepare_native_send" (r: SorobanNativeSend) => js(sdk(cx).wallet().soroban_prepare_native_send(r).await?);
     "wallet soroban-submit-native-send" "Wallet::soroban_submit_native_send" (q: SorobanNativeQuote) @sign => { cx.confirm(json!({"quote": q}))?; named("op", sdk(cx).wallet().soroban_submit_native_send(q).await?) };
     "signed-op-blob from-json" "SignedOpBlob::from_json" {text: String} => js(SignedOpBlob::from_json(&text)?);
-    "signed-op-blob to-json" "SignedOpBlob::to_json" (b: SignedOpBlob) => named("json", b.to_json());
+    "signed-op-blob to-json" "SignedOpBlob::to_json" (b: SignedOpBlob) => named("json", b.to_json()?);
     "wallet prepare-transfer" "Wallet::prepare_transfer" (r: Transfer) @op => sdk(cx).wallet().prepare_transfer(r).await?;
     "wallet prepare-pay" "Wallet::prepare_pay" (r: Pay) @op => sdk(cx).wallet().prepare_pay(r).await?;
     "wallet prepare-pay-with-tax" "Wallet::prepare_pay_with_tax" (r: PayWithTax) @op => sdk(cx).wallet().prepare_pay_with_tax(r).await?;

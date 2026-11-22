@@ -1872,6 +1872,35 @@ ScaasUaStatus scaas_ua_export_pqz_leaf_raw_version(const ScaasUaWallet *w,
                                                    uint8_t *out32);
 
 /**
+ * The PQZ leaf seed32 of `account` / `index` / `version` (scaas_ua_wallet_pqz_key_version's) sealed in the wallet as a vault v2
+ * JSON of label `pqz:registry:<account>:<index>:<version>` under `vault_passphrase` (the new-passphrase policy:
+ * SCAAS_UA_ERR_ARGUMENT) and the wallet's vault id (CLI-SGN-55, clientkeys `sealPqKey`); a PRF envelope is added by
+ * `scaas_ua_vault_enable_prf`. Each call makes a new vault (a size query too). SCAAS_UA_ERR_WALLET_LOCKED while locked.
+ */
+ScaasUaStatus scaas_ua_wallet_seal_pq_key(const ScaasUaWallet *w,
+                                          uint32_t account,
+                                          uint32_t index,
+                                          uint64_t version,
+                                          const char *vault_passphrase,
+                                          char *out_json,
+                                          size_t *out_len);
+
+/**
+ * The PQZ key of a leaf vault of `scaas_ua_wallet_seal_pq_key` (or clientkeys `sealPqKey`) into `*out`, with no wallet: the
+ * vault's label must be exactly that of `account` / `index` / `version` and its payload 32 bytes; the leaf goes into a store
+ * of its own, freed by scaas_ua_pqz_key_free (CLI-SGN-55, clientkeys `openPqKey`). Exactly one of `vault_passphrase` and
+ * `prf32` as `scaas_ua_wallet_unlock`. Every refusal of the vault is SCAAS_UA_ERR_VAULT_OPEN (a wrong unlock, another leaf,
+ * an altered or truncated JSON, another vault version or parameters; ARCH-POS-13).
+ */
+ScaasUaStatus scaas_ua_pqz_open_leaf(const char *vault_json,
+                                     const char *vault_passphrase,
+                                     const uint8_t *prf32,
+                                     uint32_t account,
+                                     uint32_t index,
+                                     uint64_t version,
+                                     ScaasUaPqzKey **out);
+
+/**
  * The k-of-n backup of the PQZ key `k`'s seed32 as the PQZ key of record `version` of the `msig` `msig_key_data` (its
  * CTR-UA-09 key data): share i + 1 sealed to `recipients[i]` (`n` of them, each a direct member's own single-key UA KEM key,
  * distinct; an ephemeral key or the `msig` itself is refused), signed by `sender` (a UA key of a kind that signs containers).

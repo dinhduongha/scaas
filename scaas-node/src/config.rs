@@ -369,6 +369,10 @@ pub struct ChainCfg {
     pub poll_ms: u64,
     #[serde(default = "default_stuck")]
     pub stuck_after_secs: u64,
+    /// NODE-LANE-24: the transactions one lane keeps in flight at most (default 16, an execution client's per-sender pool
+    /// slots; Avalanche's pool keeps 16 executable per account); a job beyond it stays queued. At least 1.
+    #[serde(default = "default_max_inflight")]
+    pub max_inflight: usize,
     #[serde(default = "default_max_gas")]
     pub max_gas_per_tx: u64,
     #[serde(default = "default_fee_cap")]
@@ -526,6 +530,7 @@ impl Default for ChainCfg {
             fee_recipient: None,
             poll_ms: default_poll(),
             stuck_after_secs: default_stuck(),
+            max_inflight: default_max_inflight(),
             max_gas_per_tx: default_max_gas(),
             max_fee_cap_gwei: default_fee_cap(),
             breaker: BreakerCfg::default(),
@@ -576,6 +581,9 @@ fn default_poll() -> u64 {
 }
 fn default_stuck() -> u64 {
     60
+}
+fn default_max_inflight() -> usize {
+    16
 }
 fn default_max_gas() -> u64 {
     3_000_000
@@ -743,6 +751,9 @@ impl Config {
             }
             if c.lanes.is_empty() {
                 bail!("chain {key}: at least one lane");
+            }
+            if c.max_inflight == 0 {
+                bail!("chain {key}: max_inflight is at least 1 (NODE-LANE-24)");
             }
             let raw = c.private_key.is_some() || !c.signer_key_env.is_empty();
             if raw && c.lanes.len() > 1 {
@@ -1598,6 +1609,12 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         c.validate().unwrap();
         assert!(c.modules.submit && c.modules.indexer && !c.modules.gateway);
         assert_eq!(c.chains[0].stuck_after_secs, 60);
+        // NODE-LANE-24: 16 in flight per lane unless set; 0 is refused
+        assert_eq!(c.chains[0].max_inflight, 16);
+        let mut z = c.clone();
+        z.chains[0].max_inflight = 0;
+        let e = z.validate().unwrap_err().to_string();
+        assert!(e.contains("max_inflight is at least 1"), "{e}");
     }
 
     /// Group 3f (spec §11.1): the top-level `[pqz_verifier]` reaches every chain at load (off and empty by default, no secret: URLs
