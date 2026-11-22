@@ -96,7 +96,6 @@ sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirt
 ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
-ua-clippy | 1233ed00d | 0 | -; tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 # T20 rest and the native auditor's PQZ consent (1233ed00d, c1a17c82f): the rows at 7f5e03caf "tree dirty" ran on the working
 # tree that became those two commits (the SDK, ffi, Dart and ua-rs files); ua-test ran before a clippy-only rewrite of one
@@ -176,11 +175,9 @@ rpc-clippy | cd3b6c03e | 0 | -
 gas-gen | 6e7e71142 | 0 | -
 ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
 ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
-ua-clippy | 7765d3e64 | 0 | -
 ua-test | 95badea99 | 0 | 608 passed, 0 failed, 3 ignored (61 binaries)
 gas-gen | 6e7e71142 | 0 | -
 ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
 ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
 # node-e2e rc=143 at 7f156ac72: 25 tests in parallel OOM-killed at the 6 GB cap (kernel oom-kill in capped's scope); the step runs 10 at a time since e80c39854, on the merged tree
@@ -244,10 +241,8 @@ sdk-noevm | 7daa8b2bc | 0 | 149 passed, 0 failed, 0 ignored (21 binaries)
 ck-test | 898fa1ebc | 0 | node: 568 pass, 0 fail, 4 skipped
 # T41.arweave's scaas-rpc and SDK parts (CA-T19, CA-T20): code 6f2eb3dbd, the shared ArweaveItem code 7daa8b2bc (error_codes_are_names was red at 6f2eb3dbd in sdk-test, sdk-noevm, sdk-min: fixed, rows above at 7daa8b2bc), the notC9 rows 291a864b2 (the survivor of t41arw2 killed); the rpc rows at 6f2eb3dbd are unchanged by the two later code commits (scaas-rpc untouched)
 rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
-mutants-check | 7992a33e7 | 0 | -
 ua-appcore | 7992a33e7 | 0 | 14 passed, 0 failed, 0 ignored (1 binaries)
 ua-test | 7992a33e7 | 0 | 622 passed, 0 failed, 3 ignored (63 binaries)
-ua-vectors | 7992a33e7 | 0 | 732 passed, 0 failed, 6 ignored (71 binaries)
 ua-verify-only | 7992a33e7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
 ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # PqVault's dedicated signing path (owner 2026-11-22, CLI-PQV-13) 4f64cf766, merged with origin/ua-rs-sign a97cce414 at
@@ -287,23 +282,13 @@ sdk-clippy-noevm | 028da021c | 0 | -
 # pqchat-core T8 (on pqchat-core-impl): the app core scope made again after an unlock (d6abf1f97, test app_core::scope_after_lock_and_unlock); sdk-clippy red at e5573b3d6 (type_complexity on that cache), its type named at f238113b8 (no behaviour change), sdk-clippy green there; sdk-test and sdk-vectors at e5573b3d6.
 ua-appcore | ea980befa | 0 | 15 passed, 0 failed, 0 ignored (1 binaries)
 ua-arweave | ea980befa | 0 | 32 passed, 0 failed, 0 ignored (6 binaries)
-ua-core | ea980befa | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
 ua-verify-only | ea980befa | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
-ua-clippy | ea980befa | 0 | -
-ua-vectors | ea980befa | 0 | 738 passed, 0 failed, 6 ignored (72 binaries)
 ua-test | ea980befa | 0 | 628 passed, 0 failed, 3 ignored (64 binaries)
 sdk-vectors | ea980befa | 0 | 19 passed, 0 failed, 0 ignored (2 binaries)
-sdk-arweave | ea980befa | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 sdk-clippy | ea980befa | 0 | -
 sdk-test | ea980befa | 0 | 438 passed, 0 failed, 17 ignored (41 binaries)
-cli | ea980befa | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
-bind-gen | ea980befa | 0 | -
-features | ea980befa | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 docs | ea980befa | 0 | -
-ua-clippy | 028da021c | 0 | -
 ua-arweave | 028da021c | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
-sdk-arweave | 028da021c | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
-features | eff2aa3e5 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 # the rows above at eff2aa3e5 (the merge of ua-rs-sign 3da595648, e33e863c9, and its regenerated bindings) and bind-js at
 # e2c2ede7c (its scan hardened; the only later code change): every bind-* step, bind-gen, sdk-uniffi, ffi, sdk-wasm,
 # sdk-clippy, sdk-test, features, docs, mutants-check green. sdk-deny rc 1: RUSTSEC-2026-0592 (url 2.5.8, Url::origin stack
@@ -321,7 +306,6 @@ sdk-clippy-default | 5eeed4adf | 0 | -
 sdk-clippy-min | 5eeed4adf | 0 | -
 sdk-min | 5eeed4adf | 0 | 74 passed, 0 failed, 0 ignored (16 binaries)
 sdk-noevm | 5eeed4adf | 0 | 157 passed, 0 failed, 1 ignored (23 binaries)
-sdk-arweave | 5eeed4adf | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 gas-gen | 7c637b66f | 0 | -
 # T39 / T25 (2026-11-22, branch sdk-round-end): every step's last row above is rc 0 (sdk-test 437 passed at 363151f8d, after
 # the 101 of 76bdb5865); bind-cpp has no row (clients/scaas-sdk/bindings/cpp does not exist yet: T20b-T20h on sdk-binding) and
@@ -329,7 +313,6 @@ gas-gen | 7c637b66f | 0 | -
 # (docs, node) fixed on ua-rs-sign at fe435934b. Local only: the Nethermind copy (PQZ debit green; e2e_bls_multi_64_on_a_node
 # red GasAboveTxCap, open: runs/2026-11-20-m20-nethermind-summary.txt), the Soroban e2e (sdk-soroban-e2e, green).
 # Mutants: 70 reruns, 70 killed (plan T39). origin/ua-rs-sign b0ee76349 (pqvault-core, url 2.5.9) merged before T25.
-features | 88e469e6b | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 sdk-deny | 4a96991f4 | 0 | -
 sdk-clippy-noevm | 4a96991f4 | 0 | -
 sdk-clippy-default | 4a96991f4 | 0 | -
@@ -362,20 +345,24 @@ sdk-soroban-e2e | 9f8c4570e | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 # soroban_ops 9, scaas-node families_vectors 5; clippy -D warnings of ua-rs (default), scaas-rpc (--all-features), scaas-sdk
 # (the full set with vectors, the non-EVM set); docs; format.sh --check rust js py sh after git add -N. Mutants t41sor 23 of
 # 23 killed at 9f8c4570e (the new one: a SourceAccount entry taken from another payer).
-sdk-arweave | 028da021c | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 sdk-clippy-noevm | 028da021c | 0 | -
 # pqchat-core T8 (on pqchat-core-impl): the app core scope made again after an unlock (d6abf1f97, test app_core::scope_after_lock_and_unlock); sdk-clippy red at e5573b3d6 (type_complexity on that cache), its type named at f238113b8 (no behaviour change), sdk-clippy green there; sdk-test and sdk-vectors at e5573b3d6.
 sdk-test | e5573b3d6 | 0 | 438 passed, 0 failed, 17 ignored (41 binaries)
 sdk-vectors | e5573b3d6 | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
-cli | e9682c492 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 sdk-clippy | e9682c492 | 0 | -
 # the rows above at e9682c492 (the merge of ua-rs-sign 70c2a3633): bind-gen no drift (pqchat-records is not a default
 # feature), cli 46 (the binding adapters skipped by its completeness test, d7910088b), sdk-clippy, mutants-check green;
 # pqchat-core `cargo check --tests` rc 0 (its three ChainProfile literals state pinned_reads).
 docs | 79994e9a5 | 0 | -
-mutants-check | 79994e9a5 | 0 | -
-bind-gen | 79994e9a5 | 0 | -
 # the rows above at 79994e9a5 (the bindings per language, decisions CLI-SDK-33 (102)): docs, mutants-check, bind-gen (each of
 # the eight generated parts checked through the list) green; ci_changes.py's self-tests and actionlint green; the controls:
 # an unknown name in the list refused by the generator and the runner (rc 2), go left out: gen.sh skips its part, the runner
 # skips bind-go and runs bind-python (7 ran, OK; tree dirty, no row).
+mutants-check | 3d96c45be | 0 | -
+bind-gen | 3d96c45be | 0 | -
+sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
+features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+cli | 3d96c45be | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+ua-clippy | 3d96c45be | 0 | -
+ua-vectors | 3d96c45be | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
+ua-core | 3d96c45be | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)

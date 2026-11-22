@@ -42,3 +42,6 @@ R3 | e2e, all five (anvil; the two-generation one on chain 31930) | deb0c1f7d | 
 R3 | format.sh --check rust py sh; docs_check | 03378a237 | 0 | ok; 0 errors
 R3 mutants | --r3 run | deb0c1f7d | - | 7 mutants, 7 killed
 R3 mutants | the v10 and v10-r2 rows whose files changed, rerun | deb0c1f7d | - | v10 21 of 21, v10-r2 11 of 11 killed
+merge-ua-rs-sign | pqvault-core lib + core + vectors (cargo test --features vectors) | 3d96c45be | 0 | lib 8 passed; core 7 passed; vectors 4 passed; e2e 5 ignored
+merge-ua-rs-sign | pqvault-core clippy --all-targets -D warnings (default) | 3d96c45be | 0 | -
+merge-ua-rs-sign | pqvault-core clippy --all-targets -D warnings (--features vectors) | 3d96c45be | 0 | -
