@@ -9005,6 +9005,13 @@ public struct ChainProfile: Equatable, Hashable {
      * `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
      */
     public var disabledKinds: [String]
+    /**
+     * Whether the chain's RPC is trusted on a read pinned by block hash (owner 2026-11-22, decisions ARCH-POS-20 (2); the
+     * profile's `pinnedReads`, default true): false on Moonbeam and Moonbase, whose RPC answers a read pinned by a made-up
+     * hash. With false, every pinned read (CLI-RPC-05: a decisive read, a read feeding a decryption) is refused by name,
+     * `PinnedReadsUntrusted`; plain reads work. EVM profiles only (`Argument` at `Sdk::open` on another family)
+     */
+    public var pinnedReads: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -9069,7 +9076,13 @@ public struct ChainProfile: Equatable, Hashable {
          * and Celo, the kinds whose largest transaction is above the chain's limit): a UA kind by its name (`mldsa65`), the PQZ token and key
          * attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
          * `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
-         */disabledKinds: [String]) {
+         */disabledKinds: [String], 
+        /**
+         * Whether the chain's RPC is trusted on a read pinned by block hash (owner 2026-11-22, decisions ARCH-POS-20 (2); the
+         * profile's `pinnedReads`, default true): false on Moonbeam and Moonbase, whose RPC answers a read pinned by a made-up
+         * hash. With false, every pinned read (CLI-RPC-05: a decisive read, a read feeding a decryption) is refused by name,
+         * `PinnedReadsUntrusted`; plain reads work. EVM profiles only (`Argument` at `Sdk::open` on another family)
+         */pinnedReads: Bool = true) {
         self.key = key
         self.family = family
         self.chainId = chainId
@@ -9093,6 +9106,7 @@ public struct ChainProfile: Equatable, Hashable {
         self.familyParams = familyParams
         self.l1Fee = l1Fee
         self.disabledKinds = disabledKinds
+        self.pinnedReads = pinnedReads
     }
 
     
@@ -9133,7 +9147,8 @@ public struct FfiConverterTypeChainProfile: FfiConverterRustBuffer {
                 wrappers: FfiConverterSequenceString.read(from: &buf), 
                 familyParams: FfiConverterOptionTypeFamilyParams.read(from: &buf), 
                 l1Fee: FfiConverterOptionTypeL1Fee.read(from: &buf), 
-                disabledKinds: FfiConverterSequenceString.read(from: &buf)
+                disabledKinds: FfiConverterSequenceString.read(from: &buf), 
+                pinnedReads: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -9161,6 +9176,7 @@ public struct FfiConverterTypeChainProfile: FfiConverterRustBuffer {
         FfiConverterOptionTypeFamilyParams.write(value.familyParams, into: &buf)
         FfiConverterOptionTypeL1Fee.write(value.l1Fee, into: &buf)
         FfiConverterSequenceString.write(value.disabledKinds, into: &buf)
+        FfiConverterBool.write(value.pinnedReads, into: &buf)
     }
 }
 

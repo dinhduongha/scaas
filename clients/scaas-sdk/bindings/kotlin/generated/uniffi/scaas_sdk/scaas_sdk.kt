@@ -14621,6 +14621,14 @@ data class ChainProfile (
      * `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
      */
     var `disabledKinds`: List<kotlin.String>
+    , 
+    /**
+     * Whether the chain's RPC is trusted on a read pinned by block hash (owner 2026-11-22, decisions ARCH-POS-20 (2); the
+     * profile's `pinnedReads`, default true): false on Moonbeam and Moonbase, whose RPC answers a read pinned by a made-up
+     * hash. With false, every pinned read (CLI-RPC-05: a decisive read, a read feeding a decryption) is refused by name,
+     * `PinnedReadsUntrusted`; plain reads work. EVM profiles only (`Argument` at `Sdk::open` on another family)
+     */
+    var `pinnedReads`: kotlin.Boolean = true 
     
 ){
     
@@ -14660,6 +14668,7 @@ public object FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile>
             FfiConverterOptionalTypeFamilyParams.read(buf),
             FfiConverterOptionalTypeL1Fee.read(buf),
             FfiConverterSequenceString.read(buf),
+            FfiConverterBoolean.read(buf),
         )
     }
 
@@ -14686,7 +14695,8 @@ public object FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile>
             FfiConverterSequenceString.allocationSize(value.`wrappers`) +
             FfiConverterOptionalTypeFamilyParams.allocationSize(value.`familyParams`) +
             FfiConverterOptionalTypeL1Fee.allocationSize(value.`l1Fee`) +
-            FfiConverterSequenceString.allocationSize(value.`disabledKinds`)
+            FfiConverterSequenceString.allocationSize(value.`disabledKinds`) +
+            FfiConverterBoolean.allocationSize(value.`pinnedReads`)
     )
 
     override fun write(value: ChainProfile, buf: ByteBuffer) {
@@ -14713,6 +14723,7 @@ public object FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile>
             FfiConverterOptionalTypeFamilyParams.write(value.`familyParams`, buf)
             FfiConverterOptionalTypeL1Fee.write(value.`l1Fee`, buf)
             FfiConverterSequenceString.write(value.`disabledKinds`, buf)
+            FfiConverterBoolean.write(value.`pinnedReads`, buf)
     }
 }
 

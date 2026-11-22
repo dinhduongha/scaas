@@ -20055,6 +20055,12 @@ class FfiConverterTypeCancelWrapOrder: FfiConverterRustBuffer<CancelWrapOrder> {
 /// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
 /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
 /// </param>
+/// <param name="PinnedReads">
+/// Whether the chain's RPC is trusted on a read pinned by block hash (owner 2026-11-22, decisions ARCH-POS-20 (2); the
+/// profile's `pinnedReads`, default true): false on Moonbeam and Moonbase, whose RPC answers a read pinned by a made-up
+/// hash. With false, every pinned read (CLI-RPC-05: a decisive read, a read feeding a decryption) is refused by name,
+/// `PinnedReadsUntrusted`; plain reads work. EVM profiles only (`Argument` at `Sdk::open` on another family)
+/// </param>
 internal record ChainProfile (
     /// <summary>
     /// `scaas-testnet`, `<chain>-mainnet`, `<chain>-testnet`
@@ -20139,7 +20145,14 @@ internal record ChainProfile (
     /// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
     /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
     /// </summary>
-    string[] DisabledKinds
+    string[] DisabledKinds, 
+    /// <summary>
+    /// Whether the chain's RPC is trusted on a read pinned by block hash (owner 2026-11-22, decisions ARCH-POS-20 (2); the
+    /// profile's `pinnedReads`, default true): false on Moonbeam and Moonbase, whose RPC answers a read pinned by a made-up
+    /// hash. With false, every pinned read (CLI-RPC-05: a decisive read, a read feeding a decryption) is refused by name,
+    /// `PinnedReadsUntrusted`; plain reads work. EVM profiles only (`Argument` at `Sdk::open` on another family)
+    /// </summary>
+    bool PinnedReads = true
 ) {
 }
 
@@ -20170,7 +20183,8 @@ class FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile> {
             Wrappers: FfiConverterSequenceString.INSTANCE.Read(stream),
             FamilyParams: FfiConverterOptionalTypeFamilyParams.INSTANCE.Read(stream),
             L1Fee: FfiConverterOptionalTypeL1Fee.INSTANCE.Read(stream),
-            DisabledKinds: FfiConverterSequenceString.INSTANCE.Read(stream)
+            DisabledKinds: FfiConverterSequenceString.INSTANCE.Read(stream),
+            PinnedReads: FfiConverterBoolean.INSTANCE.Read(stream)
         );
     }
 
@@ -20198,7 +20212,8 @@ class FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile> {
             + FfiConverterSequenceString.INSTANCE.AllocationSize(value.Wrappers)
             + FfiConverterOptionalTypeFamilyParams.INSTANCE.AllocationSize(value.FamilyParams)
             + FfiConverterOptionalTypeL1Fee.INSTANCE.AllocationSize(value.L1Fee)
-            + FfiConverterSequenceString.INSTANCE.AllocationSize(value.DisabledKinds);
+            + FfiConverterSequenceString.INSTANCE.AllocationSize(value.DisabledKinds)
+            + FfiConverterBoolean.INSTANCE.AllocationSize(value.PinnedReads);
     }
 
     public override void Write(ChainProfile value, BigEndianStream stream) {
@@ -20225,6 +20240,7 @@ class FfiConverterTypeChainProfile: FfiConverterRustBuffer<ChainProfile> {
             FfiConverterOptionalTypeFamilyParams.INSTANCE.Write(value.FamilyParams, stream);
             FfiConverterOptionalTypeL1Fee.INSTANCE.Write(value.L1Fee, stream);
             FfiConverterSequenceString.INSTANCE.Write(value.DisabledKinds, stream);
+            FfiConverterBoolean.INSTANCE.Write(value.PinnedReads, stream);
     }
 }
 

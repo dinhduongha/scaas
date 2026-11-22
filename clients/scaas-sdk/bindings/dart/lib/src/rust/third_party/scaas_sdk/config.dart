@@ -85,6 +85,12 @@ class ChainProfile {
   /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
   final List<String> disabledKinds;
 
+  /// Whether the chain's RPC is trusted on a read pinned by block hash (owner 2026-11-22, decisions ARCH-POS-20 (2); the
+  /// profile's `pinnedReads`, default true): false on Moonbeam and Moonbase, whose RPC answers a read pinned by a made-up
+  /// hash. With false, every pinned read (CLI-RPC-05: a decisive read, a read feeding a decryption) is refused by name,
+  /// `PinnedReadsUntrusted`; plain reads work. EVM profiles only (`Argument` at `Sdk::open` on another family)
+  final bool pinnedReads;
+
   const ChainProfile({
     required this.key,
     required this.family,
@@ -109,6 +115,7 @@ class ChainProfile {
     this.familyParams,
     this.l1Fee,
     required this.disabledKinds,
+    required this.pinnedReads,
   });
 
   @override
@@ -135,7 +142,8 @@ class ChainProfile {
       wrappers.hashCode ^
       familyParams.hashCode ^
       l1Fee.hashCode ^
-      disabledKinds.hashCode;
+      disabledKinds.hashCode ^
+      pinnedReads.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -164,7 +172,8 @@ class ChainProfile {
           wrappers == other.wrappers &&
           familyParams == other.familyParams &&
           l1Fee == other.l1Fee &&
-          disabledKinds == other.disabledKinds;
+          disabledKinds == other.disabledKinds &&
+          pinnedReads == other.pinnedReads;
 }
 
 /// One endpoint of a profile's RPC or gateway list (CLI-RPC-02): `{url, class, label, auth}`; `auth` belongs to this endpoint

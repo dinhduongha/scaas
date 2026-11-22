@@ -14062,6 +14062,11 @@ type ChainProfile struct {
 	// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
 	// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
 	DisabledKinds []string
+	// Whether the chain's RPC is trusted on a read pinned by block hash (owner 2026-11-22, decisions ARCH-POS-20 (2); the
+	// profile's `pinnedReads`, default true): false on Moonbeam and Moonbase, whose RPC answers a read pinned by a made-up
+	// hash. With false, every pinned read (CLI-RPC-05: a decisive read, a read feeding a decryption) is refused by name,
+	// `PinnedReadsUntrusted`; plain reads work. EVM profiles only (`Argument` at `Sdk::open` on another family)
+	PinnedReads bool
 }
 
 func (r *ChainProfile) Destroy() {
@@ -14088,6 +14093,7 @@ func (r *ChainProfile) Destroy() {
 	FfiDestroyerOptionalFamilyParams{}.Destroy(r.FamilyParams)
 	FfiDestroyerOptionalL1Fee{}.Destroy(r.L1Fee)
 	FfiDestroyerSequenceString{}.Destroy(r.DisabledKinds)
+	FfiDestroyerBool{}.Destroy(r.PinnedReads)
 }
 
 type FfiConverterChainProfile struct{}
@@ -14123,6 +14129,7 @@ func (c FfiConverterChainProfile) Read(reader io.Reader) ChainProfile {
 		FfiConverterOptionalFamilyParamsINSTANCE.Read(reader),
 		FfiConverterOptionalL1FeeINSTANCE.Read(reader),
 		FfiConverterSequenceStringINSTANCE.Read(reader),
+		FfiConverterBoolINSTANCE.Read(reader),
 	}
 }
 
@@ -14158,6 +14165,7 @@ func (c FfiConverterChainProfile) Write(writer io.Writer, value ChainProfile) {
 	FfiConverterOptionalFamilyParamsINSTANCE.Write(writer, value.FamilyParams)
 	FfiConverterOptionalL1FeeINSTANCE.Write(writer, value.L1Fee)
 	FfiConverterSequenceStringINSTANCE.Write(writer, value.DisabledKinds)
+	FfiConverterBoolINSTANCE.Write(writer, value.PinnedReads)
 }
 
 type FfiDestroyerChainProfile struct{}

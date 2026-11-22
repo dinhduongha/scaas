@@ -5742,7 +5742,8 @@ ChainProfile FfiConverterTypeChainProfile::read(RustStream &stream) {
         FfiConverterSequenceString::read(stream),
         FfiConverterOptionalFamilyParams::read(stream),
         FfiConverterOptionalL1Fee::read(stream),
-        FfiConverterSequenceString::read(stream)
+        FfiConverterSequenceString::read(stream),
+        FfiConverterBool::read(stream)
     };
 }
 
@@ -5770,6 +5771,7 @@ void FfiConverterTypeChainProfile::write(RustStream &stream, const ChainProfile 
     FfiConverterOptionalFamilyParams::write(stream, val.family_params);
     FfiConverterOptionalL1Fee::write(stream, val.l1_fee);
     FfiConverterSequenceString::write(stream, val.disabled_kinds);
+    FfiConverterBool::write(stream, val.pinned_reads);
 }
 
 uint64_t FfiConverterTypeChainProfile::allocation_size(const ChainProfile &val) {
@@ -5797,7 +5799,8 @@ uint64_t FfiConverterTypeChainProfile::allocation_size(const ChainProfile &val) 
         FfiConverterSequenceString::allocation_size(val.wrappers) +
         FfiConverterOptionalFamilyParams::allocation_size(val.family_params) +
         FfiConverterOptionalL1Fee::allocation_size(val.l1_fee) +
-        FfiConverterSequenceString::allocation_size(val.disabled_kinds);
+        FfiConverterSequenceString::allocation_size(val.disabled_kinds) +
+        FfiConverterBool::allocation_size(val.pinned_reads);
     
 }
 

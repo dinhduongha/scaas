@@ -7949,7 +7949,7 @@ class ChainProfile:
     """
     A chain as the app's release pins it (spec §4).
 """
-    def __init__(self, *, key:str, family:Family, chain_id:typing.Optional[int], chain_uid:str, rpc:typing.List[EndpointConfig], rpc_policy:Policy, gateways:typing.List[EndpointConfig], registry:typing.Optional[str], factory:typing.Optional[str], router:typing.Optional[str], finality:Finality, tx_gas_cap:typing.Optional[int], tokens:typing.List[ListedToken], gas:GasRows, gas_opt_in:typing.List[str], max_valid_secs:typing.Optional[int], verifiers:typing.List[EndpointConfig], verifier_policy:Policy, dexes:typing.List[ListedDex], wrappers:typing.List[str], family_params:typing.Optional[FamilyParams], l1_fee:typing.Optional[L1Fee], disabled_kinds:typing.List[str]):
+    def __init__(self, *, key:str, family:Family, chain_id:typing.Optional[int], chain_uid:str, rpc:typing.List[EndpointConfig], rpc_policy:Policy, gateways:typing.List[EndpointConfig], registry:typing.Optional[str], factory:typing.Optional[str], router:typing.Optional[str], finality:Finality, tx_gas_cap:typing.Optional[int], tokens:typing.List[ListedToken], gas:GasRows, gas_opt_in:typing.List[str], max_valid_secs:typing.Optional[int], verifiers:typing.List[EndpointConfig], verifier_policy:Policy, dexes:typing.List[ListedDex], wrappers:typing.List[str], family_params:typing.Optional[FamilyParams], l1_fee:typing.Optional[L1Fee], disabled_kinds:typing.List[str], pinned_reads:bool = True):
         self.key = key
         self.family = family
         self.chain_id = chain_id
@@ -7973,12 +7973,13 @@ class ChainProfile:
         self.family_params = family_params
         self.l1_fee = l1_fee
         self.disabled_kinds = disabled_kinds
+        self.pinned_reads = pinned_reads
         
         
 
     
     def __str__(self):
-        return "ChainProfile(key={}, family={}, chain_id={}, chain_uid={}, rpc={}, rpc_policy={}, gateways={}, registry={}, factory={}, router={}, finality={}, tx_gas_cap={}, tokens={}, gas={}, gas_opt_in={}, max_valid_secs={}, verifiers={}, verifier_policy={}, dexes={}, wrappers={}, family_params={}, l1_fee={}, disabled_kinds={})".format(self.key, self.family, self.chain_id, self.chain_uid, self.rpc, self.rpc_policy, self.gateways, self.registry, self.factory, self.router, self.finality, self.tx_gas_cap, self.tokens, self.gas, self.gas_opt_in, self.max_valid_secs, self.verifiers, self.verifier_policy, self.dexes, self.wrappers, self.family_params, self.l1_fee, self.disabled_kinds)
+        return "ChainProfile(key={}, family={}, chain_id={}, chain_uid={}, rpc={}, rpc_policy={}, gateways={}, registry={}, factory={}, router={}, finality={}, tx_gas_cap={}, tokens={}, gas={}, gas_opt_in={}, max_valid_secs={}, verifiers={}, verifier_policy={}, dexes={}, wrappers={}, family_params={}, l1_fee={}, disabled_kinds={}, pinned_reads={})".format(self.key, self.family, self.chain_id, self.chain_uid, self.rpc, self.rpc_policy, self.gateways, self.registry, self.factory, self.router, self.finality, self.tx_gas_cap, self.tokens, self.gas, self.gas_opt_in, self.max_valid_secs, self.verifiers, self.verifier_policy, self.dexes, self.wrappers, self.family_params, self.l1_fee, self.disabled_kinds, self.pinned_reads)
     def __eq__(self, other):
         if self.key != other.key:
             return False
@@ -8026,6 +8027,8 @@ class ChainProfile:
             return False
         if self.disabled_kinds != other.disabled_kinds:
             return False
+        if self.pinned_reads != other.pinned_reads:
+            return False
         return True
 
 class _UniffiFfiConverterTypeChainProfile(_UniffiConverterRustBuffer):
@@ -8055,6 +8058,7 @@ class _UniffiFfiConverterTypeChainProfile(_UniffiConverterRustBuffer):
             family_params=_UniffiFfiConverterOptionalTypeFamilyParams.read(buf),
             l1_fee=_UniffiFfiConverterOptionalTypeL1Fee.read(buf),
             disabled_kinds=_UniffiFfiConverterSequenceString.read(buf),
+            pinned_reads=_UniffiFfiConverterBoolean.read(buf),
         )
 
     @staticmethod
@@ -8082,6 +8086,7 @@ class _UniffiFfiConverterTypeChainProfile(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalTypeFamilyParams.check_lower(value.family_params)
         _UniffiFfiConverterOptionalTypeL1Fee.check_lower(value.l1_fee)
         _UniffiFfiConverterSequenceString.check_lower(value.disabled_kinds)
+        _UniffiFfiConverterBoolean.check_lower(value.pinned_reads)
 
     @staticmethod
     def write(value, buf):
@@ -8108,6 +8113,7 @@ class _UniffiFfiConverterTypeChainProfile(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalTypeFamilyParams.write(value.family_params, buf)
         _UniffiFfiConverterOptionalTypeL1Fee.write(value.l1_fee, buf)
         _UniffiFfiConverterSequenceString.write(value.disabled_kinds, buf)
+        _UniffiFfiConverterBoolean.write(value.pinned_reads, buf)
 
 class _UniffiFfiConverterSequenceTypeChainProfile(_UniffiConverterRustBuffer):
     @classmethod

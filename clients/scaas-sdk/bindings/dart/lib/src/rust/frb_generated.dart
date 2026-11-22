@@ -17153,8 +17153,8 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   ChainProfile dco_decode_chain_profile(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 23)
-      throw Exception('unexpected arr length: expect 23 but see ${arr.length}');
+    if (arr.length != 24)
+      throw Exception('unexpected arr length: expect 24 but see ${arr.length}');
     return ChainProfile(
       key: dco_decode_String(arr[0]),
       family: dco_decode_family(arr[1]),
@@ -17179,6 +17179,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       familyParams: dco_decode_opt_box_autoadd_family_params(arr[20]),
       l1Fee: dco_decode_opt_box_autoadd_l_1_fee(arr[21]),
       disabledKinds: dco_decode_list_String(arr[22]),
+      pinnedReads: dco_decode_bool(arr[23]),
     );
   }
 
@@ -23713,6 +23714,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     );
     var var_l1Fee = sse_decode_opt_box_autoadd_l_1_fee(deserializer);
     var var_disabledKinds = sse_decode_list_String(deserializer);
+    var var_pinnedReads = sse_decode_bool(deserializer);
     return ChainProfile(
       key: var_key,
       family: var_family,
@@ -23737,6 +23739,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       familyParams: var_familyParams,
       l1Fee: var_l1Fee,
       disabledKinds: var_disabledKinds,
+      pinnedReads: var_pinnedReads,
     );
   }
 
@@ -31638,6 +31641,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     sse_encode_opt_box_autoadd_family_params(self.familyParams, serializer);
     sse_encode_opt_box_autoadd_l_1_fee(self.l1Fee, serializer);
     sse_encode_list_String(self.disabledKinds, serializer);
+    sse_encode_bool(self.pinnedReads, serializer);
   }
 
   @protected

@@ -17954,6 +17954,7 @@ const _: fn() = || {
         let _: Option<scaas_sdk::config::FamilyParams> = ChainProfile.family_params;
         let _: Option<scaas_sdk::config::L1Fee> = ChainProfile.l1_fee;
         let _: Vec<String> = ChainProfile.disabled_kinds;
+        let _: bool = ChainProfile.pinned_reads;
     }
     {
         let ConfirmRemove = None::<scaas_sdk::vault::seeds::ConfirmRemove>.unwrap();
@@ -21353,6 +21354,7 @@ impl SseDecode for scaas_sdk::config::ChainProfile {
             <Option<scaas_sdk::config::FamilyParams>>::sse_decode(deserializer);
         let mut var_l1Fee = <Option<scaas_sdk::config::L1Fee>>::sse_decode(deserializer);
         let mut var_disabledKinds = <Vec<String>>::sse_decode(deserializer);
+        let mut var_pinnedReads = <bool>::sse_decode(deserializer);
         return scaas_sdk::config::ChainProfile {
             key: var_key,
             family: var_family,
@@ -21377,6 +21379,7 @@ impl SseDecode for scaas_sdk::config::ChainProfile {
             family_params: var_familyParams,
             l1_fee: var_l1Fee,
             disabled_kinds: var_disabledKinds,
+            pinned_reads: var_pinnedReads,
         };
     }
 }
@@ -29180,6 +29183,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::ChainProfil
             self.0.family_params.into_into_dart().into_dart(),
             self.0.l1_fee.into_into_dart().into_dart(),
             self.0.disabled_kinds.into_into_dart().into_dart(),
+            self.0.pinned_reads.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -35620,6 +35624,7 @@ impl SseEncode for scaas_sdk::config::ChainProfile {
         <Option<scaas_sdk::config::FamilyParams>>::sse_encode(self.family_params, serializer);
         <Option<scaas_sdk::config::L1Fee>>::sse_encode(self.l1_fee, serializer);
         <Vec<String>>::sse_encode(self.disabled_kinds, serializer);
+        <bool>::sse_encode(self.pinned_reads, serializer);
     }
 }
 

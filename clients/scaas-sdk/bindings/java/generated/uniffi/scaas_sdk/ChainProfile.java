@@ -88,6 +88,13 @@ public class ChainProfile {
      * `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
      */
     private java.util.List<java.lang.String> disabledKinds;
+    /**
+     * Whether the chain's RPC is trusted on a read pinned by block hash (owner 2026-11-22, decisions ARCH-POS-20 (2); the
+     * profile's `pinnedReads`, default true): false on Moonbeam and Moonbase, whose RPC answers a read pinned by a made-up
+     * hash. With false, every pinned read (CLI-RPC-05: a decisive read, a read feeding a decryption) is refused by name,
+     * `PinnedReadsUntrusted`; plain reads work. EVM profiles only (`Argument` at `Sdk::open` on another family)
+     */
+    private boolean pinnedReads;
 
     public ChainProfile(
         java.lang.String key, 
@@ -112,7 +119,8 @@ public class ChainProfile {
         java.util.List<java.lang.String> wrappers, 
         FamilyParams familyParams, 
         L1Fee l1Fee, 
-        java.util.List<java.lang.String> disabledKinds
+        java.util.List<java.lang.String> disabledKinds, 
+        boolean pinnedReads
     ) {
         
         this.key = key;
@@ -160,6 +168,8 @@ public class ChainProfile {
         this.l1Fee = l1Fee;
         
         this.disabledKinds = disabledKinds;
+        
+        this.pinnedReads = pinnedReads;
     }
     
     public java.lang.String key() {
@@ -253,6 +263,10 @@ public class ChainProfile {
     public java.util.List<java.lang.String> disabledKinds() {
         return this.disabledKinds;
     }
+    
+    public boolean pinnedReads() {
+        return this.pinnedReads;
+    }
     public void setKey(java.lang.String key) {
         this.key = key;
     }
@@ -322,6 +336,9 @@ public class ChainProfile {
     public void setDisabledKinds(java.util.List<java.lang.String> disabledKinds) {
         this.disabledKinds = disabledKinds;
     }
+    public void setPinnedReads(boolean pinnedReads) {
+        this.pinnedReads = pinnedReads;
+    }
 
     
 
@@ -375,7 +392,9 @@ public class ChainProfile {
               
               java.util.Objects.equals(l1Fee, t.l1Fee) && 
               
-              java.util.Objects.equals(disabledKinds, t.disabledKinds)
+              java.util.Objects.equals(disabledKinds, t.disabledKinds) && 
+              
+              pinnedReads == t.pinnedReads
               
             );
         };
@@ -407,6 +426,7 @@ public class ChainProfile {
         result = 31 * result + java.util.Objects.hashCode(familyParams);
         result = 31 * result + java.util.Objects.hashCode(l1Fee);
         result = 31 * result + java.util.Objects.hashCode(disabledKinds);
+        result = 31 * result + java.lang.Boolean.hashCode(pinnedReads);
         return result;
     }
 
