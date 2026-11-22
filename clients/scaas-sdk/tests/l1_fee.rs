@@ -235,7 +235,9 @@ async fn fee_above_cap_counts_the_l1_fee() {
         .await
         .unwrap()
         .quote;
-    let total: U256 = q.max_cost.parse().unwrap();
+    // gas × max fee + the L1 fee, from the quote's own gas and fee (never its max_cost: the cap is checked against this sum)
+    let fee: u128 = q.max_fee_per_gas.parse().unwrap();
+    let total = U256::from(q.gas_limit) * U256::from(fee) + U256::from(L1);
     let cap = |c: U256| Limits {
         max_cost: c.to_string(),
         ..Limits::default()
