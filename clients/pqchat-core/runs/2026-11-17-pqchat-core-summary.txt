@@ -56,10 +56,6 @@ T11 | mutants-check | c515730db | 0 | -
 T11 | pqc-e2e | 7cd88f586 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries)
 T11 | pqc-clippy | 7cd88f586 | 0 | -
 # T11 pqc-e2e at 7cd88f586: e2e_run's 23 transactions landed: 0xe1f1a56262a513bb3cc139a9e6ac18a575f6ced5d42536bbf4de698bac3436b7 0xc39003106447d9e92298094ce5090881637a671a6f4a6dfe43839f3ed500ddcc 0xdda30bee3b4075db23971a9ea4a8c2bca8dc3d21efa8f21e999d78e3ac3fbbcd 0x24025a560af14f46d73ae0b54c57426cff5aec42526347521fe01e3f8d824f27 0x2f22534af484b4716643420646e8c597b835b3dea041f683c656f4d3d150fb3a 0x83ea9437231b260113eac5ffc44f2c48207f3f7400a8730cfad89648341c1d25 0x8f2cf433de62a14b66a0ec1ff9c4ef531de5995e44f22260b446f346b29042c9 0x26776be0368a78dd7a8f9a29bf897655846bc1e3946c80c86dee52cadcb0df9c 0x6422c1a56caf78d293ae7b253e6308700878e57f4eb56da0d29099bd0d7d0ddd 0x7337bc76c48c91bc413353141b1278e97ffa3c8ee240e57032128de5b3f3fb07 0xfe79b0ea38c0f01096baa00af2d2383663cc24c44b52102bb68d2fe4c3f08bac 0xecbc8a056440538caf4c49ba7f1f3bebe0ea67dbe2bf95b669b145b0ab6226e6 0xff576f5b0a531a0dd163197a1ac1e1e00e46f73047b332d57814328e1ea60d55 0xea6a8cff8427befc5760389849882deb731321f855283ecff11eb20a1d1bd4ce 0xdd794b82ba0bc6fe5d8a3cab521070db0e4044fd9f998778c972d00f118fe860 0xdc7a1be0eae4e8ae9b915ca45f6727293858c8ac96cab96b3a0aff265703be0a 0xe744e5a259594ff7e897fdf36d38fcf7e040cef6a30fe08d95c751365c2ad43b 0x54230bf1d78f3bacb747a4ff8acae686381acf72ba8f333d02327d9453ba86fa 0x43bbc6227abbf83da8bfaa72146dd5b51cda8968e4ffffff198dfe0e600cad77 0xb5a30e050610ada0a6c82133b3329bbcab890643907c84fd2fc4ff593eb0bd9c 0x425467ec6e1db2126ca0187d976266472828c84784ac7b3928535b642453bbc5 0xc8aae0ec0fca5a2d449be433b74ae63cfa0e363c807f3d167d0d024bb7545e02 0xdf3d40c723b2fd4131965a724c3304fde82fce0a4248d8050a6ca52f4a44de2e
-T12 | bind | 9e8e17e59 | 1 | -
-T12 | pqc-test | 9e8e17e59 | 0 | 101 passed, 0 failed, 7 ignored (20 binaries)
-T12 | pqc-clippy | 9e8e17e59 | 0 | -
-T12 | mutants-check | 9e8e17e59 | 0 | -
 # T12 bind at 9e8e17e59: the SDK's drift check ok; pqchat-core's check red by name: decrypted content through the codec (Content_value), the T12 finding
 R2.1 | docs | 7c8c64950 | 0 | -
 R2.2a | ck-test | 4b8a360bb | 0 | node: 583 pass, 0 fail, 4 skipped
@@ -74,3 +70,10 @@ R2 | ck-test | 1ba45e725 | 0 | node: 583 pass, 0 fail, 4 skipped
 R2 | mutants-check | cfb61a0e1 | 0 | -
 R2 | bind | cfb61a0e1 | 1 | -
 R2 | ua-appcore | b4b4dbbd0 | 0 | 27 passed, 0 failed, 0 ignored (2 binaries)
+T12 | pqc-reads | a010e6496 | 0 | reads 37 (23 trusted), writes 13, R2 23; 0 refused
+T12 | docs | a010e6496 | 0 | -
+T12 | mutants-check | a010e6496 | 0 | -
+T12 | pqc-clippy | a010e6496 | 0 | -
+T12 | pqc-wasm | a010e6496 | 0 | -
+T12 | bind | a010e6496 | 0 | -
+T12 | pqc-test | a010e6496 | 0 | 105 passed, 0 failed, 7 ignored (20 binaries)
