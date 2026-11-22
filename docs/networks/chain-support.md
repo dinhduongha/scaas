@@ -81,7 +81,7 @@ Status: SPECIFIED.
 | 18 | Cosmos (CosmWasm) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.cosmos | M T41.cosmos (read B) |
 | 19 | Aptos | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.aptos | M T41.aptos (read B) |
 | 20 | Solana | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.solana | M T41.solana (read B) |
-| 21 | Soroban (Stellar; Pi) | B | B | B | M T27 | B | M T30 | M T28, T29 | P `zether-soroban` | M family round | M family round | M T41.soroban | M T41.soroban (read B) |
+| 21 | Soroban (Stellar; Pi) | B | B | B | B T27.soroban | B | B T30.soroban | B T28, T29.soroban | P `zether-soroban` | M family round | M family round | B T41.soroban | B T41.soroban |
 | 22 | Sui | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.sui | M T41.sui (read B) |
 | 23 | TON (GRAM) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.ton | M T41.ton (read B) |
 | 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | M T35 (sign), T36 (send; its reads B), T37 (SDK) |

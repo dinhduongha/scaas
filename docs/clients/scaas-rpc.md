@@ -141,7 +141,7 @@ fee estimates) and `bitcoin::Core` (`getblockhash`, `gettxout`), two lists with 
 
 <a id="CLI-RPC-08"></a>**CLI-RPC-08** — **The same signed bytes to one or more endpoints; outcomes merged, never final**
 (ARCH-POS-15, writes; BUILT for EVM, plan T7: `one_signed_transfer_to_two_anvils_is_sent_then_final`,
-`anvils_already_known_answer_is_accepted`, `all_refused_is_rejected_and_not_final`; for scaas-node gateways, T11). A send takes the bytes once and posts the same bytes to the first endpoint or to all; nothing is
+`anvils_already_known_answer_is_accepted`, `all_refused_is_rejected_and_not_final`; for scaas-node gateways, T11; for Soroban, SDK plan T30.soroban: `Soroban::send`, `tests/soroban_send.rs`). A send takes the bytes once and posts the same bytes to the first endpoint or to all; nothing is
 signed again per endpoint. The transaction id is computed locally from the bytes (EVM: `keccak256` of the raw transaction; a blob
 transaction in its network form is refused by name); an endpoint that answers another id is counted as not accepting. Per endpoint
 the outcome is `accepted` (an "already known" answer included), `refused` (a well-formed rejection, its reason kept, capped), or
