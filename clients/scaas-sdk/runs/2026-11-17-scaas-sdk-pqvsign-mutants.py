@@ -47,7 +47,7 @@ MUTANTS = [
     ),
     (
         "the chain-bound path under the app id, not P_V",
-        [(PV, "            purpose: purpose(),", "            purpose: app_id(),")],
+        [(PV, "Some(AppPath::ChainBound { purpose: purpose() })", "Some(AppPath::ChainBound { purpose: app_id() })")],
         U + "pqvault_records_reproduce_the_vectors",
     ),
     (
