@@ -302,10 +302,18 @@ bind-cs | eff2aa3e5 | 0 | dotnet: 4 passed, 0 failed
 bind-python | eff2aa3e5 | 0 | unittest: 7 ran, OK
 bind-kotlin | eff2aa3e5 | 0 | kotlin: PASS (0 failures)
 bind-swift | eff2aa3e5 | 0 | swift: PASS (0 failures)
-bind-js | eff2aa3e5 | 0 | node: 5 pass, 0 fail, 0 skipped
 bind-java | eff2aa3e5 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
 bind-go | eff2aa3e5 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
 bind-dart | eff2aa3e5 | 0 | dart: +14:
 features | eff2aa3e5 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 sdk-deny | eff2aa3e5 | 1 | -
 sdk-test | eff2aa3e5 | 0 | 437 passed, 0 failed, 17 ignored (41 binaries)
+bind-js | e2c2ede7c | 0 | node: 5 pass, 0 fail, 0 skipped
+# the rows above at eff2aa3e5 (the merge of ua-rs-sign 3da595648, e33e863c9, and its regenerated bindings) and bind-js at
+# e2c2ede7c (its scan hardened; the only later code change): every bind-* step, bind-gen, sdk-uniffi, ffi, sdk-wasm,
+# sdk-clippy, sdk-test, features, docs, mutants-check green. sdk-deny rc 1: RUSTSEC-2026-0592 (url 2.5.8, Url::origin stack
+# overflow on nested blob: URLs; a new advisory, not this branch's change), fixed by url >= 2.5.9 in the lockfiles, left to
+# ua-rs-sign so every branch takes it once. Mutants: t20b-sync 4/4 (the cancel mutant killed by the new watchdog), t20c-cs 2/2,
+# t20d 2/2, t20e 2/2, t20e2 3/3, t20f 2/2, t20g 4/4, t20h 3/3, t13rulings 5/5, bind100 2/2 at eff2aa3e5; review-b 7/7 (B3
+# killed at e2c2ede7c after the scan fix, survived at eff2aa3e5); t20 2/2 at cb4d7e52d (the kill rule now reads dart's [E]
+# and the generator's [gen] FAIL; mutants-check green there, tree dirty only by these records).
