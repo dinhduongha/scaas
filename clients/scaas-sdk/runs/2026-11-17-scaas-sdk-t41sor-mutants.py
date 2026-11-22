@@ -83,6 +83,10 @@ MUTANTS = [
     ("sdk: the review field not the signed one", [(SO, "fn rebuilt(p: &SorobanPrepared, passphrase: &str) -> Result<Checked, SdkError> {\n    checked(p, passphrase, p.expiry, 0)",
                                                    "fn rebuilt(p: &SorobanPrepared, passphrase: &str) -> Result<Checked, SdkError> {\n    let mut p = p.clone();\n    p.expiry += 1;\n    checked(&p, passphrase, p.expiry, 0)")],
      SDK + "a_pay_through_the_gateways_is_the_vectors_signed_op"),
+    # owner 2026-11-22: a SourceAccount entry only when the transaction's source is the subject
+    ("sdk: a SourceAccount entry taken from another payer", [(SO, "            Some(AuthCredential::SourceAccount) => *payer == subject,",
+                                                             "            Some(AuthCredential::SourceAccount) => true,")],
+     SDK + "a_source_account_entry_only_when_the_subject_pays"),
     ("sdk: a payer's consumed op counted landed", [(SO, "                        _ if gone => end(&mut r, \"consumed\", \"spent by another transaction\"),",
                                                     "                        _ if gone => end(&mut r, \"landed\", \"spent by another transaction\"),")],
      SDK + "a_pay_landed_by_another_first_is_consumed_for_the_payee"),

@@ -406,3 +406,55 @@ async fn entries_fee_stats_and_status_read_within_their_forms() {
         assert_eq!(soroban(&[&u]).transaction_at(0, &[1; 32]).await.ok(), want);
     }
 }
+
+/// Owner 2026-11-22 ("accept SourceAccount when self-paying"): a `SourceAccount` auth entry reads as such (the SDK accepts it
+/// only when the transaction's source is the op's subject); one cut short, or with a byte after it, does not.
+#[test]
+fn a_source_account_entry_reads_as_such() {
+    use scaas_rpc::soroban::{auth_credential, AuthCredential};
+    // SOROBAN_CREDENTIALS_SOURCE_ACCOUNT, then a contract function `pay` of a C… with no argument and no sub-invocation
+    let mut e = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+    e.extend_from_slice(&[7; 32]);
+    e.extend_from_slice(&[0, 0, 0, 3, b'p', b'a', b'y', 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(auth_credential(&e), Some(AuthCredential::SourceAccount));
+    assert!(auth_signer(&e).is_none(), "no Address signer");
+    let mut more = e.clone();
+    more.push(0);
+    assert!(auth_credential(&more).is_none(), "a byte after it");
+    assert!(auth_credential(&e[..e.len() - 4]).is_none(), "cut short");
+    // the control: the rows' Address entry reads as its signer
+    let v = rows();
+    let r = &v["rows"][0];
+    let (tx, data) = (hexb(&r["tx"]), hexb(&r["dataXdr"]));
+    let mut prefix = vec![0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+    prefix.extend_from_slice(&strkey_key(
+        r["op"]["invoke"]["auth"][0]["from"].as_str().unwrap(),
+    ));
+    let at = tx
+        .windows(prefix.len())
+        .position(|w| w == prefix.as_slice())
+        .unwrap();
+    let entry = &tx[at..tx.len() - data.len() - 4];
+    assert_eq!(
+        auth_credential(entry),
+        Some(AuthCredential::Address(&prefix[..]))
+    );
+}
+
+/// A simulation recording a `SourceAccount` entry is read, not refused as out of its form.
+#[tokio::test]
+async fn a_simulation_with_a_source_account_entry_reads() {
+    let v = rows();
+    let data = b64(&hexb(&v["rows"][0]["dataXdr"]));
+    let mut e = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+    e.extend_from_slice(&[7; 32]);
+    e.extend_from_slice(&[0, 0, 0, 3, b'p', b'a', b'y', 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let seen: Seen = Arc::default();
+    let u = rpc(
+        json!({"latestLedger": 100, "minResourceFee": "1", "transactionData": data, "results": [{"auth": [b64(&e)]}]}),
+        seen,
+    )
+    .await;
+    let (_, sim) = soroban(&[&u]).simulate_at(0, b"env").await.unwrap();
+    assert!(matches!(sim, Simulation::Ok { ref auth, .. } if auth == &vec![e]));
+}

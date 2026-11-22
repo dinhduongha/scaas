@@ -560,6 +560,7 @@ fn invoke(
 fn priced(
     sim: Simulation,
     c: &Checked,
+    payer: &[u8; 32],
     inclusion: u64,
     imported: bool,
 ) -> Result<(SorobanData, u64), SdkError> {
@@ -579,14 +580,21 @@ fn priced(
         Simulation::Restore => return Err(refused("archived entries need a restore first".into())),
         Simulation::Ok { data, auth, .. } => (data, auth),
     };
+    // the subject's one entry: its Address credentials, or (owner 2026-11-22, "accept SourceAccount when self-paying") the
+    // source account's own when the transaction's source is the subject itself
+    use scaas_rpc::soroban::{auth_credential, AuthCredential};
+    let subject = account_holder(&c.from());
     let mut want = vec![0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0];
-    want.extend_from_slice(&account_holder(&c.from()));
-    if auth.len() != 1
-        || auth
-            .first()
-            .and_then(|a| scaas_rpc::soroban::auth_signer(a))
-            != Some(want.as_slice())
-    {
+    want.extend_from_slice(&subject);
+    let ok = match auth.as_slice() {
+        [one] => match auth_credential(one) {
+            Some(AuthCredential::Address(s)) => s == want.as_slice(),
+            Some(AuthCredential::SourceAccount) => *payer == subject,
+            None => false,
+        },
+        _ => false,
+    };
+    if !ok {
         return Err(refused(
             "the call needs a signer other than the op's subject".into(),
         ));
@@ -730,7 +738,13 @@ impl Wallet {
                 let inclusion = inclusion_fee(sor, true).await?;
                 let sig = signature(&p)?;
                 let env = invoke(&pk, 0, seq, max_time, &op, sig, None).unsigned_envelope()?;
-                let (_, fee) = priced(simulate(sor, &env).await?, &op, inclusion, sig.is_some())?;
+                let (_, fee) = priced(
+                    simulate(sor, &env).await?,
+                    &op,
+                    &pk,
+                    inclusion,
+                    sig.is_some(),
+                )?;
                 if fee > cap(&sdk, &p.chain)? {
                     return Err(SdkError::FeeAboveCap);
                 }
@@ -819,6 +833,7 @@ impl Wallet {
                         let (data, fee) = priced(
                             simulate(sor, &env).await?,
                             &op,
+                            &pk,
                             q.inclusion_fee,
                             p.signature.is_some(),
                         )?;
