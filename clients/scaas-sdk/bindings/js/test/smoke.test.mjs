@@ -126,7 +126,9 @@ test("copy calls: a backup revealed and read, nothing left in wasm memory", asyn
   text.fill(0);
   assert.ok(sdk.release(words) && sdk.release(fresh.backup));
   // a marker written in and read out leaves no copy in the SDK's memory once released (review B3)
-  const marker = new TextEncoder().encode("marker-9f3c-" + "q".repeat(40));
+  // 4 KiB, and the scan below looks for its last 64 bytes: a later small allocation that reuses the head of a freed copy
+  // cannot hide the rest of it (the B3 mutant survived a 52-byte marker once the allocator reused its chunk)
+  const marker = new TextEncoder().encode("marker-9f3c-" + "q".repeat(4020) + "-tail-5e1d7a" + "z".repeat(52));
   const h = sdk.secret_new(marker.length);
   sdk.secret_write(h, marker.slice());
   const out = new Uint8Array(marker.length);
@@ -134,7 +136,11 @@ test("copy calls: a backup revealed and read, nothing left in wasm memory", asyn
   assert.deepEqual(out, marker);
   assert.ok(sdk.release(h));
   const mem = new Uint8Array(sdk.wasm_memory().buffer);
-  assert.equal(Buffer.from(mem).indexOf(Buffer.from(marker)), -1, "no plaintext left in wasm memory");
+  assert.equal(
+    Buffer.from(mem).indexOf(Buffer.from(marker.subarray(marker.length - 64))),
+    -1,
+    "no plaintext left in wasm memory",
+  );
   // an opaque call without the marker: OpaqueCallRefused, as on every binding (review B2)
   const call = { Opaque: { target: "0x" + "11".repeat(20), value: "0", data: "0x", allow: false } };
   const env = { valid_until: 0n, mode: 0, relayer: null, fee: "0", fee_recipient: null };
