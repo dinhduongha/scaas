@@ -343,6 +343,7 @@ pub(crate) fn figure(
 /// chain's block gas limit `GasAboveTxCap` (PR A review, finding 3: as `self_relay` checks it), a cost above the caps
 /// `FeeAboveCap`. `own`: the operation's own figure where the caller recomputed it (a gateway row's `resend`, PR A review
 /// finding 2): the larger of it and `q`'s is the base, so a quote of another entry, kind or lane state never lowers it.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn signed_quote(
     sdk: &Sdk,
     chain: &str,
