@@ -701,7 +701,7 @@ fn cards_reproduce_the_rows() {
 /// handle; the key enters the content here: the row's ciphertext and id; the content opens to the row's. (b) the reader opens
 /// the object named by the opened content: its length and `ctSha256` before decryption, then the frame and `sha256`; every
 /// refusal row by name (clientkeys' "file" is `PqChatContent`), each beside its twin; PqChat's app id.
-#[cfg(feature = "fam-arweave")]
+#[cfg(feature = "fam-arweave")] // the row's object by seal_for_arweave; the calls under test need only app-core
 #[test]
 fn file_message_rows() {
     use scaas_ua::arweave::SigType;

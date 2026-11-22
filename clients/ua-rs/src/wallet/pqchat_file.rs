@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! PqChat's `file` content (UA-7 §6.4.1 with its 2026-11-21 Change; pqchat-core T10b, owner 2026-11-22 "2 hàm mới + app_id
-//! PqChat"; features `app-core` and `fam-arweave`): the two calls that keep a file key inside `ua-rs`.
+//! PqChat"; feature `app-core`, with or without `fam-arweave`: the `ar://` form is `crate::file`'s): the two calls that keep
+//! a file key inside `ua-rs`.
 //!
 //! - **(a)** [`AppKeys::pqchat_seal_file_message`]: the sealer is given every field of the content but `key` and the file
-//!   key's `File` handle (from [`AppKeys::seal_for_arweave`]); the key enters the content here, the content is checked
+//!   key's `File` handle (from `seal_for_arweave`); the key enters the content here, the content is checked
 //!   ([`check_file`]) and sealed as S5 seals any content. A content that holds a `key` already, or of another type:
 //!   `PqChatContent`; a handle of another usage: `AppKeyUsage`.
 //! - **(b)** [`pqchat_open_file`]: the file of an object named by an opened content (K4's canonical JSON): the content checked,
@@ -20,7 +21,7 @@ use super::file::open_object;
 use super::pqchat_keys::{canonical_zeroizing, Header, SealedMessage, JSON_DEPTH, PT_MAX};
 use super::signer::Signer;
 use super::{AppKeys, Error, KeyHandle, KeyUsage, Result};
-use crate::arweave::parse_ar_url;
+use crate::file::ar_url;
 use serde_json::Value;
 use zeroize::Zeroizing;
 
@@ -72,7 +73,7 @@ pub fn check_file(v: &Value) -> Result<FileFields> {
         .and_then(Value::as_u64)
         .filter(|s| (1..=SIZE_MAX).contains(s))
         .ok_or(Error::PqChatContent)?;
-    parse_ar_url(text(o.get("url"), 1, 2048)?).map_err(|_| Error::PqChatContent)?;
+    ar_url(text(o.get("url"), 1, 2048)?).ok_or(Error::PqChatContent)?;
     if let Some(st) = o.get("store") {
         text(st.get("kind"), 1, 32)?;
         text(st.get("locator"), 1, 2048)?;

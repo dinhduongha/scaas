@@ -54,7 +54,7 @@ mod pairing;
 mod policy;
 #[cfg(feature = "app-core")]
 pub mod pqchat;
-#[cfg(all(feature = "app-core", feature = "fam-arweave"))]
+#[cfg(feature = "app-core")]
 pub mod pqchat_file;
 #[cfg(feature = "app-core")]
 pub mod pqchat_keys;

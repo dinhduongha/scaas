@@ -34,6 +34,39 @@ pub fn object_len(size: u64, cap: u64) -> Option<u64> {
     bucket(size, cap).map(|b| b + TAG)
 }
 
+/// base64url's alphabet (RFC 4648 §5).
+pub const B64URL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+/// The 32 bytes of an Arweave id: exactly 43 canonical base64url characters (the last one of `AEIMQUYcgkosw048`), else
+/// `None` (the form a `file` content's `ar://` url names, CLI-UAL-65; `arweave::id_bytes` is this).
+pub fn ar_id(id: &str) -> Option<[u8; 32]> {
+    let s = id.as_bytes();
+    if s.len() != 43 || !b"AEIMQUYcgkosw048".contains(s.get(42)?) {
+        return None;
+    }
+    let mut bits: u64 = 0;
+    let (mut n, mut out) = (0u32, Vec::with_capacity(33));
+    for c in s {
+        let v = B64URL.iter().position(|x| x == c)? as u64;
+        bits = bits << 6 | v;
+        n += 6;
+        if n >= 8 {
+            n -= 8;
+            out.push((bits >> n) as u8);
+            bits &= (1 << n) - 1;
+        }
+    }
+    if bits != 0 {
+        return None;
+    }
+    out.try_into().ok()
+}
+
+/// The id of `ar://<id>`: the scheme in lower case, [`ar_id`]'s form, nothing after it.
+pub fn ar_url(url: &str) -> Option<[u8; 32]> {
+    ar_id(url.strip_prefix("ar://")?)
+}
+
 /// Why a reader refused an object before decrypting it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectError {

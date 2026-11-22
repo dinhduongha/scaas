@@ -359,7 +359,7 @@ pub fn verify_message(t: SigType, owner: &[u8], msg: &[u8; 48], sig: &[u8]) -> b
 
 // ---------------------------------------------------------------- base64url and ar://
 
-const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+const B64: &[u8; 64] = crate::file::B64URL;
 
 /// base64url, unpadded.
 pub fn b64url(b: &[u8]) -> String {
@@ -376,28 +376,10 @@ pub fn b64url(b: &[u8]) -> String {
     out
 }
 
-/// The 32 bytes of an id: exactly 43 canonical base64url characters (the last one of `AEIMQUYcgkosw048`), else `ArUrl`.
+/// The 32 bytes of an id: exactly 43 canonical base64url characters (the last one of `AEIMQUYcgkosw048`), else `ArUrl`
+/// ([`crate::file::ar_id`], in every build: a `file` content's `url` is checked without this feature).
 pub fn id_bytes(id: &str) -> Result<[u8; 32], ArweaveError> {
-    let s = id.as_bytes();
-    if s.len() != 43 || !b"AEIMQUYcgkosw048".contains(&s[42]) {
-        return Err(ArweaveError::ArUrl);
-    }
-    let mut bits: u64 = 0;
-    let (mut n, mut out) = (0u32, Vec::with_capacity(33));
-    for c in s {
-        let v = B64.iter().position(|x| x == c).ok_or(ArweaveError::ArUrl)? as u64;
-        bits = bits << 6 | v;
-        n += 6;
-        if n >= 8 {
-            n -= 8;
-            out.push((bits >> n) as u8);
-            bits &= (1 << n) - 1;
-        }
-    }
-    if bits != 0 {
-        return Err(ArweaveError::ArUrl);
-    }
-    out.try_into().map_err(|_| ArweaveError::ArUrl)
+    crate::file::ar_id(id).ok_or(ArweaveError::ArUrl)
 }
 
 /// The id of `ar://<id>`: the scheme in lower case, [`id_bytes`]' form, nothing after it (`ArUrl`).
