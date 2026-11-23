@@ -695,6 +695,11 @@ MUTANTS = [
         [(PQV, "    if m.windows(KEYS_PER_UA_MAX + 1)", "    if false && m.windows(KEYS_PER_UA_MAX + 1)")],
         PV + " --test devices at_most_eight_keys_per_ua",
     ),
+    (
+        "8b-8 (4): V1's records read at the bound registry, not the holder",
+        [(AC, "        let Some(registry) = line.holder(pool, at, id).await? else {", "        let Some(registry) = Some(line.bound()) else {")],
+        T + ",vectors --test pqchat_keys v1_follows_the_registry_line",
+    ),
 ]
 
 

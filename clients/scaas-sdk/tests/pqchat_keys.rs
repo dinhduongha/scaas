@@ -1322,6 +1322,91 @@ async fn v1_msig_minimal_and_accepted() {
     );
 }
 
+/// TODO 8b-8 (4), CLI-PQC-15 on F2's line (CTR-UA-70): V1, the check behind a kept signature (`require_signed_records` and
+/// every `sstore2` home), reads the signer's record where the line says: `holderOf` on the bound registry (generation 2)
+/// names generation 1, whose record verifies, though the bound registry holds none; every call of it at one block. The
+/// controls: the holder the bound registry itself (no record there: false), a holder off the line (the read fails).
+#[tokio::test(flavor = "multi_thread")]
+async fn v1_follows_the_registry_line() {
+    let _one = ONE.lock().await;
+    let (sdk, _seed, chain) = on_fake().await;
+    let a = AppCore::new(sdk, desc(&[PQC])).unwrap();
+    let rec = pq("records");
+    let r = &rec["message"];
+    let x = rec["signers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["name"] == r["signer"])
+        .unwrap();
+    let (id, kind) = (a32(&x["ua"]), x["kind"].as_u64().unwrap() as u16);
+    const OLD: &str = "0x5ca00000000000000000000000000000000000a0";
+    let addr = |a: &str| format!("{:0>64}", a.trim_start_matches("0x"));
+    answer(&chain, REGISTRY, "generation()", &[], w(2));
+    answer(&chain, REGISTRY, "predecessor()", &[], addr(OLD));
+    let holder = |h: &str| {
+        answer(
+            &chain,
+            REGISTRY,
+            "holderOf(bytes32)",
+            &id,
+            format!("{}{}{}", addr(h), w(u64::from(kind)), w(0)),
+        )
+    };
+    holder(OLD);
+    let kd = unhex(&x["publicKey"]);
+    answer(
+        &chain,
+        OLD,
+        "registrationOf(bytes32)",
+        &id,
+        format!(
+            "{}{}{}{}{}{}{}",
+            w(u64::from(kind)),
+            w(0xa0),
+            w(0),
+            w(0),
+            w(0),
+            w(kd.len() as u64),
+            pad(&kd)
+        ),
+    );
+    let check = || {
+        a.verify_pqchat_record(
+            "local".into(),
+            s(&x["ua"]),
+            "PqChatMessage".into(),
+            r["record"].to_string(),
+            sig_of(&r["uaSig"]),
+        )
+    };
+    chain.lock().unwrap().requests.clear();
+    assert!(
+        check().await.unwrap(),
+        "the record at its holder, generation 1"
+    );
+    let blocks: std::collections::BTreeSet<String> = chain
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .filter(|q| q.contains("eth_call"))
+        .map(|q| {
+            let t = q.split("\"blockHash\":\"").nth(1).unwrap_or_default();
+            t.get(..66).unwrap_or(t).to_string()
+        })
+        .collect();
+    assert_eq!(blocks.len(), 1, "one block: {blocks:?}");
+    assert!(blocks.iter().all(|b| b.starts_with("0x")), "{blocks:?}");
+    holder(REGISTRY);
+    assert!(
+        !check().await.unwrap(),
+        "the bound registry holds no record"
+    );
+    holder("0x00000000000000000000000000000000000000ee");
+    assert!(check().await.is_err(), "a holder off the line");
+}
+
 /// The contact card (UA-7 §14 O7) on the fake registry: every card row verifies for its UA at the final block, each refused
 /// row is false beside its passing twin; the account signs its own card (its UA, the KEM version and Matrix id given, the
 /// row's typed digest), which verifies; a malformed Matrix id and a native key refused (`Argument`).

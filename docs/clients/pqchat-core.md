@@ -231,7 +231,9 @@ by [CTR-CHAT-23](../contracts/pqchat.md#CTR-CHAT-23); the default off a controll
 - **On an `sstore2` instance** the session and epoch records (`sessionSig`, `epochSig`), the parent's leaves and removals (from
   the kept `leaveAt` / `removalAt` records, each with its signer's signature and naming the parent; the `leftIn` and `removedIn`
   flags are not read there) and a posted message (`messageSig`) each count only when their signer's `UASig` verifies over the
-  typed digest the SDK rebuilds from the record's fields (V1, the signer's registry record a trusted read), `sealedInfo` included;
+  typed digest the SDK rebuilds from the record's fields (V1, the signer's registry record a trusted read along F2's registry
+  line: `holderOf` on the bound registry names the generation whose record is read, every call of it by one endpoint at one
+  block; the SDK's `tests/pqchat_keys.rs` `v1_follows_the_registry_line`, TODO 8b-8 (4)), `sealedInfo` included;
   else `signature`. A single-key author's UA id is the hash of its key, so a forged record fails even when the same endpoint lies
   about the registry; an `msig` author's structure is a registry read, for which the agreed reads of CLI-PQC-16 are the defence.
 - **`require_signed_records`** (`PqChatConfig`, default `false`): `true` also refuses a `none` home: its records are dropped
