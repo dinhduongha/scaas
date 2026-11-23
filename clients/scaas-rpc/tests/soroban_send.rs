@@ -11,7 +11,8 @@ use common::*;
 use scaas_rpc::endpoint::Fanout;
 use scaas_rpc::family::{Client, SendOutcome};
 use scaas_rpc::soroban::{
-    auth_signer, tx_data, tx_id, Broadcast, Simulation, Soroban, TxStatus, XDR_DEPTH, XDR_MAX,
+    auth_signer, tx_data, tx_id, Broadcast, Simulation, Soroban, TxStatus, TxWindow, XDR_DEPTH,
+    XDR_MAX,
 };
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
@@ -386,25 +387,88 @@ async fn entries_fee_stats_and_status_read_within_their_forms() {
         soroban(&[&f]).fee_stats_at(0).await.is_err(),
         "a number where the RPC writes text"
     );
+    let w = |a: Value| {
+        let mut a = a;
+        a.as_object_mut().unwrap().extend(
+            json!({"latestLedgerCloseTime": "1790000000", "oldestLedger": 3})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
+        a
+    };
     for (a, want) in [
         (
-            json!({"status": "SUCCESS", "ledger": 7, "latestLedger": 9}),
+            w(json!({"status": "SUCCESS", "ledger": 7, "latestLedger": 9})),
             Some(TxStatus::Success { ledger: 7 }),
         ),
         (
-            json!({"status": "FAILED", "ledger": 8, "latestLedger": 9}),
+            w(json!({"status": "FAILED", "ledger": 8, "latestLedger": 9})),
             Some(TxStatus::Failed { ledger: 8 }),
         ),
         (
-            json!({"status": "NOT_FOUND", "latestLedger": 9}),
+            w(json!({"status": "NOT_FOUND", "latestLedger": 9})),
             Some(TxStatus::NotFound { latest: 9 }),
         ),
-        (json!({"status": "SUCCESS", "latestLedger": 9}), None),
-        (json!({"status": "PENDING", "latestLedger": 9}), None),
+        (w(json!({"status": "SUCCESS", "latestLedger": 9})), None),
+        (w(json!({"status": "PENDING", "latestLedger": 9})), None),
     ] {
         let u = rpc(a, seen.clone()).await;
         assert_eq!(soroban(&[&u]).transaction_at(0, &[1; 32]).await.ok(), want);
     }
+    // review T26 B-2: the endpoint's window from the same answer; an answer without it is no status
+    let u = rpc(
+        w(json!({"status": "NOT_FOUND", "latestLedger": 9})),
+        seen.clone(),
+    )
+    .await;
+    assert_eq!(
+        soroban(&[&u])
+            .transaction_window_at(0, &[1; 32])
+            .await
+            .unwrap()
+            .1,
+        TxWindow {
+            latest: 9,
+            close_time: 1_790_000_000,
+            oldest: 3
+        }
+    );
+    for a in [
+        json!({"status": "NOT_FOUND", "latestLedger": 9}),
+        json!({"status": "NOT_FOUND", "latestLedger": 9, "latestLedgerCloseTime": "1790000000"}),
+        json!({"status": "NOT_FOUND", "latestLedger": 9, "latestLedgerCloseTime": "x", "oldestLedger": 3}),
+        json!({"status": "NOT_FOUND", "latestLedger": 9, "latestLedgerCloseTime": "1790000000", "oldestLedger": 10}),
+    ] {
+        let u = rpc(a, seen.clone()).await;
+        assert!(
+            soroban(&[&u]).transaction_at(0, &[1; 32]).await.is_err(),
+            "no window"
+        );
+    }
+    // a ledger's close time: its own sequence only
+    let u = rpc(
+        json!({"ledgers": [{"sequence": 9, "hash": "ab", "ledgerCloseTime": "1790000005"}]}),
+        seen.clone(),
+    )
+    .await;
+    assert_eq!(
+        soroban(&[&u]).close_time_at(0, 9).await.unwrap(),
+        1_790_000_005
+    );
+    assert!(
+        soroban(&[&u]).close_time_at(0, 8).await.is_err(),
+        "another ledger"
+    );
+    let u = rpc(
+        json!({"ledgers": [{"sequence": 9, "hash": "ab"}]}),
+        seen.clone(),
+    )
+    .await;
+    assert!(
+        soroban(&[&u]).close_time_at(0, 9).await.is_err(),
+        "no close time"
+    );
 }
 
 /// Owner 2026-11-22 ("accept SourceAccount when self-paying"): a `SourceAccount` auth entry reads as such (the SDK accepts it

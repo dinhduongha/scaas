@@ -154,7 +154,9 @@ no): the SDK's bounded re-post of the same bytes of an unsettled Arweave item, [
 report `dead` while a transaction may still land"; BUILT for EVM, plan T7, T13 S7: `final_from_an_agreed_read_is_terminal`,
 `final_from_a_discovered_first_endpoint_is_not_terminal`, `replaced_needs_the_transaction_unknown`,
 `replaced_from_a_later_endpoint_is_pending`, `replaced_under_strict_majority_rests_on_the_finalized_block`,
-`failed_for_good_under_strict_majority_rests_on_the_finalized_block`; the merged node states, T11). A read is decisive when it is agreed under `strict_majority`, or under
+`failed_for_good_under_strict_majority_rests_on_the_finalized_block`; the merged node states, T11; Soroban's reads of it,
+review T26 B-2: `getTransaction`'s ledger window (`TxWindow`: its latest ledger, that ledger's close time, the oldest ledger it
+keeps) and a ledger's close time (`close_time_at`), so a deadline is compared with the chain's time, `soroban_send.rs`). A read is decisive when it is agreed under `strict_majority`, or under
 `failover` answered whole by the first endpoint of the list when that endpoint is not `discovered`. A transaction is `Final` when a
 decisive read finds its receipt in a block at or below the final block, the receipt's block hash equal to that endpoint's header
 hash at its number. It is `Replaced` only when one decisive read finds, all at the final block, the sender's nonce (pinned by

@@ -195,6 +195,27 @@ where
     G: Fn(usize, u64) -> Gut,
     Gut: Future<Output = Result<V, ReadError>>,
 {
+    read_set_from(client, probe, first, at)
+        .await
+        .map(|(height, value, _)| (height, value))
+}
+
+/// [`read_set_pinned`] with the index of the endpoint whose answer stands (review T26 B-2: a status is decisive under
+/// `failover` only when endpoint 0 gave it and is not `discovered`, CLI-RPC-09).
+pub(crate) async fn read_set_from<V, P, F, Fut, G, Gut>(
+    client: &Client,
+    probe: &P,
+    first: F,
+    at: G,
+) -> Result<(u64, V, usize), SdkError>
+where
+    V: PartialEq,
+    P: Probe,
+    F: Fn(usize) -> Fut,
+    Fut: Future<Output = Result<(u64, u64, V), ReadError>>,
+    G: Fn(usize, u64) -> Gut,
+    Gut: Future<Output = Result<V, ReadError>>,
+{
     let a = client.failover(probe, first).await?;
     let (head, height, value) = a.value;
     if a.endpoint == 0 {
@@ -230,7 +251,7 @@ where
             .into());
         }
     }
-    Ok((height, value))
+    Ok((height, value, a.endpoint))
 }
 
 #[cfg(all(test, feature = "near"))]

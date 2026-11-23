@@ -242,7 +242,14 @@ registry write, its record present), `Consumed` (the lane nonce spent without th
 unspent), and for an EVM native send `Reverted` (final and reverted; owner 2026-11-18, ruling 4). Everything else is `InFlight` with its detail: queued or sent, the gateways' merged state (never terminal, every node `dead`
 included), a self-relay transaction that failed or was replaced (not a failed operation: the signed operation is public and may still
 land). While in flight the user may wait, resend the same bytes, or cancel the lane's nonce, which makes the operation `Consumed`.
-After a restart every operation resumes from the chain.
+After a restart every operation resumes from the chain. On Soroban (review T26 B-1 to B-3, `soroban_follow`) one endpoint answers
+every fact of a step, the op's spent entries before its transaction's status, and decides only when the read is decisive (agreed;
+under `failover` endpoint 0, not `discovered`); every bound is the chain's: a transfer's or burn's auth entry ends only past its
+expiry ledger (it signs no time), a pay also when the read ledger's close time is past its `valid_until`, a native send's
+transaction when the close time its status names is past its `max_time` and that endpoint still keeps the ledger it was sent at;
+never the SDK's clock (`a_transfer_ends_on_its_expiry_ledger_not_on_the_clock`, `a_pay_expires_on_the_chains_time`,
+`a_native_send_expires_on_the_chains_time_within_its_history`, `a_discovered_endpoint_decides_nothing`,
+`an_own_landing_between_the_reads_is_never_consumed`).
 
 ## 6. Confidential tokens
 

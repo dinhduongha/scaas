@@ -9,8 +9,8 @@
 //! XLM on the same builder. Following is by chain facts: the payer's transaction by its local id, the op by its host nonce
 //! (and a pay's `pay_ref`) entries. Every read goes through the profile's list (failover; `strict_majority` compares the
 //! others). The SDK builds ledger keys (an encoding) and hashes nothing (CLI-SDK-01). UNAUDITED.
-use super::read_set;
 use super::soroban::{account_key, failed, holder, Holder, ACCOUNT_MAX};
+use super::{read_set, read_set_from};
 use crate::op::state::{self, Row};
 use crate::vault::OpenSeed;
 use crate::wallet::native::{derive, NativeKeyRef};
@@ -18,7 +18,7 @@ use crate::wallet::{SignedOpBlob, Wallet};
 use crate::{Chain, FamilyParams, Sdk, SdkError};
 use scaas_rpc::pool::ReadError;
 use scaas_rpc::soroban::{Broadcast, Simulation, Soroban, TxStatus};
-use scaas_rpc::{EndpointFailure, FailureKind, RpcError};
+use scaas_rpc::{Class, EndpointFailure, FailureKind, Policy, RpcError};
 use scaas_ua::families::soroban::{
     check_terms, network_id, pay_nonce, signed_op, Checked, OpFields, OpKind, Shown, Terms,
 };
@@ -62,7 +62,9 @@ pub struct SorobanOpRequest {
     pub subject: NativeKeyRef,
     pub contract: String,
     pub kind: SorobanOpKind,
-    /// unix seconds: a pay's signed `valid_until`, every kind's auth expiry
+    /// unix seconds: a pay's signed `valid_until` (the contract checks it against the ledger's time); every kind's auth expiry
+    /// ledger is computed from it at one ledger a second, an upper bound: a transfer or a burn signs no time and stays good
+    /// until that ledger, at about 5 s a ledger some five times longer (review T26 B-1)
     pub valid_until: u64,
 }
 
@@ -370,6 +372,182 @@ fn contract_id(c: &str) -> [u8; 32] {
 async fn spent(sor: &Soroban, c: &Checked) -> Result<bool, SdkError> {
     let (_, e) = entries(sor, &spent_keys(c)).await?;
     Ok(e.iter().any(Option::is_some))
+}
+
+/// What following a row reads (review T26 B-1 to B-3): its transaction's id, its op's spent keys (none for a native send), its
+/// bounds on the chain (the expiry ledger; a pay's `valid_until`; the transaction's `max_time`) and the ledger it was sent at.
+struct Watch {
+    native: bool,
+    tx: Option<[u8; 32]>,
+    keys: Vec<Vec<u8>>,
+    expiry: u64,
+    pay_until: Option<u64>,
+    max_time: u64,
+    sent_at: u64,
+}
+
+fn watch(r: &Row, passphrase: &str) -> Result<Watch, SdkError> {
+    let tx = r
+        .tx_id
+        .as_deref()
+        .map(|t| {
+            crate::text::unhex(t)?
+                .try_into()
+                .map_err(|_| SdkError::Argument)
+        })
+        .transpose()?;
+    let native = r.path == "native";
+    if native && tx.is_none() {
+        return Err(SdkError::Argument);
+    }
+    let expiry = ex(&r.extra, "expiry").as_u64().unwrap_or(0);
+    let keys = if native {
+        vec![]
+    } else {
+        let p = SorobanPrepared {
+            chain: r.chain.clone(),
+            contract: r.contract.clone(),
+            entry: r.entry.clone(),
+            from: r.from.clone(),
+            to: ex(&r.extra, "to").as_str().map(str::to_string),
+            amount: ex(&r.extra, "amount").as_str().unwrap_or_default().into(),
+            pay_ref: ex(&r.extra, "pay_ref").as_str().map(str::to_string),
+            valid_until: r.valid_until,
+            nonce: r.nonce.clone(),
+            expiry: u32::try_from(expiry).unwrap_or(0),
+            subject: None,
+            signature: None,
+            relayer_bound: false,
+            op: None,
+        };
+        spent_keys(&rebuilt(&p, passphrase)?)
+    };
+    Ok(Watch {
+        native,
+        tx,
+        keys,
+        expiry,
+        pay_until: (r.entry == "pay").then_some(r.valid_until),
+        max_time: ex(&r.extra, "max_time").as_u64().unwrap_or(0),
+        sent_at: r.from_block,
+    })
+}
+
+/// A row's end: its state, its detail, the ledger of its own landed transaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct End {
+    state: &'static str,
+    detail: &'static str,
+    ledger: Option<u64>,
+}
+
+/// One endpoint's verdict on a row: its end when its facts give one, and what is known beside it. Two verdicts are equal by
+/// their end alone (a strict majority agrees on how the row ends; the detail decides nothing).
+struct Verdict {
+    end: Option<End>,
+    detail: Option<&'static str>,
+}
+
+impl PartialEq for Verdict {
+    fn eq(&self, o: &Verdict) -> bool {
+        self.end == o.end
+    }
+}
+
+fn verdict(end: Option<End>, detail: Option<&'static str>) -> Verdict {
+    Verdict { end, detail }
+}
+
+fn end(state: &'static str, detail: &'static str, ledger: Option<u64>) -> Option<End> {
+    Some(End {
+        state,
+        detail,
+        ledger,
+    })
+}
+
+/// Endpoint `i`'s verdict on `w` and the ledger it rests on (at or above `floor`): the op's spent entries first, then the
+/// transaction's status at a ledger at or above theirs, both from `i` (review T26 B-3); the bounds against that endpoint's
+/// ledger and the chain's time (B-1, B-2).
+async fn verdict_at(
+    sor: &Soroban,
+    w: &Watch,
+    i: usize,
+    floor: u64,
+) -> Result<(u64, Verdict), ReadError> {
+    let (spent_at, gone) = if w.native {
+        (0, false)
+    } else {
+        let (l, e) = sor.entries_at(i, &w.keys).await.map_err(|e| failed(i, e))?;
+        if e.iter()
+            .flatten()
+            .any(|x| x.live_until.is_some_and(|t| t < l))
+        {
+            return Err(malformed(i, "an archived entry"));
+        }
+        (l, e.iter().any(Option::is_some))
+    };
+    let status = match &w.tx {
+        Some(h) => {
+            let (s, win) = sor
+                .transaction_window_at(i, h)
+                .await
+                .map_err(|e| failed(i, e))?;
+            if win.latest < spent_at {
+                return Err(malformed(i, "a status behind its entries"));
+            }
+            Some((s, win))
+        }
+        None => None,
+    };
+    let ledger = match (w.native, &status) {
+        (true, Some((_, win))) => win.latest,
+        _ => spent_at,
+    };
+    if ledger < floor {
+        return Err(malformed(i, "a ledger behind the set's"));
+    }
+    let v = if w.native {
+        match status {
+            Some((TxStatus::Success { ledger }, _)) => {
+                verdict(end("landed", "success", Some(ledger)), None)
+            }
+            Some((TxStatus::Failed { .. }, _)) => verdict(end("reverted", "failed", None), None),
+            Some((TxStatus::NotFound { .. }, win))
+                if win.close_time > w.max_time && win.oldest <= w.sent_at =>
+            {
+                verdict(end("expired", "not found past max_time", None), None)
+            }
+            _ => verdict(None, None),
+        }
+    } else {
+        // a pay's `valid_until` against the chain's time at the ledger its entries were read at
+        let past_time = match w.pay_until {
+            Some(v) if !gone => {
+                sor.close_time_at(i, ledger)
+                    .await
+                    .map_err(|e| failed(i, e))?
+                    > v
+            }
+            _ => false,
+        };
+        match status {
+            Some((TxStatus::Success { ledger }, _)) => {
+                verdict(end("landed", "success", Some(ledger)), None)
+            }
+            _ if gone && w.tx.is_none() => verdict(end("landed", "spent", None), None),
+            _ if gone => verdict(end("consumed", "spent by another transaction", None), None),
+            _ if ledger > w.expiry || past_time => {
+                verdict(end("expired", "unspent past its bound", None), None)
+            }
+            Some((TxStatus::Failed { .. }, _)) => verdict(None, Some("tx_failed")),
+            Some((TxStatus::NotFound { .. }, win)) if win.close_time > w.max_time => {
+                verdict(None, Some("tx_expired"))
+            }
+            _ => verdict(None, None),
+        }
+    };
+    Ok((ledger, v))
 }
 
 /// `chain`'s native cost cap (`FeeAboveCap` without one: no native spend).
@@ -868,6 +1046,8 @@ impl Wallet {
                         row.tx_id = Some(hex(&signed.hash));
                         row.tx_nonce = u64::try_from(seq).ok();
                         put(&mut row.extra, "max_time", json!(q.max_time));
+                        // the ledger it is sent at: a status that knows no older ledger can say it never landed
+                        row.from_block = latest(sor).await?;
                         row.state = "signed".into();
                         state::put(&sdk, &row).await?;
                         let b = sor
@@ -1098,6 +1278,12 @@ impl Wallet {
     /// transaction (or its gateway, or for a handed-off op whoever holds it) landed the op; `consumed` when the op is spent and
     /// this row's own transaction did not land it; `expired` past its bound and unspent; a native send's billed failure
     /// `reverted`. A self-relay whose transaction failed or expired stays `sent` (`detail` names why): the op may still land.
+    /// Review T26 B-1 to B-3 (CLI-SDK-18, CLI-RPC-09): one endpoint answers every fact of a step, its op's spent entries read
+    /// before its transaction's status (at a ledger at or above theirs); a row ends only on a decisive read (agreed under
+    /// `strict_majority`; under `failover` endpoint 0's when it is not `discovered`); a bound is the chain's: a transfer's or
+    /// burn's its expiry ledger, a pay's `valid_until` also against the read ledger's close time, a native transaction's
+    /// `max_time` against the close time its status names, and only within the ledgers whose transactions that endpoint keeps.
+    /// Endpoints that disagree under `strict_majority` leave the row as it was.
     pub async fn soroban_follow(&self, op: String) -> Result<String, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
@@ -1108,77 +1294,39 @@ impl Wallet {
                 }
                 let c = sdk.chain(&r.chain)?;
                 let (sor, _, passphrase) = soroban(c)?;
-                let now = sdk.now();
-                let status = match &r.tx_id {
-                    Some(t) => {
-                        let h: [u8; 32] = crate::text::unhex(t)?
-                            .try_into()
-                            .map_err(|_| SdkError::Argument)?;
-                        let a = sor
-                            .client
-                            .failover(sor, |i| async move {
-                                sor.transaction_at(i, &h).await.map_err(|e| failed(i, e))
-                            })
-                            .await?;
-                        Some(a.value)
+                let w = watch(&r, passphrase)?;
+                let w = &w;
+                let read = read_set_from(
+                    &sor.client,
+                    sor,
+                    |i| async move { verdict_at(sor, w, i, 0).await.map(|(l, v)| (l, l, v)) },
+                    |j, l| async move { verdict_at(sor, w, j, l).await.map(|(_, v)| v) },
+                )
+                .await;
+                let (v, decisive) = match read {
+                    Ok((_, v, i)) => {
+                        let pool = sor.client.pool();
+                        let strict = pool.policy() == Policy::StrictMajority;
+                        let decisive = strict || (i == 0 && pool.class(0) != Class::Discovered);
+                        (v, decisive)
                     }
-                    None => None,
+                    Err(SdkError::Rpc(RpcError::EndpointNoMajority { .. })) => return Ok(r.state),
+                    Err(e) => return Err(e),
                 };
-                let max_time = ex(&r.extra, "max_time").as_u64().unwrap_or(0);
-                fn end(r: &mut Row, s: &str, detail: &str) {
-                    r.state = s.into();
-                    r.detail = detail.into();
-                }
-                if let Some(TxStatus::Success { ledger }) = status {
-                    r.landed = Some((ledger, r.tx_id.clone().unwrap_or_default()));
-                }
-                if r.path == "native" {
-                    match status {
-                        Some(TxStatus::Success { .. }) => end(&mut r, "landed", "success"),
-                        Some(TxStatus::Failed { .. }) => end(&mut r, "reverted", "failed"),
-                        Some(TxStatus::NotFound { .. }) if now > max_time => {
-                            end(&mut r, "expired", "not found past max_time")
+                match v.end {
+                    Some(e) if decisive => {
+                        r.state = e.state.into();
+                        r.detail = e.detail.into();
+                        if let Some(l) = e.ledger {
+                            r.landed = Some((l, r.tx_id.clone().unwrap_or_default()));
                         }
-                        _ => {}
+                        r.ended_at = Some(sdk.now());
                     }
-                } else {
-                    let p = SorobanPrepared {
-                        chain: r.chain.clone(),
-                        contract: r.contract.clone(),
-                        entry: r.entry.clone(),
-                        from: r.from.clone(),
-                        to: ex(&r.extra, "to").as_str().map(str::to_string),
-                        amount: ex(&r.extra, "amount").as_str().unwrap_or_default().into(),
-                        pay_ref: ex(&r.extra, "pay_ref").as_str().map(str::to_string),
-                        valid_until: r.valid_until,
-                        nonce: r.nonce.clone(),
-                        expiry: ex(&r.extra, "expiry")
-                            .as_u64()
-                            .and_then(|e| u32::try_from(e).ok())
-                            .unwrap_or(0),
-                        subject: None,
-                        signature: None,
-                        relayer_bound: false,
-                        op: None,
-                    };
-                    let checked = rebuilt(&p, passphrase)?;
-                    let gone = spent(sor, &checked).await?;
-                    match status {
-                        Some(TxStatus::Success { .. }) => end(&mut r, "landed", "success"),
-                        _ if gone && r.tx_id.is_none() => end(&mut r, "landed", "spent"),
-                        _ if gone => end(&mut r, "consumed", "spent by another transaction"),
-                        _ if now > r.valid_until || latest(sor).await? > u64::from(p.expiry) => {
-                            end(&mut r, "expired", "unspent past its bound")
+                    _ => {
+                        if let Some(d) = v.detail {
+                            r.detail = d.into();
                         }
-                        Some(TxStatus::Failed { .. }) => r.detail = "tx_failed".into(),
-                        Some(TxStatus::NotFound { .. }) if now > max_time => {
-                            r.detail = "tx_expired".into()
-                        }
-                        _ => {}
                     }
-                }
-                if r.terminal() {
-                    r.ended_at = Some(now);
                 }
                 state::put(&sdk, &r).await?;
                 Ok(r.state)
@@ -1257,6 +1405,8 @@ impl Wallet {
                 };
                 let signed = key.sign_soroban_tx(&nid, &tx)?;
                 let id = new_id()?;
+                // the ledger it is sent at: a status that knows no older ledger can say it never landed (review T26 B-2)
+                let sent_at = latest(sor).await?;
                 let mut row = Row {
                     op: id.clone(),
                     chain: q.chain.clone(),
@@ -1276,7 +1426,7 @@ impl Wallet {
                     tx_nonce: q.seq.parse().ok(),
                     path: "native".into(),
                     payer: Some(q.from.clone()),
-                    from_block: 0,
+                    from_block: sent_at,
                     state: "signed".into(),
                     detail: String::new(),
                     landed: None,
