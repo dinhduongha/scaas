@@ -28,6 +28,7 @@ pub enum Family {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct EndpointConfig {
     pub url: String,
     #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::ClassDef"))]
@@ -60,6 +61,7 @@ pub enum Finality {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct ChainProfile {
     /// `scaas-testnet`, `<chain>-mainnet`, `<chain>-testnet`
     pub key: String,
@@ -149,6 +151,7 @@ pub enum L1Fee {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub enum FamilyParams {
     /// Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
     /// profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),

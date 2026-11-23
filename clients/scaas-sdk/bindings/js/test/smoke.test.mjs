@@ -269,6 +269,11 @@ test("an EVM profile opens: the bindings build the SDK's `evm` (decisions CLI-SD
   assert.equal(await failure(open(profile({ disabled_kinds: ["no-such-kind"] }))), "Argument");
   // Moonbeam's pinnedReads false (owner 2026-11-22, ARCH-POS-20 (2)): the profile opens; absent, the field is true
   assert.equal(await failure(open(profile({ pinned_reads: false }))), "Ok");
+  // review T26 C-3: a key the record does not have is refused, never dropped (a misspelt field would take its default)
+  assert.equal(await failure(open(profile({ pinnedReads: false }))), "Argument", "a key in another spelling");
+  const rpc = [{ url: "http://127.0.0.1:9", class: "Named", label: null, auth: null, weight: 1 }];
+  assert.equal(await failure(open(profile({ rpc }))), "Argument", "an endpoint's unknown key");
+  assert.equal(await failure(sdk.open({ ...config(), extra: 1 }, new MemStore())), "Argument", "the configuration's");
 });
 
 test("a value nested beyond 128 levels is refused before it is lifted, and the instance lives on (review T26 C-6)", async () => {

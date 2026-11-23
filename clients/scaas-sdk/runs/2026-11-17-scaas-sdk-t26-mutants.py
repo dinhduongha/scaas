@@ -277,6 +277,12 @@ MUTANTS = [
         [(APK, "        if key.rooted {\n            return Err(Error::AppKeyRooted);\n        }\n        let (mlkem_ct, x25519_eph, ss)", "        let (mlkem_ct, x25519_eph, ss)")],
         T + " --test app_core the_app_root_never_leaves_by_a_kem_wrap",
     ),
+    (
+        "C-3: the JS configuration's keys not compared",
+        [(JSR, "        if !keys_known(&config, &to_js(&c)?, JS_DEPTH) {", "        if false {")],
+        JS,
+        "an EVM profile opens",
+    ),
 ]
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ use std::sync::{Arc, PoisonError};
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub enum Unlock {
     Passphrase(#[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))] Arc<SecretBytes>),
     Passkey,

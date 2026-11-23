@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 /// passphrase.
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct DeriveFromSignature {
     pub label: String,
     /// `0x` and 40 hex digits, any case
@@ -35,6 +36,7 @@ pub struct DeriveFromSignature {
 /// passphrase (empty, or ≥ 10 code points), the seed-set number `index`, the new seed's label and vault passphrase.
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct DeriveFromKey {
     pub label: String,
     pub network: String,

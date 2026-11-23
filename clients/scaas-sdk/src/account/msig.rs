@@ -210,6 +210,7 @@ pub struct UpdateMsig {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct MsigUpdatePlan {
     #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
     pub write: Arc<RegistryWrite>,

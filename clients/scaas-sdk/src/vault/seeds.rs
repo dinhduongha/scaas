@@ -31,6 +31,7 @@ pub struct SeedInfo {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct Generate {
     pub label: String,
     #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
@@ -41,6 +42,7 @@ pub struct Generate {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct NewSeed {
     pub info: SeedInfo,
     #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
@@ -287,6 +289,7 @@ fn fields_of<'a>(e: &'a SeedEntry, accounts: &'a str) -> IndexFields<'a> {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct ImportWords {
     pub label: String,
     #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
@@ -299,6 +302,7 @@ pub struct ImportWords {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct DeriveChild {
     pub parent: String,
     pub label: String,
@@ -311,6 +315,7 @@ pub struct DeriveChild {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct ImportKey {
     pub seed: String,
     /// `ua-rs`'s network name (`evm`, `cosmos`, `hedera_ecdsa`, `hedera_ed25519`, `sui`, `stellar`, `ton`, `aptos`, `solana`)
@@ -340,15 +345,18 @@ fn seed_passphrase(seed_vault: &scaas_ua::wallet::Vault, p: &str) -> Result<(), 
 /// The first marker of `remove`.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[serde(deny_unknown_fields)]
 pub struct ConfirmRemove {}
 /// The second marker of `remove`, for a seed whose backup is `pending`.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[serde(deny_unknown_fields)]
 pub struct ConfirmRemoveUnbacked {}
 
 /// `vault.remove`'s request.
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct Remove {
     pub seed: String,
     pub confirm: ConfirmRemove,
