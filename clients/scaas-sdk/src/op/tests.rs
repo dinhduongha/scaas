@@ -1765,6 +1765,67 @@ async fn from_block_is_the_final_block_at_submit() {
     assert!(matches!(s, OpState::Landed { block: 0x1c, .. }), "{s:?}");
 }
 
+/// T26 B-13: a poll scans only the blocks after the last decisive read at the final block that found no event; the event
+/// in a later block still lands the operation. Control: the first poll scans from the row's `from_block`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_poll_scans_only_the_blocks_after_the_last() {
+    let t = setup(1, |_, _| {}).await;
+    t.chain.lock().unwrap().finalized = 0x18;
+    let (op, digest) = submitted(&t, "token", TOKEN, "5").await;
+    let from = |c: &Fake| -> Vec<String> {
+        c.lock()
+            .unwrap()
+            .requests
+            .iter()
+            .filter_map(|r| serde_json::from_str::<Value>(r).ok())
+            .filter(|r| r["method"] == "eth_getLogs")
+            .map(|r| {
+                r["params"][0]["fromBlock"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string()
+            })
+            .collect()
+    };
+    t.chain.lock().unwrap().finalized = 0x20;
+    t.chain.lock().unwrap().requests.clear();
+    let s = t.sdk.op().state(op.clone()).await.unwrap();
+    assert!(!s.is_terminal(), "{s:?}");
+    assert_eq!(
+        from(&t.chain),
+        ["0x18"],
+        "control: the first poll from the row's from_block"
+    );
+    {
+        let mut c = t.chain.lock().unwrap();
+        c.requests.clear();
+        c.logs.push(executed_log(TOKEN, &digest, 0x1c, false));
+        c.head = 0x30;
+        c.finalized = 0x28;
+    }
+    let s = t.sdk.op().state(op.clone()).await.unwrap();
+    assert_eq!(
+        from(&t.chain),
+        ["0x21"],
+        "the second poll after the blocks already read"
+    );
+    assert!(
+        !s.is_terminal(),
+        "an event in a block already read is not looked for again: {s:?}"
+    );
+    {
+        let mut c = t.chain.lock().unwrap();
+        c.logs.push(executed_log(TOKEN, &digest, 0x2c, false));
+        c.nonces.insert(TOKEN.into(), 1);
+        c.finalized = 0x30;
+    }
+    let s = t.sdk.op().state(op).await.unwrap();
+    assert!(
+        matches!(s, OpState::Landed { block: 0x2c, .. }),
+        "a later block's event: {s:?}"
+    );
+}
+
 /// P3: one `Prepared`, two concurrent `submit`s: one signs and writes, the other is `PreparedUnknown`.
 #[tokio::test(flavor = "multi_thread")]
 async fn one_prepared_submits_once() {

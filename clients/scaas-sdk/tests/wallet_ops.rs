@@ -1284,6 +1284,16 @@ async fn pay_salt_derived_from_the_request() {
     );
     let more = t.sdk.wallet().prepare_pay(pay(None, "6")).await.unwrap();
     assert_ne!(lane(&more), lane(&b), "another amount: another lane");
+    // T26 B2-10: the salt is derived from the canonical terms; a retry writing the payee in upper case or the amount with a
+    // leading zero is the same pay lane
+    let mut retry = pay(None, "05");
+    retry.to = format!("0x{}", "00".repeat(31) + "AA");
+    let r = t.sdk.wallet().prepare_pay(retry).await.unwrap();
+    assert_eq!(
+        lane(&r),
+        lane(&b),
+        "the same terms in another spelling: the same lane"
+    );
 }
 
 /// Closing review P2-4: a PERCENT envelope (`UABurn`'s row: mode 0x13, rate 5000 on 135000) is reviewed and quoted as the amount

@@ -198,6 +198,28 @@ async fn factory_index_token_off_list_is_unlisted() {
     );
 }
 
+/// T26 B2-14: an index entry whose metadata does not read (an unregistered implementation's `name()` that answers nothing,
+/// CTR-TOK-27's `createTokenUnregistered`) is listed as `[unreadable]`, never ending the whole list (a listed token that does
+/// not read still fails the call). Control: the readable entries as before.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unreadable_index_token_is_marked() {
+    const JUNK: &str = "0x5ca00000000000000000000000000000000000a9";
+    let (s, _, c) = one(0).await;
+    c.lock().unwrap().index = vec![VND.into(), JUNK.into(), ODD.into()];
+    let t = s.wallet().tokens("local".into(), true).await.unwrap();
+    assert_eq!(t.len(), 4);
+    let junk = t.iter().find(|t| t.address == JUNK).unwrap();
+    assert_eq!(
+        (junk.listed, junk.display.as_str()),
+        (false, "[unreadable]")
+    );
+    let odd = t.iter().find(|t| t.address == ODD).unwrap();
+    assert_eq!(
+        odd.display, "[unlisted] USD",
+        "control: a readable index token"
+    );
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn unlisted_name_is_sanitised() {
     let (s, _, c) = one(0).await;

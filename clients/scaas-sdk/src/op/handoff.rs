@@ -210,6 +210,34 @@ impl Op {
                     return Err(SdkError::ImportFeeRefused);
                 }
                 let (profile, _, pool) = evm(&sdk, &expect.chain)?;
+                // the signer's kind as the signer and the signature show it (T26 B-15), never the blob's word alone: a native
+                // id (an EVM address left-padded, CTR-UA-03) is the gas tables' kind 0 (`NATIVE_EVM`) and no other; a
+                // `UASig` with `keyData` is the kind whose UA of that key data is the signer (a stored kind's empty
+                // `keyData` names its key in the record, which the chain's simulation judges)
+                let signer: Option<[u8; 32]> =
+                    unhex(&blob.signer).ok().and_then(|s| s.try_into().ok());
+                let native = signer.is_some_and(|s| s[..12] == [0; 12]);
+                if native != (blob.signer_kind == super::gas::NATIVE_EVM) {
+                    return Err(SdkError::ImportKindRefused);
+                }
+                if let Some(kd) = blob
+                    .signature
+                    .get("keyData")
+                    .and_then(Value::as_str)
+                    .filter(|k| k.len() > 2 && !native)
+                {
+                    let kd = unhex(kd)?;
+                    let derived = scaas_ua::KINDS
+                        .iter()
+                        .find(|k| {
+                            signer.is_some()
+                                && scaas_ua::derive_ua(k.kind, &kd, false).ok() == signer
+                        })
+                        .map(|k| k.kind);
+                    if derived != Some(blob.signer_kind) {
+                        return Err(SdkError::ImportKindRefused);
+                    }
+                }
                 // a signer kind the chain's profile disables (owner 2026-11-22), as `prepare` refuses its own
                 super::ua_kind_enabled(&profile, blob.signer_kind)?;
                 let contract = super::addr20(&blob.contract)?;

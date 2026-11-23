@@ -49,14 +49,15 @@ fn address_of(i: usize, e: Option<&StackEntry>, what: &str) -> Result<Addr, Read
     }
 }
 
-/// One listed token's balance of `who` at seqno `s` on endpoint `i`.
+/// One listed token's balance of `who` at seqno `s` on endpoint `i`, or why it is unknown (a frozen wallet: owner 2026-11-23,
+/// T26 B2-15, never a false 0).
 async fn token_at(
     ton: &Ton,
     i: usize,
     s: u64,
     who: Addr,
     master: Addr,
-) -> Result<String, ReadError> {
+) -> Result<(String, Option<String>), ReadError> {
     let m = scaas_rpc::ton::format_raw(master);
     let g = ton
         .run_get_at(
@@ -86,12 +87,14 @@ async fn token_at(
         .state
         .as_str()
     {
-        "uninitialized" => return Ok("0".into()),
+        "uninitialized" => return Ok(("0".into(), None)),
+        // a frozen account runs no get method: its balance is unknown, the other tokens still read
+        "frozen" => return Ok((String::new(), Some("frozen".into()))),
         "active" => {}
         _ => {
             return Err(malformed(
                 i,
-                "a jetton wallet neither active nor uninitialized",
+                "a jetton wallet neither active, uninitialized nor frozen",
             ))
         }
     }
@@ -108,7 +111,7 @@ async fn token_at(
         return Err(malformed(i, "a jetton wallet of another owner or master"));
     }
     match d.stack.first().and_then(StackEntry::as_u128) {
-        Some(b) => Ok(b.to_string()),
+        Some(b) => Ok((b.to_string(), None)),
         None => Err(malformed(
             i,
             "a jetton balance that is not a number of at most 128 bits",
@@ -123,7 +126,7 @@ async fn set_at(
     s: u64,
     who: Addr,
     tokens: &[Addr],
-) -> Result<(Option<String>, Vec<String>), ReadError> {
+) -> Result<(Option<String>, Vec<(String, Option<String>)>), ReadError> {
     let native = amount(
         i,
         &ton.account_at(i, &scaas_rpc::ton::format_raw(who), s)
@@ -184,11 +187,12 @@ pub(crate) async fn balances(c: &Chain, id: &str) -> Result<Balances, SdkError> 
             .tokens
             .iter()
             .zip(amounts)
-            .map(|(t, amount)| TokenBalance {
+            .map(|(t, (amount, unknown))| TokenBalance {
                 address: t.address.clone(),
                 display: t.symbol.clone(),
                 decimals: t.decimals,
                 amount,
+                unknown,
             })
             .collect(),
     })

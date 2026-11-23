@@ -421,7 +421,7 @@ async fn import_refusals_in_order() {
         "Ok",
         "control: the same blob again"
     );
-    // a signer kind the importer's profile disables (owner 2026-11-22), as its own operations
+    // a signer kind the importer's profile disables (owner 2026-11-22), as its own operations; a blob naming it falsely
     let kind = scaas_ua::KINDS.iter().find(|k| k.kind == 0x0101).unwrap();
     let (d, d_seed) = party(&t.url, &t.uid, vec![kind.name.to_string()]).await;
     let mut e = expect(&t);
@@ -430,10 +430,17 @@ async fn import_refusals_in_order() {
         network: "evm".into(),
         index: 1,
     };
+    // T26 B-15: the blob's kind is the one its signature's key data derives the signer from; a native signature named
+    // another kind is refused before the kind gate, on any profile
     let b = with(&|b| b.signer_kind = 0x0101);
     assert_eq!(
-        code(d.op().import_signed(b, e.clone()).await),
-        "KindDisabled"
+        code(d.op().import_signed(b.clone(), e.clone()).await),
+        "ImportKindRefused"
+    );
+    assert_eq!(
+        code(import(&t, &b).await),
+        "ImportKindRefused",
+        "a profile that disables no kind"
     );
     assert_eq!(
         code(d.op().import_signed(good.clone(), e).await),

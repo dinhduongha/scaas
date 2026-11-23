@@ -36,6 +36,15 @@ BLS = "clients/scaas-sdk/src/op/bls_multi.rs"
 HIS = "clients/scaas-sdk/src/wallet/history.rs"
 REVM = "clients/scaas-rpc/src/evm.rs"
 NAP = "scaas-node/src/adapters/aptos.rs"
+TON = "clients/scaas-sdk/src/wallet/families/ton.rs"
+LIB = "clients/scaas-sdk/src/lib.rs"
+ALG = "clients/scaas-sdk/src/wallet/families/algorand.rs"
+BTC = "clients/scaas-rpc/src/bitcoin.rs"
+DEX = "clients/scaas-sdk/src/dex.rs"
+OPS = "clients/scaas-sdk/src/wallet/ops.rs"
+TOK = "clients/scaas-sdk/src/wallet/tokens.rs"
+ARW = "clients/scaas-rpc/src/arweave.rs"
+HOF = "clients/scaas-sdk/src/op/handoff.rs"
 N = "cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
@@ -372,7 +381,78 @@ MUTANTS = [
         N + " adapters::aptos::tests::an_indexer_answer_without_its_list_is_malformed",
     ),
 
+    (
+        "B2-15: a frozen jetton wallet the endpoint's failure",
+        [(TON, '        "frozen" => return Ok((String::new(), Some("frozen".into()))),\n', "")],
+        T + " --test ton",
+    ),
+    (
+        "B-22: Depth(0) opens on a real profile",
+        [(LIB, "            if p.finality == Finality::Depth(0)\n", "            if false && p.finality == Finality::Depth(0)\n")],
+        T + " --test config",
+    ),
+    (
+        "B2-6: any box 404 is a zero balance",
+        [(ALG, '            }) if message == "box not found" => {', "            }) if !message.is_empty() || message.is_empty() => {")],
+        T + " --test algorand",
+    ),
+    (
+        "B2-6: the majority read needs the first's round",
+        [(ALG, "want.is_none_or(|w| r >= w)", "want.is_none_or(|w| r == w)")],
+        T + " --test algorand",
+    ),
+    (
+        "B2-12: a mempool output taken as confirmed",
+        [(BTC, "                    || (u.height.is_some() && o.confirmations == 0) =>", "                    || (u.height.is_some() && o.confirmations == u64::MAX) =>")],
+        R + " --test bitcoin",
+    ),
+    (
+        "B2-12: a repeated outpoint taken",
+        [(BTC, "        if !out.iter().all(|u| seen.insert((u.txid.as_str(), u.vout))) {", "        if out.iter().all(|u| !seen.insert((u.txid.as_str(), u.vout))) {")],
+        R + " --test bitcoin",
+    ),
+    (
+        "B2-12: a caller's address the endpoint's failure",
+        [(BTC, '        Err(FamilyError::Argument("an address out of form"))', '        Err(malformed(0, "an address out of form"))')],
+        R + " --test bitcoin",
+    ),
+    (
+        "B2-8: the DEX's prepares sign a disabled kind",
+        [(DEX, "    if let KeyRef::Ua { kind, .. } = signer {\n        let (profile, _, _) = evm(sdk, chain)?;", "    if let (true, KeyRef::Ua { kind, .. }) = (false, signer) {\n        let (profile, _, _) = evm(sdk, chain)?;")],
+        T + " --test dex",
+    ),
+    (
+        "B2-8: sign_order on the prepare's clock",
+        [(DEX, "                    *now = at;", "                    let _ = (now, at);")],
+        T + " --test dex",
+    ),
+    (
+        "B2-10: the salt from the terms as typed",
+        [(OPS, "                        &canon_id(&req.to)?,\n                        &canon_amount(&req.value)?,\n                    ],", "                        &req.to,\n                        &req.value,\n                    ],")],
+        T + " --test wallet_ops",
+    ),
+    (
+        "B2-14: an unreadable index token ends the list",
+        [(TOK, "                        Err(e) if n >= listed && !matches!(e, SdkError::ProfileMismatch) => out", "                        Err(e) if false && n >= listed && !matches!(e, SdkError::ProfileMismatch) => out")],
+        T + " --test wallet",
+    ),
+    (
+        "B-13: every poll scans from the row's start",
+        [(FOL, "                            .insert(row.op.clone(), at.saturating_add(1));", "                            .insert(row.op.clone(), 0);")],
+        T + " --lib op::tests::a_poll_scans_only_the_blocks_after_the_last",
+    ),
+    (
+        "B-21: every gateway read before the vote",
+        [(ARW, "            if groups.iter().any(wins) {\n                break;\n            }", "            if groups.iter().any(wins) && false {\n                break;\n            }")],
+        R + " --test arweave",
+    ),
+    (
+        "B-15: a native signer's blob kind trusted",
+        [(HOF, "                if native != (blob.signer_kind == super::gas::NATIVE_EVM) {", "                if native && !native {")],
+        T + " --test handoff",
+    ),
 ]
+
 
 if __name__ == "__main__":
     main("t26", MUTANTS)

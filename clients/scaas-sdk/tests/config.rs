@@ -236,6 +236,31 @@ async fn open_refuses_a_profile_without_chain_uid() {
     }
 }
 
+/// Owner 2026-11-23 (T26 B-22): `Finality::Depth(0)` (the head as final, for decisive and decryption reads) is `Argument` on a
+/// real profile; a local chain (an EVM profile of chain id 31337, anvil's) or a build with `dev-profiles` opens it. Controls:
+/// `Depth(1)` on the real profile, `Depth(0)` on the local one.
+#[tokio::test]
+async fn open_refuses_depth_zero_on_a_real_profile() {
+    let mut p = profile("a");
+    p.finality = Finality::Depth(1);
+    assert_eq!(code(open(vec![p.clone()]).await), "Ok", "control: Depth(1)");
+    p.finality = Finality::Depth(0);
+    let want = if cfg!(feature = "dev-profiles") {
+        "Ok"
+    } else {
+        "Argument"
+    };
+    assert_eq!(
+        code(open(vec![p.clone()]).await),
+        want,
+        "Depth(0) on a real profile"
+    );
+    if cfg!(feature = "evm") {
+        p.chain_id = Some(31337);
+        assert_eq!(code(open(vec![p]).await), "Ok", "control: a local chain");
+    }
+}
+
 #[tokio::test]
 async fn open_refuses_two_profiles_one_key() {
     assert_eq!(code(open(vec![profile("a"), profile("b")]).await), "Ok");
