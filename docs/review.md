@@ -29,21 +29,31 @@ is **PLANNED**.
 Status: **BUILT**.
 
 Each dimension lists what a reviewer looks for. The [rules that do not bend](../AGENTS.md#rules-that-do-not-bend) are
-dimension 3, and no review skips them.
+dimension 4, and no review skips them.
 
 1. **Conformance.**
    - The code does what the spec and the owner rulings say, rule by rule (by id), and no more.
    - A rule marked BUILT has code and a test.
    - Code has a rule.
    - The code and the docs agree, including the status tags.
-2. **Security and cryptography.**
-   - Forgery, replay, signature and authorship.
-   - Key schedule, domain separation, binding to the context.
-   - Forward secrecy and post-compromise security claims.
-   - What a removed or new party can learn.
+2. **Cryptography.**
+   - The key schedule and derivations; domain separation; transcripts.
+   - Binding to the context: session, epoch, membership, tree or statement.
+   - Hashes and commitments: what each one binds, and what it does not.
+   - Use of each primitive: KEM and HPKE, signatures, proofs. Parameter sets and their bounds.
+   - Canonical encodings and small-order or malleable inputs.
+   - Forward secrecy and post-compromise security claims; what a removed or new party can learn.
+   - Constant time where a secret is used; randomness and nonce reuse.
+   - Soundness of a proof or a relation.
+   - **Read vertically:** one primitive through every implementation (C, Rust, wasm32, JS, Solidity, the generic and the
+     specialised verifier). A bug class found once is checked everywhere.
+3. **Security.**
+   - Authorization: who may call what, rights per role, the own-account rules.
+   - Forgery, replay and nonces; signature and authorship of each record.
+   - Front-running and ordering.
    - Downgrade between modes or versions.
-   - Constant time where a secret is used.
-3. **Rules that do not bend.**
+   - Input validation at every trust boundary.
+4. **Rules that do not bend.**
    - Never lose ciphertext.
    - No decryption oracle ([ARCH-POS-13](decisions.md#ARCH-POS-13)).
    - Explicit parameters.
@@ -55,60 +65,60 @@ dimension 3, and no review skips them.
    - Every RPC consumer takes a list of nodes ([ARCH-POS-15](decisions.md#ARCH-POS-15)).
    - The node is open.
    - Nothing deployed is upgraded.
-4. **Secrets and privacy.**
+5. **Secrets and privacy.**
    - A key, seed, plaintext or decrypted content must not leave its place: the vault, the arena, a `SecretBytes` handle,
      a binding, a log, `Debug` output or an error text.
    - Zeroizing.
    - Metadata a public observer learns from state, events, calldata, sizes or timing.
    - Business identifiers in clear ([ARCH-POS-17](decisions.md#ARCH-POS-17)).
-5. **Robustness and denial of service.**
+6. **Robustness and denial of service.**
    - Every untrusted decode is bounded by length and by depth.
    - Gas and storage griefing.
    - An input that makes the state unusable for others.
    - Unbounded loops.
    - The block limit and the inclusion rule of EIP-8037.
    - Queue and backlog exhaustion.
-6. **Failure handling.**
+7. **Failure handling.**
    - Everything fails closed, with a named error.
    - No partial state after a refusal.
    - Reentrancy.
    - Retries, reorgs and finality.
    - The node never reports `dead` while a transaction may still land.
    - Recovery from state alone.
-7. **Consistency across languages and layers.**
+8. **Consistency across languages and layers.**
    - The same bytes in every language: `clientkeys`, every `ua-*`, the SDK, the node and the contracts, all from the
      vectors.
    - Allow-lists equal to the contract's in both directions.
    - A record the contract accepts can be followed by clients, and the reverse; no fork.
    - A check present in one path is also present in its siblings.
-8. **Contract specifics.**
+9. **Contract specifics.**
    - The storage layout and its pins.
    - Typehash pins.
    - Module and library splits: DELEGATECALL storage, `this`, `msg.sender`, return data.
    - The size gate.
    - Gas pins that move with old → new figures.
    - Immutability and the factory catalogue.
-9. **Performance and cost.**
+10. **Performance and cost.**
    - Gas per entry, against the figures the docs quote.
    - Client CPU and memory, including wasm and mobile budgets.
    - RPC round trips.
    - Proof and verify time.
    - Storage growth over a long life.
    - Who pays.
-10. **Interfaces and misuse.**
+11. **Interfaces and misuse.**
     - Is the API hard to misuse?
     - Prepare → review → sign shows every field.
     - Defaults are the safe choice.
     - Error codes are stable.
     - The CLI and the bindings match the SDK.
     - Changing a job shape needs an operator note.
-11. **Tests.**
+12. **Tests.**
     - A test that cannot fail.
     - Every refusal has a positive twin.
     - Mutants cover every check, and the survivors are explained.
     - Vectors are checked by every reader.
     - Gates are sized to the change (AGENTS.md "Verify").
-12. **Operations and the supply chain.**
+13. **Operations and the supply chain.**
     - Config holds no secret.
     - Logs and the metrics are useful and leak nothing.
     - New dependencies: their licence, `cargo deny` / `npm audit`, the size they add, the pins.
@@ -120,12 +130,15 @@ dimension 3, and no review skips them.
 
 Status: **BUILT**.
 
-A review is divided into areas, one reviewer each. Every area applies all twelve dimensions within its scope.
+A review is divided into areas, one reviewer each. Every area applies all thirteen dimensions within its scope.
 
 - **One area per layer touched.** The layers are the contracts, `ua-rs` and the other signers, the SDK and its
   bindings, `clientkeys` with its generators and vectors, the node, and `pqz-core`. A big layer can be split.
-- **One cross-layer area**, always when more than one layer is touched. It covers dimension 7 end to end: spec ↔
+- **One cross-layer area**, always when more than one layer is touched. It covers dimension 8 end to end: spec ↔
   contract ↔ clients ↔ node. It looks for places where two layers read the same rule differently.
+- **One cryptography area**, always when the change touches cryptography. It reads the spec's mathematics, then one
+  primitive at a time through every implementation and layer (dimension 2, read vertically). The other areas keep
+  dimension 2 within their scope, but this area leads it.
 - **One adversarial area**, always for crypto, value or access control. It plays every role against the whole change:
   - a malicious member or holder;
   - a malicious admin;
@@ -145,7 +158,7 @@ The **brief** holds:
 - the area;
 - the files to read;
 - the owner rulings that are not to be reopened, and the accepted risks not to raise again;
-- the dimension table of §1;
+- the dimension table of §1, with a lead area per row;
 - the machine rules: runs go through `scripts/capped` in the foreground, with no background shell.
 
 Each **finding** has:
@@ -175,9 +188,10 @@ with its commit.
 Status: **BUILT**.
 
 - **A small change** (AGENTS.md "Verify": edit, one test, the touched gates) needs no review round.
-- **A spec or a code change of one layer**: one area, plus the adversarial area if it touches crypto, value or access
-  control.
-- **A round across several layers**: one area per layer, plus the cross-layer area, plus the adversarial area.
+- **A spec or a code change of one layer**: one area, plus the cryptography area if it touches cryptography, plus the
+  adversarial area if it touches cryptography, value or access control.
+- **A round across several layers**: one area per layer, plus the cross-layer area, plus the cryptography area when
+  cryptography is touched, plus the adversarial area.
 - **The pre-freeze audit**: the same areas over the whole scope of [ARCH-POS-14](decisions.md#ARCH-POS-14).
 
 ## 5. Brief template
@@ -215,6 +229,7 @@ dimension table. A row may say `N/A: <reason>`, but it may not be deleted. Each 
 | <B> | <layer 2> |
 | <D> | cross-layer: spec ↔ contract ↔ clients ↔ node |
 | <E> | adversarial: every role against the whole change |
+| <F> | cryptography: the spec's mathematics, one primitive at a time through every implementation |
 
 ## Dimensions (docs/review.md §1)
 Each area applies every dimension within its scope. The table names the area that leads each dimension; `N/A` needs a
@@ -223,17 +238,18 @@ reason.
 | # | Dimension | Lead area | What to hunt here (specific to this change) |
 |---|---|---|---|
 | 1 | Conformance | <all> | <rule ids to check one by one> |
-| 2 | Security and cryptography | <…> | <…> |
-| 3 | Rules that do not bend | <all> | <…> |
-| 4 | Secrets and privacy | <…> | <…> |
-| 5 | Robustness and denial of service | <…> | <…> |
-| 6 | Failure handling | <…> | <…> |
-| 7 | Consistency across languages and layers | <D> | <…> |
-| 8 | Contract specifics | <…> | <…> |
-| 9 | Performance and cost | <…> | <…> |
-| 10 | Interfaces and misuse | <…> | <…> |
-| 11 | Tests | <all> | <…> |
-| 12 | Operations and the supply chain | <…> | <…> |
+| 2 | Cryptography | <F> | <primitives, derivations, hashes to read vertically> |
+| 3 | Security | <E> | <…> |
+| 4 | Rules that do not bend | <all> | <…> |
+| 5 | Secrets and privacy | <…> | <…> |
+| 6 | Robustness and denial of service | <…> | <…> |
+| 7 | Failure handling | <…> | <…> |
+| 8 | Consistency across languages and layers | <D> | <…> |
+| 9 | Contract specifics | <…> | <…> |
+| 10 | Performance and cost | <…> | <…> |
+| 11 | Interfaces and misuse | <…> | <…> |
+| 12 | Tests | <all> | <…> |
+| 13 | Operations and the supply chain | <…> | <…> |
 
 ## Findings format (docs/review.md §3)
 - id `<area>-<n>`;

@@ -147,7 +147,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 |---|---|
 | [architecture.md](architecture.md) | How the parts fit and why: contract layer, node roles, topology, sequence diagrams, trust model |
 | [decisions.md](decisions.md) | The register: every ruling, its old ids, owner flag and rationale; `ARCH-POS` system-wide positions; `CTR-GOV` governance: BUILT on branch `governance` (EVM), the regulated implementations SPECIFIED, other families PLANNED |
-| [review.md](review.md) | How a spec or code review is run: the twelve dimensions every brief covers, the areas (per layer, cross-layer, adversarial), brief and report format ([ARCH-POS-22](review.md#ARCH-POS-22)) |
+| [review.md](review.md) | How a spec or code review is run: the thirteen dimensions every brief covers, the areas (per layer, cross-layer, cryptography, adversarial), brief and report format ([ARCH-POS-22](review.md#ARCH-POS-22)) |
 
 ### Contracts (`CTR-*`)
 
