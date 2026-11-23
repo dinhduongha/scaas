@@ -171,13 +171,28 @@ impl PqChat {
         });
     }
 
-    /// `content` sent by `me` to every store of `s`'s current epoch its type may use, the same bytes to each (CLI-PQC-06).
+    /// The content whose JSON `content` holds ([`Content::from_json`]: the bindings send a content only as this handle, owner
+    /// 2026-11-23) sent by `me` to every store of `s`'s current epoch its type may use, the same bytes to each (CLI-PQC-06).
     /// Refused before anything is signed: a store list out of UA-7 §4.2's rules (`StoreListInvalid`) or naming a kind not
     /// implemented (`StoreUnsupported`), every store it would use unconfirmed (`StoreUnconfirmed`), a Matrix room without an
     /// attached client (`MatrixDetached`), chain writes without the session's spend consent (`ChainCostUnconfirmed`). A
     /// `postMessage` above the 1,024-B bucket without `post_cost_confirmed`: `ContentTooLarge`, nothing sent (the counter
     /// skipped). A `typing` with no room listed and a `receipt` while receipts are off send nothing.
     pub async fn send(
+        &self,
+        s: &SessionRef,
+        me: &Me,
+        content: Arc<SecretBytes>,
+        ts: Option<u64>,
+        o: &SendOpts,
+    ) -> Result<SendReport, PqChatError> {
+        let c = content.with(Content::from_json)?;
+        self.send_content(s, me, &c, ts, o).await
+    }
+
+    /// [`PqChat::send`] of a content built in Rust (Rust-only: the bindings send only a handle).
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+    pub async fn send_content(
         &self,
         s: &SessionRef,
         me: &Me,
@@ -203,6 +218,8 @@ impl PqChat {
         crate::session::seed_of(&me.key)?;
         self.require_accepted(&s.session_id)?;
         match body {
+            // a `file` only through `send_file`, which enters its key
+            Body::Content(Content::File { .. }) => return Err(PqChatError::ContentInvalid),
             Body::Content(c) => drop(c.value(ts)?),
             Body::File(f) => f.check(ts)?,
         }

@@ -14,7 +14,9 @@ pub const BODY_MAX: usize = 16_000;
 /// `ts` and every integer: at most 2^53 − 1.
 pub const INT_MAX: u64 = (1 << 53) - 1;
 
-/// A content of a type in scope, or [`Content::Unsupported`].
+/// A content of a type in scope, or [`Content::Unsupported`]. Rust-only (owner 2026-11-23): the bindings send a content's
+/// JSON as a handle ([`Content::from_json`]).
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Content {
     /// `media_type` `text/plain` (absent) or `text/markdown`
@@ -120,6 +122,31 @@ impl Content {
             Ok(Value::Object(o)) => Self::of(&o).unwrap_or(unsupported),
             _ => unsupported,
         }
+    }
+
+    /// The content an app hands to [`crate::PqChat::send`] as its JSON (owner 2026-11-23, plan T12): exactly a content of a
+    /// type in scope in P49's form, as [`Content::value`] writes it without `ts` (no `ts` or `onBehalfOf`, no null, no other
+    /// field; keys in any order). A `text` or `edit` body above [`BODY_MAX`] `ContentTooLarge`; anything else
+    /// `ContentInvalid`.
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+    pub fn from_json(bytes: &[u8]) -> Result<Content, PqChatError> {
+        let v: Value = serde_json::from_slice(bytes).map_err(|_| PqChatError::ContentInvalid)?;
+        let o = v.as_object().ok_or(PqChatError::ContentInvalid)?;
+        let long = matches!(o.get("type").and_then(Value::as_str), Some("text" | "edit"))
+            && o.get("body")
+                .and_then(Value::as_str)
+                .is_some_and(|b| b.len() > BODY_MAX);
+        if long {
+            return Err(PqChatError::ContentTooLarge);
+        }
+        let c = Self::of(o)
+            .map_err(|_| PqChatError::ContentInvalid)?
+            .content;
+        // what is sent is exactly what was handed in (an unsupported type has no value)
+        if c.value(None)? != v {
+            return Err(PqChatError::ContentInvalid);
+        }
+        Ok(c)
     }
 
     fn of(o: &Obj) -> Result<Parsed, ()> {

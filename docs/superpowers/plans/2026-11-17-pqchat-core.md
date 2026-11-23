@@ -125,12 +125,18 @@ T5 and T10 may run beside each other; T7 and T8 too. Every other task in order.
 4. merge `origin/ua-rs-sign` into `pqchat-core-impl` and run the reconciliation checks;
 5. only then the rest of T11 over Matrix and the T11 mutants that need the hostile-envelope and reorg fixtures.
 
-**Open owner questions** (current behaviour kept until the owner answers):
-- `send` takes the content JSON as `SecretBytes`, so a Dart app can send?
-- should PqChat's app purpose join the refused SCaaS purposes?
-- a `file` without `ar://` is neither sealed nor read this round;
-- should a contact card name a chain (its `kemVersion` is unused)? Cards have no expiry or revocation;
-- an ordinary room whose members exactly match a session may be taken for it.
+**Owner answers of 2026-11-23** ("OK, as proposed"; [decisions](../../decisions.md#CLI-PQC-02), CLI-PQC-02, -04, -05, -12):
+- T12: `send` takes the content JSON as a `SecretBytes` handle, parsed and validated inside Rust (the crate's content
+  rules, P49's bounds); no send entry of the bindings takes a plain string (the bindings check holds it). Built in T12.
+- T10b: PqChat's app purpose joins the refused SCaaS purposes of the generic app signing, as PqVault's did
+  (`gen_app_refusals.py`); PqChat's own paths (record entries, card, file seal) still sign. Built in T10b.
+- T10b, a limit: a `file` without `ar://` is neither sealed nor read this round; other stores after the freeze.
+- The contact card names no chain (portable); its `kemVersion` stays, unused; expiry and revocation after the audit.
+- The room rule, accepted risk: an ordinary room whose members exactly match a session can be taken for it; the on-chain
+  membership check still blocks forged content.
+- A `sealedInfo` substituted by a holder of `K` (a member) is covered by O11's settled limit
+  ([spec §13 O11](../specs/2026-11-17-pqchat-core.md#13-open-points-and-requests)): the current checks stay; strict majority
+  over several named endpoints is the defence.
 
 ## T0 — Gate runner and baseline
 

@@ -61,6 +61,8 @@ fi
 python3 -I "$W/clients/pqchat-core/runs/bind_surface.py" "$F/dart/lib/src/rust" || fail "a decrypted content not only as the handle"
 # the handle's id for the copy calls in the surface (the calls themselves are the library's C exports, checked below)
 grep -rqE "BigInt secretId\(\{required ArcSecretBytes s\}\)" "$F/dart/lib/src/rust" || fail "no secretId of the handle in the surface"
+# and a new handle, which an app fills with a content's JSON to send it (owner 2026-11-23)
+grep -rqE "ArcSecretBytes secretNew\(\{required int len\}\)" "$F/dart/lib/src/rust" || fail "no secretNew in the surface"
 echo "[bind] ok: no handle, no secret bytes, no Rust-only item, decrypted content only through the SDK's copy calls"
 if grep -rlE "vectors_|_vectors" "${G[@]}"; then fail "a test-only entry (feature vectors) generated"; fi
 mkdir -p "$F/target"

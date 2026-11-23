@@ -84,7 +84,8 @@ always a ciphertext `ua-rs` made under this session's key. Every entry except th
 the message entry signs each message the user sends without a per-message prompt, because a prompt per chat message is not usable
 and its ciphertext can only be the user's content under the session's key. `pqchat-core` passes named fields and receives the
 `UASig`, the typed digest and the record's id; it never passes a digest. The SDK's generic app signing call stays closed to every
-SCaaS purpose and domain, `PURPOSE_PQCHAT` and `DS_C` included. So the SDK knows PqChat's record formats and none of its logic.
+SCaaS purpose and domain, `PURPOSE_PQCHAT`, `DS_C` and PqChat's app id and its `appPurpose` included (owner 2026-11-23;
+BUILT, UNAUDITED), while PqChat's own paths (the record entries, the card, the file seal) sign. So the SDK knows PqChat's record formats and none of its logic.
 Messages and leaves are signed by a leaf UA, never by an `msig` (UA-7 P13).
 
 ## 3. The Matrix store
@@ -185,7 +186,9 @@ It still links sessions to rooms and hints, which the chain does not show, so th
 app's own store key (the one its Matrix store uses) and excludes it from backups. **Device binding:** the app keeps a random anchor
 for the store in the platform's non-backed-up secret storage; at start a missing or different anchor (a restore, a copied data
 directory, a cloned phone) makes a new device id, and so does a lost store
-([CTR-CHAT-12](../contracts/pqchat.md#CTR-CHAT-12)); a counter is never used twice.
+([CTR-CHAT-12](../contracts/pqchat.md#CTR-CHAT-12)); a counter is never used twice. **No plaintext** is stored until the
+sealed local history lands (spec §13 O7 (b), owner 2026-11-23: under an app-scoped storage key the SDK derives, a handle never
+exported; built with scaas-app after the pre-freeze tag; PLANNED).
 
 <a id="CLI-PQC-10"></a>**CLI-PQC-10** — **An envelope that arrives while the seed is locked is kept and processed at unlock: never
 dropped, never answered** (the SDK review's finding F27, moved with the chat module to `pqchat-core`, 2026-11-17; SPECIFIED). The

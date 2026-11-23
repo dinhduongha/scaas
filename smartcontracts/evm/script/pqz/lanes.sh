@@ -17,7 +17,7 @@
 #   modules    test/modules/* at the set, its pre-split side built at that set first (runs/2026-11-11-stacked-gate/
 #              legacy-at-set.sh, written into the lane's out/t66b-legacy).
 #   others     the scope at every set but the committed one, IN PARALLEL, one lane each. A lane starts when `free -g`
-#              shows LANES_LANE_GB (4) above LANES_RESERVE_GB (10) available, one start per LANES_RAMP s (60); the
+#              shows LANES_LANE_GB (4) above LANES_RESERVE_GB (6) available, one start per LANES_RAMP s (60); the
 #              rest wait (heartbeat every 30 s; they give up after LANES_WAIT s (1800) with none of ours running).
 #              Output per set in scratchpad/lanes/<set>.log; exit 1 naming the failed sets. Inside an outer
 #              scripts/capped (one 4 GB scope) the sets run one after another instead.
@@ -83,7 +83,7 @@ if [ "$S" = others ]; then
         }
         exit 0
     fi
-    RESERVE=${LANES_RESERVE_GB:-10} LANE_GB=${LANES_LANE_GB:-4} RAMP=${LANES_RAMP:-60} WAIT=${LANES_WAIT:-1800}
+    RESERVE=${LANES_RESERVE_GB:-6} LANE_GB=${LANES_LANE_GB:-4} RAMP=${LANES_RAMP:-60} WAIT=${LANES_WAIT:-1800}
     mkdir -p "$LANES"
     t0=$(date +%s)
     last=0 beat=$t0 idle=$t0 sum=0 ok="" waiting=$todo running=""

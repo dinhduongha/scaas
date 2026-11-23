@@ -366,6 +366,9 @@ matrix_id)` signs `PqChatCard(bytes32 ua, uint64 kemVersion, string matrixId)` i
 the account, the Matrix id empty or well formed (`Argument`); `verify_pqchat_card(chain, ua, card, sig)` is V1's check of a
 card for `ua` (its `ua` that UA, its Matrix id well formed, the signature the UA's on the registry's records read at the final
 block as a read that feeds a decryption), `false` with no detail. Rows: `smartcontracts/vectors/pqchat/cards.json`.
+`sign_app_record` and `verify_app_record` refuse a scope of PqChat's app id `keccak256("scaas.pqchat.v1")` on both paths
+(`AppPurposeRefused`: its `appPurpose` is in `ua-rs`'s generated SCaaS list, owner 2026-11-23; BUILT, UNAUDITED); PqChat's
+named entries, the card calls and `seal_for_arweave` under its scope still sign.
 `argon2id_passphrase` (PqVault V9, 2026-11-21; BUILT, UNAUDITED) is `argon2id` of a typed passphrase after RFC 8265's
 OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control character or bytes that are not UTF-8: `Argument`), so
 a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`. PqVault's V1 vectors

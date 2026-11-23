@@ -3,8 +3,10 @@
 from smartcontracts/evm/src/: every SCaaS purpose constant of src/ua/UAKinds.sol (`PURPOSE_*`, `APP_PURPOSE_NS`) with its
 string, every SCaaS app id (`bytes32 internal constant APP_ID = keccak256("...")` in a contract library, `PqVaultTypes`'s
 `scaas.pqvault.v1`: its purpose `appPurpose(appId)` is SCaaS's, signed only by its dedicated path, owner 2026-11-22), and every
-EIP-712 domain name "SCaaS ..." written in the contracts (code or NatSpec: a superset is the safe side). Each purpose string
-must be ASCII `scaas.ua.purpose.*` shorter than 64 bytes (review r2 R14), each app id string ASCII `scaas.*`.
+EIP-712 domain name "SCaaS ..." written in the contracts (code or NatSpec: a superset is the safe side). A SCaaS app id no
+contract names comes from clientkeys (clients/clientkeys/src/*.js, `export const APP_ID_TAG` or `APP_ID_STRING = "scaas.*"`;
+PqChat's `scaas.pqchat.v1`, owner 2026-11-23: signed only by PqChat's own paths), unless a contract already lists that string.
+Each purpose string must be ASCII `scaas.ua.purpose.*` shorter than 64 bytes (review r2 R14), each app id string ASCII `scaas.*`.
   python3 clients/ua-rs/scripts/gen_app_refusals.py [--check]"""
 
 import re
@@ -18,6 +20,8 @@ OUT = ROOT / "clients/ua-rs/src/wallet/app_refusals.rs"
 PURPOSE = re.compile(r'bytes32 internal constant ((?:PURPOSE_[A-Z0-9_]+)|APP_PURPOSE_NS)\s*=\s*keccak256\("([^"]+)"\)')
 NAME = re.compile(r'"(SCaaS [A-Za-z0-9 ]+)"')
 APP_ID = re.compile(r'^library (\w+)|bytes32 internal constant APP_ID\s*=\s*keccak256\("([^"]+)"\)', re.M)
+CK = ROOT / "clients/clientkeys/src"
+CK_APP_ID = re.compile(r'^export const (APP_ID_TAG|APP_ID_STRING) = "([^"]+)";', re.M)
 
 
 def lists():
@@ -40,6 +44,12 @@ def lists():
             if not (lib and s.isascii() and s.startswith("scaas.")):
                 sys.exit(f"{f}: app id {s!r} outside a library or not an ASCII scaas.* string")
             apps.append((f"{lib}.APP_ID", s))
+    for f in sorted(CK.glob("*.js")):
+        for n, s in CK_APP_ID.findall(f.read_text()):
+            if not (s.isascii() and s.startswith("scaas.")):
+                sys.exit(f"{f}: app id {s!r} not an ASCII scaas.* string")
+            if s not in {a for _, a in apps}:
+                apps.append((f"{f.name} {n}", s))
     return purposes, sorted(apps), sorted(names)
 
 
@@ -55,8 +65,8 @@ def render():
         *[f'    ("{n}", "{s}"),' for n, s in purposes],
         "];",
         "",
-        "/// Every SCaaS app id of a contract library (`APP_ID = keccak256(s)`): its name and `s`; `appPurpose(keccak256(s))` is a",
-        "/// SCaaS purpose.",
+        "/// Every SCaaS app id, of a contract library (`APP_ID = keccak256(s)`) or, when no contract names it, of clientkeys",
+        "/// (`APP_ID_TAG`): its name and `s`; `appPurpose(keccak256(s))` is a SCaaS purpose.",
         "pub const SCAAS_APP_IDS: &[(&str, &str)] = &[",
         *[f'    ("{n}", "{s}"),' for n, s in apps],
         "];",

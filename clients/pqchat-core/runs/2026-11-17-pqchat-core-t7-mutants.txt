@@ -1,8 +1,8 @@
 # t7 mutants (name | outcome | commit | test | first failure line)
-send to the first store only | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test stores one_send_every_store_same_bytes | panicked at tests/stores.rs:317:5:
-send typing to a chain store | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test stores typing_to_the_room_only | panicked at tests/stores.rs:350:5:
-skip the spend consent | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test stores chain_cost_unconfirmed | panicked at tests/stores.rs:485:5:
-use a new store without confirmation | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test stores rekey_by_a_member_adds_an_unconfirmed_store | panicked at tests/stores.rs:684:5:
+send to the first store only | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --test stores one_send_every_store_same_bytes | panicked at tests/stores.rs:318:5:
+send typing to a chain store | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --test stores typing_to_the_room_only | panicked at tests/stores.rs:351:5:
+skip the spend consent | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --test stores chain_cost_unconfirmed | panicked at tests/stores.rs:486:5:
+use a new store without confirmation | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --test stores rekey_by_a_member_adds_an_unconfirmed_store | panicked at tests/stores.rs:774:5:
 accept a list with no message store | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test stores store_list_invalid | panicked at tests/stores.rs:643:9:
-sign before the store-list check | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test stores hcs_listed_refused_before_signing | panicked at tests/stores.rs:585:5:
+sign before the store-list check | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --test stores hcs_listed_refused_before_signing | panicked at tests/stores.rs:675:5:
 6 mutants, 6 killed, 0 survived, 0 not loaded, 0 other failure
