@@ -183,10 +183,16 @@ const uaSigValue = (s) => [
 ];
 /** `sigHash = keccak256(abi.encode(UASig))`. */
 export const sigHash = (sig) => keccak_256(abiEncode([UASIG_ABI], [uaSigValue(sig)]));
-/** `abi.encode(record, sigHash)`: a signed record's stored bytes. */
-export function recordBlob(name, s, sig) {
+/** CTR-CHAT-23 (owner 2026-11-23): an instance's signature-storage setting, fixed at `initialize`; PQZ's numbering (1, log, is
+ *  never valid here). */
+export const SIG_STORE = Object.freeze({ none: 0, sstore2: 2 });
+/** A signed record's stored bytes: `abi.encode(record, sigHash)` on a `none` instance, `abi.encode(record, sigHash, UASig)` on
+ *  an `sstore2` one (CTR-CHAT-05, CTR-CHAT-23). */
+export function recordBlob(name, s, sig, sigStore = SIG_STORE.none) {
   const r = recordAbi(name, s);
-  return abiEncode([r.type, "bytes32"], [r.value, sigHash(sig)]);
+  if (sigStore === SIG_STORE.none) return abiEncode([r.type, "bytes32"], [r.value, sigHash(sig)]);
+  if (sigStore !== SIG_STORE.sstore2) throw new Error(`sigStore: 0 or 2, not ${sigStore}`);
+  return abiEncode([r.type, "bytes32", UASIG_ABI], [r.value, sigHash(sig), uaSigValue(sig)]);
 }
 /** `abi.encode(PqChatMessage, UASig)`: what `postMessage` takes and what the envelope holds (P15). */
 export function messageWithSig(m, sig) {

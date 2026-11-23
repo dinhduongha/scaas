@@ -47,33 +47,33 @@ contract PqChatTest is PqChatBase {
 
     function test_initialize_onceAndOnlyByTheFactory() public {
         vm.expectRevert(IPqChat.PqChatNotFactory.selector);
-        chat.initialize(bytes32(uint256(7)));
+        chat.initialize(bytes32(uint256(7)), 2);
         vm.prank(address(f));
         vm.expectRevert(IPqChat.PqChatInitialized.selector);
-        chat.initialize(bytes32(uint256(7)));
+        chat.initialize(bytes32(uint256(7)), 2);
         vm.prank(address(f));
         vm.expectRevert(IPqChat.PqChatInitialized.selector);
-        PqChat(impl).initialize(bytes32(uint256(7)));
+        PqChat(impl).initialize(bytes32(uint256(7)), 2);
         assertEq(chat.owner(), OWNER_UA);
     }
 
     /// Fable D P3-1: the owner is 0 or the creator (`creating()`): a creator naming another UA is refused; the controls, its
     /// own id and 0, pass.
     function test_initialize_ownerIsTheCreator() public {
-        bytes memory other = abi.encodeCall(IPqChat.initialize, (OWNER_UA));
+        bytes memory other = abi.encodeCall(IPqChat.initialize, (OWNER_UA, 2));
         vm.prank(address(0xB0B));
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatOwnerNotCreator.selector, OWNER_UA));
         f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "forged", other);
         vm.prank(address(0xB0B));
         PqChat own = PqChat(
             f.createInstance(
-                IOpenFactory.ReleaseId(3, 0, 1), "own", abi.encodeCall(IPqChat.initialize, (bytes32(uint256(0xB0B))))
+                IOpenFactory.ReleaseId(3, 0, 1), "own", abi.encodeCall(IPqChat.initialize, (bytes32(uint256(0xB0B)), 2))
             )
         );
         assertEq(own.owner(), bytes32(uint256(0xB0B)));
         vm.prank(address(0xB0B));
         PqChat none = PqChat(
-            f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "none", abi.encodeCall(IPqChat.initialize, (bytes32(0))))
+            f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "none", abi.encodeCall(IPqChat.initialize, (bytes32(0), 2)))
         );
         assertEq(none.owner(), bytes32(0));
     }
@@ -330,7 +330,7 @@ contract PqChatTest is PqChatBase {
             EnvKit.uidOf(address(f))
         );
         PqChat small =
-            PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 2), "s", abi.encodeCall(IPqChat.initialize, (0))));
+            PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 2), "s", abi.encodeCall(IPqChat.initialize, (0, 2))));
         for (uint8 i = 6; i <= 16; ++i) {
             _member(i); // 16 members
         }

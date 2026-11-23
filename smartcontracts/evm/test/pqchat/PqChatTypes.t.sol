@@ -132,9 +132,40 @@ contract PqChatTypesTest is Test {
             UAKinds.uaMessage(uint16(vm.parseJsonUint(rec, ".session.uaMessage.kind")), UAKinds.PURPOSE_PQCHAT, t),
             _b32(rec, ".session.uaMessage.digest")
         );
+        _keptAs(".session", abi.encode(s), true);
         // one change at a time moves the digest: `via`
         s.members[0].via = bytes32(uint256(s.members[0].via) ^ 1);
         assertTrue(h.session(s) != t);
+    }
+
+    /// CTR-CHAT-23: row `r`'s signature, its `sigHash`, the `none` blob `abi.encode(record, sigHash)` and the `sstore2` blob
+    /// `abi.encode(record, sigHash, UASig)`, from `rec1 = abi.encode(record)` of a dynamic record (`0x20` and its tail; a static
+    /// record passes its words with `dyn` false).
+    function _keptAs(string memory r, bytes memory rec1, bool dyn) internal view {
+        IUARegistry.UASig memory sig = _uaSig(rec, string.concat(r, ".uaSig"));
+        bytes32 sh = keccak256(abi.encode(sig));
+        assertEq(sh, _b32(rec, string.concat(r, ".sigHash")), r);
+        bytes memory tail = abi.encode(sig);
+        bytes memory sigTail = new bytes(tail.length - 32);
+        for (uint256 i; i < sigTail.length; ++i) {
+            sigTail[i] = tail[i + 32];
+        }
+        bytes memory body = rec1;
+        uint256 head = 96;
+        if (dyn) {
+            body = new bytes(rec1.length - 32);
+            for (uint256 i; i < body.length; ++i) {
+                body[i] = rec1[i + 32];
+            }
+            assertEq(bytes.concat(bytes32(uint256(64)), sh, body), vm.parseJsonBytes(rec, string.concat(r, ".blob")), r);
+        } else {
+            head = rec1.length + 64;
+            assertEq(bytes.concat(rec1, sh), vm.parseJsonBytes(rec, string.concat(r, ".blob")), r);
+        }
+        bytes memory kept = dyn
+            ? bytes.concat(bytes32(head), sh, bytes32(head + body.length), body, sigTail)
+            : bytes.concat(rec1, sh, bytes32(head), sigTail);
+        assertEq(kept, vm.parseJsonBytes(rec, string.concat(r, ".blobSigned")), string.concat(r, " blobSigned"));
     }
 
     function test_epochAndLeaveVectors() public view {
@@ -150,6 +181,7 @@ contract PqChatTypesTest is Test {
         e.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));
         e.sealedInfo = vm.parseJsonBytes(rec, string.concat(p, ".sealedInfo"));
         assertEq(h.epoch(e), _b32(rec, ".epoch.typed"));
+        _keptAs(".epoch", abi.encode(e), true);
         assertEq(PqChatTypes.epochId(e.sessionId, e.author, e.nonce), _b32(rec, ".epoch.id"));
         assertEq(PqChatTypes.scopeEpoch(e.sessionId, e.author), _b32(rec, ".epoch.scope"));
         p = ".leave.record";
@@ -162,6 +194,7 @@ contract PqChatTypesTest is Test {
         assertEq(h.leave(l), _b32(rec, ".leave.typed"));
         assertEq(h.leave(l), _b32(rec, ".leave.id"));
         assertEq(PqChatTypes.scopeEpoch(l.sessionId, l.member), _b32(rec, ".leave.scope"));
+        _keptAs(".leave", abi.encode(l), false);
         p = ".remove.record"; // UA-7 P48
         IPqChat.PqChatRemove memory rm = IPqChat.PqChatRemove(
             _b32(rec, string.concat(p, ".sessionId")),
@@ -173,6 +206,7 @@ contract PqChatTypesTest is Test {
         );
         assertEq(h.remove(rm), _b32(rec, ".remove.typed"));
         assertEq(PqChatTypes.scopeEpoch(rm.sessionId, rm.admin), _b32(rec, ".remove.scope"));
+        _keptAs(".remove", abi.encode(rm), true);
     }
 
     function _uaSig(string memory j, string memory p) internal pure returns (IUARegistry.UASig memory s) {
@@ -199,6 +233,8 @@ contract PqChatTypesTest is Test {
         assertEq(PqChatTypes.scopeMessage(m.epochId, m.sender, m.device), _b32(rec, ".message.scope"));
         assertEq(keccak256(abi.encode(sig)), _b32(rec, ".message.sigHash"));
         assertEq(abi.encode(m, keccak256(abi.encode(sig))), vm.parseJsonBytes(rec, ".message.blob"));
+        assertEq(abi.encode(m, keccak256(abi.encode(sig)), sig), vm.parseJsonBytes(rec, ".message.blobSigned"));
+        _keptAs(".message", abi.encode(m), true);
     }
 
     // ----- topics -----

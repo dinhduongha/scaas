@@ -213,13 +213,19 @@ abstract contract PqGroupBase {
         }
     }
 
+    /// @dev The author of a stored epoch record, its second field (`abi.encode(record, sigHash)`: the record's offset, the
+    ///      trailer, the record's first field, then `author`); `PqChat` overrides it for the blobs that keep a signature
+    ///      (CTR-CHAT-23).
+    function _authorOf(Epoch storage ep) internal view virtual returns (bytes32) {
+        return _word(ep.record, 96);
+    }
+
     /// @dev P48: the completing child `ep` holds no UA a `remove` took out of its parent, in its members or its admins, and was
     ///      not authored by one (Fable code review of PqVault F1, controller call 2026-11-21: a child staged before its author's
-    ///      removal must not complete after it). The author is the second word of the stored epoch record in both contracts
-    ///      (`abi.encode(record, …)`: the record's offset, then the trailer; the record's first field, then `author`).
+    ///      removal must not complete after it).
     function _noneRemoved(Epoch storage ep) internal view {
         Epoch storage pe = _epochs()[ep.parent];
-        bytes32 author = _word(ep.record, 96);
+        bytes32 author = _authorOf(ep);
         if (pe.removedOf[author]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(author));
         (bytes32[] memory admins, IPqChat.MemberKey[] memory m,) = _lists(ep);
         for (uint256 i; i < m.length; ++i) {

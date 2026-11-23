@@ -151,11 +151,16 @@ abstract contract PqChatBase is UARegistryBase {
     /// An instance whose owner is `ownerUA`, created by it (the owner is 0 or the creator, D P3-1): a native id by its
     /// address, a derived UA as the router's subject would be (`creating()` mocked); `ownerUA` 0: by this test.
     function _instance(bytes32 salt, bytes32 ownerUA) internal returns (PqChat c) {
+        c = _instanceWith(salt, ownerUA, 2);
+    }
+
+    /// `_instance` with the signature-storage setting `sigStore` (CTR-CHAT-23: 0 `none`, 2 `sstore2`, the default).
+    function _instanceWith(bytes32 salt, bytes32 ownerUA, uint8 sigStore) internal returns (PqChat c) {
         bool derived = ownerUA >> 160 != 0;
         if (derived) vm.mockCall(address(f), abi.encodeCall(IOpenFactory.creating, ()), abi.encode(ownerUA));
         else if (ownerUA != 0) vm.prank(address(uint160(uint256(ownerUA))));
         c = PqChat(
-            f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), salt, abi.encodeCall(IPqChat.initialize, (ownerUA)))
+            f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), salt, abi.encodeCall(IPqChat.initialize, (ownerUA, sigStore)))
         );
         if (derived) vm.clearMockedCalls();
     }

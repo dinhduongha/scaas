@@ -206,6 +206,10 @@ interface IPqChat {
     error PqChatRemovedKept(bytes32 epochId, bytes32 ua);
     error PqChatNotFactory();
     error PqChatInitialized();
+    /// @notice CTR-CHAT-23: `initialize`'s signature-storage setting is neither 0 (`none`) nor 2 (`sstore2`).
+    error PqChatSigStore(uint8 sigStore);
+    /// @notice CTR-CHAT-23: a signature view on a `none` instance, which keeps each record's `sigHash` only.
+    error PqChatSigNotStored();
     /// @notice `validateEnv`: `chainUid` 0, registry 0, no code-size limit or one under EIP-170's 24,576 B (3C-D1); a
     ///         constructor id other than class 3, kind 0, version >= 1.
     error PqChatEnv();
@@ -222,8 +226,13 @@ interface IPqChat {
 
     // ------------------------------------------------------------------ the instance (D22, topics spec §11)
 
-    /// @notice Once, by the factory, on a clone with its env; `ownerUA` 0 allowed, fixed, no transfer (Q2).
-    function initialize(bytes32 ownerUA) external;
+    /// @notice Once, by the factory, on a clone with its env; `ownerUA` 0 allowed, fixed, no transfer (Q2). `sigStore`, fixed
+    ///         for the instance's life (CTR-CHAT-23, owner 2026-11-23): 0 `none` (each record with its `sigHash` only), 2
+    ///         `sstore2` (each control-plane record and posted message also keeps its signature in state; the tools' default);
+    ///         PQZ's numbering, 1 (log) is never valid here.
+    function initialize(bytes32 ownerUA, uint8 sigStore) external;
+    /// @notice CTR-CHAT-23: the signature-storage setting, 0 `none` or 2 `sstore2`.
+    function sigStore() external view returns (uint8);
     /// @notice Names the instance; no power over anything (Q2).
     function owner() external view returns (bytes32);
 
@@ -257,6 +266,17 @@ interface IPqChat {
     function removedIn(bytes32 epochId, bytes32 member) external view returns (bool);
     function removalCount(bytes32 epochId) external view returns (uint256);
     function removalAt(bytes32 epochId, uint256 index) external view returns (PqChatRemove memory r, bytes32 sigHash);
+    /// @notice CTR-CHAT-23: the signature each record was accepted with (`keccak256(abi.encode(sig))` is its `sigHash`),
+    ///         on an `sstore2` instance; `PqChatSigNotStored` on a `none` one. Ids and indexes as the record views.
+    function sessionSig(bytes32 sessionId) external view returns (IUARegistry.UASig memory sig);
+    function epochSig(bytes32 epochId) external view returns (IUARegistry.UASig memory sig);
+    function removalSig(bytes32 epochId, uint256 index) external view returns (IUARegistry.UASig memory sig);
+    function messageSig(bytes32 sessionId, uint256 index) external view returns (IUARegistry.UASig memory sig);
+    /// @notice CTR-CHAT-23: the accepted `leave` records of `epochId`, kept on an `sstore2` instance only (0 on a `none` one,
+    ///         which keeps the `leftIn` flag alone).
+    function leaveCount(bytes32 epochId) external view returns (uint256);
+    function leaveAt(bytes32 epochId, uint256 index) external view returns (PqChatLeave memory l, bytes32 sigHash);
+    function leaveSig(bytes32 epochId, uint256 index) external view returns (IUARegistry.UASig memory sig);
     /// @notice P48: at most this many members per `remove`.
     function REMOVE_MAX() external view returns (uint256);
     /// @notice The nonce bitmaps (3C-D5): `scope` per `PqChatTypes.scopeSession` / `scopeEpoch` / `scopeMessage`.

@@ -710,7 +710,7 @@ abstract contract DeployBase is DeployBook {
         IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
         if (f.classReleaseOf(id).usableFrom <= block.timestamp) {
             address inst = f.createInstance(
-                id, keccak256("scaas.pqchat.instance.1"), abi.encodeCall(IPqChat.initialize, (bytes32(0)))
+                id, keccak256("scaas.pqchat.instance.1"), abi.encodeCall(IPqChat.initialize, (bytes32(0), 2))
             );
             vm.serializeAddress("deploy", "pqchat_instance", inst);
         }

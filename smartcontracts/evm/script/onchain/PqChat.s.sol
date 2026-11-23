@@ -183,7 +183,7 @@ contract PqChatOnchain is OnchainBase {
                 vm.stopBroadcast();
             }
             vm.broadcast(k1);
-            chat = IPqChat(f.createInstance(id, _salt("pqchat-1"), abi.encodeCall(IPqChat.initialize, (bytes32(0)))));
+            chat = IPqChat(f.createInstance(id, _salt("pqchat-1"), abi.encodeCall(IPqChat.initialize, (bytes32(0), 2))));
         }
         _book(address(chat), "PqChat");
         _book(impl, "PqChat");
@@ -194,7 +194,7 @@ contract PqChatOnchain is OnchainBase {
         vm.broadcast(k1);
         chat2 = IPqChat(
             f.createInstance(
-                IOpenFactory.ReleaseId(3, 0, 1), _salt("pqchat-2"), abi.encodeCall(IPqChat.initialize, (bytes32(0)))
+                IOpenFactory.ReleaseId(3, 0, 1), _salt("pqchat-2"), abi.encodeCall(IPqChat.initialize, (bytes32(0), 2))
             )
         );
         _book(address(chat2), "PqChat");

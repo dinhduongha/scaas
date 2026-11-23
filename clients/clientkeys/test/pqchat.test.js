@@ -110,7 +110,7 @@ test("signers: pq.js keys from the seed, ua.js and pq.js agree on uaMessage", ()
 });
 
 /** Every row: hashStruct, typed, uaMessage, and its id, scope, signature, sigHash and blob where it has them. */
-function checkRow(name, row) {
+function checkRow(name, row, kept = false) {
   const struct = STRUCT_OF[name];
   assert.equal(h(pc.structHash(struct, row.record)), row.hashStruct, name);
   assert.equal(h(pc.typed(struct, row.record)), row.typed, name);
@@ -133,12 +133,26 @@ function checkRow(name, row) {
     );
     assert.equal(h(pc.sigHash(row.uaSig)), row.sigHash, name);
     assert.equal(h(pc.recordBlob(struct, row.record, row.uaSig)), row.blob, name);
+    // CTR-CHAT-23: an `sstore2` instance keeps abi.encode(record, sigHash, UASig) of a session record; a `none` one the blob
+    // above (topic records are outside the setting)
+    if (!kept) return assert.equal(row.blobSigned, undefined, name);
+    assert.equal(h(pc.recordBlob(struct, row.record, row.uaSig, pc.SIG_STORE.sstore2)), row.blobSigned, name);
+    assert.equal(
+      row.blobSigned,
+      h(abiEncode([pc.recordAbi(struct, row.record).type, "bytes32", pc.UASIG_ABI], [
+        pc.recordAbi(struct, row.record).value,
+        fromHex(row.sigHash),
+        [fromHex(row.uaSig.keyData), fromHex(row.uaSig.signature), []],
+      ])),
+      name,
+    );
   }
 }
 
 test("session records: digests, ids, scopes, the message signature and blob", () => {
   const { session: S, epoch: E, leave: L, message: Mg } = R;
-  for (const n of ["session", "epoch", "leave", "message"]) checkRow(n, R[n]);
+  for (const n of ["session", "epoch", "leave", "remove", "message"]) checkRow(n, R[n], true);
+  assert.deepEqual(R.sigStore, { none: 0, sstore2: 2 }, "CTR-CHAT-23's modes, PQZ's numbering");
   assert.equal(S.id, h(pc.sessionId(S.record.creator, S.record.nonce)));
   assert.equal(S.scope, h(pc.scopeSession(S.record.creator)));
   assert.equal(E.id, h(pc.epochId(E.record.sessionId, E.record.author, E.record.nonce)));
@@ -149,7 +163,8 @@ test("session records: digests, ids, scopes, the message signature and blob", ()
   assert.equal(L.scope, h(pc.scopeEpoch(L.record.sessionId, L.record.member)));
   assert.equal(Mg.id, Mg.typed);
   assert.equal(Mg.scope, h(pc.scopeMessage(Mg.record.epochId, Mg.record.sender, Mg.record.device)));
-  assert.ok(Mg.uaSig && !S.uaSig && !E.uaSig && !L.uaSig);
+  // CTR-CHAT-23: every control-plane record is signed in the vectors, as a client verifies it from an `sstore2` home
+  assert.ok(Mg.uaSig && S.uaSig && E.uaSig && L.uaSig && R.remove.uaSig);
   // shapes: members and admins strictly sorted, the creator in both, one non-zero via, two sorted parents, non-zero fields
   for (const rec of [S.record, E.record]) {
     const uas = rec.members.map((m) => m.ua);
@@ -199,7 +214,7 @@ test("remove (P48): the typehash, the row by hand, its scope and shape; member o
   const r = X.record;
   assert.equal(h(pc.TYPEHASH.PqChatRemove), "0x8f4939ececad5be22f7917c0c8087d80d372be36af3b0afb30046be9db0b6c56");
   assert.equal(R.typehashes.PqChatRemove.hash, h(pc.TYPEHASH.PqChatRemove));
-  checkRow("remove", X);
+  checkRow("remove", X, true);
   // hashStruct as P48 writes it: keccak256(abi.encode(TYPEHASH, sessionId, epochId, nextEpoch, keccak256(abi.encodePacked(members)),
   // admin, nonce)), beside the generic EIP-712 encoder
   const membersHash = keccak_256(concatBytes(...r.members.map(fromHex)));
@@ -217,7 +232,7 @@ test("remove (P48): the typehash, the row by hand, its scope and shape; member o
   // the admin's epoch scope, shared with her epoch; no id, no signature
   assert.equal(X.scope, h(pc.scopeEpoch(r.sessionId, r.admin)));
   assert.equal(X.scope, R.epoch.scope);
-  assert.ok(!("id" in X) && !X.uaSig);
+  assert.ok(!("id" in X) && X.uaSig, "no id; signed (CTR-CHAT-23: a client verifies it from an sstore2 home)");
   // shape: epoch 1, one of its admins, 2 of its members strictly sorted, nextEpoch = its number + 1, a fresh nonce
   assert.equal(r.epochId, R.epoch.id);
   assert.equal(r.nextEpoch, R.epoch.record.epoch + 1);

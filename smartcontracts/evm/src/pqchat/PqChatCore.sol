@@ -45,6 +45,7 @@ abstract contract PqChatCore is PqGroupBase {
     struct S {
         bytes32 ownerUA;
         bool initialized;
+        uint8 sigStore; // CTR-CHAT-23: SIG_NONE or SIG_SSTORE2, fixed at `initialize`
         mapping(bytes32 => Epoch) epochs;
         mapping(bytes32 => bytes32) childOf;
         mapping(bytes32 => mapping(uint256 => uint256)) nonces;
@@ -65,7 +66,12 @@ abstract contract PqChatCore is PqGroupBase {
         mapping(bytes32 => bytes32[]) sessions; // per UA (owner 2026-11-10)
         mapping(bytes32 => bytes32[]) chain; // per session: its epochs >= 1 in completion order (epoch 0 implied)
         mapping(bytes32 => address[]) removals; // P48: per epoch, its `remove` records
+        mapping(bytes32 => address[]) leaves; // CTR-CHAT-23: per epoch, its `leave` records (`sstore2` only)
     }
+
+    /// @dev CTR-CHAT-23: the signature-storage modes, PQZ's numbering (`NONE` 0, `LOG` 1, `SSTORE2` 2); no log mode here.
+    uint8 internal constant SIG_NONE = 0;
+    uint8 internal constant SIG_SSTORE2 = 2;
 
     /// @dev `keccak256(abi.encode(uint256(keccak256("scaas.pqchat")) - 1)) & ~bytes32(uint256(0xff))`.
     bytes32 internal constant SLOT = 0xc7b36804b17476e9a19a6ebc690cd7b9326d322c515fd7dc91373f9bc6dc3000;

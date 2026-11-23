@@ -472,7 +472,8 @@ def cases():
     store_id = 0
     for s in sigs:
         store_id ^= int(keccak("0x" + s.encode().hex())[2:10], 16)
-    ipqchat_id = "a46bb0a4"  # type(IPqChat).interfaceId (its 53 selectors XORed, forge's artifact)
+    # type(IPqChat).interfaceId (its 61 selectors XORed, forge's artifact; CTR-CHAT-23 2026-11-23: a46bb0a4 -> 250cdb4a)
+    ipqchat_id = "250cdb4a"
 
     def h32(b):
         return b.ljust(32, b"\0")

@@ -46,9 +46,11 @@ contract PqChatGasTest is PqTopicsBase {
     // precedent): 29,111 -> 29,383 B; regular 1,996,141 -> 2,012,785; state 45,115,110 -> 45,531,270 (+272 x 1,530)
     // pqvault review F3 in PqChat too (controller call 2026-11-21, `PqGroupBase._removable`: an admin that is no member is
     // removable): 29,383 -> 29,412 B; regular 2,012,785 -> 2,014,866; state 45,531,270 -> 45,575,640 (+29 x 1,530)
-    uint256 internal constant RUNTIME = 29_412;
-    uint256 internal constant RELEASE_REGULAR = 2_014_866;
-    uint256 internal constant RELEASE_STATE = 45_575_640;
+    // CTR-CHAT-23 (owner 2026-11-23: the signature-storage setting, its views, the kept blobs and the `_authorOf` hook): 29,412 ->
+    // 31,419 B; regular 2,014,866 -> 2,145,938; state 45,575,640 -> 48,646,350 (+2,007 x 1,530)
+    uint256 internal constant RUNTIME = 31_419;
+    uint256 internal constant RELEASE_REGULAR = 2_145_938;
+    uint256 internal constant RELEASE_STATE = 48_646_350;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice: 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
     // pqvault R3 (CTR-PQV-12: the shared code from `PqGroupBase`, the env and nonce errors through `PqChatCore._fail`): 16,398 ->
@@ -91,37 +93,45 @@ contract PqChatGasTest is PqTopicsBase {
         IUARegistry.UASig memory sig = _sig(s.creator, h.session(s));
         vm.prank(STRANGER);
         bytes32 sid = chat.createSession(s, w, sig);
-        _row("createSession 2 members, both wraps, index 2", 340_852, 7_691_310);
+        // CTR-CHAT-23 (the tests' instance at `sstore2`: one SLOAD of the setting, the 32-B stand-in signature kept, 256 B more
+        // per blob): 340,852 / 7,691,310 -> 344,756 / 8,082,990 (+256 x 1,530)
+        _row("createSession 2 members, both wraps, index 2", 344_756, 8_082_990);
 
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[1], 1, 1, sid, s.admins, s.members);
         sig = _sig(e.author, h.epoch(e));
         vm.prank(STRANGER);
         bytes32 e1 = chat.rekey(e, ew, sig);
-        _row("rekey 2 members, plain, first epoch list entry", 367_359, 7_740_270);
+        // CTR-CHAT-23: 367,359 / 7,740,270 -> 371,249 / 8,131,950
+        _row("rekey 2 members, plain, first epoch list entry", 371_249, 8_131_950);
 
         (e, ew) = _epoch(sid, ids[0], 1, 2, e1, s.admins, s.members);
         sig = _sig(e.author, h.epoch(e));
         vm.prank(STRANGER);
         bytes32 e2 = chat.rekey(e, ew, sig);
-        _row("rekey 2 members, plain, next epoch list entry", 367_240, 7_642_350);
+        // CTR-CHAT-23: 367,240 / 7,642,350 -> 371,131 / 8,034,030
+        _row("rekey 2 members, plain, next epoch list entry", 371_131, 8_034_030);
 
         IPqChat.PqChatMessage memory m = _msg(sid, e2, ids[1], 0, 1040); // a 1,024-B bucket + the GCM-SIV tag
         sig = _sig(m.sender, h.message(m));
         vm.prank(STRANGER);
         chat.postMessage(m, sig);
-        _row("postMessage 2 members, 1,040 B ciphertext", 153_744, 2_732_580);
+        // CTR-CHAT-23: 153,744 / 2,732,580 -> 157,767 / 3,124,260
+        _row("postMessage 2 members, 1,040 B ciphertext", 157_767, 3_124_260);
 
         m = _msg(sid, e2, ids[1], 1, 1040);
         sig = _sig(m.sender, h.message(m));
         vm.prank(STRANGER);
         chat.postMessage(m, sig);
-        _row("postMessage 2 members, 1,040 B ciphertext, warm list", 153_756, 2_536_740);
+        // CTR-CHAT-23: 153,756 / 2,536,740 -> 157,779 / 2,928,420
+        _row("postMessage 2 members, 1,040 B ciphertext, warm list", 157_779, 2_928_420);
 
         IPqChat.PqChatLeave memory l = IPqChat.PqChatLeave(sid, e2, ids[1], 9);
         sig = _sig(ids[1], h.leave(l));
         vm.prank(STRANGER);
         chat.leave(l, sig);
-        _row("leave 2 members", 107_485, 97_920);
+        // CTR-CHAT-23 (`sstore2` keeps the leave record and its signature: a blob, the list's slots): 107,485 / 97,920 ->
+        // 150,721 / 1,116,900
+        _row("leave 2 members", 150_721, 1_116_900);
     }
 
     function test_gas_twoMembersInChunks() public {
@@ -130,7 +140,8 @@ contract PqChatGasTest is PqTopicsBase {
         IPqChat.Wrap[] memory first = _slice(w, 0, 1);
         vm.prank(STRANGER);
         bytes32 sid = chat.createSession(s, first, sig);
-        _row("createSession 2 members, one wrap", 293_223, 5_010_750);
+        // CTR-CHAT-23: 293,223 / 5,010,750 -> 297,087 / 5,402,430
+        _row("createSession 2 members, one wrap", 297_087, 5_402_430);
         IPqChat.Wrap[] memory rest = _slice(w, 1, 2);
         vm.prank(STRANGER);
         chat.addWraps(sid, 1, rest);
@@ -163,27 +174,31 @@ contract PqChatGasTest is PqTopicsBase {
         IUARegistry.UASig memory sig = _sig(s.creator, h.session(s));
         vm.prank(STRANGER);
         chat.createSession(s, w, sig);
-        _row("createSession 10 members, all wraps", 1_356_696, 32_269_230);
+        // CTR-CHAT-23 (the calldata floor holds the regular figure): state 32,269,230 -> 32,660,910
+        _row("createSession 10 members, all wraps", 1_356_696, 32_660_910);
         (s, w) = _session(20, 2, address(chat));
         sig = _sig(s.creator, h.session(s));
         vm.prank(STRANGER);
         bytes32 sid = chat.createSession(s, w, sig);
-        _row("createSession 20 members, all wraps", 2_646_936, 61_914_510);
+        // CTR-CHAT-23: state 61,914,510 -> 62,306,190
+        _row("createSession 20 members, all wraps", 2_646_936, 62_306_190);
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[3], 1, 1, sid, s.admins, s.members);
         sig = _sig(e.author, h.epoch(e));
         vm.prank(STRANGER);
         chat.rekey(e, ew, sig);
-        _row("rekey 20 members, plain", 2_648_984, 59_515_470);
+        // CTR-CHAT-23: state 59,515,470 -> 59,907,150
+        _row("rekey 20 members, plain", 2_648_984, 59_907_150);
         // all 20 wraps in one call ask more than 60 M ((regular + state) x 1.05), a create (67.8 M) and a rekey (65.3 M)
         // alike: a 20-member record goes in chunks. The 20-member rows are warm (the 10-member session above wrote 11 of
         // the slots and a wrap blob in this test): a cold call is about 1.26 M higher (Fable P3-7).
-        assertGt(uint256(2_646_936 + 61_914_510) * 105 / 100, 60_000_000, "20 wraps in one create: over 60 M");
-        assertGt(uint256(2_648_984 + 59_515_470) * 105 / 100, 60_000_000, "20 wraps in one rekey: over 60 M");
+        assertGt(uint256(2_646_936 + 62_306_190) * 105 / 100, 60_000_000, "20 wraps in one create: over 60 M");
+        assertGt(uint256(2_648_984 + 59_907_150) * 105 / 100, 60_000_000, "20 wraps in one rekey: over 60 M");
         (s, w) = _session(20, 3, address(chat));
         sig = _sig(s.creator, h.session(s));
         vm.prank(STRANGER);
         sid = chat.createSession(s, _slice(w, 0, 10), sig);
-        _row("createSession 20 members, first 10 wraps", 1_519_320, 34_129_710);
+        // CTR-CHAT-23: 1,519,320 / 34,129,710 -> 1,525,793 / 34,521,390
+        _row("createSession 20 members, first 10 wraps", 1_525_793, 34_521_390);
         vm.prank(STRANGER);
         chat.addWraps(sid, 10, _slice(w, 10, 20));
         _row("addWraps 10 wraps, completing 20 members", 1_231_768, 26_990_730);
@@ -199,7 +214,8 @@ contract PqChatGasTest is PqTopicsBase {
         vm.prank(STRANGER);
         chat.remove(r, sig);
         // pqvault review F2 / F7 (`_liveAdmin`: the admin's removed and left flags read cold): regular 168,513 -> 173,112
-        _row("remove 1 of 3 members", 173_112, 1_067_940);
+        // CTR-CHAT-23: 173,112 / 1,067,940 -> 176,666 / 1,459,620
+        _row("remove 1 of 3 members", 176_666, 1_459_620);
         IPqChat.MemberKey[] memory m = new IPqChat.MemberKey[](2);
         (m[0], m[1]) = (s.members[0], s.members[1]);
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[0], 1, 1, sid, s.admins, m);
@@ -208,7 +224,9 @@ contract PqChatGasTest is PqTopicsBase {
         chat.rekey(e, ew, sig);
         // pqvault review F1 (the completing child's author read from its record and checked against the removals): regular
         // 382,412 -> 383,942
-        _row("rekey dropping the removed member, 2 left", 383_942, 7_642_350);
+        // CTR-CHAT-23 (and the author read through the record's offset word, `PqChat._authorOf`): 383,942 / 7,642,350
+        // -> 389,335 / 8,034,030
+        _row("rekey dropping the removed member, 2 left", 389_335, 8_034_030);
     }
 
     // ----- topics (topics spec §6) -----
@@ -219,42 +237,49 @@ contract PqChatGasTest is PqTopicsBase {
         IUARegistry.UASig memory sig = _sig(t.admin, h.topic(t));
         vm.prank(STRANGER);
         bytes32 tid = chat.createTopic(t, sig);
-        _row("createTopic 256 B about", 179_045, 1_851_300);
+        // CTR-CHAT-23 (the release's dispatcher before the forward; the module unchanged): regular 179,045 -> 179,192
+        _row("createTopic 256 B about", 179_192, 1_851_300);
 
         IPqChat.PqTopicWriter memory w = IPqChat.PqTopicWriter(tid, ids[1], true, 1);
         sig = _sig(ids[0], h.topicWriter(w));
         vm.prank(STRANGER);
         chat.setTopicWriter(w, sig);
-        _row("setTopicWriter grant", 112_920, 293_760);
+        // CTR-CHAT-23: regular 112,920 -> 113,046
+        _row("setTopicWriter grant", 113_046, 293_760);
 
         IPqChat.PqTopicEntry memory p = _entryRec(tid, ids[0], 1, 0, new bytes(1024));
         sig = _sig(p.author, h.entry(p));
         vm.prank(STRANGER);
         bytes32 pid = chat.postEntry(p, sig);
-        _row("postEntry 1 KiB post", 178_583, 3_075_300);
+        // CTR-CHAT-23 (the release's dispatcher): regular 178,583 -> 178,686
+        _row("postEntry 1 KiB post", 178_686, 3_075_300);
 
         IPqChat.PqTopicEntry memory r = _entryRec(tid, ids[2], 1, pid, new bytes(256));
         sig = _sig(r.author, h.entry(r));
         vm.prank(STRANGER);
         chat.postEntry(r, sig);
-        _row("postEntry 256 B reply", 183_285, 1_900_260);
+        // CTR-CHAT-23 (the release's dispatcher): regular 183,285 -> 183,388
+        _row("postEntry 256 B reply", 183_388, 1_900_260);
 
         IPqChat.PqTopicEdit memory d = IPqChat.PqTopicEdit(pid, ids[0], 2, 2, "text/markdown", new bytes(1024));
         sig = _sig(d.author, h.edit(d));
         vm.prank(STRANGER);
         chat.editEntry(d, sig);
-        _row("editEntry 1 KiB", 144_427, 2_487_780);
+        // CTR-CHAT-23 (the release's dispatcher): regular 144,427 -> 144,596
+        _row("editEntry 1 KiB", 144_596, 2_487_780);
 
         IPqChat.PqTopicVote memory v = IPqChat.PqTopicVote(pid, ids[3], 1, 1);
         sig = _sig(v.voter, h.vote(v));
         vm.prank(STRANGER);
         chat.voteEntry(v, sig);
-        _row("voteEntry first on the entry", 101_326, 195_840);
+        // CTR-CHAT-23 (the release's dispatcher): regular 101,326 -> 101,429
+        _row("voteEntry first on the entry", 101_429, 195_840);
         v = IPqChat.PqTopicVote(pid, ids[3], -1, 2);
         sig = _sig(v.voter, h.vote(v));
         vm.prank(STRANGER);
         chat.voteEntry(v, sig);
-        _row("voteEntry changed", 102_292, 0);
+        // CTR-CHAT-23 (the release's dispatcher): regular 102,292 -> 102,395
+        _row("voteEntry changed", 102_395, 0);
     }
 
     /// The release transaction (`deployImplementation` through the factory: a CREATE2 of the whole implementation), as the deploy
@@ -312,12 +337,13 @@ contract PqChatGasTest is PqTopicsBase {
     }
 
     function test_gas_createInstance() public {
-        bytes memory init = abi.encodeCall(IPqChat.initialize, (MetaTxLib.pad(STRANGER))); // the owner is the creator (D P3-1)
+        bytes memory init = abi.encodeCall(IPqChat.initialize, (MetaTxLib.pad(STRANGER), 2)); // the owner is the creator (D P3-1)
         vm.prank(STRANGER);
         f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "gas", init);
         // round 3r T4 (R1: no owner word in the record, no owner list, no `factoryInfo().ownerUA`): 227,583 / 1,523,880 ->
         // 188,761 / 1,328,040 (state -2 x 97,920)
         // Fable D P3-1 (the `creating()` staticcall in `initialize`): regular 188,761 -> 189,561
-        _row("createInstance PqChat", 189_561, 1_328_040);
+        // CTR-CHAT-23 (the `sigStore` argument and its check): regular 189,561 -> 189,995
+        _row("createInstance PqChat", 189_995, 1_328_040);
     }
 }

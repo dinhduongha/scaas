@@ -62,13 +62,15 @@ const MXLOCAL = 255 - "@:example.org".length;
 const homeChatContract = hex(rnd("home-contract", 20));
 const seat = hex(rnd("msig-seat"));
 
-/** A signed record's row; `sig` adds the signature, its hash and the stored blob (3C-D3). */
-function recordRow(struct, s, who, { id, scope, sig } = {}) {
+/** A signed record's row; `sig` adds the signature, its hash and the stored blob (3C-D3); `kept` the blob an `sstore2` instance
+ *  keeps (CTR-CHAT-23). */
+function recordRow(struct, s, who, { id, scope, sig, kept } = {}) {
   const r = { signer: who.name, record: s, hashStruct: pc.structHash(struct, s), typed: pc.typed(struct, s) };
   if (id) r.id = id;
   if (scope) r.scope = scope;
   r.uaMessage = { kind: KIND, digest: pc.signedDigest(KIND, struct, s) };
   if (sig) Object.assign(r, { uaSig: sig, sigHash: pc.sigHash(sig), blob: pc.recordBlob(struct, s, sig) });
+  if (sig && kept) r.blobSigned = pc.recordBlob(struct, s, sig, pc.SIG_STORE.sstore2);
   return r;
 }
 
@@ -248,7 +250,10 @@ write("records.json", {
     "keccak256(abi.encode(UASig)), UASig = (bytes keyData, bytes signature, (uint16, (uint16, bytes)[], bytes)[] members); " +
     "blob = abi.encode(record as its ABI tuple, sigHash) (3C-D3). The remove row (P48): alice, the admin of epoch 1, removes " +
     "its members (strictly sorted), nextEpoch = epoch 1's number + 1; members is a bytes32[], keccak256 of the packed words as " +
-    "admins; scope = the epoch scope (sessionId, admin), shared with alice's epoch; no id, no signature.",
+    "admins; scope = the epoch scope (sessionId, admin), shared with alice's epoch; no id. The signature-storage setting " +
+    "(CTR-CHAT-23, owner 2026-11-23): sigStore its two modes (PQZ's numbering); every row is signed (uaSig, sigHash), blob is what " +
+    "a none instance keeps and blobSigned = abi.encode(record as its ABI tuple, sigHash, UASig) what an sstore2 instance keeps, " +
+    "the signature view returning that UASig.",
   version: 1,
   domain,
   purpose,
@@ -264,14 +269,35 @@ write("records.json", {
     publicKey: p.publicKey,
     ua: p.ua,
   })),
-  session: recordRow("PqChatSession", session, alice, { id: sid, scope: pc.scopeSession(alice.ua) }),
-  epoch: recordRow("PqChatEpoch", epoch, alice, { id: eid, scope: pc.scopeEpoch(sid, alice.ua) }),
-  leave: recordRow("PqChatLeave", leave, bob, { id: pc.leaveId(leave), scope: pc.scopeEpoch(sid, bob.ua) }),
-  remove: recordRow("PqChatRemove", remove, alice, { scope: pc.scopeEpoch(sid, alice.ua) }),
+  sigStore: pc.SIG_STORE,
+  session: recordRow("PqChatSession", session, alice, {
+    id: sid,
+    scope: pc.scopeSession(alice.ua),
+    sig: sign(alice, "PqChatSession", session),
+    kept: true,
+  }),
+  epoch: recordRow("PqChatEpoch", epoch, alice, {
+    id: eid,
+    scope: pc.scopeEpoch(sid, alice.ua),
+    sig: sign(alice, "PqChatEpoch", epoch),
+    kept: true,
+  }),
+  leave: recordRow("PqChatLeave", leave, bob, {
+    id: pc.leaveId(leave),
+    scope: pc.scopeEpoch(sid, bob.ua),
+    sig: sign(bob, "PqChatLeave", leave),
+    kept: true,
+  }),
+  remove: recordRow("PqChatRemove", remove, alice, {
+    scope: pc.scopeEpoch(sid, alice.ua),
+    sig: sign(alice, "PqChatRemove", remove),
+    kept: true,
+  }),
   message: recordRow("PqChatMessage", message, alice, {
     id: pc.messageId(message),
     scope: pc.scopeMessage(eid, alice.ua, DEVICE),
     sig: messageSig,
+    kept: true,
   }),
 });
 
