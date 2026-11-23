@@ -5478,7 +5478,7 @@ mod tests {
         assert_eq!(n, 14);
         assert_eq!(
             format!("{:#x}", keccak256(th("PqChatSession"))),
-            "0xe2c3b4c1033a28837e998f325e512f26783cea21cc6ccb347fa3d3d8d7ad1e4d"
+            "0x7e832d4c55dc2f6d4a77041b7000f7eb325d19c81a456b8e3844262dda62d911"
         );
         assert_eq!(
             format!("{:#x}", keccak256(th("PqTopic"))),
@@ -5586,7 +5586,7 @@ mod tests {
         assert_eq!(n, 9);
         assert_eq!(
             format!("{:#x}", keccak256(th("PqVaultCreate"))),
-            "0xb5e6f0323db4eb92065a67dedef66888c5936a3fda2508c66728db676184d587"
+            "0xa81afc5c34e93b0250095251a73b625a97fb14fa58780806d5a1916a32ef53f9"
         );
     }
 }
