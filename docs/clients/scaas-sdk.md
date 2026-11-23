@@ -363,11 +363,12 @@ purpose constant (the guard on the chain-bound path) and every domain of a SCaaS
 address, by chain), each refusal tested with a positive control and a mutant. Reads of ciphertexts the app core decrypts are decryption reads under
 [CLI-SDK-10](#CLI-SDK-10); writes are operations under [CLI-SDK-08](#CLI-SDK-08). Design: spec §12.
 
-Built additions (pqchat-core T1, 2026-11-21; BUILT, UNAUDITED): `read_app(chain, contract, entry, args, trusted)` reads a
+Built additions (pqchat-core T1, 2026-11-21; BUILT, UNAUDITED): `read_app(chain, contract, entry, args)` reads a
 `view` or `pure` entry of any contract by its JSON ABI item and named arguments at the profile's final block and answers
 named JSON (outputs and tuple components by name, integers as decimal strings, bytes and addresses as `0x` hex), bounded
 (entry 64 KiB, arguments 128 KiB, answer 1 MiB, output types nesting at most 16 levels: `Argument`), as a read that feeds a
-decryption when `trusted`. PqChat's key entries (`pqchat_*`, feature `pqchat-records`) are thin calls of `ua-rs`
+decryption by default (`read_app`; `read_app_plain` for a read that never feeds one, T26 B-17). PqChat's key entries
+(`pqchat_*`, feature `pqchat-records`) are thin calls of `ua-rs`
 `pqchat_keys` on the scope's handles, only in a scope that declared `scaas/pqchat/v1/` (`AppLabelRefused`); the signing ones
 take the sender, creator or author from the account and never a digest or a ciphertext of the caller's. PqChat's record
 entries (`sign_pqchat_*`, `sign_pqchat_card`) also work only in that scope (T26 A-9); they take the record's signer field as

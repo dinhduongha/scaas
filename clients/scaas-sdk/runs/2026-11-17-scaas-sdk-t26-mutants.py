@@ -367,6 +367,11 @@ MUTANTS = [
         [(PQK, "    let v = a.bytes(at, (*left).min(PT_MAX))?;", "    let v = a.bytes(at, PT_MAX)?;")],
         U + " --lib decode_budget",
     ),
+    (
+        "B-17: read_app a plain read",
+        [(AC, "        self.read_app_as(chain, contract, entry, args, Purpose::FeedsDecryption)", "        self.read_app_as(chain, contract, entry, args, Purpose::Plain)")],
+        T + " --test app_core read_app_feeds_decryption_by_default",
+    ),
 ]
 
 if __name__ == "__main__":

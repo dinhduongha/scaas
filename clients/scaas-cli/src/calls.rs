@@ -28,6 +28,10 @@ use std::sync::Arc;
 /// SDK calls without a command of their own, each with its reason.
 pub const EXCLUDED: &[(&str, &str)] = &[
     (
+        "AppPrepared::sign",
+        "signed inside `app-core prepare-app-record` / `prepare-pqvault-record`, after the confirm on its review (T26 A-5)",
+    ),
+    (
         "lib::load_check",
         "a binding's load check against the library it loads (spec §16.3); the CLI links the SDK it was built with",
     ),
@@ -237,6 +241,7 @@ calls! { cx;
 
     // ---- vault
     "vault seeds" "Vault::seeds" {} => js(sdk(cx).vault().seeds().await?);
+    "vault accept-rollback" "Vault::accept_rollback" {} => { sdk(cx).vault().accept_rollback().await?; ok() };
     "vault seed" "Vault::seed" {seed: String} => js(sdk(cx).vault().seed(seed).await?);
     "vault generate" "Vault::generate" {label: String} ["vault-passphrase"] => {
         let vault_passphrase = cx.secret("vault-passphrase")?;
@@ -634,14 +639,14 @@ calls! { cx;
     "app-core app-root-key" "AppCore::app_root_key" {account: KeyRef} => handle(cx.app()?.app_root_key(account)?, key_shown());
     "app-core account-ua" "AppCore::account_ua" {account: KeyRef} => hexed("ua", &cx.app()?.account_ua(&account)?);
     "app-core destroy" "AppCore::destroy" {key: H<Arc<AppKey>>} => { cx.app()?.destroy(key.0)?; ok() };
-    "app-core sign-app-record" "AppCore::prepare_app_record" {account: KeyRef, path: AppPath, typed_json: String} @sign => {
+    "app-core prepare-app-record" "AppCore::prepare_app_record" {account: KeyRef, path: AppPath, typed_json: String} @sign => {
         let p = cx.app()?.prepare_app_record(account.clone(), path, typed_json).await?;
         cx.confirm(json!({"sign": "an app record", "account": account, "review": review(&p.review), "digest": p.digest}))?;
         js(p.sign().await?)
     };
     "app-core kem-wrap" "AppCore::kem_wrap" {chain: String, recipient: String, kem_version: u64, key: H<Arc<AppKey>>, label: Vec<u8>, aad: Vec<u8>} => js(cx.app()?.kem_wrap(chain, recipient, kem_version, key.0, label, aad).await?);
     "app-core verify-app-record" "AppCore::verify_app_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_app_record(chain, ua, path, typed_json, sig).await?);
-    "app-core sign-pqvault-record" "AppCore::prepare_pqvault_record" {account: KeyRef, path: AppPath, records: Option<String>, typed_json: String} @sign => {
+    "app-core prepare-pqvault-record" "AppCore::prepare_pqvault_record" {account: KeyRef, path: AppPath, records: Option<String>, typed_json: String} @sign => {
         let p = cx.app()?.prepare_pqvault_record(account.clone(), path, records.clone(), typed_json).await?;
         cx.confirm(json!({"sign": "a PqVault record", "account": account, "records": records, "review": review(&p.review), "digest": p.digest}))?;
         js(p.sign().await?)
@@ -653,7 +658,8 @@ calls! { cx;
         cx.confirm(json!({"review": review(&call.review), "quote": call.quote}))?;
         named("tx", sdk(cx).wallet().submit_native_send(call.quote).await?)
     };
-    "app-core read-app" "AppCore::read_app" {chain: String, contract: String, entry: String, args: String, trusted: bool} => named("result", raw_json(cx.app()?.read_app(chain, contract, entry, args, trusted).await?));
+    "app-core read-app" "AppCore::read_app" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app(chain, contract, entry, args).await?));
+    "app-core read-app-plain" "AppCore::read_app_plain" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app_plain(chain, contract, entry, args).await?));
     "app-core pqchat-epoch-key" "AppCore::pqchat_epoch_key" {seed: String} => handle(cx.app()?.pqchat_epoch_key(&seed)?, key_shown());
     "app-core pqchat-wrap" "AppCore::pqchat_wrap" {chain: String, k: H<Arc<AppKey>>, session_id: String, epoch_id: String, member: String, key_id: u64} => js(cx.app()?.pqchat_wrap(chain, k.0, session_id, epoch_id, member, key_id).await?);
     "app-core pqchat-unwrap" "AppCore::pqchat_unwrap" {account: KeyRef, session_id: String, epoch_id: String, wrap: PqWrap} => handle(cx.app()?.pqchat_unwrap(account, session_id, epoch_id, wrap)?, key_shown());

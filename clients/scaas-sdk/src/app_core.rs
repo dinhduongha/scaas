@@ -1694,9 +1694,10 @@ impl AppCore {
     /// A view of an app's contract (or a SCaaS view an app reads, a registry's `kemKeyOf`, a factory listing): `entry` the
     /// function's JSON ABI item (`view` or `pure`, its parameters named; `Argument` otherwise), `args` a JSON object of exactly
     /// its parameter names (as [`AppCore::prepare_app_call`]), read at the profile's final block. Bounded: the entry 64 KiB,
-    /// the arguments 128 KiB, the answer 1 MiB, an output type nesting at most 16 levels (`Argument`). `trusted`: the read
+    /// the arguments 128 KiB, the answer 1 MiB, an output type nesting at most 16 levels (`Argument`). Always a read that
     /// feeds a decryption (`Purpose::FeedsDecryption`, ARCH-POS-15: a discovered node only under the majority option with at
-    /// least three nodes). The answer: a JSON object of the outputs by name (an unnamed one by its index), tuples by their
+    /// least three nodes; T26 B-17: the fail-closed default, never a caller's flag); [`Self::read_app_plain`] for a read
+    /// that never feeds one. The answer: a JSON object of the outputs by name (an unnamed one by its index), tuples by their
     /// components' names, integers as decimal strings, bytes, addresses and fixed bytes as `0x` hex.
     pub async fn read_app(
         self: &Arc<Self>,
@@ -1704,7 +1705,30 @@ impl AppCore {
         contract: String,
         entry: String,
         args: String,
-        trusted: bool,
+    ) -> Result<String, SdkError> {
+        self.read_app_as(chain, contract, entry, args, Purpose::FeedsDecryption)
+            .await
+    }
+
+    /// [`Self::read_app`] as a plain read (`Purpose::Plain`): its answer never feeds a decryption (T26 B-17).
+    pub async fn read_app_plain(
+        self: &Arc<Self>,
+        chain: String,
+        contract: String,
+        entry: String,
+        args: String,
+    ) -> Result<String, SdkError> {
+        self.read_app_as(chain, contract, entry, args, Purpose::Plain)
+            .await
+    }
+
+    async fn read_app_as(
+        self: &Arc<Self>,
+        chain: String,
+        contract: String,
+        entry: String,
+        args: String,
+        purpose: Purpose,
     ) -> Result<String, SdkError> {
         use alloy::dyn_abi::FunctionExt;
         use alloy::json_abi::StateMutability;
@@ -1721,11 +1745,7 @@ impl AppCore {
         }
         let to = Address::from(addr20(&contract.to_ascii_lowercase())?);
         let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
-        let purpose = if trusted {
-            Purpose::FeedsDecryption
-        } else {
-            Purpose::Plain
-        };
+
         let (pool, data) = (&pool, Bytes::from(data));
         let out = pool
             .read_at_block(final_block(&profile), purpose, |at| {

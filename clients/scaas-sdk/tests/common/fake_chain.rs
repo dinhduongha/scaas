@@ -351,7 +351,11 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 t => named(c, t),
             };
             let meta = c.tokens.get(&to).cloned();
-            let head = if at > c.finalized { &c.head_answers[..] } else { &[] };
+            let head = if at > c.finalized {
+                &c.head_answers[..]
+            } else {
+                &[]
+            };
             if let Some((_, _, out)) = head
                 .iter()
                 .chain(&c.answers)

@@ -14,8 +14,8 @@ mod fake_chain;
 
 #[path = "common/prepared.rs"]
 mod prepared;
-use prepared::SignPrepared as _;
 use fake_chain::{fake, keccak_hex, serve, Fake};
+use prepared::SignPrepared as _;
 use scaas_sdk::app_core::{AppCore, AppDesc, AppKeyUsage, AppPath, AppUaSig};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_keys::{PqMessageHeader, PqSessionNew};
@@ -1069,16 +1069,18 @@ async fn read_app_named_json() {
     answer(&chain, VIEW, "storedRange(bytes32)", &eid, out);
     let args = json!({"epochId": format!("0x{}", hexs(&eid))}).to_string();
     for trusted in [false, true] {
-        let got = a
-            .read_app(
-                "local".into(),
-                VIEW.into(),
-                entry.clone(),
-                args.clone(),
-                trusted,
-            )
-            .await
-            .unwrap();
+        let (c, v, e, x) = (
+            "local".to_string(),
+            VIEW.to_string(),
+            entry.clone(),
+            args.clone(),
+        );
+        let got = if trusted {
+            a.read_app(c, v, e, x).await
+        } else {
+            a.read_app_plain(c, v, e, x).await
+        }
+        .unwrap();
         let v: Value = serde_json::from_str(&got).unwrap();
         assert_eq!(
             v,
@@ -1099,14 +1101,14 @@ async fn read_app_named_json() {
     let bad = json!({"epoch": format!("0x{}", hexs(&eid))}).to_string();
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), entry.clone(), bad, false)
+            a.read_app_plain("local".into(), VIEW.into(), entry.clone(), bad)
                 .await
         ),
         "Argument"
     );
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), "{".into(), args.clone(), false)
+            a.read_app_plain("local".into(), VIEW.into(), "{".into(), args.clone())
                 .await
         ),
         "Argument"
@@ -1114,7 +1116,7 @@ async fn read_app_named_json() {
     let pay = entry.replace("\"view\"", "\"nonpayable\"");
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), pay, args.clone(), false)
+            a.read_app_plain("local".into(), VIEW.into(), pay, args.clone())
                 .await
         ),
         "Argument"
@@ -1130,27 +1132,15 @@ async fn read_app_named_json() {
         .to_string()
     };
     let at16 = a
-        .read_app(
-            "local".into(),
-            VIEW.into(),
-            deep_entry(16),
-            args.clone(),
-            false,
-        )
+        .read_app_plain("local".into(), VIEW.into(), deep_entry(16), args.clone())
         .await
         .unwrap();
     assert_eq!(at16.matches("\"x\":").count(), 17, "{at16}");
     assert!(at16.contains("\"x\":\"5\""), "{at16}");
     assert_eq!(
         code(
-            a.read_app(
-                "local".into(),
-                VIEW.into(),
-                deep_entry(17),
-                args.clone(),
-                false
-            )
-            .await
+            a.read_app_plain("local".into(), VIEW.into(), deep_entry(17), args.clone())
+                .await
         ),
         "Argument"
     );
@@ -1162,7 +1152,7 @@ async fn read_app_named_json() {
         .to_string()
     };
     let d16 = a
-        .read_app("local".into(), VIEW.into(), dims(16), args.clone(), false)
+        .read_app_plain("local".into(), VIEW.into(), dims(16), args.clone())
         .await
         .unwrap();
     assert_eq!(
@@ -1171,7 +1161,7 @@ async fn read_app_named_json() {
     );
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), dims(17), args, false)
+            a.read_app_plain("local".into(), VIEW.into(), dims(17), args)
                 .await
         ),
         "Argument"

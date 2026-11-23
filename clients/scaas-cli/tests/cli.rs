@@ -779,6 +779,9 @@ fn confirm_class(sdk: &str) -> Option<&'static str> {
             "pqchat_seal_message",
             "pqchat_seal_file_message",
             "prepare_app_call",
+            // T26 A-5: an app record prepared (the SDK's review), confirmed, then signed in one command
+            "prepare_app_record",
+            "prepare_pqvault_record",
             // SDK plan T41.soroban: the signer's hand-off, the subject's op signed, the payer's native send signed
             "soroban_submit",
             "soroban_hand_off",
@@ -1219,8 +1222,14 @@ fn every_signing_command_asks_first() {
                 "admin sign-rescue-vault" => zf(&["admin", "sign-rescue-vault"], zero::<scaas_sdk::admin::RescueVault>()),
                 "admin sign-pqz-auditor-consent" => zf(&["admin", "sign-pqz-auditor-consent"], zero::<scaas_sdk::admin::AuditorConsent>()),
                 "admin sign-zether-auditor-consent" => zf(&["admin", "sign-zether-auditor-consent"], zero::<scaas_sdk::admin::AuditorConsent>()),
-                "app-core sign-app-record" => Run::One(s(&["app-core", "sign-app-record", "--account", &sg, "--path", "Portable", "--typed-json", "{}"])),
-                "app-core sign-pqvault-record" => Run::One(s(&["app-core", "sign-pqvault-record", "--account", &sg, "--path", "Portable", "--typed-json", "{}"])),
+                "app-core prepare-app-record" => {
+                    // T26 A-5: the SDK prepares (its review) before the confirm, so the request is a record of the scope
+                    let rec = json!({"types": {"EIP712Domain": [{"name": "name", "type": "string"}, {"name": "version", "type": "string"},
+                        {"name": "salt", "type": "bytes32"}], "Note": [{"name": "body", "type": "string"}]}, "primaryType": "Note",
+                        "domain": {"name": "My App", "version": "1", "salt": APP_ID}, "message": {"body": "hello"}});
+                    Run::One(s(&["app-core", "prepare-app-record", "--account", &sg, "--path", "Portable", "--typed-json", &rec.to_string()]))
+                }
+                "app-core prepare-pqvault-record" => Run::One(s(&["app-core", "prepare-pqvault-record", "--account", &sg, "--path", "Portable", "--typed-json", "{}"])),
                 "app-core sign-pqchat-card" => Run::One(s(&["app-core", "sign-pqchat-card", "--account", &sg, "--kem-version", "1", "--matrix-id", ""])),
                 "app-core prepare-app-call" => {
                     let entry = json!({"type": "function", "name": "ping", "stateMutability": "nonpayable", "outputs": [],
@@ -1270,8 +1279,10 @@ fn every_signing_command_asks_first() {
                 Run::One(a) => {
                     let stdin = if a.first().map(String::as_str) == Some("--unlock") { format!("{PASS}\nn\n") } else { "n\n".into() };
                     let o = one(a, stdin).await.unwrap();
-                    (out(&o).lines().next().is_some_and(|l| l.starts_with('{')),
-                        !o.status.success() && err(&o).contains("NotConfirmed") || { failures.push(format!("{cmd}: {}", err(&o))); false })
+                    // T26 A-5: a PqVault record prepares in PqVault's scope only; this scope's refusal comes before any confirm
+                    let pre = cmd == "app-core prepare-pqvault-record" && err(&o).contains("Argument");
+                    (pre || out(&o).lines().next().is_some_and(|l| l.starts_with('{')),
+                        pre || !o.status.success() && err(&o).contains("NotConfirmed") || { failures.push(format!("{cmd}: {}", err(&o))); false })
                 }
                 Run::Session(pre, last) => {
                     let mut a = base.clone();

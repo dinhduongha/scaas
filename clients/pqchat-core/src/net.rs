@@ -147,16 +147,17 @@ impl Net for SdkNet {
         args: Value,
     ) -> Result<Value, PqChatError> {
         let trusted = trust(item)? == Trusted;
-        let out = self
-            .app
-            .read_app(
-                chain.into(),
-                contract.into(),
-                abi(item)?.into(),
-                args.to_string(),
-                trusted,
-            )
-            .await?;
+        let (c, k, e, a) = (
+            chain.into(),
+            contract.into(),
+            abi(item)?.into(),
+            args.to_string(),
+        );
+        let out = if trusted {
+            self.app.read_app(c, k, e, a).await?
+        } else {
+            self.app.read_app_plain(c, k, e, a).await?
+        };
         serde_json::from_str(&out).map_err(|_| PqChatError::Internal)
     }
 

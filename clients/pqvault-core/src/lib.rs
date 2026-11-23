@@ -261,7 +261,6 @@ impl Net for SdkNet {
                 records::hex(&contract.0),
                 entry(sig)?,
                 args.to_string(),
-                true,
             )
             .await?;
         serde_json::from_str(&out).map_err(|_| SdkError::Argument)

@@ -299,6 +299,37 @@ fn record(domain: serde_json::Value) -> String {
     .to_string()
 }
 
+/// T26 B-17: `read_app` is a read that feeds a decryption by default (a list of discovered nodes only: `NoTrustedEndpoint`,
+/// nothing asked); `read_app_plain` the plain read (the control: answered from that list).
+#[tokio::test(flavor = "multi_thread")]
+async fn read_app_feeds_decryption_by_default() {
+    let (s, _seed, chain) = on_fake(None, scaas_rpc::Class::Discovered).await;
+    let a = AppCore::new(s, desc(Some(APP_ID), &["scaas/rdap/v1/"])).unwrap();
+    let entry =
+        json!({"type": "function", "name": "generation", "stateMutability": "view", "inputs": [],
+        "outputs": [{"name": "g", "type": "uint256"}]})
+        .to_string();
+    let read = |plain: bool| {
+        let (a, entry) = (a.clone(), entry.clone());
+        async move {
+            let (c, k) = ("local".to_string(), APP_CONTRACT.to_string());
+            if plain {
+                a.read_app_plain(c, k, entry, "{}".into()).await
+            } else {
+                a.read_app(c, k, entry, "{}".into()).await
+            }
+        }
+    };
+    assert_eq!(code(read(false).await), "NoTrustedEndpoint");
+    assert!(!chain
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .any(|r| r.contains(&sel("generation()")[2..]) && r.contains("eth_call")));
+    assert_eq!(read(true).await.unwrap(), r#"{"g":"1"}"#);
+}
+
 /// T26 A-5: an app record is prepared (its review and digest, nothing signed) and signed apart; the review is the SDK's from
 /// the parsed typed data, so a typed-data text holding `message` twice shows the value that is signed.
 #[tokio::test(flavor = "multi_thread")]
