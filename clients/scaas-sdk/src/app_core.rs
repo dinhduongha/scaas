@@ -8,13 +8,11 @@
 //! namespace). The only bytes that leave are the plaintexts the app core asks to decrypt ([`AppCore::open`], a
 //! `SecretBytes`). UNAUDITED.
 use crate::error::SdkError;
-use crate::op::{addr20, final_block, sim, KeyRef};
+use crate::op::{addr20, final_block, KeyRef};
 use crate::op::{ReviewField, Source};
 use crate::vault::OpenSeed;
 use crate::Sdk;
-use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, Bytes};
-use alloy::rpc::types::TransactionRequest;
 use scaas_rpc::evm::EvmPool;
 use scaas_rpc::pool::{ReadAt, ReadError};
 use scaas_rpc::Purpose;
@@ -1345,7 +1343,9 @@ impl AppCore {
 
     /// `AppDomainRefused` for a contract an app record or call may not name (spec §12.4): the profile's registry, factory or
     /// router, a listed token or DEX, or a contract the profile's factory made of a class other than `AppDesc.class` (its
-    /// `infoOf` record, a plain read; any class when the scope declares none). `Argument` for a malformed address.
+    /// `infoOf` record read at the profile's final block; any class when the scope declares none). `Argument` for a malformed
+    /// address. Depth only (T26 A-10): the guard is the purpose refusal below the SDK; a contract the factory did not make
+    /// (class 0) or a profile without a factory passes this layer.
     async fn refuse_contract(
         &self,
         profile: &crate::ChainProfile,
@@ -1373,10 +1373,15 @@ impl AppCore {
         let f = Address::from(addr20(&f.to_ascii_lowercase())?);
         let mut arg = [0u8; 32];
         arg[12..].copy_from_slice(&c);
-        let tx = TransactionRequest::default()
-            .with_to(f)
-            .with_input(Bytes::from([sel("infoOf(address)"), arg.to_vec()].concat()));
-        let out = pool.call_tx(tx).await.map_err(sim)?;
+        // T26 A-10: at the profile's final block, as every other read of this layer
+        let data = Bytes::from([sel("infoOf(address)"), arg.to_vec()].concat());
+        let out = pool
+            .read_at_block(final_block(profile), Purpose::Plain, |at| {
+                let d = data.clone();
+                async move { pool.call_at(&at, f, d).await.map(|b| b.to_vec()) }
+            })
+            .await?
+            .value;
         // `Created(address addr, bytes32 creatorId, uint16 contractClass, …)`: a static tuple, the class in word 2
         let class = small(&out, 64, u64::from(u16::MAX)).ok_or(SdkError::Argument)?;
         if class != 0 && Some(class) != self.class.map(usize::from) {

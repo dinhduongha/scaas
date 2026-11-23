@@ -356,6 +356,11 @@ MUTANTS = [
         [(PQR, "        self.label(scaas_ua::wallet::pqchat_keys::PREFIX.as_bytes())?;\n        let sdk = self.sdk.clone();", "        let sdk = self.sdk.clone();")],
         T + ",vectors --test pqchat_records entries_reproduce_the_vectors",
     ),
+    (
+        "A-10: the factory class read at the head",
+        [(AC, "            .read_at_block(final_block(profile), Purpose::Plain, |at| {\n                let d = data.clone();\n                async move { pool.call_at(&at, f, d).await.map(|b| b.to_vec()) }", "            .read_at_block(scaas_rpc::pool::BlockChoice::Latest, Purpose::Plain, |at| {\n                let d = data.clone();\n                async move { pool.call_at(&at, f, d).await.map(|b| b.to_vec()) }")],
+        T + " --test app_core",
+    ),
 ]
 
 if __name__ == "__main__":

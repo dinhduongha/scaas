@@ -978,6 +978,16 @@ async fn factory_instance_of_another_class_refused() {
     answer(&chain, FACTORY, "infoOf(address)", &c, info(0));
     assert_eq!(sign(&a).await, "Ok");
     assert_eq!(sign(&none).await, "Ok");
+    // T26 A-10: the class is read at the profile's final block, never the head: a head answering another class is not read
+    answer(&chain, FACTORY, "infoOf(address)", &c, info(7));
+    {
+        let mut ch = chain.lock().unwrap();
+        ch.head = ch.finalized + 4;
+        let prefix = format!("{}{}", sel("infoOf(address)"), hexs(&c));
+        ch.head_answers
+            .push((FACTORY.into(), prefix, format!("0x{}", info(3))));
+    }
+    assert_eq!(sign(&a).await, "Ok");
 }
 
 alloy::sol! {
