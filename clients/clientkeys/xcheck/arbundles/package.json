@@ -10,5 +10,10 @@
   },
   "dependencies": {
     "@dha-team/arbundles": "1.2.0"
+  },
+  "overrides": {
+    "elliptic": "6.6.1",
+    "secp256k1": "5.0.2",
+    "ws": "7.5.13"
   }
 }
