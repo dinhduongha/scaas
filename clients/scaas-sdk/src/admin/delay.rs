@@ -152,7 +152,7 @@ impl Admin {
                 let byte = locked
                     .get(31 - usize::from(bit / 8))
                     .ok_or(SdkError::Argument)?;
-                let admin_gone = word(&admin, 0)?.iter().all(|b| *b == 0);
+                let admin_gone = word(admin, 0)?.iter().all(|b| *b == 0);
                 if byte & (1 << (bit % 8)) != 0 && admin_gone {
                     out.push(DelaySentence::Locked);
                 }
