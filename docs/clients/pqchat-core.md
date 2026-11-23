@@ -224,7 +224,9 @@ side is [CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **SPECIFIED*
 other than the owner's rulings are controller calls, the owner may override. **Owner rulings of 2026-11-23 on the second
 review:** the joiner without RFC 9420's `init` chain and its cost; the compromise warning; no automatic receipts in a tree
 session; freshness before a changed session info; no return, the way back being a new UA. **After the third review:** the
-warning before an Add of a key registered to another UA.
+warning before an Add of a key registered to another UA. **Codex's third review (controller calls):** the two ranges of
+replay, the comparison at the pin, the warning's roster and empty path, the prepared creation, the lookup behind the Add
+warning, an admin's new info after a gap, the order of a commit's pieces, the closed session.
 
 - **One branch.** Both modes end in an epoch key `K` per epoch id; sender chains, `sealedInfo`, messages, stores and consent sit
   above `K` and do not change. Until the mode is built the crate refuses `groupMode ≠ 0` by name. A tree session's state,
@@ -239,14 +241,18 @@ warning before an Add of a key registered to another UA.
   review and signs ([CLI-PQC-04](#CLI-PQC-04)); no digest from outside is signed.
 - **Before it encrypts** the crate refuses a head below its checkpoint (which holds the hash of the verified head record, not
   only its id; a mismatch at a pinned number is settled by a strict-majority read over at least 3 nodes, else the session
-  shows "conflicting head" and nothing is built on it), reads every page of a tree snapshot at one block, at an epoch-0 head rebuilds the tree from the signed member list, recomputes the tree hash, verifies the head commit's
+  shows "conflicting head" and nothing is built on it; **before it extends its state above a pin it compares the record
+  that won at the pinned number with the pin**, because a child binds its parent's id and tree hash and not its
+  `sealedInfo` or `admins`, and on a mismatch the epoch is replayed from the majority's record with its metadata), reads every page of a tree snapshot at one block, at an epoch-0 head rebuilds the tree from the signed member list, recomputes the tree hash, verifies the head commit's
   kept signature and its author's right, compares each target key with its hash in the tree, and has `ua-rs` verify against the
   registry record every key no signed tree hash covers yet (an added key, a member at creation), in every tree session; reads
   follow [CLI-PQC-13](#CLI-PQC-13). What a candidate seals counts as disclosed to every key of the tree it was built on.
 - **Session info.** A commit seals the full info only when the device holds the one in force at the parent; otherwise the
   marker "unchanged" (empty content). A device that did not follow an epoch has no info in force from that epoch on: it
   seals the marker until a commit it follows carries a full info, taken under the joiner rule and never sealed while
-  flagged. A changed info is taken only from an admin's commit. **Freshness (owner):** a commit that
+  flagged. A changed info is taken only from an admin's commit. **After a gap an admin may establish the info anew:**
+  a full info the user enters or confirms in the signing review, treated as a changed info; the value cached before the
+  gap is at most a draft marked "not in force" and is never sealed automatically. **Freshness (owner):** a commit that
   seals a changed info (room and store lists) is built only after the head and the roster were read at a final block under
   the strict majority over at least 3 named endpoints ([ARCH-POS-15](../decisions.md#ARCH-POS-15)); with fewer the crate
   refuses the change by name.
@@ -257,11 +263,32 @@ warning before an Add of a key registered to another UA.
   **Before an Add (owner):** the admin's client checks whether the added key's `kemHash` is registered to another UA in
   the registry and warns "this key is also held by UA …". It is a client warning only: the contract's two-level key sets
   ([CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)) do not depend on it, and a lookup that finds nothing proves nothing.
+  **The lookup.** The registry has no index by `kemHash` and its versions are sparse and stored in any order
+  ([accounts.md](../contracts/accounts.md)). Candidates `(ua, version)` are: every UA of the session (live, admin, and
+  the gone ones replay showed) and of the device's contacts, at each version from 0 to that UA's highest when the highest
+  is at most `KEM_SCAN_MAX` = 64, else at version 0, the highest and the versions the session's leaves name; and any
+  pair an index offers, as a hint. A positive is verified: `kemKeyAt(ua, version)` hashes to the `kemHash`; a hint that
+  does not verify is dropped. The result is "also held by UA … (version …)" or "not found among the N UAs checked" with
+  what was not covered, never "held by nobody".
+- **Creation.** The wraps of epoch 0 cannot be built a second time (the record signs their hashes; `joiner_0` and every
+  encapsulation are random). The crate keeps the signed record and every wrap from before the first send until epoch 0
+  completes and finishes from that store after a restart. A device restored without them reads the session as
+  incomplete, shows "creation incomplete, cannot be finished", sends nothing and offers a new session.
+- **The order of a commit's pieces.** The record; then the list and the node keys, each final before anything else
+  leaves the device; then ciphertexts and Welcome wraps; one ciphertext is held back and sent alone last, because the
+  last piece pays the completion and an indivisible piece may not fit with it. The quote names the completion with the
+  held ciphertext and the dearest piece that would be last if the order were broken; a commit whose order was broken
+  and cannot complete is reported by name and rebuilt with a new nonce.
+- **A closed session.** A session whose every live leaf belongs to a UA that left or was removed has no author and takes
+  no member: it is shown as closed, and the review of the leave that closes it says so.
 - **Replay** needs state only ([CLI-PQC-09](#CLI-PQC-09)). Its reads are fixed by public data, the same whether a ciphertext
   opens or not, and each fetched record, list, ciphertext, wrap and key is compared with its signed hash before use: the
   Welcome wrap and the joiner's path ciphertext, then one path ciphertext per later commit (the target that covers the device's
-  leaf), each derived node key compared with the signed hash, `sealedInfo` opened as the confirmation. The roster of each epoch
-  is the live leaves with the later commits undone, anchored to the head's signed tree hash; a non-admin's drop of another UA
+  leaf), each derived node key compared with the signed hash, `sealedInfo` opened as the confirmation. **Two ranges:** the
+  commit records are read from the join's parent (for its admin list) to the anchored head, also after the key was taken
+  out; ciphertexts are opened only while the key was in the tree, from the join to the epoch before the commit that
+  removed it, and nothing at that commit. A genesis key joins by the signed `members` and its wrap. The roster of each epoch
+  is the live leaves with every later commit undone, anchored to the head's signed tree hash; a non-admin's drop of another UA
   needs that UA's signed leave or removal; a key has one period per UA in a session (`goneOwnKeyOf`, then `goneKeyOf`);
   which epoch won is the home's state.
 - **Not followed.** A missing or wrong ciphertext leaves that epoch unreadable on the device: it is shown, the reads go on
@@ -269,8 +296,12 @@ warning before an Add of a key registered to another UA.
   reaches its leaf or a node it holds, its own commit on the user's request included (it seals the marker).
 - **A compromise warning (owner).** One UA signature lets its holder build the next epoch (accepted, as mode 0's `rekey`). A
   completed commit from the device's own `(ua, keyId)` that its seed does not reproduce is shown as a compromise warning, a
-  state of its own, never as "not followed". It names two cases: one foreign signature, which the device's own commit
-  ends; a stolen UA signing key, which it does not end: an admin removes the UA and the user returns as a new UA, the old
+  state of its own, never as "not followed". To reproduce is both tests: the derived node keys equal the signed hashes
+  and `sealedInfo` opens under the derived key; with an empty path (the last live leaf) `sealedInfo` alone decides, and
+  bytes that fail the signature at the read boundary are "read corrupted", not this state. It names two cases: one
+  foreign signature, where the warning shows what that commit changed (leaves added and removed, the admin list, the
+  info) and stays until the roster is reconciled, because a refresh keeps every leaf the foreign commit added; a stolen
+  UA signing key, which it does not end: an admin removes the UA and the user returns as a new UA, the old
   UA being lost everywhere (no key rotation inside a UA, [CTR-UA-13](../contracts/accounts.md#CTR-UA-13)).
 - **What shows that a device followed (owner).** The claim "the same whether a ciphertext opens or not" holds for the replay
   reads and for contract writes. A tree session sends **no automatic receipt**; a send held while a child was not final goes
