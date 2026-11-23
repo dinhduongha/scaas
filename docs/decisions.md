@@ -12805,6 +12805,7 @@ Change (owner 2026-11-23, CLI-PQC-15; status: BUILT on branch `pqchat-sigs`, UNA
 
 **Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-16).) Owner 2026-11-23 (CTR-CHAT-23 point 3, "(d - option)"): the SDK and `pqchat-core` expose strict majority (CLI-RPC-05, CLI-RPC-06) for PqChat's control-plane reads as an explicit option, not forced. Built as `PqChatConfig.agreed_reads` (default `false`), the SDK's `AppCore::read_app_agreed` and scaas-rpc's `EvmPool::read_at_block_agreed`, the agreed read whatever the list's policy; the trusted `IPqChat` reads only (controller call, the owner may override).
 **Status.** BUILT on branch `pqchat-sigs`, UNAUDITED.
+Change (controller call 2026-11-23, TODO 8b-8 (3); owner may override): the `AppCore` surface, `read_app_agreed` included, stays unbound in the generated bindings (`binding_list.rs`): app cores are Rust in the app's one library (CLI-SDK-19), the bindings expose the default features only (CLI-SDK-33), and `read_app` / `read_app_plain` are unbound too; its one both-ways surface is the CLI command `app-core read-app-agreed`.
 **Why.** The defence where a kept signature is not enough: a `none` home, or an `msig` author whose structure is a registry read.
 **Cost if wrong.** A read refused on a list of one endpoint (`Argument`), or reads served by one endpoint where the user wanted several to agree.
 **Source.** owner 2026-11-23 (relayed by the controller); [spec](superpowers/specs/2026-11-17-pqchat-core.md) §13 O11.
