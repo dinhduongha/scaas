@@ -1014,6 +1014,8 @@ impl TreeReader for Tamper<'_> {
         self.home.ua_key_of(ua)
     }
 }
+/// A view to lie about and how.
+type Lie = (String, fn(&mut Value));
 /// The last byte of the hex string at `v` flipped.
 fn flip(v: &mut Value) {
     let mut b = unhex(v);
@@ -1047,7 +1049,7 @@ fn tree_refusals_beside_twins() {
     assert!(r.epochs.iter().all(|e| e.state == State::Followed));
     // bytes that fail a signed hash or a signature: refused at the read boundary, before any decapsulation (codex-13,
     // codex-r2-15); one view at a time
-    let cases: [(String, fn(&mut Value)); 6] = [
+    let cases: [Lie; 6] = [
         (first("pathCtAt("), |x| flip(&mut x["sealedSecret"])),
         (first("pathCtAt("), |x| flip(&mut x["mlkemCt"])),
         (first("wrapAt(0,"), |x| flip(&mut x["sealedKey"])),
