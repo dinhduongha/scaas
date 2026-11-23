@@ -876,6 +876,7 @@ mod tests {
 
     /// T26 B2-13: the Zether UA's verify gas for the prover is its row's gas plus `margin`, as every quote counts it; without
     /// a row the app's figure (the control).
+    #[cfg(feature = "zether")]
     #[test]
     fn verify_or_counts_the_margin() {
         let mut r = rows(0, 5_000);
