@@ -6994,6 +6994,7 @@ mod pqvault_types {
         struct PqVaultCreate {
             bytes32 creator; uint64 nonce; uint8 mode; bytes32 homeChain; address homeVaultContract; bytes32[] admins;
             MemberKey[] members; bytes32[] wrapHashes; uint16 passKdf; bytes32 passSalt; bytes sealedInfo;
+            uint8 groupMode;
         }
         struct PqVaultItem { bytes32 vaultId; bytes32 epochId; bytes32 author; uint64 nonce; bytes ciphertext; }
         struct PqVaultEdit { bytes32 itemId; bytes32 epochId; bytes32 author; uint64 nonce; uint32 version; bytes ciphertext; }
@@ -7239,6 +7240,7 @@ async fn pqvault_flow(mode: u8, chain_id: u64) {
         passKdf: 1,
         passSalt: B256::repeat_byte(0x5a),
         sealedInfo: vec![0x5e; 1052].into(), // a nonce, the 1,024-B bucket, a tag (F12)
+        groupMode: 0,
     };
     let jm = |m: &MemberKey| json!({"ua": hb(m.ua), "keyId": "0", "via": hb(m.via)});
     let jw = |w: &Wrap| {
@@ -7249,7 +7251,7 @@ async fn pqvault_flow(mode: u8, chain_id: u64) {
         "v": {"creator": hb(v.creator), "nonce": nonce.to_string(), "mode": mode, "homeChain": hb(uid),
             "homeVaultContract": format!("{inst:#x}"), "admins": [hb(a)], "members": members.iter().map(jm).collect::<Vec<_>>(),
             "wrapHashes": v.wrapHashes.iter().map(|x| hb(*x)).collect::<Vec<_>>(), "passKdf": 1, "passSalt": hb(v.passSalt),
-            "sealedInfo": h(&v.sealedInfo)},
+            "sealedInfo": h(&v.sealedInfo), "groupMode": 0},
         "wraps": wraps.iter().map(jw).collect::<Vec<_>>(),
         "sig": sign(a, v.eip712_signing_hash(&domain)).await,
     });
