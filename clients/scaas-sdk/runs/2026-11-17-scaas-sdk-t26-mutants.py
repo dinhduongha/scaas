@@ -16,6 +16,7 @@ QUO = "clients/scaas-sdk/src/op/quote.rs"
 FOL = "clients/scaas-sdk/src/op/follow.rs"
 APT = "clients/scaas-rpc/src/aptos.rs"
 COS = "clients/scaas-rpc/src/cosmos.rs"
+CPP = "clients/scaas-sdk/bindings/cpp/same_blocks.py"
 F = (
     "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,"
     "cosmos,aptos,solana,soroban,sui,ton,substrate,arweave"
@@ -159,6 +160,12 @@ MUTANTS = [
         "B-10: a CometBFT answer without result as null",
         [(COS, 'match v.get("result").filter(|r| !r.is_null()) {', 'match Some(v.get("result").cloned().unwrap_or_default()).as_ref() {')],
         R + " --test cosmos the_cometbft_and_rest_reads",
+    ),
+    (
+        "C-4: the drift check sorts single lines",
+        [(CPP, "    return blocks(a) == blocks(b)", '    return sorted(a.split("\\n")) == sorted(b.split("\\n"))')],
+        "cd clients/scaas-sdk/bindings/cpp && python3 -I test_same_blocks.py",
+        "test_lines_in_another_order_inside_a_block",
     ),
 ]
 

@@ -11,7 +11,7 @@
 #         bindings/dart/lib/src/rust/ (the freezed classes of the data-carrying enums by build_runner, which the codegen runs)
 #         and ffi/src/frb_generated.rs, from ffi/src/api and the scaas-sdk crate itself (`rust_input`)
 #   cpp   the sync C++ surface (uniffi-bindgen-cpp v0.10.0+v0.31.0) over the reference library with `sync-api`
-#         (bindings/lib.sh): bindings/cpp/generated/ (compared as sorted lines: the generator's type order varies by run)
+#         (bindings/lib.sh): bindings/cpp/generated/ (compared block by block: the generator's type order varies by run)
 #   cs    the C# binding (uniffi-bindgen-cs v0.11.1+v0.31.0, its renames in bindings/cs/uniffi.toml) over the reference library
 #         with the async API (`uniffi`): bindings/cs/generated/
 #   python  the Python binding (official UniFFI's uniffi-bindgen 0.31.0) over the same library: bindings/python/generated/;
@@ -85,12 +85,14 @@ if [[ $PARTS == *,cpp,* ]]; then
     rm -rf "$D/bindings/cpp/generated"
     # the generator reads `cargo metadata` of the library's crate
     (cd "$D/ffi" && uniffi-bindgen-cpp --library "$(lib sync-api)" --out-dir "$D/bindings/cpp/generated" >/dev/null)
-    # the generator orders type definitions by a hash map's walk: the same lines in another order between runs. A file with
-    # the committed file's lines in another order keeps the committed one (an order the compiler took); any other change shows.
+    # the generator orders type definitions by a hash map's walk: the same blocks in another order between runs. A file with
+    # the committed file's blocks (runs of non-blank lines, each in its own order) in another order keeps the committed one
+    # (an order the compiler took); any other change shows, lines moved inside a block too (review T26 C-4: a sort of single
+    # lines hid a record's fields swapped)
     for f in "$D"/bindings/cpp/generated/*; do
         c=clients/scaas-sdk/bindings/cpp/generated/${f##*/}
         if git -C "$W" cat-file -e "HEAD:$c" 2>/dev/null &&
-            cmp -s <(sort "$f") <(git -C "$W" show "HEAD:$c" | sort); then
+            python3 -I "$D/bindings/cpp/same_blocks.py" "$f" <(git -C "$W" show "HEAD:$c"); then
             git -C "$W" show "HEAD:$c" >"$f"
         fi
     done
