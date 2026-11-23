@@ -10,6 +10,7 @@ from mutants_lib import main
 
 PRF = "clients/scaas-sdk/src/vault/prf.rs"
 SOR = "clients/scaas-sdk/src/wallet/families/soroban_ops.rs"
+FFI = "clients/scaas-sdk/ffi/src/api/mod.rs"
 F = (
     "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,"
     "cosmos,aptos,solana,soroban,sui,ton,substrate,arweave"
@@ -81,6 +82,11 @@ MUTANTS = [
             (SOR, STATUS, "    let status = early;"),
         ],
         T + " --test soroban_ops an_own_landing_between_the_reads_is_never_consumed",
+    ),
+    (
+        "C-2: the FRB opening without the load check",
+        [(FFI, "    scaas_sdk::load_check(expect_api, need_features)?;\n", "    let _ = (expect_api, need_features);\n")],
+        "cd clients/scaas-sdk/ffi && ../../../scripts/capped cargo test --locked --offline -j2 the_opening_runs_the_load_check",
     ),
 ]
 

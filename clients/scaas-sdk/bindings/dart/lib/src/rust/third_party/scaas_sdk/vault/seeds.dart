@@ -51,15 +51,15 @@ abstract class Vault implements RustOpaqueInterface {
   Future<void> disablePrfUnlock({required String seed});
 
   /// Adds a passkey PRF envelope to every vault of the seed (one credential, one fresh per-seed salt, one assertion),
-  /// opened by the vault passphrase once. `AuthenticatorRefused` for no authenticator, no RP ID or an answer without a PRF
-  /// output (nothing written).
+  /// opened by the vault passphrase once. `AuthenticatorRefused` for no authenticator, no RP ID, an answer without a PRF
+  /// output or an output the app never wrote (nothing written to the keystore).
   Future<void> enablePasskeyUnlock({
     required String seed,
     required ArcSecretBytes vaultPassphrase,
   });
 
   /// Adds a platform-secret envelope (a Keychain / Android Keystore key under `policy`, research decision 8) to every vault of
-  /// the seed, opened by the vault passphrase once.
+  /// the seed, opened by the vault passphrase once. `AuthenticatorRefused` for a refusal or a secret the app never wrote.
   Future<void> enablePlatformUnlock({
     required String seed,
     required ArcSecretBytes vaultPassphrase,

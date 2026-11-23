@@ -17416,7 +17416,9 @@ fn wire__crate__api__sdk_open_impl(
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "sdk_open", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
             let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_profiles = <Vec<scaas_sdk::config::ChainProfile>>::sse_decode(&mut deserializer);
+            let api_expect_api = <u32>::sse_decode(&mut deserializer);
+let api_need_features = <u64>::sse_decode(&mut deserializer);
+let api_profiles = <Vec<scaas_sdk::config::ChainProfile>>::sse_decode(&mut deserializer);
 let api_rp_id = <Option<String>>::sse_decode(&mut deserializer);
 let api_limits = <scaas_sdk::config::Limits>::sse_decode(&mut deserializer);
 let api_gas_tables = <Vec<scaas_sdk::config::GasTable>>::sse_decode(&mut deserializer);
@@ -17431,7 +17433,7 @@ let api_auth_platform_secret = decode_DartFn_Inputs_String_list_prim_u_8_strict_
 let api_auth_p256_generate = decode_DartFn_Inputs_key_policy_Output_se_key_answer_AnyhowException(<flutter_rust_bridge::DartOpaque>::sse_decode(&mut deserializer));
 let api_auth_p256_sign = decode_DartFn_Inputs_String_list_prim_u_8_strict_String_Output_sign_answer_AnyhowException(<flutter_rust_bridge::DartOpaque>::sse_decode(&mut deserializer));deserializer.end(); move |context| async move {
                     transform_result_sse::<_, SdkError>((move || async move {
-                         let output_ok = crate::api::sdk_open(api_profiles, api_rp_id, api_limits, api_gas_tables, api_store_get, api_store_put_if, api_store_delete, api_store_lock, api_store_unlock, api_auth_create_passkey, api_auth_get_assertion, api_auth_platform_secret, api_auth_p256_generate, api_auth_p256_sign).await?;   std::result::Result::Ok(output_ok)
+                         let output_ok = crate::api::sdk_open(api_expect_api, api_need_features, api_profiles, api_rp_id, api_limits, api_gas_tables, api_store_get, api_store_put_if, api_store_delete, api_store_lock, api_store_unlock, api_auth_create_passkey, api_auth_get_assertion, api_auth_platform_secret, api_auth_p256_generate, api_auth_p256_sign).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
 }

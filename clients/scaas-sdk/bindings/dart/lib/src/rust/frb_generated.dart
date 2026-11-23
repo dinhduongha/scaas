@@ -1626,6 +1626,8 @@ abstract class ScaasSdkApi extends BaseApi {
   Future<BigInt> scaasSdkVaultStoreRevOf({required List<int> bytes});
 
   Future<SdkHandle> crateApiSdkOpen({
+    required int expectApi,
+    required BigInt needFeatures,
     required List<ChainProfile> profiles,
     String? rpId,
     required Limits limits,
@@ -14184,6 +14186,8 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
 
   @override
   Future<SdkHandle> crateApiSdkOpen({
+    required int expectApi,
+    required BigInt needFeatures,
     required List<ChainProfile> profiles,
     String? rpId,
     required Limits limits,
@@ -14219,6 +14223,8 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(expectApi, serializer);
+          sse_encode_u_64(needFeatures, serializer);
           sse_encode_list_chain_profile(profiles, serializer);
           sse_encode_opt_String(rpId, serializer);
           sse_encode_box_autoadd_limits(limits, serializer);
@@ -14278,6 +14284,8 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         ),
         constMeta: kCrateApiSdkOpenConstMeta,
         argValues: [
+          expectApi,
+          needFeatures,
           profiles,
           rpId,
           limits,
@@ -14301,6 +14309,8 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   TaskConstMeta get kCrateApiSdkOpenConstMeta => const TaskConstMeta(
     debugName: "sdk_open",
     argNames: [
+      "expectApi",
+      "needFeatures",
       "profiles",
       "rpId",
       "limits",
@@ -37595,8 +37605,8 @@ class VaultImpl extends RustOpaque implements Vault {
       .scaasSdkVaultSeedsVaultDisablePrfUnlock(that: this, seed: seed);
 
   /// Adds a passkey PRF envelope to every vault of the seed (one credential, one fresh per-seed salt, one assertion),
-  /// opened by the vault passphrase once. `AuthenticatorRefused` for no authenticator, no RP ID or an answer without a PRF
-  /// output (nothing written).
+  /// opened by the vault passphrase once. `AuthenticatorRefused` for no authenticator, no RP ID, an answer without a PRF
+  /// output or an output the app never wrote (nothing written to the keystore).
   Future<void> enablePasskeyUnlock({
     required String seed,
     required ArcSecretBytes vaultPassphrase,
@@ -37607,7 +37617,7 @@ class VaultImpl extends RustOpaque implements Vault {
   );
 
   /// Adds a platform-secret envelope (a Keychain / Android Keystore key under `policy`, research decision 8) to every vault of
-  /// the seed, opened by the vault passphrase once.
+  /// the seed, opened by the vault passphrase once. `AuthenticatorRefused` for a refusal or a secret the app never wrote.
   Future<void> enablePlatformUnlock({
     required String seed,
     required ArcSecretBytes vaultPassphrase,

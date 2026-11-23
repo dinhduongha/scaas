@@ -493,7 +493,9 @@ the same pull subscription. The SDK has no C ABI of its own in this round, and `
 written by hand per language, and no app-facing binding wraps `ua-rs` directly. No panic crosses the boundary (unwinding builds, every
 call caught, a failed task `Internal`). An app links one Rust static library that holds the SDK and its app cores (scaas-app's
 `app-core-rust`, [CLI-SDK-19](#CLI-SDK-19)); two Rust libraries in one process are not allowed. Each generated binding refuses, at load, a library
-whose API version or feature bits differ from what it was generated against (`AbiMismatch`). `ua-rs`'s existing wrappers stay as they
+whose API version or feature bits differ from what it was generated against, or a test-only `vectors` build of `ua-rs`
+(`AbiMismatch`), in Rust at the library's opening on every binding, FRB's `sdk_open` included (review T26 C-2,
+`the_opening_runs_the_load_check`). `ua-rs`'s existing wrappers stay as they
 are for clients that use the signer without the SDK ([the wallet surface](ua-libraries.md#the-wallet-surface-of-ua-rs-built)).
 
 ## 10. Chain profiles and native chains

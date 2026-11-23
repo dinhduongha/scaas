@@ -208,9 +208,14 @@ fn done(a: StoreAnswer) -> Result<(), StoreError> {
 pub struct SdkHandle(Arc<Sdk>);
 
 /// Opens the SDK (spec §4) over the Dart side's store (spec §6.9) and authenticator (spec §6.10), each a record of async
-/// closures that answer every failure as a value, on the SDK's own runtime. `rp_id` is the deployment's passkey RP ID.
+/// closures that answer every failure as a value, on the SDK's own runtime. `rp_id` is the deployment's passkey RP ID. The
+/// load check runs first, in Rust (spec §16.3, review T26 C-2): `AbiMismatch` for another `expect_api`, a missing bit of
+/// `need_features` or a test-only `vectors` build of `scaas-ua` (one Cargo unified in from another crate of the app's library),
+/// whatever the Dart side checked before.
 #[allow(clippy::too_many_arguments)]
 pub async fn sdk_open(
+    expect_api: u32,
+    need_features: u64,
     profiles: Vec<ChainProfile>,
     rp_id: Option<String>,
     limits: Limits,
@@ -238,6 +243,7 @@ pub async fn sdk_open(
     auth_p256_generate: impl Fn(KeyPolicy) -> DartFnFuture<SeKeyAnswer> + Send + Sync + 'static,
     auth_p256_sign: impl Fn(String, Vec<u8>, String) -> DartFnFuture<SignAnswer> + Send + Sync + 'static,
 ) -> Result<SdkHandle, SdkError> {
+    scaas_sdk::load_check(expect_api, need_features)?;
     let store = ClosureStore {
         get: Box::new(move |(name, reason)| {
             let f = store_get(name, reason);
@@ -466,4 +472,100 @@ pub fn backup_challenge(b: &Arc<SeedBackup>) -> Result<Vec<u32>, SdkError> {
 #[frb(sync)]
 pub fn backup_verify(b: &Arc<SeedBackup>, answers: Arc<SecretBytes>) -> Result<bool, SdkError> {
     b.verify(answers)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// `sdk_open` over closures that find nothing and refuse every authenticator call.
+    fn open(expect_api: u32, need_features: u64) -> Result<SdkHandle, SdkError> {
+        let none = || StoreAnswer {
+            token: 1,
+            error: None,
+        };
+        let refused = Some(AuthError::Unavailable);
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(sdk_open(
+            expect_api,
+            need_features,
+            vec![],
+            None,
+            Limits::default(),
+            vec![],
+            |_, _| {
+                Box::pin(async {
+                    StoreGetAnswer {
+                        found: false,
+                        bytes: vec![],
+                        rev: 0,
+                        error: None,
+                    }
+                }) as DartFnFuture<_>
+            },
+            move |_, _, _, _| Box::pin(async move { none() }) as DartFnFuture<_>,
+            move |_| Box::pin(async move { none() }) as DartFnFuture<_>,
+            move |_| Box::pin(async move { none() }) as DartFnFuture<_>,
+            |_| Box::pin(async {}) as DartFnFuture<()>,
+            move |_, _, _| {
+                Box::pin(async move {
+                    PasskeyAnswer {
+                        created: None,
+                        error: refused,
+                    }
+                }) as DartFnFuture<_>
+            },
+            move |_, _| {
+                Box::pin(async move {
+                    AssertionAnswer {
+                        assertion: None,
+                        error: refused,
+                    }
+                }) as DartFnFuture<_>
+            },
+            move |_, _, _, _, _| Box::pin(async move { refused }) as DartFnFuture<_>,
+            move |_| {
+                Box::pin(async move {
+                    SeKeyAnswer {
+                        public: None,
+                        error: refused,
+                    }
+                }) as DartFnFuture<_>
+            },
+            move |_, _, _| {
+                Box::pin(async move {
+                    SignAnswer {
+                        signature: vec![],
+                        error: refused,
+                    }
+                }) as DartFnFuture<_>
+            },
+        ))
+    }
+
+    /// Review T26 C-2: the FRB opening runs the load check in Rust, as every UniFFI binding and JS do, so a Dart app that
+    /// calls the generated `sdkOpen` without `checkAbi` is refused too. Another `api_version`, a missing feature bit and a
+    /// test-only `vectors` build of `scaas-ua` are `AbiMismatch`; the twin, this library's own version and bits, opens.
+    #[test]
+    fn the_opening_runs_the_load_check() {
+        let code = |r: Result<SdkHandle, SdkError>| r.map_or_else(|e| e.code(), |_| "Ok");
+        let (api, bits) = (Sdk::api_version(), Sdk::features());
+        assert_eq!(code(open(api + 1, bits)), "AbiMismatch");
+        assert_eq!(
+            code(open(api, 1 << 12)),
+            "AbiMismatch",
+            "bit 12 is never set"
+        );
+        assert_eq!(bits & (1 << 12), 0, "control: bit 12 is not set");
+        let own = if scaas_ua::VECTORS {
+            "AbiMismatch"
+        } else {
+            "Ok"
+        };
+        assert_eq!(code(open(api, bits)), own);
+    }
 }
