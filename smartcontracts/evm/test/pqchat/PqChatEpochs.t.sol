@@ -182,18 +182,6 @@ contract PqChatEpochsTest is PqChatBase {
         _rekey(chat, e, w);
     }
 
-    function _setKem(bytes32 ua, uint64 version, IUARegistry.KemKey memory k) internal {
-        p.setKemKey(ua, version, k, _kemSig(ua, version, k));
-    }
-
-    function _kemSig(bytes32 ua, uint64 version, IUARegistry.KemKey memory k)
-        internal
-        view
-        returns (IUARegistry.UASig memory s)
-    {
-        s.signature = _sig(keyOf_[ua], UAKinds.uaMessage(ML, UAKinds.PURPOSE_KEM, p.kemRecordDigest(ua, version, k)));
-    }
-
     function test_rekey_plainDropsLeaversOnly() public {
         _leave(chat, sid, ids[2], 1);
         assertTrue(chat.leftIn(sid, ids[2]));

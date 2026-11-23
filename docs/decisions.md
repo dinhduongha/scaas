@@ -968,6 +968,8 @@ Change (2026-11-11, ua-mtx-fix-node, Fable re-check 2 S-1..S-3; controller call;
 
 **Source.** Owner 2026-11-12 (chat, relayed by the controller): "Làm cả row chung và riêng" (make both the generic row and the per-class ones), with `init_call` as a named exception mirroring `bytes initCall`, the node computing `initHash`, a bounded length, the release published and not deprecated, `config` and `init_call` never both.
 
+Change (owner 2026-11-23, [CTR-CHAT-23](#ctr-chat-23--every-pqchat-instance-has-a-signature-storage-setting-fixed-at-creation-none-or-sstore2-the-default-sstore2); status: BUILT on branch `pqchat-sigs`, UNAUDITED): `PqChat`'s named config is `{owner, sigStore}`, `sigStore` absent 2 (`sstore2`), else 0 or 2; the node builds `initialize(owner, sigStore)`; `PqVault`'s stays `{owner}`.
+
 ### NODE-JOB-28 — PQZ jobs on an opening token: named opening fields, the holder-signed rollover, refusals by name
 - old: — · status: current · owner: yes · date: 2026-11-13 · normative: node/job-api.md#NODE-JOB-28 · superseded-by: —
 
@@ -6084,6 +6086,8 @@ Change (2026-11-11, Fable review D P3-1; controller call under the owner's leave
 **Cost if wrong.** State gas for every byte; a mirror needs a record's signature bytes from its event, its author or an indexer.
 **Source.** owner 2026-11-04 (D11), 2026-11-07 (topics); UA-7 spec P16, P29; topics spec P39; plan 3c (3C-D3, 3C-D4), T85, T87, T88. Status: BUILT on branch `ua-mtx-merge` (EVM), UNAUDITED.
 
+Change (owner 2026-11-23, [CTR-CHAT-23](#ctr-chat-23--every-pqchat-instance-has-a-signature-storage-setting-fixed-at-creation-none-or-sstore2-the-default-sstore2); status: BUILT on branch `pqchat-sigs`, UNAUDITED): on an instance whose setting is `sstore2` every session, epoch, leave and removal record and every posted message is stored as `abi.encode(record, sigHash, UASig)`, the signature's bytes in the record's own blob; a `none` instance keeps the form above.
+
 ### CTR-CHAT-06 — A `PqChat` session: the creator a member and an admin, KEM-holding members strictly sorted (at least 2), registered admins strictly sorted, the home instance named; the 2-member session is the main case
 - old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/pqchat.md#CTR-CHAT-06 · superseded-by: —
 
@@ -6227,6 +6231,15 @@ Change (controller call, owner: no, 2026-11-21, the Fable code review of PqVault
 **Cost if wrong.** About 8 times the gas of an event-only store; or a store whose payloads a pruned log index loses.
 **Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
 Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C23; owner: no): the init-code hash and the address pinned beside the runtime code hash, an existing deployment with the pinned code taken as done, deployer and SSTORE2 probes per chain (review F18); the smallest-store bound and the relay paths without `RelayFeeRouter` stated (review F19).
+
+### CTR-CHAT-23 — Every PqChat instance has a signature-storage setting fixed at creation, `none` or `sstore2`, the default `sstore2`
+- old: — · status: current · owner: yes · date: 2026-11-23 · normative: contracts/pqchat.md#CTR-CHAT-23 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat.md](contracts/pqchat.md#CTR-CHAT-23).) Owner 2026-11-23 ("by way 2, with SSTORE2 as the default, plus (d) as an option"; verbatim on the Source line), settling the pqchat-core spec's O11 and replacing "(b) asked for the next `PqChat` release": (1) every `PqChat` home instance gets an immutable signature-storage setting with the modes `none` and `sstore2`, fixed when it is created, the default `sstore2`; in `sstore2` every accepted control-plane record keeps its signature bytes in contract state; the setting and each record's signature are read by views; `none` is the earlier behaviour (`sigHash` only); no log mode (state-only recovery); the pattern is PQZ's proof-storage token setting; a setting per session was rejected (a lying endpoint could report it off, a downgrade). (2) the client option `require_signed_records` ([CLI-PQC-15](#cli-pqc-15--on-an-sstore2-home-every-control-plane-record-the-crate-uses-counts-only-with-its-authors-kept-signature)). (3) (d) strict majority for PqChat's control-plane reads as an explicit option, not forced ([CLI-PQC-16](#cli-pqc-16--strict-majority-for-the-control-plane-reads-is-an-explicit-option-never-forced)). Controller calls (the owner may override): `initialize(bytes32 ownerUA, uint8 sigStore)` with PQZ's numbering, 0 `none` and 2 `sstore2`, 1 and every other value refused `PqChatSigStore`; the factory and its catalogue unchanged but for the release's catalogued initializer selector; the signature in the record's own blob, `abi.encode(record, sigHash, UASig)` (a sibling blob costs a new account and a slot, about 0.28 M state gas more per record), the leave records kept in a list per epoch on `sstore2` only; posted messages included (a `messageAt` record is one whose authorship the client must check, the spec's K12); topic records outside the setting (an owner question); the views `sigStore`, `sessionSig`, `epochSig`, `removalSig`, `messageSig`, `leaveCount`, `leaveAt`, `leaveSig`, `PqChatSigNotStored` on a `none` instance; every creation tool defaults to 2.
+**Status.** BUILT on branch `pqchat-sigs` (EVM, the deploy scripts, the node's named config, clientkeys, the vectors, `ua-rs`'s vector test, the SDK's agreed read, `pqchat-core`), UNAUDITED; plan [`2026-11-23-pqchat-signatures.md`](superpowers/plans/2026-11-23-pqchat-signatures.md). Pins moved (old -> new in the commit): the layout (slot +1 holds `sigStore`, `leaves` at +22), `interfaceId`, the release's initializer selector `initialize(bytes32)` -> `initialize(bytes32,uint8)`, the gas rows of `PqChatGas.t.sol`, `size-baseline.json` (`PqChat` 29,412 -> 31,419, `PqVault` 30,421 -> 30,431); no typehash moves (the signature is no signed field).
+**Why.** A client could not verify a control-plane record's authorship from state (O11): a named endpoint that lies could serve a forged chain of epochs or a `sealedInfo` naming its own store; with the signature in state the client checks it itself.
+**Cost if wrong.** About 1,530 state gas per stored signature byte on every control-plane write (ML-DSA-65 +5.43 M per record, FN-DSA-512 +1.37 M, an `msig` author its quorum's signatures), and one `SLOAD` per signed session write in both modes; or, with `none`, a client that trusts its endpoints for authorship.
+**Source.** owner 2026-11-23 (relayed by the controller), verbatim "Theo cách 2 với mặc định là SSTORE2, kèm (d - option)"; [pqchat-core spec](superpowers/specs/2026-11-17-pqchat-core.md) §13 O11 and §9.
 
 ### CTR-PQV-01 — PqVault: PqChat's group rules with at least one member plus a topics-style item model
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-01 · superseded-by: —
@@ -6416,6 +6429,15 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqva
 
 Change (controller, 2026-11-17, the Fable review r2 of 2026-11-17 (`scratchpad/pqvault-review/20261117-17-fable-fable-high-spec-r2.md`, kept outside the tracked files), findings R5, R10, R11; status: SPECIFIED): the mode is bound into `vaultId` (CTR-PQV-04's Change); the one check takes the vault from the stored epoch (for an edit, the item) and requires the record's `vaultId` to equal it before reading the mode, with a mutant per write; the clause "or the chain's registry lacks `requirePortableApp`" of the default is withdrawn (mode 1 on the user's choice only), since every registry from the freeze carries the entry and a node's answer must not pick the mode.
 
+
+### CTR-PQV-18 — PqVaultCreate carries uint8 groupMode, fixed at creation, 0 only, as PqChat's CTR-CHAT-25
+- old: — · status: current · owner: no · date: 2026-11-23 · normative: contracts/pqvault.md#CTR-PQV-18 · superseded-by: —
+
+**Rule.** (Summary; normative [pqvault.md](contracts/pqvault.md#CTR-PQV-18).) Controller call 2026-11-23 on the owner's PqChat ruling (CTR-CHAT-25), one rule for both apps of the shared base: `PqVaultCreate` gains `uint8 groupMode` as its last field, fixed at creation, 0 only in this release (`PqVaultModeUnsupported`); apart from the vault's `mode` (CTR-PQV-17).
+**Status.** BUILT on branch `pqchat-sigs`, UNAUDITED. The `PqVaultCreate` typehash `0xb5e6f0323db4eb92065a67dedef66888c5936a3fda2508c66728db676184d587` -> `0xa81afc5c34e93b0250095251a73b625a97fb14fa58780806d5a1916a32ef53f9`.
+**Why.** The group code is shared; a vault's group protocol is named the same way and kept stable across releases.
+**Cost if wrong.** One word per vault; the owner may drop it from PqVault.
+**Source.** controller call 2026-11-23 (the owner's ruling for PqChat, relayed); the owner may override.
 ### CTR-PQZ-01 — Separate PQZ class gated by the precompile self-test
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
 
@@ -12632,6 +12654,8 @@ Change (controller, 2026-11-22, pqchat-core T6 on `pqchat-core-impl`; owner: no,
 
 Change (controller, 2026-11-22, pqchat-core T7 on `pqchat-core-impl`; owner: no, owner may override; status: BUILT, UNAUDITED): seven calls. (1) The user's choices per session are a store item on the device: the stores confirmed, the chain-store spend consent, receipts (unset: on unless a chain store is listed); `confirm_stores` confirms every store of an epoch's list. (2) A send is refused before anything is signed, in this order: the content's bounds, the epoch (CLI-PQC-07's hold), UA-7 §4.2's list rules (`StoreListInvalid`), a kind not implemented (`StoreUnsupported`), every store it would use unconfirmed (`StoreUnconfirmed`), a listed Matrix room with no client attached (`MatrixDetached`), a chain write without the spend consent (`ChainCostUnconfirmed`); a `typing` with no room listed and a `receipt` while receipts are off send nothing and take no counter. (3) An unconfirmed store of the list is reported as such and not written; the confirmed ones are written; a store's failure is reported for that store only (`SendReport`, the list's order). (4) `postMessage` goes to the home instance; its bucket is read from the sealed ciphertext, so a post above 1,024 B without the cost confirmation is refused after the seal (`ContentTooLarge`, nothing sent anywhere, the counter skipped, never reused). (5) A chain store is read only when it is in the epoch's list and confirmed: `storedRange` pages of 16 from a position kept per (chain, instance, hint), to an empty or short page; a payload that does not decode (an empty envelope) or names another hint is dropped as `decode` and paged past. (6) `StoresChanged { session, author, by_admin }` when an epoch put in use is a rekey whose list names a store the user has not confirmed (once the user confirmed any store of the session), `by_admin` from the parent's admins when the parent is in use, else the epoch's own. (7) A chain store on a chain the app serves under a profile key ending `-testnet` (the chain key naming rule) is listed by `test_chain_stores` for the warning of UA-7 P27. The Matrix transport is a one-method trait here (`send_event`); T8 builds the rest.
 
+Change (owner 2026-11-23, [CLI-PQC-15](#cli-pqc-15--on-an-sstore2-home-every-control-plane-record-the-crate-uses-counts-only-with-its-authors-kept-signature); status: BUILT on branch `pqchat-sigs`, UNAUDITED): on an `sstore2` home the control-plane records and a posted message count only with their kept signatures (`signature`); a `none` home stays on the contract's check, or is dropped `unsigned` under `require_signed_records` (a new reason).
+
 ### CLI-PQC-08 — A session is pending until its user accepts it; before that, no network call and no write derived from its wraps or `sealedInfo`
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-08 · superseded-by: —
 
@@ -12724,6 +12748,8 @@ Change (controller, 2026-11-23, the owner's send answer built on `pqchat-core-im
 **Cost if wrong.** A whole session read by whoever answers `kemKeyOf` first.
 **Source.** coordinator call K1, 2026-11-17, on Fable's review of `3a5ece097` (K1, P1); the owner may override; a request to the `scaas-rpc` spec to widen CLI-RPC-06's wording ([spec](superpowers/specs/2026-11-17-pqchat-core.md) §13).
 
+Change (owner 2026-11-23, CLI-PQC-15; status: BUILT on branch `pqchat-sigs`, UNAUDITED): `sigStore`, the kept signatures and the leave records (`sessionSig`, `epochSig`, `leaveCount`, `leaveAt`, `leaveSig`, `removalSig`, `messageSig`) are trusted reads too; spec §5 R2 names them.
+
 ### CLI-PQC-14 — No skipped message key is kept; a verified message is read at any counter up to 2^20 steps past the nearest held chain position
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-14 · superseded-by: —
 
@@ -12732,6 +12758,42 @@ Change (controller, 2026-11-23, the owner's send answer built on `pqchat-core-im
 **Why.** A fresh device starts every chain at 0; under the reference's 2,000-step bound it could not read the latest messages of a long epoch, and skipped-key handles let one member fill the shared arena with new device ids. No secret is lost: `K` is held while unlocked and derived again from the seed and the chain.
 **Cost if wrong.** A restored phone that shows nothing of a long 1:1 epoch, or an app whose reading stops when one member opens many chains.
 **Source.** coordinator call K2, 2026-11-17, on Fable's review of `3a5ece097` (K2, P1; K6, K21); the owner may override; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §4, §10.
+
+### CTR-CHAT-25 — PqChatSession carries uint8 groupMode, fixed at creation; this release accepts 0 only
+- old: — · status: current · owner: yes · date: 2026-11-23 · normative: contracts/pqchat.md#CTR-CHAT-25 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat.md](contracts/pqchat.md#CTR-CHAT-25).) Owner 2026-11-23 ("add the field right in pqchat-sigs"; verbatim on the Source line): the signed session record gains `uint8 groupMode`, a protocol id: 0 = flat; 1 = RFC 9420 tree rules over KEM scheme 1; 2–255 later variants (owner 2026-11-23, its second answer); appended at the end of `PqChatSession` and `PqVaultCreate`, both accepting only 0 in this round, PqVault open for a later release; fixed at creation, no epoch, rekey, leave or removal changes it (no such record carries it); this release accepts 0 only and refuses others by name (`PqChatModeUnsupported(mode)`); a later catalogued release accepts 1 with the same struct and typehash; stored with the session, returned by `sessionOf`. Controller calls (the owner may override): the field is the struct's last (the TreeKEM research note, `docs/research/2026-11-23-treekem-pqchat.md` on branch `treekem-research`: every other field keeps its place), and the check runs first in `createSession`.
+**Status.** BUILT on branch `pqchat-sigs` (EVM, the node's type row, `selector_audit.json`, clientkeys and the vectors with rows for 0 accepted and 1 refused, `ua-rs`, the SDK and `pqchat-core` signing 0), UNAUDITED. The `PqChatSession` typehash `0xe2c3b4c1033a28837e998f325e512f26783cea21cc6ccb347fa3d3d8d7ad1e4d` -> `0x7e832d4c55dc2f6d4a77041b7000f7eb325d19c81a456b8e3844262dda62d911`.
+**Why.** A TreeKEM mode later needs its sessions told apart from the start; one field now keeps the struct, typehash and vectors stable across releases.
+**Cost if wrong.** One word per session (+48,960 state gas); or, without it, a new struct and typehash when TreeKEM lands.
+**Source.** owner 2026-11-23 (relayed by the controller), verbatim "thêm field ngay trong pqchat-sigs"; the field's place after the TreeKEM note (controller, relayed).
+
+### CTR-CHAT-24 — A member may hold several KEM keys in an epoch: members sorted by `(ua, keyId)`, at most 8 per UA
+- old: — · status: current · owner: yes · date: 2026-11-23 · normative: contracts/pqchat.md#CTR-CHAT-24 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat.md](contracts/pqchat.md#CTR-CHAT-24).) Owner 2026-11-23, option (M) ("Choose M. It is still an option, isn't it?": yes, optional per member; verbatim on the Source line): a group epoch's member list in `PqGroupBase` (rule 3C-D6) changes from strictly sorted by `ua`, one `keyId` each, to strictly sorted by `(ua, keyId)`, one or more `keyId`s per UA, each a registered KEM key of that UA with one wrap; a single key behaves as before; device keys are random per device, each its own registry KEM version; clients choose which keys to wrap to, one by default. Admins, rights, acceptance, leave and removal (a removed UA loses every key), the plain-rekey rule (3C-D7), `_uas`, `_removable`, the minimum member count and the `sessionsOf` / `vaultsOf` entries stay per UA. One rule for PqChat and PqVault (the shared base); `MemberKey` unchanged. The high-forward-secrecy mode (a symmetric ratchet with deletion, its flag in `sealedInfo`, more frequent rekeys) is client-only and after the freeze. Controller call (the owner may override): `KEYS_PER_UA_MAX` = 8 (8 keys of each of 2 members are 16 wraps, a 16-member epoch's size, landed in chunks; an extra key costs +108,944 regular and +2,876,400 state gas on a `createSession`); no total bound beyond today's.
+**Status.** BUILT on branch `pqchat-sigs` (EVM base, PqChat, PqVault, the vectors' `epochDevices` row, `pqchat-core` and `pqvault-core` readers), UNAUDITED. The registry already allows several live KEM versions per UA: `setKemKey` takes any unused version, write-once, no order rule (`smartcontracts/evm/src/ua/UARegistryAuxLib.sol:632-663`), every version stays readable (`UARegistry.sol:659`); only `kemKeyOf` names the highest one (`UARegistry.sol:647`).
+**Why.** Per-device keys keep a lost or stolen device's key apart from the seed's and open the path to a high-forward-secrecy mode later.
+**Cost if wrong.** One wrap, about 2.9 M state gas, per extra key per epoch; a client that reads members per entry where it must read per UA.
+**Source.** owner 2026-11-23 (relayed by the controller), verbatim "Chọn M. Nó vẫn là option chứ?"; [pqchat-core spec](superpowers/specs/2026-11-17-pqchat-core.md) §13 O14.
+
+### CLI-PQC-15 — On an `sstore2` home every control-plane record the crate uses counts only with its author's kept signature
+- old: — · status: current · owner: yes · date: 2026-11-23 · normative: clients/pqchat-core.md#CLI-PQC-15 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-15).) Owner 2026-11-23 ([CTR-CHAT-23](#ctr-chat-23--every-pqchat-instance-has-a-signature-storage-setting-fixed-at-creation-none-or-sstore2-the-default-sstore2), point 2): the option `require_signed_records`; on, a home whose setting is `none` (read under trusted reads) is refused; on an `sstore2` home the author's `UASig` over the rebuilt typed digest of every control-plane record the client uses, `sealedInfo` included, verifies before the record is trusted. Controller calls (the owner may override): the default is `false`, read as "verify wherever the home keeps signatures": an `sstore2` home is verified with no switch that turns it off, a `none` home is read on the contract's check, `true` also refuses it (`unsigned`, `HomeUnsigned`); the setting is pinned per instance on its first answer, so a later `none` answer for an `sstore2` instance is refused (`control`); the parent's leaves and removals come from the kept, signed records on an `sstore2` home, not from the flags; posted messages verified too.
+**Status.** BUILT on branch `pqchat-sigs` (`pqchat-core` `src/signed.rs`, `tests/signed.rs` over the vector rows), UNAUDITED.
+**Why.** The owner suggested "on when the home is `sstore2`"; refusing `none` homes by default would leave their sessions unreadable to every default client while new homes are `sstore2` anyway, and the pin stops the downgrade the owner rejected the per-session setting for.
+**Cost if wrong.** A default client that reads a `none` home on its endpoints' word; or, with the option on, sessions on `none` homes that its user cannot read.
+**Source.** owner 2026-11-23 (relayed by the controller; the default a controller call on the owner's suggestion); [spec](superpowers/specs/2026-11-17-pqchat-core.md) §13 O11.
+
+### CLI-PQC-16 — Strict majority for the control-plane reads is an explicit option, never forced
+- old: — · status: current · owner: yes · date: 2026-11-23 · normative: clients/pqchat-core.md#CLI-PQC-16 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-16).) Owner 2026-11-23 (CTR-CHAT-23 point 3, "(d - option)"): the SDK and `pqchat-core` expose strict majority (CLI-RPC-05, CLI-RPC-06) for PqChat's control-plane reads as an explicit option, not forced. Built as `PqChatConfig.agreed_reads` (default `false`), the SDK's `AppCore::read_app_agreed` and scaas-rpc's `EvmPool::read_at_block_agreed`, the agreed read whatever the list's policy; the trusted `IPqChat` reads only (controller call, the owner may override).
+**Status.** BUILT on branch `pqchat-sigs`, UNAUDITED.
+**Why.** The defence where a kept signature is not enough: a `none` home, or an `msig` author whose structure is a registry read.
+**Cost if wrong.** A read refused on a list of one endpoint (`Argument`), or reads served by one endpoint where the user wanted several to agree.
+**Source.** owner 2026-11-23 (relayed by the controller); [spec](superpowers/specs/2026-11-17-pqchat-core.md) §13 O11.
 
 ### CLI-PQC-30 — Owner rulings for `pqchat-core`, 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-PQC-30 · superseded-by: —

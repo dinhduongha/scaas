@@ -341,6 +341,11 @@
       "internalType": "bytes",
       "name": "sealedInfo",
       "type": "bytes"
+     },
+     {
+      "internalType": "uint8",
+      "name": "groupMode",
+      "type": "uint8"
      }
     ],
     "internalType": "struct IPqChat.PqChatSession",
@@ -888,6 +893,71 @@
   "stateMutability": "view",
   "type": "function"
  },
+ "IPqChat.epochSig": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "epochSig",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
  "IPqChat.epochsOf": {
   "inputs": [
    {
@@ -923,6 +993,11 @@
     "internalType": "bytes32",
     "name": "ownerUA",
     "type": "bytes32"
+   },
+   {
+    "internalType": "uint8",
+    "name": "sigStore",
+    "type": "uint8"
    }
   ],
   "name": "initialize",
@@ -1035,6 +1110,146 @@
   "stateMutability": "nonpayable",
   "type": "function"
  },
+ "IPqChat.leaveAt": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "index",
+    "type": "uint256"
+   }
+  ],
+  "name": "leaveAt",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "epochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "member",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatLeave",
+    "name": "l",
+    "type": "tuple"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "sigHash",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.leaveCount": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "leaveCount",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.leaveSig": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "index",
+    "type": "uint256"
+   }
+  ],
+  "name": "leaveSig",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
  "IPqChat.leftIn": {
   "inputs": [
    {
@@ -1139,6 +1354,76 @@
     "internalType": "uint256",
     "name": "",
     "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.messageSig": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "index",
+    "type": "uint256"
+   }
+  ],
+  "name": "messageSig",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
    }
   ],
   "stateMutability": "view",
@@ -1697,6 +1982,76 @@
   "stateMutability": "view",
   "type": "function"
  },
+ "IPqChat.removalSig": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "index",
+    "type": "uint256"
+   }
+  ],
+  "name": "removalSig",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
  "IPqChat.remove": {
   "inputs": [
    {
@@ -1962,6 +2317,11 @@
       "internalType": "bytes",
       "name": "sealedInfo",
       "type": "bytes"
+     },
+     {
+      "internalType": "uint8",
+      "name": "groupMode",
+      "type": "uint8"
      }
     ],
     "internalType": "struct IPqChat.PqChatSession",
@@ -1972,6 +2332,71 @@
     "internalType": "bytes32",
     "name": "sigHash",
     "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.sessionSig": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "sessionSig",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
    }
   ],
   "stateMutability": "view",
@@ -2090,6 +2515,19 @@
   "name": "setTopicWriter",
   "outputs": [],
   "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.sigStore": {
+  "inputs": [],
+  "name": "sigStore",
+  "outputs": [
+   {
+    "internalType": "uint8",
+    "name": "",
+    "type": "uint8"
+   }
+  ],
+  "stateMutability": "view",
   "type": "function"
  },
  "IPqChat.storeMessage": {

@@ -318,7 +318,7 @@ impl AppCore {
     ) -> Result<PqChatSigned, SdkError> {
         let wh = wrap_hashes(&r.wraps)?;
         let m = json!({"creator": r.creator, "nonce": r.nonce, "homeChain": r.home_chain,
-            "homeChatContract": r.home_chat_contract, "admins": r.admins, "members": members(&r.members),
+            "homeChatContract": r.home_chat_contract, "groupMode": 0, "admins": r.admins, "members": members(&r.members),
             "wrapHashes": wh, "sealedInfo": hex(&r.sealed_info)});
         let id = Id::Of("session", vec![w32(&r.creator)?, w64(r.nonce)]);
         self.sign_pq(account, "PqChatSession", m, id, wh).await

@@ -368,7 +368,8 @@ Built additions (pqchat-core T1, 2026-11-21; BUILT, UNAUDITED): `read_app(chain,
 `view` or `pure` entry of any contract by its JSON ABI item and named arguments at the profile's final block and answers
 named JSON (outputs and tuple components by name, integers as decimal strings, bytes and addresses as `0x` hex), bounded
 (entry 64 KiB, arguments 128 KiB, answer 1 MiB, output types nesting at most 16 levels: `Argument`), as a read that feeds a
-decryption when `trusted`. PqChat's key entries (`pqchat_*`, feature `pqchat-records`) are thin calls of `ua-rs`
+decryption when `trusted`; `read_app_agreed`, the same read as an agreed read (CLI-RPC-05) whatever the chain's list policy, an
+app core's explicit option (CTR-CHAT-23 (d), owner 2026-11-23; `src/app_core/agreed.rs`, BUILT on `pqchat-sigs`). PqChat's key entries (`pqchat_*`, feature `pqchat-records`) are thin calls of `ua-rs`
 `pqchat_keys` on the scope's handles, only in a scope that declared `scaas/pqchat/v1/` (`AppLabelRefused`); the signing ones
 take the sender, creator or author from the account and never a digest or a ciphertext of the caller's. The feature
 `vectors` (bit 28) adds test-only entries (key bytes in and out, fixed randomness): a release build refuses it

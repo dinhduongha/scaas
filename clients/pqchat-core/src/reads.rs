@@ -128,7 +128,9 @@ impl PqChat {
 
     /// The account's own wrap of `e` at `contract`, read from state (trusted), checked against the signed record's
     /// `wrapHashes[i]` before it enters a decapsulation (`wrap-hash`), then opened by the account's KEM key: the epoch key.
-    /// `member` when the account is not a member; `envelope` when the wrap does not open (shown, never answered).
+    /// `member` when the account is not a member; `envelope` when no own wrap opens (shown, never answered). A member with
+    /// several keys (CTR-CHAT-24) has one wrap per key: each is tried in order, the first that opens is used (a device key
+    /// this account does not hold is skipped).
     #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub async fn open_own_wrap(
         &self,
@@ -138,7 +140,34 @@ impl PqChat {
         account: &KeyRef,
         me: &str,
     ) -> Result<Arc<AppKey>, DropReason> {
-        let i = e.index_of(me).ok_or(DropReason::Member)?;
+        let mine: Vec<usize> = e
+            .members
+            .iter()
+            .enumerate()
+            .filter_map(|(i, m)| (m.ua == me).then_some(i))
+            .collect();
+        if mine.is_empty() {
+            return Err(DropReason::Member);
+        }
+        let mut last = DropReason::Envelope;
+        for i in mine {
+            match self.open_wrap_at(chain, contract, e, account, i).await {
+                Ok(k) => return Ok(k),
+                Err(d) => last = d,
+            }
+        }
+        Err(last)
+    }
+
+    /// [`PqChat::open_own_wrap`]'s wrap `i`.
+    async fn open_wrap_at(
+        &self,
+        chain: &str,
+        contract: &str,
+        e: &Epoch,
+        account: &KeyRef,
+        i: usize,
+    ) -> Result<Arc<AppKey>, DropReason> {
         let v = self
             .net
             .read(
@@ -181,8 +210,8 @@ pub struct SessionRef {
 
 impl PqChat {
     /// The epoch `epoch_id` of `s` opened for `account` (UA `me`): the home instance listed (`unlisted`), the record read at
-    /// home and checked as far as state allows (`control`: the shapes, and a child against its parent with the parent's
-    /// leaves and removals), equal at `replica` when one is named (`replica`), the own wrap checked and opened. Membership
+    /// home and checked (`control`: the shapes, and a child against its parent with the parent's leaves and removals; on an
+    /// `sstore2` instance each with its kept signature, `signature`, CLI-PQC-15; a `none` one `unsigned` when required), equal at `replica` when one is named (`replica`), the own wrap checked and opened. Membership
     /// is the home's record, never a replica's.
     pub async fn open_epoch(
         &self,
@@ -238,10 +267,11 @@ impl PqChat {
         {
             return Err(DropReason::Unlisted);
         }
+        // CLI-PQC-15: on an `sstore2` instance each record counts only with its author's kept signature; a `none` one is
+        // refused under `require_signed_records`
         let read = |id: String| async move {
-            self.record_at(&s.chain, contract, &s.session_id, &id)
-                .await
-                .map_err(|_| DropReason::Decode)?
+            self.signed_record_at(&s.chain, contract, &s.session_id, &id)
+                .await?
                 .ok_or(DropReason::Control)
         };
         let e = read(epoch_id.to_string()).await?;
@@ -251,31 +281,7 @@ impl PqChat {
         check::shapes(&e)?;
         if e.epoch > 0 {
             let p = read(e.parent.clone()).await?;
-            let (mut left, mut removed) = (vec![], vec![]);
-            for m in p
-                .members
-                .iter()
-                .map(|m| m.ua.clone())
-                .chain(p.admins.iter().cloned())
-            {
-                let a = json!({ "epochId": p.id, "member": m });
-                let l = self
-                    .net
-                    .read(&s.chain, contract, "IPqChat.leftIn", a.clone())
-                    .await
-                    .map_err(|_| DropReason::Decode)?;
-                let r = self
-                    .net
-                    .read(&s.chain, contract, "IPqChat.removedIn", a)
-                    .await
-                    .map_err(|_| DropReason::Decode)?;
-                if at(&l, "0") == true {
-                    left.push(m.clone());
-                }
-                if at(&r, "0") == true {
-                    removed.push(m);
-                }
-            }
+            let (left, removed) = self.left_and_removed(&s.chain, contract, &p).await?;
             check::child(&e, &p, &left, &removed)?;
         }
         Ok(e)

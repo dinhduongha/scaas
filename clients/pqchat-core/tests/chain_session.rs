@@ -239,8 +239,10 @@ async fn chain_sessions_epochs_removal_leave() {
 }
 
 /// A 20-member session: the wraps in as many writes as the SDK's quote shows fit, complete only at the last wrap. At this
-/// anvil's block gas limit all 20 fit one write under 2^24 (16.2 M measured 2026-11-22); at lower block limits, chosen
-/// from that figure (the client assumes none), the first write carries fewer wraps and `addWraps` the rest.
+/// anvil's block gas limit the first write carries 19 wraps under 2^24 and `addWraps` the 20th: the home keeps the
+/// creator's ML-DSA-65 signature (`sstore2`, the default, CTR-CHAT-23), whose code deposit takes the 20th wrap's room
+/// (16,566,456 for 19 wraps measured 2026-11-23; before the setting all 20 fit one write, 16.2 M measured 2026-11-22). At
+/// lower block limits, chosen from the first write's figure (the client assumes none), the first write carries fewer.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate pqc-chain)"]
 async fn chain_twenty_members_in_chunks() {
@@ -280,7 +282,11 @@ async fn chain_twenty_members_in_chunks() {
         }
         runs.push((first, gas.len()));
     }
-    assert_eq!(runs[0], (20, 1));
+    assert_eq!(
+        runs[0],
+        (19, 2),
+        "at this anvil's limit: 19 wraps and the kept signature, then 1"
+    );
     assert!(
         runs[1].1 > 1 && runs[2].1 > 1,
         "no chunks at the lower limits: {runs:?}"

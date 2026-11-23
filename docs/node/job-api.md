@@ -964,7 +964,7 @@ reverse). The unsigned `addVaultWraps` runs only as a relay fee's inner call or 
 `false`; `relay_unsigned_pqchat` does not open it), else `UNSIGNED_WRITE_NOT_PAID`. The seven signed writes carry their record and its
 `UASig`. Job: `{kind: "call", op: {entry, contract: "pqvault", token: <instance>, args, validUntil}}`, each record (`v`, `e`, `l`, `r`,
 `it`, `d`, `b`) and each `Wrap` an object of its fields, `sig` the `UASig` object; a hex form is `422 HEX_ARGS_REFUSED`. A creation
-`mtxCreateInstance` of class 4 has its named config `{owner}` as `PqChat`'s ([NODE-JOB-27](#NODE-JOB-27)). No vault key or plaintext
+`mtxCreateInstance` of class 4 has its named config `{owner}`, `PqChat`'s owner rule without its setting ([NODE-JOB-27](#NODE-JOB-27)). No vault key or plaintext
 ever reaches the node.
 
 | Selector | Target rule | Typical producer |
@@ -1078,8 +1078,10 @@ their names: `{entry: "mtxCreateInstance", args: {target: <OpenFactory>, contrac
 (the generic row) or `{…, config: {…}}` (a per-class row, same entry). `init_call` is the one named exception to explicit
 parameters here: it mirrors the contract's own `bytes initCall` (a class's catalogued initializer with its own typed arguments,
 precedent `Interaction.data`), at most 4,096 bytes (`INIT_CALL_TOO_LONG`). Known classes by named config (BUILT): `PqChat`
-(class 3, kind 0), `config: {owner}`, `owner` 0 or the creator (`envelope.from`; another is refused here, the instance would refuse
-it `PqChatOwnerNotCreator`); the node sends `initialize(owner)`. Refused by name (`dead`, nothing sent): both `config` and
+(class 3, kind 0), `config: {owner, sigStore}`, `owner` 0 or the creator (`envelope.from`; another is refused here, the instance would refuse
+it `PqChatOwnerNotCreator`), `sigStore` the instance's signature-storage setting, absent 2 (`sstore2`, the default), else 0
+(`none`) or 2 (`BAD_PAYLOAD: args.config.sigStore: 0 (none) or 2`; [CTR-CHAT-23](../contracts/pqchat.md#CTR-CHAT-23), Change
+2026-11-23); the node sends `initialize(owner, sigStore)`. Refused by name (`dead`, nothing sent): both `config` and
 `init_call` (`BAD_PAYLOAD: args.config and args.init_call`), neither (`BAD_PAYLOAD: args.init_call: missing`), a job's own
 `initHash` (`BAD_PAYLOAD: args.initHash: the node hashes …`), a named config for a class without one (`INSTANCE_CONFIG_UNKNOWN`),
 an unknown config field. The node signs `initHash = keccak256(initCall)` and, before the simulation, reads the release on the

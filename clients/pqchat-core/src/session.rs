@@ -389,6 +389,11 @@ impl PqChat {
         let admins = sorted(&r.admins, Some(&me))?;
         check_stores(&r.info)?;
         self.require_listed(&r.chain, &r.home).await?;
+        if self.conf.require_signed_records
+            && self.sig_store(&r.chain, &r.home).await != Ok(crate::signed::SIG_SSTORE2)
+        {
+            return Err(PqChatError::HomeUnsigned);
+        }
         let c = self.conf(&r.chain)?.clone();
         let sid = self.app.pqchat_session_id(me.clone(), r.nonce)?;
         // only a room this client created for the session, bound to it before anything is signed (CLI-PQC-05)
@@ -440,7 +445,7 @@ impl PqChat {
         }
         let sealed = model::unhex(field(&signed, "message.sealedInfo")?)?;
         let s = json!({"creator": me, "nonce": r.nonce.to_string(), "homeChain": c.chain_uid,
-            "homeChatContract": r.home.to_ascii_lowercase(), "admins": admins, "members": members_json(&w.keys),
+            "homeChatContract": r.home.to_ascii_lowercase(), "groupMode": "0", "admins": admins, "members": members_json(&w.keys),
             "wrapHashes": signed.wrap_hashes, "sealedInfo": model::hex(&sealed)});
         let epoch = Epoch {
             id: sid.clone(),
@@ -522,7 +527,7 @@ impl PqChat {
             .keys
             .iter()
             .map(|m| &m.ua)
-            .eq(p.members.iter().map(|m| &m.ua).filter(kept))
+            .eq(crate::check::distinct(p).into_iter().filter(kept))
             && admins.iter().eq(p.admins.iter().filter(kept));
         if plain && !p.has_member(&ua) {
             return Err(PqChatError::NotMember);

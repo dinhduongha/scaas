@@ -189,7 +189,7 @@ UA-7's bytes for PqChat; the requirements of §5.3 hold for whichever form the S
 | V1 | verify a portable PqChat record | a record (named fields) and a `UASig` against the signer's registry record (a trusted read; single key, `msig` minimal form two levels); returns the typed digest and id; `Refused` carries no detail. Runs where the signature's bytes are at hand: messages from stores, topic records | `records.json`, `topics.json` |
 | V2 | decode received bytes, bounded | a stored payload, a stored record blob, a view's page, by length and depth ([CLI-UAL-03](../../clients/ua-libraries.md#CLI-UAL-03)) into named fields; `hashStruct` of a read wrap for the check against `wrapHashes` | `messages.json`, `records.json` |
 | R1 | ordinary chain reads | topic pages and the other views that choose nothing, through `scaas-rpc`'s lists (ARCH-POS-15) | — |
-| R2 | trusted reads | under `Purpose::FeedsDecryption` ([CLI-RPC-06](../../clients/scaas-rpc.md#CLI-RPC-06)): the registry's `kemKeyOf`, `kemKeyAt`, `checkedOf`, `memberAccepted`, `msigOf` (an `msig` seat's slots, P13; added 2026-11-22, controller call); the factory listing (`infoOf`, `contractsPage`); at an instance, every view of a session's state: `sessionOf`, `epochOf` (their `wrapHashes` and `sealedInfo`), `epochComplete`, `epochCount`, `epochsOf`, `latestEpoch`, `childOf`, `wrapAt` (the wraps), `leftIn`, `removedIn`, `removalCount`, `removalAt`, `messageCount`, `messageAt`, `storedCount`, `storedRange`; the signer's registry record for V1 (read inside the SDK) (CLI-PQC-13; held to the crate's `READS` by gate `pqc-reads`; widened 2026-11-22 from the first list to every session-state view, controller call) | — |
+| R2 | trusted reads | under `Purpose::FeedsDecryption` ([CLI-RPC-06](../../clients/scaas-rpc.md#CLI-RPC-06)): the registry's `kemKeyOf`, `kemKeyAt`, `checkedOf`, `memberAccepted`, `msigOf` (an `msig` seat's slots, P13; added 2026-11-22, controller call); the factory listing (`infoOf`, `contractsPage`); at an instance, every view of a session's state: `sessionOf`, `epochOf` (their `wrapHashes` and `sealedInfo`), `epochComplete`, `epochCount`, `epochsOf`, `latestEpoch`, `childOf`, `wrapAt` (the wraps), `leftIn`, `removedIn`, `removalCount`, `removalAt`, `messageCount`, `messageAt`, `storedCount`, `storedRange`; the signer's registry record for V1 (read inside the SDK) (CLI-PQC-13; held to the crate's `READS` by gate `pqc-reads`; widened 2026-11-22 from the first list to every session-state view, controller call); and since CTR-CHAT-23 (owner 2026-11-23, CLI-PQC-15) `sigStore`, `sessionSig`, `epochSig`, `leaveCount`, `leaveAt`, `leaveSig`, `removalSig`, `messageSig` | — |
 | R3 | finality | the home's `childOf` / `epochsOf` read at a final block | — |
 | W1 | submission | the `PqChat` writes (`createSession`, `addWraps`, `rekey`, `leave`, `remove`, `postMessage`, `storeMessage`, the six topic writes) as prepared operations (prepare, review, quote, submit, follow; [CLI-SDK-08](../../clients/scaas-sdk.md#CLI-SDK-08)), self-relay or a gateway that takes them, fee 0 allowed; the quote (a simulation) sizes wrap chunks; an unsigned write (`addWraps`, `storeMessage`) is paid or self-relayed (UA-7 P17) | — |
 | T1 | test-only vectors build | fixed randomness and key import for K1, K2, S1, S5 and the signers; refused in a release build by the SDK's load check | §10 |
@@ -364,6 +364,7 @@ operation states).
 | `StoreIo`, `StoreConflict` | the app's storage interface failed; the item changed under the crate three times |
 | `Internal` | no better name; carries nothing |
 | `CardRefused` | a contact card that does not count for its UA (UA-7 §14 O7, CLI-PQC-05): not its signature, or not well formed |
+| `HomeUnsigned` | under `require_signed_records`, a session created on a home that keeps no signatures (`sigStore` `none`; CLI-PQC-15, owner 2026-11-23) |
 
 ## 9. Threat model
 
@@ -378,8 +379,8 @@ signing power of the UA; the user's choice of what to accept; the user's gas.
 | A removed member | read and post under the old epoch; race plain rekeys (P9's limit) | read the next epoch (fresh `K`, not wrapped to it); author a rekey of an epoch it was removed from (P48) |
 | A replica instance or a second chain | hold a different record under the same id (P32) | be counted: a replica's record counts only when equal to the home's, and membership is read at home |
 | One RPC endpoint the app did not name | answer reads | choose a key the client encrypts to, a recipient, an epoch it sends under, or a ciphertext it decrypts: those reads are trusted reads ([CLI-RPC-06](../../clients/scaas-rpc.md#CLI-RPC-06), [ARCH-POS-15](../../decisions.md#ARCH-POS-15), CLI-PQC-13); downgrade a member's KEM version (the highest seen is kept) |
-| A compromised endpoint the app named | serve a control-plane record the contract never accepted | have a wrap decapsulated that does not hash to the signed record's `wrapHashes`, or an epoch whose number or author's rights break the verified parent (CLI-PQC-07). Not caught: a whole forged chain of session and epoch records, since their signature bytes are not in state (§13 O11); strict majority over several named endpoints is the defence today |
-| A member (a holder of `K`) with an endpoint the app named | serve a session or epoch record whose `sealedInfo` it sealed again under `K` | not caught: covered by [O11](#13-open-points-and-requests)'s settled limit (signature bytes not in state); the current checks stay, strict majority over several named endpoints is the defence |
+| A compromised endpoint the app named | serve a control-plane record the contract never accepted | have a wrap decapsulated that does not hash to the signed record's `wrapHashes`, or an epoch whose number or author's rights break the verified parent (CLI-PQC-07). With an `sstore2` home (the default, CTR-CHAT-23) and CLI-PQC-15's check (always on there; `require_signed_records` refuses a `none` home too): a substituted `sealedInfo` (a store list it runs), a forged chain of session and epoch records, a leave or removal nobody signed and a forged posted message are caught by the author's kept signature, and a downgrade to `none` by the pinned setting. Still not caught on a `none` home, or for an `msig` author whose structure the endpoint also forges: strict majority over several named endpoints (CLI-PQC-16, an option) is the defence there (§13 O11) |
+| A member (a holder of `K`) with an endpoint the app named | serve a session or epoch record whose `sealedInfo` it sealed again under `K` | on an `sstore2` home (the default, CTR-CHAT-23): have it counted, since the record's author signed its `sealedInfo` and CLI-PQC-15 verifies that signature before the record is used (always there; under `require_signed_records` a `none` home is refused too). On a `none` home without the option: not caught, the earlier limit of O11; strict majority over several named endpoints (CLI-PQC-16, an option) is the defence there |
 | A homeserver | see room membership, Matrix ids, sizes, times, the event type and the hint (P20; no Matrix encryption in PqChat rooms); drop or delay events | read content or forge a record; hide a message also on a chain store |
 | A decryption-oracle attempt | send chosen ciphertexts to the user's keys | learn anything from the result: [ARCH-POS-13](../../decisions.md#ARCH-POS-13) as amended on 2026-11-13 puts the hybrid KEM's decapsulation and its one-shot AEAD outside that rule, and PqChat keeps its own no-reaction rule anyway (CLI-PQC-07); a wrap reaches the KEM only after its hash check against a member's signed record |
 | A restored or cloned store | bring back an old device id and counter | reuse a counter: a missing or different device anchor makes a new device id (CLI-PQC-09) |
@@ -520,6 +521,12 @@ endpoints. (b) A later `PqChat` release keeps these signatures' bytes in state, 
 the transaction is found only through an event). **Recommendation: (a) now, (b) asked for the next `PqChat` release**; (c) breaks
 CTR-CHAT-14.
 **Settled (owner 2026-11-17, "chốt hai điểm": settle both points): (a) now, (b) asked for the next `PqChat` release.**
+**Decided (owner 2026-11-23, "Theo cách 2 với mặc định là SSTORE2, kèm (d - option)"; replaces "(b) asked for the next `PqChat`
+release"):** (b) as a setting per home instance fixed at creation, `none` or `sstore2`, the default `sstore2`
+([CTR-CHAT-23](../../contracts/pqchat.md#CTR-CHAT-23)); the client option `require_signed_records`, verifying every control-plane
+record's kept signature on an `sstore2` home ([CLI-PQC-15](../../clients/pqchat-core.md#CLI-PQC-15)); and (d) strict majority for
+the control-plane reads as an explicit option ([CLI-PQC-16](../../clients/pqchat-core.md#CLI-PQC-16)). A setting per session was
+rejected (a lying endpoint could report it off). Plan [`2026-11-23-pqchat-signatures.md`](../plans/2026-11-23-pqchat-signatures.md).
 
 **O12 — Matrix encryption in PqChat rooms** (from the review's K13; applied (a), the owner may override). (a) PqChat rooms carry
 their events without Megolm, so the seed alone recovers the Matrix history; the homeserver sees the event type and the hint. (b)
@@ -539,6 +546,21 @@ schedule: a new protocol version with its own vectors in clientkeys `pqchat.js` 
 tasks (T0–T15 build UA-7 as pinned). Rules for when it is built: the passphrase is never stored or sent; a wrong one is detected
 before any message is shown (an AEAD check on `sealedInfo`); forgetting it loses that session's history; a group session may use
 it only if every member enters the same passphrase; the UI says a PqChat session is not an out-of-band channel for it.
+
+**O14 — Several KEM keys per member (per-device keys).** **Decided (owner 2026-11-23, "Chọn M. Nó vẫn là option chứ?": (M),
+optional per member):** a member may sit in an epoch with several `keyId`s, `(ua, keyId)` strictly ascending, at most 8, one wrap
+each ([CTR-CHAT-24](../../contracts/pqchat.md#CTR-CHAT-24)); everything but the wraps stays per UA. This crate (BUILT on
+`pqchat-sigs`): its shapes and its plain-rekey check read members per UA (`check::distinct`), it tries each own wrap and uses
+the first its account opens (a device key it does not hold is skipped); it writes one key per member, the default. The
+high-forward-secrecy mode (a symmetric ratchet with deletion, its flag in `sealedInfo`, more frequent rekeys) is client-only and
+comes after the freeze. **Follow-up, not built:** CLI-PQC-13's "a lower KEM version served later is refused" keeps the highest
+version seen per UA; with per-device keys it must become per `keyId` (each device key its own record, an older version still
+valid for the wraps that name it), and `kemKeyOf` (the highest version) no longer names the seed key once a device key is
+registered above it, so a sender picks the keys to wrap to by `kemKeyAt` per chosen version.
+
+**O15 — The group mode.** **Decided (owner 2026-11-23, "add the field now, in pqchat-sigs"):** `PqChatSession.groupMode`, the
+record's last field, 0 flat wraps; this release accepts 0 only ([CTR-CHAT-25](../../contracts/pqchat.md#CTR-CHAT-25)). This
+crate signs 0 (through the SDK) and refuses a read session of any other mode (`decode`); TreeKEM (1) comes with a later release.
 
 **Requests to other specs** (stated here, not edited there):
 

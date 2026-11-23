@@ -5798,7 +5798,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
 
     /// `forge inspect IPqVault methodIdentifiers`, its eight writes.
     const FORGE_PQVAULT_WRITES: [&str; 8] = [
-        "0a25edc3", "87e8fed1", "c487e92a", "5270d5c2", "6b7f9e2e", "1b5d7365", "344e5e37",
+        "8f02bc96", "87e8fed1", "c487e92a", "5270d5c2", "6b7f9e2e", "1b5d7365", "344e5e37",
         "1d4c2131",
     ];
 
@@ -5994,7 +5994,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .collect();
         assert_eq!(ours, theirs, "the PqChat allow-list, both directions");
         let forge: HashSet<[u8; 4]> = [
-            "21829f04", "1222a945", "2b9ab93a", "3c289881", "6035115c", "a52f4d6d", "95660a78",
+            "821d41ae", "1222a945", "2b9ab93a", "3c289881", "6035115c", "a52f4d6d", "95660a78",
             "47bee6d5", "c8de3d2d", "04857ea8", "1fd5aeac", "f3ee47ee", "5aee92d5",
         ]
         .iter()
@@ -6034,7 +6034,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             }
         }
         for s in [
-            "initialize(bytes32)",
+            "initialize(bytes32,uint8)",
             "owner()",
             "sessionOf(bytes32)",
             "storedRange(bytes8,uint256,uint256)",
@@ -6230,7 +6230,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         }
         let cast = |s: &str| -> Bytes { alloy::primitives::keccak256(s)[..4].to_vec().into() };
         for s in [
-            "initialize(bytes32)",
+            "initialize(bytes32,uint8)",
             "sessionOf(bytes32)",
             "storedRange(bytes8,uint256,uint256)",
             "transfer(address,uint256)",

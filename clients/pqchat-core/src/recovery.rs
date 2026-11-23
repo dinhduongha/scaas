@@ -154,7 +154,10 @@ impl PqChat {
             home: home.clone(),
             session_id: sid.to_ascii_lowercase(),
         };
-        let at_home = self.record_at(&s.chain, &home, sid, sid).await?;
+        // CLI-PQC-15: the home's record with its kept signature verified (`sstore2`), else not shown
+        let Ok(at_home) = self.signed_record_at(&s.chain, &home, sid, sid).await else {
+            return Ok(None);
+        };
         let here = crate::model::Epoch::from_session(sid, &v)?;
         let (Some(at_home), Some(here)) = (at_home, here) else {
             return Ok(None);
@@ -177,7 +180,10 @@ impl PqChat {
         }
         let latest = self.latest_epoch(&s).await?;
         let ua = me.ua.to_ascii_lowercase();
-        let left = match self.record_at(&s.chain, &home, sid, &latest).await? {
+        let Ok(latest_rec) = self.signed_record_at(&s.chain, &home, sid, &latest).await else {
+            return Ok(None);
+        };
+        let left = match latest_rec {
             Some(e) if e.has_member(&ua) => {
                 let l = self
                     .net

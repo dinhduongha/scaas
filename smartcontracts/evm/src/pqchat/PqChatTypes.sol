@@ -17,7 +17,7 @@ library PqChatTypes {
         keccak256("Wrap(bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey)");
     bytes32 internal constant SESSION_TYPEHASH = keccak256(
         "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,"
-        "MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"
+        "MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"
     );
     bytes32 internal constant EPOCH_TYPEHASH = keccak256(
         "PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,"
@@ -93,7 +93,8 @@ library PqChatTypes {
                 keccak256(abi.encodePacked(s.admins)),
                 hashMembers(s.members),
                 keccak256(abi.encodePacked(s.wrapHashes)),
-                keccak256(s.sealedInfo)
+                keccak256(s.sealedInfo),
+                s.groupMode
             )
         );
     }

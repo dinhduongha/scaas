@@ -85,9 +85,10 @@
     "kind": 0,
     "creator": "0xc1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
     "config": {
-      "owner": "0xc1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
+      "owner": "0xc1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+      "sigStore": 2
     },
-    "initCall": "0x9498bd71c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
-    "initHash": "0x6b805fdcc00b34dfd6e5d4b6f2526674198b36ab1595a1a293e466e80d03df96"
+    "initCall": "0x67d73548c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c10000000000000000000000000000000000000000000000000000000000000002",
+    "initHash": "0xa1788b4541b05c58d6b02e27b3adf3bc35742160da8cb7b64b93c94a7acb4030"
   }
 }

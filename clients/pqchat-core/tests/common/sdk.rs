@@ -258,6 +258,7 @@ pub fn conf() -> PqChatConfig {
             registry: REGISTRY.into(),
             factory: FACTORY.into(),
         }],
+        ..PqChatConfig::default()
     }
 }
 
@@ -372,11 +373,13 @@ fn members_json(e: &Epoch) -> Vec<Value> {
         .collect()
 }
 
-/// `e` stored at `contract` as `sessionOf` / `epochOf` answer it (the SDK's named JSON).
+/// `e` stored at `contract` as `sessionOf` / `epochOf` answer it (the SDK's named JSON); the instance keeps no signatures
+/// (`sigStore` `none`, CTR-CHAT-23: these records carry stand-in hashes; `tests/signed.rs` serves signed rows).
 pub fn put_record(net: &FakeNet, contract: &str, e: &Epoch) {
+    net.answer(contract, "IPqChat.sigStore", json!({}), json!({"0": "0"}));
     if e.epoch == 0 {
         let s = json!({"creator": e.author, "nonce": e.nonce.to_string(), "homeChain": hex(&[7; 32]),
-            "homeChatContract": HOME, "admins": e.admins, "members": members_json(e), "wrapHashes": e.wrap_hashes,
+            "homeChatContract": HOME, "groupMode": "0", "admins": e.admins, "members": members_json(e), "wrapHashes": e.wrap_hashes,
             "sealedInfo": hex(&e.sealed_info)});
         net.answer(
             contract,
@@ -412,8 +415,10 @@ pub fn put_record(net: &FakeNet, contract: &str, e: &Epoch) {
     }
 }
 
-/// `contract` in the factory's listing as class `class`, version `version`.
+/// `contract` in the factory's listing as class `class`, version `version`; it keeps no signatures (`sigStore` `none`,
+/// CTR-CHAT-23) unless a test serves another setting after this.
 pub fn list(net: &FakeNet, contract: &str, class: u16, version: u64) {
+    net.answer(contract, "IPqChat.sigStore", json!({}), json!({"0": "0"}));
     let i = json!({"addr": contract, "creatorId": hex(&[0; 32]), "contractClass": class.to_string(), "kind": "0",
         "version": version.to_string(), "createdBlock": "1", "createdAt": "1"});
     net.answer(

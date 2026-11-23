@@ -154,14 +154,13 @@ contract PqVault is IPqVault, PqGroupBase {
         ep.home = home;
         if (v.mode == 1) s.modes[vid] = 1;
         emit PqVaultCreated(vid, v.creator, v.homeChain);
-        for (uint256 i; i < v.members.length; ++i) {
-            s.vaults[v.members[i].ua].push(vid);
-        }
+        _indexAll(vid, v.members);
     }
 
     /// @dev The lists (at least one member), the creator an admin and a member, a home named, the mode 0 or 1 and in mode 1
     ///      this instance the home, the passphrase flag's shape. Returns whether this instance is the home.
     function _checkCreate(PqVaultCreate calldata v) internal view returns (IUARegistry reg, uint256 limit, bool home) {
+        if (v.groupMode != 0) revert PqVaultModeUnsupported(v.groupMode); // CTR-PQV-18: flat wraps only
         bytes32 uid;
         (reg, limit, uid) = _env();
         IPqChat.MemberKey[] memory members = v.members;
@@ -212,11 +211,19 @@ contract PqVault is IPqVault, PqGroupBase {
         _indexAdded(e.vaultId, members, _uas(pm));
     }
 
+    /// @dev `vaultsOf` gains `vid` once per UA of `m`, not per key (owner (M) 2026-11-23).
+    function _indexAll(bytes32 vid, IPqChat.MemberKey[] memory m) internal {
+        for (uint256 i; i < m.length; ++i) {
+            if (!_sameUa(m, i)) _v().vaults[m[i].ua].push(vid);
+        }
+    }
+
     /// @dev `vaultsOf` gains the vault for each member the child adds to the parent (both sorted). Before the signature: a
     ///      refused record reverts it with the rest.
     function _indexAdded(bytes32 vid, IPqChat.MemberKey[] memory members, bytes32[] memory parent) internal {
         uint256 i;
         for (uint256 j; j < members.length; ++j) {
+            if (_sameUa(members, j)) continue; // a UA's further key (owner (M))
             bytes32 ua = members[j].ua;
             while (i < parent.length && parent[i] < ua) ++i;
             if (i == parent.length || parent[i] != ua) _v().vaults[ua].push(vid);

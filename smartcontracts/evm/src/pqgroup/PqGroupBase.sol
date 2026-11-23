@@ -22,6 +22,9 @@ abstract contract PqGroupBase {
     uint256 internal constant SEALED_KEY = 48;
     /// @notice A packed wrap: member (32) ‖ keyId (8) ‖ mlkemCt (1,568) ‖ x25519Eph (32) ‖ sealedKey (48).
     uint256 internal constant WRAP_BYTES = 1688;
+    /// @dev Owner (M) 2026-11-23: the KEM keys one UA may hold in one epoch (its seed key and device keys), a controller call
+    ///      from the gas figures: 8 keys of each of 2 members are 16 wraps, about a 16-member epoch, still landed in chunks.
+    uint256 internal constant KEYS_PER_UA_MAX = 8;
 
     /// @dev What `_fail` raises, each contract by its own named error: `a`, `b` its arguments as words.
     uint8 internal constant F_SHAPE = 0; // ()
@@ -206,20 +209,37 @@ abstract contract PqGroupBase {
         return j == child.length;
     }
 
+    /// @dev The distinct UAs of a member list (sorted by `(ua, keyId)`, owner (M) 2026-11-23: a UA's keys are adjacent), in
+    ///      order: every rule but the wraps reads members per UA.
     function _uas(IPqChat.MemberKey[] memory m) internal pure returns (bytes32[] memory u) {
         u = new bytes32[](m.length);
+        uint256 n;
         for (uint256 i; i < m.length; ++i) {
-            u[i] = m[i].ua;
+            if (!_sameUa(m, i)) u[n++] = m[i].ua;
         }
+        assembly ("memory-safe") {
+            mstore(u, n)
+        }
+    }
+
+    /// @dev Entry `i` is a further key of the UA of entry `i - 1` (owner (M) 2026-11-23).
+    function _sameUa(IPqChat.MemberKey[] memory m, uint256 i) internal pure returns (bool) {
+        return i > 0 && m[i].ua == m[i - 1].ua;
+    }
+
+    /// @dev The author of a stored epoch record, its second field (`abi.encode(record, sigHash)`: the record's offset, the
+    ///      trailer, the record's first field, then `author`); `PqChat` overrides it for the blobs that keep a signature
+    ///      (CTR-CHAT-23).
+    function _authorOf(Epoch storage ep) internal view virtual returns (bytes32) {
+        return _word(ep.record, 96);
     }
 
     /// @dev P48: the completing child `ep` holds no UA a `remove` took out of its parent, in its members or its admins, and was
     ///      not authored by one (Fable code review of PqVault F1, controller call 2026-11-21: a child staged before its author's
-    ///      removal must not complete after it). The author is the second word of the stored epoch record in both contracts
-    ///      (`abi.encode(record, …)`: the record's offset, then the trailer; the record's first field, then `author`).
+    ///      removal must not complete after it).
     function _noneRemoved(Epoch storage ep) internal view {
         Epoch storage pe = _epochs()[ep.parent];
-        bytes32 author = _word(ep.record, 96);
+        bytes32 author = _authorOf(ep);
         if (pe.removedOf[author]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(author));
         (bytes32[] memory admins, IPqChat.MemberKey[] memory m,) = _lists(ep);
         for (uint256 i; i < m.length; ++i) {
@@ -230,8 +250,9 @@ abstract contract PqGroupBase {
         }
     }
 
-    /// @dev 3C-D6: members strictly sorted, at least `min`, one hash each, each holding its `keyId` here (P3); admins
-    ///      strictly sorted and registered (P8).
+    /// @dev 3C-D6 as owner (M) of 2026-11-23 changed it: members strictly sorted by `(ua, keyId)`, one or more keys per UA
+    ///      and at most `KEYS_PER_UA_MAX`, at least `min` distinct UAs, one hash per entry, each entry a KEM key its UA holds
+    ///      here (P3); admins strictly sorted and registered (P8).
     function _checkLists(
         IUARegistry reg,
         bytes32[] memory admins,
@@ -240,12 +261,20 @@ abstract contract PqGroupBase {
         uint256 min
     ) internal view {
         uint256 n = members.length;
-        if (n < min || nHashes != n) _fail(F_SHAPE, 0, 0);
+        if (nHashes != n) _fail(F_SHAPE, 0, 0);
+        uint256 uas;
+        uint256 keys;
         for (uint256 i; i < n; ++i) {
-            if (i > 0 && members[i].ua <= members[i - 1].ua) _fail(F_SHAPE, 0, 0);
+            if (_sameUa(members, i)) {
+                if (members[i].keyId <= members[i - 1].keyId || ++keys > KEYS_PER_UA_MAX) _fail(F_SHAPE, 0, 0);
+            } else {
+                if (i > 0 && members[i].ua < members[i - 1].ua) _fail(F_SHAPE, 0, 0);
+                (uas, keys) = (uas + 1, 1);
+            }
             (IUARegistry.KemKey memory k,) = reg.kemKeyAt(members[i].ua, members[i].keyId);
             if (k.scheme == 0) _fail(F_KEM_KEY, uint256(members[i].ua), members[i].keyId);
         }
+        if (uas < min) _fail(F_SHAPE, 0, 0);
         for (uint256 i; i < admins.length; ++i) {
             if ((i > 0 && admins[i] <= admins[i - 1]) || !reg.isRegistered(admins[i])) _fail(F_SHAPE, 0, 0);
         }

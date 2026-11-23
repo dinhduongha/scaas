@@ -1050,6 +1050,7 @@ fn pqchat_records_reproduce_the_vectors() {
     let rows = [
         (&rec, "session", "PqChatSession"),
         (&rec, "epoch", "PqChatEpoch"),
+        (&rec, "epochDevices", "PqChatEpoch"), // owner (M) 2026-11-23: a member with two keys
         (&rec, "leave", "PqChatLeave"),
         (&rec, "remove", "PqChatRemove"),
         (&rec, "message", "PqChatMessage"),

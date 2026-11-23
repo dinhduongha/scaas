@@ -169,7 +169,10 @@ contract PqChatMessagesTest is PqChatBase {
     /// P16: one blob per message (the code-size limit, at most 65,535 B of code).
     function test_postMessage_oneBlobOnly() public {
         _refusedPost(_msg(ids[1], 1, 0, 65_400), abi.encodeWithSelector(IPqChat.PqChatShape.selector));
-        _post(chat, _msg(ids[1], 1, 0, 65_000)); // the control: just under
+        // an `sstore2` instance's blob holds the signature too (CTR-CHAT-23: 256 B more for the stand-in 32-B signature): 65,000
+        // B, under the bound without it, is refused there; the control, just under, moved 65,000 -> 64,700
+        _refusedPost(_msg(ids[1], 1, 0, 65_000), abi.encodeWithSelector(IPqChat.PqChatShape.selector));
+        _post(chat, _msg(ids[1], 1, 0, 64_700));
     }
 
     // ----- storeMessage (P29) -----

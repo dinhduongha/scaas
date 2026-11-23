@@ -979,6 +979,26 @@ impl EvmPool {
         })
     }
 
+    /// [`EvmPool::read_at_block`] under strict majority whatever the list's policy (CLI-RPC-05 as a read's own option: an app
+    /// core asks it for the reads it chooses, never forced on the list; CTR-CHAT-23 option d). The agreed read's own checks
+    /// hold: two endpoints or more and a pinned `chain_uid` (`Argument`), CLI-RPC-06 for a read that feeds a decryption.
+    pub async fn read_at_block_agreed<T, F, Fut>(
+        &self,
+        choice: BlockChoice,
+        purpose: Purpose,
+        f: F,
+    ) -> Result<Agreed<T, B256>, RpcError>
+    where
+        T: Clone + PartialEq,
+        F: Fn(ReadAt<B256>) -> Fut,
+        Fut: Future<Output = Result<T, ReadError>>,
+    {
+        if !self.pinned_reads {
+            return Err(RpcError::PinnedReadsUntrusted);
+        }
+        self.pool.agree(self, choice, purpose, f).await
+    }
+
     /// `eth_call` at the read's block (by hash).
     pub async fn call_at(
         &self,

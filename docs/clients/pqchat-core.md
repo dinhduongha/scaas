@@ -142,18 +142,21 @@ as amended on 2026-11-13; SPECIFIED).
   against the sender's registry record, the sender is a member of a complete epoch as the home instance orders it, its counter is
   fresh in its scope `(epochId, sender, device)`, its `messageId` is new (P19), and its content unpads and is canonical (re-serialised
   and compared byte for byte, in `ua-rs`).
-- **A posted message read from state** (`messageAt`; its signature bytes are not in state, CTR-CHAT-05) counts on the contract's
-  check: only from a listed instance, read under CLI-PQC-13's trust, with the sender's membership checked again at the home.
-- **Control-plane records** (session, epoch, leave, removal) read at the home are checked as far as state allows: each wrap's
-  `hashStruct` equals the signed record's `wrapHashes[i]` **before** it enters a decapsulation; the epoch number is the verified
-  parent's plus one; the author's rights hold against the parent; members and admins are strictly sorted and the creator is in
-  both. Their signature bytes are not in state either, so their authorship rests on the contract's check and CLI-PQC-13's trusted
-  reads (the spec's open point O11). A replica's record counts only when it equals the home's record and `sigHash` under the same id
-  (P32).
+- **A posted message read from state** (`messageAt`) counts only from a listed instance, read under CLI-PQC-13's trust, with the
+  sender's membership checked again at the home; on an `sstore2` instance its kept signature must verify first
+  ([CLI-PQC-15](#CLI-PQC-15)); on a `none` one it counts on the contract's check.
+- **Control-plane records** (session, epoch, leave, removal) read at the home are checked: each wrap's `hashStruct` equals the
+  signed record's `wrapHashes[i]` **before** it enters a decapsulation; the epoch number is the verified parent's plus one; the
+  author's rights hold against the parent; members and admins are strictly sorted and the creator is in both. On an `sstore2` home
+  each record's kept signature verifies over its rebuilt typed digest, `sealedInfo` included, before any of this
+  ([CLI-PQC-15](#CLI-PQC-15)); on a `none` home their authorship rests on the contract's check and CLI-PQC-13's trusted reads. A
+  replica's record counts only when it equals the home's record and `sigHash` under the same id (P32).
 - **A failure** is no error, no receipt, no retry and no write; it is counted on the device only, per reason (`envelope`, `decode`,
   `signature`, `member`, `counter`, `duplicate`, `replica`, `unlisted`, `wrap-hash`, `content`, `too-far`, and `control` for a
   control-plane record that breaks the epoch rule, the rights or the shapes, which only a forged answer shows; an own wrap that
-  passed its hash check and does not open counts as `envelope`; controller call 2026-11-22).
+  passed its hash check and does not open counts as `envelope`; controller call 2026-11-22; `signature` also for a control-plane
+  record or posted message whose kept signature fails, and `unsigned` for a record of a `none` home under
+  `require_signed_records`, CLI-PQC-15).
 - **No automatic reaction** to a result that depends on an opening or an epoch: an own wrap of the winning epoch that does not open
   is shown, never answered by a rekey, a leave or a message; a member's higher KEM version raises an event and the rekey is a write
   the user confirms; between the first sight of a complete child and its finality the client sends under neither epoch and holds the
@@ -197,7 +200,9 @@ depends on the lock.
 <a id="CLI-PQC-13"></a>**CLI-PQC-13** — **Every read that chooses an encryption key, a recipient or an epoch, or feeds a decryption,
 is a trusted read** (coordinator call K1 after Fable's review, 2026-11-17; the owner may override; SPECIFIED). The reads of
 `kemKeyOf`, `kemKeyAt`, `checkedOf`, `memberAccepted`, `latestEpoch`, `epochsOf`, `childOf`, `removedIn`, the factory listing, the
-signer's registry record for a signature check, and the reads of wraps, `sealedInfo`, `messageAt` and `storedRange` are all made
+signer's registry record for a signature check, an instance's `sigStore`, the kept signatures and leave records (`sessionSig`,
+`epochSig`, `leaveCount`, `leaveAt`, `leaveSig`, `removalSig`, `messageSig`; CLI-PQC-15), and the reads of wraps, `sealedInfo`,
+`messageAt` and `storedRange` are all made
 under `scaas-rpc`'s decryption-feeding mark, `Purpose::FeedsDecryption` ([CLI-RPC-06](scaas-rpc.md#CLI-RPC-06)): never a discovered
 endpoint alone; under strict majority the agreeing group holds a named or default endpoint. The recipient key inside the SDK's KEM
 wrap is read the same way. So one endpoint the app did not name cannot choose a key the client encrypts to, an epoch it sends under,
@@ -214,6 +219,34 @@ message beyond is shown as unreadable on the device, reason `too-far`). Position
 session are held, the least recently used dropped, and every position is derived again after a lock. So a fresh device reads the
 latest messages of a long epoch without the earlier ones, and no member can fill the shared `ua-rs` arena by opening chains under new
 device ids. This needs no change to UA-7.
+
+<a id="CLI-PQC-15"></a>**CLI-PQC-15** — **On an `sstore2` home every control-plane record the crate uses counts only with its
+author's kept signature; the option `require_signed_records` also refuses a `none` home** (owner 2026-11-23, the spec's O11 settled
+by [CTR-CHAT-23](../contracts/pqchat.md#CTR-CHAT-23); the default off a controller call, the owner may override; BUILT on branch
+`pqchat-sigs`, `src/signed.rs`, `tests/signed.rs`, UNAUDITED).
+
+- **The setting.** The crate reads an instance's `sigStore()` under CLI-PQC-13's trust and pins its first answer per instance in
+  its store; a later different answer, or a value neither 0 nor 2, is a forged one (`control`). So an endpoint cannot report
+  `none` for an `sstore2` instance this device has seen.
+- **On an `sstore2` instance** the session and epoch records (`sessionSig`, `epochSig`), the parent's leaves and removals (from
+  the kept `leaveAt` / `removalAt` records, each with its signer's signature and naming the parent; the `leftIn` and `removedIn`
+  flags are not read there) and a posted message (`messageSig`) each count only when their signer's `UASig` verifies over the
+  typed digest the SDK rebuilds from the record's fields (V1, the signer's registry record a trusted read), `sealedInfo` included;
+  else `signature`. A single-key author's UA id is the hash of its key, so a forged record fails even when the same endpoint lies
+  about the registry; an `msig` author's structure is a registry read, for which the agreed reads of CLI-PQC-16 are the defence.
+- **`require_signed_records`** (`PqChatConfig`, default `false`): `true` also refuses a `none` home: its records are dropped
+  `unsigned` and a session created there refused `HomeUnsigned`. `false` reads a `none` home as before, on the contract's check;
+  an `sstore2` home is verified either way, with no switch that turns it off. **Why off by default** (controller call): new homes
+  are `sstore2` by default, so the check runs wherever a signature is kept; a `none` home is its creator's explicit choice, and
+  refusing it by default would leave its sessions unreadable to every default client, while the pin above already stops the
+  downgrade the owner named.
+
+<a id="CLI-PQC-16"></a>**CLI-PQC-16** — **Strict majority for the control-plane reads is an explicit option, never forced** (owner
+2026-11-23, option (d); BUILT on branch `pqchat-sigs`, UNAUDITED). `PqChatConfig.agreed_reads` (default `false`): every trusted
+`IPqChat` read (the control plane at an instance) goes through the SDK's `read_app_agreed`, the agreed read of
+[CLI-RPC-05](scaas-rpc.md#CLI-RPC-05) and [CLI-RPC-06](scaas-rpc.md#CLI-RPC-06) whatever the chain's list policy (scaas-rpc
+`read_at_block_agreed`); a list of one endpoint or without a pinned `chain_uid` is the SDK's `Argument`. The other reads keep the
+list's policy.
 
 ## 5. Vectors and tests
 
