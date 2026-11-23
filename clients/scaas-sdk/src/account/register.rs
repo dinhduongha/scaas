@@ -349,21 +349,6 @@ pub(crate) async fn read_record(
     record_holds2(landed, &out).ok_or_else(bad)
 }
 
-/// `pqzKeyAt(ua, 0).proven`: a PoP verifier checked version 0's proof.
-async fn pqz_proven(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<bool, SdkError> {
-    let mut d = selector("pqzKeyAt(bytes32,uint64)");
-    d.extend_from_slice(ua);
-    d.extend_from_slice(&word_u64(0));
-    let tx = TransactionRequest::default()
-        .with_to(registry)
-        .with_input(Bytes::from(d));
-    let out = pool.call_tx(tx).await.map_err(sim)?;
-    proven_of(&out).ok_or(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
-        last: None,
-        failover_revert: None,
-    }))
-}
-
 /// `pqzKeyAt`'s `(address ptr, bytes32 pqzPopHash, bool proven)`: `proven`.
 fn proven_of(out: &[u8]) -> Option<bool> {
     word(out, 2)
