@@ -36,7 +36,8 @@ contract PqVaultTypesTest is Test {
 
     function test_pqvaultTypehashIsPinned() public view {
         assertEq(PqVaultTypes.MEMBER_KEY_TYPEHASH, 0x6d7e57dfbfdfbc352504f1e82bc1658aeeb466b69ba168e7a3d69b0c1d448113);
-        assertEq(PqVaultTypes.CREATE_TYPEHASH, 0xb5e6f0323db4eb92065a67dedef66888c5936a3fda2508c66728db676184d587);
+        // CTR-PQV-18 (2026-11-23, `uint8 groupMode` the last field): 0xb5e6f032…84d587 -> 0xa81afc5c…ef53f9
+        assertEq(PqVaultTypes.CREATE_TYPEHASH, 0xa81afc5c34e93b0250095251a73b625a97fb14fa58780806d5a1916a32ef53f9);
         assertEq(PqVaultTypes.EPOCH_TYPEHASH, 0x71c0c9183ebe0b2c720191922d877237665a2f0a48c930022307d2ee46ca2adb);
         assertEq(PqVaultTypes.LEAVE_TYPEHASH, 0xfda6d43fa3b8346bb820f8a1d246a2216bb02589076a611063d5781fd5e52e5e);
         assertEq(PqVaultTypes.REMOVE_TYPEHASH, 0x553e622a0d5f9fd21ae3a11cc12f2b60ad5d9ab70b7b7d1c03e8ba2f2e7f55ce);
@@ -103,6 +104,7 @@ contract PqVaultTypesTest is Test {
         v.mode = uint8(_u(string.concat(p, ".mode")));
         v.homeChain = _b32(string.concat(p, ".homeChain"));
         v.homeVaultContract = vm.parseJsonAddress(rec, string.concat(p, ".homeVaultContract"));
+        v.groupMode = uint8(vm.parseJsonUint(rec, string.concat(p, ".groupMode")));
         v.admins = vm.parseJsonBytes32Array(rec, string.concat(p, ".admins"));
         v.members = _members(p);
         v.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));

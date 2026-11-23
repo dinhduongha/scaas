@@ -96,19 +96,23 @@ contract PqChatSigGasTest is PqChatBase {
     }
 
     function test_gas_none_mldsa65() public {
-        _pair(none_, ids, 3_309, "none, ML-DSA-65", [uint256(560_024), 8_278_830, 562_072, 8_327_790]);
+        // CTR-CHAT-25 (owner 2026-11-23, `groupMode`, one word more in calldata and the record): createSession 560,024 / 8,278,830 -> 562,072 / 8,327,790
+        _pair(none_, ids, 3_309, "none, ML-DSA-65", [uint256(562_072), 8_327_790, 562_072, 8_327_790]);
     }
 
     function test_gas_sstore2_mldsa65() public {
-        _pair(chat, ids, 3_309, "sstore2, ML-DSA-65", [uint256(560_024), 13_713_390, 562_072, 13_762_350]);
+        // CTR-CHAT-25 (owner 2026-11-23, `groupMode`, one word more in calldata and the record): createSession 560,024 / 13,713,390 -> 562,072 / 13,762,350
+        _pair(chat, ids, 3_309, "sstore2, ML-DSA-65", [uint256(562_072), 13_762_350, 562_072, 13_762_350]);
     }
 
     function test_gas_none_fndsa512() public {
-        _pair(none_, fn, 666, "none, FN-DSA-512", [uint256(390_040), 8_278_830, 392_088, 8_327_790]);
+        // CTR-CHAT-25 (owner 2026-11-23, `groupMode`, one word more in calldata and the record): createSession 390,040 / 8,278,830 -> 392,088 / 8,327,790
+        _pair(none_, fn, 666, "none, FN-DSA-512", [uint256(392_088), 8_327_790, 392_088, 8_327_790]);
     }
 
     function test_gas_sstore2_fndsa512() public {
-        _pair(chat, fn, 666, "sstore2, FN-DSA-512", [uint256(390_040), 9_649_710, 392_088, 9_698_670]);
+        // CTR-CHAT-25 (owner 2026-11-23, `groupMode`, one word more in calldata and the record): createSession 390,040 / 9,649,710 -> 392,088 / 9,698,670
+        _pair(chat, fn, 666, "sstore2, FN-DSA-512", [uint256(392_088), 9_698_670, 392_088, 9_698_670]);
     }
 
     /// leave, remove and postMessage, ML-DSA-65-sized signatures, at `c`: a 3-member session, a removal, a message, a leave.

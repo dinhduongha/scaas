@@ -30,6 +30,8 @@ interface IPqVault {
         uint16 passKdf;
         bytes32 passSalt;
         bytes sealedInfo;
+        /// @notice CTR-PQV-18 (controller call 2026-11-23, PqChat's CTR-CHAT-25): 0 flat wraps, fixed at creation, last; 0 only
+        uint8 groupMode;
     }
 
     /// @notice An epoch >= 1, authored by an admin of its parent (CTR-PQV-13).
@@ -143,6 +145,8 @@ interface IPqVault {
     /// @notice A shape the contract checks: lengths, order, counts, the passphrase flag, the mode and its home, a ciphertext
     ///         outside 32..16,416 B, a batch item naming another vault, epoch or author.
     error PqVaultShape();
+    /// @notice CTR-PQV-18: a vault's `groupMode` this release does not run (it runs 0, flat wraps).
+    error PqVaultModeUnsupported(uint8 groupMode);
     error PqVaultKemKey(bytes32 member, uint64 keyId);
     /// @notice No vault, epoch or item of that id here, or a record naming a vault other than its stored epoch's.
     error PqVaultUnknown(bytes32 id);

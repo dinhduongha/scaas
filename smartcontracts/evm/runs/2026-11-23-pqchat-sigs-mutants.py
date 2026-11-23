@@ -12,8 +12,10 @@ import sys
 
 E = "smartcontracts/evm/"
 P = E + "src/pqchat/PqChat.sol"
+G = E + "src/pqgroup/PqGroupBase.sol"
+V = E + "src/pqvault/PqVault.sol"
 CAPPED = os.path.abspath("scripts/capped")
-FORGE = ([CAPPED, "forge", "test", "--match-path", "test/pqchat/*.t.sol"], E)
+FORGE = ([CAPPED, "forge", "test", "--match-path", "test/pq{chat,vault}/*.t.sol"], E)
 M = [
     ("initialize takes any setting", [(P, "        if (sigStore_ != SIG_NONE && sigStore_ != SIG_SSTORE2) revert PqChatSigStore(sigStore_);\n", "")]),
     ("initialize takes log (1)", [(P, "sigStore_ != SIG_NONE && sigStore_ != SIG_SSTORE2", "sigStore_ > SIG_SSTORE2")]),
@@ -28,6 +30,20 @@ M = [
     ("the author read at the none blob's offset", [(P, "        return _word(ep.record, uint256(_word(ep.record, 0)) + 32);", "        return _word(ep.record, 96);")]),
     ("the one-blob bound without the kept signature", [(P, "        bytes memory blob = _blob(abi.encode(m), sig);\n        if (blob.length + 2 > _codeCap(limit))", "        bytes memory blob = _blob(abi.encode(m), sig);\n        if (abi.encode(m, bytes32(0)).length + 2 > _codeCap(limit))")]),
     ("sessionSig answers an epoch id", [(P, "        _kept();\n        Epoch storage ep = _known(sessionId);\n        if (ep.sessionId != sessionId) revert PqChatUnknown(sessionId);", "        _kept();\n        Epoch storage ep = _known(sessionId);")]),
+    # owner (M) 2026-11-23 (CTR-CHAT-24): several KEM keys per member, in PqGroupBase (PqChat and PqVault)
+    ("(M) a UA's key repeated", [(G, "if (members[i].keyId <= members[i - 1].keyId || ++keys > KEYS_PER_UA_MAX)", "if (members[i].keyId < members[i - 1].keyId || ++keys > KEYS_PER_UA_MAX)")]),
+    ("(M) no cap on the keys per UA", [(G, "if (members[i].keyId <= members[i - 1].keyId || ++keys > KEYS_PER_UA_MAX)", "if (members[i].keyId <= members[i - 1].keyId)")]),
+    ("(M) the UAs not ascending", [(G, "                if (i > 0 && members[i].ua < members[i - 1].ua) _fail(F_SHAPE, 0, 0);\n", "")]),
+    ("(M) the minimum counts entries, not UAs", [(G, "        if (uas < min) _fail(F_SHAPE, 0, 0);", "        if (n < min) _fail(F_SHAPE, 0, 0);")]),
+    ("(M) _uas keeps every key", [(G, "            if (!_sameUa(m, i)) u[n++] = m[i].ua;", "            u[n++] = m[i].ua;")]),
+    ("(M) sessionsOf per key at creation", [(P, "            if (!_sameUa(m, i)) _s().sessions[m[i].ua].push(sid);", "            _s().sessions[m[i].ua].push(sid);")]),
+    ("(M) sessionsOf per key at a rekey", [(P, "            if (_sameUa(ms, j)) continue; // a UA's further key (owner (M))\n", "")]),
+    ("(M) vaultsOf per key at creation", [(V, "            if (!_sameUa(m, i)) _v().vaults[m[i].ua].push(vid);", "            _v().vaults[m[i].ua].push(vid);")]),
+    ("(M) vaultsOf per key at a rekey", [(V, "            if (_sameUa(members, j)) continue; // a UA's further key (owner (M))\n", "")]),
+    # CTR-CHAT-25 / CTR-PQV-18 (owner 2026-11-23): the group mode, 0 only in this release
+    ("a TreeKEM session accepted", [(P, "        if (s.groupMode != 0) revert PqChatModeUnsupported(s.groupMode);", "        if (s.groupMode > 1) revert PqChatModeUnsupported(s.groupMode);")]),
+    ("a TreeKEM vault accepted", [(V, "        if (v.groupMode != 0) revert PqVaultModeUnsupported(v.groupMode);", "        if (v.groupMode > 1) revert PqVaultModeUnsupported(v.groupMode);")]),
+    ("the mode left out of the session's typed digest", [(E + "src/pqchat/PqChatTypes.sol", "                keccak256(s.sealedInfo),\n                s.groupMode\n", "                keccak256(s.sealedInfo),\n                uint8(0)\n")]),
     ("epochSig answers a session id", [(P, "        _kept();\n        Epoch storage ep = _known(epochId);\n        if (ep.sessionId == epochId) revert PqChatUnknown(epochId);", "        _kept();\n        Epoch storage ep = _known(epochId);")]),
 ]
 
@@ -61,6 +77,7 @@ for n, (name, reps) in enumerate(M[lo - 1:hi], lo):
     survived = r.returncode == 0 or not loaded
     bad += survived
     verdict = "SURVIVED" if r.returncode == 0 else "NO-LOAD " if not loaded else "killed  "
-    print(f"{verdict} | M{n} {name} | {P} | rc={r.returncode} | {len(failed)} failed: {', '.join(failed)[:200]}", flush=True)
+    where = ", ".join(sorted({f.split("/")[-1] for f, _, _ in reps}))
+    print(f"{verdict} | M{n} {name} | {where} | rc={r.returncode} | {len(failed)} failed: {', '.join(failed)[:200]}", flush=True)
 print(f"mutants M{lo}-M{hi} of {len(M)}, survived or not loaded: {bad}")
 raise SystemExit(1 if bad else 0)

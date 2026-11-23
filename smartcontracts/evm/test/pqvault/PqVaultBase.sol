@@ -168,6 +168,26 @@ abstract contract PqVaultBase is UARegistryBase {
     }
 
     /// `ua`'s signature over the typed digest `digest` (either mode: `uaMessage(kind, P_V, digest)`).
+    /// KEM key version `version` of `ua` set in the registry (a device key, owner (M) 2026-11-23, or a new seed version).
+    function _setKem(bytes32 ua, uint64 version, IUARegistry.KemKey memory k) internal {
+        p.setKemKey(ua, version, k, _kemSig(ua, version, k));
+    }
+
+    function _kemSig(bytes32 ua, uint64 version, IUARegistry.KemKey memory k)
+        internal
+        view
+        returns (IUARegistry.UASig memory s)
+    {
+        s.signature = _sig(keyOf_[ua], UAKinds.uaMessage(ML, UAKinds.PURPOSE_KEM, p.kemRecordDigest(ua, version, k)));
+    }
+
+    /// `ua`'s KEM versions `1..n` set (stand-in keys), so it may sit in an epoch with keyIds `0..n`.
+    function _devices(bytes32 ua, uint64 n) internal {
+        for (uint64 v = 1; v <= n; ++v) {
+            _setKem(ua, v, _kem(uint8(uint256(keccak256(abi.encode(ua, v))))));
+        }
+    }
+
     function _sig(bytes32 ua, bytes32 digest) internal view returns (IUARegistry.UASig memory s) {
         s.signature = _sig(keyOf_[ua], UAKinds.uaMessage(ML, PqVaultTypes.P_V, digest));
     }

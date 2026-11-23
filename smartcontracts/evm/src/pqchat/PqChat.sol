@@ -115,14 +115,20 @@ contract PqChat is IPqChat, PqChatCore {
         ep.wraps = uint32(s.members.length);
         ep.home = s.homeChain == uid && s.homeChatContract == address(this);
         emit PqChatSessionCreated(sid, s.creator, s.homeChain);
-        for (uint256 i; i < s.members.length; ++i) {
-            _s().sessions[s.members[i].ua].push(sid);
-        }
+        _indexAll(sid, s.members);
         _landWraps(sid, ep, 0, wraps, s.members, s.wrapHashes, limit);
+    }
+
+    /// @dev `sessionsOf` gains `sid` once per UA of `m`, not per key (owner (M) 2026-11-23).
+    function _indexAll(bytes32 sid, MemberKey[] memory m) internal {
+        for (uint256 i; i < m.length; ++i) {
+            if (!_sameUa(m, i)) _s().sessions[m[i].ua].push(sid);
+        }
     }
 
     /// @dev P8, 3C-D6: the lists, the creator a member and an admin, the home instance named (P32).
     function _checkSession(IUARegistry reg, PqChatSession calldata s) internal view {
+        if (s.groupMode != 0) revert PqChatModeUnsupported(s.groupMode); // CTR-CHAT-25: this release runs flat wraps only
         MemberKey[] memory members = s.members;
         bytes32[] memory admins = s.admins;
         _checkLists(reg, admins, members, s.wrapHashes.length, 2);
@@ -168,8 +174,10 @@ contract PqChat is IPqChat, PqChatCore {
     ///      before the signature check; a refused record reverts it with the rest.
     function _indexAdded(PqChatEpoch calldata e, bytes32[] memory parent) internal {
         uint256 i;
-        for (uint256 j; j < e.members.length; ++j) {
-            bytes32 ua = e.members[j].ua;
+        MemberKey[] memory ms = e.members;
+        for (uint256 j; j < ms.length; ++j) {
+            if (_sameUa(ms, j)) continue; // a UA's further key (owner (M))
+            bytes32 ua = ms[j].ua;
             while (i < parent.length && parent[i] < ua) ++i;
             if (i == parent.length || parent[i] != ua) _s().sessions[ua].push(e.sessionId);
         }

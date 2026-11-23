@@ -29,7 +29,8 @@ contract PqChatTypesTest is Test {
     function test_pqchatTypehashIsPinned() public view {
         assertEq(PqChatTypes.MEMBER_KEY_TYPEHASH, 0x6d7e57dfbfdfbc352504f1e82bc1658aeeb466b69ba168e7a3d69b0c1d448113);
         assertEq(PqChatTypes.WRAP_TYPEHASH, 0xf7d817cc55f4324caed15db75da261c4bd468454b80ac0cc8d30cd5a0d331e87);
-        assertEq(PqChatTypes.SESSION_TYPEHASH, 0xe2c3b4c1033a28837e998f325e512f26783cea21cc6ccb347fa3d3d8d7ad1e4d);
+        // CTR-CHAT-25 (owner 2026-11-23, `uint8 groupMode` the last field): 0xe2c3b4c1…ad1e4d -> 0x7e832d4c…62d911
+        assertEq(PqChatTypes.SESSION_TYPEHASH, 0x7e832d4c55dc2f6d4a77041b7000f7eb325d19c81a456b8e3844262dda62d911);
         assertEq(PqChatTypes.EPOCH_TYPEHASH, 0x00b07f15a60f8d4960c9262ffd3a307a3f2f2e790bcbc65911b4630ad0d2888c);
         assertEq(PqChatTypes.LEAVE_TYPEHASH, 0xe68d65ceec0d13ce4006e86e03cca815b44ff94ced5a2aa4b7244abf7502eea1);
         assertEq(PqChatTypes.REMOVE_TYPEHASH, 0x8f4939ececad5be22f7917c0c8087d80d372be36af3b0afb30046be9db0b6c56); // P48
@@ -120,6 +121,7 @@ contract PqChatTypesTest is Test {
         s.nonce = _u64(rec, string.concat(p, ".nonce"));
         s.homeChain = _b32(rec, string.concat(p, ".homeChain"));
         s.homeChatContract = vm.parseJsonAddress(rec, string.concat(p, ".homeChatContract"));
+        s.groupMode = uint8(vm.parseJsonUint(rec, string.concat(p, ".groupMode")));
         s.admins = vm.parseJsonBytes32Array(rec, string.concat(p, ".admins"));
         s.members = _membersAt(rec, p);
         s.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));
@@ -166,6 +168,26 @@ contract PqChatTypesTest is Test {
             ? bytes.concat(bytes32(head), sh, bytes32(head + body.length), body, sigTail)
             : bytes.concat(rec1, sh, bytes32(head), sigTail);
         assertEq(kept, vm.parseJsonBytes(rec, string.concat(r, ".blobSigned")), string.concat(r, " blobSigned"));
+    }
+
+    /// CTR-CHAT-25: the vector's `sessionTreeKem` (groupMode 1) hashes as the type string says (the struct and typehash a later
+    /// TreeKEM release accepts); `PqChatGroupMode.t.sol` refuses it at an instance.
+    function test_sessionTreeKemVector() public view {
+        string memory p = ".sessionTreeKem.record";
+        IPqChat.PqChatSession memory s;
+        s.creator = _b32(rec, string.concat(p, ".creator"));
+        s.nonce = _u64(rec, string.concat(p, ".nonce"));
+        s.homeChain = _b32(rec, string.concat(p, ".homeChain"));
+        s.homeChatContract = vm.parseJsonAddress(rec, string.concat(p, ".homeChatContract"));
+        s.groupMode = uint8(vm.parseJsonUint(rec, string.concat(p, ".groupMode")));
+        s.admins = vm.parseJsonBytes32Array(rec, string.concat(p, ".admins"));
+        s.members = _membersAt(rec, p);
+        s.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));
+        s.sealedInfo = vm.parseJsonBytes(rec, string.concat(p, ".sealedInfo"));
+        assertEq(s.groupMode, 1);
+        assertEq(h.session(s), _b32(rec, ".sessionTreeKem.typed"));
+        assertEq(vm.parseJsonString(rec, ".sessionTreeKem.error"), "PqChatModeUnsupported(1)");
+        assertEq(keccak256(abi.encode(_uaSig(rec, ".sessionTreeKem.uaSig"))), _b32(rec, ".sessionTreeKem.sigHash"));
     }
 
     function test_epochAndLeaveVectors() public view {

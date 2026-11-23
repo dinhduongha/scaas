@@ -14,10 +14,14 @@ import {PqVaultTypes} from "../../src/pqvault/PqVaultTypes.sol";
 import {PqVaultBase} from "./PqVaultBase.sol";
 
 /// PqVault plan V6 (spec §5.14, §5.15): gas rows of `PqVault`, `isolate = true`, so each figure is one transaction's:
-/// `vm.lastCallGas()` regular gas (intrinsic and calldata floor included) and the EIP-8037 state gas apart. Signatures go through
-/// the stand-in verifier (`MockVerifier`, no work), so a row is `PqVault`'s and the registry's own cost; a real signer adds its
-/// verifier's regular gas (FN-DSA-512 about 2.3 M, ML-DSA-65 on the cached key about 5.8 M, an EIP-8355 precompile about 0.2 M).
-/// Pins: regular within ±500 gas, state exact (`GAS_MEASURE=true`: the figures, no pin); a move needs old -> new figures in its
+
+// // `vm.lastCallGas()` regular gas (intrinsic and calldata floor included) and the EIP-8037 state gas apart. Signatures go through
+
+// // the stand-in verifier (`MockVerifier`, no work), so a row is `PqVault`'s and the registry's own cost; a real signer adds its
+
+// // verifier's regular gas (FN-DSA-512 about 2.3 M, ML-DSA-65 on the cached key about 5.8 M, an EIP-8355 precompile about 0.2 M).
+/// Pins: regular within ±500 gas, state exact (`GAS_MEASURE=true`:
+// the figures, no pin); a move needs old -> new figures in its
 /// commit. Members are ML-DSA-65 stand-ins; a wrap is 1,688 B packed. **UNAUDITED.**
 contract PqVaultGasTest is PqVaultBase {
     uint256 internal constant SLACK = 500;
@@ -86,7 +90,9 @@ contract PqVaultGasTest is PqVaultBase {
 
     function test_gas_personalVault() public {
         (bytes32 vid,) = _createVault(1, 1, 0);
-        _row("createVault 1 member, its wrap", 267_160, 6_675_390);
+        // CTR-CHAT-25 / CTR-PQV-18 (owner 2026-11-23: `groupMode` in the session and create records, one word more, 0 only):
+        // 267,160 / 6,675,390 -> 269,208 / 6,724,350
+        _row("createVault 1 member, its wrap", 269_208, 6_724_350);
         _item(vid, vid, ids[0], 1, 288, 0);
         _row("createItem 288 B, new list", 169_328, 1_459_620);
         bytes32 iid = _item(vid, vid, ids[0], 2, 288, 0);
@@ -100,12 +106,16 @@ contract PqVaultGasTest is PqVaultBase {
         _item(vid, vid, ids[0], 6, 16_416, 0);
         _row("createItem 16,416 B", 1_096_600, 25_939_620);
         _share(vid, vid, 7, 2, 0);
-        _row("rekeyVault 1 -> 2 members (share), both wraps", 398_975, 9_943_470);
+        // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
+        // regular 398,975 -> 400,264
+        _row("rekeyVault 1 -> 2 members (share), both wraps", 400_264, 9_943_470);
     }
 
     function test_gas_sharedVault() public {
         (bytes32 vid, IPqVault.PqVaultCreate memory v) = _createVault(2, 1, 0);
-        _row("createVault 2 members, both wraps", 396_184, 9_747_630);
+        // CTR-CHAT-25 / CTR-PQV-18 (owner 2026-11-23: `groupMode` in the session and create records, one word more, 0 only):
+        // 396,184 / 9,747,630 -> 398,232 / 9,796,590
+        _row("createVault 2 members, both wraps", 398_232, 9_796_590);
         (vid, v) = _createVault(3, 2, 0);
         IPqVault.PqVaultRemove memory r = IPqVault.PqVaultRemove(vid, vid, 1, _list(ids[2]), ids[0], 1);
         IUARegistry.UASig memory sig = _sig(ids[0], h.remove(r, PqVaultTypes.DS_V));
@@ -122,13 +132,17 @@ contract PqVaultGasTest is PqVaultBase {
         sig = _sig(e.author, h.epoch(e, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
         vault.rekeyVault(e, w, sig);
-        _row("rekeyVault 3 -> 1 after a removal and a leave", 320_352, 6_773_310);
+        // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
+        // regular 320,352 -> 321,710
+        _row("rekeyVault 3 -> 1 after a removal and a leave", 321_710, 6_773_310);
         (bytes32 v2,) = _createVault(2, 3, 0);
         (e, w) = _epoch(v2, ids[0], 1, 1, v2, _list(ids[0]), _members(1));
         sig = _sig(e.author, h.epoch(e, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
         vault.rekeyVault(e, w, sig);
-        _row("rekeyVault 2 -> 1", 310_007, 6_871_230);
+        // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
+        // regular 310,007 -> 310,972
+        _row("rekeyVault 2 -> 1", 310_972, 6_871_230);
     }
 
     function test_gas_chunks() public {
@@ -156,7 +170,8 @@ contract PqVaultGasTest is PqVaultBase {
         vault.createItems(b, sig);
     }
 
-    /// The largest batch of password items (288 B) that fits `(regular + state + 2.3 M) x 1.05 <= 60 M` with FN-DSA-512's
+
+    //    /// The largest batch of password items (288 B) that fits `(regular + state + 2.3 M) x 1.05 <= 60 M` with FN-DSA-512's
     /// verifier added (EIP-8037 inclusion), regular x 1.05 under 2^24 too (spec §5.8, CTR-PQV-09; expected 33-35).
     function test_gas_createItems() public {
         (bytes32 vid,) = _createVault(1, 1, 0);
@@ -184,12 +199,16 @@ contract PqVaultGasTest is PqVaultBase {
 
     function test_gas_mode1() public {
         (bytes32 vid,) = _createVault(1, 1, 1);
-        _row("mode 1: createVault 1 member, its wrap", 267_160, 6_773_310);
+        // CTR-CHAT-25 / CTR-PQV-18 (owner 2026-11-23: `groupMode` in the session and create records, one word more, 0 only):
+        // 267,160 / 6,773,310 -> 269,208 / 6,822,270
+        _row("mode 1: createVault 1 member, its wrap", 269_208, 6_822_270);
         _item(vid, vid, ids[0], 1, 288, 1);
         bytes32 iid = _item(vid, vid, ids[0], 2, 288, 1);
         _row("mode 1: createItem 288 B, warm list", 154_593, 1_263_780);
         _edit(iid, vid, ids[0], 3, 2, 1);
-        _row("mode 1: editItem 288 B, first", 148_752, 1_263_780);
+        // CTR-CHAT-25 / CTR-PQV-18 (owner 2026-11-23: `groupMode` in the session and create records, one word more, 0 only):
+        // 148,752 / 1,263,780 -> 149,283 / 1,263,780
+        _row("mode 1: editItem 288 B, first", 149_283, 1_263_780);
         _share(vid, vid, 4, 2, 1);
         _row("mode 1: rekeyVault 1 -> 2 members (share), both wraps", 396_184, 9_943_470);
     }
@@ -208,7 +227,8 @@ contract PqVaultGasTest is PqVaultBase {
 
     // ----- the release -----
 
-    /// The release's deployment through the factory: one transaction within the 60 M every transaction asks (CTR-TOK-30's line,
+    /// The release's deployment through the factory:
+    // one transaction within the 60 M every transaction asks (CTR-TOK-30's line,
     /// 33,594 B at PqChat's split), regular x 1.05 under 2^24.
     function test_gas_deployImplementation() public {
         bytes memory code = type(PqVault).creationCode;
@@ -234,12 +254,20 @@ contract PqVaultGasTest is PqVaultBase {
         assertLt(regular * 105 / 100, 1 << 24, "regular gas x 1.05 under 2^24 (EIP-7825)");
         assertLe(asked, 60_000_000, "the release transaction asks at most 60 M");
         if (!vm.envOr("GAS_MEASURE", false)) {
-            // CTR-CHAT-23 (`PqGroupBase._authorOf`, the hook `PqChat` overrides for its blobs that keep a signature; PqVault's
-            // behaviour and gas rows unchanged): 30,421 -> 30,431 B; state 47,119,410 -> 47,134,710 (+10 x 1,530); regular
+
+            //            // CTR-CHAT-23 (`PqGroupBase._authorOf`, the hook `PqChat` overrides for its blobs that keep a signature; PqVault's
+            // behaviour and gas rows unchanged):
+            // 30,421 -> 30,431 B; state 47,119,410 -> 47,134,710 (+10 x 1,530); regular
             // 2,062,717 unchanged
-            assertEq(r.code.length, 30_431, "the PqVault runtime (size-baseline.json row)");
-            assertApproxEqAbs(regular, 2_062_717, SLACK, "deployImplementation regular");
-            assertEq(state, 47_134_710, "deployImplementation state");
+            // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
+            // 30,431 -> 30,825 B; regular
+            // 2,062,717 -> 2,087,684; state 47,134,710 -> 47,737,530 (+394 x 1,530)
+            // CTR-PQV-18 (2026-11-23, `groupMode` in the create record, 0 only, the last field):
+            // 30,825 -> 31,786 B; regular
+            // 2,087,684 -> 2,150,099; state 47,737,530 -> 49,207,860 (+961 x 1,530)
+            assertEq(r.code.length, 31_786, "the PqVault runtime (size-baseline.json row)");
+            assertApproxEqAbs(regular, 2_150_099, SLACK, "deployImplementation regular");
+            assertEq(state, 49_207_860, "deployImplementation state");
         }
     }
 

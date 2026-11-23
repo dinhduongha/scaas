@@ -36,6 +36,10 @@ interface IPqChat {
         MemberKey[] members;
         bytes32[] wrapHashes;
         bytes sealedInfo;
+        /// @notice CTR-CHAT-25 (owner 2026-11-23): the group protocol, 0 flat wraps (1 TreeKEM in a later release); fixed at
+        ///         creation (no epoch record names it); last, so every other field keeps its place; 0 only here
+        ///         (`PqChatModeUnsupported`)
+        uint8 groupMode;
     }
 
     struct PqChatEpoch {
@@ -210,6 +214,8 @@ interface IPqChat {
     error PqChatSigStore(uint8 sigStore);
     /// @notice CTR-CHAT-23: a signature view on a `none` instance, which keeps each record's `sigHash` only.
     error PqChatSigNotStored();
+    /// @notice CTR-CHAT-25: a session's `groupMode` this release does not run (it runs 0, flat wraps).
+    error PqChatModeUnsupported(uint8 groupMode);
     /// @notice `validateEnv`: `chainUid` 0, registry 0, no code-size limit or one under EIP-170's 24,576 B (3C-D1); a
     ///         constructor id other than class 3, kind 0, version >= 1.
     error PqChatEnv();
