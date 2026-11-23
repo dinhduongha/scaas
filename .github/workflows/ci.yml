@@ -310,6 +310,9 @@ jobs:
       # pre-split side must be rebuilt at that set (at-set.sh's `modules` scope, under scripts/capped: local), so the
       # other cells leave it out
       - name: forge test at ${{ matrix.set }} (at-set.sh)
+        # the runner is the job's cap (no systemd user manager for scripts/capped): the lane runs forge directly
+        env:
+          CAPPED_SCOPE: 1
         run: |
           if [ "${{ matrix.set }}" = n2304-kmax4096 ]; then script/pqz/at-set.sh ${{ matrix.set }} test
           else script/pqz/at-set.sh ${{ matrix.set }} test --no-match-path 'test/modules/*'; fi

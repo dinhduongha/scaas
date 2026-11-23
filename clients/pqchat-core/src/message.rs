@@ -638,7 +638,8 @@ impl PqChat {
 
     /// `content` sealed and signed for every store of `s` by `me` (S5, no per-message prompt): under the epoch
     /// [`PqChat::send_under`] gives, at the own chain's next counter, **taken before the seal**, its `parents` the session's
-    /// heads; shown at once, its id seen (its copy from a store is a duplicate).
+    /// heads; shown at once, its id seen (its copy from a store is a duplicate). Rust-only, as [`Content`] is.
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub async fn seal(
         &self,
         s: &SessionRef,

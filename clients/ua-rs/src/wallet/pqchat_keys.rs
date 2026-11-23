@@ -727,8 +727,26 @@ impl AppKeys {
     ) -> Result<SealedMessage> {
         h.check()?;
         let pt = Zeroizing::new(pad(canon)?);
+        self.seal_padded(k, pos, h, &pt, signer, env_nonce)
+    }
+
+    /// S5 from a padded plaintext `pt` (what [`pad`] wrote, or, in the vectors build only, a hostile one): encrypted at
+    /// `pos`, signed, the envelope and the payload.
+    #[allow(clippy::too_many_arguments)]
+    fn seal_padded(
+        &self,
+        k: &KeyHandle,
+        pos: &KeyHandle,
+        h: &Header,
+        pt: &[u8],
+        signer: &dyn Signer,
+        env_nonce: &[u8; 12],
+    ) -> Result<SealedMessage> {
+        if pt.len() > PT_MAX {
+            return Err(Error::Argument);
+        }
         let (mk, n) = self.message_key(pos, h)?;
-        let ciphertext = aead_seal(Alg::Aes256GcmSiv, &mk, &n, &message_aad(h), &pt)?;
+        let ciphertext = aead_seal(Alg::Aes256GcmSiv, &mk, &n, &message_aad(h), pt)?;
         let td = pqchat::typed("PqChatMessage", h.record(&ciphertext))?;
         let message_id = td.digest()?;
         let sig = pqchat::sign(signer, &td)?;
@@ -882,6 +900,40 @@ impl AppKeys {
         env_nonce: &[u8; 12],
     ) -> Result<SealedMessage> {
         self.seal_message_with(k, pos, h, content_json, signer, env_nonce)
+    }
+
+    /// pqchat-core T11's hostile harness: S5 from a given padded plaintext `pt` (not checked against [`pad`]: a non-zero fill
+    /// stays), with a fixed envelope nonce.
+    #[allow(clippy::too_many_arguments)]
+    pub fn pqchat_vectors_seal_padded(
+        &self,
+        k: &KeyHandle,
+        pos: &KeyHandle,
+        h: &Header,
+        pt: &[u8],
+        signer: &dyn Signer,
+        env_nonce: &[u8; 12],
+    ) -> Result<SealedMessage> {
+        h.check()?;
+        self.seal_padded(k, pos, h, pt, signer, env_nonce)
+    }
+
+    /// pqchat-core T11's hostile harness: a `sealedInfo` of a given padded plaintext `pt` (not canonicalised nor padded
+    /// here), with a fixed nonce.
+    pub fn pqchat_vectors_seal_info_raw(
+        &self,
+        k: &KeyHandle,
+        session: &[u8; 32],
+        epoch: &[u8; 32],
+        pt: &[u8],
+        nonce: &[u8; 12],
+    ) -> Result<Vec<u8>> {
+        if pt.len() > PT_MAX {
+            return Err(Error::Argument);
+        }
+        let key = self.sub_key(k, INFO, session, epoch)?;
+        let ct = aead_seal(Alg::Aes256GcmSiv, &key, nonce, &[], pt)?;
+        Ok([&nonce[..], &ct].concat())
     }
 
     /// The envelope of given inner bytes (a vector's `inner`, signed elsewhere), with a fixed nonce.

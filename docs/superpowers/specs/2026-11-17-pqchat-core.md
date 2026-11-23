@@ -302,7 +302,8 @@ each with its own revision (a write replaces one item at its expected revision; 
 | envelopes kept while locked or for unknown epochs, bounded | CLI-PQC-10, P19 | read again from the stores |
 | read positions: per room, per chain store `(instance, hint)`, per session's `sessionsOf` offset | paging resumes | rebuilt from offset 0 |
 
-No key, handle export, decrypted content or `sealedInfo` plaintext is written (§13 O7). **What a copied store reveals:** which
+No key, handle export, decrypted content or `sealedInfo` plaintext is written: the store holds no plaintext until §13 O7's
+(b) lands (owner 2026-11-23, with scaas-app after the pre-freeze tag). **What a copied store reveals:** which
 sessions the device holds (the chain shows that), and the links from a session to its room and its hints, which the chain does
 not show (D10, P20). So the app's storage keeps it encrypted at rest under the app's own store key, the one its Matrix store uses
 (the app's contract §11.4), and excludes the file from backups; the crate still holds no key (§13 requests).
@@ -378,6 +379,7 @@ signing power of the UA; the user's choice of what to accept; the user's gas.
 | A replica instance or a second chain | hold a different record under the same id (P32) | be counted: a replica's record counts only when equal to the home's, and membership is read at home |
 | One RPC endpoint the app did not name | answer reads | choose a key the client encrypts to, a recipient, an epoch it sends under, or a ciphertext it decrypts: those reads are trusted reads ([CLI-RPC-06](../../clients/scaas-rpc.md#CLI-RPC-06), [ARCH-POS-15](../../decisions.md#ARCH-POS-15), CLI-PQC-13); downgrade a member's KEM version (the highest seen is kept) |
 | A compromised endpoint the app named | serve a control-plane record the contract never accepted | have a wrap decapsulated that does not hash to the signed record's `wrapHashes`, or an epoch whose number or author's rights break the verified parent (CLI-PQC-07). Not caught: a whole forged chain of session and epoch records, since their signature bytes are not in state (§13 O11); strict majority over several named endpoints is the defence today |
+| A member (a holder of `K`) with an endpoint the app named | serve a session or epoch record whose `sealedInfo` it sealed again under `K` | not caught: covered by [O11](#13-open-points-and-requests)'s settled limit (signature bytes not in state); the current checks stay, strict majority over several named endpoints is the defence |
 | A homeserver | see room membership, Matrix ids, sizes, times, the event type and the hint (P20; no Matrix encryption in PqChat rooms); drop or delay events | read content or forge a record; hide a message also on a chain store |
 | A decryption-oracle attempt | send chosen ciphertexts to the user's keys | learn anything from the result: [ARCH-POS-13](../../decisions.md#ARCH-POS-13) as amended on 2026-11-13 puts the hybrid KEM's decapsulation and its one-shot AEAD outside that rule, and PqChat keeps its own no-reaction rule anyway (CLI-PQC-07); a wrap reaches the KEM only after its hash check against a member's signed record |
 | A restored or cloned store | bring back an old device id and counter | reuse a counter: a missing or different device anchor makes a new device id (CLI-PQC-09) |
@@ -415,7 +417,8 @@ cannot be reproduced through the SDK's surface is a gap in the surface, reported
 run over that one library (the SDK's binding rules, [CLI-SDK-12](../../clients/scaas-sdk.md#CLI-SDK-12)) carry its public API to
 Flutter (FRB 2), C++ / Qt (UniFFI or the fallback the SDK's spike picks) and later the browser, with the SDK's surface rules: `Arc`
 objects, owned strings and records, ids as strings, a pull subscription, no callback for events, decrypted content as `SecretBytes`
-through the SDK's copy calls. `attach_matrix` and the storage interface are Rust-only: wired inside the one library, never carried by
+through the SDK's copy calls, and a content to send as its JSON in a `SecretBytes` handle, parsed and validated in Rust (owner
+2026-11-23; no send entry takes a plain string). `attach_matrix` and the storage interface are Rust-only: wired inside the one library, never carried by
 a binding. Tests assert the generated surface holds no handle type and no byte accessor of one, and the app library's symbols and
 features hold no vectors-build entry.
 
@@ -492,6 +495,9 @@ until the next unlock. Any marker a creator sets is its claim and is trusted nei
 `app-matrix`, chain stores are read). (b) Seal the history under an app-scoped storage key the SDK derives for the account.
 **Recommendation: (a)** this round (no secret at rest, no new SDK row); (b) when the SDK offers the storage key and a user asks for
 offline history.
+**Settled (owner 2026-11-23): (b)**, a local plaintext history sealed under an app-scoped storage key the SDK derives for the
+account, the key a handle in the arena, never exported (consistent with T26's A-3 ruling); built with scaas-app, after the pre-freeze
+tag, beside PqVault's offline ciphertext cache. Until then (a) holds: the store holds no plaintext.
 
 **O8 — The device id's version.** (a) UUID v4 (no creation time on chain under `postMessage`). (b) v7. **Recommendation: (a)**, the
 controller proposal already in [ua-libraries.md](../../clients/ua-libraries.md#pqchat-clients).

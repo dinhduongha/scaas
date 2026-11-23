@@ -1520,19 +1520,115 @@ fn pqvault_sign_refusals() {
     );
 }
 
-/// Drift: `SCAAS_APP_IDS` is exactly `PqVaultTypes.sol`'s `APP_ID` (the generator's list), its hash `pqvault::app_id()`.
+/// Drift: `SCAAS_APP_IDS`'s contract rows are exactly `PqVaultTypes.sol`'s `APP_ID` (the generator's list), its hash
+/// `pqvault::app_id()`; the other rows are clientkeys' ([`scaas_app_ids_hold_pqchat`]).
 #[test]
 fn scaas_app_ids_match_the_contracts() {
     let t = src("pqvault/PqVaultTypes.sol");
     assert!(t.contains("bytes32 internal constant APP_ID = keccak256(\"scaas.pqvault.v1\");"));
-    assert_eq!(
-        SCAAS_APP_IDS,
-        &[("PqVaultTypes.APP_ID", "scaas.pqvault.v1")]
-    );
+    let contracts: Vec<_> = SCAAS_APP_IDS
+        .iter()
+        .filter(|(n, _)| n.ends_with(".APP_ID"))
+        .collect();
+    assert_eq!(contracts, [&("PqVaultTypes.APP_ID", "scaas.pqvault.v1")]);
     assert_eq!(
         scaas_ua::keccak256(SCAAS_APP_IDS[0].1.as_bytes()),
         pqvault::app_id()
     );
+}
+
+/// Drift (owner 2026-11-23): PqChat's app id, which no contract names, is in `SCAAS_APP_IDS` from clientkeys'
+/// `src/pqchat.js` (`APP_ID_TAG`, the generator's second source), its hash `pqchat::app_id()`.
+#[test]
+fn scaas_app_ids_hold_pqchat() {
+    let js = std::fs::read_to_string(format!(
+        "{}/../clientkeys/src/pqchat.js",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    assert!(js.contains("export const APP_ID_TAG = \"scaas.pqchat.v1\";"));
+    let row = SCAAS_APP_IDS
+        .iter()
+        .find(|(_, s)| *s == pqchat::APP_ID_TAG)
+        .expect("PqChat's app id in SCAAS_APP_IDS: run clients/ua-rs/scripts/gen_app_refusals.py");
+    assert_eq!(row.0, "pqchat.js APP_ID_TAG");
+    assert_eq!(scaas_ua::keccak256(row.1.as_bytes()), pqchat::app_id());
+}
+
+/// Owner 2026-11-23 (T10b): PqChat's app purpose is a SCaaS purpose. The generic app signing refuses PqChat's app id on the
+/// portable path and its `appPurpose` on the chain-bound path (`AppPurposeRefused`); the twins, another app's id and
+/// purpose, sign.
+#[test]
+fn generic_signing_refuses_pqchat_app_purpose() {
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let key = w.ua_key(0x0108, 0, 0).unwrap();
+    let id = pqchat::app_id();
+    let purpose = scaas_ua::ua_portable::app_purpose(&id).unwrap();
+    assert!(is_scaas_purpose(&purpose));
+    assert_eq!(
+        sign_app_record(
+            &key,
+            None,
+            &AppPath::Portable { app_id: id },
+            &portable(&id, "My App", None)
+        )
+        .err(),
+        Some(Error::AppPurposeRefused),
+        "PqChat's app id on the portable path"
+    );
+    assert_eq!(
+        sign_app_record(
+            &key,
+            None,
+            &AppPath::ChainBound { purpose },
+            &chain_bound("My App", true)
+        )
+        .err(),
+        Some(Error::AppPurposeRefused),
+        "PqChat's app purpose on the chain-bound path"
+    );
+    let own = scaas_ua::keccak256(b"an app's own purpose");
+    assert!(sign_app_record(
+        &key,
+        None,
+        &AppPath::Portable { app_id: APP },
+        &portable(&APP, "My App", None)
+    )
+    .is_ok());
+    assert!(sign_app_record(
+        &key,
+        None,
+        &AppPath::ChainBound { purpose: own },
+        &chain_bound("My App", true)
+    )
+    .is_ok());
+}
+
+/// Owner 2026-11-23 (T10b): with PqChat's app purpose refused by the generic call, PqChat's own paths still sign: a record
+/// entry and the contact card under `PURPOSE_PQCHAT`, each verifying under its key, and the app root key of PqChat's app id
+/// (the file seal's root; the seal itself in `pqchat-core`'s `a_file_is_sent_and_read`).
+#[test]
+fn pqchat_dedicated_paths_still_sign() {
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let k = w.ua_key(0x0131, 0, 0).unwrap();
+    let (ua, kind, kd) = id_of(&k);
+    let ok = |td: &TypedData, sig: &[u8]| {
+        let m = scaas_ua::ua_message(kind, &pqchat::purpose(), &td.digest().unwrap()).unwrap();
+        scaas_ua::verify::verify(kind, &kd, &m, sig, true, false)
+    };
+    let td = pqchat::typed("PqChatLeave", pq("records")["leave"]["record"].clone()).unwrap();
+    let s = pqchat::sign(&k, &td).expect("a record entry");
+    assert!(ok(&td, &s.signature));
+    let card = pqchat::Card {
+        ua,
+        kem_version: 1,
+        matrix_id: "@alice:example.org".into(),
+    };
+    let s = pqchat::sign_card(&k, &card).expect("the card");
+    assert!(ok(&pqchat::card_typed(&card).unwrap(), &s.signature));
+    let ak = w.app_keys();
+    ak.app_root_key(&pqchat::app_id(), &ua)
+        .expect("PqChat's app root");
 }
 
 /// Owner 2026-11-22 (CLI-PQV-15 (1) (b)): PqVault's dedicated path signs as an `msig` the way the generic `msig` paths do,

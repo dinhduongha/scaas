@@ -220,25 +220,35 @@ impl Local {
     }
 }
 
-/// The SDK over the anvil at `rpc` with the repository seed imported; its seed id.
-async fn sdk_at(rpc: &str, uid: &str, registry: &str, factory: &str) -> (Arc<Sdk>, String) {
-    let profile = ChainProfile {
-        key: CHAIN.into(),
+/// The chain's profile `key` over the endpoints `rpc` (`(url, class)`, in order) with `finality`.
+pub fn profile_of(
+    key: &str,
+    rpc: &[(&str, scaas_rpc::Class)],
+    uid: &str,
+    registry: &str,
+    factory: &str,
+    finality: Finality,
+) -> ChainProfile {
+    ChainProfile {
+        key: key.into(),
         family: Family::Evm,
         chain_id: Some(31337),
         chain_uid: uid.into(),
-        rpc: vec![EndpointConfig {
-            url: rpc.into(),
-            class: scaas_rpc::Class::Named,
-            label: None,
-            auth: None,
-        }],
+        rpc: rpc
+            .iter()
+            .map(|(url, class)| EndpointConfig {
+                url: (*url).into(),
+                class: *class,
+                label: None,
+                auth: None,
+            })
+            .collect(),
         rpc_policy: scaas_rpc::Policy::Failover,
         gateways: vec![],
         registry: Some(registry.into()),
         factory: Some(factory.into()),
         router: None,
-        finality: Finality::Depth(0),
+        finality,
         tx_gas_cap: Some(TX_CAP),
         gas: Default::default(),
         max_valid_secs: None,
@@ -252,9 +262,33 @@ async fn sdk_at(rpc: &str, uid: &str, registry: &str, factory: &str) -> (Arc<Sdk
         pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
-    };
+    }
+}
+
+/// More profiles of the same chain beside [`CHAIN`]'s, from `(rpc, uid, registry, factory)` (the e2e's: another finality,
+/// another endpoint list).
+pub type Extra<'a> = &'a dyn Fn(&str, &str, &str, &str) -> Vec<ChainProfile>;
+
+/// The SDK over the anvil at `rpc` (profile [`CHAIN`], its final block the latest) and `extra`, with the repository seed
+/// imported; its seed id.
+async fn sdk_at(
+    rpc: &str,
+    uid: &str,
+    registry: &str,
+    factory: &str,
+    extra: Vec<ChainProfile>,
+) -> (Arc<Sdk>, String) {
+    let mut profiles = vec![profile_of(
+        CHAIN,
+        &[(rpc, scaas_rpc::Class::Named)],
+        uid,
+        registry,
+        factory,
+        Finality::Depth(0),
+    )];
+    profiles.extend(extra);
     let sdk = Sdk::open(SdkConfig {
-        profiles: vec![profile],
+        profiles,
         store: Vaults::new(),
         authenticator: None,
         rp_id: None,
@@ -327,6 +361,15 @@ pub async fn local_with(
     accounts: &[(u32, bool, u16)],
     instances: usize,
 ) -> (Local, Vec<Me>, Vec<String>) {
+    local_with_extra(accounts, instances, &|_, _, _, _| vec![]).await
+}
+
+/// [`local_with`] with `extra` profiles in the SDK the tests write through.
+pub async fn local_with_extra(
+    accounts: &[(u32, bool, u16)],
+    instances: usize,
+    extra: Extra<'_>,
+) -> (Local, Vec<Me>, Vec<String>) {
     let port = std::net::TcpListener::bind("127.0.0.1:0")
         .and_then(|l| l.local_addr())
         .expect("a free port")
@@ -370,7 +413,7 @@ pub async fn local_with(
     }
     let mut mes = vec![];
     {
-        let (sdk, seed) = sdk_at(&rpc, &uid, &registry, &factory).await;
+        let (sdk, seed) = sdk_at(&rpc, &uid, &registry, &factory, vec![]).await;
         for (account, kem, kind) in accounts {
             mes.push(register_kind(&sdk, &seed, *account, *kem, *kind).await);
         }
@@ -394,7 +437,14 @@ pub async fn local_with(
         "the reloaded chain has another genesis"
     );
     positive_control(&rpc);
-    let (sdk, seed) = sdk_at(&rpc, &uid, &registry, &factory).await;
+    let (sdk, seed) = sdk_at(
+        &rpc,
+        &uid,
+        &registry,
+        &factory,
+        extra(&rpc, &uid, &registry, &factory),
+    )
+    .await;
     for m in &mut mes {
         if let KeyRef::Ua { seed: s, .. } = &mut m.key {
             s.clone_from(&seed);

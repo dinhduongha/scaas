@@ -26,7 +26,7 @@ MUTANTS = [
       (K, "let mk = key32(&hmac_sha256(&ck[..], &[1]))?;", "let mk = key32(&hmac_sha256(&ck[..], &[2]))?;")],
      T + "chains_and_the_far_read"),
     ("S5 dropping the AAD",
-     [(K, "aead_seal(Alg::Aes256GcmSiv, &mk, &n, &message_aad(h), &pt)?;", "aead_seal(Alg::Aes256GcmSiv, &mk, &n, &[], &pt)?;")],
+     [(K, "aead_seal(Alg::Aes256GcmSiv, &mk, &n, &message_aad(h), pt)?;", "aead_seal(Alg::Aes256GcmSiv, &mk, &n, &[], pt)?;")],
      T + "message_envelope_payload"),
     ("the canonical check sorting by UTF-8",
      [(K, "keys.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));", "keys.sort();")], T + "canonical_json_rows"),

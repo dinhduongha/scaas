@@ -448,3 +448,56 @@ impl MatrixTransport for Http {
         self.rec(format!("hold_invite {room} {hold}"));
     }
 }
+
+/// A client that serves only a room's last `n` events from its history (the server's retention reached: no page before),
+/// every other call the inner client's (CLI-PQC-14's long chain).
+pub struct LastN {
+    pub inner: std::sync::Arc<Http>,
+    pub n: usize,
+}
+
+#[async_trait]
+impl MatrixTransport for LastN {
+    fn user_id(&self) -> String {
+        self.inner.user_id()
+    }
+    async fn create_room(&self) -> Result<String, PqChatError> {
+        self.inner.create_room().await
+    }
+    async fn joined(&self, room: &str) -> Result<bool, PqChatError> {
+        self.inner.joined(room).await
+    }
+    async fn members(&self, room: &str) -> Result<Vec<String>, PqChatError> {
+        self.inner.members(room).await
+    }
+    async fn join(&self, room: &str) -> Result<(), PqChatError> {
+        self.inner.join(room).await
+    }
+    async fn invite(&self, room: &str, user: &str) -> Result<(), PqChatError> {
+        self.inner.invite(room, user).await
+    }
+    async fn remove(&self, room: &str, user: &str) -> Result<(), PqChatError> {
+        self.inner.remove(room, user).await
+    }
+    async fn set_admin(&self, room: &str, user: &str, admin: bool) -> Result<(), PqChatError> {
+        self.inner.set_admin(room, user, admin).await
+    }
+    async fn send_event(&self, room: &str, content: Value) -> Result<(), PqChatError> {
+        self.inner.send_event(room, content).await
+    }
+    async fn history(
+        &self,
+        room: &str,
+        _before: Option<String>,
+    ) -> Result<HistoryPage, PqChatError> {
+        let p = self.inner.history(room, None).await?;
+        let skip = p.events.len().saturating_sub(self.n);
+        Ok(HistoryPage {
+            events: p.events.into_iter().skip(skip).collect(),
+            before: None,
+        })
+    }
+    async fn hold_invite(&self, room: &str, hold: bool) {
+        self.inner.hold_invite(room, hold).await
+    }
+}

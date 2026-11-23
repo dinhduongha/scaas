@@ -20,6 +20,15 @@ pub fn pqchat_open(sdk: Arc<Sdk>, conf: PqChatConfig) -> Result<Arc<PqChat>, PqC
     PqChat::new(sdk, Arc::new(pqchat_core::MemoryStore::new()), conf)
 }
 
+/// A new secret of `len` zero bytes, filled by the C copy call `scaas_sdk_secret_write`: how an app hands a content's JSON
+/// to `PqChat::send` (owner 2026-11-23).
+#[frb(sync)]
+pub fn secret_new(len: u32) -> Result<Arc<SecretBytes>, PqChatError> {
+    Ok(Arc::new(
+        SecretBytes::new(len as usize).map_err(|_| PqChatError::Internal)?,
+    ))
+}
+
 /// A secret's id for the C copy calls (`scaas_sdk_secret_read`): the only way a decrypted content's bytes leave.
 #[frb(sync)]
 pub fn secret_id(s: &Arc<SecretBytes>) -> u64 {

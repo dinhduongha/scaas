@@ -975,6 +975,64 @@ async fn generic_signing_refuses_pqchat() {
     assert_eq!(code(sign(AppPath::Portable, typed(mine)).await), "Ok");
 }
 
+/// Owner 2026-11-23 (T10b): under a scope of PqChat's own app id, the generic app signing is refused on both paths
+/// (`AppPurposeRefused`: PqChat's app purpose is a SCaaS purpose, `scaas-ua`'s generated list); the twins under another app
+/// id sign. PqChat's own paths are the named entries (`pqchat_sign_*`, the card, `seal_for_arweave`).
+#[tokio::test(flavor = "multi_thread")]
+async fn generic_signing_refuses_pqchat_app_id() {
+    let _one = ONE.lock().await;
+    let (sdk, seed, _c) = on_fake().await;
+    let typed = |domain: Value| {
+        let fields: Vec<Value> = [
+            ("name", "string"),
+            ("version", "string"),
+            ("chainId", "uint256"),
+            ("verifyingContract", "address"),
+            ("salt", "bytes32"),
+        ]
+        .iter()
+        .filter(|(k, _)| domain.get(*k).is_some())
+        .map(|(k, t)| json!({"name": k, "type": t}))
+        .collect();
+        json!({
+            "types": {"EIP712Domain": fields, "Note": [{"name": "body", "type": "string"}]},
+            "primaryType": "Note",
+            "domain": domain,
+            "message": {"body": "hello"},
+        })
+        .to_string()
+    };
+    let bound =
+        json!({"name": "My App", "version": "1", "chainId": 31337, "verifyingContract": VIEW});
+    let chain_bound = AppPath::ChainBound {
+        chain: "local".into(),
+        purpose: None,
+    };
+    for (id, want) in [
+        (keccak_hex(b"scaas.pqchat.v1"), "AppPurposeRefused"),
+        (APP_ID.to_string(), "Ok"),
+    ] {
+        let a = AppCore::new(
+            sdk.clone(),
+            AppDesc {
+                app_id: Some(id.clone()),
+                ..desc(&[PQC])
+            },
+        )
+        .unwrap();
+        let mine = json!({"name": "My App", "version": "1", "salt": id});
+        let p = a
+            .sign_app_record(ua(&seed, 0x0131), AppPath::Portable, typed(mine))
+            .await;
+        assert_eq!(code(p), want, "portable under {id}");
+        let b = a
+            .sign_app_record(ua(&seed, 0x0131), chain_bound.clone(), typed(bound.clone()))
+            .await;
+        assert_eq!(code(b), want, "chain-bound under {id}");
+        drop(a);
+    }
+}
+
 /// `read_app`: a named JSON answer from the entry's outputs at the final block; trusted reads skip a discovered-only list
 /// elsewhere (the KEM read's test); bounds by name.
 #[tokio::test(flavor = "multi_thread")]
@@ -1551,4 +1609,115 @@ async fn open_file_checks_ct_sha256_first() {
         "FileLength"
     );
     assert_eq!(code(open(s.object.clone(), vec![0; 31])), "Argument");
+}
+
+/// pqchat-core T11's hostile entries (vectors build only): the envelope of a record and a signature given apart reproduces
+/// the `envelope` row; a `sealedInfo` of a given padded plaintext reproduces each `sealedInfo` row and, its plaintext made
+/// non-canonical (one space), is refused at K5 (`PqChatContent`) beside its twin; S5 from the `message` row's padded
+/// plaintext opens, and the same with a non-zero fill byte under `mk` is refused (`PqChatContent`).
+#[tokio::test(flavor = "multi_thread")]
+async fn hostile_seals_for_the_e2e() {
+    let _one = ONE.lock().await;
+    let (sdk, seed, _c) = on_fake().await;
+    let a = AppCore::new(sdk, desc(&[PQC])).unwrap();
+    let (m, rec) = (pq("messages"), pq("records"));
+    let e = &m["envelope"];
+    let k = a
+        .vectors_import(&seed, a32(&e["K"]), AppKeyUsage::Derive)
+        .unwrap();
+    let r = &rec["message"]["record"];
+    let env = a
+        .pqchat_vectors_envelope(
+            k.clone(),
+            record_of(r),
+            sig_of(&rec["message"]["uaSig"]),
+            a12(&e["nonce"]),
+        )
+        .unwrap();
+    assert_eq!(env, unhex(&e["env"]));
+    for row in m["sealedInfo"].as_array().unwrap() {
+        let k = a
+            .vectors_import(&seed, a32(&row["K"]), AppKeyUsage::Derive)
+            .unwrap();
+        let (sid, eid) = (s(&row["sessionId"]), s(&row["epochId"]));
+        let sealed = a
+            .pqchat_vectors_seal_info_raw(
+                k.clone(),
+                sid.clone(),
+                eid.clone(),
+                unhex(&row["pt"]),
+                a12(&row["nonce"]),
+            )
+            .unwrap();
+        assert_eq!(sealed, unhex(&row["sealedInfo"]), "{}", row["name"]);
+        let json = row["json"].as_str().unwrap();
+        let spaced = format!("{{ {}", &json[1..]);
+        let pt = |t: &str| {
+            let mut p = (t.len() as u32).to_be_bytes().to_vec();
+            p.extend_from_slice(t.as_bytes());
+            p.resize(
+                unhex(&row["pt"]).len().max(p.len().next_multiple_of(256)),
+                0,
+            );
+            p
+        };
+        for (t, want) in [(json, "Ok"), (spaced.as_str(), "PqChatContent")] {
+            let x = a
+                .pqchat_vectors_seal_info_raw(k.clone(), sid.clone(), eid.clone(), pt(t), [7; 12])
+                .unwrap();
+            assert_eq!(
+                code(a.pqchat_open_info(k.clone(), sid.clone(), eid.clone(), x)),
+                want,
+                "{}",
+                row["name"]
+            );
+        }
+    }
+    // S5 from a padded plaintext at the account's own chain (the sender is the signing account)
+    let k = a
+        .vectors_import(&seed, a32(&m["message"]["K"]), AppKeyUsage::Derive)
+        .unwrap();
+    let wl = Wallet::from_mnemonic(REPO, "").unwrap();
+    let me = format!(
+        "0x{}",
+        hexs(&wl.ua_key(0x0131, 0, 0).unwrap().ua().unwrap())
+    );
+    let header = PqMessageHeader {
+        session_id: s(&r["sessionId"]),
+        epoch_id: s(&r["epochId"]),
+        device: s(&r["device"]),
+        counter: 3,
+        parents: vec![],
+    };
+    let pos = || {
+        let p0 = a
+            .pqchat_chain(
+                k.clone(),
+                s(&r["sessionId"]),
+                s(&r["epochId"]),
+                me.clone(),
+                s(&r["device"]),
+            )
+            .unwrap();
+        a.pqchat_advance(p0, 3).unwrap()
+    };
+    // the `message` row's padded plaintext, and the same with one fill byte non-zero (as the `unpadRefused` row)
+    let twin = unhex(&m["message"]["pt"]);
+    let mut fill = twin.clone();
+    *fill.last_mut().unwrap() = 1;
+    for (pt, want) in [(twin, "Ok"), (fill, "PqChatContent")] {
+        let x = a
+            .pqchat_vectors_seal_padded(
+                ua(&seed, 0x0131),
+                k.clone(),
+                pos(),
+                header.clone(),
+                pt,
+                [9; 12],
+            )
+            .await
+            .unwrap();
+        assert_eq!(x.record.sender, me);
+        assert_eq!(code(a.pqchat_open_message(pos(), x.record)), want);
+    }
 }

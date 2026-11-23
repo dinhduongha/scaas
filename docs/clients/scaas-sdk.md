@@ -380,11 +380,20 @@ wrap read from state, checked by the app core against `wrapHashes[i]` before it 
 `pqchat_message_id` (a received message's `typed(PqChatMessage)`, its dedupe id), `pqchat_session_id` and
 `pqchat_epoch_id` (S4: the ids the wraps' AAD binds, before signing); no key, no network. `SecretBytes` is re-exported so
 an app core holds its plaintexts without a `scaas-ua` dependency of its own.
+Three more `vectors` entries are pqchat-core T11's hostile harness (2026-11-23; BUILT, UNAUDITED), each sealing what an
+honest client never seals: `pqchat_vectors_envelope` (the envelope of a record and a signature given apart, such as a
+record signed through the generic `sign_pqchat_message` by a UA other than its sender), `pqchat_vectors_seal_padded` (S5 from
+a given padded plaintext: a non-zero fill stays) and `pqchat_vectors_seal_info_raw` (a `sealedInfo` of a given plaintext,
+neither canonicalised nor padded); `tests/pqchat_keys.rs` `hostile_seals_for_the_e2e` reproduces the `envelope` and
+`sealedInfo` rows through them and shows K5 and the content check refuse the hostile forms.
 The signed contact card (UA-7 §14 O7, owner 2026-11-22; BUILT, UNAUDITED): `sign_pqchat_card(account, kem_version,
 matrix_id)` signs `PqChatCard(bytes32 ua, uint64 kemVersion, string matrixId)` in `DS_C` under `PURPOSE_PQCHAT`, the UA from
 the account, the Matrix id empty or well formed (`Argument`); `verify_pqchat_card(chain, ua, card, sig)` is V1's check of a
 card for `ua` (its `ua` that UA, its Matrix id well formed, the signature the UA's on the registry's records read at the final
 block as a read that feeds a decryption), `false` with no detail. Rows: `smartcontracts/vectors/pqchat/cards.json`.
+`sign_app_record` and `verify_app_record` refuse a scope of PqChat's app id `keccak256("scaas.pqchat.v1")` on both paths
+(`AppPurposeRefused`: its `appPurpose` is in `ua-rs`'s generated SCaaS list, owner 2026-11-23; BUILT, UNAUDITED); PqChat's
+named entries, the card calls and `seal_for_arweave` under its scope still sign.
 `argon2id_passphrase` (PqVault V9, 2026-11-21; BUILT, UNAUDITED) is `argon2id` of a typed passphrase after RFC 8265's
 OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control character or bytes that are not UTF-8: `Argument`), so
 a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`. PqVault's V1 vectors

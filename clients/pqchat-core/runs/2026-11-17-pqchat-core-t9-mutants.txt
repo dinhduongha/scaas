@@ -1,10 +1,10 @@
 # t9 mutants (name | outcome | commit | test | first failure line)
-read an unlisted instance | killed | 632492302 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery finds_every_session_once | panicked at tests/recovery.rs:169:5:
-skip de-duplication | killed | 5462652f3 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery finds_every_session_once | panicked at tests/recovery.rs:155:5:
-show a session whose home is not listed | killed | 632492302 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery shown_only_with_a_listed_equal_home | panicked at tests/recovery.rs:248:5:
-open a pending wrap without the user's look | killed | a010e6496 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery pending_session_reaches_nothing | panicked at tests/recovery.rs:274:5:
-join the room before acceptance | killed | 632492302 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery pending_session_reaches_nothing | panicked at tests/recovery.rs:275:5:
-drop an event that arrives while locked | killed | 632492302 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery locked_events_kept_and_read_at_unlock | panicked at tests/recovery.rs:507:5:
-keep the old device id on an anchor mismatch | killed | a010e6496 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery device_bound_to_its_anchor | panicked at tests/recovery.rs:428:5:
-count a leave as acceptance | killed | 632492302 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery left_session_declined | panicked at tests/recovery.rs:371:5:
+read an unlisted instance | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery finds_every_session_once | panicked at tests/recovery.rs:177:5:
+skip de-duplication | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery finds_every_session_once | panicked at tests/recovery.rs:163:5:
+show a session whose home is not listed | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery shown_only_with_a_listed_equal_home | panicked at tests/recovery.rs:256:5:
+open a pending wrap without the user's look | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery pending_session_reaches_nothing | panicked at tests/recovery.rs:274:5:
+join the room before acceptance | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery pending_session_reaches_nothing | panicked at tests/recovery.rs:283:5:
+drop an event that arrives while locked | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery locked_events_kept_and_read_at_unlock | panicked at tests/recovery.rs:515:5:
+keep the old device id on an anchor mismatch | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery device_bound_to_its_anchor | panicked at tests/recovery.rs:428:5:
+count a leave as acceptance | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test recovery left_session_declined | panicked at tests/recovery.rs:379:5:
 8 mutants, 8 killed, 0 survived, 0 not loaded, 0 other failure

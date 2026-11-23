@@ -1,0 +1,6 @@
+# r3 mutants (name | outcome | commit | test | first failure line)
+ua-rs: PqChat's app id dropped from the generated list | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core generic_signing_refuses_pqchat_app_purpose | panicked at tests/app_core.rs:1567:5:
+ua-rs: a PqChat record entry refused as a SCaaS app's | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core pqchat_dedicated_paths_still_sign | panicked at tests/app_core.rs:1620:35:
+ua-rs: the contact card refused as a SCaaS app's | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core pqchat_dedicated_paths_still_sign | panicked at tests/app_core.rs:1627:42:
+ua-rs: the app root (the file seal's) refused for a SCaaS app | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --test stores a_file_is_sent_and_read | panicked at tests/stores.rs:879:14:
+4 mutants, 4 killed, 0 survived, 0 not loaded, 0 other failure

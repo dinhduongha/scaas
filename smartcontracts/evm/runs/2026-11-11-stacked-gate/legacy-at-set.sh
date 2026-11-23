@@ -10,7 +10,8 @@
 set -eu
 S=${1:?set or default}
 ROOT=$(cd "$(dirname "$0")/../../../.." && pwd)
-EVM=$ROOT/smartcontracts/evm
+# LEGACY_EVM: the evm tree whose out/t66b-legacy is written (a set lane of script/pqz/lanes.sh); default this one.
+EVM=${LEGACY_EVM:-$ROOT/smartcontracts/evm}
 PRE=d142b57c
 if [ "$S" = default ]; then
     P=$ROOT/scratchpad/t66b-pre
@@ -20,7 +21,7 @@ else
         rm -rf "$P" && mkdir -p "$P"
         git -C "$ROOT" archive --format=tar "$PRE" smartcontracts/evm/src smartcontracts/evm/foundry.toml | tar -x -C "$P"
         git -C "$ROOT" show "$PRE:pqz-core/params/sets/$S/PqzSet.sol" >"$P/smartcontracts/evm/src/pqz/PqzSet.sol"
-        cp -al "$EVM/lib" "$P/smartcontracts/evm/lib"
+        cp -a "$EVM/lib" "$P/smartcontracts/evm/lib"
         (cd "$P/smartcontracts/evm" && "$ROOT/scripts/capped" "$HOME/.foundry/bin/forge" build src >/dev/null)
     fi
 fi

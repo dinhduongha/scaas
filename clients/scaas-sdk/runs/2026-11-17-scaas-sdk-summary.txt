@@ -230,6 +230,7 @@ sdk-min | 7daa8b2bc | 0 | 74 passed, 0 failed, 0 ignored (14 binaries)
 ck-test | 898fa1ebc | 0 | node: 568 pass, 0 fail, 4 skipped
 # T41.arweave's scaas-rpc and SDK parts (CA-T19, CA-T20): code 6f2eb3dbd, the shared ArweaveItem code 7daa8b2bc (error_codes_are_names was red at 6f2eb3dbd in sdk-test, sdk-noevm, sdk-min: fixed, rows above at 7daa8b2bc), the notC9 rows 291a864b2 (the survivor of t41arw2 killed); the rpc rows at 6f2eb3dbd are unchanged by the two later code commits (scaas-rpc untouched)
 ua-verify-only | 7992a33e7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
+rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
 ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # PqVault's dedicated signing path (owner 2026-11-22, CLI-PQV-13) 4f64cf766, merged with origin/ua-rs-sign a97cce414 at
 # caecc3ade, mutant text fix 7992a33e7: the 14 rows above at 7992a33e7, clean tree. sdk-test's four reds of 8c869f3c5
@@ -265,6 +266,7 @@ node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # pqchat-core T8 (on pqchat-core-impl): the app core scope made again after an unlock (d6abf1f97, test app_core::scope_after_lock_and_unlock); sdk-clippy red at e5573b3d6 (type_complexity on that cache), its type named at f238113b8 (no behaviour change), sdk-clippy green there; sdk-test and sdk-vectors at e5573b3d6.
 ua-arweave | ea980befa | 0 | 32 passed, 0 failed, 0 ignored (6 binaries)
 ua-verify-only | ea980befa | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
+docs | ea980befa | 0 | -
 ua-arweave | 028da021c | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 # the rows above at eff2aa3e5 (the merge of ua-rs-sign 3da595648, e33e863c9, and its regenerated bindings) and bind-js at
 # e2c2ede7c (its scan hardened; the only later code change): every bind-* step, bind-gen, sdk-uniffi, ffi, sdk-wasm,
@@ -292,6 +294,18 @@ gas-gen | 7c637b66f | 0 | -
 sdk-deny | 4a96991f4 | 0 | -
 sdk-clippy-default | 4a96991f4 | 0 | -
 sdk-clippy-min | 4a96991f4 | 0 | -
+sdk-wasm | 4a96991f4 | 0 | -
+sdk-uniffi | 4a96991f4 | 0 | 18 passed, 0 failed, 0 ignored (2 binaries)
+ffi | 4a96991f4 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+bind-cpp | 4a96991f4 | 0 | ctest: 0 tests failed out of 1
+bind-cs | 4a96991f4 | 0 | dotnet: 4 passed, 0 failed
+bind-python | 4a96991f4 | 0 | unittest: 7 ran, OK
+bind-kotlin | 4a96991f4 | 0 | kotlin: PASS (0 failures)
+bind-swift | 4a96991f4 | 0 | swift: PASS (0 failures)
+bind-js | 4a96991f4 | 0 | node: 5 pass, 0 fail, 0 skipped
+bind-java | 4a96991f4 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
+bind-go | 4a96991f4 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
+bind-dart | 4a96991f4 | 0 | dart: +14:
 # the rows above at 4a96991f4 (the merge of ua-rs-sign 977435769 with the SDK's pinned_reads, 938133189, and its regenerated
 # bindings): the runner names the commit it started at; from sdk-wasm on the tree was d7910088b, whose only change is the CLI's
 # completeness test (it skips the binding adapters; lib::load_check excluded), after cli rc 101 on exactly that list. docs,
@@ -345,3 +359,17 @@ mutants-check | 78d410f45 | 0 | -
 sdk-clippy | 78d410f45 | 0 | -
 sdk-clippy-noevm | 78d410f45 | 0 | -
 sdk-uniffi | 78d410f45 | 0 | 21 passed, 0 failed, 0 ignored (4 binaries)
+mutants-check | 3d96c45be | 0 | -
+sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
+features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+sdk-test | 190cc2ba7 | 0 | 443 passed, 0 failed, 18 ignored (42 binaries)
+sdk-clippy | 190cc2ba7 | 0 | -
+sdk-vectors | 190cc2ba7 | 0 | 21 passed, 0 failed, 0 ignored (2 binaries)
+ua-test | 190cc2ba7 | 0 | 629 passed, 0 failed, 3 ignored (64 binaries)
+ua-clippy | 190cc2ba7 | 0 | -
+ua-vectors | 190cc2ba7 | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
+ua-appcore | 190cc2ba7 | 0 | 20 passed, 0 failed, 0 ignored (1 binaries)
+ua-verify-only | 190cc2ba7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
+ua-core | 190cc2ba7 | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
+cli | 190cc2ba7 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+bind-gen | 190cc2ba7 | 0 | -

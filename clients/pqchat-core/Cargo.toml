@@ -57,6 +57,11 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 name = "vectors"
 required-features = ["vectors"]
 
+# plan T11: the hostile harness seals what an honest client never does through the SDK's vectors build
+[[test]]
+name = "e2e"
+required-features = ["vectors"]
+
 # the SDK's: the dependencies built at opt-level 3 (scrypt and ML-KEM crawl unoptimised)
 [profile.dev.package."*"]
 opt-level = 3

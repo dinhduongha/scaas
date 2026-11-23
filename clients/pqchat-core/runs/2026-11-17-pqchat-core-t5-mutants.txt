@@ -1,10 +1,10 @@
 # t5 mutants (name | outcome | commit | test | first failure line)
-epoch = parent (no + 1) | killed | 50fdb74b4 | ../../scripts/capped cargo test --locked --offline -j2 --test session plain_rekey_is_the_parents_number_plus_one | panicked at tests/session.rs:221:5:
-K reused from the parent | killed | 50fdb74b4 | ../../scripts/capped cargo test --locked --offline -j2 --test session rekey_draws_a_fresh_k | panicked at tests/session.rs:237:5:
-the creator absent from admins | killed | 50fdb74b4 | ../../scripts/capped cargo test --locked --offline -j2 --test session two_members_one_write | panicked at tests/session.rs:114:5:
-a removed member kept | killed | 50fdb74b4 | ../../scripts/capped cargo test --locked --offline -j2 --test session removed_member_dropped_and_authors_nothing | panicked at tests/session.rs:333:5:
-the highest KEM version replaced by the first seen | killed | 50fdb74b4 | ../../scripts/capped cargo test --locked --offline -j2 --test session wraps_at_the_highest_version | panicked at tests/session.rs:471:5:
-via not set | killed | 50fdb74b4 | ../../scripts/capped cargo test --locked --offline -j2 --test session msig_seat_expanded | panicked at tests/session.rs:643:9:
-a rekey started automatically on a raised version | killed | 50fdb74b4 | ../../scripts/capped cargo test --locked --offline -j2 --test session raised_version_starts_no_rekey | panicked at tests/session.rs:506:5:
-a send under a child before its finality | killed | 50fdb74b4 | ../../scripts/capped cargo test --locked --offline -j2 --test session sends_held_until_the_child_is_final | panicked at tests/session.rs:444:5:
+epoch = parent (no + 1) | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test session plain_rekey_is_the_parents_number_plus_one | panicked at tests/session.rs:221:5:
+K reused from the parent | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test session rekey_draws_a_fresh_k | panicked at tests/session.rs:237:5:
+the creator absent from admins | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test session two_members_one_write | panicked at tests/session.rs:114:5:
+a removed member kept | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test session removed_member_dropped_and_authors_nothing | panicked at tests/session.rs:333:5:
+the highest KEM version replaced by the first seen | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test session wraps_at_the_highest_version | panicked at tests/session.rs:471:5:
+via not set | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test session msig_seat_expanded | panicked at tests/session.rs:646:9:
+a rekey started automatically on a raised version | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test session raised_version_starts_no_rekey | panicked at tests/session.rs:506:5:
+a send under a child before its finality | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test session sends_held_until_the_child_is_final | panicked at tests/session.rs:444:5:
 8 mutants, 8 killed, 0 survived, 0 not loaded, 0 other failure
