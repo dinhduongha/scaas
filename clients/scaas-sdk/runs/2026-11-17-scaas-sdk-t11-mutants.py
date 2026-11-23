@@ -26,7 +26,7 @@ MUTANTS = [
     ("the gateway's chain_uid not compared", [("clients/scaas-sdk/src/wallet/families/mod.rs", ".is_some_and(|u| u.eq_ignore_ascii_case(&c.profile.chain_uid))", ".is_some()")],
      U + "gateway_chain_uid_mismatch_is_refused"),
     ("only type 4 refused", [(W + "native_evm.rs", "if req.tx_type.is_some_and(|t| t > 2) {", "if req.tx_type.is_some_and(|t| t == 4) {")], T + "native_send_types"),
-    ("the index's tokens shown listed", [(W + "tokens.rs", "                listed: false,\n", "                listed: true,\n")],
+    ("the index's tokens shown listed", [(W + "tokens.rs", "                decimals,\n                listed: false,\n", "                decimals,\n                listed: true,\n")],
      T + "factory_index_token_off_list_is_unlisted"),
 ]
 
