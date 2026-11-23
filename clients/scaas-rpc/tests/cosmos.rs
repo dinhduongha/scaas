@@ -19,6 +19,9 @@ async fn node(height: u64, chain: &'static str) -> String {
         match p.as_str() {
             "/status" => ok(json!({"result": {"node_info": {"network": chain}, "sync_info": {"latest_block_height": height.to_string()}}})),
             "/block" => ok(json!({"error": {"code": -32603, "message": "height 99 must be less than or equal to the current blockchain height"}})),
+            // review T26 B-10: a 200 with neither `result` nor `error`, and one whose `result` is null
+            "/block_results" => ok(json!({})),
+            "/validators" => ok(json!({"jsonrpc": "2.0", "result": null})),
             "/cosmos/base/tendermint/v1beta1/node_info" => ok(json!({"default_node_info": {"network": chain}})),
             "/cosmos/base/tendermint/v1beta1/blocks/latest" => ok(json!({"block": {"header": {"height": height.to_string()}}})),
             "/cosmos/tx/v1beta1/simulate" => (axum::http::StatusCode::OK, Vec::new()),
@@ -50,6 +53,15 @@ async fn the_cometbft_and_rest_reads() {
     match n.rpc_at(0, "block?height=99").await.unwrap_err() {
         FamilyError::Rpc { error, .. } => assert_eq!(error["code"], -32603),
         e => panic!("{e:?}"),
+    }
+    // review T26 B-10 (CLI-RPC-07): an answer without its `result` is the endpoint's malformed answer, never a null result
+    for path in ["block_results?height=7", "validators"] {
+        match n.rpc_at(0, path).await.unwrap_err() {
+            FamilyError::Failure(f) => {
+                assert_eq!(f.kind, scaas_rpc::FailureKind::AnswerMalformed, "{path}")
+            }
+            e => panic!("{path}: {e:?}"),
+        }
     }
     let (s, v) = n
         .rest
