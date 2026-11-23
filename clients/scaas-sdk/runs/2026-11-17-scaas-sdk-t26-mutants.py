@@ -18,6 +18,11 @@ APT = "clients/scaas-rpc/src/aptos.rs"
 COS = "clients/scaas-rpc/src/cosmos.rs"
 CPP = "clients/scaas-sdk/bindings/cpp/same_blocks.py"
 CS = "clients/scaas-sdk/bindings/cs/CopyCall.cs"
+SEEDS = "clients/scaas-sdk/src/vault/seeds.rs"
+UNL = "clients/scaas-sdk/src/vault/unlock.rs"
+FAM = "clients/scaas-sdk/src/wallet/families/mod.rs"
+SEC = "clients/ua-rs/src/wallet/secret.rs"
+APK = "clients/ua-rs/src/wallet/appkey.rs"
 SW = "clients/scaas-sdk/bindings/swift/CopyCall.swift"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 F = (
@@ -37,6 +42,7 @@ STATUS = """    let status = match &w.tx {
         }
         None => None,
     };"""
+U = "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors"
 R = "cd clients/scaas-rpc && ../../scripts/capped cargo test --locked --offline -j2 --all-features"
 T = "cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features " + F
 MUTANTS = [
@@ -136,7 +142,7 @@ MUTANTS = [
     ),
     (
         "B-7: one unreadable gateway refuses every quote",
-        [(QUO, "            Err(e) => last = Some(e),", "            Err(e) => return Err(e.into()),")],
+        [(FAM, "            Err(e) => last = Some(e),", "            Err(e) => return Err(e.into()),")],
         T + " --lib op::tests::a_gateway_down_or_of_another_chain_is_left_out",
     ),
     (
@@ -181,6 +187,57 @@ MUTANTS = [
         [(SW, "        out.withUnsafeMutableBytes { if let p = $0.baseAddress { _ = memset(p, 0, $0.count) } }\n        return r", "        return r")],
         "cd clients/scaas-sdk/bindings/swift && SWIFTC=" + TOOLS + '/swift-6.4.2/usr/bin/swiftc" bash run.sh',
         "the copy call zeroes its read buffer",
+    ),
+    (
+        "A-1: a write signs a stored entry unchecked",
+        [(SEEDS, "            stored_ok(&open.wallet, &e)?;\n            f(&mut e)?;", "            f(&mut e)?;")],
+        T + " --test vault an_entry_changed_after_unlock_is_never_trusted_nor_signed_again",
+    ),
+    (
+        "A-1: a writer's mismatch leaves the seed open",
+        [(SEEDS, "        sdk.lock_seed(seed).await;\n    }\n    r\n}", "    }\n    r\n}")],
+        T + " --test vault an_entry_changed_after_unlock_is_never_trusted_nor_signed_again",
+    ),
+    (
+        "A-2: rows verified by the unlock alone",
+        [(SEEDS, "    let ok = mac_ok(&open.wallet, e).unwrap_or(false);", "    let ok = true;")],
+        T + " --test vault an_entry_changed_after_unlock_is_never_trusted_nor_signed_again",
+    ),
+    (
+        "A-4: a second unlock replaces the session",
+        [(UNL, "                if sdk.open_seed(&seed).is_ok() {\n                    return Ok(());\n                }\n", ""),
+         (UNL, "                    if open.contains_key(&id) {", "                    if false && open.contains_key(&id) {")],
+        T + " --lib vault::tests::unlock_of_an_open_seed_keeps_its_session",
+    ),
+    (
+        "Soroban gateway: the family not compared",
+        [(FAM, 'x.get("family").and_then(|f| f.as_str()) == Some(family.as_str())', "true")],
+        T + " --test soroban_ops a_gateway_of_another_chain_takes_no_op",
+    ),
+    (
+        "Soroban gateway: the chain_uid not compared",
+        [(FAM, "            .is_some_and(|u| u.eq_ignore_ascii_case(&c.profile.chain_uid))\n    };", "            .is_some()\n    };")],
+        T + " --test soroban_ops a_gateway_of_another_chain_takes_no_op",
+    ),
+    (
+        "C-11: a sealed secret takes the copy write",
+        [(SEC, "        .filter(|b| !b.sealed)\n", "")],
+        U + " --lib a_sealed_secret_refuses_the_copy_write",
+    ),
+    (
+        "A-3: seal_key seals a rooted key",
+        [(APK, "        self.check(key)?;\n        if key.rooted {\n            return Err(Error::AppKeyRooted);\n        }", "        self.check(key)?;")],
+        U + " --test app_core the_app_root_and_its_derivations_are_never_sealed_out",
+    ),
+    (
+        "A-3: a derivation loses the root's mark",
+        [(APK, "        let rooted = keys.iter().any(|k| k.rooted);", "        let rooted = false;")],
+        U + " --test app_core the_app_root_and_its_derivations_are_never_sealed_out",
+    ),
+    (
+        "A-3: mac_derive loses the root's mark",
+        [(APK, "        h.rooted = key.rooted;", "        h.rooted = false;")],
+        U + " --test app_core the_app_root_and_its_derivations_are_never_sealed_out",
     ),
 ]
 

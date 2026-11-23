@@ -904,3 +904,76 @@ async fn memory_protection_is_readable() {
     s.vault().lock(id.clone()).await;
     assert_eq!(code(s.vault().memory_protection(id)), "WalletLocked");
 }
+
+/// Review T26 A-1, A-2 (spec §6.2, CLI-SDK-03): an entry changed behind the SDK while its seed is unlocked is never trusted
+/// and never signed again. Its rows and its info read `verified: false` (with `KeystoreMismatch`); a write of the entry is
+/// `KeystoreMismatch` and locks the seed, and since nothing re-signed the tampered entry the next unlock still refuses it.
+/// The twin: the untouched entry reads verified and takes the write.
+#[tokio::test]
+async fn an_entry_changed_after_unlock_is_never_trusted_nor_signed_again() {
+    let (s, m) = sdk().await;
+    let id = import(&s, "Main", mnemonic(24, 3).as_str()).await.unwrap();
+    assert!(
+        s.vault().seed(id.clone()).await.unwrap().verified,
+        "control: verified"
+    );
+    #[cfg(feature = "account")]
+    assert!(s
+        .account()
+        .accounts(id.clone())
+        .await
+        .unwrap()
+        .iter()
+        .all(|r| r.verified));
+    s.vault()
+        .rename(id.clone(), "Renamed".into())
+        .await
+        .unwrap();
+    tamper(&m, |k| {
+        k.seeds[0]
+            .accounts
+            .push(scaas_sdk::vault::AccountRow::Watch {
+                id: "6f1d1f4e-58b5-4d0c-8a6e-1a2b3c4d5e6f".into(),
+                name: "x".into(),
+                watch: "0x01".into(),
+            })
+    })
+    .await;
+    let ev = s.subscribe();
+    assert!(
+        !s.vault().seed(id.clone()).await.unwrap().verified,
+        "A-2: the info"
+    );
+    #[cfg(feature = "account")]
+    assert!(
+        s.account()
+            .accounts(id.clone())
+            .await
+            .unwrap()
+            .iter()
+            .all(|r| !r.verified),
+        "A-2: every row"
+    );
+    let mut seen = vec![];
+    while let Some(e) = ev.next(200).await {
+        seen.push(e);
+    }
+    assert!(
+        seen.contains(&Event::KeystoreMismatch { seed: id.clone() }),
+        "{seen:?}"
+    );
+    assert_eq!(
+        code(s.vault().rename(id.clone(), "Again".into()).await),
+        "KeystoreMismatch",
+        "A-1"
+    );
+    assert!(
+        !s.vault().seed(id.clone()).await.unwrap().unlocked,
+        "A-1: locked"
+    );
+    assert_eq!(
+        code(s.vault().unlock(id, Unlock::Passphrase(sec(PASS))).await),
+        "KeystoreMismatch",
+        "the tampered entry was never signed again"
+    );
+}

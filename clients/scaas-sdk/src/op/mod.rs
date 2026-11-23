@@ -227,24 +227,24 @@ pub(crate) async fn key_opened(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             .await?;
     }
     if let KeyRef::Key { seed, id } = r {
-        drop(sdk.open_seed(seed)?); // a row is trusted once its seed's MAC verified (unlocked)
-        let row = sdk
-            .entry(seed)
-            .await?
-            .accounts
-            .into_iter()
-            .find_map(|a| match a {
-                crate::vault::AccountRow::Key {
-                    id: i,
-                    kind,
-                    key_data,
-                    credential_id,
-                    handle,
-                    ua,
-                    ..
-                } if i == *id => Some((kind, key_data, credential_id, handle, ua)),
-                _ => None,
-            });
+        drop(sdk.open_seed(seed)?);
+        // review T26 A-2: the row signs only from the entry as read now, checked under the open wallet (KeystoreMismatch)
+        let e = sdk.entry(seed).await?;
+        if !crate::vault::seeds::rows_verified(sdk, &e) {
+            return Err(SdkError::KeystoreMismatch);
+        }
+        let row = e.accounts.into_iter().find_map(|a| match a {
+            crate::vault::AccountRow::Key {
+                id: i,
+                kind,
+                key_data,
+                credential_id,
+                handle,
+                ua,
+                ..
+            } if i == *id => Some((kind, key_data, credential_id, handle, ua)),
+            _ => None,
+        });
         let (kind, key_data, credential_id, handle, ua) = row.ok_or(SdkError::Argument)?;
         let row = external::ExternalRow {
             kind: u16::try_from(kind).map_err(|_| SdkError::Argument)?,

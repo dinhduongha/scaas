@@ -152,13 +152,13 @@ impl Sdk {
         f: impl Fn(&V1) -> Result<V1, SdkError> + Send + Sync + 'static,
     ) -> Result<(), SdkError> {
         let e = self.entry(seed).await?;
-        let old = e.vaults.clone();
+        let old = e.clone();
         let open = self.open_seed(seed).ok();
         if open.is_none() && pass.is_none() {
             return Err(SdkError::Ua(scaas_ua::wallet::Error::WalletLocked));
         }
         let f = Arc::new(f);
-        let (new, index_mac) = self
+        let heavy = self
             .heavy({
                 let f = f.clone();
                 move || {
@@ -168,8 +168,12 @@ impl Sdk {
                         .collect::<Result<BTreeMap<_, _>, SdkError>>()?;
                     let mut ne = e.clone();
                     ne.vaults = new.clone();
+                    // review T26 A-1: the entry as read verifies under the wallet that signs it again
                     let index_mac = match (&open, &pass) {
-                        (Some(o), _) => super::seeds::mac(&o.wallet, &ne)?,
+                        (Some(o), _) => {
+                            super::seeds::stored_ok(&o.wallet, &e)?;
+                            super::seeds::mac(&o.wallet, &ne)?
+                        }
                         (None, Some(p)) => {
                             let seed_vault = super::unlock::vault_of(&e, "seed")?;
                             let w = passphrase(p, |p| {
@@ -179,7 +183,8 @@ impl Sdk {
                                     "",
                                 )?)
                             })?;
-                            let m = super::seeds::mac(&w, &ne);
+                            let m = super::seeds::stored_ok(&w, &e)
+                                .and_then(|()| super::seeds::mac(&w, &ne));
                             w.lock();
                             m?
                         }
@@ -188,7 +193,9 @@ impl Sdk {
                     Ok((new, index_mac))
                 }
             })
-            .await?;
+            .await;
+        // review T26 A-1: an entry that does not verify is never signed again; the seed locks, the event says so
+        let (new, index_mac) = super::seeds::on_mismatch(self, seed, heavy).await?;
         let ks = self
             .keystore
             .update(|ks| {
@@ -197,14 +204,16 @@ impl Sdk {
                     .iter_mut()
                     .find(|s| s.id == seed)
                     .ok_or(SdkError::SeedUnknown)?;
-                if e.vaults != old {
+                // the stored entry is the one checked and signed again, every field (review T26 A-1)
+                if *e != old {
                     return Err(SdkError::StoreConflict);
                 }
                 e.vaults = new.clone();
                 e.index_mac = index_mac.clone();
                 Ok(())
             })
-            .await?;
+            .await;
+        let ks = super::seeds::on_mismatch(self, seed, ks).await?;
         self.emit(Event::KeystoreChanged { rev: ks.rev });
         Ok(())
     }

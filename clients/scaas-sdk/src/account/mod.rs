@@ -204,7 +204,8 @@ impl Account {
         self.sdk
             .spawn(async move {
                 let e = sdk.entry(&seed).await?;
-                let verified = sdk.open_seed(&seed).is_ok();
+                // review T26 A-2: the rows as read, checked under the open wallet
+                let verified = crate::vault::seeds::rows_verified(&sdk, &e);
                 Ok(e.accounts
                     .iter()
                     .map(|r| info(&seed, r, verified))

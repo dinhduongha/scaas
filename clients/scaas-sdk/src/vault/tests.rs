@@ -603,3 +603,51 @@ async fn import_key_failed_write_leaves_no_ghost_import() {
         "control: the number is free"
     );
 }
+
+/// Review T26 A-4 (CLI-SDK-06): `unlock` of a seed already open keeps its one session: no second wallet replaces the first,
+/// so `lock` locks the wallet every call in flight holds. The twin: a locked seed unlocks into a new session.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unlock_of_an_open_seed_keeps_its_session() {
+    let s = crate::Sdk::open(crate::SdkConfig {
+        profiles: vec![],
+        store: MemoryStore::new(),
+        authenticator: None,
+        rp_id: None,
+        runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: crate::Limits::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let v = s.vault();
+    let id = v
+        .import_words(ImportWords {
+            label: "Main".into(),
+            words: secret(REPO),
+            vault_passphrase: secret(PASS),
+        })
+        .await
+        .unwrap()
+        .id;
+    let held = s.open_seed(&id).unwrap();
+    v.unlock(id.clone(), Unlock::Passphrase(secret(PASS)))
+        .await
+        .unwrap();
+    assert!(
+        Arc::ptr_eq(&held, &s.open_seed(&id).unwrap()),
+        "one session"
+    );
+    v.lock(id.clone()).await;
+    assert!(
+        !held.wallet.label_open("manifest"),
+        "the lock reached the wallet a call holds"
+    );
+    v.unlock(id.clone(), Unlock::Passphrase(secret(PASS)))
+        .await
+        .unwrap();
+    assert!(
+        !Arc::ptr_eq(&held, &s.open_seed(&id).unwrap()),
+        "control: a new session after a lock"
+    );
+}

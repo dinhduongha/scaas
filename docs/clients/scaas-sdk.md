@@ -62,8 +62,11 @@ a raw key. No error, event, log line or `Debug` output carries a secret, an inpu
 byte, in one authenticated `scaas.keystore` container** (owner 2026-11-11, 2026-11-17; container and integrity controller calls;
 BUILT: plan T2a, T2b, T2c, T4, `tests/vault.rs`, `tests/keystore_vectors.rs`, `src/vault/tests.rs`; UNAUDITED; vault v2 and
 container v 2 BUILT, owner 2026-11-19, T13b ruling 3: every vault's AAD binds its seed's id, the index MAC
-covers the vault texts, v 1 refused by name, no migration; PLANNED: the `AccountUnverified` refusal, which no call returns yet,
-while the rows' unverified mark is built). The container is one item `{format: "scaas.keystore", v: 2, rev, seeds:
+covers the vault texts, v 1 refused by name, no migration; the entry checked again on every read that trusts its rows and before
+every write that signs it again, review T26 A-1, A-2, `an_entry_changed_after_unlock_is_never_trusted_nor_signed_again`: its rows
+read `verified` only when the entry as read verifies under the open wallet, a key row signs only from such an entry
+(`KeystoreMismatch`), and a write of an entry that does not verify is `KeystoreMismatch` and locks the seed; PLANNED: the
+`AccountUnverified` refusal, which no call returns yet, while the rows' unverified mark is built). The container is one item `{format: "scaas.keystore", v: 2, rev, seeds:
 [...]}`. Each seed entry has a UUID `id`, the
 user's `label` (1 to 64 scalar values, NFC, unique), `words`, the main set's BIP-32 master `fingerprint`, `origin`, `class` (`full` or
 `classical-rooted`), `warnings` (`short_seed`, `imported_key`), `backup` (`pending` or `verified`), `vaults` (label → the exact vault
@@ -342,7 +345,14 @@ KEM-unwrapped key, a derived key, an Argon2id output stay in `ua-rs` behind hand
 `KeyWrap`, refused for any other use) without `Clone`, `Debug` or a byte accessor, scoped to their app core and released
 by `destroy` or at the seed's lock; wrap, unwrap, HKDF, HMAC, Argon2id, AEAD and key sealing (under a key-wrap constant no
 data seal produces) run in `ua-rs` on them; the only bytes that leave are plaintexts the app core asks to decrypt for the
-user; labels stay under the core's own declared prefixes, no two cores' prefixes overlapping. Scoping avoids collisions; it
+user; `seal_key` refuses the app root key and every key derived from it (`AppKeyRooted`; owner ruling A-3, 2026-11-23,
+"Restrict (1) only", BUILT, `the_app_root_and_its_derivations_are_never_sealed_out`): sealed under a key the caller can
+compute (an Argon2id output of its password and what it derives) the root would leave as bytes; the wraps a format pins
+seal drawn keys and keys derived from them (PqVault's `keyWrap` of an earlier epoch key, [pqvault spec §6.x
+`sealedInfo.prev`](../superpowers/specs/2026-11-17-pqvault.md), VC24; its `file` item's key under `kFile`, the same spec's
+item types), so none is refused. The limit kept by the same ruling: `kem_wrap_to_key` wraps any key the app core holds a
+handle to towards a KEM public key it chose (for an offline recipient not yet on chain), so an app core can export such a
+key to a key pair of its own; labels stay under the core's own declared prefixes, no two cores' prefixes overlapping. Scoping avoids collisions; it
 does not isolate: an app holding the user's unlocked seed set acts for that UA in every app namespace, so only reviewed app
 cores are linked. (2) The app signing call takes typed data, never a digest, and signs only a portable record under
 `appPurpose(appId)` whose domain is exactly `name, version, salt` with `salt = appId`, or a chain-bound record under the
