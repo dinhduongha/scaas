@@ -29,8 +29,9 @@ chain or RPC. The machine runs other heavy jobs: a large build here gets the ter
 Write exactly one file: `scratchpad/ai-audit/results/<YYYYMMDD-HH>-<tool>-<model>-<effort>-ua-rs-custody.md`
 
 - `<YYYYMMDD-HH>`: local date and hour at which you start; `<tool>`, `<model>`, `<effort>`: what actually runs, lower case, no
-  spaces (e.g. `20261120-09-codex-gpt-6.1-sol-high-ua-rs-custody.md`, `20261120-09-agy-gemini-4-argon-high-ua-rs-custody.md`). Use the tool's
-  configured model and effort; do not override them. The unit name is always last.
+  spaces (e.g. `20261120-09-codex-gpt-6.2-astra-high-ua-rs-custody.md`, `20261120-09-agy-gemini-4-argon-high-ua-rs-custody.md`). Use the tool's
+  configured model and effort (read from its config at run time; the owner may change any reviewer's model); do not
+  override them. Name that model in the report's title line; the ledger records it. The unit name is always last.
 - If your sandbox cannot write files, print the whole report as your final message; the runner saves it under that name.
 
 ## 4. Which source wins
@@ -168,9 +169,9 @@ ua-rs wallet custody: vault, store, AEAD, seal / open, KEM, derivation, pairing,
      call; the one raw export (`export_pqz_leaf_raw*`, for `pqz-cli` or a key oracle) needs the `AllowSecretExport` marker and
      returns `Zeroizing`: check that no binding or C ABI call exposes it without that marker, and that clientkeys `wipe`s the
      leaf after `sealPqKey`.
-   - Rule ids: the code comments of `src/pq.js` and `scripts/pqz-leaf-vectors.mjs` cite CLI-SGN-52 for the leaf, which
-     `signers-clientkeys.md` defines as another rule (native networks); the leaf's rule is CLI-SGN-55. Report a stale id that
-     `python3 scripts/docs_check.py resolve` does not map (dimension 1).
+   - Rule ids: the leaf's rule is CLI-SGN-55 (CLI-SGN-52 is the native networks; the leaf's comments in `src/pq.js`,
+     `scripts/pqz-leaf-vectors.mjs` and the tests cited -52 until branch `audit-docs` corrected them). Report a stale id, or one
+     that `python3 scripts/docs_check.py resolve` maps to another rule (dimension 1).
    - No secret in errors, logs, `Debug` prints or binding exceptions.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**

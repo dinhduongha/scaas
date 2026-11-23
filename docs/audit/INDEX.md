@@ -7,7 +7,9 @@ of the 13 dimensions of [review.md §1](../review.md#1-dimensions) (ARCH-POS-22)
 ## Units
 
 **Codex** is Codex's place in the [running order](README.md#running-order): tier, then position within the tier (a unit with a
-Fable P0 or P1 moves to the front of its tier). Fable, agy and Claude run every unit in parallel.
+Fable P0 or P1 moves to the front of its tier). Fable, agy and Claude run every unit in parallel. Each run uses the model
+and effort of its tool's config at run time, recorded in the ledger (owner 2026-11-24: the owner may change any
+reviewer's model; Codex today: GPT-6.2-astra, high).
 
 | # | Unit | Codex | Prompt | Id prefix | What |
 |---|---|---|---|---|---|

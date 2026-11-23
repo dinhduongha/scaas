@@ -5,8 +5,10 @@ the [unit index](INDEX.md) and the 31 self-contained [prompts](prompts/); that i
 results, the run ledger and the closure tables are local and git-ignored, under `scratchpad/ai-audit/` (owner 2026-11-24). The
 repository is public: anyone can rerun the audit on the same tag with the same prompts
 (owner 2026-11-24). Every review here covers the 13 dimensions of [review.md](../review.md#ARCH-POS-22) (ARCH-POS-22).
-Everything under audit stays `UNAUDITED` until a round covers it at its commit; the reviewers are AI models (Fable, Opus,
-GPT-6.1-Sol, Gemini 4 Argon), each named in its report, never called independent or external.
+Everything under audit stays `UNAUDITED` until a round covers it at its commit; the reviewers are AI models, each named in its report
+and in the ledger, never called independent or external. Each tool's model and effort are read from its config at run time
+and the owner may change any reviewer's model (owner 2026-11-24; Codex today: GPT-6.2-astra, effort high); a round's
+`AI-AUDITED (<models of the round>)` label names the models its ledger records.
 
 **Status:** plan; the target is the pre-freeze tag `<TAG>` (`<SHA>`), not cut yet. Owner rulings: pre-freeze tag, then the
 audit, then the audit fixes and their gates, then the freeze (2026-11-12, with the freeze after P6-PUB, the SDK and scaas-app
@@ -98,7 +100,7 @@ says so when it does not.
 | Reviewer | Units | How |
 |---|---|---|
 | **Fable** | all 31, in parallel | one read-only agent per unit, written before reading any other reviewer's report |
-| **Codex** (CLI, read-only sandbox, the configured model and effort, no override) | all 31, **one after another** | credits are limited per window, so the units run in the fixed order of [Running order](#running-order), with the local ledger `scratchpad/ai-audit/LEDGER.md` so the run resumes after a credit stop |
+| **Codex** (CLI, read-only sandbox, the model and effort of its config, no override; today GPT-6.2-astra, high) | all 31, **one after another** | credits are limited per window, so the units run in the fixed order of [Running order](#running-order), with the local ledger `scratchpad/ai-audit/LEDGER.md` so the run resumes after a credit stop |
 | **agy** (Gemini) | all 31, in parallel | the same prompts |
 | **Claude workflow** | all 31, in parallel | per unit: finders by lens, three refuters, each with a fresh context, on each finding, rounds until two add nothing, a completeness critic |
 | **Fable, a fresh agent** | adjudication and consolidation | every P0-P2 reported by one source checked against the frozen tree; it did not write the unit reports it judges |
@@ -120,7 +122,7 @@ Same model family as the implementers: fresh context and refutation reduce that;
 ## Result naming
 
 `scratchpad/ai-audit/results/<YYYYMMDD-HH>-<tool>-<model>-<effort>-<unit>.md` (local date and hour at the start, lower case, no
-spaces, unit last; for example `20261120-09-codex-gpt-6.1-sol-high-evm-pqvault.md`). A tool whose sandbox cannot write files
+spaces, unit last; for example `20261120-09-codex-gpt-6.2-astra-high-evm-pqvault.md`). A tool whose sandbox cannot write files
 prints the report, and the runner saves it under that name. The reports, the ledger and each round's closure table (finding id, severity, dimension, verdict,
 fix commit) stay local and git-ignored under `scratchpad/ai-audit/`; none of them is committed.
 

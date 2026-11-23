@@ -32,8 +32,9 @@ chain or RPC. The machine runs other heavy jobs: a large build here gets the ter
 Write exactly one file: `scratchpad/ai-audit/results/<YYYYMMDD-HH>-<tool>-<model>-<effort>-app-cores.md`
 
 - `<YYYYMMDD-HH>`: local date and hour at which you start; `<tool>`, `<model>`, `<effort>`: what actually runs, lower case, no
-  spaces (e.g. `20261120-09-codex-gpt-6.1-sol-high-app-cores.md`, `20261120-09-agy-gemini-4-argon-high-app-cores.md`). Use the tool's
-  configured model and effort; do not override them. The unit name is always last.
+  spaces (e.g. `20261120-09-codex-gpt-6.2-astra-high-app-cores.md`, `20261120-09-agy-gemini-4-argon-high-app-cores.md`). Use the tool's
+  configured model and effort (read from its config at run time; the owner may change any reviewer's model); do not
+  override them. Name that model in the report's title line; the ledger records it. The unit name is always last.
 - If your sandbox cannot write files, print the whole report as your final message; the runner saves it under that name.
 
 ## 4. Which source wins
