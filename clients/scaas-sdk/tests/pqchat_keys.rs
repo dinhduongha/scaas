@@ -1124,7 +1124,7 @@ fn bit_and_no_caller_ciphertext() {
     assert_eq!(VECTORS, 1 << 28);
     assert_eq!(scaas_sdk::features() & VECTORS, VECTORS);
     // review T26 C-2: such a build is refused by every binding's opening (the load check)
-    assert!(scaas_ua::VECTORS);
+    const { assert!(scaas_ua::VECTORS) };
     assert_eq!(
         scaas_sdk::load_check(scaas_sdk::Sdk::api_version(), 0).map_err(|e| e.code()),
         Err("AbiMismatch")

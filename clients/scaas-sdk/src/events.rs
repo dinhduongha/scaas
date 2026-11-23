@@ -82,6 +82,7 @@ pub enum Basis {
     OneEndpoint,
 }
 
+#[cfg_attr(not(feature = "evm"), allow(dead_code))]
 impl Basis {
     pub(crate) fn of(strict: bool) -> Basis {
         if strict {
