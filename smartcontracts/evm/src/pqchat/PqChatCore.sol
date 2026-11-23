@@ -85,6 +85,8 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
     uint256 internal constant TREE_LEAVES_MAX = 256;
     uint256 internal constant TREE_ADMINS_MAX = 32;
     uint256 internal constant TREE_INFO_MAX = 4124;
+    /// @dev C10, C21: adds plus removes per commit, and the leaves one head may owe to removals.
+    uint256 internal constant TREE_CHANGES_MAX = 32;
 
     function _s() internal pure returns (S storage s) {
         assembly ("memory-safe") {
@@ -136,14 +138,30 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
         return (PqChatTypes.TREE_LEAF_TYPEHASH, PqChatTypes.TREE_PARENT_TYPEHASH);
     }
 
-    function _treeBounds() internal pure override returns (uint256, uint256) {
-        return (TREE_LEAVES_MAX, TREE_ADMINS_MAX);
+    function _treeBounds() internal pure override returns (uint256, uint256, uint256, uint256) {
+        return (TREE_LEAVES_MAX, TREE_ADMINS_MAX, TREE_CHANGES_MAX, KEYS_PER_UA_MAX);
+    }
+
+    /// @dev fable-11, codex-17: a UA added by a commit joins `sessionsOf` at its first leaf, once.
+    function _treeListedNew(bytes32 gid, bytes32 ua) internal override {
+        _s().sessions[ua].push(gid);
     }
 
     function _treeFail(uint8 code, uint256 a, uint256 b) internal pure override {
-        if (code == T_KEM_KEY) revert IPqChat.PqChatKemKey(bytes32(a), uint64(b));
+        if (code == T_KEM_KEY) _chatFail(F_KEM_KEY, a, b);
         if (code == T_KEY_LIVE) revert IPqChat.PqChatTreeKeyLive(bytes32(a));
-        revert IPqChat.PqChatShape();
+        if (code == T_LEAF) revert IPqChat.PqChatTreeLeaf(uint32(a));
+        if (code == T_RETURN) revert IPqChat.PqChatTreeReturn(bytes32(a));
+        if (code == T_KEY_RETURN) revert IPqChat.PqChatTreeKeyReturn(bytes32(a));
+        if (code == T_OWN_KEY_RETURN) revert IPqChat.PqChatTreeOwnKeyReturn(bytes32(a), bytes32(b));
+        if (code == T_ADMINS) revert IPqChat.PqChatTreeAdmins();
+        if (code == T_BACKLOG) revert IPqChat.PqChatTreeBacklog(a);
+        if (code == T_TARGETS) revert IPqChat.PqChatTreeTargets(a);
+        if (code == T_HASH) revert IPqChat.PqChatTreeHash(bytes32(a));
+        if (code == T_REMOVED_KEPT) _chatFail(F_REMOVED_KEPT, a, b);
+        if (code == T_NOT_MEMBER) _chatFail(F_NOT_MEMBER, a, b);
+        if (code == T_NOT_ADMIN) _chatFail(F_NOT_ADMIN, a, b);
+        _chatFail(F_SHAPE, a, b);
     }
 
     /// @dev A session in the TreeKEM mode (CTR-CHAT-26): its tree is open from `createSession` on.
@@ -180,6 +198,52 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
     ///      second field.
     function _authorOf(Epoch storage ep) internal view override returns (bytes32) {
         return _word(ep.record, uint256(_word(ep.record, 0)) + 32);
+    }
+
+    // ------------------------------------------------------------------ CTR-CHAT-23: the kept signatures
+
+    /// @dev An `sstore2` instance keeps each signed record as `abi.encode(record, sigHash, sig)`.
+    function _keep() internal view returns (bool) {
+        return _s().sigStore == SIG_SSTORE2;
+    }
+
+    /// @dev The stored form of a signed record whose ABI tuple is dynamic, from `rec = abi.encode(record)` (`0x20` and its
+    ///      tail): `abi.encode(record, sigHash)` on a `none` instance, `abi.encode(record, sigHash, sig)` on an `sstore2` one
+    ///      (byte for byte; built here because the compiler's tuple encoder of a calldata record and signature runs out of
+    ///      stack). `sigHash = keccak256(abi.encode(sig))`.
+    function _blob(bytes memory rec, IUARegistry.UASig calldata sig) internal view returns (bytes memory out) {
+        bytes memory es = abi.encode(sig);
+        bytes32 sh = keccak256(es);
+        bool keep = _keep();
+        uint256 r = rec.length - 32;
+        uint256 e = keep ? es.length - 32 : 0;
+        uint256 head = keep ? 96 : 64;
+        out = new bytes(head + r + e);
+        assembly ("memory-safe") {
+            let o := add(out, 32)
+            mstore(o, head)
+            mstore(add(o, 32), sh)
+            if keep { mstore(add(o, 64), add(head, r)) }
+            mcopy(add(o, head), add(rec, 64), r)
+            if keep { mcopy(add(add(o, head), r), add(es, 64), e) }
+        }
+    }
+
+    /// @dev P16, D11: the message's signature, nonce, one blob appended to the session's list, the event; the caller checked
+    ///      the epoch and the sender's membership (`PqChat` for a flat session, `PqChatTree` for a tree one).
+    function _post(IUARegistry reg, uint256 limit, IPqChat.PqChatMessage calldata m, IUARegistry.UASig calldata sig)
+        internal
+        returns (uint256 index)
+    {
+        bytes32 hm = PqChatTypes.hashMessage(m);
+        _auth(reg, m.sender, hm, sig);
+        _useNonce(PqChatTypes.scopeMessage(m.epochId, m.sender, m.device), m.counter);
+        bytes memory blob = _blob(abi.encode(m), sig);
+        if (blob.length + 2 > _codeCap(limit)) revert IPqChat.PqChatShape(); // one blob (P16), the kept signature included
+        address[] storage list = _s().messages[m.sessionId];
+        index = list.length;
+        list.push(_put(blob, limit));
+        emit IPqChat.PqChatMessagePosted(m.sessionId, PqChatTypes.typed(hm), m.sender, index, sig);
     }
 
     // ------------------------------------------------------------------ internal: signatures

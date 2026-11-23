@@ -191,6 +191,40 @@ contract PqChat is IPqChat, PqChatCore {
         }
     }
 
+    // ------------------------------------------------------------------ CTR-CHAT-27: the tree entries, in `PqChatTree`
+
+    function commit(
+        PqChatCommit calldata,
+        uint32[] calldata,
+        bytes32[] calldata,
+        bytes[] calldata,
+        PathCt[] calldata,
+        Wrap[] calldata,
+        IUARegistry.UASig calldata
+    ) external returns (bytes32) {
+        _forward(TREE);
+    }
+
+    function addPathList(bytes32, uint32[] calldata, bytes32[] calldata) external {
+        _forward(TREE);
+    }
+
+    function addPathKeys(bytes32, bytes[] calldata) external {
+        _forward(TREE);
+    }
+
+    function addPath(bytes32, uint32, PathCt[] calldata) external {
+        _forward(TREE);
+    }
+
+    function treeLeave(PqChatTreeLeave calldata, IUARegistry.UASig calldata) external {
+        _forward(TREE);
+    }
+
+    function treeRemove(PqChatTreeRemove calldata, IUARegistry.UASig calldata) external {
+        _forward(TREE);
+    }
+
     function addWraps(bytes32 epochId, uint32 first, Wrap[] calldata wraps) external {
         (, uint256 limit,) = _env();
         Epoch storage ep = _known(epochId);
@@ -217,6 +251,7 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @notice P12: a member of `epochId` leaves it; the next epoch may drop it as a plain rekey (3C-D8).
     function leave(PqChatLeave calldata l, IUARegistry.UASig calldata sig) external {
+        if (_isTree(l.sessionId)) revert PqChatModeEntry(1); // C30: `treeLeave`
         (IUARegistry reg, uint256 limit,) = _env();
         Epoch storage ep = _known(l.epochId);
         if (ep.sessionId != l.sessionId) revert PqChatUnknown(l.epochId);
@@ -232,6 +267,7 @@ contract PqChat is IPqChat, PqChatCore {
     /// @notice P48 (owner 2026-11-10): an admin of the complete epoch `r.epochId` removes 1..REMOVE_MAX of its members,
     ///         strictly sorted; at home only while it has no complete child. The record and its `sigHash` in state.
     function remove(PqChatRemove calldata r, IUARegistry.UASig calldata sig) external {
+        if (_isTree(r.sessionId)) revert PqChatModeEntry(1); // C30: `treeRemove`
         (IUARegistry reg, uint256 limit,) = _env();
         Epoch storage ep = _known(r.epochId);
         if (ep.sessionId != r.sessionId) revert PqChatUnknown(r.epochId);
@@ -261,6 +297,7 @@ contract PqChat is IPqChat, PqChatCore {
     /// @notice P16, D11: a member of the complete epoch `epochId` posts; the record and `keccak256(abi.encode(sig))` in one
     ///         blob appended to the session's list, the signature's bytes in the event.
     function postMessage(PqChatMessage calldata m, IUARegistry.UASig calldata sig) external returns (uint256 index) {
+        if (_isTree(m.sessionId)) _forward(TREE); // CTR-CHAT-27: a member holds a live leaf and is not gone
         (IUARegistry reg, uint256 limit,) = _env();
         Epoch storage ep = _known(m.epochId);
         if (ep.sessionId != m.sessionId) revert PqChatUnknown(m.epochId);
@@ -271,15 +308,7 @@ contract PqChat is IPqChat, PqChatCore {
         if (child != 0) revert PqChatEpochTaken(m.epochId, child);
         (, MemberKey[] memory mk,) = _lists(ep);
         if (_memberAt(mk, m.sender) == type(uint256).max) revert PqChatNotMember(m.sender);
-        bytes32 hm = PqChatTypes.hashMessage(m);
-        _auth(reg, m.sender, hm, sig);
-        _useNonce(PqChatTypes.scopeMessage(m.epochId, m.sender, m.device), m.counter);
-        bytes memory blob = _blob(abi.encode(m), sig);
-        if (blob.length + 2 > _codeCap(limit)) revert PqChatShape(); // one blob (P16), the kept signature included
-        address[] storage list = _s().messages[m.sessionId];
-        index = list.length;
-        list.push(_put(blob, limit));
-        emit PqChatMessagePosted(m.sessionId, PqChatTypes.typed(hm), m.sender, index, sig);
+        index = _post(reg, limit, m, sig);
     }
 
     /// @notice P29: no signature, membership or nonce; the payload `abi.encode(v, hint, env)` raw in one blob.
@@ -302,6 +331,7 @@ contract PqChat is IPqChat, PqChatCore {
     function epochOf(bytes32 epochId) external view returns (PqChatEpoch memory e, bytes32 sigHash) {
         Epoch storage ep = _known(epochId);
         if (ep.sessionId == epochId) revert PqChatUnknown(epochId);
+        if (_isTree(ep.sessionId)) revert PqChatModeEntry(1); // a tree epoch is a commit
         (e, sigHash) = abi.decode(_get(ep.record), (PqChatEpoch, bytes32));
     }
 
@@ -335,33 +365,6 @@ contract PqChat is IPqChat, PqChatCore {
     }
 
     // ------------------------------------------------------------------ CTR-CHAT-23: the kept signatures
-
-    /// @dev An `sstore2` instance keeps each signed record as `abi.encode(record, sigHash, sig)`.
-    function _keep() internal view returns (bool) {
-        return _s().sigStore == SIG_SSTORE2;
-    }
-
-    /// @dev The stored form of a signed record whose ABI tuple is dynamic, from `rec = abi.encode(record)` (`0x20` and its
-    ///      tail): `abi.encode(record, sigHash)` on a `none` instance, `abi.encode(record, sigHash, sig)` on an `sstore2` one
-    ///      (byte for byte; built here because the compiler's tuple encoder of a calldata record and signature runs out of
-    ///      stack). `sigHash = keccak256(abi.encode(sig))`.
-    function _blob(bytes memory rec, IUARegistry.UASig calldata sig) internal view returns (bytes memory out) {
-        bytes memory es = abi.encode(sig);
-        bytes32 sh = keccak256(es);
-        bool keep = _keep();
-        uint256 r = rec.length - 32;
-        uint256 e = keep ? es.length - 32 : 0;
-        uint256 head = keep ? 96 : 64;
-        out = new bytes(head + r + e);
-        assembly ("memory-safe") {
-            let o := add(out, 32)
-            mstore(o, head)
-            mstore(add(o, 32), sh)
-            if keep { mstore(add(o, 64), add(head, r)) }
-            mcopy(add(o, head), add(rec, 64), r)
-            if keep { mcopy(add(add(o, head), r), add(es, 64), e) }
-        }
-    }
 
     function _kept() internal view {
         if (!_keep()) revert PqChatSigNotStored();

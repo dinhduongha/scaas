@@ -79,15 +79,6 @@ contract TreeHarness is PqChatCore {
 contract PqChatTreeTest is PqChatBase {
     using stdJson for string;
 
-    /// A `keys` row as forge decodes it (fields in alphabetical order).
-    struct KeyRow {
-        uint256 keyId;
-        bytes32 kemHash;
-        bytes kemPk;
-        string name;
-        bytes32 ua;
-    }
-
     /// `tree.json`'s `keys` rows, read once (the file is large: a storage string copied per read runs out of gas).
     mapping(bytes32 => uint256) internal keyRow; // keccak256(name) => row + 1
     bytes[] internal keyPks;
@@ -101,12 +92,13 @@ contract PqChatTreeTest is PqChatBase {
     function setUp() public override {
         super.setUp();
         string memory tj = _tj();
-        KeyRow[] memory kr = abi.decode(vm.parseJson(tj, ".keys"), (KeyRow[]));
-        for (uint256 i; i < kr.length; ++i) {
-            keyRow[keccak256(bytes(kr[i].name))] = i + 1;
-            keyPks.push(kr[i].kemPk);
-            keyUas.push(kr[i].ua);
-            keyIds.push(kr[i].keyId);
+        // field by field: forge's order of a JSON object's keys in a decoded struct is not stable (a flaky setUp)
+        for (uint256 i; vm.keyExistsJson(tj, string.concat(".keys[", vm.toString(i), "]")); ++i) {
+            string memory k = string.concat(".keys[", vm.toString(i), "]");
+            keyRow[keccak256(bytes(tj.readString(string.concat(k, ".name"))))] = i + 1;
+            keyPks.push(tj.readBytes(string.concat(k, ".kemPk")));
+            keyUas.push(tj.readBytes32(string.concat(k, ".ua")));
+            keyIds.push(tj.readUint(string.concat(k, ".keyId")));
         }
         th = new TreeHarness();
         vk = new VectorKems();

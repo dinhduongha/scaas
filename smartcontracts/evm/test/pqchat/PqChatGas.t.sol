@@ -70,9 +70,14 @@ contract PqChatGasTest is PqTopicsBase {
     // TreeKEM T3a (CTR-CHAT-26: the immutable `TREE`, its check in the constructor, the dispatch of `createSession` and
     // `addWraps` to it, `rekey` refused on a tree session, `modules()` of two, `groupMode` 1 accepted):
     // 32,104 -> 32,695 B; regular 2,189,628 -> 2,247,883; state 49,694,400 -> 50,598,630 (+591 x 1,530)
-    uint256 internal constant RUNTIME = 32_695;
-    uint256 internal constant RELEASE_REGULAR = 2_247_883;
-    uint256 internal constant RELEASE_STATE = 50_598_630;
+    // TreeKEM T3b (CTR-CHAT-27: the six tree entries forwarded, `postMessage` forwarded and `leave` / `remove` / `epochOf`
+    // refused on a tree session, `_blob` and the message tail in `PqChatCore`): 32,695 -> 33,905 B; regular 2,247,883 ->
+    // 2,329,022; state 50,598,630 -> 52,449,930 (+1,210 x 1,530). The flat entries pay the tree-session read (one cold
+    // slot, `_isTree`): postMessage 157,767 -> 160,139 (warm list 157,779 -> 160,151), leave 150,721 -> 153,039, remove
+    // 176,666 -> 179,122.
+    uint256 internal constant RUNTIME = 33_905;
+    uint256 internal constant RELEASE_REGULAR = 2_329_022;
+    uint256 internal constant RELEASE_STATE = 52_449_930;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice:
     // 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
@@ -152,14 +157,14 @@ contract PqChatGasTest is PqTopicsBase {
         vm.prank(STRANGER);
         chat.postMessage(m, sig);
         // CTR-CHAT-23: 153,744 / 2,732,580 -> 157,767 / 3,124,260
-        _row("postMessage 2 members, 1,040 B ciphertext", 157_767, 3_124_260);
+        _row("postMessage 2 members, 1,040 B ciphertext", 160_139, 3_124_260);
 
         m = _msg(sid, e2, ids[1], 1, 1040);
         sig = _sig(m.sender, h.message(m));
         vm.prank(STRANGER);
         chat.postMessage(m, sig);
         // CTR-CHAT-23: 153,756 / 2,536,740 -> 157,779 / 2,928,420
-        _row("postMessage 2 members, 1,040 B ciphertext, warm list", 157_779, 2_928_420);
+        _row("postMessage 2 members, 1,040 B ciphertext, warm list", 160_151, 2_928_420);
 
         IPqChat.PqChatLeave memory l = IPqChat.PqChatLeave(sid, e2, ids[1], 9);
         sig = _sig(ids[1], h.leave(l));
@@ -168,7 +173,7 @@ contract PqChatGasTest is PqTopicsBase {
         // CTR-CHAT-23 (`sstore2` keeps the leave record and its signature: a blob, the list's slots):
         // 107,485 / 97,920 ->
         // 150,721 / 1,116,900
-        _row("leave 2 members", 150_721, 1_116_900);
+        _row("leave 2 members", 153_039, 1_116_900);
     }
 
     /// Owner (M) 2026-11-23 (CTR-CHAT-24): a member's device key is one more `(ua, keyId)` entry and one more wrap: a
@@ -300,7 +305,7 @@ contract PqChatGasTest is PqTopicsBase {
         // pqvault review F2 / F7 (`_liveAdmin`: the admin's removed and left flags read cold):
         // regular 168,513 -> 173,112
         // CTR-CHAT-23: 173,112 / 1,067,940 -> 176,666 / 1,459,620
-        _row("remove 1 of 3 members", 176_666, 1_459_620);
+        _row("remove 1 of 3 members", 179_122, 1_459_620);
         IPqChat.MemberKey[] memory m = new IPqChat.MemberKey[](2);
         (m[0], m[1]) = (s.members[0], s.members[1]);
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[0], 1, 1, sid, s.admins, m);

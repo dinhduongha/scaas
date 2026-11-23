@@ -155,6 +155,76 @@ interface IPqChat {
         uint32 versionCount;
     }
 
+    /// @notice CTR-CHAT-27 (spec 2026-11-23-pqchat-treekem §6): a key added to a tree session's leaf `leaf`; `via` as in
+    ///         `MemberKey` (not read by the contract); `kemHash = keccak256(kemPk)` of the registry key (C18).
+    struct TreeAdd {
+        uint32 leaf;
+        bytes32 ua;
+        uint64 keyId;
+        bytes32 via;
+        bytes32 kemHash;
+    }
+
+    /// @notice A live leaf a commit blanks, named by its `(ua, keyId)`.
+    struct TreeRemove {
+        uint32 leaf;
+        bytes32 ua;
+        uint64 keyId;
+    }
+
+    /// @notice A tree epoch (§6): `author` commits from its leaf `leaf` with key `keyId`; `leaves` the tree's size after it,
+    ///         `admins` the new epoch's sorted list; `wrapHashes[i]` the Welcome wrap of `adds[i]`; `nodeKeyHashes[k]` the
+    ///         `keccak256` of the `k`-th node key of the author's filtered path; `ctCount` path ciphertexts, their list
+    ///         `hashStruct(PathList)` in `ctListHash` (of the empty list when 0, C14); `treeHash` the root after the commit.
+    struct PqChatCommit {
+        bytes32 sessionId;
+        bytes32 author;
+        uint64 nonce;
+        uint64 epoch;
+        bytes32 parentEpochId;
+        bytes32 treeId;
+        bytes32 parentTreeHash;
+        uint32 leaf;
+        uint64 keyId;
+        uint32 leaves;
+        bytes32[] admins;
+        TreeRemove[] removes;
+        TreeAdd[] adds;
+        bytes32[] wrapHashes;
+        bytes32[] nodeKeyHashes;
+        uint32 ctCount;
+        bytes32 ctListHash;
+        bytes32 treeHash;
+        bytes sealedInfo;
+    }
+
+    /// @notice A path ciphertext: 1,568 + 32 + 48 B, hashed as `PathCt` into the list's `ctHashes`.
+    struct PathCt {
+        bytes mlkemCt;
+        bytes32 x25519Eph;
+        bytes sealedSecret;
+    }
+
+    /// @notice `PqChatLeave` with `treeId` (C30): the leaver names the head; it is `gone` from then on (C28).
+    struct PqChatTreeLeave {
+        bytes32 sessionId;
+        bytes32 treeId;
+        bytes32 epochId;
+        bytes32 member;
+        uint64 nonce;
+    }
+
+    /// @notice `PqChatRemove` with `treeId` (C30): an admin of the head removes UAs; they are `gone` from then on (C28).
+    struct PqChatTreeRemove {
+        bytes32 sessionId;
+        bytes32 treeId;
+        bytes32 epochId;
+        uint64 nextEpoch;
+        bytes32[] members;
+        bytes32 admin;
+        uint64 nonce;
+    }
+
     // ------------------------------------------------------------------ events (spec §4.4, topics P42)
 
     event PqChatSessionCreated(bytes32 indexed sessionId, bytes32 indexed creator, bytes32 homeChain);
@@ -174,6 +244,8 @@ interface IPqChat {
         IUARegistry.UASig sig
     );
     event PqChatStored(bytes8 indexed hint, uint256 index);
+    /// @notice CTR-CHAT-27: a landed piece of a tree commit (`piece` 1 the list, 2 the node keys, 3 ciphertexts).
+    event PqChatPath(bytes32 indexed epochId, uint8 piece, uint32 first, uint32 count);
     event PqTopicCreated(bytes32 indexed topicId, bytes32 indexed admin);
     event PqTopicUpdated(bytes32 indexed topicId, uint64 seq);
     event PqTopicWriterSet(bytes32 indexed topicId, bytes32 indexed writer, bool granted, uint64 seq);
@@ -217,12 +289,39 @@ interface IPqChat {
     /// @notice CTR-CHAT-25, CTR-CHAT-26: a session's `groupMode` this release does not run (it runs 0, flat wraps, and 1,
     ///         TreeKEM): 2-255.
     error PqChatModeUnsupported(uint8 groupMode);
-    /// @notice CTR-CHAT-27: an entry or view of the other mode (`rekey` on a tree session).
+    /// @notice CTR-CHAT-27: an entry or view of the other mode (`rekey`, `leave` or `remove` on a tree session; `commit`,
+    ///         `treeLeave` or `treeRemove` on a flat one).
     error PqChatModeEntry(uint8 groupMode);
     /// @notice CTR-CHAT-27 C1: a tree session on a `none` home.
     error PqChatTreeSigStore();
-    /// @notice CTR-CHAT-27 C4: a tree session created outside its home instance.
+    /// @notice CTR-CHAT-27 C4: a tree session created outside its home instance; C16, C30: a commit, `treeLeave` or
+    ///         `treeRemove` whose `treeId` is not the session's.
     error PqChatTreeHome();
+    /// @notice C31: a commit whose `parentTreeHash` is not the head's tree hash `stored`.
+    error PqChatTreeParent(bytes32 stored);
+    /// @notice R14, C28: an Add of a UA that left or was removed.
+    error PqChatTreeReturn(bytes32 ua);
+    /// @notice R14, R16, C28: an Add, under any UA, of a key taken out of a UA that left or was removed (the session-wide set).
+    error PqChatTreeKeyReturn(bytes32 kemHash);
+    /// @notice R16, C28: an Add under `ua` of a key taken out of `ua`'s own leaves while it stayed a member (the pair set).
+    error PqChatTreeOwnKeyReturn(bytes32 ua, bytes32 kemHash);
+    /// @notice A leaf not live with the named key, not blank for an Add, the author's own in a Remove, or out of range.
+    error PqChatTreeLeaf(uint32 leaf);
+    /// @notice C24: no admin with a live leaf would remain.
+    error PqChatTreeAdmins();
+    /// @notice C21: a `treeRemove` or `treeLeave` that would owe more than `TREE_CHANGES_MAX` leaves at the head.
+    error PqChatTreeBacklog(uint256 owed);
+    /// @notice A list that does not hash to `ctListHash`, a second list, or a ciphertext before the list.
+    error PqChatPathList(bytes32 epochId);
+    /// @notice A node key or ciphertext that does not hash to its signed hash, or has the wrong size.
+    error PqChatPathHash(bytes32 epochId, uint256 index);
+    /// @notice A piece landed twice.
+    error PqChatPathStored(bytes32 epochId, uint256 index);
+    /// @notice At acceptance the path length or the target count differs from the walk; when the list lands, its target
+    ///         `index` differs from the expected one.
+    error PqChatTreeTargets(uint256 index);
+    /// @notice At acceptance: `treeHash` differs from the root `computed` (R12, C7).
+    error PqChatTreeHash(bytes32 computed);
     /// @notice CTR-CHAT-27 C18: a key that a live leaf already holds (`kemHash = keccak256(kemPk)`).
     error PqChatTreeKeyLive(bytes32 kemHash);
     /// @notice `validateEnv`: `chainUid` 0, registry 0, no code-size limit or one under EIP-170's 24,576 B (3C-D1); a
@@ -264,6 +363,27 @@ interface IPqChat {
     function leave(PqChatLeave calldata l, IUARegistry.UASig calldata sig) external;
     /// @notice P48: an admin of `r.epochId` removes `r.members` from it; any child completes only without them.
     function remove(PqChatRemove calldata r, IUARegistry.UASig calldata sig) external;
+    /// @notice CTR-CHAT-27 (spec §6, §8): a tree epoch; the list and `nodeKeys` each whole or absent, `cts` and `wraps` a
+    ///         first chunk or none, `cts` only with the list. Completes in this call when it carries every piece.
+    function commit(
+        PqChatCommit calldata c,
+        uint32[] calldata ctTargets,
+        bytes32[] calldata ctHashes,
+        bytes[] calldata nodeKeys,
+        PathCt[] calldata cts,
+        Wrap[] calldata wraps,
+        IUARegistry.UASig calldata sig
+    ) external returns (bytes32 epochId);
+    /// @notice A staged commit's target list, whole, once, against `ctListHash` and the targets of the walk.
+    function addPathList(bytes32 epochId, uint32[] calldata ctTargets, bytes32[] calldata ctHashes) external;
+    /// @notice A staged commit's node keys, whole, once, each against its signed hash and the admission check.
+    function addPathKeys(bytes32 epochId, bytes[] calldata nodeKeys) external;
+    /// @notice A staged commit's ciphertexts `firstCt..`, each against its hash in the landed list.
+    function addPath(bytes32 epochId, uint32 firstCt, PathCt[] calldata cts) external;
+    /// @notice C9, C21, C28: the leaver names the head; it is `gone` and its live leaves are owed by the next commit.
+    function treeLeave(PqChatTreeLeave calldata l, IUARegistry.UASig calldata sig) external;
+    /// @notice C9, C21, C24, C28: an admin of the head removes UAs; they are `gone` and their leaves owed.
+    function treeRemove(PqChatTreeRemove calldata r, IUARegistry.UASig calldata sig) external;
     function postMessage(PqChatMessage calldata m, IUARegistry.UASig calldata sig) external returns (uint256 index);
     /// @notice Anyone, no signature, membership or nonce (P29): `v == 1` and the blob fits; appends `abi.encode(v, hint,
     ///         env)` to `hint`'s list.
