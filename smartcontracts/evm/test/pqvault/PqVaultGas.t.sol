@@ -170,7 +170,6 @@ contract PqVaultGasTest is PqVaultBase {
         vault.createItems(b, sig);
     }
 
-
     //    /// The largest batch of password items (288 B) that fits `(regular + state + 2.3 M) x 1.05 <= 60 M` with FN-DSA-512's
     /// verifier added (EIP-8037 inclusion), regular x 1.05 under 2^24 too (spec §5.8, CTR-PQV-09; expected 33-35).
     function test_gas_createItems() public {
@@ -254,7 +253,6 @@ contract PqVaultGasTest is PqVaultBase {
         assertLt(regular * 105 / 100, 1 << 24, "regular gas x 1.05 under 2^24 (EIP-7825)");
         assertLe(asked, 60_000_000, "the release transaction asks at most 60 M");
         if (!vm.envOr("GAS_MEASURE", false)) {
-
             //            // CTR-CHAT-23 (`PqGroupBase._authorOf`, the hook `PqChat` overrides for its blobs that keep a signature; PqVault's
             // behaviour and gas rows unchanged):
             // 30,421 -> 30,431 B; state 47,119,410 -> 47,134,710 (+10 x 1,530); regular
@@ -265,9 +263,11 @@ contract PqVaultGasTest is PqVaultBase {
             // CTR-PQV-18 (2026-11-23, `groupMode` in the create record, 0 only, the last field):
             // 30,825 -> 31,786 B; regular
             // 2,087,684 -> 2,150,099; state 47,737,530 -> 49,207,860 (+961 x 1,530)
-            assertEq(r.code.length, 31_786, "the PqVault runtime (size-baseline.json row)");
-            assertApproxEqAbs(regular, 2_150_099, SLACK, "deployImplementation regular");
-            assertEq(state, 49_207_860, "deployImplementation state");
+            // TreeKEM T3a part 1 (`PqGroupBase._land` split): 31,786 -> 31,826 B; regular 2,150,099 -> 2,154,260; state
+            // 49,207,860 -> 49,269,060 (+40 x 1,530)
+            assertEq(r.code.length, 31_826, "the PqVault runtime (size-baseline.json row)");
+            assertApproxEqAbs(regular, 2_154_260, SLACK, "deployImplementation regular");
+            assertEq(state, 49_269_060, "deployImplementation state");
         }
     }
 

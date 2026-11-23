@@ -354,12 +354,6 @@ contract PqChat is IPqChat, PqChatCore {
         }
     }
 
-    /// @dev `PqGroupBase._authorOf` for both forms: the blob's first word is the record's offset (64 without the signature,
-    ///      96 with it), `author` the record's second field.
-    function _authorOf(Epoch storage ep) internal view override returns (bytes32) {
-        return _word(ep.record, uint256(_word(ep.record, 0)) + 32);
-    }
-
     function _kept() internal view {
         if (!_keep()) revert PqChatSigNotStored();
     }

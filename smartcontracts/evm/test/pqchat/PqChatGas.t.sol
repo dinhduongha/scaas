@@ -65,9 +65,11 @@ contract PqChatGasTest is PqTopicsBase {
     // CTR-CHAT-25 (owner 2026-11-23, `groupMode`, one word more in calldata and the record, the last field):
     // 31,897 -> 32,069 B; regular 2,177,145 ->
     // 2,187,548; state 49,377,690 -> 49,640,850 (+172 x 1,530)
-    uint256 internal constant RUNTIME = 32_069;
-    uint256 internal constant RELEASE_REGULAR = 2_187_548;
-    uint256 internal constant RELEASE_STATE = 49_640_850;
+    // TreeKEM T3a part 1 (`PqGroupBase._land` split into `_storeWraps` and `_complete`, `_authorOf` moved to `PqChatCore`):
+    // 32,069 -> 32,104 B; regular 2,187,548 -> 2,189,628; state 49,640,850 -> 49,694,400 (+35 x 1,530)
+    uint256 internal constant RUNTIME = 32_104;
+    uint256 internal constant RELEASE_REGULAR = 2_189_628;
+    uint256 internal constant RELEASE_STATE = 49_694_400;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice:
     // 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged

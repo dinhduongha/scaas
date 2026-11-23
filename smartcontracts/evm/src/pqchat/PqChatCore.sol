@@ -123,6 +123,13 @@ abstract contract PqChatCore is PqGroupBase {
         revert IPqChat.PqChatEnv();
     }
 
+    /// @dev `PqGroupBase._authorOf` for both forms of a PqChat blob, here so that every body module reads it too (fable-U2):
+    ///      the blob's first word is the record's offset (64 without the signature, 96 with it), `author` the record's
+    ///      second field.
+    function _authorOf(Epoch storage ep) internal view override returns (bytes32) {
+        return _word(ep.record, uint256(_word(ep.record, 0)) + 32);
+    }
+
     // ------------------------------------------------------------------ internal: signatures
 
     /// @dev P7: `ua`'s portable signature over `typed(structHash)` under `PURPOSE_PQCHAT`.
