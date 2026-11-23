@@ -47,13 +47,38 @@ fn to_js<T: Serialize + ?Sized>(v: &T) -> Result<JsValue, JsValue> {
     v.serialize(&s).map_err(|_| err(SdkError::Internal))
 }
 
-/// A JS value as `T`; a refused opaque-call marker is `OpaqueCallRefused` (as on every binding), any other refusal `Argument`.
+/// The deepest a JS value nests (arrays, maps, plain objects) before it is lifted: serde_json's own limit, which the native
+/// bindings' JSON text has (review T26 C-6; `serde_wasm_bindgen` recurses without one, and a stack overflow kills the
+/// instance).
+const JS_DEPTH: usize = 128;
+
+/// Whether `v` nests at most `left` levels; a typed array, a string, a number or a big integer is a leaf.
+fn shallow(v: &JsValue, left: usize) -> bool {
+    let within = |items: js_sys::Array| left > 0 && items.iter().all(|x| shallow(&x, left - 1));
+    if let Some(a) = v.dyn_ref::<js_sys::Array>() {
+        within(a.clone())
+    } else if let Some(m) = v.dyn_ref::<js_sys::Map>() {
+        within(js_sys::Array::from(m.values().as_ref()))
+    } else if v.is_object() && !js_sys::ArrayBuffer::is_view(v) && !v.is_function() {
+        within(js_sys::Object::values(v.unchecked_ref()))
+    } else {
+        true
+    }
+}
+
+/// A JS value as `T`: nested beyond [`JS_DEPTH`] `Argument`, before any lift; a refused opaque-call marker is
+/// `OpaqueCallRefused` (as on every binding), by the marker's own flag (review T26 C-12: never by the error's text), any
+/// other refusal `Argument`.
 fn from_js<T: DeserializeOwned>(v: JsValue) -> Result<T, SdkError> {
-    serde_wasm_bindgen::from_value(v).map_err(|e| {
-        match e.to_string().contains("OpaqueCallRefused") {
-            true => SdkError::OpaqueCallRefused,
-            false => SdkError::Argument,
-        }
+    if !shallow(&v, JS_DEPTH) {
+        return Err(SdkError::Argument);
+    }
+    super::OPAQUE_REFUSED.with(|r| r.set(false));
+    let out = serde_wasm_bindgen::from_value(v);
+    let refused = super::OPAQUE_REFUSED.with(|r| r.replace(false));
+    out.map_err(|_| match refused {
+        true => SdkError::OpaqueCallRefused,
+        false => SdkError::Argument,
     })
 }
 
@@ -724,6 +749,7 @@ impl Authenticator for JsAuth {
 /// A binding's configuration (spec §4), as `binding.rs`'s: the load check's `expect_api` and `need_features` (spec §16.3), the
 /// profiles, the passkey RP ID, the limits, the module gas tables.
 #[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct BindingConfig {
     expect_api: u32,
     need_features: u64,

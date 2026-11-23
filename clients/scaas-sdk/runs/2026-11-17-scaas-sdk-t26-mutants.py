@@ -23,8 +23,14 @@ UNL = "clients/scaas-sdk/src/vault/unlock.rs"
 FAM = "clients/scaas-sdk/src/wallet/families/mod.rs"
 SEC = "clients/ua-rs/src/wallet/secret.rs"
 APK = "clients/ua-rs/src/wallet/appkey.rs"
+JSR = "clients/scaas-sdk/src/wasm/js.rs"
+WAS = "clients/scaas-sdk/src/wasm.rs"
+CFG = "clients/scaas-sdk/src/config.rs"
+STO = "clients/scaas-sdk/src/vault/store.rs"
+SYN = "clients/scaas-sdk/src/sync_cpp.rs"
 SW = "clients/scaas-sdk/bindings/swift/CopyCall.swift"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
+JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
     "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,"
     "cosmos,aptos,solana,soroban,sui,ton,substrate,arweave"
@@ -238,6 +244,28 @@ MUTANTS = [
         "A-3: mac_derive loses the root's mark",
         [(APK, "        h.rooted = key.rooted;", "        h.rooted = false;")],
         U + " --test app_core the_app_root_and_its_derivations_are_never_sealed_out",
+    ),
+    (
+        "C-6: a JS value lifted without its depth bound",
+        [(JSR, "    if !shallow(&v, JS_DEPTH) {", "    if !shallow(&v, usize::MAX) {")],
+        JS,
+        "nested beyond 128 levels",
+    ),
+    (
+        "C-12: the opaque code by the error's text",
+        [(JSR, "    out.map_err(|_| match refused {", "    out.map_err(|e| match refused || e.to_string().contains(\"OpaqueCallRefused\") {")],
+        JS,
+        "store, authenticator, PRF",
+    ),
+    (
+        "C-7: an async release dropped where no runtime runs",
+        [(STO, "            if let Ok(rt) = tokio::runtime::Builder::new_current_thread()", "            if let Ok(rt) = tokio::runtime::Handle::try_current().map_err(|_| ()).and(Err::<tokio::runtime::Runtime, ()>(()))")],
+        T + ",uniffi --lib binding::tests::a_lock_is_released_wherever_it_is_dropped",
+    ),
+    (
+        "C-7: a sync release dropped where no runtime runs",
+        [(SYN, "            .spawn(move || store.unlock(token));", "            .spawn(move || {\n                if tokio::runtime::Handle::try_current().is_ok() {\n                    store.unlock(token)\n                }\n            });")],
+        T + ",sync-api --lib sync_cpp::tests::a_lock_is_released_wherever_it_is_dropped",
     ),
 ]
 

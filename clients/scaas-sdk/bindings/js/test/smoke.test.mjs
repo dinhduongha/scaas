@@ -230,6 +230,8 @@ test("store, authenticator, PRF, events, copy calls", async () => {
   const h = secret(PASS);
   assert.ok(sdk.release(h));
   assert.equal(await failure(s.vault().unlock(id, { Passphrase: h })), "Argument");
+  // review T26 C-12: a refusal whose text names OpaqueCallRefused is still Argument; only the marker's own is that code
+  assert.equal(await failure(s.vault().unlock(id, { OpaqueCallRefused: h })), "Argument");
 });
 
 test("an EVM profile opens: the bindings build the SDK's `evm` (decisions CLI-SDK-33 (100))", async () => {
@@ -267,4 +269,31 @@ test("an EVM profile opens: the bindings build the SDK's `evm` (decisions CLI-SD
   assert.equal(await failure(open(profile({ disabled_kinds: ["no-such-kind"] }))), "Argument");
   // Moonbeam's pinnedReads false (owner 2026-11-22, ARCH-POS-20 (2)): the profile opens; absent, the field is true
   assert.equal(await failure(open(profile({ pinned_reads: false }))), "Ok");
+});
+
+test("a value nested beyond 128 levels is refused before it is lifted, and the instance lives on (review T26 C-6)", async () => {
+  const s = await sdk.open(config(), new MemStore());
+  let deep = 0;
+  for (let i = 0; i < 100000; i++) deep = [deep];
+  const blob = (extra) => ({
+    v: 1,
+    chain_uid: "0x" + "60".repeat(32),
+    family: "evm",
+    contract: "0x" + "11".repeat(20),
+    entry: "mtxCancelNonce",
+    struct: "UACancelNonce",
+    kind: "token",
+    message: {},
+    extra,
+    signature: "0x",
+    signer: "0x" + "22".repeat(32),
+    signer_kind: 0,
+    ids: false,
+  });
+  const expect = { chain: "nowhere", payee: [], payer: { Native: { seed: "none", network: "evm", index: 0 } } };
+  assert.equal(await failure(s.op().import_signed(blob(deep), expect)), "Argument");
+  let ok = 0;
+  for (let i = 0; i < 100; i++) ok = [ok];
+  assert.equal(await failure(s.op().import_signed(blob(ok), expect)), "ChainUnknown", "the twin: 100 levels lift");
+  assert.deepEqual(await s.vault().seeds(), [], "the instance lives on");
 });
