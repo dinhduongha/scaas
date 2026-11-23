@@ -16,9 +16,9 @@
 
 #[path = "../../scaas-sdk/tests/common/prepared.rs"]
 mod prepared;
-use prepared::SignPrepared as _;
 use pqvault_core::records::*;
 use pqvault_core::*;
+use prepared::SignPrepared as _;
 use scaas_sdk::account::{AddNative, Register, RegisterAttrs};
 use scaas_sdk::app_core::{AppCall, AppKey, AppPath, AppSigned, AppWrap, SecretBytes};
 use scaas_sdk::op::{KeyRef, OpState};
