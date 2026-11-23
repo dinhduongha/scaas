@@ -1151,6 +1151,20 @@ fn pqchat_sign_records_only() {
         "a native key"
     );
     assert!(pqchat::typed("Nope", Value::Null).is_err());
+    // review A-8: a struct named like a record with another encodeType (one field more) is no record
+    let mut v = td.to_value();
+    v["types"]["PqChatLeave"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"name": "extra", "type": "uint256"}));
+    v["message"]["extra"] = "1".into();
+    let other = scaas_ua::wallet::TypedData::from_json(v.to_string().as_bytes()).unwrap();
+    assert_eq!(other.primary_type(), "PqChatLeave");
+    assert_eq!(
+        pqchat::sign(&k, &other).err(),
+        Some(Error::Argument),
+        "another struct under a record's name"
+    );
 }
 
 /// A UA key signs its contact card (a control verifying under its key); a native key does not; a malformed Matrix id is no card.

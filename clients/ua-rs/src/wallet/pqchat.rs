@@ -166,10 +166,22 @@ pub fn id(tag: &str, words: &[[u8; 32]]) -> [u8; 32] {
 /// A single UA key's `UASig` over the record `td` (one of [`RECORDS`] in `DS_C`, else `Argument`): `uaMessage(kind,
 /// PURPOSE_PQCHAT, typed)`, role `Pop`, no key data, no members. A native key or one claiming the `msig` kind: `Argument`.
 pub fn sign(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
-    if !RECORDS.contains(&td.primary_type()) {
+    if !own_struct(td) {
         return Err(Error::Argument);
     }
     sign_typed(key, td)
+}
+
+/// Review A-8 (as PqVault's path checks its own): `td` is one of [`RECORDS`] with that record's own `encodeType` (referenced
+/// types included), not another struct named like it.
+fn own_struct(td: &TypedData) -> bool {
+    RECORDS.contains(&td.primary_type())
+        && td
+            .to_value()
+            .get("message")
+            .cloned()
+            .and_then(|m| typed(td.primary_type(), m).ok())
+            .is_some_and(|t| t.encode_type() == td.encode_type())
 }
 
 /// [`sign`] after its struct check.
@@ -203,7 +215,7 @@ fn sign_typed(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
 /// `msig` minimal over two levels, its native members over the typed digest). A native id, an unknown UA, another struct or
 /// domain: `false`. No detail: a reader counts a refusal, it never answers one.
 pub fn verify(ua: &[u8; 32], td: &TypedData, sig: &UASig, state: &super::AppRecordState) -> bool {
-    RECORDS.contains(&td.primary_type()) && verify_typed(ua, td, sig, state)
+    own_struct(td) && verify_typed(ua, td, sig, state)
 }
 
 /// [`verify`] after its struct check.
