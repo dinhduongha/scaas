@@ -45,6 +45,7 @@ OPS = "clients/scaas-sdk/src/wallet/ops.rs"
 TOK = "clients/scaas-sdk/src/wallet/tokens.rs"
 ARW = "clients/scaas-rpc/src/arweave.rs"
 HOF = "clients/scaas-sdk/src/op/handoff.rs"
+HTP = "clients/scaas-rpc/src/http.rs"
 N = "cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
@@ -450,6 +451,11 @@ MUTANTS = [
         "B-15: a native signer's blob kind trusted",
         [(HOF, "                if native != (blob.signer_kind == super::gas::NATIVE_EVM) {", "                if native && !native {")],
         T + " --test handoff",
+    ),
+    (
+        "B-20: the body read whole before the cap",
+        [(HTP, "        if buf.len() + c.len() > cap {\n            return Ok(None);\n        }\n        each(c);\n        buf.extend_from_slice(c);\n    }\n    Ok(Some(buf))", "        each(c);\n        buf.extend_from_slice(c);\n    }\n    Ok((buf.len() <= cap).then_some(buf))")],
+        R + " --lib http::read_tests::the_read_stops_at_the_first_chunk_past_the_cap",
     ),
 ]
 

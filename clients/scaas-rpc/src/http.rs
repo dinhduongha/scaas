@@ -317,8 +317,7 @@ impl Http {
             };
             self.fail(list, i, kind, &err.without_url().to_string())
         };
-        #[allow(unused_mut)]
-        let mut r = req.send().await.map_err(net)?;
+        let r = req.send().await.map_err(net)?;
         let status = r.status().as_u16();
         if !(200..300).contains(&status) {
             return Err(self.fail(list, i, FailureKind::Http, &format!("HTTP {status}")));
@@ -332,37 +331,16 @@ impl Http {
             ));
         }
         let mut h = sha2::Sha256::new();
-        #[cfg(not(target_arch = "wasm32"))]
-        let buf = {
-            let mut buf = Vec::with_capacity(len);
-            while let Some(c) = r.chunk().await.map_err(net)? {
-                if buf.len() + c.len() > len {
-                    return Err(self.fail(
-                        list,
-                        i,
-                        FailureKind::AnswerTooLarge,
-                        "a body longer than the object",
-                    ));
-                }
-                h.update(&c);
-                buf.extend_from_slice(&c);
-            }
-            buf
-        };
-        // wasm32: no streams in the fetch backend; the announced length was checked, the whole body is read, then bounded
-        #[cfg(target_arch = "wasm32")]
-        let buf = {
-            let b = r.bytes().await.map_err(net)?;
-            if b.len() > len {
-                return Err(self.fail(
-                    list,
-                    i,
-                    FailureKind::AnswerTooLarge,
-                    "a body longer than the object",
-                ));
-            }
-            h.update(&b);
-            b.to_vec()
+        let Some(buf) = read_capped(chunks(r), len, |c| h.update(c))
+            .await
+            .map_err(net)?
+        else {
+            return Err(self.fail(
+                list,
+                i,
+                FailureKind::AnswerTooLarge,
+                "a body longer than the object",
+            ));
         };
         if buf.len() != len {
             return Err(self.fail(
@@ -503,7 +481,7 @@ impl Http {
             };
             self.fail(list, i, kind, &err.without_url().to_string())
         };
-        let mut r = req.send().await.map_err(net)?;
+        let r = req.send().await.map_err(net)?;
         let status = r.status().as_u16();
         if (300..400).contains(&status) {
             return Err(self.fail(list, i, FailureKind::Http, &format!("HTTP {status}")));
@@ -516,18 +494,14 @@ impl Http {
                 &format!("an announced answer above {cap} bytes"),
             ));
         }
-        let mut buf = Vec::new();
-        while let Some(c) = r.chunk().await.map_err(net)? {
-            if buf.len() + c.len() > cap {
-                return Err(self.fail(
-                    list,
-                    i,
-                    FailureKind::AnswerTooLarge,
-                    &format!("an answer above {cap} bytes"),
-                ));
-            }
-            buf.extend_from_slice(&c);
-        }
+        let Some(buf) = read_capped(chunks(r), cap, |_| ()).await.map_err(net)? else {
+            return Err(self.fail(
+                list,
+                i,
+                FailureKind::AnswerTooLarge,
+                &format!("an answer above {cap} bytes"),
+            ));
+        };
         if let Err(k) = if scan { depth(&buf) } else { Ok(()) } {
             return Err(self.fail(list, i, k, "the answer's nesting"));
         }
@@ -535,8 +509,8 @@ impl Http {
     }
 
     /// wasm32: the fetch backend (spec §12); the timeout an abort signal (`RequestBuilder::timeout`). The browser follows a
-    /// redirect itself: an answer from another URL than the one asked is the endpoint's HTTP failure. Without streams there,
-    /// the answer is read whole, then capped (an announced length above the cap is refused before reading).
+    /// redirect itself: an answer from another URL than the one asked is the endpoint's HTTP failure. The answer is read chunk
+    /// by chunk to the cap, as natively (an announced length above the cap is refused before reading).
     #[cfg(target_arch = "wasm32")]
     #[allow(clippy::too_many_arguments)]
     async fn send_any(
@@ -572,19 +546,18 @@ impl Http {
                 &format!("an announced answer above {cap} bytes"),
             ));
         }
-        let buf = r.bytes().await.map_err(net)?;
-        if buf.len() > cap {
+        let Some(buf) = read_capped(chunks(r), cap, |_| ()).await.map_err(net)? else {
             return Err(self.fail(
                 list,
                 i,
                 FailureKind::AnswerTooLarge,
                 &format!("an answer above {cap} bytes"),
             ));
-        }
+        };
         if let Err(k) = if scan { depth(&buf) } else { Ok(()) } {
             return Err(self.fail(list, i, k, "the answer's nesting"));
         }
-        Ok((status, buf.to_vec()))
+        Ok((status, buf))
     }
 }
 
@@ -701,5 +674,78 @@ impl tower::Service<alloy::rpc::json_rpc::RequestPacket> for BoundedRpc {
             serde_json::from_slice(&bytes)
                 .map_err(|e| TransportError::deser_err(e, String::from_utf8_lossy(&bytes)))
         })
+    }
+}
+
+/// A body as a stream of chunks: natively `chunk()` (no `stream` feature), on wasm32 the fetch backend's `bytes_stream`.
+#[cfg(not(target_arch = "wasm32"))]
+fn chunks(
+    r: reqwest::Response,
+) -> impl futures::Stream<Item = Result<impl AsRef<[u8]>, reqwest::Error>> {
+    futures::stream::unfold(r, |mut r| async move {
+        r.chunk().await.transpose().map(|c| (c, r))
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn chunks(
+    r: reqwest::Response,
+) -> impl futures::Stream<Item = Result<impl AsRef<[u8]>, reqwest::Error>> {
+    r.bytes_stream()
+}
+
+/// The one bounded body read of both targets (CLI-RPC-07): chunks are taken one at a time, each passed to `each`, and the
+/// read stops at the first chunk that would pass `cap`, before the rest is read (`Ok(None)`: the caller's named
+/// `AnswerTooLarge`).
+async fn read_capped<S, B, E>(
+    s: S,
+    cap: usize,
+    mut each: impl FnMut(&[u8]),
+) -> Result<Option<Vec<u8>>, E>
+where
+    S: futures::Stream<Item = Result<B, E>>,
+    B: AsRef<[u8]>,
+{
+    use futures::StreamExt as _;
+    let mut s = std::pin::pin!(s);
+    let mut buf = Vec::new();
+    while let Some(c) = s.next().await {
+        let c = c?;
+        let c = c.as_ref();
+        if buf.len() + c.len() > cap {
+            return Ok(None);
+        }
+        each(c);
+        buf.extend_from_slice(c);
+    }
+    Ok(Some(buf))
+}
+
+#[cfg(test)]
+mod read_tests {
+    use super::read_capped;
+    use futures::executor::block_on;
+    use futures::StreamExt as _;
+
+    /// B-20: a chunk past the cap stops the read; the chunk after it is never polled (it would panic).
+    #[test]
+    fn the_read_stops_at_the_first_chunk_past_the_cap() {
+        let chunks = futures::stream::iter([vec![1u8; 3], vec![2; 3], vec![3; 1]])
+            .enumerate()
+            .map(|(n, c)| {
+                assert!(n < 2, "a chunk read after the cap");
+                Ok::<_, ()>(c)
+            });
+        let mut seen = 0;
+        assert_eq!(
+            block_on(read_capped(chunks, 5, |c| seen += c.len())),
+            Ok(None)
+        );
+        assert_eq!(seen, 3);
+        let at = futures::stream::iter([Ok::<_, ()>(vec![1u8; 3]), Ok(vec![2; 2])]);
+        assert_eq!(
+            block_on(read_capped(at, 5, |_| ())),
+            Ok(Some(vec![1, 1, 1, 2, 2]))
+        );
     }
 }
