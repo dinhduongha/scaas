@@ -633,6 +633,9 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_subscription_next_blocking() != 19717) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_method_vault_accept_rollback_blocking() != 30181) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_method_vault_change_passphrase_blocking() != 7889) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
@@ -3241,6 +3244,12 @@ Vault::Vault(const Vault &other) : instance(0) {
 
 
 
+void Vault::accept_rollback_blocking(std::shared_ptr<CancelToken> cancel) {
+    uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_vault_accept_rollback_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterOptionalCancelToken::lower(cancel));
+}
 void Vault::change_passphrase_blocking(const std::string &seed, const std::shared_ptr<SecretBytes> &old, const std::shared_ptr<SecretBytes> &new_, std::shared_ptr<CancelToken> cancel) {
     uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_vault_change_passphrase_blocking,

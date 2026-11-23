@@ -22,6 +22,7 @@ macro_rules! binding_list {
                 #[cfg(feature = "classical-roots")] async derive_from_signature / derive_from_signature_blocking (req: DeriveFromSignature) -> NewSeed;
                 #[cfg(feature = "classical-roots")] async derive_from_key / derive_from_key_blocking (req: DeriveFromKey) -> NewSeed;
                 async keystore_rollback / keystore_rollback_blocking () -> bool;
+                async accept_rollback / accept_rollback_blocking () -> ();
                 async seeds / seeds_blocking () -> Vec<SeedInfo>;
                 async generate / generate_blocking (req: Generate) -> NewSeed;
                 async derive_child / derive_child_blocking (req: DeriveChild) -> NewSeed;

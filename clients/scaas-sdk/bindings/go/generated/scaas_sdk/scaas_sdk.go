@@ -2321,6 +2321,15 @@ func uniffiCheckChecksums() {
 	}
 	{
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_method_vault_accept_rollback()
+		})
+		if checksum != 51021 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_vault_accept_rollback: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_scaas_sdk_checksum_method_vault_change_passphrase()
 		})
 		if checksum != 63580 {
@@ -11185,6 +11194,7 @@ func (_ FfiDestroyerSubscription) Destroy(value *Subscription) {
 
 // Seeds (spec §6).
 type VaultInterface interface {
+	AcceptRollback() error
 	ChangePassphrase(seed string, old *SecretBytes, new *SecretBytes) error
 	ConfirmBackup(seed string) error
 	DeriveChild(req DeriveChild) (NewSeed, error)
@@ -11221,6 +11231,37 @@ type VaultInterface interface {
 // Seeds (spec §6).
 type Vault struct {
 	ffiObject FfiObject
+}
+
+func (_self *Vault) AcceptRollback() error {
+	_pointer := _self.ffiObject.incrementPointer("*Vault")
+	defer _self.ffiObject.decrementPointer()
+	_, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
+		// completeFn
+		func(handle C.uint64_t, status *C.RustCallStatus) struct{} {
+			C.ffi_scaas_sdk_rust_future_complete_void(handle, status)
+			return struct{}{}
+		},
+		// liftFn
+		func(_ struct{}) struct{} { return struct{}{} },
+		C.uniffi_scaas_sdk_fn_method_vault_accept_rollback(
+			_pointer),
+		// pollFn
+		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_poll_void(handle, continuation, data)
+		},
+		// freeFn
+		func(handle C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_free_void(handle)
+		},
+	)
+
+	if err == nil {
+		return nil
+	}
+
+	return err
 }
 
 func (_self *Vault) ChangePassphrase(seed string, old *SecretBytes, new *SecretBytes) error {
