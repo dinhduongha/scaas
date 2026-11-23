@@ -24,9 +24,12 @@ MUTANTS = [
      [(ORD, REACTION, "impl Message {\n    pub fn text(&self) -> String {\n"
        "        self.content.with(|b| String::from_utf8_lossy(b).into_owned())\n    }\n}\n\n" + REACTION)],
      BIND, "Message has a member that is no field"),
-    ("bind: Content::value in the surface",
-     [(CON, "    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]\n    pub fn value(", "    pub fn value(")],
-     BIND, "decrypted content through the codec (Content_value)"),
+    # (owner 2026-11-23: `Content` as a whole is Rust-only, so its `value` alone cannot reach the surface; the mutant that
+    # dropped `value`'s ignore survived at 2958d6c5b for that reason and is replaced by the type's own)
+    ("bind: the crate's Content in the surface",
+     [(CON, "#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]\n#[derive(Debug, Clone, PartialEq, Eq)]\npub enum Content {",
+       "#[derive(Debug, Clone, PartialEq, Eq)]\npub enum Content {")],
+     BIND, "the crate's Content in the surface"),
     ("bind: the session's name back in Preview",
      [(CSN, "    pub info: Arc<scaas_sdk::SecretBytes>,\n",
        "    pub info: Arc<scaas_sdk::SecretBytes>,\n    pub name: String,\n"),
