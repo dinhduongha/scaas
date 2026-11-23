@@ -193,10 +193,11 @@ test("container builder: an msig sender signs only in the minimal form (UAPoP), 
 });
 
 test("seal.json acceptance: each refusal from an otherwise valid container (C-03), before decapsulation where it says ContainerSender", async () => {
-  assert.equal(S.acceptance.length, 29);
+  assert.equal(S.acceptance.length, 33);
   for (const x of S.acceptance) {
     let got;
     const a = acceptedOf(x.accepted);
+    const msigCurrent = lookup(x.msigCurrent);
     if (x.link)
       got = await codeOf(() =>
         SL.openLink(
@@ -205,12 +206,17 @@ test("seal.json acceptance: each refusal from an otherwise valid container (C-03
           x.expect,
           lookup(x.members),
           a,
-          { now: S.containers[1].opener.session.now },
+          { now: S.containers[1].opener.session.now, msigCurrent },
         ),
       );
     else if (x.restore)
-      got = await codeOf(() => SL.restoreBackup(openerOf(x.opener), x.container, x.expect, lookup(x.members), a));
-    else got = await codeOf(() => SL.openContainer(openerOf(x.opener), x.container, x.expect, lookup(x.members), a));
+      got = await codeOf(() =>
+        SL.restoreBackup(openerOf(x.opener), x.container, x.expect, lookup(x.members), a, { msigCurrent }),
+      );
+    else
+      got = await codeOf(() =>
+        SL.openContainer(openerOf(x.opener), x.container, x.expect, lookup(x.members), a, { msigCurrent }),
+      );
     assert.equal(got, x.error, x.id);
   }
   for (const id of [
@@ -230,6 +236,9 @@ test("seal.json acceptance: each refusal from an otherwise valid container (C-03
     "msig sender: nested, the inner msig's slot not accepted (level 1)",
     "msig sender: nested, an inner signing member not accepted (level 2)",
     "msig sender: no accepted lookup",
+    "msig sender: updated to three of three (current), the first quorum refused",
+    "msig sender: a signing slot disabled (current)",
+    "msig sender: nested, the inner msig updated to three of three (current)",
   ]) {
     assert.ok(
       S.acceptance.some((x) => x.id === id),

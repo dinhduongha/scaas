@@ -126,8 +126,8 @@ pub use policy::{
 pub(crate) use seal::now;
 pub use seal::{
     seal, seal_container, AcceptedJson, ContainerExpect, ContainerExpectJson, ContainerSigner,
-    ExpectedSender, LinkSession, MembersJson, Recipient, RecipientId, Sealed, SealedContainer,
-    LINK_SKEW, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
+    CurrentJson, ExpectedSender, LinkSession, MembersJson, Recipient, RecipientId, Sealed,
+    SealedContainer, LINK_SKEW, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
 };
 pub use secret::{
     secret_dispose, secret_read, secret_write, secrets_live, SecretBytes, SECRET_MAX,
@@ -1159,6 +1159,7 @@ impl Wallet {
         containers: &[SealedContainer],
         expect: &ContainerExpect,
         members: &crate::ua_portable::Members,
+        current: &crate::ua_portable::Current,
         accepted: Option<&crate::ua_portable::Accepted>,
         msig_ua: &[u8; 32],
         version: u64,
@@ -1171,6 +1172,7 @@ impl Wallet {
             containers,
             expect,
             members,
+            current,
             accepted,
             msig_ua,
             version,

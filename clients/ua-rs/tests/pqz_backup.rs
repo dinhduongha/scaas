@@ -115,7 +115,7 @@ impl Group {
             sender: ExpectedSender::Set(&set),
             recipient: kk.recipient(),
         };
-        kk.reseal_pqz_share(c, &e, &none, None, &self.recipient(0), k)
+        kk.reseal_pqz_share(c, &e, &none, &|_| None, None, &self.recipient(0), k)
             .unwrap()
     }
     fn rebuild(
@@ -132,7 +132,7 @@ impl Group {
             sender: ExpectedSender::Set(&set),
             recipient: kk.recipient(),
         };
-        w.reconstruct_pqz_seed(kk, cs, &e, &none, None, msig_ua, version, kh)
+        w.reconstruct_pqz_seed(kk, cs, &e, &none, &|_| None, None, msig_ua, version, kh)
     }
 }
 
@@ -308,7 +308,7 @@ fn shares_never_carry_wallet_entropy() {
             sender: ExpectedSender::Set(&set),
             recipient: kk.recipient(),
         };
-        let pt = kk.open_container(c, &e, &none, None).unwrap();
+        let pt = kk.open_container(c, &e, &none, &|_| None, None).unwrap();
         let v: Value = serde_json::from_slice(&pt).unwrap();
         let mut keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         keys.sort_unstable();
@@ -477,12 +477,22 @@ fn reseal_takes_share_containers_only() {
     };
     let b = g.deal(None);
     assert!(
-        kk1.reseal_pqz_share(&b.shares[1], &e, &none, None, &g.recipient(0), k1)
-            .is_ok(),
+        kk1.reseal_pqz_share(
+            &b.shares[1],
+            &e,
+            &none,
+            &|_| None,
+            None,
+            &g.recipient(0),
+            k1
+        )
+        .is_ok(),
         "control"
     );
     // a container of another purpose that carries a well-formed share: only the purpose refuses it
-    let share_pt = kk1.open_container(&b.shares[1], &e, &none, None).unwrap();
+    let share_pt = kk1
+        .open_container(&b.shares[1], &e, &none, &|_| None, None)
+        .unwrap();
     let other = scaas_ua::wallet::seal_container(
         &g.recipient(1),
         "scaas/backup/v1",
@@ -497,7 +507,7 @@ fn reseal_takes_share_containers_only() {
         ..e
     };
     assert_eq!(
-        kk1.reseal_pqz_share(&other, &e2, &none, None, &g.recipient(0), k1)
+        kk1.reseal_pqz_share(&other, &e2, &none, &|_| None, None, &g.recipient(0), k1)
             .err(),
         Some(Error::Argument)
     );
@@ -511,7 +521,7 @@ fn reseal_takes_share_containers_only() {
     )
     .unwrap();
     assert_eq!(
-        kk1.reseal_pqz_share(&bad, &e, &none, None, &g.recipient(0), k1)
+        kk1.reseal_pqz_share(&bad, &e, &none, &|_| None, None, &g.recipient(0), k1)
             .err(),
         Some(Error::Argument),
         "malformed payload"
@@ -563,8 +573,11 @@ fn field_and_split_known_answers() {
         sender: ExpectedSender::Set(&set),
         recipient: kk.recipient(),
     };
-    let v: Value =
-        serde_json::from_slice(&kk.open_container(&b.shares[1], &e, &none, None).unwrap()).unwrap();
+    let v: Value = serde_json::from_slice(
+        &kk.open_container(&b.shares[1], &e, &none, &|_| None, None)
+            .unwrap(),
+    )
+    .unwrap();
     let want2: Vec<u8> = seed32
         .iter()
         .zip(c1)
@@ -816,9 +829,10 @@ fn the_rebuilders_backup_carries_the_key() {
         recipient: kk1.recipient(),
     };
     let pt: Value =
-        serde_json::from_slice(&kk1.open_container(&c, &e, &none, None).unwrap()).unwrap();
+        serde_json::from_slice(&kk1.open_container(&c, &e, &none, &|_| None, None).unwrap())
+            .unwrap();
     assert_eq!(pt["secrets"][0]["label"], held_label(&g.msig_ua, 0, &kh));
-    let r = Wallet::restore_backup(kk1, &c, &e, &none, None, None, None, "")
+    let r = Wallet::restore_backup(kk1, &c, &e, &none, &|_| None, None, None, None, "")
         .unwrap()
         .unwrap();
     assert_eq!(r.manifest().pqz_held, w.manifest().pqz_held);
