@@ -12,6 +12,9 @@ MS = "clients/pqchat-core/src/message.rs"
 NT = "clients/pqchat-core/src/net.rs"
 SE = "clients/pqchat-core/src/session.rs"
 AG = "clients/scaas-sdk/src/app_core.rs"
+CK = "clients/pqchat-core/src/check.rs"
+RD = "clients/pqchat-core/src/reads.rs"
+TD = "cd clients/pqchat-core && ../../scripts/capped cargo test --locked --offline -j2 --test devices "
 EV = "clients/scaas-rpc/src/evm.rs"
 T = "cd clients/pqchat-core && ../../scripts/capped cargo test --locked --offline -j2 --test signed "
 TSDK = ("cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features "
@@ -54,6 +57,19 @@ MUTANTS = [
     ("the agreed option over every read",
      [(NT, "    item.starts_with(\"IPqChat.\") && matches!(trust(item), Ok(Trusted))", "    item.starts_with(\"I\")")],
      T + "agreed_reads_cover_the_control_plane_only"),
+    # owner (M) 2026-11-23 (CTR-CHAT-24): several KEM keys per member
+    ("(M) keys of a member in any order",
+     [(CK, "all(|w| matches!(w, [a, b] if (a.ua.as_str(), a.key_id) < (b.ua.as_str(), b.key_id)))", "all(|w| matches!(w, [a, b] if a.ua <= b.ua))")],
+     TD + "shapes_take_several_keys_per_member_in_order"),
+    ("(M) no cap on a member's keys",
+     [(CK, "count() <= KEYS_PER_UA_MAX)", "count() <= usize::MAX)")],
+     TD + "shapes_take_several_keys_per_member_in_order"),
+    ("(M) the plain-rekey rule per key, not per UA",
+     [(CK, "    let plain = distinct(child)\n        .into_iter()\n        .eq(distinct(parent).into_iter().filter(|u| kept(u)))", "    let plain = child.members.iter().map(|m| &m.ua)\n        .eq(parent.members.iter().map(|m| &m.ua).filter(|u| kept(u)))")],
+     TD + "a_members_keys_change_in_a_plain_rekey"),
+    ("(M) only the first own wrap tried",
+     [(RD, "                Err(d) => last = d,", "                Err(d) => return Err(d),")],
+     TD + "the_first_own_wrap_that_opens_is_used"),
     ("SDK: read_app_agreed not agreed",
      [(AG, "        let out = if agreed {", "        let out = if false && agreed {")],
      TSDK + "read_app_agreed_is_the_agreed_read"),

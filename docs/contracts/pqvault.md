@@ -199,6 +199,12 @@ CTR-PQV-15 lists it held; `PqVault` on it: Part V). UNAUDITED.
 <a id="CTR-PQV-12"></a>**CTR-PQV-12** — **The group code PqChat and PqVault share moves into one abstract base without state
 of its own, PqChat's storage-layout and gas pins proving PqChat unchanged; if that proof fails, PqVault copies the code
 instead and PqChat stays untouched** (owner 2026-11-17, V3, V12). What counts as the proof is [CTR-PQV-15](#CTR-PQV-15).
+Change (owner 2026-11-23, (M), one rule for both apps; BUILT on branch `pqchat-sigs`, UNAUDITED): the base's member rule is
+[CTR-CHAT-24](pqchat.md#CTR-CHAT-24): a vault member may hold several KEM keys in an epoch, `(ua, keyId)` strictly ascending,
+at most 8 per UA, one wrap each; `vaultsOf`, the minimum count, rights, leave and removal per UA
+(`test/pqvault/PqVaultDevices.t.sol`). `PqVault` 30,431 → 30,825 B; `rekeyVault` 1 → 2 398,975 → 400,264, 3 → 1 320,352 →
+321,710, 2 → 1 310,007 → 310,972 regular. `pqvault-core` reads every own wrap of the user and opens the first its account
+holds; it writes one key per member.
 
 <a id="CTR-PQV-15"></a>**CTR-PQV-15** — **PqChat's behaviour counts as unchanged when, with no test, pin or vector edited, its
 layout pin, typehash pins and vectors, ABI and `interfaceId`, every per-operation gas row, every PqChat test, the node's
@@ -206,6 +212,14 @@ PqChat allow-list test and all 55 of its mutants hold; only the release-size pin
 call, owner may override). The mutant script is the one instrument allowed to change, with an old line → new line table per
 mutant. PqChat's bytecode moves, so it is redeployed and verified at the next reset and its diff is in the audit scope. The
 boundary is the spec's [§4.2](../superpowers/specs/2026-11-17-pqvault.md#42-r-b-the-base-shared-with-pqchat-v3).
+
+<a id="CTR-PQV-18"></a>**CTR-PQV-18** — **`PqVaultCreate` carries `uint8 groupMode`, its last field, fixed at creation, 0 only in
+this release (`PqVaultModeUnsupported(groupMode)`), as [CTR-CHAT-25](pqchat.md#CTR-CHAT-25)** (controller call 2026-11-23, one
+rule for both apps of the shared base; the owner confirmed the place and the 0-only rule the same day, PqVault open for a later
+release). The protocol ids are CTR-CHAT-25's. Status: **BUILT on branch `pqchat-sigs`, UNAUDITED**
+(`test/pqvault/PqVaultGroupMode.t.sol`). It is apart from the vault's `mode` (portable or chain-bound, CTR-PQV-17); the
+`PqVaultCreate` typehash `0xb5e6f032…84d587` → `0xa81afc5c…ef53f9`; `createVault`'s selector moves. `pqvault-core` signs 0 and
+refuses a read vault of any other mode.
 
 ## 10. The two modes
 

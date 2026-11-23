@@ -167,7 +167,10 @@ impl PqChat {
         Ok(Preview {
             creator,
             epoch: ep.epoch.id.clone(),
-            members: ep.epoch.members.iter().map(|m| m.ua.clone()).collect(),
+            members: crate::check::distinct(&ep.epoch)
+                .into_iter()
+                .cloned()
+                .collect(),
             admins: ep.epoch.admins.clone(),
             info: handle,
             chain_stores: info

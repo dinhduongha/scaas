@@ -232,6 +232,7 @@ fn state(pv: &PqVault, k: &KeyRef, verified: bool, pending: bool) -> VaultState 
         pass_kdf: Num(0),
         pass_salt: B32::default(),
         sealed_info: Bytes(vec![]),
+        group_mode: Num(0),
     };
     VaultState {
         at: at(),

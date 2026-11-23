@@ -341,6 +341,11 @@
       "internalType": "bytes",
       "name": "sealedInfo",
       "type": "bytes"
+     },
+     {
+      "internalType": "uint8",
+      "name": "groupMode",
+      "type": "uint8"
      }
     ],
     "internalType": "struct IPqChat.PqChatSession",
@@ -2312,6 +2317,11 @@
       "internalType": "bytes",
       "name": "sealedInfo",
       "type": "bytes"
+     },
+     {
+      "internalType": "uint8",
+      "name": "groupMode",
+      "type": "uint8"
      }
     ],
     "internalType": "struct IPqChat.PqChatSession",

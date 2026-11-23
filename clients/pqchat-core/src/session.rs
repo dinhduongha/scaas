@@ -445,7 +445,7 @@ impl PqChat {
         }
         let sealed = model::unhex(field(&signed, "message.sealedInfo")?)?;
         let s = json!({"creator": me, "nonce": r.nonce.to_string(), "homeChain": c.chain_uid,
-            "homeChatContract": r.home.to_ascii_lowercase(), "admins": admins, "members": members_json(&w.keys),
+            "homeChatContract": r.home.to_ascii_lowercase(), "groupMode": "0", "admins": admins, "members": members_json(&w.keys),
             "wrapHashes": signed.wrap_hashes, "sealedInfo": model::hex(&sealed)});
         let epoch = Epoch {
             id: sid.clone(),
@@ -527,7 +527,7 @@ impl PqChat {
             .keys
             .iter()
             .map(|m| &m.ua)
-            .eq(p.members.iter().map(|m| &m.ua).filter(kept))
+            .eq(crate::check::distinct(p).into_iter().filter(kept))
             && admins.iter().eq(p.admins.iter().filter(kept));
         if plain && !p.has_member(&ua) {
             return Err(PqChatError::NotMember);

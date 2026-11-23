@@ -6429,6 +6429,15 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqva
 
 Change (controller, 2026-11-17, the Fable review r2 of 2026-11-17 (`scratchpad/pqvault-review/20261117-17-fable-fable-high-spec-r2.md`, kept outside the tracked files), findings R5, R10, R11; status: SPECIFIED): the mode is bound into `vaultId` (CTR-PQV-04's Change); the one check takes the vault from the stored epoch (for an edit, the item) and requires the record's `vaultId` to equal it before reading the mode, with a mutant per write; the clause "or the chain's registry lacks `requirePortableApp`" of the default is withdrawn (mode 1 on the user's choice only), since every registry from the freeze carries the entry and a node's answer must not pick the mode.
 
+
+### CTR-PQV-18 — PqVaultCreate carries uint8 groupMode, fixed at creation, 0 only, as PqChat's CTR-CHAT-25
+- old: — · status: current · owner: no · date: 2026-11-23 · normative: contracts/pqvault.md#CTR-PQV-18 · superseded-by: —
+
+**Rule.** (Summary; normative [pqvault.md](contracts/pqvault.md#CTR-PQV-18).) Controller call 2026-11-23 on the owner's PqChat ruling (CTR-CHAT-25), one rule for both apps of the shared base: `PqVaultCreate` gains `uint8 groupMode` as its last field, fixed at creation, 0 only in this release (`PqVaultModeUnsupported`); apart from the vault's `mode` (CTR-PQV-17).
+**Status.** BUILT on branch `pqchat-sigs`, UNAUDITED. The `PqVaultCreate` typehash `0xb5e6f0323db4eb92065a67dedef66888c5936a3fda2508c66728db676184d587` -> `0xa81afc5c34e93b0250095251a73b625a97fb14fa58780806d5a1916a32ef53f9`.
+**Why.** The group code is shared; a vault's group protocol is named the same way and kept stable across releases.
+**Cost if wrong.** One word per vault; the owner may drop it from PqVault.
+**Source.** controller call 2026-11-23 (the owner's ruling for PqChat, relayed); the owner may override.
 ### CTR-PQZ-01 — Separate PQZ class gated by the precompile self-test
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
 
@@ -12745,6 +12754,24 @@ Change (owner 2026-11-23, CLI-PQC-15; status: BUILT on branch `pqchat-sigs`, UNA
 **Why.** A fresh device starts every chain at 0; under the reference's 2,000-step bound it could not read the latest messages of a long epoch, and skipped-key handles let one member fill the shared arena with new device ids. No secret is lost: `K` is held while unlocked and derived again from the seed and the chain.
 **Cost if wrong.** A restored phone that shows nothing of a long 1:1 epoch, or an app whose reading stops when one member opens many chains.
 **Source.** coordinator call K2, 2026-11-17, on Fable's review of `3a5ece097` (K2, P1; K6, K21); the owner may override; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §4, §10.
+
+### CTR-CHAT-25 — PqChatSession carries uint8 groupMode, fixed at creation; this release accepts 0 only
+- old: — · status: current · owner: yes · date: 2026-11-23 · normative: contracts/pqchat.md#CTR-CHAT-25 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat.md](contracts/pqchat.md#CTR-CHAT-25).) Owner 2026-11-23 ("add the field right in pqchat-sigs"; verbatim on the Source line): the signed session record gains `uint8 groupMode`, a protocol id: 0 = flat; 1 = RFC 9420 tree rules over KEM scheme 1; 2–255 later variants (owner 2026-11-23, its second answer); appended at the end of `PqChatSession` and `PqVaultCreate`, both accepting only 0 in this round, PqVault open for a later release; fixed at creation, no epoch, rekey, leave or removal changes it (no such record carries it); this release accepts 0 only and refuses others by name (`PqChatModeUnsupported(mode)`); a later catalogued release accepts 1 with the same struct and typehash; stored with the session, returned by `sessionOf`. Controller calls (the owner may override): the field is the struct's last (the TreeKEM research note, `docs/research/2026-11-23-treekem-pqchat.md` on branch `treekem-research`: every other field keeps its place), and the check runs first in `createSession`.
+**Status.** BUILT on branch `pqchat-sigs` (EVM, the node's type row, `selector_audit.json`, clientkeys and the vectors with rows for 0 accepted and 1 refused, `ua-rs`, the SDK and `pqchat-core` signing 0), UNAUDITED. The `PqChatSession` typehash `0xe2c3b4c1033a28837e998f325e512f26783cea21cc6ccb347fa3d3d8d7ad1e4d` -> `0x7e832d4c55dc2f6d4a77041b7000f7eb325d19c81a456b8e3844262dda62d911`.
+**Why.** A TreeKEM mode later needs its sessions told apart from the start; one field now keeps the struct, typehash and vectors stable across releases.
+**Cost if wrong.** One word per session (+48,960 state gas); or, without it, a new struct and typehash when TreeKEM lands.
+**Source.** owner 2026-11-23 (relayed by the controller), verbatim "thêm field ngay trong pqchat-sigs"; the field's place after the TreeKEM note (controller, relayed).
+
+### CTR-CHAT-24 — A member may hold several KEM keys in an epoch: members sorted by `(ua, keyId)`, at most 8 per UA
+- old: — · status: current · owner: yes · date: 2026-11-23 · normative: contracts/pqchat.md#CTR-CHAT-24 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat.md](contracts/pqchat.md#CTR-CHAT-24).) Owner 2026-11-23, option (M) ("Choose M. It is still an option, isn't it?": yes, optional per member; verbatim on the Source line): a group epoch's member list in `PqGroupBase` (rule 3C-D6) changes from strictly sorted by `ua`, one `keyId` each, to strictly sorted by `(ua, keyId)`, one or more `keyId`s per UA, each a registered KEM key of that UA with one wrap; a single key behaves as before; device keys are random per device, each its own registry KEM version; clients choose which keys to wrap to, one by default. Admins, rights, acceptance, leave and removal (a removed UA loses every key), the plain-rekey rule (3C-D7), `_uas`, `_removable`, the minimum member count and the `sessionsOf` / `vaultsOf` entries stay per UA. One rule for PqChat and PqVault (the shared base); `MemberKey` unchanged. The high-forward-secrecy mode (a symmetric ratchet with deletion, its flag in `sealedInfo`, more frequent rekeys) is client-only and after the freeze. Controller call (the owner may override): `KEYS_PER_UA_MAX` = 8 (8 keys of each of 2 members are 16 wraps, a 16-member epoch's size, landed in chunks; an extra key costs +108,944 regular and +2,876,400 state gas on a `createSession`); no total bound beyond today's.
+**Status.** BUILT on branch `pqchat-sigs` (EVM base, PqChat, PqVault, the vectors' `epochDevices` row, `pqchat-core` and `pqvault-core` readers), UNAUDITED. The registry already allows several live KEM versions per UA: `setKemKey` takes any unused version, write-once, no order rule (`smartcontracts/evm/src/ua/UARegistryAuxLib.sol:632-663`), every version stays readable (`UARegistry.sol:659`); only `kemKeyOf` names the highest one (`UARegistry.sol:647`).
+**Why.** Per-device keys keep a lost or stolen device's key apart from the seed's and open the path to a high-forward-secrecy mode later.
+**Cost if wrong.** One wrap, about 2.9 M state gas, per extra key per epoch; a client that reads members per entry where it must read per UA.
+**Source.** owner 2026-11-23 (relayed by the controller), verbatim "Chọn M. Nó vẫn là option chứ?"; [pqchat-core spec](superpowers/specs/2026-11-17-pqchat-core.md) §13 O14.
 
 ### CLI-PQC-15 — On an `sstore2` home every control-plane record the crate uses counts only with its author's kept signature
 - old: — · status: current · owner: yes · date: 2026-11-23 · normative: clients/pqchat-core.md#CLI-PQC-15 · superseded-by: —

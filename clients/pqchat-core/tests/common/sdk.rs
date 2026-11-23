@@ -379,7 +379,7 @@ pub fn put_record(net: &FakeNet, contract: &str, e: &Epoch) {
     net.answer(contract, "IPqChat.sigStore", json!({}), json!({"0": "0"}));
     if e.epoch == 0 {
         let s = json!({"creator": e.author, "nonce": e.nonce.to_string(), "homeChain": hex(&[7; 32]),
-            "homeChatContract": HOME, "admins": e.admins, "members": members_json(e), "wrapHashes": e.wrap_hashes,
+            "homeChatContract": HOME, "groupMode": "0", "admins": e.admins, "members": members_json(e), "wrapHashes": e.wrap_hashes,
             "sealedInfo": hex(&e.sealed_info)});
         net.answer(
             contract,

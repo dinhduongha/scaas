@@ -547,6 +547,21 @@ tasks (T0–T15 build UA-7 as pinned). Rules for when it is built: the passphras
 before any message is shown (an AEAD check on `sealedInfo`); forgetting it loses that session's history; a group session may use
 it only if every member enters the same passphrase; the UI says a PqChat session is not an out-of-band channel for it.
 
+**O14 — Several KEM keys per member (per-device keys).** **Decided (owner 2026-11-23, "Chọn M. Nó vẫn là option chứ?": (M),
+optional per member):** a member may sit in an epoch with several `keyId`s, `(ua, keyId)` strictly ascending, at most 8, one wrap
+each ([CTR-CHAT-24](../../contracts/pqchat.md#CTR-CHAT-24)); everything but the wraps stays per UA. This crate (BUILT on
+`pqchat-sigs`): its shapes and its plain-rekey check read members per UA (`check::distinct`), it tries each own wrap and uses
+the first its account opens (a device key it does not hold is skipped); it writes one key per member, the default. The
+high-forward-secrecy mode (a symmetric ratchet with deletion, its flag in `sealedInfo`, more frequent rekeys) is client-only and
+comes after the freeze. **Follow-up, not built:** CLI-PQC-13's "a lower KEM version served later is refused" keeps the highest
+version seen per UA; with per-device keys it must become per `keyId` (each device key its own record, an older version still
+valid for the wraps that name it), and `kemKeyOf` (the highest version) no longer names the seed key once a device key is
+registered above it, so a sender picks the keys to wrap to by `kemKeyAt` per chosen version.
+
+**O15 — The group mode.** **Decided (owner 2026-11-23, "add the field now, in pqchat-sigs"):** `PqChatSession.groupMode`, the
+record's last field, 0 flat wraps; this release accepts 0 only ([CTR-CHAT-25](../../contracts/pqchat.md#CTR-CHAT-25)). This
+crate signs 0 (through the SDK) and refuses a read session of any other mode (`decode`); TreeKEM (1) comes with a later release.
+
 **Requests to other specs** (stated here, not edited there):
 
 - **`scaas-rpc` (K1):** CLI-RPC-06's mark is named for reads that feed a decryption; `pqchat-core` uses the same mark,

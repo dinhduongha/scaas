@@ -1421,7 +1421,7 @@ async fn kem_rotation_and_msig_admin() {
     let wb: Vec<u64> = sb
         .epochs
         .iter()
-        .map(|e| e.own_wrap.as_ref().unwrap().key_id.0)
+        .map(|e| e.own_wraps[0].1.key_id.0)
         .collect();
     assert_eq!(
         wb,

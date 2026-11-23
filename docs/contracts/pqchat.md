@@ -139,7 +139,7 @@ a `UASig` over `uaMessage(kind, PURPOSE_PQCHAT, typed(record))` and checked by t
 |---|---|---|
 | `MemberKey` | `MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` | (inside the session and epoch types) |
 | `Wrap` | `Wrap(bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey)` | not signed; `wrapHashes[i] = hashStruct(Wrap_i)` |
-| `PqChatSession` | `PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` | `creator` |
+| `PqChatSession` | `PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` | `creator` |
 | `PqChatEpoch` | `PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` | `author` |
 | `PqChatLeave` | `PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)` | `member` |
 | `PqChatMessage` | `PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext)` | `sender` |
@@ -265,7 +265,8 @@ shapes 3C-D6 are a controller call, owner may override; the main case owner 2026
 
 `createSession(PqChatSession s, Wrap[] wraps, UASig sig)` accepts when:
 
-- `members` has at least 2 entries, strictly sorted by `ua`, and `wrapHashes` has one hash per member (`PqChatShape`);
+- `members` names at least 2 distinct UAs, strictly sorted by `(ua, keyId)` with at most 8 keys per UA
+  ([CTR-CHAT-24](#CTR-CHAT-24)), and `wrapHashes` has one hash per entry (`PqChatShape`);
 - every `members[i]` holds a KEM key of version `keyId` in this chain's registry (`kemKeyAt(ua, keyId).scheme ≠ 0`,
   [CTR-UA-32](accounts.md#CTR-UA-32); `PqChatKemKey(member, keyId)`); the contract does not read `via` ([`msig` seats
   are expanded by the author's client](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#3-members-kem-keys-devices));
@@ -281,6 +282,48 @@ Anyone may create a session listing any UA: consent is the client's (D5, [CTR-CH
 
 **The main case is a 2-person chat** (owner 2026-11-10): layout and gas are optimised for a 2-member session and its
 figures come first in the gas rows; groups stay correct and tested, and no 1:1 gas is traded for a group feature.
+
+<a id="CTR-CHAT-25"></a>**CTR-CHAT-25** — **`PqChatSession` carries `uint8 groupMode`, its last field, fixed at creation: 0 flat
+wraps; this release accepts 0 only and refuses any other value first, `PqChatModeUnsupported(groupMode)`** (owner 2026-11-23,
+"add the field now, in pqchat-sigs", verbatim in the
+[register](../decisions.md#ctr-chat-25--pqchatsession-carries-uint8-groupmode-fixed-at-creation-this-release-accepts-0-only);
+its place last, after the TreeKEM research note, a controller call). Status: **BUILT on branch `pqchat-sigs`, UNAUDITED**
+(`test/pqchat/PqChatGroupMode.t.sol`; the vector row `sessionTreeKem`).
+
+- **What it names** (owner 2026-11-23): a protocol id. 0 = flat; 1 = RFC 9420 tree rules over KEM scheme 1; 2–255 later
+  variants. Flat (0) is this page: every epoch key wrapped to each member key. Mode 1 comes with a later catalogued release
+  that widens the one check below, with the same struct and typehash, so clients and vectors stay stable across releases.
+- **Fixed at creation:** only the session record names it; no epoch, leave or removal record carries it, so no child can
+  change it (there is no field to change). `sessionOf` returns it with the record.
+- **Checked first** in `createSession`, before the lists, the KEM keys and the signature: a record of another mode costs no
+  registry read.
+- **Pins moved:** the `PqChatSession` typehash `0xe2c3b4c1…ad1e4d` → `0x7e832d4c…62d911` (full value in `PqChatTypes.t.sol` and
+  the vectors), the selectors of `createSession` and `sessionOf` (`interfaceId` → `0x869305e0`, `selector_audit.json`, the node's
+  type row). Cost: one word more in calldata and in the stored record, +48,960 state gas per `createSession`.
+
+<a id="CTR-CHAT-24"></a>**CTR-CHAT-24** — **A member may sit in an epoch with several KEM keys: `members` is strictly sorted
+by `(ua, keyId)`, one or more keys per UA and at most `KEYS_PER_UA_MAX` = 8, one wrap per entry, each a KEM key its UA holds
+here; every other rule stays per UA** (owner 2026-11-23, (M): "Choose M. It is still an option, isn't it?", yes: optional per member,
+verbatim in the [register](../decisions.md#ctr-chat-24--a-member-may-hold-several-kem-keys-in-an-epoch-members-sorted-by-ua-keyid-at-most-8-per-ua);
+the cap of 8 a controller call). Status: **BUILT on branch `pqchat-sigs` in `PqGroupBase` (PqChat and PqVault), UNAUDITED**
+(`test/pqchat/PqChatDevices.t.sol`, `test/pqvault/PqVaultDevices.t.sol`).
+
+- **Optional.** A member with one `keyId` (the seed-derived key) is exactly as before. A member may add device keys: random per
+  device, not seed-derived, each registered as its own KEM version in the registry (`setKemKey`, any unused version, every
+  version stays readable by `kemKeyAt`); its client decides which `keyId`s a wrap names. The default of the clients stays one
+  key per member.
+- **Per entry:** the order, the cap, the KEM-key check (`PqChatKemKey(ua, keyId)`), the wrap (`member == members[i].ua`, `keyId ==
+  members[i].keyId`) and its hash.
+- **Per UA:** the minimum member count (2 distinct UAs for a session, 1 for an epoch), admins, rights and acceptance, the
+  plain-rekey rule of [CTR-CHAT-09](#CTR-CHAT-09) (a member's keys may change in a plain rekey), `leave` and `remove` (removing a
+  UA removes all its keys: a child keeping any of them is `PqChatRemovedKept`), `sessionsOf` (one entry per UA, not per key),
+  `PqGroupBase._uas`, `_removable`.
+- **The bound:** 8 keys of each of 2 members are 16 wraps, the size of a 16-member epoch, landed in chunks as any group
+  ([CTR-CHAT-07](#CTR-CHAT-07)); the total member and wrap bound is unchanged (none of its own). Each extra key costs one wrap:
+  +108,944 regular and +2,876,400 state gas on a `createSession`, +105,588 / +2,876,400 on a plain `rekey` (`PqChatGas.t.sol`
+  `test_gas_deviceKeys`). The `MemberKey` type is unchanged, so no typehash moves.
+- **Not here:** the high-forward-secrecy mode (a symmetric ratchet with deletion, its flag in `sealedInfo`, more frequent rekeys)
+  is client-only and comes after the freeze; this change only keeps its path open.
 
 <a id="CTR-CHAT-07"></a>**CTR-CHAT-07** — **Wraps may arrive in chunks, by anyone: each must hash to its signed
 `wrapHashes[i]` and name `members[i]`, lands once, and the epoch is complete when its last wrap has landed** (UA-7 spec
@@ -664,7 +707,11 @@ regular figure is the calldata floor, equal in both modes):
 | `leave`, ML-DSA-65 | 250,776 | 195,840 | 6,257,700 |
 
 The release grew 29,412 → 31,419 B (deployment regular 2,014,866 → 2,145,938, state 45,575,640 → 48,646,350); `PqVault`
-30,421 → 30,431 B (the shared `_authorOf` hook); `PqChatTopics` unchanged.
+30,421 → 30,431 B (the shared `_authorOf` hook); `PqChatTopics` unchanged. [CTR-CHAT-24](#CTR-CHAT-24) (several keys per member,
+in the shared base): `PqChat` 31,419 → 31,897 B (regular 2,145,938 → 2,177,145, state 48,646,350 → 49,377,690), `PqVault`
+30,431 → 30,825 B; the 2-member rows +1.1 k to +2.5 k regular (the `(ua, keyId)` order and the UA count): `createSession`
+344,756 → 345,909, `rekey` 371,249 / 371,131 → 373,424 / 373,306, the removal's rekey 389,335 → 391,869; a device key's wrap
++108,944 / +2,876,400.
 
 A 20-member session with all its wraps in one call asks 67.8 M and a 20-member `rekey` 65.3 M, both over 60 M (asserted;
 EIP-8037 counts regular + state); the 20-member rows are warm (the 10-member session of the same test wrote 11 of the slots
@@ -697,6 +744,7 @@ Status: **BUILT** for the files below, mutants included (T91: `smartcontracts/ev
 | `PqTopics.t.sol`, `PqTopicVotes.t.sol` | the topics spec §8 tests 1–10 |
 | `PqChatLayout.t.sol` | the ERC-7201 namespace and field slots |
 | `PqChatGas.t.sol` | the gas rows and the deployment figures of §12 (T90), the tests' instance at `sstore2` |
+| `PqChatDevices.t.sol` | CTR-CHAT-24: two keys of a member, one wrap each and one `sessionsOf` entry; `(ua, keyId)` order and a repeated key refused; 8 keys land, 9 refused; two keys of one UA are one member; a member's keys change in a plain rekey, adding a UA does not; leave and removal take every key of the UA |
 | `PqChatSigs.t.sol`, `PqChatSigGas.t.sol` | CTR-CHAT-23: the setting refused outside 0 and 2; a `none` instance stores no signature and its views refuse; an `sstore2` instance's blobs and views hold exactly the signed bytes; a mismatched signature refused at write in both modes; the gas rows of both modes (mutants: `runs/2026-11-23-pqchat-sigs-mutants.py`, 14 of 14 killed) |
 
 ## 14. Clients and other families

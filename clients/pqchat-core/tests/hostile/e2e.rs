@@ -104,7 +104,7 @@ pub async fn session_at(
         .value
         .clone();
     let s = json!({"creator": me, "nonce": nonce.to_string(), "homeChain": w.l.uid,
-        "homeChatContract": home.to_ascii_lowercase(), "admins": [me],
+        "homeChatContract": home.to_ascii_lowercase(), "groupMode": "0", "admins": [me],
         "members": keys.iter().map(|k| json!({"ua": k.ua, "keyId": k.key_id.to_string(), "via": k.via})).collect::<Vec<_>>(),
         "wrapHashes": signed.wrap_hashes, "sealedInfo": sealed});
     let a = json!({"s": s, "wraps": wraps.iter().map(wrap_json).collect::<Vec<_>>(), "sig": sig_json(&signed.sig)});

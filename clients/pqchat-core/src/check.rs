@@ -11,11 +11,33 @@ pub fn strictly_sorted<'a>(v: impl IntoIterator<Item = &'a str>) -> bool {
     v.windows(2).all(|w| matches!(w, [a, b] if a < b))
 }
 
-/// The list shapes of a session or an epoch record (CTR-CHAT-06, UA-7 §4.2): members and admins strictly sorted, one wrap
-/// hash per member; a session's creator (epoch 0's author) in both.
+/// `PqGroupBase.KEYS_PER_UA_MAX` (owner (M) 2026-11-23, CTR-CHAT-24): the KEM keys one UA may hold in one epoch.
+pub const KEYS_PER_UA_MAX: usize = 8;
+
+/// Members strictly sorted by `(ua, keyId)`, at most [`KEYS_PER_UA_MAX`] keys per UA (CTR-CHAT-24).
+pub fn members_sorted(e: &Epoch) -> bool {
+    let ordered = e
+        .members
+        .windows(2)
+        .all(|w| matches!(w, [a, b] if (a.ua.as_str(), a.key_id) < (b.ua.as_str(), b.key_id)));
+    ordered
+        && distinct(e)
+            .iter()
+            .all(|u| e.members.iter().filter(|m| &m.ua == *u).count() <= KEYS_PER_UA_MAX)
+}
+
+/// The distinct UAs of `e`'s members, in order: every rule but the wraps reads members per UA (CTR-CHAT-24).
+pub fn distinct(e: &Epoch) -> Vec<&String> {
+    let mut v: Vec<&String> = e.members.iter().map(|m| &m.ua).collect();
+    v.dedup();
+    v
+}
+
+/// The list shapes of a session or an epoch record (CTR-CHAT-06, UA-7 §4.2; CTR-CHAT-24): members strictly sorted by
+/// `(ua, keyId)`, admins strictly sorted, one wrap hash per entry; a session's creator (epoch 0's author) in both.
 pub fn shapes(e: &Epoch) -> Result<(), DropReason> {
     if e.members.is_empty()
-        || !strictly_sorted(e.members.iter().map(|m| m.ua.as_str()))
+        || !members_sorted(e)
         || !strictly_sorted(e.admins.iter().map(String::as_str))
         || e.wrap_hashes.len() != e.members.len()
     {
@@ -44,11 +66,10 @@ pub fn child(
         return Err(DropReason::Control);
     }
     let kept = |u: &String| !left.contains(u);
-    let plain = child.members.iter().map(|m| &m.ua).eq(parent
-        .members
-        .iter()
-        .map(|m| &m.ua)
-        .filter(|u| kept(u)))
+    // per UA (CTR-CHAT-24): a member's keys may change in a plain rekey
+    let plain = distinct(child)
+        .into_iter()
+        .eq(distinct(parent).into_iter().filter(|u| kept(u)))
         && child
             .admins
             .iter()

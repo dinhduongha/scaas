@@ -262,6 +262,7 @@ async fn message_rows() {
     for (name, row) in [
         ("PqChatSession", "session"),
         ("PqChatEpoch", "epoch"),
+        ("PqChatEpoch", "epochDevices"), // owner (M) 2026-11-23: a member with two keys
         ("PqChatLeave", "leave"),
         ("PqChatRemove", "remove"),
     ] {
