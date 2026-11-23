@@ -7,8 +7,10 @@
 //! - **R1** every request is `Purpose::FeedsDecryption` through the profile's list; **R2** the session's pool is pinned to the
 //!   profile's `(chain_id, chain_uid)` and the token's `ChainEnv.chainUid` must be the profile's; **R3** one final block
 //!   (`Finalized` or the profile's `Depth(d)`), every request by number and hash.
-//! - **R4** storage (`eth_getStorageAt`) and code (`eth_getCode`) only: no `eth_call` is reachable from this file (a test reads
-//!   it). `proofStore` is a storage word of slot 0 by `STATE_LAYOUT` (owner 2026-11-19, T16-b): NONE 0 or LOG 1, else the token
+//! - **R4** storage (`eth_getStorageAt`) and code (`eth_getCode`) only, except the line's two address reads: this file makes no
+//!   `eth_call` (a test reads it); the `eth_call`s reached are `words.rs`'s `holderOf` (`held_at`) and `kindHome`
+//!   (`kind_home`) on the bound registry, at the same block under the same purpose, which choose the address the key records
+//!   are read at (a test counts them; reviews A2-10, B-18). `proofStore` is a storage word of slot 0 by `STATE_LAYOUT` (owner 2026-11-19, T16-b): NONE 0 or LOG 1, else the token
 //!   is of a release before 3h, refused as R5.
 //! - **R5** `_rec[token]` is class TOKEN and a PQZ kind (NORMAL_PQZ, WRAPPED_PQZ, NORMAL_PQZ_REGULATED, WRAPPED_PQZ_REGULATED),
 //!   the token's code a clone of a chain-neutral release with its `ChainEnv`.
