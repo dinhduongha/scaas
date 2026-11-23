@@ -503,6 +503,15 @@ sets one after another: a round's matrix took hours longer than it needs.
 decides a merge. Disk: one `out/` per lane.
 **Source.** Owner 2026-11-18 (TODO 8g (4)): "Đồng ý. Làm luôn" (agreed, build it now). Owner 2026-11-22: "Khi chạy các set (4 set), cần cho phép chạy song song" (when the four sets run, they must be allowed to run in parallel); earlier, 2026-10-23, the four per-set gates may run at once with `CAPPED_SLOTS=4`. Owner 2026-11-23: build 8g now, beside the T26 review.
 
+### ARCH-POS-22 — A review covers every dimension of `review.md`, divided into areas
+- old: — · status: current · owner: yes · date: 2026-11-24 · normative: review.md#ARCH-POS-22 · superseded-by: —
+
+**Rule.** (Summary; normative [review.md](review.md#ARCH-POS-22).) Every review brief (spec or code; Fable, Codex or agy; the AI audit rounds of [ARCH-POS-14](#ARCH-POS-14)) maps each of the twelve dimensions of `review.md` §1 to an area that covers it, or says why it does not apply: conformance, security and cryptography, the rules that do not bend, secrets and privacy, robustness and denial of service, failure handling, consistency across languages and layers, contract specifics, performance and cost, interfaces and misuse, tests, operations and the supply chain. Areas: one per layer touched, a cross-layer area whenever more than one layer is touched, and an adversarial area for crypto, value or access control. Reports and `STATUS.md` go to `scratchpad/<subject>-review-<YYYYMMDD-HHMM>/`.
+**Status.** BUILT as a process rule (the TreeKEM code review is the first brief under it); a brief checker is PLANNED.
+**Why.** Briefs named "design, security and crypto" left whole classes unasked (performance and cost, misuse, operations, cross-layer forks); the owner asked that every later review hold the full set of dimensions and areas.
+**Cost if wrong.** A review round costs more agent time; a missed class costs a later P0, as the three P0s behind green tests showed.
+**Source.** Owner 2026-11-24 (relayed by the controller), verbatim "Làm sao nhớ để các lần sau review cũng phải đủ các hướng và phạm vi … Nếu được thì ghi vào tài liệu tổng quát"; the five TreeKEM code-review areas agreed the same day ("Đồng ý").
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 
