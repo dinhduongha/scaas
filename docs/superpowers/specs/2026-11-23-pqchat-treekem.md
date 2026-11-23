@@ -5,7 +5,9 @@ reviewed protocol. **Revision 3 (2026-11-23)**, after two review rounds by Codex
 16 findings, 2 unsure) and of revision 2 (`29ba84732`; Codex 16, Fable 9 and 1 unsure). A finding is cited by its id where its
 fix sits (`codex-n`, `fable-n`; round 2: `codex-r2-n`, `fable-r2-n`); [§17](#17-what-revisions-2-and-3-changed) lists them. **A
 third, focused round by Fable on revision 3 (`fable-r3-n`: 0 P0, 2 P1, 4 P2, 3 P3; approve with fixes) is fixed in place:**
-wording, client rules, one node rule and one ordering rule of the contract. No record, typehash or derivation moved. The
+wording, client rules, one node rule and one ordering rule of the contract. No record, typehash or derivation moved. **After
+that round the owner made the key no-return set two-level (R16, on the controller's finding of a front-running burn):** a
+contract rule, one storage set, one named error and one client warning; again no record, typehash or derivation moved. The
 build follows. Branch `treekem-research`; the contract work branches from `pqchat-sigs`
 once it has landed. Research [`2026-11-23-treekem-pqchat.md`](../../research/2026-11-23-treekem-pqchat.md) (cited "note §n"); plan
 [`2026-11-23-pqchat-treekem.md`](../plans/2026-11-23-pqchat-treekem.md). Rule ids introduced here (SPECIFIED, defined once in
@@ -70,11 +72,30 @@ CLI-PQC-16 (owner). Ids of branch `pqchat-sigs` this builds on: CTR-CHAT-23 (sig
   seed, a KEM holder with its own registry record), added by a live admin like any new member. "Yes, block the `kemHash` too": the
   set also holds the `kemHash` of **every key ever taken out** of the session, and an Add of such a key is refused under any
   UA, with an error of its own; a new UA comes with a fresh KEM key. Mode 0 and PqVault are unchanged: re-adds stay allowed
-  there.
+  there. **The key half is two-level since R16:** a key a UA takes out of its own leaves is refused to that UA only; the
+  keys of a UA that goes are refused under any UA.
 - R15 (on the third round; fable-r3-2). **The `kemHash` half of R14 is kept as hygiene.** It stops the reuse of **the same
   key bytes** only. A deliberate equivalent key does not stop at it: an X25519 point shifted by a torsion point, or an
   ML-KEM `ek` shifted by a small vector, has another `kemHash` and is opened by the old secret (§8). That case falls under
   the accepted lending residual, because an admin must add the new UA. **Exclusion rests on the UA roster** (§9, §14).
+- R16 (after the third round, on the controller's finding of a front-running burn). **The key no-return set of R14 is
+  two-level.**
+
+  | Event | What enters the set |
+  |---|---|
+  | A UA **changes its own keys** (a commit takes out one of its own `keyId`s under the own-UA rule) | the pair `(ua, kemHash)`: only that same UA may never re-add that key |
+  | A UA **leaves or is removed** (by `treeRemove`, a forced leave, or an admin's commit that leaves it with no leaf) | the session-wide `kemHash` of **every** key that UA held, plus the UA itself in the UA set (R14 unchanged) |
+
+  An Add is refused when its UA is in the UA set (`PqChatTreeReturn`), when `(ua, kemHash)` is in the pair set
+  (`PqChatTreeOwnKeyReturn`), or when its `kemHash` is in the session-wide set (`PqChatTreeKeyReturn`). **Why:** under the
+  single set a member B could register A's public KEM key as its own new KEM version, add that leaf under the own-UA rule,
+  then take it out again, and A's key was burnt session-wide with no admin involved; B could repeat it each time A
+  registered a new key, before A's Add landed (front-running), so A never got in. With two levels B's own-key churn harms
+  only `(B, kemHash)`. B burns A's key only by leaving or being removed, which excludes B for good (one burn per UA), and
+  any further UA needs an admin's Add. Honest reuse of a compromised key is still blocked: by the same UA through the
+  pair, by a new UA after a removal through the session-wide entry. **Client rule (CLI-PQC-16):** before an Add, the
+  admin's client checks whether the key's `kemHash` is registered to another UA in the registry and warns ("this key is
+  also held by UA …"); client only.
 
 **Earlier rulings:** signature storage per home, `none` | `sstore2`, default `sstore2` (CTR-CHAT-23); several `keyId`s per member
 UA, members sorted by `(ua, keyId)` (CTR-CHAT-24, "(M)"); every record kept in full in state (CTR-CHAT-05); one child per parent
@@ -117,7 +138,7 @@ Each is the controller's (owner: no) unless marked; the owner may override any. 
 | C25 | A device takes the roster of each epoch since its join from the live leaves by undoing the later commits' changes; which epoch won is the home's state, read under ARCH-POS-15 | the reads are the ones replay makes anyway; a signature cannot prove a commit won (codex-11) |
 | C26 | A client builds only on a head at or after its local checkpoint, which holds the `hashStruct` of the verified head record, and settles a conflict at a pinned number by a strict-majority read; what a candidate seals is taken as disclosed to every key of the tree it was built on; (owner, R13) a changed session info needs the strict majority over at least 3 named endpoints at a final block | a rejected commit cannot be recalled; an epoch id does not bind its record; a pin written from one endpoint can be a twin (codex-4, fable-r2-4, fable-r3-3) |
 | C27 | A home's signature-storage setting is taken from pinned deployment data, or read under the majority rule; a session's mode is pinned with its `treeId` | first contact cannot be steered to an unsigned flat twin (codex-14) |
-| C28 | (owner, R14) A UA that left or was removed is never added again: `gone[ua]`, one slot per such UA, `PqChatTreeReturn`. The bytes of a key taken out of the tree are never added again under any UA: `goneKey[kemHash]`, one slot per such key, `PqChatTreeKeyReturn`. (controller) That slot holds the key's period | the owner's rule; the same UA and the same key bytes never return. The key half is hygiene against reuse of the same bytes (R15): a related key with another `kemHash` is not stopped by it (§8). Every key has one period in a session, so recovery needs no list of periods (codex-2, codex-r2-2, codex-r2-10, fable-r3-2) |
+| C28 | (owner, R14, R16) A UA that left or was removed is never added again: `gone[ua]`, one slot per such UA, `PqChatTreeReturn`. **The key set is two-level (R16):** a key taken out of a UA that stays a member enters the pair set, `goneOwnKey[ua][kemHash]`, and that UA never adds it again (`PqChatTreeOwnKeyReturn`); the keys of a UA that goes enter the session-wide set, `goneKey[kemHash]`, and are never added again under any UA (`PqChatTreeKeyReturn`); one slot per key taken out, in one of the two sets. (controller) The level is judged on the tree after the commit's Adds: the leaf's UA still holds a leaf → the pair set; it is `gone` → the session-wide set, for the keys its leaves hold when they are blanked (at most `KEYS_PER_UA_MAX`; keys it took out earlier stay pairs). So an admin's Remove of one key of a UA that keeps another leaf is a key change of that UA, at the pair level. The slot holds the key's period | the owner's rules; the same UA never returns, nor the same key bytes to the UA that took them out, nor under any UA once their holder went. Under a single set one member's own-key churn burnt another UA's key session-wide, with no admin and repeatably (R16). The key half is hygiene against reuse of the same bytes (R15): a related key with another `kemHash` is not stopped by it (§8). The pair level for a UA that stays lets an admin free a key a member squats on by removing that leaf alone, without burning it. Every `(ua, kemHash)` has one period in a session, and none follows a session-wide entry, so recovery needs no list of periods (codex-2, codex-r2-2, codex-r2-10, fable-r3-2) |
 | C29 | Epoch 0 is sealed under `genesisCtx`, a typed hash of the session record's public fields; `treeId` is used from the first commit on | `treeId` hashes the wrap hashes and `sealedInfo`, which would need `treeId` to be built: no construction order (codex-r2-4) |
 | C30 | Leaving and removing in a tree session are their own records and entries, `PqChatTreeLeave` and `PqChatTreeRemove`, which sign `treeId`; `leave` and `remove` are refused there | the flat records sign neither the home nor the genesis: one signature would hold in a twin session at another home (codex-r2-5) |
 | C31 | `PqChatCommit` signs `parentTreeHash`; the contract compares it with the head's stored tree hash at acceptance; `ctx_e` binds it | the author's `ps[0]` depends on it, and a twin of the head that differs only where the path overwrites would pass the final hash (codex-r2-11, fable-r2-4) |
@@ -384,8 +405,9 @@ a key it does not use) and `treeNodeKey(sessionId, node) → bytes` (the live ke
 that set it); `commitOf(epochId) → (PqChatCommit c, bytes32 sigHash)`; `pathListOf(epochId) → (uint32[] ctTargets, bytes32[]
 ctHashes)` (two empty arrays for a commit with `ctCount` 0); `pathKeys(epochId) → bytes[]`; `pathCtAt(epochId, i) → PathCt`;
 `goneOf(sessionId, ua) → (uint8 kind, uint64 epoch)` (0 a member or never one, 1 left, 2 removed; `epoch` the head it named,
-C28); `goneKeyOf(sessionId, kemHash) → (bool gone, uint64 joinEpoch, uint64 endEpoch)` (the one period of a key that was
-taken out, C28). `epochSig(epochId)`, `wrapAt`, `epochsOf`,
+C28); `goneKeyOf(sessionId, kemHash) → (bool gone, uint64 joinEpoch, uint64 endEpoch)` (the session-wide set: the period
+of a key taken out of a UA that went, C28) and `goneOwnKeyOf(sessionId, ua, kemHash) → (bool gone, uint64 joinEpoch, uint64
+endEpoch)` (the pair set: the period of a key taken out of a UA that stayed, R16). `epochSig(epochId)`, `wrapAt`, `epochsOf`,
 `latestEpoch`, `epochComplete`, `childOf`, `leftIn`, `removedIn`, `removal*`, `leave*` serve both modes, and `epochComplete`
 of a tree epoch is true exactly when it took its slot (C20); `epochOf` of a tree epoch above 0 is `PqChatModeEntry(1)`.
 
@@ -413,7 +435,7 @@ Never only a hash plus calldata or an event (CTR-CHAT-05, "never lose ciphertext
 | Node keys of a commit | one SSTORE2 blob per commit, `m × 1,601` B (at most 12,808 B: one blob on a 24,576-B chain too) |
 | Path ciphertexts | packed 1,648 B each (`mlkemCt ‖ x25519Eph ‖ sealedSecret`), as many per blob as the chain's limit holds, one slot per index (`pointer \| offset << 160`), as wraps |
 | Welcome wraps | the epoch's `wrapAt`, as mode 0 |
-| The live tree, per session (namespace `scaas.pqchat.tree`) | `treeId`, `genesisTreeHash`, `used`, `leaves`, the head, `owed`; per leaf two slots (`ua`; `keyId`, `joinEpoch`, `wrapIndex`, live bit); per parent `hash` (its `th`) and `keyAt` (`pointer \| offset << 160 \| epoch << 176`, 0 = blank); `keysOf[ua]` (the count of its live leaves and an "indexed" bit that stays); `liveKey[kemHash]` (leaf + 1); `gone[ua]` (kind and the head's epoch number; one slot per UA that left or was removed, never cleared, C28); `goneKey[kemHash]` (`joinEpoch`, `endEpoch` and a set bit, written when the key's leaf is blanked, never cleared: one slot per key taken out, C28); the live admin list; per staged commit its landed-piece bits and the hash of its expected targets |
+| The live tree, per session (namespace `scaas.pqchat.tree`) | `treeId`, `genesisTreeHash`, `used`, `leaves`, the head, `owed`; per leaf two slots (`ua`; `keyId`, `joinEpoch`, `wrapIndex`, live bit); per parent `hash` (its `th`) and `keyAt` (`pointer \| offset << 160 \| epoch << 176`, 0 = blank); `keysOf[ua]` (the count of its live leaves and an "indexed" bit that stays); `liveKey[kemHash]` (leaf + 1); `gone[ua]` (kind and the head's epoch number; one slot per UA that left or was removed, never cleared, C28); the two-level key set (R16, C28), each slot `joinEpoch`, `endEpoch` and a set bit, written at the completion that blanks the key's leaf, never cleared, one slot per key taken out in one of the two: `goneOwnKey[ua][kemHash]` when the leaf's UA still holds a leaf after the commit's Adds, `goneKey[kemHash]` when it is `gone`; the live admin list; per staged commit its landed-piece bits and the hash of its expected targets |
 
 The Epoch struct of `PqGroupBase` and `PqVault`'s layout do not change; `PqChat`'s own namespace does not change. A leaf's
 `kemHash` is not stored: it is read from the registry (write-once) where a hash needs it. The live tree changes when a wrap of
@@ -440,8 +462,8 @@ each with its own `kemHash`, and the holder of the secret opens what is sealed t
 
 So the holder of one secret can present many admitted keys, each with its own `kemHash`, and open what is sealed to any of
 them; a rule that asked for a unique `ek` fails for the second reason. **No rule on key bytes gives one capability per
-key.** `liveKey` and `goneKey` (§9) therefore mean "the same bytes", never "the same key": they stop reuse of the same
-bytes and keep one period per key; they exclude nobody who keeps a secret. Exclusion rests on the roster of UAs and on
+key.** `liveKey` and the two key sets, `goneOwnKey` and `goneKey` (§9, R16), therefore mean "the same bytes", never "the
+same key": they stop reuse of the same bytes and keep one period per `(ua, kemHash)`; they exclude nobody who keeps a secret. Exclusion rests on the roster of UAs and on
 whom an admin adds (§9, §14). The registry checks only scheme and length, so the module runs the check on every leaf key it
 admits and every node key that lands (`PqChatKemKey`). A vector row holds a key for each refused case (the non-canonical
 forms of an accepted key included) and the implementations must agree on all of them. `ua-rs` generates canonical keys only.
@@ -472,8 +494,11 @@ whose epoch 0 never completes: the creator's client runs the same checks before 
 - each remove names a live leaf by its `(ua, keyId)`, not the author's leaf; each add names a blank leaf in range (or one freed
   by a remove of this commit), **a UA that is not `gone` (`PqChatTreeReturn`, C28)**, a key
   its UA holds with `scheme == 1` (fable-10), `kemHash` equal to `keccak256` of that registry key (`PqChatKemKey`), a key that
-  passes the admission check, is not live nor added twice here (`PqChatTreeKeyLive`), **and was never taken out of this
-  session, a Remove of this same commit included (`PqChatTreeKeyReturn`, C28)**, and has one wrap hash;
+  passes the admission check, is not live nor added twice here (`PqChatTreeKeyLive`), **whose `kemHash` is not in the
+  session-wide set (`PqChatTreeKeyReturn`) and whose pair `(ua, kemHash)` is not in the pair set
+  (`PqChatTreeOwnKeyReturn`; R16, C28), a Remove of this same commit included, with its level judged on the tree after the
+  Adds** (a Remove of a UA's key and an Add of the same bytes under that UA is `PqChatTreeOwnKeyReturn`; under another UA it
+  is `PqChatTreeKeyReturn` when the removed UA goes, and accepted when it stays), and has one wrap hash;
 - at most `TREE_CHANGES_MAX` changes, at most `KEYS_PER_UA_MAX` keys per UA; the rights of §9;
 - shapes (C24, codex-20): `nodeKeyHashes.length ≤ depth(leaves)`, `ctCount < leaves`, `ctCount = 0` exactly when
   `nodeKeyHashes` is empty, and then `ctListHash` is `hashStruct(PathList)` of two empty arrays (codex-r2-14),
@@ -501,11 +526,13 @@ carries all or there is none; in this order, all or nothing:
 
 1. no `gone` UA keeps a leaf, sits in `admins` or is the author (`PqChatRemovedKept`): checked again, because a `treeRemove`
    or a `treeLeave` may have landed on the head since acceptance;
-2. the Removes blank their leaves and direct paths, free their `liveKey` and write each key's `goneKey`; the Adds set their
-   leaves and `liveKey` and blank their direct paths; `keysOf`, `used` and `leaves` follow; **then, on the tree after the
-   Adds (fable-r3-4),** a UA left with no leaf becomes `gone` if it was not, so a UA whose only leaf this commit removes and
-   to which it adds a key stays a member (§9); a UA whose first leaf this is and that was never indexed joins `sessionsOf`
-   (fable-11, codex-17);
+2. the Removes blank their leaves and direct paths and free their `liveKey`; the Adds set their leaves and `liveKey` and
+   blank their direct paths; `keysOf`, `used` and `leaves` follow; **then, on the tree after the Adds (fable-r3-4),** a UA
+   left with no leaf becomes `gone` if it was not, so a UA whose only leaf this commit removes and to which it adds a key
+   stays a member (§9); **each removed key is written to the key set of its level (R16, C28):** `goneKey[kemHash]` when its
+   UA is `gone`, else `goneOwnKey[ua][kemHash]`; a UA whose first leaf this is and that was never indexed joins
+   `sessionsOf` (fable-11, codex-17). The level cannot change between acceptance and completion: a UA judged to stay holds
+   a leaf after the commit, so if it went in between, step 1 refuses;
 3. the path nodes take their keys, the other nodes of the author's direct path are blanked;
 4. the `th` of every node on a changed path (each removed or added leaf's, and the author's) is recomputed bottom-up, a sibling
    leaf's `kemHash` read from the registry; so every hash is of the tree after steps 2 and 3, none of an earlier revision
@@ -597,20 +624,39 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   - **Replacing a UA's only key is one commit.** An admin's Remove of X's only leaf and an Add of X's new key **in the same
     commit** keep X a member: X is judged after the Adds (§8). It is the only way to replace a lost sole device key: X
     cannot author (its `ps[0]` needs the lost seed), and the Remove alone makes X `gone` for good.
-- **No key bytes return either (owner, R14, R15; C28).** When a leaf is blanked the contract writes `goneKey[kemHash]` with
-  the key's period; an Add of a key whose `kemHash` is there is `PqChatTreeKeyReturn(kemHash)`, **under any UA and any
-  `keyId`**. **This is hygiene: it stops reuse of the same key bytes, no more** (fable-r3-2). It stops a removed device's
-  old key bytes from being registered again under a new UA or under a friend's, and it gives every key one period. It does
-  not stop a holder of the secret: a deliberate equivalent key (an X25519 point shifted by a torsion point, an ML-KEM `ek`
-  shifted by a small vector; §8) has another `kemHash` and passes. That case is the lending residual below, because a live
-  member must lend a leaf or a live admin must add the new UA. **A new UA comes with a fresh KEM key:** `ua-rs` derives a
-  device key per UA or draws it at random, so an honest user never meets the refusal.
+- **No key bytes return either, at two levels (owner, R14, R15, R16; C28).** When a leaf is blanked the contract writes the
+  key's period into one of two sets, judged on the tree after the commit's Adds:
+  - **its UA stays a member** (it took out a key of its own under the own-UA rule, or an admin removed one key of a UA that
+    keeps another leaf): `goneOwnKey[ua][kemHash]`; an Add of that key **under that UA**, any `keyId`, is
+    `PqChatTreeOwnKeyReturn(ua, kemHash)`. Another UA may add the same bytes;
+  - **its UA goes** (`treeLeave`, `treeRemove`, or an admin's commit that leaves it with no leaf): `goneKey[kemHash]` for
+    every key its leaves hold when they are blanked; an Add of such a key is `PqChatTreeKeyReturn(kemHash)`, **under any UA
+    and any `keyId`**. Keys that UA took out earlier stay at the pair level.
+
+  **This is hygiene: it stops reuse of the same key bytes, no more** (fable-r3-2). The same UA never re-adds a key it took
+  out (the pair), and a removed or leaving UA's key bytes never come back under a new UA or a friend's (the session-wide
+  entry); every `(ua, kemHash)` has one period. It does not stop a holder of the secret: a deliberate equivalent key (an
+  X25519 point shifted by a torsion point, an ML-KEM `ek` shifted by a small vector; §8) has another `kemHash` and passes;
+  nor the bytes of a key a member took out of its own leaves, added again under a **friend's** UA. Both are the lending
+  residual below, because a live member must lend a leaf or a live admin must add the new UA. **A new UA comes with a fresh
+  KEM key:** `ua-rs` derives a device key per UA or draws it at random, so an honest user never meets the refusal.
+- **Why two levels (owner, R16; the controller's finding).** Under one session-wide set a member B could register A's
+  public KEM key as a KEM version of its own (the registry asks no proof of possession above version 0), add that leaf by
+  a plain commit and take it out by the next: A's key was burnt for the session with no admin involved, and B could repeat
+  it each time A registered a new key, before A's Add landed, so A never got in. Now B's own-key churn enters only
+  `(B, kemHash)`, and A adds its key afterwards. B burns A's key session-wide only by leaving or being removed: once per UA
+  (the keys B's leaves hold then, at most `KEYS_PER_UA_MAX`), B is out for good (R14), and a further UA needs an admin's
+  Add. While B **holds** A's key live, A's Add is `PqChatTreeKeyLive`: at most `KEYS_PER_UA_MAX` keys per UA at a time,
+  and an admin frees one by a Remove of that leaf alone while B keeps another, at the pair level, so the key is not burnt.
+  The admin's client warns before an Add of a key registered to another UA (CLI-PQC-16).
 - **A UA's own keys.** A UA that stays a member changes its own keys by plain commits (C8): a new device is a new `keyId` with
-  a new key. That is not a return. A key of its own that it took out stays out like any other; the device registers a new
-  KEM version. So every key, and every `(ua, keyId)` (registry versions are write-once), has **one period** in a session,
-  which is what replay recovers (§10; codex-r2-10).
+  a new key. That is not a return. A key of its own that it took out stays out for that UA (the pair set); the device
+  registers a new KEM version. So every `(ua, kemHash)`, and every `(ua, keyId)` (registry versions are write-once), has
+  **one period** in a session, which is what replay recovers (§10; codex-r2-10). The same bytes may have had a period
+  under another UA before (a squatter's), never one after a session-wide entry.
 - **Removing a device, and what it does not do (codex-2, fable-r3-2, fable-r3-4).** A `TreeRemove` of `(ua, keyId)` takes
-  that key out; no other live leaf holds the same key bytes (C18, C32), and the same bytes never come back (C28). **That
+  that key out; no other live leaf holds the same key bytes (C18, C32), and the same bytes never come back under that UA,
+  nor under any UA once it goes (C28, R16). **That
   excludes no holder of a secret:** the UA stays a member while it has another leaf and may add a **new** key of its own by
   a plain commit (C8). To exclude a holder, an admin removes the **UA** with `treeRemove`: it is then out for good (R14),
   and exclusion rests on that roster of UAs. An admin's `TreeRemove` of one key of a UA **that keeps another leaf** is a
@@ -621,11 +667,13 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   for a version above 0) and adding it as its own leaf. Then a removed UA's device still opens that leaf's ciphertexts. No
   rule on key bytes prevents it; the leaf counts as the lending UA's, shows in the roster under it, and ends when an admin
   removes that UA. The same move lets a member **block** a key: while Eve's leaf holds V's public key, an Add of V with it is
-  `PqChatTreeKeyLive`, and once Eve's leaf is blanked that key is in `goneKey` for good: V joins or stays with a fresh KEM
-  version, which costs V one registry write. The client names the UA that holds or held the colliding key. Eve's reach is
-  her 8 leaves at a time and ends with her removal; nothing is disclosed by it. **A related key is the same residual
+  `PqChatTreeKeyLive`. **Since R16 the block is bounded:** once Eve takes that leaf out herself, or an admin removes it while
+  she keeps another, only `(Eve, kemHash)` enters the pair set and V adds its key; only Eve's leaving or removal burns it
+  for the session, once, and then V joins or stays with a fresh KEM version, which costs V one registry write. The client
+  names the UA that holds or held the colliding key, and warns an admin before the Add (CLI-PQC-16). Eve's reach is her 8
+  leaves at a time and ends with her removal; nothing is disclosed by it. **A related key is the same residual
   (owner, R15):** a removed party that keeps its secret can make a key with another `kemHash` that the old secret opens
-  (§8). `goneKey` does not see it. It enters only as a live member's leaf, which is lending, or under a new UA that a live
+  (§8). Neither key set sees it. It enters only as a live member's leaf, which is lending, or under a new UA that a live
   admin adds, which is the admin's choice of whom to add.
 - **`treeRemove` (`PqChatTreeRemove`)** is RFC 9420's Remove proposal: the next commit completes only if no `gone` UA has a
   leaf left. Any member may author that commit: dropping `gone` UAs is plain.
@@ -657,9 +705,12 @@ whether the device follows every epoch or none; so are later polls of the contra
    too. **The starting roster is anchored (codex-r2-6):** the head's record and signature are read and verified, the root is
    recomputed from the leaves and node hashes and must equal the head's signed `treeHash` (at an epoch-0 head: the tree
    rebuilt from the signed member list, §8); so no unchanged leaf of the snapshot can be wrong without the root differing.
-3. **The key's one period (C28, codex-r2-10).** A key is in a session once: from its live leaf's `joinEpoch` to the head, or,
-   for a key that was taken out, `goneKeyOf(sessionId, kemHash)`; a genesis key joins at 0. There is no earlier period to
-   look for, because the contract never adds a key twice. For each epoch of that period: `commitOf` and
+3. **The key's one period (C28, R16, codex-r2-10).** A key is in a session once per UA: from its live leaf's `joinEpoch` to
+   the head, or, for a key that was taken out, `goneOwnKeyOf(sessionId, ua, kemHash)` and, when that is not set,
+   `goneKeyOf(sessionId, kemHash)` (a session-wide entry is the last period those bytes have, so when the device's UA held
+   them and the pair is not set, it is that UA's); a genesis key joins at 0. There is no earlier period of the device's
+   `(ua, kemHash)` to look for, because the contract never adds a pair twice; a period of the same bytes under another UA
+   is not the device's and fails the join check below. For each epoch of that period: `commitOf` and
    `epochSig`: the id is recomputed from `(sessionId, author, nonce)`, `treeId` is the pinned one, the signature verifies,
    `parentTreeHash` equals the parent record's `treeHash` (the rebuilt genesis hash above epoch 0). The join commit must hold
    the key in its `adds` (that index is its wrap's), the last one in its `removes`: a wrong period from an endpoint fails here.
@@ -782,7 +833,8 @@ New errors (existing ones keep their meaning: `PqChatShape`, `PqChatKemKey`, `Pq
 | `PqChatTreeHome()` | a tree session created outside its home (C4), or a commit, `treeLeave` or `treeRemove` whose `treeId` is not the session's (C16, C30) |
 | `PqChatTreeParent(bytes32 stored)` | a commit whose `parentTreeHash` is not the head's tree hash (C31) |
 | `PqChatTreeReturn(bytes32 ua)` | an Add of a UA that left or was removed (R14, C28) |
-| `PqChatTreeKeyReturn(bytes32 kemHash)` | an Add of a key that was taken out of this session before, under any UA (R14, C28) |
+| `PqChatTreeKeyReturn(bytes32 kemHash)` | an Add, under any UA, of a key that was taken out of this session from a UA that left or was removed (the session-wide set; R14, R16, C28) |
+| `PqChatTreeOwnKeyReturn(bytes32 ua, bytes32 kemHash)` | an Add, under UA `ua`, of a key taken out of that UA's own leaves while it stayed a member (the pair set; R16, C28) |
 | `PqChatTreeLeaf(uint32 leaf)` | a leaf that is not live with the named key, not blank for an Add, the author's own in a Remove, or out of range |
 | `PqChatTreeKeyLive(bytes32 kemHash)` | a key that a live leaf already holds, or added twice (C18) |
 | `PqChatTreeAdmins()` | no admin with a live leaf would remain (C24) |
@@ -840,12 +892,14 @@ Creation costs mode 0's record and wraps plus the tree's slots, now spread over 
 over 256 wraps). The discovery index moves from the record to the wraps (C34): the same slots as mode 0 writes, up to two
 (195,840) at the first key of a UA that has no session yet, one at a UA that has.
 
-**The no-return set (R14, C28) [E].** `gone[ua]`: one slot per UA that left or was removed, 97,920 of state gas and about
-22,100 regular, paid in the `treeLeave` or `treeRemove` that names it (or at the completion that leaves it without a leaf).
-`goneKey[kemHash]`: one slot per key taken out, the same figures, paid at the completion that blanks its leaf: at most 32 per
-commit, 3.13 M of state gas, which is less than the 32 Adds the completion row below is sized for. An Add reads both sets:
-two cold reads, 4,200 regular, 0.13 M at 32 Adds. Neither set is ever cleared: a session's state grows by one slot per UA
-and one per key that ever went. A tree session of 2 members costs what a flat one does per commit; the client hint stays "from about 7 keys,
+**The no-return sets (R14, R16, C28) [E].** `gone[ua]`: one slot per UA that left or was removed, 97,920 of state gas and
+about 22,100 regular, paid in the `treeLeave` or `treeRemove` that names it (or at the completion that leaves it without a
+leaf). **The key sets, `goneOwnKey[ua][kemHash]` (the pair slot) and `goneKey[kemHash]`:** one slot per key taken out, in
+the one set of its level, the same figures, paid at the completion that blanks its leaf: at most 32 per commit whatever the
+mix, 3.13 M of state gas, which is less than the 32 Adds the completion row below is sized for; the pair slot adds no slot
+to any row, since a Remove writes one of the two. An Add reads three sets: three cold reads, 6,300 regular, 0.20 M at 32
+Adds (67,200 more than the single key set, inside the rows' rounding). No set is ever cleared: a session's state grows by
+one slot per UA and one per key that ever went. A tree session of 2 members costs what a flat one does per commit; the client hint stays "from about 7 keys,
 where several members commit" (C3).
 
 **Inclusion (EIP-8037, EIP-7825) [E].** A transaction fits when `(regular + state) × 1.05` (the "asked" figure) is within the
@@ -930,9 +984,10 @@ line in `size-baseline.json`.
 | A lying endpoint substitutes the key of an added member, or of a member at creation (codex-1) | the registry record is verified against the UA before encapsulation (§8 step 5); an Add with a `kemHash` the registry does not hold is never accepted |
 | A lying endpoint serves, at an epoch-0 head, a leaf of a UA outside the signed member list, with its genuine registry key and a matching root (codex-r2-1) | the client takes no leaf from a view there: it rebuilds the tree from the signed `members` (§8 step 3) |
 | A removed device keeps a second leaf with the same key bytes, or with another encoding of the same X25519 point (codex-2, fable-10, codex-r2-2) | one live leaf per `kemHash`, enforced at every wrap of epoch 0 and every Add; one encoding per point (C32). A second leaf with a **related** key is the row on equivalent keys below |
-| A removed UA comes back, or the same key bytes do: under a new UA or `keyId`, or under a friend's UA (codex-2, codex-r2-2) | `gone[ua]` and `goneKey[kemHash]`: the Add is refused (R14, C28). A new UA with a fresh key, added by an admin, is a new member by the owner's rule |
-| A removed party that keeps its secret presents an equivalent key with another `kemHash`: an X25519 point shifted by a torsion point, an ML-KEM `ek` shifted by a small vector (fable-r3-2) | **not stopped by any rule on key bytes; accepted (owner, R15) as part of the lending residual.** The key is admitted and the old secret opens that leaf. It needs a live member that lends a leaf, or a live admin that adds the new UA; `goneKey` is hygiene against reuse of the same bytes. Exclusion rests on the UA roster and on whom an admin adds (§8, §9) |
-| A live member lends a leaf: it registers another party's fresh key as its own version, or passes on what it opens (fable-r2-8) | not preventable by any rule on keys; the leaf is that member's in the roster and ends with its removal (§9). The same move blocks or burns another UA's key in this session: that UA registers a new KEM version |
+| A removed UA comes back, or the same key bytes do: under a new UA or `keyId`, or under a friend's UA (codex-2, codex-r2-2) | `gone[ua]`, and the key sets of R16: the bytes of a UA that went are refused under any UA (`goneKey`), a key a UA took out of its own leaves is refused to that UA under any `keyId` (`goneOwnKey`) (R14, R16, C28). A new UA with a fresh key, added by an admin, is a new member by the owner's rule. **Left:** a key a member took out while it stayed, added again under a friend's UA, is the lending residual |
+| A member burns another UA's key: registers that UA's public KEM key as its own version, adds it by a plain commit and takes it out, and repeats it before each of that UA's Adds (front-running; the controller's finding) | **closed by the two levels (owner, R16):** own-key churn enters only `(member, kemHash)`, and the victim adds its key. A session-wide burn needs the member's leaving or removal: once per UA (the keys its leaves hold then, at most `KEYS_PER_UA_MAX`), the member is out for good (R14), and a further UA needs an admin's Add. Holding the key live blocks the victim's Add (`PqChatTreeKeyLive`) for at most `KEYS_PER_UA_MAX` keys per UA at a time; an admin frees one by removing that leaf alone, at the pair level. The admin's client warns when a key is registered to another UA (CLI-PQC-16) |
+| A removed party that keeps its secret presents an equivalent key with another `kemHash`: an X25519 point shifted by a torsion point, an ML-KEM `ek` shifted by a small vector (fable-r3-2) | **not stopped by any rule on key bytes; accepted (owner, R15) as part of the lending residual.** The key is admitted and the old secret opens that leaf. It needs a live member that lends a leaf, or a live admin that adds the new UA; the key sets are hygiene against reuse of the same bytes. Exclusion rests on the UA roster and on whom an admin adds (§8, §9) |
+| A live member lends a leaf: it registers another party's fresh key as its own version, or passes on what it opens (fable-r2-8) | not preventable by any rule on keys; the leaf is that member's in the roster and ends with its removal (§9). The same move blocks another UA's key while the leaf is live, and burns it for the session only when the member goes, once per UA (R16; the front-running row): that UA registers a new KEM version |
 | A stale endpoint hides the newest commits (codex-4) | the client refuses a head below its checkpoint; a commit on an old head is `PqChatEpochTaken`, but what it sealed is disclosed to the keys of that old tree (§11): path secrets of a commit that never wins, and the info in force or the marker, which those keys held. A **changed** info is sealed only after the majority read of R13; with fewer than 3 named endpoints it is refused. **Left, as in mode 0 (fable-r3-9):** a message a user sends on a stale head is read by a member removed since (§11) |
 | An endpoint serves the head author's twin of the head: same epoch id, other tree (fable-r2-4, codex-r2-11) | the checkpoint and the pins hold the record's hash; `parentTreeHash` is signed and compared by the contract, and bound in `ctx_e` |
 | The head's author has its twin served first, so the device pins the twin and then refuses the true chain (fable-r3-3) | on a mismatch at a pinned number the epoch is read under the strict majority over at least 3 nodes; the majority's record replaces the pin and the event is shown; without such a read the session shows "conflicting head" and nothing is built on it (§8 step 1) |
@@ -985,7 +1040,9 @@ line in `size-baseline.json`.
   (§10), the roster, the "not followed" state and the compromise warning (R10), the info in force, lost at a gap, and the marker (C33), the
   conflict rule of the checkpoint (§8 step 1), every page of a snapshot at one block, the
   majority read before a changed info (R13), no receipts and no flushed sends in a tree session (R11, C35), the size hint
-  (C3). It holds no key byte.
+  (C3), **the warning before an Add (owner, R16):** the admin's client checks whether the added key's `kemHash` is
+  registered to another UA in the registry and warns "this key is also held by UA …" (client only; the contract's sets do
+  not depend on it). It holds no key byte.
 - **`pqvault-core`**: refuses `groupMode ≠ 0`, as today (R5).
 - **Node**: `typed.rs` `TYPED` and `PLAIN` rows and `guard.rs` for `commit`, `treeLeave`, `treeRemove` (signed) and `addPathList`,
   `addPathKeys`, `addPath` (unsigned, relayed under `relay_unsigned_pqchat` as `addWraps`), with the contract's bounds (C24), `selector_audit.json`,
@@ -1007,15 +1064,26 @@ line in `size-baseline.json`.
 | Freshness | the strict majority over at least 3 named endpoints at a final block before a changed session info; fewer: refused (R13) |
 | Return | no UA and no key returns to a tree session; the way back is a new UA with a fresh key; mode 0 and PqVault unchanged (R14) |
 | The key half of the return rule (round 3) | kept as hygiene: it stops reuse of the same key bytes only; an equivalent key falls under the lending residual; exclusion rests on the UA roster (R15) |
+| The front-running burn (after round 3) | the key set is two-level: own-key churn enters the pair `(ua, kemHash)`, a UA that goes enters the `kemHash` of every key it held session-wide; the admin's client warns when a key is registered to another UA (R16) |
 | Revision 1's O2 to O5 | R7 |
 
-The controller's own calls of this revision (C29 to C36, the per-key period in C28, a leave forced like a removal in C21) are
-listed in §2; the owner may override any.
+The controller's own calls of this revision (C29 to C36, the per-key period in C28 and, since R16, the level judged on the
+tree after the Adds, a leave forced like a removal in C21) are listed in §2; the owner may override any.
 
 ## 17. What revisions 2 and 3 changed
 
 The full tables, one row per finding and per round, are the round's resolution file (kept with the review reports, not in the
 repo).
+
+**After round 3: the owner's R16 (the controller's finding of a front-running burn), in place.** A contract rule and storage
+change only; no record, typehash or derivation moved:
+
+| Section | Change | Findings |
+|---|---|---|
+| §1, §2, §16 | R16 recorded; C28 two-level, the level judged on the tree after the Adds | R16 (the controller's finding) |
+| §6, §7, §8, §11 | the pair set `goneOwnKey` and its view; the Add's three checks; completion writes the level; `PqChatTreeOwnKeyReturn` | R16 (the controller's finding) |
+| §9, §10, §13, §14 | the two levels and why; one period per `(ua, kemHash)`; the pair slot and the third read; the burn row bounded; the front-running row | R16 (the controller's finding) |
+| §15 | the admin's warning before an Add of a key registered to another UA | R16 (the controller's finding) |
 
 **Round 3 (Fable, focused, on revision 3), fixed in place.** No record, typehash or derivation moved:
 

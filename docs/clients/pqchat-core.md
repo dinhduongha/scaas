@@ -223,7 +223,8 @@ that cannot follow an epoch shows it and sends nothing by itself** (owner 2026-1
 side is [CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **SPECIFIED**, nothing built, UNAUDITED. The bullets below
 other than the owner's rulings are controller calls, the owner may override. **Owner rulings of 2026-11-23 on the second
 review:** the joiner without RFC 9420's `init` chain and its cost; the compromise warning; no automatic receipts in a tree
-session; freshness before a changed session info; no return, the way back being a new UA.
+session; freshness before a changed session info; no return, the way back being a new UA. **After the third review:** the
+warning before an Add of a key registered to another UA.
 
 - **One branch.** Both modes end in an epoch key `K` per epoch id; sender chains, `sealedInfo`, messages, stores and consent sit
   above `K` and do not change. Until the mode is built the crate refuses `groupMode ≠ 0` by name. A tree session's state,
@@ -253,12 +254,16 @@ session; freshness before a changed session info; no return, the way back being 
   cannot come back. A user comes back as a **new UA** with a fresh KEM key, added by an admin: the crate shows it as a new
   member, never links it to the old UA on its own, and gives it no history before its join. No "rejoin" call exists. The
   removal of a UA's only key is worded as an exclusion for good; replacing it is one commit that removes and adds.
+  **Before an Add (owner):** the admin's client checks whether the added key's `kemHash` is registered to another UA in
+  the registry and warns "this key is also held by UA …". It is a client warning only: the contract's two-level key sets
+  ([CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)) do not depend on it, and a lookup that finds nothing proves nothing.
 - **Replay** needs state only ([CLI-PQC-09](#CLI-PQC-09)). Its reads are fixed by public data, the same whether a ciphertext
   opens or not, and each fetched record, list, ciphertext, wrap and key is compared with its signed hash before use: the
   Welcome wrap and the joiner's path ciphertext, then one path ciphertext per later commit (the target that covers the device's
   leaf), each derived node key compared with the signed hash, `sealedInfo` opened as the confirmation. The roster of each epoch
   is the live leaves with the later commits undone, anchored to the head's signed tree hash; a non-admin's drop of another UA
-  needs that UA's signed leave or removal; a key has one period in a session; which epoch won is the home's state.
+  needs that UA's signed leave or removal; a key has one period per UA in a session (`goneOwnKeyOf`, then `goneKeyOf`);
+  which epoch won is the home's state.
 - **Not followed.** A missing or wrong ciphertext leaves that epoch unreadable on the device: it is shown, the reads go on
   unchanged, and nothing is sent automatically ([CLI-PQC-07](#CLI-PQC-07)). The device follows again at the next commit that
   reaches its leaf or a node it holds, its own commit on the user's request included (it seals the marker).
