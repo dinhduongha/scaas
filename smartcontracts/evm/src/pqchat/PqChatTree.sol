@@ -344,8 +344,9 @@ contract PqChatTree is PqChatCore {
         emit IPqChat.PqChatLeft(l.sessionId, l.epochId, l.member);
     }
 
-    /// @notice C9, C21, C24, C28: a live admin of the head removes members or admins (strictly sorted); they are `gone`
-    ///         (kind 2) and their leaves are owed; an admin with a live leaf remains.
+    /// @notice C9, C21, C24, C28, C38: a live admin of the head removes members or admins (strictly sorted); they are
+    ///         `gone` (kind 2) and their leaves are owed; an admin with a live leaf remains while any member keeps a leaf.
+    ///         The record that closes a session is accepted.
     function treeRemove(IPqChat.PqChatTreeRemove calldata r, IUARegistry.UASig calldata sig) external {
         (IUARegistry reg, uint256 limit,) = _env();
         Tree storage t = _treeOf(r.sessionId);
@@ -367,7 +368,8 @@ contract PqChatTree is PqChatCore {
             _treeGo(r.sessionId, r.members[i], 2, ep.epoch);
             ep.removedOf[r.members[i]] = true;
         }
-        if (leafy && !_treeLeafyAdmin(t)) revert IPqChat.PqChatTreeAdmins();
+        // C24 read with C38 (CTR-CHAT-27 Change 2026-11-24): refused only while a member that is not gone keeps a leaf
+        if (leafy && !_treeLeafyAdmin(t) && _treeHasMember(t)) revert IPqChat.PqChatTreeAdmins();
         _s().removals[r.epochId].push(_put(_blob(abi.encode(r), sig), limit));
         emit IPqChat.PqChatRemoved(r.sessionId, r.epochId, r.admin, r.members);
     }

@@ -312,6 +312,53 @@ contract PqChatTreeRulesTest is PqChatTreeModel {
         _land(st, n, c);
     }
 
+    /// `a`, `b` in ascending order.
+    function _sorted(bytes32 a, bytes32 b) internal pure returns (bytes32[] memory) {
+        return a < b ? _list(a, b) : _list(b, a);
+    }
+
+    /// `l` sorted ascending, in place.
+    function _sort(bytes32[] memory l) internal pure returns (bytes32[] memory) {
+        for (uint256 i = 1; i < l.length; ++i) {
+            for (uint256 j = i; j > 0 && l[j] < l[j - 1]; --j) {
+                (l[j], l[j - 1]) = (l[j - 1], l[j]);
+            }
+        }
+        return l;
+    }
+
+    /// C38 by a removal (CTR-CHAT-27 Change 2026-11-24): the keyless admin G removes every member that remains, the
+    /// leafed admin A among them; the record is accepted and the session is closed: `owed` 3, no key-set entry, no commit.
+    function test_closedByAKeylessAdmin() public {
+        _open(); // the vectors in this call's memory
+        bytes32 G = person["G"];
+        M memory m = _abe(_sorted(A, G));
+        bytes32[] memory all = new bytes32[](3);
+        (all[0], all[1], all[2]) = (A, B, E);
+        _removeT(m, G, _sort(all));
+        (,, uint256 owed) = _sizes(vchat, m.sid);
+        assertEq(owed, 3);
+        (uint256 kind,) = _gone(vchat, m.sid, A);
+        assertEq(kind, 2);
+        (bool set,,) = _goneKey(vchat, m.sid, _kemHash(A, 1));
+        assertFalse(set);
+        Step memory x = _build2(m, 1);
+        _refused(x, _err(IPqChat.PqChatNotMember.selector, B));
+    }
+
+    /// The twin: G removes A, the only leafed admin, while B and E keep their leaves: `PqChatTreeAdmins` (C24).
+    function test_keylessAdminKeepsALeafedAdmin() public {
+        _open(); // the vectors in this call's memory
+        bytes32 G = person["G"];
+        M memory m = _abe(_sorted(A, G));
+        IPqChat.PqChatTreeRemove memory r =
+            IPqChat.PqChatTreeRemove(m.sid, m.treeId, m.head, m.epoch + 1, _list(A), G, ++nonceN);
+        IUARegistry.UASig memory sg = _sig(G, th2.treeRemove(r));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatTreeAdmins.selector));
+        vchat.treeRemove(r, sg);
+        _removeT(m, G, _list(B)); // control: a member removed, A keeps its leaf
+    }
+
     // ----- R16 -----
 
     /// (1) B registers A's next key as its own version, adds it by a plain commit and takes it out: only the pair is set;

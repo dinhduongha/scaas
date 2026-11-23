@@ -651,7 +651,8 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   `treeRemove` only.
 - **An admin with a leaf always remains (C24, codex-21):** a commit that changes `admins` otherwise than by dropping `gone` UAs
   must leave one admin UA with a live leaf, and a `treeRemove` whose UAs include every admin that holds a leaf is
-  `PqChatTreeAdmins`. `treeLeave` is never refused for it: a group whose last such admin leaves keeps its plain commits and
+  `PqChatTreeAdmins` **while a UA that is not `gone` keeps a live leaf after it**: the `treeRemove` that closes the session (C38)
+  is never refused for it (CTR-CHAT-27 Change 2026-11-24). `treeLeave` is never refused for it: a group whose last such admin leaves keeps its plain commits and
   loses admin commits for good (nobody can add a member, R14), as a flat group whose last admin left; clients warn that admin
   before it signs and show the state after. The order "an admin removes the other admin, then leaves" completes: the commit
   that drops both from `admins` is exempt (fable-r2-6).
@@ -934,7 +935,7 @@ New errors (existing ones keep their meaning: `PqChatShape`, `PqChatKemKey`, `Pq
 | `PqChatTreeOwnKeyReturn(bytes32 ua, bytes32 kemHash)` | an Add, under UA `ua`, of a key taken out of that UA's own leaves while it stayed a member (the pair set; R16, C28) |
 | `PqChatTreeLeaf(uint32 leaf)` | a leaf that is not live with the named key, not blank for an Add, the author's own in a Remove, or out of range |
 | `PqChatTreeKeyLive(bytes32 kemHash)` | a key that a live leaf already holds, or added twice (C18) |
-| `PqChatTreeAdmins()` | no admin with a live leaf would remain (C24) |
+| `PqChatTreeAdmins()` | no admin with a live leaf would remain while a UA that is not `gone` keeps one (C24, C38) |
 | `PqChatTreeBacklog(uint256 owed)` | a `treeRemove` or `treeLeave` that would owe more than `TREE_CHANGES_MAX` leaves at the head (C21) |
 | `PqChatPathList(bytes32 epochId)` | a list that does not hash to `ctListHash`, a second list, or a ciphertext before the list |
 | `PqChatPathHash(bytes32 epochId, uint256 index)` | a node key or ciphertext that does not hash to its signed hash, or has the wrong size |

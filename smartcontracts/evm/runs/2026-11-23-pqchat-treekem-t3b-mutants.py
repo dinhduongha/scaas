@@ -57,7 +57,7 @@ M = [
     ("a piece landed twice (ciphertext)", [(T, "            if (g.ctAt[i] != 0) revert IPqChat.PqChatPathStored(eid, i);\n", "")]),
     ("a second list", [(T, "            n == 0 || g.list != address(0) || ctTargets.length != n", "            n == 0 || ctTargets.length != n")]),
     ("the backlog unbounded", [(G, "        if (owed > changesMax) _treeFail(T_BACKLOG, owed, 0);\n", "")]),
-    ("a treeRemove leaving no admin with a leaf", [(T, "        if (leafy && !_treeLeafyAdmin(t)) revert IPqChat.PqChatTreeAdmins();\n", "")]),
+    ("a treeRemove leaving no admin with a leaf", [(T, "        if (leafy && !_treeLeafyAdmin(t) && _treeHasMember(t)) revert IPqChat.PqChatTreeAdmins();\n", "")]),
     ("the empty list's hash unchecked", [(T, "                || (c.ctCount == 0 && c.ctListHash != EMPTY_PATH_LIST)", "")]),
     ("the info bound off by one", [(T, "c.sealedInfo.length > TREE_INFO_MAX", "c.sealedInfo.length >= TREE_INFO_MAX")]),
     ("the target count unchecked", [(G, "        if (n != d.ctCount) _treeFail(T_TARGETS, n, 0);\n", "")]),

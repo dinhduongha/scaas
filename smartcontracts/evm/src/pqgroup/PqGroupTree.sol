@@ -271,6 +271,16 @@ abstract contract PqGroupTree {
         return false;
     }
 
+    /// @dev C38: some UA that is not gone holds a live leaf (else the group is closed). A scan of the leaf positions, read
+    ///      only on the path where no admin with a leaf remains.
+    function _treeHasMember(Tree storage t) internal view returns (bool) {
+        for (uint256 i; i < t.used; ++i) {
+            Leaf storage l = t.leafAt[i];
+            if (l.live && t.gone[l.ua].kind == 0) return true;
+        }
+        return false;
+    }
+
     function _in(bytes32[] storage a, bytes32 x) internal view returns (bool) {
         for (uint256 i; i < a.length; ++i) {
             if (a[i] == x) return true;
