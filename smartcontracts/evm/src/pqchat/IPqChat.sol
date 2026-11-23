@@ -214,8 +214,17 @@ interface IPqChat {
     error PqChatSigStore(uint8 sigStore);
     /// @notice CTR-CHAT-23: a signature view on a `none` instance, which keeps each record's `sigHash` only.
     error PqChatSigNotStored();
-    /// @notice CTR-CHAT-25: a session's `groupMode` this release does not run (it runs 0, flat wraps).
+    /// @notice CTR-CHAT-25, CTR-CHAT-26: a session's `groupMode` this release does not run (it runs 0, flat wraps, and 1,
+    ///         TreeKEM): 2-255.
     error PqChatModeUnsupported(uint8 groupMode);
+    /// @notice CTR-CHAT-27: an entry or view of the other mode (`rekey` on a tree session).
+    error PqChatModeEntry(uint8 groupMode);
+    /// @notice CTR-CHAT-27 C1: a tree session on a `none` home.
+    error PqChatTreeSigStore();
+    /// @notice CTR-CHAT-27 C4: a tree session created outside its home instance.
+    error PqChatTreeHome();
+    /// @notice CTR-CHAT-27 C18: a key that a live leaf already holds (`kemHash = keccak256(kemPk)`).
+    error PqChatTreeKeyLive(bytes32 kemHash);
     /// @notice `validateEnv`: `chainUid` 0, registry 0, no code-size limit or one under EIP-170's 24,576 B (3C-D1); a
     ///         constructor id other than class 3, kind 0, version >= 1.
     error PqChatEnv();

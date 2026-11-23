@@ -51,6 +51,13 @@ library PqChatTypes {
     bytes32 internal constant TOPIC_VOTE_TYPEHASH =
         keccak256("PqTopicVote(bytes32 entryId,bytes32 voter,int8 value,uint64 seq)");
 
+    /// @notice The TreeKEM mode's tree hash (CTR-CHAT-26, spec §4): `PqGroupTree`'s leaf and parent typehashes for PqChat,
+    ///         hashed, never signed.
+    bytes32 internal constant TREE_LEAF_TYPEHASH =
+        keccak256("TreeLeaf(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 kemHash)");
+    bytes32 internal constant TREE_PARENT_TYPEHASH =
+        keccak256("TreeParent(bytes32 keyHash,bytes32 left,bytes32 right)");
+
     /// @notice Id tags (spec §4.3, topics P36) and nonce-scope tags (3C-D5).
     bytes32 internal constant TAG_SESSION = keccak256("scaas/pqchat/v1/session");
     bytes32 internal constant TAG_EPOCH = keccak256("scaas/pqchat/v1/epoch");

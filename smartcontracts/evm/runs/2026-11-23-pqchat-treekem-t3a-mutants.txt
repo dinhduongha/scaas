@@ -1,0 +1,35 @@
+# plan 2026-11-23-pqchat-treekem T3a contract mutants (runs/2026-11-23-pqchat-treekem-t3a-mutants.py; verdict | mutant | file | rc | tests failed).
+# Run 1 on the T3a tree before its commit: test_gas_topics and test_gas_twoMembers failed in every run from two stale gas pins (editEntry, rekey next epoch; moved in the commit), so they are left out of the lists below. A list cut by a "]" in a failure message was rerun (run 2).
+killed   | M1 mode 1 accepted on a none home | PqChatTree.sol | rc=1 | failed: test_noneHomeRefused
+killed   | M2 mode 1 accepted on a replica | PqChatTree.sol | rc=1 | failed: test_replicaRefused
+killed   | M3 the leaf cap off by one | PqGroupTree.sol | rc=1 | failed: test_leafCap
+killed   | M4 the admin cap off by one | PqGroupTree.sol | rc=1 | failed: test_adminCap
+killed   | M5 the info cap off by one | PqChatTree.sol | rc=1 | failed: test_infoCap
+killed   | M6 no leaf cap | PqGroupTree.sol | rc=1 | failed: test_leafCap
+killed   | M11 a sibling leaf taken as blank | PqGroupTree.sol | rc=1 | failed: test_genesisTreeHashWithTheWraps
+killed   | M12 the leaves written in the record's transaction | PqChatTree.sol | rc=1 | failed: test_keyFailingTheCheckRefusedAtItsWrap, test_leafCap, test_leavesAndListingLandWithTheirWraps, test_twoKeysOfOneUaListedOnce, test_twoMembersWithOneKeyNeverCompl
+killed   | M13 every member listed in the record's transaction | PqChatTree.sol | rc=1 | failed: test_leavesAndListingLandWithTheirWraps, test_twoKeysOfOneUaListedOnce
+killed   | M14 the creator not listed with the record | PqChatTree.sol | rc=1 | failed: test_leavesAndListingLandWithTheirWraps
+killed   | M15 a UA listed per key | PqChatTree.sol | rc=1 | failed: test_leavesAndListingLandWithTheirWraps, test_twoKeysOfOneUaListedOnce
+killed   | M16 a live key taken twice | PqGroupTree.sol | rc=1 | failed: test_twoMembersWithOneKeyNeverComplete
+killed   | M17 no genesis tree hash | PqChatTree.sol | rc=1 | failed: test_genesisTreeHashWithTheWraps, test_leavesAndListingLandWithTheirWraps, test_twoKeysOfOneUaListedOnce
+killed   | M18 the admission check reduced to scheme and length | PqGroupTree.sol | rc=1 | failed: test_admissionRowsMatchVectors, test_keyFailingTheCheckRefusedAtItsWrap
+killed   | M19 no coefficient check | PqGroupTree.sol | rc=1 | failed: test_admissionRowsMatchVectors, test_keyFailingTheCheckRefusedAtItsWrap
+killed   | M21 pk_X not canonical (any value) | PqGroupTree.sol | rc=1 | failed: test_admissionRowsMatchVectors
+killed   | M22 the small orders admitted | PqGroupTree.sol | rc=1 | failed: test_admissionRowsMatchVectors
+killed   | M23 the admission check not run on a leaf | PqGroupTree.sol | rc=1 | failed: test_keyFailingTheCheckRefusedAtItsWrap
+killed   | M24 rekey on a tree session | PqChat.sol | rc=1 | failed: test_gas_remove, test_rekeyOnATreeSessionRefused
+killed   | M25 addWraps of a tree session not forwarded | PqChat.sol | rc=1 | failed: test_genesisTreeHashWithTheWraps, test_keyFailingTheCheckRefusedAtItsWrap, test_leavesAndListingLandWithTheirWraps, test_twoMembersWithOneKeyNeverComplete
+killed   | M26 mode 2 accepted | PqChat.sol | rc=1 | failed: test_onlyFlatWrapsAndTreeKemAccepted, test_theModeIsCheckedFirst
+killed   | M27 the tree step skipped | PqChat.sol | rc=1 | failed: test_adminCap, test_genesisTreeHashWithTheWraps, test_infoCap, test_keyFailingTheCheckRefusedAtItsWrap, test_leafCap, test_leavesAndListingLandWithTheirWraps, tes
+killed   | M29 the tree namespace of another id | PqChatCore.sol | rc=1 | failed: test_genesisTreeHashWithTheWraps, test_leafCap, test_leavesAndListingLandWithTheirWraps, test_twoKeysOfOneUaListedOnce
+killed   | M30 the tree module's constructor check dropped | PqChat.sol | rc=1 | failed: test_constructor_refusesAnotherModule
+# run 2, after the gas pins moved: M7-M9, M28 (the lists of run 1 cut); M10 and M20 survived run 2 and are killed by the two tests added for them (run 3)
+killed   | M7 a leaf hash without its index | PqGroupTree.sol | rc=1 | failed: test_coldTreeHashMatchesVectors
+killed   | M8 a leaf hash without kemHash | PqGroupTree.sol | rc=1 | failed: test_coldTreeHashMatchesVectors
+killed   | M9 the children swapped | PqGroupTree.sol | rc=1 | failed: test_coldTreeHashMatchesVectors
+killed   | M28 the pair set and the group-wide set swapped in the layout | PqGroupTree.sol | rc=1 | failed: test_treeNamespaceIsPinned
+killed   | M10 a blank parent over empty subtrees hashed | PqGroupTree.sol | rc=1 | failed: test_blankParentOverEmptySubtreesHashesToZero (run 3)
+killed   | M20 the second coefficient of a triple unchecked | PqGroupTree.sol | rc=1 | failed: test_admissionEveryCoefficientOfAGroup (run 3)
+# part 1: the author offset back to the constant 96 (PqChatCore._authorOf): killed by test_removedAuthorsStagedChildCannotComplete
+30 mutants, 30 killed (2 after a test added), 0 survived, 0 not loaded

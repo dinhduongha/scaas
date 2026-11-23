@@ -32,6 +32,7 @@ design: the UA-7 spec [`2026-10-25-ua7-pq-e2e-sessions.md`](../superpowers/specs
 14. [Clients and other families](#14-clients-and-other-families)
 15. [The standalone store on 24,576-B chains](#15-the-standalone-store-on-24576-b-chains)
 16. [The TreeKEM mode (`groupMode = 1`)](#16-the-treekem-mode-groupmode--1)
+17. [`PqGroupTree`, the group tree for inheritors](#17-pqgrouptree-the-group-tree-for-inheritors)
 
 ## 1. Overview
 
@@ -815,7 +816,8 @@ store path, as HCS does on Hedera; the contract, its state storage and its bound
 
 ## 16. The TreeKEM mode (`groupMode = 1`)
 
-Status: **SPECIFIED**, nothing built, **UNAUDITED** (spec [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md),
+Status: **SPECIFIED**; the cold tree (creation, the leaves with the wraps, the genesis tree hash) **BUILT** on branch
+`pqchat-treekem` (plan T3a); commits are T3b. **UNAUDITED** (spec [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md),
 plan [`2026-11-23-pqchat-treekem.md`](../superpowers/plans/2026-11-23-pqchat-treekem.md)). It builds on branch `pqchat-sigs`:
 the signature-storage setting per home, several `keyId`s per member UA, and `groupMode` in `PqChatSession`.
 
@@ -856,6 +858,15 @@ scheme 1, in minimal scope (a commit with an UpdatePath, Adds and Removes, Welco
 - **Accepted cost of the joiner without RFC 9420's `init` chain (owner 2026-11-23):** as in mode 0's `rekey`, one UA signature
   lets its holder build the next epoch; the contract cannot check knowledge of the previous one.
 - **Recovery** is from state alone ([CTR-CHAT-14](#CTR-CHAT-14)), by replaying the commits since the device's Welcome.
+- **Two layers (owner 2026-11-23: "agreed, that is how it should be"; and "or other systems that use a tree"; verbatim in
+  the [register](../decisions.md#ctr-chat-26--pqchats-treekem-mode-groupmode--1-is-built-now-in-minimal-scope-in-a-body-module)).** The tree
+  is built as `PqGroupBase` and `PqChat` are: `src/pqgroup/PqGroupTree.sol`, an abstract base with no app domain, record
+  type or error of its own, for any contract that keeps a group tree (another first-party contract, a later `PqVaultTree`, a
+  third-party app, [CTR-UA-45](accounts.md#CTR-UA-45)), holds the tree math, the tree hash, the key admission check, the tree
+  storage in a namespace of its own and, from T3b, the no-return sets and the acceptance and completion checks;
+  `src/pqchat/PqChatTree.sol`, PqChat's body module, holds PqChat's entries and the glue to `PqChatCore`, which fixes the
+  base's hooks for PqChat (the namespace `scaas.pqchat.tree`, the typehashes `TreeLeaf` and `TreeParent`, the bounds, the
+  errors). Its interface for inheritors: [§17](#17-pqgrouptree-the-group-tree-for-inheritors).
 - **Owner rulings on the first spec's open points (2026-11-23):** the leaf is the registry KEM key, not refreshed per commit; a
   non-admin commits only for its own UA's leaves; no tree session on a `none` home or a replica; ML-KEM-1024 the one node
   scheme; `TREE_LEAVES_MAX` = 256, confirmed: one session record creates up to about 200 keys at a 60 M block, the rest come
@@ -930,3 +941,33 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   mode 0's, holds about 200 member keys at a 60 M block (68 to 71 M asked at 256), so a tree of 256 keys is reached by Adds
   there.
 - **Open with the owner:** nothing (the spec's §16).
+
+## 17. `PqGroupTree`, the group tree for inheritors
+
+Status: **BUILT** for the cold tree (plan 2026-11-23-pqchat-treekem T3a, branch `pqchat-treekem`: the tree math, `th`, the
+admission check, the storage, a leaf set with its key admitted and its ancestors rehashed, the genesis tree hash);
+**SPECIFIED** for commits (T3b: the acceptance and completion checks, the no-return sets written). **UNAUDITED.** Owner
+2026-11-23 ([CTR-CHAT-26](#CTR-CHAT-26), two layers; any system that needs a group tree).
+
+`src/pqgroup/PqGroupTree.sol` is abstract and app-agnostic: no record type, domain, purpose or named error of its own, and
+no PqChat name. A group is a `bytes32` id the inheritor chooses; a leaf is a registry KEM key `(ua, keyId)` by reference,
+its `kemHash = keccak256(scheme ‖ ek ‖ pk_X)` read from the registry wherever a hash needs it. Everything app-specific comes
+through four hooks, each a constant in the inheritor:
+
+| Hook | What the inheritor fixes | PqChat (`PqChatCore`) |
+|---|---|---|
+| `_treeSlot()` | its storage namespace: ERC-7201 of its own namespace id followed by `.tree`, so two apps with distinct ids never share one, also behind one `DELEGATECALL` | `scaas.pqchat.tree` |
+| `_treeTypehashes()` | the leaf and parent typehashes of `th` (fields `uint32 leaf, bytes32 ua, uint64 keyId, bytes32 kemHash` and `bytes32 keyHash, bytes32 left, bytes32 right`): its own type strings are its label, so two apps' trees never share a hash space | `TreeLeaf(…)`, `TreeParent(…)` (spec §4) |
+| `_treeBounds()` | the most leaf positions and admins of a group | 256, 32 |
+| `_treeFail(code, a, b)` | its named error for each `T_*` code (`T_SHAPE`, `T_KEM_KEY(ua, keyId)`, `T_KEY_LIVE(kemHash)`) | `PqChatShape`, `PqChatKemKey`, `PqChatTreeKeyLive` |
+
+Rights, records, signatures, the order of epochs and the indexes of members are the inheritor's. What the base gives:
+`_treeOpen` (a cold tree of `used` positions, `leaves` the next power of two, its admin list), `_treeSetLeaf` (the key
+admitted, one live leaf per `kemHash`, `keysOf` and the ancestors' `th` written bottom-up; it returns whether the UA was
+not listed yet, `_treeListed` marks one), `_treeGenesis` (the head and the genesis tree hash), `_treeHash`, RFC 9420
+Appendix C's math, and `_admissible`, the public admission check of a scheme-1 `kemPk` (spec §8, C19, C32). The storage
+layout is pinned in `test/v2/layout/namespaces.json` (`pqchatTree`): per group `treeId`, `genesisTreeHash`, the head,
+`used`, `leaves` and `owed`, per leaf two slots, per parent its `th` and its key, `keysOf`, `liveKey`, `gone`, the pair set
+`goneOwnKey[ua][kemHash]` and the group-wide set `goneKey[kemHash]` at distinct slots (the owner's two-level set), the
+admin list. A later field
+is appended after `trees` in the namespace's root struct, so no pinned slot moves.

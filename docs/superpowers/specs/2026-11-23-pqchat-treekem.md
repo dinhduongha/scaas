@@ -432,6 +432,13 @@ of a tree epoch is true exactly when it took its slot (C20); `epochOf` of a tree
 `PqChatPath(bytes32 indexed epochId, uint8 piece, uint32 first, uint32 count)` per landed piece (`piece`: 1 list, 2 keys,
 3 ciphertexts).
 
+**Two layers (owner 2026-11-23).** The tree math, the tree hash, the admission check, the R16 sets, the acceptance and
+completion checks and the tree storage (§7) are `src/pqgroup/PqGroupTree.sol`, an abstract base for any system that needs a
+group tree, with no app name, domain, record typehash or error of its own: the inheritor fixes its namespace (ERC-7201 of its
+namespace id followed by `.tree`; PqChat's is `scaas.pqchat.tree`), the leaf and parent typehashes of the tree hash (its type
+strings are its label; PqChat's are §4's), its bounds and its errors by hooks. Everything below named for PqChat is
+`PqChatTree`'s, on that base (CTR-CHAT-26, `docs/contracts/pqchat.md` §17).
+
 **The module (R2).** `PqChatTree`, a DELEGATECALL body module beside `PqChatTopics`: `PqChat` gains an immutable `TREE`, lists
 it in `modules()`, forwards `commit`, `addPathList`, `addPathKeys`, `addPath` and the tree views by `msg.data`, forwards
 `addWraps` and `postMessage` when their session is a tree session, and calls the module's creation step from

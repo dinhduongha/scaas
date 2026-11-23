@@ -190,10 +190,10 @@ test("session records: digests, ids, scopes, the message signature and blob", ()
   assert.ok(S.record.members.some((m) => m.via !== Z32));
   assert.equal(Mg.record.parents.length, 2);
   assert.deepEqual(Mg.record.parents, [...Mg.record.parents].sort());
-  // CTR-CHAT-25: groupMode is 0 in every accepted row by rule; its non-zero value is the refused sessionTreeKem row's
+  // CTR-CHAT-25, CTR-CHAT-26: groupMode is 0 in every flat row; the sessionTreeKem row's is 1, no longer refused
   assert.equal(S.record.groupMode, 0);
   assert.equal(R.sessionTreeKem.record.groupMode, 1);
-  assert.equal(R.sessionTreeKem.error, "PqChatModeUnsupported(1)");
+  assert.equal(R.sessionTreeKem.error, undefined);
   checkRow("sessionTreeKem", R.sessionTreeKem);
   for (const rec of [S.record, E.record, L.record, Mg.record]) {
     for (const [f, v] of Object.entries(rec))

@@ -176,8 +176,8 @@ const session = {
   }),
 };
 
-// CTR-CHAT-25: the same session record with groupMode 1 (TreeKEM), refused by this release (PqChatModeUnsupported(1)) before
-// anything else; a later catalogued release accepts it with the same struct and typehash
+// CTR-CHAT-25, CTR-CHAT-26: the same session record with groupMode 1 (TreeKEM), the same struct and typehash; the release
+// with the tree module accepts the mode (2-255 are PqChatModeUnsupported)
 const sessionTreeKem = { ...session, nonce: 12, groupMode: 1 };
 
 const eid = hex(pc.epochId(sid, alice.ua, 8));
@@ -302,7 +302,8 @@ write("records.json", {
     'epoch 1 adding his device key (keys.json kemKeys "bob-device", KEM version 4, random per device, not seed-derived): ' +
     'members strictly sorted by (ua, keyId), one wrap per entry (keys.json wraps "epoch-2/*"), the MemberKey type unchanged.' +
     " The group mode (owner 2026-11-23, CTR-CHAT-25): PqChatSession carries uint8 groupMode as its last field, 0 flat " +
-    "wraps; sessionTreeKem is the session with groupMode 1 (TreeKEM), signed, refused by this release by name (error).",
+    "wraps; sessionTreeKem is the session with groupMode 1 (TreeKEM), signed; the mode is accepted from the tree module on " +
+    "(CTR-CHAT-26), 2-255 refused (PqChatModeUnsupported).",
   version: 1,
   domain,
   purpose,
@@ -331,14 +332,11 @@ write("records.json", {
     sig: sign(alice, "PqChatEpoch", epoch),
     kept: true,
   }),
-  sessionTreeKem: {
-    ...recordRow("PqChatSession", sessionTreeKem, alice, {
-      id: hex(pc.sessionId(alice.ua, 12)),
-      scope: pc.scopeSession(alice.ua),
-      sig: sign(alice, "PqChatSession", sessionTreeKem),
-    }),
-    error: "PqChatModeUnsupported(1)",
-  },
+  sessionTreeKem: recordRow("PqChatSession", sessionTreeKem, alice, {
+    id: hex(pc.sessionId(alice.ua, 12)),
+    scope: pc.scopeSession(alice.ua),
+    sig: sign(alice, "PqChatSession", sessionTreeKem),
+  }),
   epochDevices: recordRow("PqChatEpoch", epochDevices, bob, {
     id: eid2,
     scope: pc.scopeEpoch(sid, bob.ua),

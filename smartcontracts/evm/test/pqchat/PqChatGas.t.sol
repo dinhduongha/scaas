@@ -67,9 +67,12 @@ contract PqChatGasTest is PqTopicsBase {
     // 2,187,548; state 49,377,690 -> 49,640,850 (+172 x 1,530)
     // TreeKEM T3a part 1 (`PqGroupBase._land` split into `_storeWraps` and `_complete`, `_authorOf` moved to `PqChatCore`):
     // 32,069 -> 32,104 B; regular 2,187,548 -> 2,189,628; state 49,640,850 -> 49,694,400 (+35 x 1,530)
-    uint256 internal constant RUNTIME = 32_104;
-    uint256 internal constant RELEASE_REGULAR = 2_189_628;
-    uint256 internal constant RELEASE_STATE = 49_694_400;
+    // TreeKEM T3a (CTR-CHAT-26: the immutable `TREE`, its check in the constructor, the dispatch of `createSession` and
+    // `addWraps` to it, `rekey` refused on a tree session, `modules()` of two, `groupMode` 1 accepted):
+    // 32,104 -> 32,695 B; regular 2,189,628 -> 2,247,883; state 49,694,400 -> 50,598,630 (+591 x 1,530)
+    uint256 internal constant RUNTIME = 32_695;
+    uint256 internal constant RELEASE_REGULAR = 2_247_883;
+    uint256 internal constant RELEASE_STATE = 50_598_630;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice:
     // 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
@@ -131,7 +134,8 @@ contract PqChatGasTest is PqTopicsBase {
         // CTR-CHAT-23: 367,359 / 7,740,270 -> 371,249 / 8,131,950
         // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
         // regular 371,249 -> 373,424
-        _row("rekey 2 members, plain, first epoch list entry", 373_424, 8_131_950);
+        // TreeKEM T3a (CTR-CHAT-27: `rekey` reads the tree namespace to refuse a tree session): regular 373,424 -> 375,895
+        _row("rekey 2 members, plain, first epoch list entry", 375_895, 8_131_950);
 
         (e, ew) = _epoch(sid, ids[0], 1, 2, e1, s.admins, s.members);
         sig = _sig(e.author, h.epoch(e));
@@ -140,7 +144,8 @@ contract PqChatGasTest is PqTopicsBase {
         // CTR-CHAT-23: 367,240 / 7,642,350 -> 371,131 / 8,034,030
         // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
         // regular 371,131 -> 373,306
-        _row("rekey 2 members, plain, next epoch list entry", 373_306, 8_034_030);
+        // TreeKEM T3a (the tree-session read in `rekey`): regular 373,306 -> 375,633
+        _row("rekey 2 members, plain, next epoch list entry", 375_633, 8_034_030);
 
         IPqChat.PqChatMessage memory m = _msg(sid, e2, ids[1], 0, 1040); // a 1,024-B bucket + the GCM-SIV tag
         sig = _sig(m.sender, h.message(m));
@@ -309,7 +314,8 @@ contract PqChatGasTest is PqTopicsBase {
         // -> 389,335 / 8,034,030
         // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
         // regular 389,335 -> 391,869
-        _row("rekey dropping the removed member, 2 left", 391_869, 8_034_030);
+        // TreeKEM T3a (the tree-session read in `rekey`): regular 391,869 -> 394,329
+        _row("rekey dropping the removed member, 2 left", 394_329, 8_034_030);
     }
 
     // ----- topics (topics spec §6) -----
@@ -335,7 +341,8 @@ contract PqChatGasTest is PqTopicsBase {
         vm.prank(STRANGER);
         bytes32 pid = chat.postEntry(p, sig);
         // CTR-CHAT-23 (the release's dispatcher): regular 178,583 -> 178,686
-        _row("postEntry 1 KiB post", 178_686, 3_075_300);
+        // TreeKEM T3a (the dispatcher with the tree module's selectors, `_forward(module)`): regular 178,686 -> 179,259
+        _row("postEntry 1 KiB post", 179_259, 3_075_300);
 
         IPqChat.PqTopicEntry memory r = _entryRec(tid, ids[2], 1, pid, new bytes(256));
         sig = _sig(r.author, h.entry(r));
@@ -349,7 +356,8 @@ contract PqChatGasTest is PqTopicsBase {
         vm.prank(STRANGER);
         chat.editEntry(d, sig);
         // CTR-CHAT-23 (the release's dispatcher): regular 144,427 -> 144,596
-        _row("editEntry 1 KiB", 144_596, 2_487_780);
+        // TreeKEM T3a (the dispatcher with the tree module's selectors): regular 144,596 -> 145,142
+        _row("editEntry 1 KiB", 145_142, 2_487_780);
 
         IPqChat.PqTopicVote memory v = IPqChat.PqTopicVote(pid, ids[3], 1, 1);
         sig = _sig(v.voter, h.vote(v));

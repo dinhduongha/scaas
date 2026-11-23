@@ -6,13 +6,15 @@ import {PqChatTypes} from "./PqChatTypes.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {PqGroupBase} from "../pqgroup/PqGroupBase.sol";
+import {PqGroupTree} from "../pqgroup/PqGroupTree.sol";
 
 /// @title What `PqChat` and its body module `PqChatTopics` share (CTR-TOK-30, plan 3c 3C-D2): the ERC-7201 namespace
 ///        `scaas.pqchat`, the clone's chain values (`ChainEnv`, 3C-D1), the signature check, the nonce bitmaps and the
 ///        SSTORE2 blobs (3C-D3). The module runs by `DELEGATECALL` in the clone's context, so both read one state and one
 ///        env. The group code (epochs, wraps, lists, nonces, blobs, the env read) is `PqGroupBase`'s (CTR-PQV-12), reached
-///        through this namespace by the hooks below. **UNAUDITED.**
-abstract contract PqChatCore is PqGroupBase {
+///        through this namespace by the hooks below; the TreeKEM mode's tree (`PqGroupTree`, CTR-CHAT-26) through the namespace
+///        `scaas.pqchat.tree`, with PqChat's typehashes, bounds and errors. **UNAUDITED.**
+abstract contract PqChatCore is PqGroupBase, PqGroupTree {
     struct Topic {
         bytes32 admin; // 0 = unknown
         address record; // the create record's head blob
@@ -76,6 +78,14 @@ abstract contract PqChatCore is PqGroupBase {
     /// @dev `keccak256(abi.encode(uint256(keccak256("scaas.pqchat")) - 1)) & ~bytes32(uint256(0xff))`.
     bytes32 internal constant SLOT = 0xc7b36804b17476e9a19a6ebc690cd7b9326d322c515fd7dc91373f9bc6dc3000;
 
+    /// @dev `PqGroupTree`'s namespace for PqChat: ERC-7201 of `scaas.pqchat.tree` (the app's id `scaas.pqchat` + `.tree`).
+    bytes32 internal constant TREE_SLOT = 0x6dbf1a211620db3f6ac9abbc89a5beccc42b16cce14417bf002a104ad4e19c00;
+    /// @dev CTR-CHAT-27 C10 (owner, R8): leaf positions of one tree session; C24: its admins and its `sealedInfo` (the
+    ///      sealed form of the 4,096-B padding bucket).
+    uint256 internal constant TREE_LEAVES_MAX = 256;
+    uint256 internal constant TREE_ADMINS_MAX = 32;
+    uint256 internal constant TREE_INFO_MAX = 4124;
+
     function _s() internal pure returns (S storage s) {
         assembly ("memory-safe") {
             s.slot := SLOT
@@ -114,6 +124,48 @@ abstract contract PqChatCore is PqGroupBase {
         }
         (IPqChat.PqChatEpoch memory e,) = abi.decode(b, (IPqChat.PqChatEpoch, bytes32));
         return (e.admins, e.members, e.wrapHashes);
+    }
+
+    // ------------------------------------------------------------------ the tree hooks (PqGroupTree)
+
+    function _treeSlot() internal pure override returns (bytes32) {
+        return TREE_SLOT;
+    }
+
+    function _treeTypehashes() internal pure override returns (bytes32, bytes32) {
+        return (PqChatTypes.TREE_LEAF_TYPEHASH, PqChatTypes.TREE_PARENT_TYPEHASH);
+    }
+
+    function _treeBounds() internal pure override returns (uint256, uint256) {
+        return (TREE_LEAVES_MAX, TREE_ADMINS_MAX);
+    }
+
+    function _treeFail(uint8 code, uint256 a, uint256 b) internal pure override {
+        if (code == T_KEM_KEY) revert IPqChat.PqChatKemKey(bytes32(a), uint64(b));
+        if (code == T_KEY_LIVE) revert IPqChat.PqChatTreeKeyLive(bytes32(a));
+        revert IPqChat.PqChatShape();
+    }
+
+    /// @dev A session in the TreeKEM mode (CTR-CHAT-26): its tree is open from `createSession` on.
+    function _isTree(bytes32 sessionId) internal view returns (bool) {
+        return _tree(sessionId).treeId != 0;
+    }
+
+    /// @dev Every `PqGroupBase` code to its `PqChat` error (CTR-PQV-12: the selectors unchanged), for `PqChat` and the tree
+    ///      module; the env and nonce codes as `_fail` here.
+    function _chatFail(uint8 code, uint256 a, uint256 b) internal pure {
+        if (code == F_SHAPE) revert IPqChat.PqChatShape();
+        if (code == F_KEM_KEY) revert IPqChat.PqChatKemKey(bytes32(a), uint64(b));
+        if (code == F_WRAP_HASH) revert IPqChat.PqChatWrapHash(bytes32(a), b);
+        if (code == F_WRAP_STORED) revert IPqChat.PqChatWrapStored(bytes32(a), b);
+        if (code == F_UNKNOWN) revert IPqChat.PqChatUnknown(bytes32(a));
+        if (code == F_INCOMPLETE) revert IPqChat.PqChatIncomplete(bytes32(a));
+        if (code == F_EPOCH_NUMBER) revert IPqChat.PqChatEpochNumber(uint64(a), uint64(b));
+        if (code == F_EPOCH_TAKEN) revert IPqChat.PqChatEpochTaken(bytes32(a), bytes32(b));
+        if (code == F_NOT_ADMIN) revert IPqChat.PqChatNotAdmin(bytes32(a));
+        if (code == F_NOT_MEMBER) revert IPqChat.PqChatNotMember(bytes32(a));
+        if (code == F_REMOVED_KEPT) revert IPqChat.PqChatRemovedKept(bytes32(a), bytes32(b));
+        PqChatCore._fail(code, a, b);
     }
 
     /// @dev What the shared code here and in the body module raises (the env read, the nonce bitmap); `PqChat` maps every other

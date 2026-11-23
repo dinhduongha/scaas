@@ -5,6 +5,7 @@ import {IPqChat} from "./IPqChat.sol";
 import {PqChatTypes} from "./PqChatTypes.sol";
 import {PqChatCore} from "./PqChatCore.sol";
 import {PqChatTopics} from "./PqChatTopics.sol";
+import {PqChatTree} from "./PqChatTree.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
@@ -19,7 +20,8 @@ import {RescueLib} from "../governance/RescueLib.sol";
 ///         registry, `chain_uid`, the code-size limit `params[0]`. State in the ERC-7201 namespace `scaas.pqchat`.
 ///         Records are stored in SSTORE2 blobs (3C-D3), never only in an event. The public topics and votes run in the
 ///         body module `PqChatTopics` by `DELEGATECALL` (CTR-TOK-30, 3C-D2); the sessions, messages and the store, the 1:1
-///         path, stay here. **UNAUDITED.**
+///         path, stay here. The TreeKEM mode (`groupMode = 1`, CTR-CHAT-26) runs in the body module `PqChatTree`.
+///         **UNAUDITED.**
 contract PqChat is IPqChat, PqChatCore {
     uint16 internal constant CLASS = 3;
     uint16 internal constant KIND = 0;
@@ -36,16 +38,20 @@ contract PqChat is IPqChat, PqChatCore {
     uint64 internal immutable VERSION;
     /// @notice The body module of the topics (`PqChatTopics`, CTR-TOK-30), named in `implArgs`.
     address internal immutable TOPICS;
+    /// @notice The body module of the TreeKEM mode (`PqChatTree`, CTR-CHAT-26), named in `implArgs`.
+    address internal immutable TREE;
 
-    /// @notice `(ReleaseId, factory_, implArgs)` (topics spec §11), `implArgs = abi.encode(topics)`: the body module
-    ///         `PqChatTopics` of this factory (CTR-TOK-30, 3C-D2), code present. The implementation is locked.
+    /// @notice `(ReleaseId, factory_, implArgs)` (topics spec §11), `implArgs = abi.encode(topics, tree)`: the body modules
+    ///         `PqChatTopics` and `PqChatTree` of this factory (CTR-TOK-30, 3C-D2, CTR-CHAT-26), code present. The
+    ///         implementation is locked.
     constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory implArgs) {
         if (id.contractClass != CLASS || id.kind != KIND || id.version == 0 || factory_ == address(0)) {
             revert PqChatEnv();
         }
-        address topics_ = abi.decode(implArgs, (address));
+        (address topics_, address tree_) = abi.decode(implArgs, (address, address));
         if (topics_.code.length == 0 || PqChatTopics(topics_).FACTORY() != factory_) revert PqChatEnv();
-        (FACTORY, VERSION, TOPICS) = (factory_, id.version, topics_);
+        if (tree_.code.length == 0 || PqChatTree(tree_).FACTORY() != factory_) revert PqChatEnv();
+        (FACTORY, VERSION, TOPICS, TREE) = (factory_, id.version, topics_, tree_);
         _s().initialized = true;
     }
 
@@ -115,6 +121,7 @@ contract PqChat is IPqChat, PqChatCore {
         ep.wraps = uint32(s.members.length);
         ep.home = s.homeChain == uid && s.homeChatContract == address(this);
         emit PqChatSessionCreated(sid, s.creator, s.homeChain);
+        if (s.groupMode == 1) _forwardAs(PqChatTree.treeCreate.selector); // CTR-CHAT-26: the tree and its wraps
         _indexAll(sid, s.members);
         _landWraps(sid, ep, 0, wraps, s.members, s.wrapHashes, limit);
     }
@@ -128,7 +135,7 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @dev P8, 3C-D6: the lists, the creator a member and an admin, the home instance named (P32).
     function _checkSession(IUARegistry reg, PqChatSession calldata s) internal view {
-        if (s.groupMode != 0) revert PqChatModeUnsupported(s.groupMode); // CTR-CHAT-25: this release runs flat wraps only
+        if (s.groupMode > 1) revert PqChatModeUnsupported(s.groupMode); // CTR-CHAT-25, CTR-CHAT-26: flat wraps and TreeKEM
         MemberKey[] memory members = s.members;
         bytes32[] memory admins = s.admins;
         _checkLists(reg, admins, members, s.wrapHashes.length, 2);
@@ -145,6 +152,7 @@ contract PqChat is IPqChat, PqChatCore {
         returns (bytes32 eid)
     {
         (IUARegistry reg, uint256 limit,) = _env();
+        if (_isTree(e.sessionId)) revert PqChatModeEntry(1); // CTR-CHAT-27: a tree session's epochs are commits
         _indexAdded(e, _rightsOf(reg, _parentOf(e.parentEpochId, e.sessionId, e.epoch), e));
         _auth(reg, e.author, PqChatTypes.hashEpoch(e), sig);
         _useNonce(PqChatTypes.scopeEpoch(e.sessionId, e.author), e.nonce);
@@ -186,6 +194,7 @@ contract PqChat is IPqChat, PqChatCore {
     function addWraps(bytes32 epochId, uint32 first, Wrap[] calldata wraps) external {
         (, uint256 limit,) = _env();
         Epoch storage ep = _known(epochId);
+        if (_isTree(ep.sessionId)) _forward(TREE); // CTR-CHAT-26: the leaves land with the wraps
         _slotFree(ep, epochId);
         (, MemberKey[] memory members, bytes32[] memory hashes) = _lists(ep);
         _landWraps(epochId, ep, first, wraps, members, hashes, limit);
@@ -487,27 +496,27 @@ contract PqChat is IPqChat, PqChatCore {
     // ------------------------------------------------------------------ public topics: the module (CTR-TOK-30, 3C-D2)
 
     function createTopic(PqTopic calldata, IUARegistry.UASig calldata) external returns (bytes32) {
-        _forward();
+        _forward(TOPICS);
     }
 
     function updateTopic(PqTopicUpdate calldata, IUARegistry.UASig calldata) external {
-        _forward();
+        _forward(TOPICS);
     }
 
     function setTopicWriter(PqTopicWriter calldata, IUARegistry.UASig calldata) external {
-        _forward();
+        _forward(TOPICS);
     }
 
     function postEntry(PqTopicEntry calldata, IUARegistry.UASig calldata) external returns (bytes32) {
-        _forward();
+        _forward(TOPICS);
     }
 
     function editEntry(PqTopicEdit calldata, IUARegistry.UASig calldata) external {
-        _forward();
+        _forward(TOPICS);
     }
 
     function voteEntry(PqTopicVote calldata, IUARegistry.UASig calldata) external {
-        _forward();
+        _forward(TOPICS);
     }
 
     function topicOf(bytes32) external view returns (PqTopic memory, uint64) {
@@ -568,8 +577,17 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @dev CTR-TOK-30's unguarded stub (no entry here holds a guard): `DELEGATECALL` of this call's calldata to the module,
     ///      its revert data verbatim on failure, else its return data verbatim.
-    function _forward() internal {
-        (bool ok, bytes memory ret) = TOPICS.delegatecall(msg.data);
+    function _forward(address module) internal {
+        _call(module, msg.data);
+    }
+
+    /// @dev `_forward` to `PqChatTree` under the selector `sel` of the same arguments (its step after this entry's part).
+    function _forwardAs(bytes4 sel) internal {
+        _call(TREE, bytes.concat(sel, msg.data[4:]));
+    }
+
+    function _call(address module, bytes memory data) private {
+        (bool ok, bytes memory ret) = module.delegatecall(data);
         assembly ("memory-safe") {
             if iszero(ok) { revert(add(ret, 32), mload(ret)) }
             return(add(ret, 32), mload(ret))
@@ -578,7 +596,7 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @dev A `view` entry (the module's body writes nothing): `_forward` under a view cast, as the token faces do.
     function _forwardView() internal view {
-        function() f = _forward;
+        function() f = _forwardTopics;
         function() view v;
         assembly ("memory-safe") {
             v := f
@@ -586,28 +604,20 @@ contract PqChat is IPqChat, PqChatCore {
         v();
     }
 
-    /// @notice The body module (CTR-TOK-30), as the token faces list theirs.
+    function _forwardTopics() internal {
+        _forward(TOPICS);
+    }
+
+    /// @notice The body modules (CTR-TOK-30), as the token faces list theirs.
     function modules() external view returns (address[] memory m) {
-        m = new address[](1);
-        m[0] = TOPICS;
+        m = new address[](2);
+        (m[0], m[1]) = (TOPICS, TREE);
     }
 
     // ------------------------------------------------------------------ internal: the group's errors (PqGroupBase)
 
-    /// @dev Every `PqGroupBase` code to its `PqChat` error (CTR-PQV-12: the selectors unchanged); the env and nonce codes as the
-    ///      body module raises them (`PqChatCore._fail`).
+    /// @dev `PqChatCore._chatFail`: every `PqGroupBase` code to its `PqChat` error (CTR-PQV-12: the selectors unchanged).
     function _fail(uint8 code, uint256 a, uint256 b) internal pure override {
-        if (code == F_SHAPE) revert PqChatShape();
-        if (code == F_KEM_KEY) revert PqChatKemKey(bytes32(a), uint64(b));
-        if (code == F_WRAP_HASH) revert PqChatWrapHash(bytes32(a), b);
-        if (code == F_WRAP_STORED) revert PqChatWrapStored(bytes32(a), b);
-        if (code == F_UNKNOWN) revert PqChatUnknown(bytes32(a));
-        if (code == F_INCOMPLETE) revert PqChatIncomplete(bytes32(a));
-        if (code == F_EPOCH_NUMBER) revert PqChatEpochNumber(uint64(a), uint64(b));
-        if (code == F_EPOCH_TAKEN) revert PqChatEpochTaken(bytes32(a), bytes32(b));
-        if (code == F_NOT_ADMIN) revert PqChatNotAdmin(bytes32(a));
-        if (code == F_NOT_MEMBER) revert PqChatNotMember(bytes32(a));
-        if (code == F_REMOVED_KEPT) revert PqChatRemovedKept(bytes32(a), bytes32(b));
-        super._fail(code, a, b);
+        _chatFail(code, a, b);
     }
 }

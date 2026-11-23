@@ -26,6 +26,15 @@ contract PqChatTypesTest is Test {
         return vm.parseJsonBytes32(j, string.concat(".typehashes.", name, ".hash"));
     }
 
+    /// CTR-CHAT-26: the tree hash's typehashes (`PqGroupTree` under PqChat's hooks) against `tree.json`.
+    function test_treeTypehashIsPinned() public view {
+        string memory tj = vm.readFile("../vectors/pqchat/tree.json");
+        assertEq(PqChatTypes.TREE_LEAF_TYPEHASH, 0xb04b5949d0f8184b625a26d5a4d20904b18d81ca1ecb3318ad8446e028e057c9);
+        assertEq(PqChatTypes.TREE_PARENT_TYPEHASH, 0x2d08ad76b968118d87715f08ab368c8009cd22137afc48432bb3a1466a326ac2);
+        assertEq(PqChatTypes.TREE_LEAF_TYPEHASH, vm.parseJsonBytes32(tj, ".typehashes.TreeLeaf.hash"));
+        assertEq(PqChatTypes.TREE_PARENT_TYPEHASH, vm.parseJsonBytes32(tj, ".typehashes.TreeParent.hash"));
+    }
+
     function test_pqchatTypehashIsPinned() public view {
         assertEq(PqChatTypes.MEMBER_KEY_TYPEHASH, 0x6d7e57dfbfdfbc352504f1e82bc1658aeeb466b69ba168e7a3d69b0c1d448113);
         assertEq(PqChatTypes.WRAP_TYPEHASH, 0xf7d817cc55f4324caed15db75da261c4bd468454b80ac0cc8d30cd5a0d331e87);
@@ -170,8 +179,8 @@ contract PqChatTypesTest is Test {
         assertEq(kept, vm.parseJsonBytes(rec, string.concat(r, ".blobSigned")), string.concat(r, " blobSigned"));
     }
 
-    /// CTR-CHAT-25: the vector's `sessionTreeKem` (groupMode 1) hashes as the type string says (the struct and typehash a later
-    /// TreeKEM release accepts); `PqChatGroupMode.t.sol` refuses it at an instance.
+    /// CTR-CHAT-25, CTR-CHAT-26: the vector's `sessionTreeKem` (groupMode 1) hashes as the type string says (the struct and
+    /// typehash of the tree mode); `PqChatGroupMode.t.sol` takes it past the mode check at an instance.
     function test_sessionTreeKemVector() public view {
         string memory p = ".sessionTreeKem.record";
         IPqChat.PqChatSession memory s;
@@ -186,7 +195,7 @@ contract PqChatTypesTest is Test {
         s.sealedInfo = vm.parseJsonBytes(rec, string.concat(p, ".sealedInfo"));
         assertEq(s.groupMode, 1);
         assertEq(h.session(s), _b32(rec, ".sessionTreeKem.typed"));
-        assertEq(vm.parseJsonString(rec, ".sessionTreeKem.error"), "PqChatModeUnsupported(1)");
+        assertFalse(vm.keyExistsJson(rec, ".sessionTreeKem.error"), "no longer refused by its mode");
         assertEq(keccak256(abi.encode(_uaSig(rec, ".sessionTreeKem.uaSig"))), _b32(rec, ".sessionTreeKem.sigHash"));
     }
 

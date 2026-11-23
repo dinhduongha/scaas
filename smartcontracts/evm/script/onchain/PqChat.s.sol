@@ -17,6 +17,7 @@ import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChat as PqChatFace} from "../../src/pqchat/PqChat.sol";
 import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
+import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
 
 /// @dev `PqChatTypes` over calldata, run in the script's own EVM (never broadcast): the typed digests and ids.
 contract PqChatDigests {
@@ -163,12 +164,14 @@ contract PqChatOnchain is OnchainBase {
             if (impl == address(0)) {
                 vm.startBroadcast(dk);
                 address topics = address(new PqChatTopics{salt: _salt("pqchat-topics")}(address(f)));
+                address tree = address(new PqChatTree{salt: _salt("pqchat-tree")}(address(f)));
                 IFactoryToken.Env memory e;
                 e.registry = address(reg);
                 e.params = new bytes32[](1);
                 e.params[0] = bytes32(vm.envOr("CHAIN_CODE_LIMIT", uint256(131_072)));
-                (e.libs, e.libCodeHashes) = (new address[](1), new bytes32[](1));
+                (e.libs, e.libCodeHashes) = (new address[](2), new bytes32[](2));
                 (e.libs[0], e.libCodeHashes[0]) = (topics, topics.codehash);
+                (e.libs[1], e.libCodeHashes[1]) = (tree, tree.codehash);
                 f.publishClassEnv(3, 0, 1, f.chainUid(), e);
                 impl = f.deployImplementation{gas: RELEASE_GAS}(
                     id,
@@ -176,7 +179,7 @@ contract PqChatOnchain is OnchainBase {
                     IPqChat.initialize.selector,
                     type(IPqChat).interfaceId,
                     vm.getCode("PqChat.sol:PqChat"),
-                    abi.encode(topics),
+                    abi.encode(topics, tree),
                     f.chainUid()
                 );
                 f.setClassKindEnabled(3, 0, true, f.chainUid());
@@ -188,6 +191,7 @@ contract PqChatOnchain is OnchainBase {
         _book(address(chat), "PqChat");
         _book(impl, "PqChat");
         _book(PqChatFace(impl).modules()[0], "PqChatTopics");
+        _book(PqChatFace(impl).modules()[1], "PqChatTree");
     }
 
     function _instance() internal {
