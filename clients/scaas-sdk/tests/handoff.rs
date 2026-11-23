@@ -430,16 +430,23 @@ async fn import_refusals_in_order() {
         network: "evm".into(),
         index: 1,
     };
+    // review A2-7: the kind is the signer's own (a native id's, else its registry record's), never the blob's word: a native
+    // signature stated as an ML-DSA one is refused before the profile's kind rule
     let b = with(&|b| b.signer_kind = 0x0101);
     assert_eq!(
-        code(d.op().import_signed(b, e.clone()).await),
-        "KindDisabled"
+        code(d.op().import_signed(b.clone(), e.clone()).await),
+        "ImportKindRefused"
     );
+    assert_eq!(code(import(&t, &b).await), "ImportKindRefused");
     assert_eq!(
         code(d.op().import_signed(good.clone(), e).await),
         "Ok",
         "control: a native signer"
     );
+    // review A2-7: the blob's signer is the operation's `from`
+    let b = with(&|b| b.signer = format!("0x{}", "11".repeat(32)));
+    assert_eq!(code(import(&t, &b).await), "Argument");
+    assert_eq!(code(import(&t, &good).await), "Ok", "control");
 }
 
 /// 5. A bound relayer: another address than the payer's is refused, the payer's own accepted.
@@ -595,6 +602,14 @@ async fn blob_bounds_and_the_cap() {
     let mut v: Value = serde_json::from_str(&text).unwrap();
     v["extra"]["pad"] = json!("0".repeat(HANDOFF_MAX));
     assert_eq!(code(SignedOpBlob::from_json(&v.to_string())), "Argument");
+    // review A2-7: the same bounds on a blob built as a struct (a binding's record, serde), not by `from_json`
+    let mut big = blob.clone();
+    big.extra["pad"] = json!("0".repeat(HANDOFF_MAX));
+    assert_eq!(code(import(&t, &big).await), "Argument");
+    let mut deep = blob.clone();
+    deep.extra["deep"] = json!([[[[[[[1]]]]]]]);
+    assert_eq!(code(import(&t, &deep).await), "Argument");
+    assert_eq!(code(import(&t, &blob).await), "Ok", "control");
     let mut v: Value = serde_json::from_str(&text).unwrap();
     v["extra"]["deep"] = json!([[[[[[[1]]]]]]]); // depth 9 with the blob's own and `extra`'s
     assert_eq!(code(SignedOpBlob::from_json(&v.to_string())), "Argument");
