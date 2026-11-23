@@ -925,15 +925,13 @@ impl Wallet {
                 let op = rebuilt(&p, passphrase)?;
                 let max_time = p.valid_until.min(sdk.now().saturating_add(TX_WINDOW_SECS));
                 let SorobanPath::SelfRelay { payer } = &path else {
-                    let n = c.profile.gateways.len();
-                    if n == 0 {
-                        return Err(SdkError::SubmitPathNone);
-                    }
+                    // the gateways that announce this chain (spec §4; the sibling of review T26 B-7)
+                    let kept = super::check_gateways(&sdk, &p.chain).await?;
                     return Ok(SorobanQuote {
                         path,
                         payer: None,
                         native: None,
-                        gateways: (0..n as u32).collect(),
+                        gateways: kept,
                         seq: None,
                         inclusion_fee: 0,
                         max_time,
@@ -1017,12 +1015,12 @@ impl Wallet {
                     SorobanPath::Gateway => {
                         let sig = sign()?;
                         put(&mut row.extra, "signature", json!(hex(&sig)));
-                        let list = c.gateways.clone().ok_or(SdkError::SubmitPathNone)?;
+                        // posted only to the gateways that announce this chain (spec §4)
+                        let nodes = super::kept_gateways(&sdk, &p.chain).await?;
                         let body = signed_op(&op, &sig, q.max_time);
                         row.op_json = body.clone();
                         row.path = "gateway".into();
                         state::put(&sdk, &row).await?;
-                        let nodes = scaas_rpc::node::NodeClient::new(list)?;
                         let out = nodes
                             .submit_ops(&c.profile.key, &body, scaas_rpc::endpoint::Fanout::All)
                             .await?;

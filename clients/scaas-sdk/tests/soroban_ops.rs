@@ -264,6 +264,8 @@ struct T {
     seed: String,
     node: Fake,
     gateway: Bodies,
+    /// the `chain_uid` the gateway announces for its Soroban chain (`GET /v1/gateway`)
+    gw_uid: Arc<Mutex<String>>,
     clock: Arc<AtomicU64>,
 }
 
@@ -334,7 +336,15 @@ async fn setup_class(
     }
     let bodies: Bodies = Arc::default();
     let b2 = bodies.clone();
+    let uid = format!("0x{}", hex(&scaas_ua::sha256(PASSPHRASE.as_bytes())));
+    let gw_uid = Arc::new(Mutex::new(uid));
+    let u2 = gw_uid.clone();
     let (gw, _) = serve(Arc::new(move |_m: &str, p: &str, body: &[u8]| {
+        if p == "/v1/gateway" {
+            let info = json!({"api": 1, "chains": [{"chain_key": "soroban:local", "chain_uid": *u2.lock().unwrap(),
+                "family": "soroban", "routes": ["ops"]}]});
+            return (200, serde_json::to_vec(&info).unwrap());
+        }
         assert_eq!(p, "/v1/ops");
         b2.lock()
             .unwrap()
@@ -417,6 +427,7 @@ async fn setup_class(
         seed,
         node,
         gateway: bodies,
+        gw_uid,
         clock,
     }
 }
@@ -1128,4 +1139,24 @@ async fn submit_and_hand_off_check_a_handed_back_op_again() {
     t.w.soroban_hand_off(p.clone()).await.unwrap();
     t.w.soroban_submit(p, q).await.unwrap();
     assert_eq!(t.gateway.lock().unwrap().len(), 1);
+}
+
+/// Spec §4 (the sibling of review T26 B-7, controller call): the gateway path posts only to a gateway that announces the
+/// profile's `chain_uid` for its Soroban chain; one of another chain is not used, none left is `ProfileMismatch` at the quote
+/// and at the submit, nothing posted. The twin: `a_pay_through_the_gateways_is_the_vectors_signed_op`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_gateway_of_another_chain_takes_no_op() {
+    let t = setup(None, scaas_rpc::Policy::Failover, None).await;
+    let p = t.w.soroban_prepare(pay(&t)).await.unwrap();
+    let q =
+        t.w.soroban_quote(p.clone(), SorobanPath::Gateway)
+            .await
+            .unwrap();
+    *t.gw_uid.lock().unwrap() = format!("0x{}", "61".repeat(32));
+    assert_eq!(
+        code(t.w.soroban_quote(p.clone(), SorobanPath::Gateway).await),
+        "ProfileMismatch"
+    );
+    assert_eq!(code(t.w.soroban_submit(p, q).await), "ProfileMismatch");
+    assert!(t.gateway.lock().unwrap().is_empty(), "nothing posted");
 }
