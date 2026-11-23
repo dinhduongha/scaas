@@ -369,7 +369,9 @@ named JSON (outputs and tuple components by name, integers as decimal strings, b
 (entry 64 KiB, arguments 128 KiB, answer 1 MiB, output types nesting at most 16 levels: `Argument`), as a read that feeds a
 decryption when `trusted`. PqChat's key entries (`pqchat_*`, feature `pqchat-records`) are thin calls of `ua-rs`
 `pqchat_keys` on the scope's handles, only in a scope that declared `scaas/pqchat/v1/` (`AppLabelRefused`); the signing ones
-take the sender, creator or author from the account and never a digest or a ciphertext of the caller's. The feature
+take the sender, creator or author from the account and never a digest or a ciphertext of the caller's. PqChat's record
+entries (`sign_pqchat_*`, `sign_pqchat_card`) also work only in that scope (T26 A-9); they take the record's signer field as
+given, and the contract refuses a record whose signer is not that field. The feature
 `vectors` (bit 28) adds test-only entries (key bytes in and out, fixed randomness): a release build refuses it
 (`compile_error!`), `scripts/check_test_features.py` keeps it out of every shipped artifact and the bind-gen check out of
 every binding. It runs alone, in its own test (`--test pqchat_keys`): a `vectors` build of `ua-rs` refuses key handles until

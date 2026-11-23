@@ -36,6 +36,7 @@ ROOTS = "clients/scaas-sdk/src/vault/roots.rs"
 POL = "clients/ua-rs/src/wallet/policy.rs"
 PQC = "clients/ua-rs/src/wallet/pqchat.rs"
 AC = "clients/scaas-sdk/src/app_core.rs"
+PQR = "clients/scaas-sdk/src/pqchat_records.rs"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
@@ -349,6 +350,11 @@ MUTANTS = [
         "A-5: a prepared record shows no review",
         [(AC, "                Ok(AppPrepared {\n                    review: Self::review(&path, &typed),\n                    digest: hex(&d),", "                Ok(AppPrepared {\n                    review: vec![],\n                    digest: hex(&d),")],
         T + " --test app_core app_record_reviewed_before_signed",
+    ),
+    (
+        "A-9: a PqChat record signed in any scope",
+        [(PQR, "        self.label(scaas_ua::wallet::pqchat_keys::PREFIX.as_bytes())?;\n        let sdk = self.sdk.clone();", "        let sdk = self.sdk.clone();")],
+        T + ",vectors --test pqchat_records entries_reproduce_the_vectors",
     ),
 ]
 

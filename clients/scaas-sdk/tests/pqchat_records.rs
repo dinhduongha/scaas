@@ -71,7 +71,7 @@ fn wraps(keys: &Value, prefix: &str) -> Vec<PqWrap> {
         .collect()
 }
 
-async fn core() -> (Arc<AppCore>, String) {
+async fn core() -> (Arc<AppCore>, String, Arc<Sdk>) {
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![],
         store: MemoryStore::new(),
@@ -99,7 +99,7 @@ async fn core() -> (Arc<AppCore>, String) {
         .id;
     // pqchat-core's scope: no app id (it signs SCaaS records only, through these entries)
     let a = AppCore::new(
-        sdk,
+        sdk.clone(),
         AppDesc {
             app_id: None,
             name: "PqChat".into(),
@@ -108,7 +108,7 @@ async fn core() -> (Arc<AppCore>, String) {
         },
     )
     .unwrap();
-    (a, seed)
+    (a, seed, sdk)
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn the_bit_follows_the_feature() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn entries_reproduce_the_vectors() {
-    let (a, seed) = core().await;
+    let (a, seed, sdk) = core().await;
     let (rec, top, keys) = (load("records"), load("topics"), load("keys"));
     let key = KeyRef::Ua {
         seed: seed.clone(),
@@ -378,9 +378,26 @@ async fn entries_reproduce_the_vectors() {
         nonce: n(&x["nonce"]),
     };
     assert_eq!(
-        a.sign_pqchat_leave(native, l)
+        a.sign_pqchat_leave(native, l.clone())
             .await
             .map_or_else(|e| e.code(), |_| "Ok"),
         "Argument"
+    );
+    // T26 A-9: a scope without PqChat's prefix (`AppLabelRefused`); the control (the vector's leave) signed above
+    let own = AppCore::new(
+        sdk,
+        AppDesc {
+            app_id: None,
+            name: "Other".into(),
+            class: Some(3),
+            labels: vec!["scaas/other/v1/".into()],
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        own.sign_pqchat_leave(key.clone(), l)
+            .await
+            .map_or_else(|e| e.code(), |_| "Ok"),
+        "AppLabelRefused"
     );
 }

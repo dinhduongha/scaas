@@ -257,7 +257,7 @@ fn card_of(c: &PqChatCard) -> Result<pqchat::Card, SdkError> {
 
 impl AppCore {
     /// The entry under each `sign_pqchat_*`: the typed data of `name` holding `message`, its id, the review (the struct, the
-    /// id, every field), the signature of `account` (a UA key; a native key or an `msig`: `Argument`).
+    /// id, every field), the signature of `account` (a UA key; a native key or an `msig`: `Argument`), in a PqChat scope.
     async fn sign_pq(
         self: &Arc<Self>,
         account: KeyRef,
@@ -266,6 +266,10 @@ impl AppCore {
         id: Id,
         wrap_hashes: Vec<String>,
     ) -> Result<PqChatSigned, SdkError> {
+        // T26 A-9: a scope that declared PqChat's prefix only (`AppLabelRefused`). The signer field (creator, author, member,
+        // admin, sender, voter) is the request's: the cross-language vectors sign records whose signer field is not the
+        // vector key's UA, and the contract refuses a record whose signer is not that field (decision (126))
+        self.label(scaas_ua::wallet::pqchat_keys::PREFIX.as_bytes())?;
         let sdk = self.sdk.clone();
         sdk.clone()
             .spawn(async move {
@@ -487,7 +491,7 @@ impl AppCore {
             .await
     }
 
-    /// The account's contact card (UA-7 §14 O7): its UA from the signing account (a UA key; a native key or an `msig`:
+    /// The account's contact card (UA-7 §14 O7), in a PqChat scope (`AppLabelRefused`): its UA from the signing account (a UA key; a native key or an `msig`:
     /// `Argument`), `kem_version` and `matrix_id` (empty: none; a malformed one `Argument`) as given and shown in the review.
     pub async fn sign_pqchat_card(
         self: &Arc<Self>,
@@ -495,6 +499,8 @@ impl AppCore {
         kem_version: u64,
         matrix_id: String,
     ) -> Result<PqCardSigned, SdkError> {
+        // T26 A-9: a PqChat scope only, as every PqChat entry
+        self.label(scaas_ua::wallet::pqchat_keys::PREFIX.as_bytes())?;
         let card = PqChatCard {
             ua: hex(&self.account_ua(&account)?),
             kem_version,
