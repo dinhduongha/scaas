@@ -65,8 +65,14 @@ async fn a_members_keys_change_in_a_plain_rekey() {
     let _one = ONE.lock().await;
     let w = world().await;
     let p = session(&w.alice, &[&w.alice, &w.bob]);
-    let (a, b) = (p.members[0].ua.clone(), p.members[1].ua.clone());
-    let mut c = with_members(p.clone(), vec![key(&a, 1), key(&b, 1), key(&b, 2)]);
+    // `a` the only admin (the creator), `b` a member who is none: the plain rule, not admin rights, lets `b` author
+    let (a, b) = (w.alice.ua.clone(), w.bob.ua.clone());
+    assert!(p.admins == [a.clone()] && p.has_member(&b));
+    let sorted = |mut m: Vec<Member>| {
+        m.sort_by(|x, y| (x.ua.as_str(), x.key_id).cmp(&(y.ua.as_str(), y.key_id)));
+        m
+    };
+    let mut c = with_members(p.clone(), sorted(vec![key(&a, 1), key(&b, 1), key(&b, 2)]));
     (c.id, c.parent, c.epoch, c.author) = (hex(&[0x61; 32]), p.id.clone(), 1, b.clone());
     assert_eq!(
         check::child(&c, &p, &[], &[]),
@@ -74,7 +80,7 @@ async fn a_members_keys_change_in_a_plain_rekey() {
         "a non-admin member adds its device key: plain"
     );
     let back = c.clone();
-    let mut d = with_members(back.clone(), vec![key(&a, 1), key(&b, 1)]);
+    let mut d = with_members(back.clone(), sorted(vec![key(&a, 1), key(&b, 1)]));
     (d.id, d.parent, d.epoch) = (hex(&[0x62; 32]), back.id.clone(), 2);
     assert_eq!(
         check::child(&d, &back, &[], &[]),
@@ -83,7 +89,7 @@ async fn a_members_keys_change_in_a_plain_rekey() {
     );
     // a removed UA kept with any of its keys: refused
     let removed = vec![b.clone()];
-    let mut k = with_members(c.clone(), vec![key(&a, 1), key(&b, 2)]);
+    let mut k = with_members(c.clone(), sorted(vec![key(&a, 1), key(&b, 2)]));
     (k.id, k.parent, k.epoch, k.author) = (hex(&[0x63; 32]), c.id.clone(), 2, a.clone());
     assert_eq!(
         check::child(&k, &c, &[], &removed),
