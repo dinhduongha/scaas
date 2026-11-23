@@ -330,7 +330,7 @@ and `pqchat-records`, `tests/app_core.rs` `no_app_core_below_the_sdk`; `app-core
 An app core (`pqchat-core`, `pqvault-core`, a third party's) depends on `scaas-sdk` with the feature `app-core` and on nothing
 below it that touches a key or a node; the SDK names no app core and holds no app logic, while the record types of SCaaS
 contracts (`PqChat`'s among them, behind the feature `pqchat-records`) are named, typed SDK entries as every SCaaS
-contract's are under [CLI-SDK-08](#CLI-SDK-08); `PqVault`'s records have two signing calls, `sign_pqvault_record` and
+contract's are under [CLI-SDK-08](#CLI-SDK-08); `PqVault`'s records have two signing calls, `prepare_pqvault_record` and
 `verify_pqvault_record`, and no other PqVault logic (owner 2026-11-22, [CLI-PQV-13](../decisions.md#CLI-PQV-13)). scaas-app's one
 library is `app-core-rust` (scaas-app's contract section 12), with the features `native-core` (on by default), `scaas`,
 `pqchat` and `pqvault` (each implying `scaas`); the SDK defines no aggregating crate.
@@ -390,7 +390,7 @@ matrix_id)` signs `PqChatCard(bytes32 ua, uint64 kemVersion, string matrixId)` i
 the account, the Matrix id empty or well formed (`Argument`); `verify_pqchat_card(chain, ua, card, sig)` is V1's check of a
 card for `ua` (its `ua` that UA, its Matrix id well formed, the signature the UA's on the registry's records read at the final
 block as a read that feeds a decryption), `false` with no detail. Rows: `smartcontracts/vectors/pqchat/cards.json`.
-`sign_app_record` and `verify_app_record` refuse a scope of PqChat's app id `keccak256("scaas.pqchat.v1")` on both paths
+`prepare_app_record` and `verify_app_record` refuse a scope of PqChat's app id `keccak256("scaas.pqchat.v1")` on both paths
 (`AppPurposeRefused`: its `appPurpose` is in `ua-rs`'s generated SCaaS list, owner 2026-11-23; BUILT, UNAUDITED); PqChat's
 named entries, the card calls and `seal_for_arweave` under its scope still sign.
 `argon2id_passphrase` (PqVault V9, 2026-11-21; BUILT, UNAUDITED) is `argon2id` of a typed passphrase after RFC 8265's
@@ -399,10 +399,10 @@ a composed and a decomposed form of one passphrase give one key; the normalisati
 (`smartcontracts/vectors/pqvault/`) run through this surface only (BUILT, UNAUDITED; `tests/app_core_vault_rows.rs` under
 `vectors`, `tests/app_core_vault_records.rs` in the main suite: typed digests in both domains, both signing paths,
 the verification); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](ua-libraries.md#CLI-PQV-12) in decisions.md.
-PqVault's records are signed and verified by `sign_pqvault_record` and `verify_pqvault_record` (owner 2026-11-22,
+PqVault's records are signed and verified by `prepare_pqvault_record` and `verify_pqvault_record` (owner 2026-11-22,
 [CLI-PQV-13](../decisions.md#CLI-PQV-13); BUILT, UNAUDITED): thin calls of `ua-rs`'s `wallet::pqvault` with the generic
-calls' profile checks, accepting PqVault's domains `DS_V` / `DS_B` and its seven structs only; `sign_app_record` and
-`verify_app_record` refuse every PqVault record (its domain name, its app id, its purpose `P_V`). `sign_pqvault_record`
+calls' profile checks, accepting PqVault's domains `DS_V` / `DS_B` and its seven structs only; `prepare_app_record` and
+`verify_app_record` refuse every PqVault record (its domain name, its app id, its purpose `P_V`). `prepare_pqvault_record`
 signs as an `msig` too (`KeyRef::Msig`; owner 2026-11-22, [CLI-PQV-15](../decisions.md#CLI-PQV-15); BUILT, UNAUDITED):
 the `msig`'s records read as the generic `msig` path reads them, local key slots only, `ua-rs`'s `pqvault::sign_msig`;
 `AppSigned.members` carries the slots; an `msig` signer's records chain is the explicit `records` argument (required on the

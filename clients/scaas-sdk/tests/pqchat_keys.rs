@@ -12,6 +12,9 @@
 #[path = "common/fake_chain.rs"]
 mod fake_chain;
 
+#[path = "common/prepared.rs"]
+mod prepared;
+use prepared::SignPrepared as _;
 use fake_chain::{fake, keccak_hex, serve, Fake};
 use scaas_sdk::app_core::{AppCore, AppDesc, AppKeyUsage, AppPath, AppUaSig};
 use scaas_sdk::op::KeyRef;

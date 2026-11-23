@@ -14,6 +14,9 @@
     clippy::too_many_arguments
 )]
 
+#[path = "../../scaas-sdk/tests/common/prepared.rs"]
+mod prepared;
+use prepared::SignPrepared as _;
 use pqvault_core::records::*;
 use pqvault_core::*;
 use scaas_sdk::account::{AddNative, Register, RegisterAttrs};

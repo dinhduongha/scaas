@@ -10,6 +10,9 @@
     clippy::expect_used,
     clippy::panic
 )]
+#[path = "common/prepared.rs"]
+mod prepared;
+use prepared::SignPrepared as _;
 use scaas_sdk::app_core::{AppCore, AppDesc, AppKeyUsage, AppNonce, AppPath};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::vault::{ImportWords, MemoryStore};
@@ -294,6 +297,49 @@ fn record(domain: serde_json::Value) -> String {
         "message": {"id": format!("0x{}", "11".repeat(32)), "body": "hello"},
     })
     .to_string()
+}
+
+/// T26 A-5: an app record is prepared (its review and digest, nothing signed) and signed apart; the review is the SDK's from
+/// the parsed typed data, so a typed-data text holding `message` twice shows the value that is signed.
+#[tokio::test(flavor = "multi_thread")]
+async fn app_record_reviewed_before_signed() {
+    let (s, seed) = sdk().await;
+    let a = AppCore::new(s.clone(), desc(Some(APP_ID), &["scaas/appr/v1/"])).unwrap();
+    let key = ua(&seed, 0x0108);
+    let pa = record(json!({"name": "My App", "version": "1", "salt": APP_ID}));
+    // control: the review before the signature, the signature over the reviewed digest
+    let p = a
+        .prepare_app_record(key.clone(), AppPath::Portable, pa.clone())
+        .await
+        .unwrap();
+    let body = |r: &[scaas_sdk::op::ReviewField]| {
+        r.iter()
+            .find(|f| f.name == "message.body")
+            .map(|f| f.value.clone())
+    };
+    assert_eq!(body(&p.review).as_deref(), Some("hello"));
+    let digest = p.digest.clone();
+    let signed = p.sign().await.unwrap();
+    assert_eq!(signed.digest, digest);
+    // a second `message` key before the real one: the review shows the one signed, never the first text
+    let dup = pa.replacen(
+        "\"message\":",
+        "\"message\":{\"id\":\"0x2222222222222222222222222222222222222222222222222222222222222222\",\"body\":\"shown?\"},\"message\":",
+        1,
+    );
+    assert_ne!(dup, pa);
+    if let Ok(q) = a
+        .prepare_app_record(key.clone(), AppPath::Portable, dup)
+        .await
+    {
+        let shown = body(&q.review);
+        let d = q.digest.clone();
+        let s2 = q.sign().await.unwrap();
+        assert_eq!(s2.digest, d);
+        // the parsed record is the one reviewed and the one signed
+        assert_eq!(shown.as_deref(), Some("hello"));
+        assert_eq!(d, digest);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]

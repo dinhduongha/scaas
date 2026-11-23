@@ -175,6 +175,111 @@ pub struct AppSigned {
     pub review: Vec<ReviewField>,
 }
 
+/// The `scaas-ua` signing call of a prepared single-key record.
+type SignFn = fn(
+    &dyn Signer,
+    Option<&scaas_ua::Domain>,
+    &UaPath,
+    &TypedData,
+) -> scaas_ua::wallet::Result<UASig>;
+
+/// How a prepared record is signed.
+enum How {
+    /// a UA key or a native EVM key (`registry`: the bound registry's domain a native key signs `UAAuth` under)
+    Key {
+        account: KeyRef,
+        registry: Option<scaas_ua::Domain>,
+        sign: SignFn,
+    },
+    /// PqVault's `msig` signer, its records read on `chain`'s registry at the signature
+    Msig {
+        chain: String,
+        ua: [u8; 32],
+        slots: Vec<crate::op::MsigSlot>,
+    },
+}
+
+/// An app record prepared for its signature (T26 A-5, decision (125)): the review to show and the typed digest, built from the
+/// parsed typed data after every refusal; [`Self::sign`] signs exactly that typed data, once (it consumes the value).
+pub struct AppPrepared {
+    /// the review shown before the signature (the path, the primary type, every domain and message field)
+    pub review: Vec<ReviewField>,
+    /// the typed digest the signature covers
+    pub digest: String,
+    sdk: Arc<Sdk>,
+    ua_path: UaPath,
+    typed: TypedData,
+    how: How,
+}
+
+impl AppPrepared {
+    /// Signs the prepared record after its review: the key opened now (`Argument` for a stored key; an `msig` as
+    /// [`AppCore::prepare_pqvault_record`] states), the `UASig` over [`Self::digest`]'s typed data.
+    pub async fn sign(self) -> Result<AppSigned, SdkError> {
+        let sdk = self.sdk.clone();
+        sdk.clone()
+            .spawn(async move {
+                let Self {
+                    review,
+                    digest,
+                    ua_path,
+                    typed,
+                    how,
+                    ..
+                } = self;
+                match how {
+                    How::Key {
+                        account,
+                        registry,
+                        sign,
+                    } => {
+                        let key = crate::op::key(&sdk, &account)?;
+                        let signer: &dyn Signer = match &key {
+                            crate::op::Key::Ua(_, k) => k,
+                            crate::op::Key::Native(_, k) => k,
+                            #[allow(unreachable_patterns)]
+                            _ => return Err(SdkError::Argument),
+                        };
+                        let sig = sign(signer, registry.as_ref(), &ua_path, &typed).map_err(ua)?;
+                        Ok(AppSigned {
+                            key_data: sig.key_data,
+                            signature: sig.signature,
+                            members: vec![],
+                            digest,
+                            review,
+                        })
+                    }
+                    How::Msig {
+                        chain,
+                        ua: m,
+                        slots,
+                    } => {
+                        let sig = crate::account::msig::app_msig(
+                            &sdk,
+                            &chain,
+                            &m,
+                            &slots,
+                            |first, current, inner, domain, s| {
+                                scaas_ua::wallet::pqvault::sign_msig(
+                                    first, current, inner, domain, &ua_path, &typed, s,
+                                )
+                            },
+                        )
+                        .await?;
+                        Ok(AppSigned {
+                            key_data: vec![],
+                            signature: vec![],
+                            members: sig.members.iter().map(AppMemberSig::from).collect(),
+                            digest,
+                            review,
+                        })
+                    }
+                }
+            })
+            .await
+    }
+}
+
 /// A `UASig` as an app record carries it (TS-D12): a single key `key_data` (empty for a stored kind and on path A) and
 /// `signature`; an `msig` `members` only.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1063,18 +1168,20 @@ impl AppCore {
         out
     }
 
-    /// Signs the app record `typed_json` (EIP-712 JSON: types, primary type, domain, message; never a digest) on `path` by
-    /// `account` (a UA key or a native EVM key; an `msig` or a stored key: `Argument` here). Refused by name (§12.4): a SCaaS
-    /// purpose, a SCaaS domain name, path A's field set or salt (`scaas-ua`); on path B a `chainId` other than the profile's or
-    /// a `verifyingContract` that is the profile's registry, factory or router, a listed token or DEX
-    /// (`AppDomainRefused`). A scope without `app_id` signs nothing under an app purpose (`Argument`).
-    pub async fn sign_app_record(
+    /// Prepares the app record `typed_json` (EIP-712 JSON: types, primary type, domain, message; never a digest) on `path` for
+    /// `account` (a UA key or a native EVM key; an `msig` or a stored key: `Argument` here) and returns its review and typed
+    /// digest; nothing is signed until [`AppPrepared::sign`] (T26 A-5, decision (125): the review is shown before the
+    /// signature, from the parsed typed data, never the caller's text). Refused by name (§12.4): a SCaaS purpose, a SCaaS domain
+    /// name, path A's field set or salt (`scaas-ua`); on path B a `chainId` other than the profile's or a `verifyingContract`
+    /// that is the profile's registry, factory or router, a listed token or DEX (`AppDomainRefused`). A scope without `app_id`
+    /// signs nothing under an app purpose (`Argument`).
+    pub async fn prepare_app_record(
         self: &Arc<Self>,
         account: KeyRef,
         path: AppPath,
         typed_json: String,
-    ) -> Result<AppSigned, SdkError> {
-        self.sign_with(
+    ) -> Result<AppPrepared, SdkError> {
+        self.prepare_with(
             account,
             path,
             typed_json,
@@ -1084,21 +1191,21 @@ impl AppCore {
         .await
     }
 
-    /// Signs the PqVault record `typed_json` (EIP-712 JSON, never a digest) on `path` by `account`, PqVault's dedicated path
-    /// (owner 2026-11-22, CLI-PQV-12; `scaas-ua` `wallet::pqvault`): a scope of PqVault's `app_id`, a primary type and
-    /// `encodeType` of PqVault's records (`Argument`), the domain `DS_V` on the portable path or `DS_B` on the chain-bound one
-    /// under `P_V` (`purpose` none or `P_V`; `AppDomainRefused`), the profile's checks of a chain-bound domain as
-    /// [`Self::sign_app_record`]'s. The generic call refuses every PqVault record. `records`: the profile whose registry holds
-    /// an `msig` signer's records on the portable path (controller call 2026-11-22, explicit parameters: required there,
-    /// `Argument` without); on the chain-bound path the path's chain (`records` none or that chain); for a single key on the
-    /// portable path none (`Argument` when given: nothing reads it).
-    pub async fn sign_pqvault_record(
+    /// Prepares the PqVault record `typed_json` (EIP-712 JSON, never a digest) on `path` for `account`, PqVault's dedicated path
+    /// (owner 2026-11-22, CLI-PQV-12; `scaas-ua` `wallet::pqvault`), signed by [`AppPrepared::sign`] after its review (A-5): a
+    /// scope of PqVault's `app_id`, a primary type and `encodeType` of PqVault's records (`Argument`), the domain `DS_V` on the
+    /// portable path or `DS_B` on the chain-bound one under `P_V` (`purpose` none or `P_V`; `AppDomainRefused`), the profile's
+    /// checks of a chain-bound domain as [`Self::prepare_app_record`]'s. The generic call refuses every PqVault record.
+    /// `records`: the profile whose registry holds an `msig` signer's records on the portable path (controller call
+    /// 2026-11-22, explicit parameters: required there, `Argument` without); on the chain-bound path the path's chain (`records`
+    /// none or that chain); for a single key on the portable path none (`Argument` when given: nothing reads it).
+    pub async fn prepare_pqvault_record(
         self: &Arc<Self>,
         account: KeyRef,
         path: AppPath,
         records: Option<String>,
         typed_json: String,
-    ) -> Result<AppSigned, SdkError> {
+    ) -> Result<AppPrepared, SdkError> {
         let chain = match (&path, &account, records) {
             (AppPath::ChainBound { chain, .. }, _, r) if r.as_ref().is_none_or(|r| r == chain) => {
                 Some(chain.clone())
@@ -1108,12 +1215,37 @@ impl AppCore {
             (AppPath::Portable, _, None) => None,
             _ => return Err(SdkError::Argument),
         };
-        if let (KeyRef::Msig { ua, slots }, Some(chain)) = (&account, chain) {
+        if let (KeyRef::Msig { ua: msig_ua, slots }, Some(chain)) = (&account, chain) {
+            // the `msig` `ua`: the chain-bound domain's profile checks here; at the signature its records read as the generic
+            // `msig` path reads them (its structures, its `msig` members', their enabled and accepted bits: `MsigSlotInactive`)
+            // on `chain`'s registry, the slots' keys opened (local keys only: a slot signed elsewhere or a stored key row
+            // `Argument`), the registry generation's domain for a native member, then `scaas-ua`'s `pqvault::sign_msig` (its
+            // refusals: the record, the path, a set not minimal, a disabled slot)
+            let me = self.clone();
+            let (ua_hex, slots) = (msig_ua.clone(), slots.clone());
             return self
-                .sign_pqvault_msig(chain, ua.clone(), slots.clone(), path, typed_json)
+                .sdk
+                .clone()
+                .spawn(async move {
+                    let typed = TypedData::from_json(typed_json.as_bytes()).map_err(ua)?;
+                    let (ua_path, _) = me.ua_path(&path, &typed, &account).await?;
+                    let digest = scaas_ua::wallet::pqvault::digest(&ua_path, &typed).map_err(ua)?;
+                    Ok(AppPrepared {
+                        review: Self::review(&path, &typed),
+                        digest: hex(&digest),
+                        sdk: me.sdk.clone(),
+                        ua_path,
+                        typed,
+                        how: How::Msig {
+                            chain,
+                            ua: hex32(&ua_hex)?,
+                            slots,
+                        },
+                    })
+                })
                 .await;
         }
-        self.sign_with(
+        self.prepare_with(
             account,
             path,
             typed_json,
@@ -1123,94 +1255,38 @@ impl AppCore {
         .await
     }
 
-    /// [`Self::sign_pqvault_record`] by the `msig` `ua` (owner 2026-11-22): the chain-bound domain's profile checks first, then
-    /// the `msig`'s records read as the generic `msig` path reads them (its structures, its `msig` members', their enabled and
-    /// accepted bits: `MsigSlotInactive`), the slots' keys opened (local keys only: a slot signed elsewhere or a stored key row
-    /// `Argument`), the registry generation's domain for a native member, then `scaas-ua`'s `pqvault::sign_msig` (its refusals:
-    /// the record, the path, a set not minimal, a disabled slot). The records are read on `chain`'s registry.
-    async fn sign_pqvault_msig(
-        self: &Arc<Self>,
-        chain: String,
-        ua_hex: String,
-        slots: Vec<crate::op::MsigSlot>,
-        path: AppPath,
-        typed_json: String,
-    ) -> Result<AppSigned, SdkError> {
-        let me = self.clone();
-        let sdk = self.sdk.clone();
-        sdk.clone()
-            .spawn(async move {
-                let typed = TypedData::from_json(typed_json.as_bytes()).map_err(ua)?;
-                let account = KeyRef::Msig {
-                    ua: ua_hex.clone(),
-                    slots: slots.clone(),
-                };
-                let (ua_path, _) = me.ua_path(&path, &typed, &account).await?;
-                let digest = scaas_ua::wallet::pqvault::digest(&ua_path, &typed).map_err(ua)?;
-                let sig = crate::account::msig::app_msig(
-                    &sdk,
-                    &chain,
-                    &hex32(&ua_hex)?,
-                    &slots,
-                    |first, current, inner, domain, s| {
-                        scaas_ua::wallet::pqvault::sign_msig(
-                            first, current, inner, domain, &ua_path, &typed, s,
-                        )
-                    },
-                )
-                .await?;
-                Ok(AppSigned {
-                    key_data: vec![],
-                    signature: vec![],
-                    members: sig.members.iter().map(AppMemberSig::from).collect(),
-                    digest: hex(&digest),
-                    review: Self::review(&path, &typed),
-                })
-            })
-            .await
-    }
-
-    /// The entry under both signing calls: `digest` states the record's typed digest after its refusals, `sign` signs it.
-    async fn sign_with(
+    /// The entry under both prepare calls: `digest` states the record's typed digest after its refusals, `sign` signs it at
+    /// [`AppPrepared::sign`].
+    async fn prepare_with(
         self: &Arc<Self>,
         account: KeyRef,
         path: AppPath,
         typed_json: String,
         digest: fn(&UaPath, &TypedData) -> scaas_ua::wallet::Result<[u8; 32]>,
-        sign: fn(
-            &dyn Signer,
-            Option<&scaas_ua::Domain>,
-            &UaPath,
-            &TypedData,
-        ) -> scaas_ua::wallet::Result<UASig>,
-    ) -> Result<AppSigned, SdkError> {
+        sign: SignFn,
+    ) -> Result<AppPrepared, SdkError> {
         let me = self.clone();
-        let sdk = self.sdk.clone();
-        sdk.clone()
+        self.sdk
+            .clone()
             .spawn(async move {
                 let typed = TypedData::from_json(typed_json.as_bytes()).map_err(ua)?;
                 let (ua_path, registry) = me.ua_path(&path, &typed, &account).await?;
-                let digest = digest(&ua_path, &typed).map_err(ua)?;
-                let review = Self::review(&path, &typed);
-                let key = crate::op::key(&sdk, &account)?;
-                let signer: &dyn Signer = match &key {
-                    crate::op::Key::Ua(_, k) => k,
-                    crate::op::Key::Native(_, k) => k,
-                    #[allow(unreachable_patterns)]
-                    _ => return Err(SdkError::Argument),
-                };
-                let sig = sign(signer, registry.as_ref(), &ua_path, &typed).map_err(ua)?;
-                Ok(AppSigned {
-                    key_data: sig.key_data,
-                    signature: sig.signature,
-                    members: vec![],
-                    digest: hex(&digest),
-                    review,
+                let d = digest(&ua_path, &typed).map_err(ua)?;
+                Ok(AppPrepared {
+                    review: Self::review(&path, &typed),
+                    digest: hex(&d),
+                    sdk: me.sdk.clone(),
+                    ua_path,
+                    typed,
+                    how: How::Key {
+                        account,
+                        registry,
+                        sign,
+                    },
                 })
             })
             .await
     }
-
     /// The `scaas-ua` path of `path`, after the profile's checks of a chain-bound domain, and the registry's domain a native
     /// key signs `UAAuth` under.
     async fn ua_path(

@@ -35,6 +35,7 @@ VLT = "clients/scaas-sdk/src/vault/mod.rs"
 ROOTS = "clients/scaas-sdk/src/vault/roots.rs"
 POL = "clients/ua-rs/src/wallet/policy.rs"
 PQC = "clients/ua-rs/src/wallet/pqchat.rs"
+AC = "clients/scaas-sdk/src/app_core.rs"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
@@ -343,6 +344,11 @@ MUTANTS = [
         "A-8: a PqChat record by its name alone",
         [(PQC, "            .is_some_and(|t| t.encode_type() == td.encode_type())", "            .is_some_and(|_| true)")],
         U + " --test app_core pqchat_sign_records_only",
+    ),
+    (
+        "A-5: a prepared record shows no review",
+        [(AC, "                Ok(AppPrepared {\n                    review: Self::review(&path, &typed),\n                    digest: hex(&d),", "                Ok(AppPrepared {\n                    review: vec![],\n                    digest: hex(&d),")],
+        T + " --test app_core app_record_reviewed_before_signed",
     ),
 ]
 
