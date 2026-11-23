@@ -602,11 +602,15 @@ async fn blob_bounds_and_the_cap() {
     let mut v: Value = serde_json::from_str(&text).unwrap();
     v["extra"]["pad"] = json!("0".repeat(HANDOFF_MAX));
     assert_eq!(code(SignedOpBlob::from_json(&v.to_string())), "Argument");
-    // review A2-7: the same bounds on a blob built as a struct (a binding's record, serde), not by `from_json`
-    let mut big = blob.clone();
+    // review A2-7: the same bounds on a blob built as a struct (a binding's record, serde), not by `from_json`; checked
+    // first, so a blob of another chain that is also too large or too deep is `Argument`, not `ProfileMismatch` (its control)
+    let mut other = blob.clone();
+    other.chain_uid = format!("0x{}", "00".repeat(32));
+    assert_eq!(code(import(&t, &other).await), "ProfileMismatch", "control");
+    let mut big = other.clone();
     big.extra["pad"] = json!("0".repeat(HANDOFF_MAX));
     assert_eq!(code(import(&t, &big).await), "Argument");
-    let mut deep = blob.clone();
+    let mut deep = other.clone();
     deep.extra["deep"] = json!([[[[[[[1]]]]]]]);
     assert_eq!(code(import(&t, &deep).await), "Argument");
     assert_eq!(code(import(&t, &blob).await), "Ok", "control");
