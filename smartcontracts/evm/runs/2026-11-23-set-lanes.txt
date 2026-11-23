@@ -1,0 +1,8 @@
+# TODO 8g (4) set lanes (ARCH-POS-21): step | commit | rc | counts. Full output in git-ignored scratchpad/lanes/<set>.log.
+list | 5f0bba237 | 0 | lanes.sh others list = the old at-set.sh others list, 54 lines, byte-identical
+busy-lane | 5f0bba237 | 3 | a second run on lane n2560-kmax16384 during its build refused by name (flock)
+cache-proof-n2560-kmax16384-src | 5f0bba237 | 0 | 318 artifacts (200 with runtime code): init 318/318 and runtime 318/318 byte-identical, incremental vs --clean; 0 on one side only; the MetaTxLib edit moved 15 artifacts (A vs incremental)
+cache-proof-n2560-kmax16384-pqz | 5f0bba237 | 0 | 475 artifacts (321 with runtime code): init 475/475 and runtime 475/475 byte-identical, incremental vs --clean; 0 on one side only; the MetaTxLib edit moved 16 artifacts (A vs incremental)
+others-sensitive | 4ef2ee01e | 0 | 3 lanes side by side (CAPPED_SLOTS=4, LANES_RESERVE_GB=4 for this run, controller call; default 10), 10 test directories each: n2048-kmax1024 179 suites 1595 passed 0 failed 3 skipped (43m30s); n2560-kmax16384 179 suites 1589 passed 0 failed 9 skipped (48m15s, warm lane); n2816-kmax65536 179 suites 1577 passed 0 failed 21 skipped (47m35s); wall 51m00s against a sum of 139m20s
+negative-control | 4ef2ee01e | 1 | a temporary test failing at n2816-kmax65536 only (test/pqz, not committed): n2048-kmax1024 ok, n2560-kmax16384 ok, n2816-kmax65536 FAIL (named in the final line), exit 1; the test removed after
+pqzset-untouched | 4ef2ee01e | 0 | the work tree's src/pqz/PqzSet.sol sha256 b5083aec...5eec before and after every run above

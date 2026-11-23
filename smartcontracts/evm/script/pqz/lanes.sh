@@ -104,7 +104,7 @@ if [ "$S" = others ]; then
                     echo "[lanes] ok $s ($(dur $((now - st))))"
                 else
                     failed="$failed $s"
-                    echo "[lanes] FAIL $s (rc $src, $(dur $((now - st))); $REL/$s.log): $(tail -n 2 "$LANES/$s.log" | tr '\n' ' ' | cut -c1-200)"
+                    echo "[lanes] FAIL $s (rc $src, $(dur $((now - st))); $REL/$s.log): $({ grep -m 1 -E '^\[FAIL|^Error|FAIL:' "$LANES/$s.log" || tail -n 2 "$LANES/$s.log"; } | tr '\n' ' ' | cut -c1-200)"
                 fi
             else
                 still="$still $r"
