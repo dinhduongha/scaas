@@ -659,12 +659,15 @@ impl PqChat {
         let sealed = &out.sealed;
         self.chains()
             .add_id(&out.epoch.epoch.session_id, sealed.message_id.clone());
-        let v = v.to_string();
-        let Ok(h) = SecretBytes::new(v.len()) else {
+        // review T26 C-10: the content's text in a buffer that wipes itself, moved into the handle (sealed: no copy call writes it)
+        let Ok(text) = serde_json::to_vec(v) else {
             return;
         };
-        h.with_mut(|b| b.copy_from_slice(v.as_bytes()));
-        let p = Content::parse(v.as_bytes());
+        let text = zeroize::Zeroizing::new(text);
+        let p = Content::parse(&text);
+        let Ok(h) = SecretBytes::from_zeroizing(text) else {
+            return;
+        };
         self.show(
             &out.epoch,
             &sealed.record,

@@ -24,6 +24,8 @@ getrandom = "0.2"
 tracing = "0.1"
 # the transport trait's and the chain port's async methods as trait objects (in the SDK's graph already)
 async-trait = "0.1"
+# a content handle's text in a buffer that wipes itself (review T26 C-10; in the SDK's graph already)
+zeroize = "=1.8.2"
 # the Matrix event's transport encoding (RFC 4648 §4 with padding, CLI-PQC-05; the SDK's version)
 base64 = "0.22"
 
@@ -43,7 +45,6 @@ tracing-core = "0.1"
 scaas-ua = { path = "../ua-rs", default-features = false, features = ["wallet"] }
 scaas-rpc = { path = "../scaas-rpc", default-features = false }
 alloy = { version = "~1.6", default-features = false, features = ["std"] }
-zeroize = "=1.8.2"
 # the e2e's test-only Matrix client over Synapse's client-server API (plan T11; matrix-rust-sdk is not in the offline
 # cargo cache); the SDK's graph has it already
 reqwest = { version = "0.12", default-features = false, features = ["json"] }

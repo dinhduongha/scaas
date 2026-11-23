@@ -856,6 +856,20 @@ async fn a_file_is_sent_and_read() {
     assert_eq!(w.net.writes(), writes, "no write from a read");
     // a text content is no file
     assert!(bob.file_info(own.content.clone()).is_ok());
+    // review T26 C-10: an own message's handle and a file's info handle are built sealed: no copy call overwrites them
+    let info_h = bob.file_info(own.content.clone()).unwrap();
+    for (what, h) in [("own", &own.content), ("file info", &info_h)] {
+        let zeros = vec![0; h.len()];
+        assert!(
+            scaas_ua::wallet::secret_write(h.id(), &zeros).is_err(),
+            "{what}"
+        );
+    }
+    let twin = Arc::new(scaas_ua::wallet::SecretBytes::new(4).unwrap());
+    assert!(
+        scaas_ua::wallet::secret_write(twin.id(), &[1; 4]).is_ok(),
+        "control: a secret made to be written"
+    );
     let t =
         w.pq.send(&s, &me(&w.alice), &txt("hi"), None, &opts(&w))
             .await
