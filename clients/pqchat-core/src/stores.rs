@@ -218,6 +218,8 @@ impl PqChat {
         crate::session::seed_of(&me.key)?;
         self.require_accepted(&s.session_id)?;
         match body {
+            // a `file` only through `send_file`, which enters its key
+            Body::Content(Content::File { .. }) => return Err(PqChatError::ContentInvalid),
             Body::Content(c) => drop(c.value(ts)?),
             Body::File(f) => f.check(ts)?,
         }

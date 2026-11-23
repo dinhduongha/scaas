@@ -598,6 +598,12 @@ async fn send_takes_the_content_json_as_a_handle() {
         r#"{{"type":"text","body":"hi","onBehalfOf":"0x{}"}}"#,
         "11".repeat(32)
     );
+    // a `file` goes only through `send_file`, which enters its key (a content without one opens nowhere)
+    let z = format!("0x{}", "00".repeat(32));
+    let file = format!(
+        r#"{{"type":"file","mediaType":"image/png","name":"a.png","size":1,"sha256":"{z}","ctSha256":"{z}","url":"ar://{}"}}"#,
+        "A".repeat(43)
+    );
     let refused: Vec<(&[u8], &str)> = vec![
         (b"hi", "ContentInvalid"),
         (br#""hi""#, "ContentInvalid"),
@@ -614,6 +620,7 @@ async fn send_takes_the_content_json_as_a_handle() {
         ),
         (br#"{"type":"text","body":"hi","ts":1}"#, "ContentInvalid"),
         (obo.as_bytes(), "ContentInvalid"),
+        (file.as_bytes(), "ContentInvalid"),
         (long.as_bytes(), "ContentTooLarge"),
     ];
     for (j, want) in refused {

@@ -72,6 +72,9 @@ MUTANTS = [
     ("crate: from_json without the body bound's own error",
      [(CON, "        if long {\n            return Err(PqChatError::ContentTooLarge);\n", "        if long {\n            return Err(PqChatError::ContentInvalid);\n")],
      TST + "send_takes_the_content_json_as_a_handle"),
+    ("crate: a file content sent as a plain content (no key entered)",
+     [(STO, "            Body::Content(Content::File { .. }) => return Err(PqChatError::ContentInvalid),\n", "")],
+     TST + "send_takes_the_content_json_as_a_handle"),
 ]
 
 if __name__ == "__main__":
