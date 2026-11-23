@@ -485,7 +485,7 @@ real files), `smartcontracts/vectors` and `pqz-core/params/sets`, copied from th
 are incremental. The set's `PqzSet.sol` is installed in the lane only; the work tree's `src/pqz/PqzSet.sol` is never
 written, so several sets run at once from one work tree. One writer per lane: a flock per lane, and a second run on a
 busy lane is refused by name. `others` runs the three other sets **in parallel**, one lane each, each forge through
-`scripts/capped`; a lane starts only while `free -g` shows about 4 GB per lane above a 10 GB reserve, the rest wait
+`scripts/capped`; a lane starts only while `free -g` shows about 4 GB per lane above a 6 GB reserve (owner 2026-11-23: lower the default to 6 GB; was 10 GB, under which no lane started while other agents held about 12 GB of the 23 GB machine), the rest wait
 (never dropped), with start, ok or FAIL per set and a heartbeat every 30 s, the full output in a git-ignored `.log`
 per set, and a non-zero exit naming each failed set. A fifth lane, `mutants`, runs a mutant runner at the work tree's
 own set. `--clean` wipes the lane's `out/` and `cache/` first: **the round's final matrix and every pre-merge gate use
