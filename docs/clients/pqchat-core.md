@@ -7,10 +7,12 @@ Matrix store is the app's own Matrix client. The protocol it implements is norma
 [pqchat.md](../contracts/pqchat.md) (CTR-CHAT-01 to CTR-CHAT-21) and the UA-7 spec
 [`2026-10-25-ua7-pq-e2e-sessions.md`](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md) (P1–P49) with the topics spec
 [`2026-11-07-pqchat-public-topics.md`](../superpowers/specs/2026-11-07-pqchat-public-topics.md) (P33–P46); this page holds what
-the crate adds. Status: **SPECIFIED**, nothing built (spec
+the crate adds. Status: **BUILT** in `clients/pqchat-core` (plan T0 to T12, T10b and the review rounds; gate rows
+`clients/pqchat-core/runs/2026-11-17-pqchat-core-summary.txt`), except the tree mode
+([CLI-PQC-17](#CLI-PQC-17)), **SPECIFIED**, and the sealed local history ([CLI-PQC-09](#CLI-PQC-09)), **PLANNED** (spec
 [`2026-11-17-pqchat-core.md`](../superpowers/specs/2026-11-17-pqchat-core.md), plan
-[`2026-11-17-pqchat-core.md`](../superpowers/plans/2026-11-17-pqchat-core.md), branch `pqchat-core`; Fable's review of
-2026-11-17 applied, the spec's §14). Path when built: `clients/pqchat-core`. UNAUDITED.
+[`2026-11-17-pqchat-core.md`](../superpowers/plans/2026-11-17-pqchat-core.md); Fable's review of 2026-11-17 applied, the spec's
+§14). UNAUDITED.
 
 **Contents**
 
@@ -22,10 +24,12 @@ the crate adds. Status: **SPECIFIED**, nothing built (spec
 
 ## 1. Place and scope
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`tests/deps.rs`: the `cargo tree` check; the content types in `src/content.rs`, out-of-scope types shown
+unsupported; `MsigAuthorPlanned` in `src/session.rs`, `src/topics.rs`; tests `tests/session.rs`, `tests/topics.rs`,
+`tests/message.rs`, `tests/stores.rs`).
 
 <a id="CLI-PQC-01"></a>**CLI-PQC-01** — **`pqchat-core` is an app core above `scaas-sdk`: it depends on the SDK and on the app's
-Matrix client, and the SDK names no chat** (owner 2026-11-17, "OK, reverse pqchat-core too"; SPECIFIED). It depends on
+Matrix client, and the SDK names no chat** (owner 2026-11-17, "OK, reverse pqchat-core too"; BUILT). It depends on
 `scaas-sdk` with the SDK's app-core feature and the feature that carries the SDK's `PqChat` record entries (the SDK spec's App
 cores section, [`2026-11-17-scaas-sdk.md`](../superpowers/specs/2026-11-17-scaas-sdk.md), as rewritten on branch `scaas-sdk`,
 names them `app-core` and `pqchat-records`), and on nothing else that touches a key or a node: no `scaas-ua`, no `scaas-rpc` and no
@@ -40,7 +44,7 @@ tokio runtime and one Matrix login ([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12)'s one 
 
 <a id="CLI-PQC-02"></a>**CLI-PQC-02** — **This round's scope: 1:1 sessions first, groups correct; Matrix and chain stores; public
 topics; attachments (owner 2026-11-21); no calls, no HCS, Waku or libp2p, no `msig` author** (owner 2026-11-10: the 2-person chat is the main case;
-controller call for the cut, owner may override; SPECIFIED). In: sessions, epochs and rekeys, wraps in chunks, `leave`, `remove`,
+controller call for the cut, owner may override; BUILT). In: sessions, epochs and rekeys, wraps in chunks, `leave`, `remove`,
 the home rule and replicas, `msig` expansion of members, the sender chains, the envelope, `postMessage` and `storeMessage`, dedupe
 and order, recovery from state, pending until accepted, the content types `text`, `edit`, `redact`, `react`, `receipt`,
 `typing` and `file` (UA-7 §6.4.1), and public topics. Out, PLANNED in later tasks of the UA-7 plan: calls and their content types
@@ -51,12 +55,13 @@ scope is shown as unsupported and never acted on (UA-7 P49).
 
 ## 2. Secrets and signing
 
-Status: **SPECIFIED** (the SDK surface it needs: the SDK spec's App cores section, SPECIFIED on branch `scaas-sdk`).
+Status: **BUILT** (the SDK's `app_core` surface and its `pqchat_*` entries; the crate's handles in `src/lib.rs`,
+`src/message.rs`; tests `tests/message.rs`, `tests/vectors.rs`, `tests/e2e.rs`, the bindings check `runs/bind_surface.py`).
 
 **Attachments are in this round** (owner 2026-11-21, "put it in" after "images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave"; O9 (b); owner 2026-11-22: two new calls and an app id for PqChat): the `file` content (UA-7 §6.4.1 with its 2026-11-21 Change, P28) is sent and read; the file is sealed under a fresh file key by the SDK's `seal_for_arweave` under PqChat's app id (`keccak256("scaas.pqchat.v1")`), framed to its power-of-two bucket inside the AEAD, its key entered into the content inside `ua-rs` by `pqchat_seal_file_message`, so no key byte reaches the crate; the signed item is returned for the app to post to Arweave (`url` = `ar://<id>`) and keep, the crate posts nothing; a reader opens the object by `pqchat_open_file`, which checks its length and `ctSha256` before any decryption and reads the key from the opened content inside `ua-rs`; a failed file is shown on the device only. BUILT (plan T10b, `src/file.rs`: `send_file`, `file_info`, `open_file`; tests `tests/stores.rs`; the form and the controller calls in CLI-PQC-02's Change of 2026-11-23 in [decisions](../decisions.md)), UNAUDITED; a `file` without an `ar://` url is not built or read in this round.
 
 <a id="CLI-PQC-03"></a>**CLI-PQC-03** — **Secrets stay below the SDK: `pqchat-core` holds key handles only, and only decrypted
-plaintext leaves** (coordinator condition 1, 2026-11-17; SPECIFIED). The epoch key `K` and the sender chains' positions are `ua-rs`
+plaintext leaves** (coordinator condition 1, 2026-11-17; BUILT). The epoch key `K` and the sender chains' positions are `ua-rs`
 handles; each wrap's shared secret and KEK, the message keys and nonces, `k_env` and the `sealedInfo` key never leave the `ua-rs`
 call that uses them. The KEM encapsulation and decapsulation with the FIPS 203 checks of UA-7 P14, HKDF, the HMAC steps of the
 sender chain, padding, canonical JSON and every AES-256-GCM or AES-256-GCM-SIV operation run in `ua-rs`. The only bytes that leave
@@ -72,7 +77,7 @@ and persists no secret (CLI-PQC-09). A handle, a key byte or a ciphertext never 
 
 <a id="CLI-PQC-04"></a>**CLI-PQC-04** — **No blind signing: PqChat records are signed only through the SDK's named, typed PqChat
 entries, under `PURPOSE_PQCHAT` in `DS_C`, built from named fields; never a digest, never the generic app signing call**
-(coordinator ruling 2026-11-17, correcting condition 2; the owner may override; SPECIFIED). `PqChat` is a SCaaS contract, so the SDK
+(coordinator ruling 2026-11-17, correcting condition 2; the owner may override; BUILT). `PqChat` is a SCaaS contract, so the SDK
 keeps one signing entry per record struct the contract checks, as it does for every SCaaS contract's operations
 ([CLI-SDK-08](scaas-sdk.md#CLI-SDK-08)): `PqChatSession`, `PqChatEpoch`, `PqChatLeave`, `PqChatRemove`, `PqChatMessage`, `PqTopic`,
 `PqTopicUpdate`, `PqTopicWriter`, `PqTopicEntry`, `PqTopicEdit`, `PqTopicVote` ([CTR-CHAT-03](../contracts/pqchat.md#CTR-CHAT-03)).
@@ -90,12 +95,13 @@ Messages and leaves are signed by a leaf UA, never by an `msig` (UA-7 P13).
 
 ## 3. The Matrix store
 
-Status: **SPECIFIED** (scaas-app's contract, its section 11, is the app side; the trait conformance test of CLI-PQC-05 is what makes
-the app's side hold).
+Status: **BUILT** on the crate's side (`src/matrix.rs`, the conformance test `tests/matrix_conformance.rs`, the fake
+`tests/matrix_fake.rs`, the e2e over a local Synapse); scaas-app's contract, its section 11, is the app side, in its own
+repository, held to the trait by the same conformance test.
 
 <a id="CLI-PQC-05"></a>**CLI-PQC-05** — **The Matrix store is the app's live Matrix client: one stack, one client, one login; a
 PqChat session is never a Matrix room to the user; a room and a Matrix id count only when bound** (owner 2026-11-17, chat "(b)";
-the binding rules a controller call after Fable's review, owner may override; SPECIFIED). `pqchat-core` attaches to the app's
+the binding rules a controller call after Fable's review, owner may override; BUILT). `pqchat-core` attaches to the app's
 `app-matrix` client after the app's Matrix login and detaches before the app's Matrix logout; it opens no Matrix client, login or
 sync loop of its own and links no second Matrix SDK. It sends each envelope as one `net.scaas.pqchat.v1` event `{v, hint, env}`
 (UA-7 P15; `hint` and `env` in RFC 4648 §4 base64 with padding, the `matrixEvent` row's form, and only that form read back).
@@ -117,12 +123,15 @@ and its chain stores still serve reads.
 
 ## 4. Protocol duties
 
-Status: **SPECIFIED**.
+Status: **BUILT** for CLI-PQC-06 to CLI-PQC-10 and CLI-PQC-13 to CLI-PQC-16 (`src/stores.rs`, `consent.rs`, `check.rs`,
+`drops.rs`, `session.rs`, `recovery.rs`, `reads.rs`, `message.rs`, `signed.rs`; tests `tests/stores.rs`, `check.rs`, `session.rs`,
+`recovery.rs`, `reads.rs`, `message.rs`, `signed.rs`, `chain_*.rs`; the reads check `runs/check_reads.py`),
+but the sealed local history of CLI-PQC-09, **PLANNED**; the tree mode, CLI-PQC-17, **SPECIFIED**.
 
 <a id="CLI-PQC-06"></a>**CLI-PQC-06** — **Every message goes to every listed message store its type may use; a session with a store
 the crate does not implement cannot send; chain-store gas is spent only under the user's consent; a new store is used only after the
 user confirms it** (UA-7 P27, P49; the refusal, the consent and the confirmation controller calls, the owner may override;
-SPECIFIED). A send builds one signed record and one envelope and delivers the same bytes to each store the epoch's `sealedInfo` lists
+BUILT). A send builds one signed record and one envelope and delivers the same bytes to each store the epoch's `sealedInfo` lists
 that the content type may use (UA-7 P49): every type in scope to the Matrix room and to each chain store by `storeMessage` (an
 instance the factory lists as class 3, version ≠ 0), except `typing`, which goes only to the Matrix room and is not sent when no
 Matrix room is listed. When the list names a message store kind this build does not implement (HCS or Waku in this round), the send
@@ -136,7 +145,7 @@ by a non-admin is flagged. The crate creates sessions only with stores it implem
 
 <a id="CLI-PQC-07"></a>**CLI-PQC-07** — **Every record read is checked before it is shown or used; a record that fails is dropped
 silently, and nothing sent depends on whether anything opened or checked** (UA-7 P25, P49, P12; [ARCH-POS-13](../decisions.md#ARCH-POS-13)
-as amended on 2026-11-13; SPECIFIED).
+as amended on 2026-11-13; BUILT).
 
 - **A message from a store** counts only when its envelope opens, its record decodes within bounds, its portable signature verifies
   against the sender's registry record, the sender is a member of a complete epoch as the home instance orders it, its counter is
@@ -166,7 +175,7 @@ Every read whose bytes enter a decryption is a trusted read (CLI-PQC-13). The hy
 outside ARCH-POS-13 by its Change of 2026-11-13; this rule keeps PqChat's own no-reaction rule for them anyway.
 
 <a id="CLI-PQC-08"></a>**CLI-PQC-08** — **A session is pending until its user accepts it: before that, no network call and no write
-derived from its wraps or `sealedInfo`** (UA-7 P12, Fable P2-4; SPECIFIED). A pending session may be read from contract state and,
+derived from its wraps or `sealedInfo`** (UA-7 P12, Fable P2-4; BUILT). A pending session may be read from contract state and,
 when the user looks at it, its own wrap and `sealedInfo` opened locally to show the creator, the members, the name and the cost of
 accepting; nothing else: no store read or joined, no Matrix invite answered, no subscription, no receipt, no `leave`, no rekey. The
 transport holds an invite to a room a pending session's `sealedInfo` names, unanswered. Acceptance is the user's act on this device;
@@ -175,7 +184,7 @@ equal record and has `epochCount > 0` (CTR-CHAT-14).
 
 <a id="CLI-PQC-09"></a>**CLI-PQC-09** — **Recovery from contract state alone; the local store is a cache with no secret and no
 source of truth, encrypted at rest by the app, and bound to the device** (owner 2026-11-10,
-[CTR-CHAT-14](../contracts/pqchat.md#CTR-CHAT-14); the store's content a controller call; SPECIFIED). A new or reinstalled device
+[CTR-CHAT-14](../contracts/pqchat.md#CTR-CHAT-14); the store's content a controller call; BUILT). A new or reinstalled device
 finds its sessions by paging the factory index for class 3 on each chain it serves and reading `sessionCount` / `sessionsOf` on each
 listed instance (batched), de-duplicating entries; follows each session's epochs at its home (`epochsOf`, `latestEpoch`, `childOf`,
 after finality); opens its own wraps; and, after acceptance, reads the latest messages from the session's chain stores
@@ -191,14 +200,14 @@ sealed local history lands (spec §13 O7 (b), owner 2026-11-23: under an app-sco
 exported; built with scaas-app after the pre-freeze tag; PLANNED).
 
 <a id="CLI-PQC-10"></a>**CLI-PQC-10** — **An envelope that arrives while the seed is locked is kept and processed at unlock: never
-dropped, never answered** (the SDK review's finding F27, moved with the chat module to `pqchat-core`, 2026-11-17; SPECIFIED). The
+dropped, never answered** (the SDK review's finding F27, moved with the chat module to `pqchat-core`, 2026-11-17; BUILT). The
 Matrix sync loop runs while the seed is locked; `pqchat-core` keeps every `net.scaas.pqchat.v1` event it is handed in its store, up to
 a bound per room, and past the bound keeps the room's read position instead, so the rest is read again from the room's history; it
 processes them in order after the next unlock, dropping then those of rooms no accepted session binds. Nothing the sender can see
 depends on the lock.
 
 <a id="CLI-PQC-13"></a>**CLI-PQC-13** — **Every read that chooses an encryption key, a recipient or an epoch, or feeds a decryption,
-is a trusted read** (coordinator call K1 after Fable's review, 2026-11-17; the owner may override; SPECIFIED). The reads of
+is a trusted read** (coordinator call K1 after Fable's review, 2026-11-17; the owner may override; BUILT). The reads of
 `kemKeyOf`, `kemKeyAt`, `checkedOf`, `memberAccepted`, `latestEpoch`, `epochsOf`, `childOf`, `removedIn`, the factory listing, the
 signer's registry record for a signature check, an instance's `sigStore`, the kept signatures and leave records (`sessionSig`,
 `epochSig`, `leaveCount`, `leaveAt`, `leaveSig`, `removalSig`, `messageSig`; CLI-PQC-15), and the reads of wraps, `sealedInfo`,
@@ -211,7 +220,7 @@ is refused.
 
 <a id="CLI-PQC-14"></a>**CLI-PQC-14** — **No skipped message key is kept; a verified message is read at any counter up to 2^20
 steps past the nearest held chain position** (coordinator call K2 after Fable's review, 2026-11-17, a client rule within UA-7 §6.3's
-bound; the owner may override; SPECIFIED). UA-7 §6.3 bounds the skipped message keys a receiver keeps at 2,000 per chain; this
+bound; the owner may override; BUILT). UA-7 §6.3 bounds the skipped message keys a receiver keeps at 2,000 per chain; this
 client keeps none: every message key is derived again from `K` when its message arrives, through one `ua-rs` call that advances a
 chain position by `n` steps. A chain walk runs only for a record that has passed the signature and membership checks of CLI-PQC-07,
 so its work is charged to a signed member record; it advances at most 2^20 steps from the nearest position held for that chain (a
@@ -347,10 +356,11 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
 
 ## 5. Vectors and tests
 
-Status: **SPECIFIED**.
+Status: **BUILT** (`tests/vectors.rs` over `smartcontracts/vectors/pqchat/`; the local real-crypto e2e `tests/e2e.rs`, gate
+`pqc-e2e`, with its mutants under `runs/`); the same run on the SCaaS testnet, **PLANNED**.
 
 <a id="CLI-PQC-11"></a>**CLI-PQC-11** — **The crate reproduces clientkeys' PqChat rows: the bytes that cross the SDK boundary in
-`pqchat-core`'s tests, the secrets between in `ua-rs`'s** (owner, byte formats change everywhere at once; SPECIFIED). `pqchat-core`'s
+`pqchat-core`'s tests, the secrets between in `ua-rs`'s** (owner, byte formats change everywhere at once; BUILT). `pqchat-core`'s
 tests read `smartcontracts/vectors/pqchat/` (`records.json`, `topics.json`, `keys.json`, `messages.json`) and check every output
 that leaves the SDK: typed digests, ids, scopes, `sigHash`, record blobs, wrap bytes and `wrapHashes`, the P14 refusals, message
 ciphertexts, envelopes, payloads, the Matrix event, `sealedInfo` and hints, through the SDK's test-only vectors build (fixed
@@ -362,7 +372,7 @@ refusals, and a chain read far past its first counter. Every unbound field is no
 `ref`). The call-key rows wait for the call tasks (CLI-PQC-02).
 
 <a id="CLI-PQC-12"></a>**CLI-PQC-12** — **A real-crypto end-to-end run is a gate of the crate** (owner 2026-11-17, "OK, put the e2e
-into the pqchat-core plan"; SPECIFIED, PLANNED). On a local chain that enforces EIP-7825's per-transaction cap and a local Matrix
+into the pqchat-core plan"; BUILT locally, UNAUDITED; the SCaaS testnet run PLANNED). On a local chain that enforces EIP-7825's per-transaction cap and a local Matrix
 homeserver, through `pqchat-core` over the SDK with no stand-in wrap: a 1:1 session wrapped by the hybrid KEM to registered KEM keys;
 a message sent by one member and decrypted by the other, equal byte for byte; an epoch rekey after which a removed member cannot
 read; a fresh device recovering its sessions and the latest messages from state alone, after an explicit acceptance; a replica read
