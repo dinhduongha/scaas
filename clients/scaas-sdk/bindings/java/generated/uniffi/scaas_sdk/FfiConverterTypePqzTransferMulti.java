@@ -13,6 +13,7 @@ public enum FfiConverterTypePqzTransferMulti implements FfiConverterRustBuffer<P
       FfiConverterString.INSTANCE.read(buf),
       FfiConverterLong.INSTANCE.read(buf),
       FfiConverterSequenceTypePqzLeg.INSTANCE.read(buf),
+      FfiConverterInteger.INSTANCE.read(buf),
       FfiConverterString.INSTANCE.read(buf),
       FfiConverterLong.INSTANCE.read(buf),
       FfiConverterTypeEnvelope.INSTANCE.read(buf)
@@ -28,6 +29,7 @@ public enum FfiConverterTypePqzTransferMulti implements FfiConverterRustBuffer<P
             FfiConverterString.INSTANCE.allocationSize(value.batch()) +
             FfiConverterLong.INSTANCE.allocationSize(value.keyVersion()) +
             FfiConverterSequenceTypePqzLeg.INSTANCE.allocationSize(value.legs()) +
+            FfiConverterInteger.INSTANCE.allocationSize(value.decoys()) +
             FfiConverterString.INSTANCE.allocationSize(value.decoyFee()) +
             FfiConverterLong.INSTANCE.allocationSize(value.validUntilBlock()) +
             FfiConverterTypeEnvelope.INSTANCE.allocationSize(value.envelope())
@@ -42,6 +44,7 @@ public enum FfiConverterTypePqzTransferMulti implements FfiConverterRustBuffer<P
       FfiConverterString.INSTANCE.write(value.batch(), buf);
       FfiConverterLong.INSTANCE.write(value.keyVersion(), buf);
       FfiConverterSequenceTypePqzLeg.INSTANCE.write(value.legs(), buf);
+      FfiConverterInteger.INSTANCE.write(value.decoys(), buf);
       FfiConverterString.INSTANCE.write(value.decoyFee(), buf);
       FfiConverterLong.INSTANCE.write(value.validUntilBlock(), buf);
       FfiConverterTypeEnvelope.INSTANCE.write(value.envelope(), buf);

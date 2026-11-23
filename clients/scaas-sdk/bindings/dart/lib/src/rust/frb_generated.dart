@@ -18959,8 +18959,8 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   PqzTransferMulti dco_decode_pqz_transfer_multi(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return PqzTransferMulti(
       signer: dco_decode_key_ref(arr[0]),
       chain: dco_decode_String(arr[1]),
@@ -18968,9 +18968,10 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       batch: dco_decode_String(arr[3]),
       keyVersion: dco_decode_u_64(arr[4]),
       legs: dco_decode_list_pqz_leg(arr[5]),
-      decoyFee: dco_decode_String(arr[6]),
-      validUntilBlock: dco_decode_u_64(arr[7]),
-      envelope: dco_decode_envelope(arr[8]),
+      decoys: dco_decode_u_32(arr[6]),
+      decoyFee: dco_decode_String(arr[7]),
+      validUntilBlock: dco_decode_u_64(arr[8]),
+      envelope: dco_decode_envelope(arr[9]),
     );
   }
 
@@ -19581,13 +19582,14 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   TokenBalance dco_decode_token_balance(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return TokenBalance(
       address: dco_decode_String(arr[0]),
       display: dco_decode_String(arr[1]),
       decimals: dco_decode_u_8(arr[2]),
       amount: dco_decode_String(arr[3]),
+      unknown: dco_decode_opt_String(arr[4]),
     );
   }
 
@@ -25997,6 +25999,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     var var_batch = sse_decode_String(deserializer);
     var var_keyVersion = sse_decode_u_64(deserializer);
     var var_legs = sse_decode_list_pqz_leg(deserializer);
+    var var_decoys = sse_decode_u_32(deserializer);
     var var_decoyFee = sse_decode_String(deserializer);
     var var_validUntilBlock = sse_decode_u_64(deserializer);
     var var_envelope = sse_decode_envelope(deserializer);
@@ -26007,6 +26010,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       batch: var_batch,
       keyVersion: var_keyVersion,
       legs: var_legs,
+      decoys: var_decoys,
       decoyFee: var_decoyFee,
       validUntilBlock: var_validUntilBlock,
       envelope: var_envelope,
@@ -26693,11 +26697,13 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     var var_display = sse_decode_String(deserializer);
     var var_decimals = sse_decode_u_8(deserializer);
     var var_amount = sse_decode_String(deserializer);
+    var var_unknown = sse_decode_opt_String(deserializer);
     return TokenBalance(
       address: var_address,
       display: var_display,
       decimals: var_decimals,
       amount: var_amount,
+      unknown: var_unknown,
     );
   }
 
@@ -33540,6 +33546,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     sse_encode_String(self.batch, serializer);
     sse_encode_u_64(self.keyVersion, serializer);
     sse_encode_list_pqz_leg(self.legs, serializer);
+    sse_encode_u_32(self.decoys, serializer);
     sse_encode_String(self.decoyFee, serializer);
     sse_encode_u_64(self.validUntilBlock, serializer);
     sse_encode_envelope(self.envelope, serializer);
@@ -34016,6 +34023,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     sse_encode_String(self.display, serializer);
     sse_encode_u_8(self.decimals, serializer);
     sse_encode_String(self.amount, serializer);
+    sse_encode_opt_String(self.unknown, serializer);
   }
 
   @protected
@@ -37003,7 +37011,8 @@ class DexImpl extends RustOpaque implements Dex {
       .api
       .scaasSdkDexDexPrepareWrapOrder(that: this, req: req);
 
-  /// Signs a prepared order under its check (the user confirmed its review): its hash, the order and the signature.
+  /// Signs a prepared order under its check (the user confirmed its review): its hash, the order and the signature. The
+  /// check's clock is the head's time read now, never the prepare's (T26 B2-8): an order held past its window is refused.
   Future<SignedOrder> signOrder({required ArcPreparedOrder order}) =>
       ScaasSdk.instance.api.scaasSdkDexDexSignOrder(that: this, order: order);
 

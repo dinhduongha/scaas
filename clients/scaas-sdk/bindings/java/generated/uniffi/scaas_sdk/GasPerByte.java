@@ -2,7 +2,8 @@ package uniffi.scaas_sdk;
 
 /**
  * A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
- * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+ * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded), `data` (`mtxExecute`'s call data) or
+ * `calldata` (the transaction row's, entry `transaction` kind `evm`: the price of a byte of the transaction's calldata).
  */
 public class GasPerByte {
     private java.lang.String input;

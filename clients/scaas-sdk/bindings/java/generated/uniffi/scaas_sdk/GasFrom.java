@@ -51,7 +51,7 @@ public sealed interface GasFrom {
   
   
     /**
-     * a native send's own estimate (or 21,000 for a plain transfer to an account without code)
+     * a native send's own estimate (`eth_estimateGas`, a plain transfer's too)
      */
   record Estimate() implements GasFrom {
     

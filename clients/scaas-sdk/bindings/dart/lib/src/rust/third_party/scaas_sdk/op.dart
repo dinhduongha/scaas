@@ -195,7 +195,7 @@ sealed class GasFrom with _$GasFrom {
   /// the figure the app passed on the call
   const factory GasFrom.app() = GasFrom_App;
 
-  /// a native send's own estimate (or 21,000 for a plain transfer to an account without code)
+  /// a native send's own estimate (`eth_estimateGas`, a plain transfer's too)
   const factory GasFrom.estimate() = GasFrom_Estimate;
 }
 
