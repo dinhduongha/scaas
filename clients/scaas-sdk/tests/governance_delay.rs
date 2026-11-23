@@ -40,9 +40,26 @@ fn views(c: &Fake, notice: u64, grant: u64, locked: &str, admin: &str) {
     c.answers
         .push((TOKEN.into(), sel("lockedFeatures()"), locked.into()));
     c.answers.push((TOKEN.into(), sel("admin()"), admin.into()));
+    info(&mut c, 1);
+}
+
+/// The factory's `infoOf(TOKEN)`: `(addr, creatorId, contractClass)` with class `class` (T26 A2-3).
+fn info(c: &mut fake_chain::Chain, class: u64) {
+    c.answers
+        .retain(|(to, s, _)| !(to == FACTORY && s.starts_with(&sel("infoOf(address)"))));
+    let a = format!("{:0>64}", &TOKEN[2..]);
+    c.answers.push((
+        FACTORY.into(),
+        sel("infoOf(address)"),
+        format!("0x{a}{:064x}{class:064x}", 0),
+    ));
 }
 
 async fn setup() -> (Arc<Sdk>, Fake) {
+    setup_with(Some(FACTORY.into())).await
+}
+
+async fn setup_with(factory: Option<String>) -> (Arc<Sdk>, Fake) {
     let chain = fake();
     let url = serve(chain.clone()).await;
     let genesis = chain.lock().unwrap().genesis.clone();
@@ -60,7 +77,7 @@ async fn setup() -> (Arc<Sdk>, Fake) {
         rpc_policy: scaas_rpc::Policy::Failover,
         gateways: vec![],
         registry: None,
-        factory: None,
+        factory,
         router: None,
         finality: Finality::Finalized,
         tx_gas_cap: None,
@@ -196,4 +213,63 @@ async fn a_failed_read_is_an_error() {
         .governance_delay("local".into(), TOKEN.into(), marked, None)
         .await;
     assert!(r.is_err(), "{r:?}");
+}
+
+/// T26 A2-2 / A2-3: one logical read at the final block (every `eth_call` pinned to a block hash); a token whose `factory()` is
+/// not the profile's, or that the factory did not catalogue as a token, or a profile without a factory, is `TokenUncatalogued`.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_token_is_the_profile_factorys() {
+    let (sdk, chain) = setup().await;
+    let marked = bits().into_iter().find(|(_, m)| *m).unwrap().0;
+    let admin = sdk.admin();
+    let ask = || admin.governance_delay("local".into(), TOKEN.into(), marked, None);
+    views(&chain, 0, 3_600, &w(0), &w(1));
+    chain.lock().unwrap().requests.clear();
+    assert_eq!(
+        ask().await.unwrap(),
+        [DelaySentence::After { delay: 3_600 }]
+    );
+    let calls: Vec<String> = chain
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .filter(|r| r.contains("eth_call"))
+        .cloned()
+        .collect();
+    assert_eq!(calls.len(), 6, "{calls:?}");
+    assert!(calls.iter().all(|r| r.contains("blockHash")), "{calls:?}");
+    // another class
+    info(&mut chain.lock().unwrap(), 2);
+    assert!(matches!(
+        ask().await,
+        Err(scaas_sdk::SdkError::TokenUncatalogued)
+    ));
+    // another factory
+    views(&chain, 0, 3_600, &w(0), &w(1));
+    {
+        let mut c = chain.lock().unwrap();
+        c.answers
+            .retain(|(to, s, _)| !(to == TOKEN && *s == sel("factory()")));
+        c.answers.push((TOKEN.into(), sel("factory()"), w(0xf1)));
+    }
+    assert!(matches!(
+        ask().await,
+        Err(scaas_sdk::SdkError::TokenUncatalogued)
+    ));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_profile_without_a_factory_names_no_token() {
+    let (sdk, chain) = setup_with(None).await;
+    let marked = bits().into_iter().find(|(_, m)| *m).unwrap().0;
+    views(&chain, 0, 0, &w(0), &w(1));
+    let r = sdk
+        .admin()
+        .governance_delay("local".into(), TOKEN.into(), marked, None)
+        .await;
+    assert!(
+        matches!(r, Err(scaas_sdk::SdkError::TokenUncatalogued)),
+        "{r:?}"
+    );
 }
