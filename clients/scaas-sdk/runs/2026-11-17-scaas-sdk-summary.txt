@@ -331,7 +331,6 @@ sdk-soroban-e2e | 9f8c4570e | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 # skips bind-go and runs bind-python (7 ran, OK; tree dirty, no row).
 sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
-ua-clippy | 3d96c45be | 0 | -
 ua-vectors | 3d96c45be | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
 ua-core | 3d96c45be | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
 docs | 1e73c93e4 | 0 | -
@@ -356,20 +355,19 @@ bind-go | 1e73c93e4 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
 bind-js | 1e73c93e4 | 0 | node: 6 pass, 0 fail, 0 skipped
 cli | 1e73c93e4 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 mutants-check | 78d410f45 | 0 | -
-sdk-clippy | 78d410f45 | 0 | -
 sdk-clippy-noevm | 78d410f45 | 0 | -
 sdk-uniffi | 78d410f45 | 0 | 21 passed, 0 failed, 0 ignored (4 binaries)
 mutants-check | 3d96c45be | 0 | -
 sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 sdk-test | 190cc2ba7 | 0 | 443 passed, 0 failed, 18 ignored (42 binaries)
-sdk-clippy | 190cc2ba7 | 0 | -
 sdk-vectors | 190cc2ba7 | 0 | 21 passed, 0 failed, 0 ignored (2 binaries)
 ua-test | 190cc2ba7 | 0 | 629 passed, 0 failed, 3 ignored (64 binaries)
-ua-clippy | 190cc2ba7 | 0 | -
 ua-vectors | 190cc2ba7 | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
 ua-appcore | 190cc2ba7 | 0 | 20 passed, 0 failed, 0 ignored (1 binaries)
 ua-verify-only | 190cc2ba7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
 ua-core | 190cc2ba7 | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
 cli | 190cc2ba7 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 bind-gen | 190cc2ba7 | 0 | -
+sdk-clippy | c11fb2b10 | 0 | -
+ua-clippy | c11fb2b10 | 0 | -
