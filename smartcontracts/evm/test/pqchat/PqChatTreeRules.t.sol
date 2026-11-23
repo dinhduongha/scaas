@@ -312,6 +312,40 @@ contract PqChatTreeRulesTest is PqChatTreeModel {
         _land(st, n, c);
     }
 
+    /// Spec §6: `leave*` and `removal*` serve both modes. A tree session's `PqChatTreeLeave` and `PqChatTreeRemove` read
+    /// back field by field (`treeId` is the session's, `treeOf`), their `sigHash` and the signature accepted.
+    function test_leaveAndRemovalViewsReadTreeRecords() public {
+        _open(); // the vectors in this call's memory
+        M memory m = _abe(_list(A));
+        IPqChat.PqChatTreeRemove memory r =
+            IPqChat.PqChatTreeRemove(m.sid, m.treeId, m.head, m.epoch + 1, _list(E), A, ++nonceN);
+        IUARegistry.UASig memory rs = _sig(A, th2.treeRemove(r));
+        vchat.treeRemove(r, rs);
+        IPqChat.PqChatTreeLeave memory l = IPqChat.PqChatTreeLeave(m.sid, m.treeId, m.head, B, ++nonceN);
+        IUARegistry.UASig memory ls = _sig(B, th2.treeLeave(l));
+        vchat.treeLeave(l, ls);
+        (IPqChat.PqChatRemove memory rr, bytes32 rh) = vchat.removalAt(m.head, 0);
+        assertEq(rh, keccak256(abi.encode(rs)), "removal sigHash");
+        assertEq(
+            keccak256(abi.encode(rr)),
+            keccak256(
+                abi.encode(IPqChat.PqChatRemove(r.sessionId, r.epochId, r.nextEpoch, r.members, r.admin, r.nonce))
+            ),
+            "the removal's fields"
+        );
+        (IPqChat.PqChatLeave memory ll, bytes32 lh) = vchat.leaveAt(m.head, 0);
+        assertEq(lh, keccak256(abi.encode(ls)), "leave sigHash");
+        assertEq(
+            keccak256(abi.encode(ll)),
+            keccak256(abi.encode(IPqChat.PqChatLeave(l.sessionId, l.epochId, l.member, l.nonce))),
+            "the leave's fields"
+        );
+        (, bytes memory ret) = address(vchat).staticcall(abi.encodeCall(vchat.leaveSig, (m.head, 0)));
+        assertEq(keccak256(ret), keccak256(abi.encode(ls)), "leaveSig");
+        (, ret) = address(vchat).staticcall(abi.encodeCall(vchat.removalSig, (m.head, 0)));
+        assertEq(keccak256(ret), keccak256(abi.encode(rs)), "removalSig");
+    }
+
     /// `a`, `b` in ascending order.
     function _sorted(bytes32 a, bytes32 b) internal pure returns (bytes32[] memory) {
         return a < b ? _list(a, b) : _list(b, a);

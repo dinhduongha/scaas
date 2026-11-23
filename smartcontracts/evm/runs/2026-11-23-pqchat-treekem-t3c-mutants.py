@@ -23,6 +23,9 @@ FORGE = (
 M = [
     ("the closing treeRemove refused (C24 read without C38)", [(T, " && _treeHasMember(t)) revert IPqChat.PqChatTreeAdmins();", ") revert IPqChat.PqChatTreeAdmins();")]),
     ("a gone UA's leaf counted as a member's (C38)", [(G, "            if (l.live && t.gone[l.ua].kind == 0) return true;", "            if (l.live) return true;")]),
+    ("removalAt decoding a tree record as a flat one", [(P, "        if (!_isTree(_s().epochs[epochId].sessionId)) return abi.decode(b, (PqChatRemove, bytes32));\n        PqChatTreeRemove memory t;", "        if (true) return abi.decode(b, (PqChatRemove, bytes32));\n        PqChatTreeRemove memory t;")]),
+    ("leaveAt decoding a tree record as a flat one", [(P, "        if (!_isTree(_s().epochs[epochId].sessionId)) return abi.decode(b, (PqChatLeave, bytes32));", "        if (true) return abi.decode(b, (PqChatLeave, bytes32));")]),
+    ("leaveSig at the flat record's word for a tree record", [(P, "_isTree(_s().epochs[epochId].sessionId) ? 6 : 5);", "_isTree(_s().epochs[epochId].sessionId) ? 5 : 5);")]),
 ]
 
 if sys.argv[1:] == ["check"]:

@@ -75,9 +75,11 @@ contract PqChatGasTest is PqTopicsBase {
     // 2,329,022; state 50,598,630 -> 52,449,930 (+1,210 x 1,530). The flat entries pay the tree-session read (one cold
     // slot, `_isTree`): postMessage 157,767 -> 160,139 (warm list 157,779 -> 160,151), leave 150,721 -> 153,039, remove
     // 176,666 -> 179,122.
-    uint256 internal constant RUNTIME = 33_905;
-    uint256 internal constant RELEASE_REGULAR = 2_329_022;
-    uint256 internal constant RELEASE_STATE = 52_449_930;
+    // TreeKEM T3c (spec §6: `leaveAt`, `leaveSig` and `removalAt` read a tree session's records): 33,905 -> 34,743 B;
+    // regular 2,329,022 -> 2,383,116; state 52,449,930 -> 53,732,070 (+838 x 1,530); asked x 1.05 58,920,945 of 60 M.
+    uint256 internal constant RUNTIME = 34_743;
+    uint256 internal constant RELEASE_REGULAR = 2_383_116;
+    uint256 internal constant RELEASE_STATE = 53_732_070;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice:
     // 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged

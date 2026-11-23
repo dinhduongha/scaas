@@ -360,8 +360,13 @@ contract PqChat is IPqChat, PqChatCore {
         return _s().removals[epochId].length;
     }
 
+    /// @notice Both modes (spec §6): a tree session's `PqChatTreeRemove` without its `treeId` (the session's, `treeOf`).
     function removalAt(bytes32 epochId, uint256 index) external view returns (PqChatRemove memory r, bytes32 sigHash) {
-        (r, sigHash) = abi.decode(_get(_s().removals[epochId][index]), (PqChatRemove, bytes32));
+        bytes memory b = _get(_s().removals[epochId][index]);
+        if (!_isTree(_s().epochs[epochId].sessionId)) return abi.decode(b, (PqChatRemove, bytes32));
+        PqChatTreeRemove memory t;
+        (t, sigHash) = abi.decode(b, (PqChatTreeRemove, bytes32));
+        r = PqChatRemove(t.sessionId, t.epochId, t.nextEpoch, t.members, t.admin, t.nonce);
     }
 
     // ------------------------------------------------------------------ CTR-CHAT-23: the kept signatures
@@ -411,13 +416,19 @@ contract PqChat is IPqChat, PqChatCore {
         return _s().leaves[epochId].length;
     }
 
+    /// @notice Both modes (spec §6): a tree session's `PqChatTreeLeave` without its `treeId` (the session's, `treeOf`).
     function leaveAt(bytes32 epochId, uint256 index) external view returns (PqChatLeave memory l, bytes32 sigHash) {
-        (l, sigHash) = abi.decode(_get(_s().leaves[epochId][index]), (PqChatLeave, bytes32));
+        bytes memory b = _get(_s().leaves[epochId][index]);
+        if (!_isTree(_s().epochs[epochId].sessionId)) return abi.decode(b, (PqChatLeave, bytes32));
+        PqChatTreeLeave memory t;
+        (t, sigHash) = abi.decode(b, (PqChatTreeLeave, bytes32));
+        l = PqChatLeave(t.sessionId, t.epochId, t.member, t.nonce);
     }
 
+    /// @notice Both modes: a `PqChatTreeLeave` is five static words, a `PqChatLeave` four.
     function leaveSig(bytes32 epochId, uint256 index) external view returns (IUARegistry.UASig memory) {
         _kept();
-        _returnSig(_get(_s().leaves[epochId][index]), 5);
+        _returnSig(_get(_s().leaves[epochId][index]), _isTree(_s().epochs[epochId].sessionId) ? 6 : 5);
     }
 
     function nonceUsed(bytes32 scope, uint64 nonce) external view returns (bool) {
