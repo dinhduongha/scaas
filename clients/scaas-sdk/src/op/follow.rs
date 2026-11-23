@@ -11,7 +11,7 @@ use crate::SdkError;
 use alloy::primitives::{Address, B256, U256};
 use alloy::rpc::types::Filter;
 use scaas_rpc::evm::{TxState, LOG_RANGE_MAX};
-use scaas_rpc::pool::ReadError;
+use scaas_rpc::pool::{BlockChoice, ReadError};
 use scaas_rpc::{Class, Policy, Purpose};
 
 fn detail_of(s: &str) -> InFlight {
@@ -104,8 +104,8 @@ impl Op {
                     let (kind, from_block) = (row.kind.clone(), row.from_block);
                     let (lane, filter, kind) = (&lane, &filter, kind.as_str());
                     let pool = &pool;
-                    let a = pool
-                        .read_at_block(choice, Purpose::Plain, |at| async move {
+                    let read = |choice| {
+                        pool.read_at_block(choice, Purpose::Plain, move |at| async move {
                             let mut landed = None;
                             let mut lo = from_block.min(at.number);
                             while lo <= at.number && landed.is_none() {
@@ -144,15 +144,34 @@ impl Op {
                             };
                             Ok::<Facts, ReadError>((landed, spent, pool.timestamp_at(&at).await?))
                         })
-                        .await?;
+                    };
+                    let a = read(choice).await?;
                     let strict = pool.pool().policy() == Policy::StrictMajority;
                     let decisive =
                         strict || (a.members == [0] && pool.pool().class(0) != Class::Discovered);
                     let (landed, spent, ts) = a.value;
+                    let failed =
+                        |spent: bool, ts: u64| lane.is_some() && (spent || row.valid_until < ts);
                     match landed {
                         Some((block, hash)) if decisive => OpState::Landed { block, hash },
-                        _ if decisive && lane.is_some() && spent => OpState::Consumed,
-                        _ if decisive && lane.is_some() && row.valid_until < ts => OpState::Expired,
+                        _ if decisive && failed(spent, ts) => {
+                            // review T26 B-11 (CLI-RPC-09, owner 2026-11-17, T13 S7): under strict_majority a failed-for-good
+                            // rests on the agreed read at `finalized`; a read at another depth that shows one reads it again
+                            let (landed, spent, ts) = if strict && choice != BlockChoice::Finalized
+                            {
+                                read(BlockChoice::Finalized).await?.value
+                            } else {
+                                (None, spent, ts)
+                            };
+                            match landed {
+                                Some((block, hash)) => OpState::Landed { block, hash },
+                                None if failed(spent, ts) && spent => OpState::Consumed,
+                                None if failed(spent, ts) => OpState::Expired,
+                                None => OpState::InFlight {
+                                    detail: tx_detail(pool, &row, choice).await,
+                                },
+                            }
+                        }
                         _ => OpState::InFlight {
                             detail: tx_detail(pool, &row, choice).await,
                         },

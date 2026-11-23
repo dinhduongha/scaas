@@ -182,7 +182,9 @@ keeps its reader's depth bound). Every answer, those of the EVM reader's provide
 transport under alloy), is read in chunks up to its call's byte cap (default 16 MiB, lower per call where the answer is small; an
 announced length above the cap stops before reading), then its JSON nesting depth is checked by a flat scan (at most 64), and only
 then parsed, once. Family binary decoders keep their own caps (XDR depth 64, msgpack depth 64, BOC 4096 cells). Too large, too deep
-or malformed is that endpoint's failure ([CLI-RPC-04](#CLI-RPC-04)), never a panic. The requests of one read are bounded too: a log
+or malformed is that endpoint's failure ([CLI-RPC-04](#CLI-RPC-04)), never a panic; an answer without the member it is read for
+(a CometBFT answer without `result`, an Indexer API answer without `data`) is malformed, never a null value (review T26 B-9, B-10;
+Aptos's indexer also names its network before its first query, `ledger_infos`' `chain_id`, CLI-RPC-03). The requests of one read are bounded too: a log
 range is read in spans, at most about 25 requests per window.
 
 <a id="CLI-RPC-11"></a>**CLI-RPC-11** — **No URL, credential or request body in a log line or an error** (follows the node's

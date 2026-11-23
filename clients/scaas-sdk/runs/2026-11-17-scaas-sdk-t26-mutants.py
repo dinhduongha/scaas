@@ -11,6 +11,11 @@ from mutants_lib import main
 PRF = "clients/scaas-sdk/src/vault/prf.rs"
 SOR = "clients/scaas-sdk/src/wallet/families/soroban_ops.rs"
 FFI = "clients/scaas-sdk/ffi/src/api/mod.rs"
+SUB = "clients/scaas-sdk/src/op/submit.rs"
+QUO = "clients/scaas-sdk/src/op/quote.rs"
+FOL = "clients/scaas-sdk/src/op/follow.rs"
+APT = "clients/scaas-rpc/src/aptos.rs"
+COS = "clients/scaas-rpc/src/cosmos.rs"
 F = (
     "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,"
     "cosmos,aptos,solana,soroban,sui,ton,substrate,arweave"
@@ -28,6 +33,7 @@ STATUS = """    let status = match &w.tx {
         }
         None => None,
     };"""
+R = "cd clients/scaas-rpc && ../../scripts/capped cargo test --locked --offline -j2 --all-features"
 T = "cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features " + F
 MUTANTS = [
     (
@@ -87,6 +93,72 @@ MUTANTS = [
         "C-2: the FRB opening without the load check",
         [(FFI, "    scaas_sdk::load_check(expect_api, need_features)?;\n", "    let _ = (expect_api, need_features);\n")],
         "cd clients/scaas-sdk/ffi && ../../../scripts/capped cargo test --locked --offline -j2 the_opening_runs_the_load_check",
+    ),
+    (
+        "B-4: submit signs a handed-back op unchecked",
+        [(SOR, "                if p.signature.is_none() {\n                    own_terms(&sdk, c, sor, &p, passphrase).await?;\n                }\n", "")],
+        T + " --test soroban_ops submit_and_hand_off_check_a_handed_back_op_again",
+    ),
+    (
+        "B-4: the hand-off signs a handed-back op unchecked",
+        [(SOR, "                own_terms(&sdk, c, sor, &p, passphrase).await?;\n                let op = rebuilt(&p, passphrase)?;\n                let k =",
+          "                let op = rebuilt(&p, passphrase)?;\n                let k =")],
+        T + " --test soroban_ops submit_and_hand_off_check_a_handed_back_op_again",
+    ),
+    (
+        "B-4: the expiry ledger not held to the window",
+        [(SOR, "    checked(p, passphrase, ledger, window).map(|_| ())", "    checked(p, passphrase, p.expiry, 0).map(|_| ())")],
+        T + " --test soroban_ops submit_and_hand_off_check_a_handed_back_op_again",
+    ),
+    (
+        "B-5: the stored transaction decides the path",
+        [(SUB, "if let (Some(raw), false) = (&row.raw, row.path == \"gateway\") {", "if let (Some(raw), false) = (&row.raw, false) {")],
+        T + " --lib op::tests::resend_of_a_self_relay_to_the_gateways_posts_to_them",
+    ),
+    (
+        "B-6: a failed send marked sent",
+        [(SUB, "send_once(sdk, &row).await.unwrap_or(InFlight::Signed);", "send_once(sdk, &row).await.unwrap_or(InFlight::GivenUpByEveryNode);")],
+        T + " --lib op::tests::a_simulation_down_in_transport_is_sent_at_the_next_resume",
+    ),
+    (
+        "B-6: a transport failure of the simulation as SimRefused",
+        [(SUB, "                Err(e) => return Err(super::sim(e)),", "                Err(_) => return Ok(InFlight::SimRefused),")],
+        T + " --lib op::tests::a_simulation_down_in_transport_is_sent_at_the_next_resume",
+    ),
+    (
+        "B-6: every gateway unreachable is given up",
+        [(SUB, "                .any(|(_, o)| matches!(o, scaas_rpc::node::NodeOutcome::Unreachable(_))) =>", "                .any(|(_, o)| matches!(o, scaas_rpc::node::NodeOutcome::Refused(_))) =>")],
+        T + " --lib op::tests::a_post_no_gateway_took_stays_signed",
+    ),
+    (
+        "B-7: one unreadable gateway refuses every quote",
+        [(QUO, "            Err(e) => last = Some(e),", "            Err(e) => return Err(e.into()),")],
+        T + " --lib op::tests::a_gateway_down_or_of_another_chain_is_left_out",
+    ),
+    (
+        "B-7: the send posts to every listed gateway",
+        [(SUB, "    let node = kept_gateways(sdk, &row.chain).await?;", "    let _ = kept_gateways(sdk, &row.chain).await?;\n    let node = scaas_rpc::node::NodeClient::new(\n        sdk.chains.iter().find(|c| c.profile.key == row.chain).and_then(|c| c.gateways.clone()).ok_or(SdkError::SubmitPathNone)?,\n    )?;")],
+        T + " --lib op::tests::a_gateway_down_or_of_another_chain_is_left_out",
+    ),
+    (
+        "B-8: resume sends another family's row",
+        [(SUB, "                        && evm(&sdk, &row.chain).is_ok()\n", "")],
+        T + " --lib op::tests::resume_leaves_another_familys_row",
+    ),
+    (
+        "B-11: no finalized re-read under strict_majority",
+        [(FOL, "if strict && choice != BlockChoice::Finalized", "if false && strict && choice != BlockChoice::Finalized")],
+        T + " --lib op::tests::strict_majority_ends_a_failed_operation_at_the_finalized_block",
+    ),
+    (
+        "B-9: the indexer's network not compared",
+        [(APT, "Some(c) if c == u64::from(self.chain_id) =>", "Some(_) =>")],
+        R + " --test aptos an_indexer_of_another_network_answers_nothing",
+    ),
+    (
+        "B-10: a CometBFT answer without result as null",
+        [(COS, 'match v.get("result").filter(|r| !r.is_null()) {', 'match Some(v.get("result").cloned().unwrap_or_default()).as_ref() {')],
+        R + " --test cosmos the_cometbft_and_rest_reads",
     ),
 ]
 

@@ -417,9 +417,11 @@ pub(crate) async fn signed_quote(
     Ok(out)
 }
 
-/// Every gateway of `chain` announces the profile's `chain_uid` for its chain id (`GET /v1/gateway`; NODE-GW-05), else
-/// `ProfileMismatch` and none is used (spec §8; a gateway that announces none is refused too).
-pub(crate) async fn check_gateways(sdk: &Sdk, chain: &str) -> Result<(), SdkError> {
+/// The gateways of `chain` that announce the profile's `chain_uid` for its chain id (`GET /v1/gateway`; NODE-GW-05), by their
+/// index in the profile's list. One that cannot be read, or announces another or none, is left out (spec §4: a source that
+/// differs is not used; review T26 B-7, ARCH-POS-15: the list gives availability, as the DEX venue's `post` does). None
+/// left: `ProfileMismatch` when one announced another, else the last failure.
+pub(crate) async fn check_gateways(sdk: &Sdk, chain: &str) -> Result<Vec<u32>, SdkError> {
     let c = sdk
         .chains
         .iter()
@@ -429,24 +431,62 @@ pub(crate) async fn check_gateways(sdk: &Sdk, chain: &str) -> Result<(), SdkErro
         return Err(SdkError::SubmitPathNone);
     };
     let client = scaas_rpc::node::NodeClient::new(list)?;
+    let (mut kept, mut mismatch, mut last) = (vec![], false, None);
     for i in 0..client.list().len() {
-        let v = client.gateway_at(i).await?;
-        let ok = v
-            .get("chains")
-            .and_then(|c| c.as_array())
-            .is_some_and(|cs| {
-                cs.iter().any(|x| {
-                    x.get("chain").and_then(|n| n.as_u64()) == Some(id)
-                        && x.get("chain_uid")
-                            .and_then(|u| u.as_str())
-                            .is_some_and(|u| u.eq_ignore_ascii_case(&c.profile.chain_uid))
-                })
-            });
-        if !ok {
-            return Err(SdkError::ProfileMismatch);
+        match client.gateway_at(i).await {
+            Ok(v) => {
+                let ok = v
+                    .get("chains")
+                    .and_then(|c| c.as_array())
+                    .is_some_and(|cs| {
+                        cs.iter().any(|x| {
+                            x.get("chain").and_then(|n| n.as_u64()) == Some(id)
+                                && x.get("chain_uid")
+                                    .and_then(|u| u.as_str())
+                                    .is_some_and(|u| u.eq_ignore_ascii_case(&c.profile.chain_uid))
+                        })
+                    });
+                if ok {
+                    kept.push(u32::try_from(i).map_err(|_| SdkError::Argument)?);
+                } else {
+                    mismatch = true;
+                }
+            }
+            Err(e) => last = Some(e),
         }
     }
-    Ok(())
+    match last {
+        _ if !kept.is_empty() => Ok(kept),
+        Some(e) if !mismatch => Err(e.into()),
+        _ => Err(SdkError::ProfileMismatch),
+    }
+}
+
+/// The client of the gateways [`check_gateways`] keeps (review T26 B-7): an operation is posted to them only.
+pub(crate) async fn kept_gateways(
+    sdk: &Sdk,
+    chain: &str,
+) -> Result<scaas_rpc::node::NodeClient, SdkError> {
+    let kept = check_gateways(sdk, chain).await?;
+    let list = sdk
+        .chains
+        .iter()
+        .find(|c| c.profile.key == chain)
+        .and_then(|c| c.gateways.clone())
+        .ok_or(SdkError::SubmitPathNone)?;
+    let endpoints = kept
+        .iter()
+        .filter_map(|&i| list.endpoints().get(i as usize).cloned())
+        .collect();
+    let kept = scaas_rpc::endpoint::NodeList::new(
+        endpoints,
+        list.policy,
+        list.timeout_ms,
+        list.slow_timeout_ms,
+        list.read_timeout_ms,
+    )?
+    .with_max_lag(list.max_lag);
+    Ok(scaas_rpc::node::NodeClient::new(kept)?)
 }
 
 impl Op {
@@ -540,8 +580,11 @@ impl Op {
                     SubmitPath::Gateway | SubmitPath::Auto { .. }
                         if gateways > 0 && door_a(&prepared) =>
                     {
-                        check_gateways(&sdk, &prepared.chain()).await?;
-                        return Ok(gateway());
+                        let kept = check_gateways(&sdk, &prepared.chain()).await?;
+                        return Ok(SubmitQuote {
+                            gateways: kept,
+                            ..gateway()
+                        });
                     }
                     SubmitPath::Gateway => return Err(SdkError::SubmitPathNone),
                     SubmitPath::Auto { payer: None } => return Err(SdkError::SubmitPathNone),

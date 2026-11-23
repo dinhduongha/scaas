@@ -3336,3 +3336,223 @@ async fn bls_multi_register_sends_the_pop() {
         assert!(c.pqzPop.is_empty() && c.attrs.pqzKey.is_empty() && c.attrs.kem.mlkemEk.is_empty());
     }
 }
+
+/// A URL nothing listens on (connection refused).
+fn closed_url() -> String {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = l.local_addr().unwrap().port();
+    drop(l);
+    format!("http://127.0.0.1:{port}")
+}
+
+/// Waits (≤ 5 s) until row `op` has the state `want`.
+async fn row_state(sdk: &Arc<Sdk>, op: &str, want: &str) -> state::Row {
+    for _ in 0..100 {
+        let r = state::row(sdk, op).await.unwrap();
+        if r.state == want && !r.detail.is_empty() {
+            return r;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    state::row(sdk, op).await.unwrap()
+}
+
+/// Review T26 B-5 (spec §13.3): `resend` of a self-relayed operation on the gateway path posts its operation to the gateways;
+/// it never broadcasts the old transaction again. The twin: `resend` on its own path sends the same transaction
+/// (`write_ahead_then_send`).
+#[tokio::test(flavor = "multi_thread")]
+async fn resend_of_a_self_relay_to_the_gateways_posts_to_them() {
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    let g = gateway_quote(&t, &p).await;
+    let op = t.sdk.op().submit(p, q).await.unwrap();
+    sent_txs(&t, 1).await;
+    row_state(&t.sdk, &op, "sent").await;
+    t.sdk.op().resend(op.clone(), g).await.unwrap();
+    assert_eq!(bodies(&t, 1).await.len(), 1, "posted to the gateway");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(t.chain.lock().unwrap().sent.len(), 1, "no second broadcast");
+    assert_eq!(state::row(&t.sdk, &op).await.unwrap().path, "gateway");
+}
+
+/// Review T26 B-6 (CLI-RPC-09, spec §13.4): a send nothing accepted is not `sent`. Every gateway unreachable keeps the row
+/// `signed`, so `resume` posts it again; every gateway refusing is `sent` with `GivenUpByEveryNode` (the twin,
+/// `submit_returns_after_the_row_write`).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_post_no_gateway_took_stays_signed() {
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = gateway_quote(&t, &p).await;
+    t.chain.lock().unwrap().gw = Gw::Down;
+    let op = t.sdk.op().submit(p, q).await.unwrap();
+    bodies(&t, 1).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let row = state::row(&t.sdk, &op).await.unwrap();
+    assert_eq!(row.state, "signed", "nothing accepted: {}", row.detail);
+    t.chain.lock().unwrap().gw = Gw::Queue;
+    assert_eq!(t.sdk.op().resume().await.unwrap(), 1);
+    assert_eq!(bodies(&t, 2).await.len(), 2, "the same body again");
+    assert_eq!(state::row(&t.sdk, &op).await.unwrap().state, "sent");
+}
+
+/// Review T26 B-6: a simulation that fails in transport is no `SimRefused` (which only the user's `resend` sends again): the
+/// row stays `signed` and the next `resume` sends it. A revert stays `SimRefused` (the twin, `sim_refused_is_written_and_followed`).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_simulation_down_in_transport_is_sent_at_the_next_resume() {
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    t.store.fail_sent.store(true, SeqCst);
+    let op = t.sdk.op().submit(p, q).await.unwrap();
+    sent_txs(&t, 1).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    t.store.fail_sent.store(false, SeqCst);
+    t.chain.lock().unwrap().sim_down = true;
+    let again = open(t.store.clone(), t.profile.clone(), Limits::default()).await;
+    assert_eq!(again.op().resume().await.unwrap(), 1);
+    let row = state::row(&again, &op).await.unwrap();
+    assert_eq!(
+        (row.state.as_str(), row.detail != "SimRefused"),
+        ("signed", true),
+        "{}",
+        row.detail
+    );
+    t.chain.lock().unwrap().sim_down = false;
+    assert_eq!(
+        again.op().resume().await.unwrap(),
+        1,
+        "sent at the next resume"
+    );
+    assert_eq!(sent_txs(&t, 2).await.len(), 2);
+    assert_eq!(state::row(&again, &op).await.unwrap().state, "sent");
+}
+
+/// Review T26 B-8 (spec §13.4): `Op::resume` sends only rows of an EVM profile; a row of another family (a Soroban row cut
+/// between its write-ahead and its send) is left as it is, never marked `sent`. The twin: an EVM row is sent
+/// (`write_ahead_then_send`).
+#[tokio::test(flavor = "multi_thread")]
+async fn resume_leaves_another_familys_row() {
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    t.store.fail_sent.store(true, SeqCst);
+    let op = t.sdk.op().submit(p, q).await.unwrap();
+    sent_txs(&t, 1).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    t.store.fail_sent.store(false, SeqCst);
+    let mut other = state::row(&t.sdk, &op).await.unwrap();
+    other.op = "sor-0001".into();
+    other.chain = "soroban-local".into();
+    other.name = "soroban".into();
+    state::put(&t.sdk, &other).await.unwrap();
+    let again = open(t.store.clone(), t.profile.clone(), Limits::default()).await;
+    assert_eq!(again.op().resume().await.unwrap(), 1, "the EVM row only");
+    let r = state::row(&again, "sor-0001").await.unwrap();
+    assert_eq!(
+        (r.state.as_str(), r.detail.as_str()),
+        ("signed", other.detail.as_str())
+    );
+}
+
+/// Review T26 B-7 (ARCH-POS-15, spec §4: a source that differs is not used): a gateway that cannot be read, or announces
+/// another `chain_uid`, is left out; the quote names the others and the operation is posted to them only. None left:
+/// refused. The twin: two good gateways both take it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_gateway_down_or_of_another_chain_is_left_out() {
+    let wrong = fake();
+    wrong.lock().unwrap().gw_info["chains"][0]["chain_uid"] =
+        format!("0x{}", "61".repeat(32)).into();
+    let wrong_url = serve(wrong.clone()).await;
+    let down = closed_url();
+    let (w2, d2) = (wrong_url.clone(), down.clone());
+    let t = setup(1, move |p, _| {
+        p.gateways.push(endpoint(&d2));
+        p.gateways.push(endpoint(&w2));
+    })
+    .await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = gateway_quote(&t, &p).await;
+    assert_eq!(q.gateways, vec![0], "the good one only");
+    t.sdk.op().submit(p, q).await.unwrap();
+    assert_eq!(bodies(&t, 1).await.len(), 1);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        wrong.lock().unwrap().bodies.is_empty(),
+        "nothing to another chain's gateway"
+    );
+    // none left: refused, by the last reason
+    let (w3, d3) = (wrong_url, down);
+    let t = setup(0, move |p, _| {
+        p.gateways.push(endpoint(&d3));
+        p.gateways.push(endpoint(&w3));
+    })
+    .await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert_eq!(
+        code(t.sdk.op().quote(p, SubmitPath::Gateway).await),
+        "ProfileMismatch"
+    );
+    // the twin: two good gateways
+    let t = setup(2, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert_eq!(gateway_quote(&t, &p).await.gateways, vec![0, 1]);
+}
+
+/// Review T26 B-11 (CLI-RPC-09, owner 2026-11-17, T13 S7): under `strict_majority` a relayed operation's failed-for-good
+/// (`Consumed`, `Expired`) rests on the agreed read at the `finalized` block; a profile whose final block is a depth reads the
+/// finalized block again when its own read shows one. The nonce spent at the depth's block but not at `finalized`: in
+/// flight; spent at `finalized` too: `Consumed`. The twin under `failover` ends at the depth (one endpoint's basis).
+#[tokio::test(flavor = "multi_thread")]
+async fn strict_majority_ends_a_failed_operation_at_the_finalized_block() {
+    for (policy, spent_from, want) in [
+        (scaas_rpc::Policy::StrictMajority, 0x25, None),
+        (
+            scaas_rpc::Policy::StrictMajority,
+            0x10,
+            Some(OpState::Consumed),
+        ),
+        (scaas_rpc::Policy::Failover, 0x25, Some(OpState::Consumed)),
+    ] {
+        let t = setup(1, move |p, _| {
+            p.finality = Finality::Depth(1);
+            if policy == scaas_rpc::Policy::StrictMajority {
+                p.rpc.push(p.rpc[0].clone());
+                p.rpc[1].url.push_str("/second");
+            }
+            p.rpc_policy = policy;
+        })
+        .await;
+        {
+            let mut c = t.chain.lock().unwrap();
+            c.head = 0x30;
+            c.finalized = 0x20;
+        }
+        let (op, _) = submitted(&t, "token", TOKEN, "5").await;
+        {
+            let mut c = t.chain.lock().unwrap();
+            c.nonces.insert(TOKEN.into(), 1);
+            c.nonces_from = spent_from;
+        }
+        let s = t.sdk.op().state(op).await.unwrap();
+        match want {
+            Some(w) => assert_eq!(s, w, "{policy:?} {spent_from:#x}"),
+            None => assert!(matches!(s, OpState::InFlight { .. }), "{policy:?}: {s:?}"),
+        }
+    }
+}

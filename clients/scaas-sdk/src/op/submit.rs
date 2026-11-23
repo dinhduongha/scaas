@@ -7,8 +7,8 @@
 //! simulation was refused); a row `sent` is sent again only by the user's `resend`, the same bytes.
 use super::prepared::{envelope, Prepared};
 use super::quote::{
-    check_caps, check_gateways, door_a, fee_of, figure, payer_address, signed_quote, signer_kind,
-    SubmitPath, SubmitQuote,
+    check_caps, check_gateways, door_a, fee_of, figure, kept_gateways, payer_address, signed_quote,
+    signer_kind, SubmitPath, SubmitQuote,
 };
 use super::state::{self, Row};
 use super::{dec, evm, hex, key, lane_nonce, unhex, InFlight, Op, OpState};
@@ -16,7 +16,7 @@ use crate::events::Event;
 use crate::{Sdk, SdkError};
 use alloy::primitives::{Address, U256};
 use scaas_rpc::evm::BroadcastOutcome;
-use scaas_rpc::node::{NodeClient, SubmitOutcome, UaMetaTxReq};
+use scaas_rpc::node::{SubmitOutcome, UaMetaTxReq};
 use scaas_rpc::Fanout;
 use scaas_ua::wallet::entries::{entry, entry_rows, relay_fee_op, transfer_on_ids, Built};
 use scaas_ua::wallet::{sign_scaas, EvmTx};
@@ -542,8 +542,12 @@ impl Op {
             .spawn(async move {
                 let mut n = 0;
                 for row in state::rows(&sdk).await? {
-                    // a refused simulation is sent again only by the user's `resend`
-                    if row.state == "signed" && row.detail != "SimRefused" {
+                    // a refused simulation is sent again only by the user's `resend`; a row of another family is its own
+                    // module's (review T26 B-8)
+                    if row.state == "signed"
+                        && row.detail != "SimRefused"
+                        && evm(&sdk, &row.chain).is_ok()
+                    {
                         send(&sdk, row).await;
                         n += 1;
                     }
@@ -661,13 +665,12 @@ pub(crate) fn detach(_: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + 's
 }
 
 /// One send of `row`'s bytes on its path; the row then `sent` with the outcome's detail, and the event. A refused simulation
-/// sends nothing and leaves the state as it was, with the detail `SimRefused`.
+/// sends nothing and leaves the state as it was, with the detail `SimRefused`. A send nothing accepted (review T26 B-6: an
+/// error before any post, a simulation that failed in transport, every gateway unreachable) leaves it `signed` with the
+/// detail `Signed`, so `resume` sends it again.
 pub(crate) async fn send(sdk: &Arc<Sdk>, mut row: Row) {
-    let detail = match send_once(sdk, &row).await {
-        Ok(d) => d,
-        Err(_) => InFlight::GivenUpByEveryNode,
-    };
-    if detail != InFlight::SimRefused {
+    let detail = send_once(sdk, &row).await.unwrap_or(InFlight::Signed);
+    if detail != InFlight::SimRefused && detail != InFlight::Signed {
         row.state = "sent".into();
     }
     row.detail = format!("{detail:?}");
@@ -681,7 +684,8 @@ pub(crate) async fn send(sdk: &Arc<Sdk>, mut row: Row) {
 
 async fn send_once(sdk: &Sdk, row: &Row) -> Result<InFlight, SdkError> {
     let (_, chain_id, pool) = evm(sdk, &row.chain)?;
-    if let Some(raw) = &row.raw {
+    // the row's path decides (review T26 B-5): a self-relayed row `resend` moved to the gateways keeps its old transaction
+    if let (Some(raw), false) = (&row.raw, row.path == "gateway") {
         // a relayed operation's signed calldata simulated from the payer (ruling 1, after the write ahead: ruling A): a revert,
         // a failed simulation or more gas than the confirmed quote sends nothing
         if row.kind != "native" {
@@ -694,7 +698,11 @@ async fn send_once(sdk: &Sdk, row: &Row) -> Result<InFlight, SdkError> {
             let data = alloy::primitives::Bytes::from(unhex(&row.calldata)?);
             match pool.simulate_from(from, to, data).await {
                 Ok(g) if row.gas_limit.is_some_and(|l| g <= l) => {}
-                _ => return Ok(InFlight::SimRefused),
+                Ok(_) | Err(scaas_rpc::evm::SimError::Revert(_)) => {
+                    return Ok(InFlight::SimRefused)
+                }
+                // review T26 B-6: no answer is no refusal
+                Err(e) => return Err(super::sim(e)),
             }
         }
         return Ok(match pool.broadcast(&unhex(raw)?, Fanout::All).await? {
@@ -702,13 +710,7 @@ async fn send_once(sdk: &Sdk, row: &Row) -> Result<InFlight, SdkError> {
             BroadcastOutcome::Rejected { .. } => InFlight::BroadcastRejected,
         });
     }
-    let gateways = sdk
-        .chains
-        .iter()
-        .find(|c| c.profile.key == row.chain)
-        .and_then(|c| c.gateways.clone())
-        .ok_or(SdkError::SubmitPathNone)?;
-    let node = NodeClient::new(gateways)?;
+    let node = kept_gateways(sdk, &row.chain).await?;
     let outcome = if row.entry == "mtxExecuteTransfer" {
         // the transfer on ids: `POST /v1/ua-metatx` (owner 2026-11-18, ruling 6)
         let o = &row.op_json;
@@ -727,6 +729,14 @@ async fn send_once(sdk: &Sdk, row: &Row) -> Result<InFlight, SdkError> {
     };
     Ok(match outcome {
         SubmitOutcome::Queued { .. } => InFlight::Queued,
+        // review T26 B-6 (CLI-RPC-09): an unreachable gateway may not have it; every gateway refusing has given it up
+        SubmitOutcome::NotQueued { outcomes }
+            if outcomes
+                .iter()
+                .any(|(_, o)| matches!(o, scaas_rpc::node::NodeOutcome::Unreachable(_))) =>
+        {
+            InFlight::Signed
+        }
         SubmitOutcome::NotQueued { .. } => InFlight::GivenUpByEveryNode,
     })
 }

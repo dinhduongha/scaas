@@ -29,6 +29,8 @@ pub type VerdictFn = fn(&Value) -> (u16, Value);
 pub enum Gw {
     Queue,
     Refuse,
+    /// a 503 on every write route (unreachable: the bytes may or may not have reached it); `GET /v1/gateway` still answers
+    Down,
 }
 
 pub struct Chain {
@@ -44,6 +46,8 @@ pub struct Chain {
     pub base_fee: u64,
     /// lane nonce by contract (lower-case `0x` hex): `mtxNonce` answers it for any `from` and lane
     pub nonces: HashMap<String, u64>,
+    /// the first block whose state holds `nonces` (below it `mtxNonce` answers 0; review T26 B-11)
+    pub nonces_from: u64,
     pub code: HashMap<String, String>,
     pub logs: Vec<Value>,
     /// tx id -> status
@@ -67,6 +71,8 @@ pub struct Chain {
     pub requests: Vec<String>,
     /// `eth_call` and `eth_estimateGas` of a contract revert (an unsigned form the contract refuses)
     pub call_revert: bool,
+    /// `eth_call` and `eth_estimateGas` fail as the node's own timeout (a transport failure, no revert; review T26 B-6)
+    pub sim_down: bool,
     /// the blocks carry no `baseFeePerGas` (a chain without EIP-1559)
     pub no_base_fee: bool,
     /// ERC-5267 `eip712Domain()` by contract: `(name, salt)`, version "1", the fake's chain id, the contract
@@ -112,6 +118,7 @@ impl Default for Chain {
             prio: 1,
             base_fee: 7,
             nonces: HashMap::new(),
+            nonces_from: 0,
             code: HashMap::new(),
             logs: vec![],
             receipts: HashMap::new(),
@@ -127,6 +134,7 @@ impl Default for Chain {
             index: vec![],
             requests: vec![],
             call_revert: false,
+            sim_down: false,
             no_base_fee: false,
             domains: HashMap::new(),
             gw_paths: vec![],
@@ -304,6 +312,9 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
     };
     let sends_value = p[0]["value"].as_str().is_some_and(|v| v != "0x0");
     match r["method"].as_str().unwrap_or_default() {
+        "eth_call" | "eth_estimateGas" if c.sim_down => {
+            err("eth_call request was canceled due to enabled timeout.")
+        }
         "eth_call" | "eth_estimateGas" if c.value_reverts && sends_value => {
             err("execution reverted")
         }
@@ -346,10 +357,12 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             } else if data.starts_with(&sel("mtxNonce(bytes32,uint256)"))
                 || data.starts_with(&sel("mtxNonce(address,uint256)"))
             {
-                ok(json!(format!(
-                    "0x{:064x}",
+                let n = if at >= c.nonces_from {
                     c.nonces.get(&to).copied().unwrap_or(0)
-                )))
+                } else {
+                    0
+                };
+                ok(json!(format!("0x{n:064x}")))
             } else if let (Some((name, salt)), true) =
                 (c.domains.get(&to), data == sel("eip712Domain()"))
             {
@@ -595,6 +608,7 @@ pub async fn serve(c: Fake) -> String {
                                 Gw::Refuse => {
                                     (422, json!({"code": "DEX_NOT_LISTED", "detail": "dex"}))
                                 }
+                                Gw::Down => (503, json!({"error": "BUSY"})),
                                 Gw::Queue if body.is_empty() => (200, json!({"route": path})),
                                 Gw::Queue => (201, json!({"status": "resting", "fills": []})),
                             }
@@ -609,6 +623,7 @@ pub async fn serve(c: Fake) -> String {
                             }
                             match c.gw {
                                 Gw::Queue => (202, json!({"status": "queued", "intent_id": "i1"})),
+                                Gw::Down => (503, json!({"error": "BUSY"})),
                                 Gw::Refuse => {
                                     (409, json!({"code": "NONCE_USED", "detail": "dead"}))
                                 }
