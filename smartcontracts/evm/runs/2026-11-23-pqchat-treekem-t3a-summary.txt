@@ -1,0 +1,33 @@
+ck-test | e38f7a1a5 | 0 | node: 617 pass, 0 fail
+ck-vectors | e38f7a1a5 | 0 | pqchat-vectors.mjs --check ok (6 files)
+docs | e38f7a1a5 | 0 | check: 0 error(s), 7 warning(s), 16 note(s)
+fmt | e38f7a1a5 | 0 | forge fmt --check of src and the touched files: clean
+forge-account | e38f7a1a5 | 0 | forge: 103 passed, 0 failed
+forge-as | e38f7a1a5 | 0 | forge: 568 passed, 0 failed
+forge-confidential | e38f7a1a5 | 0 | forge: 5 passed, 0 failed
+forge-factory | e38f7a1a5 | 0 | forge: 2 passed, 0 failed
+forge-fork | e38f7a1a5 | 0 | forge: 0 passed, 0 failed, 1 skipped
+forge-gas | e38f7a1a5 | 0 | forge: 406 passed, 0 failed
+forge-governance | e38f7a1a5 | 0 | forge: 942 passed, 0 failed
+forge-hedera | e38f7a1a5 | 0 | forge: 20 passed, 0 failed
+forge-liquidity | e38f7a1a5 | 0 | forge: 93 passed, 0 failed
+forge-merge | e38f7a1a5 | 0 | forge: 350 passed, 0 failed
+forge-metatx | e38f7a1a5 | 0 | forge: 549 passed, 0 failed
+forge-modules | e38f7a1a5 | 0 | forge: 35 passed, 0 failed
+forge-p6f | e38f7a1a5 | 0 | forge: 4 passed, 0 failed
+forge-pqchat | e38f7a1a5 | 0 | forge: 164 passed, 0 failed
+forge-pqvault | e38f7a1a5 | 0 | forge: 94 passed, 0 failed
+forge-pqz | e38f7a1a5 | 0 | forge: 694 passed, 0 failed
+forge-pqzh | e38f7a1a5 | 0 | forge: 42 passed, 0 failed
+forge-research | e38f7a1a5 | 0 | forge: 360 passed, 0 failed
+forge-top | e38f7a1a5 | 0 | forge: 29 passed, 0 failed
+forge-ua | e38f7a1a5 | 0 | forge: 1044 passed, 0 failed
+forge-v2 | e38f7a1a5 | 0 | forge: 756 passed, 0 failed
+forge-wallet | e38f7a1a5 | 0 | forge: 185 passed, 0 failed
+forge-wrap | e38f7a1a5 | 0 | forge: 324 passed, 0 failed
+forge-zether | e38f7a1a5 | 0 | forge: 478 passed, 0 failed
+mutants | e38f7a1a5 | 0 | 30 replacements found once (the runs: 2026-11-23-pqchat-treekem-t3a-mutants.txt, 30 of 30 killed)
+sets-modules | e38f7a1a5 | 0 | lanes ok: n2048-kmax1024 n2560-kmax16384 n2816-kmax65536 (test/modules at each set, 35 passed each)
+sets-sensitive | e38f7a1a5 | 0 | lanes ok: n2048-kmax1024 n2560-kmax16384 n2816-kmax65536 (the set-sensitive tests, wall 75m58s)
+size | e38f7a1a5 | 0 | size gate: 0 error(s), 181 contracts
+uagas | e38f7a1a5 | 0 | forge: 29 passed, 0 failed
