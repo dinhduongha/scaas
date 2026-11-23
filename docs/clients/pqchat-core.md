@@ -219,9 +219,11 @@ device ids. This needs no change to UA-7.
 commits since its Welcome; every tree secret stays in `ua-rs`; a committer's path secrets derive from its KEM seed; a device
 that cannot follow an epoch shows it and sends nothing by itself** (owner 2026-11-23: our own TreeKEM in `ua-rs` after RFC
 9420's algorithms, no MLS library; seed-derived committer secrets, no self-wrap; spec
-[`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md), revision 2, §5, §8, §10, §15; the contract
+[`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md), revision 3, §5, §8, §10, §11, §15; the contract
 side is [CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **SPECIFIED**, nothing built, UNAUDITED. The bullets below
-other than the owner's two rulings are controller calls, the owner may override.
+other than the owner's rulings are controller calls, the owner may override. **Owner rulings of 2026-11-23 on the second
+review:** the joiner without RFC 9420's `init` chain and its cost; the compromise warning; no automatic receipts in a tree
+session; freshness before a changed session info; no return, the way back being a new UA.
 
 - **One branch.** Both modes end in an epoch key `K` per epoch id; sender chains, `sealedInfo`, messages, stores and consent sit
   above `K` and do not change. Until the mode is built the crate refuses `groupMode ≠ 0` by name. A tree session's state,
@@ -234,18 +236,35 @@ other than the owner's two rulings are controller calls, the owner may override.
   and never reused. A random device key recovers its commits on that device only.
 - **Signing.** One typed `ua-rs` operation builds the path, the pieces and `PqChatCommit` inside the signing boundary, shows the
   review and signs ([CLI-PQC-04](#CLI-PQC-04)); no digest from outside is signed.
-- **Before it encrypts** the crate refuses a head below its checkpoint, recomputes the tree hash, verifies the head commit's
+- **Before it encrypts** the crate refuses a head below its checkpoint (which holds the hash of the verified head record, not
+  only its id), at an epoch-0 head rebuilds the tree from the signed member list, recomputes the tree hash, verifies the head commit's
   kept signature and its author's right, compares each target key with its hash in the tree, and has `ua-rs` verify against the
   registry record every key no signed tree hash covers yet (an added key, a member at creation), in every tree session; reads
   follow [CLI-PQC-13](#CLI-PQC-13). What a candidate seals counts as disclosed to every key of the tree it was built on.
+- **Session info.** A commit seals the full info only when the device holds the one in force at the parent; otherwise the
+  marker "unchanged" (empty content). A changed info is taken only from an admin's commit. **Freshness (owner):** a commit that
+  seals a changed info (room and store lists) is built only after the head and the roster were read at a final block under
+  the strict majority over at least 3 named endpoints ([ARCH-POS-15](../decisions.md#ARCH-POS-15)); with fewer the crate
+  refuses the change by name.
+- **No return (owner).** The crate leaves and removes by `PqChatTreeLeave` and `PqChatTreeRemove`, whose review says the UA
+  cannot come back. A user comes back as a **new UA** with a fresh KEM key, added by an admin: the crate shows it as a new
+  member, never links it to the old UA on its own, and gives it no history before its join. No "rejoin" call exists.
 - **Replay** needs state only ([CLI-PQC-09](#CLI-PQC-09)). Its reads are fixed by public data, the same whether a ciphertext
   opens or not, and each fetched record, list, ciphertext, wrap and key is compared with its signed hash before use: the
   Welcome wrap and the joiner's path ciphertext, then one path ciphertext per later commit (the target that covers the device's
   leaf), each derived node key compared with the signed hash, `sealedInfo` opened as the confirmation. The roster of each epoch
-  is the live leaves with the later commits undone; which epoch won is the home's state.
+  is the live leaves with the later commits undone, anchored to the head's signed tree hash; a non-admin's drop of another UA
+  needs that UA's signed leave or removal; a key has one period in a session; which epoch won is the home's state.
 - **Not followed.** A missing or wrong ciphertext leaves that epoch unreadable on the device: it is shown, the reads go on
-  unchanged, and nothing is sent automatically ([CLI-PQC-07](#CLI-PQC-07)). As proposed (the spec's O2, open with the owner) the
-  device follows again at the next commit that reaches its leaf, its own commit on the user's request included.
+  unchanged, and nothing is sent automatically ([CLI-PQC-07](#CLI-PQC-07)). The device follows again at the next commit that
+  reaches its leaf or a node it holds, its own commit on the user's request included (it seals the marker).
+- **A compromise warning (owner).** One UA signature lets its holder build the next epoch (accepted, as mode 0's `rekey`). A
+  completed commit from the device's own `(ua, keyId)` that its seed does not reproduce is shown as a compromise warning, a
+  state of its own, never as "not followed".
+- **What shows that a device followed (owner).** The claim "the same whether a ciphertext opens or not" holds for the replay
+  reads and for contract writes. A tree session sends **no automatic receipt**; a send held while a child was not final goes
+  back to the user. The store read by the epoch hint stays and is the one inherited signal (one bit per epoch to a watcher of
+  the store; scheme 1 is outside [ARCH-POS-13](../decisions.md#ARCH-POS-13) by the owner's change of 2026-11-13).
 - **The home's setting** comes from pinned deployment data or a majority read and is pinned; the mode is pinned with `treeId`.
 - **The size hint.** The crate proposes the tree mode from about 7 keys where several members commit; it enforces nothing.
 

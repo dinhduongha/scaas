@@ -62,10 +62,10 @@ CLI-PQC-16 (owner). Ids of branch `pqchat-sigs` this builds on: CTR-CHAT-23 (sig
 - R13. **Freshness before publishing newly private session information** (a changed `sealedInfo`: room and store lists): the
   client needs the head and the roster read at a final block under the strict majority over **at least 3 named endpoints**
   (ARCH-POS-15). With fewer it refuses (§11; codex-4).
-- R14. **No return (mode 1 only).** "Không cho thành viên quay lại": a UA that was removed from a tree session, or left it,
+- R14. **No return (mode 1 only).** "Members are not allowed back" (the owner's words, translated here and below): a UA that was removed from a tree session, or left it,
   is never added back to that session; the contract refuses the Add (C28). A UA's own key changes (a new `keyId`) are not a
-  return. "Muốn quay lại thì user sẽ tạo UA mới rồi thêm vào": the way back is a **new UA** (a new account index or a new
-  seed, a KEM holder with its own registry record), added by a live admin like any new member. "Có, chặn cả kemHash": the
+  return. "To come back, the user creates a new UA and is added": the way back is a **new UA** (a new account index or a new
+  seed, a KEM holder with its own registry record), added by a live admin like any new member. "Yes, block the `kemHash` too": the
   set also holds the `kemHash` of **every key ever taken out** of the session, and an Add of such a key is refused under any
   UA, with an error of its own; a new UA comes with a fresh KEM key. Mode 0 and PqVault are unchanged: re-adds stay allowed
   there.

@@ -723,50 +723,76 @@ scheme 1, in minimal scope (a commit with an UpdatePath, Adds and Removes, Welco
   `members[i]`, written when wrap `i` of epoch 0 lands, every parent blank, one wrap per member key. A later epoch is a signed
   `PqChatCommit` through `commit`: the author's path (new node keys, one path ciphertext per entry of each copath resolution),
   `TreeRemove`s, `TreeAdd`s and one Welcome wrap per added key. External commits, pre-shared keys and ReInit are out.
-- **Typed records.** `PqChatCommit`, `TreeAdd`, `TreeRemove`, `PathList`, `PathCt`, EIP-712 in `DS_C`, every field named
-  ([CTR-CHAT-03](#CTR-CHAT-03)); the type strings are the spec's §6. One entry per operation: `commit`, and `addPathList`,
-  `addPathKeys` and `addPath` for the remaining pieces, by anyone ([CTR-CHAT-19](#CTR-CHAT-19)).
+- **Typed records.** `PqChatCommit`, `TreeAdd`, `TreeRemove`, `PathList`, `PathCt`, `PqChatTreeLeave`, `PqChatTreeRemove`,
+  EIP-712 in `DS_C`, every field named ([CTR-CHAT-03](#CTR-CHAT-03)); the type strings are the spec's §6. One entry per
+  operation: `commit`, `treeLeave`, `treeRemove`, and `addPathList`, `addPathKeys` and `addPath` for the remaining pieces, by
+  anyone ([CTR-CHAT-19](#CTR-CHAT-19)).
 - **Nothing is lost.** The record, the target list, every node key and every path ciphertext stay in SSTORE2 blobs
   ([CTR-CHAT-05](#CTR-CHAT-05)); pieces land in chunks against their signed hashes ([CTR-CHAT-07](#CTR-CHAT-07)).
 - **Order, rights, leave, removal** are this page's: one child per parent in the home instance
-  ([CTR-CHAT-08](#CTR-CHAT-08)), the rights of [CTR-CHAT-09](#CTR-CHAT-09) per UA, `remove`
-  ([CTR-CHAT-20](#CTR-CHAT-20)) and `leave` ([CTR-CHAT-10](#CTR-CHAT-10)) with their records unchanged; the next commit
-  completes only without a removed UA's leaves.
+  ([CTR-CHAT-08](#CTR-CHAT-08)), the rights of [CTR-CHAT-09](#CTR-CHAT-09) per UA, removal
+  ([CTR-CHAT-20](#CTR-CHAT-20)) and leaving ([CTR-CHAT-10](#CTR-CHAT-10)) by the tree's own records, which sign `treeId`; the
+  next commit completes only without the leaves of a UA that left or was removed.
+- **No return (owner 2026-11-23, mode 1 only).** A UA that left a tree session or was removed from it is never added back
+  to it (`PqChatTreeReturn(ua)`), and a key that was taken out of it is never added again under any UA
+  (`PqChatTreeKeyReturn(kemHash)`). The way back is a **new UA** with a fresh KEM key, added by a live admin like any new
+  member: another identity, never linked to the old one by a client or on chain, with no history before its join; no entry is
+  a "rejoin". A UA's own key changes (a new `keyId` with a new key) are not a return. Mode 0 and `PqVault` keep re-adds.
+- **Accepted cost of the joiner without RFC 9420's `init` chain (owner 2026-11-23):** as in mode 0's `rekey`, one UA signature
+  lets its holder build the next epoch; the contract cannot check knowledge of the previous one.
 - **Recovery** is from state alone ([CTR-CHAT-14](#CTR-CHAT-14)), by replaying the commits since the device's Welcome.
 - **Owner rulings on the first spec's open points (2026-11-23):** the leaf is the registry KEM key, not refreshed per commit; a
   non-admin commits only for its own UA's leaves; no tree session on a `none` home or a replica; ML-KEM-1024 the one node
-  scheme; `TREE_LEAVES_MAX` = 256 on the premise that every piece fits a 60 M block, to be confirmed on the figures of the
-  spec's revision 2 (its §13, §16 O1).
+  scheme; `TREE_LEAVES_MAX` = 256, confirmed: one session record creates up to about 200 keys at a 60 M block, the rest come
+  by Adds. **On the second review (2026-11-23):** impossible commits are refused at acceptance
+  ([CTR-CHAT-27](#CTR-CHAT-27)); no automatic receipts, the freshness rule and the compromise warning are the client's
+  ([CLI-PQC-16](../clients/pqchat-core.md#CLI-PQC-16)).
 
 <a id="CTR-CHAT-27"></a>**CTR-CHAT-27** — **The tree mode's checks and bounds: an `sstore2` home only, the home instance only,
 scheme-1 node keys that pass the admission check, leaves by reference to registry KEM keys with their key hash, and the landed
-target list and the signed `treeHash` compared with what the contract computes when a commit completes** (controller calls
-C1–C27 of the spec's §2, revision 2, the owner may override; C1, C2, C4, C5, C6, C8 and the cap are owner rulings; in the
+signed `treeHash`, counts and removed UAs compared with what the contract computes when a commit's record is accepted**
+(controller calls C1–C36 of the spec's §2, revision 3, the owner may override; C1, C2, C4, C5, C6, C8, the cap, C7's check at
+acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
 [register](../decisions.md#ctr-chat-27--the-tree-modes-checks-and-bounds-controller-calls)).
 
 - **Where.** `createSession` with `groupMode = 1` is `PqChatTreeSigStore()` on a home whose signature-storage setting is `none`,
-  and `PqChatTreeHome()` in an instance that is not the session's home. `rekey` on a tree session and `commit` on a flat one are
-  `PqChatModeEntry(groupMode)`. A commit names `treeId = hashStruct(PqChatSession)`; another session's is `PqChatTreeHome()`.
+  and `PqChatTreeHome()` in an instance that is not the session's home. `rekey`, `leave` and `remove` on a tree session and
+  `commit`, `treeLeave` and `treeRemove` on a flat one are `PqChatModeEntry(groupMode)`. A commit, a `treeLeave` and a
+  `treeRemove` name `treeId = hashStruct(PqChatSession)`; another session's is `PqChatTreeHome()`. A commit also signs
+  `parentTreeHash`, compared with the head's tree hash (`PqChatTreeParent`). Epoch 0 is sealed under `genesisCtx`, the typed
+  hash of the session record without `wrapHashes` and `sealedInfo`, so a creator can build it in order.
 - **The tree.** RFC 9420's array layout, blanks and resolution without unmerged leaves: an Add blanks the new leaf's direct
   path and the added leaf is in the resolution; the tree never shrinks; every commit carries a path. A leaf is a `(ua, keyId)`
   the registry holds, hashed with `kemHash = keccak256(kemPk)`; a node key is a `kemPk` of 1,601 B. No two live leaves hold one
-  key (`PqChatTreeKeyLive`). The tree hash is a typed keccak256 hash (the spec's §4); there is no parent hash.
+  key (`PqChatTreeKeyLive`), and an admitted key has one encoding (a canonical `pk_X`). The tree hash is a typed keccak256
+  hash (the spec's §4); there is no parent hash.
 - **Pieces.** The record signs `ctCount` and `ctListHash`; the list of targets and ciphertext hashes, the node keys, each
   ciphertext and each Welcome wrap land as pieces, each checked when it lands. A tree epoch's `wraps` counter is its piece count
   plus one, and the last unit is added only by the completion, so `epochComplete` and every shared entry see a staged or losing
   tree epoch as incomplete.
 - **Checked by the contract:** signatures and nonces; `treeId`; the author's live leaf; the rights per UA (a non-admin changes
   keys of its own UA only); an Add's `scheme == 1`, its `kemHash` against the registry and the public-key admission check of
-  scheme 1 (also on every node key: `PqChatKemKey`); shapes and sizes at acceptance; every piece against its signed hash, once;
-  and at completion the removed UAs, the resolution walk against the landed targets (`PqChatTreeTargets`) and the root,
-  recomputed after the changes and the new keys, against `treeHash` (`PqChatTreeHash`). A commit that fails never becomes an
-  epoch. **Checked by clients only:** that a node key derives from its path secret and that a ciphertext opens to it; a member
+  scheme 1 (also on every node key: `PqChatKemKey`); the no-return sets; shapes and sizes; **and, at acceptance, the tree of
+  the commit computed in memory on the head:** no leaf of a UA that left or was removed, the path length and the target count
+  of the resolution walk (`PqChatTreeTargets`), and the root after the changes and the new keys against `treeHash`
+  (`PqChatTreeHash`); then every piece against its signed hash, once, the list's targets against the expected ones. So no
+  record is staged that could not complete on the head it was accepted on; completion checks again only the UAs that went
+  since, and writes. About 3 M more regular gas at acceptance at the bounds (estimate). **Checked by clients only:** that a node key derives from its path secret and that a ciphertext opens to it; a member
   that cannot follow an epoch shows it and sends nothing by itself.
-- **`remove` and admins.** A `remove` is `PqChatTreeBacklog` when the leaves owed to removals at the head would exceed
-  `TREE_CHANGES_MAX`; a commit that changes `admins`, and a `remove`, leave an admin with a live leaf (`PqChatTreeAdmins`).
+- **Removal, leaving and admins.** A leave is forced like a removal: the next commit blanks the leaves. A `treeRemove` or a
+  `treeLeave` is `PqChatTreeBacklog` when the leaves owed at the head would exceed `TREE_CHANGES_MAX`; a commit that changes
+  `admins` otherwise than by dropping UAs that are gone, and a `treeRemove`, leave an admin with a live leaf
+  (`PqChatTreeAdmins`).
+- **The no-return sets.** `gone[ua]`: one slot per UA that left or was removed, written by `treeLeave`, `treeRemove`, or the
+  completion that leaves a UA without a leaf. `goneKey[kemHash]`: one slot per key taken out, written when its leaf is
+  blanked, holding the key's one period (`goneKeyOf`). Each slot is 97,920 of state gas and about 22,100 regular (estimate);
+  an Add reads both (4,200 regular). Neither is ever cleared.
+- **Creation.** The creator joins `sessionsOf` with the record, every other member UA when its first wrap lands, so the
+  record's transaction carries no per-member index slot.
 - **Bounds.** `TREE_LEAVES_MAX` = 256 keys (owner), `TREE_CHANGES_MAX` = 32 adds plus removes per commit, `TREE_ADMINS_MAX` =
-  32, `TREE_INFO_MAX` = 4,096 B, at most 8 keys per UA. The contract enforces no minimum size; "useful from about 7 keys, where
+  32, `TREE_INFO_MAX` = 4,124 B (at creation too), 64 leaves per `treeLeaves` call, at most 8 keys per UA. The contract enforces no minimum size; "useful from about 7 keys, where
   several members commit" is a client hint. Gas figures: the spec's §13 (estimates until the plan's gas task pins them): no
-  commit piece asks more than 34.5 M; the session record, mode 0's, holds about 200 member keys at a 60 M block (68 to 71 M
-  asked at 256), so a tree of 256 keys is reached by Adds there.
-- **Open with the owner** (the spec's §16): the cap on those figures; the joiner secret without RFC 9420's `init` chain.
+  commit piece asks more than 42.9 M (a record at its bounds signed with ML-DSA-87; 37.6 M with ML-DSA-65); the session record,
+  mode 0's, holds about 200 member keys at a 60 M block (68 to 71 M asked at 256), so a tree of 256 keys is reached by Adds
+  there.
+- **Open with the owner:** nothing (the spec's §16).
