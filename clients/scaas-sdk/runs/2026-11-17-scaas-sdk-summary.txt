@@ -350,6 +350,9 @@ features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 sdk-vectors | 190cc2ba7 | 0 | 21 passed, 0 failed, 0 ignored (2 binaries)
 ua-verify-only | 190cc2ba7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
 ua-core | 190cc2ba7 | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
+cli | 190cc2ba7 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+bind-gen | 190cc2ba7 | 0 | -
+docs | 2592e0de8 | 0 | -
 bind-gen | 76c43264c | 0 | -
 sdk-test | 76c43264c | 0 | 467 passed, 0 failed, 18 ignored (42 binaries)
 sdk-noevm | 76c43264c | 0 | 169 passed, 0 failed, 1 ignored (23 binaries)
@@ -405,9 +408,6 @@ ua-vectors | 190cc2ba7 | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
 ua-appcore | 190cc2ba7 | 0 | 20 passed, 0 failed, 0 ignored (1 binaries)
 ua-verify-only | 190cc2ba7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
 ua-core | 190cc2ba7 | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
-cli | 190cc2ba7 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
-bind-gen | 190cc2ba7 | 0 | -
-docs | 2592e0de8 | 0 | -
 rpc-test | 2592e0de8 | 0 | 232 passed, 0 failed, 10 ignored (23 binaries)
 sdk-clippy | 2592e0de8 | 0 | -
 ua-clippy | 2592e0de8 | 0 | -
@@ -430,3 +430,17 @@ docs | 6fd5d6e5c | 0 | -
 mutants-check | 957827e7c | 0 | -
 cli | 957827e7c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 sdk-deny | 957827e7c | 0 | -
+sdk-clippy | 69798ca92 | 0 | -
+sdk-clippy-noevm | 69798ca92 | 0 | -
+rpc-clippy | 69798ca92 | 0 | -
+ua-clippy | 69798ca92 | 0 | -
+cli | 69798ca92 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+bind-gen | dfc306d1e | 0 | -
+docs | dfc306d1e | 0 | -
+mutants-check | dfc306d1e | 1 | -
+# the rows above at 69798ca92 / dfc306d1e (t26-merge: origin/ua-rs-sign e26c2dece + sdk-t26-fix 82cfd4f25, sdk-t26-c 502110714,
+# sdk-t26-b 589115908; then 384e7a72d regenerated bindings, dfc306d1e rustfmt only): the older rows of these steps kept by hand
+# (the runner replaces a step's rows). mutants-check rc 1 is five mutant texts sdk-t26-fix had already moved from at 82cfd4f25
+# (its row at 1597f994a): t13rulings R3, t13sponsor's receiver check, t16a R6, t18b's two noticePeriod ones; not re-anchored.
+# cargo check --tests (--locked --offline -j 2, capped) at dfc306d1e: scaas-node, pqchat-core, pqvault-core rc 0;
+# format.sh --check rust py sh js rc 0.
