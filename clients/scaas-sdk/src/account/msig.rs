@@ -427,16 +427,26 @@ fn leaves_active(
     slots: &[MsigSlot],
 ) -> Result<(), SdkError> {
     for s in slots {
-        if let MsigSlot::Msig { index, members } = s {
-            let id = structure
-                .members
-                .get(usize::from(*index))
-                .ok_or(SdkError::Argument)?
-                .id;
-            let v = views.get(&id).ok_or(SdkError::Argument)?;
-            if members.iter().any(|l| !v.active(l.index)) {
-                return Err(SdkError::MsigSlotInactive);
+        let leaves: Vec<u16> = match s {
+            MsigSlot::Msig { members, .. } => members.iter().map(|l| l.index).collect(),
+            // review A2-11: a slot signed elsewhere names its inner leaves too, checked as a local slot's
+            MsigSlot::Signed { member, .. } => {
+                let m = member_of(member)?;
+                if m.members.is_empty() {
+                    continue;
+                }
+                m.members.iter().map(|l| l.index).collect()
             }
+            MsigSlot::Member { .. } => continue,
+        };
+        let id = structure
+            .members
+            .get(usize::from(s.index()))
+            .ok_or(SdkError::Argument)?
+            .id;
+        let v = views.get(&id).ok_or(SdkError::Argument)?;
+        if leaves.iter().any(|i| !v.active(*i)) {
+            return Err(SdkError::MsigSlotInactive);
         }
     }
     Ok(())

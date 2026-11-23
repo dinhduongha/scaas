@@ -335,6 +335,21 @@ async fn msig_minimal_sets() {
     // msig-nested-heavy-outer: the inner slot (w2) by inner-pq's {0, 1} alone
     let s = sign(&outer, vec![leaves(&[0, 1])]).await.unwrap();
     assert_eq!(verify(&outer, &s), Ok(()));
+    // review A2-11: the same slot signed elsewhere (`Signed`, as `member_sign` writes it) names its inner leaves
+    let signed = {
+        let mut m = super::members_json(&s).unwrap()[0].clone();
+        m["ua"] = hex(&scaas_ua::derive_ua(MSIG, &outer, false).unwrap()).into();
+        m["purpose"] = hex(&purpose).into();
+        m["digest"] = hex(&digest).into();
+        MsigSlot::Signed {
+            index: 0,
+            member: m.to_string(),
+        }
+    };
+    assert!(
+        sign(&outer, vec![signed.clone()]).await.is_ok(),
+        "control: a Signed slot"
+    );
     assert_eq!((s.members.len(), s.members[0].members.len()), (1, 2));
     assert_eq!(
         code(sign(&outer, vec![leaves(&[0, 1]), member(&t, 1, FNDSA512, 2)]).await),
@@ -355,6 +370,11 @@ async fn msig_minimal_sets() {
     assert_eq!(
         code(sign(&outer, vec![leaves(&[0, 1])]).await),
         "MsigSlotInactive"
+    );
+    assert_eq!(
+        code(sign(&outer, vec![signed.clone()]).await),
+        "MsigSlotInactive",
+        "review A2-11: an inactive inner leaf of a slot signed elsewhere"
     );
     record(&t, REGISTRY, &inner_pq, &inner_pq, 0, 0b11, 0b11);
     assert!(
@@ -994,15 +1014,18 @@ async fn msig_members_apart() {
     let mut inner: serde_json::Value = serde_json::from_str(&j).unwrap();
     inner["members"] = serde_json::json!(vec![serde_json::json!({"index": 0, "sig": "0x00"}); 257]);
     assert_eq!(at(with(inner.to_string())).await, "Argument");
+    assert!(super::member_of(&inner.to_string()).is_err(), "257 inner signatures");
     assert_eq!(
         se.n.load(std::sync::atomic::Ordering::SeqCst),
         asked,
         "no device asked"
     );
-    // the controls: at 64 KiB and at 256 inner signatures the slot is read (combined; the registry checks the signatures)
+    // the controls: at 64 KiB the slot is read (combined; the registry checks the signatures); 256 inner signatures parse, but
+    // on this single-key slot they name no inner `msig`: refused since review A2-11 (an inner leaf is checked active)
     assert_eq!(at(with(pad(64 << 10))).await, "Ok");
     inner["members"] = serde_json::json!(vec![serde_json::json!({"index": 0, "sig": "0x00"}); 256]);
-    assert_eq!(at(with(inner.to_string())).await, "Ok");
+    assert!(super::member_of(&inner.to_string()).is_ok(), "256 inner signatures");
+    assert_eq!(at(with(inner.to_string())).await, "Argument");
     // the secure-element slot not accepted: its own code, no device asked
     record(&t, REGISTRY, &kd, &kd, 0, 0b11, 1 << fi);
     let n = se.n.load(std::sync::atomic::Ordering::SeqCst);
