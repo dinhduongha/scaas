@@ -690,7 +690,7 @@ fn target_of(
     rec: &dyn Fn(&[u8; 32], u64) -> KemRecord,
 ) -> scaas_ua::wallet::Result<TargetKey> {
     match tree.node(x) {
-        Node::Leaf(l) if epoch == 0 => Ok(TargetKey::Record(rec(&l.ua, l.key_id))),
+        Node::Leaf(l) if epoch == 0 => Ok(TargetKey::Record(Box::new(rec(&l.ua, l.key_id)))),
         _ => key_of(rd, tree, x).map(TargetKey::Key),
     }
 }
@@ -1357,7 +1357,9 @@ fn tree_refusals_beside_twins() {
     let tree = prep0.tree.clone();
     let target = |rd: &mut Home, x: u32, how: u8| match (tree.node(x), how) {
         (Node::Leaf(_), 1) => Ok(TargetKey::Key(key_of(rd, &tree, x)?)),
-        (Node::Leaf(l), 2) => Ok(TargetKey::Record(flipped(&world.record(&l.ua, l.key_id)))),
+        (Node::Leaf(l), 2) => Ok(TargetKey::Record(Box::new(flipped(
+            &world.record(&l.ua, l.key_id),
+        )))),
         _ => target_of(rd, &tree, 0, x, &records),
     };
     for (how, want) in [(0, "accepted"), (1, "TreeKemRecord"), (2, "TreeKemRecord")] {
@@ -2008,10 +2010,10 @@ fn tree_kem_record_check() {
         pop: unhex(&c["pop"]),
         kem_pk: unhex(&g["attrs"]["kemPk"]),
     };
-    let reg = |r: &KemRecord, f: &dyn Fn(&mut Vec<u8>, &mut Vec<u8>, &mut Vec<u8>)| {
+    let reg = |r: &KemRecord, f: &dyn Fn(&mut Vec<u8>, &mut Vec<u8>)| {
         let KemRecord::Registration {
             kind,
-            mut key_data,
+            key_data,
             attrs,
             mut pop,
             mut kem_pk,
@@ -2019,7 +2021,7 @@ fn tree_kem_record_check() {
         else {
             panic!()
         };
-        f(&mut key_data, &mut pop, &mut kem_pk);
+        f(&mut pop, &mut kem_pk);
         KemRecord::Registration {
             kind,
             key_data,
@@ -2030,13 +2032,13 @@ fn tree_kem_record_check() {
     };
     for (form, r) in [("in full", &full), ("as the hash commit", &commit)] {
         assert_eq!(ok(&g["ua"], 0, r), "accepted", "{form}");
-        let sub = reg(r, &|_, _, k| *k = unhex(&v1["kemPk"]));
+        let sub = reg(r, &|_, k| *k = unhex(&v1["kemPk"]));
         assert_eq!(
             ok(&g["ua"], 0, &sub),
             "TreeKemRecord",
             "{form}: a substituted key"
         );
-        let flip = reg(r, &|_, p, _| p[9] ^= 1);
+        let flip = reg(r, &|p, _| p[9] ^= 1);
         assert_eq!(
             ok(&g["ua"], 0, &flip),
             "TreeKemRecord",
@@ -2053,6 +2055,6 @@ fn tree_kem_record_check() {
             "{form}: another version"
         );
     }
-    let empty = reg(&full, &|_, _, k| k.clear());
+    let empty = reg(&full, &|_, k| k.clear());
     assert_eq!(ok(&g["ua"], 0, &empty), "TreeKemRecord", "no key");
 }

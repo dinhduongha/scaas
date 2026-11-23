@@ -439,7 +439,7 @@ pub struct CommitInput<'a> {
 /// covers, or a leaf's registry record where none does yet (every leaf of an epoch-0 head).
 pub enum TargetKey {
     Key(Vec<u8>),
-    Record(KemRecord),
+    Record(Box<KemRecord>),
 }
 
 /// Target `x`'s key of the parent tree, checked inside the boundary: a node's against its `keyHash`; a leaf's against its
@@ -766,9 +766,20 @@ impl TreePrepared {
         let td = (sc.typed)(name, rec)?;
         let v = td.to_value();
         let mut review = vec![("record".to_string(), name.to_string())];
-        for f in v["types"][name].as_array().into_iter().flatten() {
-            let n = f["name"].as_str().ok_or(Error::Argument)?;
-            review.push((n.to_string(), show(&v["message"][n])));
+        let fields = v
+            .get("types")
+            .and_then(|t| t.get(name))
+            .and_then(Value::as_array);
+        for f in fields.into_iter().flatten() {
+            let n = f
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or(Error::Argument)?;
+            let x = v
+                .get("message")
+                .and_then(|m| m.get(n))
+                .ok_or(Error::Argument)?;
+            review.push((n.to_string(), show(x)));
         }
         review.extend(more);
         Ok(TreePrepared {
@@ -787,7 +798,11 @@ impl TreePrepared {
     }
     /// The record as it is signed (its named fields, `0x` hex).
     pub fn record(&self) -> Value {
-        self.td.to_value()["message"].clone()
+        self.td
+            .to_value()
+            .get("message")
+            .cloned()
+            .unwrap_or(Value::Null)
     }
     /// The single UA key's `UASig` over the prepared record under the scope's purpose (a native key or an `msig`: `Argument`).
     pub fn sign(self, key: &dyn Signer) -> Result<UASig> {

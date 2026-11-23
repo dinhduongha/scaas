@@ -342,7 +342,6 @@ sdk-vectors | 1e73c93e4 | 0 | 19 passed, 0 failed, 0 ignored (2 binaries)
 rpc-test | 1e73c93e4 | 0 | 231 passed, 0 failed, 10 ignored (23 binaries)
 rpc-clippy | 1e73c93e4 | 0 | -
 ua-test | 1e73c93e4 | 0 | 630 passed, 0 failed, 3 ignored (64 binaries)
-ua-appcore | 1e73c93e4 | 0 | 19 passed, 0 failed, 0 ignored (1 binaries)
 ffi | 1e73c93e4 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 bind-gen | 1e73c93e4 | 0 | -
 bind-dart | 1e73c93e4 | 0 | dart: +14:
@@ -368,8 +367,8 @@ sdk-vectors | 190cc2ba7 | 0 | 21 passed, 0 failed, 0 ignored (2 binaries)
 ua-test | 190cc2ba7 | 0 | 629 passed, 0 failed, 3 ignored (64 binaries)
 ua-clippy | 190cc2ba7 | 0 | -
 ua-vectors | 190cc2ba7 | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
-ua-appcore | 190cc2ba7 | 0 | 20 passed, 0 failed, 0 ignored (1 binaries)
 ua-verify-only | 190cc2ba7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
 ua-core | 190cc2ba7 | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
 cli | 190cc2ba7 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 bind-gen | 190cc2ba7 | 0 | -
+ua-appcore | 18e89d524 | 101 | -
