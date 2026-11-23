@@ -43,3 +43,11 @@ killed   | M41 the path length unchecked | PqGroupTree.sol | 1 failed: test_acce
 killed   | M6 a non-admin adding another UA's key | PqGroupTree.sol | 1 failed: test_adminRules
 killed   | M14 the tree hash check moved back to completion | PqGroupTree.sol | 1 failed: test_acceptanceRefusalsWriteNothing
 result: 41 of 41 killed
+
+# T3c part 2 (source at 198ade5bf plus the R16 (2) tests): M16 re-run against the new tests; M37 follows the treeRemove line of
+# part 1; M42 and M43 are the two plan mutants T3b's runner lacked (M17 renamed: the pair-set write only).
+killed   | M16 own-key churn written to the session-wide set | PqGroupTree.sol | 4 failed: test_r16_frontRunningLoop, test_r16_keysHeldAtOnce, test_r16_ownKeyChurnHarmsNobody, test_r16_replacementOfAnOnlyKey
+killed   | M37 a treeRemove leaving no admin with a leaf | PqChatTree.sol | 2 failed: test_adminRules, test_keylessAdminKeepsALeafedAdmin
+killed   | M42 goneKey written by the last leave (C38) | PqChatTree.sol | 1 failed: test_closedSession
+killed   | M43 the session-wide set keyed by (ua, kemHash) | PqGroupTree.sol | 2 failed: test_r16_burnByLeave, test_removalVoidsAStagedCommit
+result: 43 of 43 killed

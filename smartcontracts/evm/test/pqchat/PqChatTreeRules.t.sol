@@ -386,6 +386,87 @@ contract PqChatTreeRulesTest is PqChatTreeModel {
         _land(st, n, m);
     }
 
+    /// (2) the front-running loop is impossible (codex-r3-8): B repeats (1) on A's next three keys, each before A's Add;
+    /// each churn writes the pair only and each of A's Adds after it is accepted.
+    function test_r16_frontRunningLoop() public {
+        _open(); // the vectors in this call's memory
+        M memory m = _abe(_list(A, E));
+        Step memory st;
+        M memory n;
+        for (uint64 s = 1; s <= 3; ++s) {
+            IUARegistry.KemKey memory v = _variant("A2", s);
+            _setKem(A, 4 + s, v);
+            _setKem(B, 20 + s, v);
+            bytes32 k = _kemHash(A, 4 + s);
+            uint32 at = uint32(m.used);
+            (st, n) = _build(m, 1, _chs(_add(at, B, 20 + s)), _list(A, E));
+            n = _land(st, n, m);
+            (st, m) = _build(n, 1, _chs(_rm(at, B, 20 + s)), _list(A, E));
+            m = _land(st, m, n);
+            (bool own,,) = _goneOwnKey(vchat, m.sid, B, k);
+            (bool wide,,) = _goneKey(vchat, m.sid, k);
+            assertTrue(own && !wide, "the pair only");
+            (st, n) = _build(m, 0, _chs(_add(at, A, 4 + s)), _list(A, E));
+            m = _land(st, n, m); // A's Add after B's churn
+        }
+    }
+
+    /// (2), the keys B holds at once: with B at `KEYS_PER_UA_MAX` live keys, one of them A's next key, A's Add of it is
+    /// `PqChatTreeKeyLive`, also when B swaps one key for A's following key in one commit; once B releases the key while it
+    /// stays a member (B takes it out; an admin removes that leaf while B keeps others) only the pair is written and A's
+    /// Add of it is accepted.
+    function test_r16_keysHeldAtOnce() public {
+        _open(); // the vectors in this call's memory
+        M memory m = _abe(_list(A, E));
+        // B at 8 live keys: 7 more, the first of them A's next key (A 8 = B 24), at leaves 3..9
+        _copyKey(8, 24, 4);
+        Ch[] memory seven = new Ch[](7);
+        seven[0] = _add(3, B, 24);
+        for (uint64 i = 1; i < 7; ++i) {
+            _setKem(B, 30 + i, _variant("B", i));
+            seven[i] = _add(uint32(3 + i), B, 30 + i);
+        }
+        m = _step(m, 1, seven);
+        assertEq(_liveCount(vchat, m.sid, B), 8);
+        (Step memory x,) = _build(m, 0, _chs(_add(10, A, 8)), _list(A, E));
+        _refused(x, _err(IPqChat.PqChatTreeKeyLive.selector, _kemHash(A, 8)));
+        // B swaps (B 31) for A's following key (A 9 = B 25) in one commit: B stays at 8, A's Add of it collides
+        _copyKey(9, 25, 5);
+        m = _step(m, 1, _chs(_rm(4, B, 31), _add(4, B, 25)));
+        assertEq(_liveCount(vchat, m.sid, B), 8);
+        (x,) = _build(m, 0, _chs(_add(10, A, 9)), _list(A, E));
+        _refused(x, _err(IPqChat.PqChatTreeKeyLive.selector, _kemHash(A, 9)));
+        // B takes A's key out: the pair only; A's Add accepted
+        m = _step(m, 1, _chs(_rm(3, B, 24)));
+        _pairOnly(m.sid, B, _kemHash(A, 8));
+        m = _step(m, 0, _chs(_add(3, A, 8)));
+        // the admin A removes B's leaf with A's following key while B keeps others: the pair only; A's Add accepted
+        m = _step(m, 0, _chs(_rm(4, B, 25)));
+        _pairOnly(m.sid, B, _kemHash(A, 9));
+        (uint256 kind,) = _gone(vchat, m.sid, B);
+        assertEq(kind, 0, "B stays a member");
+        _step(m, 0, _chs(_add(4, A, 9)));
+    }
+
+    /// A's version `a` and B's version `b`, the same admitted bytes (B copies A's public key).
+    function _copyKey(uint64 a, uint64 b, uint256 seed) internal {
+        IUARegistry.KemKey memory v = _variant("A2", seed);
+        _setKem(A, a, v);
+        _setKem(B, b, v);
+    }
+
+    /// A commit from `leaf` with `chs`, admins [A, E], landed.
+    function _step(M memory m, uint32 leaf, Ch[] memory chs) internal returns (M memory) {
+        (Step memory st, M memory n) = _build(m, leaf, chs, _list(A, E));
+        return _land(st, n, m);
+    }
+
+    function _pairOnly(bytes32 sid, bytes32 ua, bytes32 k) internal view {
+        (bool own,,) = _goneOwnKey(vchat, sid, ua, k);
+        (bool wide,,) = _goneKey(vchat, sid, k);
+        assertTrue(own && !wide, "the pair only");
+    }
+
     /// (3) the burn by leave: B holds A's key, leaves, the honouring commit writes it session-wide; A's Add of it is
     /// `PqChatTreeKeyReturn`, an Add of B `PqChatTreeReturn`, B commits nothing.
     function test_r16_burnByLeave() public {

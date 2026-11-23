@@ -37,7 +37,7 @@ M = [
     ("the tree hash check moved back to completion", [(G, "        if (w.root != d.treeHash) _treeFail(T_HASH, uint256(w.root), 0);", "        if (completing && w.root != d.treeHash) _treeFail(T_HASH, uint256(w.root), 0);")]),
     ("gone cleared at completion", [(G, "                if (t.gone[r.ua].kind == 0) t.gone[r.ua] = Gone(2, d.epoch);", "                t.gone[r.ua] = Gone(0, 0);")]),
     ("own-key churn written to the session-wide set", [(G, "                t.goneOwnKey[r.ua][k] = g;", "                t.goneKey[k] = g;")]),
-    ("a going UA's keys written to the pair set only (the session-wide set keyed by (ua, kemHash))", [(G, "                t.goneKey[k] = g;", "                t.goneOwnKey[r.ua][k] = g;")]),
+    ("a going UA's keys written to the pair set only", [(G, "                t.goneKey[k] = g;", "                t.goneOwnKey[r.ua][k] = g;")]),
     ("the pair set unchecked at an Add", [(G, "            if (t.goneOwnKey[a.ua][k].set) _treeFail(T_OWN_KEY_RETURN, uint256(a.ua), uint256(k));\n", "")]),
     ("the session-wide set unchecked at an Add", [(G, "            if (t.goneKey[k].set) _treeFail(T_KEY_RETURN, uint256(k), 0);\n", "")]),
     ("the level judged before the Adds", [(G, "            if (_liveAfter(t, w, r.ua) == 0) {", "            if (t.keysOf[r.ua].live == 0) {")]),
@@ -62,6 +62,8 @@ M = [
     ("the info bound off by one", [(T, "c.sealedInfo.length > TREE_INFO_MAX", "c.sealedInfo.length >= TREE_INFO_MAX")]),
     ("the target count unchecked", [(G, "        if (n != d.ctCount) _treeFail(T_TARGETS, n, 0);\n", "")]),
     ("the path length unchecked", [(G, "        if (k != d.nodeKeyHashes.length) _treeFail(T_TARGETS, k, 0);\n", "")]),
+    ("goneKey written by the last leave (C38)", [(T, "        ep.left[l.member] = true;\n", "        ep.left[l.member] = true;\n        if (!_treeHasMember(t)) {\n            for (uint256 i; i < t.used; ++i) {\n                Leaf storage f = t.leafAt[i];\n                if (f.live) t.goneKey[keccak256(_kemPk(reg, f.ua, f.keyId))] = GoneKey(f.joinEpoch, ep.epoch, true);\n            }\n        }\n")]),
+    ("the session-wide set keyed by (ua, kemHash)", [(G, "                t.goneKey[k] = g;", "                t.goneKey[keccak256(abi.encode(r.ua, k))] = g;"), (G, "            if (t.goneKey[k].set) _treeFail(T_KEY_RETURN, uint256(k), 0);\n", "            if (t.goneKey[keccak256(abi.encode(a.ua, k))].set) _treeFail(T_KEY_RETURN, uint256(k), 0);\n")]),
 ]
 
 if sys.argv[1:] == ["check"]:
