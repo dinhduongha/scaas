@@ -317,6 +317,11 @@ async fn typed_digests_in_both_domains() {
         modes[usize::try_from(*mode).unwrap()] += 1;
     }
     assert_eq!(modes, [13, 10]);
+    // CTR-PQV-18: `createTreeKem`, a create record of groupMode 1 (refused by the contract and pqvault-core), hashes as signed
+    let tk = &d["createTreeKem"];
+    assert_eq!(tk["record"]["groupMode"], 1);
+    let t = typed(&d, "PqVaultCreate", &tk["record"], &ds_v(&d));
+    assert_eq!(digest(AppPath::Portable, t).await, s(&tk["typed"]));
     // a create record with its mode flipped after signing: the new mode's domain gives `typed`, never `signedTyped`
     for f in d["modes"]["flipped"].as_array().unwrap() {
         let (_, of) = named(&d, f["of"].as_str().unwrap());
@@ -433,6 +438,12 @@ async fn verify_app_record_on_the_committed_rows() {
         let t = typed(&d, r["struct"].as_str().unwrap(), &r["record"], &dom);
         assert!(verify(ua, p, t, ua_sig(&r["uaSig"])).await, "{}", r["name"]);
     }
+    // CTR-PQV-18: `createTreeKem` carries its creator's real signature (refused for its groupMode alone, by the contract)
+    let tk = &d["createTreeKem"];
+    let t = typed(&d, "PqVaultCreate", &tk["record"], &ds_v(&d));
+    let ua = s(&signer(&d, tk["signer"].as_str().unwrap())["ua"]);
+    assert_eq!(tk["error"], "PqVaultModeUnsupported(1)");
+    assert!(verify(ua, AppPath::Portable, t, ua_sig(&tk["uaSig"])).await);
 
     // one record per mode for the refusals
     for name in ["shared0.item", "shared1.item"] {

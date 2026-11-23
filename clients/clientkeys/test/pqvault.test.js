@@ -247,6 +247,25 @@ test("modes: ids of one creator and nonce differ by mode, mode 2 refused, a flip
   }
 });
 
+test("CTR-PQV-18: groupMode 0 in every vault's create record; createTreeKem (groupMode 1) signed, refused by name", () => {
+  for (const { r } of allRecords()) if (r.struct === "PqVaultCreate") assert.equal(r.record.groupMode, 0, r.name);
+  const t = R.createTreeKem;
+  const x = t.record;
+  assert.equal(x.groupMode, 1);
+  assert.equal(t.error, "PqVaultModeUnsupported(1)");
+  assert.equal(t.mode, 0);
+  assert.equal(t.hashStruct, h(pv.structHash("PqVaultCreate", x)));
+  assert.equal(t.typed, h(pv.typed("PqVaultCreate", x, pv.DS_V)));
+  assert.notEqual(t.typed, h(pv.typed("PqVaultCreate", { ...x, groupMode: 0 }, pv.DS_V)), "groupMode is in the digest");
+  const s = signer(t.signer);
+  assert.equal(t.uaMessage.digest, h(ua.uaMessage(s.kind, pv.P_V, fromHex(t.typed))));
+  assert.ok(verifyUA(s.kindName, fromHex(s.publicKey), pv.P_V, fromHex(t.typed), fromHex(t.uaSig.signature)));
+  assert.equal(t.sigHash, h(pv.sigHash(t.uaSig)));
+  assert.equal(t.blob, h(pv.groupBlob("PqVaultCreate", x, t.uaSig)));
+  assert.equal(t.id, h(pv.vaultId(x.creator, x.nonce, x.mode, x.homeChain, x.homeVaultContract)));
+  assert.equal(t.scope, h(pv.scopeVault(x.creator)));
+});
+
 test("a native msig member: the typed digest in mode 0, UAAuth in mode 1, each signature refused in the other mode", () => {
   const n = R.nativeMember;
   const addr = (sig, digest) => {

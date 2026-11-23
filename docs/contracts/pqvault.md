@@ -219,7 +219,9 @@ rule for both apps of the shared base; the owner confirmed the place and the 0-o
 release). The protocol ids are CTR-CHAT-25's. Status: **BUILT on branch `pqchat-sigs`, UNAUDITED**
 (`test/pqvault/PqVaultGroupMode.t.sol`). It is apart from the vault's `mode` (portable or chain-bound, CTR-PQV-17); the
 `PqVaultCreate` typehash `0xb5e6f032…84d587` → `0xa81afc5c…ef53f9`; `createVault`'s selector moves. `pqvault-core` signs 0 and
-refuses a read vault of any other mode.
+refuses a read vault of any other mode. The vectors' row `createTreeKem` (`smartcontracts/vectors/pqvault/records.json`, a
+signed create record of groupMode 1, `PqVaultModeUnsupported(1)`; TODO 8b-8 (1)) is read by clientkeys, `ua-rs`, the SDK,
+`pqvault-core` (refused at `verify` before any SDK call) and the contract's tests (refused by name).
 
 ## 10. The two modes
 

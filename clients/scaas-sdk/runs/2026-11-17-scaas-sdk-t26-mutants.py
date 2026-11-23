@@ -66,6 +66,8 @@ TOK = "clients/scaas-sdk/src/wallet/tokens.rs"
 ARW = "clients/scaas-rpc/src/arweave.rs"
 HOF = "clients/scaas-sdk/src/op/handoff.rs"
 HTP = "clients/scaas-rpc/src/http.rs"
+PQV = "clients/pqvault-core/src/vault.rs"
+PV = "cd clients/pqvault-core && ../../scripts/capped cargo test --locked --offline -j2"
 N = "cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
@@ -671,6 +673,12 @@ MUTANTS = [
         "B-20: the body read whole before the cap",
         [(HTP, "        if buf.len() + c.len() > cap {\n            return Ok(None);\n        }\n        each(c);\n        buf.extend_from_slice(c);\n    }\n    Ok(Some(buf))", "        each(c);\n        buf.extend_from_slice(c);\n    }\n    Ok((buf.len() <= cap).then_some(buf))")],
         R + " --lib http::read_tests::the_read_stops_at_the_first_chunk_past_the_cap",
+    ),
+    # TODO 8b-8 follow-ups of pqchat-sigs (2026-11-23), each beside its red-first test
+    (
+        "8b-8 (1): a vault of groupMode 1 verified",
+        [(PQV, "            || c.group_mode.0 != 0\n", "")],
+        PV + " --test core a_vault_of_group_mode_1_is_refused_before_any_call",
     ),
 ]
 

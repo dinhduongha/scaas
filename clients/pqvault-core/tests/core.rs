@@ -389,3 +389,74 @@ async fn generated_passphrase_is_six_bip39_words() {
     }
     assert!(rec.0.lock().unwrap().is_empty());
 }
+
+/// CTR-PQV-18: the vector row `createTreeKem` (shared0's create record with groupMode 1, signed by its creator) is
+/// `ChainUnverified` at verify before any SDK call; the control, the same record with groupMode 0, reaches the seam's
+/// signature check.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_vault_of_group_mode_1_is_refused_before_any_call() {
+    let _one = ONE.lock().await;
+    let (pv, rec, _, _) = setup().await;
+    let p = format!(
+        "{}/../../smartcontracts/vectors/pqvault/records.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let d: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+    let row = &d["createTreeKem"];
+    assert_eq!(row["error"], "PqVaultModeUnsupported(1)");
+    let create: VaultCreate = serde_json::from_value(row["record"].clone()).unwrap();
+    assert_eq!(create.group_mode, Num(1));
+    let vid = vault_id(
+        create.creator,
+        create.nonce.0,
+        0,
+        create.home_chain,
+        create.home_vault_contract,
+    );
+    assert_eq!(
+        hex(&vid.0),
+        row["id"].as_str().unwrap(),
+        "the row's vaultId"
+    );
+    let s = |c: VaultCreate| VaultState {
+        at: at(),
+        chain_uid: c.home_chain,
+        vault_id: vid,
+        epochs: vec![pqvault_core::EpochState {
+            id: vid,
+            number: 0,
+            parent: B32::default(),
+            author: c.creator,
+            admins: c.admins.clone(),
+            members: c.members.clone(),
+            wrap_hashes: c.wrap_hashes.clone(),
+            pass_kdf: 1,
+            pass_salt: c.pass_salt,
+            sealed_info: c.sealed_info.0.clone(),
+            nonce: c.nonce.0,
+            sig: sig_of(&row["uaSig"]).unwrap(),
+            removals: vec![],
+            own_wraps: vec![],
+        }],
+        me: c.creator,
+        create: c,
+        verified: false,
+        pending: false,
+    };
+    assert!(matches!(
+        pv.verify(s(create.clone())).await,
+        Err(Error::ChainUnverified)
+    ));
+    assert!(
+        rec.0.lock().unwrap().is_empty(),
+        "refused before any SDK call"
+    );
+    let mut flat = create;
+    flat.group_mode = Num(0);
+    assert!(pv.verify(s(flat)).await.is_err());
+    assert_eq!(
+        *rec.0.lock().unwrap(),
+        vec!["verify".to_string()],
+        "the control reaches the signature check"
+    );
+}
