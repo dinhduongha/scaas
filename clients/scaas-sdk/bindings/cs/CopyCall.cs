@@ -29,14 +29,18 @@ public static class CopyCall
     }
 
     /// <summary>Secret `id` (at most `cap` bytes) out; null when refused.</summary>
-    public static unsafe byte[]? Read(ulong id, int cap)
+    public static byte[]? Read(ulong id, int cap) => ReadVia(id, new byte[cap]);
+
+    /// <summary>[`Read`] through the buffer `out_` (its capacity the cap): the secret's bytes are copied out of it, then it is
+    /// zeroed, so no copy stays behind but the one returned (review T26 C-5).</summary>
+    public static unsafe byte[]? ReadVia(ulong id, byte[] out_)
     {
-        var out_ = new byte[cap];
         long n;
         fixed (byte* p = out_)
-            n = scaas_sdk_secret_read(id, p, (nuint)cap);
-        if (n < 0) return null;
-        return out_[..(int)n];
+            n = scaas_sdk_secret_read(id, p, (nuint)out_.Length);
+        var r = n < 0 ? null : out_[..(int)n];
+        CryptographicOperations.ZeroMemory(out_);
+        return r;
     }
 
     /// <summary>Secret `id` zeroed and freed; false when unknown.</summary>

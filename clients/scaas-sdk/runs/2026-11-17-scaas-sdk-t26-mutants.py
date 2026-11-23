@@ -17,6 +17,9 @@ FOL = "clients/scaas-sdk/src/op/follow.rs"
 APT = "clients/scaas-rpc/src/aptos.rs"
 COS = "clients/scaas-rpc/src/cosmos.rs"
 CPP = "clients/scaas-sdk/bindings/cpp/same_blocks.py"
+CS = "clients/scaas-sdk/bindings/cs/CopyCall.cs"
+SW = "clients/scaas-sdk/bindings/swift/CopyCall.swift"
+TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 F = (
     "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,"
     "cosmos,aptos,solana,soroban,sui,ton,substrate,arweave"
@@ -166,6 +169,18 @@ MUTANTS = [
         [(CPP, "    return blocks(a) == blocks(b)", '    return sorted(a.split("\\n")) == sorted(b.split("\\n"))')],
         "cd clients/scaas-sdk/bindings/cpp && python3 -I test_same_blocks.py",
         "test_lines_in_another_order_inside_a_block",
+    ),
+    (
+        "C-5: C#'s read leaves its buffer",
+        [(CS, "        var r = n < 0 ? null : out_[..(int)n];\n        CryptographicOperations.ZeroMemory(out_);\n", "        var r = n < 0 ? null : out_[..(int)n];\n")],
+        "cd clients/scaas-sdk/bindings/cs && bash ../lib.sh uniffi && ../../../../scripts/capped dotnet test; rc=$?; dotnet build-server shutdown >/dev/null 2>&1; exit $rc",
+        "CopyCallsRevealDispose",
+    ),
+    (
+        "C-5: Swift's read leaves its buffer",
+        [(SW, "        out.withUnsafeMutableBytes { if let p = $0.baseAddress { _ = memset(p, 0, $0.count) } }\n        return r", "        return r")],
+        "cd clients/scaas-sdk/bindings/swift && SWIFTC=" + TOOLS + '/swift-6.4.2/usr/bin/swiftc" bash run.sh',
+        "the copy call zeroes its read buffer",
     ),
 ]
 

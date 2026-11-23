@@ -158,6 +158,12 @@ public class SmokeTests
         Assert.NotNull(text);
         Assert.Equal(24, Encoding.UTF8.GetString(text!).Split(' ').Length);
         Array.Clear(text!);
+        // review T26 C-5: the read's own buffer is zeroed once the copy is out
+        var via = new byte[(int)ScaasSdkMethods.SecretLen(words)];
+        var again = Scaas.Sdk.CopyCall.ReadVia(id, via);
+        Assert.Equal(24, Encoding.UTF8.GetString(again!).Split(' ').Length);
+        Array.Clear(again!);
+        Assert.True(via.All(x => x == 0), "the copy call zeroes its read buffer");
         Assert.True(Scaas.Sdk.CopyCall.Dispose(id));
         Assert.Null(Scaas.Sdk.CopyCall.Read(id, 1));
     }
