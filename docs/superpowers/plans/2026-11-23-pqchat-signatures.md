@@ -54,8 +54,8 @@ out: they are public, choose no key or epoch, and live in the body module; an ow
 
 ### 1.3 Storage (CTR-CHAT-05)
 
-- The setting: `uint8 sigStore` packed after `initialized` in the namespace's slot +1 (byte 1). Every signed write reads it (one
-  cold `SLOAD`, both modes).
+- The setting: `uint8 sigStore` packed after `initialized` in the namespace's slot +1 (byte 1). Every signed session write
+  (`createSession`, `rekey`, `leave`, `remove`, `postMessage`) reads it (one cold `SLOAD`, both modes).
 - As built, the blob is assembled byte for byte from `abi.encode(record)` and `abi.encode(sig)` (`PqChat._blob`; the tuple
   encoder of a calldata record and signature runs out of stack), and the shared `PqGroupBase._noneRemoved` reads the author
   through a hook (`_authorOf`) that `PqChat` overrides to follow the record's offset word (the author moves one word in the
@@ -86,7 +86,8 @@ out: they are public, choose no key or epoch, and live in the body module; an ow
 An `msig` carries its quorum's signatures (minimal form, two levels, at most 16 enabled slots per level): `k` ML-DSA-87 members add
 about `k × 4.8` KiB, `k × 7.4` M state gas. Records are chained across blobs (no size bound of their own); the bound is the
 transaction: EIP-8037 puts regular + state under the block limit, so at 60 M a 2-member `createSession` with both wraps
-(about 7.7 M state) leaves room for at most 7 ML-DSA-87 signatures in `sstore2`, while the regular cost of their verification
+(about 7.7 M state) leaves room for about 6 ML-DSA-87 signatures in `sstore2` (7.44 M each, the 1.05 margin a client asks
+included), while the regular cost of their verification
 (about 0.2 M each by an EIP-8355 precompile, about 5.8 M each in software) binds first on a chain without the precompile (the 2^24
 cap). Owner question (§4).
 
@@ -135,5 +136,5 @@ excluded, as in `PqChatGas.t.sol`); `leave`, `remove` and `postMessage` at both 
 
 - Topic records (`PqTopic`, updates, writers, entries, edits, votes) keep `sigHash` (entries and edits also carry the signature in
   their events). Keep them out of the setting, or add them in the module?
-- An `msig` author on an `sstore2` home: at a 60 M block, at most about 7 ML-DSA-87 quorum signatures fit a 2-member
+- An `msig` author on an `sstore2` home: at a 60 M block, about 6 ML-DSA-87 quorum signatures fit a 2-member
   `createSession` with both wraps (§1.4). Accept, or bound the quorum the client offers on `sstore2` homes?

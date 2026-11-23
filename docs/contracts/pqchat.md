@@ -249,7 +249,8 @@ owner may override). Status: **BUILT on branch `pqchat-sigs` (EVM), UNAUDITED** 
   the signature is no signed field, so no typehash moves.
 - **Cost** (`PqChatSigGas.t.sol`, the stand-in verifier): `sstore2` adds the encoded signature and one head word to the blob at
   1,530 state gas a byte, ML-DSA-65 3,552 B (5.43 M), FN-DSA-512 896 B (1.37 M), ML-DSA-87 about 4.86 KiB (7.4 M); an `msig`
-  author adds each quorum signature. Every write reads the setting (one cold `SLOAD`, both modes). The figures are in
+  author adds each quorum signature. Every signed session write (`createSession`, `rekey`, `leave`, `remove`, `postMessage`)
+  reads the setting (one cold `SLOAD`, both modes); `addWraps`, `storeMessage` and the topic writes do not. The figures are in
   [§12](#12-gas-and-size).
 - **Readers.** A client reads the setting under trusted reads and pins it per instance; on an `sstore2` home it verifies every
   control-plane record it uses before it trusts it ([CLI-PQC-15](../clients/pqchat-core.md#CLI-PQC-15)).
@@ -648,7 +649,7 @@ regular + 43,147,530 state = 47.3 M asked; `PqChatTopics` 16,398 B (16,396 befor
 | `voteEntry` first; changed | 101,326; 102,292 | 195,840; 0 |
 
 Since CTR-CHAT-23 (2026-11-23) the rows above are measured on an `sstore2` instance, the default, with the 32-B stand-in
-signature: each keeps 256 B more per record than before (+391,680 state gas), every write reads the setting, and a `leave` keeps
+signature: each keeps 256 B more per record than before (+391,680 state gas), every signed session write reads the setting, and a `leave` keeps
 its record (107,485 / 97,920 → 150,721 / 1,116,900). With a real signature's size, at both settings (`PqChatSigGas.t.sol`; the
 regular figure is the calldata floor, equal in both modes):
 
