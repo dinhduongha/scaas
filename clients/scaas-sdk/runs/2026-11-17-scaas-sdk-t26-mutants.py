@@ -50,6 +50,23 @@ MSG = "clients/scaas-sdk/src/account/msig.rs"
 MAN = "clients/ua-rs/src/wallet/manifest.rs"
 OPM = "clients/scaas-sdk/src/op/mod.rs"
 REVM = "clients/scaas-rpc/src/evm.rs"
+GAS = "clients/scaas-sdk/src/op/gas.rs"
+PQD = "clients/scaas-sdk/src/confidential/pqz_debit.rs"
+BLS = "clients/scaas-sdk/src/op/bls_multi.rs"
+HIS = "clients/scaas-sdk/src/wallet/history.rs"
+REVM = "clients/scaas-rpc/src/evm.rs"
+NAP = "scaas-node/src/adapters/aptos.rs"
+TON = "clients/scaas-sdk/src/wallet/families/ton.rs"
+LIB = "clients/scaas-sdk/src/lib.rs"
+ALG = "clients/scaas-sdk/src/wallet/families/algorand.rs"
+BTC = "clients/scaas-rpc/src/bitcoin.rs"
+DEX = "clients/scaas-sdk/src/dex.rs"
+OPS = "clients/scaas-sdk/src/wallet/ops.rs"
+TOK = "clients/scaas-sdk/src/wallet/tokens.rs"
+ARW = "clients/scaas-rpc/src/arweave.rs"
+HOF = "clients/scaas-sdk/src/op/handoff.rs"
+HTP = "clients/scaas-rpc/src/http.rs"
+N = "cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
@@ -504,7 +521,159 @@ MUTANTS = [
         [(MSG, "            MsigSlot::Signed { member, .. } => {\n                let m = member_of(member)?;\n                if m.members.is_empty() {", "            MsigSlot::Signed { member, .. } => {\n                let m = member_of(member)?;\n                if true {")],
         T + " --lib account::msig::tests::msig_minimal_sets",
     ),
+    (
+        "B2-1: a plain transfer at 21,000",
+        [(QUO, "    } else {\n        // the estimate with the value sent (T13b ruling 5)", "    } else if data.is_empty() {\n        Figure::whole(21_000, GasSources::both(GasFrom::Estimate))\n    } else {\n        // the estimate with the value sent (T13b ruling 5)")],
+        T + " --test wallet",
+    ),
+    (
+        "B2-1: no transaction row still quoted",
+        [(GAS, "    let Some(tx) = tx_gas(chain, opt_in, tables) else {\n        return Ok(None);\n    };\n    let r = lookup_in", "    let tx = tx_gas(chain, opt_in, tables).unwrap_or(TxGas { intrinsic: 21_000, per_byte: 64, from: GasFrom::Chain });\n    let r = lookup_in")],
+        T + " --lib op::tests::no_transaction_row_no_figure",
+    ),
+    (
+        "B2-1: the L1 component not added",
+        [(QUO, "            q.gas_limit = own.saturating_add(super::gas::with_margin(l1));", "            q.gas_limit = own.max(l1 & 0);")],
+        T + " --lib op::tests::in_estimate_adds_the_l1_component",
+    ),
+    (
+        "B2-1: Linea's fees not taken",
+        [(QUO, "        Some(crate::L1Fee::Linea) => {", "        Some(crate::L1Fee::Linea) if false => {")],
+        T + " --test l1_fee linea_fees_are_linea_estimate_gas",
+    ),
+    (
+        "B2-1: an estimated send gets the L1 component again",
+        [(QUO, "        Some(crate::L1Fee::InEstimate) if !estimated => {", "        Some(crate::L1Fee::InEstimate) if estimated || !estimated => {")],
+        T + " --test l1_fee in_estimate_native_send_is_its_estimate",
+    ),
+    (
+        "B2-2: an op 7's decoys not drawn",
+        [(PQD, "    if decoys > 0 {\n        let (registry, pool)", "    if decoys > u32::MAX - 1 {\n        let (registry, pool)")],
+        T + " --test confidential_pqz pqz_op7_draws_its_decoys_from_the_line",
+    ),
+    (
+        "B2-3: no half-block share",
+        [(BLS, "    if profile.tx_gas_cap.is_none() && gas > block / 2 {", "    if profile.tx_gas_cap.is_none() && gas > block {")],
+        T + " --lib op::tests::",
+    ),
+    (
+        "B2-13: the verify row's margin dropped",
+        [(GAS, "            .map(|v| v.gas.saturating_add(v.margin))\n    })\n    .unwrap_or((app, GasFrom::App))", "            .map(|v| v.gas)\n    })\n    .unwrap_or((app, GasFrom::App))")],
+        T + " --lib op::gas::tests::verify_or_counts_the_margin",
+    ),
+    (
+        "B2-4: a log outside the filter taken",
+        [(REVM, "    match logs.iter().all(fits) {", "    match logs.iter().all(fits) || true {")],
+        T + " --test history history_refuses_logs_outside_the_filter",
+    ),
+    (
+        "B2-4: a log outside the range taken",
+        [(REVM, "        l.block_number.is_none_or(|b| (from..=to).contains(&b)) && filter.matches(&l.inner)", "        filter.matches(&l.inner)")],
+        T + " --test history history_refuses_logs_outside_the_filter",
+    ),
+    (
+        "B2-5: the operations by the id's text",
+        [(HIS, "r.chain == chain && id_word(&r.from).is_ok_and(|(w, _)| w == word)", "r.chain == chain && r.from.eq_ignore_ascii_case(&account)")],
+        T + " --test history operations_in_history",
+    ),
+    (
+        "B2-11: a disabled pqz read and proved first",
+        [(PQD, "                crate::op::kind_enabled(&evm(&sdk, &d.chain)?.0, \"pqz\")?;\n", "")],
+        T + " --test confidential_pqz a_disabled_pqz_refuses_before_any_read",
+    ),
+    (
+        "B2-12: a produced slot outside the range taken",
+        [("clients/scaas-rpc/src/solana.rs", "        if slots.iter().any(|s| !range.contains(s)) {", "        if slots.iter().any(|s| !range.contains(s) && false) {")],
+        R + " --test solana a_produced_slot_outside_the_range_is_refused",
+    ),
+    (
+        "B-16: submit takes the caller's data unchecked",
+        [("clients/scaas-sdk/src/wallet/native_evm.rs", "                let data = unhex(&q.data)?;\n                native_args(chain_id, &data)?;\n", "                let data = unhex(&q.data)?;\n")],
+        T + " --test wallet",
+    ),
+    (
+        "8b-4: the node reads a missing list as empty",
+        [(NAP, "            let Some(rows) = d[\"user_transactions\"].as_array().cloned() else {\n                bail!(\"indexer: AnswerMalformed: no user_transactions list\")\n            };", "            let rows = d[\"user_transactions\"].as_array().cloned().unwrap_or_default();")],
+        N + " adapters::aptos::tests::an_indexer_answer_without_its_list_is_malformed",
+    ),
+
+    (
+        "B2-15: a frozen jetton wallet the endpoint's failure",
+        [(TON, '        "frozen" => return Ok((String::new(), Some("frozen".into()))),\n', "")],
+        T + " --test ton",
+    ),
+    (
+        "B-22: Depth(0) opens on a real profile",
+        [(LIB, "            if p.finality == Finality::Depth(0)\n", "            if false && p.finality == Finality::Depth(0)\n")],
+        T + " --test config",
+    ),
+    (
+        "B2-6: any box 404 is a zero balance",
+        [(ALG, '            }) if message == "box not found" => {', "            }) if !message.is_empty() || message.is_empty() => {")],
+        T + " --test algorand",
+    ),
+    (
+        "B2-6: the majority read needs the first's round",
+        [(ALG, "want.is_none_or(|w| r >= w)", "want.is_none_or(|w| r == w)")],
+        T + " --test algorand",
+    ),
+    (
+        "B2-12: a mempool output taken as confirmed",
+        [(BTC, "                    || (u.height.is_some() && o.confirmations == 0) =>", "                    || (u.height.is_some() && o.confirmations == u64::MAX) =>")],
+        R + " --test bitcoin",
+    ),
+    (
+        "B2-12: a repeated outpoint taken",
+        [(BTC, "        if !out.iter().all(|u| seen.insert((u.txid.as_str(), u.vout))) {", "        if out.iter().all(|u| !seen.insert((u.txid.as_str(), u.vout))) {")],
+        R + " --test bitcoin",
+    ),
+    (
+        "B2-12: a caller's address the endpoint's failure",
+        [(BTC, '        Err(FamilyError::Argument("an address out of form"))', '        Err(malformed(0, "an address out of form"))')],
+        R + " --test bitcoin",
+    ),
+    (
+        "B2-8: the DEX's prepares sign a disabled kind",
+        [(DEX, "    if let KeyRef::Ua { kind, .. } = signer {\n        let (profile, _, _) = evm(sdk, chain)?;", "    if let (true, KeyRef::Ua { kind, .. }) = (false, signer) {\n        let (profile, _, _) = evm(sdk, chain)?;")],
+        T + " --test dex",
+    ),
+    (
+        "B2-8: sign_order on the prepare's clock",
+        [(DEX, "                    *now = at;", "                    let _ = (now, at);")],
+        T + " --test dex",
+    ),
+    (
+        "B2-10: the salt from the terms as typed",
+        [(OPS, "                        &canon_id(&req.to)?,\n                        &canon_amount(&req.value)?,\n                    ],", "                        &req.to,\n                        &req.value,\n                    ],")],
+        T + " --test wallet_ops",
+    ),
+    (
+        "B2-14: an unreadable index token ends the list",
+        [(TOK, "                        Err(e) if n >= listed && !matches!(e, SdkError::ProfileMismatch) => out", "                        Err(e) if false && n >= listed && !matches!(e, SdkError::ProfileMismatch) => out")],
+        T + " --test wallet",
+    ),
+    (
+        "B-13: every poll scans from the row's start",
+        [(FOL, "                            .insert(row.op.clone(), at.saturating_add(1));", "                            .insert(row.op.clone(), 0);")],
+        T + " --lib op::tests::a_poll_scans_only_the_blocks_after_the_last",
+    ),
+    (
+        "B-21: every gateway read before the vote",
+        [(ARW, "            if groups.iter().any(wins) {\n                break;\n            }", "            if groups.iter().any(wins) && false {\n                break;\n            }")],
+        R + " --test arweave",
+    ),
+    (
+        "B-15: a native signer's blob kind trusted",
+        [(HOF, "                if native != (blob.signer_kind == super::gas::NATIVE_EVM) {", "                if native && !native {")],
+        T + " --test handoff",
+    ),
+    (
+        "B-20: the body read whole before the cap",
+        [(HTP, "        if buf.len() + c.len() > cap {\n            return Ok(None);\n        }\n        each(c);\n        buf.extend_from_slice(c);\n    }\n    Ok(Some(buf))", "        each(c);\n        buf.extend_from_slice(c);\n    }\n    Ok((buf.len() <= cap).then_some(buf))")],
+        R + " --lib http::read_tests::the_read_stops_at_the_first_chunk_past_the_cap",
+    ),
 ]
+
 
 if __name__ == "__main__":
     main("t26", MUTANTS)

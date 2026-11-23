@@ -222,6 +222,7 @@ impl Wallet {
                     .iter()
                     .map(|t| t.address.to_ascii_lowercase())
                     .collect();
+                let listed = addrs.len();
                 if with_index {
                     let f: Address = profile
                         .factory
@@ -235,8 +236,23 @@ impl Wallet {
                     }
                 }
                 let mut out = Vec::with_capacity(addrs.len());
-                for a in &addrs {
-                    out.push(token(&sdk, &chain, a).await?);
+                for (n, a) in addrs.iter().enumerate() {
+                    match token(&sdk, &chain, a).await {
+                        Ok(t) => out.push(t),
+                        // an index entry whose metadata does not read (CTR-TOK-27: `createTokenUnregistered` indexes unvetted
+                        // code) is shown as unreadable, not cached, never ending the list (T26 B2-14); a listed token's
+                        // failure and another chain's token still end it
+                        Err(e) if n >= listed && !matches!(e, SdkError::ProfileMismatch) => out
+                            .push(TokenInfo {
+                                address: a.clone(),
+                                name: String::new(),
+                                symbol: String::new(),
+                                decimals: 0,
+                                listed: false,
+                                display: "[unreadable]".into(),
+                            }),
+                        Err(e) => return Err(e),
+                    }
                 }
                 Ok(out)
             })

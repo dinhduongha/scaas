@@ -131,7 +131,11 @@ Status: SPECIFIED.
   `storePqzPop` 49.1 M at `n2304-kmax4096`): the owner disabled exactly those there on 2026-11-22 (ARCH-POS-18 confirmed,
   decisions CLI-SDK-32; each profile's `disabledKinds`, the SDK's `KindDisabled`); `fndsa512`, `slhdsa128s` and `fndsa1024`
   fit and stay. The same rule and ruling on Base mainnet (block 40 M) and Celo (block 30 M, mainnet and Sepolia): `mldsa44`,
-  `mldsa65`, `mldsa87` and PQZ disabled; on Base Sepolia (block 120 M) every kind fits and none is disabled. Row 8 (ETC) was dropped by the owner the same day. OP's SDK and Native cells take T38's L1 fee.
+  `mldsa65`, `mldsa87` and PQZ disabled; on Base Sepolia (block 120 M) every kind fits and none is disabled. Row 8 (ETC) was dropped by the owner the same day. OP's SDK and Native cells take T38's L1 fee. Arbitrum's and Linea's
+  (rows 10, 11; T26 B2-1, decisions (140)): the profile's `"l1Fee": "in-estimate"` is `L1Fee::InEstimate` (a table-quoted
+  self-relay's gas limit adds `NodeInterface.gasEstimateL1Component` over its calldata, with the margin; a native send's
+  `eth_estimateGas` holds the L1 part already) and `"linea"` is `L1Fee::Linea` (the fees are `linea_estimateGas`'s over the
+  transaction, never below the chain's own); `tests/l1_fee.rs`, `src/op/tests.rs`.
 - **Hedera (row 12), `B‡`.** The token kinds, the DEX, the registry pair and the factory do not fit Hedera until it raises its code
   size (owner 2026-11-09; the public Hedera testnet refused runtime above 24,576 B; each transaction within 15 M gas); a small
   contract that needs none of them can deploy. Classical Zether needs EIP-2537 ([CTR-ZTH-32](../contracts/zether.md#CTR-ZTH-32)),

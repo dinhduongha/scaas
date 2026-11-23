@@ -105,7 +105,14 @@ impl Op {
                         None => (contract, executed_topic(&row.kind), None),
                     };
                     let filter = Filter::new().address(contract).event_signature(topic);
-                    let (kind, from_block) = (row.kind.clone(), row.from_block);
+                    let scanned = sdk
+                        .scanned
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .get(&row.op)
+                        .copied()
+                        .unwrap_or(0);
+                    let (kind, from_block) = (row.kind.clone(), row.from_block.max(scanned));
                     let (lane, filter, kind) = (&lane, &filter, kind.as_str());
                     let pool = &pool;
                     let read = |choice| {
@@ -146,14 +153,24 @@ impl Op {
                                 }
                                 None => false,
                             };
-                            Ok::<Facts, ReadError>((landed, spent, pool.timestamp_at(&at).await?))
+                            Ok::<(Facts, u64), ReadError>((
+                                (landed, spent, pool.timestamp_at(&at).await?),
+                                at.number,
+                            ))
                         })
                     };
                     let a = read(choice).await?;
                     let strict = pool.pool().policy() == Policy::StrictMajority;
                     let decisive =
                         strict || (a.members == [0] && pool.pool().class(0) != Class::Discovered);
-                    let (landed, spent, ts) = a.value;
+                    let ((landed, spent, ts), at) = a.value;
+                    // a decisive read at the final block without the event: the blocks up to it need no second look
+                    if decisive && landed.is_none() {
+                        sdk.scanned
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .insert(row.op.clone(), at.saturating_add(1));
+                    }
                     let failed =
                         |spent: bool, ts: u64| lane.is_some() && (spent || row.valid_until < ts);
                     match landed {
@@ -163,7 +180,7 @@ impl Op {
                             // rests on the agreed read at `finalized`; a read at another depth that shows one reads it again
                             let (landed, spent, ts) = if strict && choice != BlockChoice::Finalized
                             {
-                                read(BlockChoice::Finalized).await?.value
+                                read(BlockChoice::Finalized).await?.value.0
                             } else {
                                 (None, spent, ts)
                             };

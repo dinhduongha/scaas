@@ -18773,6 +18773,7 @@ const _: fn() = || {
         let _: String = PqzTransferMulti.batch;
         let _: u64 = PqzTransferMulti.key_version;
         let _: Vec<scaas_sdk::confidential::PqzLeg> = PqzTransferMulti.legs;
+        let _: u32 = PqzTransferMulti.decoys;
         let _: String = PqzTransferMulti.decoy_fee;
         let _: u64 = PqzTransferMulti.valid_until_block;
         let _: scaas_sdk::wallet::Envelope = PqzTransferMulti.envelope;
@@ -19055,6 +19056,7 @@ const _: fn() = || {
         let _: String = TokenBalance.display;
         let _: u8 = TokenBalance.decimals;
         let _: String = TokenBalance.amount;
+        let _: Option<String> = TokenBalance.unknown;
     }
     {
         let TokenInfo = None::<scaas_sdk::wallet::TokenInfo>.unwrap();
@@ -22308,6 +22310,8 @@ impl SseDecode for scaas_sdk::config::L1Fee {
         let mut inner = <i32>::sse_decode(deserializer);
         return match inner {
             0 => scaas_sdk::config::L1Fee::OpStack,
+            1 => scaas_sdk::config::L1Fee::InEstimate,
+            2 => scaas_sdk::config::L1Fee::Linea,
             _ => unreachable!("Invalid variant for L1Fee: {}", inner),
         };
     }
@@ -23924,6 +23928,7 @@ impl SseDecode for scaas_sdk::confidential::PqzTransferMulti {
         let mut var_batch = <String>::sse_decode(deserializer);
         let mut var_keyVersion = <u64>::sse_decode(deserializer);
         let mut var_legs = <Vec<scaas_sdk::confidential::PqzLeg>>::sse_decode(deserializer);
+        let mut var_decoys = <u32>::sse_decode(deserializer);
         let mut var_decoyFee = <String>::sse_decode(deserializer);
         let mut var_validUntilBlock = <u64>::sse_decode(deserializer);
         let mut var_envelope = <scaas_sdk::wallet::Envelope>::sse_decode(deserializer);
@@ -23934,6 +23939,7 @@ impl SseDecode for scaas_sdk::confidential::PqzTransferMulti {
             batch: var_batch,
             key_version: var_keyVersion,
             legs: var_legs,
+            decoys: var_decoys,
             decoy_fee: var_decoyFee,
             valid_until_block: var_validUntilBlock,
             envelope: var_envelope,
@@ -24711,11 +24717,13 @@ impl SseDecode for scaas_sdk::wallet::TokenBalance {
         let mut var_display = <String>::sse_decode(deserializer);
         let mut var_decimals = <u8>::sse_decode(deserializer);
         let mut var_amount = <String>::sse_decode(deserializer);
+        let mut var_unknown = <Option<String>>::sse_decode(deserializer);
         return scaas_sdk::wallet::TokenBalance {
             address: var_address,
             display: var_display,
             decimals: var_decimals,
             amount: var_amount,
+            unknown: var_unknown,
         };
     }
 }
@@ -30406,6 +30414,8 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::L1Fee> {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self.0 {
             scaas_sdk::config::L1Fee::OpStack => 0.into_dart(),
+            scaas_sdk::config::L1Fee::InEstimate => 1.into_dart(),
+            scaas_sdk::config::L1Fee::Linea => 2.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -31520,6 +31530,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::confidential::PqzTr
             self.0.batch.into_into_dart().into_dart(),
             self.0.key_version.into_into_dart().into_dart(),
             self.0.legs.into_into_dart().into_dart(),
+            self.0.decoys.into_into_dart().into_dart(),
             self.0.decoy_fee.into_into_dart().into_dart(),
             self.0.valid_until_block.into_into_dart().into_dart(),
             self.0.envelope.into_into_dart().into_dart(),
@@ -32511,6 +32522,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::wallet::TokenBalanc
             self.0.display.into_into_dart().into_dart(),
             self.0.decimals.into_into_dart().into_dart(),
             self.0.amount.into_into_dart().into_dart(),
+            self.0.unknown.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -36435,6 +36447,8 @@ impl SseEncode for scaas_sdk::config::L1Fee {
         <i32>::sse_encode(
             match self {
                 scaas_sdk::config::L1Fee::OpStack => 0,
+                scaas_sdk::config::L1Fee::InEstimate => 1,
+                scaas_sdk::config::L1Fee::Linea => 2,
                 _ => {
                     unimplemented!("");
                 }
@@ -37627,6 +37641,7 @@ impl SseEncode for scaas_sdk::confidential::PqzTransferMulti {
         <String>::sse_encode(self.batch, serializer);
         <u64>::sse_encode(self.key_version, serializer);
         <Vec<scaas_sdk::confidential::PqzLeg>>::sse_encode(self.legs, serializer);
+        <u32>::sse_encode(self.decoys, serializer);
         <String>::sse_encode(self.decoy_fee, serializer);
         <u64>::sse_encode(self.valid_until_block, serializer);
         <scaas_sdk::wallet::Envelope>::sse_encode(self.envelope, serializer);
@@ -38157,6 +38172,7 @@ impl SseEncode for scaas_sdk::wallet::TokenBalance {
         <String>::sse_encode(self.display, serializer);
         <u8>::sse_encode(self.decimals, serializer);
         <String>::sse_encode(self.amount, serializer);
+        <Option<String>>::sse_encode(self.unknown, serializer);
     }
 }
 

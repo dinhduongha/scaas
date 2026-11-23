@@ -169,6 +169,51 @@ async fn events(s: &scaas_sdk::Subscription) -> Vec<Event> {
     out
 }
 
+/// T26 B2-4 (CLI-RPC-07): an endpoint answering logs outside the filter or the range it was asked (another contract, a
+/// block above the final one) fails the read, `AnswerMalformed`, never shows them; the control filters and answers.
+#[tokio::test(flavor = "multi_thread")]
+async fn history_refuses_logs_outside_the_filter() {
+    let (c, url) = chain(2, 25_000).await;
+    {
+        let mut g = c.lock().unwrap();
+        g.logs.push(transfer(&token_addr(0), ACC, OTHER, 24_000, 1));
+        g.logs
+            .push(transfer(&token_addr(0), ACC, OTHER, 1_000_000, 0)); // above the range asked
+    }
+    let sdk = open(&url, 2, MemoryStore::new(), Limits::default()).await;
+    let w = sdk.wallet();
+    let p = w
+        .history(ACC.into(), "local".into(), None, 10)
+        .await
+        .unwrap();
+    assert_eq!(p.items.len(), 1, "control: the filter answered");
+    for other in [false, true] {
+        {
+            let mut g = c.lock().unwrap();
+            g.logs_unfiltered = true;
+            if other {
+                g.logs.pop();
+                // another contract's
+                g.logs.push(transfer(
+                    "0x00000000000000000000000000000000000000ff",
+                    ACC,
+                    OTHER,
+                    24_100,
+                    0,
+                ));
+            }
+        }
+        match w.history(ACC.into(), "local".into(), None, 10).await {
+            Err(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
+                last: Some(l), ..
+            })) => {
+                assert_eq!(l.kind, scaas_rpc::FailureKind::AnswerMalformed, "{other}")
+            }
+            r => panic!("{other}: {:?}", r.map(|p| p.items.len())),
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn history_pages_with_logs_range() {
     let (c, url) = chain(2, 25_000).await;
@@ -376,7 +421,10 @@ async fn operations_in_history() {
         "tx_nonce": null, "path": "gateway", "payer": null, "from_block": 90, "state": "landed", "detail": "Queued",
         "landed": [95, hash_of(95)], "relayer_bound": false})
     };
-    let st = json!({"rev": 1, "ops": [row("op-mine", &ACC.to_ascii_uppercase().replace("0X", "0x")), row("op-other", OTHER)]});
+    // T26 B2-5: a row holds the account as its 20-byte address or zero-padded to 32 bytes (`op/state.rs`), one account
+    let padded = format!("0x{}", &ACC[26..]);
+    let st = json!({"rev": 1, "ops": [row("op-mine", &ACC.to_ascii_uppercase().replace("0X", "0x")), row("op-other", OTHER),
+        row("op-ids", &padded)]});
     store
         .put_if(
             "sdk.state".into(),
@@ -391,8 +439,9 @@ async fn operations_in_history() {
         .history(ACC.into(), "local".into(), None, 10)
         .await
         .unwrap();
-    assert_eq!(p.ops.len(), 1);
+    assert_eq!(p.ops.len(), 2, "{:?}", p.ops);
     assert_eq!(p.ops[0].op, "op-mine");
+    assert_eq!(p.ops[1].op, "op-ids");
     assert_eq!(p.ops[0].state, "landed");
     assert_eq!(p.ops[0].landed_block, Some(95));
     let p = w

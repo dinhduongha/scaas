@@ -161,6 +161,8 @@ pub mod bits {
     pub const EVM: u64 = 1 << 30;
     /// T41.arweave: Arweave uploads and reads (CLI-SDK-21)
     pub const ARWEAVE: u64 = 1 << 31;
+    /// development profiles: `Finality::Depth(0)` on any chain (owner 2026-11-23, T26 B-22); never in a release build
+    pub const DEV_PROFILES: u64 = 1 << 32;
 }
 
 /// The load check of a binding (spec §16.3): `AbiMismatch` unless this library's `api_version` is `expect_api`, it has every
@@ -223,11 +225,16 @@ pub fn features() -> u64 {
         (cfg!(feature = "substrate"), SUBSTRATE),
         (cfg!(feature = "evm"), EVM),
         (cfg!(feature = "arweave"), ARWEAVE),
+        (cfg!(feature = "dev-profiles"), DEV_PROFILES),
     ];
     on.iter()
         .filter(|(enabled, _)| *enabled)
         .fold(0, |acc, (_, bit)| acc | bit)
 }
+
+/// The local development chain's id (anvil's and Hardhat's default): the one profile `Finality::Depth(0)` opens on outside a
+/// `dev-profiles` build (owner 2026-11-23, T26 B-22).
+pub(crate) const LOCAL_CHAIN_ID: u64 = 31337;
 
 /// A chain as the SDK holds it once its profile passed `Sdk::open`'s checks: the profile, its EVM pool, its gateway list.
 pub(crate) struct Chain {
@@ -331,6 +338,10 @@ pub struct Sdk {
     /// tokens read in this session, by (chain, address) (spec §8.2: metadata read once per session)
     #[cfg(feature = "evm")]
     pub(crate) tokens: Mutex<HashMap<(String, String), wallet::TokenInfo>>,
+    /// per operation, the first block its executed event was not yet looked for: every block below it was read at a final
+    /// block by a decisive read without the event (T26 B-13), so a poll scans only the blocks after it; held for the session
+    #[cfg(feature = "evm")]
+    pub(crate) scanned: Mutex<HashMap<String, u64>>,
     /// the next transaction nonce of each payer by (chain, address) after this session's own signed transactions: a quote's
     /// floor above the endpoints' pending nonce (spec §8.5; under `strict_majority` the agreed nonce is the committed one)
     #[cfg(feature = "evm")]
@@ -381,6 +392,14 @@ impl Sdk {
                 return Err(SdkError::Argument);
             }
             if p.family_params.as_ref().is_some_and(|f| !f.fits(p.family)) {
+                return Err(SdkError::Argument);
+            }
+            // the head as final (`Depth(0)`) only on a local chain (anvil's chain id) or in a `dev-profiles` build (owner
+            // 2026-11-23, T26 B-22): on a real chain it would make decisive and decryption reads rest on the head
+            if p.finality == Finality::Depth(0)
+                && !cfg!(feature = "dev-profiles")
+                && !(p.family == Family::Evm && p.chain_id == Some(LOCAL_CHAIN_ID))
+            {
                 return Err(SdkError::Argument);
             }
             // an L1 data fee model is an EVM chain's (plan T38)
@@ -653,6 +672,8 @@ impl Sdk {
             registry_writes: Mutex::new(HashMap::new()),
             #[cfg(feature = "evm")]
             tokens: Mutex::new(HashMap::new()),
+            #[cfg(feature = "evm")]
+            scanned: Mutex::new(HashMap::new()),
             #[cfg(feature = "evm")]
             sent_nonces: Mutex::new(HashMap::new()),
             #[cfg(feature = "evm")]

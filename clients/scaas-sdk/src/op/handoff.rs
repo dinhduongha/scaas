@@ -212,6 +212,45 @@ impl Op {
                     return Err(SdkError::ImportFeeRefused);
                 }
                 let (profile, _, pool) = evm(&sdk, &expect.chain)?;
+                // review A2-7: the blob's signer is the operation's `from`
+                let from = unhex(
+                    env.get("from")
+                        .and_then(Value::as_str)
+                        .ok_or(SdkError::Argument)?,
+                )?;
+                if unhex(&blob.signer)? != from {
+                    return Err(SdkError::Argument);
+                }
+                // the signer's kind as the signer and the signature show it (T26 B-15), never the blob's word alone: a native
+                // id (an EVM address left-padded, CTR-UA-03) is the gas tables' kind 0 (`NATIVE_EVM`) and no other; a
+                // `UASig` with `keyData` is the kind whose UA of that key data is the signer (a stored kind's empty
+                // `keyData` names its key in the record, which the chain's simulation judges)
+                let signer: Option<[u8; 32]> =
+                    unhex(&blob.signer).ok().and_then(|s| s.try_into().ok());
+                let native = signer.is_some_and(|s| s[..12] == [0; 12]);
+                if native != (blob.signer_kind == super::gas::NATIVE_EVM) {
+                    return Err(SdkError::ImportKindRefused);
+                }
+                if let Some(kd) = blob
+                    .signature
+                    .get("keyData")
+                    .and_then(Value::as_str)
+                    .filter(|k| k.len() > 2 && !native)
+                {
+                    let kd = unhex(kd)?;
+                    let derived = scaas_ua::KINDS
+                        .iter()
+                        .find(|k| {
+                            signer.is_some()
+                                && scaas_ua::derive_ua(k.kind, &kd, false).ok() == signer
+                        })
+                        .map(|k| k.kind);
+                    if derived != Some(blob.signer_kind) {
+                        return Err(SdkError::ImportKindRefused);
+                    }
+                }
+                // a signer kind the chain's profile disables (owner 2026-11-22), as `prepare` refuses its own
+                super::ua_kind_enabled(&profile, blob.signer_kind)?;
                 let contract = super::addr20(&blob.contract)?;
                 // 7. time left on the chain's clock
                 let valid_until = env
@@ -224,16 +263,8 @@ impl Op {
                     return Err(SdkError::ImportExpired);
                 }
                 // 8. the lane nonce unspent
-                let from = unhex(
-                    env.get("from")
-                        .and_then(Value::as_str)
-                        .ok_or(SdkError::Argument)?,
-                )?;
-                // review A2-7: the blob's signer is the operation's `from`, and its kind the signer's own (a native-space id's,
-                // else the kind of its record on the registry's line), never the blob's word: `ImportKindRefused` otherwise
-                if unhex(&blob.signer)? != from {
-                    return Err(SdkError::Argument);
-                }
+                // review A2-7: the signer's kind is its own (a native-space id's, else the kind of its record on the
+                // registry's line), never the blob's word: `ImportKindRefused` otherwise
                 let from32: [u8; 32] =
                     from.as_slice().try_into().map_err(|_| SdkError::Argument)?;
                 let kind = if scaas_ua::in_native_space(&from32) {
@@ -245,8 +276,6 @@ impl Op {
                 if kind != blob.signer_kind {
                     return Err(SdkError::ImportKindRefused);
                 }
-                // a signer kind the chain's profile disables (owner 2026-11-22), as `prepare` refuses its own
-                super::ua_kind_enabled(&profile, kind)?;
                 let batch = dec(env.get("batch").ok_or(SdkError::Argument)?)?;
                 let nonce = dec(env.get("nonce").ok_or(SdkError::Argument)?)?;
                 if lane_nonce(&pool, Address::from(contract), "token", &from, batch).await? > nonce

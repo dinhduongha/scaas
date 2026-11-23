@@ -113,16 +113,22 @@ impl Solana {
                 json!([slot.saturating_sub(2048), slot, {"commitment": "finalized"}]),
             )
             .await?;
-        let s = blocks
+        // T26 B2-12: every slot answered within the range asked, the block the highest of them (no order assumed)
+        let range = slot.saturating_sub(2048)..=slot;
+        let slots: Option<Vec<u64>> = blocks
             .as_array()
-            .and_then(|a| a.last())
-            .and_then(Value::as_u64)
-            .ok_or_else(|| {
-                bad(
-                    i,
-                    &format!("no block produced in the 2048 slots up to {slot}"),
-                )
-            })?;
+            .map(|a| a.iter().map(Value::as_u64).collect::<Option<Vec<_>>>())
+            .unwrap_or(None);
+        let slots = slots.ok_or_else(|| bad(i, "getBlocks: no list of slots"))?;
+        if slots.iter().any(|s| !range.contains(s)) {
+            return Err(bad(i, &format!("getBlocks: a slot outside {range:?}")));
+        }
+        let s = slots.into_iter().max().ok_or_else(|| {
+            bad(
+                i,
+                &format!("no block produced in the 2048 slots up to {slot}"),
+            )
+        })?;
         Ok(Block {
             slot: s,
             hash: self.blockhash_at(i, s).await?,

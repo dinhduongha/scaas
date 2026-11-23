@@ -20095,8 +20095,9 @@ class FfiConverterTypeCancelWrapOrder: FfiConverterRustBuffer<CancelWrapOrder> {
 /// `Sdk::open`
 /// </param>
 /// <param name="L1Fee">
-/// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-/// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+/// the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+/// (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+/// Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
 /// `Sdk::open` on another family)
 /// </param>
 /// <param name="DisabledKinds">
@@ -20184,8 +20185,9 @@ internal record ChainProfile (
     /// </summary>
     FamilyParams? FamilyParams, 
     /// <summary>
-    /// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-    /// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+    /// the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+    /// (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+    /// Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
     /// `Sdk::open` on another family)
     /// </summary>
     L1Fee? L1Fee, 
@@ -21060,7 +21062,8 @@ class FfiConverterTypeGasLine: FfiConverterRustBuffer<GasLine> {
 
 /// <summary>
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
-/// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+/// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded), `data` (`mtxExecute`'s call data) or
+/// `calldata` (the transaction row's, entry `transaction` kind `evm`: the price of a byte of the transaction's calldata).
 /// </summary>
 internal record GasPerByte (
     string Input, 
@@ -23158,7 +23161,8 @@ class FfiConverterTypePay: FfiConverterRustBuffer<Pay> {
 /// A pay's `PayMeta` v3 (CTR-MTX-26): committed to by the signed `entryRef` (`metaPayId`).
 /// </summary>
 /// <param name="Salt">
-/// `0x` + 64 hex; `None`: 32 random bytes
+/// `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+/// the same pay lane, however its ids and amounts are spelt)
 /// </param>
 /// <param name="PayNo">
 /// a UUIDv7 in its text form, or `0x` + 64 hex; `None`: no number
@@ -23168,7 +23172,8 @@ class FfiConverterTypePay: FfiConverterRustBuffer<Pay> {
 /// </param>
 internal record PayMeta (
     /// <summary>
-    /// `0x` + 64 hex; `None`: 32 random bytes
+    /// `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+    /// the same pay lane, however its ids and amounts are spelt)
     /// </summary>
     string? Salt, 
     /// <summary>
@@ -23885,8 +23890,9 @@ class FfiConverterTypePqzTransfer: FfiConverterRustBuffer<PqzTransfer> {
 
 
 /// <summary>
-/// `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
-/// fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+/// `UAPqzTransfer` / `UAPqzTransferCompact`: the real `legs` and `decoys` legs of amount 0 the SDK draws from the registry
+/// line's `0x0142` lists, every leg's position shuffled (CTR-UA-29; their count one the set builds, 1, 2, 4 or 8),
+/// `decoy_fee` the per-leg fee (decimal; at least the token's `minDecoyFee`, the contract's check).
 /// </summary>
 internal record PqzTransferMulti (
     KeyRef Signer, 
@@ -23895,6 +23901,7 @@ internal record PqzTransferMulti (
     string Batch, 
     ulong KeyVersion, 
     PqzLeg[] Legs, 
+    uint Decoys, 
     string DecoyFee, 
     ulong ValidUntilBlock, 
     Envelope Envelope
@@ -23912,6 +23919,7 @@ class FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer<PqzTransferMulti>
             Batch: FfiConverterString.INSTANCE.Read(stream),
             KeyVersion: FfiConverterUInt64.INSTANCE.Read(stream),
             Legs: FfiConverterSequenceTypePqzLeg.INSTANCE.Read(stream),
+            Decoys: FfiConverterUInt32.INSTANCE.Read(stream),
             DecoyFee: FfiConverterString.INSTANCE.Read(stream),
             ValidUntilBlock: FfiConverterUInt64.INSTANCE.Read(stream),
             Envelope: FfiConverterTypeEnvelope.INSTANCE.Read(stream)
@@ -23926,6 +23934,7 @@ class FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer<PqzTransferMulti>
             + FfiConverterString.INSTANCE.AllocationSize(value.Batch)
             + FfiConverterUInt64.INSTANCE.AllocationSize(value.KeyVersion)
             + FfiConverterSequenceTypePqzLeg.INSTANCE.AllocationSize(value.Legs)
+            + FfiConverterUInt32.INSTANCE.AllocationSize(value.Decoys)
             + FfiConverterString.INSTANCE.AllocationSize(value.DecoyFee)
             + FfiConverterUInt64.INSTANCE.AllocationSize(value.ValidUntilBlock)
             + FfiConverterTypeEnvelope.INSTANCE.AllocationSize(value.Envelope);
@@ -23938,6 +23947,7 @@ class FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer<PqzTransferMulti>
             FfiConverterString.INSTANCE.Write(value.Batch, stream);
             FfiConverterUInt64.INSTANCE.Write(value.KeyVersion, stream);
             FfiConverterSequenceTypePqzLeg.INSTANCE.Write(value.Legs, stream);
+            FfiConverterUInt32.INSTANCE.Write(value.Decoys, stream);
             FfiConverterString.INSTANCE.Write(value.DecoyFee, stream);
             FfiConverterUInt64.INSTANCE.Write(value.ValidUntilBlock, stream);
             FfiConverterTypeEnvelope.INSTANCE.Write(value.Envelope, stream);
@@ -25644,16 +25654,25 @@ class FfiConverterTypeSubmitQuote: FfiConverterRustBuffer<SubmitQuote> {
 /// One token's balance.
 /// </summary>
 /// <param name="Amount">
-/// the smallest unit, decimal
+/// the smallest unit, decimal; empty when `unknown` is set
+/// </param>
+/// <param name="Unknown">
+/// set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+/// `frozen`): the amount is unknown, never a false 0
 /// </param>
 internal record TokenBalance (
     string Address, 
     string Display, 
     byte Decimals, 
     /// <summary>
-    /// the smallest unit, decimal
+    /// the smallest unit, decimal; empty when `unknown` is set
     /// </summary>
-    string Amount
+    string Amount, 
+    /// <summary>
+    /// set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+    /// `frozen`): the amount is unknown, never a false 0
+    /// </summary>
+    string? Unknown
 ) {
 }
 
@@ -25665,7 +25684,8 @@ class FfiConverterTypeTokenBalance: FfiConverterRustBuffer<TokenBalance> {
             Address: FfiConverterString.INSTANCE.Read(stream),
             Display: FfiConverterString.INSTANCE.Read(stream),
             Decimals: FfiConverterUInt8.INSTANCE.Read(stream),
-            Amount: FfiConverterString.INSTANCE.Read(stream)
+            Amount: FfiConverterString.INSTANCE.Read(stream),
+            Unknown: FfiConverterOptionalString.INSTANCE.Read(stream)
         );
     }
 
@@ -25674,7 +25694,8 @@ class FfiConverterTypeTokenBalance: FfiConverterRustBuffer<TokenBalance> {
             + FfiConverterString.INSTANCE.AllocationSize(value.Address)
             + FfiConverterString.INSTANCE.AllocationSize(value.Display)
             + FfiConverterUInt8.INSTANCE.AllocationSize(value.Decimals)
-            + FfiConverterString.INSTANCE.AllocationSize(value.Amount);
+            + FfiConverterString.INSTANCE.AllocationSize(value.Amount)
+            + FfiConverterOptionalString.INSTANCE.AllocationSize(value.Unknown);
     }
 
     public override void Write(TokenBalance value, BigEndianStream stream) {
@@ -25682,6 +25703,7 @@ class FfiConverterTypeTokenBalance: FfiConverterRustBuffer<TokenBalance> {
             FfiConverterString.INSTANCE.Write(value.Display, stream);
             FfiConverterUInt8.INSTANCE.Write(value.Decimals, stream);
             FfiConverterString.INSTANCE.Write(value.Amount, stream);
+            FfiConverterOptionalString.INSTANCE.Write(value.Unknown, stream);
     }
 }
 
@@ -33179,7 +33201,7 @@ internal record GasFrom {
     
     
     /// <summary>
-    /// a native send's own estimate (or 21,000 for a plain transfer to an account without code)
+    /// a native send's own estimate (`eth_estimateGas`, a plain transfer's too)
     /// </summary>
     public record Estimate: GasFrom {}
     
@@ -33626,7 +33648,17 @@ internal enum L1Fee: int {
     /// <summary>
     /// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
     /// </summary>
-    OpStack
+    OpStack,
+    /// <summary>
+    /// the L1 cost charged as gas (Arbitrum, the profile's `in-estimate`): a table-quoted transaction's gas limit adds
+    /// `NodeInterface.gasEstimateL1Component` (`0x…C8`) over its calldata, with the margin; an estimate holds it already
+    /// </summary>
+    InEstimate,
+    /// <summary>
+    /// the L1 cost carried by the priority fee (Linea, the profile's `linea`): the fees are `linea_estimateGas`'s over the
+    /// transaction, never below the chain's own
+    /// </summary>
+    Linea
 }
 
 class FfiConverterTypeL1Fee: FfiConverterRustBuffer<L1Fee> {
@@ -33636,6 +33668,8 @@ class FfiConverterTypeL1Fee: FfiConverterRustBuffer<L1Fee> {
         var value = stream.ReadInt();
         switch (value) {
             case 1: return L1Fee.OpStack;
+            case 2: return L1Fee.InEstimate;
+            case 3: return L1Fee.Linea;
             default: throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeL1Fee.Read()", value));
         }
     }
@@ -33647,6 +33681,8 @@ class FfiConverterTypeL1Fee: FfiConverterRustBuffer<L1Fee> {
     public override void Write(L1Fee value, BigEndianStream stream) {
         switch (value) {
             case L1Fee.OpStack: stream.WriteInt(1); break;
+            case L1Fee.InEstimate: stream.WriteInt(2); break;
+            case L1Fee.Linea: stream.WriteInt(3); break;
             default: throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeL1Fee.Write()", value));
         }
     }

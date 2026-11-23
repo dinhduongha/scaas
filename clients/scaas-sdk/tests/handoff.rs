@@ -99,7 +99,7 @@ fn gas_rows() -> GasRows {
             })
         })
         .collect();
-    GasRows {
+    with_tx(GasRows {
         base,
         verify: vec![GasVerify {
             line: Default::default(),
@@ -109,7 +109,7 @@ fn gas_rows() -> GasRows {
             margin: 0,
             per_item: None,
         }],
-    }
+    })
 }
 
 /// One party: an SDK over the shared fake chain with the repository seed imported, and its seed id.
@@ -421,7 +421,7 @@ async fn import_refusals_in_order() {
         "Ok",
         "control: the same blob again"
     );
-    // a signer kind the importer's profile disables (owner 2026-11-22), as its own operations
+    // a signer kind the importer's profile disables (owner 2026-11-22), as its own operations; a blob naming it falsely
     let kind = scaas_ua::KINDS.iter().find(|k| k.kind == 0x0101).unwrap();
     let (d, d_seed) = party(&t.url, &t.uid, vec![kind.name.to_string()]).await;
     let mut e = expect(&t);
@@ -430,14 +430,19 @@ async fn import_refusals_in_order() {
         network: "evm".into(),
         index: 1,
     };
-    // review A2-7: the kind is the signer's own (a native id's, else its registry record's), never the blob's word: a native
-    // signature stated as an ML-DSA one is refused before the profile's kind rule
+    // review A2-7 and T26 B-15: the kind is the signer's own (a native id's, else its registry record's) and the one its
+    // signature's key data derives the signer from, never the blob's word: a native signature stated as an ML-DSA one is
+    // refused before the kind gate, on any profile
     let b = with(&|b| b.signer_kind = 0x0101);
     assert_eq!(
         code(d.op().import_signed(b.clone(), e.clone()).await),
         "ImportKindRefused"
     );
-    assert_eq!(code(import(&t, &b).await), "ImportKindRefused");
+    assert_eq!(
+        code(import(&t, &b).await),
+        "ImportKindRefused",
+        "a profile that disables no kind"
+    );
     assert_eq!(
         code(d.op().import_signed(good.clone(), e).await),
         "Ok",
@@ -636,4 +641,24 @@ async fn blob_bounds_and_the_cap() {
     let sig_len = auth.as_str().unwrap().len();
     println!("handoff cap: the largest signed operation's signature {sig_len} B, its blob {} B, the cap {HANDOFF_MAX} B", big.len());
     assert!(big.len() * 10 < HANDOFF_MAX, "a tenth of the cap");
+}
+
+/// `rows` with the transaction row at Ethereum's figures (T26 B2-1: the SDK carries no gas figure; a test's table does).
+fn with_tx(mut rows: scaas_sdk::GasRows) -> scaas_sdk::GasRows {
+    rows.base.push(scaas_sdk::GasBase {
+        entry: "transaction".into(),
+        kind: "evm".into(),
+        fresh: false,
+        gas: 21_000,
+        per_byte: Some(scaas_sdk::GasPerByte {
+            input: "calldata".into(),
+            gas: 64,
+        }),
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
+        regular: None,
+    });
+    rows
 }

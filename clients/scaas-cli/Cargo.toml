@@ -16,7 +16,7 @@ path = "src/main.rs"
 
 [features]
 # a profile file from the command line (`--profiles`), only in a development build, which says so on every run (CLI-SDK-17, R17)
-dev-profiles = []
+dev-profiles = ["scaas-sdk/dev-profiles"]
 
 [dependencies]
 # the SDK's shipped surface; never its test feature `vectors` (scripts/check_test_features.py), never `raw-native` or

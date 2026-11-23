@@ -31,9 +31,9 @@ MUTANTS = [
      U + "gas_table_extra_fields_parse"),
     # ruling 2: sig_bytes
     ("sig_bytes not added",
-     [(G, ".saturating_add(b.saturating_mul(PER_BYTE))", ".saturating_add(0)")],
+     [(G, ".saturating_add(b.saturating_mul(per))", ".saturating_add(0)")],
      U + "gas_save_fee"),
-    ("sig_bytes at 16 gas a byte", [(G, "b.saturating_mul(PER_BYTE)", "b.saturating_mul(16)")],
+    ("sig_bytes at 16 gas a byte", [(G, "b.saturating_mul(per)", "b.saturating_mul(16)")],
      U + "gas_save_fee"),
     ("parse: sig_bytes unbounded",
      [(C, "Some(b) => b.as_u64().filter(|b| *b <= GAS_SIG_BYTES_MAX)?,", "Some(b) => b.as_u64()?,")],

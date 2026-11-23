@@ -109,7 +109,8 @@ fn answer(status: u16, body: Vec<u8>) -> Result<Vec<u8>, FamilyError> {
     if (200..300).contains(&status) {
         return Ok(body);
     }
-    let message = serde_json::from_slice::<Value>(&body)
+    // the error body under the same bounds as an answer (T26 B-19: the depth scan, not serde's own limit)
+    let message = crate::http::decode(&body, ANSWER_MAX)
         .ok()
         .and_then(|v| v["message"].as_str().map(str::to_string))
         .unwrap_or_else(|| String::from_utf8_lossy(&body).chars().take(300).collect());

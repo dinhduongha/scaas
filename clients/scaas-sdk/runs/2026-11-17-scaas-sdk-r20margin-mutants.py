@@ -48,8 +48,8 @@ MUTANTS = [
         [
             (
                 G,
-                "        f.saturating_add(INTRINSIC)\n            .saturating_add(bytes)\n            .saturating_add(with_margin(d))",
-                "        with_margin(f.saturating_add(INTRINSIC).saturating_add(bytes))\n            .saturating_add(with_margin(d))",
+                "        f.saturating_add(tx.intrinsic)\n            .saturating_add(bytes)\n            .saturating_add(with_margin(d))",
+                "        with_margin(f.saturating_add(tx.intrinsic).saturating_add(bytes))\n            .saturating_add(with_margin(d))",
             )
         ],
         M20,
@@ -64,8 +64,8 @@ MUTANTS = [
         [
             (
                 G,
-                "        f.saturating_add(INTRINSIC)\n            .saturating_add(bytes)\n",
-                "        f.saturating_add(INTRINSIC)\n            .saturating_add(0 * bytes)\n",
+                "        f.saturating_add(tx.intrinsic)\n            .saturating_add(bytes)\n",
+                "        f.saturating_add(tx.intrinsic)\n            .saturating_add(0 * bytes)\n",
             )
         ],
         M20,

@@ -110,8 +110,9 @@ pub struct ChainProfile {
     /// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
     /// `Sdk::open`
     pub family_params: Option<FamilyParams>,
-    /// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-    /// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+    /// the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+    /// (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+    /// Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
     /// `Sdk::open` on another family)
     pub l1_fee: Option<L1Fee>,
     /// the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
@@ -144,6 +145,12 @@ pub(crate) fn pinned_reads_default() -> bool {
 pub enum L1Fee {
     /// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
     OpStack,
+    /// the L1 cost charged as gas (Arbitrum, the profile's `in-estimate`): a table-quoted transaction's gas limit adds
+    /// `NodeInterface.gasEstimateL1Component` (`0x…C8`) over its calldata, with the margin; an estimate holds it already
+    InEstimate,
+    /// the L1 cost carried by the priority fee (Linea, the profile's `linea`): the fees are `linea_estimateGas`'s over the
+    /// transaction, never below the chain's own
+    Linea,
 }
 
 /// A family's own profile data (spec §8.7 rule 2; decisions CLI-SDK-15's Changes of 2026-11-21).
@@ -333,7 +340,8 @@ pub struct GasPerItem {
 }
 
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
-/// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+/// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded), `data` (`mtxExecute`'s call data) or
+/// `calldata` (the transaction row's, entry `transaction` kind `evm`: the price of a byte of the transaction's calldata).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
@@ -422,7 +430,7 @@ const GAS_TABLE_MAX_BYTES: usize = 1024 * 1024;
 const GAS_TABLE_MAX_ROWS: usize = 1_024;
 const GAS_NAME_MAX: usize = 64;
 /// A per-byte part's inputs and bound.
-const GAS_PER_BYTE_INPUTS: [&str; 2] = ["meta.body", "data"];
+const GAS_PER_BYTE_INPUTS: [&str; 3] = ["meta.body", "data", "calldata"];
 const GAS_PER_BYTE_MAX: u64 = 1_000;
 /// A verify row's largest `sig_bytes` (SLH-DSA-128s, the longest, is 7,872).
 const GAS_SIG_BYTES_MAX: u64 = 65_536;

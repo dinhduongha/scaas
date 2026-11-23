@@ -939,7 +939,8 @@ pub(crate) mod tests {
                 if to - from + 1 > cap {
                     return json!({"error": {"code": -32005, "message": format!("query exceeds max block range {cap}")}});
                 }
-                json!({"result": [{"address": format!("{:#x}", Address::ZERO), "topics": [], "data": "0x",
+                // T26 B2-4 (fixture correction): the log the filter names (topic 0 asked), as a real node answers
+                json!({"result": [{"address": format!("{:#x}", Address::ZERO), "topics": [format!("{:#x}", B256::ZERO)], "data": "0x",
                     "blockNumber": format!("{from:#x}"), "blockHash": format!("{:#x}", B256::repeat_byte(9)),
                     "transactionHash": format!("{:#x}", B256::repeat_byte(8)), "transactionIndex": "0x0",
                     "logIndex": format!("{:#x}", to - from + 1), "removed": false}]})

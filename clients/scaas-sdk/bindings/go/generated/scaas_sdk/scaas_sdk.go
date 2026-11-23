@@ -14094,8 +14094,9 @@ type ChainProfile struct {
 	// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
 	// `Sdk::open`
 	FamilyParams *FamilyParams
-	// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-	// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+	// the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+	// (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+	// Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
 	// `Sdk::open` on another family)
 	L1Fee *L1Fee
 	// the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
@@ -15047,7 +15048,8 @@ func (_ FfiDestroyerGasLine) Destroy(value GasLine) {
 }
 
 // A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
-// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded), `data` (`mtxExecute`'s call data) or
+// `calldata` (the transaction row's, entry `transaction` kind `evm`: the price of a byte of the transaction's calldata).
 type GasPerByte struct {
 	Input string
 	Gas   uint64
@@ -17320,7 +17322,8 @@ func (_ FfiDestroyerPay) Destroy(value Pay) {
 
 // A pay's `PayMeta` v3 (CTR-MTX-26): committed to by the signed `entryRef` (`metaPayId`).
 type PayMeta struct {
-	// `0x` + 64 hex; `None`: 32 random bytes
+	// `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+	// the same pay lane, however its ids and amounts are spelt)
 	Salt *string
 	// a UUIDv7 in its text form, or `0x` + 64 hex; `None`: no number
 	PayNo *string
@@ -18161,8 +18164,9 @@ func (_ FfiDestroyerPqzTransfer) Destroy(value PqzTransfer) {
 	value.Destroy()
 }
 
-// `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
-// fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+// `UAPqzTransfer` / `UAPqzTransferCompact`: the real `legs` and `decoys` legs of amount 0 the SDK draws from the registry
+// line's `0x0142` lists, every leg's position shuffled (CTR-UA-29; their count one the set builds, 1, 2, 4 or 8),
+// `decoy_fee` the per-leg fee (decimal; at least the token's `minDecoyFee`, the contract's check).
 type PqzTransferMulti struct {
 	Signer          KeyRef
 	Chain           string
@@ -18170,6 +18174,7 @@ type PqzTransferMulti struct {
 	Batch           string
 	KeyVersion      uint64
 	Legs            []PqzLeg
+	Decoys          uint32
 	DecoyFee        string
 	ValidUntilBlock uint64
 	Envelope        Envelope
@@ -18182,6 +18187,7 @@ func (r *PqzTransferMulti) Destroy() {
 	FfiDestroyerString{}.Destroy(r.Batch)
 	FfiDestroyerUint64{}.Destroy(r.KeyVersion)
 	FfiDestroyerSequencePqzLeg{}.Destroy(r.Legs)
+	FfiDestroyerUint32{}.Destroy(r.Decoys)
 	FfiDestroyerString{}.Destroy(r.DecoyFee)
 	FfiDestroyerUint64{}.Destroy(r.ValidUntilBlock)
 	FfiDestroyerEnvelope{}.Destroy(r.Envelope)
@@ -18203,6 +18209,7 @@ func (c FfiConverterPqzTransferMulti) Read(reader io.Reader) PqzTransferMulti {
 		FfiConverterStringINSTANCE.Read(reader),
 		FfiConverterUint64INSTANCE.Read(reader),
 		FfiConverterSequencePqzLegINSTANCE.Read(reader),
+		FfiConverterUint32INSTANCE.Read(reader),
 		FfiConverterStringINSTANCE.Read(reader),
 		FfiConverterUint64INSTANCE.Read(reader),
 		FfiConverterEnvelopeINSTANCE.Read(reader),
@@ -18224,6 +18231,7 @@ func (c FfiConverterPqzTransferMulti) Write(writer io.Writer, value PqzTransferM
 	FfiConverterStringINSTANCE.Write(writer, value.Batch)
 	FfiConverterUint64INSTANCE.Write(writer, value.KeyVersion)
 	FfiConverterSequencePqzLegINSTANCE.Write(writer, value.Legs)
+	FfiConverterUint32INSTANCE.Write(writer, value.Decoys)
 	FfiConverterStringINSTANCE.Write(writer, value.DecoyFee)
 	FfiConverterUint64INSTANCE.Write(writer, value.ValidUntilBlock)
 	FfiConverterEnvelopeINSTANCE.Write(writer, value.Envelope)
@@ -20088,8 +20096,11 @@ type TokenBalance struct {
 	Address  string
 	Display  string
 	Decimals uint8
-	// the smallest unit, decimal
+	// the smallest unit, decimal; empty when `unknown` is set
 	Amount string
+	// set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+	// `frozen`): the amount is unknown, never a false 0
+	Unknown *string
 }
 
 func (r *TokenBalance) Destroy() {
@@ -20097,6 +20108,7 @@ func (r *TokenBalance) Destroy() {
 	FfiDestroyerString{}.Destroy(r.Display)
 	FfiDestroyerUint8{}.Destroy(r.Decimals)
 	FfiDestroyerString{}.Destroy(r.Amount)
+	FfiDestroyerOptionalString{}.Destroy(r.Unknown)
 }
 
 type FfiConverterTokenBalance struct{}
@@ -20113,6 +20125,7 @@ func (c FfiConverterTokenBalance) Read(reader io.Reader) TokenBalance {
 		FfiConverterStringINSTANCE.Read(reader),
 		FfiConverterUint8INSTANCE.Read(reader),
 		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterOptionalStringINSTANCE.Read(reader),
 	}
 }
 
@@ -20129,6 +20142,7 @@ func (c FfiConverterTokenBalance) Write(writer io.Writer, value TokenBalance) {
 	FfiConverterStringINSTANCE.Write(writer, value.Display)
 	FfiConverterUint8INSTANCE.Write(writer, value.Decimals)
 	FfiConverterStringINSTANCE.Write(writer, value.Amount)
+	FfiConverterOptionalStringINSTANCE.Write(writer, value.Unknown)
 }
 
 type FfiDestroyerTokenBalance struct{}
@@ -27921,7 +27935,7 @@ type GasFromApp struct {
 func (e GasFromApp) Destroy() {
 }
 
-// a native send's own estimate (or 21,000 for a plain transfer to an account without code)
+// a native send's own estimate (`eth_estimateGas`, a plain transfer's too)
 type GasFromEstimate struct {
 }
 
@@ -28296,6 +28310,12 @@ type L1Fee uint
 const (
 	// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
 	L1FeeOpStack L1Fee = 1
+	// the L1 cost charged as gas (Arbitrum, the profile's `in-estimate`): a table-quoted transaction's gas limit adds
+	// `NodeInterface.gasEstimateL1Component` (`0x…C8`) over its calldata, with the margin; an estimate holds it already
+	L1FeeInEstimate L1Fee = 2
+	// the L1 cost carried by the priority fee (Linea, the profile's `linea`): the fees are `linea_estimateGas`'s over the
+	// transaction, never below the chain's own
+	L1FeeLinea L1Fee = 3
 )
 
 type FfiConverterL1Fee struct{}

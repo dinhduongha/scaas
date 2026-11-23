@@ -300,6 +300,23 @@ async fn esplora_answers_out_of_form_are_refused() {
             )
         })
     }
+    // T26 B2-12: the same outpoint twice would be counted twice by a caller that sums
+    fn twice(p: &str) -> Option<(u16, Vec<u8>)> {
+        p.ends_with("/utxo").then(|| {
+            let one = esplora_fixture("utxo")
+                .trim()
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .to_string();
+            (200, format!("[{one},{one}]").into_bytes())
+        })
+    }
+    let e = esp(&[&esplora(Default::default(), twice).await]);
+    assert_eq!(
+        kind(e.utxos(0, FUNDED).await.unwrap_err()),
+        FailureKind::AnswerMalformed,
+        "a repeated outpoint"
+    );
     let e = esp(&[&esplora(Default::default(), deep).await]);
     assert_eq!(
         kind(e.utxos(0, FUNDED).await.unwrap_err()),
@@ -319,7 +336,11 @@ async fn esplora_answers_out_of_form_are_refused() {
         "TB1QFWXZLMN42RH6WU6GT4F0YRFPE4GF0JTWGXAGRR",
         "tb1q",
     ] {
-        assert!(e.utxos(0, bad).await.is_err(), "{bad}");
+        // T26 B2-12: the caller's argument, never the endpoint's failure (a failover would blame every endpoint)
+        assert!(
+            matches!(e.utxos(0, bad).await, Err(FamilyError::Argument(_))),
+            "{bad}"
+        );
     }
     assert!(
         !seen.lock().unwrap().iter().any(|p| p.contains("/address/")),
@@ -430,4 +451,25 @@ async fn the_cross_check_refuses_each_disagreement() {
     assert_eq!(cross_check(&ok, 0, &tip, &more, SCRIPT).await, out);
     let other = "0014".to_string() + &"00".repeat(20);
     assert_eq!(cross_check(&ok, 0, &tip, &utxos, &other).await, out);
+    // T26 B2-12: an output Core holds only in its mempool (`confirmations` 0) is not the UTXO Esplora calls confirmed
+    fn mempool(r: &Value) -> Value {
+        let mut v = joint(r);
+        if r["method"] == "gettxout" && !v["result"].is_null() {
+            v["result"]["confirmations"] = json!(0);
+        }
+        v
+    }
+    let mem = core(&[&core_fake(Default::default(), mempool).await], TESTNET);
+    assert_eq!(
+        cross_check(&mem, 0, &tip, &utxos, SCRIPT).await,
+        out,
+        "a mempool output"
+    );
+    let mut unconfirmed = utxos.clone();
+    unconfirmed[0].height = None;
+    assert_eq!(
+        cross_check(&mem, 0, &tip, &unconfirmed, SCRIPT).await,
+        Ok(()),
+        "control: a UTXO Esplora calls unconfirmed"
+    );
 }

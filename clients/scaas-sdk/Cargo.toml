@@ -81,6 +81,8 @@ native-networks = ["wallet", "scaas-ua/fam-btc", "scaas-ua/fam-near", "scaas-ua/
 raw-native = ["wallet"]
 # T41.arweave (chains-arweave plan T20; CLI-SDK-21): Arweave uploads, settlement, re-posts and reads (`src/arweave.rs`), without
 # the EVM part; the seal and the open are the app core's (`app-core`); bit 31
+# owner 2026-11-23 (T26 B-22): a development build whose profiles may take `Finality::Depth(0)` on any chain; never a release
+dev-profiles = []
 arweave = ["vault", "scaas-rpc/arweave", "scaas-rpc/node-client", "scaas-ua/fam-arweave"]
 # the Dart adapter (src/frb.rs): the platform interfaces as records of async closures; no dependency of its own
 frb = []

@@ -171,7 +171,10 @@ keeps) and a ledger's close time (`close_time_at`), so a deadline is compared wi
 `failover` answered whole by the first endpoint of the list when that endpoint is not `discovered`. A transaction is `Final` when a
 decisive read finds its receipt in a block at or below the final block, the receipt's block hash equal to that endpoint's header
 hash at its number. It is `Replaced` only when one decisive read finds, all at the final block, the sender's nonce (pinned by
-hash) above the transaction's nonce, the transaction by hash unknown and its receipt unknown. Under `strict_majority`, `Replaced`
+hash) above the transaction's nonce, the transaction by hash unknown and its receipt unknown. "Unknown" is only a fact on an
+endpoint that keeps the whole transaction index: a decisive endpoint (endpoint 0 under `failover`, every member under
+`strict_majority`) must be an archive node or one whose transaction index is not pruned (geth `--history.transactions=0`),
+since a pruned index answers "unknown" for an old landed transaction too (review T26 B-12). Under `strict_majority`, `Replaced`
 and a relayed operation's failed-for-good need the majority's agreed read at the `finalized` block (a read at another depth that
 shows them reads the finalized block again); under `failover` they are endpoint 0's alone and their text says they rest on one
 endpoint (owner 2026-11-17). The same facts from any other

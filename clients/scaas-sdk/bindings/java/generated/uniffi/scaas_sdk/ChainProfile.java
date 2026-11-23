@@ -76,8 +76,9 @@ public class ChainProfile {
      */
     private FamilyParams familyParams;
     /**
-     * the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-     * and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+     * the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+     * (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+     * Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
      * `Sdk::open` on another family)
      */
     private L1Fee l1Fee;

@@ -63,7 +63,8 @@ abstract class Dex implements RustOpaqueInterface {
   /// `Expect::WrapOrder`, sent to the wrapper's `mtxWrapOrder`; `DexNotListed` for a wrapper off the profile's list.
   Future<ArcPrepared> prepareWrapOrder({required WrapOrder req});
 
-  /// Signs a prepared order under its check (the user confirmed its review): its hash, the order and the signature.
+  /// Signs a prepared order under its check (the user confirmed its review): its hash, the order and the signature. The
+  /// check's clock is the head's time read now, never the prepare's (T26 B2-8): an order held past its window is refused.
   Future<SignedOrder> signOrder({required ArcPreparedOrder order});
 
   /// A market's last price, best bid and ask, volume (`GET /v1/dex/ticker`).
