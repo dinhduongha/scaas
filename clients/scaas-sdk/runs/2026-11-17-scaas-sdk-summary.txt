@@ -444,3 +444,17 @@ mutants-check | dfc306d1e | 1 | -
 # (its row at 1597f994a): t13rulings R3, t13sponsor's receiver check, t16a R6, t18b's two noticePeriod ones; not re-anchored.
 # cargo check --tests (--locked --offline -j 2, capped) at dfc306d1e: scaas-node, pqchat-core, pqvault-core rc 0;
 # format.sh --check rust py sh js rc 0.
+docs | a24fdb96f | 0 | -
+mutants-check | a24fdb96f | 0 | -
+sdk-clippy | a24fdb96f | 0 | -
+ua-clippy | a24fdb96f | 0 | -
+cli | a24fdb96f | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+bind-gen | a24fdb96f | 0 | -
+ck-test | a24fdb96f | 0 | node: 586 pass, 0 fail, 4 skipped
+# the rows above at a24fdb96f (t26-merge + TODO 8b-8 b114e7b6e..a24fdb96f, clean tree): the older rows of these steps kept by
+# hand (the runner replaces a step's rows). ck-test's first run here was red (263 pass, 33 fail: the worktree's node_modules
+# lacked @scure/sr25519, an install gap of a git-ignored input); rerun after node_modules was refreshed from the same lockfile.
+# Beside them at a24fdb96f, capped -j 2: pqvault-core cargo test --features vectors (lib 8, core 8, devices 3, vectors 4; e2e
+# 5 ignored) and clippy --all-targets -D warnings default and vectors; scaas-sdk app_core_vault_records 6, pqchat_keys
+# (vectors) 18; ua-rs app_core pqvault (app-core,vectors) 3 and its clippy; pqchat-core signed 8, devices 3; forge
+# PqVaultGroupMode 2, PqVaultTypes 7; format.sh --check rust py sh js rc 0. mutants-check rc 0: every SDK mutant script loads.
