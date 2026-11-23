@@ -47,6 +47,9 @@ fn endpoint(url: &str) -> EndpointConfig {
 const REGISTRY: &str = "0x5ca0000000000000000000000000000000000001";
 
 async fn setup() -> (Arc<Sdk>, KeyRef, Value) {
+    // a `vectors` build (feature `vectors` turns on `scaas-ua/vectors`) makes no key handle before the test marker is taken
+    #[cfg(feature = "vectors")]
+    scaas_ua::facade::vectors_unlock(scaas_ua::facade::TestOnly);
     let v = load("smartcontracts/vectors/typed/typed_ops.json");
     let d = &v["ops"]["UAGrantRole"]["domains"]["gov_router"]["domain"];
     let (router, salt) = (text(&d["verifyingContract"]), text(&d["salt"]));
