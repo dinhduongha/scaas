@@ -3,11 +3,12 @@
 //! chooses, whatever its chain's list policy; never forced on the list or on another read.
 use super::AppCore;
 use crate::SdkError;
+use scaas_rpc::Purpose;
 use std::sync::Arc;
 
 impl AppCore {
     /// [`AppCore::read_app`] as an agreed read: the same complete answer at one block from ⌊n/2⌋ + 1 of the chain's endpoints
-    /// (CLI-RPC-05, with CLI-RPC-06 for `trusted`). The list needs two endpoints or more and a pinned `chain_uid` (`Argument`);
+    /// (CLI-RPC-05, with CLI-RPC-06: always a read that feeds a decryption, as `read_app`, T26 B-17). The list needs two endpoints or more and a pinned `chain_uid` (`Argument`);
     /// no majority is `EndpointNoMajority`.
     pub async fn read_app_agreed(
         self: &Arc<Self>,
@@ -15,9 +16,8 @@ impl AppCore {
         contract: String,
         entry: String,
         args: String,
-        trusted: bool,
     ) -> Result<String, SdkError> {
-        self.read_app_by(chain, contract, entry, args, trusted, true)
+        self.read_app_by(chain, contract, entry, args, Purpose::FeedsDecryption, true)
             .await
     }
 }

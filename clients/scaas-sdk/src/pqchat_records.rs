@@ -210,6 +210,86 @@ pub struct PqChatSigned {
     pub review: Vec<ReviewField>,
 }
 
+/// A PqChat record prepared for its signature (T26 A-5 part b, decision (135)): the review to show and the typed digest, built
+/// after every refusal; [`Self::sign`] signs exactly that typed data, once (it consumes the value). S5 (`pqchat_seal_message`)
+/// alone signs without a per-signature review (CLI-PQC-04).
+pub struct PqChatPrepared {
+    pub record: String,
+    pub id: Option<String>,
+    /// the typed digest the signature covers
+    pub typed: String,
+    pub wrap_hashes: Vec<String>,
+    /// the review shown before the signature (the struct, the id, every field)
+    pub review: Vec<ReviewField>,
+    sdk: Arc<crate::Sdk>,
+    account: KeyRef,
+    td: scaas_ua::wallet::TypedData,
+}
+
+impl PqChatPrepared {
+    /// Signs the prepared record after its review: `account`'s UA key opened now (a native key or an `msig`: `Argument`).
+    pub async fn sign(self) -> Result<PqChatSigned, SdkError> {
+        let sdk = self.sdk.clone();
+        sdk.clone()
+            .spawn(async move {
+                let crate::op::Key::Ua(_, k) = crate::op::key(&sdk, &self.account)? else {
+                    return Err(SdkError::Argument);
+                };
+                let s = pqchat::sign(&k, &self.td)?;
+                Ok(PqChatSigned {
+                    record: self.record,
+                    id: self.id,
+                    typed: self.typed,
+                    wrap_hashes: self.wrap_hashes,
+                    sig: AppUaSig {
+                        key_data: s.key_data,
+                        signature: s.signature,
+                        members: vec![],
+                    },
+                    review: self.review,
+                })
+            })
+            .await
+    }
+}
+
+/// The contact card prepared for its signature (T26 A-5 part b): as [`PqChatPrepared`].
+pub struct PqCardPrepared {
+    pub card: PqChatCard,
+    /// the typed digest the signature covers
+    pub typed: String,
+    /// the review shown before the signature
+    pub review: Vec<ReviewField>,
+    sdk: Arc<crate::Sdk>,
+    account: KeyRef,
+    c: pqchat::Card,
+}
+
+impl PqCardPrepared {
+    /// Signs the prepared card after its review: `account`'s UA key opened now (a native key or an `msig`: `Argument`).
+    pub async fn sign(self) -> Result<PqCardSigned, SdkError> {
+        let sdk = self.sdk.clone();
+        sdk.clone()
+            .spawn(async move {
+                let crate::op::Key::Ua(_, k) = crate::op::key(&sdk, &self.account)? else {
+                    return Err(SdkError::Argument);
+                };
+                let s = pqchat::sign_card(&k, &self.c)?;
+                Ok(PqCardSigned {
+                    card: self.card,
+                    typed: self.typed,
+                    sig: AppUaSig {
+                        key_data: s.key_data,
+                        signature: s.signature,
+                        members: vec![],
+                    },
+                    review: self.review,
+                })
+            })
+            .await
+    }
+}
+
 fn w32(s: &str) -> Result<[u8; 32], SdkError> {
     crate::op::unhex(&s.to_ascii_lowercase())?
         .try_into()
@@ -256,80 +336,74 @@ fn card_of(c: &PqChatCard) -> Result<pqchat::Card, SdkError> {
 }
 
 impl AppCore {
-    /// The entry under each `sign_pqchat_*`: the typed data of `name` holding `message`, its id, the review (the struct, the
-    /// id, every field), the signature of `account` (a UA key; a native key or an `msig`: `Argument`).
-    async fn sign_pq(
+    /// The entry under each `prepare_pqchat_*`: the typed data of `name` holding `message`, its id and the review (the struct,
+    /// the id, every field), in a PqChat scope; nothing is signed until [`PqChatPrepared::sign`] (T26 A-5 part b, decision
+    /// (135)), by `account` (a UA key; a native key or an `msig`: `Argument` there).
+    async fn prepare_pq(
         self: &Arc<Self>,
         account: KeyRef,
         name: &'static str,
         message: Value,
         id: Id,
         wrap_hashes: Vec<String>,
-    ) -> Result<PqChatSigned, SdkError> {
-        let sdk = self.sdk.clone();
-        sdk.clone()
-            .spawn(async move {
-                let td = pqchat::typed(name, message.clone())?;
-                let digest = td.digest()?;
-                let id = match id {
-                    Id::None => None,
-                    Id::Typed => Some(hex(&digest)),
-                    Id::Of(tag, words) => Some(hex(&pqchat::id(tag, &words))),
-                };
-                let mut review = vec![crate::app_core::field(
-                    "record",
-                    name.into(),
-                    Source::Derived,
-                )];
-                if let Some(i) = &id {
-                    review.push(crate::app_core::field("id", i.clone(), Source::Derived));
-                }
-                let v = td.to_value();
-                crate::app_core::flatten(
-                    "message",
-                    v.get("message").unwrap_or(&Value::Null),
-                    &mut review,
-                );
-                let crate::op::Key::Ua(_, k) = crate::op::key(&sdk, &account)? else {
-                    return Err(SdkError::Argument);
-                };
-                let s = pqchat::sign(&k, &td)?;
-                Ok(PqChatSigned {
-                    record: name.into(),
-                    id,
-                    typed: hex(&digest),
-                    wrap_hashes,
-                    sig: AppUaSig {
-                        key_data: s.key_data,
-                        signature: s.signature,
-                        members: vec![],
-                    },
-                    review,
-                })
-            })
-            .await
+    ) -> Result<PqChatPrepared, SdkError> {
+        // T26 A-9: a scope that declared PqChat's prefix only (`AppLabelRefused`). The signer field (creator, author, member,
+        // admin, sender, voter) is the request's: the cross-language vectors sign records whose signer field is not the
+        // vector key's UA, and the contract refuses a record whose signer is not that field (decision (126))
+        self.label(scaas_ua::wallet::pqchat_keys::PREFIX.as_bytes())?;
+        let td = pqchat::typed(name, message)?;
+        let digest = td.digest()?;
+        let id = match id {
+            Id::None => None,
+            Id::Typed => Some(hex(&digest)),
+            Id::Of(tag, words) => Some(hex(&pqchat::id(tag, &words))),
+        };
+        let mut review = vec![crate::app_core::field(
+            "record",
+            name.into(),
+            Source::Derived,
+        )];
+        if let Some(i) = &id {
+            review.push(crate::app_core::field("id", i.clone(), Source::Derived));
+        }
+        let v = td.to_value();
+        crate::app_core::flatten(
+            "message",
+            v.get("message").unwrap_or(&Value::Null),
+            &mut review,
+        );
+        Ok(PqChatPrepared {
+            record: name.into(),
+            id,
+            typed: hex(&digest),
+            wrap_hashes,
+            review,
+            sdk: self.sdk.clone(),
+            account,
+            td,
+        })
     }
 
     /// `PqChatSession`, its `wrapHashes` from `r.wraps`.
-    pub async fn sign_pqchat_session(
+    pub async fn prepare_pqchat_session(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqChatSession,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let wh = wrap_hashes(&r.wraps)?;
         let m = json!({"creator": r.creator, "nonce": r.nonce, "homeChain": r.home_chain,
             "homeChatContract": r.home_chat_contract, "groupMode": 0, "admins": r.admins, "members": members(&r.members),
             "wrapHashes": wh, "sealedInfo": hex(&r.sealed_info)});
         let id = Id::Of("session", vec![w32(&r.creator)?, w64(r.nonce)]);
-        self.sign_pq(account, "PqChatSession", m, id, wh).await
+        self.prepare_pq(account, "PqChatSession", m, id, wh).await
     }
 
     /// `PqChatEpoch`, its `wrapHashes` from `r.wraps`.
-    pub async fn sign_pqchat_epoch(
+    pub async fn prepare_pqchat_epoch(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqChatEpoch,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let wh = wrap_hashes(&r.wraps)?;
         let m = json!({"sessionId": r.session_id, "author": r.author, "nonce": r.nonce, "epoch": r.epoch,
             "parentEpochId": r.parent_epoch_id, "admins": r.admins, "members": members(&r.members),
@@ -338,41 +412,41 @@ impl AppCore {
             "epoch",
             vec![w32(&r.session_id)?, w32(&r.author)?, w64(r.nonce)],
         );
-        self.sign_pq(account, "PqChatEpoch", m, id, wh).await
+        self.prepare_pq(account, "PqChatEpoch", m, id, wh).await
     }
 
     /// `PqChatLeave`.
-    pub async fn sign_pqchat_leave(
+    pub async fn prepare_pqchat_leave(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqChatLeave,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let m = json!({"sessionId": r.session_id, "epochId": r.epoch_id, "member": r.member, "nonce": r.nonce});
-        self.sign_pq(account, "PqChatLeave", m, Id::Typed, vec![])
+        self.prepare_pq(account, "PqChatLeave", m, Id::Typed, vec![])
             .await
     }
 
     /// `PqChatRemove`.
-    pub async fn sign_pqchat_remove(
+    pub async fn prepare_pqchat_remove(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqChatRemove,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let m = json!({"sessionId": r.session_id, "epochId": r.epoch_id, "nextEpoch": r.next_epoch,
             "members": r.members, "admin": r.admin, "nonce": r.nonce});
-        self.sign_pq(account, "PqChatRemove", m, Id::None, vec![])
+        self.prepare_pq(account, "PqChatRemove", m, Id::None, vec![])
             .await
     }
 
     /// `PqChatMessage`.
-    pub async fn sign_pqchat_message(
+    pub async fn prepare_pqchat_message(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqChatMessage,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let m = json!({"sessionId": r.session_id, "epochId": r.epoch_id, "sender": r.sender, "device": r.device,
             "counter": r.counter, "parents": r.parents, "ciphertext": hex(&r.ciphertext)});
-        self.sign_pq(account, "PqChatMessage", m, Id::Typed, vec![])
+        self.prepare_pq(account, "PqChatMessage", m, Id::Typed, vec![])
             .await
     }
 
@@ -411,48 +485,48 @@ impl AppCore {
     }
 
     /// `PqTopic`.
-    pub async fn sign_pqchat_topic(
+    pub async fn prepare_pqchat_topic(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqTopic,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let m = json!({"admin": r.admin, "nonce": r.nonce, "homeChain": r.home_chain,
             "homeChatContract": r.home_chat_contract, "name": r.name, "about": hex(&r.about),
             "openReplies": r.open_replies});
         let id = Id::Of("topic", vec![w32(&r.admin)?, w64(r.nonce)]);
-        self.sign_pq(account, "PqTopic", m, id, vec![]).await
+        self.prepare_pq(account, "PqTopic", m, id, vec![]).await
     }
 
     /// `PqTopicUpdate`.
-    pub async fn sign_pqchat_topic_update(
+    pub async fn prepare_pqchat_topic_update(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqTopicUpdate,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let m = json!({"topicId": r.topic_id, "seq": r.seq, "name": r.name, "about": hex(&r.about),
             "openReplies": r.open_replies});
-        self.sign_pq(account, "PqTopicUpdate", m, Id::None, vec![])
+        self.prepare_pq(account, "PqTopicUpdate", m, Id::None, vec![])
             .await
     }
 
     /// `PqTopicWriter`.
-    pub async fn sign_pqchat_topic_writer(
+    pub async fn prepare_pqchat_topic_writer(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqTopicWriter,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let m =
             json!({"topicId": r.topic_id, "writer": r.writer, "granted": r.granted, "seq": r.seq});
-        self.sign_pq(account, "PqTopicWriter", m, Id::None, vec![])
+        self.prepare_pq(account, "PqTopicWriter", m, Id::None, vec![])
             .await
     }
 
     /// `PqTopicEntry` (a post or a reply).
-    pub async fn sign_pqchat_topic_entry(
+    pub async fn prepare_pqchat_topic_entry(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqTopicEntry,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let e = &r.entry_ref;
         let m = json!({"topicId": r.topic_id, "author": r.author, "nonce": r.nonce, "parentId": r.parent_id,
             "ref": {"chainUid": e.chain_uid, "pqchat": e.pqchat, "entryId": e.entry_id, "contentHash": e.content_hash},
@@ -461,77 +535,70 @@ impl AppCore {
             "entry",
             vec![w32(&r.topic_id)?, w32(&r.author)?, w64(r.nonce)],
         );
-        self.sign_pq(account, "PqTopicEntry", m, id, vec![]).await
+        self.prepare_pq(account, "PqTopicEntry", m, id, vec![])
+            .await
     }
 
     /// `PqTopicEdit`.
-    pub async fn sign_pqchat_topic_edit(
+    pub async fn prepare_pqchat_topic_edit(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqTopicEdit,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let m = json!({"entryId": r.entry_id, "author": r.author, "nonce": r.nonce, "version": r.version,
             "mediaType": r.media_type, "body": hex(&r.body)});
-        self.sign_pq(account, "PqTopicEdit", m, Id::None, vec![])
+        self.prepare_pq(account, "PqTopicEdit", m, Id::None, vec![])
             .await
     }
 
     /// `PqTopicVote`.
-    pub async fn sign_pqchat_topic_vote(
+    pub async fn prepare_pqchat_topic_vote(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqTopicVote,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let m = json!({"entryId": r.entry_id, "voter": r.voter, "value": r.value, "seq": r.seq});
-        self.sign_pq(account, "PqTopicVote", m, Id::None, vec![])
+        self.prepare_pq(account, "PqTopicVote", m, Id::None, vec![])
             .await
     }
 
-    /// The account's contact card (UA-7 §14 O7): its UA from the signing account (a UA key; a native key or an `msig`:
-    /// `Argument`), `kem_version` and `matrix_id` (empty: none; a malformed one `Argument`) as given and shown in the review.
-    pub async fn sign_pqchat_card(
+    /// The account's contact card (UA-7 §14 O7), in a PqChat scope (`AppLabelRefused`): its UA from the signing account (a UA key; a native key or an `msig`:
+    /// `Argument`), `kem_version` and `matrix_id` (empty: none; a malformed one `Argument`) as given and shown in the review;
+    /// signed by [`PqCardPrepared::sign`] after it (T26 A-5 part b).
+    pub async fn prepare_pqchat_card(
         self: &Arc<Self>,
         account: KeyRef,
         kem_version: u64,
         matrix_id: String,
-    ) -> Result<PqCardSigned, SdkError> {
+    ) -> Result<PqCardPrepared, SdkError> {
+        // T26 A-9: a PqChat scope only, as every PqChat entry
+        self.label(scaas_ua::wallet::pqchat_keys::PREFIX.as_bytes())?;
         let card = PqChatCard {
             ua: hex(&self.account_ua(&account)?),
             kem_version,
             matrix_id,
         };
         let c = card_of(&card)?;
-        let sdk = self.sdk.clone();
-        sdk.clone()
-            .spawn(async move {
-                let td = pqchat::card_typed(&c)?;
-                let mut review = vec![crate::app_core::field(
-                    "record",
-                    "PqChatCard".into(),
-                    Source::Derived,
-                )];
-                let v = td.to_value();
-                crate::app_core::flatten(
-                    "message",
-                    v.get("message").unwrap_or(&Value::Null),
-                    &mut review,
-                );
-                let crate::op::Key::Ua(_, k) = crate::op::key(&sdk, &account)? else {
-                    return Err(SdkError::Argument);
-                };
-                let s = pqchat::sign_card(&k, &c)?;
-                Ok(PqCardSigned {
-                    card,
-                    typed: hex(&td.digest()?),
-                    sig: AppUaSig {
-                        key_data: s.key_data,
-                        signature: s.signature,
-                        members: vec![],
-                    },
-                    review,
-                })
-            })
-            .await
+        let td = pqchat::card_typed(&c)?;
+        let mut review = vec![crate::app_core::field(
+            "record",
+            "PqChatCard".into(),
+            Source::Derived,
+        )];
+        let v = td.to_value();
+        crate::app_core::flatten(
+            "message",
+            v.get("message").unwrap_or(&Value::Null),
+            &mut review,
+        );
+        Ok(PqCardPrepared {
+            typed: hex(&td.digest()?),
+            card,
+            review,
+            sdk: self.sdk.clone(),
+            account,
+            c,
+        })
     }
 
     /// Whether `card` counts for `ua` (CLI-PQC-05): its `ua` is `ua`, its Matrix id well formed, and `sig` is `ua`'s portable
@@ -547,7 +614,7 @@ impl AppCore {
         let id = w32(&ua)?;
         let c = card_of(&card)?;
         let sig = scaas_ua::ua_portable::UASig::from(&sig);
-        self.with_records(&chain, id, false, false, |state| {
+        self.with_records(&chain, id, false, |state| {
             pqchat::verify_card(&id, &c, &sig, state)
         })
         .await

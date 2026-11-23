@@ -2,7 +2,7 @@
 // The ua-rs wallet through libscaas_ua_c (clients/ua-c, C ABI v6) by P/Invoke (spec 2026-11-05-ua-rs-sign §9.2, plan T13f). The
 // identity port (Ua.cs) stays this assembly's own code and the independent cross-check; signing, KEM, seal, vault, backup, link
 // and the Zether and PQZ facades are the library's.
-// Load: every entry point checks once that scaas_ua_abi_version() is 6 and scaas_ua_features() a build this binding knows
+// Load: every entry point checks once that scaas_ua_abi_version() is 7 and scaas_ua_features() a build this binding knows
 // (LibraryMismatchException otherwise). Secrets: secret inputs are byte[] (a string cannot be wiped); the NUL-terminated copy this
 // binding makes of one is a pinned array zeroed by CryptographicOperations.ZeroMemory after the call; secret outputs are pinned
 // byte[] the caller wipes with UaLib.Wipe. Handles: SafeHandle (freed exactly once; a call in flight holds a reference, so
@@ -155,10 +155,10 @@ internal static unsafe class Native
     [DllImport(L)] internal static extern int scaas_ua_wallet_manifest_json(WalletHandle w, byte* o, ref nuint n);
     [DllImport(L)] internal static extern int scaas_ua_wallet_discover_candidates(WalletHandle w, ushort kind, uint account, uint gap, byte* o, ref nuint n);
     [DllImport(L)] internal static extern int scaas_ua_wallet_backup_seal(WalletHandle w, KeyHandle sender, RecipientC* rs, nuint n, byte* o, ref nuint len);
-    [DllImport(L)] internal static extern int scaas_ua_wallet_restore_backup(KemHandle kk, byte* c, byte* e, byte* m, byte* a, WalletHandle cur, byte* bip39, out WalletHandle w, byte* installed);
-    [DllImport(L)] internal static extern int scaas_ua_wallet_restore_backup_rollback(KemHandle kk, byte* c, byte* e, byte* m, byte* a, WalletHandle cur, byte* bip39, out WalletHandle w, byte* installed);
+    [DllImport(L)] internal static extern int scaas_ua_wallet_restore_backup(KemHandle kk, byte* c, byte* e, byte* m, byte* a, byte* mc, WalletHandle cur, byte* bip39, out WalletHandle w, byte* installed);
+    [DllImport(L)] internal static extern int scaas_ua_wallet_restore_backup_rollback(KemHandle kk, byte* c, byte* e, byte* m, byte* a, byte* mc, WalletHandle cur, byte* bip39, out WalletHandle w, byte* installed);
     [DllImport(L)] internal static extern int scaas_ua_wallet_link_seal(WalletHandle w, KeyHandle sender, byte* pk, nuint pkLen, byte* code, byte* o, ref nuint n);
-    [DllImport(L)] internal static extern int scaas_ua_wallet_from_link(LinkHandle s, byte* c, byte* e, byte* m, byte* a, byte* bip39, out WalletHandle w);
+    [DllImport(L)] internal static extern int scaas_ua_wallet_from_link(LinkHandle s, byte* c, byte* e, byte* m, byte* a, byte* mc, byte* bip39, out WalletHandle w);
     [DllImport(L)] internal static extern int scaas_ua_seed_backup_reveal(SeedBackupHandle b, byte* o, ref nuint n);
     [DllImport(L)] internal static extern int scaas_ua_seed_backup_challenge(SeedBackupHandle b, uint* out3);
     [DllImport(L)] internal static extern int scaas_ua_seed_backup_verify(SeedBackupHandle b, byte** answers, nuint n, byte* ok);
@@ -183,7 +183,7 @@ internal static unsafe class Native
     [DllImport(L)] internal static extern int scaas_ua_kem_encaps(byte* pk, nuint pkLen, byte* ct, byte* eph, byte* ss);
     [DllImport(L)] internal static extern int scaas_ua_seal(byte* pk, nuint pkLen, byte* purpose, byte* aad, nuint aadLen, byte* pt, nuint ptLen, byte* mct, ref nuint mctLen, byte* eph, byte* ct, ref nuint ctLen);
     [DllImport(L)] internal static extern int scaas_ua_open(KemHandle kk, byte* purpose, byte* aad, nuint aadLen, byte* mct, nuint mctLen, byte* eph, byte* ct, nuint ctLen, byte* pt, ref nuint ptLen);
-    [DllImport(L)] internal static extern int scaas_ua_open_container(KemHandle kk, byte* c, byte* e, byte* m, byte* a, byte* pt, ref nuint n);
+    [DllImport(L)] internal static extern int scaas_ua_open_container(KemHandle kk, byte* c, byte* e, byte* m, byte* a, byte* mc, byte* pt, ref nuint n);
     [DllImport(L)] internal static extern int scaas_ua_link_session_new(out LinkHandle s);
     [DllImport(L)] internal static extern int scaas_ua_link_session_kem_pk(LinkHandle s, byte* o);
     [DllImport(L)] internal static extern int scaas_ua_link_session_short_code(LinkHandle s, byte* o, ref nuint n);
@@ -282,7 +282,7 @@ internal sealed unsafe class Args : IDisposable
 /// <summary>The library's module-level calls, constants, the load check and the secret helpers.</summary>
 public static unsafe class UaLib
 {
-    public const uint AbiVersionRequired = 6;
+    public const uint AbiVersionRequired = 7;
     public const ulong FeatureWallet = 1 << 0, FeaturePq = 1 << 1, FeatureFalcon = 1 << 2, FeatureZether = 1 << 3, FeaturePqz = 1 << 4,
         FeaturePqzSetN2048Kmax1024 = 1 << 5, FeaturePqzSetN2304Kmax4096 = 1 << 6, FeaturePqzSetN2560Kmax16384 = 1 << 7,
         FeaturePqzSetN2816Kmax65536 = 1 << 8, FeatureExternal = 1 << 9, FeatureMlock = 1 << 10;
@@ -790,7 +790,7 @@ public sealed unsafe class Wallet : IDisposable
         return leaf;
     }
 
-    static Wallet? Restore(bool rollback, KemKey kk, string container, string expect, string? members, string? accepted, Wallet? current, byte[]? bip39Passphrase)
+    static Wallet? Restore(bool rollback, KemKey kk, string container, string expect, string? members, string? accepted, string? msigCurrent, Wallet? current, byte[]? bip39Passphrase)
     {
         using var a = new Args();
         byte installed = 0;
@@ -798,31 +798,35 @@ public sealed unsafe class Wallet : IDisposable
         var e = a.Str(expect);
         var m = a.Str(members);
         var ac = a.Str(accepted);
+        var mc = a.Str(msigCurrent);
         var bp = a.Secret(bip39Passphrase);
         var cur = current?.H ?? WalletHandle.None;
         WalletHandle w;
         var st = rollback
-            ? Native.scaas_ua_wallet_restore_backup_rollback(kk.H, c, e, m, ac, cur, bp, out w, &installed)
-            : Native.scaas_ua_wallet_restore_backup(kk.H, c, e, m, ac, cur, bp, out w, &installed);
+            ? Native.scaas_ua_wallet_restore_backup_rollback(kk.H, c, e, m, ac, mc, cur, bp, out w, &installed)
+            : Native.scaas_ua_wallet_restore_backup(kk.H, c, e, m, ac, mc, cur, bp, out w, &installed);
         UaLib.Check(st);
         return installed != 0 ? new Wallet(w) : null;
     }
 
     /// <summary>The wallet a backup container carries, or null when <paramref name="current"/> holds that generation already (an older one
-    /// is UABackupRollback).</summary>
+    /// is UABackupRollback). <paramref name="msigCurrent"/>: <c>{"&lt;msig id&gt;": {msig, enabled}}</c>, the current structure of an
+    /// updated msig (CTR-UA-44); null = none updated.</summary>
     public static Wallet? RestoreBackup(KemKey kk, string container, string expect, string? members = null, string? accepted = null,
-        Wallet? current = null, byte[]? bip39Passphrase = null) => Restore(false, kk, container, expect, members, accepted, current, bip39Passphrase);
+        string? msigCurrent = null, Wallet? current = null, byte[]? bip39Passphrase = null) =>
+        Restore(false, kk, container, expect, members, accepted, msigCurrent, current, bip39Passphrase);
 
     /// <summary><see cref="RestoreBackup"/> that may install an older backup: only after the user confirmed the rollback.</summary>
     public static Wallet? RestoreBackupRollback(KemKey kk, string container, string expect, string? members = null, string? accepted = null,
-        Wallet? current = null, byte[]? bip39Passphrase = null) => Restore(true, kk, container, expect, members, accepted, current, bip39Passphrase);
+        string? msigCurrent = null, Wallet? current = null, byte[]? bip39Passphrase = null) =>
+        Restore(true, kk, container, expect, members, accepted, msigCurrent, current, bip39Passphrase);
 
     /// <summary>The wallet a link container carries to <paramref name="session"/> (which it consumes).</summary>
     public static Wallet FromLink(LinkSession session, string container, string expect, string? members = null, string? accepted = null,
-        byte[]? bip39Passphrase = null)
+        string? msigCurrent = null, byte[]? bip39Passphrase = null)
     {
         using var a = new Args();
-        UaLib.Check(Native.scaas_ua_wallet_from_link(session.H, a.Str(container), a.Str(expect), a.Str(members), a.Str(accepted), a.Secret(bip39Passphrase), out var w));
+        UaLib.Check(Native.scaas_ua_wallet_from_link(session.H, a.Str(container), a.Str(expect), a.Str(members), a.Str(accepted), a.Str(msigCurrent), a.Secret(bip39Passphrase), out var w));
         return new Wallet(w);
     }
 }
@@ -1027,14 +1031,15 @@ public sealed unsafe class KemKey : IDisposable
     }
 
     /// <summary>The plaintext of a sealed container accepted as <paramref name="expect"/> says (a pinned array: wipe it).</summary>
-    public byte[] OpenContainer(string container, string expect, string? members = null, string? accepted = null)
+    public byte[] OpenContainer(string container, string expect, string? members = null, string? accepted = null, string? msigCurrent = null)
     {
         using var a = new Args();
         var c = a.Str(container);
         var e = a.Str(expect);
         var m = a.Str(members);
         var ac = a.Str(accepted);
-        return UaLib.SecretOut((o, ref n) => Native.scaas_ua_open_container(H, c, e, m, ac, o, ref n));
+        var mc = a.Str(msigCurrent);
+        return UaLib.SecretOut((o, ref n) => Native.scaas_ua_open_container(H, c, e, m, ac, mc, o, ref n));
     }
 }
 

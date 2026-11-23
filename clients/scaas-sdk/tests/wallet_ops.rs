@@ -1466,10 +1466,26 @@ async fn smart_execute_decoded_only() {
         "no slot holds the signer"
     );
     slots(3);
+    t.chain.lock().unwrap().requests.clear();
     let p = acc
         .prepare_smart_execute(read(&account), transfer)
         .await
         .unwrap();
+    // T26 A2-2: `nextKeyIndex()` and the three `keyAt(i)` one read, each pinned to one block hash
+    let keys: Vec<String> = (t.chain.lock().unwrap().requests.iter())
+        .filter(|r| r.contains("eth_call") && r.contains(&account[2..]))
+        .filter(|r| {
+            r.contains(&sel("nextKeyIndex()")[2..]) || r.contains(&sel("keyAt(uint256)")[2..])
+        })
+        .cloned()
+        .collect();
+    assert_eq!(keys.len(), 4, "{keys:?}");
+    let pin = |r: &String| r.split("blockHash").nth(1).map(|x| x[..72].to_string());
+    assert!(
+        keys.iter()
+            .all(|r| pin(r).is_some() && pin(r) == pin(&keys[0])),
+        "{keys:?}"
+    );
     let payer = SubmitPath::SelfRelay {
         payer: t.payer.clone(),
     };

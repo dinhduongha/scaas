@@ -6,6 +6,9 @@
 //! `Landed` by the token's executed event. Local only; nothing leaves the machine.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+#[path = "common/prepared.rs"]
+mod prepared;
+use prepared::SignPrepared as _;
 use scaas_sdk::op::{BlsMultiPart, KeyRef, OpState, SubmitPath};
 use scaas_sdk::vault::{ImportWords, MemoryStore};
 use scaas_sdk::wallet::{Envelope, Pay, PayBody, PayMeta, Transfer};

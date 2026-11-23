@@ -26,14 +26,14 @@
 //! use scaas_ua::wallet::{ContainerExpect, KemKeyPair, SealedContainer};
 //! fn f(k: &KemKeyPair, c: &SealedContainer, e: &ContainerExpect) {
 //!     let none = |_: [u8; 32]| -> Option<(u16, Vec<u8>)> { None };
-//!     let _ = k.open_container(c, e, &none, None);
+//!     let _ = k.open_container(c, e, &none, &|_| None, None);
 //! }
 //! ```
 //! ```compile_fail,E0061
 //! use scaas_ua::wallet::{KemKeyPair, SealedContainer};
 //! fn f(k: &KemKeyPair, c: &SealedContainer) {
 //!     let none = |_: [u8; 32]| -> Option<(u16, Vec<u8>)> { None };
-//!     let _ = k.open_container(c, &none, None);
+//!     let _ = k.open_container(c, &none, &|_| None, None);
 //! }
 //! ```
 //! A link session installs once (`second_link_install_cannot_be_expressed`: the session is moved):
@@ -41,15 +41,15 @@
 //! use scaas_ua::wallet::{ContainerExpect, LinkSession, SealedContainer, Wallet};
 //! fn f(s: LinkSession, c: &SealedContainer, e: &ContainerExpect) {
 //!     let none = |_: [u8; 32]| -> Option<(u16, Vec<u8>)> { None };
-//!     let _ = Wallet::from_link(s, c, e, &none, None, "");
+//!     let _ = Wallet::from_link(s, c, e, &none, &|_| None, None, "");
 //! }
 //! ```
 //! ```compile_fail,E0382
 //! use scaas_ua::wallet::{ContainerExpect, LinkSession, SealedContainer, Wallet};
 //! fn f(s: LinkSession, c: &SealedContainer, e: &ContainerExpect) {
 //!     let none = |_: [u8; 32]| -> Option<(u16, Vec<u8>)> { None };
-//!     let _ = Wallet::from_link(s, c, e, &none, None, "");
-//!     let _ = Wallet::from_link(s, c, e, &none, None, "");
+//!     let _ = Wallet::from_link(s, c, e, &none, &|_| None, None, "");
+//!     let _ = Wallet::from_link(s, c, e, &none, &|_| None, None, "");
 //! }
 //! ```
 use super::aead::{aead_open, aead_seal, hkdf_sha256, Alg};
@@ -60,8 +60,8 @@ use super::signer::{KeyRef, Signer};
 use super::uasig::{msig_members, Slot};
 use super::{bounded, Error, Result, Wallet};
 use crate::ua_portable::{
-    inner_digest, member_keys_current, msig_sig_minimal, Accepted, Inner, InnerSig, MemberSig,
-    Members, MsigStructure, UASig,
+    inner_digest, member_keys_current, msig_sig_minimal, slot_enabled, Accepted, Current, Inner,
+    InnerSig, MemberSig, Members, MsigStructure, UASig,
 };
 use crate::{derive_ua, keccak256, member_digest, purpose_tag, seal_purpose_tag, ua_message};
 use base64ct::{Base64UrlUnpadded, Encoding};
@@ -244,9 +244,10 @@ impl KemKeyPair {
         c: &SealedContainer,
         expect: &ContainerExpect,
         members: &Members,
+        current: &Current,
         accepted: Option<&Accepted>,
     ) -> Result<Zeroizing<Vec<u8>>> {
-        open_container_with(self, c, expect, members, accepted, None)
+        open_container_with(self, c, expect, members, current, accepted, None)
     }
 }
 
@@ -606,6 +607,7 @@ fn open_container_with(
     c: &SealedContainer,
     expect: &ContainerExpect,
     members: &Members,
+    current: &Current,
     accepted: Option<&Accepted>,
     short_code: Option<&str>,
 ) -> Result<Zeroizing<Vec<u8>>> {
@@ -646,6 +648,7 @@ fn open_container_with(
                 &m0,
                 &auth.members,
                 members,
+                current,
                 accepted,
             )?
     } else {
@@ -688,30 +691,36 @@ fn leaf_ok(kind: u16, key: &[u8], md: &[u8; 32], sig: &[u8]) -> Result<bool> {
     Ok(SENDER_KINDS.contains(&kind) && crate::verify::verify(kind, key, &msg, sig, false, false))
 }
 
-/// An `msig` sender's member signatures over its `ua_msg` `m0`: member keys from `members` (re-derived; unknown:
-/// `ContainerSender`), the minimal set at both levels (else `false`), each level's signers accepted ([`accepted_ok`]), a derived
-/// member over `memberDigest(id, m0)`, an `msig` member with no `sig` and its own non-empty list over `innerDigest`.
+/// An `msig` sender's member signatures over its `ua_msg` `m0`, judged on the current structures (`current`, CTR-UA-44, T26
+/// A2-1: `d` is the first structure, which never authorizes once `current` answers) at both levels: member keys from `members`
+/// (re-derived; unknown: `ContainerSender`), the minimal set at both levels (else `false`), each level's signers accepted and
+/// enabled ([`accepted_ok`]), a derived member over `memberDigest(id, m0)`, an `msig` member with no `sig` and its own non-empty
+/// list over `innerDigest`.
 fn msig_ok(
     id: &[u8; 32],
     d: &[u8],
     m0: &[u8; 32],
     slots: &[MemberSig],
     members: &Members,
+    current: &Current,
     accepted: &Accepted,
 ) -> Result<bool> {
     let cs = |_| Error::ContainerSender;
-    let keys = member_keys_current(d, members, &|_| None).map_err(cs)?;
-    let inner = |x: [u8; 32]| members(x).map(|(_, k)| k);
+    let d = &current(*id).map_or_else(|| d.to_vec(), |c| c.0);
+    let keys = member_keys_current(d, members, current).map_err(cs)?;
+    let inner = |x: [u8; 32]| members(x).map(|(_, k)| current(x).map_or(k, |c| c.0));
     if !msig_sig_minimal(d, slots, &inner).map_err(cs)? {
         return Ok(false);
     }
+    let on =
+        |x: [u8; 32], i: u16| accepted(x, i) && current(x).is_none_or(|c| slot_enabled(&c.1, i));
     let all = MsigStructure::from_key_data(d).map_err(cs)?.members;
     let at = |i: u16| Some((*all.get(usize::from(i))?, keys.get(usize::from(i))?));
-    accepted_ok(id, d, slots.iter().map(|s| s.index), accepted)?;
+    accepted_ok(id, d, slots.iter().map(|s| s.index), &on)?;
     for s in slots {
         let (m, key) = at(s.index).ok_or(Error::ContainerSender)?;
         if m.kind == MSIG {
-            accepted_ok(&m.id, key, s.members.iter().map(|x| x.index), accepted)?;
+            accepted_ok(&m.id, key, s.members.iter().map(|x| x.index), &on)?;
         }
     }
     let md = member_digest(id, m0);
@@ -721,7 +730,7 @@ fn msig_ok(
             s.members.is_empty() && leaf_ok(m.kind, key, &md, &s.sig)?
         } else {
             let leaves = MsigStructure::from_key_data(key).map_err(cs)?.members;
-            let inner_keys = member_keys_current(key, members, &|_| None).map_err(cs)?;
+            let inner_keys = member_keys_current(key, members, current).map_err(cs)?;
             let imd = inner_digest(&m.id, &md)?;
             let leaf = |x: &InnerSig| -> Result<bool> {
                 match (
@@ -813,11 +822,13 @@ pub(crate) fn now() -> Result<u64> {
     Ok((ms / 1000.0) as u64)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn link_install(
     s: &LinkSession,
     c: &SealedContainer,
     expect: &ContainerExpect,
     members: &Members,
+    current: &Current,
     accepted: Option<&Accepted>,
     bip39_passphrase: &str,
     now: u64,
@@ -832,7 +843,15 @@ fn link_install(
     {
         return Err(Error::ContainerReplay);
     }
-    let pt = open_container_with(&s.key, c, expect, members, accepted, Some(&s.short_code))?;
+    let pt = open_container_with(
+        &s.key,
+        c,
+        expect,
+        members,
+        current,
+        accepted,
+        Some(&s.short_code),
+    )?;
     super::manifest::install_link(&pt, &c.sender_ua, bip39_passphrase)
 }
 
@@ -849,11 +868,21 @@ impl Wallet {
         c: &SealedContainer,
         expect: &ContainerExpect,
         members: &Members,
+        current: &Current,
         accepted: Option<&Accepted>,
         bip39_passphrase: &str,
     ) -> Result<Wallet> {
         let r = now().and_then(|t| {
-            link_install(&session, c, expect, members, accepted, bip39_passphrase, t)
+            link_install(
+                &session,
+                c,
+                expect,
+                members,
+                current,
+                accepted,
+                bip39_passphrase,
+                t,
+            )
         });
         session.key.wipe_own_store();
         r
@@ -999,6 +1028,40 @@ impl AcceptedJson {
     }
 }
 
+/// The current structures of updated `msig`s ([`Current`], CTR-UA-44) as JSON: `{"<msig id>": {msig, enabled}}`, `msig` the
+/// CTR-UA-09 bytes of `msigOf` (hex), `enabled` the `msigStateOf` bitmap (a decimal string); an id not named was never updated.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CurrentJson(Vec<([u8; 32], Vec<u8>, [u8; 32])>);
+
+impl CurrentJson {
+    /// `Argument` past 512 KiB, depth 4 or 64 ids, for an id that is not 32 bytes, `msig` that is not hex or `enabled` that is
+    /// not a decimal uint256.
+    pub fn from_json(json: &[u8]) -> Result<CurrentJson> {
+        let v = bounded::json(json, MEMBERS_JSON, LOOKUP_DEPTH)?;
+        let entry = |(id, x): (&String, &Value)| {
+            let x = only(x, &["msig", "enabled"])?;
+            Some((
+                h32(&Value::from(id.as_str()))?,
+                from_hex(x.get("msig")?.as_str()?)?,
+                crate::json::uint_in(x.get("enabled")?).ok()?,
+            ))
+        };
+        v.as_object()
+            .filter(|o| o.len() <= SET_MAX)
+            .and_then(|o| o.iter().map(entry).collect::<Option<_>>())
+            .map(CurrentJson)
+            .ok_or(Error::Argument)
+    }
+
+    /// The [`Current`] answer for `id`.
+    pub fn lookup(&self, id: [u8; 32]) -> Option<(Vec<u8>, [u8; 32])> {
+        self.0
+            .iter()
+            .find(|(x, ..)| *x == id)
+            .map(|(_, d, e)| (d.clone(), *e))
+    }
+}
+
 /// Test-only entry points (feature `vectors`, never in a release build).
 #[cfg(feature = "vectors")]
 mod vectors {
@@ -1051,11 +1114,13 @@ mod vectors {
 
     impl Wallet {
         /// [`Wallet::from_link`] with the opener's clock at `now` (a vector row's).
+        #[allow(clippy::too_many_arguments)]
         pub fn vectors_from_link_at(
             session: LinkSession,
             c: &SealedContainer,
             expect: &ContainerExpect,
             members: &Members,
+            current: &Current,
             accepted: Option<&Accepted>,
             bip39_passphrase: &str,
             now: u64,
@@ -1065,6 +1130,7 @@ mod vectors {
                 c,
                 expect,
                 members,
+                current,
                 accepted,
                 bip39_passphrase,
                 now,

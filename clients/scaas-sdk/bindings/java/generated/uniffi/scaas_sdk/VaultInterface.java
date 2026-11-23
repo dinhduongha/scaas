@@ -4,6 +4,7 @@ package uniffi.scaas_sdk;
  * Seeds (spec §6).
  */
 public interface VaultInterface {
+    public java.util.concurrent.CompletableFuture<java.lang.Void> acceptRollback() ;
     public java.util.concurrent.CompletableFuture<java.lang.Void> changePassphrase(java.lang.String seed, SecretBytes old, SecretBytes _new) ;
     public java.util.concurrent.CompletableFuture<java.lang.Void> confirmBackup(java.lang.String seed) ;
     public java.util.concurrent.CompletableFuture<NewSeed> deriveChild(DeriveChild req) ;

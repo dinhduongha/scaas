@@ -216,9 +216,9 @@ struct ZetherKey;
 struct PqzKey;
 } // namespace ffi
 
-// The surface generation this header was written for (the C ABI's SCAAS_UA_ABI_VERSION, 6) and the build features it needs
+// The surface generation this header was written for (the C ABI's SCAAS_UA_ABI_VERSION, 7) and the build features it needs
 // (the bits of scaas_ua_features()).
-constexpr uint32_t kAbiVersion = 6;
+constexpr uint32_t kAbiVersion = 7;
 namespace feature {
 constexpr uint64_t kWallet = 1u << 0, kPq = 1u << 1, kFalcon = 1u << 2, kZether = 1u << 3, kPqz = 1u << 4,
                    kPqzSetN2048Kmax1024 = 1u << 5, kPqzSetN2304Kmax4096 = 1u << 6, kPqzSetN2560Kmax16384 = 1u << 7,
@@ -349,20 +349,24 @@ class Wallet : public Handle<ffi::Wallet> {
     // Exactly one of vaultPassphrase / prf32 is meant (both given: the PRF secret, the passphrase not tried; neither: UAArgument).
     static Wallet openVault(const std::string &vaultJson, Secret &vaultPassphrase, Secret &prf32,
                             Secret &bip39Passphrase);
-    // The opener's JSON: expectJson required, membersJson "" = none, acceptedJson "" = no lookup. nullopt: an equal generation
-    // installed nothing.
+    // The opener's JSON: expectJson required, membersJson "" = none, acceptedJson "" = no lookup, currentJson
+    // ({"<msig id>": {msig, enabled}}, CTR-UA-44) "" = no msig updated. nullopt: an equal generation installed nothing.
     static std::optional<Wallet> restoreBackup(const KemKey &kk, const std::string &containerJson,
                                                const std::string &expectJson, const std::string &membersJson,
-                                               const std::string &acceptedJson, Secret &bip39Passphrase);
+                                               const std::string &acceptedJson, const std::string &currentJson,
+                                               Secret &bip39Passphrase);
     std::optional<Wallet> restoreBackupOver(const KemKey &kk, const std::string &containerJson,
                                             const std::string &expectJson, const std::string &membersJson,
-                                            const std::string &acceptedJson, Secret &bip39Passphrase) const;
+                                            const std::string &acceptedJson, const std::string &currentJson,
+                                            Secret &bip39Passphrase) const;
     std::optional<Wallet> restoreBackupRollback(const KemKey &kk, const std::string &containerJson,
                                                 const std::string &expectJson, const std::string &membersJson,
-                                                const std::string &acceptedJson, Secret &bip39Passphrase) const;
+                                                const std::string &acceptedJson, const std::string &currentJson,
+                                                Secret &bip39Passphrase) const;
     // Consumes the session (later calls on it: UAKeyRevoked), whatever the outcome once its inputs parse.
     static Wallet fromLink(const LinkSession &s, const std::string &containerJson, const std::string &expectJson,
-                           const std::string &membersJson, const std::string &acceptedJson, Secret &bip39Passphrase);
+                           const std::string &membersJson, const std::string &acceptedJson,
+                           const std::string &currentJson, Secret &bip39Passphrase);
 
     void unlock(const std::string &vaultJson, Secret &vaultPassphrase, Secret &prf32, Secret &bip39Passphrase) const;
     std::string sealVault(Secret &vaultPassphrase) const;
@@ -453,7 +457,8 @@ class KemKey : public Handle<ffi::KemKey> {
     Secret decaps(const Bytes &mlkemCt, const Bytes &x25519Eph) const;
     Secret open(const std::string &purpose, const Bytes &aad, const Sealed &s) const;
     Secret openContainer(const std::string &containerJson, const std::string &expectJson,
-                         const std::string &membersJson = "", const std::string &acceptedJson = "") const;
+                         const std::string &membersJson = "", const std::string &acceptedJson = "",
+                         const std::string &currentJson = "") const;
 };
 Encapsulated kemEncaps(const Bytes &kemPk);
 Sealed seal(const Bytes &kemPk, const std::string &purpose, const Bytes &aad,

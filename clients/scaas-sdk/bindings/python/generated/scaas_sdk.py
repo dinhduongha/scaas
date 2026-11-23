@@ -939,6 +939,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_subscription_next() != 46941:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback() != 51021:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != 63580:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_vault_confirm_backup() != 1424:
@@ -2768,6 +2770,10 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_subscription_next.argtypes = (
     ctypes.c_uint64,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_subscription_next.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_vault_accept_rollback.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_vault_accept_rollback.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_vault_change_passphrase.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3728,6 +3734,9 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_seedbackup_verify.restype = ctypes.c
 _UniffiLib.uniffi_scaas_sdk_checksum_method_subscription_next.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_subscription_next.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase.restype = ctypes.c_uint16
@@ -30909,6 +30918,8 @@ class VaultProtocol(typing.Protocol):
     Seeds (spec §6).
 """
     
+    async def accept_rollback(self, ) -> None:
+        raise NotImplementedError
     async def change_passphrase(self, seed: str,old: SecretBytes,new: SecretBytes) -> None:
         raise NotImplementedError
     async def confirm_backup(self, seed: str) -> None:
@@ -31004,6 +31015,20 @@ class Vault(VaultProtocol):
         inst = cls.__new__(cls)
         inst._handle = handle
         return inst
+    async def accept_rollback(self, ) -> None:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_vault_accept_rollback(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_void,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_void,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
     async def change_passphrase(self, seed: str,old: SecretBytes,new: SecretBytes) -> None:
         
         _UniffiFfiConverterString.check_lower(seed)

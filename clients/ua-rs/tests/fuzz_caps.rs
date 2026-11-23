@@ -9,9 +9,9 @@
 //! the `UASig` request (64 KiB, depth 6) of the C ABI. T14: the Zether command (1 MiB, depth 8) and cache box (2 MiB, depth 1). T15: the PQZ command (1 MiB, depth 8) and
 //! cache box (2 MiB, depth 1). UNAUDITED.
 use scaas_ua::wallet::{
-    bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, Error, EvmTx,
-    Expect, Manifest, MembersJson, Result, Sealed, SealedContainer, TypedData, UaSigRequest, Vault,
-    Wallet,
+    bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, CurrentJson,
+    Error, EvmTx, Expect, Manifest, MembersJson, Result, Sealed, SealedContainer, TypedData,
+    UaSigRequest, Vault, Wallet,
 };
 use serde_json::Value;
 
@@ -278,10 +278,21 @@ fn container_json_inputs_read_the_vector_rows() {
                     assert!(!a2.accepted(id, 999));
                 }
             }
+            // T26 A2-1: an updated msig's current structure
+            if let Some(c) = r.get("msigCurrent") {
+                let c2 = CurrentJson::from_json(c.to_string().as_bytes()).unwrap();
+                for (id, x) in c.as_object().unwrap() {
+                    let id: [u8; 32] = hex::decode(&id[2..]).unwrap().try_into().unwrap();
+                    let msig = hex::decode(&x["msig"].as_str().unwrap()[2..]).unwrap();
+                    assert_eq!(c2.lookup(id).map(|(m, _)| m), Some(msig));
+                }
+                assert_eq!(c2.lookup([0; 32]), None);
+            }
             n += 1;
         }
     }
-    assert_eq!(n, 4 + 29 + 12); // replay: 6 link rows since T21 O3 (the opener's clock, the skew), 6 backup rows
+    // acceptance 29 -> 33: T26 A2-1's four msigCurrent rows
+    assert_eq!(n, 4 + 33 + 12); // replay: 6 link rows since T21 O3 (the opener's clock, the skew), 6 backup rows
     let ua = format!("\"0x{}\"", "11".repeat(32));
     let set = |k: usize| {
         format!("{{\"purpose\":\"scaas/backup/v1\",\"sender\":{{\"set\":[{}]}},\"recipient\":{{\"kemPkHash\":{ua}}}}}", vec![ua.clone(); k].join(","))

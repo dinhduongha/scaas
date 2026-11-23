@@ -90,6 +90,8 @@ pub struct Chain {
     pub storage: HashMap<(String, String), String>,
     /// `eth_call` answers by `(to, calldata prefix)`, read first (plan T13: the registry's views)
     pub answers: Vec<(String, String, String)>,
+    /// `eth_call` answers above the finalized block only, read before `answers` (T26 A-10: a read at the head, not the final block)
+    pub head_answers: Vec<(String, String, String)>,
     /// `eth_estimateGas` by the call's input (plan T13: a registration's size); `None`: `gas`
     pub gas_of: Option<fn(&str) -> u64>,
     /// the regular gas a transaction's input executes, held to `tx_cap` at the send; `None`: its estimate (`gas_of` / `gas`)
@@ -143,6 +145,7 @@ impl Default for Chain {
             kind_home: HashMap::new(),
             storage: HashMap::new(),
             answers: vec![],
+            head_answers: vec![],
             gas_of: None,
             regular_of: None,
             tx_cap: 1 << 24,
@@ -348,9 +351,14 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 t => named(c, t),
             };
             let meta = c.tokens.get(&to).cloned();
-            if let Some((_, _, out)) = c
-                .answers
+            let head = if at > c.finalized {
+                &c.head_answers[..]
+            } else {
+                &[]
+            };
+            if let Some((_, _, out)) = head
                 .iter()
+                .chain(&c.answers)
                 .find(|(t, d, _)| *t == to && data.starts_with(d.as_str()))
             {
                 ok(json!(out))
@@ -367,6 +375,19 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 (c.domains.get(&to), data == sel("eip712Domain()"))
             {
                 ok(json!(eip712_domain(name, &to, salt)))
+            } else if !c.call_revert && data == sel("generation()") {
+                // the line (F2): a registry not answered otherwise is a generation 1
+                ok(json!(format!("0x{:064x}", 1)))
+            } else if !c.call_revert && data == sel("predecessor()") {
+                ok(json!(format!("0x{:064x}", 0)))
+            } else if !c.call_revert && data.starts_with(&sel("holderOf(bytes32)")) {
+                // a generation 1 holds what it is asked about (kind 0 and no PQZ home: read as its own records say)
+                ok(json!(format!(
+                    "0x{:0>64}{:064x}{:064x}",
+                    to.trim_start_matches("0x"),
+                    0,
+                    0
+                )))
             } else if data.starts_with(&sel("kindHome(uint16)")) {
                 let home = c.kind_home.get(&to).unwrap_or(&to);
                 ok(json!(format!("0x{:0>64}", home.trim_start_matches("0x"))))

@@ -93,36 +93,41 @@ Wallet Wallet::openVault(const std::string &vaultJson, Secret &vaultPassphrase, 
 }
 std::optional<Wallet> Wallet::restoreBackup(const KemKey &kk, const std::string &containerJson,
                                             const std::string &expectJson, const std::string &membersJson,
-                                            const std::string &acceptedJson, Secret &bip39Passphrase) {
+                                            const std::string &acceptedJson, const std::string &currentJson,
+                                            Secret &bip39Passphrase) {
     load();
     return call([&] {
         return restored(ffi::wallet_restore_backup(kk.ffi(), str(containerJson), str(expectJson), str(membersJson),
-                                                   str(acceptedJson), sec(bip39Passphrase)));
+                                                   str(acceptedJson), str(currentJson), sec(bip39Passphrase)));
     });
 }
 std::optional<Wallet> Wallet::restoreBackupOver(const KemKey &kk, const std::string &containerJson,
                                                 const std::string &expectJson, const std::string &membersJson,
-                                                const std::string &acceptedJson, Secret &bip39Passphrase) const {
+                                                const std::string &acceptedJson, const std::string &currentJson,
+                                                Secret &bip39Passphrase) const {
     return call([&] {
         return restored(ffi::wallet_restore_backup_over(kk.ffi(), str(containerJson), str(expectJson), str(membersJson),
-                                                        str(acceptedJson), ffi(), sec(bip39Passphrase)));
+                                                        str(acceptedJson), str(currentJson), ffi(),
+                                                        sec(bip39Passphrase)));
     });
 }
 std::optional<Wallet> Wallet::restoreBackupRollback(const KemKey &kk, const std::string &containerJson,
                                                     const std::string &expectJson, const std::string &membersJson,
-                                                    const std::string &acceptedJson, Secret &bip39Passphrase) const {
+                                                    const std::string &acceptedJson, const std::string &currentJson,
+                                                    Secret &bip39Passphrase) const {
     return call([&] {
         return restored(ffi::wallet_restore_backup_rollback(kk.ffi(), str(containerJson), str(expectJson),
-                                                            str(membersJson), str(acceptedJson), ffi(),
-                                                            sec(bip39Passphrase)));
+                                                            str(membersJson), str(acceptedJson), str(currentJson),
+                                                            ffi(), sec(bip39Passphrase)));
     });
 }
 Wallet Wallet::fromLink(const LinkSession &s, const std::string &containerJson, const std::string &expectJson,
-                        const std::string &membersJson, const std::string &acceptedJson, Secret &bip39Passphrase) {
+                        const std::string &membersJson, const std::string &acceptedJson, const std::string &currentJson,
+                        Secret &bip39Passphrase) {
     load();
     return call([&] {
         return adopt<Wallet>(ffi::wallet_from_link(s.ffi(), str(containerJson), str(expectJson), str(membersJson),
-                                                   str(acceptedJson), sec(bip39Passphrase)));
+                                                   str(acceptedJson), str(currentJson), sec(bip39Passphrase)));
     });
 }
 void Wallet::unlock(const std::string &vaultJson, Secret &vaultPassphrase, Secret &prf32,
@@ -331,10 +336,11 @@ Secret KemKey::open(const std::string &purpose, const Bytes &aad, const Sealed &
     });
 }
 Secret KemKey::openContainer(const std::string &containerJson, const std::string &expectJson,
-                             const std::string &membersJson, const std::string &acceptedJson) const {
+                             const std::string &membersJson, const std::string &acceptedJson,
+                             const std::string &currentJson) const {
     return call([&] {
-        return secret(
-            ffi::open_container(ffi(), str(containerJson), str(expectJson), str(membersJson), str(acceptedJson)));
+        return secret(ffi::open_container(ffi(), str(containerJson), str(expectJson), str(membersJson),
+                                          str(acceptedJson), str(currentJson)));
     });
 }
 Encapsulated kemEncaps(const Bytes &kemPk) {

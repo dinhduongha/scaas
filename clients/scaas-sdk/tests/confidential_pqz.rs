@@ -1908,3 +1908,34 @@ async fn pqz_recipient_in_predecessor_read_at_home() {
         .await
         .unwrap();
 }
+
+/// A2-4: on an `OFFCHAIN` token the holder's key need not be proven (`PqzCore._usable`: `proven || OFFCHAIN`, the holder's
+/// check too): B's unproven scoped record still reads its balance and debits; the same record on a `PRECOMPILE` token is
+/// `LegKeyMismatch` (the balance test's refusal).
+#[tokio::test(flavor = "multi_thread")]
+async fn offchain_holder_key_need_not_be_proven() {
+    let (s, seed, c, a, b, _) = debit_setup(true).await;
+    let q = &row("B:")["request"];
+    let mut k = w(&q["keyRecord"]);
+    k[11] = 0;
+    let v = q["keyVersion"].as_u64().unwrap();
+    put(
+        &c,
+        REGISTRY,
+        &map(&be(v), &map(&[0u8; 32], &map(&b, &be(20)))),
+        &k,
+    );
+    put(&c, REGISTRY, &map(&be(0), &map(&b, &be(2))), &k);
+    assert_eq!(
+        s.confidential()
+            .pqz_balance(req(&seed, 1, 0))
+            .await
+            .unwrap()
+            .amount,
+        "257"
+    );
+    s.confidential()
+        .prepare_pqz_transfer(transfer(&seed, &a, "100"))
+        .await
+        .unwrap();
+}

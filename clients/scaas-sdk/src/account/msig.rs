@@ -7,9 +7,10 @@
 //! (`msigStateOf`), the same for each `msig` member of the current structure; then `scaas-ua` builds the signature
 //! (`msig_sig_current`, `membership_sig_current`), refusing a set not minimal at either level (`UAPoP`) or a disabled slot.
 //! The SDK refuses before anything is signed a slot (or an inner leaf) that is not enabled and accepted on this registry
-//! (CTR-UA-37: an `msig` names no signer until then; `MsigSlotInactive`, M2). A native member signs an operation as `UAAuth`
-//! under the registry's domain, gen 1 only (`predecessor() == 0`; a gen-2 registry `Argument`), and a `registerMsig` PoP as the
-//! registration's typed data (`scaas-ua` `registration_typed_data`, M1).
+//! (CTR-UA-37: an `msig` names no signer until then; `MsigSlotInactive`, M2). Every record is read through F2's line reader
+//! ([`crate::line::read_line`]: one endpoint, one block) at the generation that holds it; a native member signs an operation
+//! as `UAAuth` in the holder's domain at the holder's generation (CTR-UA-60), an `updateMsig` binds the holder (where it is
+//! written), and a `registerMsig` PoP is the registration's typed data (`scaas-ua` `registration_typed_data`, M1).
 //!
 //! Members on different devices (M1, owner 2026-11-19): [`crate::op::Op::member_sign`] signs one slot of a prepared operation
 //! (its check first) and returns that slot's `MemberSig`; the device that submits names it as `MsigSlot::Signed` beside its own
@@ -17,16 +18,15 @@
 //! secure-element row signs a slot through the external flow (M5): a dry run that only refuses, then the device asked for
 //! `uaMessage(kind, member, memberDigest(msig, uaMessage(msig, purpose, digest)))`, then `scaas-ua` verifies its answer.
 //! UNAUDITED.
-use super::register::{
-    keep_with, registry_of, slot_signer, writes, GasShape, Landed, RegistryWrite,
-};
+use super::register::{keep_with, slot_signer, writes, GasShape, Landed, RegistryWrite};
 use super::Account;
-use crate::op::{evm, hex, key_opened, sim, unhex, Key, KeyRef, MsigSlot};
+use crate::line::{call_at, read_line, At, Line};
+use crate::op::{evm, hex, key_opened, unhex, Key, KeyRef, MsigSlot};
 use crate::{Sdk, SdkError};
-use alloy::network::TransactionBuilder;
-use alloy::primitives::{Address, Bytes, U256};
-use alloy::rpc::types::TransactionRequest;
+use alloy::primitives::{Address, U256};
 use scaas_rpc::evm::EvmPool;
+use scaas_rpc::pool::{BlockChoice, ReadError};
+use scaas_rpc::Purpose;
 use scaas_ua::ua_portable::{
     msig_update_digest, plan_msig_update, MsigMember, MsigStructure, MsigUpdateState, UASig,
 };
@@ -218,8 +218,10 @@ pub struct MsigUpdatePlan {
 }
 
 /// One `msig` as read from the registry.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct View {
+    /// the generation that holds it (F2)
+    holder: Address,
     first: Vec<u8>,
     current: Vec<u8>,
     version: u64,
@@ -244,13 +246,6 @@ fn id32(s: &str) -> Result<[u8; 32], SdkError> {
         .map_err(|_| SdkError::Argument)
 }
 
-fn bad() -> SdkError {
-    SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
-        last: None,
-        failover_revert: None,
-    })
-}
-
 fn word(out: &[u8], at: usize) -> Option<U256> {
     out.get(at..at.checked_add(32)?).map(U256::from_be_slice)
 }
@@ -259,25 +254,6 @@ fn small(out: &[u8], at: usize, max: u64) -> Option<usize> {
     word(out, at)
         .filter(|w| *w <= U256::from(max))
         .and_then(|w| usize::try_from(w).ok())
-}
-
-async fn call(
-    pool: &EvmPool,
-    registry: Address,
-    sig: &str,
-    args: &[[u8; 32]],
-) -> Result<Vec<u8>, SdkError> {
-    let mut d = scaas_ua::keccak256(sig.as_bytes())
-        .get(..4)
-        .unwrap_or_default()
-        .to_vec();
-    for a in args {
-        d.extend_from_slice(a);
-    }
-    let tx = TransactionRequest::default()
-        .with_to(registry)
-        .with_input(Bytes::from(d));
-    pool.call_tx(tx).await.map(|b| b.to_vec()).map_err(sim)
 }
 
 /// `registrationOf(ua).keyData`, at most 256 slots' bytes.
@@ -306,17 +282,28 @@ pub(crate) fn decode_structure(out: &[u8]) -> Option<Vec<u8>> {
     Some(MsigStructure { threshold, members }.key_data())
 }
 
-/// The `msig` `ua` on `registry`: `Argument` when it holds no `msig` of that id.
-async fn view(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<View, SdkError> {
-    let first = decode_key_data(&call(pool, registry, "registrationOf(bytes32)", &[*ua]).await?)
-        .ok_or_else(bad)?;
+/// The `msig` `ua` at the read's block, read at the generation that holds it (F2, [`Line`]): `None` when no generation holds
+/// an `msig` of that id; an answer that does not decode is the endpoint's failure.
+async fn view_at(
+    pool: &EvmPool,
+    at: &At,
+    line: &Line,
+    ua: &[u8; 32],
+) -> Result<Option<View>, ReadError> {
+    let bad = || crate::line::malformed(at, "an msig view that does not decode");
+    let Some(holder) = line.holder(pool, at, *ua).await? else {
+        return Ok(None);
+    };
+    let first =
+        decode_key_data(&call_at(pool, at, holder, "registrationOf(bytes32)", &[*ua]).await?)
+            .ok_or_else(bad)?;
     if scaas_ua::derive_ua(MSIG, &first, false).ok() != Some(*ua) {
-        return Err(SdkError::Argument);
+        return Ok(None);
     }
-    let current = decode_structure(&call(pool, registry, "msigOf(bytes32)", &[*ua]).await?)
+    let current = decode_structure(&call_at(pool, at, holder, "msigOf(bytes32)", &[*ua]).await?)
         .ok_or_else(bad)?;
-    let st = call(pool, registry, "msigStateOf(bytes32)", &[*ua]).await?;
-    let w = |i: usize| -> Result<[u8; 32], SdkError> {
+    let st = call_at(pool, at, holder, "msigStateOf(bytes32)", &[*ua]).await?;
+    let w = |i: usize| -> Result<[u8; 32], ReadError> {
         st.get(32 * i..32 * i + 32)
             .and_then(|b| b.try_into().ok())
             .ok_or_else(bad)
@@ -324,32 +311,66 @@ async fn view(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<View, 
     if st.len() != 96 {
         return Err(bad());
     }
-    Ok(View {
+    Ok(Some(View {
+        holder,
         version: u64::try_from(U256::from_be_bytes(w(0)?)).map_err(|_| bad())?,
         enabled: w(1)?,
         accepted: w(2)?,
         first,
         current,
-    })
+    }))
 }
 
-/// The views of `ids` and of each `msig` member of their current structures (two levels).
-async fn views(
+/// The views of `ids` and of each `msig` member of their current structures (two levels) at the read's block; `None` when
+/// one of `ids` is no `msig`.
+async fn views_at(
     pool: &EvmPool,
-    registry: Address,
+    at: &At,
+    line: &Line,
     ids: &[[u8; 32]],
-) -> Result<HashMap<[u8; 32], View>, SdkError> {
+) -> Result<Option<HashMap<[u8; 32], View>>, ReadError> {
     let mut out = HashMap::new();
     for id in ids {
-        let v = view(pool, registry, id).await?;
-        for m in structure(&v.current)?.members {
+        let Some(v) = view_at(pool, at, line, id).await? else {
+            return Ok(None);
+        };
+        let Ok(s) = MsigStructure::from_key_data(&v.current) else {
+            return Err(crate::line::malformed(
+                at,
+                "an msig structure that does not parse",
+            ));
+        };
+        for m in s.members {
             if m.kind == MSIG && !out.contains_key(&m.id) {
-                out.insert(m.id, view(pool, registry, &m.id).await?);
+                let Some(mv) = view_at(pool, at, line, &m.id).await? else {
+                    return Ok(None);
+                };
+                out.insert(m.id, mv);
             }
         }
         out.insert(*id, v);
     }
-    Ok(out)
+    Ok(Some(out))
+}
+
+/// [`views_at`] as one read (F2's [`read_line`]: one endpoint, one block, the latest; review A2-2) with the line it was read
+/// on; `Argument` when one of `ids` is no `msig`.
+async fn views(
+    sdk: &Sdk,
+    chain: &str,
+    ids: &[[u8; 32]],
+) -> Result<(HashMap<[u8; 32], View>, Line), SdkError> {
+    let ids = ids.to_vec();
+    let ids = &ids;
+    let (v, line) = read_line(
+        sdk,
+        chain,
+        BlockChoice::Latest,
+        Purpose::Plain,
+        |pool, at, line| async move { views_at(&pool, &at, &line, ids).await },
+    )
+    .await?;
+    Ok((v.ok_or(SdkError::Argument)?, line))
 }
 
 /// The keys of `slots` in their order (a slot's key, then an `msig` slot's leaves); a key that is an `msig` itself `Argument`.
@@ -444,24 +465,11 @@ fn structure(kd: &[u8]) -> Result<MsigStructure, SdkError> {
     MsigStructure::from_key_data(kd).map_err(ua_err)
 }
 
-/// The registry's domain for a native member's `UAAuth` (gen 1 only: `predecessor() == 0`).
-pub(crate) async fn domain(
-    sdk: &Sdk,
-    chain: &str,
-    pool: &EvmPool,
-    registry: Address,
-) -> Result<scaas_ua::Domain, SdkError> {
+/// The domain a native member of the `msig` `v` signs `UAAuth` in (F2, CTR-UA-60): the generation that holds it, at its
+/// generation on `line`.
+fn domain(sdk: &Sdk, chain: &str, line: &Line, v: &View) -> Result<scaas_ua::Domain, SdkError> {
     let (profile, chain_id, _) = evm(sdk, chain)?;
-    let pred = call(pool, registry, "predecessor()", &[]).await?;
-    if word(&pred, 0) != Some(U256::ZERO) {
-        return Err(SdkError::Argument);
-    }
-    Ok(scaas_ua::Domain {
-        generation: 1,
-        chain_id,
-        registry: registry.into_array(),
-        chain_uid: id32(&profile.chain_uid)?,
-    })
+    Ok(line.domain(Some(v.holder), chain_id, id32(&profile.chain_uid)?))
 }
 
 /// A `MemberSig` from its JSON (`{index, members: [{index, sig}], sig}`, `0x` hex), as [`members_json`] writes one: bounded
@@ -599,15 +607,13 @@ async fn uasig(
     purpose: &[u8; 32],
     digest: &[u8; 32],
 ) -> Result<UASig, SdkError> {
-    let (_, _, pool) = evm(sdk, chain)?;
-    let registry = registry_of(sdk, chain)?;
-    let views = views(&pool, registry, &[*ua]).await?;
+    let (views, line) = views(sdk, chain, &[*ua]).await?;
     let v = views.get(ua).ok_or(SdkError::Internal)?;
     slots_active(&views, v, slots)?;
     let keys = open(sdk, slots).await?;
     let native = keys.iter().any(|k| matches!(k, Key::Native(..)));
     let d = match native {
-        true => Some(domain(sdk, chain, &pool, registry).await?),
+        true => Some(domain(sdk, chain, &line, v)?),
         false => None,
     };
     let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
@@ -657,45 +663,6 @@ async fn uasig(
     Ok(msig_combine(&v.first, &current, &members)?)
 }
 
-/// F2 (controller call 2026-11-22, CLI-PQV-15; PqVault's dedicated path): the `UAAuth` domain a signature of `of` is checked in
-/// on the line ending at `registry`, of any generation. A record a predecessor holds (`holderOf`, when `registry` has a
-/// predecessor) is checked by its holder, in the holder's domain (`requireAuthorized` hands it there, CTR-UA-60 §4); `of`
-/// none (a native signer), a native id, or a record `registry` holds, in `registry`'s own. The generation is the registry's `generation()`: its domain's
-/// version.
-#[cfg(feature = "app-core")]
-pub(crate) async fn line_domain(
-    sdk: &Sdk,
-    chain: &str,
-    pool: &EvmPool,
-    registry: Address,
-    of: Option<[u8; 32]>,
-) -> Result<scaas_ua::Domain, SdkError> {
-    let (profile, chain_id, _) = evm(sdk, chain)?;
-    let mut at = registry;
-    if let Some(of) = of.filter(|x| !scaas_ua::in_native_space(x)) {
-        let pred = call(pool, registry, "predecessor()", &[]).await?;
-        if word(&pred, 0).ok_or(SdkError::Argument)? != U256::ZERO {
-            let h = call(pool, registry, "holderOf(bytes32)", &[of]).await?;
-            let w = word(&h, 0).ok_or(SdkError::Argument)?;
-            let holder = Address::from_word(alloy::primitives::B256::from(w));
-            if holder != Address::ZERO {
-                at = holder;
-            }
-        }
-    }
-    let g = call(pool, at, "generation()", &[]).await?;
-    let generation = small(&g, 0, 16)
-        .and_then(|n| u32::try_from(n).ok())
-        .filter(|n| *n >= 1)
-        .ok_or(SdkError::Argument)?;
-    Ok(scaas_ua::Domain {
-        generation,
-        chain_id,
-        registry: at.into_array(),
-        chain_uid: id32(&profile.chain_uid)?,
-    })
-}
-
 /// An app record's `UASig` by the `msig` `ua` (PqVault's dedicated path, owner 2026-11-22): the records read as [`uasig`]
 /// reads them, the slots checked enabled and accepted, their keys opened (local keys only: a slot signed elsewhere or a
 /// stored key row `Argument`), the registry generation's domain when a member is native; `sign` builds the `UASig`.
@@ -716,18 +683,15 @@ pub(crate) async fn app_msig(
     if slots.is_empty() || slots.iter().any(|s| matches!(s, MsigSlot::Signed { .. })) {
         return Err(SdkError::Argument);
     }
-    let (_, _, pool) = evm(sdk, chain)?;
-    let registry = registry_of(sdk, chain)?;
-    let views = views(&pool, registry, &[*ua]).await?;
+    let (views, line) = views(sdk, chain, &[*ua]).await?;
     let v = views.get(ua).ok_or(SdkError::Internal)?;
     slots_active(&views, v, slots)?;
     let keys = open(sdk, slots).await?;
     if keys.iter().any(|k| matches!(k, Key::External(..))) {
         return Err(SdkError::Argument);
     }
-    // F2: the domain of the generation that holds the `msig` (its native members sign there)
     let d = match keys.iter().any(|k| matches!(k, Key::Native(..))) {
-        true => Some(line_domain(sdk, chain, &pool, registry, Some(*ua)).await?),
+        true => Some(domain(sdk, chain, &line, v)?),
         false => None,
     };
     let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
@@ -811,13 +775,11 @@ impl crate::op::Op {
                 check_first(&sdk, &slots, td, expect).await?;
                 let ua = id32(&ua)?;
                 let chain = prepared.chain();
-                let (_, _, pool) = evm(&sdk, &chain)?;
-                let registry = registry_of(&sdk, &chain)?;
-                let views = views(&pool, registry, &[ua]).await?;
+                let (views, line) = views(&sdk, &chain, &[ua]).await?;
                 let v = views.get(&ua).ok_or(SdkError::Internal)?;
                 slots_active(&views, v, &slots)?;
                 let d = match has_native(&sdk, slot).await? {
-                    true => Some(domain(&sdk, &chain, &pool, registry).await?),
+                    true => Some(domain(&sdk, &chain, &line, v)?),
                     false => None,
                 };
                 let (purpose, digest) = (scaas_purpose(td)?, td.digest()?);
@@ -872,30 +834,57 @@ impl Account {
         self.sdk
             .spawn(async move {
                 let id = id32(&ua)?;
-                let (_, _, pool) = evm(&sdk, &chain)?;
-                let registry = registry_of(&sdk, &chain)?;
-                let v = view(&pool, registry, &id).await?;
+                // one read (F2, A2-2): the view at its holder and each accepted slot's signature hash there
+                let ((v, hashes), _) = read_line(
+                    &sdk,
+                    &chain,
+                    BlockChoice::Latest,
+                    Purpose::Plain,
+                    |pool, at, line| async move {
+                        let Some(v) = view_at(&pool, &at, &line, &id).await? else {
+                            return Ok((None, vec![]));
+                        };
+                        let n =
+                            MsigStructure::from_key_data(&v.current).map_or(0, |s| s.members.len());
+                        let mut hashes = vec![];
+                        for i in 0..n {
+                            let i = u16::try_from(i).unwrap_or(u16::MAX);
+                            hashes.push(match bit(&v.accepted, i) {
+                                true => {
+                                    let out = call_at(
+                                        &pool,
+                                        &at,
+                                        v.holder,
+                                        "memberSigHashOf(bytes32,uint256)",
+                                        &[id, U256::from(i).to_be_bytes()],
+                                    )
+                                    .await?;
+                                    Some(
+                                        out.get(..32)
+                                            .filter(|_| out.len() == 32)
+                                            .ok_or_else(|| {
+                                                crate::line::malformed(&at, "memberSigHashOf")
+                                            })?
+                                            .to_vec(),
+                                    )
+                                }
+                                false => None,
+                            });
+                        }
+                        Ok((Some(v), hashes))
+                    },
+                )
+                .await?;
+                let v = v.ok_or(SdkError::Argument)?;
                 let current = structure(&v.current)?;
                 let mut slots = vec![];
                 let mut active_weight = 0u32;
                 for (i, m) in current.members.iter().enumerate() {
                     let i = u16::try_from(i).map_err(|_| SdkError::Internal)?;
                     let accepted = bit(&v.accepted, i);
-                    let sig_hash = match accepted {
-                        true => {
-                            let out = call(
-                                &pool,
-                                registry,
-                                "memberSigHashOf(bytes32,uint256)",
-                                &[id, U256::from(i).to_be_bytes()],
-                            )
-                            .await?;
-                            out.get(..32)
-                                .map(hex)
-                                .filter(|_| out.len() == 32)
-                                .ok_or_else(bad)?
-                        }
-                        false => hex(&[0; 32]),
+                    let sig_hash = match hashes.get(usize::from(i)) {
+                        Some(Some(h)) => hex(h),
+                        _ => hex(&[0; 32]),
                     };
                     if v.active(i) {
                         active_weight += u32::from(m.weight);
@@ -935,10 +924,8 @@ impl Account {
                 let s = req.structure.typed()?;
                 let kd = s.key_data();
                 let ua = scaas_ua::derive_ua(MSIG, &kd, false).map_err(ua_err)?;
-                let (_, _, pool) = evm(&sdk, &req.chain)?;
-                let registry = registry_of(&sdk, &req.chain)?;
                 let inners: Vec<[u8; 32]> = s.members.iter().filter(|m| m.kind == MSIG).map(|m| m.id).collect();
-                let views = views(&pool, registry, &inners).await?;
+                let (views, _) = views(&sdk, &req.chain, &inners).await?;
                 let pop = match req.slots.is_empty() {
                     true => json!([]),
                     false => {
@@ -988,9 +975,7 @@ impl Account {
         self.sdk
             .spawn(async move {
                 let ua = id32(&req.ua)?;
-                let (_, _, pool) = evm(&sdk, &req.chain)?;
-                let registry = registry_of(&sdk, &req.chain)?;
-                let views = views(&pool, registry, &[ua]).await?;
+                let (views, _) = views(&sdk, &req.chain, &[ua]).await?;
                 let v = views.get(&ua).ok_or(SdkError::Internal)?;
                 let index = req.slot.index();
                 if bit(&v.accepted, index) {
@@ -1053,10 +1038,22 @@ impl Account {
         self.sdk
             .spawn(async move {
                 let ua = id32(&req.ua)?;
-                let (profile, _, pool) = evm(&sdk, &req.chain)?;
-                let registry = registry_of(&sdk, &req.chain)?;
-                let views = views(&pool, registry, &[ua]).await?;
+                let (profile, _, _) = evm(&sdk, &req.chain)?;
+                // one read (F2, A2-2): the views and whether the `msig` holds a PQZ key, at its holder
+                let ((views, key), _) = read_line(&sdk, &req.chain, BlockChoice::Latest, Purpose::Plain, |pool, at, line| async move {
+                    let Some(views) = views_at(&pool, &at, &line, &[ua]).await? else {
+                        return Ok((None, vec![]));
+                    };
+                    let h = views.get(&ua).map_or(line.bound(), |v| v.holder);
+                    // M4: `pqzKeyAt(ua, 0)`: a key at version 0 once any is set
+                    let key = call_at(&pool, &at, h, "pqzKeyAt(bytes32,uint64)", &[ua, [0; 32]]).await?;
+                    Ok((Some(views), key))
+                })
+                .await?;
+                let views = views.ok_or(SdkError::Argument)?;
                 let v = views.get(&ua).ok_or(SdkError::Internal)?;
+                // the update is signed for the generation that holds the `msig`, where it is written (`write_target`)
+                let registry = v.holder;
                 slots_active(&views, v, &req.slots)?;
                 let mut enabled = [0u8; 32];
                 for i in &req.enabled {
@@ -1064,15 +1061,13 @@ impl Account {
                     let b = enabled.get_mut(31usize.checked_sub(i / 8).ok_or(SdkError::Argument)?);
                     *b.ok_or(SdkError::Argument)? |= 1 << (i % 8);
                 }
-                // M4: whether the `msig` holds a PQZ key, read (`pqzKeyAt(ua, 0)`: a key at version 0 once any is set); the
-                // verifier and family facts are the caller's
-                let key = call(&pool, registry, "pqzKeyAt(bytes32,uint64)", &[ua, [0; 32]]).await?;
+                // M4: the verifier and family facts are the caller's
                 let state = MsigUpdateState {
                     current: structure(&v.current)?,
                     version: v.version,
                     enabled: v.enabled,
                     accepted: v.accepted,
-                    holds_pqz_key: word(&key, 0).ok_or_else(bad)? != U256::ZERO,
+                    holds_pqz_key: word(&key, 0).ok_or(SdkError::Argument)? != U256::ZERO,
                     verifier: req.verifier,
                     family_without_update: req.family_without_update,
                 };

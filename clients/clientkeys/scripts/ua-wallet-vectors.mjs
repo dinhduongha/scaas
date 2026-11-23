@@ -2462,6 +2462,32 @@ const acceptance = [
     error: "ContainerSender",
   },
   { id: "msig sender: no accepted lookup", ...msigRow(flatC, flatUa, flatMembers, null), error: "ContainerSender" },
+  // CTR-UA-44 (T26 A2-1): an updated msig is judged on its current structure (`msigCurrent`: id -> {msig: the msigOf bytes, enabled:
+  // the msigStateOf bitmap, decimal}), at both levels; a slot counts only when accepted and enabled
+  {
+    id: "msig sender: updated to three of three (current), the first quorum refused",
+    ...msigRow(flatC, flatUa, flatMembers),
+    msigCurrent: { [H(flatUa)]: { msig: H(ua.encodeMsig(3, flat)), enabled: "7" } },
+    error: "SealOpen",
+  },
+  {
+    id: "msig sender: a signing slot disabled (current)",
+    ...msigRow(flatC, flatUa, flatMembers),
+    msigCurrent: { [H(flatUa)]: { msig: H(flatKd), enabled: String(7 & ~(1 << flatSigners[0])) } },
+    error: "ContainerSender",
+  },
+  {
+    id: "msig sender: current equal to the first, every slot enabled (accepted)",
+    ...msigRow(flatC, flatUa, flatMembers),
+    msigCurrent: { [H(flatUa)]: { msig: H(flatKd), enabled: "7" } },
+    error: null,
+  },
+  {
+    id: "msig sender: nested, the inner msig updated to three of three (current)",
+    ...msigRow(nestedC, outerUa, nestedMembers),
+    msigCurrent: { [H(innerUa)]: { msig: H(ua.encodeMsig(3, innerMs)), enabled: "7" } },
+    error: "SealOpen",
+  },
   {
     id: "created changed (aad)",
     container: { ...structuredClone(backup2), created: CREATED + 1 },
@@ -2501,11 +2527,16 @@ for (const x of acceptance) {
         x.expect,
         lookup(x.members),
         acceptedOf(x.accepted),
-        { now: SESSION.now },
+        { now: SESSION.now, msigCurrent: lookup(x.msigCurrent) },
       );
     else if (x.restore)
-      await restoreBackup(openerKey(x.opener), x.container, x.expect, lookup(x.members), acceptedOf(x.accepted));
-    else await openContainer(openerKey(x.opener), x.container, x.expect, lookup(x.members), acceptedOf(x.accepted));
+      await restoreBackup(openerKey(x.opener), x.container, x.expect, lookup(x.members), acceptedOf(x.accepted), {
+        msigCurrent: lookup(x.msigCurrent),
+      });
+    else
+      await openContainer(openerKey(x.opener), x.container, x.expect, lookup(x.members), acceptedOf(x.accepted), {
+        msigCurrent: lookup(x.msigCurrent),
+      });
   } catch (err) {
     e = err;
   }

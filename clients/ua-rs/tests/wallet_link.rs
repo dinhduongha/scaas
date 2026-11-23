@@ -57,7 +57,7 @@ fn link_seal_then_from_link_installs() {
         .unwrap();
     assert_eq!(c.purpose, "scaas/link/v1");
     assert_eq!(c.recipient, session.recipient());
-    let linked = Wallet::from_link(session, &reread(&c), &x, &none, None, "").unwrap();
+    let linked = Wallet::from_link(session, &reread(&c), &x, &none, &|_| None, None, "").unwrap();
     assert_eq!(linked.ua_key(0x0102, 0, 0).unwrap().ua(), key.ua());
     assert_eq!(
         linked.imported_key(Network::Evm, 0).unwrap().public_key(),
@@ -93,7 +93,7 @@ fn from_link_refuses_another_bip39_passphrase() {
         let c = w
             .link_seal(&key, &session.kem_pk(), &session.short_code())
             .unwrap();
-        let r = Wallet::from_link(session, &reread(&c), &x, &none, None, pass);
+        let r = Wallet::from_link(session, &reread(&c), &x, &none, &|_| None, None, pass);
         match ok {
             true => assert_eq!(r.unwrap().ua_key(0x0102, 0, 0).unwrap().ua(), key.ua()),
             false => assert_eq!(r.err(), Some(Error::ContainerSender), "{pass:?}"),
@@ -114,7 +114,7 @@ fn link_seal_with_a_wrong_short_code_is_refused() {
     let x = expect(&key, &session);
     let c = w.link_seal(&key, &session.kem_pk(), wrong).unwrap();
     assert_eq!(
-        Wallet::from_link(session, &reread(&c), &x, &none, None, "").err(),
+        Wallet::from_link(session, &reread(&c), &x, &none, &|_| None, None, "").err(),
         Some(Error::SealOpen)
     );
 }
@@ -218,7 +218,7 @@ mod vectors {
             .link_seal(&key, &stale.kem_pk(), &stale.short_code())
             .unwrap();
         assert_eq!(
-            Wallet::from_link(stale, &reread(&c), &x, &none, None, "").err(),
+            Wallet::from_link(stale, &reread(&c), &x, &none, &|_| None, None, "").err(),
             Some(Error::ContainerReplay)
         );
     }
@@ -248,7 +248,7 @@ mod vectors {
             recipient: kk.recipient(),
         };
         let bc = SealedContainer::from_json(backup["container"].to_string().as_bytes()).unwrap();
-        let w = Wallet::restore_backup(&kk, &bc, &bx, &none, None, None, None, "")
+        let w = Wallet::restore_backup(&kk, &bc, &bx, &none, &|_| None, None, None, None, "")
             .unwrap()
             .unwrap();
         let o = &link["opener"]["session"];

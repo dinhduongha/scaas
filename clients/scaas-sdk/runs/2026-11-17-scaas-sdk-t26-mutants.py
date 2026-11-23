@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""scaas-sdk plan T26, the review's fixes (areas B and C, 2026-11-23) mutants:
+"""scaas-sdk plan T26, the review's fixes (areas A, B and C, 2026-11-23) mutants:
 python3 clients/scaas-sdk/runs/2026-11-17-scaas-sdk-t26-mutants.py check | run [name]"""
 
 import sys
@@ -30,6 +30,20 @@ CFG = "clients/scaas-sdk/src/config.rs"
 STO = "clients/scaas-sdk/src/vault/store.rs"
 SYN = "clients/scaas-sdk/src/sync_cpp.rs"
 SW = "clients/scaas-sdk/bindings/swift/CopyCall.swift"
+LINE = "clients/scaas-sdk/src/line.rs"
+VLT = "clients/scaas-sdk/src/vault/mod.rs"
+ROOTS = "clients/scaas-sdk/src/vault/roots.rs"
+POL = "clients/ua-rs/src/wallet/policy.rs"
+PQC = "clients/ua-rs/src/wallet/pqchat.rs"
+AC = "clients/scaas-sdk/src/app_core.rs"
+PQR = "clients/scaas-sdk/src/pqchat_records.rs"
+PQK = "clients/ua-rs/src/wallet/pqchat_keys.rs"
+USEAL = "clients/ua-rs/src/wallet/seal.rs"
+JSEAL = "clients/clientkeys/src/seal.js"
+OPS = "clients/scaas-sdk/src/wallet/ops.rs"
+CPQ = "clients/scaas-sdk/src/confidential/pqz.rs"
+FPQ = "clients/ua-rs/src/facade/pqz.rs"
+DLY = "clients/scaas-sdk/src/admin/delay.rs"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
@@ -288,6 +302,136 @@ MUTANTS = [
         "B-14: every end said to rest on one endpoint",
         [(EVT, "    pub(crate) fn of(strict: bool) -> Basis {\n        if strict {", "    pub(crate) fn of(strict: bool) -> Basis {\n        if !strict && strict {")],
         T + " --lib op::tests::strict_majority_ends_a_failed_operation_at_the_finalized_block",
+    ),
+    (
+        "F2 / A-7: a holder off the line taken",
+        [(LINE, "        if !on(r.holder) || (r.pqzHome != Address::ZERO && !on(r.pqzHome)) {", "        if false {")],
+        T + " --lib account::",
+    ),
+    (
+        "F2: a line not checked consecutive",
+        [(LINE, "            if g != U256::from(top - gens.len()) {", "            if false {")],
+        T + " --lib account::",
+    ),
+    (
+        "F2: a native member signs in the bound registry's domain",
+        [(LINE, "        let at = holder\n            .filter(|h| self.generation(*h).is_some())\n            .unwrap_or(self.bound());", "        let at = self.bound();")],
+        T + " --lib account::msig::tests::msig_on_a_two_generation_line",
+    ),
+    (
+        "F2: every domain at generation 1",
+        [(LINE, "            generation: self.generation(at).unwrap_or(1),", "            generation: 1,")],
+        T + " --lib account::msig::tests::msig_on_a_two_generation_line",
+    ),
+    (
+        "A-7: a write target falls back on a failed read",
+        [(LINE, "            Ok(line().await?.map_or(registry, |(h, _, _)| h))", "            Ok(line().await.unwrap_or(None).map_or(registry, |(h, _, _)| h))")],
+        T + " --lib account::register::tests::write_targets_follow_the_line",
+    ),
+    (
+        "A-6: a write over a rollback",
+        [(VLT, "        if rolled_back(&item, &ks, self.get(HEAD).await?)? {", "        if false {")],
+        T + " --lib vault::tests::rollback_blocks_writes_until_accepted",
+    ),
+    (
+        "A-6: accept_rollback writes nothing",
+        [(VLT, "        self.put(HEAD, prev, anchor(ks.rev, &item.bytes)?).await\n    }", "        let _ = (prev, ks);\n        Ok(())\n    }")],
+        T + " --lib vault::tests::rollback_blocks_writes_until_accepted",
+    ),
+    (
+        "A2-5: one handle for both signatures",
+        [(ROOTS, " || Arc::ptr_eq(&s1, &s2) {", " {")],
+        T + " --test roots one_secret_for_two_parameters_does_not_hang",
+    ),
+    (
+        "A2-8: sign_scaas takes an ERC-7739 nest",
+        [(POL, "    if matches!(expect, Expect::Any(_) | Expect::Erc7739 { .. }) {\n        return Err(Error::Argument);\n    }\n    if let super", "    if matches!(expect, Expect::Any(_)) {\n        return Err(Error::Argument);\n    }\n    if let super")],
+        "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_typed erc7739_kat_and_expect",
+    ),
+    (
+        "A-8: a PqChat record by its name alone",
+        [(PQC, "            .is_some_and(|t| t.encode_type() == td.encode_type())", "            .is_some_and(|_| true)")],
+        U + " --test app_core pqchat_sign_records_only",
+    ),
+    (
+        "A-5: a prepared record shows no review",
+        [(AC, "                Ok(AppPrepared {\n                    review: Self::review(&path, &typed),\n                    digest: hex(&d),", "                Ok(AppPrepared {\n                    review: vec![],\n                    digest: hex(&d),")],
+        T + " --test app_core app_record_reviewed_before_signed",
+    ),
+    (
+        "A-9: a PqChat record signed in any scope",
+        [(PQR, "        self.label(scaas_ua::wallet::pqchat_keys::PREFIX.as_bytes())?;\n        let td = pqchat::typed(name, message)?;", "        let td = pqchat::typed(name, message)?;")],
+        T + ",vectors --test pqchat_records entries_reproduce_the_vectors",
+    ),
+    (
+        "A-10: the factory class read at the head",
+        [(AC, "            .read_at_block(final_block(profile), Purpose::Plain, |at| {\n                let d = data.clone();\n                async move { pool.call_at(&at, f, d).await.map(|b| b.to_vec()) }", "            .read_at_block(scaas_rpc::pool::BlockChoice::Latest, Purpose::Plain, |at| {\n                let d = data.clone();\n                async move { pool.call_at(&at, f, d).await.map(|b| b.to_vec()) }")],
+        T + " --test app_core",
+    ),
+    (
+        "A-11: decode_inner copies past its input",
+        [(PQK, "    let v = a.bytes(at, (*left).min(PT_MAX))?;", "    let v = a.bytes(at, PT_MAX)?;")],
+        U + " --lib decode_budget",
+    ),
+    (
+        "B-17: read_app a plain read",
+        [(AC, "        self.read_app_as(chain, contract, entry, args, Purpose::FeedsDecryption)", "        self.read_app_as(chain, contract, entry, args, Purpose::Plain)")],
+        T + " --test app_core read_app_feeds_decryption_by_default",
+    ),
+    (
+        "B2-9: a transfer skips the receiver check",
+        [(OPS, "                crate::line::receiver_registered(&sdk, &req.chain, &id32(&req.to)?).await?;\n                let kind = kind_of(&sdk, &req.chain, \"UAMetaTransfer\", token).await?;\n                let mut m", "                let kind = kind_of(&sdk, &req.chain, \"UAMetaTransfer\", token).await?;\n                let mut m")],
+        T + " --test account_ops pay_to_unregistered_derived_ua",
+    ),
+    (
+        "A2-4: the SDK requires a proven holder key on an OFFCHAIN token",
+        [(CPQ, "    if !(proven || offchain)\n", "    if !proven\n")],
+        T + " --test confidential_pqz offchain_holder_key_need_not_be_proven",
+    ),
+    (
+        "A2-4: the facade requires a proven holder key on an OFFCHAIN token",
+        [(FPQ, "    if !(proven == 1 || proven == 0 && offchain) || added > 1 {", "    if proven != 1 || added > 1 {")],
+        T + " --test confidential_pqz offchain_holder_key_need_not_be_proven",
+    ),
+    (
+        "A2-3: governance_delay takes a token of another factory",
+        [(DLY, "                if word(f, 0)?.get(12..) != Some(&factory[..])\n                    || small", "                if word(f, 0)?.get(12..).is_none()\n                    || small")],
+        T + " --test governance_delay the_token_is_the_profile_factorys",
+    ),
+    (
+        "A2-3: governance_delay takes another class",
+        [(DLY, "? != CLASS_TOKEN\n", "? > CLASS_TOKEN + 1\n")],
+        T + " --test governance_delay the_token_is_the_profile_factorys",
+    ),
+    (
+        "A2-1: ua-rs judges an msig sender on its first structure",
+        [(USEAL, "    let d = &current(*id).map_or_else(|| d.to_vec(), |c| c.0);\n", "    let d = &d.to_vec();\n")],
+        U + " --test wallet_seal seal_json_acceptance",
+    ),
+    (
+        "A2-1: ua-rs counts a disabled slot",
+        [(USEAL, "accepted(x, i) && current(x).is_none_or(|c| slot_enabled(&c.1, i))", "accepted(x, i)")],
+        U + " --test wallet_seal seal_json_acceptance",
+    ),
+    (
+        "A2-1: ua-rs judges an inner msig member on its first structure",
+        [(USEAL, "members(x).map(|(_, k)| current(x).map_or(k, |c| c.0))", "members(x).map(|(_, k)| k)")],
+        U + " --test wallet_seal seal_json_acceptance",
+    ),
+    (
+        "A2-1: clientkeys judges an msig sender on its first structure",
+        [(JSEAL, "  const d = nowOf(cur, hex(id), first);\n", "  const d = first;\n")],
+        "cd clients/clientkeys && node --test test/seal.test.js",
+    ),
+    (
+        "A2-1: clientkeys counts a disabled slot",
+        [(JSEAL, "accepted(x, i) === true && enabledAt(cur, x, i)", "accepted(x, i) === true")],
+        "cd clients/clientkeys && node --test test/seal.test.js",
+    ),
+    (
+        "A-5b: a PqChat record's key opened at prepare",
+        [(PQR, "        Ok(PqChatPrepared {\n            record: name.into(),", "        let crate::op::Key::Ua(..) = crate::op::key(&self.sdk, &account)? else {\n            return Err(SdkError::Argument);\n        };\n        Ok(PqChatPrepared {\n            record: name.into(),")],
+        T + ",vectors --test pqchat_records entries_reproduce_the_vectors",
     ),
 ]
 

@@ -38,7 +38,7 @@
 )]
 
 use super::pqz::PqzKey;
-use crate::ua_portable::{Accepted, Members, MsigStructure};
+use crate::ua_portable::{Accepted, Current, Members, MsigStructure};
 use crate::wallet::{
     bounded, from_hex, seal_container, to_hex, ContainerExpect, ContainerSigner, Error, KemKeyPair,
     Recipient, RecipientId, Result, SealedContainer, SecretStore, UaKey,
@@ -196,12 +196,13 @@ fn open_share(
     c: &SealedContainer,
     expect: &ContainerExpect,
     members: &Members,
+    current: &Current,
     accepted: Option<&Accepted>,
 ) -> Result<Share> {
     if expect.purpose != PURPOSE_PQZ_SHARE {
         return Err(Error::Argument);
     }
-    Share::from_json(&kk.open_container(c, expect, members, accepted)?)
+    Share::from_json(&kk.open_container(c, expect, members, current, accepted)?)
 }
 
 // --- the backup ------------------------------------------------------------------------------------------------------------
@@ -416,16 +417,18 @@ impl KemKeyPair {
     /// A member's share container `c` (opened by this key as `expect` says; purpose [`PURPOSE_PQZ_SHARE`]) sealed again, the same
     /// payload, to `to` (the one who rebuilds the key) and signed by `sender`. The share stays inside the library. Errors as
     /// [`KemKeyPair::open_container`] and [`seal_container`]; `Argument` for another purpose or a malformed payload.
+    #[allow(clippy::too_many_arguments)]
     pub fn reseal_pqz_share(
         &self,
         c: &SealedContainer,
         expect: &ContainerExpect,
         members: &Members,
+        current: &Current,
         accepted: Option<&Accepted>,
         to: &Recipient,
         sender: &UaKey,
     ) -> Result<SealedContainer> {
-        let s = open_share(self, c, expect, members, accepted)?;
+        let s = open_share(self, c, expect, members, current, accepted)?;
         seal_container(
             to,
             PURPOSE_PQZ_SHARE,
@@ -445,6 +448,7 @@ pub(crate) fn reconstruct(
     containers: &[SealedContainer],
     expect: &ContainerExpect,
     members: &Members,
+    current: &Current,
     accepted: Option<&Accepted>,
     msig_ua: &[u8; 32],
     version: u64,
@@ -455,7 +459,7 @@ pub(crate) fn reconstruct(
     }
     let shares = containers
         .iter()
-        .map(|c| open_share(kk, c, expect, members, accepted))
+        .map(|c| open_share(kk, c, expect, members, current, accepted))
         .collect::<Result<Vec<_>>>()?;
     let first = shares.first().ok_or(Error::Argument)?.h;
     let want = (first.msig_ua == *msig_ua)

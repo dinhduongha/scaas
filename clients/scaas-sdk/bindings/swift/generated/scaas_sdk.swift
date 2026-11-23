@@ -6418,6 +6418,8 @@ public func FfiConverterTypeSubscription_lower(_ value: Subscription) -> UInt64 
  */
 public protocol VaultProtocol: AnyObject, Sendable {
     
+    func acceptRollback() async throws 
+    
     func changePassphrase(seed: String, old: SecretBytes, new: SecretBytes) async throws 
     
     func confirmBackup(seed: String) async throws 
@@ -6541,6 +6543,23 @@ open class Vault: VaultProtocol, @unchecked Sendable {
 
     
 
+    
+open func acceptRollback()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_vault_accept_rollback(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_void,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_void,
+            freeFunc: ffi_scaas_sdk_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
     
 open func changePassphrase(seed: String, old: SecretBytes, new: SecretBytes)async throws   {
     return
@@ -31790,6 +31809,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_subscription_next() != 46941) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_vault_accept_rollback() != 51021) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != 63580) {

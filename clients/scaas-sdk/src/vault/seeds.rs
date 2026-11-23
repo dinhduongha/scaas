@@ -144,6 +144,16 @@ impl Vault {
             .await
     }
 
+    /// Accepts the stored keystore as it is after a `KeystoreRollback` (spec §6.3, review A-6): the user chose the older copy
+    /// deliberately; the anchor is rewritten over it and writes resume. While a rollback holds, every write of the keystore is
+    /// `KeystoreRollback` and changes nothing.
+    pub async fn accept_rollback(&self) -> Result<(), SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move { sdk.keystore.accept_rollback().await })
+            .await
+    }
+
     /// The memory protection of an unlocked seed's key arena now (`mlock`, no-dump; best effort, closing review P3): an app can
     /// tell whether the retained PRF key and the opened keys are locked in RAM. `WalletLocked` for a locked seed.
     pub fn memory_protection(

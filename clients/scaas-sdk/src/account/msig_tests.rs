@@ -855,9 +855,7 @@ async fn msig_members_apart() {
     );
     let (purpose, digest) = (scaas_ua::purpose_tag("metatx").unwrap(), [5u8; 32]);
     // the fndsa512 slot on its own device
-    let (_, _, pool) = crate::op::evm(&t.sdk, "local").unwrap();
-    let reg: Address = REGISTRY.parse().unwrap();
-    let vs = views(&pool, reg, &[ua]).await.unwrap();
+    let (vs, _) = views(&t.sdk, "local", &[ua]).await.unwrap();
     let m = slot_sig(
         &t.sdk,
         &vs,
@@ -1176,5 +1174,81 @@ async fn imported_evm_key_is_a_native_member() {
             .await
             .unwrap(),
         "a UA key: the control"
+    );
+}
+
+/// F2 (owner 2026-11-23, review T26 A-7, A2-2): an `msig` held by generation 1 read through a bound generation 2 is read at
+/// its holder in one read, and its native members sign `UAAuth` in the holder's domain at the holder's generation; a native
+/// signer's domain is the bound registry's own at its generation. A holder off the line and a line that is not consecutive
+/// are refused, each beside its control.
+#[tokio::test(flavor = "multi_thread")]
+async fn msig_on_a_two_generation_line() {
+    const G1: &str = "0x5ca00000000000000000000000000000000000c1";
+    let t = setup(REGISTRY, None).await;
+    let kd = MsigStructure {
+        threshold: 1,
+        members: vec![MsigMember {
+            kind: FNDSA512,
+            id: Wallet::from_mnemonic(REPO, "")
+                .unwrap()
+                .ua_key(FNDSA512, 0, 0)
+                .unwrap()
+                .ua()
+                .unwrap(),
+            weight: 1,
+        }],
+    }
+    .key_data();
+    let ua = scaas_ua::derive_ua(MSIG, &kd, false).unwrap();
+    record(&t, G1, &kd, &kd, 0, 1, 1);
+    let line = |g2: u64| {
+        let word = |a: &str| format!("0x{:0>64}", a.trim_start_matches("0x"));
+        answer(&t, REGISTRY, sel("generation()"), format!("0x{g2:064x}"));
+        answer(&t, REGISTRY, sel("predecessor()"), word(G1));
+        answer(&t, G1, sel("generation()"), format!("0x{:064x}", 1));
+        answer(&t, G1, sel("predecessor()"), word("0x0"));
+    };
+    let holder = |h: &str| {
+        answer(
+            &t,
+            REGISTRY,
+            format!("{}{}", sel("holderOf(bytes32)"), &hex(&ua)[2..]),
+            format!("0x{:0>64}{:064x}{:064x}", &h[2..], MSIG, 0),
+        )
+    };
+    line(2);
+    holder(G1);
+    let (vs, l) = views(&t.sdk, "local", &[ua]).await.unwrap();
+    let d = super::domain(&t.sdk, "local", &l, &vs[&ua]).unwrap();
+    let g1: Address = G1.parse().unwrap();
+    assert_eq!(
+        (d.registry, d.generation),
+        (g1.into_array(), 1),
+        "the holder's domain"
+    );
+    let own = l.domain(None, CHAIN_ID, [0; 32]);
+    let bound: Address = REGISTRY.parse().unwrap();
+    assert_eq!(
+        (own.registry, own.generation),
+        (bound.into_array(), 2),
+        "a native signer's: the bound one's"
+    );
+    // a holder off the line; its control above
+    holder("0x5ca00000000000000000000000000000000000c9");
+    assert!(
+        views(&t.sdk, "local", &[ua]).await.is_err(),
+        "a holder off the line"
+    );
+    holder(G1);
+    // generation 3 over a generation 1: not consecutive
+    line(3);
+    assert!(
+        views(&t.sdk, "local", &[ua]).await.is_err(),
+        "a line that is not consecutive"
+    );
+    line(2);
+    assert!(
+        views(&t.sdk, "local", &[ua]).await.is_ok(),
+        "the control again"
     );
 }

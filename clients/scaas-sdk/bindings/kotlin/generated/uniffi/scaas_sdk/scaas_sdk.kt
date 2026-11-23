@@ -1167,6 +1167,8 @@ external fun uniffi_scaas_sdk_checksum_method_sdk_watch(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_subscription_next(
 ): Short
+external fun uniffi_scaas_sdk_checksum_method_vault_accept_rollback(
+): Short
 external fun uniffi_scaas_sdk_checksum_method_vault_change_passphrase(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_vault_confirm_backup(
@@ -1745,6 +1747,8 @@ external fun uniffi_scaas_sdk_fn_clone_vault(`handle`: Long,uniffi_out_err: Unif
 ): Long
 external fun uniffi_scaas_sdk_fn_free_vault(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_scaas_sdk_fn_method_vault_accept_rollback(`ptr`: Long,
+): Long
 external fun uniffi_scaas_sdk_fn_method_vault_change_passphrase(`ptr`: Long,`seed`: RustBuffer.ByValue,`old`: Long,`new`: Long,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_vault_confirm_backup(`ptr`: Long,`seed`: RustBuffer.ByValue,
@@ -2708,6 +2712,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_subscription_next() != 46941.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback() != 51021.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != 63580.toShort()) {
@@ -11918,6 +11925,8 @@ public object FfiConverterTypeSubscription: FfiConverter<Subscription, Long> {
  */
 public interface VaultInterface {
     
+    suspend fun `acceptRollback`()
+    
     suspend fun `changePassphrase`(`seed`: kotlin.String, `old`: SecretBytes, `new`: SecretBytes)
     
     suspend fun `confirmBackup`(`seed`: kotlin.String)
@@ -12085,6 +12094,28 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
         return uniffiRustCall() { status ->
             UniffiLib.uniffi_scaas_sdk_fn_clone_vault(handle, status)
         }
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `acceptRollback`() {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_vault_accept_rollback(
+                uniffiHandle,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
     }
 
     

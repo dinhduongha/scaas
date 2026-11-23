@@ -140,8 +140,8 @@ static void load_refuses_wrong_abi_or_features() {
     CHECK((features() & kRequiredFeatures) == kRequiredFeatures, "required features");
     auto abi = detail::reportedAbiVersion;
     auto feat = detail::reportedFeatures;
-    detail::reportedAbiVersion = [] { return 5u; }; // an older core
-    CHECK(code_of([] { load(); }) == "UAAbiMismatch", "abi 5");
+    detail::reportedAbiVersion = [] { return 6u; }; // an older core
+    CHECK(code_of([] { load(); }) == "UAAbiMismatch", "abi 6");
     CHECK(code_of([] {
               Secret w(MN.at("pq_kat")["words"].get<std::string>()), p;
               Wallet::fromMnemonic(w, p);
@@ -150,8 +150,8 @@ static void load_refuses_wrong_abi_or_features() {
     CHECK(code_of([] { KemKey::ephemeral(); }) == "UAAbiMismatch", "kem ephemeral");
     CHECK(code_of([] { LinkSession::create(); }) == "UAAbiMismatch", "link session");
     CHECK(code_of([] { seal(Bytes(1601, 1), "scaas/backup/v1", {}, {}); }) == "UAAbiMismatch", "seal");
-    detail::reportedAbiVersion = [] { return 7u; };
-    CHECK(code_of([] { load(); }) == "UAAbiMismatch", "abi 7");
+    detail::reportedAbiVersion = [] { return 8u; };
+    CHECK(code_of([] { load(); }) == "UAAbiMismatch", "abi 8");
     detail::reportedAbiVersion = abi;
     detail::reportedFeatures = [] { return kRequiredFeatures & ~feature::kPqz; };
     CHECK(code_of([] { load(); }) == "UAAbiMismatch", "features without pqz");
@@ -519,20 +519,21 @@ static void seal_json() {
         if (r.contains("link"))
             continue;
         KemKey kk = kem_of(r["opener"]["kem"]);
-        std::string members = dump(r.value("members", json())), accepted = dump(r.value("accepted", json()));
+        std::string members = dump(r.value("members", json())), accepted = dump(r.value("accepted", json())),
+                    current = dump(r.value("msigCurrent", json()));
         std::string got = code_of([&] {
             if (r.value("restore", false)) {
                 Secret b39;
-                Wallet::restoreBackup(kk, r["container"].dump(), r["expect"].dump(), members, accepted, b39);
+                Wallet::restoreBackup(kk, r["container"].dump(), r["expect"].dump(), members, accepted, current, b39);
             } else {
-                kk.openContainer(r["container"].dump(), r["expect"].dump(), members, accepted);
+                kk.openContainer(r["container"].dump(), r["expect"].dump(), members, accepted, current);
             }
         });
         std::string want = r.contains("error") && !r["error"].is_null() ? "UA" + r["error"].get<std::string>() : "";
         CHECK(got == want, r["id"].get<std::string>());
         ++n;
     }
-    CHECK(n == 28, "acceptance rows");
+    CHECK(n == 32, "acceptance rows"); // T26 A2-1: 28 -> 32 (four msigCurrent rows)
 }
 
 static void backup_link_restore() {
@@ -549,21 +550,21 @@ static void backup_link_restore() {
                    {"sender", {{"ua", hx(sender.ua())}}},
                    {"recipient", {{"ua", hx(rec.ua())}, {"version", 0}}}};
     Secret b39;
-    auto r = Wallet::restoreBackup(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", b39);
+    auto r = Wallet::restoreBackup(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", "", b39);
     CHECK(r.has_value(), "installed");
     CHECK(r->uaKey(0x0102, 0, 0).keyData() == sender.keyData(), "restored key");
     json m = json::parse(r->manifestJson());
     CHECK(m["backupGeneration"] == 1 && m["entries"].size() == 2, "manifest");
     Secret b2;
-    CHECK(!r->restoreBackupOver(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", b2).has_value(),
+    CHECK(!r->restoreBackupOver(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", "", b2).has_value(),
           "an equal generation installs nothing");
     w.backupSeal(sender, {Recipient{0x0130, rec.keyData(), 0, pk, false}}); // generation 2 on w
     Secret b3;
-    CHECK(code_of([&] { w.restoreBackupOver(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", b3); }) ==
+    CHECK(code_of([&] { w.restoreBackupOver(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", "", b3); }) ==
               "UABackupRollback",
           "rollback");
     Secret b4;
-    CHECK(w.restoreBackupRollback(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", b4).has_value(),
+    CHECK(w.restoreBackupRollback(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", "", b4).has_value(),
           "rollback by its own name");
     CHECK(code_of([&] { w.backupSeal(W("pq_kat").nativeKey("evm", 0), {Recipient{0, {}, 0, pk, true}}); }) ==
               "UAArgument",
@@ -576,10 +577,10 @@ static void backup_link_restore() {
                  {"sender", {{"ua", hx(sender.ua())}}},
                  {"recipient", {{"kemPkHash", hx(keccak256(s.kemPk()))}}}};
     Secret b5;
-    Wallet linked = Wallet::fromLink(s, c, lexp.dump(), "", "", b5);
+    Wallet linked = Wallet::fromLink(s, c, lexp.dump(), "", "", "", b5);
     CHECK(linked.uaKey(0x0102, 0, 0).keyData() == sender.keyData(), "linked key");
     Secret b6;
-    CHECK(code_of([&] { Wallet::fromLink(s, c, lexp.dump(), "", "", b6); }) == "UAKeyRevoked",
+    CHECK(code_of([&] { Wallet::fromLink(s, c, lexp.dump(), "", "", "", b6); }) == "UAKeyRevoked",
           "the session is consumed");
     CHECK(code_of([&] { s.kemPk(); }) == "UAKeyRevoked", "consumed session");
     LinkSession s2 = LinkSession::create();
@@ -589,7 +590,8 @@ static void backup_link_restore() {
                   {"sender", {{"ua", hx(sender.ua())}}},
                   {"recipient", {{"kemPkHash", hx(keccak256(s2.kemPk()))}}}};
     Secret b7;
-    CHECK(code_of([&] { Wallet::fromLink(s2, c2, lexp2.dump(), "", "", b7); }) == "UASealOpen", "a wrong short code");
+    CHECK(code_of([&] { Wallet::fromLink(s2, c2, lexp2.dump(), "", "", "", b7); }) == "UASealOpen",
+          "a wrong short code");
     for (auto &r : S["containers"]) {
         if (!r["opener"].contains("session"))
             continue;
@@ -597,7 +599,7 @@ static void backup_link_restore() {
         json e3 = r["expect"];
         e3["recipient"] = {{"kemPkHash", hx(keccak256(s3.kemPk()))}};
         Secret b8;
-        CHECK(code_of([&] { Wallet::fromLink(s3, r["container"].dump(), e3.dump(), "", "", b8); }) ==
+        CHECK(code_of([&] { Wallet::fromLink(s3, r["container"].dump(), e3.dump(), "", "", "", b8); }) ==
                   "UAContainerReplay",
               "outside the window");
     }
@@ -678,7 +680,7 @@ static void rs_vault_json() {
                        {"sender", {{"ua", b["senderUa"]}}},
                        {"recipient", {{"ua", hx(rua)}, {"version", 0}}}};
         Secret b39;
-        auto w = Wallet::restoreBackup(kk, b["container"].dump(), expect.dump(), "", "", b39);
+        auto w = Wallet::restoreBackup(kk, b["container"].dump(), expect.dump(), "", "", "", b39);
         CHECK(w.has_value(), b["id"].get<std::string>());
         json m = json::parse(w->manifestJson());
         CHECK(m["backupGeneration"] == b["generation"], "generation");

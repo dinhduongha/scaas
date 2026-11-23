@@ -10,6 +10,9 @@
     clippy::expect_used,
     clippy::panic
 )]
+#[path = "common/prepared.rs"]
+mod prepared;
+use prepared::SignPrepared as _;
 use scaas_sdk::app_core::{AppCore, AppDesc, AppKeyUsage, AppNonce, AppPath};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::vault::{ImportWords, MemoryStore};
@@ -294,6 +297,80 @@ fn record(domain: serde_json::Value) -> String {
         "message": {"id": format!("0x{}", "11".repeat(32)), "body": "hello"},
     })
     .to_string()
+}
+
+/// T26 B-17: `read_app` is a read that feeds a decryption by default (a list of discovered nodes only: `NoTrustedEndpoint`,
+/// nothing asked); `read_app_plain` the plain read (the control: answered from that list).
+#[tokio::test(flavor = "multi_thread")]
+async fn read_app_feeds_decryption_by_default() {
+    let (s, _seed, chain) = on_fake(None, scaas_rpc::Class::Discovered).await;
+    let a = AppCore::new(s, desc(Some(APP_ID), &["scaas/rdap/v1/"])).unwrap();
+    let entry =
+        json!({"type": "function", "name": "generation", "stateMutability": "view", "inputs": [],
+        "outputs": [{"name": "g", "type": "uint256"}]})
+        .to_string();
+    let read = |plain: bool| {
+        let (a, entry) = (a.clone(), entry.clone());
+        async move {
+            let (c, k) = ("local".to_string(), APP_CONTRACT.to_string());
+            if plain {
+                a.read_app_plain(c, k, entry, "{}".into()).await
+            } else {
+                a.read_app(c, k, entry, "{}".into()).await
+            }
+        }
+    };
+    assert_eq!(code(read(false).await), "NoTrustedEndpoint");
+    assert!(!chain
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .any(|r| r.contains(&sel("generation()")[2..]) && r.contains("eth_call")));
+    assert_eq!(read(true).await.unwrap(), r#"{"g":"1"}"#);
+}
+
+/// T26 A-5: an app record is prepared (its review and digest, nothing signed) and signed apart; the review is the SDK's from
+/// the parsed typed data, so a typed-data text holding `message` twice shows the value that is signed.
+#[tokio::test(flavor = "multi_thread")]
+async fn app_record_reviewed_before_signed() {
+    let (s, seed) = sdk().await;
+    let a = AppCore::new(s.clone(), desc(Some(APP_ID), &["scaas/appr/v1/"])).unwrap();
+    let key = ua(&seed, 0x0108);
+    let pa = record(json!({"name": "My App", "version": "1", "salt": APP_ID}));
+    // control: the review before the signature, the signature over the reviewed digest
+    let p = a
+        .prepare_app_record(key.clone(), AppPath::Portable, pa.clone())
+        .await
+        .unwrap();
+    let body = |r: &[scaas_sdk::op::ReviewField]| {
+        r.iter()
+            .find(|f| f.name == "message.body")
+            .map(|f| f.value.clone())
+    };
+    assert_eq!(body(&p.review).as_deref(), Some("hello"));
+    let digest = p.digest.clone();
+    let signed = p.sign().await.unwrap();
+    assert_eq!(signed.digest, digest);
+    // a second `message` key before the real one: the review shows the one signed, never the first text
+    let dup = pa.replacen(
+        "\"message\":",
+        "\"message\":{\"id\":\"0x2222222222222222222222222222222222222222222222222222222222222222\",\"body\":\"shown?\"},\"message\":",
+        1,
+    );
+    assert_ne!(dup, pa);
+    if let Ok(q) = a
+        .prepare_app_record(key.clone(), AppPath::Portable, dup)
+        .await
+    {
+        let shown = body(&q.review);
+        let d = q.digest.clone();
+        let s2 = q.sign().await.unwrap();
+        assert_eq!(s2.digest, d);
+        // the parsed record is the one reviewed and the one signed
+        assert_eq!(shown.as_deref(), Some("hello"));
+        assert_eq!(d, digest);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -762,15 +839,24 @@ async fn verify_app_record_reads_the_registry() {
         !verify(nid, AppPath::Portable, pa.clone(), sn.clone()).await,
         "no portable record"
     );
+    // F2 (owner 2026-11-23): the domain comes from the line; a generation 1 naming a predecessor is no line (the read
+    // fails, never a guessed domain); a generation 2 the registry's own at generation 2, which the signature (made at
+    // generation 1) does not verify in
     answer(&chain, REGISTRY, "predecessor()", &[], w(1));
     assert_eq!(
         code(
-            a.verify_app_record("local".into(), hx(&nid), b(), cb.clone(), sn)
+            a.verify_app_record("local".into(), hx(&nid), b(), cb.clone(), sn.clone())
                 .await
         ),
-        "Argument",
-        "a registry of another generation"
+        "EndpointAllFailed",
+        "a line that is not consecutive"
     );
+    answer(&chain, REGISTRY, "generation()", &[], w(2));
+    assert!(
+        !verify(nid, b(), cb.clone(), sn).await,
+        "generation 2's domain, not generation 1's"
+    );
+    answer(&chain, REGISTRY, "generation()", &[], w(1));
     answer(&chain, REGISTRY, "predecessor()", &[], w(0));
 
     // an msig {k1, native}, threshold 2, both slots accepted
@@ -923,6 +1009,16 @@ async fn factory_instance_of_another_class_refused() {
     answer(&chain, FACTORY, "infoOf(address)", &c, info(0));
     assert_eq!(sign(&a).await, "Ok");
     assert_eq!(sign(&none).await, "Ok");
+    // T26 A-10: the class is read at the profile's final block, never the head: a head answering another class is not read
+    answer(&chain, FACTORY, "infoOf(address)", &c, info(7));
+    {
+        let mut ch = chain.lock().unwrap();
+        ch.head = ch.finalized + 4;
+        let prefix = format!("{}{}", sel("infoOf(address)"), hexs(&c));
+        ch.head_answers
+            .push((FACTORY.into(), prefix, format!("0x{}", info(3))));
+    }
+    assert_eq!(sign(&a).await, "Ok");
 }
 
 alloy::sol! {

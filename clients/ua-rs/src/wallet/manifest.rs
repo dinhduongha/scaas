@@ -30,7 +30,7 @@ use super::{
     bounded, derive, seed_of, Error, KemKeyPair, KeyId, NativeKey, Network, Result, UaKey, Wallet,
 };
 use crate::derive_ua;
-use crate::ua_portable::{Accepted, Members};
+use crate::ua_portable::{Accepted, Current, Members};
 use base64ct::{Base64UrlUnpadded, Encoding};
 use serde_json::Value;
 use zeroize::Zeroizing;
@@ -1075,6 +1075,7 @@ impl Wallet {
         c: &SealedContainer,
         expect: &ContainerExpect,
         members: &Members,
+        msig_current: &Current,
         accepted: Option<&Accepted>,
         current: Option<&Wallet>,
         rollback: Option<AllowRollback>,
@@ -1083,7 +1084,13 @@ impl Wallet {
         if expect.purpose != PURPOSE_BACKUP {
             return Err(Error::Argument);
         }
-        let p = BackupPayload::from_json(&recipient.open_container(c, expect, members, accepted)?)?;
+        let p = BackupPayload::from_json(&recipient.open_container(
+            c,
+            expect,
+            members,
+            msig_current,
+            accepted,
+        )?)?;
         if !derives_sender(&p, &c.sender_ua, bip39_passphrase) {
             return Err(Error::ContainerSender);
         }

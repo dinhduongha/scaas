@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Public topics (topics spec P33–P46, CTR-CHAT-15 to CTR-CHAT-18): create (with `openReplies` true, D19), update, writers,
-//! post, reply, edit, vote, each signed by the SDK's `sign_pqchat_topic*` entries (S6) from named fields and prepared as the
+//! post, reply, edit, vote, each signed by the SDK's `prepare_pqchat_topic*` entries and their `sign()` (S6) from named fields and prepared as the
 //! SDK's operation (W1); a record that replaces a value is built at `seq == stored + 1` and an edit at `versionCount + 1`,
 //! both read from the instance's state. Rights are the contract's: the crate checks none of its own and the quote (a
 //! simulation) refuses what the contract refuses. Every list is paged from state. A `ref` is shown unverified until
@@ -192,7 +192,12 @@ impl PqChat {
         };
         let r = json!({"admin": admin, "nonce": nonce.to_string(), "homeChain": t.home_chain,
             "homeChatContract": home, "name": name, "about": model::hex(about), "openReplies": true});
-        let signed = self.app.sign_pqchat_topic(me.key.clone(), t).await?;
+        let signed = self
+            .app
+            .prepare_pqchat_topic(me.key.clone(), t)
+            .await?
+            .sign()
+            .await?;
         self.topic_write(on, "IPqChat.createTopic", "t", r, signed, payer)
             .await
     }
@@ -221,7 +226,12 @@ impl PqChat {
         };
         let r = json!({"topicId": tid, "seq": seq.to_string(), "name": name, "about": model::hex(about),
             "openReplies": open_replies});
-        let signed = self.app.sign_pqchat_topic_update(me.key.clone(), u).await?;
+        let signed = self
+            .app
+            .prepare_pqchat_topic_update(me.key.clone(), u)
+            .await?
+            .sign()
+            .await?;
         self.topic_write(on, "IPqChat.updateTopic", "u", r, signed, payer)
             .await
     }
@@ -255,7 +265,12 @@ impl PqChat {
             seq,
         };
         let r = json!({"topicId": tid, "writer": wr, "granted": granted, "seq": seq.to_string()});
-        let signed = self.app.sign_pqchat_topic_writer(me.key.clone(), w).await?;
+        let signed = self
+            .app
+            .prepare_pqchat_topic_writer(me.key.clone(), w)
+            .await?
+            .sign()
+            .await?;
         self.topic_write(on, "IPqChat.setTopicWriter", "w", r, signed, payer)
             .await
     }
@@ -291,7 +306,12 @@ impl PqChat {
             media_type: MARKDOWN.into(),
             body: body.to_vec(),
         };
-        let signed = self.app.sign_pqchat_topic_entry(me.key.clone(), e).await?;
+        let signed = self
+            .app
+            .prepare_pqchat_topic_entry(me.key.clone(), e)
+            .await?
+            .sign()
+            .await?;
         self.topic_write(on, "IPqChat.postEntry", "e", r, signed, payer)
             .await
     }
@@ -320,7 +340,12 @@ impl PqChat {
             media_type: MARKDOWN.into(),
             body: body.to_vec(),
         };
-        let signed = self.app.sign_pqchat_topic_edit(me.key.clone(), d).await?;
+        let signed = self
+            .app
+            .prepare_pqchat_topic_edit(me.key.clone(), d)
+            .await?
+            .sign()
+            .await?;
         self.topic_write(on, "IPqChat.editEntry", "e", r, signed, payer)
             .await
     }
@@ -344,7 +369,12 @@ impl PqChat {
             value: vote.value(),
             seq,
         };
-        let signed = self.app.sign_pqchat_topic_vote(me.key.clone(), v).await?;
+        let signed = self
+            .app
+            .prepare_pqchat_topic_vote(me.key.clone(), v)
+            .await?
+            .sign()
+            .await?;
         self.topic_write(on, "IPqChat.voteEntry", "v", r, signed, payer)
             .await
     }

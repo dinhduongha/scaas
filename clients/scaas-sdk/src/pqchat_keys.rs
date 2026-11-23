@@ -13,7 +13,7 @@ use crate::app_core::{
 use crate::error::SdkError;
 use crate::op::{hex, KeyRef, Source};
 use crate::pqchat_records::{
-    PqChatEpoch, PqChatMessage, PqChatSession, PqChatSigned, PqMemberKey, PqWrap,
+    PqChatEpoch, PqChatMessage, PqChatPrepared, PqChatSession, PqMemberKey, PqWrap,
 };
 use scaas_ua::ua_portable::UASig;
 use scaas_ua::wallet::pqchat_keys::{self as pk, Header};
@@ -177,7 +177,7 @@ fn secret(pt: zeroize::Zeroizing<Vec<u8>>) -> Result<SecretBytes, SdkError> {
 }
 
 /// The `sealedInfo`'s fields listed in the review as request fields (CLI-PQC-04: the store list and the Matrix ids shown).
-fn info_review(info_json: &str, s: &mut PqChatSigned) -> Result<(), SdkError> {
+fn info_review(info_json: &str, s: &mut PqChatPrepared) -> Result<(), SdkError> {
     let v = scaas_ua::wallet::bounded::json(info_json.as_bytes(), pk::PT_MAX, pk::JSON_DEPTH)?;
     crate::app_core::flatten_as("sealedInfo", &v, Source::Request, &mut s.review);
     Ok(())
@@ -458,14 +458,15 @@ impl AppCore {
             .await
     }
 
-    /// S1: `sealedInfo` sealed from `r.info_json` under `k` (random nonce), then `PqChatSession` signed by `account` (the
-    /// creator, its UA), the session id computed, the info's fields in the review as request fields.
-    pub async fn pqchat_sign_session(
+    /// S1: `sealedInfo` sealed from `r.info_json` under `k` (random nonce), then `PqChatSession` prepared for `account`'s
+    /// signature (the creator, its UA; [`PqChatPrepared::sign`] after the review, T26 A-5 part b), the session id computed, the
+    /// info's fields in the review as request fields.
+    pub async fn pqchat_prepare_session(
         self: &Arc<Self>,
         account: KeyRef,
         k: Arc<AppKey>,
         r: PqSessionNew,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let creator = self.account_ua(&account)?;
         let sid = pqchat::id("session", &[creator, word(r.nonce)]);
         let sealed = self.seal_info(&k, &sid, &sid, &r.info_json)?;
@@ -479,18 +480,18 @@ impl AppCore {
             wraps: r.wraps,
             sealed_info: sealed,
         };
-        let mut s = self.sign_pqchat_session(account, rec).await?;
+        let mut s = self.prepare_pqchat_session(account, rec).await?;
         info_review(&r.info_json, &mut s)?;
         Ok(s)
     }
 
     /// S2: as S1 for `PqChatEpoch`, the author the signing account, the epoch id computed.
-    pub async fn pqchat_sign_epoch(
+    pub async fn pqchat_prepare_epoch(
         self: &Arc<Self>,
         account: KeyRef,
         k: Arc<AppKey>,
         r: PqEpochNew,
-    ) -> Result<PqChatSigned, SdkError> {
+    ) -> Result<PqChatPrepared, SdkError> {
         let author = self.account_ua(&account)?;
         let session = h32(&r.session_id)?;
         let eid = pqchat::id("epoch", &[session, author, word(r.nonce)]);
@@ -506,7 +507,7 @@ impl AppCore {
             wraps: r.wraps,
             sealed_info: sealed,
         };
-        let mut s = self.sign_pqchat_epoch(account, rec).await?;
+        let mut s = self.prepare_pqchat_epoch(account, rec).await?;
         info_review(&r.info_json, &mut s)?;
         Ok(s)
     }
@@ -527,7 +528,7 @@ impl AppCore {
         let v = scaas_ua::wallet::bounded::json(record_json.as_bytes(), 1 << 20, pk::JSON_DEPTH)?;
         let td = pqchat::typed(&name, v)?;
         let sig = UASig::from(&sig);
-        self.with_records(&chain, id, false, false, |state| {
+        self.with_records(&chain, id, false, |state| {
             pqchat::verify(&id, &td, &sig, state)
         })
         .await
@@ -684,7 +685,7 @@ impl AppCore {
     }
 
     /// pqchat-core T11's hostile harness: the envelope under `k` of a record and a signature given apart (a record signed by
-    /// a UA other than its sender, through the generic `sign_pqchat_message`), with a fixed nonce.
+    /// a UA other than its sender, through the generic `prepare_pqchat_message`), with a fixed nonce.
     pub fn pqchat_vectors_envelope(
         &self,
         k: Arc<AppKey>,

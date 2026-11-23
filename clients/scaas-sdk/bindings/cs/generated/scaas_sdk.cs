@@ -1462,6 +1462,8 @@ static class _UniFFILib {
     
     
     
+    
+    
 
     static _UniFFILib() {
         _UniFFILib.uniffiCheckContractApiVersion();
@@ -3834,6 +3836,17 @@ static class _UniFFILib {
     public static extern
 #endif
      void uniffi_scaas_sdk_fn_free_vault(ulong @handle,ref UniffiRustCallStatus _uniffi_out_err
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ulong uniffi_scaas_sdk_fn_method_vault_accept_rollback(ulong @ptr
     );
 
     #if NET8_0_OR_GREATER
@@ -7881,6 +7894,17 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ushort uniffi_scaas_sdk_checksum_method_vault_accept_rollback(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ushort uniffi_scaas_sdk_checksum_method_vault_change_passphrase(
     );
 
@@ -9891,6 +9915,12 @@ static class _UniFFILib {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_subscription_next();
             if (checksum != 46941) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_subscription_next` checksum `46941`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback();
+            if (checksum != 51021) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_vault_accept_rollback` checksum `51021`, library returned `{checksum}`");
             }
         }
         {
@@ -17697,6 +17727,8 @@ class FfiConverterTypeSubscription: FfiConverter<Subscription, ulong> {
 /// </summary>
 internal interface IVault {
     /// <exception cref="SdkException"></exception>
+    Task AcceptRollback();
+    /// <exception cref="SdkException"></exception>
     Task ChangePassphrase(string @seed, SecretBytes @old, SecretBytes @new);
     /// <exception cref="SdkException"></exception>
     Task ConfirmBackup(string @seed);
@@ -17854,6 +17886,24 @@ internal class Vault : IVault, IDisposable {
         }
     }
 
+    
+    /// <exception cref="SdkException"></exception>
+    public async Task AcceptRollback() {await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_vault_accept_rollback(thisPtr);
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_void(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {_UniFFILib.ffi_scaas_sdk_rust_future_complete_void(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_void(future),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
     
     /// <exception cref="SdkException"></exception>
     public async Task ChangePassphrase(string @seed, SecretBytes @old, SecretBytes @new) {await _UniFFIAsync.UniffiRustCallAsync(

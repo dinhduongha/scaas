@@ -10,10 +10,13 @@
     clippy::panic
 )]
 
+#[path = "../../scaas-sdk/tests/common/prepared.rs"]
+mod prepared;
 use pqvault_core::content;
 use pqvault_core::keys::{self, ItemAt};
 use pqvault_core::records::*;
 use pqvault_core::{Error, PqVault};
+use prepared::SignPrepared as _;
 use scaas_sdk::app_core::{AppCore, AppKey, AppKeyUsage, AppPath, SecretBytes};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::vault::{ImportWords, MemoryStore};

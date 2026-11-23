@@ -83,6 +83,8 @@ pub(super) struct Open {
     /// Group 3g: the version is below the registry's `current` (KV-8: it only migrates or refreshes); `forOp7` (its `p`).
     stale: bool,
     op7: bool,
+    /// the token's `pqzVerifyMode` is `OFFCHAIN`: a stored key need not be proven (`PqzCore._usable`)
+    offchain: bool,
     /// `accBlob` (the last own debit's op blob) and that debit's record (`lastRecord`).
     acc_blob: [u8; 20],
     last: Option<Record>,
@@ -219,7 +221,7 @@ fn window(list: &[Value], from: u64, to: u64) -> Result<Vec<(u64, Word)>> {
 /// registered key the handle must hold.
 pub(super) fn open(f: &Fields<'_>) -> Result<(Open, Vec<u8>)> {
     let mut blobs = Blobs::new(f)?;
-    let key = registered_key(&f.word("keyRecord")?, &mut blobs)?;
+    let key = registered_key(&f.word("keyRecord")?, &mut blobs, offchain(f)?)?;
     let o = open_words(f, &mut blobs)?;
     blobs.done()?;
     Ok((o, key))
@@ -299,6 +301,7 @@ fn open_words(f: &Fields<'_>, blobs: &mut Blobs) -> Result<Open> {
     }
     Ok(Open {
         id,
+        offchain: offchain(f)?,
         chain_id: f.u64("chainId")?,
         registry: f.arr("registry")?,
         chain_uid,
@@ -737,7 +740,7 @@ impl PqzKey {
                 .as_ref()?
                 .iter()
                 .find(|(u, x, _)| *u == o.ua && *x == rec.key_version)?;
-            let pk = registered_key(w, blobs).ok()?;
+            let pk = registered_key(w, blobs, o.offchain).ok()?;
             let kh = crate::key_hash_of(crate::PQZ_SCHEME, &pk).ok()??;
             self.secret
                 .derive(KeyId::PqzHeld(kh), |_| Err(Error::Argument))
@@ -798,12 +801,18 @@ fn by_proof(
 }
 
 /// The key of `(ua, v)` from a credit's `keyRecords` (its code in the request's blobs).
-fn key_of(keys: &[(Word, u64, Word)], blobs: &mut Blobs, ua: &Word, v: u64) -> Result<Vec<u8>> {
+fn key_of(
+    keys: &[(Word, u64, Word)],
+    blobs: &mut Blobs,
+    ua: &Word,
+    v: u64,
+    offchain: bool,
+) -> Result<Vec<u8>> {
     let (_, _, w) = keys
         .iter()
         .find(|(u, x, _)| u == ua && *x == v)
         .ok_or(Error::Argument)?;
-    registered_key(w, blobs)
+    registered_key(w, blobs, offchain)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -831,7 +840,7 @@ fn verified(
     // step 2: `T_k`
     let t = t_k(rec, window, blobs)?;
     // step 3: the keys, the holder's leg its own `pk`, never a source's
-    let pk_f = key_of(keys, blobs, &c.from_ua, rec.key_version)?;
+    let pk_f = key_of(keys, blobs, &c.from_ua, rec.key_version, o.offchain)?;
     let (m, aud) = (l.e.m, l.e.aud);
     let mut pks = Vec::with_capacity(m);
     for j in 0..m {
@@ -843,6 +852,7 @@ fn verified(
                 blobs,
                 &l.e.owner(j)?,
                 *l.t.kv.get(j).ok_or(Error::Argument)?,
+                o.offchain,
             )?
         });
     }
@@ -853,6 +863,7 @@ fn verified(
             blobs,
             &a,
             *l.t.kv.get(m).ok_or(Error::Argument)?,
+            o.offchain,
         )?)
     } else {
         None
@@ -1585,6 +1596,7 @@ fn own_proven(
                         blobs,
                         &e.owner(j)?,
                         *tl.kv.get(j).ok_or(Error::Argument)?,
+                        o.offchain,
                     )
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -1595,6 +1607,7 @@ fn own_proven(
                     blobs,
                     &a,
                     *tl.kv.get(e.m).ok_or(Error::Argument)?,
+                    o.offchain,
                 )?)
             } else {
                 None
@@ -1748,6 +1761,7 @@ mod tests {
             let name = r["name"].as_str().unwrap();
             let form = r["form"].as_str().unwrap();
             let o = Open {
+                offchain: false,
                 id: w(&r["psid"]),
                 chain_id: n(&r["chainId"]),
                 registry: h(&r["registry"]).try_into().unwrap(),

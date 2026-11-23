@@ -334,7 +334,10 @@ async fn run() {
     // --- 1:1 session S2, the Matrix room its only store: B's signed contact card binds its Matrix id on A's device
     let card = w
         .app
-        .sign_pqchat_card(b.key.clone(), 1, tb.user.clone())
+        .prepare_pqchat_card(b.key.clone(), 1, tb.user.clone())
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap();
     assert!(pa.add_card(CHAIN, &card.card, &card.sig).await.unwrap());
