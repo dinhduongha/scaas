@@ -645,9 +645,10 @@ export function replay(sc, rd, dev, store = null) {
   const last = endEpoch === null ? head : endEpoch - 1;
   // 4. the rosters by undo from the anchored head, every later commit of the public range undone (C25, codex-r3-1)
   const rosters = [];
-  rosters[head] = leaves.map((l) => (l.ua === ZERO ? null : { ua: l.ua, keyId: l.keyId }));
+  const top = head;
+  rosters[top] = leaves.map((l) => (l.ua === ZERO ? null : { ua: l.ua, keyId: l.keyId }));
   const coldSize = 2 ** Math.ceil(Math.log2(Math.max(S0.members.length, 1)));
-  for (let n = head; n > lo; n--) {
+  for (let n = top; n > lo; n--) {
     const r = rosters[n].slice();
     for (const x of recs[n].adds) r[x.leaf] = null;
     for (const x of recs[n].removes) r[x.leaf] = { ua: x.ua, keyId: x.keyId };

@@ -413,6 +413,11 @@ test("healing (fable-4, fable-r2-7): a member that did not follow follows the ne
     assert.equal(at(r[n], 3).state, "followed", `${n}: F's commit falls back to node 3`);
   }
   assert.deepEqual(HEAL.steps[3].built.ctTargets, [3]);
+  // B reads the one ciphertext over its leaf in every commit of another, held or not (C22)
+  assert.deepEqual(
+    r.B.reads.filter((x) => x.startsWith("pathCtAt(")).map((x) => x.split(",")[0]),
+    ["pathCtAt(1", "pathCtAt(2", "pathCtAt(3", "pathCtAt(4"],
+  );
   for (const n of ["A", "B", "C", "F"]) assert.equal(kAt(r[n], 5), hex(HEAL.steps.at(-1).built.K), n);
 });
 
@@ -510,6 +515,20 @@ test("the checkpoint (C26, fable-r2-4, codex-r2-11): a same-id twin of the head 
   const c2 = f.commit(t2, "B", { nonce: 10 }).built;
   assert.equal(c1.epochId, c2.epochId);
   assert.notEqual(c1.ps[0], c2.ps[0]);
+  // below the head: the twin (validly signed, same id) breaks the chain at its child; a record of another number, its id
+  const twinAt1 = (read, v) =>
+    read === "commitOf(1)" ? { record: t2.home.epochs[1].record, sig: t2.home.epochs[1].sig } : v;
+  assert.throws(
+    () => f.replayOf(t1, "C", twinAt1),
+    (e) => e.code === "TreeReadCorrupted" && e.read === "commitOf(2)",
+  );
+  const twoAt1 = (read, v) =>
+    read === "commitOf(1)" ? { record: t1.home.epochs[2].record, sig: t1.home.epochs[2].sig } : v;
+  assert.throws(
+    () => f.replayOf(t1, "C", twoAt1),
+    (e) => e.code === "TreeReadCorrupted" && e.read === "commitOf(1)",
+  );
+  assert.equal(f.replayOf(t1, "C").epochs.length, 3);
 });
 
 test("the twin outside the tree (codex-r3-2): one id, one parent, one treeHash, another sealedInfo: two hashStructs, the true child fits both, the pin decides", () => {
@@ -805,6 +824,20 @@ test("negative rows (codex-1, codex-13, codex-r2-15): read corrupted (bytes chan
     }
     return v;
   };
+  const w2 = f.createSession({
+    tag: "t/neg-join",
+    creator: "A",
+    nonce: 70,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+  });
+  f.commit(w2, "A", { adds: [["D", 3]] });
+  assert.equal(at(f.replayOf(w2, "D"), 1).state, "followed");
+  assert.throws(
+    () => f.replayOf(w2, "D", alter("wrapAt")),
+    (e) => e.code === "TreeReadCorrupted" && e.read === "wrapAt(1,0)",
+  );
   for (const name of ["pathCtAt", "pathListOf", "wrapAt", "commitOf"]) {
     decaps = 0;
     assert.throws(
@@ -871,6 +904,24 @@ test("rights (§9): a non-admin's commit that drops another UA needs that UA's s
     states(f.replayOf(MAIN, "D", notGone)).find((x) => x[0] === 5),
     [5, "not followed", "rights"],
   );
+});
+
+test("the key's period (C28, codex-r2-10): a wrong join or end from an endpoint is refused; a non-admin's Add of another UA is not followed (rights)", () => {
+  const D = f.deviceOf("D");
+  const kh = hex(keccak_256(fromHex(D.kemPk)));
+  const period = (join, end) => (read, v) =>
+    read === `goneKeyOf(${kh})` ? { ...v, joinEpoch: join, endEpoch: end } : v;
+  refused("TreePeriod", () => f.replayOf(RETIRED, "D", period(3, 5)));
+  refused("TreePeriod", () => f.replayOf(RETIRED, "D", period(2, 6)));
+  assert.deepEqual(f.replayOf(RETIRED, "D", period(2, 5)).epochs.length, 3, "the twin: the true period");
+  const mk = (tag) =>
+    f.createSession({ tag, creator: "A", nonce: 71, admins: ["A"], members: ["A", "B", "C"], info: f.INFO.I1 });
+  const w = mk("t/rights");
+  f.commit(w, "B", { adds: [["D", 3]] });
+  for (const n of ["A", "C", "D"]) assert.deepEqual(states(f.replayOf(w, n)).at(-1), [1, "not followed", "rights"], n);
+  const v = mk("t/rights-twin");
+  f.commit(v, "A", { adds: [["D", 3]] });
+  for (const n of ["B", "C", "D"]) assert.equal(at(f.replayOf(v, n), 1).state, "followed", n);
 });
 
 test("receipts (R11): a tree session sends none automatically, whatever the store list says; mode 0 keeps its default", () => {
