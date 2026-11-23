@@ -856,6 +856,7 @@ fn zero_words<T: serde::de::DeserializeOwned + serde::Serialize>() -> Value {
                 *s = match k {
                     "info_json" => "{}".into(),
                     "home_chat_contract" | "pqchat" => format!("0x{}", "00".repeat(20)),
+                    "device" => format!("0x{}", "00".repeat(16)),
                     _ => format!("0x{}", "00".repeat(32)),
                 }
             }
@@ -1223,6 +1224,8 @@ fn every_signing_command_asks_first() {
         let native = json!({"Native": {"seed": seed, "network": "evm", "index": 0}});
         let ua_key = json!({"Ua": {"seed": seed, "kind": ED25519, "account": 0, "index": 0}});
         let (sg, nk) = (signer.to_string(), native.to_string());
+        // S1 / S2 and the card take the signer's UA (`account_ua`): a UA key, not an imported one
+        let ua = ua_key.to_string();
         let valid = (now + 3600).to_string();
         // the objects a session's signing command takes, made by the commands that make them
         let prepared = || vec![
@@ -1289,7 +1292,7 @@ fn every_signing_command_asks_first() {
                 }
                 "app-core prepare-pqvault-record" => Run::One(s(&["--app", &pqvault_app, "app-core", "prepare-pqvault-record", "--account", &sg,
                     "--path", "Portable", "--typed-json", &pqv_typed])),
-                "app-core prepare-pqchat-card" => Run::One(s(&["--app", &pqchat_app, "app-core", "prepare-pqchat-card", "--account", &sg, "--kem-version", "1", "--matrix-id", ""])),
+                "app-core prepare-pqchat-card" => Run::One(s(&["--unlock", &seed, "--passphrase-fd", "0", "--app", &pqchat_app, "app-core", "prepare-pqchat-card", "--account", &ua, "--kem-version", "1", "--matrix-id", ""])),
                 "app-core prepare-app-call" => {
                     let entry = json!({"type": "function", "name": "ping", "stateMutability": "nonpayable", "outputs": [],
                         "inputs": [{"name": "x", "type": "uint64"}]});
@@ -1301,9 +1304,9 @@ fn every_signing_command_asks_first() {
                 "app-core pqchat-seal-file-message" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-seal-file-message", "--account", sg,
                     "--k", "k", "--pos", "k", "--header", zero::<scaas_sdk::pqchat_keys::PqMessageHeader>().to_string(), "--fields-json", "{}",
                     "--file-key", "k"])),
-                "app-core pqchat-prepare-session" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-prepare-session", "--account", sg, "--k", "k",
+                "app-core pqchat-prepare-session" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-prepare-session", "--account", ua, "--k", "k",
                     "--r", zero_words::<scaas_sdk::pqchat_keys::PqSessionNew>().to_string()])),
-                "app-core pqchat-prepare-epoch" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-prepare-epoch", "--account", sg, "--k", "k",
+                "app-core pqchat-prepare-epoch" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-prepare-epoch", "--account", ua, "--k", "k",
                     "--r", zero_words::<scaas_sdk::pqchat_keys::PqEpochNew>().to_string()])),
                 "app-core prepare-pqchat-session" => rec("prepare-pqchat-session", zero_words::<PqChatSession>()),
                 "app-core prepare-pqchat-epoch" => rec("prepare-pqchat-epoch", zero_words::<PqChatEpoch>()),
