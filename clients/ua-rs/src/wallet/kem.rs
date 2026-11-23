@@ -233,6 +233,7 @@ impl KemKeyPair {
     /// `KeyRevoked` once the wallet was locked. ML-KEM's implicit rejection kept: a wrong `mlkem_ct` gives another `ss`.
     /// `HKDF-SHA-256(ikm = the key's 96-byte seed, salt empty, info, len)` (a TreeKEM committer's `ps[0]`, spec §5): inside
     /// the store, out only through a handle.
+    #[cfg(feature = "app-core")]
     pub(super) fn seed_hkdf(&self, info: &[u8], len: usize) -> Result<Zeroizing<Vec<u8>>> {
         self.secret
             .with(|s| super::aead::hkdf_sha256(s, &[], info, len))?

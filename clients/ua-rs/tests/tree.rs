@@ -968,6 +968,17 @@ fn replay_row(keys: &AppKeys, world: &World, home: &mut Home, tag: &str, dev: &s
         .collect();
     assert_eq!(json!(warnings), want["warnings"], "{at} warnings");
     assert_eq!(json!(home.log), want["reads"], "{at} reads");
+    // a key still in the tree holds exactly the head's nodes it derived: each a parent of the head tree under that key's
+    // hash (a node a Remove blanked is dropped, never kept)
+    if r.end_epoch.is_none() {
+        for (x, k) in &r.held {
+            assert_eq!(
+                *home.tree.node(*x),
+                Node::Parent(keccak256(&k.kem_pk())),
+                "{at} held node {x}"
+            );
+        }
+    }
     // the pin it would store: the head and the hash of its record; a replay against it passes, a wrong hash conflicts
     let pin = r.pin.clone();
     assert_eq!(pin.epoch as usize, home.epochs.len() - 1);
