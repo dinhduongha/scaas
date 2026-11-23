@@ -10,6 +10,10 @@ import {PqChatBase} from "./PqChatBase.sol";
 
 /// The tree records' typed hashes, as the contract signs them.
 contract TreeHasher {
+    function sessionHash(IPqChat.PqChatSession calldata s) external pure returns (bytes32) {
+        return PqChatTypes.hashSession(s);
+    }
+
     function commit(IPqChat.PqChatCommit calldata c) external pure returns (bytes32) {
         return PqChatTypes.typed(PqChatTypes.hashCommit(c));
     }
