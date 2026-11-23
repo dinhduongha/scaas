@@ -237,18 +237,22 @@ session; freshness before a changed session info; no return, the way back being 
 - **Signing.** One typed `ua-rs` operation builds the path, the pieces and `PqChatCommit` inside the signing boundary, shows the
   review and signs ([CLI-PQC-04](#CLI-PQC-04)); no digest from outside is signed.
 - **Before it encrypts** the crate refuses a head below its checkpoint (which holds the hash of the verified head record, not
-  only its id), at an epoch-0 head rebuilds the tree from the signed member list, recomputes the tree hash, verifies the head commit's
+  only its id; a mismatch at a pinned number is settled by a strict-majority read over at least 3 nodes, else the session
+  shows "conflicting head" and nothing is built on it), reads every page of a tree snapshot at one block, at an epoch-0 head rebuilds the tree from the signed member list, recomputes the tree hash, verifies the head commit's
   kept signature and its author's right, compares each target key with its hash in the tree, and has `ua-rs` verify against the
   registry record every key no signed tree hash covers yet (an added key, a member at creation), in every tree session; reads
   follow [CLI-PQC-13](#CLI-PQC-13). What a candidate seals counts as disclosed to every key of the tree it was built on.
 - **Session info.** A commit seals the full info only when the device holds the one in force at the parent; otherwise the
-  marker "unchanged" (empty content). A changed info is taken only from an admin's commit. **Freshness (owner):** a commit that
+  marker "unchanged" (empty content). A device that did not follow an epoch has no info in force from that epoch on: it
+  seals the marker until a commit it follows carries a full info, taken under the joiner rule and never sealed while
+  flagged. A changed info is taken only from an admin's commit. **Freshness (owner):** a commit that
   seals a changed info (room and store lists) is built only after the head and the roster were read at a final block under
   the strict majority over at least 3 named endpoints ([ARCH-POS-15](../decisions.md#ARCH-POS-15)); with fewer the crate
   refuses the change by name.
 - **No return (owner).** The crate leaves and removes by `PqChatTreeLeave` and `PqChatTreeRemove`, whose review says the UA
   cannot come back. A user comes back as a **new UA** with a fresh KEM key, added by an admin: the crate shows it as a new
-  member, never links it to the old UA on its own, and gives it no history before its join. No "rejoin" call exists.
+  member, never links it to the old UA on its own, and gives it no history before its join. No "rejoin" call exists. The
+  removal of a UA's only key is worded as an exclusion for good; replacing it is one commit that removes and adds.
 - **Replay** needs state only ([CLI-PQC-09](#CLI-PQC-09)). Its reads are fixed by public data, the same whether a ciphertext
   opens or not, and each fetched record, list, ciphertext, wrap and key is compared with its signed hash before use: the
   Welcome wrap and the joiner's path ciphertext, then one path ciphertext per later commit (the target that covers the device's
@@ -260,7 +264,9 @@ session; freshness before a changed session info; no return, the way back being 
   reaches its leaf or a node it holds, its own commit on the user's request included (it seals the marker).
 - **A compromise warning (owner).** One UA signature lets its holder build the next epoch (accepted, as mode 0's `rekey`). A
   completed commit from the device's own `(ua, keyId)` that its seed does not reproduce is shown as a compromise warning, a
-  state of its own, never as "not followed".
+  state of its own, never as "not followed". It names two cases: one foreign signature, which the device's own commit
+  ends; a stolen UA signing key, which it does not end: an admin removes the UA and the user returns as a new UA, the old
+  UA being lost everywhere (no key rotation inside a UA, [CTR-UA-13](../contracts/accounts.md#CTR-UA-13)).
 - **What shows that a device followed (owner).** The claim "the same whether a ciphertext opens or not" holds for the replay
   reads and for contract writes. A tree session sends **no automatic receipt**; a send held while a child was not final goes
   back to the user. The store read by the epoch hint stays and is the one inherited signal (one bit per epoch to a watcher of
