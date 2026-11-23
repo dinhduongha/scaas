@@ -297,8 +297,13 @@ test("a value nested beyond 128 levels is refused before it is lifted, and the i
   });
   const expect = { chain: "nowhere", payee: [], payer: { Native: { seed: "none", network: "evm", index: 0 } } };
   assert.equal(await failure(s.op().import_signed(blob(deep), expect)), "Argument");
+  // the twin pair on an entry whose first step after the lift is the chain lookup (`request_verdict`'s `op` is a free
+  // value): `import_signed` re-bounds the blob at depth 8 (review A2-7) before its chain, so its `Argument` would not tell the
+  // binding's refusal from the SDK's; here the deep value is `Argument` only by the binding's bound, and 100 levels lift
   let ok = 0;
   for (let i = 0; i < 100; i++) ok = [ok];
-  assert.equal(await failure(s.op().import_signed(blob(ok), expect)), "ChainUnknown", "the twin: 100 levels lift");
+  const verdict = (op) => ({ chain: "nowhere", token: "0x" + "11".repeat(20), op, statement: "0x", proof: "0x" });
+  assert.equal(await failure(s.confidential().request_verdict(verdict(deep))), "Argument", "refused before the lift");
+  assert.equal(await failure(s.confidential().request_verdict(verdict(ok))), "ChainUnknown", "the twin: 100 levels lift");
   assert.deepEqual(await s.vault().seeds(), [], "the instance lives on");
 });
