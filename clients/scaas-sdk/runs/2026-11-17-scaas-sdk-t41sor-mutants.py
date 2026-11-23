@@ -77,8 +77,8 @@ MUTANTS = [
     ("sdk: the native send's sequence not advanced", [(SO, "                    seq: seq.checked_add(1).ok_or(SdkError::Argument)?.to_string(),",
                                                        "                    seq: seq.to_string(),")],
      SDK + "a_native_xlm_send"),
-    ("sdk: following ends without the chain fact", [(SO, "                        _ if gone && r.tx_id.is_none() => end(&mut r, \"landed\", \"spent\"),",
-                                                     "                        _ if r.tx_id.is_none() => end(&mut r, \"landed\", \"spent\"),")],
+    ("sdk: following ends without the chain fact", [(SO, "            _ if gone && w.tx.is_none() => verdict(end(\"landed\", \"spent\", None), None),",
+                                                     "            _ if w.tx.is_none() => verdict(end(\"landed\", \"spent\", None), None),")],
      SDK + "a_pay_through_the_gateways_is_the_vectors_signed_op"),
     ("sdk: the review field not the signed one", [(SO, "fn rebuilt(p: &SorobanPrepared, passphrase: &str) -> Result<Checked, SdkError> {\n    checked(p, passphrase, p.expiry, 0)",
                                                    "fn rebuilt(p: &SorobanPrepared, passphrase: &str) -> Result<Checked, SdkError> {\n    let mut p = p.clone();\n    p.expiry += 1;\n    checked(&p, passphrase, p.expiry, 0)")],
@@ -87,8 +87,8 @@ MUTANTS = [
     ("sdk: a SourceAccount entry taken from another payer", [(SO, "            Some(AuthCredential::SourceAccount) => *payer == subject,",
                                                              "            Some(AuthCredential::SourceAccount) => true,")],
      SDK + "a_source_account_entry_only_when_the_subject_pays"),
-    ("sdk: a payer's consumed op counted landed", [(SO, "                        _ if gone => end(&mut r, \"consumed\", \"spent by another transaction\"),",
-                                                    "                        _ if gone => end(&mut r, \"landed\", \"spent by another transaction\"),")],
+    ("sdk: a payer's consumed op counted landed", [(SO, "            _ if gone => verdict(end(\"consumed\", \"spent by another transaction\", None), None),",
+                                                    "            _ if gone => verdict(end(\"landed\", \"spent by another transaction\", None), None),")],
      SDK + "a_pay_landed_by_another_first_is_consumed_for_the_payee"),
 ]
 

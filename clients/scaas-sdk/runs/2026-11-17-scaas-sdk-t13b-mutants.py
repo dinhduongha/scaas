@@ -20,7 +20,7 @@ MUTANTS = [
      [(S, "Ok(g) if row.gas_limit.is_some_and(|l| g <= l) => {}", "_ if true => {}")],
      U + "sim_refused_is_written_and_followed"),
     ("ruling A: a refused simulation is sent at restart",
-     [(S, 'if row.state == "signed" && row.detail != "SimRefused" {', 'if row.state == "signed" {')],
+     [(S, '                        && row.detail != "SimRefused"\n', '')],
      U + "sim_refused_is_written_and_followed"),
     ("P2-5: from_block is the head", [(S, "super::final_number(&pool, &profile).await?", "super::head(&pool).await?.0")],
      U + "from_block_is_the_final_block_at_submit"),
