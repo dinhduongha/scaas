@@ -358,13 +358,15 @@ a kernel page that does not divide 16 KiB (nothing locked), everything on wasm32
 may. BUILT.
 
 <a id="CLI-UAL-11"></a>**CLI-UAL-11** — **A container's sender is expected, never self-declared.** A valid signature proves only that some
-registered UA sealed it, so the one opening call is `open_container(kem_key, container, expect, members, accepted)` and no call
+registered UA sealed it, so the one opening call is `open_container(kem_key, container, expect, members, current, accepted)` and no call
 opens without a `ContainerExpect {purpose, sender (a UA or an approved set), recipient}`. Before any decapsulation, each a refusal
 with nothing imported: the purpose; the recipient, which is the opening key's own; `sender.ua` expected; `sender.auth.keyData`
 derives `sender.ua` (an `msig`, or exactly one single-key kind: the container names no kind, the opener tries the derived kinds
 that may sign, each under its own tag); `sender.auth` verifies over the rebuilt `aad` and wire form. An `msig` sender: no signature of
 its own, the minimal set at both levels, its signers accepted at both levels through the caller's `accepted(id, index)` (a missing
-lookup refuses, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)). A mismatch, or a signer not accepted: `ContainerSender`; a bad signature,
+lookup refuses, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)). An updated `msig` (the sender or an `msig` member) is judged on its current structure from the caller's `current(id)`
+(`msigOf` bytes and `msigStateOf` bitmap; none: never updated): minimality, threshold, weights and slot keys, a slot counting only
+when accepted and enabled ([CTR-UA-44](../contracts/accounts.md#CTR-UA-44), T26 A2-1, decision (134)). A mismatch, or a signer not accepted: `ContainerSender`; a bad signature,
 the wrong `UASig` form or a bad tag: `SealOpen`. **Trust anchors.** Restore: the wallet's identity UA, known before the container
 is read (the UA a backup holder approved, kept in its manifest as `backup_senders`, or the account the user confirms); after
 decryption the payload's entropy must derive `sender.ua`, else `ContainerSender`. Link: the UA the user confirms on the new device

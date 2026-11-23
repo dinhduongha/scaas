@@ -636,7 +636,7 @@ async fn sealed_info_rows_and_s1() {
     let info = pq("messages")["sealedInfo"][0]["info"].clone();
     let k = a.pqchat_epoch_key(&seed).unwrap();
     let signed = a
-        .pqchat_sign_session(
+        .pqchat_prepare_session(
             ua(&seed, 0x0131),
             k.clone(),
             PqSessionNew {
@@ -658,6 +658,9 @@ async fn sealed_info_rows_and_s1() {
                 info_json: info.to_string(),
             },
         )
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap();
     let want: Vec<String> = sr["wrapHashes"].as_array().unwrap().iter().map(s).collect();
@@ -980,7 +983,7 @@ async fn generic_signing_refuses_pqchat() {
 
 /// Owner 2026-11-23 (T10b): under a scope of PqChat's own app id, the generic app signing is refused on both paths
 /// (`AppPurposeRefused`: PqChat's app purpose is a SCaaS purpose, `scaas-ua`'s generated list); the twins under another app
-/// id sign. PqChat's own paths are the named entries (`pqchat_sign_*`, the card, `seal_for_arweave`).
+/// id sign. PqChat's own paths are the named entries (`pqchat_prepare_*`, the card, `seal_for_arweave`).
 #[tokio::test(flavor = "multi_thread")]
 async fn generic_signing_refuses_pqchat_app_id() {
     let _one = ONE.lock().await;
@@ -1185,8 +1188,8 @@ fn bit_and_no_caller_ciphertext() {
     let mut seen = 0;
     for f in [
         "pqchat_seal_message",
-        "pqchat_sign_session",
-        "pqchat_sign_epoch",
+        "pqchat_prepare_session",
+        "pqchat_prepare_epoch",
     ] {
         let at = src.find(&format!("pub async fn {f}(")).unwrap();
         let sig = &src[at..at + src[at..].find('{').unwrap()];
@@ -1358,7 +1361,10 @@ async fn cards_sign_and_verify() {
     let me = k.ua().unwrap();
     reg_answer(&chain, &me, 0x0131, &key_data);
     let signed = a
-        .sign_pqchat_card(ua(&seed, 0x0131), 1, "@alice:example.org".into())
+        .prepare_pqchat_card(ua(&seed, 0x0131), 1, "@alice:example.org".into())
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap();
     assert_eq!(
@@ -1389,8 +1395,13 @@ async fn cards_sign_and_verify() {
         .unwrap());
     assert_eq!(
         code(
-            a.sign_pqchat_card(ua(&seed, 0x0131), 1, "alice:example.org".into())
-                .await
+            async {
+                a.prepare_pqchat_card(ua(&seed, 0x0131), 1, "alice:example.org".into())
+                    .await?
+                    .sign()
+                    .await
+            }
+            .await
         ),
         "Argument"
     );
@@ -1400,7 +1411,15 @@ async fn cards_sign_and_verify() {
         index: 0,
     };
     assert_eq!(
-        code(a.sign_pqchat_card(native, 1, String::new()).await),
+        code(
+            async {
+                a.prepare_pqchat_card(native, 1, String::new())
+                    .await?
+                    .sign()
+                    .await
+            }
+            .await
+        ),
         "Argument"
     );
 }

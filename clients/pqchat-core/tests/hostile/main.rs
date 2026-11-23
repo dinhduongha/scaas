@@ -2,7 +2,7 @@
 //! The hostile harness (plan Global constraints): records an honest client refuses to build, made here through the SDK's
 //! generic record entries and never by `pqchat-core`. Plan T5: a session whose wraps are the stand-in bytes of
 //! `smartcontracts/evm/script/onchain/PqChat.s.sol` (`_wraps`: the contract checks shape and hash only; random bytes of a
-//! real wrap's lengths), signed by the SDK's generic `sign_pqchat_session`: its hashes hold, the wrap reaches the KEM and does
+//! real wrap's lengths), signed by the SDK's generic `prepare_pqchat_session`: its hashes hold, the wrap reaches the KEM and does
 //! not open (`envelope`), nothing written; the same record with a real wrap opens.
 #![allow(
     clippy::unwrap_used,
@@ -62,7 +62,7 @@ async fn session_with(w: &World, nonce: u64, bob_wrap: PqWrap) -> (SessionRef, S
         .collect();
     let signed = w
         .app
-        .sign_pqchat_session(
+        .prepare_pqchat_session(
             w.alice.key.clone(),
             PqChatSession {
                 creator: w.alice.ua.clone(),
@@ -75,6 +75,9 @@ async fn session_with(w: &World, nonce: u64, bob_wrap: PqWrap) -> (SessionRef, S
                 sealed_info: random(64),
             },
         )
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap();
     assert_eq!(signed.id.as_deref(), Some(sid.as_str()));

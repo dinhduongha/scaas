@@ -421,7 +421,7 @@ impl PqChat {
         let info_json = serde_json::to_string(&r.info).map_err(|_| PqChatError::Internal)?;
         let signed = self
             .app
-            .pqchat_sign_session(
+            .pqchat_prepare_session(
                 r.me.key.clone(),
                 k.clone(),
                 PqSessionNew {
@@ -434,6 +434,8 @@ impl PqChat {
                     info_json,
                 },
             )
+            .await?
+            .sign()
             .await?;
         if field(&signed, "message.creator")? != me || signed.id.as_deref() != Some(sid.as_str()) {
             return Err(PqChatError::Internal);
@@ -534,7 +536,7 @@ impl PqChat {
         let info_json = serde_json::to_string(&r.info).map_err(|_| PqChatError::Internal)?;
         let signed = self
             .app
-            .pqchat_sign_epoch(
+            .pqchat_prepare_epoch(
                 r.me.key.clone(),
                 k.clone(),
                 PqEpochNew {
@@ -548,6 +550,8 @@ impl PqChat {
                     info_json,
                 },
             )
+            .await?
+            .sign()
             .await?;
         if field(&signed, "message.author")? != ua || signed.id.as_deref() != Some(eid.as_str()) {
             return Err(PqChatError::Internal);
@@ -734,7 +738,12 @@ impl PqChat {
             admin: ua.clone(),
             nonce,
         };
-        let signed = self.app.sign_pqchat_remove(me.key.clone(), r).await?;
+        let signed = self
+            .app
+            .prepare_pqchat_remove(me.key.clone(), r)
+            .await?
+            .sign()
+            .await?;
         let a = json!({"r": {"sessionId": s.session_id, "epochId": e.id, "nextEpoch": (e.epoch + 1).to_string(),
             "members": m, "admin": ua, "nonce": nonce.to_string()}, "sig": sig_json(&signed.sig)});
         self.net
@@ -762,7 +771,12 @@ impl PqChat {
             member: ua.clone(),
             nonce,
         };
-        let signed = self.app.sign_pqchat_leave(me.key.clone(), l).await?;
+        let signed = self
+            .app
+            .prepare_pqchat_leave(me.key.clone(), l)
+            .await?
+            .sign()
+            .await?;
         let a = json!({"l": {"sessionId": s.session_id, "epochId": e.id, "member": ua, "nonce": nonce.to_string()},
             "sig": sig_json(&signed.sig)});
         self.net

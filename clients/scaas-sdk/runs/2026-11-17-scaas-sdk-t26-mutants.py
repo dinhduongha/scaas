@@ -38,6 +38,8 @@ PQC = "clients/ua-rs/src/wallet/pqchat.rs"
 AC = "clients/scaas-sdk/src/app_core.rs"
 PQR = "clients/scaas-sdk/src/pqchat_records.rs"
 PQK = "clients/ua-rs/src/wallet/pqchat_keys.rs"
+USEAL = "clients/ua-rs/src/wallet/seal.rs"
+JSEAL = "clients/clientkeys/src/seal.js"
 OPS = "clients/scaas-sdk/src/wallet/ops.rs"
 CPQ = "clients/scaas-sdk/src/confidential/pqz.rs"
 FPQ = "clients/ua-rs/src/facade/pqz.rs"
@@ -358,7 +360,7 @@ MUTANTS = [
     ),
     (
         "A-9: a PqChat record signed in any scope",
-        [(PQR, "        self.label(scaas_ua::wallet::pqchat_keys::PREFIX.as_bytes())?;\n        let sdk = self.sdk.clone();", "        let sdk = self.sdk.clone();")],
+        [(PQR, "        self.label(scaas_ua::wallet::pqchat_keys::PREFIX.as_bytes())?;\n        let td = pqchat::typed(name, message)?;", "        let td = pqchat::typed(name, message)?;")],
         T + ",vectors --test pqchat_records entries_reproduce_the_vectors",
     ),
     (
@@ -400,6 +402,36 @@ MUTANTS = [
         "A2-3: governance_delay takes another class",
         [(DLY, "? != CLASS_TOKEN\n", "? > CLASS_TOKEN + 1\n")],
         T + " --test governance_delay the_token_is_the_profile_factorys",
+    ),
+    (
+        "A2-1: ua-rs judges an msig sender on its first structure",
+        [(USEAL, "    let d = &current(*id).map_or_else(|| d.to_vec(), |c| c.0);\n", "    let d = &d.to_vec();\n")],
+        U + " --test wallet_seal seal_json_acceptance",
+    ),
+    (
+        "A2-1: ua-rs counts a disabled slot",
+        [(USEAL, "accepted(x, i) && current(x).is_none_or(|c| slot_enabled(&c.1, i))", "accepted(x, i)")],
+        U + " --test wallet_seal seal_json_acceptance",
+    ),
+    (
+        "A2-1: ua-rs judges an inner msig member on its first structure",
+        [(USEAL, "members(x).map(|(_, k)| current(x).map_or(k, |c| c.0))", "members(x).map(|(_, k)| k)")],
+        U + " --test wallet_seal seal_json_acceptance",
+    ),
+    (
+        "A2-1: clientkeys judges an msig sender on its first structure",
+        [(JSEAL, "  const d = nowOf(cur, hex(id), first);\n", "  const d = first;\n")],
+        "cd clients/clientkeys && node --test test/seal.test.js",
+    ),
+    (
+        "A2-1: clientkeys counts a disabled slot",
+        [(JSEAL, "accepted(x, i) === true && enabledAt(cur, x, i)", "accepted(x, i) === true")],
+        "cd clients/clientkeys && node --test test/seal.test.js",
+    ),
+    (
+        "A-5b: a PqChat record's key opened at prepare",
+        [(PQR, "        Ok(PqChatPrepared {\n            record: name.into(),", "        let crate::op::Key::Ua(..) = crate::op::key(&self.sdk, &account)? else {\n            return Err(SdkError::Argument);\n        };\n        Ok(PqChatPrepared {\n            record: name.into(),")],
+        T + ",vectors --test pqchat_records entries_reproduce_the_vectors",
     ),
 ]
 

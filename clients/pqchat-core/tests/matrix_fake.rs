@@ -657,7 +657,10 @@ async fn card_binds_its_matrix_id() {
     let _one = ONE.lock().await;
     let w = ready().await;
     let (server, _) = attach(&w);
-    let card = |a: &Acc, id: &str| w.app.sign_pqchat_card(a.key.clone(), 1, id.into());
+    let card = |a: &Acc, id: &str| {
+        let (app, key, id) = (w.app.clone(), a.key.clone(), id.to_string());
+        async move { app.prepare_pqchat_card(key, 1, id).await?.sign().await }
+    };
     let b = card(&w.bob, BOB).await.unwrap();
     assert!(w.pq.add_card(CHAIN, &b.card, &b.sig).await.unwrap());
     assert_eq!(w.pq.matrix_ids_of(&w.bob.ua).unwrap(), [BOB]);
@@ -702,7 +705,10 @@ async fn card_binds_only_its_own_matrix_id() {
     let (server, _) = attach(&w);
     let c = w
         .app
-        .sign_pqchat_card(w.carol.key.clone(), 1, CAROL.into())
+        .prepare_pqchat_card(w.carol.key.clone(), 1, CAROL.into())
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap();
     assert!(w.pq.add_card(CHAIN, &c.card, &c.sig).await.unwrap());

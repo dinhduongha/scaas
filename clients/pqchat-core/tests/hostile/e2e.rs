@@ -81,7 +81,7 @@ pub async fn session_at(
     .unwrap();
     let signed = w
         .app
-        .pqchat_sign_session(
+        .pqchat_prepare_session(
             by.key.clone(),
             k,
             PqSessionNew {
@@ -94,6 +94,9 @@ pub async fn session_at(
                 info_json: info,
             },
         )
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap();
     let sealed = signed
@@ -166,7 +169,7 @@ pub async fn sealed(
         .unwrap()
 }
 
-/// A record of `(sid, eid)` naming `sender` and signed by `signer` (the generic `sign_pqchat_message`), its envelope under
+/// A record of `(sid, eid)` naming `sender` and signed by `signer` (the generic `prepare_pqchat_message`), its envelope under
 /// `k`: what V1 refuses.
 pub async fn signed_by_another(
     w: &World,
@@ -186,7 +189,10 @@ pub async fn signed_by_another(
     };
     let sig = w
         .app
-        .sign_pqchat_message(signer.key.clone(), r.clone())
+        .prepare_pqchat_message(signer.key.clone(), r.clone())
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap()
         .sig;

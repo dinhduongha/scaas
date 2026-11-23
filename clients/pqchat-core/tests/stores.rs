@@ -189,7 +189,7 @@ async fn signed_epoch(
     let signed = match parent {
         None => w
             .app
-            .pqchat_sign_session(
+            .pqchat_prepare_session(
                 by.key.clone(),
                 k.clone(),
                 PqSessionNew {
@@ -203,10 +203,13 @@ async fn signed_epoch(
                 },
             )
             .await
+            .unwrap()
+            .sign()
+            .await
             .unwrap(),
         Some(p) => w
             .app
-            .pqchat_sign_epoch(
+            .pqchat_prepare_epoch(
                 by.key.clone(),
                 k.clone(),
                 PqEpochNew {
@@ -220,6 +223,9 @@ async fn signed_epoch(
                     info_json,
                 },
             )
+            .await
+            .unwrap()
+            .sign()
             .await
             .unwrap(),
     };

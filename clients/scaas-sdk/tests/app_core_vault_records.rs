@@ -21,8 +21,8 @@ mod fake_chain;
 
 #[path = "common/prepared.rs"]
 mod prepared;
-use prepared::SignPrepared as _;
 use fake_chain::{fake, keccak_hex, serve, Fake};
+use prepared::SignPrepared as _;
 use scaas_sdk::account::msig::{msig_structure, MsigMemberArgs};
 use scaas_sdk::app_core::{AppCore, AppDesc, AppMemberSig, AppPath, AppUaSig};
 use scaas_sdk::op::KeyRef;

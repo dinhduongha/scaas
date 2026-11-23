@@ -371,8 +371,11 @@ decryption by default (`read_app`; `read_app_plain` for a read that never feeds 
 (`pqchat_*`, feature `pqchat-records`) are thin calls of `ua-rs`
 `pqchat_keys` on the scope's handles, only in a scope that declared `scaas/pqchat/v1/` (`AppLabelRefused`); the signing ones
 take the sender, creator or author from the account and never a digest or a ciphertext of the caller's. PqChat's record
-entries (`sign_pqchat_*`, `sign_pqchat_card`) also work only in that scope (T26 A-9); they take the record's signer field as
-given, and the contract refuses a record whose signer is not that field. The feature
+entries (`prepare_pqchat_*`, `prepare_pqchat_card`) also work only in that scope (T26 A-9); they take the record's signer field as
+given, and the contract refuses a record whose signer is not that field. Every PqChat signature but S5's is prepared, then
+signed (T26 A-5, decisions (125), (135)): `prepare_pqchat_*`, `prepare_pqchat_card`, `pqchat_prepare_session` / `_epoch`
+return the review and the typed digest (`PqChatPrepared`, `PqCardPrepared`), and nothing is signed until their `sign()`;
+`pqchat_seal_message` (S5) signs without a per-signature review (CLI-PQC-04). The feature
 `vectors` (bit 28) adds test-only entries (key bytes in and out, fixed randomness): a release build refuses it
 (`compile_error!`), `scripts/check_test_features.py` keeps it out of every shipped artifact and the bind-gen check out of
 every binding. It runs alone, in its own test (`--test pqchat_keys`): a `vectors` build of `ua-rs` refuses key handles until
@@ -384,12 +387,12 @@ wrap read from state, checked by the app core against `wrapHashes[i]` before it 
 an app core holds its plaintexts without a `scaas-ua` dependency of its own.
 Three more `vectors` entries are pqchat-core T11's hostile harness (2026-11-23; BUILT, UNAUDITED), each sealing what an
 honest client never seals: `pqchat_vectors_envelope` (the envelope of a record and a signature given apart, such as a
-record signed through the generic `sign_pqchat_message` by a UA other than its sender), `pqchat_vectors_seal_padded` (S5 from
+record signed through the generic `prepare_pqchat_message` by a UA other than its sender), `pqchat_vectors_seal_padded` (S5 from
 a given padded plaintext: a non-zero fill stays) and `pqchat_vectors_seal_info_raw` (a `sealedInfo` of a given plaintext,
 neither canonicalised nor padded); `tests/pqchat_keys.rs` `hostile_seals_for_the_e2e` reproduces the `envelope` and
 `sealedInfo` rows through them and shows K5 and the content check refuse the hostile forms.
-The signed contact card (UA-7 §14 O7, owner 2026-11-22; BUILT, UNAUDITED): `sign_pqchat_card(account, kem_version,
-matrix_id)` signs `PqChatCard(bytes32 ua, uint64 kemVersion, string matrixId)` in `DS_C` under `PURPOSE_PQCHAT`, the UA from
+The signed contact card (UA-7 §14 O7, owner 2026-11-22; BUILT, UNAUDITED): `prepare_pqchat_card(account, kem_version,
+matrix_id)`, then `sign()`, signs `PqChatCard(bytes32 ua, uint64 kemVersion, string matrixId)` in `DS_C` under `PURPOSE_PQCHAT`, the UA from
 the account, the Matrix id empty or well formed (`Argument`); `verify_pqchat_card(chain, ua, card, sig)` is V1's check of a
 card for `ua` (its `ua` that UA, its Matrix id well formed, the signature the UA's on the registry's records read at the final
 block as a read that feeds a decryption), `false` with no detail. Rows: `smartcontracts/vectors/pqchat/cards.json`.
