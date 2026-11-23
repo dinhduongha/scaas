@@ -70,6 +70,8 @@ pub struct KeyHandle {
     nonce: Option<[u8; 12]>,
     /// a sender-chain position's chain (`keccak256` of its context) and counter (`pqchat_keys`)
     pub(super) chain: Option<([u8; 32], u64)>,
+    /// the app root or a key derived from it (owner ruling A-3, 2026-11-23): [`AppKeys::seal_key`] refuses it
+    pub(super) rooted: bool,
 }
 
 /// A dropped handle's key is wiped and its slot freed, as by [`AppKeys::destroy`].
@@ -211,6 +213,7 @@ impl AppKeys {
             origin,
             nonce,
             chain: None,
+            rooted: false,
         })
     }
 
@@ -271,6 +274,7 @@ impl AppKeys {
             self.check_usage(k, KeyUsage::Derive)?;
             ikm.extend_from_slice(&self.bytes(k)?[..]);
         }
+        let rooted = keys.iter().any(|k| k.rooted);
         let okm = hkdf_sha256(&ikm, salt, info, if nonce { 44 } else { 32 })?;
         let n = match nonce {
             true => Some(
@@ -280,19 +284,23 @@ impl AppKeys {
             ),
             false => None,
         };
-        self.make(
+        let mut h = self.make(
             okm.get(..32).ok_or(Error::Argument)?,
             usage,
             Origin::Derived,
             n,
-        )
+        )?;
+        h.rooted = rooted;
+        Ok(h)
     }
 
     /// HMAC-SHA-256 of `data` (exactly) under the `Derive` handle `key`, into a 32-byte key of `usage`.
     pub fn mac_derive(&self, key: &KeyHandle, data: &[u8], usage: KeyUsage) -> Result<KeyHandle> {
         self.check_usage(key, KeyUsage::Derive)?;
         let out = Zeroizing::new(hmac_sha256(&self.bytes(key)?[..], data));
-        self.make(&out[..], usage, Origin::Derived, None)
+        let mut h = self.make(&out[..], usage, Origin::Derived, None)?;
+        h.rooted = key.rooted;
+        Ok(h)
     }
 
     /// One public MAC output of 1 to 8 bytes under a `Derive` key this scope drew or unwrapped (never a derived one).
@@ -378,9 +386,15 @@ impl AppKeys {
     }
 
     /// `nonce ‖ AES-256-GCM-SIV(under, nonce, key, KEYWRAP ‖ u8(usage of key) ‖ aad)` (60 bytes), `under` a `KeyWrap` handle.
+    /// `AppKeyRooted` for the app root key or a key derived from it (owner ruling A-3, 2026-11-23: sealed under a key the
+    /// caller can compute, it would leave as bytes); the pinned wraps (PqVault's `keyWrap` of an epoch key, its file key's)
+    /// seal drawn keys and keys derived from them.
     pub fn seal_key(&self, under: &KeyHandle, key: &KeyHandle, aad: &[u8]) -> Result<Vec<u8>> {
         self.check_usage(under, KeyUsage::KeyWrap)?;
         self.check(key)?;
+        if key.rooted {
+            return Err(Error::AppKeyRooted);
+        }
         let mut n = [0u8; 12];
         rng(&mut n)?;
         let ct = aead_seal(
@@ -510,7 +524,9 @@ impl AppKeys {
         let k = self
             .store
             .with_seed(|seed| hkdf_sha256(seed, &[], &info, 32))?;
-        self.make(&k, KeyUsage::Derive, Origin::Derived, None)
+        let mut h = self.make(&k, KeyUsage::Derive, Origin::Derived, None)?;
+        h.rooted = true;
+        Ok(h)
     }
 
     /// Wipes the handle's key and frees its slot (`AppHandleForeign` for another scope's; that handle is dropped all the
@@ -574,6 +590,9 @@ impl AppKeys {
         aad: &[u8],
     ) -> Result<Vec<u8>> {
         self.check_usage(under, KeyUsage::KeyWrap)?;
+        if key.rooted {
+            return Err(Error::AppKeyRooted);
+        }
         let ct = aead_seal(
             Alg::Aes256GcmSiv,
             &*self.bytes(under)?,

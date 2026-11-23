@@ -233,6 +233,8 @@ pub enum Error {
     AppKeyUsage,
     /// An app-core key handle of another scope or store (scaas-sdk spec §12.3).
     AppHandleForeign,
+    /// `seal_key` of the app root key or a key derived from it (owner ruling A-3, 2026-11-23; scaas-sdk spec §12.3).
+    AppKeyRooted,
     /// The arena holds its stated number of live app-core key handles (scaas-sdk spec §12.2); nothing dropped.
     AppArenaFull,
     /// An app record under a SCaaS purpose (`UAKinds`, `APP_PURPOSE_NS`, the seal purpose; scaas-sdk spec §12.4).
@@ -289,6 +291,7 @@ impl Error {
             Error::ExternalSignature => "ExternalSignature",
             Error::AppKeyUsage => "AppKeyUsage",
             Error::AppHandleForeign => "AppHandleForeign",
+            Error::AppKeyRooted => "AppKeyRooted",
             Error::AppArenaFull => "AppArenaFull",
             Error::AppPurposeRefused => "AppPurposeRefused",
             Error::AppDomainRefused => "AppDomainRefused",

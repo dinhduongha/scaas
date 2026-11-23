@@ -1701,3 +1701,54 @@ fn generated_passphrase_six_bip39_words() {
     }
     assert!(seen.len() > 1500, "{} distinct words", seen.len());
 }
+
+/// Owner ruling A-3 (2026-11-23, "Restrict (1) only"): `seal_key` never seals out the app root key or a key derived from it,
+/// by `derive` or `mac_derive`, whatever the wrapping key (`AppKeyRooted`); a caller who chose that key's password could open
+/// the output. The twins: the pinned wraps seal drawn keys and keys derived from drawn keys (PqVault's `keyWrap` of an
+/// epoch key, its file key under `kFile`), under a key from a caller's password too.
+#[test]
+fn the_app_root_and_its_derivations_are_never_sealed_out() {
+    let (_w, k) = keys();
+    let under = k
+        .argon2id(
+            b"a caller's password",
+            &[7; 16],
+            Argon2Params {
+                m_kib: 64,
+                t: 1,
+                p: 1,
+            },
+        )
+        .unwrap();
+    let under = k
+        .derive(&[&under], b"", b"wrap", KeyUsage::KeyWrap, false)
+        .unwrap();
+    let root = k.app_root_key(&[1; 32], &[2; 32]).unwrap();
+    let child = k
+        .derive(&[&root], b"", b"upload", KeyUsage::Data, false)
+        .unwrap();
+    let mac = k.mac_derive(&root, b"m", KeyUsage::Derive).unwrap();
+    let grandchild = k.derive(&[&mac], b"", b"g", KeyUsage::Data, false).unwrap();
+    for (what, key) in [
+        ("root", &root),
+        ("derived", &child),
+        ("mac", &mac),
+        ("grandchild", &grandchild),
+    ] {
+        assert_eq!(
+            k.seal_key(&under, key, b"").err().map(|e| e.code()),
+            Some("AppKeyRooted"),
+            "{what}"
+        );
+    }
+    let epoch = k.random_key(KeyUsage::Derive).unwrap();
+    let kv = k
+        .derive(&[&epoch], b"", b"kv", KeyUsage::Derive, false)
+        .unwrap();
+    let file = k.random_key(KeyUsage::Data).unwrap();
+    assert!(
+        k.seal_key(&under, &kv, b"").is_ok(),
+        "a key derived from a drawn one"
+    );
+    assert!(k.seal_key(&under, &file, b"").is_ok(), "a drawn file key");
+}
