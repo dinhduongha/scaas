@@ -188,20 +188,21 @@ async fn history_refuses_logs_outside_the_filter() {
         .unwrap();
     assert_eq!(p.items.len(), 1, "control: the filter answered");
     for other in [false, true] {
-        let mut g = c.lock().unwrap();
-        g.logs_unfiltered = true;
-        if other {
-            g.logs.pop();
-            // another contract's
-            g.logs.push(transfer(
-                "0x00000000000000000000000000000000000000ff",
-                ACC,
-                OTHER,
-                24_100,
-                0,
-            ));
+        {
+            let mut g = c.lock().unwrap();
+            g.logs_unfiltered = true;
+            if other {
+                g.logs.pop();
+                // another contract's
+                g.logs.push(transfer(
+                    "0x00000000000000000000000000000000000000ff",
+                    ACC,
+                    OTHER,
+                    24_100,
+                    0,
+                ));
+            }
         }
-        drop(g);
         match w.history(ACC.into(), "local".into(), None, 10).await {
             Err(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
                 last: Some(l), ..
