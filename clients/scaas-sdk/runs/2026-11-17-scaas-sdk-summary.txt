@@ -256,7 +256,6 @@ node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # pqchat-core T8 (on pqchat-core-impl): the app core scope made again after an unlock (d6abf1f97, test app_core::scope_after_lock_and_unlock); sdk-clippy red at e5573b3d6 (type_complexity on that cache), its type named at f238113b8 (no behaviour change), sdk-clippy green there; sdk-test and sdk-vectors at e5573b3d6.
 ua-arweave | ea980befa | 0 | 32 passed, 0 failed, 0 ignored (6 binaries)
 ua-verify-only | ea980befa | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
-docs | ea980befa | 0 | -
 ua-arweave | 028da021c | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 # the rows above at eff2aa3e5 (the merge of ua-rs-sign 3da595648, e33e863c9, and its regenerated bindings) and bind-js at
 # e2c2ede7c (its scan hardened; the only later code change): every bind-* step, bind-gen, sdk-uniffi, ffi, sdk-wasm,
@@ -312,14 +311,11 @@ sdk-soroban-e2e | 9f8c4570e | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 ua-core | 3d96c45be | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
-docs | 1e73c93e4 | 0 | -
 sdk-vectors | 1e73c93e4 | 0 | 19 passed, 0 failed, 0 ignored (2 binaries)
 rpc-test | 1e73c93e4 | 0 | 231 passed, 0 failed, 10 ignored (23 binaries)
 rpc-clippy | 1e73c93e4 | 0 | -
 ffi | 1e73c93e4 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-mutants-check | 78d410f45 | 0 | -
 sdk-uniffi | 78d410f45 | 0 | 21 passed, 0 failed, 0 ignored (4 binaries)
-mutants-check | 3d96c45be | 0 | -
 sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 sdk-vectors | 190cc2ba7 | 0 | 21 passed, 0 failed, 0 ignored (2 binaries)
@@ -350,3 +346,5 @@ bind-js | 4e1d9dcd5 | 0 | node: 6 pass, 0 fail, 0 skipped
 bind-kotlin | 4e1d9dcd5 | 0 | kotlin: PASS (0 failures)
 bind-python | 4e1d9dcd5 | 0 | unittest: 7 ran, OK
 bind-swift | 4e1d9dcd5 | 0 | swift: PASS (0 failures)
+mutants-check | 1597f994a | 1 | -
+docs | 1597f994a | 0 | -
