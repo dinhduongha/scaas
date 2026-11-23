@@ -3188,6 +3188,8 @@ alloy::sol! {
     function isToken(address token) external view returns (bool);
     /// `PqChat`'s owner (class 3, kind 0): 0 or its creator.
     function owner() external view returns (bytes32);
+    /// `PqChat`'s signature-storage setting (CTR-CHAT-23): 0 `none`, 2 `sstore2`.
+    function sigStore() external view returns (uint8);
 }
 
 /// Owner 2026-11-12 (every state-changing `mtx*` relayable, fee 0 too): an EOA with no gas signs `mtxCreateDex` and `mtxCreateToken`
@@ -3338,8 +3340,9 @@ async fn router_creations_signed_by_an_eoa() {
 
 /// Owner 2026-11-12 (`mtxCreateInstance`, "both the generic row and the per-class ones"): an EOA with no gas signs two `PqChat`
 /// creations (class 3, kind 0) on the chain's `GovernanceRouter`, relayed at fee 0: one names its `init_call` bytes
-/// (`initialize(0)`), the other the class's named config `{owner: <creator>}`, which the node builds into the call; both instances
-/// stand at the creator's predicted addresses with their owners. The negatives, `dead` with nothing sent (the lane's nonce does
+/// (`initialize(0, 0)`: owner 0, the setting `none`), the other the class's named config `{owner: <creator>}`, which the node builds
+/// into the call with the default setting `sstore2` (CTR-CHAT-23); both instances stand at the creator's predicted addresses with
+/// their owners and settings. The negatives, `dead` with nothing sent (the lane's nonce does
 /// not move): both forms in one job, an owner that is not the creator, an unpublished release (`RELEASE_UNKNOWN`, read from the
 /// factory before the simulation).
 #[tokio::test]
@@ -3385,8 +3388,8 @@ async fn router_instance_creations_signed_by_an_eoa() {
     };
     let init_zero = json!(format!(
         "0x{}{}",
-        alloy::hex::encode(&alloy::primitives::keccak256("initialize(bytes32)")[..4]),
-        "00".repeat(32)
+        alloy::hex::encode(&alloy::primitives::keccak256("initialize(bytes32,uint8)")[..4]),
+        "00".repeat(64)
     ));
     let raw_op = op(with(base(0x71, "1"), "init_call", init_zero.clone()), 0);
     let named_op = op(with(base(0x72, "1"), "config", json!({"owner": me})), 1);
@@ -3494,6 +3497,11 @@ async fn router_instance_creations_signed_by_an_eoa() {
         view(&rpc, named_at, ownerCall {}).await,
         owner.address().into_word(),
         "the named config: the creator owns it"
+    );
+    assert_eq!(
+        (view(&rpc, raw_at, sigStoreCall {}).await, view(&rpc, named_at, sigStoreCall {}).await),
+        (0, 2),
+        "init_call: none; the named config: the default sstore2"
     );
     assert_eq!(
         view(&rpc, router, nonce).await,
