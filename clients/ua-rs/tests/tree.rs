@@ -668,7 +668,7 @@ fn tree_secrets_every_row() {
     }
     let mut rebuilt_differs = Vec::new();
     for sc in v["scenarios"].as_array().unwrap() {
-        scenario(&keys, &v, &world, sc, &mut rebuilt_differs);
+        scenario(&keys, &v, &world, sc, &mut rebuilt_differs, None);
     }
     // the steps a generator built with a fault or a foreign seed: a seed's own rebuild differs there, nowhere else
     assert_eq!(rebuilt_differs, KNOWN_FAULTS, "rebuilt commits that differ");
@@ -687,7 +687,25 @@ const KNOWN_FAULTS: &[&str] = &[
     "admin-gap/epoch-1",
 ];
 
-fn scenario(keys: &AppKeys, v: &Value, world: &World, sc: &Value, differs: &mut Vec<String>) {
+/// Steps whose author chose the info (the fixture's `info:`); every other step seals what its author's replay of the head
+/// gives as the info to seal (C33).
+const EXPLICIT_INFO: &[&str] = &[
+    "gap/epoch-1",
+    "gap-control/epoch-1",
+    "foreign/epoch-1",
+    "admin-gap/epoch-4",
+];
+
+/// A scenario landed on a model of its home, every row checked on the way; `upto` lands only that many steps and skips
+/// the replays.
+fn scenario(
+    keys: &AppKeys,
+    v: &Value,
+    world: &World,
+    sc: &Value,
+    differs: &mut Vec<String>,
+    upto: Option<usize>,
+) -> Home {
     let tag = sc["name"].as_str().unwrap();
     let g = &sc["genesis"];
     let rec = &g["record"];
@@ -765,7 +783,8 @@ fn scenario(keys: &AppKeys, v: &Value, world: &World, sc: &Value, differs: &mut 
             .collect::<Vec<_>>())
     };
     assert_eq!(roster(&home), sc["rosters"][0], "{tag} roster 0");
-    for st in sc["steps"].as_array().unwrap() {
+    let steps = sc["steps"].as_array().unwrap();
+    for st in steps.iter().take(upto.unwrap_or(steps.len())) {
         if !st["gone"].is_null() {
             home.land_gone(&st["gone"]);
             continue;
@@ -782,9 +801,12 @@ fn scenario(keys: &AppKeys, v: &Value, world: &World, sc: &Value, differs: &mut 
             "{name} roster"
         );
     }
-    for (dev, want) in sc["replays"].as_object().unwrap() {
-        replay_row(keys, world, &mut home, tag, dev, want);
+    if upto.is_none() {
+        for (dev, want) in sc["replays"].as_object().unwrap() {
+            replay_row(keys, world, &mut home, tag, dev, want);
+        }
     }
+    home
 }
 
 /// Builds the step's commit from the author's seed on the prepared head; whether every byte equals the row's.
@@ -809,6 +831,22 @@ fn rebuild(keys: &AppKeys, world: &World, home: &mut Home, st: &Value) -> bool {
             (a, k)
         })
         .collect();
+    let name = st["name"].as_str().unwrap().to_string();
+    if !EXPLICIT_INFO.contains(&name.as_str()) {
+        // the info the author's own replay of the head says to seal: the full info in force, or the marker (C33)
+        let (d, kem) = &world.devices[author];
+        let dev = TreeDevice {
+            ua: a32(&d["ua"]),
+            key_id: u(&d["keyId"]),
+            kem,
+        };
+        let r = keys.tree_replay(SC, home, &dev, None).unwrap().unwrap();
+        assert_eq!(
+            r.info_to_seal(),
+            info.as_deref(),
+            "{name}: the info to seal"
+        );
+    }
     let tree = prep.tree.clone();
     let mut key_fn = |x: u32| key_of(home, &tree, x);
     let input = CommitInput {
@@ -833,7 +871,6 @@ fn rebuild(keys: &AppKeys, world: &World, home: &mut Home, st: &Value) -> bool {
         info: info.as_deref().map(str::as_bytes),
         key_of: &mut key_fn,
     };
-    let name = st["name"].as_str().unwrap().to_string();
     let mut rand = |x: &str, n: usize| Ok(rnd(&format!("tree-secrets/{name}/{x}"), n));
     let b = keys
         .vectors_tree_build_commit(SC, input, u(&c["nonce"]), &mut rand)
@@ -921,4 +958,268 @@ fn replay_row(keys: &AppKeys, world: &World, home: &mut Home, tag: &str, dev: &s
         code(keys.tree_replay(SC, home, &device, Some(&bad))),
         "TreeConflict"
     );
+}
+
+// ------------------------------------------------------------------ refusals beside their positive twins
+
+/// A lying endpoint: the view named `read` changed by `f`, every other view as the home serves it.
+struct Tamper<'a> {
+    home: &'a mut Home,
+    read: String,
+    f: fn(&mut Value),
+}
+impl TreeReader for Tamper<'_> {
+    fn read(&mut self, v: View) -> scaas_ua::wallet::Result<Value> {
+        let name = v.to_string();
+        let mut x = self.home.read(v)?;
+        if name == self.read {
+            (self.f)(&mut x);
+        }
+        Ok(x)
+    }
+    fn ua_key_of(&mut self, ua: &[u8; 32]) -> Option<(u16, Vec<u8>)> {
+        self.home.ua_key_of(ua)
+    }
+}
+/// The last byte of the hex string at `v` flipped.
+fn flip(v: &mut Value) {
+    let mut b = unhex(v);
+    *b.last_mut().unwrap() ^= 1;
+    *v = json!(hx(&b));
+}
+
+#[test]
+fn tree_refusals_beside_twins() {
+    let v = pq("tree-secrets");
+    let (_w, keys) = keys();
+    let world = World::new(&v);
+    let main = &v["scenarios"][0];
+    assert_eq!(main["name"], "main");
+    let mut home = scenario(&keys, &v, &world, main, &mut vec![], None);
+    let (d, kem) = &world.devices["C"];
+    let c = TreeDevice {
+        ua: a32(&d["ua"]),
+        key_id: u(&d["keyId"]),
+        kem,
+    };
+    let reads: Vec<String> = main["replays"]["C"]["reads"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r.as_str().unwrap().into())
+        .collect();
+    let first = |p: &str| reads.iter().find(|r| r.starts_with(p)).unwrap().clone();
+    // the positive twin: the honest endpoint, every epoch followed
+    let r = keys.tree_replay(SC, &mut home, &c, None).unwrap().unwrap();
+    assert!(r.epochs.iter().all(|e| e.state == State::Followed));
+    // bytes that fail a signed hash or a signature: refused at the read boundary, before any decapsulation (codex-13,
+    // codex-r2-15); one view at a time
+    let cases: [(String, fn(&mut Value)); 6] = [
+        (first("pathCtAt("), |x| flip(&mut x["sealedSecret"])),
+        (first("pathCtAt("), |x| flip(&mut x["mlkemCt"])),
+        (first("wrapAt(0,"), |x| flip(&mut x["sealedKey"])),
+        ("commitOf(1)".into(), |x| flip(&mut x["sig"])),
+        ("sessionOf()".into(), |x| x["record"]["nonce"] = json!(2)),
+        (first("pathListOf("), |x| flip(&mut x["ctHashes"][0])),
+    ];
+    for (read, f) in cases {
+        let mut t = Tamper {
+            home: &mut home,
+            read: read.clone(),
+            f,
+        };
+        assert_eq!(
+            code(keys.tree_replay(SC, &mut t, &c, None)),
+            "TreeReadCorrupted",
+            "{read}"
+        );
+    }
+    // the snapshot against the head's signed tree hash (codex-r2-6)
+    let mut t = Tamper {
+        home: &mut home,
+        read: "treeNodes()".into(),
+        f: |x| flip(&mut x[1]["keyHash"]),
+    };
+    assert_eq!(code(keys.tree_replay(SC, &mut t, &c, None)), "TreeHeadRoot");
+    // a fetched key against the hash that entered the root (codex-1): a node key and a leaf key
+    let prep = tree_prepare(SC, &mut home, None).unwrap();
+    let node = (0..prep.tree.nodes.len() as u32)
+        .find(|x| matches!(prep.tree.node(*x), Node::Parent(_)))
+        .unwrap();
+    assert!(key_of(&mut home, &prep.tree, node).is_ok());
+    assert!(key_of(&mut home, &prep.tree, 0).is_ok());
+    let mut t = Tamper {
+        home: &mut home,
+        read: format!("treeNodeKey({node})"),
+        f: flip,
+    };
+    assert_eq!(code(key_of(&mut t, &prep.tree, node)), "TreeKeyHash");
+    let a = home.tree.leaf(0).unwrap().clone();
+    let mut t = Tamper {
+        home: &mut home,
+        read: format!("kemKeyAt({},{})", hx(&a.ua), a.key_id),
+        f: flip,
+    };
+    assert_eq!(code(key_of(&mut t, &prep.tree, 0)), "TreeKeyHash");
+    // the checkpoint: below the pinned epoch, another session
+    let pin = r.pin.clone();
+    let high = Pin {
+        epoch: pin.epoch + 1,
+        ..pin.clone()
+    };
+    assert_eq!(
+        code(keys.tree_replay(SC, &mut home, &c, Some(&high))),
+        "TreeCheckpoint"
+    );
+    let other = Pin {
+        tree_id: [2; 32],
+        ..pin.clone()
+    };
+    assert_eq!(
+        code(keys.tree_replay(SC, &mut home, &c, Some(&other))),
+        "TreeCheckpoint"
+    );
+
+    // the epoch-0 head: the cold tree rebuilt from the signed member list (codex-r2-1)
+    let mut h0 = scenario(&keys, &v, &world, main, &mut vec![], Some(0));
+    let (da, ka) = &world.devices["A"];
+    let dev_a = TreeDevice {
+        ua: a32(&da["ua"]),
+        key_id: u(&da["keyId"]),
+        kem: ka,
+    };
+    assert!(keys
+        .tree_replay(SC, &mut h0, &dev_a, None)
+        .unwrap()
+        .is_some());
+    let mut t = Tamper {
+        home: &mut h0,
+        read: "treeLeaves()".into(),
+        f: |x| flip(&mut x[1]["kemHash"]),
+    };
+    assert_eq!(
+        code(keys.tree_replay(SC, &mut t, &dev_a, None)),
+        "TreeGenesisLeaves"
+    );
+    // a key in no period of the session
+    let (dh, kh) = &world.devices["H"];
+    let dev_h = TreeDevice {
+        ua: a32(&dh["ua"]),
+        key_id: u(&dh["keyId"]),
+        kem: kh,
+    };
+    assert!(keys
+        .tree_replay(SC, &mut h0, &dev_h, None)
+        .unwrap()
+        .is_none());
+
+    // a commit built by the release entry on the epoch-0 head: its nonce drawn inside, so two builds differ (C17); K is an
+    // epoch key the mode-0 entries take (the hint, a chain); an added key that fails admission is refused (KemCheck)
+    let prep0 = tree_prepare(SC, &mut h0, None).unwrap();
+    let rec = &main["genesis"]["record"];
+    let build = |keys: &AppKeys, h0: &mut Home, adds: Vec<(Add, Vec<u8>)>| {
+        let tree = prep0.tree.clone();
+        let mut kf = |x: u32| key_of(h0, &tree, x);
+        keys.tree_build_commit(
+            SC,
+            CommitInput {
+                tree: &prep0.tree,
+                parent_epoch_id: prep0.parent_epoch_id,
+                parent_epoch: 0,
+                parent_tree_hash: prep0.parent_tree_hash,
+                session_id: a32(&main["genesis"]["sessionId"]),
+                tree_id: a32(&main["genesis"]["treeId"]),
+                author: dev_a.ua,
+                leaf: 0,
+                key_id: dev_a.key_id,
+                kem: ka,
+                removes: vec![],
+                adds,
+                admins: rec["admins"].as_array().unwrap().iter().map(a32).collect(),
+                info: None,
+                key_of: &mut kf,
+            },
+        )
+    };
+    let b1 = build(&keys, &mut h0, vec![]).unwrap();
+    let b2 = build(&keys, &mut h0, vec![]).unwrap();
+    assert_ne!(b1.record["nonce"], b2.record["nonce"]);
+    assert_ne!(b1.epoch_id, b2.epoch_id);
+    assert!(keys.pqchat_hint(&b1.k).is_ok());
+    assert!(keys
+        .pqchat_chain(&b1.k, &[0; 32], &b1.epoch_id, &dev_a.ua, &[0; 16])
+        .is_ok());
+    let (dd, kd) = &world.devices["D"];
+    let add = Add {
+        leaf: prep0.tree.used,
+        ua: a32(&dd["ua"]),
+        key_id: u(&dd["keyId"]),
+        via: ZERO,
+        kem_hash: keccak256(&kd.kem_pk()),
+    };
+    assert!(build(&keys, &mut h0, vec![(add.clone(), kd.kem_pk())]).is_ok());
+    let mut bad = kd.kem_pk();
+    bad[0] = 2;
+    let bad_add = Add {
+        kem_hash: keccak256(&bad),
+        ..add
+    };
+    assert!(matches!(
+        build(&keys, &mut h0, vec![(bad_add, bad)]),
+        Err(Error::KemCheck)
+    ));
+
+    // the info's bound: the 4,096-B bucket seals (4,124 B), the next is refused (codex-r2-13)
+    let mut session = rec.clone();
+    session.as_object_mut().unwrap().remove("wrapHashes");
+    session.as_object_mut().unwrap().remove("sealedInfo");
+    let kem_pks: Vec<Vec<u8>> = rec["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| world.kem(world.by_key(&m["ua"], &m["keyId"])).kem_pk())
+        .collect();
+    let info_n = |n: usize| format!("{{\"a\":\"{}\"}}", "x".repeat(n));
+    let fits = (0..5000)
+        .rev()
+        .find(|n| {
+            scaas_ua::wallet::pqchat_keys::pad(info_n(*n).as_bytes())
+                .unwrap()
+                .len()
+                == 4096
+        })
+        .unwrap();
+    let g = keys
+        .tree_create_genesis(SC, &session, &kem_pks, info_n(fits).as_bytes())
+        .unwrap();
+    assert_eq!(unhex(&g.record["sealedInfo"]).len(), 4124);
+    assert_eq!(
+        code(keys.tree_create_genesis(SC, &session, &kem_pks, info_n(fits + 1).as_bytes())),
+        "TreeInfoSize"
+    );
+
+    // app-agnostic (owner 2026-11-23): another app's scope under its own prefix gives other labels and other secrets
+    let other = scaas_ua::wallet::tree::TreeScope {
+        prefix: "scaas/other/v1/tree",
+        ..PQCHAT_TREE
+    };
+    assert_ne!(other.tag_path(), SC.tag_path());
+    assert_ne!(other.tag_context(), SC.tag_context());
+    let s = &v["secrets"][0];
+    let targets: Vec<u32> = s["ctTargets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| u(x) as u32)
+        .collect();
+    let (c1, c2) = (
+        path_context(SC, &s["record"], &targets).unwrap(),
+        path_context(&other, &s["record"], &targets).unwrap(),
+    );
+    assert_ne!(c1, c2);
+    let author = world.kem(s["author"].as_str().unwrap());
+    let (p1, _) = keys.vectors_tree_path(SC, author, &c1, 1).unwrap();
+    let (p2, _) = keys.vectors_tree_path(&other, author, &c1, 1).unwrap();
+    assert_eq!(hx(&p1[0]), s["ps0"]);
+    assert_ne!(p1, p2);
 }
