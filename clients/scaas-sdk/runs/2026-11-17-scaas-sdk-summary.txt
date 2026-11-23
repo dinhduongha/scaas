@@ -458,3 +458,13 @@ ck-test | a24fdb96f | 0 | node: 586 pass, 0 fail, 4 skipped
 # 5 ignored) and clippy --all-targets -D warnings default and vectors; scaas-sdk app_core_vault_records 6, pqchat_keys
 # (vectors) 18; ua-rs app_core pqvault (app-core,vectors) 3 and its clippy; pqchat-core signed 8, devices 3; forge
 # PqVaultGroupMode 2, PqVaultTypes 7; format.sh --check rust py sh js rc 0. mutants-check rc 0: every SDK mutant script loads.
+sdk-clippy-default | 4ae443025 | 0 | -
+sdk-clippy | 4ae443025 | 0 | -
+mutants-check | 4ae443025 | 0 | -
+docs | 4ae443025 | 0 | -
+# the rows above at 4ae443025 (Part 2: the T26 area-B mutant run, 11bfb27a9..370aa0ee6, and its fixes 273c2f71e, 3e0852c36,
+# 57e346ddd, 4ae443025; clean tree): sdk-clippy-default rc 0 again (red since e4ad5f592 on e2e's app-core helper and since
+# 1d5490233 on B2-13's zether-only test; last green 4a96991f4). Beside them at 57e346ddd / 4ae443025, capped -j 2: history 4 and
+# governance_delay 9 passed (full features), --lib op:: 101 passed (full), --lib op::gas 32 passed (default features);
+# format.sh --check rust py sh js rc 0. Mutants: 76 rows of Part 2, 76 killed (records in the t26, t13rulings, t13sponsor,
+# t16a, t18b, gas3c, m8, r20margin, t11, t24algorand, t24ton, t36read files).
