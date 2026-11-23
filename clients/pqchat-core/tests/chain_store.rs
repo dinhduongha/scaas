@@ -124,12 +124,15 @@ async fn chain_store_post_and_read() {
         post_cost_confirmed: false,
     };
     assert_eq!(
-        pa.send(&s, &alice, &rc, None, &o).await.unwrap().message_id,
+        pa.send_content(&s, &alice, &rc, None, &o)
+            .await
+            .unwrap()
+            .message_id,
         None
     );
     // one message stored and posted
     let r1 = pa
-        .send(&s, &alice, &txt("stored and posted"), Some(1), &o)
+        .send_content(&s, &alice, &txt("stored and posted"), Some(1), &o)
         .await
         .unwrap();
     landed(&l, &r1.stores[0].1).await;
@@ -155,7 +158,7 @@ async fn chain_store_post_and_read() {
         ..o.clone()
     };
     let r3 = pa
-        .send(&s, &alice, &txt("stored"), Some(3), &o2)
+        .send_content(&s, &alice, &txt("stored"), Some(3), &o2)
         .await
         .unwrap();
     landed(&l, &r3.stores[0].1).await;

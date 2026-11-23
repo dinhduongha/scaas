@@ -416,7 +416,8 @@ cannot be reproduced through the SDK's surface is a gap in the surface, reported
 run over that one library (the SDK's binding rules, [CLI-SDK-12](../../clients/scaas-sdk.md#CLI-SDK-12)) carry its public API to
 Flutter (FRB 2), C++ / Qt (UniFFI or the fallback the SDK's spike picks) and later the browser, with the SDK's surface rules: `Arc`
 objects, owned strings and records, ids as strings, a pull subscription, no callback for events, decrypted content as `SecretBytes`
-through the SDK's copy calls. `attach_matrix` and the storage interface are Rust-only: wired inside the one library, never carried by
+through the SDK's copy calls, and a content to send as its JSON in a `SecretBytes` handle, parsed and validated in Rust (owner
+2026-11-23; no send entry takes a plain string). `attach_matrix` and the storage interface are Rust-only: wired inside the one library, never carried by
 a binding. Tests assert the generated surface holds no handle type and no byte accessor of one, and the app library's symbols and
 features hold no vectors-build entry.
 

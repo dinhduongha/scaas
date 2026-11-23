@@ -274,7 +274,10 @@ async fn pending_session_reaches_nothing() {
     assert_eq!(bob.unwrap_calls(), 0);
     let sr = sref(&s.e);
     assert_eq!(
-        code(bob.send(&sr, &me(&w.bob), &txt("x"), None, &opts(&w)).await),
+        code(
+            bob.send_content(&sr, &me(&w.bob), &txt("x"), None, &opts(&w))
+                .await
+        ),
         "SessionPending"
     );
     let ep = s.open();
@@ -382,7 +385,7 @@ async fn left_session_declined() {
     );
     assert_eq!(
         code(
-            bob.send(&sref(&s.e), &me(&w.bob), &txt("x"), None, &opts(&w))
+            bob.send_content(&sref(&s.e), &me(&w.bob), &txt("x"), None, &opts(&w))
                 .await
         ),
         "SessionPending"

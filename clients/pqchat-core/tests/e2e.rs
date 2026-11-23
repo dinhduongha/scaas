@@ -273,7 +273,7 @@ async fn run() {
     // A sends a text to the room and the chain store, posted too
     let hello = txt("hello B, from A");
     let r = pa
-        .send(&s1, &a, &hello, Some(1), &opts(&w, true))
+        .send_content(&s1, &a, &hello, Some(1), &opts(&w, true))
         .await
         .unwrap();
     assert_eq!(r.stores[0].1, Delivery::Sent(String::new()));
@@ -301,7 +301,7 @@ async fn run() {
     pb.attach_matrix(tb.clone());
     let reply = txt("hello A, from B");
     let r = pb
-        .send(&s1, &b, &reply, Some(2), &opts(&w, false))
+        .send_content(&s1, &b, &reply, Some(2), &opts(&w, false))
         .await
         .unwrap();
     assert_eq!(r.stores[0].1, Delivery::Failed("MatrixRoom"));
@@ -366,7 +366,7 @@ async fn run() {
     assert_eq!(ta.calls_of("invite"), 1);
     let m2 = txt("hello B, Matrix only");
     let r = pa
-        .send(&s2, &a, &m2, Some(10), &opts(&w, false))
+        .send_content(&s2, &a, &m2, Some(10), &opts(&w, false))
         .await
         .unwrap();
     assert_eq!(r.stores, vec![(0, Delivery::Sent(String::new()))]);
@@ -384,7 +384,7 @@ async fn run() {
     assert_eq!(texts(&pb, &sid2), vec![(a.ua.clone(), m2.clone())]);
     let rep2 = txt("hello A, Matrix only");
     let r = pb
-        .send(&s2, &b, &rep2, Some(11), &opts(&w, false))
+        .send_content(&s2, &b, &rep2, Some(11), &opts(&w, false))
         .await
         .unwrap();
     assert_eq!(r.stores[0].1, Delivery::Sent(String::new()));
@@ -415,7 +415,7 @@ async fn run() {
     let ea3 = creator_uses(&w, &pa, &sid3, &sid3, s3b.k.clone()).await;
     let first = txt("to B and C");
     let r = pa
-        .send(&s3, &a, &first, Some(3), &opts(&w, false))
+        .send_content(&s3, &a, &first, Some(3), &opts(&w, false))
         .await
         .unwrap();
     w.delivered(&r.stores[0].1).await;
@@ -504,7 +504,7 @@ async fn run() {
     creator_uses(&w, &pa, &sid3, &r1.epoch_id, r1.k.clone()).await;
     let after = txt("after C left");
     let r = pa
-        .send(&s3, &a, &after, Some(5), &opts(&w, true))
+        .send_content(&s3, &a, &after, Some(5), &opts(&w, true))
         .await
         .unwrap();
     w.delivered(&r.stores[0].1).await;
@@ -602,7 +602,7 @@ async fn run() {
     // B sends from the new device (a new device id: A's counter scope is new, the counter starts again)
     let fresh = txt("from B's new device");
     let r = pb2
-        .send(&s1, &b, &fresh, Some(6), &opts(&w, false))
+        .send_content(&s1, &b, &fresh, Some(6), &opts(&w, false))
         .await
         .unwrap();
     w.delivered(&r.stores[1].1).await;
@@ -613,7 +613,7 @@ async fn run() {
     );
     let fresh2 = txt("from B's new device, Matrix only");
     let r = pb2
-        .send(&s2, &b, &fresh2, Some(7), &opts(&w, false))
+        .send_content(&s2, &b, &fresh2, Some(7), &opts(&w, false))
         .await
         .unwrap();
     assert_eq!(r.stores[0].1, Delivery::Sent(String::new()));
@@ -847,7 +847,7 @@ async fn run() {
     .unwrap();
     for (pq, m) in [(&pa, "one counter, first"), (&pa2, "one counter, second")] {
         let r = pq
-            .send(&s3, &a, &txt(m), Some(7), &opts(&w, false))
+            .send_content(&s3, &a, &txt(m), Some(7), &opts(&w, false))
             .await
             .unwrap();
         w.delivered(&r.stores[0].1).await;
@@ -1033,7 +1033,7 @@ async fn run() {
     assert_eq!(w.l.call("childOf(bytes32)(bytes32)", &[&sid2]), ch.epoch_id);
     let fin = txt("B under the final epoch");
     let r = pbf
-        .send(&sf, &b, &fin, Some(13), &opts(&w, false))
+        .send_content(&sf, &b, &fin, Some(13), &opts(&w, false))
         .await
         .unwrap();
     assert_eq!(r.stores[0].1, Delivery::Sent(String::new()));
@@ -1060,7 +1060,7 @@ async fn run() {
     const LONG: usize = 5000;
     for i in 0..LONG {
         let r = pa
-            .send(&s2, &a, &txt(&format!("long {i}")), None, &opts(&w, false))
+            .send_content(&s2, &a, &txt(&format!("long {i}")), None, &opts(&w, false))
             .await
             .unwrap();
         assert_eq!(r.stores[0].1, Delivery::Sent(String::new()));
