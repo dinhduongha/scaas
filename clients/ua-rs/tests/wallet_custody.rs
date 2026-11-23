@@ -672,3 +672,23 @@ fn leased_opens_run_at_once() {
         assert_eq!(*pt.unwrap(), b"pt");
     }
 }
+
+/// Review A2-6: a backup refused for one recipient's key (`KemCheck`) raises no `backup_generation` (else the newest real
+/// backup would restore as `BackupRollback`); the twin with good keys raises it by one.
+#[test]
+fn a_refused_backup_raises_no_generation() {
+    let w = wallet();
+    let key = w.ua_key(0x0102, 0, 0).unwrap();
+    let good = Recipient::ephemeral(&KemKeyPair::generate_ephemeral().unwrap().kem_pk());
+    let mut bad_pk = good.kem_pk().to_vec();
+    bad_pk[0] = 2;
+    let bad = Recipient::ephemeral(&bad_pk);
+    let g = w.manifest().backup_generation;
+    assert_eq!(
+        w.backup_seal(&key, &[good.clone(), bad]).unwrap_err(),
+        scaas_ua::wallet::Error::KemCheck
+    );
+    assert_eq!(w.manifest().backup_generation, g, "a refused backup");
+    assert_eq!(w.backup_seal(&key, &[good]).unwrap().len(), 1);
+    assert_eq!(w.manifest().backup_generation, g + 1, "the twin");
+}
