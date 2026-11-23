@@ -215,6 +215,28 @@ session are held, the least recently used dropped, and every position is derived
 latest messages of a long epoch without the earlier ones, and no member can fill the shared `ua-rs` arena by opening chains under new
 device ids. This needs no change to UA-7.
 
+<a id="CLI-PQC-16"></a>**CLI-PQC-16** — **In a tree session (`groupMode = 1`) the crate obtains each epoch key by replaying the
+commits since its Welcome; every tree secret stays in `ua-rs`; a committer's path secrets derive from its KEM seed; a device
+that cannot follow a commit is cut off and sends nothing by itself** (owner 2026-11-23: our own TreeKEM in `ua-rs` after RFC
+9420's algorithms, no MLS library; seed-derived committer secrets, no self-wrap; spec
+[`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md) §5, §10, §15; the contract side is
+[CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **SPECIFIED**, nothing built, UNAUDITED.
+
+- **One branch.** Both modes end in an epoch key `K` per epoch id; sender chains, `sealedInfo`, messages, stores and consent sit
+  above `K` and do not change. Until the mode is built the crate refuses `groupMode ≠ 0` by name.
+- **Secrets.** KEM, AEAD, HKDF and every path, node and epoch secret are `ua-rs`'s, behind handles
+  ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01)); the crate holds the public tree, the records and handles, no key byte.
+- **The committer.** `ps[0]` is an HKDF of the KEM seed of the author's leaf key over the session, the parent epoch, the
+  membership change and the recipient set, so a device restored from the seed opens its own commits and a rebuilt commit never
+  repeats a secret. A random device key recovers its commits on that device only.
+- **Before it encrypts** to the live tree the crate recomputes the tree hash and verifies the head commit's kept signature,
+  in every tree session (a controller call, the owner may override); reads follow [CLI-PQC-13](#CLI-PQC-13).
+- **Replay** needs state only ([CLI-PQC-09](#CLI-PQC-09)): the Welcome wrap, then one path ciphertext per later commit, each
+  derived node key compared with the stored one, `sealedInfo` opened as the confirmation.
+- **Cut off.** A missing or wrong ciphertext ends that device's view at that epoch: it is shown, and nothing is sent
+  automatically ([ARCH-POS-13](../decisions.md#ARCH-POS-13)).
+- **The size hint.** The crate proposes the tree mode from about 7 keys where several members commit; it enforces nothing.
+
 ## 5. Vectors and tests
 
 Status: **SPECIFIED**.

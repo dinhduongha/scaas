@@ -31,6 +31,7 @@ design: the UA-7 spec [`2026-10-25-ua7-pq-e2e-sessions.md`](../superpowers/specs
 13. [Tests](#13-tests)
 14. [Clients and other families](#14-clients-and-other-families)
 15. [The standalone store on 24,576-B chains](#15-the-standalone-store-on-24576-b-chains)
+16. [The TreeKEM mode (`groupMode = 1`)](#16-the-treekem-mode-groupmode--1)
 
 ## 1. Overview
 
@@ -705,3 +706,51 @@ store path, as HCS does on Hedera; the contract, its state storage and its bound
   [CTR-CHAT-19](#CTR-CHAT-19)'s unsigned writes: no SCaaS set (so no `RelayFeeRouter`) is deployed on Avalanche, so the paths
   today are the operator's lane policy or the user's own account, which shows the user's address beside the hint.
 
+## 16. The TreeKEM mode (`groupMode = 1`)
+
+Status: **SPECIFIED**, nothing built, **UNAUDITED** (spec [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md),
+plan [`2026-11-23-pqchat-treekem.md`](../superpowers/plans/2026-11-23-pqchat-treekem.md)). It builds on branch `pqchat-sigs`:
+the signature-storage setting per home, several `keyId`s per member UA, and `groupMode` in `PqChatSession`.
+
+<a id="CTR-CHAT-26"></a>**CTR-CHAT-26** — **A session with `groupMode = 1` is a TreeKEM session: RFC 9420's tree rules over KEM
+scheme 1, in minimal scope (a commit with an UpdatePath, Adds and Removes, Welcome by wraps), in a DELEGATECALL body module
+`PqChatTree`; `PqVault` accepts only 0** (owner 2026-11-23, in the
+[register](../decisions.md#ctr-chat-26--pqchats-treekem-mode-groupmode--1-is-built-now-in-minimal-scope-in-a-body-module)).
+
+- **The protocol id.** `groupMode` 0 = flat wraps; 1 = RFC 9420 tree rules over KEM scheme 1 (ML-KEM-1024 + X25519); 2–255 later
+  variants, refused `PqChatModeUnsupported(groupMode)`. Fixed at creation.
+- **Scope.** A tree session is created cold from its signed member list by the unchanged `createSession`: leaf `i` is
+  `members[i]`, every parent blank, epoch 0 one wrap per member key. A later epoch is a signed `PqChatCommit` through `commit`:
+  the author's path (new node keys, one path ciphertext per entry of each copath resolution), `TreeRemove`s, `TreeAdd`s and one
+  Welcome wrap per added key. External commits, pre-shared keys and ReInit are out.
+- **Typed records.** `PqChatCommit`, `TreeAdd`, `TreeRemove`, `PathCt`, EIP-712 in `DS_C`, every field named
+  ([CTR-CHAT-03](#CTR-CHAT-03)); the type strings are the spec's §6. One entry per operation: `commit`, and `addPath` for the
+  remaining pieces, by anyone ([CTR-CHAT-19](#CTR-CHAT-19)).
+- **Nothing is lost.** The record, every node key and every path ciphertext stay in SSTORE2 blobs
+  ([CTR-CHAT-05](#CTR-CHAT-05)); pieces land in chunks against their signed hashes ([CTR-CHAT-07](#CTR-CHAT-07)).
+- **Order, rights, leave, removal** are this page's: one child per parent in the home instance
+  ([CTR-CHAT-08](#CTR-CHAT-08)), the rights of [CTR-CHAT-09](#CTR-CHAT-09) per UA, `remove`
+  ([CTR-CHAT-20](#CTR-CHAT-20)) and `leave` ([CTR-CHAT-10](#CTR-CHAT-10)) with their records unchanged; the next commit
+  completes only without a removed UA's leaves.
+- **Recovery** is from state alone ([CTR-CHAT-14](#CTR-CHAT-14)), by replaying the commits since the device's Welcome.
+
+<a id="CTR-CHAT-27"></a>**CTR-CHAT-27** — **The tree mode's checks and bounds: an `sstore2` home only, the home instance only,
+scheme-1 node keys, leaves by reference to registry KEM keys, and the signed `ctTargets`, `parentHash` and `treeHash` compared
+with what the contract computes when a commit completes** (controller calls C1–C13 of the spec's §2, the owner may override; in
+the [register](../decisions.md#ctr-chat-27--the-tree-modes-checks-and-bounds-controller-calls)).
+
+- **Where.** `createSession` with `groupMode = 1` is `PqChatTreeSigStore()` on a home whose signature-storage setting is `none`,
+  and `PqChatTreeHome()` in an instance that is not the session's home. `rekey` on a tree session and `commit` on a flat one are
+  `PqChatModeEntry(groupMode)`.
+- **The tree.** RFC 9420's array layout, blanks and resolution without unmerged leaves: an Add blanks the new leaf's direct
+  path; the tree never shrinks; every commit carries a path. A leaf is a `(ua, keyId)` the registry holds; a node key is a
+  `kemPk` of 1,601 B. The tree hash and the parent hash are typed keccak256 hashes (the spec's §4).
+- **Checked by the contract:** signatures and nonces; the author's live leaf; the rights per UA (a non-admin changes keys of its
+  own UA only); shapes and sizes; every piece against its signed hash, once; and at completion the resolution walk against
+  `ctTargets` (`PqChatTreeTargets`), `parentHash` (`PqChatParentHash`) and the recomputed root against `treeHash`
+  (`PqChatTreeHash`). A commit that fails never becomes an epoch. **Checked by clients only:** that a node key derives from its
+  path secret and that a ciphertext opens to it; a member that cannot follow is cut off and sends nothing by itself
+  ([ARCH-POS-13](../decisions.md#ARCH-POS-13)).
+- **Bounds.** `TREE_LEAVES_MAX` = 1,024 keys, `TREE_CHANGES_MAX` = 32 adds plus removes per commit, at most 8 keys per UA. The
+  contract enforces no minimum size; "useful from about 7 keys, where several members commit" is a client hint. Gas figures: the
+  spec's §13 (estimates until the plan's gas task pins them).

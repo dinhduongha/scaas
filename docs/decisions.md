@@ -6228,6 +6228,24 @@ Change (controller call, owner: no, 2026-11-21, the Fable code review of PqVault
 **Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
 Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C23; owner: no): the init-code hash and the address pinned beside the runtime code hash, an existing deployment with the pinned code taken as done, deployer and SSTORE2 probes per chain (review F18); the smallest-store bound and the relay paths without `RelayFeeRouter` stated (review F19).
 
+### CTR-CHAT-26 — PqChat's TreeKEM mode (`groupMode = 1`) is built now, in minimal scope, in a body module
+- old: — · status: current · owner: yes · date: 2026-11-23 · normative: contracts/pqchat.md#CTR-CHAT-26 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat.md](contracts/pqchat.md#CTR-CHAT-26).) Owner 2026-11-23, as relayed by the controller: (1) "Minimal mode 1 is built now, before the pre-freeze tag. It covers a commit with UpdatePath, Add and Remove, with Welcome by wraps. External commits, PSKs and ReInit are out." (2) "A new DELEGATECALL body module is accepted for it." (3) "`groupMode` is a protocol id: 0 = flat; 1 = RFC 9420 tree rules over KEM scheme 1 (ML-KEM-1024 + X25519, `clients/ua-rs/src/wallet/kem.rs`); 2–255 for later variants. It is appended at the end of `PqChatSession` and `PqVaultCreate`, and fixed at creation." (4) "PqVault accepts only 0 in this release; it stays open for a later PqVault release." Rulings (5) seed-derived committer secrets and (6) our own TreeKEM in `ua-rs` are [CLI-PQC-16](#cli-pqc-16--a-tree-sessions-epoch-keys-come-from-replay-tree-secrets-stay-in-ua-rs-committer-secrets-derive-from-the-kem-seed).
+**Status.** SPECIFIED, nothing built, UNAUDITED. This replaces the research note's recommendation "the field now, the mode in a later release". The contract work branches from `pqchat-sigs` once it has landed.
+**Why.** With the mode in the release that is frozen, large groups get a key refresh of `log2 n` ciphertexts without a second catalogued release; the module keeps `PqChat` under its size line (31,897 B of 35,286 B).
+**Cost if wrong.** 10 to 13 agent-days before the tag and a new cryptographic protocol in the pre-freeze audit; a tree that never warms costs what flat costs.
+**Source.** owner 2026-11-23 (relayed by the controller); [spec](superpowers/specs/2026-11-23-pqchat-treekem.md) and its [plan](superpowers/plans/2026-11-23-pqchat-treekem.md); research [`2026-11-23-treekem-pqchat.md`](research/2026-11-23-treekem-pqchat.md) §8.
+
+### CTR-CHAT-27 — The tree mode's checks and bounds (controller calls)
+- old: — · status: current · owner: no · date: 2026-11-23 · normative: contracts/pqchat.md#CTR-CHAT-27 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat.md](contracts/pqchat.md#CTR-CHAT-27).) Controller calls of 2026-11-23, the owner may override any (the spec's §2): C1 a tree session on a home whose signature-storage setting is `none` is refused (`PqChatTreeSigStore`); C2 tree nodes use KEM scheme 1, ML-KEM-1024 + X25519, as the one scheme, a node key being a 1,601-B `kemPk`; C3 the group-size advice (useful from about 7 keys) is a client hint, the contract enforces nothing about size below its cap; C4 a tree session lives only in its home instance (`PqChatTreeHome`); C5 a leaf is a registry KEM key `(ua, keyId)` by reference, never replaced by a commit; C6 no unmerged leaves (an Add blanks the new leaf's direct path), no truncation, every commit carries a path; C7 the contract keeps the tree hash and compares the signed `ctTargets`, `parentHash` and `treeHash` with what it computes when the commit completes, so a wrong commit never becomes an epoch; C8 a non-admin author changes keys of its own UA only; C9 `leave` and `remove` of a tree session name its head; C10 `TREE_LEAVES_MAX` = 1,024 and `TREE_CHANGES_MAX` = 32; C11 clients always verify a tree session's control-plane records; C12 `sealedInfo` confirms the epoch secret, no confirmation tag; C13 the tree hash covers node keys, the commit's one `parentHash` is checked at completion and kept in the signed record.
+**Status.** SPECIFIED, nothing built, UNAUDITED. Open with the owner (the spec's §16): the cap (O1), long-term leaf keys (O2), the own-UA rule (O3), `none` homes and replicas (O4), ML-KEM-1024 for nodes (O5).
+**Why.** A committer encrypts to node keys that only commit signatures vouch for (C1, C11); a check the contract can make at write keeps clients from ever rejecting an accepted epoch (C7); the simplifications keep the resolution walk and the module small (C5, C6).
+**Cost if wrong.** A cap or a rule fixed in an immutable release; commits after an Add pay up to about twice the warm cost; a compromised device heals only by a new `keyId`.
+**Source.** [spec](superpowers/specs/2026-11-23-pqchat-treekem.md) §2, §13, §16; research [`2026-11-23-treekem-pqchat.md`](research/2026-11-23-treekem-pqchat.md) §4, §6, §8.5.
+
 ### CTR-PQV-01 — PqVault: PqChat's group rules with at least one member plus a topics-style item model
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-01 · superseded-by: —
 
@@ -12732,6 +12750,15 @@ Change (controller, 2026-11-23, the owner's send answer built on `pqchat-core-im
 **Why.** A fresh device starts every chain at 0; under the reference's 2,000-step bound it could not read the latest messages of a long epoch, and skipped-key handles let one member fill the shared arena with new device ids. No secret is lost: `K` is held while unlocked and derived again from the seed and the chain.
 **Cost if wrong.** A restored phone that shows nothing of a long 1:1 epoch, or an app whose reading stops when one member opens many chains.
 **Source.** coordinator call K2, 2026-11-17, on Fable's review of `3a5ece097` (K2, P1; K6, K21); the owner may override; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §4, §10.
+
+### CLI-PQC-16 — A tree session's epoch keys come from replay; tree secrets stay in `ua-rs`; committer secrets derive from the KEM seed
+- old: — · status: current · owner: yes · date: 2026-11-23 · normative: clients/pqchat-core.md#CLI-PQC-16 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-16).) Owner 2026-11-23, as relayed by the controller: "The committer's own path secrets are seed-derived (HKDF over the session and the commit), so no self-wrap." and "Our own TreeKEM in `ua-rs`, following RFC 9420's algorithms, with typed records. No MLS library." Controller calls (owner: no, the owner may override): the derivation's inputs (the KEM seed of the author's leaf key over the session, the parent epoch, the membership change and the recipient set); the verification of the head commit's signature before any encryption in every tree session; the cut-off state with no automatic write; the size hint.
+**Status.** SPECIFIED, nothing built, UNAUDITED.
+**Why.** The seed keeps recovering everything, as in flat mode, at no byte on chain; one signer and one secret store ([CLI-UAL-01](clients/ua-libraries.md#CLI-UAL-01)); an MLS library brings its own HPKE, key schedule and opaque wire format that a contract cannot check field by field.
+**Cost if wrong.** A leaked seed opens every epoch its key ever committed or received; new protocol code outside RFC 9420's analyses.
+**Source.** owner 2026-11-23 (relayed by the controller); [spec](superpowers/specs/2026-11-23-pqchat-treekem.md) §5, §10, §15; research [`2026-11-23-treekem-pqchat.md`](research/2026-11-23-treekem-pqchat.md) §3.2, §6.2.
 
 ### CLI-PQC-30 — Owner rulings for `pqchat-core`, 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-PQC-30 · superseded-by: —
