@@ -79,9 +79,7 @@ contract CreateConfigKatTest is Test {
         bytes32 creator = _w(0xc1);
         bytes memory c = abi.encodeCall(IPqChat.initialize, (creator, 2));
         if (vm.envOr("WRITE_CREATE_CONFIG_KAT", false)) {
-            vm.writeJson(
-                string.concat('{"owner":"', vm.toString(creator), '","sigStore":2}'), KAT, ".instance.config"
-            );
+            vm.writeJson(string.concat('{"owner":"', vm.toString(creator), '","sigStore":2}'), KAT, ".instance.config");
             vm.writeJson(string.concat('"', vm.toString(c), '"'), KAT, ".instance.initCall");
             vm.writeJson(string.concat('"', vm.toString(keccak256(c)), '"'), KAT, ".instance.initHash");
         }

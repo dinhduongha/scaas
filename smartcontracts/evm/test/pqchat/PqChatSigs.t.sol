@@ -148,9 +148,17 @@ contract PqChatSigsTest is PqChatBase {
         _keptLists();
         // a session id is no epoch and an epoch id no session, as the record views
         bytes32 x = bytes32(uint256(1));
-        _refused(chat, abi.encodeCall(IPqChat.epochSig, (sid_)), abi.encodeWithSelector(IPqChat.PqChatUnknown.selector, sid_));
-        _refused(chat, abi.encodeCall(IPqChat.sessionSig, (eid_)), abi.encodeWithSelector(IPqChat.PqChatUnknown.selector, eid_));
-        _refused(chat, abi.encodeCall(IPqChat.sessionSig, (x)), abi.encodeWithSelector(IPqChat.PqChatUnknown.selector, x));
+        _refused(
+            chat, abi.encodeCall(IPqChat.epochSig, (sid_)), abi.encodeWithSelector(IPqChat.PqChatUnknown.selector, sid_)
+        );
+        _refused(
+            chat,
+            abi.encodeCall(IPqChat.sessionSig, (eid_)),
+            abi.encodeWithSelector(IPqChat.PqChatUnknown.selector, eid_)
+        );
+        _refused(
+            chat, abi.encodeCall(IPqChat.sessionSig, (x)), abi.encodeWithSelector(IPqChat.PqChatUnknown.selector, x)
+        );
     }
 
     function _keptLeave() internal view {
@@ -190,7 +198,8 @@ contract PqChatSigsTest is PqChatBase {
             c.leave(l, other);
             assertEq(c.leaveCount(sid), 0, "a refused leave stores nothing");
             assertFalse(c.leftIn(sid, ids[1]));
-            (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[0], 4, 1, sid, s.admins, s.members);
+            (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) =
+                _epoch(sid, ids[0], 4, 1, sid, s.admins, s.members);
             IUARegistry.UASig memory es = _sig(ids[0], h.epoch(e));
             e.sealedInfo = hex"bad1";
             vm.expectRevert(_unauthorized(ids[0]));

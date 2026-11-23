@@ -73,7 +73,9 @@ contract PqChatTest is PqChatBase {
         assertEq(own.owner(), bytes32(uint256(0xB0B)));
         vm.prank(address(0xB0B));
         PqChat none = PqChat(
-            f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "none", abi.encodeCall(IPqChat.initialize, (bytes32(0), 2)))
+            f.createInstance(
+                IOpenFactory.ReleaseId(3, 0, 1), "none", abi.encodeCall(IPqChat.initialize, (bytes32(0), 2))
+            )
         );
         assertEq(none.owner(), bytes32(0));
     }
