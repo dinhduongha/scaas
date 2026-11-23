@@ -141,11 +141,16 @@ function checkRow(name, row, kept = false) {
     assert.equal(h(pc.recordBlob(struct, row.record, row.uaSig, pc.SIG_STORE.sstore2)), row.blobSigned, name);
     assert.equal(
       row.blobSigned,
-      h(abiEncode([pc.recordAbi(struct, row.record).type, "bytes32", pc.UASIG_ABI], [
-        pc.recordAbi(struct, row.record).value,
-        fromHex(row.sigHash),
-        [fromHex(row.uaSig.keyData), fromHex(row.uaSig.signature), []],
-      ])),
+      h(
+        abiEncode(
+          [pc.recordAbi(struct, row.record).type, "bytes32", pc.UASIG_ABI],
+          [
+            pc.recordAbi(struct, row.record).value,
+            fromHex(row.sigHash),
+            [fromHex(row.uaSig.keyData), fromHex(row.uaSig.signature), []],
+          ],
+        ),
+      ),
       name,
     );
   }
@@ -158,7 +163,9 @@ test("session records: digests, ids, scopes, the message signature and blob", ()
   // MemberKey typehash unchanged
   const D = R.epochDevices.record;
   const keys = D.members.map((m) => [m.ua, m.keyId]);
-  assert.ok(keys.every((k, i) => i === 0 || keys[i - 1][0] < k[0] || (keys[i - 1][0] === k[0] && keys[i - 1][1] < k[1])));
+  assert.ok(
+    keys.every((k, i) => i === 0 || keys[i - 1][0] < k[0] || (keys[i - 1][0] === k[0] && keys[i - 1][1] < k[1])),
+  );
   assert.ok(new Set(D.members.map((m) => m.ua)).size < D.members.length, "a UA twice");
   assert.equal(D.wrapHashes.length, D.members.length);
   assert.equal(h(pc.TYPEHASH.MemberKey), h(keccak_256(utf8ToBytes("MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"))));
@@ -197,10 +204,11 @@ test("session records: digests, ids, scopes, the message signature and blob", ()
   checkRow("sessionTreeKem", R.sessionTreeKem);
   for (const rec of [S.record, E.record, L.record, Mg.record]) {
     for (const [f, v] of Object.entries(rec))
-      if (f !== "groupMode") assert.ok(
-        v !== 0 && v !== Z32 && v !== "0x" && v !== hex(new Uint8Array(20)) && !(Array.isArray(v) && !v.length),
-        f,
-      );
+      if (f !== "groupMode")
+        assert.ok(
+          v !== 0 && v !== Z32 && v !== "0x" && v !== hex(new Uint8Array(20)) && !(Array.isArray(v) && !v.length),
+          f,
+        );
   }
   // the session signs the keys.json wraps and the messages.json sealedInfo
   const wrapsOf = (e) => KEYS.wraps.filter((w) => w.name.startsWith(`${e}/`));

@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import * as pc from "../src/pqchat.js";
 import * as ar from "../src/arweave.js";
 import * as tr from "../src/pqchat-tree.js";
+import * as fx from "./treekem-fixture.mjs";
 import { ed25519, ED25519_TORSION_SUBGROUP } from "@noble/curves/ed25519.js";
 import { x25519 } from "@noble/curves/ed25519.js";
 import { pqKeygen, signUA } from "../src/pq.js";
@@ -1447,7 +1448,165 @@ write("tree.json", {
     ],
   },
 });
-console.log(`pqchat vectors: records, keys (${wrapRows.length} wraps), messages, topics, cards, tree -> ${OUT}`);
+// ------------------------------------------------------------------ tree-secrets.json (PqChat TreeKEM, T1b; frozen)
+// Spec §5 (secrets), §10 (replay); plan T1b. The worlds are scripts/treekem-fixture.mjs's; src/treekem.js builds and replays.
+{
+  const tk = fx.tk;
+  const sc = fx.sc;
+  const worlds = [
+    ["main", fx.mainScenario()],
+    ["joiner", fx.joinerScenario()],
+    ["heal", fx.healScenario()],
+    ["behind", fx.behindScenario()],
+    ["gap", fx.gapScenario(false)],
+    ["gap-control", fx.gapScenario(true)],
+    ["retired", fx.retiredScenario()],
+    ["foreign", fx.foreignScenario()],
+    ["empty-path", fx.emptyPathScenario(null)],
+    ["empty-path-foreign", fx.emptyPathScenario("H")],
+    ["admin-gap", fx.adminGapScenario()],
+  ];
+  const DEVICE_NAMES = ["A", "A2", "B", "B2", "C", "C2", "C3", "D", "E", "E2", "F", "G", "H"];
+  const devices = Object.fromEntries(
+    DEVICE_NAMES.map((n) => {
+      const d = fx.deviceOf(n);
+      return [n, { ua: d.ua, keyId: d.keyId, kemPk: d.kemPk, kemSeed: hex(d.kemSeed) }];
+    }),
+  );
+  const people = Object.fromEntries(
+    [...new Set(DEVICE_NAMES.map((n) => n[0]))].map((n) => [
+      n,
+      { ua: fx.personOf(n).ua, publicKey: fx.personOf(n).publicKey },
+    ]),
+  );
+  const main = worlds[0][1];
+  const commits = main.steps.filter((s) => s.built);
+  const secrets = commits.map((s) => ({
+    name: s.name,
+    author: s.author,
+    kemSeed: hex(fx.deviceOf(s.author).kemSeed),
+    record: s.built.record,
+    ctTargets: s.built.ctTargets,
+    pathContext: s.built.pathContext,
+    ps0: s.built.ps[0],
+    ps: s.built.ps,
+    nodeKeyHashes: s.built.record.nodeKeyHashes,
+  }));
+  const pathCt = commits.slice(0, 2).flatMap((s) =>
+    s.built.cts.map((c, j) => ({
+      name: `${s.name}/ct/${j}`,
+      input: {
+        treeId: s.built.record.treeId,
+        epochId: s.built.epochId,
+        node: c.node,
+        target: c.target,
+        kemPk: c.kemPk,
+        secret: s.built.ps[c.level],
+        m: hex(fx.rnd(`tree-secrets/${s.name}/ct/${j}/mlkem-m`)),
+        e: hex(fx.rnd(`tree-secrets/${s.name}/ct/${j}/x25519-ephemeral`)),
+      },
+      output: { ss: hex(c.ss), kek: hex(c.kek), ct: c.ct },
+    })),
+  );
+  const schedule = [
+    { name: "main/genesis", joiner: hex(main.genesis.joiner), fields: tk.genesisFields(main.genesis.record) },
+    ...commits.map((s) => ({ name: s.name, joiner: hex(s.built.joiner), fields: tk.commitFields(s.built.record) })),
+  ].map((r) => {
+    const x = tk.schedule(sc, r.joiner, r.fields);
+    const fields = Object.fromEntries(
+      Object.entries(r.fields).map(([k, v]) => [
+        k,
+        typeof v === "number" || typeof v === "string" || Array.isArray(v) ? v : hex(v),
+      ]),
+    );
+    return { ...r, fields, ctx: hex(x.ctx), S: hex(x.S), K: hex(x.K) };
+  });
+  const devicesOf = (w) =>
+    DEVICE_NAMES.filter((n) => w.home.kems.has(`${fx.deviceOf(n).ua}/${fx.deviceOf(n).keyId}`)).filter(
+      (n) => fx.replayOf(w, n).inSession,
+    );
+  const scenarios = worlds.map(([name, w]) => ({
+    name,
+    genesis: {
+      record: w.genesis.record,
+      sig: w.sig,
+      sessionId: w.genesis.sessionId,
+      treeId: w.genesis.treeId,
+      genesisCtx: w.genesis.genesisCtx,
+      joiner: hex(w.genesis.joiner),
+      K: hex(w.genesis.K),
+      wraps: w.genesis.wraps.map((x) => x.wrap),
+    },
+    steps: w.steps.map((s) =>
+      s.gone
+        ? { name: s.name, gone: s.gone }
+        : {
+            name: s.name,
+            author: s.author,
+            record: s.built.record,
+            sig: s.sig,
+            epochId: s.built.epochId,
+            ctTargets: s.built.ctTargets,
+            ctHashes: s.built.ctHashes,
+            nodeKeys: s.built.nodeKeys,
+            cts: s.built.cts.map((c) => c.ct),
+            wraps: s.built.wraps.map((x) => x.wrap),
+            treeHash: s.built.record.treeHash,
+            K: hex(s.built.K),
+          },
+    ),
+    rosters: w.rosters,
+    replays: Object.fromEntries(
+      devicesOf(w).map((n) => {
+        const r = fx.replayOf(w, n);
+        return [
+          n,
+          {
+            leaf: r.leaf,
+            joinEpoch: r.joinEpoch,
+            endEpoch: r.endEpoch,
+            states: r.epochs.map((e) => [e.epoch, e.state, e.reason ?? null]),
+            K: r.epochs.map((e) => e.K ?? null),
+            info: r.epochs.map((e) => [e.info, e.inForce, e.flagged]),
+            warnings: r.warnings,
+            reads: r.reads,
+          },
+        ];
+      }),
+    ),
+  }));
+  write("tree-secrets.json", {
+    description:
+      COMMON.replace(/Sources: .*$/, "") +
+      "PqChat TreeKEM secrets (frozen after T1b: a record or derivation change restarts every vector). Source: " +
+      "docs/superpowers/specs/2026-11-23-pqchat-treekem.md §5 (path secrets, ps[0] over pathContext, the path ciphertext, the " +
+      "schedule without init, K, the tree wrap, the info and the marker) and §10 (replay), plan " +
+      "docs/superpowers/plans/2026-11-23-pqchat-treekem.md T1b; by src/treekem.js, the worlds of scripts/treekem-fixture.mjs. " +
+      "H(ikm, info, n) = HKDF-SHA-256(ikm, salt empty, info, n); labels are scaas/pqchat/v1/tree/<name>. people: UAs (mldsa65, " +
+      "pqKeygen of rnd(tree-secrets/mldsa65-bip39-seed, 64), account 0, index A=0 … H=7) and their public keys; devices: a " +
+      "person's KEM version keyId (A2 = A's version 2), kemSeed = HKDF-Expand(HKDF-Extract(\"scaas.ua.kem.v1\", " +
+      'rnd(tree-secrets/kem/<person>, 64)), "scaas.kem.1" ‖ ua ‖ be64 keyId, 96). secrets: per commit of the main world its ' +
+      "pathContext, ps[0] = H(kemSeed, …/commit ‖ pathContext), ps[0..m] and the node key hashes. pathCt: inputs and outputs " +
+      "of each path ciphertext of the first two commits. schedule: ctx, S, K from the joiner and the context fields. " +
+      "scenarios: each world's genesis, steps (a commit with every piece and its signature, or a landed treeLeave / " +
+      "treeRemove), rosters per epoch, and each device's replay: per epoch of its secret range [epoch, state, reason], K, " +
+      "[info, inForce, flagged], the compromise warnings and the reads in order. UNAUDITED.",
+    labels: Object.fromEntries(
+      ["path", "node", "commit", "ct", "joiner", "epoch", "key"].map((k) => [k, new TextDecoder().decode(sc[k])]),
+    ),
+    tags: { tagPath: hex(sc.tagPath), tagContext: hex(sc.tagContext), wrap: sc.wrap },
+    infoMax: tk.TREE_INFO_MAX,
+    people,
+    devices,
+    secrets,
+    pathCt,
+    schedule,
+    scenarios,
+  });
+}
+console.log(
+  `pqchat vectors: records, keys (${wrapRows.length} wraps), messages, topics, cards, tree, tree-secrets -> ${OUT}`,
+);
 
 if (CHECK) {
   const bad = WRITTEN.filter((f) => readFileSync(join(OUT, f), "utf8") !== readFileSync(join(REPO, f), "utf8"));

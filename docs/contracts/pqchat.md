@@ -942,6 +942,19 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   there.
 - **Open with the owner:** nothing (the spec's §16).
 
+<a id="CTR-CHAT-28"></a>**CTR-CHAT-28** — **The tree is app-agnostic: its labels and the app's scope are parameters, PqChat is one
+instance** (owner 2026-11-23, in the
+[register](../decisions.md#ctr-chat-28--the-tree-is-app-agnostic-its-labels-and-app-scope-are-parameters-pqchat-is-one-instance)).
+Status: clientkeys and `ua-rs` **BUILT**, the contract's cold tree **BUILT** (`PqGroupTree`, [§17](#17-pqgrouptree-the-group-tree-for-inheritors)), its commits **SPECIFIED**, **UNAUDITED**.
+
+- **Labels.** Every tree label is `<prefix>/<name>` (`path`, `node`, `commit`, `ct`, `joiner`, `epoch`, `key`, `wrap`, and the
+  tags of `path-context` and `context`); PqChat's prefix is `scaas/pqchat/v1/tree`.
+- **The app's scope.** The info label above `K`, the records' typed data, the UA purpose and the ids are the scope's; PqChat's
+  are mode 0's info label, `DS_C`, `PURPOSE_PQCHAT` and its `scaas/pqchat/v1/*` ids. Another app takes the same tree, the same
+  checks and the same records' shapes under its own scope; nothing in the tree's code names PqChat but its one instance.
+- **Clients.** clientkeys `treeScope(prefix, …)` and `PQCHAT_TREE` (`src/treekem.js`); `ua-rs` `wallet::tree::TreeScope` and
+  `PQCHAT_TREE`, every derivation and the replay taking the scope (plan T2).
+
 ## 17. `PqGroupTree`, the group tree for inheritors
 
 Status: **BUILT** for the cold tree (plan 2026-11-23-pqchat-treekem T3a, branch `pqchat-treekem`: the tree math, `th`, the

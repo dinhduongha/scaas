@@ -81,6 +81,10 @@ mod signer;
 pub mod soroban_tx;
 mod store;
 mod substrate;
+#[cfg(feature = "app-core")]
+pub mod tree;
+#[cfg(feature = "app-core")]
+pub mod tree_public;
 mod tx;
 mod uasig;
 mod vault;
@@ -261,6 +265,9 @@ pub enum Error {
     FileHashMismatch,
     /// An Arweave data item `ua-rs` built that its own verifying parser refused (CLI-UAL-64): nothing returned.
     ArweaveItem,
+    /// A TreeKEM session's named refusal (`tree_public::TreeError`; spec 2026-11-23-pqchat-treekem §8, §10, §11).
+    #[cfg(feature = "app-core")]
+    Tree(tree_public::TreeError),
     Ua(UAError),
 }
 
@@ -304,6 +311,8 @@ impl Error {
             Error::FileFrame => "FileFrame",
             Error::FileHashMismatch => "FileHashMismatch",
             Error::ArweaveItem => "ArweaveItem",
+            #[cfg(feature = "app-core")]
+            Error::Tree(e) => e.code(),
             Error::Ua(e) => e.code(),
         }
     }
