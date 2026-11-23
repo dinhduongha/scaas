@@ -680,6 +680,21 @@ MUTANTS = [
         [(PQV, "            || c.group_mode.0 != 0\n", "")],
         PV + " --test core a_vault_of_group_mode_1_is_refused_before_any_call",
     ),
+    (
+        "8b-8 (2): a member's keys deduplicated by UA",
+        [(PQV, "    m.dedup_by_key(|k| (k.ua, k.key_id.0));", "    m.dedup_by_key(|k| k.ua);")],
+        PV + " --test devices each_own_key_is_kept_and_its_wrap_opens",
+    ),
+    (
+        "8b-8 (2): members sorted by UA only",
+        [(PQV, "    m.sort_by_key(|k| (k.ua, k.key_id.0));", "    m.sort_by_key(|k| k.ua);")],
+        PV + " --test devices each_own_key_is_kept_and_its_wrap_opens",
+    ),
+    (
+        "8b-8 (2): a ninth key of one UA taken",
+        [(PQV, "    if m.windows(KEYS_PER_UA_MAX + 1)", "    if false && m.windows(KEYS_PER_UA_MAX + 1)")],
+        PV + " --test devices at_most_eight_keys_per_ua",
+    ),
 ]
 
 

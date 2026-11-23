@@ -3235,6 +3235,7 @@ dependencies = [
  "async-trait",
  "scaas-rpc",
  "scaas-sdk",
+ "scaas-ua",
  "serde",
  "serde_json",
  "tokio",
