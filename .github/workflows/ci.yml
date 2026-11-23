@@ -907,7 +907,7 @@ jobs:
             tests: --test roots
           - cell: app-core
             features: --features app-core,vectors
-            tests: --test app_core --test arweave --test arweave_rows --test file_seal
+            tests: --test app_core --test arweave --test arweave_rows --test file_seal --test tree
           - cell: pqvault
             features: --no-default-features --features pqvault
             tests: --test pqvault_pass

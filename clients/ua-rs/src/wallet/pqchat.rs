@@ -82,7 +82,7 @@ pub const TYPE_STRINGS: &[(&str, &str)] = &[
         "PqChatCard(bytes32 ua,uint64 kemVersion,string matrixId)",
     ),
     // TreeKEM mode (spec 2026-11-23-pqchat-treekem §6), each struct alone (`typed` adds the nested ones): signed only by the
-    // tree's own operations (`tree`), so none is in RECORDS
+    // tree's own operations (`tree`), so none is in RECORDS; the signed ones are TREE_RECORDS
     (
         "PqChatCommit",
         "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo)",
@@ -133,6 +133,11 @@ pub const RECORDS: &[&str] = &[
     "PqTopicEdit",
     "PqTopicVote",
 ];
+
+/// The tree's signed records (spec §6, §15): signed only by the tree's prepared operations ([`super::tree::TreePrepared`],
+/// [`super::tree::PreparedCommit`]), never by [`sign`]; [`verify`] does not take them either (the replay checks their
+/// signatures under the tree's scope).
+pub const TREE_RECORDS: &[&str] = &["PqChatCommit", "PqChatTreeLeave", "PqChatTreeRemove"];
 
 /// `PURPOSE_PQCHAT = keccak256("scaas.ua.purpose.pqchat.v1")`.
 pub fn purpose() -> [u8; 32] {
@@ -210,14 +215,38 @@ pub fn sign(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
 
 /// [`sign`] after its struct check.
 fn sign_typed(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
+    if td.to_value().get("domain") != Some(&json!({"name": "SCaaS PqChat", "version": "1"})) {
+        return Err(Error::Argument);
+    }
+    sign_digest(key, &td.digest()?, &purpose())
+}
+
+/// The tree's dedicated signing step (spec §15, CTR-CHAT-28): a single UA key's `UASig` over the tree record `td` (one of
+/// [`TREE_RECORDS`], else `Argument`; built by the tree's prepared operations under their scope's typed data) under the
+/// scope's `purpose`, as [`sign`] signs a record.
+pub(crate) fn sign_tree(key: &dyn Signer, td: &TypedData, purpose: &[u8; 32]) -> Result<UASig> {
+    if !TREE_RECORDS.contains(&td.primary_type()) {
+        return Err(Error::Argument);
+    }
+    sign_digest(key, &td.digest()?, purpose)
+}
+
+/// [`sign_tree`] for a test (feature `vectors`, never in a release build): its struct check beside its twin.
+#[cfg(feature = "vectors")]
+pub fn vectors_sign_tree(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
+    sign_tree(key, td, &purpose())
+}
+
+/// `uaMessage(kind, purpose, digest)` signed by a single UA key, role `Pop`, no key data, no members; a native key or one
+/// claiming the `msig` kind: `Argument`.
+fn sign_digest(key: &dyn Signer, digest: &[u8; 32], purpose: &[u8; 32]) -> Result<UASig> {
     let KeyRef::Ua { kind, .. } = key.key_ref() else {
         return Err(Error::Argument);
     };
-    let v = td.to_value();
-    if kind == 0x0120 || v.get("domain") != Some(&json!({"name": "SCaaS PqChat", "version": "1"})) {
+    if kind == 0x0120 {
         return Err(Error::Argument);
     }
-    let m = ua_message(kind, &purpose(), &td.digest()?)?;
+    let m = ua_message(kind, purpose, digest)?;
     let req = if kind == 0x0100 {
         SignRequest::WebAuthn { challenge: m }
     } else {

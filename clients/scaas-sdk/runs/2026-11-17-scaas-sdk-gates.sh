@@ -73,7 +73,7 @@ STEPS=(
     "sdk-uniffi|clients/scaas-sdk|$cap cargo test $C --features $F,uniffi --test binding && $cap cargo test $C --features $F,uniffi --lib binding::tests && $cap cargo test $C --features $F,sync-api --lib sync_cpp::tests && $cap cargo test $C --features $F,sync-api --test binding && $cap cargo clippy $C --all-targets --features $F,uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features $F,sync-api -- -D warnings"
     "sdk-opaque|clients/scaas-sdk|$cap cargo test $C --features $F,opaque-calls --test wallet_ops"
     "ua-vectors|clients/ua-rs|$cap cargo clippy $C --all-targets --features vectors,roots -- -D warnings && $cap cargo test $C --features vectors,roots"
-    "ua-appcore|clients/ua-rs|$cap cargo clippy $C --all-targets --features app-core,vectors -- -D warnings && $cap cargo test $C --features app-core,vectors --test app_core && python3 -I scripts/gen_app_refusals.py --check"
+    "ua-appcore|clients/ua-rs|$cap cargo clippy $C --all-targets --features app-core,vectors -- -D warnings && $cap cargo test $C --features app-core,vectors --test app_core --test tree && python3 -I scripts/gen_app_refusals.py --check"
     "ua-verify-only|clients/ua-rs|$cap cargo test $C --no-default-features"
     # plan T42: the core with no family (every UA kind, the seed standards, FeatureMissing) and its clippy; then none, each
     # fam-<row> alone and all on, in release, the size probe's bytes (runs/fam-sizes.sh prints `RESULT` rows for the summary)

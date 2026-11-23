@@ -4,7 +4,10 @@
 //! path ciphertext, `genesisCtx`, the epoch schedule without `init`, `K`, the tree wrap (epoch 0's and a Welcome), the info
 //! and the marker (C33), creation in order, building a commit, and the replay of §10 (the joiner, the own-commit
 //! reproduction, the compromise warning, the info in force after a gap). As clientkeys `src/treekem.js`; held to
-//! `smartcontracts/vectors/pqchat/tree-secrets.json`.
+//! `smartcontracts/vectors/pqchat/tree-secrets.json`. The tree's signed records (`PqChatCommit`, `PqChatTreeLeave`,
+//! `PqChatTreeRemove`) are prepared here, reviewed, then signed on PqChat's dedicated path (spec §15): [`PreparedCommit`],
+//! [`TreePrepared`]. Every key an encapsulation takes passed its check first: a registry record ([`KemRecord`]) where no
+//! signed tree hash covers it (spec §8 step 5), the hash that entered the root otherwise, then the admission check.
 //!
 //! **App-agnostic** (owner 2026-11-23): every label and the app's step above `K` come from a [`TreeScope`]; PqChat's is
 //! [`PQCHAT_TREE`]. **No secret byte leaves** (scaas-sdk C1, A-3): path secrets, node secrets, the joiner and `K` stay in
@@ -12,15 +15,18 @@
 //! records and states. The entries with fixed randomness are feature `vectors` only. UNAUDITED.
 use super::aead::{aead_open, aead_seal, hkdf_sha256, Alg};
 use super::appkey::{rng, AppKeys, KemWrap, KeyHandle, KeyUsage, Origin};
+use super::eip712::TypedData;
 use super::kem::KemKeyPair;
 use super::pqchat_keys::{canonical_content, canonical_of_text, pad};
+use super::signer::Signer;
 use super::tree_public::{
-    array_hash, b32, b32j, bytes, ct_targets_hash, direct_path, genesis_ctx, hx, list,
-    path_list_hash, refuse, struct_hash, tree_id, u32j, u64j, Add, Changes, Leaf, Node, Remove,
-    Tree, TreeError, Typed, ZERO,
+    admit_kem_key, array_hash, b32, b32j, bytes, ct_targets_hash, direct_path, genesis_ctx, hx,
+    kem_record_key, list, path_list_hash, refuse, struct_hash, tree_id, u32j, u64j, Add, Changes,
+    KemRecord, Leaf, Node, Remove, Tree, TreeError, Typed, ZERO,
 };
 use super::{Error, Result};
 use crate::keccak256;
+use crate::ua_portable::UASig;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use zeroize::Zeroizing;
@@ -406,14 +412,16 @@ pub struct Genesis {
     pub k: KeyHandle,
 }
 
-/// What a commit is built from: the parent tree and head, the author's leaf and its KEM key (its seed derives `ps[0]`), the
-/// Removes and the Adds with each added key, the admins and the info (`None`: the marker). `key_of(node)` gives the key of
-/// a target of the parent tree, checked by the caller against the hash that entered the root ([`key_of`]).
+/// What a commit is built from: the parent tree and head (its admins for the review), the author's leaf and its KEM key (its
+/// seed derives `ps[0]`), the Removes and the Adds with each added key's registry record, the admins and the info (`None`:
+/// the marker). `key_of(node)` gives a target of the parent tree: a node's key, a leaf's key, or on an epoch-0 head a leaf's
+/// registry record; each is checked here ([`TargetKey`]).
 pub struct CommitInput<'a> {
     pub tree: &'a Tree,
     pub parent_epoch_id: [u8; 32],
     pub parent_epoch: u64,
     pub parent_tree_hash: [u8; 32],
+    pub parent_admins: Vec<[u8; 32]>,
     pub session_id: [u8; 32],
     pub tree_id: [u8; 32],
     pub author: [u8; 32],
@@ -421,10 +429,32 @@ pub struct CommitInput<'a> {
     pub key_id: u64,
     pub kem: &'a KemKeyPair,
     pub removes: Vec<Remove>,
-    pub adds: Vec<(Add, Vec<u8>)>,
+    pub adds: Vec<(Add, KemRecord)>,
     pub admins: Vec<[u8; 32]>,
     pub info: Option<&'a [u8]>,
-    pub key_of: &'a mut dyn FnMut(u32) -> Result<Vec<u8>>,
+    pub key_of: &'a mut dyn FnMut(u32) -> Result<TargetKey>,
+}
+
+/// A target's key as the caller fetched it (spec §8 steps 4, 5): bytes (`treeNodeKey`, `kemKeyAt`) that a signed tree hash
+/// covers, or a leaf's registry record where none does yet (every leaf of an epoch-0 head).
+pub enum TargetKey {
+    Key(Vec<u8>),
+    Record(KemRecord),
+}
+
+/// Target `x`'s key of the parent tree, checked inside the boundary: a node's against its `keyHash`; a leaf's against its
+/// `kemHash`, and on an epoch-0 head first authenticated by its registry record (`TreeKemRecord`); a mismatch `TreeKeyHash`.
+fn target_key(tree: &Tree, parent_epoch: u64, x: u32, k: TargetKey) -> Result<Vec<u8>> {
+    let (key, want) = match (tree.node(x), k) {
+        (Node::Leaf(l), TargetKey::Record(r)) => (kem_record_key(&l.ua, l.key_id, &r)?, l.kem_hash),
+        (Node::Leaf(l), TargetKey::Key(k)) if parent_epoch > 0 => (k, l.kem_hash),
+        (Node::Parent(h), TargetKey::Key(k)) => (k, *h),
+        _ => return refuse(TreeError::KemRecord),
+    };
+    if keccak256(&key) != want {
+        return refuse(TreeError::KeyHash);
+    }
+    Ok(key)
 }
 
 /// A built commit: the record (unsigned, in the type's field order), its pieces, the tree after it and `K_e`.
@@ -493,24 +523,24 @@ impl AppKeys {
     }
 
     /// Creation in order (C29, codex-r2-4): `genesisCtx` → `joiner_0`, `K_0` → the wraps and `sealedInfo` → the record with
-    /// their hashes → `treeId`. `session` is the record without `wrapHashes` and `sealedInfo`; `kem_pks[i]` the key of
-    /// `members[i]` (admitted here, `KemCheck`); `info` the canonical JSON of the session info. The signature is the
-    /// caller's. Randomness from the OS.
+    /// their hashes → `treeId`. `session` is the record without `wrapHashes` and `sealedInfo`; `kems[i]` the registry record of
+    /// `members[i]`'s key (authenticated here, `TreeKemRecord`, then admitted, `KemCheck`; spec §8 step 5); `info` the
+    /// canonical JSON of the session info. The signature is the caller's. Randomness from the OS.
     pub fn tree_create_genesis(
         &self,
         sc: &TreeScope,
         session: &Value,
-        kem_pks: &[Vec<u8>],
+        kems: &[KemRecord],
         info: &[u8],
     ) -> Result<Genesis> {
-        self.create_genesis(sc, session, kem_pks, info, &mut os_rand)
+        self.create_genesis(sc, session, kems, info, &mut os_rand)
     }
 
     fn create_genesis(
         &self,
         sc: &TreeScope,
         session: &Value,
-        kem_pks: &[Vec<u8>],
+        kems: &[KemRecord],
         info: &[u8],
         rand: Rand,
     ) -> Result<Genesis> {
@@ -518,11 +548,14 @@ impl AppKeys {
         let members = list(session, "members", |m| {
             Ok((b32j(m, "ua")?, u64j(m, "keyId")?))
         })?;
-        if members.len() != kem_pks.len() {
+        if members.len() != kems.len() {
             return Err(Error::Argument);
         }
-        for k in kem_pks {
-            super::tree_public::admit_kem_key(k)?;
+        let mut kem_pks = Vec::new();
+        for ((ua, key_id), r) in members.iter().zip(kems) {
+            let k = kem_record_key(ua, *key_id, r)?;
+            admit_kem_key(&k)?;
+            kem_pks.push(k);
         }
         let joiner = self.make(
             &r32(rand, "joiner-0")?[..],
@@ -532,7 +565,7 @@ impl AppKeys {
         )?;
         let (_, k) = schedule(sc, &self.bytes(&joiner)?[..], &f)?;
         let mut wraps = Vec::new();
-        for (i, ((ua, key_id), kem_pk)) in members.iter().zip(kem_pks).enumerate() {
+        for (i, ((ua, key_id), kem_pk)) in members.iter().zip(&kem_pks).enumerate() {
             let (m, e) = (
                 r32(rand, &format!("wrap/{i}/mlkem-m"))?,
                 r32(rand, &format!("wrap/{i}/x25519-ephemeral"))?,
@@ -585,6 +618,15 @@ impl AppKeys {
         nonce: u64,
         rand: Rand,
     ) -> Result<BuiltCommit> {
+        // each added key authenticated by its registry record and named by the Add's kemHash (spec §8 step 5)
+        let mut add_keys = Vec::new();
+        for (x, r) in &a.adds {
+            let k = kem_record_key(&x.ua, x.key_id, r)?;
+            if keccak256(&k) != x.kem_hash {
+                return refuse(TreeError::KeyHash);
+            }
+            add_keys.push(k);
+        }
         let add_recs: Vec<Add> = a.adds.iter().map(|(x, _)| x.clone()).collect();
         let ch = Changes {
             author: a.author,
@@ -614,9 +656,9 @@ impl AppKeys {
         for (q, s) in p.iter().zip(&ps) {
             for &t in &q.targets {
                 let j = cts.len();
-                let kem_pk = match a.adds.iter().find(|(x, _)| 2 * x.leaf == t) {
-                    Some((_, k)) => k.clone(),
-                    None => (a.key_of)(t)?,
+                let kem_pk = match add_recs.iter().position(|x| 2 * x.leaf == t) {
+                    Some(i) => add_keys.get(i).cloned().ok_or(Error::Argument)?,
+                    None => target_key(a.tree, a.parent_epoch, t, (a.key_of)(t)?)?,
                 };
                 super::tree_public::admit_kem_key(&kem_pk)?;
                 let at = CtAt {
@@ -664,7 +706,7 @@ impl AppKeys {
         };
         let (_, k) = schedule(sc, &joiner[..], &f)?;
         let mut wraps = Vec::new();
-        for (i, (x, kem_pk)) in a.adds.iter().enumerate() {
+        for (i, (x, kem_pk)) in add_recs.iter().zip(&add_keys).enumerate() {
             let (m, e) = (
                 r32(rand, &format!("welcome/{i}/mlkem-m"))?,
                 r32(rand, &format!("welcome/{i}/x25519-ephemeral"))?,
@@ -693,6 +735,172 @@ impl AppKeys {
             tree: applied.tree,
             k: self.tree_key(&k[..])?,
         })
+    }
+}
+
+// ------------------------------------------------------------------ the signing operations (spec §15; T26 A-5)
+
+/// A line of a review: a field's name and its value as shown (`0x` hex, a number, a list joined by `, `, a struct as JSON).
+pub type ReviewLine = (String, String);
+
+fn show(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Array(a) => a.iter().map(show).collect::<Vec<_>>().join(", "),
+        x => x.to_string(),
+    }
+}
+
+/// A tree record prepared for its signature (prepare → review → sign, as the SDK's T26 A-5): the record built here from
+/// named fields, its review (every field in the type's order, then what the operation adds) and its typed digest;
+/// [`TreePrepared::sign`] signs exactly that record, once, on PqChat's dedicated path ([`super::pqchat::TREE_RECORDS`]),
+/// the key opened only there. No call signs a tree record's digest supplied from outside.
+pub struct TreePrepared {
+    td: TypedData,
+    purpose: [u8; 32],
+    review: Vec<ReviewLine>,
+}
+
+impl TreePrepared {
+    fn new(sc: &TreeScope, name: &str, rec: Value, more: Vec<ReviewLine>) -> Result<TreePrepared> {
+        let td = (sc.typed)(name, rec)?;
+        let v = td.to_value();
+        let mut review = vec![("record".to_string(), name.to_string())];
+        for f in v["types"][name].as_array().into_iter().flatten() {
+            let n = f["name"].as_str().ok_or(Error::Argument)?;
+            review.push((n.to_string(), show(&v["message"][n])));
+        }
+        review.extend(more);
+        Ok(TreePrepared {
+            td,
+            purpose: (sc.purpose)(),
+            review,
+        })
+    }
+    /// What the signer is shown before it signs.
+    pub fn review(&self) -> &[ReviewLine] {
+        &self.review
+    }
+    /// The typed digest the signature covers.
+    pub fn digest(&self) -> Result<[u8; 32]> {
+        self.td.digest()
+    }
+    /// The record as it is signed (its named fields, `0x` hex).
+    pub fn record(&self) -> Value {
+        self.td.to_value()["message"].clone()
+    }
+    /// The single UA key's `UASig` over the prepared record under the scope's purpose (a native key or an `msig`: `Argument`).
+    pub fn sign(self, key: &dyn Signer) -> Result<UASig> {
+        super::pqchat::sign_tree(key, &self.td, &self.purpose)
+    }
+}
+
+/// A commit built inside the boundary and prepared for its author's signature (spec §15, codex-12): its pieces and its
+/// record ([`BuiltCommit`]), the review (every field of the record, whether the admins change, the session info or the
+/// marker) and the digest; [`PreparedCommit::sign`] returns the pieces with the signature over exactly their record.
+pub struct PreparedCommit {
+    built: BuiltCommit,
+    rec: TreePrepared,
+}
+
+impl PreparedCommit {
+    /// The record and the pieces (public bytes) and `K_e`'s handle.
+    pub fn built(&self) -> &BuiltCommit {
+        &self.built
+    }
+    pub fn review(&self) -> &[ReviewLine] {
+        self.rec.review()
+    }
+    pub fn digest(&self) -> Result<[u8; 32]> {
+        self.rec.digest()
+    }
+    /// The author's signature over the record built here, with the pieces built with it.
+    pub fn sign(self, key: &dyn Signer) -> Result<(BuiltCommit, UASig)> {
+        let sig = self.rec.sign(key)?;
+        Ok((self.built, sig))
+    }
+}
+
+/// `PqChatTreeLeave`'s named fields (spec §6): `member` leaves the session `treeId` at its head `epochId`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TreeLeave {
+    pub session_id: [u8; 32],
+    pub tree_id: [u8; 32],
+    pub epoch_id: [u8; 32],
+    pub member: [u8; 32],
+    pub nonce: u64,
+}
+
+/// `PqChatTreeRemove`'s named fields (spec §6): the admin `admin` removes `members` at the head `epochId`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TreeRemove {
+    pub session_id: [u8; 32],
+    pub tree_id: [u8; 32],
+    pub epoch_id: [u8; 32],
+    pub next_epoch: u64,
+    pub members: Vec<[u8; 32]>,
+    pub admin: [u8; 32],
+    pub nonce: u64,
+}
+
+/// A `treeLeave` prepared for the leaver's signature: the review names the session by `treeId` and says the UA cannot come
+/// back (C30, R14).
+pub fn tree_prepare_leave(sc: &TreeScope, l: &TreeLeave) -> Result<TreePrepared> {
+    let rec = json!({"sessionId": hx(&l.session_id), "treeId": hx(&l.tree_id), "epochId": hx(&l.epoch_id),
+        "member": hx(&l.member), "nonce": l.nonce});
+    let back = "this UA can never come back to this session (R14)".to_string();
+    TreePrepared::new(
+        sc,
+        "PqChatTreeLeave",
+        rec,
+        vec![("cannotComeBack".into(), back)],
+    )
+}
+
+/// A `treeRemove` prepared for the admin's signature: the review names the session by `treeId` and says the removed UAs
+/// cannot come back (C30, R14).
+pub fn tree_prepare_remove(sc: &TreeScope, r: &TreeRemove) -> Result<TreePrepared> {
+    let members: Vec<String> = r.members.iter().map(|m| hx(m)).collect();
+    let rec = json!({"sessionId": hx(&r.session_id), "treeId": hx(&r.tree_id), "epochId": hx(&r.epoch_id),
+        "nextEpoch": r.next_epoch, "members": members, "admin": hx(&r.admin), "nonce": r.nonce});
+    let back = "the removed UAs can never come back to this session (R14)".to_string();
+    TreePrepared::new(
+        sc,
+        "PqChatTreeRemove",
+        rec,
+        vec![("cannotComeBack".into(), back)],
+    )
+}
+
+impl AppKeys {
+    /// The typed commit-signing operation (spec §15, codex-12): [`AppKeys::tree_build_commit`] (the target keys checked, the
+    /// nonce drawn, the path, the list, the pieces and the record built here), then the record prepared for the author's
+    /// signature with its review. Randomness from the OS.
+    pub fn tree_prepare_commit(&self, sc: &TreeScope, a: CommitInput) -> Result<PreparedCommit> {
+        let mut n = [0u8; 8];
+        rng(&mut n)?;
+        self.prepare_commit(sc, a, u64::from_be_bytes(n), &mut os_rand)
+    }
+
+    fn prepare_commit(
+        &self,
+        sc: &TreeScope,
+        a: CommitInput,
+        nonce: u64,
+        rand: Rand,
+    ) -> Result<PreparedCommit> {
+        let changed = a.admins != a.parent_admins;
+        let info = match a.info {
+            Some(j) => canonical_of_text(j)?.to_string(),
+            None => "unchanged (the marker)".to_string(),
+        };
+        let built = self.build_commit(sc, a, nonce, rand)?;
+        let more = vec![
+            ("adminsChanged".to_string(), changed.to_string()),
+            ("sessionInfo".to_string(), info),
+        ];
+        let rec = TreePrepared::new(sc, "PqChatCommit", built.record.clone(), more)?;
+        Ok(PreparedCommit { built, rec })
     }
 }
 
@@ -990,12 +1198,13 @@ impl Anchor {
 }
 
 /// The public tree a commit is built on (§8): the checkpoint, the anchored head (the cold tree rebuilt at epoch 0), the
-/// head's `gone` UAs, and the parent's id, number and tree hash.
+/// head's `gone` UAs, and the parent's id, number, tree hash and admins.
 pub struct Prepared {
     pub tree: Tree,
     pub parent_epoch_id: [u8; 32],
     pub parent_epoch: u64,
     pub parent_tree_hash: [u8; 32],
+    pub parent_admins: Vec<[u8; 32]>,
     pub pin: Pin,
 }
 
@@ -1028,6 +1237,7 @@ pub fn tree_prepare(
         parent_epoch_id: at(&a.ids, a.head)?,
         parent_epoch: a.head,
         parent_tree_hash,
+        parent_admins: a.admins_at(a.head)?,
         pin: a.pin(sc, rd)?,
         tree,
     })
@@ -1743,11 +1953,21 @@ impl AppKeys {
         &self,
         sc: &TreeScope,
         session: &Value,
-        kem_pks: &[Vec<u8>],
+        kems: &[KemRecord],
         info: &[u8],
         rand: Rand,
     ) -> Result<Genesis> {
-        self.create_genesis(sc, session, kem_pks, info, rand)
+        self.create_genesis(sc, session, kems, info, rand)
+    }
+    /// [`AppKeys::tree_prepare_commit`] with a given nonce and `rand(name, n)`.
+    pub fn vectors_tree_prepare_commit(
+        &self,
+        sc: &TreeScope,
+        a: CommitInput,
+        nonce: u64,
+        rand: Rand,
+    ) -> Result<PreparedCommit> {
+        self.prepare_commit(sc, a, nonce, rand)
     }
     /// [`AppKeys::tree_build_commit`] with a given nonce and `rand(name, n)`.
     pub fn vectors_tree_build_commit(

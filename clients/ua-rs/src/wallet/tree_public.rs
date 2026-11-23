@@ -45,6 +45,8 @@ pub enum TreeError {
     KeyMismatch,
     /// a target whose secret this state does not hold
     NotHeld,
+    /// a KEM key its registry record does not authenticate (spec §8 step 5, codex-1)
+    KemRecord,
 }
 
 impl TreeError {
@@ -71,6 +73,7 @@ impl TreeError {
             TreeError::InfoSize => "TreeInfoSize",
             TreeError::KeyMismatch => "TreeKeyMismatch",
             TreeError::NotHeld => "TreeNotHeld",
+            TreeError::KemRecord => "TreeKemRecord",
         }
     }
 }
@@ -820,4 +823,77 @@ pub fn admit_kem_key(kem_pk: &[u8]) -> Result<()> {
         None => Ok(()),
         Some(_) => Err(Error::KemCheck),
     }
+}
+
+/// A UA's KEM key as the caller read it from the registry (spec §8 step 5, codex-1; the reads are the SDK's, none here): a
+/// version above 0 is `kemKeyAt(ua, version)` with its kept signature and the UA's registration key; version 0 is
+/// `registrationOf(ua)` (its `attrs` holding the key in full or as the hash commit, its `pop`) with `kemKeyAt(ua, 0)`'s key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum KemRecord {
+    Version {
+        kind: u16,
+        key_data: Vec<u8>,
+        kem_pk: Vec<u8>,
+        sig: Vec<u8>,
+    },
+    Registration {
+        kind: u16,
+        key_data: Vec<u8>,
+        attrs: crate::ua_portable::UAAttrs,
+        pop: Vec<u8>,
+        kem_pk: Vec<u8>,
+    },
+}
+
+impl KemRecord {
+    /// The key the record names, not yet authenticated ([`kem_record_key`] is the check).
+    pub fn kem_pk(&self) -> &[u8] {
+        match self {
+            KemRecord::Version { kem_pk, .. } | KemRecord::Registration { kem_pk, .. } => kem_pk,
+        }
+    }
+}
+
+/// The key of `(ua, version)` once its registry record authenticates it, in one call (spec §8 step 5): the registration key
+/// data hashes to `ua`; a version above 0 by its kept signature over `kemRecordDigest(ua, version, kemPk)` under that key; version
+/// 0 by the registration's proof of possession over its committed key (in full, or `kemPkHash`, the key hashing to it).
+/// Anything else, a record of another form than its version included: `TreeKemRecord`. Only a key that passed reaches an
+/// encapsulation (the admission check follows, `KemCheck`).
+pub fn kem_record_key(ua: &[u8; 32], version: u64, rec: &KemRecord) -> Result<Vec<u8>> {
+    let none = |_: [u8; 32]| None;
+    let ok = match rec {
+        KemRecord::Version {
+            kind,
+            key_data,
+            kem_pk,
+            sig,
+        } => {
+            // version 0 is the registration's: `KemVersion` there
+            crate::ua_portable::check_kem_record(*kind, key_data, ua, version, kem_pk, sig, &none)
+                .is_ok()
+        }
+        KemRecord::Registration {
+            kind,
+            key_data,
+            attrs,
+            pop,
+            kem_pk,
+        } => {
+            let committed = if attrs.kem_pk_hash == ZERO {
+                attrs.kem.kem_pk() == *kem_pk
+            } else {
+                keccak256(kem_pk) == attrs.kem_pk_hash
+            };
+            version == 0
+                && !kem_pk.is_empty()
+                && committed
+                && crate::derive_ua(*kind, key_data, false).ok() == Some(*ua)
+                && crate::ua_portable::check_registration(*kind, key_data, attrs, pop, &[], &none)
+                    .is_ok()
+        }
+    };
+    if !ok {
+        return refuse(TreeError::KemRecord);
+    }
+    Ok(rec.kem_pk().to_vec())
 }

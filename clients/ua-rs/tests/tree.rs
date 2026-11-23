@@ -2,19 +2,26 @@
 //! TreeKEM in `ua-rs` (plan T2 of docs/superpowers/plans/2026-11-23-pqchat-treekem.md): every row of
 //! `smartcontracts/vectors/pqchat/tree.json` (the public side, `wallet::tree_public`) and of `tree-secrets.json` (the secrets
 //! behind handles, `wallet::tree`) reproduced byte for byte, the scenarios landed on a model of the home and every device's
-//! replay compared with its row: states, `K`, the info in force, the warnings and the reads in order. Feature
-//! `app-core,vectors`.
+//! replay compared with its row: states, `K`, the info in force, the warnings and the reads in order; the tree's signing
+//! operations (every signature the rows carry reproduced through prepare → review → sign) and the registry KEM record check
+//! before an encapsulation (`smartcontracts/vectors/ua/portable.json`). Feature `app-core,vectors`.
 #![cfg(all(feature = "app-core", feature = "vectors"))]
+use scaas_ua::ua_portable::{kem_record_digest, kem_record_message, KemKey, UAAttrs};
+use scaas_ua::wallet::derive::{ua_key_data, ua_secret};
 use scaas_ua::wallet::kem::x25519;
 use scaas_ua::wallet::tree::{
-    key_of, path_context, tree_prepare, CommitInput, CtAt, EpochFields, Info, InfoTook, PathCt,
-    Pin, State, TreeDevice, TreeReader, View, PQCHAT_TREE,
+    key_of, path_context, tree_prepare, tree_prepare_leave, tree_prepare_remove, CommitInput, CtAt,
+    EpochFields, Info, InfoTook, PathCt, Pin, PreparedCommit, State, TargetKey, TreeDevice,
+    TreeLeave, TreeReader, TreeRemove, View, PQCHAT_TREE,
 };
 use scaas_ua::wallet::tree_public::{
-    array_hash, ct_targets_hash, genesis_ctx, kem_admission, leaf_hash, path_list_hash,
-    struct_hash, tree_id, Add, Changes, Leaf, Node, Remove, Tree, ZERO,
+    array_hash, ct_targets_hash, genesis_ctx, kem_admission, kem_record_key, leaf_hash,
+    path_list_hash, struct_hash, tree_id, Add, Changes, KemRecord, Leaf, Node, Remove, Tree, ZERO,
 };
-use scaas_ua::wallet::{pqchat, tree_public as tp, AppKeys, Error, KemKeyPair, KeyUsage, Wallet};
+use scaas_ua::wallet::{
+    pqchat, tree_public as tp, AppKeys, Error, ExternalKey, KemKeyPair, KeyRef, KeyUsage,
+    SignRequest, Wallet,
+};
 use scaas_ua::{keccak256, ua_message, ua_of};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -573,30 +580,118 @@ fn new_home(
 
 // ------------------------------------------------------------------ tree-secrets.json
 
+/// A vector person's ML-DSA-65 key: `ua_secret(rnd(tree-secrets/mldsa65-bip39-seed, 64), mldsa65, 0, i)` (A = 0 … H = 7),
+/// signing as clientkeys' `signUA(…, {extraEntropy: false})`, the deterministic variant (FIPS 204, `rnd` zero).
+struct Person {
+    ua: [u8; 32],
+    xi: Vec<u8>,
+    key_data: Vec<u8>,
+}
+
+impl Person {
+    fn new(seed: &[u8], i: u32, want: &Value) -> Person {
+        let xi = ua_secret(seed, MLDSA65, 0, i).unwrap().to_vec();
+        let key_data = ua_key_data(MLDSA65, &xi).unwrap();
+        assert_eq!(hx(&key_data), want["publicKey"], "person {i}");
+        Person {
+            ua: ua_of(MLDSA65, &key_data).unwrap(),
+            xi,
+            key_data,
+        }
+    }
+    fn sign_msg(&self, ua_msg: &[u8; 32]) -> Vec<u8> {
+        let seed = ml_dsa::Seed::try_from(&self.xi[..]).unwrap();
+        let sk = ml_dsa::SigningKey::<ml_dsa::MlDsa65>::from_seed(&seed);
+        let m = scaas_ua::pq::signed_message(MLDSA65, ua_msg);
+        let rnd = ml_dsa::B32::try_from(&[0u8; 32][..]).unwrap();
+        sk.expanded_key()
+            .sign_internal(&[&[0, 0], &m], &rnd)
+            .encode()
+            .to_vec()
+    }
+    /// The key as an external signer: it signs whatever `uaMessage` request `ua-rs` builds.
+    fn key(&self) -> ExternalKey<'_> {
+        let r = KeyRef::Ua {
+            kind: MLDSA65,
+            key_data: self.key_data.clone(),
+        };
+        ExternalKey::new(r, move |req| match req {
+            SignRequest::UaMsg { ua_msg, .. } => Ok(self.sign_msg(ua_msg)),
+            _ => Err(Error::Argument),
+        })
+    }
+    /// The registry record of its KEM key `(version, kem_pk)`: `setKemKey`'s signature over `kemRecordDigest`.
+    fn record(&self, version: u64, kem_pk: &[u8]) -> KemRecord {
+        let m = kem_record_message(MLDSA65, &self.ua, version, kem_pk).unwrap();
+        KemRecord::Version {
+            kind: MLDSA65,
+            key_data: self.key_data.clone(),
+            kem_pk: kem_pk.to_vec(),
+            sig: self.sign_msg(&m),
+        }
+    }
+}
+
 struct World {
     devices: BTreeMap<String, (Value, KemKeyPair)>,
+    people: BTreeMap<String, Person>,
+    records: BTreeMap<([u8; 32], u64), KemRecord>,
 }
 
 impl World {
     fn new(v: &Value) -> World {
+        let seed = rnd("tree-secrets/mldsa65-bip39-seed", 64);
+        let people: BTreeMap<String, Person> = v["people"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(n, p)| {
+                let i = "ABCDEFGH".find(n.as_str()).unwrap() as u32;
+                (n.clone(), Person::new(&seed, i, p))
+            })
+            .collect();
         let mut devices = BTreeMap::new();
+        let mut records = BTreeMap::new();
         for (name, d) in v["devices"].as_object().unwrap() {
             let seed: [u8; 96] = unhex(&d["kemSeed"]).try_into().unwrap();
             let k = KemKeyPair::vectors_ephemeral(&seed).unwrap();
             assert_eq!(hx(&k.kem_pk()), d["kemPk"], "device {name}");
+            let p = &people[&name[..1]];
+            records.insert(
+                (p.ua, u(&d["keyId"])),
+                p.record(u(&d["keyId"]), &k.kem_pk()),
+            );
             devices.insert(name.clone(), (d.clone(), k));
         }
-        World { devices }
+        World {
+            devices,
+            people,
+            records,
+        }
+    }
+    fn person(&self, ua: &[u8; 32]) -> &Person {
+        self.people.values().find(|p| p.ua == *ua).unwrap()
+    }
+    fn record(&self, ua: &[u8; 32], key_id: u64) -> KemRecord {
+        self.records[&(*ua, key_id)].clone()
     }
     fn kem(&self, name: &str) -> &KemKeyPair {
         &self.devices[name].1
     }
-    fn by_key(&self, ua: &Value, key_id: &Value) -> &str {
-        self.devices
-            .iter()
-            .find(|(_, (d, _))| d["ua"] == *ua && d["keyId"] == *key_id)
-            .unwrap()
-            .0
+}
+
+/// Target `x` of `tree` as the SDK hands it in (spec §8 steps 4, 5): on an epoch-0 head a leaf's registry record (`rec`),
+/// otherwise the bytes the home serves under the hash that entered the root.
+fn target_of(
+    rd: &mut dyn TreeReader,
+    tree: &Tree,
+    epoch: u64,
+    x: u32,
+    rec: &dyn Fn(&[u8; 32], u64) -> KemRecord,
+) -> scaas_ua::wallet::Result<TargetKey> {
+    match tree.node(x) {
+        Node::Leaf(l) if epoch == 0 => Ok(TargetKey::Record(rec(&l.ua, l.key_id))),
+        _ => key_of(rd, tree, x).map(TargetKey::Key),
     }
 }
 
@@ -759,16 +854,16 @@ fn scenario(
     session.as_object_mut().unwrap().remove("wrapHashes");
     session.as_object_mut().unwrap().remove("sealedInfo");
     let members = rec["members"].as_array().unwrap();
-    let kem_pks: Vec<Vec<u8>> = members
+    let kems: Vec<KemRecord> = members
         .iter()
-        .map(|m| world.kem(world.by_key(&m["ua"], &m["keyId"])).kem_pk())
+        .map(|m| world.record(&a32(&m["ua"]), u(&m["keyId"])))
         .collect();
     let sid = a32(&g["sessionId"]);
     let info = info_of(keys, &a32(&g["K"]), &sid, &sid, &rec["sealedInfo"])
         .expect("a genesis carries a full info");
     let mut rand = |name: &str, n: usize| Ok(rnd(&format!("tree-secrets/{tag}/genesis/{name}"), n));
     let gen = keys
-        .vectors_tree_create_genesis(SC, &session, &kem_pks, info.as_bytes(), &mut rand)
+        .vectors_tree_create_genesis(SC, &session, &kems, info.as_bytes(), &mut rand)
         .unwrap();
     assert_eq!(gen.record, *rec, "{tag} genesis");
     assert_eq!(hx(&gen.session_id), g["sessionId"]);
@@ -831,7 +926,8 @@ fn scenario(
     home
 }
 
-/// Builds the step's commit from the author's seed on the prepared head; whether every byte equals the row's.
+/// Builds the step's commit from the author's seed on the prepared head, through the typed commit-signing operation (prepare,
+/// review, sign); whether every byte equals the row's. An equal record carries the row's signature, byte for byte.
 fn rebuild(keys: &AppKeys, world: &World, home: &mut Home, st: &Value) -> bool {
     let c = &st["record"];
     let author = st["author"].as_str().unwrap();
@@ -849,8 +945,8 @@ fn rebuild(keys: &AppKeys, world: &World, home: &mut Home, st: &Value) -> bool {
         .iter()
         .map(|x| {
             let a = Add::from_json(x).unwrap();
-            let k = home.kems[&(a.ua, a.key_id)].clone();
-            (a, k)
+            let r = world.record(&a.ua, a.key_id);
+            (a, r)
         })
         .collect();
     let name = st["name"].as_str().unwrap().to_string();
@@ -870,12 +966,14 @@ fn rebuild(keys: &AppKeys, world: &World, home: &mut Home, st: &Value) -> bool {
         );
     }
     let tree = prep.tree.clone();
-    let mut key_fn = |x: u32| key_of(home, &tree, x);
+    let rec = |ua: &[u8; 32], k: u64| world.record(ua, k);
+    let mut key_fn = |x: u32| target_of(home, &tree, prep.parent_epoch, x, &rec);
     let input = CommitInput {
         tree: &prep.tree,
         parent_epoch_id: prep.parent_epoch_id,
         parent_epoch: prep.parent_epoch,
         parent_tree_hash: prep.parent_tree_hash,
+        parent_admins: prep.parent_admins.clone(),
         session_id: a32(&c["sessionId"]),
         tree_id: a32(&c["treeId"]),
         author: a32(&c["author"]),
@@ -894,9 +992,23 @@ fn rebuild(keys: &AppKeys, world: &World, home: &mut Home, st: &Value) -> bool {
         key_of: &mut key_fn,
     };
     let mut rand = |x: &str, n: usize| Ok(rnd(&format!("tree-secrets/{name}/{x}"), n));
-    let b = keys
-        .vectors_tree_build_commit(SC, input, u(&c["nonce"]), &mut rand)
+    let p = keys
+        .vectors_tree_prepare_commit(SC, input, u(&c["nonce"]), &mut rand)
         .unwrap();
+    let typed = pqchat::typed("PqChatCommit", p.built().record.clone()).unwrap();
+    assert_eq!(p.digest().unwrap(), typed.digest().unwrap(), "{name}");
+    assert!(p
+        .review()
+        .contains(&("treeId".into(), c["treeId"].as_str().unwrap().into())));
+    let person = world.person(&a32(&c["author"]));
+    let (b, sig) = p.sign(&person.key()).unwrap();
+    if b.record == *c {
+        assert_eq!(
+            json!(hx(&sig.signature)),
+            st["sig"],
+            "{name}: the author's signature"
+        );
+    }
     b.record == *c
         && hx(&b.epoch_id) == st["epochId"]
         && json!(b.ct_targets) == st["ctTargets"]
@@ -1152,9 +1264,10 @@ fn tree_refusals_beside_twins() {
     // epoch key the mode-0 entries take (the hint, a chain); an added key that fails admission is refused (KemCheck)
     let prep0 = tree_prepare(SC, &mut h0, None).unwrap();
     let rec = &main["genesis"]["record"];
-    let build = |keys: &AppKeys, h0: &mut Home, adds: Vec<(Add, Vec<u8>)>| {
+    let records = |ua: &[u8; 32], k: u64| world.record(ua, k);
+    let build = |keys: &AppKeys, h0: &mut Home, adds: Vec<(Add, KemRecord)>| {
         let tree = prep0.tree.clone();
-        let mut kf = |x: u32| key_of(h0, &tree, x);
+        let mut kf = |x: u32| target_of(h0, &tree, 0, x, &records);
         keys.tree_build_commit(
             SC,
             CommitInput {
@@ -1162,6 +1275,7 @@ fn tree_refusals_beside_twins() {
                 parent_epoch_id: prep0.parent_epoch_id,
                 parent_epoch: 0,
                 parent_tree_hash: prep0.parent_tree_hash,
+                parent_admins: prep0.parent_admins.clone(),
                 session_id: a32(&main["genesis"]["sessionId"]),
                 tree_id: a32(&main["genesis"]["treeId"]),
                 author: dev_a.ua,
@@ -1192,28 +1306,95 @@ fn tree_refusals_beside_twins() {
         via: ZERO,
         kem_hash: keccak256(&kd.kem_pk()),
     };
-    assert!(build(&keys, &mut h0, vec![(add.clone(), kd.kem_pk())]).is_ok());
-    // bit 255 of pk_X set: X25519 ignores it (encapsulation alone would pass), the admission check refuses it
+    let d_rec = world.record(&add.ua, add.key_id);
+    assert!(build(&keys, &mut h0, vec![(add.clone(), d_rec.clone())]).is_ok());
+    // bit 255 of pk_X set: X25519 ignores it (encapsulation alone would pass), the admission check refuses it (its registry
+    // record authenticates it: the admission is the check that refuses)
     let mut bad = kd.kem_pk();
     *bad.last_mut().unwrap() |= 0x80;
     let bad_add = Add {
         kem_hash: keccak256(&bad),
-        ..add
+        ..add.clone()
     };
+    let bad_rec = world.person(&add.ua).record(add.key_id, &bad);
     assert!(matches!(
-        build(&keys, &mut h0, vec![(bad_add, bad)]),
+        build(&keys, &mut h0, vec![(bad_add, bad_rec)]),
         Err(Error::KemCheck)
     ));
+    // the registry record check before an encapsulation (spec §8 step 5, codex-1), each refusal beside the twin above: an
+    // added key whose record does not authenticate it (its signature flipped), an added key its record authenticates but the
+    // Add's kemHash does not name (D's record of another device's key under D's Add)
+    let flipped = |r: &KemRecord| match r.clone() {
+        KemRecord::Version {
+            kind,
+            key_data,
+            kem_pk,
+            mut sig,
+        } => {
+            sig[7] ^= 1;
+            KemRecord::Version {
+                kind,
+                key_data,
+                kem_pk,
+                sig,
+            }
+        }
+        x => x,
+    };
+    assert_eq!(
+        code(build(&keys, &mut h0, vec![(add.clone(), flipped(&d_rec))])),
+        "TreeKemRecord"
+    );
+    let other = world
+        .person(&add.ua)
+        .record(add.key_id, &world.kem("A2").kem_pk());
+    assert_eq!(
+        code(build(&keys, &mut h0, vec![(add.clone(), other)])),
+        "TreeKeyHash"
+    );
+    // an epoch-0 head's leaf target: its record is the check (no signed tree hash covers the cold tree yet); its bytes alone,
+    // or a record whose signature fails, are refused
+    let tree = prep0.tree.clone();
+    let target = |rd: &mut Home, x: u32, how: u8| match (tree.node(x), how) {
+        (Node::Leaf(_), 1) => Ok(TargetKey::Key(key_of(rd, &tree, x)?)),
+        (Node::Leaf(l), 2) => Ok(TargetKey::Record(flipped(&world.record(&l.ua, l.key_id)))),
+        _ => target_of(rd, &tree, 0, x, &records),
+    };
+    for (how, want) in [(0, "accepted"), (1, "TreeKemRecord"), (2, "TreeKemRecord")] {
+        let mut kf = |x: u32| target(&mut h0, x, how);
+        let r = keys.tree_build_commit(
+            SC,
+            CommitInput {
+                tree: &prep0.tree,
+                parent_epoch_id: prep0.parent_epoch_id,
+                parent_epoch: 0,
+                parent_tree_hash: prep0.parent_tree_hash,
+                parent_admins: prep0.parent_admins.clone(),
+                session_id: a32(&main["genesis"]["sessionId"]),
+                tree_id: a32(&main["genesis"]["treeId"]),
+                author: dev_a.ua,
+                leaf: 0,
+                key_id: dev_a.key_id,
+                kem: ka,
+                removes: vec![],
+                adds: vec![],
+                admins: prep0.parent_admins.clone(),
+                info: None,
+                key_of: &mut kf,
+            },
+        );
+        assert_eq!(code(r), want, "an epoch-0 leaf target ({how})");
+    }
 
     // the info's bound: the 4,096-B bucket seals (4,124 B), the next is refused (codex-r2-13)
     let mut session = rec.clone();
     session.as_object_mut().unwrap().remove("wrapHashes");
     session.as_object_mut().unwrap().remove("sealedInfo");
-    let kem_pks: Vec<Vec<u8>> = rec["members"]
+    let kems: Vec<KemRecord> = rec["members"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|m| world.kem(world.by_key(&m["ua"], &m["keyId"])).kem_pk())
+        .map(|m| world.record(&a32(&m["ua"]), u(&m["keyId"])))
         .collect();
     let info_n = |n: usize| format!("{{\"a\":\"{}\"}}", "x".repeat(n));
     let fits = (0..5000)
@@ -1226,12 +1407,20 @@ fn tree_refusals_beside_twins() {
         })
         .unwrap();
     let g = keys
-        .tree_create_genesis(SC, &session, &kem_pks, info_n(fits).as_bytes())
+        .tree_create_genesis(SC, &session, &kems, info_n(fits).as_bytes())
         .unwrap();
     assert_eq!(unhex(&g.record["sealedInfo"]).len(), 4124);
     assert_eq!(
-        code(keys.tree_create_genesis(SC, &session, &kem_pks, info_n(fits + 1).as_bytes())),
+        code(keys.tree_create_genesis(SC, &session, &kems, info_n(fits + 1).as_bytes())),
         "TreeInfoSize"
+    );
+    // a member's key authenticated by its registry record at creation (spec §8 step 5): another member's record in its
+    // place is refused before any wrap; its twin, every member's own record, is the creation just above
+    let mut swapped = kems.clone();
+    swapped.swap(0, 1);
+    assert_eq!(
+        code(keys.tree_create_genesis(SC, &session, &swapped, info_n(1).as_bytes())),
+        "TreeKemRecord"
     );
 
     // app-agnostic (owner 2026-11-23): another app's scope under its own prefix gives other labels and other secrets
@@ -1303,6 +1492,21 @@ impl Own {
             kem: &self.kems[i],
         }
     }
+    /// `i`'s KEM key's registry record (version 1): its UA key's `setKemKey` signature.
+    fn record(&self, i: usize) -> KemRecord {
+        let pk = self.kems[i].kem_pk();
+        let d = kem_record_digest(&self.ua(i), 1, &pk).unwrap();
+        let tag = scaas_ua::purpose_tag("kem").unwrap();
+        KemRecord::Version {
+            kind: MLDSA65,
+            key_data: self.uas[i].key_data(),
+            kem_pk: pk,
+            sig: self.uas[i].sign_ua(&tag, &d).unwrap(),
+        }
+    }
+    fn record_of(&self, ua: &[u8; 32]) -> KemRecord {
+        self.record((0..4).find(|i| self.ua(*i) == *ua).unwrap())
+    }
     fn sign(&self, i: usize, name: &str, rec: &Value) -> Value {
         let d = pqchat::typed(name, rec.clone()).unwrap().digest().unwrap();
         // a signer outside the tree's operations: an app record of this test app's id (its scope's purpose, [`OWN`])
@@ -1313,10 +1517,10 @@ impl Own {
             "homeChatContract": hx(&[0xc4; 20]), "admins": [hx(&self.ua(0))],
             "members": (0..3).map(|i| json!({"ua": hx(&self.ua(i)), "keyId": 1, "via": hx(&ZERO)})).collect::<Vec<_>>(),
             "groupMode": 1});
-        let pks: Vec<Vec<u8>> = (0..3).map(|i| self.kems[i].kem_pk()).collect();
+        let kems: Vec<KemRecord> = (0..3).map(|i| self.record(i)).collect();
         let g = self
             .keys
-            .tree_create_genesis(OWN, &session, &pks, INFO_A.as_bytes())
+            .tree_create_genesis(OWN, &session, &kems, INFO_A.as_bytes())
             .unwrap();
         let sig = self.sign(0, "PqChatSession", &g.record);
         let kems = (0..4)
@@ -1335,48 +1539,48 @@ impl Own {
             ua_keys,
         )
     }
-    /// `i`'s commit on the head with `admins`, `info` and `adds` (of UA indexes); `fault` changes the record (and the
-    /// pieces) before `i` signs it, as a signer outside `ua-rs` would. Landed.
-    fn commit(
+    /// `i`'s commit on the head with `admins`, `info` and `adds` (of UA indexes), prepared by the typed commit-signing
+    /// operation under this app's scope.
+    fn prepare(
         &self,
         h: &mut Home,
         i: usize,
         admins: &[usize],
         info: &str,
         adds: &[usize],
-        fault: fn(&Own, &mut Value, &Tree),
-    ) {
+    ) -> (PreparedCommit, Tree) {
         let prep = tree_prepare(OWN, h, None).unwrap();
         let tree = prep.tree.clone();
-        let adds: Vec<(Add, Vec<u8>)> = adds
+        let adds: Vec<(Add, KemRecord)> = adds
             .iter()
             .enumerate()
             .map(|(j, x)| {
-                let pk = self.kems[*x].kem_pk();
                 let a = Add {
                     leaf: tree.used + j as u32,
                     ua: self.ua(*x),
                     key_id: 1,
                     via: ZERO,
-                    kem_hash: keccak256(&pk),
+                    kem_hash: keccak256(&self.kems[*x].kem_pk()),
                 };
-                (a, pk)
+                (a, self.record(*x))
             })
             .collect();
         let leaf = (0..tree.leaves)
             .find(|l| tree.leaf(*l).is_some_and(|x| x.ua == self.ua(i)))
             .unwrap();
         let (sid, tid) = (h.epochs[0].id, h.tree_id);
-        let mut kf = |x: u32| key_of(h, &tree, x);
-        let b = self
+        let rec = |ua: &[u8; 32], _: u64| self.record_of(ua);
+        let mut kf = |x: u32| target_of(h, &tree, prep.parent_epoch, x, &rec);
+        let p = self
             .keys
-            .tree_build_commit(
+            .tree_prepare_commit(
                 OWN,
                 CommitInput {
                     tree: &prep.tree,
                     parent_epoch_id: prep.parent_epoch_id,
                     parent_epoch: prep.parent_epoch,
                     parent_tree_hash: prep.parent_tree_hash,
+                    parent_admins: prep.parent_admins.clone(),
                     session_id: sid,
                     tree_id: tid,
                     author: self.ua(i),
@@ -1391,12 +1595,31 @@ impl Own {
                 },
             )
             .unwrap();
+        (p, prep.tree)
+    }
+    /// [`Own::prepare`], then `fault` changes the record (and the pieces) and `i` signs it as a signer outside `ua-rs` would;
+    /// an unchanged record carries the operation's own signature. Landed.
+    fn commit(
+        &self,
+        h: &mut Home,
+        i: usize,
+        admins: &[usize],
+        info: &str,
+        adds: &[usize],
+        fault: fn(&Own, &mut Value, &Tree),
+    ) {
+        let (p, tree) = self.prepare(h, i, admins, info, adds);
+        let (b, sig) = p.sign(&self.uas[i]).unwrap();
         let mut st = json!({"record": b.record, "epochId": hx(&b.epoch_id), "ctTargets": b.ct_targets,
             "ctHashes": b.ct_hashes.iter().map(|x| hx(x)).collect::<Vec<_>>(),
             "nodeKeys": b.node_keys.iter().map(|x| hx(x)).collect::<Vec<_>>(),
             "cts": b.cts.iter().map(PathCt::to_json).collect::<Vec<_>>(), "wraps": b.wraps});
-        fault(self, &mut st, &prep.tree);
-        st["sig"] = self.sign(i, "PqChatCommit", &st["record"]);
+        fault(self, &mut st, &tree);
+        st["sig"] = if st["record"] == b.record {
+            json!(hx(&sig.signature))
+        } else {
+            self.sign(i, "PqChatCommit", &st["record"])
+        };
         h.land_commit(&st);
     }
     fn replay(&self, h: &mut Home, i: usize) -> scaas_ua::wallet::tree::Replay {
@@ -1500,4 +1723,336 @@ fn tree_states_of_signed_faults() {
     assert_eq!(k(&r), k(&o.replay(&mut h, 2)));
     // the committer itself: its own commit reproduced from its seed (node keys and sealedInfo), K equal
     assert_eq!(k(&o.replay(&mut h, 0)), k(&r));
+}
+
+// ------------------------------------------------------------------ the signing operations (spec §15, plan T2)
+
+/// The record `r` as `PqChatTreeRemove`'s named fields.
+fn remove_of(r: &Value) -> TreeRemove {
+    TreeRemove {
+        session_id: a32(&r["sessionId"]),
+        tree_id: a32(&r["treeId"]),
+        epoch_id: a32(&r["epochId"]),
+        next_epoch: u(&r["nextEpoch"]),
+        members: r["members"].as_array().unwrap().iter().map(a32).collect(),
+        admin: a32(&r["admin"]),
+        nonce: u(&r["nonce"]),
+    }
+}
+fn leave_of(r: &Value) -> TreeLeave {
+    TreeLeave {
+        session_id: a32(&r["sessionId"]),
+        tree_id: a32(&r["treeId"]),
+        epoch_id: a32(&r["epochId"]),
+        member: a32(&r["member"]),
+        nonce: u(&r["nonce"]),
+    }
+}
+fn line(name: &str, value: &Value) -> (String, String) {
+    (name.into(), value.as_str().unwrap().into())
+}
+
+/// `treeLeave` and `treeRemove` prepared from named fields, reviewed, then signed on PqChat's dedicated path: the digests of
+/// `tree.json`, every signed `treeRemove` of `tree-secrets.json` byte for byte (the commits: `rebuild`, every step), the
+/// review naming the session by `treeId` and saying the UA cannot come back. Refused beside their twins: a struct other
+/// than a tree record on the tree's path, a tree record on the generic record path.
+#[test]
+fn tree_signing_ops() {
+    let v = pq("tree-secrets");
+    let world = World::new(&v);
+    let d = &pq("tree")["digests"];
+    let row = |name: &str| {
+        d["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["struct"] == name)
+            .unwrap()
+            .clone()
+    };
+    let (lr, rr) = (row("PqChatTreeLeave"), row("PqChatTreeRemove"));
+    for (r, p) in [
+        (
+            &lr,
+            tree_prepare_leave(SC, &leave_of(&lr["record"])).unwrap(),
+        ),
+        (
+            &rr,
+            tree_prepare_remove(SC, &remove_of(&rr["record"])).unwrap(),
+        ),
+    ] {
+        assert_eq!(p.record(), r["record"], "{}", r["struct"]);
+        assert_eq!(hx(&p.digest().unwrap()), r["typed"], "{}", r["struct"]);
+        let m = ua_message(MLDSA65, &pqchat::purpose(), &p.digest().unwrap()).unwrap();
+        assert_eq!(hx(&m), r["signedDigest"], "{}", r["struct"]);
+        assert!(p.review().contains(&line("treeId", &r["record"]["treeId"])));
+        assert!(p.review().iter().any(|(n, _)| n == "cannotComeBack"));
+    }
+    // every landed treeRemove: its signature from the named fields, byte for byte
+    let mut n = 0;
+    for sc in v["scenarios"].as_array().unwrap() {
+        for st in sc["steps"].as_array().unwrap() {
+            let Some(g) = st.get("gone") else { continue };
+            assert_eq!(g["struct"], "PqChatTreeRemove");
+            let p = tree_prepare_remove(SC, &remove_of(&g["record"])).unwrap();
+            assert_eq!(p.record(), g["record"]);
+            let sig = p
+                .sign(&world.person(&a32(&g["record"]["admin"])).key())
+                .unwrap();
+            assert!(sig.key_data.is_empty() && sig.members.is_empty());
+            assert_eq!(json!(hx(&sig.signature)), g["sig"], "{}", sc["name"]);
+            n += 1;
+        }
+    }
+    assert_eq!(n, 2);
+    // a treeLeave (no row carries its signature): signed by its member, the signature verifies over the row's signedDigest
+    let a = &world.people["A"];
+    let l = TreeLeave {
+        member: a.ua,
+        ..leave_of(&lr["record"])
+    };
+    let p = tree_prepare_leave(SC, &l).unwrap();
+    let m = ua_message(MLDSA65, &pqchat::purpose(), &p.digest().unwrap()).unwrap();
+    let sig = p.sign(&a.key()).unwrap();
+    assert!(scaas_ua::pq::verify(
+        MLDSA65,
+        &a.key_data,
+        &m,
+        &sig.signature
+    ));
+
+    // the tree's path signs a tree record only: the flat PqChatLeave and a nested struct are refused, the tree record signs
+    let flat = pq("records")["leave"]["record"].clone();
+    let flat_td = pqchat::typed("PqChatLeave", flat).unwrap();
+    let tree_td = pqchat::typed("PqChatTreeRemove", rr["record"].clone()).unwrap();
+    let nested = pqchat::typed("TreeAdd", d["records"][0]["record"]["adds"][0].clone()).unwrap();
+    let key = a.key();
+    assert_eq!(
+        pqchat::vectors_sign_tree(&key, &flat_td).err(),
+        Some(Error::Argument)
+    );
+    assert_eq!(
+        pqchat::vectors_sign_tree(&key, &nested).err(),
+        Some(Error::Argument)
+    );
+    assert!(pqchat::vectors_sign_tree(&key, &tree_td).is_ok());
+    // the generic record path refuses every tree record; its twin, the flat record, signs
+    for r in d["records"].as_array().unwrap() {
+        let name = r["struct"].as_str().unwrap();
+        if pqchat::TREE_RECORDS.contains(&name) {
+            let td = pqchat::typed(name, r["record"].clone()).unwrap();
+            assert_eq!(
+                pqchat::sign(&key, &td).err(),
+                Some(Error::Argument),
+                "{name}"
+            );
+        }
+    }
+    assert_eq!(pqchat::TREE_RECORDS.len(), 3);
+    assert!(pqchat::sign(&key, &flat_td).is_ok());
+}
+
+/// The commit's review (spec §15): every field of the record it built, whether the admins change (a twin that keeps them),
+/// the session info; the signature over that record verifies (the replay of `tree_states_of_signed_faults` lands them).
+#[test]
+fn tree_commit_review() {
+    let o = Own::new();
+    let mut h = o.home();
+    let (p, _) = o.prepare(&mut h, 0, &[0, 1], INFO_A, &[3]);
+    let r = p.review();
+    let rec = &p.built().record;
+    assert_eq!(r[0], ("record".into(), "PqChatCommit".into()));
+    assert!(r.contains(&line("treeId", &rec["treeId"])));
+    assert!(r.contains(&("adminsChanged".into(), "true".into())));
+    assert!(r.contains(&("sessionInfo".into(), INFO_A.into())));
+    assert!(r
+        .iter()
+        .any(|(n, x)| n == "adds" && x.contains(&hx(&o.ua(3)))));
+    assert_eq!(r.len(), 1 + 19 + 2);
+    let (p, _) = o.prepare(&mut h, 0, &[0], INFO_A, &[]);
+    assert!(p
+        .review()
+        .contains(&("adminsChanged".into(), "false".into())));
+}
+
+/// The registry KEM record check before an encapsulation (spec §8 step 5, codex-1) on `ua/portable.json`'s rows, each refusal
+/// beside its twin: a version above 0 by its kept signature (a substituted valid key, a record of another UA, another key's
+/// signature, the version-0 form), version 0 by the registration's proof (in full and as the hash commit; a substituted
+/// key, another UA's registration, a flipped proof, the other version).
+#[test]
+fn tree_kem_record_check() {
+    let p: Value = serde_json::from_str(
+        &std::fs::read_to_string(format!(
+            "{}/../../smartcontracts/vectors/ua/portable.json",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let rows = |k: &str| p[k].as_array().unwrap().clone();
+    let reg_of = |ua: &Value| {
+        rows("registrations")
+            .into_iter()
+            .find(|r| r["ua"] == *ua)
+            .unwrap()
+    };
+    let kem_row = |id: &str| {
+        rows("kemRecords")
+            .into_iter()
+            .find(|r| r["id"] == id)
+            .unwrap()
+    };
+    let version = |r: &Value| {
+        let g = reg_of(&r["ua"]);
+        KemRecord::Version {
+            kind: u(&g["kind"]) as u16,
+            key_data: unhex(&g["keyData"]),
+            kem_pk: unhex(&r["kemPk"]),
+            sig: unhex(&r["sig"]),
+        }
+    };
+    let ok = |ua: &Value, v: u64, rec: &KemRecord| code(kem_record_key(&a32(ua), v, rec));
+    // a version above 0
+    let (v1, v2, other) = (
+        kem_row("mldsa65/v1"),
+        kem_row("mldsa65/v2"),
+        kem_row("mldsa87/v1"),
+    );
+    let r1 = version(&v1);
+    assert_eq!(
+        kem_record_key(&a32(&v1["ua"]), 1, &r1).unwrap(),
+        unhex(&v1["kemPk"])
+    );
+    let with = |r: &KemRecord, f: &dyn Fn(&mut Vec<u8>, &mut Vec<u8>)| {
+        let KemRecord::Version {
+            kind,
+            key_data,
+            mut kem_pk,
+            mut sig,
+        } = r.clone()
+        else {
+            panic!()
+        };
+        f(&mut kem_pk, &mut sig);
+        KemRecord::Version {
+            kind,
+            key_data,
+            kem_pk,
+            sig,
+        }
+    };
+    let swapped = with(&r1, &|k, _| *k = unhex(&v2["kemPk"]));
+    assert_eq!(
+        ok(&v1["ua"], 1, &swapped),
+        "TreeKemRecord",
+        "a substituted valid key"
+    );
+    let foreign = with(&r1, &|_, s| *s = unhex(&other["sig"]));
+    assert_eq!(
+        ok(&v1["ua"], 1, &foreign),
+        "TreeKemRecord",
+        "another key's signature"
+    );
+    let theirs = version(&other);
+    assert_eq!(
+        ok(&other["ua"], 1, &theirs),
+        "accepted",
+        "the twin: its own UA"
+    );
+    assert_eq!(
+        ok(&v1["ua"], 1, &theirs),
+        "TreeKemRecord",
+        "a record of another UA"
+    );
+    assert_eq!(
+        ok(&v1["ua"], 2, &r1),
+        "TreeKemRecord",
+        "signed for another version"
+    );
+    assert_eq!(
+        ok(&v1["ua"], 0, &r1),
+        "TreeKemRecord",
+        "version 0 is the registration's"
+    );
+    // version 0: the registration in full, then as the hash commit
+    let g = rows("registrations")
+        .into_iter()
+        .find(|r| r.get("kemCommit").is_some())
+        .unwrap();
+    let kem_of = |pk: &[u8]| KemKey::from_kem_pk(pk).unwrap();
+    let full = KemRecord::Registration {
+        kind: u(&g["kind"]) as u16,
+        key_data: unhex(&g["keyData"]),
+        attrs: UAAttrs {
+            pqz_key: unhex(&g["attrs"]["pqzKey"]),
+            pqz_pop_hash: a32(&g["attrs"]["pqzPopHash"]),
+            kem: kem_of(&unhex(&g["attrs"]["kemPk"])),
+            kem_pk_hash: [0; 32],
+        },
+        pop: unhex(&g["pop"]),
+        kem_pk: unhex(&g["attrs"]["kemPk"]),
+    };
+    let c = &g["kemCommit"]["register"];
+    let commit = KemRecord::Registration {
+        kind: u(&g["kind"]) as u16,
+        key_data: unhex(&g["keyData"]),
+        attrs: UAAttrs {
+            pqz_key: unhex(&c["attrs"]["pqzKey"]),
+            pqz_pop_hash: a32(&c["attrs"]["pqzPopHash"]),
+            kem: KemKey {
+                scheme: u(&c["attrs"]["kem"]["scheme"]) as u8,
+                ..Default::default()
+            },
+            kem_pk_hash: a32(&c["attrs"]["kemPkHash"]),
+        },
+        pop: unhex(&c["pop"]),
+        kem_pk: unhex(&g["attrs"]["kemPk"]),
+    };
+    let reg = |r: &KemRecord, f: &dyn Fn(&mut Vec<u8>, &mut Vec<u8>, &mut Vec<u8>)| {
+        let KemRecord::Registration {
+            kind,
+            mut key_data,
+            attrs,
+            mut pop,
+            mut kem_pk,
+        } = r.clone()
+        else {
+            panic!()
+        };
+        f(&mut key_data, &mut pop, &mut kem_pk);
+        KemRecord::Registration {
+            kind,
+            key_data,
+            attrs,
+            pop,
+            kem_pk,
+        }
+    };
+    for (form, r) in [("in full", &full), ("as the hash commit", &commit)] {
+        assert_eq!(ok(&g["ua"], 0, r), "accepted", "{form}");
+        let sub = reg(r, &|_, _, k| *k = unhex(&v1["kemPk"]));
+        assert_eq!(
+            ok(&g["ua"], 0, &sub),
+            "TreeKemRecord",
+            "{form}: a substituted key"
+        );
+        let flip = reg(r, &|_, p, _| p[9] ^= 1);
+        assert_eq!(
+            ok(&g["ua"], 0, &flip),
+            "TreeKemRecord",
+            "{form}: a flipped proof"
+        );
+        assert_eq!(
+            ok(&other["ua"], 0, r),
+            "TreeKemRecord",
+            "{form}: another UA"
+        );
+        assert_eq!(
+            ok(&g["ua"], 1, r),
+            "TreeKemRecord",
+            "{form}: another version"
+        );
+    }
+    let empty = reg(&full, &|_, _, k| k.clear());
+    assert_eq!(ok(&g["ua"], 0, &empty), "TreeKemRecord", "no key");
 }
