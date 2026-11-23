@@ -1,5 +1,8 @@
 > **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
 
+**Superseded (owner 2026-11-24):** the plan, units and prompts of the pre-freeze AI audit are in
+[docs/audit/](../../audit/README.md). This note keeps the first EVM-only plan as background.
+
 # EVM contracts audit, 2026-11
 
 **Request (owner 2026-11-02).** AI audit of the EVM contracts first, with several different models: Codex, the Claude Code workflow

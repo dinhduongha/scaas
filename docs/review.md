@@ -193,6 +193,7 @@ Status: **BUILT**.
 - **A round across several layers**: one area per layer, plus the cross-layer area, plus the cryptography area when
   cryptography is touched, plus the adversarial area.
 - **The pre-freeze audit**: the same areas over the whole scope of [ARCH-POS-14](decisions.md#ARCH-POS-14).
+  Its application of this rule (units, prompts with their dimension tables, running order, ledger) is in [audit/](audit/README.md).
 
 ## 5. Brief template
 

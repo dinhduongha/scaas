@@ -49,6 +49,16 @@ def main():
     assert r.returncode == 1 and "C11" in r.stdout, r.stdout
     r = check(tree(DOC + "\n```text\n┌──┐\n│ x │──►\n└──┘\n```\n"))
     assert r.returncode == 0, r.stdout
+    # audit/prompts/ is reference text, not a current doc: old and foreign ids pass there; the rest of audit/ is checked
+    root = tree()
+    (root / "audit" / "prompts").mkdir(parents=True)
+    (root / "audit" / "prompts" / "prompt-x.md").write_text(
+        "The old rule R91; NODE-ZZZ-99 on a branch; [x](missing.md)\n"
+    )
+    assert check(root).returncode == 0, check(root).stdout
+    (root / "audit" / "README.md").write_text("The old rule R91.\n")
+    r = check(root)
+    assert r.returncode == 1 and "C4 audit/README.md" in r.stdout and "prompts" not in r.stdout, r.stdout
     root = tree()
     assert "NODE-JOB-01" in run(root, "resolve", "R91").stdout
     # paths: the repo is the parent of --docs; only tracked files count, legacy/ is exempt
