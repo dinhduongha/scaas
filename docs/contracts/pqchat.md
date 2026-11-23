@@ -734,8 +734,13 @@ scheme 1, in minimal scope (a commit with an UpdatePath, Adds and Removes, Welco
   ([CTR-CHAT-20](#CTR-CHAT-20)) and leaving ([CTR-CHAT-10](#CTR-CHAT-10)) by the tree's own records, which sign `treeId`; the
   next commit completes only without the leaves of a UA that left or was removed.
 - **No return (owner 2026-11-23, mode 1 only).** A UA that left a tree session or was removed from it is never added back
-  to it (`PqChatTreeReturn(ua)`), and a key that was taken out of it is never added again under any UA
-  (`PqChatTreeKeyReturn(kemHash)`). **The key half is hygiene (owner 2026-11-23, on the third review):** it stops reuse of
+  to it (`PqChatTreeReturn(ua)`). **Keys, at two levels (owner 2026-11-23, after the third review):** a key a UA takes out
+  of its own leaves while it stays a member is never added again **by that UA** (the pair `(ua, kemHash)`,
+  `PqChatTreeOwnKeyReturn(ua, kemHash)`); when a UA leaves or is removed (`treeRemove`, a forced leave, or an admin's commit
+  that leaves it with no leaf), the `kemHash` of every key it held is never added again **under any UA**
+  (`PqChatTreeKeyReturn(kemHash)`). So a member that registers another UA's public KEM key as its own, adds it and takes it
+  out harms only its own pair, and cannot repeat it to keep that UA out; it burns that key for the session only by going,
+  once, and is out for good. **The key half is hygiene (owner 2026-11-23, on the third review):** it stops reuse of
   the same key bytes only. A deliberate equivalent key (an X25519 point shifted by a torsion point, an ML-KEM `ek` shifted
   by a small vector) has another `kemHash` and is not stopped; that falls under the accepted lending residual, because an
   admin must add the new UA. Exclusion rests on the UA roster. The way back is a **new UA** with a fresh KEM key, added by a live admin like any new
@@ -749,6 +754,8 @@ scheme 1, in minimal scope (a commit with an UpdatePath, Adds and Removes, Welco
   scheme; `TREE_LEAVES_MAX` = 256, confirmed: one session record creates up to about 200 keys at a 60 M block, the rest come
   by Adds. **On the second review (2026-11-23):** impossible commits are refused at acceptance
   ([CTR-CHAT-27](#CTR-CHAT-27)); no automatic receipts, the freshness rule and the compromise warning are the client's
+  ([CLI-PQC-16](../clients/pqchat-core.md#CLI-PQC-16)). **After the third review (2026-11-23):** the key no-return set is
+  two-level (above); the admin's client warns before an Add of a key registered to another UA
   ([CLI-PQC-16](../clients/pqchat-core.md#CLI-PQC-16)).
 
 <a id="CTR-CHAT-27"></a>**CTR-CHAT-27** — **The tree mode's checks and bounds: an `sstore2` home only, the home instance only,
@@ -791,9 +798,11 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   (`PqChatTreeAdmins`).
 - **The no-return sets.** `gone[ua]`: one slot per UA that left or was removed, written by `treeLeave`, `treeRemove`, or the
   completion that leaves a UA without a leaf **on the tree after its Adds** (a commit that removes a UA's only key and adds
-  a new key of that UA keeps it a member). `goneKey[kemHash]`: one slot per key taken out, written when its leaf is
-  blanked, holding the key's one period (`goneKeyOf`). Each slot is 97,920 of state gas and about 22,100 regular (estimate);
-  an Add reads both (4,200 regular). Neither is ever cleared.
+  a new key of that UA keeps it a member). The key sets, one slot per key taken out, in one of the two, written at the
+  completion that blanks its leaf and holding that key's one period: `goneOwnKey[ua][kemHash]` (`goneOwnKeyOf`) when the
+  leaf's UA still holds a leaf on the tree after the Adds, `goneKey[kemHash]` (`goneKeyOf`) when it is `gone`, for the keys
+  its leaves hold then. Each slot is 97,920 of state gas and about 22,100 regular (estimate); an Add reads the three sets
+  (6,300 regular). None is ever cleared.
 - **Creation.** The creator joins `sessionsOf` with the record, every other member UA when its first wrap lands, so the
   record's transaction carries no per-member index slot.
 - **Bounds.** `TREE_LEAVES_MAX` = 256 keys (owner), `TREE_CHANGES_MAX` = 32 adds plus removes per commit, `TREE_ADMINS_MAX` =

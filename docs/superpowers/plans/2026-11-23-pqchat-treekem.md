@@ -4,8 +4,9 @@
 > checkbox (`- [ ]`) syntax for tracking.
 
 **Status (2026-11-23):** PLANNED, nothing built. **UNAUDITED.** Revision 3, after two review rounds by Codex and Fable and a
-third, focused round by Fable (`fable-r3-n`), whose fixes moved no record, typehash or derivation.
-Spec [`2026-11-23-pqchat-treekem.md`](../specs/2026-11-23-pqchat-treekem.md) (cited "spec §n", its rulings "R1"–"R15", its
+third, focused round by Fable (`fable-r3-n`), whose fixes moved no record, typehash or derivation; then the owner's R16
+(the key no-return set two-level), a contract rule and storage change that moved none either.
+Spec [`2026-11-23-pqchat-treekem.md`](../specs/2026-11-23-pqchat-treekem.md) (cited "spec §n", its rulings "R1"–"R16", its
 controller calls "C1"–"C36"; a review finding by its id, `codex-n`, `fable-n`, `codex-r2-n`, `fable-r2-n`, `fable-r3-n`); research
 [`2026-11-23-treekem-pqchat.md`](../../research/2026-11-23-treekem-pqchat.md).
 
@@ -17,7 +18,9 @@ the one node scheme; `TREE_LEAVES_MAX` = 256 (about 200 keys by one record at 60
 the `init` chain, its cost accepted, with a compromise warning; no automatic receipts in a tree session; impossible commits
 refused by the contract at acceptance; a changed session info only after a strict-majority read over at least 3 named
 endpoints; no UA and no key returns to a tree session (the way back is a new UA with a fresh key); the key half of that rule is
-hygiene against reuse of the same key bytes, and exclusion rests on the UA roster (R15). **No point is open**
+hygiene against reuse of the same key bytes, and exclusion rests on the UA roster (R15); that key half is two-level, the
+pair `(ua, kemHash)` for a key a UA takes out of its own leaves and the session-wide `kemHash` of every key a UA held when
+it leaves or is removed, with the admin's client warning before an Add of a key registered to another UA (R16). **No point is open**
 (spec §16).
 
 **Goal:** `PqChatTree` and its entries, the reference and vectors, `ua-rs`, the node's rows, the SDK calls, `pqchat-core`'s tree
@@ -92,6 +95,9 @@ foreground.
       (the info after a gap, the checkpoint conflict, the warning's remedies), one node rule (the whole-set guard), one
       ordering rule of the contract (`gone` after the Adds), wording and two gas rows. No record, typehash or derivation
       moved; the owner's R15 recorded.
+- [x] The owner's R16 (after round 3, on the controller's finding of a front-running burn): the key no-return set two-level
+      in the spec (§1, §2 C28, §6 to §11, §13 to §17), the component docs and decisions; no record, typehash or derivation
+      moved.
 
 ### T1a. clientkeys: records, tree math, hashes (`clients/clientkeys`)
 
@@ -99,12 +105,23 @@ foreground.
       typehashes and `hashStruct` of `PqChatCommit` (with `parentTreeHash`), `TreeAdd`, `TreeRemove`, `PathList` (the empty
       list too, codex-r2-14), `PathCt`, `PqChatTreeLeave`, `PqChatTreeRemove`, `TreeGenesis`; `treeId` and `genesisCtx` (spec
       §5, §6);
-      applying Removes and Adds; `ctTargets`; the target that covers a leaf; the key admission check (spec §8).
+      applying Removes and Adds; `ctTargets`; the target that covers a leaf; the key admission check (spec §8); **the
+      no-return model of R16:** the UA set, the pair set and the session-wide set, the level of each removed key judged on
+      the tree after the Adds, and the Add's verdict with its named error.
 - [ ] `scripts/pqchat-vectors.mjs`: `tree.json` rows `treeMath` (RFC 9420's tree-math vectors as a control), `resolution`,
       `treeHash` (cold 2, 3, 5 and 8 keys; after a commit, a Remove, an Add, growth; **an Add and a Remove under a copath child
       of the author**, fable-9), `admission` (one key per refused case: a coefficient at 3,329, each of the five canonical small-order
       `pk_X`, **the non-canonical forms: `p`, `p + 1`, an accepted key plus `p` where it fits, and an accepted key with bit
-      255 set** (C32, codex-r2-2), a wrong scheme byte, a wrong length; and accepted controls), `typehashes`, `digests`.
+      255 set** (C32, codex-r2-2), a wrong scheme byte, a wrong length; and accepted controls), `typehashes`, `digests`,
+      and `noReturn` (R16), each step with the sets after it and the verdict of the next Add: **the burn by own-key churn**
+      (B registers A's public key as its own version, adds it by a plain commit, takes it out: only `(B, kemHash)` is set,
+      B's re-add is `PqChatTreeOwnKeyReturn`, A's Add is accepted); **the front-running loop** (B repeats it on each of A's
+      next keys: every one of A's Adds after B's churn is accepted; B holding keys live blocks at most `KEYS_PER_UA_MAX` of
+      them, and an admin's Remove of one such leaf while B keeps another frees it at the pair level); **the burn by leave**
+      (B holds A's key, then `treeLeave`, `treeRemove`, or an admin's commit that leaves B no leaf: the `kemHash` of every
+      key B's leaves held enters the session-wide set, A's Add of it is `PqChatTreeKeyReturn` under any UA, B's Add is
+      `PqChatTreeReturn`, keys B took out earlier stay pairs); the replacement of a UA's only key in one commit (the old key
+      a pair, the UA not `gone`); a Remove and an Add of the same bytes in one commit, under the same UA and under another.
 - [ ] **An admitted related key (fable-r3-2, R15):** one `admission` row holds an accepted key and the same key with `pk_X`
       shifted by a torsion point (order 4, and order 8): the shifted key is **admitted**, has another `kemHash`, and for one
       fixed ephemeral scalar gives the same X25519 output. The row states what the check does not give; no test may
@@ -113,7 +130,11 @@ foreground.
 - [ ] Mutants (each must turn a test red, one at a time): resolution lists right before left; a blank leaf counted; the filtered
       path keeps an empty level; `th` of an empty subtree non-zero; the leaf hash without `kemHash`; a sibling hash taken before
       the changes; the admission check without the small-order list; the admission check that clears bit 255 instead of refusing it; one
-      field dropped from the `PqChatCommit` type string; `genesisCtx` that hashes `wrapHashes`.
+      field dropped from the `PqChatCommit` type string; `genesisCtx` that hashes `wrapHashes`; **R16:** own-key churn
+      written session-wide (the churn row must fail); a going UA's keys written as pairs only (the leave row must fail); the
+      level judged between the Removes and the Adds (the replacement row must fail); the pair set ignored at an Add (B's
+      re-add must fail); the keys a going UA took out earlier promoted to session-wide (the leave row's earlier-key step must
+      fail).
 
 ### T1b. clientkeys: secrets, scenarios, the vectors frozen
 
@@ -184,7 +205,7 @@ foreground.
       to a base the module inherits (fable-U2); mode 0's behaviour and events unchanged (`PqChat` and `PqVault` bytecode may
       move: size and gas pins old → new in the commit).
 - [ ] `src/pqchat/PqChatTree.sol` (SPDX header), a DELEGATECALL body module as `PqChatTopics`; namespace `scaas.pqchat.tree`
-      (spec §7); `PqChat` gains the immutable `TREE`, `modules()` lists it, the factory release and `script/onchain/PqChat.s.sol`
+      (spec §7), with `gone`, and the two key sets of R16, `goneOwnKey[ua][kemHash]` and `goneKey[kemHash]`, apart; `PqChat` gains the immutable `TREE`, `modules()` lists it, the factory release and `script/onchain/PqChat.s.sol`
       pass it. Library-split checks: storage through the hooks only, no `this`, `msg.sender` unused, return data forwarded.
 - [ ] `createSession` with `groupMode = 1`: `PqChatTreeSigStore`, `PqChatTreeHome`, the caps (`TREE_INFO_MAX` too), `treeId`;
       only the creator indexed at the record; **leaf `i`, `liveKey`, `keysOf`, the hashes above it and the UA's `sessionsOf`
@@ -193,12 +214,13 @@ foreground.
       `PqChatModeEntry`.
 - [ ] Tests first (`test/pqchat/PqChatTree.t.sol`), each refusal with its positive control; the cold `treeHash` against the
       vector rows, with the wraps landed in order, in reverse and one per transaction; every `admission` row; two members with
-      one key; the author read from a three-part blob; `test/v2/layout/` gains the module's namespace and proves `PqChat`'s
-      and `PqVault`'s layouts unmoved.
+      one key; the author read from a three-part blob; `test/v2/layout/` gains the module's namespace (the pair set and the
+      session-wide set at distinct pinned slots, R16) and proves `PqChat`'s and `PqVault`'s layouts unmoved.
 - [ ] Gates: every forge directory at the default set; the size gate (`PqChat` under 35,286 B, a new `PqChatTree` row with its
       reason); `forge fmt --check`.
 - [ ] Mutants: mode 1 accepted on a `none` home; on a replica; the cap off by one; a leaf hash without its index or without
-      `kemHash`; the leaves written in the record's transaction; every member indexed in the record's transaction (the gas row
+      `kemHash`; the leaves written in the record's transaction; the pair set stored in the session-wide mapping by `kemHash`
+      alone (the layout pin and T3b's churn test must fail, R16); every member indexed in the record's transaction (the gas row
       at 192 first-time UAs must fail, codex-r2-8); the author offset back to the constant 96; the admission check reduced to
       scheme and length.
 
@@ -206,23 +228,38 @@ foreground.
 
 - [ ] `PqChatTypes`: the eight typehashes and hashes (`*TypehashIsPinned` against the vectors); `IPqChat`: the structs, entries,
       views, errors and the `PqChatPath` event of spec §6 and §11.
-- [ ] `commit`: the acceptance checks of spec §8 (with `treeId`, `parentTreeHash`, `kemHash`, `liveKey`, `gone`, `goneKey`,
+- [ ] `commit`: the acceptance checks of spec §8 (with `treeId`, `parentTreeHash`, `kemHash`, `liveKey`, `gone`, `goneOwnKey`, `goneKey`,
       the shapes of C24, the empty-list hash) and the rights of §9; **the tree check in memory at acceptance (R12): counts,
       path length, removed UAs, the root, the expected-targets hash**; `addPathList` (against that hash), `addPathKeys`,
       `addPath`; `addWraps` and `postMessage` forwarded for a tree session; `treeLeave` and `treeRemove` (`treeId`, `gone`,
       `owed` for both, C21, `PqChatTreeAdmins` with its exemption); `leave` and `remove` refused on a tree session;
       `Epoch.wraps` = pieces + 1 (C20); completion steps 1–5 in order, all or nothing, also from `commit` itself, writing
-      `goneKey` and `gone`.
+      `gone` and each removed key at its level, `goneOwnKey` or `goneKey`, judged after the Adds (R16).
 - [ ] Tests of round 2: each of a wrong `treeHash`, `ctCount`, path length and a kept removed UA **refused at acceptance with
       no state written** (fable-r2-3), and the same record accepted when right; a `treeRemove` landed between acceptance and
       completion fails step 1; a wrong `parentTreeHash` (codex-r2-11); an Add of a `gone` UA after a leave, after a
-      `treeRemove`, after a commit-only removal → `PqChatTreeReturn`; an Add of a key taken out, under the same UA, another
-      `keyId` and another UA, and in the commit that removes it → `PqChatTreeKeyReturn`; a new UA with a fresh key accepted
-      (R14); a flat session still re-adds; `treeLeave` and `treeRemove` of a twin at another home refused (codex-r2-5);
+      `treeRemove`, after a commit-only removal → `PqChatTreeReturn`; an Add of a key taken out of a UA that went, under
+      that UA's other `keyId`, under another UA, and in the commit that removes it → `PqChatTreeKeyReturn`; a new UA with a
+      fresh key accepted (R14); a flat session still re-adds; `treeLeave` and `treeRemove` of a twin at another home refused (codex-r2-5);
       32 owed then one leave refused, and the commit of 32 forced changes completes (codex-r2-7); `treeRemove(A2)` then
       `treeLeave(A1)` and the honouring commit completes (fable-r2-6); a zero-target commit with a non-canonical list hash
       refused (codex-r2-14); the signed record sent alone by a third party, then the author's pieces through the piece
       entries (fable-r2-9).
+- [ ] **Tests of R16, over T1a's `noReturn` rows, each refusal with its positive control:** (1) **the burn by own-key churn
+      is refused to harm A:** B registers A's public KEM key as its own version, adds it by a plain commit, takes it out by
+      the next; `goneOwnKeyOf(B, kemHash)` is set and `goneKeyOf(kemHash)` is not; B's re-add under any `keyId` is
+      `PqChatTreeOwnKeyReturn(B, kemHash)`; A's Add of that key (by an admin, and by A's own plain commit when A is a
+      member) is accepted. (2) **The front-running loop is impossible:** B repeats (1) on A's next three keys, each before
+      A's Add; each of A's Adds after B's churn is accepted; with B at `KEYS_PER_UA_MAX` live keys, A's Add of a key B
+      holds is `PqChatTreeKeyLive` and A's next key, which B cannot add without taking one out, is accepted; an admin's
+      Remove of one held leaf while B keeps another writes only the pair and A then adds that key. (3) **The burn by leave works once and excludes B:** B holds A's key,
+      then `treeLeave(B)` and the honouring commit: `goneKeyOf(kemHash)` is set, A's Add of it is `PqChatTreeKeyReturn`
+      under A and under a third UA, an Add of B is `PqChatTreeReturn`, B can neither post nor commit, a key B took out
+      before its leave stays a pair (A adds it); the same with `treeRemove(B)` and with an admin's commit that leaves B no
+      leaf; a fresh UA for the next attempt cannot add itself (`PqChatNotMember`, an admin's Add needed). (4) A Remove and
+      an Add of the same bytes in one commit: under the same UA → `PqChatTreeOwnKeyReturn`; under another UA → accepted
+      while the removed UA keeps a leaf, `PqChatTreeKeyReturn` when the commit leaves it none. (5) The replacement of X's
+      only key in one commit writes the old key as `(X, kemHash)`, not session-wide.
 - [ ] Tests of round 3 (fable-r3-4): an admin's commit that removes X's only leaf and adds X's new key completes, X is not
       `gone`, can post, and the next commit owes no Remove for it (`owed` is 0); the same Remove without the Add makes X `gone` (kind
       2) and a later Add of X is `PqChatTreeReturn`.
@@ -244,7 +281,10 @@ foreground.
       they are recomputed; completion without the removed-UA check; a non-admin adding another UA's key; the slot taken before
       the last piece; `wraps` without the extra unit; a direct-path node outside the filtered path left with its key; a
       ciphertext or the list kept as its hash only; `liveKey` not freed by a Remove; `owed` not reset at completion; the tree check moved back to
-      completion; `gone` cleared at completion; `goneKey` keyed by `(ua, keyId)`; a leave not counted in `owed`; the admin
+      completion; `gone` cleared at completion; the session-wide set keyed by `(ua, kemHash)` (R16's leave test must fail);
+      own-key churn written to the session-wide set (R16's churn test must fail); a going UA's keys written to the pair set
+      only (the leave test must fail); the pair set unchecked at an Add (B's re-add must fail); the level judged before the
+      Adds (the replacement test must fail); a leave not counted in `owed`; the admin
       exemption widened to any change; `parentTreeHash` unchecked; the flat `leave` accepted on a tree session; `gone` judged
       between the Removes and the Adds (fable-r3-4).
 
@@ -254,7 +294,8 @@ foreground.
 - [ ] `test/pqchat/PqChatTreeGas.t.sol`: every row of spec §13 measured (2, 8, 64 and 256 keys; warm, after a removal, cold; the
       session record at 64, 128, 192 and 256 member keys; a genesis wrap with its leaf, typical and first of a subtree; the
       record at its bounds; the list at 255 targets; the node keys; completion at its bounds; the acceptance tree check alone, warm and on a cold tree of 256
-      (R12's +3 M); `treeLeave` and `treeRemove` with their `gone` slots, a Remove with `goneKey`; a genesis wrap of a
+      (R12's +3 M); `treeLeave` and `treeRemove` with their `gone` slots, a Remove with its key slot at each level and an
+      Add's three cold reads (R16); a genesis wrap of a
       first-time UA; **each signed row with ML-DSA-65 and with ML-DSA-87 on their caches (codex-r2-12)**; one transaction
       holding acceptance and completion at the bounds, for both signers: ML-DSA-87 is expected over 2^24 and recorded as
       "record alone"; **the commit of the last live leaf at its bounds** (no piece, so one transaction by construction: 32
@@ -317,7 +358,9 @@ foreground.
       may change the info (C33); **the majority read at a final block over at least 3 named endpoints before a changed info,
       refused by name with fewer (R13)**; no receipt and no flushed send in a tree session (R11, C35); leaving and removing
       by the tree records; a new UA shown as a new member, never linked to a gone one (R14); the removal of a UA's only key
-      worded as an exclusion for good, with the one-commit replacement offered (fable-r3-4); asking `ua-rs` for a commit (plain, Add, Remove, by UA, "refresh") and sending its pieces; the
+      worded as an exclusion for good, with the one-commit replacement offered (fable-r3-4); **before an Add, the warning
+      when the key's `kemHash` is registered to another UA in the registry, "this key is also held by UA …" (owner, R16;
+      a test with such a key and a control without)**; asking `ua-rs` for a commit (plain, Add, Remove, by UA, "refresh") and sending its pieces; the
       rules of spec §11 for a candidate; the size hint (C3); a `none` home refused by name.
 - [ ] Gates: `scripts/capped cargo test` over the vector rows; `tests/hostile`: a substituted node key, a substituted live leaf
       key, a substituted key of an added member, a head below the checkpoint, a same-id twin of the head, **a twin pinned first and then the true record (3 nodes: the majority's record replaces the pin and the event is shown; 2 nodes: "conflicting head", nothing built; fable-r3-3)**, every page call of one tree snapshot carrying the same block (the harness asserts it; fable-r3-9), an epoch-0 leaf outside
@@ -331,7 +374,7 @@ foreground.
 
 - [ ] Replay from state (spec §10) on a fresh store: the fixed read list, the checks at the read boundary, the starting
       roster anchored to the head's signed root, the roster by undo, the rights check with the signed leave or removal of
-      each dropped UA (codex-r2-6), the one period of a key (`goneKeyOf`), the compromise warning (R10); the store's tree rows as a cache; the "not followed" state:
+      each dropped UA (codex-r2-6), the one period of a `(ua, kemHash)` (`goneOwnKeyOf`, then `goneKeyOf`; R16), the compromise warning (R10); the store's tree rows as a cache; the "not followed" state:
       shown, nothing sent; a seed-restored device opens its own commits; a device key's commits open on that device only.
 - [ ] **The trace test (codex-3, fable-8):** the harness records every RPC call (method, arguments, order) and every send of a
       device replaying a session in which it follows every epoch, and of the same device on T1b's "opening failed" row (a
@@ -400,7 +443,8 @@ tree check in memory at acceptance (R12), the two tree records for leaving and r
 signing operations (C30), the no-return sets (R14), `genesisCtx` and the signed `parentTreeHash`, the info marker and the rule
 of who changes the info (C33), the majority read before a changed info (R13), the compromise warning (R10), the rights
 evidence in replay, both ML-DSA signers in the gas gate and the `treeLeaves` page run, per-operation chunk planning. It
-removes the scan for a key's earlier periods (one period per key).
+removes the scan for a key's earlier periods (one period per key; since R16 per `(ua, kemHash)`, with one more view).
+R16 adds a set, an error, the `noReturn` rows and their tests and mutants, inside the 25 to 30 range.
 
 | Task | Revision 2 | Revision 3 | What moved |
 |---|---:|---:|---|
