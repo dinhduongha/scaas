@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""The ua-rs wallet through libscaas_ua_c (clients/ua-c, C ABI v6) by ctypes (spec 2026-11-05-ua-rs-sign §9.2, plan T13d).
+"""The ua-rs wallet through libscaas_ua_c (clients/ua-c, C ABI v7) by ctypes (spec 2026-11-05-ua-rs-sign §9.2, plan T13d).
 
 The identity port (``scaas_ua``) stays this package's own code and the independent cross-check; signing, KEM, seal, vault,
-backup, link and the Zether and PQZ facades are the library's. At load the library's ``scaas_ua_abi_version()`` must be 6 and
+backup, link and the Zether and PQZ facades are the library's. At load the library's ``scaas_ua_abi_version()`` must be 7 and
 ``scaas_ua_features()`` a build this binding knows (``LibraryMismatch`` otherwise).
 
 Secrets: every buffer this module hands the library for a secret (mnemonic, passphrases, PRF secret, imported key, AEAD key,
@@ -21,7 +21,7 @@ from collections import namedtuple
 
 from . import UAError
 
-ABI_VERSION = 6
+ABI_VERSION = 7
 FEATURES = (
     "wallet",
     "pq",
@@ -64,7 +64,7 @@ OK, ERR_KEY_DATA, ERR_ARGUMENT, ERR_BUFFER = 0, 1, 8, 9
 
 
 class LibraryMismatch(RuntimeError):
-    """The library is not ABI 6 or its feature bits are not a build this binding knows."""
+    """The library is not ABI 7 or its feature bits are not a build this binding knows."""
 
 
 class WalletError(UAError):
@@ -136,10 +136,10 @@ _SIGNATURES = [
     ("wallet_manifest_json", st, [P, P, P]),
     ("wallet_discover_candidates", st, [P, u16, u32, u32, P, P]),
     ("wallet_backup_seal", st, [P, P, P, sz, P, P]),
-    ("wallet_restore_backup", st, [P, P, P, P, P, P, P, P, P]),
-    ("wallet_restore_backup_rollback", st, [P, P, P, P, P, P, P, P, P]),
+    ("wallet_restore_backup", st, [P, P, P, P, P, P, P, P, P, P]),
+    ("wallet_restore_backup_rollback", st, [P, P, P, P, P, P, P, P, P, P]),
     ("wallet_link_seal", st, [P, P, P, sz, P, P, P]),
-    ("wallet_from_link", st, [P, P, P, P, P, P, P]),
+    ("wallet_from_link", st, [P, P, P, P, P, P, P, P]),
     ("seed_backup_reveal", st, [P, P, P]),
     ("seed_backup_challenge", st, [P, P]),
     ("seed_backup_verify", st, [P, P, sz, P]),
@@ -174,7 +174,7 @@ _SIGNATURES = [
     ("kem_encaps", st, [P, sz, P, P, P]),
     ("seal", st, [P, sz, P, P, sz, P, sz, P, P, P, P, P]),
     ("open", st, [P, P, P, sz, P, sz, P, P, sz, P, P]),
-    ("open_container", st, [P, P, P, P, P, P, P]),
+    ("open_container", st, [P, P, P, P, P, P, P, P]),
     ("link_session_new", st, [P]),
     ("link_session_kem_pk", st, [P, P]),
     ("link_session_short_code", st, [P, P, P]),
@@ -617,7 +617,7 @@ class Wallet(_Handle):
             return _str(_c("wallet_seal_pq_key"), w, account, index, version, s.bytes_in(passphrase, True))
 
     @staticmethod
-    def _restore(fn, kem_key, container, expect, members, accepted, current, bip39_passphrase):
+    def _restore(fn, kem_key, container, expect, members, accepted, msig_current, current, bip39_passphrase):
         out, installed = P(), bl()
         with _Secrets() as s, _hold(kem_key, current) as (kk, cur):
             _ok(
@@ -627,6 +627,7 @@ class Wallet(_Handle):
                     _text(expect),
                     _text(members),
                     _text(accepted),
+                    _text(msig_current),
                     cur,
                     s.bytes_in(bip39_passphrase, True),
                     C.byref(out),
@@ -636,24 +637,43 @@ class Wallet(_Handle):
         return Wallet(out.value) if installed.value else None
 
     @staticmethod
-    def restore_backup(kem_key, container, expect, members=None, accepted=None, current=None, bip39_passphrase=None):
+    def restore_backup(
+        kem_key, container, expect, members=None, accepted=None, msig_current=None, current=None, bip39_passphrase=None
+    ):
         """The wallet a backup container carries, or None when ``current`` holds that generation already (an older one is
-        ``UABackupRollback``)."""
+        ``UABackupRollback``). ``msig_current``: ``{"<msig id>": {msig, enabled}}``, the current structure of an updated
+        ``msig`` (CTR-UA-44); None = none updated."""
         return Wallet._restore(
-            "wallet_restore_backup", kem_key, container, expect, members, accepted, current, bip39_passphrase
+            "wallet_restore_backup",
+            kem_key,
+            container,
+            expect,
+            members,
+            accepted,
+            msig_current,
+            current,
+            bip39_passphrase,
         )
 
     @staticmethod
     def restore_backup_rollback(
-        kem_key, container, expect, members=None, accepted=None, current=None, bip39_passphrase=None
+        kem_key, container, expect, members=None, accepted=None, msig_current=None, current=None, bip39_passphrase=None
     ):
         """``restore_backup`` that may install an older backup: only after the user confirmed the rollback."""
         return Wallet._restore(
-            "wallet_restore_backup_rollback", kem_key, container, expect, members, accepted, current, bip39_passphrase
+            "wallet_restore_backup_rollback",
+            kem_key,
+            container,
+            expect,
+            members,
+            accepted,
+            msig_current,
+            current,
+            bip39_passphrase,
         )
 
     @staticmethod
-    def from_link(session, container, expect, members=None, accepted=None, bip39_passphrase=None):
+    def from_link(session, container, expect, members=None, accepted=None, msig_current=None, bip39_passphrase=None):
         """The wallet a link container carries to ``session`` (which it consumes)."""
         with _Secrets() as s, _hold(session) as (ls,):
             return _new(
@@ -664,6 +684,7 @@ class Wallet(_Handle):
                 _text(expect),
                 _text(members),
                 _text(accepted),
+                _text(msig_current),
                 s.bytes_in(bip39_passphrase, True),
             )
 
@@ -851,9 +872,9 @@ class KemKey(_Handle):
             )
             return s.out(pt, m.value)
 
-    def open_container(self, container, expect, members=None, accepted=None):
+    def open_container(self, container, expect, members=None, accepted=None, msig_current=None):
         """The plaintext of a sealed container accepted as ``expect`` says (``bytearray``; wipe it)."""
-        args = (_text(container), _text(expect), _text(members), _text(accepted))
+        args = (_text(container), _text(expect), _text(members), _text(accepted), _text(msig_current))
         with _Secrets() as s, _hold(self) as (kk,):
             m = sz(0)
             status = _c("open_container")(kk, *args, None, C.byref(m))  # the capacity is checked before decapsulation

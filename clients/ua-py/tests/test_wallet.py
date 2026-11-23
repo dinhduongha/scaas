@@ -137,34 +137,34 @@ class Load(unittest.TestCase):
     def test_load_refuses_wrong_abi_or_features(self):
         lib = W.load()
         try:
-            W._abi_hook = lambda v: 5
+            W._abi_hook = lambda v: 6
             with self.assertRaises(W.LibraryMismatch):
                 W.load(W._default_path())
         finally:
             W._abi_hook = None
         self.assertIs(W._lib, lib, "a refused library is not kept")
         f = W.FEATURE
-        # ua-rs-native (spec §10.2): a good build carries bit native-networks; an older v6 library without it is refused
+        # ua-rs-native (spec §10.2): a good build carries bit native-networks; a library without it is refused
         good = f["wallet"] | f["pq"] | f["pqz"] | f["pqz-set-n2304-kmax4096"] | f["native-networks"]
-        W.check_build(6, good)
-        W.check_build(6, f["wallet"] | f["pq"] | f["native-networks"])
+        W.check_build(7, good)
+        W.check_build(7, f["wallet"] | f["pq"] | f["native-networks"])
         for label, abi, feats in [
-            ("abi 5", 5, good),
-            ("abi 7", 7, good),
-            ("no wallet", 6, good & ~f["wallet"]),
-            ("no pq", 6, good & ~f["pq"]),
-            ("an unknown bit", 6, good | 1 << 13),
-            ("an older v6 library (no native-networks)", 6, good & ~f["native-networks"]),
-            ("a vectors build (C1)", 6, good | f["vectors"]),
-            ("two sets", 6, good | f["pqz-set-n2048-kmax1024"]),
-            ("pqz without a set", 6, f["wallet"] | f["pq"] | f["pqz"]),
-            ("a set without pqz", 6, f["wallet"] | f["pq"] | f["pqz-set-n2304-kmax4096"]),
+            ("abi 6", 6, good),  # T26 A2-1: 6 -> 7
+            ("abi 8", 8, good),
+            ("no wallet", 7, good & ~f["wallet"]),
+            ("no pq", 7, good & ~f["pq"]),
+            ("an unknown bit", 7, good | 1 << 13),
+            ("a library without native-networks", 7, good & ~f["native-networks"]),
+            ("a vectors build (C1)", 7, good | f["vectors"]),
+            ("two sets", 7, good | f["pqz-set-n2048-kmax1024"]),
+            ("pqz without a set", 7, f["wallet"] | f["pq"] | f["pqz"]),
+            ("a set without pqz", 7, f["wallet"] | f["pq"] | f["pqz-set-n2304-kmax4096"]),
         ]:
             with self.subTest(label), self.assertRaises(W.LibraryMismatch):
                 W.check_build(abi, feats)
 
-    def test_abi_version_is_6_and_features_bits(self):
-        self.assertEqual(W.abi_version(), 6)
+    def test_abi_version_is_7_and_features_bits(self):
+        self.assertEqual(W.abi_version(), 7)
         f = W.features()
         self.assertTrue(f & W.FEATURE["wallet"] and f & W.FEATURE["pq"])
         self.assertFalse(f & W.FEATURE["external"], "MD-13: no external key in this round")
@@ -566,14 +566,16 @@ class Seal(Case):
 
                     def f():
                         w = W.Wallet.restore_backup(
-                            kk, r["container"], r["expect"], r.get("members"), r.get("accepted")
+                            kk, r["container"], r["expect"], r.get("members"), r.get("accepted"), r.get("msigCurrent")
                         )
                         w.close()
                 else:
-                    f = lambda: kk.open_container(r["container"], r["expect"], r.get("members"), r.get("accepted"))
+                    f = lambda: kk.open_container(
+                        r["container"], r["expect"], r.get("members"), r.get("accepted"), r.get("msigCurrent")
+                    )
                 self.assertEqual(code(f), "UA" + r["error"] if r.get("error") else "")
                 n += 1
-        self.assertEqual(n, 28)
+        self.assertEqual(n, 32)  # T26 A2-1: 28 -> 32 (four msigCurrent rows)
 
     def test_open_container_msig_without_accepted_json_is_ContainerSender(self):
         r = next(x for x in SEAL["containers"] if x.get("accepted"))
@@ -1342,8 +1344,8 @@ class Native(unittest.TestCase):
         self.assertEqual(list(W.NETWORKS), NATIVE["networks"])
         f = W.FEATURE
         with self.assertRaises(W.LibraryMismatch):
-            W.check_build(6, f["wallet"] | f["pq"])  # an older v6 library: no native-networks bit
-        W.check_build(6, f["wallet"] | f["pq"] | f["native-networks"])
+            W.check_build(7, f["wallet"] | f["pq"])  # a library without the native-networks bit
+        W.check_build(7, f["wallet"] | f["pq"] | f["native-networks"])
 
     def test_addresses_witness_programs_ss58(self):
         n = 0

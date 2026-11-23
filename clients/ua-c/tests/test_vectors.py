@@ -324,7 +324,7 @@ def record_sig(r):
 
 class Vectors(unittest.TestCase):
     def test_table_groups_purposes_constants(self):
-        self.assertEqual(L.abi_version(), 6)  # T12: 5 -> 6
+        self.assertEqual(L.abi_version(), 7)  # T12: 5 -> 6; T26 A2-1: 6 -> 7
         self.assertEqual(L.kind_count(), len(K["kinds"]))
         for i, r in enumerate(K["kinds"]):
             with self.subTest(r["name"]):
@@ -1469,9 +1469,9 @@ for name, res, args in [
     ("wallet_manifest_json", st, [P, P, P]),
     ("wallet_discover_candidates", st, [P, u16, u32, u32, P, P]),
     ("wallet_backup_seal", st, [P, P, P, sz, P, P]),
-    ("wallet_restore_backup", st, [P, u8, u8, u8, u8, P, u8, P, P]),
-    ("wallet_restore_backup_rollback", st, [P, u8, u8, u8, u8, P, u8, P, P]),
-    ("wallet_from_link", st, [P, u8, u8, u8, u8, u8, P]),
+    ("wallet_restore_backup", st, [P, u8, u8, u8, u8, u8, P, u8, P, P]),
+    ("wallet_restore_backup_rollback", st, [P, u8, u8, u8, u8, u8, P, u8, P, P]),
+    ("wallet_from_link", st, [P, u8, u8, u8, u8, u8, u8, P]),
     ("seed_backup_reveal", st, [P, P, P]),
     ("seed_backup_challenge", st, [P, P]),
     ("seed_backup_verify", st, [P, P, sz, P]),
@@ -1498,7 +1498,7 @@ for name, res, args in [
     ("kem_encaps", st, [u8, sz, P, P, P]),
     ("seal", st, [u8, sz, u8, u8, sz, u8, sz, P, P, P, P, P]),
     ("open", st, [P, u8, u8, sz, u8, sz, u8, u8, sz, P, P]),
-    ("open_container", st, [P, u8, u8, u8, u8, P, P]),
+    ("open_container", st, [P, u8, u8, u8, u8, u8, P, P]),
     ("link_session_new", st, [P]),
     ("link_session_kem_pk", st, [P, P]),
     ("link_session_short_code", st, [P, P, P]),
@@ -1538,8 +1538,8 @@ for name, res, args in [
     ("wallet_seal_pq_key", st, [P, u32, u32, u64, u8, P, P]),
     ("pqz_open_leaf", st, [u8, u8, u8, u32, u32, u64, P]),
     ("pqz_seed_backup", st, [P, P, u8, sz, u64, C.c_uint8, P, sz, P, P]),
-    ("pqz_share_reseal", st, [P, u8, u8, u8, u8, P, P, P, P]),
-    ("wallet_pqz_reconstruct", st, [P, P, u8, u8, u8, u8, u8, u64, u8, P]),
+    ("pqz_share_reseal", st, [P, u8, u8, u8, u8, u8, P, P, P, P]),
+    ("wallet_pqz_reconstruct", st, [P, P, u8, u8, u8, u8, u8, u8, u64, u8, P]),
     ("wallet_pqz_held_key", st, [P, u8, P]),
     ("pqz_seed_backup_warning", st, [u16, u8, u64, u8, sz, u8, P]),
 ]:
@@ -1656,12 +1656,13 @@ class WalletCase(unittest.TestCase):
 
     def open_container(self, kk, r, accepted=True):
         acc = r.get("accepted") if accepted else None
-        return sig_of(L.open_container, kk, jb(r["container"]), jb(r["expect"]), jb(r.get("members")), jb(acc))
+        cur = jb(r.get("msigCurrent"))
+        return sig_of(L.open_container, kk, jb(r["container"]), jb(r["expect"]), jb(r.get("members")), jb(acc), cur)
 
 
 class WalletAbi(WalletCase):
-    def test_abi_version_is_6(self):
-        self.assertEqual(L.abi_version(), 6)
+    def test_abi_version_is_7(self):
+        self.assertEqual(L.abi_version(), 7)
 
     def test_features_bits(self):
         f = L.features()
@@ -1695,7 +1696,7 @@ class WalletAbi(WalletCase):
             "ua_key out NULL": L.wallet_ua_key(self.w("pq_kat"), 0x0102, 0, 0, None),
             "sign_ua key NULL": L.sign_ua(None, bytes(32), bytes(32), o, C.byref(n)),
             "from_mnemonic words NULL": L.wallet_from_mnemonic(None, None, C.byref(P())),
-            "open_container expect NULL": L.open_container(None, b"{}", None, None, None, o, C.byref(n)),
+            "open_container expect NULL": L.open_container(None, b"{}", None, None, None, None, o, C.byref(n)),
             # ua-rs-native: 9 to 12 are networks now (spec §10.2); 13 is the first unknown
             "unknown network": L.wallet_native_key(self.w("pq_kat"), 13, 0, COIN_DEFAULT, C.byref(P())),
         }.items():
@@ -2070,6 +2071,7 @@ class WalletSeal(WalletCase):
                         jb(r["expect"]),
                         jb(r.get("members")),
                         jb(r.get("accepted")),
+                        jb(r.get("msigCurrent")),
                         None,
                         b"",
                         C.byref(out),
@@ -2082,7 +2084,7 @@ class WalletSeal(WalletCase):
                     got = self.open_container(kk, r)[0]
                 self.assertEqual(got, "UA" + r["error"] if r.get("error") else "")
                 n += 1
-        self.assertEqual(n, 28)
+        self.assertEqual(n, 32)  # T26 A2-1: 28 -> 32 (four msigCurrent rows)
 
     def test_open_container_msig_without_accepted_json_is_ContainerSender(self):
         r = next(x for x in SEAL["containers"] if x.get("accepted"))
@@ -2094,18 +2096,19 @@ class WalletSeal(WalletCase):
         r = SEAL["containers"][0]
         kk = self.opener(r)
         deep = dict(r["expect"], x=[[[[0]]]])
-        self.assertEqual(sig_of(L.open_container, kk, jb(r["container"]), jb(deep), None, None)[0], "UAArgument")
+        self.assertEqual(sig_of(L.open_container, kk, jb(r["container"]), jb(deep), None, None, None)[0], "UAArgument")
         big = json.dumps(r["expect"]).encode() + b" " * (16 << 10)
-        self.assertEqual(sig_of(L.open_container, kk, jb(r["container"]), big, None, None)[0], "UAArgument")
+        self.assertEqual(sig_of(L.open_container, kk, jb(r["container"]), big, None, None, None)[0], "UAArgument")
         # members_json: 512 KiB (owner 2026-11-06), the other two 16 KiB
         members = b"{}" + b" " * ((512 << 10) - 2)
         self.assertEqual(
-            sig_of(L.open_container, kk, jb(r["container"]), jb(r["expect"]), members, None),
+            sig_of(L.open_container, kk, jb(r["container"]), jb(r["expect"]), members, None, None),
             ("", b(r["pt"])),
             "512 KiB",
         )
         self.assertEqual(
-            sig_of(L.open_container, kk, jb(r["container"]), jb(r["expect"]), members + b" ", None)[0], "UAArgument"
+            sig_of(L.open_container, kk, jb(r["container"]), jb(r["expect"]), members + b" ", None, None)[0],
+            "UAArgument",
         )
 
     def replay_current(self, r):
@@ -2141,6 +2144,7 @@ class WalletSeal(WalletCase):
                     self.opener(r),
                     jb(r["container"]),
                     jb(r["expect"]),
+                    None,
                     None,
                     None,
                     cur,
@@ -2187,6 +2191,7 @@ class WalletSeal(WalletCase):
                 None,
                 None,
                 None,
+                None,
                 b"",
                 C.byref(out),
                 C.byref(installed),
@@ -2213,12 +2218,12 @@ class WalletSeal(WalletCase):
         r = next(x for x in SEAL["containers"] if "session" in x["opener"])
         expect = dict(r["expect"], recipient={"kemPkHash": hx(out32(L.keccak256, pk.raw, KEM_PK))})
         out = P()
-        status = L.wallet_from_link(s, jb(r["container"]), jb(expect), None, None, b"", C.byref(out))
+        status = L.wallet_from_link(s, jb(r["container"]), jb(expect), None, None, None, b"", C.byref(out))
         self.assertEqual(
             name_of(status), "UAContainerReplay", "the vector container's created is outside this session's window"
         )
         for f in (
-            lambda: L.wallet_from_link(s, jb(r["container"]), jb(expect), None, None, b"", C.byref(out)),
+            lambda: L.wallet_from_link(s, jb(r["container"]), jb(expect), None, None, None, b"", C.byref(out)),
             lambda: L.link_session_kem_pk(s, pk),
         ):
             self.assertEqual(name_of(f()), "UAKeyRevoked", "the session is consumed by its first install")
@@ -2246,7 +2251,7 @@ class WalletSeal(WalletCase):
                 "recipient": {"kemPkHash": hx(out32(L.keccak256, pk.raw, KEM_PK))},
             }
             out = P()
-            status = L.wallet_from_link(s, c.encode(), jb(expect), None, None, b"", C.byref(out))
+            status = L.wallet_from_link(s, c.encode(), jb(expect), None, None, None, b"", C.byref(out))
             if wrong:
                 self.assertEqual(name_of(status), "UASealOpen")
                 continue
@@ -2613,12 +2618,13 @@ class WalletErrors(WalletCase):
             lambda: L.sign_typed_any(evm, td, o, C.byref(n)),
             lambda: L.sign_transaction(evm, jb({"type": 2, "chainId": "SECRETvalue0xdead"}), o, C.byref(n)),
             lambda: L.open_container(
-                kk, b'{"v":"Pa55-word-Secret"}', jb({"purpose": "Qx7SekritPurp0se"}), None, None, o, C.byref(n)
+                kk, b'{"v":"Pa55-word-Secret"}', jb({"purpose": "Qx7SekritPurp0se"}), None, None, None, o, C.byref(n)
             ),
             lambda: L.open_container(
                 kk,
                 jb(SEAL["containers"][0]["container"]),
                 jb({"purpose": "Qx7SekritPurp0se"}),
+                None,
                 None,
                 None,
                 o,
@@ -3180,6 +3186,7 @@ class WalletPqzBackup(WalletCase):
             jb(self.expect(0)),
             None,
             None,
+            None,
             ua or self.msig_ua,
             0,
             kh or self.kh,
@@ -3208,6 +3215,7 @@ class WalletPqzBackup(WalletCase):
                 self.kks[1],
                 jb(b["shares"][1]),
                 jb(self.expect(1)),
+                None,
                 None,
                 None,
                 C.byref(r0),
@@ -3254,6 +3262,7 @@ class WalletPqzBackup(WalletCase):
                                 jb(self.expect(1)),
                                 None,
                                 None,
+                                None,
                                 C.byref(self.rec(0)),
                                 self.mkeys[1],
                             )
@@ -3261,6 +3270,7 @@ class WalletPqzBackup(WalletCase):
                     ]
                 ),
                 jb(self.expect(0)),
+                None,
                 None,
                 None,
                 self.msig_ua,

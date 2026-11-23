@@ -17,8 +17,8 @@ use std::sync::{Arc, Mutex};
 
 type R<T> = Result<T, UAError>;
 
-/// The surface generation of this binding, in step with the C ABI's `SCAAS_UA_ABI_VERSION` (6, ua-rs-sign T12).
-const ABI_VERSION: u32 = 6;
+/// The surface generation of this binding, in step with the C ABI's `SCAAS_UA_ABI_VERSION` (6, ua-rs-sign T12; 7, T26 A2-1).
+const ABI_VERSION: u32 = 7;
 const _: () = assert!(
     !scaas_ua::build::VECTORS,
     "ua-dart-frb must not build scaas-ua with feature `vectors`"
@@ -248,16 +248,19 @@ fn key(k: KeyInner) -> UaKey {
 fn container(json: &str) -> R<uw::SealedContainer> {
     Ok(uw::SealedContainer::from_json(json.as_bytes())?)
 }
+/// The opener's JSON inputs: `members_json` / `accepted_json` / `current_json` null = none / no lookup / no `msig` updated.
 struct Opening {
     expect: uw::ContainerExpectJson,
     members: uw::MembersJson,
     accepted: Option<uw::AcceptedJson>,
+    current: uw::CurrentJson,
 }
 impl Opening {
     fn read(
         expect_json: &str,
         members_json: Option<String>,
         accepted_json: Option<String>,
+        current_json: Option<String>,
     ) -> R<Opening> {
         let members = match members_json {
             Some(m) => uw::MembersJson::from_json(m.as_bytes())?,
@@ -266,10 +269,15 @@ impl Opening {
         let accepted = accepted_json
             .map(|a| uw::AcceptedJson::from_json(a.as_bytes()))
             .transpose()?;
+        let current = match current_json {
+            Some(c) => uw::CurrentJson::from_json(c.as_bytes())?,
+            None => uw::CurrentJson::default(),
+        };
         Ok(Opening {
             expect: uw::ContainerExpectJson::from_json(expect_json.as_bytes())?,
             members,
             accepted,
+            current,
         })
     }
     fn with<T>(
@@ -277,15 +285,18 @@ impl Opening {
         f: impl FnOnce(
             &uw::ContainerExpect,
             &scaas_ua::ua_portable::Members,
+            &scaas_ua::ua_portable::Current,
             Option<&scaas_ua::ua_portable::Accepted>,
         ) -> T,
     ) -> T {
         let members = |id: [u8; 32]| self.members.lookup(id);
+        let current = |id: [u8; 32]| self.current.lookup(id);
         let accepted =
             |id: [u8; 32], i: u16| self.accepted.as_ref().is_some_and(|a| a.accepted(id, i));
         f(
             &self.expect.get(),
             &members,
+            &current,
             self.accepted
                 .as_ref()
                 .map(|_| &accepted as &scaas_ua::ua_portable::Accepted),
@@ -399,27 +410,40 @@ fn restore(
     expect_json: String,
     members_json: Option<String>,
     accepted_json: Option<String>,
+    current_json: Option<String>,
     current: Option<&UaWallet>,
     rollback: Option<uw::AllowRollback>,
     bip39_passphrase: &SecretBytes,
 ) -> R<Option<UaWallet>> {
     let (c, o) = (
         container(&container_json)?,
-        Opening::read(&expect_json, members_json, accepted_json)?,
+        Opening::read(&expect_json, members_json, accepted_json, current_json)?,
     );
     let pass = text(bip39_passphrase.get())?;
-    let w = o.with(|e, m, acc| {
-        uw::Wallet::restore_backup(&kk.0, &c, e, m, acc, current.map(|w| &w.0), rollback, pass)
+    let w = o.with(|e, m, x, acc| {
+        uw::Wallet::restore_backup(
+            &kk.0,
+            &c,
+            e,
+            m,
+            x,
+            acc,
+            current.map(|w| &w.0),
+            rollback,
+            pass,
+        )
     })?;
     Ok(w.map(|w| UaWallet(w, Live::new())))
 }
-/// The wallet of a backup container (`None`: an equal generation installed nothing). `members_json` / `accepted_json` null = none.
+/// The wallet of a backup container (`None`: an equal generation installed nothing). `members_json` / `accepted_json` /
+/// `current_json` (`{"<msig id>": {msig, enabled}}`, an updated `msig`'s current structure, CTR-UA-44) null = none.
 pub fn wallet_restore_backup(
     kk: &UaKemKey,
     container_json: String,
     expect_json: String,
     members_json: Option<String>,
     accepted_json: Option<String>,
+    current_json: Option<String>,
     bip39_passphrase: &SecretBytes,
 ) -> R<Option<UaWallet>> {
     restore(
@@ -428,12 +452,14 @@ pub fn wallet_restore_backup(
         expect_json,
         members_json,
         accepted_json,
+        current_json,
         None,
         None,
         bip39_passphrase,
     )
 }
 /// As `wallet_restore_backup` over the wallet `current` holds (an older generation: `UABackupRollback`).
+#[allow(clippy::too_many_arguments)]
 pub fn wallet_restore_backup_over(
     current: &UaWallet,
     kk: &UaKemKey,
@@ -441,6 +467,7 @@ pub fn wallet_restore_backup_over(
     expect_json: String,
     members_json: Option<String>,
     accepted_json: Option<String>,
+    current_json: Option<String>,
     bip39_passphrase: &SecretBytes,
 ) -> R<Option<UaWallet>> {
     restore(
@@ -449,12 +476,14 @@ pub fn wallet_restore_backup_over(
         expect_json,
         members_json,
         accepted_json,
+        current_json,
         Some(current),
         None,
         bip39_passphrase,
     )
 }
 /// The rollback, by its own name.
+#[allow(clippy::too_many_arguments)]
 pub fn wallet_restore_backup_rollback(
     current: &UaWallet,
     kk: &UaKemKey,
@@ -462,6 +491,7 @@ pub fn wallet_restore_backup_rollback(
     expect_json: String,
     members_json: Option<String>,
     accepted_json: Option<String>,
+    current_json: Option<String>,
     bip39_passphrase: &SecretBytes,
 ) -> R<Option<UaWallet>> {
     let allow = Some(uw::AllowRollback);
@@ -471,6 +501,7 @@ pub fn wallet_restore_backup_rollback(
         expect_json,
         members_json,
         accepted_json,
+        current_json,
         Some(current),
         allow,
         bip39_passphrase,
@@ -482,11 +513,12 @@ pub fn wallet_from_link(
     expect_json: String,
     members_json: Option<String>,
     accepted_json: Option<String>,
+    current_json: Option<String>,
     bip39_passphrase: &SecretBytes,
 ) -> R<UaWallet> {
     let (c, o) = (
         container(&container_json)?,
-        Opening::read(&expect_json, members_json, accepted_json)?,
+        Opening::read(&expect_json, members_json, accepted_json, current_json)?,
     );
     let pass = text(bip39_passphrase.get())?;
     let taken = session
@@ -498,7 +530,7 @@ pub fn wallet_from_link(
             code: "UAKeyRevoked".into(),
             reason: String::new(),
         })?;
-    let w = o.with(|e, m, acc| uw::Wallet::from_link(taken, &c, e, m, acc, pass))?;
+    let w = o.with(|e, m, x, acc| uw::Wallet::from_link(taken, &c, e, m, x, acc, pass))?;
     Ok(UaWallet(w, Live::new()))
 }
 /// Whether `answers` are the words at the challenged positions, in order (the call consumes them).
@@ -1061,19 +1093,21 @@ impl UaKemKey {
         };
         out(&self.0.open(&purpose, &aad, &s)?)
     }
-    /// A container's plaintext, accepted as `expect_json` says (spec §6.3); `members_json` / `accepted_json` null = none.
+    /// A container's plaintext, accepted as `expect_json` says (spec §6.3); `members_json` / `accepted_json` / `current_json`
+    /// null = none.
     pub fn open_container(
         &self,
         container_json: String,
         expect_json: String,
         members_json: Option<String>,
         accepted_json: Option<String>,
+        current_json: Option<String>,
     ) -> R<SecretBytes> {
         let (c, o) = (
             container(&container_json)?,
-            Opening::read(&expect_json, members_json, accepted_json)?,
+            Opening::read(&expect_json, members_json, accepted_json, current_json)?,
         );
-        out(&o.with(|e, m, acc| self.0.open_container(&c, e, m, acc))?)
+        out(&o.with(|e, m, x, acc| self.0.open_container(&c, e, m, x, acc))?)
     }
 }
 
