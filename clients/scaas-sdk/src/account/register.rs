@@ -1100,27 +1100,6 @@ fn pqz_attr(
     Err(SdkError::FeatureMissing)
 }
 
-/// `ReceiverUnregistered` (spec §7.1): `to` a derived UA (not a native id: its top 12 bytes not all zero) that the profile's
-/// registry does not hold, or on a profile naming no registry (fail closed: owner 2026-11-19, R3); a native id passes.
-pub(crate) async fn receiver_registered(
-    sdk: &Sdk,
-    chain: &str,
-    to: &[u8; 32],
-) -> Result<(), SdkError> {
-    if to.get(..12).is_some_and(|h| h.iter().all(|b| *b == 0)) {
-        return Ok(());
-    }
-    let (profile, _, pool) = evm(sdk, chain)?;
-    let Some(registry) = profile.registry.as_deref() else {
-        return Err(SdkError::ReceiverUnregistered);
-    };
-    let registry: Address = registry.parse().map_err(|_| SdkError::Argument)?;
-    match read_record(&pool, registry, Landed::Registered, to).await? {
-        true => Ok(()),
-        false => Err(SdkError::ReceiverUnregistered),
-    }
-}
-
 impl Account {
     /// Prepares the registration of `req.key` (spec §7): the arguments and the PoP by `scaas-ua`, then the writes (the
     /// registration, `storePqzPop` when split, `setKemKey` for a hash-committed KEM key), in the order they must land; an

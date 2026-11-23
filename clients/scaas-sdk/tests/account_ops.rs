@@ -158,6 +158,17 @@ fn registry(t: &T, ua: &str, registered: bool, kem_pk_hash: &str, kem_stored: bo
         format!("{}{ua}", sel("isRegistered(bytes32)")),
         format!("0x{}", w(u64::from(registered))),
     ));
+    // the line's `holderOf` (T26 B2-9): the bound registry holds a registered UA, nothing holds another
+    c.answers.push((
+        REGISTRY.into(),
+        format!("{}{ua}", sel("holderOf(bytes32)")),
+        format!(
+            "0x{:0>64}{}{}",
+            if registered { &REGISTRY[2..] } else { "" },
+            w(0),
+            w(0)
+        ),
+    ));
     // `(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop)`: `attrs` at 0xc0 after an empty `keyData`
     c.answers.push((
         REGISTRY.into(),
@@ -913,6 +924,26 @@ async fn pay_to_unregistered_derived_ua() {
     let native = format!("0x{}{}", "00".repeat(12), "ca".repeat(20));
     assert_ne!(
         code(t.sdk.wallet().prepare_pay(pay(&native)).await),
+        "ReceiverUnregistered"
+    );
+    // T26 B2-9: every payment prepare checks the receiver, a transfer as a pay (its control: registered, below)
+    let transfer = |to: &str| scaas_sdk::wallet::Transfer {
+        signer: t.payer.clone(),
+        chain: "local".into(),
+        token: format!("0x{}", "7a".repeat(20)),
+        to: to.into(),
+        value: "1".into(),
+        batch: "0".into(),
+        envelope: pay(to).envelope,
+    };
+    registry(&t, &ua, false, &hx(&[0; 32]), false);
+    assert_eq!(
+        code(t.sdk.wallet().prepare_transfer(transfer(&ua)).await),
+        "ReceiverUnregistered"
+    );
+    registry(&t, &ua, true, &hx(&[0; 32]), false);
+    assert_ne!(
+        code(t.sdk.wallet().prepare_transfer(transfer(&ua)).await),
         "ReceiverUnregistered"
     );
     // a profile naming no registry: fail closed for a derived UA (owner 2026-11-19, R3); a native id still passes

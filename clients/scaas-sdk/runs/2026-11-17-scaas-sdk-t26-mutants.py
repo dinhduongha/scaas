@@ -38,6 +38,7 @@ PQC = "clients/ua-rs/src/wallet/pqchat.rs"
 AC = "clients/scaas-sdk/src/app_core.rs"
 PQR = "clients/scaas-sdk/src/pqchat_records.rs"
 PQK = "clients/ua-rs/src/wallet/pqchat_keys.rs"
+OPS = "clients/scaas-sdk/src/wallet/ops.rs"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
@@ -371,6 +372,11 @@ MUTANTS = [
         "B-17: read_app a plain read",
         [(AC, "        self.read_app_as(chain, contract, entry, args, Purpose::FeedsDecryption)", "        self.read_app_as(chain, contract, entry, args, Purpose::Plain)")],
         T + " --test app_core read_app_feeds_decryption_by_default",
+    ),
+    (
+        "B2-9: a transfer skips the receiver check",
+        [(OPS, "                crate::line::receiver_registered(&sdk, &req.chain, &id32(&req.to)?).await?;\n                let kind = kind_of(&sdk, &req.chain, \"UAMetaTransfer\", token).await?;\n                let mut m", "                let kind = kind_of(&sdk, &req.chain, \"UAMetaTransfer\", token).await?;\n                let mut m")],
+        T + " --test account_ops pay_to_unregistered_derived_ua",
     ),
 ]
 

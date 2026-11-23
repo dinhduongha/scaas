@@ -22,9 +22,7 @@ pub use msig::{
     MsigStructureArgs, MsigUpdatePlan, UpdateMsig,
 };
 #[cfg(feature = "evm")]
-pub(crate) use register::{
-    receiver_registered, record_call, record_call2, record_holds, record_holds2, Landed,
-};
+pub(crate) use register::{record_call, record_call2, record_holds, record_holds2, Landed};
 #[cfg(feature = "evm")]
 pub use register::{
     Register, RegisterAttrs, RegistrationGas, RegistrationState, RegistryWrite, StepGas,

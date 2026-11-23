@@ -478,3 +478,31 @@ mod tests {
         assert_eq!(distinct_by_key(&lists), vec![w(1), w(3), w(4)]);
     }
 }
+
+/// `ReceiverUnregistered` (spec §7.1, owner 2026-11-19 R3; T26 B2-9): `to` a derived UA (not a native id: its top 12 bytes
+/// not all zero) that no generation of the profile's line holds (one `holderOf(to)` on the bound registry by [`read_line`]:
+/// one endpoint, one block), or a profile naming no registry (fail closed); a native id passes. Every payment prepare calls
+/// it, in every build with `evm`.
+pub(crate) async fn receiver_registered(
+    sdk: &Sdk,
+    chain: &str,
+    to: &[u8; 32],
+) -> Result<(), SdkError> {
+    if to.get(..12).is_some_and(|h| h.iter().all(|b| *b == 0)) {
+        return Ok(());
+    }
+    let (profile, _, _) = crate::op::evm(sdk, chain)?;
+    if profile.registry.is_none() {
+        return Err(SdkError::ReceiverUnregistered);
+    }
+    let to = *to;
+    let (held, _) = read_line(
+        sdk,
+        chain,
+        BlockChoice::Latest,
+        Purpose::Plain,
+        |pool, at, line| async move { Ok(line.holder(&pool, &at, to).await?.is_some()) },
+    )
+    .await?;
+    held.then_some(()).ok_or(SdkError::ReceiverUnregistered)
+}
