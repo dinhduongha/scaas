@@ -586,6 +586,19 @@ async fn no_transaction_row_no_figure() {
     let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
     let path = SubmitPath::SelfRelay { payer: payer(&t) };
     assert!(t.sdk.op().quote(p, path).await.is_ok(), "control");
+    // an app's own figure (an operation with no row of its own) without the transaction row: no figure either, never one on a
+    // made-up transaction cost; the control with the row
+    let key = ("mtxPay", "token", 0x0101, false);
+    let plain = &gas::OpGas::PLAIN;
+    let none = crate::GasRows::default();
+    assert_eq!(
+        gas::quoted(&none, &[], &[], Some(9), key, 10, plain).unwrap(),
+        None
+    );
+    let with = gas::with_tx(crate::GasRows::default());
+    assert!(gas::quoted(&with, &[], &[], Some(9), key, 10, plain)
+        .unwrap()
+        .is_some());
     // a gateway quote too: the operation's row alone gives no figure (`gas: None`), never one on a made-up transaction cost
     let t = setup(1, |pr, _| pr.gas.base.retain(|b| b.entry != gas::TX_ENTRY)).await;
     let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
