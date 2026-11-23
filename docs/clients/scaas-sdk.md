@@ -521,7 +521,8 @@ profile's caps; a gas price of 0 is a value like any other; no block limit is co
 <a id="CLI-SDK-16"></a>**CLI-SDK-16** — **EVM keys sign only built transactions; other native chains sign through one guarded entry**
 (owner 2026-11-17; BUILT: plan T11, T11b, T19, `tests/wallet.rs`, `src/wallet/raw_tests.rs`; UNAUDITED). EVM native sends (`evm`, `hedera_ecdsa`) are transactions of type 0, 1 or 2 built and signed in `ua-rs`
 (3 and 4 refused; 0 by default where the chain has no base fee; owner 2026-11-18, ruling 3), quoted and capped, a delegated sender's
-quote carrying the delegation mark (ruling 5); no EVM key signs a raw digest. For another chain an app's own encoder builds the transaction and the SDK signs it through
+quote carrying the delegation mark (ruling 5); no EVM key signs a raw digest. Soroban's native XLM send is built by the SDK from named fields and signed by `ua-rs`'s transaction builder (plan
+T41.soroban, `soroban_prepare_native_send`, `tests/soroban_ops.rs`). For another chain an app's own encoder builds the transaction and the SDK signs it through
 one entry that exists only behind its own feature and marker and is absent from the default generated surface. The entry, not
 `ua-rs`'s existing calls, enforces the restrictions (`ua-rs` keeps its native-key digest signing for other uses): native keys only,
 never a UA key or a SCaaS kind, never an EVM-address key; NEAR, Sui, Stellar and Hedera Ed25519 through `ua-rs`'s envelope-building
