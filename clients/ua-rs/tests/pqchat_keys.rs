@@ -9,7 +9,7 @@ use scaas_ua::wallet::pqchat_keys::{
     sig_hash, unpad, Header, WALK_MAX,
 };
 use scaas_ua::wallet::{AppKeys, Error, KemKeyPair, KemWrap, KeyHandle, KeyUsage, Wallet};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 const MNEMONIC: &str = "bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author capable act festival slice deposit sauce coconut afford frown better";
 
@@ -544,9 +544,10 @@ fn bounded_decoders() {
 #[allow(dead_code)]
 fn _types(_: KemWrap) {}
 
-/// V1: every record row with a signature (the message and the topic records; the control-plane rows keep only their
-/// `sigHash`, as state does) verifies against its signer's record as `requirePortable` judges it; one change at a time
-/// (a signature byte, another signer's UA, a native id, a struct outside the records) does not.
+/// V1: every record row with a signature (the control-plane records, the message and the topic records; CTR-CHAT-23: an
+/// `sstore2` instance keeps the control-plane signatures in state) verifies against its signer's record as `requirePortable`
+/// judges it; one change at a time (a signature byte, another signer's UA, a native id, a struct outside the records, a
+/// control-plane record's `sealedInfo` or another field) does not.
 #[test]
 fn v1_verifies_the_record_rows() {
     use scaas_ua::wallet::{pqchat, AppRecordState};
@@ -568,6 +569,10 @@ fn v1_verifies_the_record_rows() {
     };
     let ua_of = |name: &str| a32(&signers.iter().find(|s| s["name"] == name).unwrap()["ua"]);
     let rows = [
+        (&rec, "session", "PqChatSession"),
+        (&rec, "epoch", "PqChatEpoch"),
+        (&rec, "leave", "PqChatLeave"),
+        (&rec, "remove", "PqChatRemove"),
         (&rec, "message", "PqChatMessage"),
         (&top, "topic", "PqTopic"),
         (&top, "post", "PqTopicEntry"),
@@ -581,6 +586,23 @@ fn v1_verifies_the_record_rows() {
         let ua = ua_of(r["signer"].as_str().unwrap());
         let sig = uasig(&r["uaSig"]);
         assert!(pqchat::verify(&ua, &td, &sig, &state), "{row}");
+        // CTR-CHAT-23: the threat a kept signature closes, a field the endpoint substitutes (a store list of its own in
+        // `sealedInfo`, a member it adds) under the record's own signature
+        for field in ["sealedInfo", "nonce"] {
+            if let Some(x) = r["record"].get(field) {
+                let mut changed = r["record"].clone();
+                changed[field] = if x.is_string() {
+                    json!("0xbad0")
+                } else {
+                    json!(x.as_u64().unwrap() + 1)
+                };
+                let td2 = pqchat::typed(name, changed).unwrap();
+                assert!(
+                    !pqchat::verify(&ua, &td2, &sig, &state),
+                    "{row}: {field} changed"
+                );
+            }
+        }
         let mut bad = sig.clone();
         bad.signature[0] ^= 1;
         assert!(

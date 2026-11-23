@@ -389,6 +389,11 @@ impl PqChat {
         let admins = sorted(&r.admins, Some(&me))?;
         check_stores(&r.info)?;
         self.require_listed(&r.chain, &r.home).await?;
+        if self.conf.require_signed_records
+            && self.sig_store(&r.chain, &r.home).await != Ok(crate::signed::SIG_SSTORE2)
+        {
+            return Err(PqChatError::HomeUnsigned);
+        }
         let c = self.conf(&r.chain)?.clone();
         let sid = self.app.pqchat_session_id(me.clone(), r.nonce)?;
         // only a room this client created for the session, bound to it before anything is signed (CLI-PQC-05)

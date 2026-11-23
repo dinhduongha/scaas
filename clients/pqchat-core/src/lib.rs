@@ -40,6 +40,7 @@ pub mod order;
 pub mod reads;
 pub mod recovery;
 pub mod session;
+pub mod signed;
 #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub mod store;
 pub mod stores;
@@ -91,6 +92,14 @@ pub struct ChainConf {
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct PqChatConfig {
     pub chains: Vec<ChainConf>,
+    /// CLI-PQC-15 (owner 2026-11-23): also refuse a home that keeps no signatures (`sigStore` `none`). Off by default: an
+    /// `sstore2` home is verified either way (no switch turns that off), a `none` home is read on the contract's check.
+    #[serde(default)]
+    pub require_signed_records: bool,
+    /// CLI-PQC-16 (owner 2026-11-23, option d): the control-plane reads at an instance (`IPqChat`'s trusted views) as agreed
+    /// reads (strict majority, CLI-RPC-05) whatever the chain's list policy. Off by default, never forced.
+    #[serde(default)]
+    pub agreed_reads: bool,
 }
 
 /// The PqChat client core: one per process, over one app-core scope of the SDK.
@@ -158,10 +167,15 @@ impl PqChat {
         conf: PqChatConfig,
     ) -> Result<Arc<Self>, PqChatError> {
         let app = scope(&sdk)?;
-        let net = Arc::new(net::SdkNet {
+        let sdk_net = net::SdkNet {
             sdk,
             app: app.clone(),
-        });
+        };
+        let net: Arc<dyn net::Net> = if conf.agreed_reads {
+            Arc::new(net::AgreedNet(sdk_net))
+        } else {
+            Arc::new(sdk_net)
+        };
         Ok(Self::with_net(app, net, store, conf))
     }
 

@@ -157,9 +157,10 @@ impl PqChat {
         self.accept_record(ep, r).await
     }
 
-    /// A message posted at `instance` (`messageAt(sessionId, index)`, a trusted read): its signature bytes are not in state
-    /// (CTR-CHAT-05), so it counts on the contract's check, only from a listed instance, with the sender's membership checked
-    /// again at the home (`ep`, read there), then the checks after the signature (K12).
+    /// A message posted at `instance` (`messageAt(sessionId, index)`, a trusted read), only from a listed instance: on an
+    /// `sstore2` instance with the sender's kept signature verified (CLI-PQC-15); on a `none` one on the contract's check
+    /// (K12), or refused under `require_signed_records`; then the sender's membership checked again at the home (`ep`, read
+    /// there) and the checks after the signature.
     pub async fn posted(
         &self,
         instance: &str,
@@ -206,6 +207,23 @@ impl PqChat {
         };
         if r.session_id != ep.epoch.session_id || r.epoch_id != ep.epoch.id {
             return Err(DropReason::Control);
+        }
+        // CLI-PQC-15: an `sstore2` instance keeps the message's signature, so it counts only when the sender's verifies; a
+        // `none` one counts on the contract's check (K12), or is refused under `require_signed_records`
+        if self.verifies(&ep.chain, instance).await? {
+            let rec: serde_json::Value =
+                serde_json::from_str(&record_json(&r)).map_err(|_| DropReason::Decode)?;
+            let a =
+                serde_json::json!({ "sessionId": ep.epoch.session_id, "index": index.to_string() });
+            self.verify_kept(
+                &ep.chain,
+                instance,
+                &r.sender,
+                "PqChatMessage",
+                &rec,
+                ("IPqChat.messageSig", a),
+            )
+            .await?;
         }
         self.accept_record(ep, r).await
     }

@@ -4982,7 +4982,11 @@ mod tests {
             raw_form.data,
             "the default is sstore2"
         );
-        let none = with(&[("config", json!({"owner": k["config"]["owner"].clone(), "sigStore": 0}))]).unwrap();
+        let none = with(&[(
+            "config",
+            json!({"owner": k["config"]["owner"].clone(), "sigStore": 0}),
+        )])
+        .unwrap();
         let (_, nb, _) = op_from_calldata(row, &none.data);
         let want = k["initCall"].as_str().unwrap();
         assert_eq!(
@@ -4992,10 +4996,13 @@ mod tests {
         );
         for v in [1, 3, 255] {
             assert!(
-                with(&[("config", json!({"owner": k["config"]["owner"].clone(), "sigStore": v}))])
-                    .unwrap_err()
-                    .to_string()
-                    .contains("args.config.sigStore: 0 (none) or 2"),
+                with(&[(
+                    "config",
+                    json!({"owner": k["config"]["owner"].clone(), "sigStore": v})
+                )])
+                .unwrap_err()
+                .to_string()
+                .contains("args.config.sigStore: 0 (none) or 2"),
                 "sigStore {v}"
             );
         }
@@ -5049,7 +5056,8 @@ mod tests {
         );
         let bad4 = |c: Value| on(&four, &[("config", c)]).unwrap_err().to_string();
         assert!(bad4(json!({"owner": z32(0), "admin": z32(0)})).contains("(PqVault takes owner)"));
-        assert!(bad4(k["config"].clone()).contains("args.config.sigStore: unknown field (PqVault takes owner)"));
+        assert!(bad4(k["config"].clone())
+            .contains("args.config.sigStore: unknown field (PqVault takes owner)"));
         assert!(
             bad4(json!({"owner": format!("{:#x}", B256::repeat_byte(0x0b))}))
                 .contains("args.config.owner: 0 or the creator")

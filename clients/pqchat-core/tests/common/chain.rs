@@ -193,6 +193,7 @@ impl Local {
                 registry: self.registry.clone(),
                 factory: self.factory.clone(),
             }],
+            ..PqChatConfig::default()
         }
     }
 
@@ -331,7 +332,8 @@ pub async fn local(accounts: &[(u32, bool)]) -> (Local, Vec<Me>) {
 /// `instances` more `PqChat` instances listed through the factory's `createInstance` (anyone may call it; release
 /// `(3, 0, 1)`, no owner), each by its own salt: their addresses.
 fn create_instances(rpc: &str, factory: &str, instances: usize) -> Vec<String> {
-    let init = cast(&["calldata", "initialize(bytes32)", ZERO]);
+    // CTR-CHAT-23: the default setting, sstore2 (2)
+    let init = cast(&["calldata", "initialize(bytes32,uint8)", ZERO, "2"]);
     (0..instances)
         .map(|i| {
             let salt = cast(&["keccak", &format!("scaas.pqchat.e2e.{i}")]);

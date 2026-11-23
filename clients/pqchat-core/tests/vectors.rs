@@ -258,6 +258,15 @@ async fn message_rows() {
         )
     };
     assert!(v1("PqChatMessage", &rec["message"]).await.unwrap());
+    // CTR-CHAT-23: the control-plane rows are signed, as an `sstore2` home keeps them (CLI-PQC-15)
+    for (name, row) in [
+        ("PqChatSession", "session"),
+        ("PqChatEpoch", "epoch"),
+        ("PqChatLeave", "leave"),
+        ("PqChatRemove", "remove"),
+    ] {
+        assert!(v1(name, &rec[row]).await.unwrap(), "{row}");
+    }
     let t = pq("topics");
     for (name, row) in [
         ("PqTopic", "topic"),

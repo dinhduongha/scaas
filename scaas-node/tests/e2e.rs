@@ -3499,7 +3499,10 @@ async fn router_instance_creations_signed_by_an_eoa() {
         "the named config: the creator owns it"
     );
     assert_eq!(
-        (view(&rpc, raw_at, sigStoreCall {}).await, view(&rpc, named_at, sigStoreCall {}).await),
+        (
+            view(&rpc, raw_at, sigStoreCall {}).await,
+            view(&rpc, named_at, sigStoreCall {}).await
+        ),
         (0, 2),
         "init_call: none; the named config: the default sstore2"
     );

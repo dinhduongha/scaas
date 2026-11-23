@@ -975,6 +975,40 @@ async fn generic_signing_refuses_pqchat() {
     assert_eq!(code(sign(AppPath::Portable, typed(mine)).await), "Ok");
 }
 
+/// CTR-CHAT-23 option d (owner 2026-11-23): `read_app_agreed` is `read_app` as an agreed read (CLI-RPC-05), the read's own
+/// option: on the fake chain's one-endpoint list it is refused by the agreed read's own check (`Argument`, two endpoints or
+/// more), while the same `read_app` answers (the control). The agreement itself is scaas-rpc's
+/// (`an_agreed_read_on_a_failover_list_outvotes_one_liar`).
+#[tokio::test(flavor = "multi_thread")]
+async fn read_app_agreed_is_the_agreed_read() {
+    let _one = ONE.lock().await;
+    let (sdk, _seed, chain) = on_fake().await;
+    let a = AppCore::new(sdk, desc(&[PQC])).unwrap();
+    let entry =
+        json!({"type": "function", "name": "sigStore", "stateMutability": "view", "inputs": [],
+        "outputs": [{"name": "", "type": "uint8"}]})
+        .to_string();
+    answer(&chain, VIEW, "sigStore()", &[], w(2));
+    let plain = a
+        .read_app(
+            "local".into(),
+            VIEW.into(),
+            entry.clone(),
+            "{}".into(),
+            true,
+        )
+        .await
+        .unwrap();
+    assert_eq!(plain, json!({"0": "2"}).to_string());
+    assert_eq!(
+        code(
+            a.read_app_agreed("local".into(), VIEW.into(), entry, "{}".into(), true)
+                .await
+        ),
+        "Argument"
+    );
+}
+
 /// `read_app`: a named JSON answer from the entry's outputs at the final block; trusted reads skip a discovered-only list
 /// elsewhere (the KEM read's test); bounds by name.
 #[tokio::test(flavor = "multi_thread")]

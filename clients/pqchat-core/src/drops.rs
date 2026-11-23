@@ -23,10 +23,12 @@ pub enum DropReason {
     Content,
     TooFar,
     Control,
+    /// CLI-PQC-15: a record of an instance that keeps no signatures (`sigStore` `none`) under `require_signed_records`
+    Unsigned,
 }
 
 impl DropReason {
-    pub const ALL: [DropReason; 12] = [
+    pub const ALL: [DropReason; 13] = [
         DropReason::Envelope,
         DropReason::Decode,
         DropReason::Signature,
@@ -39,6 +41,7 @@ impl DropReason {
         DropReason::Content,
         DropReason::TooFar,
         DropReason::Control,
+        DropReason::Unsigned,
     ];
     /// The reason's name as CLI-PQC-07 writes it.
     pub fn name(self) -> &'static str {
@@ -55,6 +58,7 @@ impl DropReason {
             DropReason::Content => "content",
             DropReason::TooFar => "too-far",
             DropReason::Control => "control",
+            DropReason::Unsigned => "unsigned",
         }
     }
 }
