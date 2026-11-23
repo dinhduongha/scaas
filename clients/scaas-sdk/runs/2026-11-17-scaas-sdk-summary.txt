@@ -282,7 +282,6 @@ gas-gen | 7c637b66f | 0 | -
 # (docs, node) fixed on ua-rs-sign at fe435934b. Local only: the Nethermind copy (PQZ debit green; e2e_bls_multi_64_on_a_node
 # red GasAboveTxCap, open: runs/2026-11-20-m20-nethermind-summary.txt), the Soroban e2e (sdk-soroban-e2e, green).
 # Mutants: 70 reruns, 70 killed (plan T39). origin/ua-rs-sign b0ee76349 (pqvault-core, url 2.5.9) merged before T25.
-sdk-deny | 4a96991f4 | 0 | -
 sdk-clippy-default | 4a96991f4 | 0 | -
 sdk-clippy-min | 4a96991f4 | 0 | -
 sdk-uniffi | 4a96991f4 | 0 | 18 passed, 0 failed, 0 ignored (2 binaries)
@@ -337,7 +336,6 @@ bind-kotlin | 1e73c93e4 | 0 | kotlin: PASS (0 failures)
 bind-java | 1e73c93e4 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
 bind-go | 1e73c93e4 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
 bind-js | 1e73c93e4 | 0 | node: 6 pass, 0 fail, 0 skipped
-cli | 1e73c93e4 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 sdk-uniffi | 78d410f45 | 0 | 21 passed, 0 failed, 0 ignored (4 binaries)
 sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
@@ -348,7 +346,6 @@ ua-vectors | 190cc2ba7 | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
 ua-appcore | 190cc2ba7 | 0 | 20 passed, 0 failed, 0 ignored (1 binaries)
 ua-verify-only | 190cc2ba7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
 ua-core | 190cc2ba7 | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
-cli | 190cc2ba7 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 bind-gen | ebadbb0ff | 0 | -
 sdk-test | ebadbb0ff | 0 | 474 passed, 0 failed, 18 ignored (42 binaries)
 sdk-noevm | ebadbb0ff | 0 | 171 passed, 0 failed, 1 ignored (23 binaries)
@@ -360,4 +357,6 @@ rpc-test | ebadbb0ff | 0 | 234 passed, 0 failed, 10 ignored (23 binaries)
 rpc-clippy | ebadbb0ff | 0 | -
 rpc-wasm | ebadbb0ff | 0 | -
 docs | 6fd5d6e5c | 0 | -
-mutants-check | 6fd5d6e5c | 1 | -
+mutants-check | 957827e7c | 0 | -
+cli | 957827e7c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+sdk-deny | 957827e7c | 0 | -
