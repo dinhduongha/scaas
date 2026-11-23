@@ -6,6 +6,8 @@
 # (owner 2026-11-15: a wait is never silent; `fuser ~/.cache/r3-locks/heavy*` names the holders).
 # Slot 1 is the historical lock file `heavy`, so `fuser heavy` still finds a job.
 slots=${CAPPED_SLOTS:-3}
+# Inside the scope: a tool that would wrap its own heavy step (script/pqz/lanes.sh) runs it directly instead.
+export CAPPED_SCOPE=1
 # CAPPED_MEM overrides the per-job cap (default 4G; owner 2026-10-19: fuzz campaigns may run 3 at once at 3G).
 dir="$HOME/.cache/r3-locks"
 said=
