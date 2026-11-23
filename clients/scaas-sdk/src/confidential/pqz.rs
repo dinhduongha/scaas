@@ -196,7 +196,7 @@ struct Raw {
 #[derive(Debug, Clone)]
 pub(crate) struct PqzRead {
     pub block: u64,
-    /// the facade's words command fields: `{chainUid, token, block, psid, keyRecord, ua, account, pending, accWords,
+    /// the facade's words command fields: `{chainUid, token, block, psid, keyRecord, pqzVerifyMode, ua, account, pending, accWords,
     /// sendCounterWord, keyVersion, keyVersions, forOp7, blobs}`
     pub words: Value,
     /// the token's slot 0 (`disclosureMode`, `auditorMode`, `pqzVerifyMode`, `proofStore`, `auditorEpoch`)
@@ -357,15 +357,20 @@ fn check(
     if field(&x.slot0, "proofStore") > 1 {
         return Err(SdkError::TokenUncatalogued);
     }
-    // R6: the registry's key of (ua, v), proven, is the handle's
+    // R6: the registry's key of (ua, v), usable as the token reads the holder's (`PqzCore._usable`: proven, or an `OFFCHAIN`
+    // token), is the handle's
+    let offchain = field(&x.slot0, "pqzVerifyMode") == 1;
     let ptr = low_addr(&x.key_record, 0);
     let proven = x.key_record[11] == 1;
     let code = x.blobs.iter().find(|b| b.0 == ptr).map(|b| b.1.as_slice());
-    if !proven || ptr == [0; 20] || code.and_then(|c| c.split_first()) != Some((&0, pk)) {
+    if !(proven || offchain)
+        || ptr == [0; 20]
+        || code.and_then(|c| c.split_first()) != Some((&0, pk))
+    {
         return Err(SdkError::LegKeyMismatch);
     }
     let words = json!({"chainUid": hex(chain_uid), "token": hex(token), "block": block, "psid": hex(&r.psid),
-        "keyRecord": hex(&x.key_record), "ua": hex(ua),
+        "keyRecord": hex(&x.key_record), "pqzVerifyMode": u64::from(offchain), "ua": hex(ua),
         "account": x.account.iter().map(|w| hex(w)).collect::<Vec<_>>(),
         "pending": x.pending.iter().map(|(i, w)| json!({"index": i, "word": hex(w)})).collect::<Vec<_>>(),
         "accWords": x.acc_words.iter().map(|w| hex(w)).collect::<Vec<_>>(),
@@ -374,7 +379,6 @@ fn check(
         "blobs": x.blobs.iter().map(|(a, c)| json!({"address": hex(a), "code": hex(c)})).collect::<Vec<_>>()});
     // the second set: each named UA's current key usable as the token reads it (`_creditKey`: proven, or an `OFFCHAIN` token,
     // and `0x00 ‖ pk` of the set's length), else the recipient is unregistered
-    let offchain = field(&x.slot0, "pqzVerifyMode") == 1;
     let mut keys = Vec::with_capacity(x.keys.len());
     for (_, record, code) in &x.keys {
         let ok = (record[11] == 1 || offchain)
