@@ -1014,11 +1014,10 @@ struct Release(u64, Arc<dyn ForeignStore>);
 #[cfg(not(feature = "sync-api"))]
 impl Drop for Release {
     fn drop(&mut self) {
-        // the release runs on the runtime that dropped the lock (every SDK call runs on one)
+        // review T26 C-7: the release runs to its end on a thread of its own: never a task a runtime's shutdown drops, and
+        // where no runtime runs too
         let (token, store) = (self.0, self.1.clone());
-        if let Ok(h) = tokio::runtime::Handle::try_current() {
-            h.spawn(async move { store.unlock(token).await });
-        }
+        crate::vault::store::release_on_own_thread(async move { store.unlock(token).await });
     }
 }
 
@@ -1140,5 +1139,80 @@ mod tests {
         // control: text that parses lifts
         let good = <String as Lower<crate::UniFfiTag>>::lower("{\"a\":1}".into());
         assert!(<Value as Lift<crate::UniFfiTag>>::try_lift(good).is_ok());
+    }
+
+    /// A store counting its unlocks.
+    #[cfg(not(feature = "sync-api"))]
+    #[derive(Default)]
+    struct Count(std::sync::atomic::AtomicU32);
+
+    #[cfg(not(feature = "sync-api"))]
+    #[async_trait]
+    impl ForeignStore for Count {
+        async fn get(&self, _: String, _: String) -> Result<Option<StoredItem>, StoreError> {
+            Ok(None)
+        }
+        async fn put_if(
+            &self,
+            _: String,
+            _: Option<u64>,
+            _: Vec<u8>,
+            _: StorePolicy,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+        async fn delete(&self, _: String) -> Result<(), StoreError> {
+            Ok(())
+        }
+        async fn lock(&self, _: String) -> Result<u64, StoreError> {
+            Ok(7)
+        }
+        async fn unlock(&self, token: u64) {
+            assert_eq!(token, 7);
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    /// Review T26 C-7: the store's lock is released wherever it is dropped: on a thread where no runtime runs, and (the twin)
+    /// inside the runtime that took it.
+    #[cfg(not(feature = "sync-api"))]
+    #[test]
+    fn a_lock_is_released_wherever_it_is_dropped() {
+        let unlocks = |c: &Count| {
+            for _ in 0..100 {
+                if c.0.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            c.0.load(std::sync::atomic::Ordering::SeqCst)
+        };
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let c = Arc::new(Count::default());
+        let lock = rt
+            .block_on(StoreAdapter(c.clone()).lock("keystore".into()))
+            .unwrap();
+        drop(rt);
+        drop(lock);
+        assert_eq!(unlocks(&c), 1, "dropped where no runtime runs");
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let c = Arc::new(Count::default());
+        rt.block_on(async {
+            let lock = StoreAdapter(c.clone())
+                .lock("keystore".into())
+                .await
+                .unwrap();
+            drop(lock);
+        });
+        drop(rt);
+        assert_eq!(
+            unlocks(&c),
+            1,
+            "dropped inside its runtime, which then shuts down"
+        );
     }
 }

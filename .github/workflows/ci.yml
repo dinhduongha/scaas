@@ -1300,6 +1300,7 @@ jobs:
           cargo clippy --locked --all-targets --features "$U,sync-api" -- -D warnings
           cargo test --locked --features "$U,uniffi" --test binding
           cargo test --locked --features "$U,uniffi" --lib binding::tests
+          cargo test --locked --features "$U,sync-api" --lib sync_cpp::tests
           cargo test --locked --features "$U,sync-api" --test binding
       - name: the reference library with each UniFFI surface (review B16)
         working-directory: clients/scaas-sdk/ffi

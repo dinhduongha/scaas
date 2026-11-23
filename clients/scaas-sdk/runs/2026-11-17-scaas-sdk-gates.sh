@@ -70,7 +70,7 @@ STEPS=(
     "bind-js|clients/scaas-sdk/bindings/js|WASM_BINDGEN=\${WASM_BINDGEN:-$TOOLS/wasm-bindgen/bin/wasm-bindgen} bash run.sh"
     "bind-java|clients/scaas-sdk/bindings/java|python3 -I test_fix_generated.py && JAVA_HOME=\${JAVA_HOME_25:-$TOOLS/jdk-25} bash run.sh"
     "bind-go|clients/scaas-sdk/bindings/go|python3 -I test_fix_generated.py && bash run.sh"
-    "sdk-uniffi|clients/scaas-sdk|$cap cargo test $C --features $F,uniffi --test binding && $cap cargo test $C --features $F,uniffi --lib binding::tests && $cap cargo test $C --features $F,sync-api --test binding && $cap cargo clippy $C --all-targets --features $F,uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features $F,sync-api -- -D warnings"
+    "sdk-uniffi|clients/scaas-sdk|$cap cargo test $C --features $F,uniffi --test binding && $cap cargo test $C --features $F,uniffi --lib binding::tests && $cap cargo test $C --features $F,sync-api --lib sync_cpp::tests && $cap cargo test $C --features $F,sync-api --test binding && $cap cargo clippy $C --all-targets --features $F,uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features $F,sync-api -- -D warnings"
     "sdk-opaque|clients/scaas-sdk|$cap cargo test $C --features $F,opaque-calls --test wallet_ops"
     "ua-vectors|clients/ua-rs|$cap cargo clippy $C --all-targets --features vectors,roots -- -D warnings && $cap cargo test $C --features vectors,roots"
     "ua-appcore|clients/ua-rs|$cap cargo clippy $C --all-targets --features app-core,vectors -- -D warnings && $cap cargo test $C --features app-core,vectors --test app_core && python3 -I scripts/gen_app_refusals.py --check"

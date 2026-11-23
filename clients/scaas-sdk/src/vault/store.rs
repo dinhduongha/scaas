@@ -67,6 +67,22 @@ pub enum StoreError {
     Unexpected,
 }
 
+/// A foreign store's lock release, run to its end on a thread of its own on a current-thread runtime (review T26 C-7): a
+/// task of the SDK's runtime would be dropped by its shutdown, and a drop where no runtime runs could not run it at all.
+#[cfg(any(feature = "uniffi", feature = "frb"))]
+pub(crate) fn release_on_own_thread(f: impl std::future::Future<Output = ()> + Send + 'static) {
+    let _ = std::thread::Builder::new()
+        .name("scaas-store-unlock".into())
+        .spawn(move || {
+            if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                rt.block_on(f);
+            }
+        });
+}
+
 /// A held store lock; released on drop.
 pub struct StoreLock {
     _held: Box<dyn Send + Sync>,
