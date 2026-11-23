@@ -555,6 +555,30 @@ async fn pq_registration_step_that_does_not_fit_refused() {
     );
 }
 
+/// Review A2-9: a registry write whose every handle the caller dropped is pruned at the next preparation; the writes still
+/// held stay (twin).
+#[tokio::test(flavor = "multi_thread")]
+async fn dropped_registry_writes_are_pruned() {
+    let t = reg_setup(PQ, 150_000_000, reg_rows(300_000, 2_000_000)).await;
+    let n = || t.sdk.registry_writes.lock().unwrap().len();
+    let first = writes(&t.sdk, "local", &t.payer, t.ua, &t.args, None)
+        .await
+        .unwrap();
+    let kept = writes(&t.sdk, "local", &t.payer, t.ua, &t.args, None)
+        .await
+        .unwrap();
+    assert_eq!(n(), first.len() + kept.len(), "both held");
+    drop(first);
+    let third = writes(&t.sdk, "local", &t.payer, t.ua, &t.args, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        n(),
+        kept.len() + third.len(),
+        "the dropped ones pruned, the held ones kept"
+    );
+}
+
 /// (d) A restart between the two steps: the registration landed, its proof not stored, `pqzKeyAt(ua, 0).pqzPopHash` its
 /// commit (F22, M1): `storePqzPop` alone is prepared from the stored state, stated as the second of two, quoted from its
 /// row (the regular the table's, the whole max(estimate, table)).

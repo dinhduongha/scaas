@@ -44,6 +44,12 @@ OPS = "clients/scaas-sdk/src/wallet/ops.rs"
 CPQ = "clients/scaas-sdk/src/confidential/pqz.rs"
 FPQ = "clients/ua-rs/src/facade/pqz.rs"
 DLY = "clients/scaas-sdk/src/admin/delay.rs"
+HOF = "clients/scaas-sdk/src/op/handoff.rs"
+REG = "clients/scaas-sdk/src/account/register.rs"
+MSG = "clients/scaas-sdk/src/account/msig.rs"
+MAN = "clients/ua-rs/src/wallet/manifest.rs"
+OPM = "clients/scaas-sdk/src/op/mod.rs"
+REVM = "clients/scaas-rpc/src/evm.rs"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
@@ -432,6 +438,71 @@ MUTANTS = [
         "A-5b: a PqChat record's key opened at prepare",
         [(PQR, "        Ok(PqChatPrepared {\n            record: name.into(),", "        let crate::op::Key::Ua(..) = crate::op::key(&self.sdk, &account)? else {\n            return Err(SdkError::Argument);\n        };\n        Ok(PqChatPrepared {\n            record: name.into(),")],
         T + ",vectors --test pqchat_records entries_reproduce_the_vectors",
+    ),
+    (
+        "Sticky: no retry of a moved head",
+        [(REVM, "        for _ in 0..STICKY_TRIES {", "        for _ in 0..1 {")],
+        R + " --test evm_profiles a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head",
+    ),
+    (
+        "Sticky: the head not read again",
+        [(REVM, "                    Ok((head().await? == (number, hash)).then_some((v, number, hash)))", "                    Ok(Some((v, number, hash)))")],
+        R + " --test evm_profiles a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head",
+    ),
+    (
+        "Sticky: a request named by a made-up pin",
+        [(REVM, "        if self.pinned_reads {\n            pinned(at)\n        } else {\n            alloy::eips::BlockId::latest()\n        }", "        pinned(at)")],
+        R + " --test evm_profiles a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head",
+    ),
+    (
+        "Sticky: a read feeding a decryption served",
+        [(REVM, "        if purpose == Purpose::FeedsDecryption\n            || self.pool.policy()", "        if self.pool.policy()")],
+        R + " --test evm_profiles a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head",
+    ),
+    (
+        "Sticky: strict majority served",
+        [(REVM, "            || self.pool.policy() == crate::Policy::StrictMajority\n", "            || false\n")],
+        R + " --test evm_profiles a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head",
+    ),
+    (
+        "Sticky: read_line pinned on every chain",
+        [(LINE, "    Ok(if pool.pinned_reads() || choice != BlockChoice::Latest {", "    Ok(if true {")],
+        T + " --lib account::msig::tests::msig_on_a_two_generation_line",
+    ),
+    (
+        "(161): a simulated revert loses its reason",
+        [(OPM, "        SimError::Revert(reason) => SdkError::Rpc(scaas_rpc::RpcError::Revert {\n            endpoint: 0,\n            data: vec![],\n            reason,", "        SimError::Revert(_) => SdkError::Rpc(scaas_rpc::RpcError::Revert {\n            endpoint: 0,\n            data: vec![],\n            reason: String::new(),")],
+        T + " --lib line::tests::a_simulated_revert_keeps_its_reason",
+    ),
+    (
+        "A2-6: the generation raised before the keys are checked",
+        [(MAN, "        recipients.iter().try_for_each(Recipient::check)?;\n", "")],
+        "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 --test wallet_custody a_refused_backup_raises_no_generation",
+    ),
+    (
+        "A2-7: no bounds on a blob built as a struct",
+        [(HOF, "                SignedOpBlob::from_json(&blob.to_json()?)?;\n", "")],
+        T + " --test handoff blob_bounds_and_the_cap",
+    ),
+    (
+        "A2-7: the blob's signer not its from",
+        [(HOF, "                if unhex(&blob.signer)? != from {", "                if false {")],
+        T + " --test handoff import_refusals_in_order",
+    ),
+    (
+        "A2-7: the kind on the blob's word",
+        [(HOF, "                if kind != blob.signer_kind {", "                if false {")],
+        T + " --test handoff import_refusals_in_order",
+    ),
+    (
+        "A2-9: the write table never pruned",
+        [(REG, "    t.retain(|_, x| x.strong_count() > 0);\n", "")],
+        T + " --lib account::register::tests::dropped_registry_writes_are_pruned",
+    ),
+    (
+        "A2-11: a Signed slot's inner leaves unchecked",
+        [(MSG, "            MsigSlot::Signed { member, .. } => {\n                let m = member_of(member)?;\n                if m.members.is_empty() {", "            MsigSlot::Signed { member, .. } => {\n                let m = member_of(member)?;\n                if true {")],
+        T + " --lib account::msig::tests::msig_minimal_sets",
     ),
 ]
 

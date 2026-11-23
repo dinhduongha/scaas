@@ -2132,4 +2132,42 @@ async fn pqvault_records_on_a_two_generation_line() {
         .await
         .unwrap());
     say("F2's generic part: a native record by generation 2's domain");
+
+    // M's `updateMsig` with its native member, prepared through generation 2 (it binds and lands at generation 1, M's holder:
+    // F2, (120)), signed by both slots of the stored structure. Threshold 2 -> 1 lets the native member authorize alone: M is
+    // no longer PQ-eligible, which the chain refuses (UA-6 U3, `msigBound`'s `UAPqzHolder`), its reason kept (decision (161))
+    // `pq`: the PQ member's weight (the native one weighs 1)
+    let update = |pq: u16, threshold: u16| {
+        let mut members = st.members.clone();
+        for m in members.iter_mut().filter(|m| m.kind == FNDSA512) {
+            m.weight = pq;
+        }
+        let structure = msig_structure(members, threshold).unwrap();
+        let block: u64 = cast(&["block-number", "--rpc-url", &rpc]).parse().unwrap();
+        acc.prepare_update_msig(scaas_sdk::account::UpdateMsig {
+            chain: "g2".into(),
+            ua: m.clone(),
+            structure,
+            enabled: vec![0, 1],
+            valid_until_block: block + 100,
+            slots: slots.clone(),
+            payer: d.payer.clone(),
+            verifier: false,
+            family_without_update: false,
+        })
+    };
+    let plan = update(1, 1).await.unwrap();
+    let e = acc.quote_registry_write(plan.write).await.unwrap_err();
+    assert!(
+        format!("{e:?}").contains("UAPqzHolder") || format!("{e:?}").contains("5c98ad17"),
+        "the chain's reason: {e:?}"
+    );
+    // the twin: the PQ member weighs 2, threshold 2: every quorum holds it, M stays PQ-eligible
+    let plan = update(2, 2).await.unwrap();
+    let q = acc.quote_registry_write(plan.write.clone()).await.unwrap();
+    let op = acc.submit_registry_write(plan.write, q).await.unwrap();
+    assert!(matches!(follow(&d.sdk, op).await, OpState::Landed { .. }));
+    let st = acc.msig_state("g2".into(), m.clone()).await.unwrap();
+    assert!(st.version == 1 && st.active, "{st:?}");
+    say("M's updateMsig with its native member landed at generation 1");
 }

@@ -5,6 +5,7 @@
 //! `holder` and the PQZ attachment at `pqzHome`; never assume the bound registry holds the record. Every read goes through
 //! the chain's pool (the profile's RPC list under its policy, ARCH-POS-15); only the SDK reads the line (owner C6: no RPC in
 //! the `ua-*` libraries). UNAUDITED.
+use crate::op::sim;
 use crate::{Sdk, SdkError};
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, U256};
@@ -63,21 +64,6 @@ impl UaLine {
     pub fn pqz_target(&self) -> Result<String, SdkError> {
         self.pqz_home.clone().ok_or(SdkError::PqzHomeNone)
     }
-}
-
-/// A read's failure as the SDK names it (the reason never carried: CLI-RPC-11).
-fn sim(e: scaas_rpc::evm::SimError) -> SdkError {
-    SdkError::Rpc(match e {
-        scaas_rpc::evm::SimError::Revert(_) => scaas_rpc::RpcError::Revert {
-            endpoint: 0,
-            data: vec![],
-            reason: String::new(),
-        },
-        scaas_rpc::evm::SimError::Transport(_) => scaas_rpc::RpcError::EndpointAllFailed {
-            last: None,
-            failover_revert: None,
-        },
-    })
 }
 
 fn addr(a: Address) -> String {
@@ -143,14 +129,13 @@ pub(crate) async fn write_target(
 ) -> Result<Address, SdkError> {
     let line = || async {
         Ok::<_, SdkError>(
-            pool.read_at_block(BlockChoice::Latest, Purpose::Plain, |at| async move {
+            read_one(pool, BlockChoice::Latest, Purpose::Plain, |at| async move {
                 Line::read(pool, &at, registry)
                     .await?
                     .holder_of(pool, &at, ua)
                     .await
             })
-            .await?
-            .value,
+            .await?,
         )
     };
     match entry {
@@ -175,15 +160,13 @@ pub(crate) async fn ua_line(
     registry: Address,
     ua: [u8; 32],
 ) -> Result<UaLine, SdkError> {
-    let r = pool
-        .read_at_block(BlockChoice::Latest, Purpose::Plain, |at| async move {
-            Line::read(pool, &at, registry)
-                .await?
-                .holder_of(pool, &at, ua)
-                .await
-        })
-        .await?
-        .value;
+    let r = read_one(pool, BlockChoice::Latest, Purpose::Plain, |at| async move {
+        Line::read(pool, &at, registry)
+            .await?
+            .holder_of(pool, &at, ua)
+            .await
+    })
+    .await?;
     let (holder, kind, pqz_home) = r.ok_or(SdkError::UaUnregistered)?;
     Ok(UaLine {
         holder: addr(holder),
@@ -338,8 +321,9 @@ impl Line {
 
 /// F2's reader: `f` over chain `chain`'s line (the profile's registry), every call of it by one endpoint at one block
 /// (`choice`; ARCH-POS-15: a logical read never mixes nodes or blocks, review A2-2), under `purpose`. `f` gets the pool, the
-/// block and the [`Line`] read at it; the answer is `f`'s with that line. `Argument` without a registry;
-/// `PinnedReadsUntrusted` on a chain whose RPC is not trusted on a pinned read (the profile's `pinnedReads` false).
+/// block and the [`Line`] read at it; the answer is `f`'s with that line. `Argument` without a registry. On a chain whose RPC
+/// is not trusted on a pinned read (the profile's `pinnedReads` false) a read at the latest block is the sticky read
+/// ([`read_one`]); a read feeding a decryption or at another block is `PinnedReadsUntrusted` there.
 pub(crate) async fn read_line<T, F, Fut>(
     sdk: &Sdk,
     chain: &str,
@@ -354,14 +338,35 @@ where
 {
     let (bound, pool) = self::bound(sdk, chain)?;
     let (f, p) = (&f, &pool);
-    Ok(pool
-        .read_at_block(choice, purpose, |at| async move {
-            let line = Line::read(p, &at, bound).await?;
-            let v = f(p.clone(), at, line.clone()).await?;
-            Ok((v, line))
-        })
-        .await?
-        .value)
+    Ok(read_one(&pool, choice, purpose, |at| async move {
+        let line = Line::read(p, &at, bound).await?;
+        let v = f(p.clone(), at, line.clone()).await?;
+        Ok((v, line))
+    })
+    .await?)
+}
+
+/// One logical read on `pool` (ARCH-POS-15; owner 2026-11-23, "Sticky endpoint"): pinned to one block by one endpoint
+/// ([`EvmPool::read_at_block`]) where the chain's pinned reads are trusted; else, at the latest block, the sticky read
+/// ([`EvmPool::read_sticky`]: one endpoint whose head did not move, a read feeding a decryption refused); another block
+/// choice there is `PinnedReadsUntrusted`.
+pub(crate) async fn read_one<T, F, Fut>(
+    pool: &EvmPool,
+    choice: BlockChoice,
+    purpose: Purpose,
+    f: F,
+) -> Result<T, scaas_rpc::RpcError>
+where
+    T: Clone + PartialEq,
+    F: Fn(At) -> Fut,
+    Fut: std::future::Future<Output = Result<T, ReadError>>,
+{
+    Ok(if pool.pinned_reads() || choice != BlockChoice::Latest {
+        pool.read_at_block(choice, purpose, f).await?
+    } else {
+        pool.read_sticky(purpose, f).await?
+    }
+    .value)
 }
 
 /// The decoy candidates (owner P19, §11.2 M5): the lists, oldest generation first, each `(ua, key hash)`, concatenated;
@@ -483,6 +488,13 @@ mod tests {
 
     fn w(b: u8) -> [u8; 32] {
         [b; 32]
+    }
+
+    /// Decision (161): a simulation's revert keeps the chain's reason (a refused write named its error nowhere before).
+    #[test]
+    fn a_simulated_revert_keeps_its_reason() {
+        let e = crate::op::sim(scaas_rpc::evm::SimError::Revert("UAPqzHolder(0x01)".into()));
+        assert!(format!("{e:?}").contains("UAPqzHolder(0x01)"), "{e:?}");
     }
 
     #[test]

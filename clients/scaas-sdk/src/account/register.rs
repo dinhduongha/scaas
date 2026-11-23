@@ -660,10 +660,14 @@ pub(crate) async fn keep_with(
         registration,
         to: registry,
     });
-    sdk.registry_writes
+    let mut t = sdk
+        .registry_writes
         .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .insert(w.id.clone(), w.clone());
+        .unwrap_or_else(PoisonError::into_inner);
+    // review A2-9: a write no caller holds any more is gone (the table never grows with writes prepared and dropped)
+    t.retain(|_, x| x.strong_count() > 0);
+    t.insert(w.id.clone(), Arc::downgrade(&w));
+    drop(t);
     Ok(w)
 }
 
@@ -923,7 +927,7 @@ fn known(sdk: &Sdk, w: &Arc<RegistryWrite>) -> Result<(), SdkError> {
         .unwrap_or_else(PoisonError::into_inner)
         .get(&w.id)
     {
-        Some(x) if Arc::ptr_eq(x, w) => Ok(()),
+        Some(x) if std::ptr::eq(x.as_ptr(), Arc::as_ptr(w)) => Ok(()),
         _ => Err(SdkError::PreparedUnknown),
     }
 }
@@ -935,7 +939,7 @@ fn take(sdk: &Sdk, w: &Arc<RegistryWrite>) -> Result<(), SdkError> {
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     match t.get(&w.id) {
-        Some(x) if Arc::ptr_eq(x, w) => {
+        Some(x) if std::ptr::eq(x.as_ptr(), Arc::as_ptr(w)) => {
             t.remove(&w.id);
             Ok(())
         }
@@ -1225,7 +1229,7 @@ impl Account {
                             .lock()
                             .unwrap_or_else(PoisonError::into_inner)
                             .entry(write.id.clone())
-                            .or_insert_with(|| write.clone());
+                            .or_insert_with(|| Arc::downgrade(&write));
                         return Err(e);
                     }
                 };

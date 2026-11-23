@@ -307,6 +307,11 @@ impl Recipient {
     pub fn kem_pk(&self) -> &[u8] {
         &self.kem_pk
     }
+
+    /// The key's §7.3 checks (`KemCheck`), by an encapsulation whose output is dropped: a seal to it then fails on none.
+    pub(super) fn check(&self) -> Result<()> {
+        super::kem::encaps(&self.kem_pk, &[0; 32], &[1; 32]).map(|_| ())
+    }
 }
 
 /// The sender the opener expects (never the container's own claim).

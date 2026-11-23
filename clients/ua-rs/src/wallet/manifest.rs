@@ -964,6 +964,8 @@ impl Wallet {
             return Err(Error::Argument);
         }
         let created = now()?;
+        // review A2-6: every recipient's key checked before the generation is raised (a refused backup raises none)
+        recipients.iter().try_for_each(Recipient::check)?;
         let _lease = self.store.lease(); // the payload's copies, through the seals (T21 L82)
         let pt = self.payload(sender, true)?;
         super::store::copied();

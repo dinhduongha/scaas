@@ -155,6 +155,8 @@ impl Op {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
+                // review A2-7: `from_json`'s bounds (size, depth) however the blob was built (a binding's record, serde)
+                SignedOpBlob::from_json(&blob.to_json()?)?;
                 let c = sdk.chain(&expect.chain)?;
                 // 1. the chain
                 if blob.v != 1
@@ -210,8 +212,6 @@ impl Op {
                     return Err(SdkError::ImportFeeRefused);
                 }
                 let (profile, _, pool) = evm(&sdk, &expect.chain)?;
-                // a signer kind the chain's profile disables (owner 2026-11-22), as `prepare` refuses its own
-                super::ua_kind_enabled(&profile, blob.signer_kind)?;
                 let contract = super::addr20(&blob.contract)?;
                 // 7. time left on the chain's clock
                 let valid_until = env
@@ -229,6 +229,24 @@ impl Op {
                         .and_then(Value::as_str)
                         .ok_or(SdkError::Argument)?,
                 )?;
+                // review A2-7: the blob's signer is the operation's `from`, and its kind the signer's own (a native-space id's,
+                // else the kind of its record on the registry's line), never the blob's word: `ImportKindRefused` otherwise
+                if unhex(&blob.signer)? != from {
+                    return Err(SdkError::Argument);
+                }
+                let from32: [u8; 32] =
+                    from.as_slice().try_into().map_err(|_| SdkError::Argument)?;
+                let kind = if scaas_ua::in_native_space(&from32) {
+                    super::gas::NATIVE_EVM
+                } else {
+                    let (registry, _) = crate::line::bound(&sdk, &expect.chain)?;
+                    crate::line::ua_line(&pool, registry, from32).await?.kind
+                };
+                if kind != blob.signer_kind {
+                    return Err(SdkError::ImportKindRefused);
+                }
+                // a signer kind the chain's profile disables (owner 2026-11-22), as `prepare` refuses its own
+                super::ua_kind_enabled(&profile, kind)?;
                 let batch = dec(env.get("batch").ok_or(SdkError::Argument)?)?;
                 let nonce = dec(env.get("nonce").ok_or(SdkError::Argument)?)?;
                 if lane_nonce(&pool, Address::from(contract), "token", &from, batch).await? > nonce
