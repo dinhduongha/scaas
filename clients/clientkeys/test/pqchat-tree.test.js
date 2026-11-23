@@ -613,7 +613,7 @@ test("the generator reproduces every pqchat vector file byte for byte (--check)"
     },
   );
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /--check: ok \(.*tree\.json\)/);
+  assert.match(r.stdout, /--check: ok \(.*tree\.json, tree-secrets\.json\)/);
 });
 
 test("tree.json: typehashes, keys, the RFC 9420 tree-math rows", () => {

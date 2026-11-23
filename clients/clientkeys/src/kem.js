@@ -130,6 +130,13 @@ export function kemKeyFromPrk(prk, ua, version) {
   });
 }
 
+/** The 96-byte KEM seed of a UA's KEM version from `prk` (the seed form `kemKeyFromPrk` expands): what a tree commit derives its
+ *  first path secret from (PqChat TreeKEM spec §5, R4). */
+export const kemSeedFromPrk = (prk, ua, version) => expand(sha256, prk, concatBytes(LABEL, ua, be64(version)), 96);
+
+/** A KEM key from its 96-byte seed form (`d ‖ z ‖ sk_X`) and no UA: a tree node key (PqChat TreeKEM spec §5). */
+export const kemKeyFromSeed = (seed96) => keyPair(u8(seed96, 96, "seed").slice(), null);
+
 /** HKDF-Extract(salt = "scaas.ua.kem.v1", ikm = seed): what a KEM holder's UA key keeps for `kemKey`. */
 export const kemPrk = (seed) => extract(sha256, seed, SALT);
 
