@@ -12657,6 +12657,9 @@ Change (owner 2026-11-22, on T10's call (3), relayed by the coordinator; owner: 
 
 Change (2026-11-17, Fable's review of `3a5ece097` applied, with the coordinator's calls; status: SPECIFIED): new: store items keyed apart with their own revisions; the highest KEM version seen per UA kept; the store encrypted at rest by the app and excluded from backups, since it links sessions to rooms and hints; a device anchor in non-backed-up secret storage, a missing or different anchor making a new device id; counts batched (K1, K18, K26, K27, K31).
 
+Change (owner 2026-11-23, spec §13 O7, relayed by the coordinator; owner: yes; status: PLANNED, with scaas-app after the pre-freeze tag): **O7 settled as (b): a local plaintext history, sealed under an app-scoped storage key the SDK derives for the account**, the key a handle in the arena, never exported (consistent with T26's A-3 ruling); built with scaas-app after the pre-freeze tag, beside PqVault's offline ciphertext cache. Old: (a), no local history, decrypted again from the stores after each unlock. Until (b) lands (a) holds and the store holds no plaintext. Why: the owner's ruling (offline history). Cost: a new SDK storage-key row and a sealed history store in scaas-app.
+**Source.** Owner 2026-11-23, relayed by the coordinator: O7 settled as (b).
+
 ### CLI-PQC-10 — An envelope that arrives while the seed is locked is kept and processed at unlock: never dropped, never answered
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-10 · superseded-by: —
 

@@ -302,7 +302,8 @@ each with its own revision (a write replaces one item at its expected revision; 
 | envelopes kept while locked or for unknown epochs, bounded | CLI-PQC-10, P19 | read again from the stores |
 | read positions: per room, per chain store `(instance, hint)`, per session's `sessionsOf` offset | paging resumes | rebuilt from offset 0 |
 
-No key, handle export, decrypted content or `sealedInfo` plaintext is written (§13 O7). **What a copied store reveals:** which
+No key, handle export, decrypted content or `sealedInfo` plaintext is written: the store holds no plaintext until §13 O7's
+(b) lands (owner 2026-11-23, with scaas-app after the pre-freeze tag). **What a copied store reveals:** which
 sessions the device holds (the chain shows that), and the links from a session to its room and its hints, which the chain does
 not show (D10, P20). So the app's storage keeps it encrypted at rest under the app's own store key, the one its Matrix store uses
 (the app's contract §11.4), and excludes the file from backups; the crate still holds no key (§13 requests).
@@ -494,6 +495,9 @@ until the next unlock. Any marker a creator sets is its claim and is trusted nei
 `app-matrix`, chain stores are read). (b) Seal the history under an app-scoped storage key the SDK derives for the account.
 **Recommendation: (a)** this round (no secret at rest, no new SDK row); (b) when the SDK offers the storage key and a user asks for
 offline history.
+**Settled (owner 2026-11-23): (b)**, a local plaintext history sealed under an app-scoped storage key the SDK derives for the
+account, the key a handle in the arena, never exported (consistent with T26's A-3 ruling); built with scaas-app, after the pre-freeze
+tag, beside PqVault's offline ciphertext cache. Until then (a) holds: the store holds no plaintext.
 
 **O8 — The device id's version.** (a) UUID v4 (no creation time on chain under `postMessage`). (b) v7. **Recommendation: (a)**, the
 controller proposal already in [ua-libraries.md](../../clients/ua-libraries.md#pqchat-clients).
