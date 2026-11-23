@@ -324,9 +324,10 @@ pub struct Sdk {
     /// the operations prepared in this session, by id (spec §13.1: a `Prepared` not here is `PreparedUnknown`)
     #[cfg(feature = "evm")]
     pub(crate) prepared: Mutex<HashMap<String, Arc<op::Prepared>>>,
-    /// the registry writes prepared in this session, by id (spec §7: one not here is `PreparedUnknown`)
+    /// the registry writes prepared in this session, by id (spec §7: one not here is `PreparedUnknown`), held weakly: a write
+    /// whose every handle the caller dropped can never be submitted and is pruned at the next preparation (review A2-9)
     #[cfg(all(feature = "account", feature = "evm"))]
-    pub(crate) registry_writes: Mutex<HashMap<String, Arc<account::RegistryWrite>>>,
+    pub(crate) registry_writes: Mutex<HashMap<String, std::sync::Weak<account::RegistryWrite>>>,
     /// tokens read in this session, by (chain, address) (spec §8.2: metadata read once per session)
     #[cfg(feature = "evm")]
     pub(crate) tokens: Mutex<HashMap<(String, String), wallet::TokenInfo>>,
