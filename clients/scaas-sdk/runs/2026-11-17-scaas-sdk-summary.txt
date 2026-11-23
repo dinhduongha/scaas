@@ -171,7 +171,6 @@ sdk-test-sync | b5b5ec89c | 0 | 272 passed, 0 failed, 12 ignored (22 binaries) (
 sdk-min | 0b43541d3 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-rpc-clippy | cd3b6c03e | 0 | -
 gas-gen | 6e7e71142 | 0 | -
 ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
 ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
@@ -200,7 +199,6 @@ ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
 # cli: the rc=101 note above is closed by baf175492 (git cherry-pick -x of sdk-complete's b7a34aff6): cli rc=0 at baf175492
 # node build at 129380772 (the merged tree, CAPPED_MEM=6G, cargo build --locked --offline -j2): rc=0, Finished in 3m 19s; log runs/2026-11-22-sdk-evm-profiles-node-build.log (git-ignored)
 # sdk-evm-profiles: docs | 1cba8f84a | 0 | -
-rpc-test | 4175c2d43 | 0 | 205 passed, 0 failed, 10 ignored (21 binaries)
 rpc-wasm | 4175c2d43 | 0 | -
 node-test | 4175c2d43 | 0 | 897 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
@@ -234,13 +232,11 @@ ck-test | 0736ad763 | 0 | node: 567 pass, 0 fail, 4 skipped
 ck-xcheck | 0736ad763 | 0 | -
 # T41.arweave's ua-rs part at 0736ad763 (CA-T16, CA-T17): the rows above; mutants t41arw1 20/20 killed (the ua-rs rows at 0736ad763, the clientkeys rows at 9764de7c0, their command through capped with the TAP reporter); every mutant script loads (mutants-check's commands, run by hand at 9764de7c0: rc 0)
 # T41.arweave fam-arweave size (clients/ua-rs/runs/fam-sizes.sh, release, the probe now reaching DataItem::parse) at 0736ad763: none 2212040 B; fam-arweave 2205712 → 2265656 B (delta −72 → +53616 B, old the empty feature at 61c5bb014); all 2342744 → 2379296 B (delta +136960 → +167256 B)
-rpc-test | 6f2eb3dbd | 0 | 219 passed, 0 failed, 10 ignored (22 binaries)
 rpc-wasm | 6f2eb3dbd | 0 | -
 sdk-min | 7daa8b2bc | 0 | 74 passed, 0 failed, 0 ignored (14 binaries)
 sdk-noevm | 7daa8b2bc | 0 | 149 passed, 0 failed, 0 ignored (21 binaries)
 ck-test | 898fa1ebc | 0 | node: 568 pass, 0 fail, 4 skipped
 # T41.arweave's scaas-rpc and SDK parts (CA-T19, CA-T20): code 6f2eb3dbd, the shared ArweaveItem code 7daa8b2bc (error_codes_are_names was red at 6f2eb3dbd in sdk-test, sdk-noevm, sdk-min: fixed, rows above at 7daa8b2bc), the notC9 rows 291a864b2 (the survivor of t41arw2 killed); the rpc rows at 6f2eb3dbd are unchanged by the two later code commits (scaas-rpc untouched)
-rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
 ua-appcore | 7992a33e7 | 0 | 14 passed, 0 failed, 0 ignored (1 binaries)
 ua-test | 7992a33e7 | 0 | 622 passed, 0 failed, 3 ignored (63 binaries)
 ua-verify-only | 7992a33e7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
@@ -254,7 +250,6 @@ ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # hand, not a runner step). format.sh --check: rust, js, py, sol clean at 4f64cf766 (tact not run: no ton node_modules in the
 # worktree; untouched). Mutants pqvsign 14/14 killed at 7992a33e7. No pin moved: no vector row, typehash, gas or size pin
 # changes (records.json is read, not regenerated; the purpose P_V enters no new digest).
-rpc-test | 76bdb5865 | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
 node-test | 76bdb5865 | 0 | 902 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 76bdb5865 (origin/ua-rs-sign a97cce414): sdk-test's 4 reds are app_core_vault_records' (AppDomainRefused: ua-rs-sign's PqVault domain refusal of 7da6fbb32; branch pqvault-sign fixes them, inherited, not touched); the same set with --no-fail-fast: 412 passed, those 4 failed, 17 ignored in 39 binaries; scripts/format.sh --check: every part ok but tact (tact-fmt not installed in this worktree)
@@ -277,7 +272,6 @@ node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # vectors, and the non-EVM set), its tests handoff 8 and soroban_ops 8; scaas-cli clippy --all-targets --features dev-profiles
 # and tests/cli.rs 13 passed (one_command_per_sdk_call_both_ways, every_signing_command_asks_first: its missing run of
 # pqvault-sign's `app-core sign-pqvault-record` added); docs; format.sh --check rust js py after git add -N.
-rpc-clippy | 028da021c | 0 | -
 sdk-clippy-noevm | 028da021c | 0 | -
 # pqchat-core T8 (on pqchat-core-impl): the app core scope made again after an unlock (d6abf1f97, test app_core::scope_after_lock_and_unlock); sdk-clippy red at e5573b3d6 (type_complexity on that cache), its type named at f238113b8 (no behaviour change), sdk-clippy green there; sdk-test and sdk-vectors at e5573b3d6.
 ua-appcore | ea980befa | 0 | 15 passed, 0 failed, 0 ignored (1 binaries)
@@ -286,7 +280,6 @@ ua-verify-only | ea980befa | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
 ua-test | ea980befa | 0 | 628 passed, 0 failed, 3 ignored (64 binaries)
 sdk-vectors | ea980befa | 0 | 19 passed, 0 failed, 0 ignored (2 binaries)
 sdk-clippy | ea980befa | 0 | -
-sdk-test | ea980befa | 0 | 438 passed, 0 failed, 17 ignored (41 binaries)
 docs | ea980befa | 0 | -
 ua-arweave | 028da021c | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 # the rows above at eff2aa3e5 (the merge of ua-rs-sign 3da595648, e33e863c9, and its regenerated bindings) and bind-js at
@@ -329,7 +322,6 @@ bind-js | 4a96991f4 | 0 | node: 5 pass, 0 fail, 0 skipped
 bind-java | 4a96991f4 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
 bind-go | 4a96991f4 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
 bind-dart | 4a96991f4 | 0 | dart: +14:
-sdk-test | 4a96991f4 | 0 | 441 passed, 0 failed, 18 ignored (42 binaries)
 # the rows above at 4a96991f4 (the merge of ua-rs-sign 977435769 with the SDK's pinned_reads, 938133189, and its regenerated
 # bindings): the runner names the commit it started at; from sdk-wasm on the tree was d7910088b, whose only change is the CLI's
 # completeness test (it skips the binding adapters; lib::load_check excluded), after cli rc 101 on exactly that list. docs,
@@ -347,7 +339,6 @@ sdk-soroban-e2e | 9f8c4570e | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 # 23 killed at 9f8c4570e (the new one: a SourceAccount entry taken from another payer).
 sdk-clippy-noevm | 028da021c | 0 | -
 # pqchat-core T8 (on pqchat-core-impl): the app core scope made again after an unlock (d6abf1f97, test app_core::scope_after_lock_and_unlock); sdk-clippy red at e5573b3d6 (type_complexity on that cache), its type named at f238113b8 (no behaviour change), sdk-clippy green there; sdk-test and sdk-vectors at e5573b3d6.
-sdk-test | e5573b3d6 | 0 | 438 passed, 0 failed, 17 ignored (41 binaries)
 sdk-vectors | e5573b3d6 | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 sdk-clippy | e9682c492 | 0 | -
 # the rows above at e9682c492 (the merge of ua-rs-sign 70c2a3633): bind-gen no drift (pqchat-records is not a default
@@ -366,3 +357,6 @@ cli | 3d96c45be | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 ua-clippy | 3d96c45be | 0 | -
 ua-vectors | 3d96c45be | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
 ua-core | 3d96c45be | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
+sdk-test | 1979b57a2 | 0 | 456 passed, 0 failed, 18 ignored (42 binaries)
+rpc-test | 1979b57a2 | 0 | 231 passed, 0 failed, 10 ignored (23 binaries)
+rpc-clippy | 1979b57a2 | 0 | -
