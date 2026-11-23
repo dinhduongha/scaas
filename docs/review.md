@@ -22,6 +22,7 @@ is **PLANNED**.
 2. [Areas](#2-areas)
 3. [Brief and report](#3-brief-and-report)
 4. [Scale](#4-scale)
+5. [Brief template](#5-brief-template)
 
 ## 1. Dimensions
 
@@ -178,3 +179,85 @@ Status: **BUILT**.
   control.
 - **A round across several layers**: one area per layer, plus the cross-layer area, plus the adversarial area.
 - **The pre-freeze audit**: the same areas over the whole scope of [ARCH-POS-14](decisions.md#ARCH-POS-14).
+
+## 5. Brief template
+
+Status: **BUILT**.
+
+Copy this block to `scratchpad/<subject>-review-<YYYYMMDD-HHMM>/BRIEF.md` and fill each `<…>`. Keep every row of the
+dimension table. A row may say `N/A: <reason>`, but it may not be deleted. Each reviewer's prompt is then one line:
+"Read `<dir>/BRIEF.md`. Your area is `<X>`. Write `<dir>/<reviewer>-<X>.md`."
+
+````markdown
+# <Subject> review (shared brief)
+
+## Setup
+- **Tree:** branch `<branch>` at `<commit>`, checked out read-only at `<worktree>`. Edit, commit, stash or push nothing there.
+- **Reports:** `<dir>/<reviewer>-<area>.md`. The directory is git-ignored and never pushed.
+- **Who fixes:** the controller fixes the findings later, task by task, in `<dir>/STATUS.md`. Reviewers only report.
+
+## What this is
+<one paragraph: what changed, its spec / plan / decisions by path and id, its size>
+
+## Rules, by precedence
+1. `docs/decisions.md` entries with `owner: yes`.
+2. The component docs: <paths>.
+3. The spec and plan: <paths>.
+4. `AGENTS.md`, above all "Rules that do not bend".
+
+**Owner rulings, not to be reopened:** <list>
+**Accepted risks, never to be raised again:** <list>
+
+## Areas
+| Area | Scope (files, entries) |
+|---|---|
+| <A> | <layer 1> |
+| <B> | <layer 2> |
+| <D> | cross-layer: spec ↔ contract ↔ clients ↔ node |
+| <E> | adversarial: every role against the whole change |
+
+## Dimensions (docs/review.md §1)
+Each area applies every dimension within its scope. The table names the area that leads each dimension; `N/A` needs a
+reason.
+
+| # | Dimension | Lead area | What to hunt here (specific to this change) |
+|---|---|---|---|
+| 1 | Conformance | <all> | <rule ids to check one by one> |
+| 2 | Security and cryptography | <…> | <…> |
+| 3 | Rules that do not bend | <all> | <…> |
+| 4 | Secrets and privacy | <…> | <…> |
+| 5 | Robustness and denial of service | <…> | <…> |
+| 6 | Failure handling | <…> | <…> |
+| 7 | Consistency across languages and layers | <D> | <…> |
+| 8 | Contract specifics | <…> | <…> |
+| 9 | Performance and cost | <…> | <…> |
+| 10 | Interfaces and misuse | <…> | <…> |
+| 11 | Tests | <all> | <…> |
+| 12 | Operations and the supply chain | <…> | <…> |
+
+## Findings format (docs/review.md §3)
+- id `<area>-<n>`;
+- severity P0 to P3;
+- `file:line`;
+- rule id;
+- dimension number;
+- concrete failure scenario;
+- fix in one or two lines.
+
+Only verified findings count. Mark a doubtful one `UNSURE`, with what would settle it. At the top of the report, list
+what you read and what you did not get to. End with a verdict: approve, approve with fixes, or rework.
+
+## Machine rules
+- Prefer reading code.
+- Runs go only through `scripts/capped`, in the foreground, `CARGO_INCREMENTAL=0`, `-j 2`, one at a time, with a target
+  dir under `<dir>`.
+- No `timeout`, `sleep` loops, `pkill` / `pgrep -f`, docker or background shell.
+- Do not touch the live testnet.
+- Never print `scratchpad/testnet-wallet.txt`.
+````
+
+**`STATUS.md`** has one row per finding:
+
+```text
+| id | sev | dim | verdict (fix / reject: reason / owner) | commit | test (red line) | mutant |
+```
