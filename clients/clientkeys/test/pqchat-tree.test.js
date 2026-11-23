@@ -5,6 +5,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { x25519 } from "@noble/curves/ed25519.js";
 import * as tr from "../src/pqchat-tree.js";
 import * as pc from "../src/pqchat.js";
 import { uaMessage } from "../src/ua.js";
@@ -326,7 +330,7 @@ test("refusals, each with its twin: a live key, a key added twice, a key taken o
     commit(r.tree, by(A, 0), { adds: [{ leaf: 2, ...D, kemHash: C.kemHash }], nodeKeyHashes: [id("1"), id("3")] }),
   );
   // C held one leaf: it is gone, and no key of C comes back
-  assert.deepEqual([...r.tree.gone], [C.ua]);
+  assert.deepEqual([...r.tree.goneUa], [C.ua]);
   refused("PqChatTreeReturn", () =>
     commit(r.tree, by(A, 0), { adds: [{ leaf: 2, ...key("C", 9) }], nodeKeyHashes: [id("1"), id("3")] }),
   );
@@ -343,11 +347,11 @@ test("a UA is judged after the Adds: its only leaf removed and a new key added i
       nodeKeyHashes: [id("1"), id("3")],
     }),
   );
-  assert.deepEqual([...r.tree.gone], []);
+  assert.deepEqual([...r.tree.goneUa], []);
   assert.deepEqual([...r.tree.goneKey], []);
-  assert.deepEqual([...r.tree.ownKey.get(C.ua)], [C.kemHash]);
+  assert.deepEqual([...r.tree.goneOwnKey.get(C.ua)], [C.kemHash]);
   const twin = whole(commit(t, by(A, 0), { removes: [{ leaf: 2, ...C }], nodeKeyHashes: [id("1")] }));
-  assert.deepEqual([...twin.tree.gone], [C.ua]);
+  assert.deepEqual([...twin.tree.goneUa], [C.ua]);
 });
 
 test("no gone UA keeps a leaf, nor commits (PqChatRemovedKept); the path length is the walk's (PqChatTreeTargets)", () => {
@@ -366,50 +370,56 @@ test("ctTargetsHash: keccak256 of the targets packed 4 B big-endian, as the list
   assert.equal(tr.ctTargetsHash([2, 0x01020304]), hex(keccak_256(Uint8Array.of(0, 0, 0, 2, 1, 2, 3, 4))));
 });
 
-test("R16: a key change takes out only the pair (ua, kemHash); a leave or removal takes out every key the UA held", () => {
+test("R16: a key taken out of a UA that stays is a pair; the keys of a UA that goes are session-wide, earlier pairs stay", () => {
   const C2 = key("C", 2);
+  const own = (f) => refused("PqChatTreeOwnKeyReturn", f);
   const t = tr.coldTree([A, B, C, C2]);
-  // C changes keys: takes out keyId 1 and stays a member with keyId 2
+  // C takes out its keyId 1 and stays a member with keyId 2: only the pair (C, kemHash)
   const r = whole(commit(t, by(C2, 3), { removes: [{ leaf: 2, ...C }], nodeKeyHashes: [id("3")] }));
-  assert.deepEqual([...r.tree.gone], []);
+  assert.deepEqual([...r.tree.goneUa], []);
   assert.deepEqual([...r.tree.goneKey], []);
-  // C may not add that key again, in this commit or later
-  tr_refusedOwn(() =>
+  assert.deepEqual([...r.tree.goneOwnKey.get(C.ua)], [C.kemHash]);
+  // C may not add those bytes again under any keyId, in that commit or later
+  own(() =>
     commit(t, by(C2, 3), {
       removes: [{ leaf: 2, ...C }],
       adds: [{ leaf: 2, ...C }],
       nodeKeyHashes: [id("1"), id("3")],
     }),
   );
-  tr_refusedOwn(() => commit(r.tree, by(C2, 3), { adds: [{ leaf: 2, ...C }], nodeKeyHashes: [id("1"), id("3")] }));
-  // another UA holding the same key bytes is not burnt by C's key change (no front-running a key out of the session)
+  own(() =>
+    commit(r.tree, by(C2, 3), {
+      adds: [{ leaf: 2, ...key("C", 5), kemHash: C.kemHash }],
+      nodeKeyHashes: [id("1"), id("3")],
+    }),
+  );
+  // another UA may add the same bytes, later or in the same commit (the removed UA stays): no burn by own-key churn
   const D = { ...key("D"), kemHash: C.kemHash };
   whole(commit(r.tree, by(C2, 3), { adds: [{ leaf: 2, ...D }], nodeKeyHashes: [id("1"), id("3")] }));
-  // once C leaves, every key it held is session-wide: the one taken out before and the live one
-  const g = tr.markGone(r.tree, [C.ua]);
-  assert.deepEqual([...g.goneKey].sort(), [C.kemHash, C2.kemHash].sort());
-  refused("PqChatTreeKeyReturn", () =>
-    commit(g, by(A, 0), {
-      removes: [{ leaf: 3, ...C2 }],
+  whole(
+    commit(t, by(C2, 3), {
+      removes: [{ leaf: 2, ...C }],
       adds: [{ leaf: 2, ...D }],
       nodeKeyHashes: [id("1"), id("3")],
     }),
   );
+  // C leaves: a mark only; the commit that blanks its last leaf writes that leaf's key session-wide; the earlier pair stays
+  const g = tr.markGone(r.tree, [C.ua]);
+  assert.deepEqual([...g.goneKey], []);
+  const b = whole(commit(g, by(A, 0), { removes: [{ leaf: 3, ...C2 }], nodeKeyHashes: [id("1")] }));
+  assert.deepEqual([...b.tree.goneKey], [C2.kemHash]);
+  assert.deepEqual([...b.tree.goneOwnKey.get(C.ua)], [C.kemHash]);
+  refused("PqChatTreeKeyReturn", () =>
+    commit(b.tree, by(A, 0), {
+      adds: [{ leaf: 2, ...key("E"), kemHash: C2.kemHash }],
+      nodeKeyHashes: [id("1"), id("3")],
+    }),
+  );
   refused("PqChatTreeReturn", () =>
-    commit(g, by(A, 0), {
-      removes: [{ leaf: 3, ...C2 }],
-      adds: [{ leaf: 2, ...key("C", 3) }],
-      nodeKeyHashes: [id("1"), id("3")],
-    }),
+    commit(b.tree, by(A, 0), { adds: [{ leaf: 2, ...key("C", 3) }], nodeKeyHashes: [id("1"), id("3")] }),
   );
-  whole(
-    commit(g, by(A, 0), {
-      removes: [{ leaf: 3, ...C2 }],
-      adds: [{ leaf: 2, ...key("E") }],
-      nodeKeyHashes: [id("1"), id("3")],
-    }),
-  );
-  // a removal by a commit that leaves the UA no leaf: its key is session-wide in that same commit
+  whole(commit(b.tree, by(A, 0), { adds: [{ leaf: 2, ...D }], nodeKeyHashes: [id("1"), id("3")] }));
+  // a commit that leaves the UA no leaf: its key is session-wide in that same commit, under any UA
   refused("PqChatTreeKeyReturn", () =>
     commit(tr.coldTree([A, B, C]), by(A, 0), {
       removes: [{ leaf: 2, ...C }],
@@ -418,7 +428,6 @@ test("R16: a key change takes out only the pair (ua, kemHash); a leave or remova
     }),
   );
 });
-const tr_refusedOwn = (f) => refused(tr.OWN_KEY_RETURN, f);
 
 // ------------------------------------------------------------------ records (spec §6), treeId and genesisCtx (§5)
 
@@ -579,4 +588,186 @@ test("admission: pk_X canonical (bit 255 clear, below p) and none of the five sm
   // twins: the same values reduced, as X25519 reads them, are accepted points
   tr.admitKemKey(withX(le(9n)));
   tr.admitKemKey(withX(le(asU(hi) - 2n ** 255n)));
+});
+
+// ------------------------------------------------------------------ smartcontracts/vectors/pqchat/tree.json
+
+const V = JSON.parse(readFileSync(new URL("../../../smartcontracts/vectors/pqchat/tree.json", import.meta.url)));
+const byName = (rows) => Object.fromEntries(rows.map((r) => [r.name, r]));
+const asRow = (t) => ({ ...tr.treeJson(t), nodeHashes: t.hash, treeHash: t.hash[tr.root(t.leaves)] });
+const json = (x) => JSON.parse(JSON.stringify(x));
+
+test("the generator reproduces every pqchat vector file byte for byte (--check)", () => {
+  const r = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("../scripts/pqchat-vectors.mjs", import.meta.url)), "--check"],
+    {
+      encoding: "utf8",
+    },
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /--check: ok \(.*tree\.json\)/);
+});
+
+test("tree.json: typehashes, keys, the RFC 9420 tree-math rows", () => {
+  for (const [n, { type, hash }] of Object.entries(V.typehashes)) {
+    assert.equal(type, SPEC[n]);
+    assert.equal(hash, hex(tr.TREE_TYPEHASH[n]));
+  }
+  for (const k of V.keys) {
+    assert.equal(k.kemHash, hex(keccak_256(b32(k.kemPk))));
+    tr.admitKemKey(b32(k.kemPk));
+  }
+  assert.deepEqual(V.treeMath.rows, tr.treeMathRows(V.treeMath.rows.map((r) => r.n_leaves)));
+  assert.equal(
+    createHash("sha256")
+      .update(JSON.stringify(V.treeMath.rows, null, 2))
+      .digest("hex"),
+    V.treeMath.sha256,
+  );
+  assert.equal(V.treeMath.sha256, RFC_TREE_MATH_SHA256);
+});
+
+test("tree.json resolution rows: every node's resolution, each filtered path, ctTargets, and the covering target", () => {
+  for (const row of V.resolution) {
+    const t = tr.treeFromJson(row.tree);
+    assert.deepEqual(json(asRow(t)), row.tree, row.name);
+    assert.deepEqual(
+      t.nodes.map((_, x) => tr.resolution(t, x)),
+      row.resolution,
+    );
+    for (const [l, p] of Object.entries(row.filteredPath)) assert.deepEqual(tr.filteredPath(t, Number(l)), p);
+    for (const [l, c] of Object.entries(row.ctTargets)) assert.deepEqual(tr.ctTargets(t, Number(l)), c);
+    for (const c of row.cover) {
+      const { author, leaf, ...rest } = c;
+      assert.deepEqual(tr.coverOf(t, author, leaf), rest, `${row.name}: ${author} → ${leaf}`);
+      assert.equal(row.ctTargets[author][rest.index], rest.target);
+    }
+  }
+  assert.deepEqual(byName(V.resolution)["spec §4's picture"].ctTargets[0], [2, 5, 8, 12]);
+});
+
+test("tree.json treeHash rows: cold trees, commits from their before tree, refusals with their named error", () => {
+  const keys = Object.fromEntries(V.keys.map((k) => [k.name, k]));
+  const trees = {};
+  for (const row of V.treeHash.cold) {
+    const t = tr.coldTree(row.members.map((n) => ({ ua: keys[n].ua, keyId: keys[n].keyId, kemHash: keys[n].kemHash })));
+    assert.deepEqual(json(asRow(t)), row.tree, row.name);
+    trees[row.name] = row.tree;
+  }
+  for (const row of V.treeHash.commits) {
+    const r = tr.applyCommit(tr.treeFromJson(trees[row.before]), row.commit);
+    assert.deepEqual(json(asRow(r.tree)), row.after, row.name);
+    assert.deepEqual(r.ctTargets, row.ctTargets);
+    assert.equal(tr.ctTargetsHash(r.ctTargets), row.ctTargetsHash);
+    assert.equal(r.treeHash, row.after.treeHash);
+    trees[row.name] = row.after;
+  }
+  for (const row of V.treeHash.refused)
+    refused(row.error, () => tr.applyCommit(tr.treeFromJson(trees[row.before]), row.commit));
+  const names = V.treeHash.commits.map((r) => r.name);
+  for (const n of ["C commits", "A removes E", "A adds F", "growth 2 to 4", "growth 8 to 16", "a key change"])
+    assert.ok(names.includes(n), n);
+  assert.ok(names.includes("an Add and a Remove under a copath child of the author"));
+});
+
+test("tree.json admission rows: each refusal by its check, its twin accepted; the torsion-shifted keys admitted (R15)", () => {
+  const accepted = byName(V.admission.accepted);
+  for (const a of V.admission.accepted) {
+    tr.admitKemKey(b32(a.kemPk));
+    assert.equal(a.kemHash, hex(keccak_256(b32(a.kemPk))));
+  }
+  for (const r of V.admission.refused) {
+    assert.throws(
+      () => tr.admitKemKey(b32(r.kemPk)),
+      (e) => e.message === r.error,
+      r.name,
+    );
+    tr.admitKemKey(b32(accepted[r.twin].kemPk));
+  }
+  assert.equal(V.admission.refused.filter((r) => r.error === "pkX small order").length, 5);
+  // what the check does not give: another admitted kemHash, the same X25519 output for the fixed ephemeral scalar
+  const rel = V.admission.related;
+  const base = b32(accepted[rel.base].kemPk);
+  assert.equal(hex(x25519.getSharedSecret(b32(rel.ephemeral), base.subarray(1569))), rel.x25519Output);
+  assert.deepEqual(
+    rel.shifted.map((s) => s.order),
+    [4, 8],
+  );
+  const hashes = new Set([hex(keccak_256(base))]);
+  for (const s of rel.shifted) {
+    const pk = b32(s.kemPk);
+    tr.admitKemKey(pk);
+    assert.equal(s.kemHash, hex(keccak_256(pk)));
+    hashes.add(s.kemHash);
+    assert.deepEqual(pk.subarray(0, 1569), base.subarray(0, 1569));
+    assert.equal(hex(x25519.getSharedSecret(b32(rel.ephemeral), pk.subarray(1569))), rel.x25519Output);
+  }
+  assert.equal(hashes.size, 3);
+});
+
+test("tree.json digests: treeId, genesisCtx, ids, array hashes, struct hashes, typed and signed digests", () => {
+  const d = V.digests;
+  assert.equal(hex(tr.treeId(d.session)), d.treeId);
+  assert.equal(hex(tr.genesisCtx({ ...d.session, groupMode: d.genesisGroupMode })), d.genesisCtx);
+  assert.equal(hex(pc.sessionId(d.session.creator, d.session.nonce)), d.sessionId);
+  const c = d.records[0].record;
+  assert.equal(hex(pc.epochId(d.sessionId, c.author, c.nonce)), d.epochId);
+  assert.equal(hex(tr.arrayHash("TreeRemove", c.removes)), d.removesHash);
+  assert.equal(hex(tr.arrayHash("TreeAdd", c.adds)), d.addsHash);
+  assert.equal(hex(tr.pathListHash([], [])), d.emptyPathList);
+  assert.equal(c.ctListHash, hex(tr.pathListHash(d.ctTargets, d.ctHashes)));
+  for (const r of d.records) {
+    assert.equal(hex(tr.treeStructHash(r.struct, r.record)), r.structHash, r.struct);
+    if (r.typed) {
+      assert.equal(hex(tr.treeTyped(r.struct, r.record)), r.typed);
+      assert.equal(hex(tr.treeSignedDigest(0x0131, r.struct, r.record)), r.signedDigest);
+    }
+  }
+});
+
+test("tree.json noReturn rows (R16): each step's tree and sets, and each probe's verdict, replayed from the cold tree", () => {
+  const keys = Object.fromEntries(V.keys.map((k) => [k.name, k]));
+  const names = V.noReturn.map((s) => s.name);
+  for (const n of [
+    "the burn by own-key churn",
+    "the front-running loop",
+    "the burn by leave: treeLeave",
+    "the burn by leave: treeRemove",
+    "the burn by leave: an admin's commit",
+    "the replacement of a UA's only key in one commit",
+    "a Remove and an Add of the same bytes in one commit",
+  ])
+    assert.ok(names.includes(n), n);
+  for (const s of V.noReturn) {
+    let t = tr.coldTree(s.start.map((n) => ({ ua: keys[n].ua, keyId: keys[n].keyId, kemHash: keys[n].kemHash })));
+    for (const step of s.steps) {
+      t = step.leave ? tr.markGone(t, step.leave) : tr.applyCommit(t, step.commit).tree;
+      assert.deepEqual(json(asRow(t)), step.tree, `${s.name} / ${step.name}`);
+      for (const p of step.probes) {
+        const where = `${s.name} / ${step.name} / ${p.name}`;
+        if (p.verdict === "accepted") tr.applyCommit(t, p.commit);
+        else
+          assert.throws(
+            () => tr.applyCommit(t, p.commit),
+            (e) => e.code === p.verdict,
+            where,
+          );
+      }
+    }
+  }
+  // the churn sets only the pair; a leave sets the session-wide keys and keeps the earlier pair
+  const last = (n) => V.noReturn.find((s) => s.name === n).steps.at(-1).tree;
+  const churn = last("the burn by own-key churn");
+  assert.deepEqual(churn.goneKey, []);
+  assert.deepEqual(churn.goneOwnKey, { [keys.B.ua]: [keys.A2.kemHash] });
+  for (const n of [
+    "the burn by leave: treeLeave",
+    "the burn by leave: treeRemove",
+    "the burn by leave: an admin's commit",
+  ]) {
+    assert.deepEqual(last(n).goneKey, [keys.A2.kemHash, keys.B.kemHash].sort(), n);
+    assert.deepEqual(last(n).goneOwnKey, { [keys.B.ua]: [keys.A3.kemHash] }, n);
+    assert.deepEqual(last(n).goneUa, [keys.B.ua], n);
+  }
 });

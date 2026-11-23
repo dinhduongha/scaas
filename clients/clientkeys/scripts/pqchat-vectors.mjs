@@ -1,18 +1,25 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-// Generates smartcontracts/vectors/pqchat/{records,keys,messages,topics,cards}.json (UA-7 T4, P48; public topics PT1; plan group 3c T84) by
-// src/pqchat.js: typehashes, DS_C, ids, nonce scopes, typed and uaMessage digests, signed-record blobs, P14 refusals, wraps,
+// Generates smartcontracts/vectors/pqchat/{records,keys,messages,topics,cards,tree}.json (UA-7 T4, P48; public topics PT1; plan group 3c T84;
+// tree.json: PqChat TreeKEM T1a, by src/pqchat-tree.js) by src/pqchat.js: typehashes, DS_C, ids, nonce scopes, typed and uaMessage digests, signed-record blobs, P14 refusals, wraps,
 // sender chains, padding, the message, envelope, payload, sealedInfo and call keys. Every random input is fixed:
 // rnd(name, n) = the first n bytes of keccak256("scaas/pqchat/vectors/<name>/0") ‖ keccak256(".../<name>/1") ‖ …
 //   node scripts/pqchat-vectors.mjs [outDir]
-import { mkdirSync, writeFileSync } from "node:fs";
+//   node scripts/pqchat-vectors.mjs --check     regenerate into a temporary directory; exit 1 unless every file is byte-identical
+import { mkdirSync, writeFileSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as pc from "../src/pqchat.js";
 import * as ar from "../src/arweave.js";
+import * as tr from "../src/pqchat-tree.js";
+import { ed25519, ED25519_TORSION_SUBGROUP } from "@noble/curves/ed25519.js";
+import { x25519 } from "@noble/curves/ed25519.js";
 import { pqKeygen, signUA } from "../src/pq.js";
 import { hex, keccak_256, utf8ToBytes, concatBytes } from "../src/bytes.js";
 
-const OUT = process.argv[2] ?? fileURLToPath(new URL("../../../smartcontracts/vectors/pqchat/", import.meta.url));
+const REPO = fileURLToPath(new URL("../../../smartcontracts/vectors/pqchat/", import.meta.url));
+const CHECK = process.argv.includes("--check");
+const OUT = CHECK ? mkdtempSync(join(tmpdir(), "pqchat-vectors-")) : (process.argv[2] ?? REPO);
 mkdirSync(OUT, { recursive: true });
 
 const rnd = (name, n = 32) => {
@@ -216,8 +223,11 @@ const pl = pc.payload(env.hint, env.env);
 const mk = pc.chainKeys(K1, sid, eid, alice.ua, DEVICE, 3).steps[2];
 
 // ------------------------------------------------------------------ files
-const write = (file, doc) =>
+const WRITTEN = [];
+const write = (file, doc) => {
+  WRITTEN.push(file);
   writeFileSync(join(OUT, file), `${JSON.stringify(doc, (_, v) => (v instanceof Uint8Array ? hex(v) : v), 2)}\n`);
+};
 const typehashes = (names) =>
   Object.fromEntries(names.map((n) => [n, { type: pc.TYPE_STRINGS[n], hash: pc.TYPEHASH[n] }]));
 const tags = (names) =>
@@ -759,4 +769,617 @@ write("cards.json", {
     { name: "256 bytes", id: `${long}g`, twin: long },
   ],
 });
-console.log(`pqchat vectors: records, keys (${wrapRows.length} wraps), messages, topics, cards -> ${OUT}`);
+
+// ------------------------------------------------------------------ tree.json (PqChat TreeKEM, T1a)
+// Spec docs/superpowers/specs/2026-11-23-pqchat-treekem.md §4, §5 (treeId, genesisCtx), §6, §8; plan T1a. Members' KEM keys are
+// real (kemKey of rnd("tree/kem/<name>/…")); UAs are labels here (rnd("tree/ua/<name>")), the registry binding is T3's.
+const treeKeys = Object.fromEntries(
+  ["A", "A2", "A3", "A4", "A5", "B", "C", "C2", "D", "E", "F", "G", "H", "I", "J"].map((name, i) => {
+    const kem = pc.kemKey(rnd(`tree/kem/${name}/mlkem-keygen-seed`, 64), rnd(`tree/kem/${name}/x25519-secret`));
+    const ua = hex(rnd(`tree/ua/${name.replace(/\d$/, "")}`));
+    return [
+      name,
+      { name, ua, keyId: Number(name.slice(1)) || 1, kemPk: hex(kem.kemPk), kemHash: hex(kem.kemPkHash), i },
+    ];
+  }),
+);
+const leafOf = (n) => ({ ua: treeKeys[n].ua, keyId: treeKeys[n].keyId, kemHash: treeKeys[n].kemHash });
+const named = (ns) => ns.map(leafOf);
+const treeRow = (t) => ({ ...tr.treeJson(t), nodeHashes: t.hash, treeHash: t.hash[tr.root(t.leaves)] });
+const trees = {};
+const cold = (name, ns) => (trees[name] = tr.coldTree(named(ns)));
+const coldRows = [
+  ["cold 2", ["A", "B"]],
+  ["cold 3", ["A", "B", "C"]],
+  ["cold 5", ["A", "B", "C", "D", "E"]],
+  ["cold 6", ["A", "B", "C", "D", "E", "F"]],
+  ["cold 8", ["A", "B", "C", "D", "E", "F", "G", "H"]],
+  ["cold 4, two keys of C", ["A", "B", "C", "C2"]],
+].map(([name, ns]) => ({ name, members: ns, tree: treeRow(cold(name, ns)) }));
+const nk = (row, n) => Array.from({ length: n }, (_, k) => hex(rnd(`tree/${row}/node-key-hash/${k}`)));
+const by = (n, leaf) => ({ author: treeKeys[n].ua, keyId: treeKeys[n].keyId, leaf });
+const asRemove = (n, leaf) => ({ leaf, ua: treeKeys[n].ua, keyId: treeKeys[n].keyId });
+const asAdd = (n, leaf) => ({ leaf, ...leafOf(n), via: Z32 });
+const commitRow = (name, before, who, leaf, removes = [], adds = [], note = undefined) => {
+  const t = trees[before];
+  const n = tr.filteredPathAfter(t, leaf, { removes, adds }).length;
+  const commit = { ...by(who, leaf), removes, adds, nodeKeyHashes: nk(name, n) };
+  const r = tr.applyCommit(t, commit);
+  trees[name] = r.tree;
+  return {
+    name,
+    ...(note ? { note } : {}),
+    before,
+    commit,
+    ctTargets: r.ctTargets,
+    ctTargetsHash: tr.ctTargetsHash(r.ctTargets),
+    after: treeRow(r.tree),
+  };
+};
+const commitRows = [
+  commitRow("C commits", "cold 5", "C", 2),
+  commitRow("A removes E", "C commits", "A", 0, [asRemove("E", 4)]),
+  commitRow("A adds F", "cold 5", "A", 0, [], [asAdd("F", 5)]),
+  commitRow("growth 2 to 4", "cold 2", "B", 1, [], [asAdd("C", 2)]),
+  commitRow("growth 8 to 16", "cold 8", "A", 0, [], [asAdd("I", 8)]),
+  commitRow("A commits", "cold 6", "A", 0),
+  commitRow("C commits after A", "A commits", "C", 2),
+  commitRow(
+    "an Add and a Remove under a copath child of the author",
+    "C commits after A",
+    "A",
+    0,
+    [asRemove("D", 3)],
+    [asAdd("G", 6)],
+    "fable-9: D's Remove is under node 5, A's copath child at node 3; G's Add under node 11, its copath child at the root",
+  ),
+  commitRow(
+    "a key change",
+    "cold 4, two keys of C",
+    "C2",
+    3,
+    [asRemove("C", 2)],
+    [],
+    "owner R16: C takes out its keyId 1 and stays; only the pair (C, kemHash) is taken out (goneOwnKey)",
+  ),
+  commitRow(
+    "a Remove and an Add of one UA",
+    "cold 3",
+    "A",
+    0,
+    [asRemove("C", 2)],
+    [asAdd("C2", 3)],
+    "fable-r3-4: C is judged on the tree after the Adds; it holds keyId 2 there, so it is not gone",
+  ),
+  commitRow(
+    "A removes C",
+    "cold 3",
+    "A",
+    0,
+    [asRemove("C", 2)],
+    [],
+    "C held one leaf: C is gone, its key session-wide",
+  ),
+];
+const treeRefusals = [
+  ["the author's leaf names another key", "cold 3", { ...by("B", 0), nodeKeyHashes: nk("r", 2) }, "PqChatTreeLeaf"],
+  ["a Remove of the author's own leaf", "cold 3", { ...by("A", 0), removes: [asRemove("A", 0)] }, "PqChatTreeLeaf"],
+  [
+    "a Remove of another keyId",
+    "cold 3",
+    { ...by("A", 0), removes: [{ ...asRemove("B", 1), keyId: 2 }] },
+    "PqChatTreeLeaf",
+  ],
+  ["an Add past used", "cold 2", { ...by("A", 0), adds: [asAdd("C", 3)] }, "PqChatTreeLeaf"],
+  ["an Add to a live leaf", "cold 2", { ...by("A", 0), adds: [asAdd("C", 1)] }, "PqChatTreeLeaf"],
+  [
+    "an Add of a live key",
+    "cold 3",
+    { ...by("A", 0), adds: [{ ...asAdd("D", 3), kemHash: treeKeys.B.kemHash }] },
+    "PqChatTreeKeyLive",
+  ],
+  [
+    "a key added twice",
+    "cold 3",
+    { ...by("A", 0), adds: [asAdd("D", 3), { ...asAdd("E", 4), kemHash: treeKeys.D.kemHash }] },
+    "PqChatTreeKeyLive",
+  ],
+  ["an Add of a gone UA", "A removes C", { ...by("A", 0), adds: [asAdd("C2", 2)] }, "PqChatTreeReturn"],
+  [
+    "an Add of a gone UA's key under another UA",
+    "A removes C",
+    { ...by("A", 0), adds: [{ ...asAdd("D", 2), kemHash: treeKeys.C.kemHash }] },
+    "PqChatTreeKeyReturn",
+  ],
+  [
+    "a Remove and an Add of the same key, its UA left with no leaf",
+    "cold 3",
+    { ...by("A", 0), removes: [asRemove("C", 2)], adds: [{ ...asAdd("D", 3), kemHash: treeKeys.C.kemHash }] },
+    "PqChatTreeKeyReturn",
+  ],
+  ["a key change undone", "a key change", { ...by("C2", 3), adds: [asAdd("C", 2)] }, "PqChatTreeOwnKeyReturn"],
+  ["a path one node short", "cold 3", { ...by("A", 0), nodeKeyHashes: nk("r", 1) }, "PqChatTreeTargets"],
+].map(([name, before, c, error]) => {
+  const commit = { removes: [], adds: [], nodeKeyHashes: [], ...c };
+  try {
+    tr.applyCommit(trees[before], commit);
+  } catch (e) {
+    if (e.code !== error) throw e;
+    return { name, before, commit, error };
+  }
+  throw new Error(`tree refusal not refused: ${name}`);
+});
+// a twin for the key change: another UA adds the same key bytes, and is accepted (R16: no front-running)
+const twinRows = [
+  commitRow(
+    "another UA adds C's changed key",
+    "a key change",
+    "C2",
+    3,
+    [],
+    [{ ...asAdd("D", 2), kemHash: treeKeys.C.kemHash }],
+  ),
+];
+
+// resolution: spec §4's picture, and cold 3 (a blank leaf, every parent blank)
+const picture = tr.coldTree(named(["A", "B", "C", "D", "E", "F", "G"]));
+picture.nodes[10] = null;
+picture.nodes[5] = { keyHash: hex(rnd("tree/picture/node-key-hash/5")) };
+for (const x of [1, 3, 7]) picture.nodes[x] = { keyHash: hex(rnd(`tree/picture/node-key-hash/${x}`)) };
+tr.rehashAll(picture);
+const resolutionRow = (name, t) => {
+  const liveLeaves = [...Array(t.leaves).keys()].filter((l) => t.nodes[2 * l]);
+  return {
+    name,
+    tree: treeRow(t),
+    resolution: t.nodes.map((_, x) => tr.resolution(t, x)),
+    filteredPath: Object.fromEntries(liveLeaves.map((l) => [l, tr.filteredPath(t, l)])),
+    ctTargets: Object.fromEntries(liveLeaves.map((l) => [l, tr.ctTargets(t, l)])),
+    cover: liveLeaves.flatMap((a) =>
+      liveLeaves.filter((l) => l !== a).map((l) => ({ author: a, leaf: l, ...tr.coverOf(t, a, l) })),
+    ),
+  };
+};
+
+// admission (spec §8, C19, C32): every refused case with the accepted key it changes (its twin)
+const baseKey = pc.kemKey(rnd("tree/admission/mlkem-keygen-seed", 64), rnd("tree/admission/x25519-secret")).kemPk;
+const le32 = (v) => {
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++, v >>= 8n) out[i] = Number(v & 255n);
+  return out;
+};
+const uOf = (pkX) => pkX.reduceRight((a, b) => (a << 8n) | BigInt(b), 0n);
+const withPkX = (pkX) => concatBytes(baseKey.subarray(0, 1569), pkX);
+const nine = withPkX(le32(9n));
+const coeff = (c) => {
+  const pk = baseKey.slice();
+  pk[1] = c & 255;
+  pk[2] = (pk[2] & 0xf0) | (c >> 8);
+  return pk;
+};
+const hi = baseKey.slice();
+hi[1600] |= 0x80;
+const P = tr.P25519;
+const admissionRefused = [
+  ["a coefficient at 3,329", coeff(3329), "modulus check", "coefficient 3,328"],
+  ["scheme byte 2", concatBytes(Uint8Array.of(2), baseKey.subarray(1)), "wrong scheme byte", "base"],
+  ["1,600 bytes", baseKey.subarray(0, 1600), "wrong length", "base"],
+  ["1,602 bytes", concatBytes(baseKey, Uint8Array.of(0)), "wrong length", "base"],
+  ...tr.SMALL_ORDER_X25519.map((u, i) => [
+    `small-order pk_X ${["0", "1", "of order 8 (a)", "of order 8 (b)", "p - 1"][i]}`,
+    withPkX(le32(u)),
+    "pkX small order",
+    "base",
+  ]),
+  ["pk_X = p", withPkX(le32(P)), "pkX not below p", "base"],
+  ["pk_X = p + 1", withPkX(le32(P + 1n)), "pkX not below p", "base"],
+  [
+    "pk_X = 9 + p (an accepted point plus p, where it fits below 2^255)",
+    withPkX(le32(9n + P)),
+    "pkX not below p",
+    "u = 9",
+  ],
+  ["the base key with bit 255 set", hi, "pkX bit 255", "base"],
+].map(([name, kemPk, error, twin]) => {
+  try {
+    tr.admitKemKey(kemPk);
+  } catch (e) {
+    if (e.message !== error) throw e;
+    return { name, error, twin, kemPk: hex(kemPk) };
+  }
+  throw new Error(`admission not refused: ${name}`);
+});
+const admissionAccepted = [
+  ["base", baseKey],
+  ["u = 9", nine],
+  ["coefficient 3,328", coeff(3328)],
+].map(([name, kemPk]) => (tr.admitKemKey(kemPk), { name, kemPk: hex(kemPk), kemHash: hex(keccak_256(kemPk)) }));
+
+// fable-r3-2, R15: the base key's point shifted by a torsion point of order 4 and of order 8 is admitted, has another kemHash,
+// and gives every clamped scalar the same X25519 output. u = (1 + y) / (1 - y) of the Edwards point.
+const mod = (a) => ((a % P) + P) % P;
+const inv = (a) => {
+  let [r, b, e] = [1n, mod(a), P - 2n];
+  for (; e; e >>= 1n, b = mod(b * b)) if (e & 1n) r = mod(r * b);
+  return r;
+};
+const edOf = (u) => {
+  const y = mod((u - 1n) * inv(u + 1n));
+  return ed25519.Point.fromBytes(le32(y));
+};
+const uOfEd = (pt) => {
+  const { y } = pt.toAffine();
+  return mod((1n + y) * inv(1n - y));
+};
+const torsion = ED25519_TORSION_SUBGROUP.map((h) => ed25519.Point.fromHex(h));
+const orderOf = (pt) => {
+  let q = pt;
+  for (let k = 1; k <= 8; k++, q = q.add(pt)) if (q.is0()) return k;
+  throw new Error("not a torsion point");
+};
+const T4 = torsion.find((t) => orderOf(t) === 4);
+const T8 = torsion.find((t) => orderOf(t) === 8);
+const baseX = baseKey.subarray(1569);
+const baseEd = edOf(uOf(baseX));
+if (uOfEd(baseEd) !== uOf(baseX)) throw new Error("the Edwards map does not round-trip");
+const EPH = rnd("tree/admission/ephemeral-x25519-secret");
+const shared = hex(x25519.getSharedSecret(EPH, baseX));
+const shifted = [
+  [4, T4],
+  [8, T8],
+].map(([order, t]) => {
+  const kemPk = withPkX(le32(uOfEd(baseEd.add(t))));
+  tr.admitKemKey(kemPk);
+  const out = hex(x25519.getSharedSecret(EPH, kemPk.subarray(1569)));
+  if (out !== shared) throw new Error(`the order-${order} shift changes the X25519 output`);
+  return { order, kemPk: hex(kemPk), kemHash: hex(keccak_256(kemPk)), x25519Output: out };
+});
+
+// records and digests (§5, §6): a session of A, B, C; B adds D in epoch 1 on the cold tree
+const groupModeInSession = pc.TYPES.PqChatSession.some((f) => f.name === "groupMode");
+const tSession = {
+  creator: treeKeys.A.ua,
+  nonce: 21,
+  homeChain,
+  homeChatContract: "0x" + "c4".repeat(20),
+  admins: [treeKeys.A.ua],
+  members: ["A", "B", "C"].map((n) => ({ ua: treeKeys[n].ua, keyId: treeKeys[n].keyId, via: Z32 })),
+  wrapHashes: ["A", "B", "C"].map((n) => hex(rnd(`tree/session/wrap-hash/${n}`))),
+  sealedInfo: hex(rnd("tree/session/sealed-info", 284)),
+  // pqchat-sigs adds groupMode to PqChatSession; until this branch has it, treeId hashes the session without it
+  ...(groupModeInSession ? { groupMode: 1 } : {}),
+};
+const tSid = hex(pc.sessionId(tSession.creator, tSession.nonce));
+const tTreeId = hex(tr.treeId(tSession));
+const tGenesis = hex(tr.genesisCtx({ ...tSession, groupMode: 1 }));
+const tCold = trees["cold 3"];
+const addD = commitRow("B adds D", "cold 3", "B", 1, [], [asAdd("D", 3)]);
+const ctHashes = addD.ctTargets.map((_, j) => hex(rnd(`tree/commit/ct-hash/${j}`)));
+const tCommit = {
+  sessionId: tSid,
+  author: treeKeys.B.ua,
+  nonce: 5,
+  epoch: 1,
+  parentEpochId: tSid,
+  treeId: tTreeId,
+  parentTreeHash: tCold.hash[tr.root(tCold.leaves)],
+  leaf: 1,
+  keyId: treeKeys.B.keyId,
+  leaves: addD.after.leaves,
+  admins: [treeKeys.A.ua],
+  removes: [],
+  adds: addD.commit.adds,
+  wrapHashes: [hex(rnd("tree/commit/welcome-wrap-hash/D"))],
+  nodeKeyHashes: addD.commit.nodeKeyHashes,
+  ctCount: addD.ctTargets.length,
+  ctListHash: hex(tr.pathListHash(addD.ctTargets, ctHashes)),
+  treeHash: addD.after.treeHash,
+  sealedInfo: hex(rnd("tree/commit/sealed-info", 284)),
+};
+const tEpochId = hex(pc.epochId(tSid, tCommit.author, tCommit.nonce));
+const tLeave = { sessionId: tSid, treeId: tTreeId, epochId: tEpochId, member: treeKeys.C.ua, nonce: 6 };
+const tRemove = {
+  sessionId: tSid,
+  treeId: tTreeId,
+  epochId: tEpochId,
+  nextEpoch: 2,
+  members: [treeKeys.C.ua],
+  admin: treeKeys.A.ua,
+  nonce: 7,
+};
+const tPathCt = {
+  mlkemCt: hex(rnd("tree/path-ct/mlkem-ct", 1568)),
+  x25519Eph: hex(rnd("tree/path-ct/x25519-eph")),
+  sealedSecret: hex(rnd("tree/path-ct/sealed-secret", 48)),
+};
+const digestRow = (struct, s) => ({
+  struct,
+  record: s,
+  structHash: hex(tr.treeStructHash(struct, s)),
+  ...(["PqChatCommit", "PqChatTreeLeave", "PqChatTreeRemove"].includes(struct)
+    ? { typed: hex(tr.treeTyped(struct, s)), signedDigest: hex(tr.treeSignedDigest(KIND, struct, s)) }
+    : {}),
+});
+
+// noReturn (owner R16; plan T1a): E an admin, A the victim whose next keys A2… B copies as its own versions (keyId 10 + n)
+const kem = (n) => treeKeys[n].kemHash;
+const ua = (n) => treeKeys[n].ua;
+const add = (leaf, holder, keyId, kemOf) => ({ leaf, ua: ua(holder), keyId, via: Z32, kemHash: kem(kemOf) });
+const rem = (leaf, holder, keyId) => ({ leaf, ua: ua(holder), keyId });
+const nrCommit = (t, label, [who, leaf], removes = [], adds = []) => {
+  const me = t.nodes[2 * leaf];
+  if (!me || me.ua !== ua(who)) throw new Error(`${label}: ${who} is not at leaf ${leaf}`);
+  const n = tr.filteredPathAfter(t, leaf, { removes, adds }).length;
+  return { author: me.ua, keyId: me.keyId, leaf, removes, adds, nodeKeyHashes: nk(`no-return/${label}`, n) };
+};
+const scenario = (name, note, members, steps) => {
+  let t = tr.coldTree(named(members));
+  return {
+    name,
+    note,
+    start: members,
+    steps: steps.map(({ name: label, by: who, removes, adds, leave, probes = [] }) => {
+      let action;
+      if (leave) {
+        action = { leave: leave.map(ua) };
+        t = tr.markGone(t, action.leave);
+      } else {
+        action = { commit: nrCommit(t, label, who, removes, adds) };
+        t = tr.applyCommit(t, action.commit).tree;
+      }
+      return {
+        name: label,
+        ...action,
+        tree: treeRow(t),
+        probes: probes.map(({ name: p, by: pw, removes: pr = [], adds: pa, verdict }) => {
+          let got = "accepted";
+          let commit;
+          try {
+            commit = nrCommit(t, `${label}/${p}`, pw, pr, pa);
+            tr.applyCommit(t, commit);
+          } catch (e) {
+            if (!e.code) throw e;
+            got = e.code;
+            commit ??= {
+              author: ua(pw[0]),
+              keyId: t.nodes[2 * pw[1]].keyId,
+              leaf: pw[1],
+              removes: pr,
+              adds: pa,
+              nodeKeyHashes: [],
+            };
+          }
+          if (got !== verdict) throw new Error(`noReturn ${name} / ${label} / ${p}: ${got}, expected ${verdict}`);
+          return { name: p, commit, verdict };
+        }),
+      };
+    }),
+  };
+};
+const START = ["E", "A", "B"];
+const leaveSteps = (how) => [
+  { name: "B adds a copy of A3 as its keyId 13", by: ["B", 2], adds: [add(3, "B", 13, "A3")] },
+  { name: "B takes it out (a pair)", by: ["B", 2], removes: [rem(3, "B", 13)] },
+  { name: "B adds a copy of A2 as its keyId 12 (live)", by: ["B", 2], adds: [add(3, "B", 12, "A2")] },
+  ...(how === "commit" ? [] : [{ name: `B's ${how}`, leave: ["B"] }]),
+  {
+    name: "E blanks B's leaves: every key they hold is session-wide; the earlier pair stays",
+    by: ["E", 0],
+    removes: [rem(2, "B", 1), rem(3, "B", 12)],
+    probes: [
+      { name: "A adds A2", by: ["A", 1], adds: [add(2, "A", 2, "A2")], verdict: "PqChatTreeKeyReturn" },
+      { name: "E adds A2's bytes under D", by: ["E", 0], adds: [add(2, "D", 1, "A2")], verdict: "PqChatTreeKeyReturn" },
+      { name: "E adds B with a fresh key", by: ["E", 0], adds: [add(2, "B", 20, "J")], verdict: "PqChatTreeReturn" },
+      {
+        name: "A adds A3, the key B took out earlier",
+        by: ["A", 1],
+        adds: [add(2, "A", 3, "A3")],
+        verdict: "accepted",
+      },
+    ],
+  },
+];
+const noReturn = [
+  scenario(
+    "the burn by own-key churn",
+    "B registers A's next public key as its own version, adds it by a plain commit and takes it out: only (B, kemHash) is set",
+    START,
+    [
+      { name: "B adds a copy of A2 as its keyId 12", by: ["B", 2], adds: [add(3, "B", 12, "A2")] },
+      {
+        name: "B takes it out",
+        by: ["B", 2],
+        removes: [rem(3, "B", 12)],
+        probes: [
+          {
+            name: "B adds it again as keyId 13",
+            by: ["B", 2],
+            adds: [add(3, "B", 13, "A2")],
+            verdict: "PqChatTreeOwnKeyReturn",
+          },
+          { name: "A adds A2 by its own commit", by: ["A", 1], adds: [add(3, "A", 2, "A2")], verdict: "accepted" },
+          { name: "E adds A2 for A", by: ["E", 0], adds: [add(3, "A", 2, "A2")], verdict: "accepted" },
+        ],
+      },
+    ],
+  ),
+  scenario(
+    "the front-running loop",
+    "B repeats the churn on each of A's next keys before A's Add: every Add of A is accepted; a copy B keeps live blocks A " +
+      "until an admin removes that leaf while B keeps another (a pair then)",
+    START,
+    [
+      ...[
+        ["A2", 3],
+        ["A3", 4],
+        ["A4", 5],
+      ].flatMap(([k, leaf]) => [
+        { name: `B adds a copy of ${k}`, by: ["B", 2], adds: [add(leaf, "B", 10 + Number(k[1]), k)] },
+        { name: `B takes out its copy of ${k}`, by: ["B", 2], removes: [rem(leaf, "B", 10 + Number(k[1]))] },
+        { name: `A adds ${k}`, by: ["A", 1], adds: [add(leaf, "A", Number(k[1]), k)] },
+      ]),
+      {
+        name: "B adds a copy of A5 and keeps it live",
+        by: ["B", 2],
+        adds: [add(6, "B", 15, "A5")],
+        probes: [{ name: "A adds A5", by: ["A", 1], adds: [add(7, "A", 5, "A5")], verdict: "PqChatTreeKeyLive" }],
+      },
+      {
+        name: "E removes B's copy; B keeps its keyId 1",
+        by: ["E", 0],
+        removes: [rem(6, "B", 15)],
+        probes: [{ name: "A adds A5", by: ["A", 1], adds: [add(6, "A", 5, "A5")], verdict: "accepted" }],
+      },
+    ],
+  ),
+  scenario("the burn by leave: treeLeave", "B holds a copy of A2 and leaves", START, leaveSteps("treeLeave")),
+  scenario(
+    "the burn by leave: treeRemove",
+    "B holds a copy of A2 and an admin removes B",
+    START,
+    leaveSteps("treeRemove"),
+  ),
+  scenario(
+    "the burn by leave: an admin's commit",
+    "an admin's commit leaves B with no leaf",
+    START,
+    leaveSteps("commit"),
+  ),
+  scenario(
+    "the replacement of a UA's only key in one commit",
+    "fable-r3-4: A is judged after the Adds, holds A2 there, stays; its old key is a pair",
+    START,
+    [
+      {
+        name: "E replaces A's key 1 by A2",
+        by: ["E", 0],
+        removes: [rem(1, "A", 1)],
+        adds: [add(1, "A", 2, "A2")],
+        probes: [
+          {
+            name: "E adds A's old key under A again",
+            by: ["E", 0],
+            adds: [add(3, "A", 3, "A")],
+            verdict: "PqChatTreeOwnKeyReturn",
+          },
+          { name: "E adds A's old bytes under D", by: ["E", 0], adds: [add(3, "D", 1, "A")], verdict: "accepted" },
+        ],
+      },
+    ],
+  ),
+  scenario(
+    "a Remove and an Add of the same bytes in one commit",
+    "the level is judged after the Adds: under the same UA a pair; under another UA accepted when the removed UA stays, " +
+      "session-wide when it goes",
+    START,
+    [
+      {
+        name: "E adds A2 for A",
+        by: ["E", 0],
+        adds: [add(3, "A", 2, "A2")],
+        probes: [
+          {
+            name: "under the same UA",
+            by: ["E", 0],
+            removes: [rem(1, "A", 1)],
+            adds: [add(1, "A", 3, "A")],
+            verdict: "PqChatTreeOwnKeyReturn",
+          },
+          {
+            name: "under another UA, A stays",
+            by: ["E", 0],
+            removes: [rem(1, "A", 1)],
+            adds: [add(1, "D", 1, "A")],
+            verdict: "accepted",
+          },
+          {
+            name: "under another UA, A goes",
+            by: ["E", 0],
+            removes: [rem(1, "A", 1), rem(3, "A", 2)],
+            adds: [add(1, "D", 1, "A")],
+            verdict: "PqChatTreeKeyReturn",
+          },
+        ],
+      },
+    ],
+  ),
+];
+
+write("tree.json", {
+  description:
+    COMMON.replace(/Sources: .*$/, "") +
+    "Source: docs/superpowers/specs/2026-11-23-pqchat-treekem.md (§4 the tree, §5 treeId and genesisCtx, §6 records, §8 the " +
+    "admission check and a commit's order), plan docs/superpowers/plans/2026-11-23-pqchat-treekem.md T1a. UNAUDITED. " +
+    "A tree: nodes[x] is null (blank), a leaf {ua, keyId, kemHash} (node 2i is leaf i) or a parent {keyHash}; nodeHashes[x] = " +
+    "th(x); goneUa, goneOwnKey (the pairs) and goneKey (session-wide) are the no-return sets (C28, owner R14, R16). " +
+    "treeMath: RFC 9420's tree-math vectors (mlswg/mls-implementations test-vectors/tree-math.json at e4d3b074f3452a6fa3a7681" +
+    "ede6c963c410aafd9) regenerated by our tree math: JSON.stringify(rows, null, 2) has that file's sha256. resolution: per " +
+    "tree the resolution of every node, the filtered path, ctTargets and the target (index into ctTargets) that covers each " +
+    "live leaf for each author. treeHash: cold trees; commits applied in the contract's order (Removes, Adds, gone after the " +
+    "Adds, the path, th along every changed path), each from the tree named by before; refusals with the named error; " +
+    "twins accepted. admission: refused keys (error names the check; every one is PqChatKemKey in the contract) each with its " +
+    "accepted twin, accepted keys, and related: torsion-shifted keys (fable-r3-2, R15). digests: struct hashes, typed = " +
+    "keccak256(0x1901 ‖ DS_C ‖ structHash) and signedDigest = uaMessage(0x0131 mldsa65, PURPOSE_PQCHAT, typed) of the signed " +
+    "records. noReturn (R16): scenarios from a cold tree, each step a commit or a treeLeave / treeRemove mark (leave) with the " +
+    "tree and its sets after it, and probes: an Add commit on that tree with its verdict (accepted or the named error). " +
+    "The tree records' UAs are labels; the members' KEM keys are real.",
+  typehashes: Object.fromEntries(
+    Object.entries(tr.TREE_TYPE_STRINGS).map(([n, s]) => [n, { type: s, hash: hex(tr.TREE_TYPEHASH[n]) }]),
+  ),
+  keys: Object.values(treeKeys).map(({ i, ...k }) => k),
+  treeMath: {
+    source: "mlswg/mls-implementations test-vectors/tree-math.json @ e4d3b074f3452a6fa3a7681ede6c963c410aafd9",
+    sha256: "27f04891f56106593b74b674445f01b845e173953770c084deb2f8cf5592e2fc",
+    rows: tr.treeMathRows([1, 2, 4, 8, 16, 32, 64, 128, 256, 512]),
+  },
+  resolution: [resolutionRow("spec §4's picture", picture), resolutionRow("cold 3", trees["cold 3"])],
+  treeHash: { cold: coldRows, commits: [...commitRows, ...twinRows, addD], refused: treeRefusals },
+  admission: {
+    accepted: admissionAccepted,
+    refused: admissionRefused,
+    related: {
+      note:
+        "What the check does not give (R15): the base key's pk_X moved by a torsion point is admitted and has its own kemHash, " +
+        "yet every clamped X25519 scalar (ephemeral below) gives it the base key's output, so the holder of the base key's " +
+        "secret opens what is sealed to it. liveKey and goneKey mean the same bytes, never one capability per kemHash.",
+      base: "base",
+      ephemeral: hex(EPH),
+      x25519Output: shared,
+      shifted,
+    },
+  },
+  noReturn,
+  digests: {
+    session: tSession,
+    sessionId: tSid,
+    treeId: tTreeId,
+    genesisCtx: tGenesis,
+    genesisGroupMode: 1,
+    epochId: tEpochId,
+    ctTargets: addD.ctTargets,
+    ctHashes,
+    removesHash: hex(tr.arrayHash("TreeRemove", tCommit.removes)),
+    addsHash: hex(tr.arrayHash("TreeAdd", tCommit.adds)),
+    emptyPathList: hex(tr.pathListHash([], [])),
+    records: [
+      digestRow("PqChatCommit", tCommit),
+      digestRow("PqChatTreeLeave", tLeave),
+      digestRow("PqChatTreeRemove", tRemove),
+      digestRow("PathCt", tPathCt),
+      digestRow("PathList", { ctTargets: addD.ctTargets, ctHashes }),
+      ...tCommit.adds.map((a) => digestRow("TreeAdd", a)),
+      digestRow("TreeRemove", asRemove("C", 2)),
+    ],
+  },
+});
+console.log(`pqchat vectors: records, keys (${wrapRows.length} wraps), messages, topics, cards, tree -> ${OUT}`);
+
+if (CHECK) {
+  const bad = WRITTEN.filter((f) => readFileSync(join(OUT, f), "utf8") !== readFileSync(join(REPO, f), "utf8"));
+  rmSync(OUT, { recursive: true, force: true });
+  if (bad.length) {
+    console.error(`pqchat-vectors.mjs --check: ${bad.join(", ")} differ`);
+    process.exit(1);
+  }
+  console.log(`pqchat-vectors.mjs --check: ok (${WRITTEN.join(", ")})`);
+}

@@ -84,30 +84,21 @@ export const treeMathRows = (sizes) =>
 /** The smallest power of two `≥ used` (1 when used ≤ 1). */
 const sizeFor = (used) => 2 ** Math.ceil(Math.log2(Math.max(used, 1)));
 /** A tree: `nodes[x]` is null (blank), a leaf `{ ua, keyId, kemHash }` or a parent `{ keyHash }`; `hash[x]` its `th`. The
- *  no-return sets (C28, owner R16; never cleared): `gone` the UAs that left or were removed; `goneKey` the session-wide
- *  `kemHash`es, every key a gone UA held; `ownKey` per UA the `kemHash`es it took out by a key change while it stayed.
- *  Hex strings. */
+ *  no-return sets (C28, owner R14, R16; never cleared): `goneUa` the UAs that left or were removed; the pair set
+ *  `goneOwnKey` (per UA the `kemHash`es taken out of its leaves while it stayed a member); the session-wide set `goneKey`
+ *  (the `kemHash` of every key a UA's leaves held when they were blanked and that UA was gone). Hex strings. */
 const clone = (t) => ({
   leaves: t.leaves,
   used: t.used,
   nodes: t.nodes.slice(),
   hash: t.hash.slice(),
-  gone: new Set(t.gone),
+  goneUa: new Set(t.goneUa),
+  goneOwnKey: new Map([...(t.goneOwnKey ?? [])].map(([ua, ks]) => [ua, new Set(ks)])),
   goneKey: new Set(t.goneKey),
-  ownKey: new Map([...(t.ownKey ?? [])].map(([ua, ks]) => [ua, new Set(ks)])),
 });
-/** The refusal of an Add of a `(ua, kemHash)` pair its UA took out by a key change (owner R16). PROVISIONAL name: the spec
- *  commit of R16 fixes it. */
-export const OWN_KEY_RETURN = "PqChatTreeOwnKeyReturn";
-const takeOut = (t, ua, kemHash) => {
-  if (!t.ownKey.has(ua)) t.ownKey.set(ua, new Set());
-  t.ownKey.get(ua).add(kemHash);
-};
-/** A UA is gone: every key it held, live or taken out before, becomes session-wide (R16). */
-const goneUA = (t, ua) => {
-  t.gone.add(ua);
-  for (const k of t.ownKey.get(ua) ?? []) t.goneKey.add(k);
-  for (const n of live(t)) if (n.ua === ua) t.goneKey.add(n.kemHash);
+const pairOut = (t, ua, kemHash) => {
+  if (!t.goneOwnKey.has(ua)) t.goneOwnKey.set(ua, new Set());
+  t.goneOwnKey.get(ua).add(kemHash);
 };
 const norm = (k) => ({ ua: hex(k.ua), keyId: Number(k.keyId), kemHash: hex(k.kemHash) });
 const live = (t) => t.nodes.filter((n, x) => n && x % 2 === 0);
@@ -121,7 +112,7 @@ export function coldTree(members) {
     used: members.length,
     nodes: Array(nodeWidth(leaves)).fill(null),
     hash: [],
-    gone: [],
+    goneUa: [],
     goneKey: [],
   };
   members.forEach((m, i) => {
@@ -131,10 +122,11 @@ export function coldTree(members) {
   return rehashAll(clone(t));
 }
 
-/** Mark UAs `gone` (a landed `treeLeave` or `treeRemove`, C28): their leaves are owed to the next commit. */
+/** Mark UAs `gone` (a landed `treeLeave` or `treeRemove`, C28): their leaves are owed to the next commit, which writes
+ *  their keys session-wide when it blanks them (R16). */
 export function markGone(t, uas) {
   const u = clone(t);
-  for (const ua of uas) goneUA(u, hex(ua));
+  for (const ua of uas) u.goneUa.add(hex(ua));
   return u;
 }
 
@@ -236,24 +228,21 @@ function applyChanges(tree, { author, leaf, keyId, removes = [], adds = [] }) {
   const t = clone(tree);
   const me = t.nodes[2 * leaf];
   if (leaf >= t.leaves || !me || me.ua !== hex(author) || me.keyId !== Number(keyId)) refuse("PqChatTreeLeaf");
-  if (t.gone.has(me.ua)) refuse("PqChatRemovedKept");
+  if (t.goneUa.has(me.ua)) refuse("PqChatRemovedKept");
   const touched = new Set([2 * leaf]);
-  const changed = new Set();
+  const out = [];
   for (const r of removes) {
     const n = t.nodes[2 * r.leaf];
-    const k = norm(r);
+    const k = { ua: hex(r.ua), keyId: Number(r.keyId) };
     if (r.leaf === leaf || r.leaf >= t.leaves || !n || n.ua !== k.ua || n.keyId !== k.keyId) refuse("PqChatTreeLeaf");
     t.nodes[2 * r.leaf] = null;
     blankPath(t, 2 * r.leaf);
-    takeOut(t, n.ua, n.kemHash);
-    changed.add(n.ua);
+    out.push(n);
     touched.add(2 * r.leaf);
   }
   for (const a of adds) {
     const k = norm(a);
-    if (t.gone.has(k.ua)) refuse("PqChatTreeReturn");
-    if (t.ownKey.get(k.ua)?.has(k.kemHash)) refuse(OWN_KEY_RETURN);
-    if (t.goneKey.has(k.kemHash)) refuse("PqChatTreeKeyReturn");
+    if (t.goneUa.has(k.ua)) refuse("PqChatTreeReturn");
     if (live(t).some((n) => n.kemHash === k.kemHash)) refuse("PqChatTreeKeyLive");
     if (a.leaf > t.used || t.nodes[2 * a.leaf] || (a.leaf === t.used && t.used === TREE_LEAVES_MAX))
       refuse("PqChatTreeLeaf");
@@ -262,11 +251,16 @@ function applyChanges(tree, { author, leaf, keyId, removes = [], adds = [] }) {
     blankPath(t, 2 * a.leaf);
     touched.add(2 * a.leaf);
   }
-  // on the tree after the Adds (fable-r3-4): a UA left with no leaf is gone
-  // its keys become session-wide, so an Add of one of them in this same commit is refused here
-  for (const ua of changed) if (!live(t).some((n) => n.ua === ua)) goneUA(t, ua);
-  if (live(t).some((n) => t.gone.has(n.ua))) refuse("PqChatRemovedKept");
-  if (adds.some((a) => t.goneKey.has(hex(a.kemHash)))) refuse("PqChatTreeKeyReturn");
+  // on the tree after the Adds (fable-r3-4): a UA left with no leaf is gone; each removed key at its level (R16): its UA
+  // gone, session-wide; else the pair. Then each Add's verdict, a Remove of this same commit included.
+  for (const n of out) if (!live(t).some((m) => m.ua === n.ua)) t.goneUa.add(n.ua);
+  for (const n of out) if (t.goneUa.has(n.ua)) t.goneKey.add(n.kemHash);
+  for (const n of out) if (!t.goneUa.has(n.ua)) pairOut(t, n.ua, n.kemHash);
+  if (live(t).some((n) => t.goneUa.has(n.ua))) refuse("PqChatRemovedKept");
+  for (const a of adds) {
+    if (t.goneKey.has(hex(a.kemHash))) refuse("PqChatTreeKeyReturn");
+    if (t.goneOwnKey.get(hex(a.ua))?.has(hex(a.kemHash))) refuse("PqChatTreeOwnKeyReturn");
+  }
   return { t, touched };
 }
 
@@ -380,3 +374,18 @@ export function admitKemKey(kemPk) {
   if (SMALL_ORDER_X25519.includes(u)) refuse("pkX small order");
   return k;
 }
+
+// ------------------------------------------------------------------ the JSON form of tree.json
+
+/** A tree as tree.json writes it: nodes, size, and the no-return sets sorted. */
+export const treeJson = (t) => ({
+  leaves: t.leaves,
+  used: t.used,
+  nodes: t.nodes,
+  goneUa: [...t.goneUa].sort(),
+  goneOwnKey: Object.fromEntries(
+    [...t.goneOwnKey].sort(([a], [b]) => (a < b ? -1 : 1)).map(([u, ks]) => [u, [...ks].sort()]),
+  ),
+  goneKey: [...t.goneKey].sort(),
+});
+export const treeFromJson = (j) => rehashAll(clone({ ...j, hash: [], goneOwnKey: Object.entries(j.goneOwnKey ?? {}) }));
