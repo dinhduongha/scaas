@@ -1546,10 +1546,10 @@ impl ChainAdapter for AptosAdapter {
                     json!({"p": addr_hex(&self.package), "from": from, "to": to, "after": after}),
                 )
                 .await?;
-            let rows = d["user_transactions"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
+            // TODO 8b-4: an answer without its list is malformed, never an empty list (fail closed)
+            let Some(rows) = d["user_transactions"].as_array().cloned() else {
+                bail!("indexer: AnswerMalformed: no user_transactions list")
+            };
             for r in &rows {
                 let (v, h) = (r["version"].as_u64(), r["block_height"].as_u64());
                 let (Some(v), Some(h)) = (v, h) else {
@@ -1739,10 +1739,21 @@ mod tests {
     /// REST + Indexer API giả cho `events`: tx version 101 ở block 5 phát một `PaymentSettled` với `amount` cho trước
     /// (một endpoint nói dối thì đổi số tiền).
     async fn fake_aptos(amount: &'static str) -> String {
+        fake_aptos_with(
+            amount,
+            json!({"data": {"ledger_infos": [{"chain_id": 4}]}}),
+            json!({"data": {"user_transactions": [{"version": 101, "block_height": 5}]}}),
+        )
+        .await
+    }
+
+    /// [`fake_aptos`] whose indexer answers `ident` to the identity query (scaas-rpc B-9: `{ ledger_infos(limit: 1)
+    /// { chain_id } }`, a real indexer's `{"data": {"ledger_infos": [{"chain_id": n}]}}`) and `rows` to `user_transactions`.
+    async fn fake_aptos_with(amount: &'static str, ident: Value, rows: Value) -> String {
         use axum::extract::State;
         use axum::http::Uri;
         async fn h(
-            State(amount): State<&'static str>,
+            State((amount, ident, rows)): State<(&'static str, Value, Value)>,
             uri: Uri,
             body: String,
         ) -> axum::Json<Value> {
@@ -1750,10 +1761,12 @@ mod tests {
             axum::Json(if p == "/" {
                 // scaas-rpc T24.8 (fixture correction): endpoint 0's identity read comes before its reads
                 json!({"chain_id": 4, "block_height": "5"})
+            } else if p == "/graphql" && body.contains("ledger_infos") {
+                ident
             } else if p == "/graphql" && body.contains("processor_status") {
                 json!({"data": {"processor_status": [{"last_success_version": 1000}]}})
             } else if p == "/graphql" {
-                json!({"data": {"user_transactions": [{"version": 101, "block_height": 5}]}})
+                rows
             } else if p.starts_with("/blocks/by_height/") {
                 json!({"block_height": "5", "block_hash": format!("0x{}", "bb".repeat(32)), "first_version": "100",
                        "last_version": "102"})
@@ -1766,7 +1779,9 @@ mod tests {
                 panic!("unexpected {p}")
             })
         }
-        let app = axum::Router::new().fallback(h).with_state(amount);
+        let app = axum::Router::new()
+            .fallback(h)
+            .with_state((amount, ident, rows));
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
@@ -1816,6 +1831,66 @@ mod tests {
         assert_eq!(a.tx_fee("0xaa").await.unwrap(), Some(700));
         assert!(a.tx_fee("0xbb").await.is_err(), "no price");
         assert!(a.tx_fee("0xcc").await.is_err(), "not found");
+    }
+
+    /// scaas-rpc B-9 in the node: an indexer naming another network is `WrongChain`, one naming none `IdentityUnread`,
+    /// before any of its answers is used; the control names network 4 and reads.
+    #[tokio::test]
+    async fn the_indexer_names_its_network() {
+        let rows = json!({"data": {"user_transactions": [{"version": 101, "block_height": 5}]}});
+        let tokens = [addr_hex(&parse_addr("0xa").unwrap())];
+        for (ident, want) in [
+            (
+                json!({"data": {"ledger_infos": [{"chain_id": 5}]}}),
+                "WrongChain",
+            ),
+            (json!({"data": {"ledger_infos": []}}), "IdentityUnread"),
+        ] {
+            let u = fake_aptos_with("100", ident, rows.clone()).await;
+            let e = events_adapter(&[&u], 1)
+                .events(5, 5, &tokens)
+                .await
+                .unwrap_err();
+            assert!(format!("{e:#}").contains(want), "{want}: {e:#}");
+        }
+        let u = fake_aptos_with(
+            "100",
+            json!({"data": {"ledger_infos": [{"chain_id": 4}]}}),
+            rows,
+        )
+        .await;
+        assert_eq!(
+            events_adapter(&[&u], 1)
+                .events(5, 5, &tokens)
+                .await
+                .unwrap()
+                .len(),
+            1,
+            "control"
+        );
+    }
+
+    /// TODO 8b-4: an indexer answer without its `user_transactions` list is malformed, never an empty list (fail closed);
+    /// the control with an empty list reads no event.
+    #[tokio::test]
+    async fn an_indexer_answer_without_its_list_is_malformed() {
+        let ident = json!({"data": {"ledger_infos": [{"chain_id": 4}]}});
+        let tokens = [addr_hex(&parse_addr("0xa").unwrap())];
+        let u = fake_aptos_with("100", ident.clone(), json!({"data": {}})).await;
+        let e = events_adapter(&[&u], 1)
+            .events(5, 5, &tokens)
+            .await
+            .unwrap_err();
+        assert!(format!("{e:#}").contains("AnswerMalformed"), "{e:#}");
+        let u = fake_aptos_with("100", ident, json!({"data": {"user_transactions": []}})).await;
+        assert!(
+            events_adapter(&[&u], 1)
+                .events(5, 5, &tokens)
+                .await
+                .unwrap()
+                .is_empty(),
+            "control"
+        );
     }
 
     // L3: with quorum > 1, event bodies need the same agreement as block hashes — one endpoint cannot invent a payment.
@@ -2632,7 +2707,7 @@ mod tests {
             let s2 = s2.clone();
             async move {
                 s2.lock().unwrap().push((uri.path().to_string(), h.get("authorization").and_then(|v| v.to_str().ok()).map(str::to_string)));
-                axum::Json(json!({"data": {"processor_status": [{"last_success_version": 7}]}, "chain_id": 4, "block_height": "3"}))
+                axum::Json(json!({"data": {"processor_status": [{"last_success_version": 7}], "ledger_infos": [{"chain_id": 4}]}, "chain_id": 4, "block_height": "3"}))
             }
         });
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -2658,6 +2733,8 @@ mod tests {
         assert_eq!(
             got,
             [
+                // scaas-rpc B-9: the indexer's identity read (its `ledger_infos` chain id) before its first query, keyed too
+                ("/graphql".to_string(), Some("Bearer ikey".to_string())),
                 ("/graphql".to_string(), Some("Bearer ikey".to_string())),
                 ("/v1".to_string(), None),
                 ("/v1".to_string(), None)
