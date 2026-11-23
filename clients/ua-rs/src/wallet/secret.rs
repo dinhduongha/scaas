@@ -33,12 +33,14 @@ pub const SECRET_MAX: usize = 1 << 24;
 #[repr(C, align(16384))]
 struct Block([u8; BLOCK]);
 
-/// The blocks of one secret and its length.
+/// The blocks of one secret and its length; `sealed`: filled in Rust, so [`secret_write`] refuses it (scaas-sdk review T26
+/// C-11).
 struct Blocks {
     mem: Box<[Block]>,
     len: usize,
     locked: bool,
     no_dump: bool,
+    sealed: bool,
 }
 
 impl Blocks {
@@ -55,6 +57,7 @@ impl Blocks {
             len,
             locked,
             no_dump,
+            sealed: false,
         })
     }
     fn get(&self) -> &[u8] {
@@ -111,10 +114,15 @@ impl SecretBytes {
         Ok(SecretBytes { id, cell })
     }
 
-    /// A secret holding `src` (a Rust caller's); `src` wipes itself.
+    /// A secret holding `src` (a Rust caller's); `src` wipes itself. Sealed: a binding's [`secret_write`] cannot overwrite it
+    /// (scaas-sdk review T26 C-11: an id named by mistake never changes a secret the SDK issued; [`SecretBytes::new`] makes
+    /// the ones a binding fills, and the outputs lent to a callback).
     pub fn from_zeroizing(src: Zeroizing<Vec<u8>>) -> Result<SecretBytes> {
         let s = SecretBytes::new(src.len())?;
         s.with_mut(|b| b.copy_from_slice(&src));
+        if let Some(b) = cell(&s.cell).as_mut() {
+            b.sealed = true;
+        }
         Ok(s)
     }
 
@@ -182,11 +190,16 @@ fn lookup(id: u64) -> Result<Cell> {
     registry().get(&id).cloned().ok_or(Error::Argument)
 }
 
-/// Copies `src` into secret `id`: `Argument` for an unknown or disposed id or a length other than the secret's.
+/// Copies `src` into secret `id`: `Argument` for an unknown or disposed id, a sealed one ([`SecretBytes::from_zeroizing`]), or
+/// a length other than the secret's.
 pub fn secret_write(id: u64, src: &[u8]) -> Result<()> {
     let c = lookup(id)?;
     let mut g = cell(&c);
-    let dst = g.as_mut().map(Blocks::get_mut).ok_or(Error::Argument)?;
+    let dst = g
+        .as_mut()
+        .filter(|b| !b.sealed)
+        .map(Blocks::get_mut)
+        .ok_or(Error::Argument)?;
     if dst.len() != src.len() {
         return Err(Error::Argument);
     }
@@ -360,6 +373,24 @@ mod tests {
             dispose_done.recv_timeout(Duration::from_secs(5)),
             Ok(true),
             "control: the dispose completes"
+        );
+    }
+
+    /// scaas-sdk review T26 C-11: a secret filled in Rust is sealed against the copy call's write (`Argument`, its bytes kept);
+    /// the twin, a secret made to be written, takes it.
+    #[test]
+    fn a_sealed_secret_refuses_the_copy_write() {
+        let sealed = SecretBytes::from_zeroizing(Zeroizing::new(vec![7; 4])).unwrap();
+        assert_eq!(secret_write(sealed.id(), &[1; 4]), Err(Error::Argument));
+        assert!(sealed.with(|b| b == [7; 4]), "kept");
+        let open = SecretBytes::new(4).unwrap();
+        assert_eq!(secret_write(open.id(), &[1; 4]), Ok(()));
+        assert!(open.with(|b| b == [1; 4]));
+        let mut out = [0; 4];
+        assert_eq!(
+            secret_read(sealed.id(), &mut out),
+            Ok(4),
+            "a sealed one still reads"
         );
     }
 
