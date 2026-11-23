@@ -333,7 +333,6 @@ ua-vectors | 3d96c45be | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
 ua-core | 3d96c45be | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
 sdk-noevm | 1e73c93e4 | 0 | 168 passed, 0 failed, 1 ignored (23 binaries)
 sdk-wasm | 1e73c93e4 | 0 | -
-sdk-vectors | 1e73c93e4 | 0 | 19 passed, 0 failed, 0 ignored (2 binaries)
 ua-appcore | 1e73c93e4 | 0 | 19 passed, 0 failed, 0 ignored (1 binaries)
 ffi | 1e73c93e4 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 bind-gen | 1e73c93e4 | 0 | -
@@ -351,7 +350,6 @@ sdk-clippy-noevm | 78d410f45 | 0 | -
 sdk-uniffi | 78d410f45 | 0 | 21 passed, 0 failed, 0 ignored (4 binaries)
 sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
-sdk-vectors | 190cc2ba7 | 0 | 21 passed, 0 failed, 0 ignored (2 binaries)
 ua-vectors | 190cc2ba7 | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
 ua-appcore | 190cc2ba7 | 0 | 20 passed, 0 failed, 0 ignored (1 binaries)
 ua-verify-only | 190cc2ba7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
@@ -359,10 +357,11 @@ ua-core | 190cc2ba7 | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
 cli | 190cc2ba7 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
 bind-gen | 190cc2ba7 | 0 | -
 docs | 2592e0de8 | 0 | -
-mutants-check | 2592e0de8 | 1 | -
 rpc-test | 2592e0de8 | 0 | 232 passed, 0 failed, 10 ignored (23 binaries)
-rpc-clippy | 2592e0de8 | 101 | -
 sdk-clippy | 2592e0de8 | 0 | -
 ua-clippy | 2592e0de8 | 0 | -
 ua-test | 2592e0de8 | 0 | 631 passed, 0 failed, 3 ignored (64 binaries)
 sdk-test | 2592e0de8 | 0 | 464 passed, 0 failed, 18 ignored (42 binaries)
+rpc-clippy | 64747dea8 | 0 | -
+mutants-check | 64747dea8 | 0 | -
+sdk-vectors | 64747dea8 | 0 | 21 passed, 0 failed, 0 ignored (2 binaries)
