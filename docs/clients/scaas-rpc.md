@@ -106,7 +106,9 @@ endpoint; in the node every family has its caps (Soroban `max_resource_fee_per_j
 `max_priority_lamports`, Sui `max_gas_budget`, Cosmos `max_gas_per_tx`, Aptos `max_gas_unit_price`, Algorand `max_min_fee` and
 `max_fee_per_byte`, NEAR `max_deposit_per_job`; owner 2026-11-18, plan T24.4), and a figure above its cap is no verdict. BUILT for EVM, plan T3, T6, T13 S1, S2: `three_honest_agree`, `one_altered_storage_slot_is_outvoted`,
 `two_altered_differently_is_no_majority` against three anvils, EIP-1898 verified against anvil and a local Nethermind 2.2.0
-(plan T0; Hedera's relay not verified); on another family PLANNED.
+(plan T0; Hedera's relay not verified); on another family PLANNED. A caller may ask the agreed read of one read on a `failover`
+list, `EvmPool::read_at_block_agreed` (the same checks; one endpoint or no pinned `chain_uid` `Argument`; owner 2026-11-23, an app
+core's option, never forced on the list; BUILT on `pqchat-sigs`: `an_agreed_read_on_a_failover_list_outvotes_one_liar`).
 
 <a id="CLI-RPC-06"></a>**CLI-RPC-06** — **A read that feeds a decryption never rests on a discovered endpoint alone** (ARCH-POS-15,
 ARCH-POS-13, as stated; BUILT, plan T3: `discovered_is_skipped_under_failover`, `only_discovered_is_no_trusted_endpoint`,
