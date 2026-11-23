@@ -1014,7 +1014,10 @@ async fn msig_members_apart() {
     let mut inner: serde_json::Value = serde_json::from_str(&j).unwrap();
     inner["members"] = serde_json::json!(vec![serde_json::json!({"index": 0, "sig": "0x00"}); 257]);
     assert_eq!(at(with(inner.to_string())).await, "Argument");
-    assert!(super::member_of(&inner.to_string()).is_err(), "257 inner signatures");
+    assert!(
+        super::member_of(&inner.to_string()).is_err(),
+        "257 inner signatures"
+    );
     assert_eq!(
         se.n.load(std::sync::atomic::Ordering::SeqCst),
         asked,
@@ -1024,7 +1027,10 @@ async fn msig_members_apart() {
     // on this single-key slot they name no inner `msig`: refused since review A2-11 (an inner leaf is checked active)
     assert_eq!(at(with(pad(64 << 10))).await, "Ok");
     inner["members"] = serde_json::json!(vec![serde_json::json!({"index": 0, "sig": "0x00"}); 256]);
-    assert!(super::member_of(&inner.to_string()).is_ok(), "256 inner signatures");
+    assert!(
+        super::member_of(&inner.to_string()).is_ok(),
+        "256 inner signatures"
+    );
     assert_eq!(at(with(inner.to_string())).await, "Argument");
     // the secure-element slot not accepted: its own code, no device asked
     record(&t, REGISTRY, &kd, &kd, 0, 0b11, 1 << fi);

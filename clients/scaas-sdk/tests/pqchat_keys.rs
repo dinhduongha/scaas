@@ -996,12 +996,7 @@ async fn read_app_agreed_is_the_agreed_read() {
         .to_string();
     answer(&chain, VIEW, "sigStore()", &[], w(2));
     let plain = a
-        .read_app(
-            "local".into(),
-            VIEW.into(),
-            entry.clone(),
-            "{}".into(),
-        )
+        .read_app("local".into(), VIEW.into(), entry.clone(), "{}".into())
         .await
         .unwrap();
     assert_eq!(plain, json!({"0": "2"}).to_string());
