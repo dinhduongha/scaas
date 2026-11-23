@@ -17,7 +17,7 @@ mod hostile;
 #[path = "e2e/matrix.rs"]
 mod matrix;
 
-use matrix::{Synapse, SynapseWitness};
+use matrix::{LastN, Synapse, SynapseWitness};
 use pqchat_core::matrix::MatrixTransport;
 
 /// The test transport over Synapse passes T8's conformance test (CLI-PQC-05, K9).
@@ -49,10 +49,11 @@ async fn e2e_matrix_conformance() {
 }
 
 use common::chain::CHAIN;
-use harness::{selector, World};
+use harness::{selector, World, DEPTH, DISC, FINAL};
 use pqchat_core::consent::Consent;
 use pqchat_core::content::Content;
-use pqchat_core::message::OpenEpoch;
+use pqchat_core::matrix::RoomUse;
+use pqchat_core::message::{Incoming, OpenEpoch};
 use pqchat_core::net::Net;
 use pqchat_core::reads::SessionRef;
 use pqchat_core::session::{CreateSession, Info, Me, Rekey, StoreEntry};
@@ -156,11 +157,30 @@ fn texts(pq: &PqChat, sid: &str) -> Vec<(String, Content)> {
 }
 
 /// The plan's steps in their order on one chain and one homeserver (CLI-PQC-12): 1:1 session with the Matrix room and the
-/// chain store, send and decrypt, a group rekey with removal (and the removed member's writes refused by the contract
-/// through the hostile harness), a fresh device, replicas, a public topic.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+/// chain store, send and decrypt, a Matrix-only 1:1 session (B invited by its contact card's id), a group rekey with removal
+/// (and the removed member's writes refused by the contract through the hostile harness), a fresh device (S2 from the room's
+/// history), C's competing child at R1, replicas, a public topic, the fixtures of the plan's mutants, and the long chain.
+#[test]
 #[ignore = "needs anvil, forge, cast, smartcontracts/evm/lib, Docker and the Synapse image (gate pqc-e2e)"]
-async fn e2e_run() {
+fn e2e_run() {
+    // the run's future outgrows a test thread's stack in a debug build: its own thread and runtime, larger stacks
+    std::thread::Builder::new()
+        .stack_size(256 << 20)
+        .spawn(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(32 << 20)
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(run())
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+async fn run() {
     let w = world_and_log().await;
     let hs = Synapse::start().await;
     for u in ["alice", "bob", "carol"] {
@@ -172,6 +192,17 @@ async fn e2e_run() {
     );
     let (a, b, c) = (w.a.clone(), w.b.clone(), w.c.clone());
     let h = w.chain_store(&w.l.home);
+
+    // --- mutant 1's fixture: B's KEM key rotated to version 1 before S1 (the registration's is version 0), by the SDK
+    let acc = w.l.sdk.account();
+    let wr = acc
+        .prepare_set_kem_key(b.key.clone(), CHAIN.into(), 1, w.l.payer.clone())
+        .await
+        .unwrap()
+        .expect("version 1 not stored yet");
+    let q = acc.quote_registry_write(wr.clone()).await.unwrap();
+    w.follow_landed(acc.submit_registry_write(wr, q).await.unwrap())
+        .await;
 
     // --- 1:1 session S1: the Matrix room and H's chain store
     let store_a = Arc::new(MemoryStore::new());
@@ -205,6 +236,9 @@ async fn e2e_run() {
     );
     let s1b = w.land_all(&pa, s1b).await;
     let sid1 = s1b.session_id.clone();
+    let kb =
+        |e: &pqchat_core::model::Epoch| e.members.iter().find(|m| m.ua == b.ua).unwrap().key_id;
+    assert_eq!(kb(&s1b.epoch), 1, "A wraps to B's KEM version 1");
     let s1 = w.sref(&sid1);
     let ea1 = creator_uses(&w, &pa, &sid1, &sid1, s1b.k.clone()).await;
     // the creator invites only ids bound to their UA: B's is not (no contact card row, UA-7 §14 O7), so no invite
@@ -224,7 +258,10 @@ async fn e2e_run() {
     let found = pb.sessions(&b).await.unwrap();
     assert_eq!(found.len(), 1);
     assert_eq!((&found[0].s, found[0].consent), (&s1, Consent::Pending));
-    let p = pb.preview(&s1, &b).await.unwrap();
+    let p = pb
+        .preview(&s1, &b)
+        .await
+        .expect("mutant 1: B opens its S1 wrap at KEM version 1");
     assert!(p.matrix && p.chain_stores == 1 && p.creator == a.ua);
     assert_eq!(
         tb.calls.lock().unwrap().clone(),
@@ -294,6 +331,77 @@ async fn e2e_run() {
     );
     println!("[e2e] S1: sent, posted, decrypted both ways; duplicate counted once; no receipt or typing in the room");
 
+    // --- 1:1 session S2, the Matrix room its only store: B's signed contact card binds its Matrix id on A's device
+    let card = w
+        .app
+        .sign_pqchat_card(b.key.clone(), 1, tb.user.clone())
+        .await
+        .unwrap();
+    assert!(pa.add_card(CHAIN, &card.card, &card.sig).await.unwrap());
+    let room2 = pa.create_room().await.unwrap();
+    let mut req = create(
+        &w,
+        &a,
+        2,
+        &[&b],
+        vec![StoreEntry::Matrix {
+            room: room2.clone(),
+        }],
+        "s2",
+    );
+    req.info.matrix = BTreeMap::from([
+        (a.ua.clone(), ta.user.clone()),
+        (b.ua.clone(), tb.user.clone()),
+    ]);
+    let s2b = w.land_all(&pa, pa.create(req).await.unwrap()).await;
+    let sid2 = s2b.session_id.clone();
+    let s2 = w.sref(&sid2);
+    let ea2 = creator_uses(&w, &pa, &sid2, &sid2, s2b.k.clone()).await;
+    let sync = pa.sync_room(&s2, &ea2, None, &a).await.unwrap();
+    assert_eq!(
+        (sync.invited.clone(), sync.unbound.len()),
+        (vec![b.ua.clone()], 0),
+        "B invited by its card's id"
+    );
+    assert_eq!(ta.calls_of("invite"), 1);
+    let m2 = txt("hello B, Matrix only");
+    let r = pa
+        .send(&s2, &a, &m2, Some(10), &opts(&w, false))
+        .await
+        .unwrap();
+    assert_eq!(r.stores, vec![(0, Delivery::Sent(String::new()))]);
+    // B: pending, the invite held; joined only after the acceptance, the room's history read then
+    let found = pb.sessions(&b).await.unwrap();
+    assert!(found
+        .iter()
+        .any(|f| f.s == s2 && f.consent == Consent::Pending));
+    pb.preview(&s2, &b).await.unwrap();
+    assert_eq!(tb.calls_of("join"), 0, "no join before acceptance");
+    pb.accept(&s2, false).unwrap();
+    let o = pb.open_session(&s2, &b).await.unwrap();
+    assert_eq!((o.room, o.shown), (RoomUse::Bound, 1));
+    assert_eq!(tb.calls_of("join"), 1);
+    assert_eq!(texts(&pb, &sid2), vec![(a.ua.clone(), m2.clone())]);
+    let rep2 = txt("hello A, Matrix only");
+    let r = pb
+        .send(&s2, &b, &rep2, Some(11), &opts(&w, false))
+        .await
+        .unwrap();
+    assert_eq!(r.stores[0].1, Delivery::Sent(String::new()));
+    assert_eq!(pa.read_room(&room2).await.unwrap(), 1);
+    assert_eq!(
+        texts(&pa, &sid2),
+        vec![(a.ua.clone(), m2.clone()), (b.ua.clone(), rep2.clone())]
+    );
+    assert_eq!(
+        pa.dropped(&sid2),
+        BTreeMap::from([(DropReason::Duplicate, 1)])
+    );
+    let sr = hs.seen_of(&room2, &tb.user);
+    assert!(sr.joined && !sr.encrypted && sr.events == 2, "{sr:?}");
+    assert_eq!((sr.receipts, sr.read_markers, sr.typing), (0, 0, 0));
+    println!("[e2e] S2 {sid2}: Matrix only; B invited by its card, joined after acceptance; decrypted both ways");
+
     // --- group S3 (A admin; B, C), H's chain store
     let pc = w.device();
     pc.start_device(Some("c-1".into())).unwrap();
@@ -301,7 +409,7 @@ async fn e2e_run() {
         .create(create(&w, &a, 3, &[&b, &c], vec![h.clone()], "s3"))
         .await
         .unwrap();
-    let s3b = w.land_all(&pa, s3b).await;
+    let (s3b, s3_calls) = w.land_all_calls(&pa, s3b).await;
     let sid3 = s3b.session_id.clone();
     let s3 = w.sref(&sid3);
     let ea3 = creator_uses(&w, &pa, &sid3, &sid3, s3b.k.clone()).await;
@@ -432,6 +540,7 @@ async fn e2e_run() {
     let d2 = pb2.start_device(Some("b-2".into())).unwrap();
     assert_ne!(d2, db1);
     w.net.clear();
+    let (joins, hist) = (tb.calls_of("join"), tb.calls_of("history"));
     let found = pb2.sessions(&b).await.unwrap();
     let mut ids: Vec<_> = found
         .iter()
@@ -440,6 +549,7 @@ async fn e2e_run() {
     ids.sort_by(|x, y| x.0.cmp(&y.0));
     let mut want = vec![
         (sid1.clone(), Consent::Pending),
+        (sid2.clone(), Consent::Pending),
         (sid3.clone(), Consent::Pending),
     ];
     want.sort_by(|x, y| x.0.cmp(&y.0));
@@ -455,6 +565,11 @@ async fn e2e_run() {
         assert!(!w.net.read_items().contains(&it), "{it} read before accept");
     }
     assert_eq!(pb2.unwrap_calls(), 0);
+    assert_eq!(
+        (tb.calls_of("join"), tb.calls_of("history")),
+        (joins, hist),
+        "the room neither joined nor read before accept"
+    );
     pb2.accept(&s1, true).unwrap();
     pb2.accept(&s3, true).unwrap();
     let o1 = pb2.open_session(&s1, &b).await.unwrap();
@@ -469,8 +584,22 @@ async fn e2e_run() {
         (1, r1.epoch_id.clone())
     );
     assert_eq!(texts(&pb2, &sid3), vec![(a.ua.clone(), after.clone())]);
-    // B sends from the new device (a new device id: A's counter scope is new, the counter starts again)
+    // S2 from the room's history: the room B's account joined before, used once its members check against the epoch
+    // (attached now: S1's room never invited B, so a join of it would fail)
     pb2.attach_matrix(tb.clone());
+    pb2.accept(&s2, false).unwrap();
+    let o2 = pb2.open_session(&s2, &b).await.unwrap();
+    assert_eq!(
+        (o2.room, o2.shown),
+        (RoomUse::Bound, 2),
+        "a room joined before used after its members' check"
+    );
+    assert_eq!(tb.calls_of("join"), joins, "no second join");
+    assert_eq!(
+        texts(&pb2, &sid2),
+        vec![(a.ua.clone(), m2.clone()), (b.ua.clone(), rep2.clone())]
+    );
+    // B sends from the new device (a new device id: A's counter scope is new, the counter starts again)
     let fresh = txt("from B's new device");
     let r = pb2
         .send(&s1, &b, &fresh, Some(6), &opts(&w, false))
@@ -482,7 +611,115 @@ async fn e2e_run() {
         texts(&pa, &sid1).last().unwrap(),
         &(b.ua.clone(), fresh.clone())
     );
-    println!("[e2e] B's fresh device: S1 and S3 found from state, pending; read after accept; its send decrypted by A");
+    let fresh2 = txt("from B's new device, Matrix only");
+    let r = pb2
+        .send(&s2, &b, &fresh2, Some(7), &opts(&w, false))
+        .await
+        .unwrap();
+    assert_eq!(r.stores[0].1, Delivery::Sent(String::new()));
+    assert_eq!(pa.read_room(&room2).await.unwrap(), 1);
+    assert_eq!(
+        texts(&pa, &sid2).last().unwrap(),
+        &(b.ua.clone(), fresh2.clone())
+    );
+    println!("[e2e] B's fresh device: S1, S2, S3 found from state, pending; read after accept (S1 storedRange, S2 the room); its sends decrypted by A");
+
+    // --- C's competing child at R1 (hostile): S3's session copied to R1, then C's plain rekey of e0 sent there, where C
+    // was never removed; at H, A's e1 holds e0's slot
+    for call in &s3_calls {
+        w.raw(&w.r1, &call.quote.data).unwrap();
+    }
+    assert_eq!(
+        c_rekey.sent,
+        c_rekey.wraps.len(),
+        "C's child complete in one write"
+    );
+    w.raw(&w.r1, &c_rekey.call.quote.data).unwrap();
+    let view =
+        |at: &str, sig: &str| common::chain::cast(&["call", "--rpc-url", &w.l.rpc, at, sig, &sid3]);
+    // a replica orders nothing (no slot written there): R1's latest complete epoch is C's child, H's slot A's e1
+    assert_eq!(
+        (
+            view(&w.r1, "latestEpoch(bytes32)(bytes32)"),
+            view(&w.r1, "childOf(bytes32)(bytes32)"),
+            view(&w.l.home, "childOf(bytes32)(bytes32)")
+        ),
+        (
+            c_rekey.epoch_id.clone(),
+            pqchat_core::model::ZERO32.to_string(),
+            r1.epoch_id.clone()
+        )
+    );
+    // membership is the home's: C's child, named with R1 as the replica, does not open (the home's `epochOf` refuses an
+    // epoch it does not hold: `decode`)
+    assert_eq!(
+        pb.open_epoch(&s3, &c_rekey.epoch_id, &b.key, &b.ua, Some(w.r1.clone()))
+            .await
+            .err(),
+        Some(DropReason::Decode),
+        "mutant 4: membership from the replica"
+    );
+    // B's first device, e0 in use, follows the home's slot: its next message goes under A's e1
+    pb.accept(&s3, true).unwrap();
+    let e0b = pb
+        .open_epoch(&s3, &sid3, &b.key, &b.ua, None)
+        .await
+        .unwrap();
+    let e0b = pb.use_epoch(&s3, e0b).await.unwrap();
+    let out = pb
+        .seal(&s3, &b, &txt("B follows H"), Some(8))
+        .await
+        .unwrap();
+    assert_eq!(out.epoch.epoch.id, r1.epoch_id, "mutant 5: the home slot");
+    println!(
+        "[e2e] C's child {} complete at R1 (its latest); B's client follows H's slot {}",
+        c_rekey.epoch_id, r1.epoch_id
+    );
+
+    // --- hostile envelopes, each handed to B's first device as a store would
+    let hint1 = w.app.pqchat_hint(s1b.k.clone()).unwrap();
+    // mutant 2: a valid S2 record and signature, sealed under S2's k_env, handed in under S1's hint
+    let s2env = hostile::sealed(
+        &w,
+        &a,
+        &s2b.k,
+        (&sid2, &sid2),
+        &format!("0x{}", "a2".repeat(16)),
+        0,
+        r#"{"body":"x","type":"text"}"#,
+    )
+    .await;
+    assert_eq!(
+        pb.incoming(&sid1, &hint1, s2env.env).await.unwrap(),
+        Incoming::Dropped(DropReason::Envelope),
+        "mutant 2: envelope"
+    );
+    // mutant 3: a record naming B as its sender, signed by C, sealed under e0's k_env (C holds e0's K)
+    let forged = hostile::signed_by_another(&w, &c, &b.ua, &ec0.k, (&sid3, &sid3)).await;
+    let hint0 = w.app.pqchat_hint(ec0.k.clone()).unwrap();
+    assert_eq!(
+        pb.incoming(&sid3, &hint0, forged).await.unwrap(),
+        Incoming::Dropped(DropReason::Signature),
+        "mutant 3: signature"
+    );
+    // mutant 12: A's message whose padded plaintext has a non-zero fill, sealed under its mk
+    let filled = hostile::with_fill(
+        &w,
+        &a,
+        &s1b.k,
+        (&sid1, &sid1),
+        &format!("0x{}", "a5".repeat(16)),
+        5,
+        r#"{"body":"fill","type":"text"}"#,
+    )
+    .await;
+    assert_eq!(
+        pb.incoming(&sid1, &hint1, filled.env).await.unwrap(),
+        Incoming::Dropped(DropReason::Content),
+        "mutant 12: content"
+    );
+    let _ = &e0b;
+    println!("[e2e] hostile envelopes: another epoch's k_env (envelope), B's record signed by C (signature), a non-zero fill (content)");
 
     // --- replicas: S1's createSession copied to R1 (anyone may submit the signed record)
     w.raw(&w.r1, &s1b.call.quote.data).unwrap();
@@ -693,6 +930,162 @@ async fn e2e_run() {
         "mutant 14: no join before accept"
     );
     println!("[e2e] fixtures: counter, unlisted, wrap-hash, pending gate");
+
+    // --- mutant 11's fixture: the named endpoint serves S2's sealedInfo changed for one sealed under S2's K that is not in
+    // K5's canonical form (hostile, the vectors build); B's new device opens nothing and joins nothing from it
+    let canon = pa.info(&ea2).unwrap().with(|b| b.to_vec());
+    let bad = pqchat_core::model::hex(&hostile::info_spaced(&w, &s2b.k, (&sid2, &sid2), &canon));
+    let real = pqchat_core::model::hex(&ea2.epoch.sealed_info);
+    *w.net.tamper.lock().unwrap() = Some(Box::new(move |item, mut v| {
+        if item == "IPqChat.sessionOf" && v["s"]["sealedInfo"].as_str() == Some(real.as_str()) {
+            v["s"]["sealedInfo"] = Value::String(bad.clone());
+        }
+        v
+    }));
+    let pb4 = w.device();
+    pb4.start_device(Some("b-4".into())).unwrap();
+    pb4.attach_matrix(tb.clone());
+    pb4.accept(&s2, false).unwrap();
+    let (joins, hist) = (tb.calls_of("join"), tb.calls_of("history"));
+    let r = pb4.open_session(&s2, &b).await;
+    *w.net.tamper.lock().unwrap() = None;
+    assert_eq!(
+        r.err().map(|e| e.code()),
+        Some("PqChatContent"),
+        "mutant 11: the sealedInfo's check"
+    );
+    assert_eq!(
+        (
+            tb.calls_of("join"),
+            tb.calls_of("history"),
+            pb4.room_session(&room2).unwrap()
+        ),
+        (joins, hist, None),
+        "mutant 11: no store joined from it"
+    );
+
+    // --- mutant 15's fixture: A's device on the profile whose first endpoint is a discovered one that serves C's KEM key
+    // for B's; the key read feeds a wrap, so only the named endpoint answers it
+    let kem_at = selector("kemKeyAt(bytes32,uint64)");
+    let word = |x: &str| x.trim_start_matches("0x").to_string();
+    *w.proxy.swap.lock().unwrap() = Some((
+        format!("{kem_at}{}{:064x}", word(&b.ua), 1),
+        format!("{kem_at}{}{:064x}", word(&c.ua), 0),
+    ));
+    let pad_ = w.device_on(DISC);
+    pad_.start_device(Some("a-d".into())).unwrap();
+    let mut req = create(&w, &a, 15, &[&b], vec![h.clone()], "s15");
+    req.chain = DISC.into();
+    let b15 = pad_.create(req).await.unwrap();
+    *w.proxy.swap.lock().unwrap() = None;
+    let wb = b15.wraps.iter().find(|x| x.member == b.ua).unwrap().clone();
+    assert!(
+        w.app
+            .pqchat_unwrap(
+                b.key.clone(),
+                b15.session_id.clone(),
+                b15.session_id.clone(),
+                wb
+            )
+            .is_ok(),
+        "mutant 15: A wraps to B's own key"
+    );
+    assert_eq!(w.proxy.swapped.load(std::sync::atomic::Ordering::SeqCst), 0);
+
+    // --- mutant 13's fixture: B's device reading at two blocks below the latest; A's child of S2 lands, B sends, the chain
+    // is reverted to before the child: B's message went under the final epoch, so A reads it
+    let rpc = |m: &str, a: &[&str]| {
+        let mut v = vec!["rpc", "--rpc-url", &w.l.rpc, m];
+        v.extend_from_slice(a);
+        common::chain::cast(&v)
+    };
+    rpc("anvil_mine", &[&format!("{DEPTH:#x}")]);
+    let sf = SessionRef {
+        chain: FINAL.into(),
+        ..s2.clone()
+    };
+    let pbf = w.device_on(FINAL);
+    pbf.start_device(Some("b-f".into())).unwrap();
+    pbf.attach_matrix(tb.clone());
+    pbf.accept(&sf, false).unwrap();
+    assert_eq!(
+        pbf.open_session(&sf, &b).await.unwrap().room,
+        RoomUse::Bound
+    );
+    let snap = rpc("anvil_snapshot", &[]);
+    let landed = w.txs.lock().unwrap().len();
+    let ch = pa
+        .rekey(
+            &s2,
+            &ea2,
+            Rekey {
+                me: a.clone(),
+                nonce: 13,
+                members: uas(&[&a, &b]),
+                admins: uas(&[&a]),
+                info: info_of(&pa, &ea2),
+                payer: w.l.payer.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    let ch = w.land_all(&pa, ch).await;
+    assert_eq!(w.l.call("childOf(bytes32)(bytes32)", &[&sid2]), ch.epoch_id);
+    let fin = txt("B under the final epoch");
+    let r = pbf
+        .send(&sf, &b, &fin, Some(13), &opts(&w, false))
+        .await
+        .unwrap();
+    assert_eq!(r.stores[0].1, Delivery::Sent(String::new()));
+    assert_eq!(rpc("anvil_revert", &[&snap]), "true");
+    assert_eq!(
+        w.l.call("childOf(bytes32)(bytes32)", &[&sid2]),
+        pqchat_core::model::ZERO32
+    );
+    let reverted: Vec<String> = w.txs.lock().unwrap().drain(landed..).collect();
+    pa.read_room(&room2).await.unwrap();
+    assert_eq!(
+        texts(&pa, &sid2).last().unwrap(),
+        &(b.ua.clone(), fin.clone()),
+        "mutant 13: a send under the vanished child"
+    );
+    println!(
+        "[e2e] fixtures: sealedInfo, discovered endpoint, finality ({} reverted: {})",
+        reverted.len(),
+        reverted.join(" ")
+    );
+
+    // --- the long chain (CLI-PQC-14): A sends 5,000 texts in S2; B's store with a client serving only the room's last 10
+    // events shows all 10
+    const LONG: usize = 5000;
+    for i in 0..LONG {
+        let r = pa
+            .send(&s2, &a, &txt(&format!("long {i}")), None, &opts(&w, false))
+            .await
+            .unwrap();
+        assert_eq!(r.stores[0].1, Delivery::Sent(String::new()));
+        if (i + 1) % 500 == 0 {
+            println!("[e2e] long chain: {}/{LONG} sent", i + 1);
+        }
+    }
+    let pb5 = w.device();
+    pb5.start_device(Some("b-5".into())).unwrap();
+    pb5.attach_matrix(Arc::new(LastN {
+        inner: tb.clone(),
+        n: 10,
+    }));
+    pb5.accept(&s2, false).unwrap();
+    let o = pb5.open_session(&s2, &b).await.unwrap();
+    assert_eq!(
+        (o.room, o.shown),
+        (RoomUse::Bound, 10),
+        "CLI-PQC-14: the last 10"
+    );
+    let want: Vec<(String, Content)> = (LONG - 10..LONG)
+        .map(|i| (a.ua.clone(), txt(&format!("long {i}"))))
+        .collect();
+    assert_eq!(texts(&pb5, &sid2), want);
+    println!("[e2e] long chain: {LONG} sent in S2; the last 10 events shown on a fresh store");
     let _ = (&s3b, &eb1);
     // the run's writes (the gate's summary note), hashes only
     let txs = w.txs.lock().unwrap().clone();

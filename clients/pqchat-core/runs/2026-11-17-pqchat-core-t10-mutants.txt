@@ -1,7 +1,7 @@
 # t10 mutants (name | outcome | commit | test | first failure line)
-skip the factory listing of the ref's instance | killed | bc814812f | ../../scripts/capped cargo test --locked --offline -j2 --test topics ref_verified_only_when_listed | panicked at tests/topics.rs:460:5:
-skip the home check | killed | bc814812f | ../../scripts/capped cargo test --locked --offline -j2 --test topics ref_refused_at_another_home | panicked at tests/topics.rs:479:5:
-accept a seq jump (vote) | killed | bc814812f | ../../scripts/capped cargo test --locked --offline -j2 --test topics seq_is_stored_plus_one | panicked at tests/topics.rs:215:5:
-accept a seq jump (writer) | killed | bc814812f | ../../scripts/capped cargo test --locked --offline -j2 --test topics seq_is_stored_plus_one | panicked at tests/topics.rs:232:5:
-accept a seq jump (topic update) | killed | bc814812f | ../../scripts/capped cargo test --locked --offline -j2 --test topics seq_is_stored_plus_one | panicked at tests/topics.rs:243:5:
+skip the factory listing of the ref's instance | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test topics ref_verified_only_when_listed | panicked at tests/topics.rs:460:5:
+skip the home check | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test topics ref_refused_at_another_home | panicked at tests/topics.rs:479:5:
+accept a seq jump (vote) | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test topics seq_is_stored_plus_one | panicked at tests/topics.rs:215:5:
+accept a seq jump (writer) | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test topics seq_is_stored_plus_one | panicked at tests/topics.rs:232:5:
+accept a seq jump (topic update) | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test topics seq_is_stored_plus_one | panicked at tests/topics.rs:243:5:
 5 mutants, 5 killed, 0 survived, 0 not loaded, 0 other failure

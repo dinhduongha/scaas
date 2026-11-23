@@ -1,9 +1,9 @@
 # t6 mutants (name | outcome | commit | test | first failure line)
-counter persisted after the send | killed | b4443da65 | ../../scripts/capped cargo test --locked --offline -j2 --test message counter_taken_before_the_seal | panicked at tests/message.rs:200:5:
-a walk before the signature check | killed | 1dc2991c3 | ../../scripts/capped cargo test --locked --offline -j2 --test message walk_only_after_signature_and_membership | panicked at tests/message.rs:375:5:
-the walk bound off by a factor | killed | 1dc2991c3 | ../../scripts/capped cargo test --locked --offline -j2 --test message long_chain_fresh_store | panicked at tests/message.rs:311:5:
-positions unbounded | killed | 1dc2991c3 | ../../scripts/capped cargo test --locked --offline -j2 --test message five_hundred_devices_keep_positions_bounded | panicked at tests/message.rs:341:9:
-parents unsorted | killed | 1dc2991c3 | ../../scripts/capped cargo test --locked --offline -j2 --test message parents_at_most_eight_sorted | panicked at tests/message.rs:658:5:
-an edit accepted from any UA | killed | 1dc2991c3 | ../../scripts/capped cargo test --locked --offline -j2 --test message edit_and_redact_from_another_ua_ignored | panicked at tests/message.rs:774:5:
-the unknown-epoch buffer unbounded | killed | 1dc2991c3 | ../../scripts/capped cargo test --locked --offline -j2 --test message unknown_epoch_buffered_then_shown | panicked at tests/message.rs:742:5:
+counter persisted after the send | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test message counter_taken_before_the_seal | panicked at tests/message.rs:200:5:
+a walk before the signature check | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test message walk_only_after_signature_and_membership | panicked at tests/message.rs:381:5:
+the walk bound off by a factor | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test message long_chain_fresh_store | panicked at tests/message.rs:317:5:
+positions unbounded | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test message five_hundred_devices_keep_positions_bounded | panicked at tests/message.rs:347:9:
+parents unsorted | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test message parents_at_most_eight_sorted | panicked at tests/message.rs:667:5:
+an edit accepted from any UA | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test message edit_and_redact_from_another_ua_ignored | panicked at tests/message.rs:783:5:
+the unknown-epoch buffer unbounded | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test message unknown_epoch_buffered_then_shown | panicked at tests/message.rs:751:5:
 7 mutants, 7 killed, 0 survived, 0 not loaded, 0 other failure
