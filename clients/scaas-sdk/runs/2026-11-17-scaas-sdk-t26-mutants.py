@@ -188,7 +188,8 @@ MUTANTS = [
     ),
     (
         "B-7: one unreadable gateway refuses every quote",
-        [(FAM, "            Err(e) => last = Some(e),", "            Err(e) => return Err(e.into()),")],
+        # the first run did not compile (E0282: `last` never assigned, its type unknown): the same mutation, `last` typed
+        [(FAM, "            Err(e) => last = Some(e),", "            Err(e) => {\n                last = None::<scaas_rpc::RpcError>;\n                return Err(e.into());\n            }")],
         T + " --lib op::tests::a_gateway_down_or_of_another_chain_is_left_out",
     ),
     (
