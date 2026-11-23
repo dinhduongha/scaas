@@ -81,6 +81,42 @@ pub const TYPE_STRINGS: &[(&str, &str)] = &[
         "PqChatCard",
         "PqChatCard(bytes32 ua,uint64 kemVersion,string matrixId)",
     ),
+    // TreeKEM mode (spec 2026-11-23-pqchat-treekem §6), each struct alone (`typed` adds the nested ones): signed only by the
+    // tree's own operations (`tree`), so none is in RECORDS
+    (
+        "PqChatCommit",
+        "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo)",
+    ),
+    (
+        "TreeAdd",
+        "TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)",
+    ),
+    ("TreeRemove", "TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)"),
+    ("PathList", "PathList(uint32[] ctTargets,bytes32[] ctHashes)"),
+    (
+        "PathCt",
+        "PathCt(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSecret)",
+    ),
+    (
+        "PqChatTreeLeave",
+        "PqChatTreeLeave(bytes32 sessionId,bytes32 treeId,bytes32 epochId,bytes32 member,uint64 nonce)",
+    ),
+    (
+        "PqChatTreeRemove",
+        "PqChatTreeRemove(bytes32 sessionId,bytes32 treeId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)",
+    ),
+    (
+        "TreeGenesis",
+        "TreeGenesis(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,uint8 groupMode)",
+    ),
+    (
+        "TreeLeaf",
+        "TreeLeaf(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 kemHash)",
+    ),
+    (
+        "TreeParent",
+        "TreeParent(bytes32 keyHash,bytes32 left,bytes32 right)",
+    ),
 ];
 
 /// The records a UA signs for a contract (every type string but the nested `MemberKey`, `Wrap` and `EntryRef`, and the card).

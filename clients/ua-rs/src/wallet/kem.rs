@@ -188,7 +188,7 @@ impl KemKeyPair {
         KemKeyPair::ephemeral(&s)
     }
 
-    fn ephemeral(s: &[u8]) -> Result<KemKeyPair> {
+    pub(super) fn ephemeral(s: &[u8]) -> Result<KemKeyPair> {
         let kem_pk = kem_pk_of(s)?;
         self_test(s)?; // its store's only key, checked once
         let recipient = RecipientId::KemPkHash(crate::keccak256(&kem_pk));
@@ -231,6 +231,13 @@ impl KemKeyPair {
 
     /// `ss` of `(mlkem_ct, x25519_eph)`: `KemCheck` for an `mlkem_ct` of other than 1,568 bytes or a small-order `E`;
     /// `KeyRevoked` once the wallet was locked. ML-KEM's implicit rejection kept: a wrong `mlkem_ct` gives another `ss`.
+    /// `HKDF-SHA-256(ikm = the key's 96-byte seed, salt empty, info, len)` (a TreeKEM committer's `ps[0]`, spec §5): inside
+    /// the store, out only through a handle.
+    pub(super) fn seed_hkdf(&self, info: &[u8], len: usize) -> Result<Zeroizing<Vec<u8>>> {
+        self.secret
+            .with(|s| super::aead::hkdf_sha256(s, &[], info, len))?
+    }
+
     pub fn decaps(&self, mlkem_ct: &[u8], x25519_eph: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
         let pk_x = self.kem_pk.get(1 + EK..).ok_or(Error::Argument)?;
         self.secret
