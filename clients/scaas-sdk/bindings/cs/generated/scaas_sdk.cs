@@ -32141,6 +32141,46 @@ class FfiConverterTypeAuthError : FfiConverterRustBuffer<AuthException>, CallSta
 
 
 
+/// <summary>
+/// What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+/// read at the `finalized` block, or endpoint 0's alone under `failover`.
+/// </summary>
+internal enum Basis: int {
+    Majority,
+    OneEndpoint
+}
+
+class FfiConverterTypeBasis: FfiConverterRustBuffer<Basis> {
+    public static FfiConverterTypeBasis INSTANCE = new FfiConverterTypeBasis();
+
+    public override Basis Read(BigEndianStream stream) {
+        var value = stream.ReadInt();
+        switch (value) {
+            case 1: return Basis.Majority;
+            case 2: return Basis.OneEndpoint;
+            default: throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeBasis.Read()", value));
+        }
+    }
+
+    public override int AllocationSize(Basis value) {
+        return 4;
+    }
+
+    public override void Write(Basis value, BigEndianStream stream) {
+        switch (value) {
+            case Basis.Majority: stream.WriteInt(1); break;
+            case Basis.OneEndpoint: stream.WriteInt(2); break;
+            default: throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeBasis.Write()", value));
+        }
+    }
+}
+
+
+
+
+
+
+
 internal enum Class: int {
     Named,
     Default,
@@ -33692,8 +33732,9 @@ internal record OpState {
     /// <summary>
     /// the lane's nonce spent at the final block without that event; a replaced native send
     /// </summary>
-    public record Consumed: OpState {}
-    
+    public record Consumed (
+        Basis Basis
+    ) : OpState {}
     
     /// <summary>
     /// an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
@@ -33706,8 +33747,9 @@ internal record OpState {
     /// <summary>
     /// `validUntil` below the final block's timestamp while the nonce is unspent
     /// </summary>
-    public record Expired: OpState {}
-    
+    public record Expired (
+        Basis Basis
+    ) : OpState {}
     
     /// <summary>
     /// anything else, with what is known (never an end)
@@ -33733,6 +33775,7 @@ class FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                 );
             case 2:
                 return new OpState.Consumed(
+                    FfiConverterTypeBasis.INSTANCE.Read(stream)
                 );
             case 3:
                 return new OpState.Reverted(
@@ -33741,6 +33784,7 @@ class FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                 );
             case 4:
                 return new OpState.Expired(
+                    FfiConverterTypeBasis.INSTANCE.Read(stream)
                 );
             case 5:
                 return new OpState.InFlight(
@@ -33758,13 +33802,15 @@ class FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                     + FfiConverterUInt64.INSTANCE.AllocationSize(variant_value.Block)
                     + FfiConverterString.INSTANCE.AllocationSize(variant_value.Hash);
             case OpState.Consumed variant_value:
-                return 4;
+                return 4
+                    + FfiConverterTypeBasis.INSTANCE.AllocationSize(variant_value.Basis);
             case OpState.Reverted variant_value:
                 return 4
                     + FfiConverterUInt64.INSTANCE.AllocationSize(variant_value.Block)
                     + FfiConverterString.INSTANCE.AllocationSize(variant_value.Hash);
             case OpState.Expired variant_value:
-                return 4;
+                return 4
+                    + FfiConverterTypeBasis.INSTANCE.AllocationSize(variant_value.Basis);
             case OpState.InFlight variant_value:
                 return 4
                     + FfiConverterTypeInFlight.INSTANCE.AllocationSize(variant_value.Detail);
@@ -33782,6 +33828,7 @@ class FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                 break;
             case OpState.Consumed variant_value:
                 stream.WriteInt(2);
+                FfiConverterTypeBasis.INSTANCE.Write(variant_value.Basis, stream);
                 break;
             case OpState.Reverted variant_value:
                 stream.WriteInt(3);
@@ -33790,6 +33837,7 @@ class FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                 break;
             case OpState.Expired variant_value:
                 stream.WriteInt(4);
+                FfiConverterTypeBasis.INSTANCE.Write(variant_value.Basis, stream);
                 break;
             case OpState.InFlight variant_value:
                 stream.WriteInt(5);

@@ -177,6 +177,7 @@ impl Wallet {
                     members: None,
                     ended_at: None,
                     fact: None,
+                    basis: None,
                     message: serde_json::Value::Null,
                 };
                 state::put(&sdk, &row).await?;

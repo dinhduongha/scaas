@@ -735,6 +735,7 @@ fn row_of(p: &SorobanPrepared, c: &Checked, id: &str, path: &str, state: &str) -
         message: c.payload_json(),
         extra: json!({"expiry": p.expiry, "pay_ref": p.pay_ref, "to": p.to, "amount": p.amount}),
         fact: None,
+        basis: None,
     }
 }
 
@@ -1471,6 +1472,7 @@ impl Wallet {
                     message: Value::Null,
                     extra: json!({"max_time": q.max_time, "to": q.to, "amount": q.amount}),
                     fact: None,
+                    basis: None,
                 };
                 state::put(&sdk, &row).await?;
                 let b = sor

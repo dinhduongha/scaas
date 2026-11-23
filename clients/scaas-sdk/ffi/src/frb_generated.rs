@@ -18514,12 +18514,16 @@ const _: fn() = || {
             let _: u64 = block;
             let _: String = hash;
         }
-        scaas_sdk::events::OpState::Consumed => {}
+        scaas_sdk::events::OpState::Consumed { basis } => {
+            let _: scaas_sdk::events::Basis = basis;
+        }
         scaas_sdk::events::OpState::Reverted { block, hash } => {
             let _: u64 = block;
             let _: String = hash;
         }
-        scaas_sdk::events::OpState::Expired => {}
+        scaas_sdk::events::OpState::Expired { basis } => {
+            let _: scaas_sdk::events::Basis = basis;
+        }
         scaas_sdk::events::OpState::InFlight { detail } => {
             let _: scaas_sdk::events::InFlight = detail;
         }
@@ -21218,6 +21222,18 @@ impl SseDecode for scaas_sdk::wallet::Balances {
     }
 }
 
+impl SseDecode for scaas_sdk::events::Basis {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => scaas_sdk::events::Basis::Majority,
+            1 => scaas_sdk::events::Basis::OneEndpoint,
+            _ => unreachable!("Invalid variant for Basis: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for scaas_sdk::op::BlsMultiPart {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -23084,7 +23100,8 @@ impl SseDecode for scaas_sdk::events::OpState {
                 };
             }
             1 => {
-                return scaas_sdk::events::OpState::Consumed;
+                let mut var_basis = <scaas_sdk::events::Basis>::sse_decode(deserializer);
+                return scaas_sdk::events::OpState::Consumed { basis: var_basis };
             }
             2 => {
                 let mut var_block = <u64>::sse_decode(deserializer);
@@ -23095,7 +23112,8 @@ impl SseDecode for scaas_sdk::events::OpState {
                 };
             }
             3 => {
-                return scaas_sdk::events::OpState::Expired;
+                let mut var_basis = <scaas_sdk::events::Basis>::sse_decode(deserializer);
+                return scaas_sdk::events::OpState::Expired { basis: var_basis };
             }
             4 => {
                 let mut var_detail = <scaas_sdk::events::InFlight>::sse_decode(deserializer);
@@ -29017,6 +29035,27 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::wallet::Balances>>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::events::Basis> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self.0 {
+            scaas_sdk::events::Basis::Majority => 0.into_dart(),
+            scaas_sdk::events::Basis::OneEndpoint => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<scaas_sdk::events::Basis>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::events::Basis>>
+    for scaas_sdk::events::Basis
+{
+    fn into_into_dart(self) -> FrbWrapper<scaas_sdk::events::Basis> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::op::BlsMultiPart> {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -30850,14 +30889,18 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::events::OpState> {
                 hash.into_into_dart().into_dart(),
             ]
             .into_dart(),
-            scaas_sdk::events::OpState::Consumed => [1.into_dart()].into_dart(),
+            scaas_sdk::events::OpState::Consumed { basis } => {
+                [1.into_dart(), basis.into_into_dart().into_dart()].into_dart()
+            }
             scaas_sdk::events::OpState::Reverted { block, hash } => [
                 2.into_dart(),
                 block.into_into_dart().into_dart(),
                 hash.into_into_dart().into_dart(),
             ]
             .into_dart(),
-            scaas_sdk::events::OpState::Expired => [3.into_dart()].into_dart(),
+            scaas_sdk::events::OpState::Expired { basis } => {
+                [3.into_dart(), basis.into_into_dart().into_dart()].into_dart()
+            }
             scaas_sdk::events::OpState::InFlight { detail } => {
                 [4.into_dart(), detail.into_into_dart().into_dart()].into_dart()
             }
@@ -35529,6 +35572,22 @@ impl SseEncode for scaas_sdk::wallet::Balances {
     }
 }
 
+impl SseEncode for scaas_sdk::events::Basis {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                scaas_sdk::events::Basis::Majority => 0,
+                scaas_sdk::events::Basis::OneEndpoint => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for scaas_sdk::op::BlsMultiPart {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -36919,16 +36978,18 @@ impl SseEncode for scaas_sdk::events::OpState {
                 <u64>::sse_encode(block, serializer);
                 <String>::sse_encode(hash, serializer);
             }
-            scaas_sdk::events::OpState::Consumed => {
+            scaas_sdk::events::OpState::Consumed { basis } => {
                 <i32>::sse_encode(1, serializer);
+                <scaas_sdk::events::Basis>::sse_encode(basis, serializer);
             }
             scaas_sdk::events::OpState::Reverted { block, hash } => {
                 <i32>::sse_encode(2, serializer);
                 <u64>::sse_encode(block, serializer);
                 <String>::sse_encode(hash, serializer);
             }
-            scaas_sdk::events::OpState::Expired => {
+            scaas_sdk::events::OpState::Expired { basis } => {
                 <i32>::sse_encode(3, serializer);
+                <scaas_sdk::events::Basis>::sse_encode(basis, serializer);
             }
             scaas_sdk::events::OpState::InFlight { detail } => {
                 <i32>::sse_encode(4, serializer);

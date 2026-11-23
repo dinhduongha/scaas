@@ -360,7 +360,10 @@ async fn hand_off_import_quote_submit() {
     ));
     // the lane spent on chain: the signer's row ends by that fact
     t.chain.lock().unwrap().nonces.insert(VND.into(), 1);
-    assert_eq!(t.a.op().state(p.id()).await.unwrap(), OpState::Consumed);
+    assert!(matches!(
+        t.a.op().state(p.id()).await.unwrap(),
+        OpState::Consumed { .. }
+    ));
 }
 
 /// The import's checks in their order, each refusal beside the passing blob (`hand_off_import_quote_submit`).

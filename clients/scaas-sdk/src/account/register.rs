@@ -1288,6 +1288,7 @@ impl Account {
                     unsigned_len: None,
                     ended_at: None,
                     fact: None,
+                    basis: None,
                     message: Value::Null,
                     extra: Value::Null,
                 };

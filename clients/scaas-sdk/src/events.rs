@@ -63,13 +63,50 @@ pub enum OpState {
     /// the executed event of the operation's digest at or below the final block
     Landed { block: u64, hash: String },
     /// the lane's nonce spent at the final block without that event; a replaced native send
-    Consumed,
+    Consumed { basis: Basis },
     /// an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
     Reverted { block: u64, hash: String },
     /// `validUntil` below the final block's timestamp while the nonce is unspent
-    Expired,
+    Expired { basis: Basis },
     /// anything else, with what is known (never an end)
     InFlight { detail: InFlight },
+}
+
+/// What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+/// read at the `finalized` block, or endpoint 0's alone under `failover`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum Basis {
+    Majority,
+    OneEndpoint,
+}
+
+impl Basis {
+    pub(crate) fn of(strict: bool) -> Basis {
+        if strict {
+            Basis::Majority
+        } else {
+            Basis::OneEndpoint
+        }
+    }
+    fn name(self) -> &'static str {
+        match self {
+            Basis::Majority => "majority",
+            Basis::OneEndpoint => "one-endpoint",
+        }
+    }
+    /// A stored row's basis (a row of an older build has none: endpoint 0's).
+    pub(crate) fn parse(s: Option<&str>) -> Basis {
+        if s == Some("majority") {
+            Basis::Majority
+        } else {
+            Basis::OneEndpoint
+        }
+    }
+    pub(crate) fn stored(self) -> String {
+        self.name().into()
+    }
 }
 
 impl OpState {

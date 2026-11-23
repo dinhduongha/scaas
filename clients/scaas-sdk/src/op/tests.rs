@@ -1009,7 +1009,9 @@ async fn all_gateways_dead_is_in_flight() {
     t.chain.lock().unwrap().nonces.insert(TOKEN.into(), 1);
     assert_eq!(
         t.sdk.op().state(spent).await.unwrap(),
-        OpState::Consumed,
+        OpState::Consumed {
+            basis: crate::events::Basis::OneEndpoint
+        },
         "the nonce spent without the event"
     );
     t.chain.lock().unwrap().nonces.insert(TOKEN.into(), 0);
@@ -1017,7 +1019,9 @@ async fn all_gateways_dead_is_in_flight() {
     t.chain.lock().unwrap().timestamp += 7200;
     assert_eq!(
         t.sdk.op().state(late).await.unwrap(),
-        OpState::Expired,
+        OpState::Expired {
+            basis: crate::events::Basis::OneEndpoint
+        },
         "validUntil passed, the nonce unspent"
     );
     {
@@ -1128,7 +1132,10 @@ async fn cancel_nonce_ends_it() {
     let q = gateway_quote(&t, &p).await;
     t.sdk.op().submit(p, q).await.unwrap();
     bodies(&t, 2).await;
-    assert_eq!(t.sdk.op().state(first).await.unwrap(), OpState::Consumed);
+    assert!(matches!(
+        t.sdk.op().state(first).await.unwrap(),
+        OpState::Consumed { .. }
+    ));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2042,7 +2049,10 @@ async fn retry_on_a_lane_waits_for_expired() {
     let q = gateway_quote(&t, &p).await;
     let second = t.sdk.op().submit(p, q).await.unwrap();
     assert_ne!(second, first);
-    assert_eq!(t.sdk.op().state(first).await.unwrap(), OpState::Expired);
+    assert!(matches!(
+        t.sdk.op().state(first).await.unwrap(),
+        OpState::Expired { .. }
+    ));
     assert_eq!(signs(&t), 2);
 }
 
@@ -3525,9 +3535,17 @@ async fn strict_majority_ends_a_failed_operation_at_the_finalized_block() {
         (
             scaas_rpc::Policy::StrictMajority,
             0x10,
-            Some(OpState::Consumed),
+            Some(OpState::Consumed {
+                basis: crate::events::Basis::Majority,
+            }),
         ),
-        (scaas_rpc::Policy::Failover, 0x25, Some(OpState::Consumed)),
+        (
+            scaas_rpc::Policy::Failover,
+            0x25,
+            Some(OpState::Consumed {
+                basis: crate::events::Basis::OneEndpoint,
+            }),
+        ),
     ] {
         let t = setup(1, move |p, _| {
             p.finality = Finality::Depth(1);

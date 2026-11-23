@@ -134,7 +134,8 @@ abstract class Vault implements RustOpaqueInterface {
   /// Unlocks the seed by its vault passphrase (every vault opened now, the passphrase not kept) or by its passkey / platform
   /// PRF envelope (the seed and manifest vaults opened, the PRF key kept for the others' first use; spec §6.10, owner
   /// 2026-11-18): `VaultOpen` for a wrong secret, `AuthenticatorRefused` (no authenticator, no envelope, no PRF output),
-  /// `KeystoreMismatch` when the index MAC does not verify (the seed stays locked, the event says so), `SeedUnknown`.
+  /// `KeystoreMismatch` when the index MAC does not verify (the seed stays locked, the event says so), `SeedUnknown`. A seed
+  /// already open stays as it is (`Ok`, nothing asked): one session per seed.
   Future<void> unlock({required String seed, required Unlock unlock});
 
   /// Whether `word` (one word, as a secret) is on the BIP-39 English list; the list never leaves `scaas-ua` (R17).

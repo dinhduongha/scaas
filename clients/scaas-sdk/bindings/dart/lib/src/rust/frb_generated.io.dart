@@ -631,6 +631,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Balances dco_decode_balances(dynamic raw);
 
   @protected
+  Basis dco_decode_basis(dynamic raw);
+
+  @protected
   BlsMultiPart dco_decode_bls_multi_part(dynamic raw);
 
   @protected
@@ -2527,6 +2530,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   Balances sse_decode_balances(SseDeserializer deserializer);
+
+  @protected
+  Basis sse_decode_basis(SseDeserializer deserializer);
 
   @protected
   BlsMultiPart sse_decode_bls_multi_part(SseDeserializer deserializer);
@@ -4827,6 +4833,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void sse_encode_balances(Balances self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_basis(Basis self, SseSerializer serializer);
 
   @protected
   void sse_encode_bls_multi_part(BlsMultiPart self, SseSerializer serializer);

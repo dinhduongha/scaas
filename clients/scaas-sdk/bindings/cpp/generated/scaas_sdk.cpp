@@ -4372,6 +4372,9 @@ uint64_t Wallet::_uniffi_internal_clone_handle() const {
 
 
 
+
+
+
 namespace uniffi {
 
 
@@ -16074,6 +16077,62 @@ uint64_t FfiConverterAuthError::allocation_size(const AuthError &val) {
 }
 
 
+Basis FfiConverterBasis::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterBasis::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterBasis::lower(const Basis &val) {
+    auto buf = rustbuffer_alloc(FfiConverterBasis::allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterBasis::write(stream, val);
+
+    return std::move(buf);
+}
+
+Basis FfiConverterBasis::read(RustStream &stream) {
+    int32_t variant;
+    stream >> variant;
+
+    switch (variant) {
+        
+    case 1:
+        return Basis::kMajority;
+        
+    case 2:
+        return Basis::kOneEndpoint;
+        
+    default:
+        throw std::runtime_error("No matching Basis variant");
+    }
+}
+
+void FfiConverterBasis::write(RustStream &stream, const Basis &val) {
+    switch (val) {
+        
+    case Basis::kMajority:
+        stream << static_cast<int32_t>(1);
+        break;
+        
+    case Basis::kOneEndpoint:
+        stream << static_cast<int32_t>(2);
+        break;
+        
+    default:
+        throw std::runtime_error("No matching Basis variant");
+    }
+}
+
+uint64_t FfiConverterBasis::allocation_size(const Basis &) {
+    return static_cast<uint64_t>(sizeof(int32_t));
+}
+
+
 Class FfiConverterClass::lift(RustBuffer buf) {
     auto stream = RustStream(&buf);
     auto ret = FfiConverterClass::read(stream);
@@ -17655,6 +17714,7 @@ OpState FfiConverterOpState::read(RustStream &stream) {
         
     case 2:
         return OpState::kConsumed {
+            .basis = FfiConverterBasis::read(stream),
         };
         
     case 3:
@@ -17665,6 +17725,7 @@ OpState FfiConverterOpState::read(RustStream &stream) {
         
     case 4:
         return OpState::kExpired {
+            .basis = FfiConverterBasis::read(stream),
         };
         
     case 5:
@@ -17689,12 +17750,14 @@ void FfiConverterOpState::write(RustStream &stream, const OpState &val) {
             FfiConverterString::write(stream, arg.hash);
         }
         else if constexpr (std::is_same_v<T, OpState::kConsumed>) {
+            FfiConverterBasis::write(stream, arg.basis);
         }
         else if constexpr (std::is_same_v<T, OpState::kReverted>) {
             FfiConverterUInt64::write(stream, arg.block);
             FfiConverterString::write(stream, arg.hash);
         }
         else if constexpr (std::is_same_v<T, OpState::kExpired>) {
+            FfiConverterBasis::write(stream, arg.basis);
         }
         else if constexpr (std::is_same_v<T, OpState::kInFlight>) {
             FfiConverterInFlight::write(stream, arg.detail);
@@ -17718,6 +17781,7 @@ uint64_t FfiConverterOpState::allocation_size(const OpState &val) {
         }
         else if constexpr (std::is_same_v<T, OpState::kConsumed>) {
             uint64_t size = 0;
+            size += FfiConverterBasis::allocation_size(arg.basis);
             return size;
         }
         else if constexpr (std::is_same_v<T, OpState::kReverted>) {
@@ -17728,6 +17792,7 @@ uint64_t FfiConverterOpState::allocation_size(const OpState &val) {
         }
         else if constexpr (std::is_same_v<T, OpState::kExpired>) {
             uint64_t size = 0;
+            size += FfiConverterBasis::allocation_size(arg.basis);
             return size;
         }
         else if constexpr (std::is_same_v<T, OpState::kInFlight>) {

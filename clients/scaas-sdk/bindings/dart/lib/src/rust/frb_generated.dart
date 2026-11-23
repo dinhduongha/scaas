@@ -16015,6 +16015,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  Basis dco_decode_basis(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return Basis.values[raw as int];
+  }
+
+  @protected
   BlsMultiPart dco_decode_bls_multi_part(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -18416,14 +18422,14 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           hash: dco_decode_String(raw[2]),
         );
       case 1:
-        return OpState_Consumed();
+        return OpState_Consumed(basis: dco_decode_basis(raw[1]));
       case 2:
         return OpState_Reverted(
           block: dco_decode_u_64(raw[1]),
           hash: dco_decode_String(raw[2]),
         );
       case 3:
-        return OpState_Expired();
+        return OpState_Expired(basis: dco_decode_basis(raw[1]));
       case 4:
         return OpState_InFlight(detail: dco_decode_in_flight(raw[1]));
       default:
@@ -22367,6 +22373,13 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  Basis sse_decode_basis(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return Basis.values[inner];
+  }
+
+  @protected
   BlsMultiPart sse_decode_bls_multi_part(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_index = sse_decode_u_8(deserializer);
@@ -25245,13 +25258,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         var var_hash = sse_decode_String(deserializer);
         return OpState_Landed(block: var_block, hash: var_hash);
       case 1:
-        return OpState_Consumed();
+        var var_basis = sse_decode_basis(deserializer);
+        return OpState_Consumed(basis: var_basis);
       case 2:
         var var_block = sse_decode_u_64(deserializer);
         var var_hash = sse_decode_String(deserializer);
         return OpState_Reverted(block: var_block, hash: var_hash);
       case 3:
-        return OpState_Expired();
+        var var_basis = sse_decode_basis(deserializer);
+        return OpState_Expired(basis: var_basis);
       case 4:
         var var_detail = sse_decode_in_flight(deserializer);
         return OpState_InFlight(detail: var_detail);
@@ -30107,6 +30122,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  void sse_encode_basis(Basis self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_bls_multi_part(BlsMultiPart self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_8(self.index, serializer);
@@ -32883,14 +32904,16 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         sse_encode_i_32(0, serializer);
         sse_encode_u_64(block, serializer);
         sse_encode_String(hash, serializer);
-      case OpState_Consumed():
+      case OpState_Consumed(basis: final basis):
         sse_encode_i_32(1, serializer);
+        sse_encode_basis(basis, serializer);
       case OpState_Reverted(block: final block, hash: final hash):
         sse_encode_i_32(2, serializer);
         sse_encode_u_64(block, serializer);
         sse_encode_String(hash, serializer);
-      case OpState_Expired():
+      case OpState_Expired(basis: final basis):
         sse_encode_i_32(3, serializer);
+        sse_encode_basis(basis, serializer);
       case OpState_InFlight(detail: final detail):
         sse_encode_i_32(4, serializer);
         sse_encode_in_flight(detail, serializer);
@@ -37729,7 +37752,8 @@ class VaultImpl extends RustOpaque implements Vault {
   /// Unlocks the seed by its vault passphrase (every vault opened now, the passphrase not kept) or by its passkey / platform
   /// PRF envelope (the seed and manifest vaults opened, the PRF key kept for the others' first use; spec §6.10, owner
   /// 2026-11-18): `VaultOpen` for a wrong secret, `AuthenticatorRefused` (no authenticator, no envelope, no PRF output),
-  /// `KeystoreMismatch` when the index MAC does not verify (the seed stays locked, the event says so), `SeedUnknown`.
+  /// `KeystoreMismatch` when the index MAC does not verify (the seed stays locked, the event says so), `SeedUnknown`. A seed
+  /// already open stays as it is (`Ok`, nothing asked): one session per seed.
   Future<void> unlock({required String seed, required Unlock unlock}) =>
       ScaasSdk.instance.api.scaasSdkVaultSeedsVaultUnlock(
         that: this,

@@ -25547,6 +25547,77 @@ public func FfiConverterTypeAuthError_lower(_ value: AuthError) -> RustBuffer {
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+ * read at the `finalized` block, or endpoint 0's alone under `failover`.
+ */
+
+public enum Basis: Equatable, Hashable {
+    
+    case majority
+    case oneEndpoint
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension Basis: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBasis: FfiConverterRustBuffer {
+    typealias SwiftType = Basis
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Basis {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .majority
+        
+        case 2: return .oneEndpoint
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Basis, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .majority:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .oneEndpoint:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBasis_lift(_ buf: RustBuffer) throws -> Basis {
+    return try FfiConverterTypeBasis.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBasis_lower(_ value: Basis) -> RustBuffer {
+    return FfiConverterTypeBasis.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum Class: Equatable, Hashable {
     
@@ -27127,7 +27198,8 @@ public enum OpState: Equatable, Hashable {
     /**
      * the lane's nonce spent at the final block without that event; a replaced native send
      */
-    case consumed
+    case consumed(basis: Basis
+    )
     /**
      * an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
      */
@@ -27136,7 +27208,8 @@ public enum OpState: Equatable, Hashable {
     /**
      * `validUntil` below the final block's timestamp while the nonce is unspent
      */
-    case expired
+    case expired(basis: Basis
+    )
     /**
      * anything else, with what is known (never an end)
      */
@@ -27166,12 +27239,14 @@ public struct FfiConverterTypeOpState: FfiConverterRustBuffer {
         case 1: return .landed(block: try FfiConverterUInt64.read(from: &buf), hash: try FfiConverterString.read(from: &buf)
         )
         
-        case 2: return .consumed
+        case 2: return .consumed(basis: try FfiConverterTypeBasis.read(from: &buf)
+        )
         
         case 3: return .reverted(block: try FfiConverterUInt64.read(from: &buf), hash: try FfiConverterString.read(from: &buf)
         )
         
-        case 4: return .expired
+        case 4: return .expired(basis: try FfiConverterTypeBasis.read(from: &buf)
+        )
         
         case 5: return .inFlight(detail: try FfiConverterTypeInFlight.read(from: &buf)
         )
@@ -27190,9 +27265,10 @@ public struct FfiConverterTypeOpState: FfiConverterRustBuffer {
             FfiConverterString.write(hash, into: &buf)
             
         
-        case .consumed:
+        case let .consumed(basis):
             writeInt(&buf, Int32(2))
-        
+            FfiConverterTypeBasis.write(basis, into: &buf)
+            
         
         case let .reverted(block,hash):
             writeInt(&buf, Int32(3))
@@ -27200,9 +27276,10 @@ public struct FfiConverterTypeOpState: FfiConverterRustBuffer {
             FfiConverterString.write(hash, into: &buf)
             
         
-        case .expired:
+        case let .expired(basis):
             writeInt(&buf, Int32(4))
-        
+            FfiConverterTypeBasis.write(basis, into: &buf)
+            
         
         case let .inFlight(detail):
             writeInt(&buf, Int32(5))

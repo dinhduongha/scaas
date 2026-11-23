@@ -344,7 +344,7 @@ async fn earlier_on_lane(sdk: &Arc<Sdk>, p: &Prepared) -> Result<Option<String>,
             continue;
         }
         let op = Op { sdk: sdk.clone() };
-        if op.state(row.op.clone()).await? != OpState::Expired {
+        if !matches!(op.state(row.op.clone()).await?, OpState::Expired { .. }) {
             return Ok(Some(row.op));
         }
     }
@@ -512,6 +512,7 @@ impl Op {
                         .map(|(c, e, h)| (hex(c), (*e).to_string(), hex(h))),
                     message: prepared.t.message.clone(),
                     extra: prepared.t.extra.clone(),
+                    basis: None,
                     path: if payer.is_some() { "self" } else { "gateway" }.into(),
                     payer,
                     from_block,

@@ -39,8 +39,12 @@ fn stored(row: &Row) -> OpState {
             block: *block,
             hash: hash.clone(),
         },
-        ("consumed", _) => OpState::Consumed,
-        ("expired", _) => OpState::Expired,
+        ("consumed", _) => OpState::Consumed {
+            basis: crate::events::Basis::parse(row.basis.as_deref()),
+        },
+        ("expired", _) => OpState::Expired {
+            basis: crate::events::Basis::parse(row.basis.as_deref()),
+        },
         _ => OpState::InFlight {
             detail: detail_of(&row.detail),
         },
@@ -165,8 +169,12 @@ impl Op {
                             };
                             match landed {
                                 Some((block, hash)) => OpState::Landed { block, hash },
-                                None if failed(spent, ts) && spent => OpState::Consumed,
-                                None if failed(spent, ts) => OpState::Expired,
+                                None if failed(spent, ts) && spent => OpState::Consumed {
+                                    basis: crate::events::Basis::of(strict),
+                                },
+                                None if failed(spent, ts) => OpState::Expired {
+                                    basis: crate::events::Basis::of(strict),
+                                },
                                 None => OpState::InFlight {
                                     detail: tx_detail(pool, &row, choice).await,
                                 },
@@ -190,8 +198,14 @@ impl Op {
                             row.state = "reverted".into();
                             row.landed = Some((*block, hash.clone()));
                         }
-                        OpState::Consumed => row.state = "consumed".into(),
-                        OpState::Expired => row.state = "expired".into(),
+                        OpState::Consumed { basis } => {
+                            row.state = "consumed".into();
+                            row.basis = Some(basis.stored());
+                        }
+                        OpState::Expired { basis } => {
+                            row.state = "expired".into();
+                            row.basis = Some(basis.stored());
+                        }
                         OpState::InFlight { detail } => row.detail = format!("{detail:?}"),
                     }
                     state::put(&sdk, &row).await?;
@@ -238,7 +252,12 @@ async fn native_state(
             block: number,
             hash: format!("{hash:#x}"),
         },
-        Ok(TxState::Replaced { .. }) => OpState::Consumed,
+        Ok(TxState::Replaced { basis, .. }) => OpState::Consumed {
+            basis: match basis {
+                scaas_rpc::evm::Basis::Majority => crate::events::Basis::Majority,
+                scaas_rpc::evm::Basis::OneEndpoint => crate::events::Basis::OneEndpoint,
+            },
+        },
         Ok(TxState::Included { .. }) => OpState::InFlight {
             detail: InFlight::TxIncluded,
         },

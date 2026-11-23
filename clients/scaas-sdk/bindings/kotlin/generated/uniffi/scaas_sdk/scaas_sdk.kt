@@ -28193,6 +28193,44 @@ public object FfiConverterTypeAuthError : FfiConverterRustBuffer<AuthException> 
 
 
 
+/**
+ * What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+ * read at the `finalized` block, or endpoint 0's alone under `failover`.
+ */
+
+enum class Basis {
+    
+    MAJORITY,
+    ONE_ENDPOINT;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBasis: FfiConverterRustBuffer<Basis> {
+    override fun read(buf: ByteBuffer) = try {
+        Basis.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: Basis) = 4UL
+
+    override fun write(value: Basis, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 
 enum class Class {
     
@@ -30024,8 +30062,14 @@ sealed class OpState {
     /**
      * the lane's nonce spent at the final block without that event; a replaced native send
      */
-    object Consumed : OpState()
-    
+    data class Consumed(
+        val `basis`: uniffi.scaas_sdk.Basis) : OpState()
+        
+    {
+        
+
+        companion object
+    }
     
     /**
      * an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
@@ -30043,8 +30087,14 @@ sealed class OpState {
     /**
      * `validUntil` below the final block's timestamp while the nonce is unspent
      */
-    object Expired : OpState()
-    
+    data class Expired(
+        val `basis`: uniffi.scaas_sdk.Basis) : OpState()
+        
+    {
+        
+
+        companion object
+    }
     
     /**
      * anything else, with what is known (never an end)
@@ -30078,12 +30128,16 @@ public object FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                 FfiConverterULong.read(buf),
                 FfiConverterString.read(buf),
                 )
-            2 -> OpState.Consumed
+            2 -> OpState.Consumed(
+                FfiConverterTypeBasis.read(buf),
+                )
             3 -> OpState.Reverted(
                 FfiConverterULong.read(buf),
                 FfiConverterString.read(buf),
                 )
-            4 -> OpState.Expired
+            4 -> OpState.Expired(
+                FfiConverterTypeBasis.read(buf),
+                )
             5 -> OpState.InFlight(
                 FfiConverterTypeInFlight.read(buf),
                 )
@@ -30104,6 +30158,7 @@ public object FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeBasis.allocationSize(value.`basis`)
             )
         }
         is OpState.Reverted -> {
@@ -30118,6 +30173,7 @@ public object FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeBasis.allocationSize(value.`basis`)
             )
         }
         is OpState.InFlight -> {
@@ -30139,6 +30195,7 @@ public object FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
             }
             is OpState.Consumed -> {
                 buf.putInt(2)
+                FfiConverterTypeBasis.write(value.`basis`, buf)
                 Unit
             }
             is OpState.Reverted -> {
@@ -30149,6 +30206,7 @@ public object FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
             }
             is OpState.Expired -> {
                 buf.putInt(4)
+                FfiConverterTypeBasis.write(value.`basis`, buf)
                 Unit
             }
             is OpState.InFlight -> {

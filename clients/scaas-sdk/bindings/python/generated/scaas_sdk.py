@@ -24144,6 +24144,50 @@ class _UniffiFfiConverterTypeAuthError(_UniffiConverterRustBuffer):
 
 
 
+class Basis(enum.Enum):
+    """
+    What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+    read at the `finalized` block, or endpoint 0's alone under `failover`.
+"""
+    
+    MAJORITY = 0
+    
+    ONE_ENDPOINT = 1
+    
+
+
+class _UniffiFfiConverterTypeBasis(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return Basis.MAJORITY
+        if variant == 2:
+            return Basis.ONE_ENDPOINT
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == Basis.MAJORITY:
+            return
+        if value == Basis.ONE_ENDPOINT:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == Basis.MAJORITY:
+            buf.write_i32(1)
+        if value == Basis.ONE_ENDPOINT:
+            buf.write_i32(2)
+
+
+
+
+
+
+
+
 class DelaySentence:
     """
     One delay sentence of a power bit, by name.
@@ -24572,7 +24616,10 @@ class OpState:
         the lane's nonce spent at the final block without that event; a replaced native send
 """
         
-        def __init__(self, ):
+        def __init__(self, basis:Basis):
+            self.basis = basis
+            
+            
             pass
 
     
@@ -24580,11 +24627,13 @@ class OpState:
             
     
         def __str__(self):
-            return "OpState.CONSUMED()".format()
+            return "OpState.CONSUMED(basis={})".format(self.basis)
         def __eq__(self, other):
             if not isinstance(other, OpState):
                 return NotImplemented
             if not other.is_CONSUMED():
+                return False
+            if self.basis != other.basis:
                 return False
             return True
 
@@ -24626,7 +24675,10 @@ class OpState:
         `validUntil` below the final block's timestamp while the nonce is unspent
 """
         
-        def __init__(self, ):
+        def __init__(self, basis:Basis):
+            self.basis = basis
+            
+            
             pass
 
     
@@ -24634,11 +24686,13 @@ class OpState:
             
     
         def __str__(self):
-            return "OpState.EXPIRED()".format()
+            return "OpState.EXPIRED(basis={})".format(self.basis)
         def __eq__(self, other):
             if not isinstance(other, OpState):
                 return NotImplemented
             if not other.is_EXPIRED():
+                return False
+            if self.basis != other.basis:
                 return False
             return True
 
@@ -24718,6 +24772,7 @@ class _UniffiFfiConverterTypeOpState(_UniffiConverterRustBuffer):
             )
         if variant == 2:
             return OpState.CONSUMED(
+                _UniffiFfiConverterTypeBasis.read(buf),
             )
         if variant == 3:
             return OpState.REVERTED(
@@ -24726,6 +24781,7 @@ class _UniffiFfiConverterTypeOpState(_UniffiConverterRustBuffer):
             )
         if variant == 4:
             return OpState.EXPIRED(
+                _UniffiFfiConverterTypeBasis.read(buf),
             )
         if variant == 5:
             return OpState.IN_FLIGHT(
@@ -24740,12 +24796,14 @@ class _UniffiFfiConverterTypeOpState(_UniffiConverterRustBuffer):
             _UniffiFfiConverterString.check_lower(value.hash)
             return
         if value.is_CONSUMED():
+            _UniffiFfiConverterTypeBasis.check_lower(value.basis)
             return
         if value.is_REVERTED():
             _UniffiFfiConverterUInt64.check_lower(value.block)
             _UniffiFfiConverterString.check_lower(value.hash)
             return
         if value.is_EXPIRED():
+            _UniffiFfiConverterTypeBasis.check_lower(value.basis)
             return
         if value.is_IN_FLIGHT():
             _UniffiFfiConverterTypeInFlight.check_lower(value.detail)
@@ -24760,12 +24818,14 @@ class _UniffiFfiConverterTypeOpState(_UniffiConverterRustBuffer):
             _UniffiFfiConverterString.write(value.hash, buf)
         if value.is_CONSUMED():
             buf.write_i32(2)
+            _UniffiFfiConverterTypeBasis.write(value.basis, buf)
         if value.is_REVERTED():
             buf.write_i32(3)
             _UniffiFfiConverterUInt64.write(value.block, buf)
             _UniffiFfiConverterString.write(value.hash, buf)
         if value.is_EXPIRED():
             buf.write_i32(4)
+            _UniffiFfiConverterTypeBasis.write(value.basis, buf)
         if value.is_IN_FLIGHT():
             buf.write_i32(5)
             _UniffiFfiConverterTypeInFlight.write(value.detail, buf)
@@ -32827,6 +32887,7 @@ __all__ = [
     "Presence",
     "AccountRow",
     "AuthError",
+    "Basis",
     "DelaySentence",
     "InFlight",
     "OpState",

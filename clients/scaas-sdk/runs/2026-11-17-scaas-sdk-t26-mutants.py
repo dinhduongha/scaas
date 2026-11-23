@@ -24,6 +24,7 @@ FAM = "clients/scaas-sdk/src/wallet/families/mod.rs"
 SEC = "clients/ua-rs/src/wallet/secret.rs"
 APK = "clients/ua-rs/src/wallet/appkey.rs"
 JSR = "clients/scaas-sdk/src/wasm/js.rs"
+EVT = "clients/scaas-sdk/src/events.rs"
 WAS = "clients/scaas-sdk/src/wasm.rs"
 CFG = "clients/scaas-sdk/src/config.rs"
 STO = "clients/scaas-sdk/src/vault/store.rs"
@@ -282,6 +283,11 @@ MUTANTS = [
         [(JSR, "        if !keys_known(&config, &to_js(&c)?, JS_DEPTH) {", "        if false {")],
         JS,
         "an EVM profile opens",
+    ),
+    (
+        "B-14: every end said to rest on one endpoint",
+        [(EVT, "    pub(crate) fn of(strict: bool) -> Basis {\n        if strict {", "    pub(crate) fn of(strict: bool) -> Basis {\n        if !strict && strict {")],
+        T + " --lib op::tests::strict_majority_ends_a_failed_operation_at_the_finalized_block",
     ),
 ]
 

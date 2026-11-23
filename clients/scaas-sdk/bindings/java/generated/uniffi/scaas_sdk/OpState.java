@@ -21,13 +21,13 @@ public sealed interface OpState {
     /**
      * the lane's nonce spent at the final block without that event; a replaced native send
      */
-  record Consumed() implements OpState {
+  record Consumed(
+    uniffi.scaas_sdk.Basis basis) implements OpState {
     
     
     
 
   }
-  
   
     /**
      * an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
@@ -44,13 +44,13 @@ public sealed interface OpState {
     /**
      * `validUntil` below the final block's timestamp while the nonce is unspent
      */
-  record Expired() implements OpState {
+  record Expired(
+    uniffi.scaas_sdk.Basis basis) implements OpState {
     
     
     
 
   }
-  
   
     /**
      * anything else, with what is known (never an end)

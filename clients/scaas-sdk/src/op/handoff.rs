@@ -115,6 +115,7 @@ impl Op {
                     message: p.t.message.clone(),
                     extra: extra.clone(),
                     fact: None,
+                    basis: None,
                 };
                 // the write ahead: the signature leaves the SDK only in the blob returned after it
                 state::put(&sdk, &row).await?;

@@ -26948,6 +26948,44 @@ func (_ FfiDestroyerAuthError) Destroy(value *AuthError) {
 	}
 }
 
+// What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+// read at the `finalized` block, or endpoint 0's alone under `failover`.
+type Basis uint
+
+const (
+	BasisMajority    Basis = 1
+	BasisOneEndpoint Basis = 2
+)
+
+type FfiConverterBasis struct{}
+
+var FfiConverterBasisINSTANCE = FfiConverterBasis{}
+
+func (c FfiConverterBasis) Lift(rb RustBufferI) Basis {
+	return LiftFromRustBuffer[Basis](c, rb)
+}
+
+func (c FfiConverterBasis) Lower(value Basis) C.RustBuffer {
+	return LowerIntoRustBuffer[Basis](c, value)
+}
+
+func (c FfiConverterBasis) LowerExternal(value Basis) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[Basis](c, value))
+}
+func (FfiConverterBasis) Read(reader io.Reader) Basis {
+	id := readInt32(reader)
+	return Basis(id)
+}
+
+func (FfiConverterBasis) Write(writer io.Writer, value Basis) {
+	writeInt32(writer, int32(value))
+}
+
+type FfiDestroyerBasis struct{}
+
+func (_ FfiDestroyerBasis) Destroy(value Basis) {
+}
+
 type Class uint
 
 const (
@@ -28369,9 +28407,11 @@ func (e OpStateLanded) Destroy() {
 
 // the lane's nonce spent at the final block without that event; a replaced native send
 type OpStateConsumed struct {
+	Basis Basis
 }
 
 func (e OpStateConsumed) Destroy() {
+	FfiDestroyerBasis{}.Destroy(e.Basis)
 }
 
 // an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
@@ -28387,9 +28427,11 @@ func (e OpStateReverted) Destroy() {
 
 // `validUntil` below the final block's timestamp while the nonce is unspent
 type OpStateExpired struct {
+	Basis Basis
 }
 
 func (e OpStateExpired) Destroy() {
+	FfiDestroyerBasis{}.Destroy(e.Basis)
 }
 
 // anything else, with what is known (never an end)
@@ -28425,14 +28467,18 @@ func (FfiConverterOpState) Read(reader io.Reader) OpState {
 			FfiConverterStringINSTANCE.Read(reader),
 		}
 	case 2:
-		return OpStateConsumed{}
+		return OpStateConsumed{
+			FfiConverterBasisINSTANCE.Read(reader),
+		}
 	case 3:
 		return OpStateReverted{
 			FfiConverterUint64INSTANCE.Read(reader),
 			FfiConverterStringINSTANCE.Read(reader),
 		}
 	case 4:
-		return OpStateExpired{}
+		return OpStateExpired{
+			FfiConverterBasisINSTANCE.Read(reader),
+		}
 	case 5:
 		return OpStateInFlight{
 			FfiConverterInFlightINSTANCE.Read(reader),
@@ -28450,12 +28496,14 @@ func (FfiConverterOpState) Write(writer io.Writer, value OpState) {
 		FfiConverterStringINSTANCE.Write(writer, variant_value.Hash)
 	case OpStateConsumed:
 		writeInt32(writer, 2)
+		FfiConverterBasisINSTANCE.Write(writer, variant_value.Basis)
 	case OpStateReverted:
 		writeInt32(writer, 3)
 		FfiConverterUint64INSTANCE.Write(writer, variant_value.Block)
 		FfiConverterStringINSTANCE.Write(writer, variant_value.Hash)
 	case OpStateExpired:
 		writeInt32(writer, 4)
+		FfiConverterBasisINSTANCE.Write(writer, variant_value.Basis)
 	case OpStateInFlight:
 		writeInt32(writer, 5)
 		FfiConverterInFlightINSTANCE.Write(writer, variant_value.Detail)
