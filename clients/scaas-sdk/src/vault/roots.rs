@@ -104,7 +104,8 @@ impl Vault {
         Ok(Arc::new(SecretBytes::from_zeroizing(full)?))
     }
 
-    /// Root (c)'s new seed set (spec §6.6). `OriginSignature` (the signatures differ, a wrong length, `r` / `s` / `v` out of
+    /// Root (c)'s new seed set (spec §6.6): the two signatures come from two requests to the wallet (one handle given for both is
+    /// `Argument`). `OriginSignature` (the signatures differ, a wrong length, `r` / `s` / `v` out of
     /// range, recovering to another address), `DerivationPassphraseShort`, `VaultPassphraseWeak`, `SeedExists`, `LabelTaken`.
     pub async fn derive_from_signature(
         &self,
@@ -117,8 +118,10 @@ impl Vault {
                 precheck(&req.label, &req.vault_passphrase)?;
                 derivation_passphrase(&req.derivation_passphrase, false)?;
                 let (s1, s2, dp) = (req.signature1, req.signature2, req.derivation_passphrase);
-                // nested `with`s on one secret would wait on its own lock: a secret given twice is read once
-                if Arc::ptr_eq(&dp, &s1) || Arc::ptr_eq(&dp, &s2) {
+                // nested `with`s on one secret would wait on its own lock: a secret given twice is read once. Review A2-5
+                // (CLI-SDK-05: signed twice, the wallet's determinism test): one signature handle given as both is no second
+                // signature, refused
+                if Arc::ptr_eq(&dp, &s1) || Arc::ptr_eq(&dp, &s2) || Arc::ptr_eq(&s1, &s2) {
                     return Err(SdkError::Argument);
                 }
                 let set = req.set;

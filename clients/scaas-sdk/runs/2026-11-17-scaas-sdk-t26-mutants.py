@@ -319,6 +319,31 @@ MUTANTS = [
         [(LINE, "            Ok(line().await?.map_or(registry, |(h, _, _)| h))", "            Ok(line().await.unwrap_or(None).map_or(registry, |(h, _, _)| h))")],
         T + " --lib account::register::tests::write_targets_follow_the_line",
     ),
+    (
+        "A-6: a write over a rollback",
+        [(VLT, "        if rolled_back(&item, &ks, self.get(HEAD).await?)? {", "        if false {")],
+        T + " --lib vault::tests::rollback_blocks_writes_until_accepted",
+    ),
+    (
+        "A-6: accept_rollback writes nothing",
+        [(VLT, "        self.put(HEAD, prev, anchor(ks.rev, &item.bytes)?).await\n    }", "        let _ = (prev, ks);\n        Ok(())\n    }")],
+        T + " --lib vault::tests::rollback_blocks_writes_until_accepted",
+    ),
+    (
+        "A2-5: one handle for both signatures",
+        [(ROOTS, " || Arc::ptr_eq(&s1, &s2) {", " {")],
+        T + " --test roots one_secret_for_two_parameters_does_not_hang",
+    ),
+    (
+        "A2-8: sign_scaas takes an ERC-7739 nest",
+        [(POL, "    if matches!(expect, Expect::Any(_) | Expect::Erc7739 { .. }) {\n        return Err(Error::Argument);\n    }\n    if let super", "    if matches!(expect, Expect::Any(_)) {\n        return Err(Error::Argument);\n    }\n    if let super")],
+        "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_typed erc7739_kat_and_expect",
+    ),
+    (
+        "A-8: a PqChat record by its name alone",
+        [(PQC, "            .is_some_and(|t| t.encode_type() == td.encode_type())", "            .is_some_and(|_| true)")],
+        U + " --test app_core pqchat_sign_records_only",
+    ),
 ]
 
 if __name__ == "__main__":

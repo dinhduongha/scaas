@@ -80,7 +80,7 @@ those fields (so they change only while the seed is unlocked); it binds `id`, `l
 Rows of a locked seed are **unverified**: shown with that mark, never used as a receive address or a destination
 (`AccountUnverified`). **Writers:** every read-modify-write runs under the store's lock and replaces the item only at the expected
 `rev` (`StoreConflict` after three tries); the replaced container is kept as `keystore.prev`; where a keychain exists a small anchor
-`{rev, sha256}` detects an older container put back (`KeystoreRollback`, shown, not fatal). The container is a file (or IndexedDB)
+`{rev, sha256}` detects an older container put back (`KeystoreRollback`, shown, not fatal; while it holds every keystore write is `KeystoreRollback` and writes nothing, until the user accepts the copy with `Vault::accept_rollback`, which rewrites the anchor over it: review T26 A-6, BUILT, UNAUDITED). The container is a file (or IndexedDB)
 through the app's `SecureStore`, whose small keychain items hold only the anchor and the platform unlock secret; it receives vault
 ciphertext and public fields only, and a failed write keeps the old item (`VaultIo`). clientkeys writes the container's vectors first
 (`smartcontracts/vectors/keystore/`); scaas-app's default build, which has no `ua-rs`, reads and writes the same container.
