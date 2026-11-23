@@ -96,6 +96,8 @@ pub struct Chain {
     pub linea: Option<Value>,
     /// `eth_getLogs` answers every log, whatever the filter and the range asked (T26 B2-4)
     pub logs_unfiltered: bool,
+    /// `eth_getLogs` filters by address and topics but answers every block (a range ignored; T26 B2-4)
+    pub logs_unranged: bool,
     /// `eth_estimateGas` by the call's input (plan T13: a registration's size); `None`: `gas`
     pub gas_of: Option<fn(&str) -> u64>,
     /// the regular gas a transaction's input executes, held to `tx_cap` at the send; `None`: its estimate (`gas_of` / `gas`)
@@ -152,6 +154,7 @@ impl Default for Chain {
             head_answers: vec![],
             linea: None,
             logs_unfiltered: false,
+            logs_unranged: false,
             gas_of: None,
             regular_of: None,
             tx_cap: 1 << 24,
@@ -541,9 +544,9 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 .iter()
                 .filter(|l| {
                     let n = named(c, &l["blockNumber"]);
-                    c.logs_unfiltered || n >= lo
-                        && n <= hi
-                        && addr.as_ref().is_none_or(|a| a.contains(&l["address"]))
+                    c.logs_unfiltered
+                        || (c.logs_unranged || n >= lo && n <= hi)
+                            && addr.as_ref().is_none_or(|a| a.contains(&l["address"]))
                         && ts
                             .iter()
                             .enumerate()

@@ -213,6 +213,25 @@ async fn a_failed_read_is_an_error() {
         .governance_delay("local".into(), TOKEN.into(), marked, None)
         .await;
     assert!(r.is_err(), "{r:?}");
+    // the notice period's read alone failing (the factory's class read answers): an error, never a delay of 0
+    views(&chain, 0, 0, &w(0), &w(1));
+    chain
+        .lock()
+        .unwrap()
+        .answers
+        .retain(|(to, s, _)| !(to == FACTORY && *s == sel("noticePeriod()")));
+    let r = sdk
+        .admin()
+        .governance_delay("local".into(), TOKEN.into(), marked, None)
+        .await;
+    assert!(r.is_err(), "{r:?}");
+    // the control: every view answering, a delay of 0
+    views(&chain, 0, 0, &w(0), &w(1));
+    assert!(sdk
+        .admin()
+        .governance_delay("local".into(), TOKEN.into(), marked, None)
+        .await
+        .is_ok());
 }
 
 /// T26 A2-2 / A2-3: one logical read at the final block (every `eth_call` pinned to a block hash); a token whose `factory()` is

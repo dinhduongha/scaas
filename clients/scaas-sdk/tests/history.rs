@@ -187,6 +187,15 @@ async fn history_refuses_logs_outside_the_filter() {
         .await
         .unwrap();
     assert_eq!(p.items.len(), 1, "control: the filter answered");
+    // the address and topics filtered, the range not: the log above the range alone is the endpoint's failure
+    c.lock().unwrap().logs_unranged = true;
+    match w.history(ACC.into(), "local".into(), None, 10).await {
+        Err(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed { last: Some(l), .. })) => {
+            assert_eq!(l.kind, scaas_rpc::FailureKind::AnswerMalformed, "unranged")
+        }
+        r => panic!("unranged: {:?}", r.map(|p| p.items.len())),
+    }
+    c.lock().unwrap().logs_unranged = false;
     for other in [false, true] {
         {
             let mut g = c.lock().unwrap();

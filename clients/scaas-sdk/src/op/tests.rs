@@ -575,7 +575,7 @@ async fn in_estimate_adds_the_l1_component() {
 }
 
 /// T26 B2-1: the transaction's own gas is table data: a profile whose tables carry no transaction row quotes nothing
-/// (`GasUnquoted`), the control with it quotes.
+/// (`GasUnquoted`; a gateway quote `gas: None`), the control with it quotes.
 #[tokio::test(flavor = "multi_thread")]
 async fn no_transaction_row_no_figure() {
     let t = setup(0, |pr, _| pr.gas.base.retain(|b| b.entry != gas::TX_ENTRY)).await;
@@ -586,6 +586,16 @@ async fn no_transaction_row_no_figure() {
     let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
     let path = SubmitPath::SelfRelay { payer: payer(&t) };
     assert!(t.sdk.op().quote(p, path).await.is_ok(), "control");
+    // a gateway quote too: the operation's row alone gives no figure (`gas: None`), never one on a made-up transaction cost
+    let t = setup(1, |pr, _| pr.gas.base.retain(|b| b.entry != gas::TX_ENTRY)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert_eq!(gateway_quote(&t, &p).await.gas, None, "no transaction row");
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert!(
+        gateway_quote(&t, &p).await.gas.is_some(),
+        "control: with it"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
