@@ -202,6 +202,18 @@ test("a commit sets the filtered path, blanks the rest of the direct path, and e
   assert.deepEqual(u.ctTargets, [2, 5]);
 });
 
+test("the nodes of the author's direct path off its filtered path are blanked, a keyed one too (RFC 9420 §7.5)", () => {
+  // not reachable by commits (emptying a side blanks the path above it); a tree read from views is checked by the same rule
+  const t = tr.coldTree([A, B]);
+  const g = tr.rehashAll({ ...tr.coldTree([A, B, C]), nodes: [...t.nodes, null, null, null, null] });
+  g.nodes[4] = null;
+  g.used = 2;
+  g.nodes[3] = { keyHash: id("stale") };
+  tr.rehashAll(g);
+  const r = whole(commit(g, by(A, 0), { nodeKeyHashes: [id("1")] }));
+  assert.equal(r.tree.nodes[3], null);
+});
+
 test("an Add and a Remove under a copath child of the author: every sibling hash is taken after the changes (fable-9)", () => {
   const t = whole(
     commit(tr.coldTree([A, B, C, D, E, F]), by(A, 0), { nodeKeyHashes: path(tr.coldTree([A, B, C, D, E, F]), 0) }),
