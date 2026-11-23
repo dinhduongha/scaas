@@ -257,3 +257,71 @@ async fn fee_above_cap_counts_the_l1_fee() {
         "control: at the cap"
     );
 }
+
+/// T26 B2-1: on a `Linea` profile the fees are `linea_estimateGas`'s over the transaction (its priority fee carries the L1
+/// cost), never below the chain's own, and `max_cost` counts them; an answer without both fees is the endpoint's
+/// `AnswerMalformed`. Control: without the model the chain's own fees and no Linea read.
+#[tokio::test(flavor = "multi_thread")]
+async fn linea_fees_are_linea_estimate_gas() {
+    let (s, seed, c) = on(None, &word(L1), Limits::default()).await;
+    c.lock().unwrap().linea = Some(
+        serde_json::json!({"gasLimit": "0x5208", "baseFeePerGas": "0x7", "priorityFeePerGas": "0x3e8"}),
+    );
+    let own = s
+        .wallet()
+        .prepare_native_send(send(&seed))
+        .await
+        .unwrap()
+        .quote;
+    assert!(
+        own.max_priority_fee_per_gas.parse::<u128>().unwrap() < 1_000,
+        "control: the chain's own"
+    );
+    let (s, seed, c) = on(Some(L1Fee::Linea), &word(L1), Limits::default()).await;
+    c.lock().unwrap().linea = Some(
+        serde_json::json!({"gasLimit": "0x5208", "baseFeePerGas": "0x7", "priorityFeePerGas": "0x3e8"}),
+    );
+    let q = s
+        .wallet()
+        .prepare_native_send(send(&seed))
+        .await
+        .unwrap()
+        .quote;
+    assert_eq!(q.max_priority_fee_per_gas, "1000");
+    let fee: u128 = q.max_fee_per_gas.parse().unwrap();
+    assert!(fee >= 2 * 7 + 1_000, "{fee}");
+    assert_eq!(
+        q.max_cost,
+        (U256::from(q.gas_limit) * U256::from(fee)).to_string()
+    );
+    c.lock().unwrap().linea = Some(serde_json::json!({"gasLimit": "0x5208"}));
+    match s.wallet().prepare_native_send(send(&seed)).await {
+        Err(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed { last: Some(l), .. })) => {
+            assert_eq!(l.kind, scaas_rpc::FailureKind::AnswerMalformed)
+        }
+        r => panic!("{:?}", r.map(|q| q.quote)),
+    }
+}
+
+/// T26 B2-1: a native send's estimate holds Arbitrum's L1 part already: on an `InEstimate` profile its gas limit is the
+/// estimate and no `NodeInterface` read is made.
+#[tokio::test(flavor = "multi_thread")]
+async fn in_estimate_native_send_is_its_estimate() {
+    let (s, seed, c) = on(Some(L1Fee::InEstimate), &word(L1), Limits::default()).await;
+    c.lock().unwrap().gas = 31_000;
+    let q = s
+        .wallet()
+        .prepare_native_send(send(&seed))
+        .await
+        .unwrap()
+        .quote;
+    assert_eq!(q.gas_limit, 31_000);
+    let reads = c
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .filter(|r| r.contains("0x77d488a2"))
+        .count();
+    assert_eq!(reads, 0);
+}

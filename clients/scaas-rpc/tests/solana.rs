@@ -61,6 +61,25 @@ async fn the_finalized_reads() {
 }
 
 /// F5 over Solana's answer shapes: a `getBlock` answer of 16 MiB + 1 is the endpoint's failure. Control: a small one is read.
+/// T26 B2-12: a `getBlocks` answer naming a slot outside the range asked (above the slot) is the endpoint's malformed answer,
+/// never taken as the block produced; the control is `the_finalized_reads`.
+#[tokio::test]
+async fn a_produced_slot_outside_the_range_is_refused() {
+    let url = serve(axum::Router::new().route(
+        "/",
+        axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
+            let result = match r["method"].as_str() {
+                Some("getGenesisHash") => json!(GENESIS),
+                Some("getBlocks") => json!([r["params"][1].as_u64().unwrap() + 100]),
+                _ => json!({"blockhash": "h"}),
+            };
+            axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": result}))
+        }),
+    ))
+    .await;
+    assert!(solana(&[&url]).produced_at_or_before(0, 41).await.is_err());
+}
+
 #[tokio::test]
 async fn a_solana_answer_above_16_mib_is_refused() {
     async fn big(len: usize) -> String {

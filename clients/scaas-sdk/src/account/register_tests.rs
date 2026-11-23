@@ -352,10 +352,10 @@ async fn reg_setup(name: &str, block: u64, rows: Vec<crate::GasBase>) -> Reg {
         finality: Finality::Finalized,
         tx_gas_cap: Some(1 << 24),
         tokens: vec![],
-        gas: crate::GasRows {
+        gas: crate::op::gas::with_tx(crate::GasRows {
             base: rows,
             verify: vec![],
-        },
+        }),
         max_valid_secs: None,
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
@@ -922,7 +922,7 @@ fn registry_margin_on_the_data_dependent_parts_only() {
         per_item: None,
         line: Default::default(),
     };
-    let chain = crate::GasRows {
+    let chain = crate::op::gas::with_tx(crate::GasRows {
         base: vec![
             row("register", "ua-0x0131", 1_000_000, 100_000),
             row("register", "ua-0x0132", 2_000_000, 200_000),
@@ -930,7 +930,7 @@ fn registry_margin_on_the_data_dependent_parts_only() {
             row("registerMsig", "msig", 500_000, 50_000),
         ],
         verify: vec![v(0x0131, 100_000), v(0x0102, 300_000), v(0x0135, 900_000)],
-    };
+    });
     let q = |rows: &[(&str, &str)], signers: &[u16]| {
         let rows: Vec<(String, String)> = rows
             .iter()

@@ -580,7 +580,10 @@ impl EvmPool {
                             .await
                         {
                             Ok(l) => {
-                                out.extend(l);
+                                out.extend(
+                                    asked(&filter, from, to, l)
+                                        .map_err(|m| SimError::Transport(m.into()))?,
+                                );
                                 from = to + 1;
                                 span = span.saturating_mul(2).min(refused / 2).max(span);
                             }
@@ -1061,11 +1064,19 @@ impl EvmPool {
                 ),
             )));
         }
-        self.at(at.endpoint, at.deadline)
+        let logs = self
+            .at(at.endpoint, at.deadline)
             .get_logs(&filter.clone().from_block(from).to_block(to))
             .await
-            .map(|l| l.iter().map(LogAt::from).collect())
-            .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))
+            .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?;
+        let logs = asked(filter, from, to, logs).map_err(|m| {
+            ReadError::Failure(EndpointFailure::new(
+                at.endpoint,
+                FailureKind::AnswerMalformed,
+                m,
+            ))
+        })?;
+        Ok(logs.iter().map(LogAt::from).collect())
     }
     /// The committed nonce of `who` at the read's block.
     pub async fn nonce_at_block(&self, at: &ReadAt<B256>, who: Address) -> Result<u64, ReadError> {
@@ -1165,6 +1176,13 @@ impl EvmPool {
                 .get_logs(&filter.clone().from_block(from).to_block(to))
                 .await
                 .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?;
+            let logs = asked(filter, from, to, logs).map_err(|m| {
+                ReadError::Failure(EndpointFailure::new(
+                    at.endpoint,
+                    FailureKind::AnswerMalformed,
+                    m,
+                ))
+            })?;
             Ok(logs.iter().map(LogAt::from).collect())
         })
         .await
@@ -1281,6 +1299,66 @@ impl EvmPool {
             });
         }
         Ok(agreed_fees(max, prio, need))
+    }
+}
+
+impl EvmPool {
+    /// Linea's fees of one transaction (T26 B2-1, controller call (140)): `linea_estimateGas` over `from`, `to`, `value`,
+    /// `data`, whose priority fee carries the transaction's L1 data cost; failed over. The max fee is twice the answered base
+    /// fee plus that priority fee. An answer without both hex quantities is the endpoint's `AnswerMalformed`.
+    pub async fn linea_fees(
+        &self,
+        from: Address,
+        to: Address,
+        value: U256,
+        data: Bytes,
+        purpose: Purpose,
+    ) -> Result<Fees, RpcError> {
+        let call = serde_json::json!({"from": from, "to": to, "value": value, "data": data});
+        let d = self.decode;
+        self.pool
+            .failover(self, purpose, |i| {
+                let (p, call) = (self.providers[i].clone(), call.clone());
+                async move {
+                    let v: serde_json::Value = p
+                        .raw_request("linea_estimateGas".into(), (call,))
+                        .await
+                        .map_err(|e| read_error(i, &e, d))?;
+                    let q = |k: &str| {
+                        v.get(k)
+                            .and_then(serde_json::Value::as_str)
+                            .and_then(|s| s.strip_prefix("0x"))
+                            .and_then(|h| u128::from_str_radix(h, 16).ok())
+                    };
+                    let (Some(base), Some(prio)) = (q("baseFeePerGas"), q("priorityFeePerGas"))
+                    else {
+                        return Err(ReadError::Failure(EndpointFailure::new(
+                            i,
+                            FailureKind::AnswerMalformed,
+                            "linea_estimateGas answered no fees",
+                        )));
+                    };
+                    Ok(Fees {
+                        max_fee_per_gas: base.saturating_mul(2).saturating_add(prio).max(1),
+                        max_priority_fee_per_gas: prio,
+                    })
+                }
+            })
+            .await
+            .map(|a| a.value)
+    }
+}
+
+/// The logs an endpoint answered to `filter` over `[from, to]`, each held to what was asked (T26 B2-4, CLI-RPC-07): its block,
+/// where named, in the range, its address and topics the filter's; an answer with another log is malformed (`Err`), the
+/// endpoint's failure.
+fn asked(filter: &Filter, from: u64, to: u64, logs: Vec<Log>) -> Result<Vec<Log>, &'static str> {
+    let fits = |l: &Log| {
+        l.block_number.is_none_or(|b| (from..=to).contains(&b)) && filter.matches(&l.inner)
+    };
+    match logs.iter().all(fits) {
+        true => Ok(logs),
+        false => Err("a log outside the filter or the range asked"),
     }
 }
 
@@ -1674,7 +1752,7 @@ impl EvmPool {
     ) -> Result<Agreed<(bool, bool, u64), B256>, RpcError> {
         self.read_at_block(choice, Purpose::Plain, |at| async move {
             let p = self.at(at.endpoint, at.deadline);
-            let executed = !p
+            let logs = p
                 .get_logs(
                     &q.executed
                         .clone()
@@ -1682,7 +1760,16 @@ impl EvmPool {
                         .to_block(at.number),
                 )
                 .await
-                .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?
+                .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?;
+            // a log outside the filter is no evidence of execution (T26 B2-4): the endpoint's malformed answer
+            let executed = !asked(&q.executed, q.from_block, at.number, logs)
+                .map_err(|m| {
+                    ReadError::Failure(EndpointFailure::new(
+                        at.endpoint,
+                        FailureKind::AnswerMalformed,
+                        m,
+                    ))
+                })?
                 .is_empty();
             let word = self.call_at(&at, q.contract, q.nonce_call.clone()).await?;
             // T13 S10: one 32-byte word (an empty answer, an address without code, is no nonce 0)

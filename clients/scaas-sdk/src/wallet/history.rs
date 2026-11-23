@@ -181,7 +181,10 @@ impl Wallet {
                     state::rows(&sdk)
                         .await?
                         .into_iter()
-                        .filter(|r| r.chain == chain && r.from.eq_ignore_ascii_case(&account))
+                        // by the id's word, not its text: a row on ids holds the 32-byte form (T26 B2-5)
+                        .filter(|r| {
+                            r.chain == chain && id_word(&r.from).is_ok_and(|(w, _)| w == word)
+                        })
                         .map(|r| OpItem {
                             op: r.op,
                             entry: r.entry,

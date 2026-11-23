@@ -102,7 +102,13 @@ fn profile(key: &str, rpc: &str) -> (ChainProfile, Finality, u8) {
         verifier_policy: scaas_rpc::Policy::Failover,
         dexes: vec![],
         wrappers: vec![],
-        l1_fee: (p["l1Fee"] == "op-stack").then_some(L1Fee::OpStack),
+        l1_fee: match p["l1Fee"].as_str() {
+            Some("op-stack") => Some(L1Fee::OpStack),
+            Some("in-estimate") => Some(L1Fee::InEstimate),
+            Some("linea") => Some(L1Fee::Linea),
+            None => None,
+            Some(m) => panic!("an L1 fee model the SDK does not carry: {m}"),
+        },
         pinned_reads: p["pinnedReads"].as_bool().unwrap_or(true),
         disabled_kinds: p["disabledKinds"]
             .as_array()
@@ -422,9 +428,14 @@ fn the_op_stack_profiles_are_base_celo_and_op() {
         let (p, _, _) = profile(k, "http://127.0.0.1:9");
         assert_eq!(p.l1_fee, Some(L1Fee::OpStack), "{k}");
     }
-    assert_eq!(
-        profile("arbitrum-mainnet", "http://127.0.0.1:9").0.l1_fee,
-        None,
-        "control"
-    );
+    // T26 B2-1: Arbitrum's L1 cost is in the gas, Linea's in the fees; Ethereum has none (the control)
+    for (k, m) in [
+        ("arbitrum-mainnet", Some(L1Fee::InEstimate)),
+        ("arbitrum-testnet", Some(L1Fee::InEstimate)),
+        ("linea-mainnet", Some(L1Fee::Linea)),
+        ("linea-testnet", Some(L1Fee::Linea)),
+        ("ethereum-mainnet", None),
+    ] {
+        assert_eq!(profile(k, "http://127.0.0.1:9").0.l1_fee, m, "{k}");
+    }
 }

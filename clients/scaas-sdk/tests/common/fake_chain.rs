@@ -90,6 +90,10 @@ pub struct Chain {
     pub storage: HashMap<(String, String), String>,
     /// `eth_call` answers by `(to, calldata prefix)`, read first (plan T13: the registry's views)
     pub answers: Vec<(String, String, String)>,
+    /// `linea_estimateGas`'s answer (T26 B2-1); `None`: the chain's own `gas`, base fee and priority fee
+    pub linea: Option<Value>,
+    /// `eth_getLogs` answers every log, whatever the filter and the range asked (T26 B2-4)
+    pub logs_unfiltered: bool,
     /// `eth_estimateGas` by the call's input (plan T13: a registration's size); `None`: `gas`
     pub gas_of: Option<fn(&str) -> u64>,
     /// the regular gas a transaction's input executes, held to `tx_cap` at the send; `None`: its estimate (`gas_of` / `gas`)
@@ -143,6 +147,8 @@ impl Default for Chain {
             kind_home: HashMap::new(),
             storage: HashMap::new(),
             answers: vec![],
+            linea: None,
+            logs_unfiltered: false,
             gas_of: None,
             regular_of: None,
             tx_cap: 1 << 24,
@@ -318,6 +324,10 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
         "eth_call" | "eth_estimateGas" if c.value_reverts && sends_value => {
             err("execution reverted")
         }
+        "linea_estimateGas" => ok(c.linea.clone().unwrap_or_else(|| {
+            json!({"gasLimit": format!("{:#x}", c.gas), "baseFeePerGas": format!("{:#x}", c.base_fee),
+                "priorityFeePerGas": format!("{:#x}", c.prio)})
+        })),
         "eth_chainId" => ok(json!(format!("{:#x}", c.chain_id))),
         "eth_blockNumber" => ok(json!(format!("{:#x}", c.head))),
         "eth_getBlockByNumber" => {
@@ -510,7 +520,7 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 .iter()
                 .filter(|l| {
                     let n = named(c, &l["blockNumber"]);
-                    n >= lo
+                    c.logs_unfiltered || n >= lo
                         && n <= hi
                         && addr.as_ref().is_none_or(|a| a.contains(&l["address"]))
                         && ts

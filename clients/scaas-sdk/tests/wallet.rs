@@ -272,21 +272,33 @@ async fn zero_gas_price_is_a_value() {
         let mut c = c.lock().unwrap();
         c.base_fee = 0;
         c.prio = 0;
+        // a chain whose plain transfer costs more than Ethereum's 21,000 (an L1 part, an account's creation: T26 B2-1)
+        c.gas = 30_000;
     }
     let q = s
         .wallet()
         .prepare_native_send(native_send(&seed, Some(2)))
         .await
         .unwrap();
-    assert_eq!(q.quote.gas_limit, 21_000, "a plain transfer");
+    assert_eq!(
+        q.quote.gas_limit, 30_000,
+        "a plain transfer at the chain's estimate"
+    );
     // the chain's own value (scaas-rpc's fee reader floors the fee at 1 wei); the SDK adds no floor or price of its own
     let max: u128 = q.quote.max_fee_per_gas.parse().unwrap();
     let prio: u128 = q.quote.max_priority_fee_per_gas.parse().unwrap();
     assert!(max <= 1 && prio <= max, "{max} {prio}");
     assert_eq!(
         q.quote.max_cost,
-        (21_000u128 * q.quote.max_fee_per_gas.parse::<u128>().unwrap()).to_string()
+        (30_000u128 * q.quote.max_fee_per_gas.parse::<u128>().unwrap()).to_string()
     );
+    // T26 B-16: `submit` checks the caller's record as `prepare` checked the request: data above 128 KiB is `Argument`
+    let mut big = q.clone();
+    big.data = format!("0x{}", "00".repeat(128 * 1024 + 1));
+    assert!(matches!(
+        s.wallet().submit_native_send(big).await,
+        Err(SdkError::Argument)
+    ));
     s.wallet().submit_native_send(q).await.unwrap();
     for _ in 0..100 {
         if !c.lock().unwrap().sent.is_empty() {

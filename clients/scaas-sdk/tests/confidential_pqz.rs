@@ -885,7 +885,7 @@ async fn pqz_plain_pairs() {
     let url = serve(c.clone()).await;
     let mut pr = profile(vec![endpoint(&url)]);
     pr.gateways = vec![endpoint(&url)];
-    pr.gas = scaas_sdk::GasRows {
+    pr.gas = with_tx(scaas_sdk::GasRows {
         base: ["mtxShield", "mtxPrepareAcc", "mtxRollOver"]
             .iter()
             .flat_map(|e| {
@@ -911,7 +911,7 @@ async fn pqz_plain_pairs() {
             margin: 0,
             per_item: None,
         }],
-    };
+    });
     let (s, seed) = sdk(pr).await;
     {
         let mut cc = c.lock().unwrap();
@@ -1047,7 +1047,7 @@ async fn debit_setup(offchain: bool) -> (Arc<Sdk>, String, Fake, W, W, Arc<Memor
     if offchain {
         pr.verifiers = vec![endpoint(&url)];
     }
-    pr.gas = scaas_sdk::GasRows {
+    pr.gas = with_tx(scaas_sdk::GasRows {
         base: DEBITS
             .iter()
             .flat_map(|e| {
@@ -1073,7 +1073,7 @@ async fn debit_setup(offchain: bool) -> (Arc<Sdk>, String, Fake, W, W, Arc<Memor
             margin: 0,
             per_item: None,
         }],
-    };
+    });
     let (s, seed, store) = sdk_with(pr).await;
     let (a, b) = (ua_of(&s, &seed, 0).await, ua_of(&s, &seed, 1).await);
     pqz_state(&c, &a, &row("A v1"));
@@ -1308,6 +1308,7 @@ async fn pqz_transfer_multi_pairs() {
             to_ua: hx(&a),
             amount: "60".into(),
         }],
+        decoys: 0,
         decoy_fee: "0".into(),
         valid_until_block: 1000,
         envelope: env(),
@@ -1342,6 +1343,86 @@ async fn pqz_transfer_multi_pairs() {
             if compact { 42 } else { 0 }
         );
     }
+}
+
+/// T26 B2-2 (CTR-UA-29, as Zether's): an op 7's decoys are the SDK's draw from the registry line's `0x0142` lists, never the
+/// caller's: with `decoys: 1` the SDK reads the line, and a line holding no one but the holder and the recipient refuses the
+/// draw; the control without a decoy prepares.
+#[tokio::test(flavor = "multi_thread")]
+async fn pqz_op7_draws_its_decoys_from_the_line() {
+    use scaas_sdk::confidential::{PqzLeg, PqzTransferMulti};
+    let (s, seed, c, a, _, _) = debit_setup(false).await;
+    let sel = |sig: &str| fake_chain::keccak_hex(sig.as_bytes())[..10].to_string();
+    {
+        let mut cc = c.lock().unwrap();
+        for (f, v) in [
+            ("predecessor()", 0),
+            ("kindEnabled(uint16)", 1),
+            ("uaCount(uint16)", 0),
+        ] {
+            cc.answers
+                .push((REGISTRY.into(), sel(f), format!("0x{v:064x}")));
+        }
+    }
+    let r = |decoys| PqzTransferMulti {
+        signer: signer(&seed, 1),
+        chain: "local".into(),
+        token: TOKEN.into(),
+        batch: "0".into(),
+        key_version: 0,
+        legs: vec![PqzLeg {
+            to_ua: hx(&a),
+            amount: "60".into(),
+        }],
+        decoys,
+        decoy_fee: "0".into(),
+        valid_until_block: 1000,
+        envelope: env(),
+    };
+    let cf = s.confidential();
+    assert!(
+        cf.prepare_pqz_transfer_multi(r(1)).await.is_err(),
+        "no candidate to draw"
+    );
+    let count = sel("uaCount(uint16)");
+    let reads = c
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .filter(|q| q.contains(&count[2..]))
+        .count();
+    assert!(reads > 0, "the line's 0x0142 list read");
+    assert!(cf.prepare_pqz_transfer_multi(r(0)).await.is_ok(), "control");
+}
+
+/// T26 B2-11: a profile disabling `pqz` refuses a PQZ debit (`KindDisabled`) before any read, proof or verdict request;
+/// the control is every debit test above, on a profile that does not.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_disabled_pqz_refuses_before_any_read() {
+    let c = fake();
+    let url = serve(c.clone()).await;
+    let mut pr = profile(vec![endpoint(&url)]);
+    pr.disabled_kinds = vec!["pqz".into()];
+    let (s, seed, _) = sdk_with(pr).await;
+    let a = ua_of(&s, &seed, 0).await;
+    c.lock().unwrap().requests.clear();
+    assert_eq!(
+        code(
+            s.confidential()
+                .prepare_pqz_transfer(transfer(&seed, &a, "100"))
+                .await
+        ),
+        "KindDisabled"
+    );
+    let calls = c
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .filter(|r| r.contains("eth_call"))
+        .count();
+    assert_eq!(calls, 0, "nothing read");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1907,4 +1988,24 @@ async fn pqz_recipient_in_predecessor_read_at_home() {
         .prepare_pqz_transfer(transfer(&seed, &a, "100"))
         .await
         .unwrap();
+}
+
+/// `rows` with the transaction row at Ethereum's figures (T26 B2-1: the SDK carries no gas figure; a test's table does).
+fn with_tx(mut rows: scaas_sdk::GasRows) -> scaas_sdk::GasRows {
+    rows.base.push(scaas_sdk::GasBase {
+        entry: "transaction".into(),
+        kind: "evm".into(),
+        fresh: false,
+        gas: 21_000,
+        per_byte: Some(scaas_sdk::GasPerByte {
+            input: "calldata".into(),
+            gas: 64,
+        }),
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
+        regular: None,
+    });
+    rows
 }

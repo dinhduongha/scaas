@@ -2280,10 +2280,11 @@ pub(crate) mod tests {
                 // the rotation filter asks `UAPqzKeyCurrent` and `UAPqzScopedKeyCurrent` (one topic-0 list); a log of the first
                 "eth_getLogs" if e.pqz_rotated && p[0]["topics"][0].as_array().is_some_and(|t| t.contains(&json!(format!("{:#x}",
                     <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH)))) => Ok(json!([{
+                    // T26 B2-4 (fixture correction): a log the filter names, in the range asked, as a real node answers
                     "address": p[0]["address"].clone(), "topics": [format!("{:#x}",
-                        <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH), format!("{:#x}", B256::repeat_byte(1)),
-                        format!("{:#x}", B256::from(U256::from(1)))],
-                    "data": "0x", "blockNumber": "0x9", "blockHash": format!("{:#x}", B256::repeat_byte(9)),
+                        <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH),
+                        topic_of(&p[0]["topics"][1], B256::repeat_byte(1)), topic_of(&p[0]["topics"][2], B256::from(U256::from(1)))],
+                    "data": "0x", "blockNumber": p[0]["fromBlock"].clone(), "blockHash": format!("{:#x}", B256::repeat_byte(9)),
                     "transactionHash": format!("{:#x}", B256::repeat_byte(8)), "transactionIndex": "0x0", "logIndex": "0x0",
                     "removed": false}])),
                 "eth_getLogs" if e.fee_set && p[0]["topics"][0] == json!(format!("{:#x}",
@@ -7393,6 +7394,15 @@ pub(crate) mod tests {
             "{:?}",
             e.scopes_asked
         );
+    }
+
+    /// A topic a log filter position names (its first, a list or one word), else `or`.
+    fn topic_of(t: &serde_json::Value, or: B256) -> String {
+        t.as_array()
+            .and_then(|a| a.first())
+            .or(Some(t).filter(|t| t.is_string()))
+            .and_then(serde_json::Value::as_str)
+            .map_or_else(|| format!("{or:#x}"), str::to_string)
     }
 
     /// Group 3g (spec §7.3): `ProofRejected` after an indexed `UAPqzKeyCurrent` of a party is `PQZ_KEY_ROTATED`, the simulation

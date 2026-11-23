@@ -34,7 +34,7 @@ pub enum GasFrom {
     Reference,
     /// the figure the app passed on the call
     App,
-    /// a native send's own estimate (or 21,000 for a plain transfer to an account without code)
+    /// a native send's own estimate (`eth_estimateGas`, a plain transfer's too)
     Estimate,
 }
 
@@ -57,9 +57,81 @@ impl GasSources {
     }
 }
 
-/// The transaction's base cost and calldata at the highest price per byte (EIP-7976's floor, 64 gas a byte).
-pub(crate) const INTRINSIC: u64 = 21_000;
-pub(crate) const PER_BYTE: u64 = 64;
+/// The base row of the transaction's own gas (T26 B2-1, controller call (140); owner 2026-11-19, no gas figure in code): entry
+/// `transaction`, kind `evm`, not fresh, `gas` its intrinsic cost and `per_byte` (input `calldata`) the price of a calldata
+/// byte; looked up as every part ([`tx_gas`]), so a chain's own rows carry its own figures. Without it no figure.
+pub(crate) const TX_ENTRY: &str = "transaction";
+pub(crate) const TX_KIND: &str = "evm";
+pub(crate) const TX_INPUT: &str = "calldata";
+
+/// The transaction's own gas of a table: its intrinsic cost, a calldata byte's price and its source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TxGas {
+    pub intrinsic: u64,
+    pub per_byte: u64,
+    pub from: GasFrom,
+}
+
+/// The transaction row ([`TX_ENTRY`]) in the lookup order of every part; `None`: no table carries it (unquoted).
+pub(crate) fn tx_gas(chain: &GasRows, opt_in: &[String], tables: &[GasTable]) -> Option<TxGas> {
+    part(chain, opt_in, tables, |r| {
+        let b = r
+            .base
+            .iter()
+            .find(|b| b.key() == (TX_ENTRY, TX_KIND, false))?;
+        let p = b.per_byte.as_ref().filter(|p| p.input == TX_INPUT)?;
+        Some((b.gas, p.gas))
+    })
+    .map(|((intrinsic, per_byte), from)| TxGas {
+        intrinsic,
+        per_byte,
+        from,
+    })
+}
+
+/// The transaction row at Ethereum's figures (21,000; EIP-7976's 64 gas a byte), for the crate's tests: data a test owns.
+#[cfg(test)]
+pub(crate) fn tx_row() -> crate::GasBase {
+    crate::GasBase {
+        entry: TX_ENTRY.into(),
+        kind: TX_KIND.into(),
+        fresh: false,
+        gas: 21_000,
+        per_byte: Some(crate::GasPerByte {
+            input: TX_INPUT.into(),
+            gas: 64,
+        }),
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
+        regular: None,
+    }
+}
+
+/// `rows` with [`tx_row`] added, for the crate's tests.
+#[cfg(test)]
+pub(crate) fn with_tx(mut rows: GasRows) -> GasRows {
+    rows.base.push(tx_row());
+    rows
+}
+
+/// Of two sources, the one further down the lookup order (chain → module → reference → app → estimate): a figure made of
+/// both is named by its least local part, so a part not measured on the chain is never reported as the chain's.
+pub(crate) fn coarser(a: GasFrom, b: &GasFrom) -> GasFrom {
+    let rank = |f: &GasFrom| match f {
+        GasFrom::Chain => 0,
+        GasFrom::Module(_) => 1,
+        GasFrom::Reference => 2,
+        GasFrom::App => 3,
+        GasFrom::Estimate => 4,
+    };
+    if rank(b) > rank(&a) {
+        b.clone()
+    } else {
+        a
+    }
+}
 
 /// The largest count a per-item part is quoted at (owner 2026-11-19, I1: a bounded count); above it the operation is
 /// refused as `GasCountUnknown`.
@@ -97,12 +169,12 @@ fn data_dependent_row(kind: &str) -> bool {
 
 /// One part's figure and source, in the lookup order: the chain's rows → the module tables opted in (profile order) → the
 /// reference table if opted in; `find` reads the part's row of a table.
-fn part(
+fn part<T>(
     chain: &GasRows,
     opt_in: &[String],
     tables: &[GasTable],
-    find: impl Fn(&GasRows) -> Option<u64>,
-) -> Option<(u64, GasFrom)> {
+    find: impl Fn(&GasRows) -> Option<T>,
+) -> Option<(T, GasFrom)> {
     let table = |name: &str| tables.iter().find(|t| t.name == name);
     if let Some(g) = find(chain) {
         return Some((g, GasFrom::Chain));
@@ -215,13 +287,18 @@ fn verify_part(
     bytes: bool,
     items: &dyn Fn(&Option<GasPerItem>) -> Option<u64>,
 ) -> Option<(u64, GasFrom)> {
+    // the signature's bytes at the transaction row's price (no row: no figure)
+    let per = match bytes {
+        true => tx_gas(chain, opt_in, tables)?.per_byte,
+        false => 0,
+    };
     part(chain, opt_in, tables, |r| {
         let v = verify_row(r, signer, registry)?;
         let b = if bytes { v.sig_bytes } else { 0 };
         Some(
             v.gas
                 .saturating_add(v.margin)
-                .saturating_add(b.saturating_mul(PER_BYTE))
+                .saturating_add(b.saturating_mul(per))
                 .saturating_add(items(&v.per_item)?),
         )
     })
@@ -449,11 +526,15 @@ pub(crate) fn registry_gas(
         add(DATA_DEPENDENT.contains(s), v, v);
         verify.get_or_insert(from);
     }
+    let Some(tx) = tx_gas(chain, opt_in, tables) else {
+        return Ok(None);
+    };
+    let base = coarser(base, &tx.from);
     let bytes = u64::try_from(len)
         .unwrap_or(u64::MAX)
-        .saturating_mul(PER_BYTE);
+        .saturating_mul(tx.per_byte);
     let total = |f: u64, d: u64| {
-        f.saturating_add(INTRINSIC)
+        f.saturating_add(tx.intrinsic)
             .saturating_add(bytes)
             .saturating_add(with_margin(d))
     };
@@ -505,7 +586,8 @@ pub(crate) fn verify_or(
                     && v.line.depth == 0
                     && !v.line.write
             })
-            .map(|v| v.gas)
+            // the row's margin too, as every quote counts it (T26 B2-13)
+            .map(|v| v.gas.saturating_add(v.margin))
     })
     .unwrap_or((app, GasFrom::App))
 }
@@ -531,18 +613,22 @@ impl Figure {
     }
 }
 
-/// The figure `g` and its regular bound `r` of a transaction whose calldata is `len` bytes: each plus the intrinsic cost and
-/// the calldata, with the margin; the regular bound at most the gas.
-pub(crate) fn with_calldata(g: u64, r: u64, len: usize, from: GasSources) -> Figure {
+/// The figure `g` and its regular bound `r` of a transaction whose calldata is `len` bytes: each plus the transaction row's
+/// intrinsic cost and calldata (`tx`), with the margin; the regular bound at most the gas; the base named by the coarser of
+/// its source and the transaction row's ([`coarser`]).
+pub(crate) fn with_calldata(g: u64, r: u64, len: usize, tx: &TxGas, from: GasSources) -> Figure {
     let bytes = u64::try_from(len)
         .unwrap_or(u64::MAX)
-        .saturating_mul(PER_BYTE);
-    let total = |x: u64| with_margin(x.saturating_add(INTRINSIC).saturating_add(bytes));
+        .saturating_mul(tx.per_byte);
+    let total = |x: u64| with_margin(x.saturating_add(tx.intrinsic).saturating_add(bytes));
     let gas = total(g);
     Figure {
         gas,
         regular: total(r).min(gas),
-        from,
+        from: GasSources {
+            base: coarser(from.base, &tx.from),
+            verify: from.verify,
+        },
     }
 }
 
@@ -560,8 +646,11 @@ pub(crate) fn quoted(
     let Some((g, from)) = lookup_by(chain, opt_in, tables, app, key, op)? else {
         return Ok(None);
     };
+    let Some(tx) = tx_gas(chain, opt_in, tables) else {
+        return Ok(None);
+    };
     let r = lookup_in(chain, opt_in, tables, app, key, op, true)?.map_or(g, |(r, _)| r);
-    Ok(Some(with_calldata(g, r, len, from)))
+    Ok(Some(with_calldata(g, r, len, &tx, from)))
 }
 
 /// The calldata bytes a quote of signer kind `signer` counted (owner 2026-11-19, G3): the unsigned calldata (`unsigned`) plus
@@ -592,12 +681,12 @@ pub(crate) fn counted_bytes(
 
 /// The gas of a quoted operation once signed (owner 2026-11-19, G3): the calldata part recomputed from the signed calldata
 /// (`signed` bytes, the real signature's length) where it exceeds what the quote counted (`counted`), with the margin; never
-/// below the quote's figure (`quoted`).
-pub(crate) fn signed_gas(quoted: u64, counted: u64, signed: usize) -> u64 {
+/// below the quote's figure (`quoted`); a byte at the transaction row's price `per_byte`.
+pub(crate) fn signed_gas(quoted: u64, counted: u64, signed: usize, per_byte: u64) -> u64 {
     let signed = u64::try_from(signed).unwrap_or(u64::MAX);
     match signed.saturating_sub(counted) {
         0 => quoted,
-        more => quoted.saturating_add(with_margin(more.saturating_mul(PER_BYTE))),
+        more => quoted.saturating_add(with_margin(more.saturating_mul(per_byte))),
     }
 }
 
@@ -737,18 +826,21 @@ mod tests {
 
     fn rows(base: u64, verify: u64) -> GasRows {
         GasRows {
-            base: vec![GasBase {
-                entry: "mtxPay".into(),
-                kind: "token".into(),
-                fresh: false,
-                gas: base,
-                per_byte: None,
-                save: None,
-                fee_extra: None,
-                ua_extra: None,
-                per_item: None,
-                regular: None,
-            }],
+            base: vec![
+                GasBase {
+                    entry: "mtxPay".into(),
+                    kind: "token".into(),
+                    fresh: false,
+                    gas: base,
+                    per_byte: None,
+                    save: None,
+                    fee_extra: None,
+                    ua_extra: None,
+                    per_item: None,
+                    regular: None,
+                },
+                tx_row(),
+            ],
             verify: vec![GasVerify {
                 line: Default::default(),
                 signer: 0x0101,
@@ -767,7 +859,7 @@ mod tests {
     }
     fn verify_only(g: u64) -> GasRows {
         GasRows {
-            base: vec![],
+            base: vec![tx_row()],
             ..rows(0, g)
         }
     }
@@ -781,6 +873,16 @@ mod tests {
     }
 
     const K: (&str, &str, u16, bool) = ("mtxPay", "token", 0x0101, false);
+
+    /// T26 B2-13: the Zether UA's verify gas for the prover is its row's gas plus `margin`, as every quote counts it; without
+    /// a row the app's figure (the control).
+    #[test]
+    fn verify_or_counts_the_margin() {
+        let mut r = rows(0, 5_000);
+        r.verify[0].margin = 700;
+        assert_eq!(verify_or(&r, &[], &[], 0x0101, 9), (5_700, GasFrom::Chain));
+        assert_eq!(verify_or(&r, &[], &[], 0x0102, 9), (9, GasFrom::App));
+    }
 
     fn all(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
@@ -882,7 +984,7 @@ mod tests {
         r.base[0].per_item.as_mut().unwrap().regular = Some(40);
         let f = quoted(&r, &[], &[], None, k, 10, &op).unwrap().unwrap();
         assert_eq!(f.regular, f.gas, "never above the gas");
-        let app = quoted(&GasRows::default(), &[], &[], Some(9), k, 10, &op)
+        let app = quoted(&with_tx(GasRows::default()), &[], &[], Some(9), k, 10, &op)
             .unwrap()
             .unwrap();
         assert_eq!(app.regular, app.gas, "an app's figure: whole");
@@ -1130,7 +1232,9 @@ mod tests {
     #[test]
     fn gas_table_parse_checks() {
         let ok = GasTable::parse(&file(&b(98_000, 97_947), &v(257, 3_000, 2_100))).unwrap();
-        assert_eq!(ok.rows, rows(98_000, 3_000));
+        let mut want = rows(98_000, 3_000);
+        want.base.retain(|b| b.entry != TX_ENTRY);
+        assert_eq!(ok.rows, want);
         for good in [
             file(&b(98_000, 98_000), ""), // an exact multiple stays
             file("", &v(0, 0, 0)),        // the reference signer's 0
@@ -1268,6 +1372,20 @@ mod tests {
             serde_json::from_str(include_str!("../../gas/inputs.json")).unwrap();
         let mut line = 0;
         for r in rows {
+            // T26 B2-1: the transaction row is the inputs' protocol figures, not a measurement
+            if r["entry"] == TX_ENTRY {
+                let tx = &inputs["transaction"];
+                assert_eq!(
+                    (&r["gas"], &r["per_byte"]["gas"]),
+                    (&tx["gas"], &tx["per_byte"]),
+                    "{r}"
+                );
+                assert_eq!(
+                    (&r["kind"], &r["per_byte"]["input"]),
+                    (&TX_KIND.into(), &TX_INPUT.into())
+                );
+                continue;
+            }
             // CTR-UA-65: a line row (a path, a depth or the write path) is the kind's verify delta plus the input list's
             // line figure, named in its source with its forge test, marked `stand_in`, never keyed by a registry
             if r.get("depth").is_some() {
@@ -1445,7 +1563,7 @@ mod tests {
                 .any(|v| v == x)
         };
         let base = t["base"].as_array().unwrap();
-        for r in base {
+        for r in base.iter().filter(|r| r["entry"] != TX_ENTRY) {
             let (kind, entry) = (r["kind"].as_str().unwrap(), r["entry"].as_str().unwrap());
             let fresh = vars(&format!("{kind}_{entry}_fresh_"));
             let ua = vars(&format!("{kind}_{entry}_ua_"));
@@ -1558,7 +1676,7 @@ mod tests {
                     }
                     let (g, _) =
                         lookup(&rows, &[], &[], None, (entry, "token", signer, fresh)).unwrap();
-                    let composed = g - PER_BYTE * v.sig_bytes;
+                    let composed = g - 64 * v.sig_bytes;
                     let measured = key(&format!("{s}_{entry}_{lane}_normal"));
                     out.push((
                         s.clone(),
@@ -2472,10 +2590,10 @@ mod tests {
         ] {
             assert_eq!(c(&r, f.clone()), 500, "{f:?}");
         }
-        assert_eq!(signed_gas(90_000, 628, 628), 90_000);
-        assert_eq!(signed_gas(90_000, 628, 600), 90_000, "never lowered");
-        assert_eq!(signed_gas(90_000, 628, 629), 90_000 + 96);
-        assert_eq!(signed_gas(90_000, 500, 628), 90_000 + 12_288);
+        assert_eq!(signed_gas(90_000, 628, 628, 64), 90_000);
+        assert_eq!(signed_gas(90_000, 628, 600, 64), 90_000, "never lowered");
+        assert_eq!(signed_gas(90_000, 628, 629, 64), 90_000 + 96);
+        assert_eq!(signed_gas(90_000, 500, 628, 64), 90_000 + 12_288);
     }
 
     /// Ruling 4: the attached signature's kind, read from `payerSig` and the payment's `from`; I3: from `consent` and

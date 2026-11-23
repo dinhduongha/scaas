@@ -323,7 +323,7 @@ impl Op {
                     cd.len(),
                 )?
                 .ok_or(SdkError::GasUnquoted)?;
-                self_relay(
+                let q = self_relay(
                     &sdk,
                     &chain,
                     &payer,
@@ -334,7 +334,11 @@ impl Op {
                     true,
                     Some(figure),
                 )
-                .await
+                .await?;
+                let (profile, _, pool) = evm(&sdk, &chain)?;
+                let block = pool.block_gas().await.map_err(sim)?;
+                half_block(&profile, q.gas_limit, block.limit)?;
+                Ok(q)
             })
             .await
     }
@@ -391,6 +395,7 @@ impl Op {
                 let (profile, _, _) = evm(&sdk, &chain)?;
                 let block = pool.block_gas().await.map_err(sim)?;
                 super::quote::above_caps(&profile, regular, gas, block.limit)?;
+                half_block(&profile, gas, block.limit)?;
                 let cost = super::quote::check_caps(&sdk, gas, fee)?;
                 let mut quote = SubmitQuote {
                     gas_limit: gas,
@@ -415,4 +420,14 @@ impl Op {
             })
             .await
     }
+}
+
+/// A registration on a chain without a per-transaction cap is held to half its block gas limit (T26 B2-3,
+/// docs/clients/scaas-sdk.md, the group limit's paragraph): above it `GasAboveBlockShare`, before anything is signed, as a
+/// registry write's step (`account::register`'s `Caps`).
+fn half_block(profile: &crate::ChainProfile, gas: u64, block: u64) -> Result<(), SdkError> {
+    if profile.tx_gas_cap.is_none() && gas > block / 2 {
+        return Err(SdkError::GasAboveBlockShare);
+    }
+    Ok(())
 }

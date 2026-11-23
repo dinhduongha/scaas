@@ -30,6 +30,13 @@ CFG = "clients/scaas-sdk/src/config.rs"
 STO = "clients/scaas-sdk/src/vault/store.rs"
 SYN = "clients/scaas-sdk/src/sync_cpp.rs"
 SW = "clients/scaas-sdk/bindings/swift/CopyCall.swift"
+GAS = "clients/scaas-sdk/src/op/gas.rs"
+PQD = "clients/scaas-sdk/src/confidential/pqz_debit.rs"
+BLS = "clients/scaas-sdk/src/op/bls_multi.rs"
+HIS = "clients/scaas-sdk/src/wallet/history.rs"
+REVM = "clients/scaas-rpc/src/evm.rs"
+NAP = "scaas-node/src/adapters/aptos.rs"
+N = "cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
@@ -289,6 +296,82 @@ MUTANTS = [
         [(EVT, "    pub(crate) fn of(strict: bool) -> Basis {\n        if strict {", "    pub(crate) fn of(strict: bool) -> Basis {\n        if !strict && strict {")],
         T + " --lib op::tests::strict_majority_ends_a_failed_operation_at_the_finalized_block",
     ),
+    (
+        "B2-1: a plain transfer at 21,000",
+        [(QUO, "    } else {\n        // the estimate with the value sent (T13b ruling 5)", "    } else if data.is_empty() {\n        Figure::whole(21_000, GasSources::both(GasFrom::Estimate))\n    } else {\n        // the estimate with the value sent (T13b ruling 5)")],
+        T + " --test wallet",
+    ),
+    (
+        "B2-1: no transaction row still quoted",
+        [(GAS, "    let Some(tx) = tx_gas(chain, opt_in, tables) else {\n        return Ok(None);\n    };\n    let r = lookup_in", "    let tx = tx_gas(chain, opt_in, tables).unwrap_or(TxGas { intrinsic: 21_000, per_byte: 64, from: GasFrom::Chain });\n    let r = lookup_in")],
+        T + " --lib op::tests::no_transaction_row_no_figure",
+    ),
+    (
+        "B2-1: the L1 component not added",
+        [(QUO, "            q.gas_limit = own.saturating_add(super::gas::with_margin(l1));", "            q.gas_limit = own.max(l1 & 0);")],
+        T + " --lib op::tests::in_estimate_adds_the_l1_component",
+    ),
+    (
+        "B2-1: Linea's fees not taken",
+        [(QUO, "        Some(crate::L1Fee::Linea) => {", "        Some(crate::L1Fee::Linea) if false => {")],
+        T + " --test l1_fee linea_fees_are_linea_estimate_gas",
+    ),
+    (
+        "B2-1: an estimated send gets the L1 component again",
+        [(QUO, "        Some(crate::L1Fee::InEstimate) if !estimated => {", "        Some(crate::L1Fee::InEstimate) if estimated || !estimated => {")],
+        T + " --test l1_fee in_estimate_native_send_is_its_estimate",
+    ),
+    (
+        "B2-2: an op 7's decoys not drawn",
+        [(PQD, "    if decoys > 0 {\n        let (registry, pool)", "    if decoys > u32::MAX - 1 {\n        let (registry, pool)")],
+        T + " --test confidential_pqz pqz_op7_draws_its_decoys_from_the_line",
+    ),
+    (
+        "B2-3: no half-block share",
+        [(BLS, "    if profile.tx_gas_cap.is_none() && gas > block / 2 {", "    if profile.tx_gas_cap.is_none() && gas > block {")],
+        T + " --lib op::tests::",
+    ),
+    (
+        "B2-13: the verify row's margin dropped",
+        [(GAS, "            .map(|v| v.gas.saturating_add(v.margin))\n    })\n    .unwrap_or((app, GasFrom::App))", "            .map(|v| v.gas)\n    })\n    .unwrap_or((app, GasFrom::App))")],
+        T + " --lib op::gas::tests::verify_or_counts_the_margin",
+    ),
+    (
+        "B2-4: a log outside the filter taken",
+        [(REVM, "    match logs.iter().all(fits) {", "    match logs.iter().all(fits) || true {")],
+        T + " --test history history_refuses_logs_outside_the_filter",
+    ),
+    (
+        "B2-4: a log outside the range taken",
+        [(REVM, "        l.block_number.is_none_or(|b| (from..=to).contains(&b)) && filter.matches(&l.inner)", "        filter.matches(&l.inner)")],
+        T + " --test history history_refuses_logs_outside_the_filter",
+    ),
+    (
+        "B2-5: the operations by the id's text",
+        [(HIS, "r.chain == chain && id_word(&r.from).is_ok_and(|(w, _)| w == word)", "r.chain == chain && r.from.eq_ignore_ascii_case(&account)")],
+        T + " --test history operations_in_history",
+    ),
+    (
+        "B2-11: a disabled pqz read and proved first",
+        [(PQD, "                crate::op::kind_enabled(&evm(&sdk, &d.chain)?.0, \"pqz\")?;\n", "")],
+        T + " --test confidential_pqz a_disabled_pqz_refuses_before_any_read",
+    ),
+    (
+        "B2-12: a produced slot outside the range taken",
+        [("clients/scaas-rpc/src/solana.rs", "        if slots.iter().any(|s| !range.contains(s)) {", "        if slots.iter().any(|s| !range.contains(s) && false) {")],
+        R + " --test solana a_produced_slot_outside_the_range_is_refused",
+    ),
+    (
+        "B-16: submit takes the caller's data unchecked",
+        [("clients/scaas-sdk/src/wallet/native_evm.rs", "                let data = unhex(&q.data)?;\n                native_args(chain_id, &data)?;\n", "                let data = unhex(&q.data)?;\n")],
+        T + " --test wallet",
+    ),
+    (
+        "8b-4: the node reads a missing list as empty",
+        [(NAP, "            let Some(rows) = d[\"user_transactions\"].as_array().cloned() else {\n                bail!(\"indexer: AnswerMalformed: no user_transactions list\")\n            };", "            let rows = d[\"user_transactions\"].as_array().cloned().unwrap_or_default();")],
+        N + " adapters::aptos::tests::an_indexer_answer_without_its_list_is_malformed",
+    ),
+
 ]
 
 if __name__ == "__main__":

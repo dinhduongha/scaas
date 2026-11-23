@@ -99,7 +99,7 @@ fn gas_rows() -> GasRows {
             })
         })
         .collect();
-    GasRows {
+    with_tx(GasRows {
         base,
         verify: vec![GasVerify {
             line: Default::default(),
@@ -109,7 +109,7 @@ fn gas_rows() -> GasRows {
             margin: 0,
             per_item: None,
         }],
-    }
+    })
 }
 
 /// One party: an SDK over the shared fake chain with the repository seed imported, and its seed id.
@@ -617,4 +617,24 @@ async fn blob_bounds_and_the_cap() {
     let sig_len = auth.as_str().unwrap().len();
     println!("handoff cap: the largest signed operation's signature {sig_len} B, its blob {} B, the cap {HANDOFF_MAX} B", big.len());
     assert!(big.len() * 10 < HANDOFF_MAX, "a tenth of the cap");
+}
+
+/// `rows` with the transaction row at Ethereum's figures (T26 B2-1: the SDK carries no gas figure; a test's table does).
+fn with_tx(mut rows: scaas_sdk::GasRows) -> scaas_sdk::GasRows {
+    rows.base.push(scaas_sdk::GasBase {
+        entry: "transaction".into(),
+        kind: "evm".into(),
+        fresh: false,
+        gas: 21_000,
+        per_byte: Some(scaas_sdk::GasPerByte {
+            input: "calldata".into(),
+            gas: 64,
+        }),
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
+        regular: None,
+    });
+    rows
 }

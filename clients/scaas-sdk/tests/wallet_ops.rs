@@ -574,7 +574,7 @@ fn gas_rows() -> GasRows {
             })
         })
         .collect();
-    GasRows {
+    with_tx(GasRows {
         base,
         // every signer kind the SDK accepts: a second signature of an unknown kind takes the dearest (ruling 4)
         verify: [0u16]
@@ -591,7 +591,7 @@ fn gas_rows() -> GasRows {
                 per_item: None,
             })
             .collect(),
-    }
+    })
 }
 
 /// `carried`, waited for (≤ 5 s): the simulation and the send run after `submit` returns (ruling A).
@@ -1490,4 +1490,24 @@ async fn smart_execute_decoded_only() {
             .unwrap();
         assert!(p.opaque(), "under the marker: flagged");
     }
+}
+
+/// `rows` with the transaction row at Ethereum's figures (T26 B2-1: the SDK carries no gas figure; a test's table does).
+fn with_tx(mut rows: scaas_sdk::GasRows) -> scaas_sdk::GasRows {
+    rows.base.push(scaas_sdk::GasBase {
+        entry: "transaction".into(),
+        kind: "evm".into(),
+        fresh: false,
+        gas: 21_000,
+        per_byte: Some(scaas_sdk::GasPerByte {
+            input: "calldata".into(),
+            gas: 64,
+        }),
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
+        regular: None,
+    });
+    rows
 }
