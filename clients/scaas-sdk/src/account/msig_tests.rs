@@ -61,13 +61,14 @@ struct T {
 }
 
 async fn setup(registry: &str, genesis: Option<&str>) -> T {
-    setup_auth(registry, genesis, None).await
+    setup_auth(registry, genesis, None, true).await
 }
 
 async fn setup_auth(
     registry: &str,
     genesis: Option<&str>,
     authenticator: Option<Arc<dyn crate::platform::Authenticator>>,
+    pinned_reads: bool,
 ) -> T {
     let chain = fake();
     if let Some(g) = genesis {
@@ -101,7 +102,7 @@ async fn setup_auth(
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
-        pinned_reads: true,
+        pinned_reads,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -810,7 +811,7 @@ impl crate::platform::Authenticator for Se {
 #[tokio::test(flavor = "multi_thread")]
 async fn msig_members_apart() {
     let se = Arc::new(Se::default());
-    let t = setup_auth(REGISTRY, None, Some(se.clone())).await;
+    let t = setup_auth(REGISTRY, None, Some(se.clone()), true).await;
     let policy = crate::platform::KeyPolicy {
         biometry_current_set: true,
         invalidated_by_enrollment: true,
@@ -1183,8 +1184,16 @@ async fn imported_evm_key_is_a_native_member() {
 /// are refused, each beside its control.
 #[tokio::test(flavor = "multi_thread")]
 async fn msig_on_a_two_generation_line() {
+    for pinned in [true, false] {
+        msig_line(pinned).await;
+    }
+}
+
+/// [`msig_on_a_two_generation_line`] on a chain with pinned reads, and on one without (owner 2026-11-23, "Sticky endpoint":
+/// Moonbeam's profile; the same views by the sticky read, where `PinnedReadsUntrusted` refused them before).
+async fn msig_line(pinned: bool) {
     const G1: &str = "0x5ca00000000000000000000000000000000000c1";
-    let t = setup(REGISTRY, None).await;
+    let t = setup_auth(REGISTRY, None, None, pinned).await;
     let kd = MsigStructure {
         threshold: 1,
         members: vec![MsigMember {

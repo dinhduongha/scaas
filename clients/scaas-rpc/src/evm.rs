@@ -917,6 +917,10 @@ pub struct TxAt {
     pub nonce: u64,
 }
 
+/// The tries of a sticky read ([`EvmPool::read_sticky`]) before `HeadMoving` (owner 2026-11-23: a small N; 3 covers a head
+/// that moves once or twice during one read at a block time of seconds).
+pub const STICKY_TRIES: usize = 3;
+
 /// Every request of a pinned read names its block by hash (EIP-1898, `requireCanonical`).
 pub fn pinned(at: &ReadAt<B256>) -> alloy::eips::BlockId {
     alloy::eips::BlockId::Hash(alloy::eips::RpcBlockHash {
@@ -979,6 +983,73 @@ impl EvmPool {
         })
     }
 
+    /// Whether this pool's pinned reads are trusted (the profile's `pinnedReads`).
+    pub fn pinned_reads(&self) -> bool {
+        self.pinned_reads
+    }
+
+    /// The block a request of read `at` names: its hash ([`pinned`]); `latest` on a pool without pinned reads, whose only
+    /// reads are [`EvmPool::read_sticky`]'s.
+    fn block_of(&self, at: &ReadAt<B256>) -> alloy::eips::BlockId {
+        if self.pinned_reads {
+            pinned(at)
+        } else {
+            alloy::eips::BlockId::latest()
+        }
+    }
+
+    /// The sticky read (owner 2026-11-23, "Sticky endpoint"; a chain whose pinned reads are not trusted, the profile's
+    /// `pinnedReads` false): every call of `f` goes to one endpoint at its latest block (on such a pool each request names
+    /// `latest`), that endpoint's head (number and hash) read before and after; a moved head retries the whole read, at most
+    /// [`STICKY_TRIES`] times, then `HeadMoving`. It never mixes nodes: each try is one endpoint, failing over as a plain read.
+    /// A read that feeds a decryption, and `strict_majority` (no agreement without a pin), are `PinnedReadsUntrusted`.
+    pub async fn read_sticky<T, F, Fut>(
+        &self,
+        purpose: Purpose,
+        f: F,
+    ) -> Result<Agreed<T, B256>, RpcError>
+    where
+        F: Fn(ReadAt<B256>) -> Fut,
+        Fut: Future<Output = Result<T, ReadError>>,
+    {
+        if purpose == Purpose::FeedsDecryption
+            || self.pool.policy() == crate::Policy::StrictMajority
+        {
+            return Err(RpcError::PinnedReadsUntrusted);
+        }
+        let f = &f;
+        for _ in 0..STICKY_TRIES {
+            let a = self
+                .pool
+                .failover(self, purpose, |i| async move {
+                    let head = || async move {
+                        let n = self.named(i, BlockChoice::Latest, None).await?;
+                        Ok::<_, EndpointFailure>((n, self.header(i, n, None).await?))
+                    };
+                    let (number, hash) = head().await?;
+                    let v = f(ReadAt {
+                        endpoint: i,
+                        number,
+                        hash,
+                        deadline: None,
+                    })
+                    .await?;
+                    Ok((head().await? == (number, hash)).then_some((v, number, hash)))
+                })
+                .await?;
+            if let Some((value, number, hash)) = a.value {
+                return Ok(Agreed {
+                    value,
+                    number,
+                    hash,
+                    members: vec![a.endpoint],
+                    highest_named: number,
+                });
+            }
+        }
+        Err(RpcError::HeadMoving)
+    }
+
     /// `eth_call` at the read's block (by hash).
     pub async fn call_at(
         &self,
@@ -989,7 +1060,7 @@ impl EvmPool {
         let tx = TransactionRequest::default().with_to(to).with_input(data);
         self.at(at.endpoint, at.deadline)
             .call(tx)
-            .block(pinned(at))
+            .block(self.block_of(at))
             .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
@@ -1002,7 +1073,7 @@ impl EvmPool {
     ) -> Result<alloy::primitives::U256, ReadError> {
         self.at(at.endpoint, at.deadline)
             .get_storage_at(who, slot)
-            .block_id(pinned(at))
+            .block_id(self.block_of(at))
             .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
@@ -1010,7 +1081,7 @@ impl EvmPool {
     pub async fn code_at(&self, at: &ReadAt<B256>, who: Address) -> Result<Bytes, ReadError> {
         self.at(at.endpoint, at.deadline)
             .get_code_at(who)
-            .block_id(pinned(at))
+            .block_id(self.block_of(at))
             .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
@@ -1022,7 +1093,7 @@ impl EvmPool {
     ) -> Result<alloy::primitives::U256, ReadError> {
         self.at(at.endpoint, at.deadline)
             .get_balance(who)
-            .block_id(pinned(at))
+            .block_id(self.block_of(at))
             .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
@@ -1071,7 +1142,7 @@ impl EvmPool {
     pub async fn nonce_at_block(&self, at: &ReadAt<B256>, who: Address) -> Result<u64, ReadError> {
         self.at(at.endpoint, at.deadline)
             .get_transaction_count(who)
-            .block_id(pinned(at))
+            .block_id(self.block_of(at))
             .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }

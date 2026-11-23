@@ -35,6 +35,7 @@ VLT = "clients/scaas-sdk/src/vault/mod.rs"
 ROOTS = "clients/scaas-sdk/src/vault/roots.rs"
 POL = "clients/ua-rs/src/wallet/policy.rs"
 PQC = "clients/ua-rs/src/wallet/pqchat.rs"
+REVM = "clients/scaas-rpc/src/evm.rs"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
@@ -343,6 +344,36 @@ MUTANTS = [
         "A-8: a PqChat record by its name alone",
         [(PQC, "            .is_some_and(|t| t.encode_type() == td.encode_type())", "            .is_some_and(|_| true)")],
         U + " --test app_core pqchat_sign_records_only",
+    ),
+    (
+        "Sticky: no retry of a moved head",
+        [(REVM, "        for _ in 0..STICKY_TRIES {", "        for _ in 0..1 {")],
+        R + " --test evm_profiles a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head",
+    ),
+    (
+        "Sticky: the head not read again",
+        [(REVM, "                    Ok((head().await? == (number, hash)).then_some((v, number, hash)))", "                    Ok(Some((v, number, hash)))")],
+        R + " --test evm_profiles a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head",
+    ),
+    (
+        "Sticky: a request named by a made-up pin",
+        [(REVM, "        if self.pinned_reads {\n            pinned(at)\n        } else {\n            alloy::eips::BlockId::latest()\n        }", "        pinned(at)")],
+        R + " --test evm_profiles a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head",
+    ),
+    (
+        "Sticky: a read feeding a decryption served",
+        [(REVM, "        if purpose == Purpose::FeedsDecryption\n            || self.pool.policy()", "        if self.pool.policy()")],
+        R + " --test evm_profiles a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head",
+    ),
+    (
+        "Sticky: strict majority served",
+        [(REVM, "            || self.pool.policy() == crate::Policy::StrictMajority\n", "            || false\n")],
+        R + " --test evm_profiles a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head",
+    ),
+    (
+        "Sticky: read_line pinned on every chain",
+        [(LINE, "    Ok(if pool.pinned_reads() || choice != BlockChoice::Latest {", "    Ok(if true {")],
+        T + " --lib account::msig::tests::msig_on_a_two_generation_line",
     ),
 ]
 
