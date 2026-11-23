@@ -267,6 +267,16 @@ MUTANTS = [
         [(SYN, "            .spawn(move || store.unlock(token));", "            .spawn(move || {\n                if tokio::runtime::Handle::try_current().is_ok() {\n                    store.unlock(token)\n                }\n            });")],
         T + ",sync-api --lib sync_cpp::tests::a_lock_is_released_wherever_it_is_dropped",
     ),
+    (
+        "A-3 (b): a KEM wrap of a rooted key",
+        [(APK, "        if key.rooted {\n            return Err(Error::AppKeyRooted);\n        }\n        let (mlkem_ct, x25519_eph, ss)", "        let (mlkem_ct, x25519_eph, ss)")],
+        U + " --test app_core the_app_root_and_its_derivations_are_never_kem_wrapped",
+    ),
+    (
+        "A-3 (b): the SDK's kem_wrap_to_key of a rooted key",
+        [(APK, "        if key.rooted {\n            return Err(Error::AppKeyRooted);\n        }\n        let (mlkem_ct, x25519_eph, ss)", "        let (mlkem_ct, x25519_eph, ss)")],
+        T + " --test app_core the_app_root_never_leaves_by_a_kem_wrap",
+    ),
 ]
 
 if __name__ == "__main__":

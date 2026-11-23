@@ -345,14 +345,16 @@ KEM-unwrapped key, a derived key, an Argon2id output stay in `ua-rs` behind hand
 `KeyWrap`, refused for any other use) without `Clone`, `Debug` or a byte accessor, scoped to their app core and released
 by `destroy` or at the seed's lock; wrap, unwrap, HKDF, HMAC, Argon2id, AEAD and key sealing (under a key-wrap constant no
 data seal produces) run in `ua-rs` on them; the only bytes that leave are plaintexts the app core asks to decrypt for the
-user; `seal_key` refuses the app root key and every key derived from it (`AppKeyRooted`; owner ruling A-3, 2026-11-23,
-"Restrict (1) only", BUILT, `the_app_root_and_its_derivations_are_never_sealed_out`): sealed under a key the caller can
-compute (an Argon2id output of its password and what it derives) the root would leave as bytes; the wraps a format pins
+user; the app root key and every key derived from it never leave, by any path: `seal_key` and every KEM wrap (`kem_wrap`,
+`kem_wrap_to_key`, their vectors twins, `pqchat_wrap`) refuse them (`AppKeyRooted`; owner ruling A-3, 2026-11-23,
+"Restrict (1) only", BUILT, review T26 A-3 (b), `the_app_root_and_its_derivations_are_never_sealed_out`,
+`the_app_root_and_its_derivations_are_never_kem_wrapped`, `the_app_root_never_leaves_by_a_kem_wrap`): sealed under a key
+the caller can compute, or wrapped to a KEM key it chose, the root would leave as bytes; the wraps a format pins
 seal drawn keys and keys derived from them (PqVault's `keyWrap` of an earlier epoch key, [pqvault spec §6.x
 `sealedInfo.prev`](../superpowers/specs/2026-11-17-pqvault.md), VC24; its `file` item's key under `kFile`, the same spec's
-item types), so none is refused. The limit kept by the same ruling: `kem_wrap_to_key` wraps any key the app core holds a
-handle to towards a KEM public key it chose (for an offline recipient not yet on chain), so an app core can export such a
-key to a key pair of its own; labels stay under the core's own declared prefixes, no two cores' prefixes overlapping. Scoping avoids collisions; it
+item types), so none is refused. The limit kept by the same ruling: `kem_wrap_to_key` wraps a **drawn** key (an epoch, vault or file
+key, or a key derived from one) towards a KEM public key the app core chose (an offline recipient not yet on chain), so an
+app core can export such a key to a key pair of its own; never the root or a key derived from it; labels stay under the core's own declared prefixes, no two cores' prefixes overlapping. Scoping avoids collisions; it
 does not isolate: an app holding the user's unlocked seed set acts for that UA in every app namespace, so only reviewed app
 cores are linked. (2) The app signing call takes typed data, never a digest, and signs only a portable record under
 `appPurpose(appId)` whose domain is exactly `name, version, salt` with `salt = appId`, or a chain-bound record under the

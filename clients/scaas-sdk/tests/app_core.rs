@@ -1157,3 +1157,39 @@ async fn scope_after_lock_and_unlock() {
         "KeyRevoked" | "AppHandleForeign"
     ));
 }
+
+/// Owner ruling A-3 (2026-11-23), review T26 A-3 (b): the app root and its derivations never leave, by any path: neither
+/// `seal_key` nor a KEM wrap to a key the caller chose (`AppKeyRooted`), the root and a key derived from it alike. The twin
+/// the ruling keeps: a drawn key (an epoch, vault or file key) wraps to a caller's KEM key for an offline recipient.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_app_root_never_leaves_by_a_kem_wrap() {
+    let (s, seed) = sdk().await;
+    let a = AppCore::new(s.clone(), desc(Some(APP_ID), &["scaas/appc/v1/"])).unwrap();
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let kem_pk = w.ua_key(0x0131, 0, 0).unwrap().kem_key(0).unwrap().kem_pk();
+    let label = b"scaas/appc/v1/wrap".to_vec();
+    let root = a.app_root_key(ua(&seed, 0x0108)).unwrap();
+    let child = a
+        .derive(
+            vec![root.clone()],
+            vec![],
+            label.clone(),
+            b"c".to_vec(),
+            AppKeyUsage::Derive,
+            false,
+        )
+        .unwrap();
+    for (what, k) in [("root", root), ("derived", child)] {
+        assert_eq!(
+            code(a.kem_wrap_to_key(kem_pk.clone(), k, label.clone(), b"ctx".to_vec())),
+            "AppKeyRooted",
+            "{what}"
+        );
+    }
+    let epoch = a.random_key(&seed, AppKeyUsage::Derive).unwrap();
+    assert!(
+        a.kem_wrap_to_key(kem_pk, epoch, label, b"ctx".to_vec())
+            .is_ok(),
+        "a drawn key wraps to a caller's KEM key"
+    );
+}

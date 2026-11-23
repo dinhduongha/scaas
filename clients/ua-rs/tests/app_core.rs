@@ -1752,3 +1752,32 @@ fn the_app_root_and_its_derivations_are_never_sealed_out() {
     );
     assert!(k.seal_key(&under, &file, b"").is_ok(), "a drawn file key");
 }
+
+/// Review T26 A-3 (b): no KEM wrap carries the app root or a key derived from it to any KEM key (`AppKeyRooted`), the vectors
+/// twin with its fixed randomness too. The twin: a drawn key wraps to the same KEM key.
+#[test]
+fn the_app_root_and_its_derivations_are_never_kem_wrapped() {
+    let (_w, k) = keys();
+    let kem = KemKeyPair::vectors_ephemeral(&[3u8; 96]).unwrap();
+    let pk = kem.kem_pk();
+    let root = k.app_root_key(&[1; 32], &[2; 32]).unwrap();
+    let child = k
+        .derive(&[&root], b"", b"c", KeyUsage::Derive, false)
+        .unwrap();
+    for (what, key) in [("root", &root), ("derived", &child)] {
+        assert_eq!(
+            k.kem_wrap(key, b"l", b"a", &pk).err().map(|e| e.code()),
+            Some("AppKeyRooted"),
+            "{what}"
+        );
+        assert_eq!(
+            k.vectors_kem_wrap(key, b"l", b"a", &pk, &[4; 32], &[5; 32])
+                .err()
+                .map(|e| e.code()),
+            Some("AppKeyRooted"),
+            "{what}: vectors"
+        );
+    }
+    let epoch = k.random_key(KeyUsage::Derive).unwrap();
+    assert!(k.kem_wrap(&epoch, b"l", b"a", &pk).is_ok(), "a drawn key");
+}

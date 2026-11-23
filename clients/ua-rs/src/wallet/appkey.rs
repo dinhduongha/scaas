@@ -475,6 +475,11 @@ impl AppKeys {
         e: &[u8; 32],
     ) -> Result<KemWrap> {
         self.check(key)?;
+        // owner ruling A-3 (review T26 A-3 (b)): the app root and its derivations never leave, to no KEM key either; every
+        // KEM wrap (`kem_wrap`, its vectors twin, `pqchat_wrap`) comes through here
+        if key.rooted {
+            return Err(Error::AppKeyRooted);
+        }
         let (mlkem_ct, x25519_eph, ss) = super::kem::encaps(kem_pk, m, e)?;
         let kek = wrap_kek(&ss, label, aad, kem_pk)?;
         let sealed_key = aead_seal(Alg::Aes256Gcm, &kek, &[0; 12], aad, &self.bytes(key)?[..])?;
@@ -487,6 +492,8 @@ impl AppKeys {
 
     /// `key` wrapped to the KEM key `kem_pk` (a UA's at a version the caller read, or a fresh ephemeral one): the FIPS 203
     /// §7.2 checks on `kem_pk` (`KemCheck`), the KEK's info `label ‖ aad ‖ 0x01 ‖ keccak256(kem_pk)` built here.
+    /// `AppKeyRooted` for the app root key or a key derived from it (owner ruling A-3): only drawn keys and their derivations
+    /// leave wrapped.
     pub fn kem_wrap(
         &self,
         key: &KeyHandle,
