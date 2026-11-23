@@ -1,5 +1,5 @@
 # t2 mutants (name | outcome | commit | test | first failure line)
-drop the revision check | killed | bda67c257 | ../../scripts/capped cargo test --locked --offline -j2 --test store revisions_per_item | panicked at tests/store.rs:23:5:
-one revision for all items | killed | bda67c257 | ../../scripts/capped cargo test --locked --offline -j2 --test store revisions_per_item | panicked at tests/store.rs:26:5:
-let an error carry its input | killed | bda67c257 | ../../scripts/capped cargo test --locked --offline -j2 --test errors no_error_or_log_line_holds_an_input | panicked at tests/errors.rs:114:9:
+drop the revision check | killed | c2c20ab4d | ../../scripts/capped cargo test --locked --offline -j2 --test store revisions_per_item | panicked at tests/store.rs:23:5:
+one revision for all items | killed | c2c20ab4d | ../../scripts/capped cargo test --locked --offline -j2 --test store revisions_per_item | panicked at tests/store.rs:26:5:
+let an error carry its input | killed | c2c20ab4d | ../../scripts/capped cargo test --locked --offline -j2 --test errors no_error_or_log_line_holds_an_input | panicked at tests/errors.rs:114:9:
 3 mutants, 3 killed, 0 survived, 0 not loaded, 0 other failure
