@@ -1,0 +1,33 @@
+docs | be65f696e | 0 | check: 0 error(s), 7 warning(s), 16 note(s)
+fmt | be65f696e | 0 | -
+forge-account | be65f696e | 0 | forge: 103 passed, 0 failed
+forge-as | be65f696e | 0 | forge: 568 passed, 0 failed
+forge-confidential | be65f696e | 0 | -
+forge-factory | be65f696e | 0 | -
+forge-fork | be65f696e | 0 | -
+forge-gas | be65f696e | 0 | forge: 406 passed, 0 failed
+forge-governance | f1e5f946d | 0 | forge: 942 passed, 0 failed
+forge-hedera | be65f696e | 0 | forge: 20 passed, 0 failed
+forge-liquidity | be65f696e | 0 | forge: 93 passed, 0 failed
+forge-merge | be65f696e | 0 | forge: 350 passed, 0 failed
+forge-metatx | be65f696e | 0 | forge: 549 passed, 0 failed
+forge-modules | be65f696e | 0 | forge: 35 passed, 0 failed
+forge-p6f | be65f696e | 0 | -
+forge-pqchat | be65f696e | 0 | forge: 196 passed, 0 failed
+forge-pqvault | be65f696e | 0 | forge: 94 passed, 0 failed
+forge-pqz | be65f696e | 0 | forge: 694 passed, 0 failed
+forge-pqzh | be65f696e | 0 | forge: 42 passed, 0 failed
+forge-research | be65f696e | 0 | forge: 360 passed, 0 failed
+forge-top | be65f696e | 0 | forge: 29 passed, 0 failed
+forge-ua | be65f696e | 0 | forge: 1044 passed, 0 failed
+forge-v2 | be65f696e | 0 | forge: 756 passed, 0 failed
+forge-wallet | be65f696e | 0 | forge: 185 passed, 0 failed
+forge-wrap | be65f696e | 0 | forge: 324 passed, 0 failed
+forge-zether | be65f696e | 0 | forge: 478 passed, 0 failed
+mutants | be65f696e | 0 | -
+sets-sensitive | f1e5f946d | 1 | not run: the lanes never started (7 GB available, each lane asks 6 + 4 GB; other sessions on the machine)
+size | be65f696e | 0 | size gate: 0 error(s), 181 contracts
+uagas | be65f696e | 0 | forge: 29 passed, 0 failed
+mutants-run | be65f696e | 0 | 41 of 41 killed (2026-11-23-pqchat-treekem-t3b-mutants.txt; M2, M6, M14 survived the first run, their tests added, re-run killed)
+left: sets-sensitive and sets-modules at the three other sets (at-set.sh others sensitive / modules through the lanes): re-run with the machine free (gates.sh sets-sensitive sets-modules)
+left: T3c pins the gas fixtures, the views (treeOf, treeLeaves, goneOf, goneKeyOf, goneOwnKeyOf, commitOf, pathListOf, pathKeys, pathCtAt) and the leaveAt / leaveSig / removalAt decoding of the tree records
