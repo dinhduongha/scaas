@@ -5,9 +5,11 @@
 
 **Status (2026-11-23):** PLANNED, nothing built. **UNAUDITED.** Revision 3, after two review rounds by Codex and Fable and a
 third, focused round by Fable (`fable-r3-n`), whose fixes moved no record, typehash or derivation; then the owner's R16
-(the key no-return set two-level), a contract rule and storage change that moved none either.
+(the key no-return set two-level), a contract rule and storage change that moved none either; then a third round by
+Codex (`codex-r3-n`: 0 P0, 6 P1, 6 P2, 1 P3), fixed in place: no record, typehash, derivation or view moved, one check
+added to `commit`'s acceptance (T3b).
 Spec [`2026-11-23-pqchat-treekem.md`](../specs/2026-11-23-pqchat-treekem.md) (cited "spec §n", its rulings "R1"–"R16", its
-controller calls "C1"–"C36"; a review finding by its id, `codex-n`, `fable-n`, `codex-r2-n`, `fable-r2-n`, `fable-r3-n`); research
+controller calls "C1"–"C38"; a review finding by its id, `codex-n`, `fable-n`, `codex-r2-n`, `fable-r2-n`, `fable-r3-n`, `codex-r3-n`); research
 [`2026-11-23-treekem-pqchat.md`](../../research/2026-11-23-treekem-pqchat.md).
 
 **Owner rulings (2026-11-23, owner: yes):** minimal mode 1 is built now, before the pre-freeze tag: a commit with UpdatePath, Add
@@ -98,6 +100,13 @@ foreground.
 - [x] The owner's R16 (after round 3, on the controller's finding of a front-running burn): the key no-return set two-level
       in the spec (§1, §2 C28, §6 to §11, §13 to §17), the component docs and decisions; no record, typehash or derivation
       moved.
+- [x] Third review by Codex on that tree (`ddf3a92cb`; rework before the recovery vectors and the gas bounds freeze; 0 P0,
+      6 P1, 6 P2, 1 P3; R16 and both readings of C28 judged sound), fixed in place: the two ranges of replay, the
+      comparison at the pin, the warning's roster and its empty-path test, the prepared creation, the completion's gas
+      recomputed (352 new slots, 49.1 M asked at the bounds), an admin's new info after a gap, R16's guarantee worded,
+      the lookup behind the Add warning, `admins` against the UAs a commit evicts, the closed session (C38), the order
+      of the pieces (C37), the `treeLeaves` measurement. **No record, typehash, derivation or view moved: T1a's rows and
+      T3a's module stand.** New work lands in T1b, T2, T3b, T3c, T4, T5, T6a and T6b below.
 
 ### T1a. clientkeys: records, tree math, hashes (`clients/clientkeys`)
 
@@ -117,7 +126,7 @@ foreground.
       (B registers A's public key as its own version, adds it by a plain commit, takes it out: only `(B, kemHash)` is set,
       B's re-add is `PqChatTreeOwnKeyReturn`, A's Add is accepted); **the front-running loop** (B repeats it on each of A's
       next keys: every one of A's Adds after B's churn is accepted; B holding keys live blocks at most `KEYS_PER_UA_MAX` of
-      them, and an admin's Remove of one such leaf while B keeps another frees it at the pair level); **the burn by leave**
+      them at a time (occupancy, no priority for A; wording only, the rows stand: codex-r3-8), and an admin's Remove of one such leaf while B keeps another frees it at the pair level); **the burn by leave**
       (B holds A's key, then `treeLeave`, `treeRemove`, or an admin's commit that leaves B no leaf: the `kemHash` of every
       key B's leaves held enters the session-wide set, A's Add of it is `PqChatTreeKeyReturn` under any UA, B's Add is
       `PqChatTreeReturn`, keys B took out earlier stay pairs); the replacement of a UA's only key in one commit (the old key
@@ -142,8 +151,10 @@ foreground.
       schedule without `init` (`ctx` with `parentTreeHash`, `joiner`, `S`, `K`; epoch 0 under `genesisCtx`), the tree wrap
       label, the info marker and the info in force (C33), building and processing a commit, the joiner's path, the roster by
       undo with the rights evidence, replay with its fixed read list (spec §5, §10).
-- [ ] **Creation in order (codex-r2-4):** a test builds a session from `genesisCtx` to the signature with no placeholder, and
-      a fresh store recovers `K_0` and every wrap from the stored record alone.
+- [ ] **Creation in order (codex-r2-4):** a test builds a session from `genesisCtx` to the signature with no placeholder; on
+      a **completed** genesis a fresh store recovers `K_0` from its own wrap read back from state, and every stored wrap
+      matches `wrapHashes`. No test rebuilds a wrap: the signed ciphertexts are made once (codex-r3-5; the incomplete
+      creation is T6a's).
 - [ ] Rows `secrets`, `pathCt`, `schedule`, and `scenario`: create (3 UAs, one with 2 keys) → commit by B → Add of a UA →
       **a commit by a third member, outside the new member's subtree, right after the Add** (codex-5, fable-5) → a commit by
       the new member → `treeRemove` then a commit → Remove by `(ua, keyId)`; per step every record, piece, tree hash, roster, and
@@ -155,14 +166,28 @@ foreground.
       epochs** and is not restored by the commit that restores the others (fable-r2-7).
 - [ ] Rows of round 2: a commit from a device's own `(ua, keyId)` that the seed does not reproduce → the compromise warning,
       not "not followed" (fable-r2-1); a same-id twin of the head with another `treeHash` → refused by the pinned record hash,
-      and `ps[0]` differs (fable-r2-4, codex-r2-11); a refresh by a device two epochs behind seals the marker and the info in
-      force stays (codex-r2-3, fable-r2-5); a non-admin's changed info is ignored; an epoch-0 head served with a leaf outside
+      and `ps[0]` differs (fable-r2-4, codex-r2-11); a refresh by a device two epochs behind seals the marker; that device has **no info in force** from its gap on, and
+      the members that followed keep theirs (codex-r2-3, fable-r2-5, codex-r3-7); a non-admin's changed info is ignored; an epoch-0 head served with a leaf outside
       the signed members and a matching root → refused before encryption (codex-r2-1); a `PqChatTreeLeave` and a
       `PqChatTreeRemove` of a twin session at another home → another digest (codex-r2-5); `sealedInfo` of the 4,096-B bucket
       (4,124 B) at genesis and in a commit, and the next bucket refused (codex-r2-13).
 - [ ] Row of round 3 (fable-r3-1): an admin changes the info in epoch `e`; a device does not follow `e`, follows the next
       commit (a non-admin's, from its sibling side), then commits (a new device key) → it seals **the marker**, and the
       retired info appears in no later record; a control in which it followed `e` seals the full info.
+- [ ] Rows of Codex's round 3, each with its control:
+      **the retired key (codex-r3-1):** a key joins at 2, is removed at 5, the head is 9, with Adds and Removes of other
+      UAs in 6 to 9; the read list is the records of 1 to 9, the ciphertexts of 2 to 4 and nothing at 5; the rosters of
+      2 to 4 by undo from the head equal the scenario's; the same for a **genesis** key taken out (`members[i]`, wrap
+      `i`, no record before 0);
+      **the twin outside the tree (codex-r3-2):** two signed records with one id, one parent and one `treeHash` and
+      another `sealedInfo`: two `hashStruct`s, and the true child fits both;
+      **the foreign commit that adds a leaf (codex-r3-3):** an own-UA commit the seed does not reproduce, which also adds
+      a second leaf of that UA; after a refresh that leaf is still a target; after the commit that removes it, it is not;
+      **the empty path (codex-r3-4):** the last live leaf's commit built from another seed under the UA's signature →
+      `sealedInfo` does not open under the derived `K` → the compromise warning; built from the seed → followed; the
+      same record with a byte changed → "read corrupted", neither state;
+      **the info after a gap (codex-r3-7):** every admin device behind → markers only; an admin establishes a new info
+      → the members take it as a changed info; the cached old info is sealed by no automatic step.
 - [ ] Negative rows with the expected named result: a wrong target, a wrong `treeHash`, a list that does not hash, a node key
       that does not match its secret, a Welcome that disagrees with the path, a `sealedInfo` that does not open, a valid
       substituted leaf key with the tree unchanged (codex-1), a fetched ciphertext or key altered with the signature unchanged
@@ -174,7 +199,9 @@ foreground.
       ciphertext `aad` without the target; `ctx` without `parentTreeHash`; epoch 0 under `treeId`; a refresh that re-seals
       the last info read; **the gap ignored** (a device that follows again keeps the info it held before the epoch it missed; fable-r3-1); the compromise warning folded into "not followed"; a tree wrap under the flat label; a processed commit that skips the derived-key
       comparison; a joiner that skips its path ciphertext (the third-member row must fail); a ciphertext index chosen from the
-      held secrets instead of the list (the read list of the failing member must differ and the test must see it).
+      held secrets instead of the list (the read list of the failing member must differ and the test must see it); **the
+      undo stopped at the key's `endEpoch`** (the retired-key row must fail); **the own-commit test on node keys only**
+      (the empty-path row must fail); a ciphertext opened at `endEpoch`.
 
 ### T2. `ua-rs`: the tree behind handles (`clients/ua-rs`)
 
@@ -188,7 +215,8 @@ foreground.
       `PqChatCommit` digest from outside. The same for `PqChatTreeLeave` and `PqChatTreeRemove`: named operations whose
       review shows the `treeId` and "cannot come back" (C30, R14).
 - [ ] The epoch-0 tree rebuilt from the signed member list (codex-r2-1); the own-commit check that yields the compromise
-      warning (R10), in its two cases with their remedies (fable-r3-5); a device key per UA or random, never one key under two UAs (R14).
+      warning (R10), in its two cases with their remedies (fable-r3-5): to reproduce is node keys **and** `sealedInfo`, the empty
+      path included (codex-r3-4); a device key per UA or random, never one key under two UAs (R14).
 - [ ] **The registry KEM record check (codex-1, spec §8 step 4):** key data hashes to the UA; a version above 0 by its kept
       signature over `kemRecordDigest`; version 0 by the registration's committed hash. Encapsulation takes only a key that
       passed. Tests: each form accepted; a substituted valid key refused; a record signed by another UA refused.
@@ -234,7 +262,16 @@ foreground.
       `addPath`; `addWraps` and `postMessage` forwarded for a tree session; `treeLeave` and `treeRemove` (`treeId`, `gone`,
       `owed` for both, C21, `PqChatTreeAdmins` with its exemption); `leave` and `remove` refused on a tree session;
       `Epoch.wraps` = pieces + 1 (C20); completion steps 1–5 in order, all or nothing, also from `commit` itself, writing
-      `gone` and each removed key at its level, `goneOwnKey` or `goneKey`, judged after the Adds (R16).
+      `gone` and each removed key at its level, `goneOwnKey` or `goneKey`, judged after the Adds (R16); **`admins` judged
+      against the prospective `gone` set at acceptance** (`gone` plus every UA the commit leaves with no leaf:
+      `PqChatRemovedKept`; codex-r3-10).
+- [ ] Tests of Codex's round 3: an admin's commit that removes another admin's last leaf and keeps it in `admins` is
+      refused at acceptance with no state written; the same commit without that UA in `admins` completes and the UA is
+      `gone`; the same Remove with an Add of that UA's new key and the UA kept in `admins` completes (codex-r3-10).
+      **The closed session (C38, codex-r3-11):** the only member left leaves, and two members leave on one head: the
+      record is accepted; a commit by anyone is `PqChatNotMember`, a message refused; `goneOf` is set, `goneKeyOf` and
+      `goneOwnKeyOf` are unset for those leaves, `treeLeaves` and `treeOf` are as before with `owed` above 0; control:
+      with one member left that is not `gone`, its commit honours the leaves and completes.
 - [ ] Tests of round 2: each of a wrong `treeHash`, `ctCount`, path length and a kept removed UA **refused at acceptance with
       no state written** (fable-r2-3), and the same record accepted when right; a `treeRemove` landed between acceptance and
       completion fails step 1; a wrong `parentTreeHash` (codex-r2-11); an Add of a `gone` UA after a leave, after a
@@ -251,8 +288,10 @@ foreground.
       `PqChatTreeOwnKeyReturn(B, kemHash)`; A's Add of that key (by an admin, and by A's own plain commit when A is a
       member) is accepted. (2) **The front-running loop is impossible:** B repeats (1) on A's next three keys, each before
       A's Add; each of A's Adds after B's churn is accepted; with B at `KEYS_PER_UA_MAX` live keys, A's Add of a key B
-      holds is `PqChatTreeKeyLive` and A's next key, which B cannot add without taking one out, is accepted; an admin's
-      Remove of one held leaf while B keeps another writes only the pair and A then adds that key. (3) **The burn by leave works once and excludes B:** B holds A's key,
+      holds is `PqChatTreeKeyLive`; **after B releases that key while it stays a member (B takes it out, or an admin
+      removes that leaf while B keeps another), only the pair is written and A's Add of it is accepted; an Add that still
+      collides with a live leaf is refused, also when B takes one key out and adds A's next key in the same commit.** The
+      bound of eight is on the keys B holds at once and gives A no priority (codex-r3-8). (3) **The burn by leave works once and excludes B:** B holds A's key,
       then `treeLeave(B)` and the honouring commit: `goneKeyOf(kemHash)` is set, A's Add of it is `PqChatTreeKeyReturn`
       under A and under a third UA, an Add of B is `PqChatTreeReturn`, B can neither post nor commit, a key B took out
       before its leave stays a pair (A adds it); the same with `treeRemove(B)` and with an admin's commit that leaves B no
@@ -286,30 +325,39 @@ foreground.
       only (the leave test must fail); the pair set unchecked at an Add (B's re-add must fail); the level judged before the
       Adds (the replacement test must fail); a leave not counted in `owed`; the admin
       exemption widened to any change; `parentTreeHash` unchecked; the flat `leave` accepted on a tree session; `gone` judged
-      between the Removes and the Adds (fable-r3-4).
+      between the Removes and the Adds (fable-r3-4); `admins` judged against the stored `gone` set only (the evicted-admin
+      test must fail; codex-r3-10); the last leave refused, or `goneKey` written by it (the closed-session test must fail).
 
 ### T3c. Contract: views, gas, size, pins
 
 - [ ] The views of spec §6, with `TREE_RANGE_MAX`; `supportsInterface` and `interfaceId` (old → new).
 - [ ] `test/pqchat/PqChatTreeGas.t.sol`: every row of spec §13 measured (2, 8, 64 and 256 keys; warm, after a removal, cold; the
       session record at 64, 128, 192 and 256 member keys; a genesis wrap with its leaf, typical and first of a subtree; the
-      record at its bounds; the list at 255 targets; the node keys; completion at its bounds; the acceptance tree check alone, warm and on a cold tree of 256
+      record at its bounds; the list at 255 targets; the node keys; **completion with the last ciphertext sent alone, at two
+      fixtures (codex-r3-6): a full tree of 32 keys grown to 64 by 32 Adds of UAs with no session (227 new slots expected),
+      and the bound, a tree of 256 with one live leaf, 32 such Adds in 32 different subtrees of 8, the admin list grown
+      from 1 to 32 (352 expected); each test counts its new slots and compares them with the spec's table**; the node
+      keys as the last piece at the bound, expected not to fit and recorded with its figure (C37); the acceptance tree check alone, warm and on a cold tree of 256
       (R12's +3 M); `treeLeave` and `treeRemove` with their `gone` slots, a Remove with its key slot at each level and an
       Add's three cold reads (R16); a genesis wrap of a
       first-time UA; **each signed row with ML-DSA-65 and with ML-DSA-87 on their caches (codex-r2-12)**; one transaction
-      holding acceptance and completion at the bounds, for both signers: ML-DSA-87 is expected over 2^24 and recorded as
-      "record alone"; **the commit of the last live leaf at its bounds** (no piece, so one transaction by construction: 32
-      forced Removes, 32 admins, 4,124 B of info), for both signers, which cannot go "record alone": over 2^24 it stops the
+      holding acceptance and completion at the bounds, for both signers: both are expected over 2^24 (about 20 M and
+      23 M) and recorded as "record alone"; **the commit of the last live leaf at its bounds** (no piece, so one
+      transaction by construction: 32 admins, 4,124 B of info, and 32 Removes in two fixtures: forced, their `gone`
+      slots paid before, and evictions by the commit alone, 32 `gone` slots more; codex-r3-6), for both signers, which cannot go "record alone": over 2^24 it stops the
       task; **a transaction of 15 genesis wraps, and one whose wraps each open a subtree**, against the block (fable-r3-8)). **The file runs with `--enable-tx-gas-limit`, and each row asserts `regular < 2^24` and `(regular + state)
       × 1.05 ≤ 60 M` in the test itself (fable-15; the session record at 256 member keys is expected above 60 M and is recorded
       with its figure, with the largest key count that fits):** a positive control row that exceeds 2^24 (the FIPS-key verify) must fail
       under the flag, or the flag is not in force. **A row that does not fit stops the task: numbers to the owner, no bound
       edited to pass.** Timing or calibration runs: ask first.
 - [ ] **The `treeLeaves` page (fable-r2-U1):** a page of `TREE_LEAF_PAGE_MAX` = 64 leaves whose keys are all versions above 0,
-      as an `eth_call` on the local Nethermind copy (2^24 enforced), with its gas; and a page of 256 for the record. If 64 is
+      as an `eth_call` on the local Nethermind copy (2^24 enforced), with its gas; and a full tree of 256 as **four such
+      calls at one block**, summed. The production view never returns 256 leaves at once; an uncapped page of 256, if
+      wanted for comparison, is a harness contract and is named as that (codex-r3-13). If 64 is
       above 4 M, the page is lowered and the figure goes to the spec.
 - [ ] A reachability test (fable-3): a tree at the cap with 224 silent added leaves, then `treeRemove`s to `owed` = 32: the next
-      commit's pieces are the bounds of §13 and each fits.
+      commit's pieces are the bounds of §13 and each fits, sent in the order of C37; the claim is for a tree with a
+      member left (a closed session has no next commit, C38).
 - [ ] Pins: `size-baseline.json` (old → new, reasons), the gas pins of `PqChatGas.t.sol` that the base split moved, the layout
       files, `LinkClosure` release pins.
 - [ ] Gates: every forge directory at the default set; `script/pqz/at-set.sh others sensitive`, then `others modules` (no outer
@@ -328,7 +376,9 @@ foreground.
       with a node key that fails the admission check and one with a piece missing are refused with nothing sent; the
       right set is relayed. Mutant: the guard checks the hashes but not the admission check.
 - [ ] Gas for a piece is estimated on the state at send time, so the piece that turns out last gets the completion's limit
-      (fable-r2-9).
+      (fable-r2-9). **The node sends a set in the order of C37:** the record, the list, the node keys, each final before
+      the next, then ciphertexts and wraps, one ciphertext alone at the end (codex-r3-12). Test: the last transaction of
+      a relayed commit holds one ciphertext; mutant: the node keys sent last.
 - [ ] `docs/node/job-api.md`: the six calls' named fields and the whole-set guard with its refusal; a note for operators (job shapes were added, none changed).
 - [ ] Gates: `scripts/capped cargo test`, clippy `-D warnings`; the node rebuilds the vector rows' calldata byte for byte.
 - [ ] Mutants: a missing bound on `ctTargets`; a bound one above the contract's; an unsigned entry relayed with the option off;
@@ -340,12 +390,18 @@ foreground.
       `ua-rs`'s tree handles and the signing operation through; the registry read that returns the KEM key **with** its kept
       signature and the registration (codex-1); chunk planning from the chain's limits as for wraps, **per operation (codex-r2-9):** the
       plan quotes the actual record, completion and chunks, and refuses by name, with figures, only the operation whose
-      required piece does not fit; the last piece alone after the others are final; the fallback to the piece entries when
+      required piece does not fit; **the order of C37** (the record, the list and the node keys final first, one
+      ciphertext held back and sent alone last), the quote with both figures (the completion with the held ciphertext,
+      and the dearest piece that would be last if the order were broken); the fallback to the piece entries when
       the record is already stored (fable-r2-9); an ML-DSA-87 record at its bounds sent alone (the gas table stays release
       data). No tree logic, no key byte, no "rejoin" call.
-- [ ] Tests: a chain with a 20 M block takes a plain commit and refuses a record at its bounds by name.
+- [ ] Tests: a chain with a 20 M block takes a plain commit and refuses a record at its bounds by name. **The order
+      broken (codex-r3-12):** another sender lands every ciphertext first, so the node keys are last and do not fit with
+      the completion → the named result with the figures, nothing more sent, a rebuild with a new nonce; beside it the
+      record-already-stored fallback; a control in which the held ciphertext is last and the commit completes.
 - [ ] Gates: the SDK's tests over the `tree.json` digests and calldata; clippy; the binding surface check.
-- [ ] Mutants: a chunk plan that exceeds the block-limit rule; a refusal by a protocol-wide constant; a call that names
+- [ ] Mutants: a chunk plan that exceeds the block-limit rule; every ciphertext released before the node keys are final;
+      a refusal by a protocol-wide constant; a call that names
       `rekey` for a tree session; the decoder that
       drops the signature again.
 
@@ -360,21 +416,34 @@ foreground.
       by the tree records; a new UA shown as a new member, never linked to a gone one (R14); the removal of a UA's only key
       worded as an exclusion for good, with the one-commit replacement offered (fable-r3-4); **before an Add, the warning
       when the key's `kemHash` is registered to another UA in the registry, "this key is also held by UA …" (owner, R16;
-      a test with such a key and a control without)**; asking `ua-rs` for a commit (plain, Add, Remove, by UA, "refresh") and sending its pieces; the
+      a test with such a key and a control without)**; **the lookup of spec §15 (codex-r3-9):** candidates from the session's
+      UAs and the contacts (versions 0 to the highest up to `KEM_SCAN_MAX` = 64, else 0, the highest and the leaves'
+      versions) and from index hints, each positive verified by `kemKeyAt`; tests: a match at an **older, non-latest**
+      version of a session member; a hint that verifies; a false hint dropped; a negative that states its coverage; a UA
+      outside the candidates → "not found among N", never "held by nobody"; **the prepared creation (codex-r3-5):** the
+      signed record and every wrap kept from before the first send until epoch 0 completes; a restart with the store
+      finishes the wraps; a fresh store on an incomplete creation shows "creation incomplete, cannot be finished", sends
+      nothing and offers a new session; **the comparison at the pin (codex-r3-2)**; **an admin's new info after a gap,
+      reviewed, under R13 (codex-r3-7)**; **a closed session shown as closed, and the leave that closes it worded so
+      (C38)**; asking `ua-rs` for a commit (plain, Add, Remove, by UA, "refresh") and sending its pieces; the
       rules of spec §11 for a candidate; the size hint (C3); a `none` home refused by name.
 - [ ] Gates: `scripts/capped cargo test` over the vector rows; `tests/hostile`: a substituted node key, a substituted live leaf
-      key, a substituted key of an added member, a head below the checkpoint, a same-id twin of the head, **a twin pinned first and then the true record (3 nodes: the majority's record replaces the pin and the event is shown; 2 nodes: "conflicting head", nothing built; fable-r3-3)**, every page call of one tree snapshot carrying the same block (the harness asserts it; fable-r3-9), an epoch-0 leaf outside
+      key, a substituted key of an added member, a head below the checkpoint, a same-id twin of the head, **a twin of epoch 7 that differs only in `sealedInfo`, pinned, then the true epoch 8 served: the comparison at the pin fires before the state is extended, the majority's record replaces the pin and the info in force is the true record's; with 2 nodes "conflicting head" (codex-r3-2)**, **a twin pinned first and then the true record (3 nodes: the majority's record replaces the pin and the event is shown; 2 nodes: "conflicting head", nothing built; fable-r3-3)**, every page call of one tree snapshot carrying the same block (the harness asserts it; fable-r3-9), an epoch-0 leaf outside
       the signed members, a changed info with 2 named endpoints and with 3 that disagree, a forged continuation, a flat twin with the
       setting changed on an empty store (the pinned case as control; codex-14), each refused before any encryption.
 - [ ] Mutants: encrypting before the signature check; the tree hash not recomputed; a tree read from a replica; the checkpoint
-      not consulted; the checkpoint by epoch id only; a pin replaced on one node's word; the setting taken from one discovered node; a changed info sealed with
+      not consulted; the checkpoint by epoch id only; the pin not compared when the head is higher (codex-r3-2); a cached info sealed in full after a gap without the review; a lookup that reads only the latest version; a pin replaced on one node's word; the setting taken from one discovered node; a changed info sealed with
       one endpoint; a discovered node counted among the 3; a receipt sent in a tree session.
 
 ### T6b. `pqchat-core`: replay, the store, not followed
 
 - [ ] Replay from state (spec §10) on a fresh store: the fixed read list, the checks at the read boundary, the starting
       roster anchored to the head's signed root, the roster by undo, the rights check with the signed leave or removal of
-      each dropped UA (codex-r2-6), the one period of a `(ua, kemHash)` (`goneOwnKeyOf`, then `goneKeyOf`; R16), the compromise warning (R10); the store's tree rows as a cache; the "not followed" state:
+      each dropped UA (codex-r2-6), the one period of a `(ua, kemHash)` (`goneOwnKeyOf`, then `goneKeyOf`; R16), **the two
+      ranges (codex-r3-1): records from the join's parent to the anchored head, ciphertexts from the join to `endEpoch − 1`,
+      nothing opened at `endEpoch`, a genesis join by the signed `members`; a key on a leaf of a closed session read to
+      the head (C38)**, the compromise warning (R10) **with what the foreign commit changed, kept until the roster is
+      reconciled (codex-r3-3), and raised for an empty path by `sealedInfo` (codex-r3-4)**; the store's tree rows as a cache; the "not followed" state:
       shown, nothing sent; a seed-restored device opens its own commits; a device key's commits open on that device only.
 - [ ] **The trace test (codex-3, fable-8):** the harness records every RPC call (method, arguments, order) and every send of a
       device replaying a session in which it follows every epoch, and of the same device on T1b's "opening failed" row (a
@@ -382,11 +451,14 @@ foreground.
       reads of the two traces are equal, later polls included, and sends are 0. The "read corrupted" row is a separate
       control. **Store reads by the hint are recorded and reported apart: they differ by design (R11), and the test says so
       instead of hiding them (fable-r2-2).** Control: with the T1b mutant (index from held secrets) the traces differ.
-- [ ] Gates: `tests/recovery.rs` over the `scenario` rows for every member, for a late joiner, for a removed key and for an
+- [ ] Gates: `tests/recovery.rs` over the `scenario` rows for every member, for a late joiner, for a removed key **restored at a head several membership changes later, and
+      a removed genesis key (T1b's retired-key rows; codex-r3-1)**, and for an
       unchanged third member as message author (codex-11); a losing signed candidate is not followed; the real-crypto e2e gate.
 - [ ] Mutants: any automatic write after a failed open; a held send flushed; a read skipped after a failed open; a dropped UA
       accepted without its signed leave or removal; replay that reads an event; replay
-      that needs an epoch before the join; a commit author not checked against the roster.
+      that opens anything before the join or reads a record before the join's parent; the undo stopped at `endEpoch`; the
+      join's author judged without the parent's `admins`; the warning cleared by a refresh while a foreign leaf stays;
+      a commit author not checked against the roster.
 
 ### T7. Bindings
 
@@ -460,14 +532,18 @@ R16 adds a set, an error, the `noReturn` rows and their tests and mutants, insid
 | **Total** | **about 22** | **about 27 (25 to 30), T0 not counted** | |
 
 The third round's fixes (the node's whole-set guard, the checkpoint's conflict read, the gap rule, two tests and two gas
-rows) add about 1 agent-day, inside the 25 to 30 range.
+rows) add about 1 agent-day, inside the 25 to 30 range. Codex's third round adds about 1.5 more (the retired-key replay
+and its rows, the prepared creation, the lookup, the piece order in the planner and the node, two gas fixtures, one
+contract check): the top of that range, about 29 to 30.
 
 In four lanes the longest chain is T1a → T1b → T3b → T3c → T8 → T10: about 12 days of work, 9 to 11 calendar days.
 
 - **Time to the tag:** about 2.5 times revision 1's estimate; the contract's acceptance check and completion (C7) and
   `ua-rs`'s signing operations carry the most.
-- **2^24 is close in one case:** acceptance plus completion at the bounds in one transaction is about 15.5 M regular with
-  ML-DSA-65 by estimate (1.3 M under the cap) and over it with ML-DSA-87. T3c measures both; the planner already splits. A
+- **2^24 and one transaction:** acceptance plus completion at the bounds in one transaction is about 20 M regular with
+  ML-DSA-65 by estimate and 23 M with ML-DSA-87, over the cap with either (the completion's slots recounted, codex-r3-6).
+  T3c measures both; the planner already splits, and holds one ciphertext back so that no indivisible piece pays the
+  completion (C37). A
   record alone over 2^24 would stop the task: numbers to the owner. **The commit of the last live leaf cannot be split**
   (no piece): about 16 M regular with ML-DSA-87 at its bounds by estimate, within about 1 M of the cap (fable-r3-8).
 - **The session record** is the one row at the 60 M line (about 200 member keys by estimate); the cap is ruled (R8), so T3c

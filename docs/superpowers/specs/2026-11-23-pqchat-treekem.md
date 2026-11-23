@@ -3,11 +3,15 @@
 **Status:** SPECIFIED, nothing built. **UNAUDITED**: a new cryptographic protocol; every construction below is a design, not a
 reviewed protocol. **Revision 3 (2026-11-23)**, after two review rounds by Codex and Fable: of revision 1 (`f42a75af2`; 22 and
 16 findings, 2 unsure) and of revision 2 (`29ba84732`; Codex 16, Fable 9 and 1 unsure). A finding is cited by its id where its
-fix sits (`codex-n`, `fable-n`; round 2: `codex-r2-n`, `fable-r2-n`); [§17](#17-what-revisions-2-and-3-changed) lists them. **A
+fix sits (`codex-n`, `fable-n`; round 2: `codex-r2-n`, `fable-r2-n`; round 3: `fable-r3-n`, `codex-r3-n`); [§17](#17-what-revisions-2-and-3-changed) lists them. **A
 third, focused round by Fable on revision 3 (`fable-r3-n`: 0 P0, 2 P1, 4 P2, 3 P3; approve with fixes) is fixed in place:**
 wording, client rules, one node rule and one ordering rule of the contract. No record, typehash or derivation moved. **After
 that round the owner made the key no-return set two-level (R16, on the controller's finding of a front-running burn):** a
-contract rule, one storage set, one named error and one client warning; again no record, typehash or derivation moved. The
+contract rule, one storage set, one named error and one client warning; again no record, typehash or derivation moved.
+**A third round by Codex on that tree (`codex-r3-n`: 0 P0, 6 P1, 6 P2, 1 P3; rework before the recovery vectors and the gas
+bounds freeze; R16 and both readings of C28 judged sound) is fixed in place:** client rules of recovery, of the checkpoint
+and of the warning, one contract check (the signed admin list against the UAs a commit evicts), the order of a commit's
+pieces, and the completion's gas recomputed. No record, typehash or derivation moved, and no view. The
 build follows. Branch `treekem-research`; the contract work branches from `pqchat-sigs`
 once it has landed. Research [`2026-11-23-treekem-pqchat.md`](../../research/2026-11-23-treekem-pqchat.md) (cited "note §n"); plan
 [`2026-11-23-pqchat-treekem.md`](../plans/2026-11-23-pqchat-treekem.md). Rule ids introduced here (SPECIFIED, defined once in
@@ -107,7 +111,7 @@ stays); ARCH-POS-15 (lists of nodes); ARCH-POS-18 (software fallback).
 
 ## 2. Controller calls
 
-Each is the controller's (owner: no) unless marked; the owner may override any. Recorded as CTR-CHAT-27. C14–C27 are revision 2's, C28–C36 revision 3's.
+Each is the controller's (owner: no) unless marked; the owner may override any. Recorded as CTR-CHAT-27. C14–C27 are revision 2's, C28–C36 revision 3's, C37 and C38 follow Codex's third round.
 
 | # | Call | Why |
 |---|---|---|
@@ -124,7 +128,7 @@ Each is the controller's (owner: no) unless marked; the owner may override any. 
 | C11 | A tree session's control-plane records are always verified by the client, whatever `require_signed_records` says | C1's reason |
 | C12 | The epoch secret is confirmed by opening the commit's `sealedInfo`, which a tree commit may not leave empty; no separate confirmation tag | the tag would sit outside the signed record; `sealedInfo` is already an AEAD under a key from `K` (fable-13) |
 | C13 | The tree hash covers node keys and leaf keys; **there is no parent hash** (revision 1's `parentHash` is dropped) | the contract compares the whole `treeHash`, which binds everything the parent hash bound, and no client step read it (fable-16; with it codex-19 has no second hash to disagree) |
-| C14 | The target list is not in the signed record: the record signs `ctCount` and `ctListHash`; the list (`ctTargets`, `ctHashes`) lands once as a piece of its own and stays in state | with the list inside, the worst record at 256 keys asks 60.7 M and does not fit a 60 M block; outside, no commit piece asks more than 34.5 M **[E]** (codex-9, fable-3) |
+| C14 | The target list is not in the signed record: the record signs `ctCount` and `ctListHash`; the list (`ctTargets`, `ctHashes`) lands once as a piece of its own and stays in state | with the list inside, the worst record at 256 keys asks 60.7 M and does not fit a 60 M block; outside, every piece of a commit fits (§13) **[E]** (codex-9, fable-3) |
 | C15 | The cold tree is written with the wraps: leaf `i` and the hashes above it are written when wrap `i` of epoch 0 lands | 767 new slots in the record's transaction are 75.1 M of state gas at 256 keys (codex-9, fable-12) |
 | C16 | `treeId = hashStruct(PqChatSession)` names a tree session: it is a field of every commit and an input of every tree derivation from epoch 1 (epoch 0 uses `genesisCtx`, C29); clients key their state and consent by it | `sessionId` is creator plus nonce and binds neither the home nor the genesis record (codex-7, fable-1) |
 | C17 | `pathContext` also binds the parent's tree hash; a commit's nonce is never used twice once a piece or its signature has left the device | the tree hash commits to every target key; a retried or twin commit gets independent secrets (fable-1, codex-7, O9 of the review) |
@@ -134,19 +138,21 @@ Each is the controller's (owner: no) unless marked; the owner may override any. 
 | C21 | In a tree session a leave is forced like a removal, and `treeRemove` and `treeLeave` are refused when the leaves owed at the head would exceed `TREE_CHANGES_MAX`: `PqChatTreeBacklog` | the commit that must honour them always fits one record, and the honest builder has one rule (codex-6, fable-2, codex-r2-7) |
 | C22 | (owner, R11) Replay reads are scheduled from public data only; no contract write of a tree session is automatic; a tree session sends no receipt | the replay reads and the writes show nothing about whether a ciphertext opened; the store read by the epoch hint is the one inherited signal left (§10; codex-3, fable-8, fable-r2-2) |
 | C23 | (owner, R9, R10) `joiner_e` derives from the commit secret and the context, without the previous epoch's `init` | with the chain one member's bad commit ends the session for good; without it the next honest commit heals, as in mode 0. The cost: a commit proves a signature, not knowledge of the previous epoch (fable-4, codex-18, fable-r2-1) |
-| C24 | Shapes are bounded when a record is accepted: `ctCount` < `leaves`, at most `TREE_ADMINS_MAX` = 32 admins, `sealedInfo` at most `TREE_INFO_MAX` = 4,124 B (the sealed form of the 4,096-B padding bucket), at creation too; a commit that changes `admins` otherwise than by dropping UAs that are gone, and a `treeRemove`, leave an admin with a live leaf | with C7, no record is staged whose public inputs could not complete on the state it was accepted on (what is known only by a signed hash: §8, fable-r3-6); no group left with a keyless admin only (codex-20, codex-21, codex-r2-13, fable-r2-6) |
-| C25 | A device takes the roster of each epoch since its join from the live leaves by undoing the later commits' changes; which epoch won is the home's state, read under ARCH-POS-15 | the reads are the ones replay makes anyway; a signature cannot prove a commit won (codex-11) |
-| C26 | A client builds only on a head at or after its local checkpoint, which holds the `hashStruct` of the verified head record, and settles a conflict at a pinned number by a strict-majority read; what a candidate seals is taken as disclosed to every key of the tree it was built on; (owner, R13) a changed session info needs the strict majority over at least 3 named endpoints at a final block | a rejected commit cannot be recalled; an epoch id does not bind its record; a pin written from one endpoint can be a twin (codex-4, fable-r2-4, fable-r3-3) |
+| C24 | Shapes are bounded when a record is accepted: `ctCount` < `leaves`, at most `TREE_ADMINS_MAX` = 32 admins, `sealedInfo` at most `TREE_INFO_MAX` = 4,124 B (the sealed form of the 4,096-B padding bucket), at creation too; a commit that changes `admins` otherwise than by dropping UAs that are gone, and a `treeRemove`, leave an admin with a live leaf; a UA that a commit leaves with no leaf counts as gone for that commit's `admins` (codex-r3-10) | with C7, no record is staged whose public inputs could not complete on the state it was accepted on (what is known only by a signed hash: §8, fable-r3-6); no group left with a keyless admin only (codex-20, codex-21, codex-r2-13, fable-r2-6) |
+| C25 | A device takes the roster of each epoch since its join from the live leaves by undoing the later commits' changes, **every commit from the anchored head back to its join, those after its key was taken out included**; it reads those records and the record of the join's parent, and opens ciphertexts only in the epochs its key was in the tree; which epoch won is the home's state, read under ARCH-POS-15 | a signature cannot prove a commit won; a key that was taken out has no other way to the roster of its period than the deltas since (codex-11, codex-r2-6, codex-r3-1) |
+| C26 | A client builds only on a head at or after its local checkpoint, which holds the `hashStruct` of the verified head record, and settles a conflict at a pinned number by a strict-majority read; before it extends its state above the pin it compares the record that won at the pinned number with the pin; what a candidate seals is taken as disclosed to every key of the tree it was built on; (owner, R13) a changed session info needs the strict majority over at least 3 named endpoints at a final block | a rejected commit cannot be recalled; an epoch id does not bind its record; a pin written from one endpoint can be a twin; a child binds its parent's id and tree, not its record (codex-4, fable-r2-4, fable-r3-3, codex-r3-2) |
 | C27 | A home's signature-storage setting is taken from pinned deployment data, or read under the majority rule; a session's mode is pinned with its `treeId` | first contact cannot be steered to an unsigned flat twin (codex-14) |
 | C28 | (owner, R14, R16) A UA that left or was removed is never added again: `gone[ua]`, one slot per such UA, `PqChatTreeReturn`. **The key set is two-level (R16):** a key taken out of a UA that stays a member enters the pair set, `goneOwnKey[ua][kemHash]`, and that UA never adds it again (`PqChatTreeOwnKeyReturn`); the keys of a UA that goes enter the session-wide set, `goneKey[kemHash]`, and are never added again under any UA (`PqChatTreeKeyReturn`); one slot per key taken out, in one of the two sets. (controller) The level is judged on the tree after the commit's Adds: the leaf's UA still holds a leaf → the pair set; it is `gone` → the session-wide set, for the keys its leaves hold when they are blanked (at most `KEYS_PER_UA_MAX`; keys it took out earlier stay pairs). So an admin's Remove of one key of a UA that keeps another leaf is a key change of that UA, at the pair level. The slot holds the key's period | the owner's rules; the same UA never returns, nor the same key bytes to the UA that took them out, nor under any UA once their holder went. Under a single set one member's own-key churn burnt another UA's key session-wide, with no admin and repeatably (R16). The key half is hygiene against reuse of the same bytes (R15): a related key with another `kemHash` is not stopped by it (§8). The pair level for a UA that stays lets an admin free a key a member squats on by removing that leaf alone, without burning it. Every `(ua, kemHash)` has one period in a session, and none follows a session-wide entry, so recovery needs no list of periods (codex-2, codex-r2-2, codex-r2-10, fable-r3-2) |
 | C29 | Epoch 0 is sealed under `genesisCtx`, a typed hash of the session record's public fields; `treeId` is used from the first commit on | `treeId` hashes the wrap hashes and `sealedInfo`, which would need `treeId` to be built: no construction order (codex-r2-4) |
 | C30 | Leaving and removing in a tree session are their own records and entries, `PqChatTreeLeave` and `PqChatTreeRemove`, which sign `treeId`; `leave` and `remove` are refused there | the flat records sign neither the home nor the genesis: one signature would hold in a twin session at another home (codex-r2-5) |
 | C31 | `PqChatCommit` signs `parentTreeHash`; the contract compares it with the head's stored tree hash at acceptance; `ctx_e` binds it | the author's `ps[0]` depends on it, and a twin of the head that differs only where the path overwrites would pass the final hash (codex-r2-11, fable-r2-4) |
 | C32 | The admission check also asks a canonical `pk_X`: bit 255 clear and the value below `p` | X25519 ignores bit 255 and reduces mod `p`, so one point would have up to four byte strings; the rule leaves one byte string per point. It is a rule on bytes: it does not make an admitted key the only one that its secret opens (§8; codex-r2-2, fable-r3-2) |
-| C33 | A commit's `sealedInfo` is a full info or the marker "unchanged" (empty content, padded and sealed); a device seals the full info only if it holds the one in force at the parent, and a device that did not follow an epoch holds none from that epoch on; clients take a changed info only from an admin | a device that fell behind, by a refresh or by a later commit after it follows again, would publish retired room and store lists to members that joined later, and a first-time joiner has no info to re-seal (codex-r2-3, fable-r2-5, fable-r3-1) |
+| C33 | A commit's `sealedInfo` is a full info or the marker "unchanged" (empty content, padded and sealed); a device seals the full info only if it holds the one in force at the parent, and a device that did not follow an epoch holds none from that epoch on; clients take a changed info only from an admin; after a gap an admin establishes the info anew as a changed info, reviewed, never automatically (codex-r3-7) | a device that fell behind, by a refresh or by a later commit after it follows again, would publish retired room and store lists to members that joined later, and a first-time joiner has no info to re-seal (codex-r2-3, fable-r2-5, fable-r3-1) |
 | C34 | At creation a member UA joins `sessionsOf` when its first wrap lands; the creator with the record | two new slots per first-time UA in the record's transaction are 37.6 M of state gas at 192 UAs (codex-r2-8) |
 | C35 | A send held while a child was not final goes back to the user when the child is final; it is never sent on its own | a flushed send shows the device followed the child (fable-r2-2) |
 | C36 | `treeLeaves` returns at most `TREE_LEAF_PAGE_MAX` = 64 leaves per call | each `kemHash` is computed from the registry at read; a page of 256 is 6 to 10 M under the 2^24 cap of `eth_call` (fable-r2-U1) |
+| C37 | A commit's pieces leave the device in a fixed order: the record, then the list and the node keys, each final before the next; then the ciphertexts and the Welcome wraps; **one ciphertext is held back** and sent alone when every other piece is final. The node keeps that order for a set it relays | whichever piece lands last pays the completion, up to 34.5 M of state gas at the bounds; with the node keys it would not fit a 60 M block, with a ciphertext it does. A piece that has not left the device cannot be landed by anyone else (§13; codex-r3-12) |
+| C38 | A tree session in which no UA that is not `gone` holds a live leaf is **closed**: the contract does not refuse the `treeLeave` or `treeRemove` that closes it and writes nothing more for it; the head, `owed` and the leaves stay, and no `goneKey` entry is written for those leaves | nobody is left to author the commit that would honour it, and nothing can be added to it (R14), so the key sets have no reader there; finishing the accounting inside the last leave would add up to 32 slots to a `treeLeave` for no reader (§9; codex-r3-11) |
 
 ## 3. Scope, non-goals, deviations from RFC 9420
 
@@ -306,8 +312,10 @@ K_e      = H(S_e, "scaas/pqchat/v1/tree/key")
 `TAG_TREE_CONTEXT = keccak256("scaas/pqchat/v1/tree/context")`. **For epoch 0** `genesisCtx` stands where `treeId` does (C29),
 `epochId = sessionId`, and `parentEpochId`, `parentTreeHash` and `treeHash` are 0: `genesisCtx` already commits to the signed
 member list, so deriving `K_0` needs no tree and no registry read (codex-16). `groupMode` is bound by the labels (`…/tree/…`)
-and by `treeId` and `genesisCtx`. `parentTreeHash` beside `parentEpochId` binds the parent's record, which its id (author
-and nonce) does not (fable-r2-4).
+and by `treeId` and `genesisCtx`. `parentTreeHash` beside `parentEpochId` binds the parent's **tree**, which its id (author
+and nonce) does not (fable-r2-4). **It does not bind the rest of the parent's record (codex-r3-2):** two signed records with
+one id and one tree can differ in `sealedInfo` or in `admins`. Which of them is the parent is the checkpoint's comparison
+(§8, "before a client encrypts", step 1).
 
 - **No `init` chain (C23; owner, R9).** RFC 9420 salts the joiner secret with the previous epoch's `init`. Here a member that
   misses one epoch would then miss every later one, and one member's commit of bad ciphertexts to everyone would leave nobody
@@ -319,7 +327,8 @@ and nonce) does not (fable-r2-4).
   commit that targets it. (4) **A commit is useful only to one who knew the previous epoch: lost.** The contract accepts a
   commit on its author's signature and public shape; the committer's secret alone fixes `K_e`. So **one UA signature lets its
   holder build the next epoch**: a stolen UA signing key, or one signature over a foreign `PqChatCommit` obtained from a signer
-  outside `ua-rs`, opens the following epochs to the commit's maker until that leaf commits again or is removed; a holder of the stolen key
+  outside `ua-rs`, opens the following epochs to the commit's maker until that leaf commits again or is removed **and every
+  leaf the foreign commit added is out (§10; codex-r3-3)**; a holder of the stolen key
   commits again, so there only the removal of the UA ends it (§10). Mode 0's
   `rekey` has the same cost. The honest device notices: §10's compromise warning.
 - **Every wrap of a tree session seals a joiner secret** under the tree's own label: epoch 0's wraps seal `joiner_0`; a Welcome
@@ -349,7 +358,15 @@ and nonce) does not (fable-r2-4).
     author is in the parent's admin list; a non-admin's differing info is ignored and shown, the epoch is still followed;
   - a joiner, and a device after a gap, has no info in force: it takes the full info of the first commit it follows that
     carries one (for a joiner its join commit), flagged until an admin's commit carries a full info, unless that author
-    is an admin or its own UA; an Add's author seals the full info when it holds it.
+    is an admin or its own UA; an Add's author seals the full info when it holds it;
+  - **after a gap an admin may establish the info anew (codex-r3-7).** A device with no info in force seals the marker,
+    always, by itself. If every admin device is in that state the markers go on and the session has no info in force for
+    whoever joins or falls behind next. An admin ends that by **establishing a new info**: a full info that the user
+    enters or confirms in the signing review. It is a changed info by definition (the device holds none in force to
+    compare it with), so it goes in a commit of its own under R13's freshness (§11), and members take it as a changed
+    info from an admin. The value the device cached before the gap may be offered as a draft marked "not in force"; it
+    is never sealed without that review, never by a non-admin and never automatically (a refresh, a new device key and
+    an Add seal the marker). Where no admin holds a leaf the info cannot be established again (§9).
 
 ## 6. Records and entries
 
@@ -477,10 +494,20 @@ slots per first-time UA in the record's transaction, 37.6 M of state gas at 192 
 **When wrap `i` of epoch 0 lands (C15):** as mode 0 against `members[i]`; then the key of `members[i]` is read from the
 registry, passes the admission check, its `kemHash` is not live (`PqChatTreeKeyLive`); leaf `i`, `liveKey`, `keysOf` and the
 `th` of each ancestor are written, and the UA joins `sessionsOf` at its first key (C34). So a member finds a session being
-created once one of its wraps is there; the creator finds it from the record and can finish the wraps after a restore; epoch 0
+created once one of its wraps is there; the creator finds it from the record (finishing it: below); epoch 0
 is usable by nobody before it completes, as in mode 0. When the last wrap lands epoch 0 completes as in mode 0 and the root
 is kept as `genesisTreeHash` and `treeHash`. Two members with one key, or a member whose key fails the check, mean a session
 whose epoch 0 never completes: the creator's client runs the same checks before it signs.
+
+**Finishing a creation needs the prepared pieces (codex-r3-5).** The wraps of epoch 0 cannot be built a second time: the
+record signs `wrapHashes`, `joiner_0` is random and so is every encapsulation. So **the creating device keeps the prepared
+creation**, the signed record and every wrap (public bytes, in `pqchat-core`'s store), from before the first send until
+epoch 0 completes, and finishes from that store after a restart; a relayer that was handed the set can finish it too, since
+anyone sends a wrap. A device restored from the seed **without** those pieces finds the session through `sessionsOf`, reads
+it as incomplete and cannot finish it: opening a landed wrap of its own gives `joiner_0`, not the other ciphertexts the
+record signed. It shows "creation incomplete, cannot be finished" and sends nothing; the user creates a new session under a
+new nonce, and the incomplete one stays usable by nobody. Only a **completed** genesis is recovered from state alone: `K_0`
+from the device's own wrap, read by `wrapAt` (§10).
 
 **When a `commit` record is accepted** (owner, R12: everything that is public then is checked then):
 
@@ -488,8 +515,13 @@ whose epoch 0 never completes: the creator's client runs the same checks before 
   the slot free (`_parentOf`); `parentTreeHash` equals the head's stored tree hash (`PqChatTreeParent`, C31); the author
   signed it and `(scopeEpoch, nonce)` is unused;
 - leaf `leaf` is live and names `(author, keyId)`; the author is not `gone`;
-- `admins` strictly sorted and registered, at most `TREE_ADMINS_MAX`, none of them `gone`; if it differs from the head's list
-  **otherwise than by dropping `gone` UAs**, at least one of its UAs holds a live leaf after the commit (`PqChatTreeAdmins`,
+- `admins` strictly sorted and registered, at most `TREE_ADMINS_MAX`, none of them `gone`, **and none of them a UA this
+  commit leaves with no leaf (codex-r3-10):** the list is judged against the **prospective** `gone` set, which is `gone`
+  plus every UA that holds a leaf on the head and none on the commit's tree after its Adds (`PqChatRemovedKept`). Without
+  it an admin could remove another admin's last leaf, keep that UA in `admins`, and the head would hold a `gone` admin. A
+  UA whose last leaf is removed and that gets a key in the same commit holds a leaf after the Adds and may stay in
+  `admins`. If the list differs from the head's
+  **otherwise than by dropping `gone` UAs** (the prospective ones included), at least one of its UAs holds a live leaf after the commit (`PqChatTreeAdmins`,
   C24; the exemption is fable-r2-6's: the commit that honours a removal must never be trapped by it);
 - each remove names a live leaf by its `(ua, keyId)`, not the author's leaf; each add names a blank leaf in range (or one freed
   by a remove of this commit), **a UA that is not `gone` (`PqChatTreeReturn`, C28)**, a key
@@ -525,11 +557,13 @@ commit; its author can sign one that no piece completes (below).
 carries all or there is none; in this order, all or nothing:
 
 1. no `gone` UA keeps a leaf, sits in `admins` or is the author (`PqChatRemovedKept`): checked again, because a `treeRemove`
-   or a `treeLeave` may have landed on the head since acceptance;
+   or a `treeLeave` may have landed on the head since acceptance. The UAs this commit itself leaves with no leaf were
+   judged against `admins` at acceptance, on the same head and the same record, so for them step 2 asserts it
+   (codex-r3-10);
 2. the Removes blank their leaves and direct paths and free their `liveKey`; the Adds set their leaves and `liveKey` and
    blank their direct paths; `keysOf`, `used` and `leaves` follow; **then, on the tree after the Adds (fable-r3-4),** a UA
-   left with no leaf becomes `gone` if it was not, so a UA whose only leaf this commit removes and to which it adds a key
-   stays a member (§9); **each removed key is written to the key set of its level (R16, C28):** `goneKey[kemHash]` when its
+   left with no leaf becomes `gone` if it was not (it is not in `admins`: `PqChatRemovedKept`), so a UA whose only leaf
+   this commit removes and to which it adds a key stays a member (§9); **each removed key is written to the key set of its level (R16, C28):** `goneKey[kemHash]` when its
    UA is `gone`, else `goneOwnKey[ua][kemHash]`; a UA whose first leaf this is and that was never indexed joins
    `sessionsOf` (fable-11, codex-17). The level cannot change between acceptance and completion: a UA judged to stay holds
    a leaf after the commit, so if it went in between, step 1 refuses;
@@ -570,7 +604,16 @@ compares `keccak256` of every derived `kemPk` with the signed `nodeKeyHashes`, t
    have its twin pinned first. On a mismatch at a pinned number the client reads that epoch under the strict-majority
    option (at least 3 nodes, ARCH-POS-15): the majority's record, verified like any head, replaces the pin, the epoch is
    replayed from it and the event is shown. Without 3 nodes, or without a majority that agrees, the session shows
-   **"conflicting head"** and the client builds nothing on it until such a read succeeds;
+   **"conflicting head"** and the client builds nothing on it until such a read succeeds. **A higher head does not settle
+   it (codex-r3-2):** a child signs its parent's id and tree hash, and two signed records can share both and differ in
+   `sealedInfo` or `admins`. A device that pinned one of them at number `n` and next sees the true epoch `n + 1` would see
+   the number advance and every hash match, and a marker would carry the wrong record's info forward. So **before the
+   client extends its state above a pin at `n`**, it reads the record that won at `n` (`epochsOf`, `commitOf`; the session
+   record at 0) and compares its `hashStruct` with the pin, and it verifies each record from `n + 1` to the head against
+   its parent's id and `treeHash`. A mismatch at `n` is the conflict above: the majority's record replaces the pin, the
+   epoch is replayed from it, **its metadata too** (the admin list that later rights are judged by, the info in force that
+   a marker carries on), and the epochs above are processed on the replaced record only. C31's comparison keeps its own
+   purpose: it fixes the tree the author derived `ps[0]` on;
 2. **a head above epoch 0:** it reads `treeOf`, the head's record, `treeLeaves` and `treeNodes`, **every page of the
    snapshot at one block** (a tree is up to 4 leaf pages and 2 node pages; a commit that lands between two pages gives a
    root mismatch that looks like a lying endpoint; fable-r3-9), recomputes the root and compares it with the head commit's
@@ -620,7 +663,8 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   - **Removed by a commit alone counts too (fable-r3-4):** when a completed commit leaves a UA with no leaf **on the tree
     after its Adds** (an admin's Remove by UA without a `treeRemove` before it, and no Add of that UA in the same commit),
     the contract sets `gone[ua]` (kind 2, that epoch). A UA cannot blank its own last leaf (the author's leaf stays), so
-    this is always somebody else's removal.
+    this is always somebody else's removal. **That UA may not stay in the commit's `admins` (codex-r3-10):** the signed
+    list is judged against the UAs the commit leaves with no leaf, at acceptance (§8).
   - **Replacing a UA's only key is one commit.** An admin's Remove of X's only leaf and an Add of X's new key **in the same
     commit** keep X a member: X is judged after the Adds (§8). It is the only way to replace a lost sole device key: X
     cannot author (its `ps[0]` needs the lost seed), and the Remove alone makes X `gone` for good.
@@ -648,7 +692,11 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   (the keys B's leaves hold then, at most `KEYS_PER_UA_MAX`), B is out for good (R14), and a further UA needs an admin's
   Add. While B **holds** A's key live, A's Add is `PqChatTreeKeyLive`: at most `KEYS_PER_UA_MAX` keys per UA at a time,
   and an admin frees one by a Remove of that leaf alone while B keeps another, at the pair level, so the key is not burnt.
-  The admin's client warns before an Add of a key registered to another UA (CLI-PQC-17).
+  The admin's client warns before an Add of a key registered to another UA (CLI-PQC-17). **What R16 guarantees, and what
+  it does not (codex-r3-8):** once B has released a key while it stays a member, B's pair entry never makes A's Add of
+  those bytes fail. It gives A no priority for a slot or a transaction: `KEYS_PER_UA_MAX` bounds how many keys B holds at
+  once, B can take one key out and add another in one commit, and A's Add of a key that is live under B at that moment
+  is still `PqChatTreeKeyLive`.
 - **A UA's own keys.** A UA that stays a member changes its own keys by plain commits (C8): a new device is a new `keyId` with
   a new key. That is not a return. A key of its own that it took out stays out for that UA (the pair set); the device
   registers a new KEM version. So every `(ua, kemHash)`, and every `(ua, keyId)` (registry versions are write-once), has
@@ -685,6 +733,16 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   the forced Removes always fit one commit, with any room left for other changes, and the honest builder never needs more
   than the record holds. A larger eviction is two rounds; a member refused a leave commits (or waits for a commit) and leaves
   on the new head.
+- **A closed session (C38; codex-r3-11).** A commit needs an author with a live leaf that is not `gone`. C21 bounds the
+  Removes a head owes; it does not keep a signer. When a `treeLeave` or a `treeRemove` makes the last such UA `gone` (the
+  only member left leaves; the last two leave on one head; an admin without a leaf removes the members that remain),
+  nobody can author the commit that would honour it, and nothing can be added (R14): the session is **closed** for good.
+  The contract does not refuse that record and writes nothing more for the session: the head and its epoch stay, `owed`
+  stays above 0, `treeLeaves` keeps the leaves as they are with their `joinEpoch`, `goneOf` names each UA with the head it
+  named, and **`goneKeyOf` and `goneOwnKeyOf` stay unset for those leaves**. A key on such a leaf has its period from
+  `joinEpoch` to the head, which is what its device read and what §10 step 3 takes for a live leaf. No message, commit
+  or leave is accepted after it (each asks a member that is not `gone`), and a `treeRemove` has nobody left to remove. Clients show a
+  session whose every live leaf belongs to a `gone` UA as closed, and the review of the leave that closes it says so.
 - A member with no admin right that wants a new device in: registers the KEM version, then commits with a `TreeAdd` of its own
   UA (plain). A lost device: its owner's commit from another leaf, or an admin's, removes that leaf. A lost **sole** device: an
   admin's commit that removes the leaf and adds the UA's new key together (above).
@@ -710,21 +768,38 @@ whether the device follows every epoch or none; so are later polls of the contra
    `goneKeyOf(sessionId, kemHash)` (a session-wide entry is the last period those bytes have, so when the device's UA held
    them and the pair is not set, it is that UA's); a genesis key joins at 0. There is no earlier period of the device's
    `(ua, kemHash)` to look for, because the contract never adds a pair twice; a period of the same bytes under another UA
-   is not the device's and fails the join check below. For each epoch of that period: `commitOf` and
-   `epochSig`: the id is recomputed from `(sessionId, author, nonce)`, `treeId` is the pinned one, the signature verifies,
-   `parentTreeHash` equals the parent record's `treeHash` (the rebuilt genesis hash above epoch 0). The join commit must hold
-   the key in its `adds` (that index is its wrap's), the last one in its `removes`: a wrong period from an endpoint fails here.
-4. **The roster (C25, codex-11).** The leaves of each epoch back to the join are the live leaves with the later commits undone,
-   newest first: an Add's leaf becomes blank, then a Remove's leaf takes back its `(ua, keyId)`. Each commit's author must hold
-   leaf `leaf` in its parent's roster with the right of §9 against the parent's admin list (the parent record's `admins`); the
-   join commit is checked the same way against the roster one step further back. A record that fails is not followed, and a
-   message author is checked against the roster of its epoch.
+   is not the device's and fails the join check below. **Two ranges follow from the period, and they differ for a key
+   that was taken out (codex-r3-1, which closes codex-11 and codex-r2-6):**
+   - **the public range: every epoch from the join to the anchored head**, the epochs after the key was taken out
+     included, **and the join's parent** (epoch `joinEpoch − 1`; the session record when that is epoch 0; none for a
+     genesis key). A device that joined at 2, was removed at 5 and restores at a head of 9 reads the records of 1 to 9:
+     the deltas of 6 to 9 are other members' changes, which only those records hold, and the admin list of 1 judges the
+     author of 2. For each of them `commitOf` and `epochSig`: the id is recomputed from `(sessionId, author, nonce)` and
+     is the one `epochsOf` holds at that number, `treeId` is the pinned one, the signature verifies, `parentEpochId` and
+     `parentTreeHash` equal the parent record's id and `treeHash` (the rebuilt genesis hash above epoch 0). Records only:
+     no list, ciphertext or wrap is read outside the secret range. They are the home's state, read under ARCH-POS-15 as
+     the head is;
+   - **the secret range: the epochs the key was in the tree.** `joinEpoch` to the head for a live key; `joinEpoch` to
+     `endEpoch − 1` for a key that was taken out. **`endEpoch` is the number of the commit that blanks the leaf:** its
+     record must hold the key in its `removes`, and the device opens nothing there, because it is not in that tree.
+
+   The join is checked by its kind. **A commit join** holds the key in the `adds` of the commit at `joinEpoch` (that index
+   is its wrap's). **A genesis join** (`joinEpoch` 0) has no join commit: the key is `members[i]` of the session record
+   whose creator's signature was verified in step 1, `i` is its leaf and its wrap (`wrapAt(sessionId, i)`), and nothing
+   is read before epoch 0. A wrong period from an endpoint fails at one of these.
+4. **The roster (C25, codex-11, codex-r3-1).** The leaves of each epoch back to the join are the live leaves of the anchored
+   head with **every later commit of the public range** undone, newest first, for a key that was taken out through the
+   commits after `endEpoch` too: an Add's leaf becomes blank, then a Remove's leaf takes back its `(ua, keyId)`. Each
+   commit of the secret range, and the commit at `endEpoch`, must have its author at leaf `leaf` in its parent's roster
+   with the right of §9 against the parent's admin list (the parent record's `admins`); the join commit is checked the
+   same way against the roster one step further back **and the `admins` of the join's parent record**. A record that
+   fails is not followed, and a message author is checked against the roster of its epoch.
 5. **Rights evidence (codex-r2-6).** A non-admin's commit may drop another UA only if that UA was `gone` at the parent. For
    each UA so dropped: `goneOf` gives the kind and the epoch it names; the `PqChatTreeLeave` or `PqChatTreeRemove` record of
    that epoch and its signature are read (`leave*`, `removal*`) and verified: the signer is that UA, or an admin of the epoch
    named, and `treeId` is the pinned one. A UA goes once (R14), so this is one record per UA for the life of the session.
    Without the evidence the commit is not followed.
-6. For each of those commits in which the device's key is live and not the author: `pathListOf`, compared with `ctListHash`;
+6. For each commit of the secret range in which the device's key is live and not the author: `pathListOf`, compared with `ctListHash`;
    then the index `j` of **the one target that is its leaf's node or an ancestor of it** (targets are disjoint subtrees, so tree
    math on the list alone finds it; no secret is consulted) and `pathCtAt(epochId, j)`, compared with `ctHashes[j]`. For a join
    commit also `wrapAt(epochId, wrapIndex)`, compared with `wrapHashes`. For its own commits: the list.
@@ -737,14 +812,17 @@ whether the device follows every epoch or none; so are later polls of the contra
 - Another's commit: if the device holds the secret of target `ctTargets[j]` (its leaf key, or a node an earlier commit gave
   it), the ciphertext → `ps` of the path node above that target → upward with the key comparison → `commitSecret` → `joiner`,
   `S`, `K`.
-- Its own commit: `ps[0]` from the KEM seed and `pathContext` (R4), then the same key comparison.
+- Its own commit: `ps[0]` from the KEM seed and `pathContext` (R4), then the same key comparison. With an empty path
+  (the last live leaf: `nodeKeyHashes` is empty and `commitSecret = ps[0]`) there is no key to compare, and `sealedInfo`
+  is the test (the compromise warning below; codex-r3-4).
 - In every case `sealedInfo` must open before the epoch's handle is usable (C12, codex-13); a marker leaves the info in force
   as it was, and a device that did not follow an epoch has none until a commit it follows carries a full info (C33).
 - From the record alone the device updates what it holds: secrets of nodes on the direct path of a removed or added leaf are
   dropped; nodes the commit set are replaced by what it derived, or dropped when it derived nothing.
 
-Replay needs no epoch before the device's join and one ciphertext per commit since; only building a commit needs the live
-tree's keys.
+Replay opens nothing before the device's join and reads one record before it, the join's parent, for its admin list. It
+reads one record per commit from the join to the head and one ciphertext per commit of the secret range; for a key taken
+out long ago that is one record per later epoch, no piece. Only building a commit needs the live tree's keys.
 
 **Not followed, and healing (C22, C23; fable-4, codex-18).** A target whose secret the device does not hold, a derived key that
 differs, a Welcome that disagrees with the path, or a `sealedInfo` that does not open: the device marks that epoch "not
@@ -763,14 +841,26 @@ Epochs it did not follow stay unreadable to it. **Following again does not bring
 has no info in force from the epoch it missed. It seals the marker in every commit of its own, a new device key or an Add
 included, until a commit it follows carries a full info (C33).
 
-**A compromise warning (owner, R10; fable-r2-1).** A completed commit whose author is the device's own `(ua, keyId)` and whose
-node keys its seed does not reproduce was not built by this seed: someone else holds the UA's signing key or obtained one
-signature. The device shows **a compromise warning** for the session and the UA, a state of its own, **never "not followed"**:
+**A compromise warning (owner, R10; fable-r2-1).** A completed commit whose author is the device's own `(ua, keyId)` and
+which its seed does not reproduce was not built by this seed: someone else holds the UA's signing key or obtained one
+signature. **To reproduce is both tests (codex-r3-4):** every node key derived from the seed's `ps[0]` equals its signed
+`nodeKeyHashes` entry, **and** `sealedInfo` opens under the `K_e` derived from it. For the last live leaf the path is
+empty, the first test passes with nothing compared, and the second decides: a `sealedInfo` of an own commit that does not
+open is the warning, never "not followed". It cannot be bytes changed on the way: the record, `sealedInfo` included, was
+verified against the author's signature at the read boundary, and bytes that fail there are "read corrupted", read again
+from another node and shown as neither state. The device shows **a compromise warning** for the session and the UA, a state of its own, **never "not followed"**:
 it names the epoch and tells the user that whoever built it reads the session from that epoch on. The device cannot tell
 which of two cases it is, so **the warning names both, with the remedy of each (fable-r3-5):**
 
-- **one foreign signature** (a signer outside `ua-rs` signed one commit it did not build): a commit of its own from this
-  device ends it, because it locks the maker out of the path;
+- **one foreign signature** (a signer outside `ua-rs` signed one commit it did not build). **The warning shows what that
+  commit changed (codex-r3-3):** the leaves it added and removed, its `admins` against the parent's, a changed info,
+  and the same for every later commit by a UA it admitted. A non-admin's signature can add leaves of its own UA only
+  (C8); an admin's can add other UAs, remove UAs (they are `gone` for good, R14) and change the admin list. A refresh
+  from this device locks the maker out of the path above this leaf, and **keeps every leaf the foreign commit added:
+  each stays a recipient of every later epoch.** So the device says the exposure has ended only when **the roster is
+  reconciled**: a commit of its own that removes the leaves of its own UA the user does not confirm, an admin's commit
+  or `treeRemove` for other UAs and for the admin list, and no unconfirmed leaf left at the head. Until then the
+  warning stays and names the leaves left. A UA the foreign commit removed does not come back (R14);
 - **a stolen UA signing key:** its holder commits again from the victim's leaf, so the device's own commit does not end
   it, and a second warning after such a commit shows this case. No key is rotated inside a UA
   ([CTR-UA-13](../../contracts/accounts.md#CTR-UA-13): new key data is a new UA). The remedy is that an admin removes the
@@ -878,7 +968,8 @@ the registry's.
 
 **State gas [E]** (EIP-8037 at 1,530 per byte, 97,920 per new slot, 183,600 per new blob; the note's fixed part of 2.33 M; add
 5.39 M for a kept ML-DSA-65 signature): a path ciphertext is 2,619,360 as a piece (bytes and its slot) and 55,080 in the stored list
-(36 B); a node key 2,596,410 (bytes, its `keyAt` slot, 32 B in the record); so a warm level is about 5.27 M.
+(36 B); a node key 2,596,410 (bytes, its `keyAt` slot, 32 B in the record); so a warm level is about 5.27 M. The `keyAt`
+slot is written at completion, so the completion's transaction pays it, as it pays every other slot of the tree.
 
 | n keys | depth | Warm commit | After one removal (up to `2d` ciphertexts) | Cold commit (`n − 1` ciphertexts) | Flat rekey (note §4.2) |
 |---:|---:|---:|---:|---:|---:|
@@ -914,20 +1005,43 @@ pieces. Every row is for the cap of 256.
 | A commit's record, plain, ML-DSA-65 checked in software, with the tree check of C7 on a warm tree | about 7 M | 8.1 M | 15.9 M | fits |
 | A commit's record at its bounds (32 Adds, 32 admins, 4,124 B of `sealedInfo`; the tree check on a cold tree of 256, about 3 M) | about 10.5 M | 25.3 M | 37.6 M | fits |
 | The same records signed with ML-DSA-87 (8.86 M cached verify, a 4,627-B signature kept: +3.06 M regular, +2.02 M state; codex-r2-12) | about 10 M / 13.6 M | 10.1 M / 27.3 M | 21.2 M / 42.9 M | fits; the largest record sent alone |
-| The commit of the last live leaf at its bounds: no piece, so acceptance and completion are one transaction (32 forced Removes with their `goneKey` slots and up to 32 `gone` slots, 32 admins, 4,124 B of `sealedInfo`; ML-DSA-65 / ML-DSA-87; fable-r3-8) | about 13 M / 16 M | about 27 M / 29 M | about 42 M / 47 M | fits the block; with ML-DSA-87 the regular gas is near 2^24 and the transaction **cannot be split** (below) |
+| The commit of the last live leaf at its bounds: no piece, so acceptance and completion are one transaction (32 Removes with their `goneKey` slots, 32 admins, 4,124 B of `sealedInfo`; ML-DSA-65 / ML-DSA-87; fable-r3-8). The figure is for **evictions by the commit alone** (an admin's Removes with no `treeRemove` before: 32 `gone` slots more, 64 slots, 6.27 M); for **forced** Removes the `gone` slot was paid by the `treeLeave` or `treeRemove`, 3.13 M less (codex-r3-6) | about 13 M / 16 M | about 27 M / 29 M | about 42 M / 47 M | fits the block; with ML-DSA-87 the regular gas is near 2^24 and the transaction **cannot be split** (below) |
 | The list of a cold commit (255 targets, stored packed, 9,180 B) | about 0.5 M | 14.2 M | 15.5 M | fits |
-| The node keys, depth 8 | about 1 M | 20.6 M | 22.6 M | fits |
+| The node keys, depth 8 (12,808 B and one blob; their 8 `keyAt` slots, 0.78 M, are the completion's) | about 1 M | 19.8 M | 21.8 M | fits |
 | One ciphertext in `addPath` | about 0.11 M | 2.62 M | 2.9 M | 20 per transaction |
-| Completion at its bounds (32 Adds: 176 new slots; the walk of 511 nodes; 33 paths rehashed) with the last ciphertext | about 5 M | 19.9 M | 26.1 M | fits |
+| Completion with the last ciphertext, **the fixture of codex-r3-6:** a full tree of 32 keys grows to 64 by 32 Adds of UAs that have no session yet (227 new slots, below) | about 6.5 M | 25.0 M | 33.1 M | fits |
+| Completion **at its bounds** with the last ciphertext: 32 Adds of such UAs, scattered over a tree of 256 that has one live leaf, the admin list grown from 1 to 32 (352 new slots, below; the walk of 511 nodes; 33 paths rehashed) | about 9.5 M | 37.3 M | 49.1 M | fits, 10.9 M to spare; the dearest transaction of a commit |
 | A whole warm commit, 64 keys | about 8.5 M | 39.7 M | 50.6 M | one transaction |
 | A whole warm commit, 256 keys | about 9 M | 50.3 M | 62.2 M | two transactions |
 | A whole cold commit, 256 keys | | 710.8 M | | at least 14 transactions (a flat rekey: 739 M) |
 
+- **The completion's slots, counted (codex-r3-6) [E].** Revision 3's row (176 new slots, 19.9 M) was short: 32 first-time
+  UAs alone are 192. Per Add: two leaf slots and `liveKey` (3); `keysOf` at a UA's first key in the session (1);
+  `sessionsOf` at a UA's first key, two for a UA that has no session yet, one for a UA that has (§8, C34): **6 per Add
+  at most, 192 for 32.** Then one `hash` slot per parent whose subtree was empty and now holds an added leaf; one `keyAt`
+  slot per node of the author's path that was blank; `childOf` and `epochsOf` (2, as every epoch); one slot per admin the
+  list grows by. A Remove adds its key slot, and a `gone` slot when the commit alone evicts the UA.
+
+  | Case | Leaves, index | Parent `hash` | `keyAt` | Admins | Epoch | New slots | State gas (97,920 each) |
+  |---|---:|---:|---:|---:|---:|---:|---:|
+  | The fixture: 32 → 64 keys, 32 UAs with no session, a warm path below the new root | 192 | 32 (31 of the new subtree and the new root) | 1 (the new root) | 0 | 2 | 227 | 22,227,840 |
+  | The bound: a tree of 256 with one live leaf, 32 Adds in 32 different subtrees of 8, a blank path, admins 1 → 32 | 192 | 121 | 6 | 31 | 2 | 352 | 34,467,840 |
+
+  **127 is the most for parent hashes and `keyAt` slots together.** The paths of 32 leaves cover 127 parents at most at
+  depth 8 (31 in the five top levels, 32 in each of the three below). The author's ancestors among them are hashed
+  already, and exactly those take a key, because their copath child holds an Add: 6 and 121 in the layout of the row,
+  8 and 119 when the author's sibling is added. A client that takes the leftmost blank leaf (§4) stays near the
+  fixture, about 40 new parents at most; the contract checks only "blank and in range", so the bound is the scattered
+  case. The last ciphertext sent alone is 2,802,960 (its 1,648 B, its slot and a blob of its own; 2,619,360 is its share
+  in a chunk): **25,030,800 and 37,270,800 of state gas.** Regular gas is about 22,100 per new slot (5.0 M and 7.8 M)
+  plus the walk and the rehash: about 6.5 M and 9.5 M, under 2^24. **Asked: 33.1 M and 49.1 M; both fit a 60 M block.** No bound and no split of the record moves; what moves is the order of the pieces
+  (the last piece, below) and the one-transaction figure (the end of this section). T3c measures both fixtures.
 - **What revision 1 would have asked at 256 [E]:** `createSession` with the cold tree in the record's transaction, 133.0 M of
   state gas (767 slots are 75.1 M of it): no 60 M block holds it. A commit's record at its bounds with the target list inside
   (64 B per ciphertext), 50.3 M of state gas, 60.7 M asked: over the line. With C14 and C15 neither exists.
-- **Result for R8's premise:** every piece of a commit, of any tree up to 256 keys, fits a 60 M block with at least 17 M to
-  spare (the one-transaction commit of the last live leaf: about 13 M, estimate). **One piece does not fit at 256: the session record.** It is mode 0's record,
+- **Result for R8's premise:** every piece of a commit, of any tree up to 256 keys, fits a 60 M block with at least about
+  10 M to spare, sent in the order of C37 (the completion at its bounds with the last ciphertext asks 49.1 M; the
+  one-transaction commit of the last live leaf about 47 M with ML-DSA-87; a record at its bounds 42.9 M; estimates). **One piece does not fit at 256: the session record.** It is mode 0's record,
   unchanged (a flat session of 256 keys sends the same bytes; mode 0 bounds it by the transaction, not by a constant), signed
   whole, 128 B per member key: a 60 M block holds a creation of about 200 keys **[E]**, some fewer with an ML-DSA-87
   creator (about 190) or an `msig` creator's quorum signatures. Revision 2's row left out mode 0's discovery index, up to
@@ -936,21 +1050,39 @@ pieces. Every row is for the cap of 256.
   the block is 72 M or more. The cap bounds the tree, not the creation (owner, R8).
 - **Not done here:** splitting the session record (its member list as a piece). That changes `PqChatSession`, a record of both
   modes and of `pqchat-sigs`, for a limit mode 0 already has; it is the way to make 256 creatable at 60 M, should the owner ask for it.
-- **No reachable tree is stuck (fable-3):** under the cap a commit has at most 255 targets, 32 changes and 32 owed leaves, and
-  the rows above are those bounds; so every tree a session can reach has a next commit whose pieces fit a 60 M block.
+- **No reachable tree with a member left is stuck (fable-3, codex-r3-11):** under the cap a commit has at most 255 targets,
+  32 changes and 32 owed leaves, and the rows above are those bounds; so every tree a session can reach **in which a UA
+  that is not `gone` holds a live leaf** has a next commit whose pieces fit a 60 M block. A closed session has no author
+  and no next commit, by definition (C38, §9).
 - **A smaller chain: per operation, not per protocol (codex-r2-9).** The SDK's chunk planner quotes **the operation asked
   for**: its actual record, the completion it needs and the chunks it chose, against the chain's limits (block limit, 2^24,
   the code-size limit for blobs). It refuses, by name and with the figures, exactly the operation whose required piece does
   not fit; a plain commit (15.9 M) and a ciphertext (2.9 M) go through on a chain where a record at its bounds would not. No
   constant in the SDK names a smallest chain.
-- **The last piece (fable-r2-9).** Whichever piece lands last also pays the completion (26.1 M asked at the bounds, against
-  2.9 M for a ciphertext alone). The planner sends the last piece alone, after the others are final, with the completion's
-  limit; the node estimates each piece on the state at send time, so a piece that became the last is given the gas for it.
+- **The last piece (C37; fable-r2-9, codex-r3-12).** Whichever piece lands last also pays the completion: up to 34.5 M of
+  state gas at the bounds, beside its own. With a ciphertext that asks 49.1 M. With the node keys, which are one
+  indivisible piece, it would ask about 63 M at the row's layout (6 keys, 14.9 M) and about 68 M with 8 keys (19.8 M):
+  **that does not fit a 60 M block**, and it stops fitting from about 280 new slots. The list stays under the line as a
+  last piece on these figures (about 53 M asked at the worst mix found: a long list needs many live leaves, which
+  leaves fewer empty subtrees to fill), and the rule sends it first anyway. Anyone may land a piece, so the order is a rule and not a hope. The planner sends the record; then the
+  list and the node keys, each final before anything else leaves the device; then the ciphertexts and the Welcome wraps;
+  and it **holds one ciphertext back**, sent alone when every other piece is final, with the completion's limit. A piece
+  that has not left the device cannot be landed by anybody else, and a commit that has any piece has a ciphertext
+  (`ctCount > 0`), so the last piece is that ciphertext. The node keeps the same order for a set it relays and estimates
+  each piece on the state at send time (§15). **The quote names two figures:** the completion with the held ciphertext,
+  and the dearest piece that would be last if the order were broken, with whether that fits. **If the order is broken**
+  (only a sender that was handed the whole set can do it: the author's relayer) and the piece left does not fit with the
+  completion, the commit cannot complete. It is void like a lost race: the planner reports it by name with the figures,
+  and the author rebuilds with a new nonce through another sender. The exposure is the gas of the pieces that landed,
+  each paid by its sender, and what a candidate discloses anyway (§11). Where the completion is small (a plain warm
+  commit) every piece fits as the last one, and the quote says so.
 - **The `treeLeaves` page (fable-r2-U1, settled) [E].** Each leaf of a page costs two slot reads, the registry's key read
   (1,601 B, and for a version above 0 about 5 KB with its kept signature) and one hash: 6 to 10 M for 256 leaves, most of it
   memory growth, under the 2^24 cap that Nethermind applies to `eth_call` but with less than a factor 2 to spare. With
   `TREE_LEAF_PAGE_MAX` = 64 a page is 1.5 to 2.5 M and a full tree four calls. The plan measures a full page of
-  version-above-0 keys with the cap enforced (T3c).
+  version-above-0 keys with the cap enforced, and a full tree as **four such calls at one block** (T3c). The production
+  view never returns 256 leaves in one call; a figure for one uncapped page of 256 can only come from a test harness
+  and is named as that (codex-r3-13).
 - **The ML-DSA-65 figure (fable-U1, settled) [F].** 5.80 M is the measured `verifyCached` (cap 5,950,000,
   `docs/contracts/accounts.md`, P6c). The 18.9 M to 19.0 M figure is the verify on the FIPS 204 key, which a registry without
   the precompile never runs for a registered UA: `register` needs the expanded-key cache complete first, and a missing cache
@@ -961,9 +1093,10 @@ pieces. Every row is for the cap of 256.
   and runs the largest pieces on the local Nethermind copy (fable-15).
 
 Acceptance (the signature and the tree check, R12) and completion (the tree update) fall in different transactions whenever
-a commit is chunked; in one transaction they are about 15.5 M regular at the bounds with ML-DSA-65, under 2^24 by about
-1.3 M, and about 18.6 M with ML-DSA-87, over it: there the planner sends the record alone and the pieces after
-(ARCH-POS-18: both paths in software, none disabled). **One commit cannot go "the record alone" (fable-r3-8):** the
+a commit is chunked; in one transaction they are about 17 M regular at the fixture of codex-r3-6 with ML-DSA-65 (10.5 M
+and 6.5 M) and about 20 M at the bounds (10.5 M and 9.5 M), 3.1 M more with ML-DSA-87: **over 2^24 with either signer**
+(revision 3's 15.5 M rested on the short completion row). There the planner sends the record alone and the pieces after
+(ARCH-POS-18: both paths in software, none disabled); a commit with fewer new slots goes in one transaction when the quote fits. **One commit cannot go "the record alone" (fable-r3-8):** the
 author that is the last live leaf has no copath target, so its commit has no piece, and acceptance and completion are one
 transaction by construction (§8). At its bounds (32 forced Removes, 32 admins, 4,124 B of `sealedInfo`) that is the
 signature, the tree check and 32 blanked leaves with their `goneKey` and `gone` slots: about 13 M regular with ML-DSA-65
@@ -990,8 +1123,9 @@ line in `size-baseline.json`.
 | A live member lends a leaf: it registers another party's fresh key as its own version, or passes on what it opens (fable-r2-8) | not preventable by any rule on keys; the leaf is that member's in the roster and ends with its removal (§9). The same move blocks another UA's key while the leaf is live, and burns it for the session only when the member goes, once per UA (R16; the front-running row): that UA registers a new KEM version |
 | A stale endpoint hides the newest commits (codex-4) | the client refuses a head below its checkpoint; a commit on an old head is `PqChatEpochTaken`, but what it sealed is disclosed to the keys of that old tree (§11): path secrets of a commit that never wins, and the info in force or the marker, which those keys held. A **changed** info is sealed only after the majority read of R13; with fewer than 3 named endpoints it is refused. **Left, as in mode 0 (fable-r3-9):** a message a user sends on a stale head is read by a member removed since (§11) |
 | An endpoint serves the head author's twin of the head: same epoch id, other tree (fable-r2-4, codex-r2-11) | the checkpoint and the pins hold the record's hash; `parentTreeHash` is signed and compared by the contract, and bound in `ctx_e` |
+| The device pinned a twin of epoch `n` that differs outside the tree (`sealedInfo`, `admins`), then is served the true epoch `n + 1`: the number advances, the parent id and root match (codex-r3-2) | before the state is extended above a pin, the record that won at the pinned number is read and compared with the pin; a mismatch is settled by the majority rule and the epoch is replayed with its metadata (§8 step 1) |
 | The head's author has its twin served first, so the device pins the twin and then refuses the true chain (fable-r3-3) | on a mismatch at a pinned number the epoch is read under the strict majority over at least 3 nodes; the majority's record replaces the pin and the event is shown; without such a read the session shows "conflicting head" and nothing is built on it (§8 step 1) |
-| A stolen UA signing key, or one signature over a foreign commit, without the KEM seed (fable-r2-1) | **accepted (owner, R10):** the maker of that commit holds `K` of its epoch and the path above the victim's leaf, and follows until that leaf commits again or is removed; mode 0's `rekey` is the same. The victim's seed-restored device shows a compromise warning (§10). **One foreign signature** ends with the device's own commit. **A stolen key** does not: its holder commits again; an admin removes the UA and the user returns as a new UA (R14). No key is rotated inside a UA (CTR-UA-13), and that UA is lost everywhere (fable-r3-5) |
+| A stolen UA signing key, or one signature over a foreign commit, without the KEM seed (fable-r2-1) | **accepted (owner, R10):** the maker of that commit holds `K` of its epoch and the path above the victim's leaf, and follows until that leaf commits again or is removed; mode 0's `rekey` is the same. The victim's seed-restored device shows a compromise warning (§10). **One foreign signature** ends when the roster is reconciled: the warning shows what the foreign commit changed, and a refresh alone keeps every leaf it added as a recipient (codex-r3-3). **An own commit with an empty path** (the last live leaf) is judged by `sealedInfo` (codex-r3-4). **A stolen key** does not end so: its holder commits again; an admin removes the UA and the user returns as a new UA (R14). No key is rotated inside a UA (CTR-UA-13), and that UA is lost everywhere (fable-r3-5) |
 | A leave or removal signed for one home is replayed in a twin session at another (codex-r2-5) | `PqChatTreeLeave` and `PqChatTreeRemove` sign `treeId` (C30) |
 | A device that fell behind refreshes and republishes old room or store lists (codex-r2-3, fable-r2-5) | it seals the marker; a full info is sealed only by a device that holds the one in force; a changed one is taken only from an admin (C33) |
 | A device misses the epoch that changed the info, follows again through another member's commit, and its next commit (a new device key, an Add) seals the retired info (fable-r3-1) | a device that did not follow an epoch has no info in force from that epoch on: it seals the marker until a commit it follows carries a full info, taken under the joiner rule and never sealed while flagged (C33) |
@@ -1009,6 +1143,10 @@ line in `size-baseline.json`.
 | A staged record that can never complete, to spend sponsors' gas and fill state (codex-20, fable-r2-3) | refused at acceptance: shapes, counts, the walk and the tree hash (C7, C24, R12); every piece checked when it lands. **Left (fable-r3-6):** a race on the head (a UA that went, another commit that won), and an author that signs the hash of a node key that fails the admission check, a hash no piece matches, or holds a piece back: the record is accepted and the commit never completes. The contract cannot see it at acceptance. The node guards a relayer's gas: it relays a commit only when it holds the whole set and every piece passes (§8, §15); a sender outside the node pays for what it fills |
 | A member leaves, or an admin removes a UA, while a commit is staged (fable-r3-9) | by design the staged commit fails step 1 and is void: a cold commit of 14 transactions is lost each time. Any member can do it once per UA (R14 bounds it: a UA goes once); an admin as often as it removes. The author rebuilds on the head it reads then |
 | A removed admin and a leaving admin trap the honouring commit (fable-r2-6) | dropping `gone` UAs from `admins` is exempt from the admin-with-a-leaf rule |
+| An admin removes another admin's last leaf by a commit and keeps that UA in the signed `admins`: a `gone` admin at the head (codex-r3-10) | refused at acceptance: `admins` is judged against the UAs the commit leaves with no leaf (`PqChatRemovedKept`); with a replacement key in the same commit the UA stays |
+| The last member leaves, or a keyless admin removes the last members (codex-r3-11) | the session is closed for good (C38): no author, no Add; the head, the leaves and `goneOf` stay readable, a key's period ends at the head; nothing is lost and nobody returns |
+| A sender that holds the whole set lands the pieces out of order, so that an indivisible piece is last and does not fit with the completion (codex-r3-12) | only the author's own relayer can (C37: nothing else has left the device); the commit is void like a lost race and is rebuilt through another sender; the gas of the landed pieces was their sender's |
+| A creator loses its device after the session record landed and before the wraps did (codex-r3-5) | the wraps cannot be rebuilt; without the prepared pieces the creation is shown as incomplete and is abandoned for a new session; with them (the device's store, or a relayer) it is finished (§8) |
 | A huge tree to exhaust gas | `TREE_LEAVES_MAX`, `TREE_CHANGES_MAX`; each piece paid by its sender |
 | A decode bomb at the node | `typed.rs` bounds every array by length and depth before it builds bytes, with the contract's bounds |
 | Downgrade of the mode (codex-14, fable-13) | the creator's signature covers `groupMode`; the home's setting is authenticated and the mode pinned with `treeId` (C27); a tree wrap opens under no flat processing |
@@ -1033,7 +1171,8 @@ line in `size-baseline.json`.
   signer is outside this guard: that is R10's accepted cost.
 - **`scaas-sdk`**: thin calls: named ABI rows for `commit`, `addPathList`, `addPathKeys`, `addPath`, `treeLeave`, `treeRemove`
   and the views, the `app_core` surface for the handles and the signing operations, the registry read that keeps the KEM
-  record's signature, chunk planning per operation from the chain's limits (§13: the last piece alone, the fallback to the
+  record's signature, chunk planning per operation from the chain's limits (§13: the order of C37 with one ciphertext
+  held back and sent alone, both figures in the quote, the named result when the order was broken, the fallback to the
   piece entries when the record is already stored). No "rejoin" call (R14).
 - **`pqchat-core`**: the mode branch at "obtain `K` of this epoch": the public tree from views, validation (§8), the checkpoint
   and the pins per `treeId` (C16, C26, C27), asking for a commit and sending its pieces, the fixed read schedule and replay
@@ -1042,14 +1181,27 @@ line in `size-baseline.json`.
   majority read before a changed info (R13), no receipts and no flushed sends in a tree session (R11, C35), the size hint
   (C3), **the warning before an Add (owner, R16):** the admin's client checks whether the added key's `kemHash` is
   registered to another UA in the registry and warns "this key is also held by UA …" (client only; the contract's sets do
-  not depend on it). It holds no key byte.
+  not depend on it). **The lookup (codex-r3-9):** the registry has no index by `kemHash`, and its versions are sparse and
+  stored in any order, so the client checks **candidates** `(ua, version)`: every UA of the session (live, admin, and
+  the `gone` ones replay showed it) and of the device's contacts, at each version from 0 to that UA's highest when the
+  highest is at most `KEM_SCAN_MAX` = 64, else at version 0, the highest and the versions the session's leaves name;
+  and any `(ua, version)` an index offers (the node's indexer or another), as a hint only. A positive is **verified**:
+  `kemKeyAt(ua, version)`, read under the read rules, hashes to the `kemHash`; a hint that does not verify is dropped.
+  The result is "also held by UA … (version …)" or "not found among the N UAs checked", with what was not covered (UAs
+  outside the list, versions above the scan), never "held by nobody": an empty lookup proves nothing.
+  **Also (Codex's third round):** the prepared creation kept until epoch 0 completes, and "creation incomplete" without
+  it (§8); the comparison at the pin before the state is extended (§8 step 1); the two ranges of replay and the genesis
+  join (§10); the own-commit test on node keys and `sealedInfo`, and the warning that stays until the roster is
+  reconciled (§10); an admin's new info after a gap (§5); a closed session shown as closed (§9). It holds no key byte.
 - **`pqvault-core`**: refuses `groupMode ≠ 0`, as today (R5).
 - **Node**: `typed.rs` `TYPED` and `PLAIN` rows and `guard.rs` for `commit`, `treeLeave`, `treeRemove` (signed) and `addPathList`,
   `addPathKeys`, `addPath` (unsigned, relayed under `relay_unsigned_pqchat` as `addWraps`), with the contract's bounds (C24), `selector_audit.json`,
   equal to the contract's in both directions. **The whole-set guard (fable-r3-6):** the node relays a tree commit's record
   or pieces only when it holds every piece the record signs that is not yet in state (the list, the node keys, every
   ciphertext, every Welcome wrap), each hashing to its signed hash and every node key passing the admission check;
-  otherwise it refuses by name and sends nothing. The guarantee is the node's, for every consumer.
+  otherwise it refuses by name and sends nothing. **It sends the set in the order of C37** (the record, the list, the
+  node keys, then ciphertexts and wraps, one ciphertext alone at the end), so no indivisible piece pays the completion
+  (codex-r3-12). The guarantee is the node's, for every consumer.
 
 ## 16. Open points for the owner
 
@@ -1068,7 +1220,8 @@ line in `size-baseline.json`.
 | Revision 1's O2 to O5 | R7 |
 
 The controller's own calls of this revision (C29 to C36, the per-key period in C28 and, since R16, the level judged on the
-tree after the Adds, a leave forced like a removal in C21) are listed in §2; the owner may override any.
+tree after the Adds, a leave forced like a removal in C21; after Codex's third round C37, the order of the pieces, and
+C38, the closed session) are listed in §2; the owner may override any.
 
 ## 17. What revisions 2 and 3 changed
 
@@ -1084,6 +1237,25 @@ change only; no record, typehash or derivation moved:
 | §6, §7, §8, §11 | the pair set `goneOwnKey` and its view; the Add's three checks; completion writes the level; `PqChatTreeOwnKeyReturn` | R16 (the controller's finding) |
 | §9, §10, §13, §14 | the two levels and why; one period per `(ua, kemHash)`; the pair slot and the third read; the burn row bounded; the front-running row | R16 (the controller's finding) |
 | §15 | the admin's warning before an Add of a key registered to another UA | R16 (the controller's finding) |
+
+**Round 3 (Codex, on the tree with R16, `ddf3a92cb`), fixed in place.** No record, typehash, derivation or view moved; one
+contract check is added at acceptance (codex-r3-10):
+
+| Section | Change | Findings |
+|---|---|---|
+| §2 C25, §10, §15 | the public range (the join's parent to the anchored head) apart from the secret range; `endEpoch` is the removal commit, nothing opened there; the genesis join by the signed `members` | codex-r3-1 (closes codex-11, codex-r2-6) |
+| §2 C26, §5, §8, §14 | the record that won at the pinned number is compared before the state is extended; `parentTreeHash` binds the parent's tree, not its record | codex-r3-2 |
+| §5, §10, §14 | the warning shows what the foreign commit changed; the exposure ends when the roster is reconciled | codex-r3-3 |
+| §10, §14 | to reproduce an own commit is node keys and `sealedInfo`; the empty path | codex-r3-4 |
+| §8, §14, §15 | the prepared creation is kept until epoch 0 completes; without it the creation is abandoned | codex-r3-5 |
+| §13 | the completion's slots counted: 227 at the fixture, 352 at the bounds (37.3 M of state gas, 49.1 M asked); the one-transaction figure; forced Removes apart from evictions by a commit | codex-r3-6 |
+| §2 C33, §5 | an admin establishes the info anew after a gap, reviewed, never automatically | codex-r3-7 |
+| §9 | what R16 guarantees: a key B released; no priority for A | codex-r3-8 |
+| §15 | the lookup behind the warning before an Add: candidates, a verified positive, coverage stated | codex-r3-9 |
+| §2 C24, §8, §9, §14 | `admins` judged against the UAs a commit leaves with no leaf | codex-r3-10 |
+| §2 C38, §9, §13, §14 | the closed session | codex-r3-11 |
+| §2 C37, §13, §14, §15 | the order of the pieces, one ciphertext held back; both figures in the quote | codex-r3-12 |
+| §13 | a full tree is four `treeLeaves` calls at one block; an uncapped page is a harness figure | codex-r3-13 |
 
 **Round 3 (Fable, focused, on revision 3), fixed in place.** No record, typehash or derivation moved:
 
