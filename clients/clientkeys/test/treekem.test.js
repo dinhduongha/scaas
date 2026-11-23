@@ -323,6 +323,8 @@ test("the main scenario: every member with a leaf derives the same K at every ep
     hex(tr.treeStructHash("PqChatCommit", { ...MAIN.steps[1].built.record, adds: [{ ...add, via: Z32 }] })),
     hex(tr.treeStructHash("PqChatCommit", MAIN.steps[1].built.record)),
   );
+  // what the commits blanked is dropped: C held node 5 from its own commit of 3; A's Remove of C2 (6) blanked it
+  assert.deepEqual(replays.C.held, [3, 4, 7]);
   // the third member's commit (3, C) right after the Add: D follows it
   assert.equal(at(replays.D, 3).state, "followed");
 });
@@ -529,6 +531,34 @@ test("the checkpoint (C26, fable-r2-4, codex-r2-11): a same-id twin of the head 
     (e) => e.code === "TreeReadCorrupted" && e.read === "commitOf(1)",
   );
   assert.equal(f.replayOf(t1, "C").epochs.length, 3);
+});
+
+test("a record of the twin session at another home, same id, parent and treeHash (an empty path), is refused by its treeId", () => {
+  const mk = (homeChain) =>
+    f.createSession({
+      tag: "t/solo",
+      creator: "A",
+      nonce: 72,
+      admins: ["A"],
+      members: ["A"],
+      info: f.INFO.I1,
+      homeChain,
+    });
+  const [x, y] = [mk(), mk(hex(rnd("t/other-home-3")))];
+  f.commit(x, "A", { nonce: 9 });
+  f.commit(y, "A", { nonce: 9 });
+  const [rx, ry] = [x.home.epochs[1].record, y.home.epochs[1].record];
+  assert.deepEqual(
+    [x.home.epochs[1].id, rx.parentTreeHash, rx.treeHash],
+    [y.home.epochs[1].id, ry.parentTreeHash, ry.treeHash],
+  );
+  assert.notEqual(rx.treeId, ry.treeId);
+  const swap = (read, v) => (read === "commitOf(1)" ? { record: ry, sig: y.home.epochs[1].sig } : v);
+  assert.throws(
+    () => f.replayOf(x, "A", swap),
+    (e) => e.code === "TreeReadCorrupted" && e.read === "commitOf(1)",
+  );
+  assert.equal(at(f.replayOf(x, "A"), 1).state, "followed");
 });
 
 test("the twin outside the tree (codex-r3-2): one id, one parent, one treeHash, another sealedInfo: two hashStructs, the true child fits both, the pin decides", () => {
