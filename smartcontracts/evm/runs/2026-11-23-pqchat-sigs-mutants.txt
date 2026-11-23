@@ -1,0 +1,16 @@
+# plan 2026-11-23-pqchat-signatures S1 contract mutants (runs/2026-11-23-pqchat-sigs-mutants.py; verdict | mutant | file | rc | tests failed); run on the tree of the S1 commit before it was made (src unchanged since)
+killed   | M1 initialize takes any setting | PqChat.sol | rc=1 | 2 failed: test_gas_deployImplementation, test_initializeTakesNoneOrSstore2Only
+killed   | M2 initialize takes log (1) | PqChat.sol | rc=1 | 2 failed: test_gas_deployImplementation, test_initializeTakesNoneOrSstore2Only
+killed   | M3 every instance keeps signatures | PqChat.sol | rc=1 | 9 failed: test_gas_deployImplementation, test_gas_groups, test_gas_none_fndsa512, test_gas_none_mldsa65, test_gas_remove, test_gas_rest_none, test_gas_twoMembers, test_gas_twoMembersInChunks, test_noneHomeStore
+killed   | M4 no instance keeps signatures | PqChat.sol | rc=1 | 11 failed: test_gas_deployImplementation, test_gas_groups, test_gas_remove, test_gas_rest_sstore2, test_gas_sstore2_fndsa512, test_gas_sstore2_mldsa65, test_gas_twoMembers, test_gas_twoMembersInChunks, test_leav
+killed   | M5 a none instance answers the signature views | PqChat.sol | rc=1 | 2 failed: test_gas_deployImplementation, test_noneHomeStoresNoSignature
+killed   | M6 a none instance keeps leave records | PqChat.sol | rc=1 | 4 failed: test_gas_deployImplementation, test_gas_rest_none, test_gas_twoMembers, test_noneHomeStoresNoSignature
+killed   | M7 an sstore2 instance keeps no leave record | PqChat.sol | rc=1 | 5 failed: test_gas_deployImplementation, test_gas_rest_sstore2, test_gas_twoMembers, test_leaveRecordsArePinned, test_sstore2HomeReturnsTheSignedBytes
+killed   | M8 the kept blob's signature offset wrong | PqChat.sol | rc=1 | 2 failed: test_gas_deployImplementation, test_sstore2HomeReturnsTheSignedBytes
+killed   | M9 the kept blob without the signature tail | PqChat.sol | rc=1 | 2 failed: test_gas_deployImplementation, test_sstore2HomeReturnsTheSignedBytes
+killed   | M10 leaveSig reads the dynamic records' offset word | PqChat.sol | rc=1 | 2 failed: test_gas_deployImplementation, test_sstore2HomeReturnsTheSignedBytes
+killed   | M11 the author read at the none blob's offset | PqChat.sol | rc=1 | 3 failed: test_gas_deployImplementation, test_gas_remove, test_removedAuthorsStagedChildCannotComplete
+killed   | M12 the one-blob bound without the kept signature | PqChat.sol | rc=1 | 3 failed: test_gas_deployImplementation, test_gas_twoMembers, test_postMessage_oneBlobOnly
+killed   | M13 sessionSig answers an epoch id | PqChat.sol | rc=1 | 2 failed: test_gas_deployImplementation, test_sstore2HomeReturnsTheSignedBytes
+killed   | M14 epochSig answers a session id | PqChat.sol | rc=1 | 2 failed: test_gas_deployImplementation, test_sstore2HomeReturnsTheSignedBytes
+14 mutants, 14 killed, 0 survived, 0 not loaded

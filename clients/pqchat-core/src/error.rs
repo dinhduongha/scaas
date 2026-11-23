@@ -89,6 +89,8 @@ codes! {
     Internal,
     /// a contact card that does not count for its UA (UA-7 §14 O7, CLI-PQC-05)
     CardRefused,
+    /// CLI-PQC-15: under `require_signed_records`, a home that keeps no signatures (`sigStore` `none`)
+    HomeUnsigned,
 }
 
 impl fmt::Display for PqChatError {

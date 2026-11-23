@@ -468,8 +468,7 @@ test("every type string is spec §6's; its typehash is keccak256 of it; encodeTy
   assert.deepEqual(Object.keys(tr.TREE_TYPE_STRINGS).sort(), Object.keys(SPEC).sort());
 });
 
-/** pqchat-sigs adds `groupMode` to PqChatSession; this branch has it once rebased on pqchat-sigs (plan §1). */
-const MODE = pc.TYPES.PqChatSession.some((f) => f.name === "groupMode");
+/** A tree session: PqChatSession with `groupMode` 1 (CTR-CHAT-25). */
 const session = {
   creator: id("ua/A"),
   nonce: 3,
@@ -482,18 +481,14 @@ const session = {
   ],
   wrapHashes: [id("w0"), id("w1")],
   sealedInfo: "0x" + "ab".repeat(284),
-  ...(MODE ? { groupMode: 1 } : {}),
+  groupMode: 1,
 };
 const tree = { ...session, groupMode: 1 };
 
-test(
-  "TreeGenesis is PqChatSession's type without wrapHashes and sealedInfo",
-  { todo: MODE ? false : "pqchat-sigs" },
-  () => {
-    const s = pc.TYPES.PqChatSession.filter((f) => f.name !== "wrapHashes" && f.name !== "sealedInfo");
-    assert.deepEqual(tr.TREE_TYPES.TreeGenesis, s);
-  },
-);
+test("TreeGenesis is PqChatSession's type without wrapHashes and sealedInfo", () => {
+  const s = pc.TYPES.PqChatSession.filter((f) => f.name !== "wrapHashes" && f.name !== "sealedInfo");
+  assert.deepEqual(tr.TREE_TYPES.TreeGenesis, s);
+});
 
 test("genesisCtx: every genesis field moves it, wrapHashes and sealedInfo do not; treeId is PqChatSession's struct hash", () => {
   const g = hex(tr.genesisCtx(tree));

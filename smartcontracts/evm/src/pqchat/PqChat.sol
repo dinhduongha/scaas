@@ -52,14 +52,19 @@ contract PqChat is IPqChat, PqChatCore {
     // ------------------------------------------------------------------ the instance
 
     /// @notice The factory's only. `ownerUA` is 0 (no owner) or the creator (`IOpenFactory.creating()`, Fable D P3-1): nobody
-    ///         names another UA as the owner of an instance it creates.
-    function initialize(bytes32 ownerUA) external {
+    ///         names another UA as the owner of an instance it creates. `sigStore` (CTR-CHAT-23) `none` or `sstore2`, fixed.
+    function initialize(bytes32 ownerUA, uint8 sigStore_) external {
         if (msg.sender != FACTORY) revert PqChatNotFactory();
         S storage s = _s();
         if (s.initialized) revert PqChatInitialized();
         ChainEnvCode.requirePresent();
         if (ownerUA != 0 && ownerUA != IOpenFactory(FACTORY).creating()) revert PqChatOwnerNotCreator(ownerUA);
-        (s.initialized, s.ownerUA) = (true, ownerUA);
+        if (sigStore_ != SIG_NONE && sigStore_ != SIG_SSTORE2) revert PqChatSigStore(sigStore_);
+        (s.initialized, s.ownerUA, s.sigStore) = (true, ownerUA, sigStore_);
+    }
+
+    function sigStore() external view returns (uint8) {
+        return _s().sigStore;
     }
 
     function owner() external view returns (bytes32) {
@@ -106,18 +111,24 @@ contract PqChat is IPqChat, PqChatCore {
         sid = PqChatTypes.sessionId(s.creator, s.nonce);
         Epoch storage ep = _s().epochs[sid];
         ep.sessionId = sid;
-        ep.record = _put(abi.encode(s, keccak256(abi.encode(sig))), limit);
+        ep.record = _put(_blob(abi.encode(s), sig), limit);
         ep.wraps = uint32(s.members.length);
         ep.home = s.homeChain == uid && s.homeChatContract == address(this);
         emit PqChatSessionCreated(sid, s.creator, s.homeChain);
-        for (uint256 i; i < s.members.length; ++i) {
-            _s().sessions[s.members[i].ua].push(sid);
-        }
+        _indexAll(sid, s.members);
         _landWraps(sid, ep, 0, wraps, s.members, s.wrapHashes, limit);
+    }
+
+    /// @dev `sessionsOf` gains `sid` once per UA of `m`, not per key (owner (M) 2026-11-23).
+    function _indexAll(bytes32 sid, MemberKey[] memory m) internal {
+        for (uint256 i; i < m.length; ++i) {
+            if (!_sameUa(m, i)) _s().sessions[m[i].ua].push(sid);
+        }
     }
 
     /// @dev P8, 3C-D6: the lists, the creator a member and an admin, the home instance named (P32).
     function _checkSession(IUARegistry reg, PqChatSession calldata s) internal view {
+        if (s.groupMode != 0) revert PqChatModeUnsupported(s.groupMode); // CTR-CHAT-25: this release runs flat wraps only
         MemberKey[] memory members = s.members;
         bytes32[] memory admins = s.admins;
         _checkLists(reg, admins, members, s.wrapHashes.length, 2);
@@ -140,7 +151,7 @@ contract PqChat is IPqChat, PqChatCore {
         eid = PqChatTypes.epochId(e.sessionId, e.author, e.nonce);
         Epoch storage ep = _s().epochs[eid];
         (ep.sessionId, ep.parent, ep.epoch) = (e.sessionId, e.parentEpochId, e.epoch);
-        ep.record = _put(abi.encode(e, keccak256(abi.encode(sig))), limit);
+        ep.record = _put(_blob(abi.encode(e), sig), limit);
         ep.wraps = uint32(e.members.length);
         emit PqChatEpochAdded(e.sessionId, eid, e.parentEpochId, e.epoch, e.author);
         _landWraps(eid, ep, 0, wraps, e.members, e.wrapHashes, limit);
@@ -163,8 +174,10 @@ contract PqChat is IPqChat, PqChatCore {
     ///      before the signature check; a refused record reverts it with the rest.
     function _indexAdded(PqChatEpoch calldata e, bytes32[] memory parent) internal {
         uint256 i;
-        for (uint256 j; j < e.members.length; ++j) {
-            bytes32 ua = e.members[j].ua;
+        MemberKey[] memory ms = e.members;
+        for (uint256 j; j < ms.length; ++j) {
+            if (_sameUa(ms, j)) continue; // a UA's further key (owner (M))
+            bytes32 ua = ms[j].ua;
             while (i < parent.length && parent[i] < ua) ++i;
             if (i == parent.length || parent[i] != ua) _s().sessions[ua].push(e.sessionId);
         }
@@ -195,7 +208,7 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @notice P12: a member of `epochId` leaves it; the next epoch may drop it as a plain rekey (3C-D8).
     function leave(PqChatLeave calldata l, IUARegistry.UASig calldata sig) external {
-        (IUARegistry reg,,) = _env();
+        (IUARegistry reg, uint256 limit,) = _env();
         Epoch storage ep = _known(l.epochId);
         if (ep.sessionId != l.sessionId) revert PqChatUnknown(l.epochId);
         (, MemberKey[] memory m,) = _lists(ep);
@@ -203,6 +216,7 @@ contract PqChat is IPqChat, PqChatCore {
         _auth(reg, l.member, PqChatTypes.hashLeave(l), sig);
         _useNonce(PqChatTypes.scopeEpoch(l.sessionId, l.member), l.nonce);
         ep.left[l.member] = true;
+        if (_keep()) _s().leaves[l.epochId].push(_put(abi.encode(l, keccak256(abi.encode(sig)), sig), limit));
         emit PqChatLeft(l.sessionId, l.epochId, l.member);
     }
 
@@ -231,7 +245,7 @@ contract PqChat is IPqChat, PqChatCore {
             if (!ep.removedOf[r.members[i]]) (ep.removedOf[r.members[i]], added) = (true, added + 1);
         }
         ep.removed += uint16(added);
-        _s().removals[r.epochId].push(_put(abi.encode(r, keccak256(abi.encode(sig))), limit));
+        _s().removals[r.epochId].push(_put(_blob(abi.encode(r), sig), limit));
         emit PqChatRemoved(r.sessionId, r.epochId, r.admin, r.members);
     }
 
@@ -251,8 +265,8 @@ contract PqChat is IPqChat, PqChatCore {
         bytes32 hm = PqChatTypes.hashMessage(m);
         _auth(reg, m.sender, hm, sig);
         _useNonce(PqChatTypes.scopeMessage(m.epochId, m.sender, m.device), m.counter);
-        bytes memory blob = abi.encode(m, keccak256(abi.encode(sig)));
-        if (blob.length + 2 > _codeCap(limit)) revert PqChatShape(); // one blob (P16)
+        bytes memory blob = _blob(abi.encode(m), sig);
+        if (blob.length + 2 > _codeCap(limit)) revert PqChatShape(); // one blob (P16), the kept signature included
         address[] storage list = _s().messages[m.sessionId];
         index = list.length;
         list.push(_put(blob, limit));
@@ -309,6 +323,95 @@ contract PqChat is IPqChat, PqChatCore {
 
     function removalAt(bytes32 epochId, uint256 index) external view returns (PqChatRemove memory r, bytes32 sigHash) {
         (r, sigHash) = abi.decode(_get(_s().removals[epochId][index]), (PqChatRemove, bytes32));
+    }
+
+    // ------------------------------------------------------------------ CTR-CHAT-23: the kept signatures
+
+    /// @dev An `sstore2` instance keeps each signed record as `abi.encode(record, sigHash, sig)`.
+    function _keep() internal view returns (bool) {
+        return _s().sigStore == SIG_SSTORE2;
+    }
+
+    /// @dev The stored form of a signed record whose ABI tuple is dynamic, from `rec = abi.encode(record)` (`0x20` and its
+    ///      tail): `abi.encode(record, sigHash)` on a `none` instance, `abi.encode(record, sigHash, sig)` on an `sstore2` one
+    ///      (byte for byte; built here because the compiler's tuple encoder of a calldata record and signature runs out of
+    ///      stack). `sigHash = keccak256(abi.encode(sig))`.
+    function _blob(bytes memory rec, IUARegistry.UASig calldata sig) internal view returns (bytes memory out) {
+        bytes memory es = abi.encode(sig);
+        bytes32 sh = keccak256(es);
+        bool keep = _keep();
+        uint256 r = rec.length - 32;
+        uint256 e = keep ? es.length - 32 : 0;
+        uint256 head = keep ? 96 : 64;
+        out = new bytes(head + r + e);
+        assembly ("memory-safe") {
+            let o := add(out, 32)
+            mstore(o, head)
+            mstore(add(o, 32), sh)
+            if keep { mstore(add(o, 64), add(head, r)) }
+            mcopy(add(o, head), add(rec, 64), r)
+            if keep { mcopy(add(add(o, head), r), add(es, 64), e) }
+        }
+    }
+
+    /// @dev `PqGroupBase._authorOf` for both forms: the blob's first word is the record's offset (64 without the signature,
+    ///      96 with it), `author` the record's second field.
+    function _authorOf(Epoch storage ep) internal view override returns (bytes32) {
+        return _word(ep.record, uint256(_word(ep.record, 0)) + 32);
+    }
+
+    function _kept() internal view {
+        if (!_keep()) revert PqChatSigNotStored();
+    }
+
+    /// @dev Returns the signature of a kept blob `abi.encode(record, sigHash, sig)` as the view's ABI output, `0x20` and the
+    ///      signature's tail as the contract encoded it at write: head word `w` of the blob is that tail's offset (2 after a
+    ///      dynamic record's offset and `sigHash`; 5 after a `PqChatLeave`'s four static words and `sigHash`). The record is
+    ///      not decoded (the compiler's memory decoder of a `UASig` runs out of stack).
+    function _returnSig(bytes memory blob, uint256 w) internal pure {
+        assembly ("memory-safe") {
+            let off := mload(add(add(blob, 32), mul(w, 32)))
+            let p := add(add(blob, 32), off)
+            mstore(sub(p, 32), 0x20)
+            return(sub(p, 32), add(sub(mload(blob), off), 32))
+        }
+    }
+
+    function sessionSig(bytes32 sessionId) external view returns (IUARegistry.UASig memory) {
+        _kept();
+        Epoch storage ep = _known(sessionId);
+        if (ep.sessionId != sessionId) revert PqChatUnknown(sessionId);
+        _returnSig(_get(ep.record), 2);
+    }
+
+    function epochSig(bytes32 epochId) external view returns (IUARegistry.UASig memory) {
+        _kept();
+        Epoch storage ep = _known(epochId);
+        if (ep.sessionId == epochId) revert PqChatUnknown(epochId);
+        _returnSig(_get(ep.record), 2);
+    }
+
+    function removalSig(bytes32 epochId, uint256 index) external view returns (IUARegistry.UASig memory) {
+        _kept();
+        _returnSig(_get(_s().removals[epochId][index]), 2);
+    }
+
+    function messageSig(bytes32 sessionId, uint256 index) external view returns (IUARegistry.UASig memory) {
+        _kept();
+        _returnSig(_get(_s().messages[sessionId][index]), 2);
+    }
+
+    function leaveCount(bytes32 epochId) external view returns (uint256) {
+        return _s().leaves[epochId].length;
+    }
+
+    function leaveAt(bytes32 epochId, uint256 index) external view returns (PqChatLeave memory l, bytes32 sigHash) {
+        (l, sigHash) = abi.decode(_get(_s().leaves[epochId][index]), (PqChatLeave, bytes32));
+    }
+
+    function leaveSig(bytes32 epochId, uint256 index) external view returns (IUARegistry.UASig memory) {
+        _kept();
+        _returnSig(_get(_s().leaves[epochId][index]), 5);
     }
 
     function nonceUsed(bytes32 scope, uint64 nonce) external view returns (bool) {

@@ -46,6 +46,10 @@ impl Epoch {
         if author == ZERO32 {
             return Ok(None);
         }
+        // CTR-CHAT-25 (owner 2026-11-23): flat wraps (0) is the only group mode this release reads
+        if num(at(s, "groupMode"))? != 0 {
+            return Err(PqChatError::Internal);
+        }
         Ok(Some(Epoch {
             id: id.to_ascii_lowercase(),
             session_id: id.to_ascii_lowercase(),

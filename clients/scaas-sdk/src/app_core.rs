@@ -1647,6 +1647,20 @@ impl AppCore {
         args: String,
         trusted: bool,
     ) -> Result<String, SdkError> {
+        self.read_app_by(chain, contract, entry, args, trusted, false)
+            .await
+    }
+
+    /// [`AppCore::read_app`], under strict majority when `agreed` ([`AppCore::read_app_agreed`]).
+    async fn read_app_by(
+        self: &Arc<Self>,
+        chain: String,
+        contract: String,
+        entry: String,
+        args: String,
+        trusted: bool,
+        agreed: bool,
+    ) -> Result<String, SdkError> {
         use alloy::dyn_abi::FunctionExt;
         use alloy::json_abi::StateMutability;
         let (f, _, data) = entry_call(&entry, &args)?;
@@ -1668,13 +1682,17 @@ impl AppCore {
             Purpose::Plain
         };
         let (pool, data) = (&pool, Bytes::from(data));
-        let out = pool
-            .read_at_block(final_block(&profile), purpose, |at| {
-                let d = data.clone();
-                async move { pool.call_at(&at, to, d).await.map(|b| b.to_vec()) }
-            })
-            .await?
-            .value;
+        let call = |at| {
+            let d = data.clone();
+            async move { pool.call_at(&at, to, d).await.map(|b| b.to_vec()) }
+        };
+        let choice = final_block(&profile);
+        let out = if agreed {
+            pool.read_at_block_agreed(choice, purpose, call).await?
+        } else {
+            pool.read_at_block(choice, purpose, call).await?
+        }
+        .value;
         if out.len() > READ_MAX {
             return Err(SdkError::Argument);
         }
@@ -1691,6 +1709,8 @@ impl AppCore {
         Ok(serde_json::Value::Object(o).to_string())
     }
 }
+
+mod agreed;
 
 /// Test-only entry points (feature `vectors`, never in a release build nor a binding): key bytes in and out and fixed
 /// randomness, for the vectors.

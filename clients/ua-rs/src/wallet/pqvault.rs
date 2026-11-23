@@ -19,7 +19,7 @@ use crate::{keccak256, Domain};
 pub const RECORDS: &[(&str, &str)] = &[
     (
         "PqVaultCreate",
-        "PqVaultCreate(bytes32 creator,uint64 nonce,uint8 mode,bytes32 homeChain,address homeVaultContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
+        "PqVaultCreate(bytes32 creator,uint64 nonce,uint8 mode,bytes32 homeChain,address homeVaultContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
     ),
     (
         "PqVaultEpoch",

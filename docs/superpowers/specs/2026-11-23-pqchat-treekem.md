@@ -12,7 +12,7 @@ build follows. Branch `treekem-research`; the contract work branches from `pqcha
 once it has landed. Research [`2026-11-23-treekem-pqchat.md`](../../research/2026-11-23-treekem-pqchat.md) (cited "note §n"); plan
 [`2026-11-23-pqchat-treekem.md`](../plans/2026-11-23-pqchat-treekem.md). Rule ids introduced here (SPECIFIED, defined once in
 their component doc, recorded in [decisions.md](../../decisions.md)): CTR-CHAT-26 (owner), CTR-CHAT-27 (controller calls),
-CLI-PQC-16 (owner). Ids of branch `pqchat-sigs` this builds on: CTR-CHAT-23 (signature storage per home), CTR-CHAT-24 (several
+CLI-PQC-17 (owner). Ids of branch `pqchat-sigs` this builds on: CTR-CHAT-23 (signature storage per home), CTR-CHAT-24 (several
 `keyId`s per member UA), CTR-CHAT-25 (`groupMode`), CLI-PQC-15 (`require_signed_records`). Tags: **[F]** fact, **[E]** estimate
 (paper figures on the pinned PqChat rows, as in the note; the plan measures and pins them).
 
@@ -93,7 +93,7 @@ CLI-PQC-16 (owner). Ids of branch `pqchat-sigs` this builds on: CTR-CHAT-23 (sig
   registered a new key, before A's Add landed (front-running), so A never got in. With two levels B's own-key churn harms
   only `(B, kemHash)`. B burns A's key only by leaving or being removed, which excludes B for good (one burn per UA), and
   any further UA needs an admin's Add. Honest reuse of a compromised key is still blocked: by the same UA through the
-  pair, by a new UA after a removal through the session-wide entry. **Client rule (CLI-PQC-16):** before an Add, the
+  pair, by a new UA after a removal through the session-wide entry. **Client rule (CLI-PQC-17):** before an Add, the
   admin's client checks whether the key's `kemHash` is registered to another UA in the registry and warns ("this key is
   also held by UA …"); client only.
 
@@ -648,7 +648,7 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   (the keys B's leaves hold then, at most `KEYS_PER_UA_MAX`), B is out for good (R14), and a further UA needs an admin's
   Add. While B **holds** A's key live, A's Add is `PqChatTreeKeyLive`: at most `KEYS_PER_UA_MAX` keys per UA at a time,
   and an admin frees one by a Remove of that leaf alone while B keeps another, at the pair level, so the key is not burnt.
-  The admin's client warns before an Add of a key registered to another UA (CLI-PQC-16).
+  The admin's client warns before an Add of a key registered to another UA (CLI-PQC-17).
 - **A UA's own keys.** A UA that stays a member changes its own keys by plain commits (C8): a new device is a new `keyId` with
   a new key. That is not a return. A key of its own that it took out stays out for that UA (the pair set); the device
   registers a new KEM version. So every `(ua, kemHash)`, and every `(ua, keyId)` (registry versions are write-once), has
@@ -670,7 +670,7 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   `PqChatTreeKeyLive`. **Since R16 the block is bounded:** once Eve takes that leaf out herself, or an admin removes it while
   she keeps another, only `(Eve, kemHash)` enters the pair set and V adds its key; only Eve's leaving or removal burns it
   for the session, once, and then V joins or stays with a fresh KEM version, which costs V one registry write. The client
-  names the UA that holds or held the colliding key, and warns an admin before the Add (CLI-PQC-16). Eve's reach is her 8
+  names the UA that holds or held the colliding key, and warns an admin before the Add (CLI-PQC-17). Eve's reach is her 8
   leaves at a time and ends with her removal; nothing is disclosed by it. **A related key is the same residual
   (owner, R15):** a removed party that keeps its secret can make a key with another `kemHash` that the old secret opens
   (§8). Neither key set sees it. It enters only as a live member's leaf, which is lending, or under a new UA that a live
@@ -985,7 +985,7 @@ line in `size-baseline.json`.
 | A lying endpoint serves, at an epoch-0 head, a leaf of a UA outside the signed member list, with its genuine registry key and a matching root (codex-r2-1) | the client takes no leaf from a view there: it rebuilds the tree from the signed `members` (§8 step 3) |
 | A removed device keeps a second leaf with the same key bytes, or with another encoding of the same X25519 point (codex-2, fable-10, codex-r2-2) | one live leaf per `kemHash`, enforced at every wrap of epoch 0 and every Add; one encoding per point (C32). A second leaf with a **related** key is the row on equivalent keys below |
 | A removed UA comes back, or the same key bytes do: under a new UA or `keyId`, or under a friend's UA (codex-2, codex-r2-2) | `gone[ua]`, and the key sets of R16: the bytes of a UA that went are refused under any UA (`goneKey`), a key a UA took out of its own leaves is refused to that UA under any `keyId` (`goneOwnKey`) (R14, R16, C28). A new UA with a fresh key, added by an admin, is a new member by the owner's rule. **Left:** a key a member took out while it stayed, added again under a friend's UA, is the lending residual |
-| A member burns another UA's key: registers that UA's public KEM key as its own version, adds it by a plain commit and takes it out, and repeats it before each of that UA's Adds (front-running; the controller's finding) | **closed by the two levels (owner, R16):** own-key churn enters only `(member, kemHash)`, and the victim adds its key. A session-wide burn needs the member's leaving or removal: once per UA (the keys its leaves hold then, at most `KEYS_PER_UA_MAX`), the member is out for good (R14), and a further UA needs an admin's Add. Holding the key live blocks the victim's Add (`PqChatTreeKeyLive`) for at most `KEYS_PER_UA_MAX` keys per UA at a time; an admin frees one by removing that leaf alone, at the pair level. The admin's client warns when a key is registered to another UA (CLI-PQC-16) |
+| A member burns another UA's key: registers that UA's public KEM key as its own version, adds it by a plain commit and takes it out, and repeats it before each of that UA's Adds (front-running; the controller's finding) | **closed by the two levels (owner, R16):** own-key churn enters only `(member, kemHash)`, and the victim adds its key. A session-wide burn needs the member's leaving or removal: once per UA (the keys its leaves hold then, at most `KEYS_PER_UA_MAX`), the member is out for good (R14), and a further UA needs an admin's Add. Holding the key live blocks the victim's Add (`PqChatTreeKeyLive`) for at most `KEYS_PER_UA_MAX` keys per UA at a time; an admin frees one by removing that leaf alone, at the pair level. The admin's client warns when a key is registered to another UA (CLI-PQC-17) |
 | A removed party that keeps its secret presents an equivalent key with another `kemHash`: an X25519 point shifted by a torsion point, an ML-KEM `ek` shifted by a small vector (fable-r3-2) | **not stopped by any rule on key bytes; accepted (owner, R15) as part of the lending residual.** The key is admitted and the old secret opens that leaf. It needs a live member that lends a leaf, or a live admin that adds the new UA; the key sets are hygiene against reuse of the same bytes. Exclusion rests on the UA roster and on whom an admin adds (§8, §9) |
 | A live member lends a leaf: it registers another party's fresh key as its own version, or passes on what it opens (fable-r2-8) | not preventable by any rule on keys; the leaf is that member's in the roster and ends with its removal (§9). The same move blocks another UA's key while the leaf is live, and burns it for the session only when the member goes, once per UA (R16; the front-running row): that UA registers a new KEM version |
 | A stale endpoint hides the newest commits (codex-4) | the client refuses a head below its checkpoint; a commit on an old head is `PqChatEpochTaken`, but what it sealed is disclosed to the keys of that old tree (§11): path secrets of a commit that never wins, and the info in force or the marker, which those keys held. A **changed** info is sealed only after the majority read of R13; with fewer than 3 named endpoints it is refused. **Left, as in mode 0 (fable-r3-9):** a message a user sends on a stale head is read by a member removed since (§11) |

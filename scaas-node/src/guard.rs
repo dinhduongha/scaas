@@ -6034,7 +6034,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             }
         }
         for s in [
-            "initialize(bytes32)",
+            "initialize(bytes32,uint8)",
             "owner()",
             "sessionOf(bytes32)",
             "storedRange(bytes8,uint256,uint256)",
@@ -6230,7 +6230,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         }
         let cast = |s: &str| -> Bytes { alloy::primitives::keccak256(s)[..4].to_vec().into() };
         for s in [
-            "initialize(bytes32)",
+            "initialize(bytes32,uint8)",
             "sessionOf(bytes32)",
             "storedRange(bytes8,uint256,uint256)",
             "transfer(address,uint256)",

@@ -80,7 +80,10 @@ fn two_chains(w: &World) -> Arc<PqChat> {
         w.app.clone(),
         w.net.clone(),
         Arc::new(MemoryStore::new()),
-        PqChatConfig { chains: c.chains },
+        PqChatConfig {
+            chains: c.chains,
+            ..PqChatConfig::default()
+        },
     )
 }
 

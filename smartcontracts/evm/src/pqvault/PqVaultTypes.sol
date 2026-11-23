@@ -24,7 +24,7 @@ library PqVaultTypes {
     bytes32 internal constant MEMBER_KEY_TYPEHASH = keccak256("MemberKey(bytes32 ua,uint64 keyId,bytes32 via)");
     bytes32 internal constant CREATE_TYPEHASH = keccak256(
         "PqVaultCreate(bytes32 creator,uint64 nonce,uint8 mode,bytes32 homeChain,address homeVaultContract,bytes32[] admins,"
-        "MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo)"
+        "MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo,uint8 groupMode)"
         "MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"
     );
     bytes32 internal constant EPOCH_TYPEHASH = keccak256(
@@ -88,7 +88,13 @@ library PqVaultTypes {
                     keccak256(abi.encodePacked(v.admins)),
                     hashMembers(v.members)
                 ),
-                abi.encode(keccak256(abi.encodePacked(v.wrapHashes)), v.passKdf, v.passSalt, keccak256(v.sealedInfo))
+                abi.encode(
+                    keccak256(abi.encodePacked(v.wrapHashes)),
+                    v.passKdf,
+                    v.passSalt,
+                    keccak256(v.sealedInfo),
+                    v.groupMode
+                )
             )
         );
     }

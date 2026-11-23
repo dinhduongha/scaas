@@ -55,6 +55,14 @@ const people = ["alice", "bob", "carol"].map((name, index) => {
   };
 });
 const [alice, bob, carol] = people;
+// Owner (M) 2026-11-23 (CTR-CHAT-24): bob's device key, random per device (not seed-derived), registered as his KEM version 4
+const BOB_DEVICE_KEY_ID = 4;
+const bobDevice = {
+  name: "bob-device",
+  kemSeed: rnd("kem/bob-device/mlkem-keygen-seed", 64),
+  kemX: rnd("kem/bob-device/x25519-secret"),
+};
+bobDevice.kem = pc.kemKey(bobDevice.kemSeed, bobDevice.kemX);
 const byUa = [...people].sort((a, b) => (a.ua < b.ua ? -1 : 1));
 const sorted = (xs) => [...xs].sort();
 const sign = (who, struct, s) => ({
@@ -69,13 +77,15 @@ const MXLOCAL = 255 - "@:example.org".length;
 const homeChatContract = hex(rnd("home-contract", 20));
 const seat = hex(rnd("msig-seat"));
 
-/** A signed record's row; `sig` adds the signature, its hash and the stored blob (3C-D3). */
-function recordRow(struct, s, who, { id, scope, sig } = {}) {
+/** A signed record's row; `sig` adds the signature, its hash and the stored blob (3C-D3); `kept` the blob an `sstore2` instance
+ *  keeps (CTR-CHAT-23). */
+function recordRow(struct, s, who, { id, scope, sig, kept } = {}) {
   const r = { signer: who.name, record: s, hashStruct: pc.structHash(struct, s), typed: pc.typed(struct, s) };
   if (id) r.id = id;
   if (scope) r.scope = scope;
   r.uaMessage = { kind: KIND, digest: pc.signedDigest(KIND, struct, s) };
   if (sig) Object.assign(r, { uaSig: sig, sigHash: pc.sigHash(sig), blob: pc.recordBlob(struct, s, sig) });
+  if (sig && kept) r.blobSigned = pc.recordBlob(struct, s, sig, pc.SIG_STORE.sstore2);
   return r;
 }
 
@@ -83,7 +93,7 @@ function recordRow(struct, s, who, { id, scope, sig } = {}) {
 const wrapRows = [];
 function wraps(epochName, K, sid, eid, members) {
   return members.map((mem) => {
-    const p = people.find((x) => x.ua === mem.ua);
+    const p = mem.ua === bob.ua && mem.keyId === BOB_DEVICE_KEY_ID ? bobDevice : people.find((x) => x.ua === mem.ua);
     const mlkemM = rnd(`wrap/${epochName}/${p.name}/mlkem-m`);
     const x25519Secret = rnd(`wrap/${epochName}/${p.name}/x25519-ephemeral-secret`);
     const w = pc.wrapTo({
@@ -148,6 +158,7 @@ const session = {
   nonce: 7,
   homeChain,
   homeChatContract,
+  groupMode: 0, // owner 2026-11-23 (CTR-CHAT-25): flat wraps, the only mode this release accepts
   admins: sorted([alice.ua, bob.ua]),
   members: members0,
   wrapHashes: wraps("session", K0, sid, sid, members0),
@@ -165,6 +176,10 @@ const session = {
   }),
 };
 
+// CTR-CHAT-25: the same session record with groupMode 1 (TreeKEM), refused by this release (PqChatModeUnsupported(1)) before
+// anything else; a later catalogued release accepts it with the same struct and typehash
+const sessionTreeKem = { ...session, nonce: 12, groupMode: 1 };
+
 const eid = hex(pc.epochId(sid, alice.ua, 8));
 const K1 = rnd("K/epoch-1");
 const members1 = members0.filter((m) => m.ua !== carol.ua);
@@ -181,6 +196,28 @@ const epoch = {
     stores: [chainStore, { kind: "hcs", topic: "0.0.4242" }],
     name: "PqChat vectors",
     topic: "Epoch 1: carol removed, no Matrix store",
+  }),
+};
+
+// Owner (M) 2026-11-23: epoch 2, bob's plain rekey of epoch 1 adding his device key, members by (ua, keyId)
+const eid2 = hex(pc.epochId(sid, bob.ua, 11));
+const K2 = rnd("K/epoch-2");
+const members2 = [...members1, { ua: bob.ua, keyId: BOB_DEVICE_KEY_ID, via: Z32 }].sort((a, b) =>
+  a.ua !== b.ua ? (a.ua < b.ua ? -1 : 1) : a.keyId - b.keyId,
+);
+const epochDevices = {
+  sessionId: sid,
+  author: bob.ua,
+  nonce: 11,
+  epoch: 2,
+  parentEpochId: eid,
+  admins: [alice.ua],
+  members: members2,
+  wrapHashes: wraps("epoch-2", K2, sid, eid2, members2),
+  sealedInfo: sealed("epoch-2", K2, sid, eid2, {
+    stores: [chainStore],
+    name: "PqChat vectors",
+    topic: "Epoch 2: bob adds his device key",
   }),
 };
 
@@ -258,7 +295,14 @@ write("records.json", {
     "keccak256(abi.encode(UASig)), UASig = (bytes keyData, bytes signature, (uint16, (uint16, bytes)[], bytes)[] members); " +
     "blob = abi.encode(record as its ABI tuple, sigHash) (3C-D3). The remove row (P48): alice, the admin of epoch 1, removes " +
     "its members (strictly sorted), nextEpoch = epoch 1's number + 1; members is a bytes32[], keccak256 of the packed words as " +
-    "admins; scope = the epoch scope (sessionId, admin), shared with alice's epoch; no id, no signature.",
+    "admins; scope = the epoch scope (sessionId, admin), shared with alice's epoch; no id. The signature-storage setting " +
+    "(CTR-CHAT-23, owner 2026-11-23): sigStore its two modes (PQZ's numbering); every row is signed (uaSig, sigHash), blob is what " +
+    "a none instance keeps and blobSigned = abi.encode(record as its ABI tuple, sigHash, UASig) what an sstore2 instance keeps, " +
+    "the signature view returning that UASig. The epochDevices row (owner (M) 2026-11-23, CTR-CHAT-24): bob's plain rekey of " +
+    'epoch 1 adding his device key (keys.json kemKeys "bob-device", KEM version 4, random per device, not seed-derived): ' +
+    'members strictly sorted by (ua, keyId), one wrap per entry (keys.json wraps "epoch-2/*"), the MemberKey type unchanged.' +
+    " The group mode (owner 2026-11-23, CTR-CHAT-25): PqChatSession carries uint8 groupMode as its last field, 0 flat " +
+    "wraps; sessionTreeKem is the session with groupMode 1 (TreeKEM), signed, refused by this release by name (error).",
   version: 1,
   domain,
   purpose,
@@ -274,14 +318,49 @@ write("records.json", {
     publicKey: p.publicKey,
     ua: p.ua,
   })),
-  session: recordRow("PqChatSession", session, alice, { id: sid, scope: pc.scopeSession(alice.ua) }),
-  epoch: recordRow("PqChatEpoch", epoch, alice, { id: eid, scope: pc.scopeEpoch(sid, alice.ua) }),
-  leave: recordRow("PqChatLeave", leave, bob, { id: pc.leaveId(leave), scope: pc.scopeEpoch(sid, bob.ua) }),
-  remove: recordRow("PqChatRemove", remove, alice, { scope: pc.scopeEpoch(sid, alice.ua) }),
+  sigStore: pc.SIG_STORE,
+  session: recordRow("PqChatSession", session, alice, {
+    id: sid,
+    scope: pc.scopeSession(alice.ua),
+    sig: sign(alice, "PqChatSession", session),
+    kept: true,
+  }),
+  epoch: recordRow("PqChatEpoch", epoch, alice, {
+    id: eid,
+    scope: pc.scopeEpoch(sid, alice.ua),
+    sig: sign(alice, "PqChatEpoch", epoch),
+    kept: true,
+  }),
+  sessionTreeKem: {
+    ...recordRow("PqChatSession", sessionTreeKem, alice, {
+      id: hex(pc.sessionId(alice.ua, 12)),
+      scope: pc.scopeSession(alice.ua),
+      sig: sign(alice, "PqChatSession", sessionTreeKem),
+    }),
+    error: "PqChatModeUnsupported(1)",
+  },
+  epochDevices: recordRow("PqChatEpoch", epochDevices, bob, {
+    id: eid2,
+    scope: pc.scopeEpoch(sid, bob.ua),
+    sig: sign(bob, "PqChatEpoch", epochDevices),
+    kept: true,
+  }),
+  leave: recordRow("PqChatLeave", leave, bob, {
+    id: pc.leaveId(leave),
+    scope: pc.scopeEpoch(sid, bob.ua),
+    sig: sign(bob, "PqChatLeave", leave),
+    kept: true,
+  }),
+  remove: recordRow("PqChatRemove", remove, alice, {
+    scope: pc.scopeEpoch(sid, alice.ua),
+    sig: sign(alice, "PqChatRemove", remove),
+    kept: true,
+  }),
   message: recordRow("PqChatMessage", message, alice, {
     id: pc.messageId(message),
     scope: pc.scopeMessage(eid, alice.ua, DEVICE),
     sig: messageSig,
+    kept: true,
   }),
 });
 
@@ -309,7 +388,7 @@ write("keys.json", {
     "u64be keyId) (48 B, tag last); wrap = the Wrap struct, hashStruct its EIP-712 hash. The receiver (kemKey) reopens K with dk " +
     "and x25519Secret. Epoch 0's epochId is its sessionId.",
   version: 1,
-  kemKeys: people.map((p) => ({
+  kemKeys: [...people, bobDevice].map((p) => ({
     name: p.name,
     mlkemSeed: p.kemSeed,
     x25519Secret: p.kemX,
@@ -1036,7 +1115,6 @@ const shifted = [
 });
 
 // records and digests (§5, §6): a session of A, B, C; B adds D in epoch 1 on the cold tree
-const groupModeInSession = pc.TYPES.PqChatSession.some((f) => f.name === "groupMode");
 const tSession = {
   creator: treeKeys.A.ua,
   nonce: 21,
@@ -1046,12 +1124,11 @@ const tSession = {
   members: ["A", "B", "C"].map((n) => ({ ua: treeKeys[n].ua, keyId: treeKeys[n].keyId, via: Z32 })),
   wrapHashes: ["A", "B", "C"].map((n) => hex(rnd(`tree/session/wrap-hash/${n}`))),
   sealedInfo: hex(rnd("tree/session/sealed-info", 284)),
-  // pqchat-sigs adds groupMode to PqChatSession; until this branch has it, treeId hashes the session without it
-  ...(groupModeInSession ? { groupMode: 1 } : {}),
+  groupMode: 1,
 };
 const tSid = hex(pc.sessionId(tSession.creator, tSession.nonce));
 const tTreeId = hex(tr.treeId(tSession));
-const tGenesis = hex(tr.genesisCtx({ ...tSession, groupMode: 1 }));
+const tGenesis = hex(tr.genesisCtx(tSession));
 const tCold = trees["cold 3"];
 const addD = commitRow("B adds D", "cold 3", "B", 1, [], [asAdd("D", 3)]);
 const ctHashes = addD.ctTargets.map((_, j) => hex(rnd(`tree/commit/ct-hash/${j}`)));

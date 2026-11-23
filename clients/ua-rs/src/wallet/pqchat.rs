@@ -31,7 +31,7 @@ pub const TYPE_STRINGS: &[(&str, &str)] = &[
     ),
     (
         "PqChatSession",
-        "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)",
+        "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode)",
     ),
     (
         "PqChatEpoch",

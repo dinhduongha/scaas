@@ -148,7 +148,7 @@ const NESTED: &[(&str, &str)] = &[
     // the op of that name
     ("MemberKey", "bytes32 ua,uint64 keyId,bytes32 via"),
     ("Wrap", "bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey"),
-    ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
+    ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode"),
     ("PqChatEpoch", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
     ("PqChatLeave", "bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce"),
     ("PqChatRemove", "bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce"),
@@ -161,7 +161,7 @@ const NESTED: &[(&str, &str)] = &[
     ("PqTopicEdit", "bytes32 entryId,bytes32 author,uint64 nonce,uint32 version,string mediaType,bytes body"),
     ("PqTopicVote", "bytes32 entryId,bytes32 voter,int8 value,uint64 seq"),
     // `IPqVault`'s records (pqvault spec §5.2), by the contract's field names; `MemberKey` and `Wrap` are PqChat's
-    ("PqVaultCreate", "bytes32 creator,uint64 nonce,uint8 mode,bytes32 homeChain,address homeVaultContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo"),
+    ("PqVaultCreate", "bytes32 creator,uint64 nonce,uint8 mode,bytes32 homeChain,address homeVaultContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo,uint8 groupMode"),
     ("PqVaultEpoch", "bytes32 vaultId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo"),
     ("PqVaultLeave", "bytes32 vaultId,bytes32 epochId,bytes32 member,uint64 nonce"),
     ("PqVaultRemove", "bytes32 vaultId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce"),
@@ -1481,7 +1481,7 @@ fn emit(t: &Tok, row: &Row, a: &Assembled) -> Result<Val> {
 const INIT_CALL: &str = "initCall";
 
 /// Owner 2026-11-12: a job's `init_call` is at most this long (a class's initializer takes named, mostly static arguments;
-/// `PqChat`'s is 36 bytes).
+/// `PqChat`'s is 68 bytes).
 pub const MAX_INIT_CALL: usize = 4096;
 
 /// The classes whose `mtxCreateInstance` a job may name by fields (`args.config`): `(contractClass, kind)`, the initializer.
@@ -1489,7 +1489,7 @@ pub const INSTANCE_CONFIGS: &[(u16, u16, &str)] = &[
     (
         crate::guard::CLASS_PQCHAT,
         0,
-        "PqChat initialize(bytes32 owner)",
+        "PqChat initialize(bytes32 owner,uint8 sigStore)",
     ),
     (
         crate::guard::CLASS_PQVAULT,
@@ -1501,7 +1501,8 @@ pub const INSTANCE_CONFIGS: &[(u16, u16, &str)] = &[
 /// Owner 2026-11-12 (`mtxCreateInstance`, both forms): the initializer call of a generic creation, either `args.init_call` (bytes,
 /// at most [`MAX_INIT_CALL`]) or built from a known class's named `args.config` ([`INSTANCE_CONFIGS`]), never both. `PqChat`
 /// (class 3, kind 0) and `PqVault` (class 4, kind 0, CTR-PQV-02): `{owner}`, 0 or the creator (`envelope.from`; the instance
-/// refuses any other, `PqChatOwnerNotCreator` / `PqVaultOwnerNotCreator`).
+/// refuses any other, `PqChatOwnerNotCreator` / `PqVaultOwnerNotCreator`); `PqChat` also `sigStore` (CTR-CHAT-23, owner
+/// 2026-11-23): absent 2 (`sstore2`, the default), else 0 (`none`) or 2, as the instance takes (`PqChatSigStore`).
 fn instance_init_call(a: &Map<String, Value>, e: &Map<String, Value>) -> Result<Vec<u8>> {
     match (a.get("config"), a.get("init_call")) {
         (Some(_), Some(_)) => {
@@ -1540,9 +1541,13 @@ fn instance_init_call(a: &Map<String, Value>, e: &Map<String, Value>) -> Result<
                 .ok_or_else(|| anyhow!("BAD_PAYLOAD: args.config: not an object"))?;
             match (class, kind) {
                 (3, 0) | (4, 0) => {
-                    let name = if class == 3 { "PqChat" } else { "PqVault" };
-                    if let Some(k) = c.keys().find(|k| *k != "owner") {
-                        bail!("BAD_PAYLOAD: args.config.{k}: unknown field ({name} takes owner)");
+                    let (name, takes) = if class == 3 {
+                        ("PqChat", "owner, sigStore")
+                    } else {
+                        ("PqVault", "owner")
+                    };
+                    if let Some(k) = c.keys().find(|k| *k != "owner" && !(class == 3 && *k == "sigStore")) {
+                        bail!("BAD_PAYLOAD: args.config.{k}: unknown field ({name} takes {takes})");
                     }
                     let owner = parse("bytes32", c.get("owner").ok_or_else(|| anyhow!("BAD_PAYLOAD: args.config.owner: missing"))?,
                         "args.config.owner")?;
@@ -1551,8 +1556,23 @@ fn instance_init_call(a: &Map<String, Value>, e: &Map<String, Value>) -> Result<
                     if !owner.is_zero() && Some(owner.as_slice()) != from.as_fixed_bytes().map(|(b, _)| b) {
                         bail!("BAD_PAYLOAD: args.config.owner: 0 or the creator (envelope.from), the instance refuses another");
                     }
-                    alloy::sol! { function initialize(bytes32 ownerUA) external; }
-                    Ok(initializeCall { ownerUA: owner }.abi_encode())
+                    if class == 4 {
+                        alloy::sol! { function initialize(bytes32 ownerUA) external; }
+                        return Ok(initializeCall { ownerUA: owner }.abi_encode());
+                    }
+                    let sig_store = match c.get("sigStore") {
+                        None => 2,
+                        Some(v) => parse("uint8", v, "args.config.sigStore")?
+                            .as_uint()
+                            .map_or(u64::MAX, |(u, _)| u.saturating_to::<u64>()),
+                    };
+                    if sig_store != 0 && sig_store != 2 {
+                        bail!("BAD_PAYLOAD: args.config.sigStore: 0 (none) or 2 (sstore2, the default)");
+                    }
+                    mod chat {
+                        alloy::sol! { function initialize(bytes32 ownerUA, uint8 sigStore) external; }
+                    }
+                    Ok(chat::initializeCall { ownerUA: owner, sigStore: sig_store as u8 }.abi_encode())
                 }
                 _ => bail!("INSTANCE_CONFIG_UNKNOWN: class {class} kind {kind} has no named config; send args.init_call"),
             }
@@ -4954,6 +4974,38 @@ mod tests {
             "the calldata carries the vector's initCall"
         );
         with(&[("config", json!({"owner": z32(0)}))]).expect("control: owner 0");
+        // CTR-CHAT-23 (owner 2026-11-23): `sigStore` absent is 2 (sstore2, the vector's), 0 builds `none`, any other refused
+        assert_eq!(k["config"]["sigStore"], json!(2));
+        let owner_only = json!({"owner": k["config"]["owner"].clone()});
+        assert_eq!(
+            with(&[("config", owner_only.clone())]).unwrap().data,
+            raw_form.data,
+            "the default is sstore2"
+        );
+        let none = with(&[(
+            "config",
+            json!({"owner": k["config"]["owner"].clone(), "sigStore": 0}),
+        )])
+        .unwrap();
+        let (_, nb, _) = op_from_calldata(row, &none.data);
+        let want = k["initCall"].as_str().unwrap();
+        assert_eq!(
+            nb["init_call"],
+            json!(format!("{}00", &want[..want.len() - 2])),
+            "none: the setting's word 0"
+        );
+        for v in [1, 3, 255] {
+            assert!(
+                with(&[(
+                    "config",
+                    json!({"owner": k["config"]["owner"].clone(), "sigStore": v})
+                )])
+                .unwrap_err()
+                .to_string()
+                .contains("args.config.sigStore: 0 (none) or 2"),
+                "sigStore {v}"
+            );
+        }
         let refused = |extra: &[(&str, Value)]| with(extra).unwrap_err().to_string();
         let other = json!({"owner": format!("{:#x}", B256::repeat_byte(0x0b))});
         assert!(refused(&[("config", other)]).contains("args.config.owner: 0 or the creator"));
@@ -4988,23 +5040,30 @@ mod tests {
             .starts_with("INSTANCE_CONFIG_UNKNOWN: class 7 kind 0"));
         on(&seven, &[("init_call", k["initCall"].clone())])
             .expect("control: any class by init_call");
-        // PqVault plan V8 (CTR-PQV-02): class 4, kind 0 names the same `initialize(bytes32 owner)`, its owner rule and fields
+        // PqVault plan V8 (CTR-PQV-02): class 4, kind 0 names `initialize(bytes32 owner)`, the same owner rule, no setting
         let mut four = args.clone();
         four.insert("contractClass".into(), json!(4));
-        let named4 = on(&four, &[("config", k["config"].clone())]).expect("PqVault's named config");
-        let raw4 = on(&four, &[("init_call", k["initCall"].clone())]).unwrap();
+        let named4 = on(&four, &[("config", owner_only.clone())]).expect("PqVault's named config");
+        let v4 = format!(
+            "0x{}{}",
+            alloy::hex::encode(&alloy::primitives::keccak256("initialize(bytes32)")[..4]),
+            &k["config"]["owner"].as_str().unwrap()[2..]
+        );
+        let raw4 = on(&four, &[("init_call", json!(v4))]).unwrap();
         assert_eq!(
             named4.data, raw4.data,
-            "class 4: the named config builds the same call"
+            "class 4: the named config builds initialize(bytes32)"
         );
         let bad4 = |c: Value| on(&four, &[("config", c)]).unwrap_err().to_string();
         assert!(bad4(json!({"owner": z32(0), "admin": z32(0)})).contains("(PqVault takes owner)"));
+        assert!(bad4(k["config"].clone())
+            .contains("args.config.sigStore: unknown field (PqVault takes owner)"));
         assert!(
             bad4(json!({"owner": format!("{:#x}", B256::repeat_byte(0x0b))}))
                 .contains("args.config.owner: 0 or the creator")
         );
         four.insert("kind".into(), json!(1));
-        assert!(on(&four, &[("config", k["config"].clone())])
+        assert!(on(&four, &[("config", owner_only)])
             .unwrap_err()
             .to_string()
             .starts_with("INSTANCE_CONFIG_UNKNOWN: class 4 kind 1"));

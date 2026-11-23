@@ -28,7 +28,7 @@ const EDIT: &str =
 fn create_t() -> String {
     format!(
         "(bytes32 creator,uint64 nonce,uint8 mode,bytes32 homeChain,address homeVaultContract,bytes32[] admins,\
-         {MEMBER}[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo)"
+         {MEMBER}[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo,uint8 groupMode)"
     )
 }
 fn epoch_t() -> String {
@@ -141,8 +141,9 @@ pub struct EpochState {
     pub sig: UaSig,
     /// the members `removeVaultMembers` records of this epoch name, with their records (verified with the rest)
     pub removals: Vec<Signed<VaultRemove>>,
-    /// the user's own wrap in this epoch, when the user is a member
-    pub own_wrap: Option<Wrap>,
+    /// the user's own wraps in this epoch by member index, one per `(ua, keyId)` entry of the user (owner (M) 2026-11-23: a
+    /// member may hold several KEM keys; one by default), empty when the user is no member
+    pub own_wraps: Vec<(usize, Wrap)>,
 }
 
 impl EpochState {
@@ -423,7 +424,8 @@ impl PqVault {
             let mut want: Vec<B32> = recipients.iter().copied().chain([v.state.me]).collect();
             want.sort();
             want.dedup();
-            let have: Vec<B32> = e.members.iter().map(|m| m.ua).collect();
+            let mut have: Vec<B32> = e.members.iter().map(|m| m.ua).collect();
+            have.dedup(); // a member's several keys are one member (owner (M))
             let shared = v.info()?.get("shared").and_then(Value::as_bool) == Some(true);
             (shared
                 && v.state.create.creator == v.state.me
@@ -499,7 +501,7 @@ impl PqVault {
             nonce: create.nonce.0,
             sig,
             removals: vec![],
-            own_wrap: None,
+            own_wraps: vec![],
         }];
         let ep_t = format!(
             "function epochOf(bytes32 epochId) view returns ({} e, {UASIG} sig)",
@@ -527,7 +529,7 @@ impl PqVault {
                 nonce: e.nonce.0,
                 sig,
                 removals: vec![],
-                own_wrap: None,
+                own_wraps: vec![],
             });
         }
         let rm_t = format!(
@@ -555,7 +557,13 @@ impl PqVault {
                         .ok_or(Error::ChainUnverified)?,
                 });
             }
-            if let Some(i) = e.member_at(me) {
+            let mine: Vec<usize> = e
+                .members
+                .iter()
+                .enumerate()
+                .filter_map(|(i, m)| (m.ua == me).then_some(i))
+                .collect();
+            for i in mine {
                 let w = self
                     .read(
                         at,
@@ -565,7 +573,7 @@ impl PqVault {
                         json!({"epochId": e.id, "i": i.to_string()}),
                     )
                     .await?;
-                e.own_wrap = Some(get(&w, "w")?);
+                e.own_wraps.push((i, get(&w, "w")?));
             }
         }
         Ok(VaultState {
@@ -610,6 +618,7 @@ impl PqVault {
         let c = &s.create;
         let mode = u8::try_from(c.mode.0).map_err(|_| Error::ChainUnverified)?;
         if mode > 1
+            || c.group_mode.0 != 0
             || vault_id(
                 c.creator,
                 c.nonce.0,
@@ -673,10 +682,11 @@ impl PqVault {
                     return Err(Error::ChainUnverified);
                 }
             }
-            if let (Some(w), Some(j)) = (&e.own_wrap, e.member_at(s.me)) {
-                let m = e.members.get(j).ok_or(Error::ChainUnverified)?;
-                if e.wrap_hashes.get(j) != Some(&wrap_hash(w))
+            for (j, w) in &e.own_wraps {
+                let m = e.members.get(*j).ok_or(Error::ChainUnverified)?;
+                if e.wrap_hashes.get(*j) != Some(&wrap_hash(w))
                     || w.member != s.me
+                    || m.ua != s.me
                     || w.key_id != m.key_id
                 {
                     return Err(Error::ChainUnverified);
@@ -856,10 +866,10 @@ impl PqVault {
         pass: &Passphrase,
     ) -> Result<Option<bool>> {
         let e = u.state.epochs.get(i).ok_or(Error::ChainUnverified)?.clone();
-        let Some(w) = &e.own_wrap else {
-            return Ok(None);
-        };
-        let Ok(ke) = keys::unwrap(&self.core, &u.account, w, u.state.vault_id, e.id) else {
+        // the first of the user's wraps this account opens (a device key it does not hold is skipped; owner (M))
+        let Some(ke) = e.own_wraps.iter().find_map(|(_, w)| {
+            keys::unwrap(&self.core, &u.account, w, u.state.vault_id, e.id).ok()
+        }) else {
             return Ok(None);
         };
         let pk = match u
@@ -1016,6 +1026,7 @@ impl PqVault {
             mode: Num(u64::from(mode.byte())),
             home_chain,
             home_vault_contract: at.contract,
+            group_mode: Num(0),
             admins: vec![me],
             members,
             wrap_hashes: wraps.iter().map(wrap_hash).collect(),
