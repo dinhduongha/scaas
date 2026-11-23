@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""scaas-sdk plan T26, the review's fixes (areas B and C, 2026-11-23) mutants:
+"""scaas-sdk plan T26, the review's fixes (areas A, B and C, 2026-11-23) mutants:
 python3 clients/scaas-sdk/runs/2026-11-17-scaas-sdk-t26-mutants.py check | run [name]"""
 
 import sys
@@ -30,6 +30,11 @@ CFG = "clients/scaas-sdk/src/config.rs"
 STO = "clients/scaas-sdk/src/vault/store.rs"
 SYN = "clients/scaas-sdk/src/sync_cpp.rs"
 SW = "clients/scaas-sdk/bindings/swift/CopyCall.swift"
+LINE = "clients/scaas-sdk/src/line.rs"
+VLT = "clients/scaas-sdk/src/vault/mod.rs"
+ROOTS = "clients/scaas-sdk/src/vault/roots.rs"
+POL = "clients/ua-rs/src/wallet/policy.rs"
+PQC = "clients/ua-rs/src/wallet/pqchat.rs"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
@@ -288,6 +293,31 @@ MUTANTS = [
         "B-14: every end said to rest on one endpoint",
         [(EVT, "    pub(crate) fn of(strict: bool) -> Basis {\n        if strict {", "    pub(crate) fn of(strict: bool) -> Basis {\n        if !strict && strict {")],
         T + " --lib op::tests::strict_majority_ends_a_failed_operation_at_the_finalized_block",
+    ),
+    (
+        "F2 / A-7: a holder off the line taken",
+        [(LINE, "        if !on(r.holder) || (r.pqzHome != Address::ZERO && !on(r.pqzHome)) {", "        if false {")],
+        T + " --lib account::",
+    ),
+    (
+        "F2: a line not checked consecutive",
+        [(LINE, "            if g != U256::from(top - gens.len()) {", "            if false {")],
+        T + " --lib account::",
+    ),
+    (
+        "F2: a native member signs in the bound registry's domain",
+        [(LINE, "        let at = holder\n            .filter(|h| self.generation(*h).is_some())\n            .unwrap_or(self.bound());", "        let at = self.bound();")],
+        T + " --lib account::msig::tests::msig_on_a_two_generation_line",
+    ),
+    (
+        "F2: every domain at generation 1",
+        [(LINE, "            generation: self.generation(at).unwrap_or(1),", "            generation: 1,")],
+        T + " --lib account::msig::tests::msig_on_a_two_generation_line",
+    ),
+    (
+        "A-7: a write target falls back on a failed read",
+        [(LINE, "            Ok(line().await?.map_or(registry, |(h, _, _)| h))", "            Ok(line().await.unwrap_or(None).map_or(registry, |(h, _, _)| h))")],
+        T + " --lib account::register::tests::write_targets_follow_the_line",
     ),
 ]
 

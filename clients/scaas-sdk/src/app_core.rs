@@ -316,31 +316,20 @@ fn sel(sig: &str) -> Vec<u8> {
         .to_vec()
 }
 
-/// `eth_call` of `sig(args…)` on `to` at the read's block.
-async fn call_at(
-    pool: &EvmPool,
-    at: &ReadAt<alloy::primitives::B256>,
-    to: Address,
-    sig: &str,
-    args: &[[u8; 32]],
-) -> Result<Vec<u8>, ReadError> {
-    let d = [sel(sig), args.concat()].concat();
-    pool.call_at(at, to, Bytes::from(d))
-        .await
-        .map(|b| b.to_vec())
-}
+use crate::line::call_at;
 
 fn bit(w: &[u8; 32], i: u16) -> bool {
     let i = usize::from(i);
     i < 256 && w.get(31 - i / 8).is_some_and(|b| b >> (i % 8) & 1 == 1)
 }
 
-/// The records of `ua`, its members and theirs (two levels, at most [`RECORDS_MAX`]) at the read's block: an unregistered
-/// id has none, a malformed answer is unread (the verdict false, never another endpoint's answer: R7 of spec §9.4).
+/// The records of `ua`, its members and theirs (two levels, at most [`RECORDS_MAX`]) at the read's block, each read at the
+/// generation that holds it (F2, [`crate::line::Line`]): an unregistered id has none, a malformed answer is unread (the
+/// verdict false, never another endpoint's answer: R7 of spec §9.4).
 async fn records(
     pool: &EvmPool,
     at: &ReadAt<alloy::primitives::B256>,
-    registry: Address,
+    line: &crate::line::Line,
     ua: [u8; 32],
 ) -> Result<BTreeMap<[u8; 32], Rec>, ReadError> {
     let mut out = BTreeMap::new();
@@ -349,6 +338,9 @@ async fn records(
         if out.len() >= RECORDS_MAX || out.contains_key(&id) || scaas_ua::in_native_space(&id) {
             continue;
         }
+        let Some(registry) = line.holder(pool, at, id).await? else {
+            continue;
+        };
         let r = call_at(pool, at, registry, "registrationOf(bytes32)", &[id]).await?;
         let Some(kind) = small(&r, 0, u64::from(u16::MAX)).and_then(|k| u16::try_from(k).ok())
         else {
@@ -1088,7 +1080,6 @@ impl AppCore {
             typed_json,
             scaas_ua::wallet::app_record_digest,
             scaas_ua::wallet::sign_app_record,
-            false,
         )
         .await
     }
@@ -1128,7 +1119,6 @@ impl AppCore {
             typed_json,
             scaas_ua::wallet::pqvault::digest,
             scaas_ua::wallet::pqvault::sign,
-            true,
         )
         .await
     }
@@ -1155,7 +1145,7 @@ impl AppCore {
                     ua: ua_hex.clone(),
                     slots: slots.clone(),
                 };
-                let (ua_path, _) = me.ua_path(&path, &typed, &account, true).await?;
+                let (ua_path, _) = me.ua_path(&path, &typed, &account).await?;
                 let digest = scaas_ua::wallet::pqvault::digest(&ua_path, &typed).map_err(ua)?;
                 let sig = crate::account::msig::app_msig(
                     &sdk,
@@ -1193,14 +1183,13 @@ impl AppCore {
             &UaPath,
             &TypedData,
         ) -> scaas_ua::wallet::Result<UASig>,
-        line: bool,
     ) -> Result<AppSigned, SdkError> {
         let me = self.clone();
         let sdk = self.sdk.clone();
         sdk.clone()
             .spawn(async move {
                 let typed = TypedData::from_json(typed_json.as_bytes()).map_err(ua)?;
-                let (ua_path, registry) = me.ua_path(&path, &typed, &account, line).await?;
+                let (ua_path, registry) = me.ua_path(&path, &typed, &account).await?;
                 let digest = digest(&ua_path, &typed).map_err(ua)?;
                 let review = Self::review(&path, &typed);
                 let key = crate::op::key(&sdk, &account)?;
@@ -1229,7 +1218,6 @@ impl AppCore {
         path: &AppPath,
         typed: &TypedData,
         account: &KeyRef,
-        line: bool,
     ) -> Result<(UaPath, Option<scaas_ua::Domain>), SdkError> {
         let app_id = self.app_id.ok_or(SdkError::Argument)?;
         let (chain, purpose) = match path {
@@ -1262,17 +1250,17 @@ impl AppCore {
             .unwrap_or_default();
         self.refuse_contract(&profile, &pool, vc).await?;
         let registry = match account {
+            // F2: a native signer's `UAAuth` is the bound registry's own, at its generation on the line
             KeyRef::Native { .. } => {
-                let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
-                let addr = r.parse().map_err(|_| SdkError::Argument)?;
-                // F2 (PqVault's dedicated path, `line`): the registry's own domain at its generation
-                Some(match line {
-                    true => {
-                        crate::account::msig::line_domain(&self.sdk, chain, &pool, addr, None)
-                            .await?
-                    }
-                    false => crate::account::msig::domain(&self.sdk, chain, &pool, addr).await?,
-                })
+                let (_, line) = crate::line::read_line(
+                    &self.sdk,
+                    chain,
+                    scaas_rpc::pool::BlockChoice::Latest,
+                    Purpose::Plain,
+                    |_, _, _| async { Ok(()) },
+                )
+                .await?;
+                Some(line.domain(None, chain_id, hex32(&profile.chain_uid)?))
             }
             _ => None,
         };
@@ -1349,22 +1337,21 @@ impl AppCore {
         ua: [u8; 32],
         version: u64,
     ) -> Result<Vec<u8>, SdkError> {
-        let (profile, _, pool) = crate::op::evm(&self.sdk, chain)?;
-        let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
-        let registry = Address::from(addr20(&r.to_ascii_lowercase())?);
+        let (profile, _, _) = crate::op::evm(&self.sdk, chain)?;
         let mut v = [0u8; 32];
         v[24..].copy_from_slice(&version.to_be_bytes());
-        let pool = &pool;
-        let out = pool
-            .read_at_block(
-                final_block(&profile),
-                Purpose::FeedsDecryption,
-                |at| async move {
-                    call_at(pool, &at, registry, "kemKeyAt(bytes32,uint64)", &[ua, v]).await
-                },
-            )
-            .await?
-            .value;
+        // F2: read at the generation that holds `ua` (an unregistered one at the bound registry, which answers none)
+        let (out, _) = crate::line::read_line(
+            &self.sdk,
+            chain,
+            final_block(&profile),
+            Purpose::FeedsDecryption,
+            |pool, at, line| async move {
+                let to = line.holder(&pool, &at, ua).await?.unwrap_or(line.bound());
+                call_at(&pool, &at, to, "kemKeyAt(bytes32,uint64)", &[ua, v]).await
+            },
+        )
+        .await?;
         kem_pk_of(&out)
     }
 
@@ -1408,7 +1395,6 @@ impl AppCore {
             typed_json,
             sig,
             scaas_ua::wallet::verify_app_record,
-            false,
         )
         .await
     }
@@ -1431,7 +1417,6 @@ impl AppCore {
             typed_json,
             sig,
             scaas_ua::wallet::pqvault::verify,
-            true,
         )
         .await
     }
@@ -1446,7 +1431,6 @@ impl AppCore {
         typed_json: String,
         sig: AppUaSig,
         f: fn(&[u8; 32], &UaPath, &TypedData, &UASig, &AppRecordState) -> bool,
-        line: bool,
     ) -> Result<bool, SdkError> {
         let id = hex32(&ua)?;
         let typed = TypedData::from_json(typed_json.as_bytes()).map_err(SdkError::Ua)?;
@@ -1470,7 +1454,7 @@ impl AppCore {
             }
         };
         let chain_bound = matches!(p, UaPath::ChainBound { .. });
-        self.with_records(&chain, id, chain_bound, line, |state| {
+        self.with_records(&chain, id, chain_bound, |state| {
             f(&id, &p, &typed, &UASig::from(&sig), state)
         })
         .await
@@ -1484,35 +1468,29 @@ impl AppCore {
         chain: &str,
         id: [u8; 32],
         chain_bound: bool,
-        line: bool,
         f: impl FnOnce(&AppRecordState) -> R,
     ) -> Result<R, SdkError> {
-        let (profile, _, pool) = crate::op::evm(&self.sdk, chain)?;
-        let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
-        let registry = Address::from(addr20(&r.to_ascii_lowercase())?);
-        let poolr = &pool;
-        let recs = pool
-            .read_at_block(
-                final_block(&profile),
-                Purpose::FeedsDecryption,
-                |at| async move { records(poolr, &at, registry, id).await },
-            )
-            .await?
-            .value;
+        let (profile, chain_id, _) = crate::op::evm(&self.sdk, chain)?;
+        // F2: the records and the domain from one line, one endpoint, one block
+        let ((recs, holder), line) = crate::line::read_line(
+            &self.sdk,
+            chain,
+            final_block(&profile),
+            Purpose::FeedsDecryption,
+            |pool, at, line| async move {
+                let recs = records(&pool, &at, &line, id).await?;
+                Ok((recs, line.holder(&pool, &at, id).await?))
+            },
+        )
+        .await?;
         let needs_domain = chain_bound
             && (scaas_ua::in_native_space(&id) || recs.get(&id).is_some_and(|r| r.kind == MSIG));
-        let domain = if needs_domain {
-            // F2 (`line`, PqVault's dedicated path): the domain of the generation that holds `id`, at its generation
-            Some(match line {
-                true => {
-                    crate::account::msig::line_domain(&self.sdk, chain, &pool, registry, Some(id))
-                        .await?
-                }
-                false => crate::account::msig::domain(&self.sdk, chain, &pool, registry).await?,
+        // a native id's key signs in the bound registry's domain, an `msig`'s native members in its holder's
+        let domain = needs_domain
+            .then(|| -> Result<_, SdkError> {
+                Ok(line.domain(holder, chain_id, hex32(&profile.chain_uid)?))
             })
-        } else {
-            None
-        };
+            .transpose()?;
         let members = |x: [u8; 32]| recs.get(&x).map(|r| (r.kind, r.key_data.clone()));
         let current = |x: [u8; 32]| recs.get(&x).and_then(|r| r.current.clone());
         let accepted = |x: [u8; 32], i: u16| recs.get(&x).is_some_and(|r| bit(&r.active, i));

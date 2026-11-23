@@ -547,7 +547,7 @@ impl AppCore {
         let id = w32(&ua)?;
         let c = card_of(&card)?;
         let sig = scaas_ua::ua_portable::UASig::from(&sig);
-        self.with_records(&chain, id, false, false, |state| {
+        self.with_records(&chain, id, false, |state| {
             pqchat::verify_card(&id, &c, &sig, state)
         })
         .await

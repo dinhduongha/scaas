@@ -2059,8 +2059,74 @@ async fn pqvault_records_on_a_two_generation_line() {
         "the twin"
     );
     assert!(core
-        .verify_pqvault_record("g2".into(), m, AppPath::Portable, tv, app_sig(&sp))
+        .verify_pqvault_record("g2".into(), m.clone(), AppPath::Portable, tv, app_sig(&sp))
         .await
         .unwrap());
     say("generation 2's line: M by generation 1's domain, the native key by generation 2's");
+
+    // F2's generic part (owner 2026-11-23, review T26): the generic record entries read the same line. A native key's generic
+    // chain-bound record through g2 is generation 2's own (red before: the generic path's domain refused a generation 2,
+    // `Argument`), accepted by generation 2's `requireAuthorized` and by `verify_app_record`, beside its twin.
+    let note = json!({
+        "types": {"EIP712Domain": [{"name": "name", "type": "string"}, {"name": "version", "type": "string"},
+            {"name": "chainId", "type": "uint256"}, {"name": "verifyingContract", "type": "address"}],
+            "Note": [{"name": "id", "type": "bytes32"}, {"name": "body", "type": "string"}]},
+        "primaryType": "Note",
+        "domain": {"name": "E2E App", "version": "1", "chainId": CHAIN, "verifyingContract": format!("0x{}", "5a".repeat(20))},
+        "message": {"id": format!("0x{}", "11".repeat(32)), "body": "on the line"},
+    })
+    .to_string();
+    // a generic app's scope (PqVault's purpose is its dedicated path's only)
+    let gen_app = format!("0x{}", "5a".repeat(32));
+    let gc = scaas_sdk::app_core::AppCore::new(
+        d.sdk.clone(),
+        scaas_sdk::app_core::AppDesc {
+            app_id: Some(gen_app.clone()),
+            name: "E2E App".into(),
+            class: None,
+            labels: vec!["scaas/e2e-app/v1/".into()],
+        },
+    )
+    .unwrap();
+    let p_g = hex(&alloy::primitives::keccak256(
+        [
+            alloy::primitives::keccak256("scaas.ua.purpose.app.v1").0,
+            [0x5a; 32],
+        ]
+        .concat(),
+    )
+    .0);
+    let gn = gc
+        .sign_app_record(native.clone(), cb("g2"), note.clone())
+        .await
+        .unwrap();
+    assert!(
+        accepts(&gen2, "requireAuthorized", &nid, &p_g, &gn),
+        "a generic native record in generation 2's domain"
+    );
+    assert!(
+        !accepts(&gen2, "requireAuthorized", &nid, &p_g, &twin(&gn)),
+        "the twin"
+    );
+    assert!(gc
+        .verify_app_record(
+            "g2".into(),
+            nid.clone(),
+            cb("g2"),
+            note.clone(),
+            app_sig(&gn)
+        )
+        .await
+        .unwrap());
+    assert!(!gc
+        .verify_app_record(
+            "g2".into(),
+            nid.clone(),
+            cb("g2"),
+            note,
+            app_sig(&twin(&gn))
+        )
+        .await
+        .unwrap());
+    say("F2's generic part: a native record by generation 2's domain");
 }

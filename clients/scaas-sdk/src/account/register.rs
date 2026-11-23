@@ -358,14 +358,17 @@ async fn pqz_proven(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<
         .with_to(registry)
         .with_input(Bytes::from(d));
     let out = pool.call_tx(tx).await.map_err(sim)?;
-    // `(address ptr, bytes32 pqzPopHash, bool proven)`
-    word(&out, 2)
+    proven_of(&out).ok_or(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
+        last: None,
+        failover_revert: None,
+    }))
+}
+
+/// `pqzKeyAt`'s `(address ptr, bytes32 pqzPopHash, bool proven)`: `proven`.
+fn proven_of(out: &[u8]) -> Option<bool> {
+    word(out, 2)
         .filter(|w| *w <= U256::from(1))
         .map(|w| w == U256::from(1))
-        .ok_or(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
-            last: None,
-            failover_revert: None,
-        }))
 }
 
 /// `pqzKeyAt(ua, 0).pqzPopHash`: the hash of the proof the registration committed to (`storePqzPop` takes only that proof).
@@ -402,20 +405,18 @@ async fn kem_pk_hash(
         .with_to(registry)
         .with_input(Bytes::from(d));
     let out = pool.call_tx(tx).await.map_err(sim)?;
-    let bad = || {
-        SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
-            last: None,
-            failover_revert: None,
-        })
-    };
-    // `(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop)`: `attrs` by its offset, `kemPkHash` its fourth word
-    let off = word(&out, 2)
-        .and_then(|w| usize::try_from(w).ok())
-        .ok_or_else(bad)?;
-    let at = off.checked_add(96).ok_or_else(bad)?;
-    out.get(at..at.checked_add(32).ok_or_else(bad)?)
-        .and_then(|w| w.try_into().ok())
-        .ok_or_else(bad)
+    kem_hash_of(&out).ok_or(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
+        last: None,
+        failover_revert: None,
+    }))
+}
+
+/// `registrationOf`'s `(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop)`: `attrs` by its offset,
+/// `kemPkHash` its fourth word.
+fn kem_hash_of(out: &[u8]) -> Option<[u8; 32]> {
+    let off = word(out, 2).and_then(|w| usize::try_from(w).ok())?;
+    let at = off.checked_add(96)?;
+    out.get(at..at.checked_add(32)?)?.try_into().ok()
 }
 
 /// A verify row's signer of an `msig` slot of kind `kind`: an EOA member the native reference (0), any other its kind (a kind
@@ -1310,21 +1311,68 @@ impl Account {
         self.sdk
             .spawn(async move {
                 let ua: [u8; 32] = unhex(&ua)?.try_into().map_err(|_| SdkError::Argument)?;
-                let (_, _, pool) = evm(&sdk, &chain)?;
-                let registry = registry_of(&sdk, &chain)?;
-                let registered = read_record(&pool, registry, Landed::Registered, &ua).await?;
-                if !registered {
+                // F2 (A2-2): one read of the line; the record at its holder, the PQZ attachment at its home (CTR-UA-71)
+                let (r, _) = crate::line::read_line(
+                    &sdk,
+                    &chain,
+                    scaas_rpc::pool::BlockChoice::Latest,
+                    scaas_rpc::Purpose::Plain,
+                    |pool, at, line| async move {
+                        let bad = || crate::line::malformed(&at, "a registration view");
+                        let Some((h, _, home)) = line.holder_of(&pool, &at, ua).await? else {
+                            return Ok(None);
+                        };
+                        let p = home.unwrap_or(h);
+                        let reg = pool
+                            .call_at(
+                                &at,
+                                h,
+                                Bytes::from(
+                                    [selector("registrationOf(bytes32)"), ua.to_vec()].concat(),
+                                ),
+                            )
+                            .await?;
+                        let kem = pool
+                            .call_at(&at, h, record_call(Landed::Kem(0), &ua))
+                            .await?;
+                        let pop = pool
+                            .call_at(&at, p, record_call(Landed::PqzPop(0), &ua))
+                            .await?;
+                        let key = pool
+                            .call_at(
+                                &at,
+                                p,
+                                Bytes::from(
+                                    [
+                                        selector("pqzKeyAt(bytes32,uint64)"),
+                                        ua.to_vec(),
+                                        word_u64(0).to_vec(),
+                                    ]
+                                    .concat(),
+                                ),
+                            )
+                            .await?;
+                        Ok(Some((
+                            kem_hash_of(&reg).ok_or_else(bad)?,
+                            record_holds(Landed::Kem(0), &kem).ok_or_else(bad)?,
+                            record_holds(Landed::PqzPop(0), &pop).ok_or_else(bad)?,
+                            proven_of(&key).ok_or_else(bad)?,
+                        )))
+                    },
+                )
+                .await?;
+                let Some((kem_pk_hash, kem_stored, pqz_pop_stored, pqz_proven)) = r else {
                     return Ok(RegistrationState {
                         kem_pk_hash: hex(&[0; 32]),
                         ..Default::default()
                     });
-                }
+                };
                 Ok(RegistrationState {
-                    registered,
-                    kem_pk_hash: hex(&kem_pk_hash(&pool, registry, &ua).await?),
-                    kem_stored: read_record(&pool, registry, Landed::Kem(0), &ua).await?,
-                    pqz_pop_stored: read_record(&pool, registry, Landed::PqzPop(0), &ua).await?,
-                    pqz_proven: pqz_proven(&pool, registry, &ua).await?,
+                    registered: true,
+                    kem_pk_hash: hex(&kem_pk_hash),
+                    kem_stored,
+                    pqz_pop_stored,
+                    pqz_proven,
                 })
             })
             .await

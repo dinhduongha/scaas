@@ -762,15 +762,24 @@ async fn verify_app_record_reads_the_registry() {
         !verify(nid, AppPath::Portable, pa.clone(), sn.clone()).await,
         "no portable record"
     );
+    // F2 (owner 2026-11-23): the domain comes from the line; a generation 1 naming a predecessor is no line (the read
+    // fails, never a guessed domain); a generation 2 the registry's own at generation 2, which the signature (made at
+    // generation 1) does not verify in
     answer(&chain, REGISTRY, "predecessor()", &[], w(1));
     assert_eq!(
         code(
-            a.verify_app_record("local".into(), hx(&nid), b(), cb.clone(), sn)
+            a.verify_app_record("local".into(), hx(&nid), b(), cb.clone(), sn.clone())
                 .await
         ),
-        "Argument",
-        "a registry of another generation"
+        "EndpointAllFailed",
+        "a line that is not consecutive"
     );
+    answer(&chain, REGISTRY, "generation()", &[], w(2));
+    assert!(
+        !verify(nid, b(), cb.clone(), sn).await,
+        "generation 2's domain, not generation 1's"
+    );
+    answer(&chain, REGISTRY, "generation()", &[], w(1));
     answer(&chain, REGISTRY, "predecessor()", &[], w(0));
 
     // an msig {k1, native}, threshold 2, both slots accepted

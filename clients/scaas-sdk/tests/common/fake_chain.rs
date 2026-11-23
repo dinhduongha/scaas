@@ -367,6 +367,19 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 (c.domains.get(&to), data == sel("eip712Domain()"))
             {
                 ok(json!(eip712_domain(name, &to, salt)))
+            } else if !c.call_revert && data == sel("generation()") {
+                // the line (F2): a registry not answered otherwise is a generation 1
+                ok(json!(format!("0x{:064x}", 1)))
+            } else if !c.call_revert && data == sel("predecessor()") {
+                ok(json!(format!("0x{:064x}", 0)))
+            } else if !c.call_revert && data.starts_with(&sel("holderOf(bytes32)")) {
+                // a generation 1 holds what it is asked about (kind 0 and no PQZ home: read as its own records say)
+                ok(json!(format!(
+                    "0x{:0>64}{:064x}{:064x}",
+                    to.trim_start_matches("0x"),
+                    0,
+                    0
+                )))
             } else if data.starts_with(&sel("kindHome(uint16)")) {
                 let home = c.kind_home.get(&to).unwrap_or(&to);
                 ok(json!(format!("0x{:0>64}", home.trim_start_matches("0x"))))
