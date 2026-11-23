@@ -1,9 +1,17 @@
 # t12 mutants (name | outcome | commit | test | first failure line)
 bind: a String content accessor on Message | killed | ae197bbd4 | bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh | not ok - decrypted content not only as the handle: Message has a member that is no field: ['Future<String> text()']
-bind: Content::value in the surface | killed | ae197bbd4 | bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh | not ok - decrypted content through the codec (Content_value)
+bind: PqChat::seal of a Content in the surface | killed | 5d6a91cd0 | bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh | not ok - decrypted content not only as the handle: PqChat.seal is not a send entry of the surface: {'s': 'SessionRef', 'me': 'Me', 'content': 'Content', 'ts': '
 bind: the session's name back in Preview | killed | ae197bbd4 | bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh | not ok - decrypted content not only as the handle: Preview's members [('admins', 'List<String>'), ('chainStores', 'BigInt'), ('creator', 'String'), ('epoch', 'S
-bind: the handle's id for the copy calls gone | killed | ae197bbd4 | bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh | not ok - no secretId of the handle in the surface
+bind: the handle's id for the copy calls gone | killed | a4c2df18e | bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh | not ok - no secretId of the handle in the surface
 bind: the read copy call not exported | killed | ae197bbd4 | bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh | not ok - the SDK's copy call scaas_sdk_secret_read not exported
 crate: a reaction counted per react, not per UA | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test message content_leaves_only_as_handles | panicked at tests/message.rs:854:5:
 crate: the newest edit's content not shown | killed | ae197bbd4 | ../../scripts/capped cargo test --locked --offline -j2 --test message content_leaves_only_as_handles | panicked at tests/message.rs:849:5:
-7 mutants, 7 killed, 0 survived, 0 not loaded, 0 other failure
+bind: a plain String send entry added back | killed | a4c2df18e | bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh | not ok - decrypted content not only as the handle: PqChat.sendText is not a send entry of the surface: {'s': 'SessionRef', 'me': 'Me', 'body': 'String', 'o': 'S
+bind: send takes the content JSON as a String | killed | a4c2df18e | bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh | not ok - decrypted content not only as the handle: PqChat.send's parameters {'s': 'SessionRef', 'me': 'Me', 'content': 'String', 'ts': 'BigInt?', 'o': 'SendOpts
+bind: the Rust-only send of a Content in the surface | killed | a4c2df18e | bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh | not ok - decrypted content not only as the handle: PqChat.sendContent is not a send entry of the surface: {'s': 'SessionRef', 'me': 'Me', 'content': 'Content', 
+bind: no new handle in the surface | killed | a4c2df18e | bash clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh | not ok - no secretNew in the surface
+crate: send parses the handle without the content rules | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --test stores send_takes_the_content_json_as_a_handle | panicked at tests/stores.rs:631:9:
+crate: from_json takes a content that is not exactly its form | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --test stores send_takes_the_content_json_as_a_handle | panicked at tests/stores.rs:631:9:
+crate: from_json without the body bound's own error | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --test stores send_takes_the_content_json_as_a_handle | panicked at tests/stores.rs:631:9:
+crate: a file content sent as a plain content (no key entered) | killed | a4c2df18e | ../../scripts/capped cargo test --locked --offline -j2 --test stores send_takes_the_content_json_as_a_handle | panicked at tests/stores.rs:631:9:
+15 mutants, 15 killed, 0 survived, 0 not loaded, 0 other failure
