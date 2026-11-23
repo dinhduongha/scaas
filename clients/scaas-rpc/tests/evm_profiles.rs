@@ -100,6 +100,8 @@ fn receipt(id: u64, n: u64) -> Value {
 }
 
 const HEAD: u64 = 1_000;
+/// The block parameters a fake node's `eth_getBalance` saw.
+type Seen = Arc<Mutex<Vec<Value>>>;
 const FINAL: u64 = 900;
 
 /// A node of chain `id` whose block 0 is `uid`: head 1,000, `finalized` 900; every `eth_getBalance` block parameter is kept
@@ -360,7 +362,7 @@ async fn a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head() {
         (2, Ok(2)),
         (u64::MAX, Err("HeadMoving")),
     ] {
-        let (s0, s1): (Arc<Mutex<Vec<Value>>>, Arc<Mutex<Vec<Value>>>) = Default::default();
+        let (s0, s1) = (Seen::default(), Seen::default());
         let e0 = moving_node(p.id, p.uid, 1, moves, s0.clone()).await;
         let e1 = moving_node(p.id, p.uid, 2, moves, s1.clone()).await;
         let pool = pool(&[&e0, &e1], &p).with_pinned_reads(false);
