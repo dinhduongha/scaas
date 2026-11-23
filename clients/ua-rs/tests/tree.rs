@@ -526,6 +526,51 @@ impl TreeReader for Home {
     }
 }
 
+/// A home holding a session's genesis: the cold tree from the registry's keys.
+fn new_home(
+    rec: &Value,
+    sig: Value,
+    wraps: Vec<Value>,
+    sid: [u8; 32],
+    tree_id: [u8; 32],
+    kems: BTreeMap<([u8; 32], u64), Vec<u8>>,
+    ua_keys: BTreeMap<[u8; 32], Vec<u8>>,
+) -> Home {
+    let members = rec["members"].as_array().unwrap();
+    let cold: Vec<Leaf> = members
+        .iter()
+        .map(|m| Leaf {
+            ua: a32(&m["ua"]),
+            key_id: u(&m["keyId"]),
+            kem_hash: keccak256(&kems[&(a32(&m["ua"]), u(&m["keyId"]))]),
+        })
+        .collect();
+    let tree = Tree::cold(&cold).unwrap();
+    Home {
+        tree_id,
+        genesis_tree_hash: tree.tree_hash(),
+        tree,
+        epochs: vec![Epoch {
+            id: sid,
+            record: rec.clone(),
+            sig,
+            ct_targets: vec![],
+            ct_hashes: vec![],
+            cts: vec![],
+            wraps,
+        }],
+        join: (0..members.len() as u32)
+            .map(|i| (i, (0, i as u64)))
+            .collect(),
+        node_key: BTreeMap::new(),
+        gone: BTreeMap::new(),
+        periods: BTreeMap::new(),
+        kems,
+        ua_keys,
+        log: vec![],
+    }
+}
+
 // ------------------------------------------------------------------ tree-secrets.json
 
 struct World {
@@ -742,38 +787,15 @@ fn scenario(
         .values()
         .map(|p| (a32(&p["ua"]), unhex(&p["publicKey"])))
         .collect();
-    let cold: Vec<Leaf> = members
-        .iter()
-        .map(|m| Leaf {
-            ua: a32(&m["ua"]),
-            key_id: u(&m["keyId"]),
-            kem_hash: keccak256(&kems[&(a32(&m["ua"]), u(&m["keyId"]))]),
-        })
-        .collect();
-    let tree = Tree::cold(&cold).unwrap();
-    let mut home = Home {
-        tree_id: gen.tree_id,
-        genesis_tree_hash: tree.tree_hash(),
-        tree,
-        epochs: vec![Epoch {
-            id: sid,
-            record: rec.clone(),
-            sig: g["sig"].clone(),
-            ct_targets: vec![],
-            ct_hashes: vec![],
-            cts: vec![],
-            wraps: g["wraps"].as_array().unwrap().clone(),
-        }],
-        join: (0..members.len() as u32)
-            .map(|i| (i, (0, i as u64)))
-            .collect(),
-        node_key: BTreeMap::new(),
-        gone: BTreeMap::new(),
-        periods: BTreeMap::new(),
+    let mut home = new_home(
+        rec,
+        g["sig"].clone(),
+        g["wraps"].as_array().unwrap().clone(),
+        sid,
+        gen.tree_id,
         kems,
         ua_keys,
-        log: vec![],
-    };
+    );
     let roster = |h: &Home| -> Value {
         json!((0..h.tree.leaves)
             .map(|i| h
@@ -1158,8 +1180,9 @@ fn tree_refusals_beside_twins() {
         kem_hash: keccak256(&kd.kem_pk()),
     };
     assert!(build(&keys, &mut h0, vec![(add.clone(), kd.kem_pk())]).is_ok());
+    // bit 255 of pk_X set: X25519 ignores it (encapsulation alone would pass), the admission check refuses it
     let mut bad = kd.kem_pk();
-    bad[0] = 2;
+    *bad.last_mut().unwrap() |= 0x80;
     let bad_add = Add {
         kem_hash: keccak256(&bad),
         ..add
@@ -1222,4 +1245,246 @@ fn tree_refusals_beside_twins() {
     let (p2, _) = keys.vectors_tree_path(&other, author, &c1, 1).unwrap();
     assert_eq!(hx(&p1[0]), s["ps0"]);
     assert_ne!(p1, p2);
+}
+
+// ------------------------------------------------------------------ states only a signed fault reaches (built here)
+
+/// A session of the test wallet's UAs X (admin, creator), Y, Z, W (ML-DSA-65, account 0, index 0..3), each with an ephemeral
+/// KEM key (its seed in its own store), X, Y and Z members at genesis.
+struct Own {
+    w: Wallet,
+    keys: AppKeys,
+    uas: Vec<scaas_ua::wallet::UaKey>,
+    kems: Vec<KemKeyPair>,
+}
+/// The test app's tree: PqChat's labels and records under another app's purpose (the scope is a parameter).
+const OWN: &scaas_ua::wallet::tree::TreeScope = &scaas_ua::wallet::tree::TreeScope {
+    purpose: own_purpose,
+    ..PQCHAT_TREE
+};
+fn own_app() -> [u8; 32] {
+    keccak256(b"test.tree.v1")
+}
+fn own_purpose() -> [u8; 32] {
+    scaas_ua::ua_portable::app_purpose(&own_app()).unwrap()
+}
+const INFO_A: &str = r#"{"stores":[{"kind":"matrix","room":"!a:example.org"}]}"#;
+const INFO_B: &str = r#"{"stores":[{"kind":"matrix","room":"!b:example.org"}]}"#;
+
+impl Own {
+    fn new() -> Own {
+        let (w, keys) = keys();
+        let uas = (0..4).map(|i| w.ua_key(MLDSA65, 0, i).unwrap()).collect();
+        let kems = (0..4)
+            .map(|_| KemKeyPair::generate_ephemeral().unwrap())
+            .collect();
+        Own { w, keys, uas, kems }
+    }
+    fn ua(&self, i: usize) -> [u8; 32] {
+        self.uas[i].ua().unwrap()
+    }
+    fn dev(&self, i: usize) -> TreeDevice<'_> {
+        TreeDevice {
+            ua: self.ua(i),
+            key_id: 1,
+            kem: &self.kems[i],
+        }
+    }
+    fn sign(&self, i: usize, name: &str, rec: &Value) -> Value {
+        let d = pqchat::typed(name, rec.clone()).unwrap().digest().unwrap();
+        // a signer outside the tree's operations: an app record of this test app's id (its scope's purpose, [`OWN`])
+        json!(hx(&self.uas[i].sign_ua_app(&own_app(), &d).unwrap()))
+    }
+    fn home(&self) -> Home {
+        let session = json!({"creator": hx(&self.ua(0)), "nonce": 1, "homeChain": hx(&[7; 32]),
+            "homeChatContract": hx(&[0xc4; 20]), "admins": [hx(&self.ua(0))],
+            "members": (0..3).map(|i| json!({"ua": hx(&self.ua(i)), "keyId": 1, "via": hx(&ZERO)})).collect::<Vec<_>>(),
+            "groupMode": 1});
+        let pks: Vec<Vec<u8>> = (0..3).map(|i| self.kems[i].kem_pk()).collect();
+        let g = self
+            .keys
+            .tree_create_genesis(OWN, &session, &pks, INFO_A.as_bytes())
+            .unwrap();
+        let sig = self.sign(0, "PqChatSession", &g.record);
+        let kems = (0..4)
+            .map(|i| ((self.ua(i), 1), self.kems[i].kem_pk()))
+            .collect();
+        let ua_keys = (0..4)
+            .map(|i| (self.ua(i), self.uas[i].key_data()))
+            .collect();
+        new_home(
+            &g.record,
+            sig,
+            g.wraps.clone(),
+            g.session_id,
+            g.tree_id,
+            kems,
+            ua_keys,
+        )
+    }
+    /// `i`'s commit on the head with `admins`, `info` and `adds` (of UA indexes); `fault` changes the record (and the
+    /// pieces) before `i` signs it, as a signer outside `ua-rs` would. Landed.
+    fn commit(
+        &self,
+        h: &mut Home,
+        i: usize,
+        admins: &[usize],
+        info: &str,
+        adds: &[usize],
+        fault: fn(&Own, &mut Value, &Tree),
+    ) {
+        let prep = tree_prepare(OWN, h, None).unwrap();
+        let tree = prep.tree.clone();
+        let adds: Vec<(Add, Vec<u8>)> = adds
+            .iter()
+            .enumerate()
+            .map(|(j, x)| {
+                let pk = self.kems[*x].kem_pk();
+                let a = Add {
+                    leaf: tree.used + j as u32,
+                    ua: self.ua(*x),
+                    key_id: 1,
+                    via: ZERO,
+                    kem_hash: keccak256(&pk),
+                };
+                (a, pk)
+            })
+            .collect();
+        let leaf = (0..tree.leaves)
+            .find(|l| tree.leaf(*l).is_some_and(|x| x.ua == self.ua(i)))
+            .unwrap();
+        let (sid, tid) = (h.epochs[0].id, h.tree_id);
+        let mut kf = |x: u32| key_of(h, &tree, x);
+        let b = self
+            .keys
+            .tree_build_commit(
+                OWN,
+                CommitInput {
+                    tree: &prep.tree,
+                    parent_epoch_id: prep.parent_epoch_id,
+                    parent_epoch: prep.parent_epoch,
+                    parent_tree_hash: prep.parent_tree_hash,
+                    session_id: sid,
+                    tree_id: tid,
+                    author: self.ua(i),
+                    leaf,
+                    key_id: 1,
+                    kem: &self.kems[i],
+                    removes: vec![],
+                    adds,
+                    admins: admins.iter().map(|a| self.ua(*a)).collect(),
+                    info: Some(info.as_bytes()),
+                    key_of: &mut kf,
+                },
+            )
+            .unwrap();
+        let mut st = json!({"record": b.record, "epochId": hx(&b.epoch_id), "ctTargets": b.ct_targets,
+            "ctHashes": b.ct_hashes.iter().map(|x| hx(x)).collect::<Vec<_>>(),
+            "nodeKeys": b.node_keys.iter().map(|x| hx(x)).collect::<Vec<_>>(),
+            "cts": b.cts.iter().map(PathCt::to_json).collect::<Vec<_>>(), "wraps": b.wraps});
+        fault(self, &mut st, &prep.tree);
+        st["sig"] = self.sign(i, "PqChatCommit", &st["record"]);
+        h.land_commit(&st);
+    }
+    fn replay(&self, h: &mut Home, i: usize) -> scaas_ua::wallet::tree::Replay {
+        self.keys
+            .tree_replay(OWN, h, &self.dev(i), None)
+            .unwrap()
+            .unwrap()
+    }
+}
+fn honest(_: &Own, _: &mut Value, _: &Tree) {}
+/// Every node key hash replaced by another key's, the tree hash recomputed: the ciphertexts open, the keys do not match.
+fn other_node_keys(_: &Own, st: &mut Value, tree: &Tree) {
+    let other = keccak256(&KemKeyPair::generate_ephemeral().unwrap().kem_pk());
+    let n = st["record"]["nodeKeyHashes"].as_array().unwrap().len();
+    st["record"]["nodeKeyHashes"] = json!(vec![hx(&other); n]);
+    let a = tree
+        .apply_commit(&Changes::from_json(&st["record"]).unwrap(), &vec![other; n])
+        .unwrap();
+    st["record"]["treeHash"] = json!(hx(&a.tree_hash));
+}
+/// The Welcome replaced by a wrap of another joiner secret, its hash in the record.
+fn other_welcome(o: &Own, st: &mut Value, _: &Tree) {
+    let r = &st["record"];
+    let (tid, eid, member) = (
+        a32(&r["treeId"]),
+        a32(&st["epochId"]),
+        a32(&r["adds"][0]["ua"]),
+    );
+    let aad = [&tid[..], &eid, &member, &1u64.to_be_bytes()].concat();
+    let j = o.keys.random_key(KeyUsage::Derive).unwrap();
+    let w = o
+        .keys
+        .kem_wrap(&j, &SC.wrap_label(), &aad, &o.kems[3].kem_pk())
+        .unwrap();
+    let wrap = json!({"member": hx(&member), "keyId": 1, "mlkemCt": hx(&w.mlkem_ct), "x25519Eph": hx(&w.x25519_eph),
+        "sealedKey": hx(&w.sealed_key)});
+    st["record"]["wrapHashes"] =
+        json!([hx(&scaas_ua::wallet::tree::wrap_hash(SC, &wrap).unwrap())]);
+    st["wraps"] = json!([wrap]);
+}
+
+#[test]
+fn tree_states_of_signed_faults() {
+    let o = Own::new();
+    let _ = &o.w;
+    let last = |r: &scaas_ua::wallet::tree::Replay| {
+        (
+            r.epochs.last().unwrap().state,
+            r.epochs.last().unwrap().info,
+        )
+    };
+    // rights (codex-r2-6): a non-admin's commit that changes the admins is not followed; its twin keeps them
+    let mut h = o.home();
+    o.commit(&mut h, 1, &[0, 1], INFO_A, &[], honest);
+    assert_eq!(last(&o.replay(&mut h, 2)).0, State::NotFollowed("rights"));
+    let mut h = o.home();
+    o.commit(&mut h, 1, &[0], INFO_A, &[], honest);
+    assert_eq!(
+        last(&o.replay(&mut h, 2)),
+        (State::Followed, Some(InfoTook::Full))
+    );
+    // the info (C33): a non-admin's differing info is ignored, the one in force kept; an admin's is the changed info
+    let mut h = o.home();
+    o.commit(&mut h, 1, &[0], INFO_B, &[], honest);
+    let r = o.replay(&mut h, 2);
+    assert_eq!(last(&r), (State::Followed, Some(InfoTook::Ignored)));
+    assert_eq!(r.epochs.last().unwrap().in_force.as_deref(), Some(INFO_A));
+    let mut h = o.home();
+    o.commit(&mut h, 0, &[0], INFO_B, &[], honest);
+    let r = o.replay(&mut h, 2);
+    assert_eq!(last(&r), (State::Followed, Some(InfoTook::Changed)));
+    assert_eq!(r.epochs.last().unwrap().in_force.as_deref(), Some(INFO_B));
+    // the derived-key comparison: ciphertexts that open to secrets whose keys are not the signed ones
+    let mut h = o.home();
+    o.commit(&mut h, 0, &[0], INFO_A, &[], other_node_keys);
+    assert_eq!(
+        last(&o.replay(&mut h, 2)).0,
+        State::NotFollowed("node key mismatch")
+    );
+    // the joiner's Welcome against its path ciphertext (codex-5, fable-5)
+    let mut h = o.home();
+    o.commit(&mut h, 0, &[0], INFO_A, &[3], other_welcome);
+    assert_eq!(
+        last(&o.replay(&mut h, 3)).0,
+        State::NotFollowed("welcome disagrees")
+    );
+    assert_eq!(last(&o.replay(&mut h, 2)).0, State::Followed);
+    let mut h = o.home();
+    o.commit(&mut h, 0, &[0], INFO_A, &[3], honest);
+    let r = o.replay(&mut h, 3);
+    assert_eq!(
+        (r.join_epoch, last(&r)),
+        (1, (State::Followed, Some(InfoTook::Full)))
+    );
+    // the joiner's K is the members' K
+    let k = |r: &scaas_ua::wallet::tree::Replay| {
+        o.keys
+            .vectors_reveal(r.epochs.last().unwrap().k.as_ref().unwrap())
+            .unwrap()
+    };
+    assert_eq!(k(&r), k(&o.replay(&mut h, 2)));
+    // the committer itself: its own commit reproduced from its seed (node keys and sealedInfo), K equal
+    assert_eq!(k(&o.replay(&mut h, 0)), k(&r));
 }
