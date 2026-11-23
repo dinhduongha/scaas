@@ -54,6 +54,11 @@ contract PqChatTreeRulesTest is PqChatTreeModel {
         Step memory x = _build2(m, 1);
         x.c.treeHash = bytes32(uint256(1));
         _refused(x, _err(IPqChat.PqChatTreeHash.selector, st.c.treeHash));
+        IUARegistry.UASig memory sg = _signC(x.c); // the record alone: refused at acceptance, not at a completion
+        vm.expectRevert(_err(IPqChat.PqChatTreeHash.selector, st.c.treeHash));
+        vchat.commit(
+            x.c, new uint32[](0), new bytes32[](0), new bytes[](0), new IPqChat.PathCt[](0), new IPqChat.Wrap[](0), sg
+        );
         x = _build2(m, 1);
         x.c.ctCount = 3;
         _refused(x, abi.encodeWithSelector(IPqChat.PqChatTreeTargets.selector, uint256(2)));
@@ -427,8 +432,51 @@ contract PqChatTreeRulesTest is PqChatTreeModel {
         vchat.treeRemove(r, sg);
         (Step memory x,) = _build(m, 1, _chs(_rm(2, E, 1)), _list(A));
         _refused(x, _err(IPqChat.PqChatNotAdmin.selector, B));
+        (x,) = _build(m, 1, _chs(_add(3, E, 2)), _list(A)); // a non-admin adds another UA's key
+        _refused(x, _err(IPqChat.PqChatNotAdmin.selector, B));
+        (x,) = _build(m, 0, _noCh(), new bytes32[](0)); // A drops itself, not gone: no admin with a leaf would remain
+        _refused(x, abi.encodeWithSelector(IPqChat.PqChatTreeAdmins.selector));
+        (x,) = _build(m, 0, _noCh(), _list(A, E)); // E added as an admin: an admin change, by an admin
+        (, M memory e2) = _build(m, 0, _noCh(), _list(A, E));
+        _land(x, e2, m);
+        m = e2;
         (Step memory st, M memory n) = _build(m, 0, _chs(_rm(2, E, 1)), _list(A));
         _land(st, n, m);
+    }
+
+    /// codex-8: a node key that fails the admission check with every hash matching: the record is accepted (only its hash
+    /// is public then, fable-r3-6), the key is refused when it lands, nothing completes it.
+    function test_nodeKeyFailsAdmission() public {
+        _open(); // the vectors in this call's memory
+        M memory m = _abe(_list(A));
+        bytes memory good = nodeKey;
+        nodeKey = _j().readBytes(".devices.G.kemPk");
+        nodeKey[1600] = 0x80; // pk_X with bit 255 set: not canonical
+        (Step memory st,) = _build(m, 1, _noCh(), _list(A));
+        nodeKey = good;
+        bytes32 eid = _commitAlone(vchat, st);
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatKemKey.selector, eid, uint64(0)));
+        vchat.addPathKeys(eid, st.nodeKeys);
+    }
+
+    /// C7, C14: a record that signs the hash of a list whose targets differ from the walk's is accepted (the list is not
+    /// in the record), its list refused when it lands (`PqChatTreeTargets`); the walk's list lands for the twin record.
+    function test_listTargetsAgainstTheWalk() public {
+        _open(); // the vectors in this call's memory
+        M memory m = _abe(_list(A));
+        (Step memory st,) = _build(m, 1, _noCh(), _list(A));
+        Step memory x = _copyStep(st);
+        (x.ctTargets, x.ctHashes) = (new uint32[](2), new bytes32[](2));
+        (x.ctTargets[0], x.ctTargets[1], x.ctHashes[0], x.ctHashes[1]) =
+        (st.ctTargets[1], st.ctTargets[0], st.ctHashes[1], st.ctHashes[0]);
+        x.c.ctListHash = th2.pathList(x.ctTargets, x.ctHashes);
+        bytes32 eid = _commitAlone(vchat, x);
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatTreeTargets.selector, uint256(2)));
+        vchat.addPathList(eid, x.ctTargets, x.ctHashes);
+        ++nonceN;
+        (st,) = _build(m, 1, _noCh(), _list(A));
+        eid = _commitAlone(vchat, st);
+        vchat.addPathList(eid, st.ctTargets, st.ctHashes);
     }
 
     // ----- C21 -----
