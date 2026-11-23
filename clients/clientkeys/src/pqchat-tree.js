@@ -4,8 +4,9 @@
 // filtered path, ctTargets and the target that covers a leaf, `th`, applying a commit's Removes, Adds and path with the
 // contract's refusals (the no-return sets included). The byte formats of smartcontracts/vectors/pqchat/tree.json. UNAUDITED.
 import { keccak_256, concatBytes, hex as hexOf } from "./bytes.js";
-import { hashStruct } from "./evm.js";
-import { PqChatError } from "./pqchat.js";
+import { encodeType, hashStruct } from "./evm.js";
+import { uaMessage } from "./ua.js";
+import { PqChatError, TYPE_STRINGS, DS_C, PURPOSE_PQCHAT, structHash, checkKemPk } from "./pqchat.js";
 
 /** `used ≤ TREE_LEAVES_MAX` (owner, R-ruling of 2026-11-23). */
 export const TREE_LEAVES_MAX = 256;
@@ -49,7 +50,7 @@ export const sibling = (x, n) => {
 /** The ancestors of `x` up to the root, the root included. */
 export const directPath = (x, n) => {
   const out = [];
-  for (let r = root(n); x !== r;) out.push((x = parent(x, n)));
+  for (let r = root(n); x !== r; ) out.push((x = parent(x, n)));
   return out;
 };
 /** The sibling of `x` and of each node of its direct path but the root. */
@@ -181,31 +182,18 @@ export function coverOf(t, author, leaf) {
 
 // ------------------------------------------------------------------ th (RFC 9420 §7.8, typed)
 
-const HASH_TYPES = {
-  TreeLeaf: [
-    { name: "leaf", type: "uint32" },
-    { name: "ua", type: "bytes32" },
-    { name: "keyId", type: "uint64" },
-    { name: "kemHash", type: "bytes32" },
-  ],
-  TreeParent: [
-    { name: "keyHash", type: "bytes32" },
-    { name: "left", type: "bytes32" },
-    { name: "right", type: "bytes32" },
-  ],
-};
 /** `th(x)` from the hashes `h` of its children. */
 function th(t, x, h) {
   const n = t.nodes[x];
   if (level(x) === 0) {
     return n
-      ? hex(hashStruct(HASH_TYPES, "TreeLeaf", { leaf: x / 2, ua: n.ua, keyId: n.keyId, kemHash: n.kemHash }))
+      ? hex(hashStruct(TREE_TYPES, "TreeLeaf", { leaf: x / 2, ua: n.ua, keyId: n.keyId, kemHash: n.kemHash }))
       : ZERO;
   }
   const l = h[left(x)] ?? ZERO;
   const r = h[right(x)] ?? ZERO;
   if (!n && l === ZERO && r === ZERO) return ZERO;
-  return hex(hashStruct(HASH_TYPES, "TreeParent", { keyHash: n ? n.keyHash : ZERO, left: l, right: r }));
+  return hex(hashStruct(TREE_TYPES, "TreeParent", { keyHash: n ? n.keyHash : ZERO, left: l, right: r }));
 }
 const byLevel = (xs) => [...xs].sort((a, b) => level(a) - level(b) || a - b);
 
@@ -299,4 +287,96 @@ export function applyCommit(tree, c) {
   p.forEach((q, k) => (t.nodes[q.node] = { keyHash: hex(c.nodeKeyHashes[k]) }));
   rehashPaths(t, touched);
   return { tree: t, ctTargets: p.flatMap((q) => q.targets), treeHash: t.hash[root(t.leaves)] };
+}
+
+// ------------------------------------------------------------------ records (§6), treeId and genesisCtx (§5)
+
+/** The type strings, exactly as spec §6 fixes them; the field lists are parsed from them and `encodeType` must give them back. */
+export const TREE_TYPE_STRINGS = Object.freeze({
+  PqChatCommit:
+    "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId," +
+    "bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds," +
+    "bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo)" +
+    "TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)",
+  TreeAdd: "TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)",
+  TreeRemove: "TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)",
+  PathList: "PathList(uint32[] ctTargets,bytes32[] ctHashes)",
+  PathCt: "PathCt(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSecret)",
+  PqChatTreeLeave: "PqChatTreeLeave(bytes32 sessionId,bytes32 treeId,bytes32 epochId,bytes32 member,uint64 nonce)",
+  PqChatTreeRemove:
+    "PqChatTreeRemove(bytes32 sessionId,bytes32 treeId,bytes32 epochId,uint64 nextEpoch,bytes32[] members," +
+    "bytes32 admin,uint64 nonce)",
+  // PqChatSession's fields (pqchat-sigs) in its order without wrapHashes and sealedInfo; hashed, never signed (§5, C29)
+  TreeGenesis:
+    "TreeGenesis(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins," +
+    "MemberKey[] members,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
+  TreeLeaf: "TreeLeaf(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 kemHash)",
+  TreeParent: "TreeParent(bytes32 keyHash,bytes32 left,bytes32 right)",
+});
+const fieldsOf = (s) =>
+  s
+    .match(/^\w+\(([^)]*)\)/)[1]
+    .split(",")
+    .map((f) => {
+      const [type, name] = f.split(" ");
+      return { name, type };
+    });
+export const TREE_TYPES = Object.freeze(
+  Object.fromEntries(
+    [["MemberKey", TYPE_STRINGS.MemberKey], ...Object.entries(TREE_TYPE_STRINGS)].map(([n, s]) => [n, fieldsOf(s)]),
+  ),
+);
+for (const name of Object.keys(TREE_TYPE_STRINGS)) {
+  if (encodeType(TREE_TYPES, name) !== TREE_TYPE_STRINGS[name])
+    throw new Error(`encodeType(${name}) differs from its type string`);
+}
+export const TREE_TYPEHASH = Object.freeze(
+  Object.fromEntries(Object.entries(TREE_TYPE_STRINGS).map(([n, s]) => [n, keccak_256(new TextEncoder().encode(s))])),
+);
+
+export const treeStructHash = (name, s) => hashStruct(TREE_TYPES, name, s);
+/** `typed(s) = keccak256(0x1901 ‖ DS_C ‖ hashStruct(s))`, as every PqChat record (CTR-CHAT-03). */
+export const treeTyped = (name, s) => keccak_256(concatBytes(Uint8Array.of(0x19, 0x01), DS_C, treeStructHash(name, s)));
+/** What the signer signs: `uaMessage(kind, PURPOSE_PQCHAT, typed(s))`. */
+export const treeSignedDigest = (kind, name, s) => uaMessage(kind, PURPOSE_PQCHAT, treeTyped(name, s));
+/** The EIP-712 hash of an array of structs: keccak256 of their struct hashes (`hash(removes)`, `hash(adds)`, §5). */
+export const arrayHash = (name, items) => keccak_256(concatBytes(...items.map((x) => treeStructHash(name, x))));
+/** `ctListHash = hashStruct(PathList)`; of two empty arrays when `ctCount` is 0 (codex-r2-14). */
+export const pathListHash = (ctTargets, ctHashes) => treeStructHash("PathList", { ctTargets, ctHashes });
+
+/** `treeId = hashStruct(PqChatSession)` of the signed session record (C16). */
+export const treeId = (session) => structHash("PqChatSession", session);
+/** `genesisCtx = hashStruct(TreeGenesis)`: the session's fields without wrapHashes and sealedInfo (C29); each one given. */
+export function genesisCtx(session) {
+  const g = {};
+  for (const f of TREE_TYPES.TreeGenesis) {
+    if (session[f.name] === undefined) refuse("PqChatShape");
+    g[f.name] = session[f.name];
+  }
+  return treeStructHash("TreeGenesis", g);
+}
+
+// ------------------------------------------------------------------ the key admission check (§8, C19, C32)
+
+/** `p = 2^255 − 19`. */
+export const P25519 = 2n ** 255n - 19n;
+/** The canonical X25519 values of small order (0, 1, the two of order 8, p − 1): an all-zero output in kem.rs. */
+export const SMALL_ORDER_X25519 = Object.freeze([
+  0n,
+  1n,
+  325606250916557431795983626356110631294008115727848805560023387167927233504n,
+  39382357235489614581723060781553021112529911719440698176882885853963445705823n,
+  P25519 - 1n,
+]);
+
+/** The public admission check of a scheme-1 `kemPk`, the same in the contract, `ua-rs` and here: scheme byte 1, 1,601 B,
+ *  every 12-bit coefficient of `ek` below 3,329 (checkKemPk, P14); `pk_X` canonical (bit 255 clear, below p) and of none of
+ *  the five small orders. A rule on bytes: it does not make an admitted key the only one its secret opens (R15). */
+export function admitKemKey(kemPk) {
+  const k = checkKemPk(kemPk);
+  const u = k.pkX.reduceRight((a, b) => (a << 8n) | BigInt(b), 0n);
+  if (u >> 255n) refuse("pkX bit 255");
+  if (u >= P25519) refuse("pkX not below p");
+  if (SMALL_ORDER_X25519.includes(u)) refuse("pkX small order");
+  return k;
 }

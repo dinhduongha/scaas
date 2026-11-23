@@ -6,6 +6,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import * as tr from "../src/pqchat-tree.js";
+import * as pc from "../src/pqchat.js";
+import { uaMessage } from "../src/ua.js";
 import { hex, keccak_256, utf8ToBytes, concatBytes, abiEncode } from "../src/bytes.js";
 
 const Z32 = hex(new Uint8Array(32));
@@ -417,3 +419,164 @@ test("R16: a key change takes out only the pair (ua, kemHash); a leave or remova
   );
 });
 const tr_refusedOwn = (f) => refused(tr.OWN_KEY_RETURN, f);
+
+// ------------------------------------------------------------------ records (spec §6), treeId and genesisCtx (§5)
+
+// The type strings as spec §6 writes them, typed here a second time: a field dropped or moved in src/pqchat-tree.js fails here.
+const SPEC = {
+  PqChatCommit:
+    "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo)TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)",
+  TreeAdd: "TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)",
+  TreeRemove: "TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)",
+  PathList: "PathList(uint32[] ctTargets,bytes32[] ctHashes)",
+  PathCt: "PathCt(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSecret)",
+  PqChatTreeLeave: "PqChatTreeLeave(bytes32 sessionId,bytes32 treeId,bytes32 epochId,bytes32 member,uint64 nonce)",
+  PqChatTreeRemove:
+    "PqChatTreeRemove(bytes32 sessionId,bytes32 treeId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)",
+  TreeGenesis:
+    "TreeGenesis(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
+  TreeLeaf: "TreeLeaf(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 kemHash)",
+  TreeParent: "TreeParent(bytes32 keyHash,bytes32 left,bytes32 right)",
+};
+
+test("every type string is spec §6's; its typehash is keccak256 of it; encodeType gives it back", () => {
+  for (const [name, s] of Object.entries(SPEC)) {
+    assert.equal(tr.TREE_TYPE_STRINGS[name], s, name);
+    assert.equal(hex(tr.TREE_TYPEHASH[name]), hex(keccak_256(utf8ToBytes(s))), name);
+  }
+  assert.deepEqual(Object.keys(tr.TREE_TYPE_STRINGS).sort(), Object.keys(SPEC).sort());
+});
+
+/** pqchat-sigs adds `groupMode` to PqChatSession; this branch has it once rebased on pqchat-sigs (plan §1). */
+const MODE = pc.TYPES.PqChatSession.some((f) => f.name === "groupMode");
+const session = {
+  creator: id("ua/A"),
+  nonce: 3,
+  homeChain: id("chain"),
+  homeChatContract: "0x" + "11".repeat(20),
+  admins: [id("ua/A")],
+  members: [
+    { ua: id("ua/A"), keyId: 1, via: Z32 },
+    { ua: id("ua/B"), keyId: 1, via: id("via") },
+  ],
+  wrapHashes: [id("w0"), id("w1")],
+  sealedInfo: "0x" + "ab".repeat(284),
+  ...(MODE ? { groupMode: 1 } : {}),
+};
+const tree = { ...session, groupMode: 1 };
+
+test(
+  "TreeGenesis is PqChatSession's type without wrapHashes and sealedInfo",
+  { todo: MODE ? false : "pqchat-sigs" },
+  () => {
+    const s = pc.TYPES.PqChatSession.filter((f) => f.name !== "wrapHashes" && f.name !== "sealedInfo");
+    assert.deepEqual(tr.TREE_TYPES.TreeGenesis, s);
+  },
+);
+
+test("genesisCtx: every genesis field moves it, wrapHashes and sealedInfo do not; treeId is PqChatSession's struct hash", () => {
+  const g = hex(tr.genesisCtx(tree));
+  assert.equal(hex(tr.genesisCtx({ ...tree, wrapHashes: [id("x"), id("y")], sealedInfo: "0x01" })), g);
+  for (const [f, v] of Object.entries({
+    creator: id("ua/B"),
+    nonce: 4,
+    homeChain: id("chain2"),
+    homeChatContract: "0x" + "22".repeat(20),
+    admins: [id("ua/B")],
+    members: session.members.slice(1),
+    groupMode: 2,
+  }))
+    assert.notEqual(hex(tr.genesisCtx({ ...tree, [f]: v })), g, f);
+  refused("PqChatShape", () => tr.genesisCtx({ ...tree, groupMode: undefined }));
+  assert.equal(hex(tr.treeId(session)), hex(pc.structHash("PqChatSession", session)));
+  assert.notEqual(hex(tr.treeId({ ...session, wrapHashes: [id("x"), id("y")] })), hex(tr.treeId(session)));
+});
+
+test("PathList of the empty list (codex-r2-14), by hand; arrays hash as EIP-712 arrays of struct hashes", () => {
+  const empty = keccak_256(new Uint8Array(0));
+  assert.equal(hex(tr.pathListHash([], [])), hex(keccak_256(concatBytes(tr.TREE_TYPEHASH.PathList, empty, empty))));
+  const l = tr.pathListHash([2, 5], [id("c0"), id("c1")]);
+  const by = keccak_256(
+    concatBytes(
+      tr.TREE_TYPEHASH.PathList,
+      keccak_256(concatBytes(word(2), word(5))),
+      keccak_256(concatBytes(b32(id("c0")), b32(id("c1")))),
+    ),
+  );
+  assert.equal(hex(l), hex(by));
+  const adds = [{ leaf: 3, ua: id("ua/D"), keyId: 2, via: Z32, kemHash: id("kem/D") }];
+  assert.equal(hex(tr.arrayHash("TreeAdd", adds)), hex(keccak_256(tr.treeStructHash("TreeAdd", adds[0]))));
+  assert.equal(hex(tr.arrayHash("TreeRemove", [])), hex(empty));
+});
+
+test("typed and signed digests: 0x1901 ‖ DS_C ‖ hashStruct, under PURPOSE_PQCHAT", () => {
+  const l = { sessionId: id("s"), treeId: id("t"), epochId: id("e"), member: id("ua/B"), nonce: 9 };
+  const typed = keccak_256(concatBytes(Uint8Array.of(0x19, 0x01), pc.DS_C, tr.treeStructHash("PqChatTreeLeave", l)));
+  assert.equal(hex(tr.treeTyped("PqChatTreeLeave", l)), hex(typed));
+  assert.equal(
+    hex(tr.treeSignedDigest(0x0131, "PqChatTreeLeave", l)),
+    hex(uaMessage(0x0131, pc.PURPOSE_PQCHAT, typed)),
+  );
+  // the flat leave of the same fields without treeId is another digest (codex-r2-5)
+  const { treeId: _, ...flat } = l;
+  assert.notEqual(hex(pc.typed("PqChatLeave", flat)), hex(typed));
+});
+
+// ------------------------------------------------------------------ the key admission check (spec §8, C19, C32)
+
+const P = 2n ** 255n - 19n;
+const le = (v) => {
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++, v >>= 8n) out[i] = Number(v & 255n);
+  return out;
+};
+const kh = (l) => keccak_256(utf8ToBytes(`scaas/pqchat/tree-test/${l}`));
+const real = pc.kemKey(concatBytes(kh("mlkem/0"), kh("mlkem/1")), kh("x25519"));
+const withX = (pkX) => concatBytes(real.kemPk.subarray(0, 1569), pkX);
+const asU = (pk) => pk.subarray(1569).reduceRight((a, b) => (a << 8n) | BigInt(b), 0n);
+const admitRefused = (code, pk) =>
+  assert.throws(
+    () => tr.admitKemKey(pk),
+    (e) => e.code === code,
+    code,
+  );
+
+test("admission: a real key, u = 9 and a coefficient of 3,328 pass; 3,329, the scheme byte and the length are refused", () => {
+  tr.admitKemKey(real.kemPk);
+  tr.admitKemKey(withX(le(9n)));
+  const coeff = (c) => {
+    const pk = real.kemPk.slice();
+    pk[1] = c & 255;
+    pk[2] = (pk[2] & 0xf0) | (c >> 8);
+    return pk;
+  };
+  tr.admitKemKey(coeff(3328));
+  admitRefused("modulus check", coeff(3329));
+  admitRefused("wrong scheme byte", concatBytes(Uint8Array.of(2), real.kemPk.subarray(1)));
+  admitRefused("wrong length", real.kemPk.subarray(0, 1600));
+  admitRefused("wrong length", concatBytes(real.kemPk, Uint8Array.of(0)));
+});
+
+test("admission: pk_X canonical (bit 255 clear, below p) and none of the five small-order values (C32, codex-r2-2)", () => {
+  assert.deepEqual(tr.SMALL_ORDER_X25519, [
+    0n,
+    1n,
+    325606250916557431795983626356110631294008115727848805560023387167927233504n,
+    39382357235489614581723060781553021112529911719440698176882885853963445705823n,
+    P - 1n,
+  ]);
+  for (const u of tr.SMALL_ORDER_X25519) {
+    admitRefused("pkX small order", withX(le(u)));
+    // a positive control that the list is the right one: X25519 to it gives the all-zero output kem.rs refuses
+    assert.throws(() => pc.encaps(withX(le(u)), new Uint8Array(32), keccak_256(utf8ToBytes("e"))), /all-zero X25519/);
+  }
+  admitRefused("pkX not below p", withX(le(P)));
+  admitRefused("pkX not below p", withX(le(P + 1n)));
+  admitRefused("pkX not below p", withX(le(P + 9n)));
+  const hi = real.kemPk.slice();
+  hi[1600] |= 0x80;
+  admitRefused("pkX bit 255", hi);
+  // twins: the same values reduced, as X25519 reads them, are accepted points
+  tr.admitKemKey(withX(le(9n)));
+  tr.admitKemKey(withX(le(asU(hi) - 2n ** 255n)));
+});
