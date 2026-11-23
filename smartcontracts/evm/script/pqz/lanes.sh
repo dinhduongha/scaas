@@ -9,7 +9,8 @@
 # src/pqz/PqzSet.sol is never written, so several sets run at once from one work tree. One writer per lane: a run on a
 # busy lane is refused (flock on scratchpad/lanes/<set>.lock). --clean wipes the lane's out/ and cache/ first: the
 # round's final matrix and every pre-merge gate use it. forge runs through scripts/capped (directly inside one).
-# Scopes (AGENTS.md "Size the per-set run to the change"; default: test --match-path 'test/pqz/*'):
+# Scopes (AGENTS.md "Size the per-set run to the change"; default: test/pqz/*) run one forge per test directory, each
+# its own compile set, out/t-<dir>, cache/t-<dir>; plain forge args run once, as given, in out/ and cache/:
 #   sensitive  test/pqz/*, test/pqzh/* and every other *.t.sol that reads the set (PqzSet., a kmax<N> set name,
 #              PQZ_SET) or imports a helper that does. For a non-PQZ contract change.
 #   list       print that list and exit (no lane, no forge).
@@ -28,7 +29,7 @@ if [ "${1:-}" = --clean ]; then
     shift
 fi
 [ $# -ge 1 ] || {
-    sed -n '3,23p' "$0"
+    awk 'NR > 2 && /^set -eu/ { exit } NR > 2' "$0"
     exit 2
 }
 S=$1
@@ -171,18 +172,29 @@ case $S in
         }
         ;;
 esac
+# A scope runs per test directory, "<dir> <match-path>" per line: each its own compile set, out/t-<dir> and
+# cache/t-<dir> (FOUNDRY_TEST / FOUNDRY_SCRIPT = test/<dir>, as the round matrices do: src, test and script in one solc
+# run exceed a 4 GB cap). Plain forge args run as given, in out/ and cache/.
 MODULES=
+JOBS=
 if [ "$S" != mutants ]; then
-    if [ "${1:-}" = modules ]; then
-        shift
-        MODULES=1
-        set -- test --match-path 'test/modules/*' "$@"
-    fi
-    if [ "${1:-}" = sensitive ]; then
-        shift
-        set -- test --match-path "{test/pqz/*,test/pqzh/*,$(sensitive | paste -sd, -)}" "$@"
-    fi
-    [ $# -gt 0 ] || set -- test --match-path 'test/pqz/*'
+    case ${1:-} in
+        modules)
+            shift
+            MODULES=1
+            JOBS='modules test/modules/*'
+            ;;
+        sensitive)
+            shift
+            SL=$(sensitive)
+            JOBS=$(
+                echo 'pqz test/pqz/*'
+                echo 'pqzh test/pqzh/*'
+                for d in $(echo "$SL" | cut -d/ -f2 | sort -u); do echo "$d {$(echo "$SL" | grep "^test/$d/" | paste -sd, -)}"; done
+            )
+            ;;
+        '') JOBS='pqz test/pqz/*' ;;
+    esac
 fi
 
 L=$LANES/$S
@@ -217,7 +229,26 @@ if [ "$S" = mutants ]; then
     exec "$@"
 fi
 [ -z "$MODULES" ] || LEGACY_EVM=$LE sh "$EVM/runs/2026-11-11-stacked-gate/legacy-at-set.sh" "$S"
-echo "== lanes.sh: $S ($(setname src/pqz/PqzSet.sol)) in $REL/$S${CLEAN:+, clean}, forge $*"
-set -- forge "$@"
-[ -n "${CAPPED_SCOPE:-}" ] || set -- "$ROOT/scripts/capped" "$@"
-exec "$@"
+fg() {
+    if [ -n "${CAPPED_SCOPE:-}" ]; then forge "$@" </dev/null; else "$ROOT/scripts/capped" forge "$@" </dev/null; fi
+}
+echo "== lanes.sh: $S ($(setname src/pqz/PqzSet.sol)) in $REL/$S${CLEAN:+, clean}, forge ${JOBS:+test --match-path <per directory> }$*"
+if [ -z "$JOBS" ]; then
+    fg "$@"
+    exit 0
+fi
+bad=
+while read -r d m; do
+    echo "-- $S test/$d: forge test --match-path $m $*"
+    (
+        export FOUNDRY_TEST="test/$d" FOUNDRY_SCRIPT="test/$d" FOUNDRY_OUT="out/t-$d" FOUNDRY_CACHE_PATH="cache/t-$d"
+        fg test --match-path "$m" "$@"
+    ) || bad="$bad test/$d"
+done <<EOF
+$JOBS
+EOF
+[ -z "$bad" ] || {
+    echo "== lanes.sh: $S FAIL:$bad" >&2
+    exit 1
+}
+echo "== lanes.sh: $S ok"

@@ -492,8 +492,9 @@ own set. `--clean` wipes the lane's `out/` and `cache/` first: **the round's fin
 `--clean`**; the incremental path is for task-level runs. The incremental path was proven before use: an incremental
 lane build after a source change and a clean build give byte-identical runtime and init bytecode for every contract
 (`smartcontracts/evm/runs/2026-11-23-set-lanes.txt`). The CLI and scopes of `at-set.sh` are unchanged (`<set>` or
-`others`; `sensitive`, `list`, `modules` or forge arguments); inside an outer `scripts/capped` `others` runs the sets
-one after another.
+`others`; `sensitive`, `list`, `modules` or forge arguments); a scope runs one forge per test directory, each with its
+own compile set, `out/t-<dir>` and `cache/t-<dir>`, as the round matrices do (src, test and script in one solc run
+exceed the 4 GB cap); inside an outer `scripts/capped` `others` runs the sets one after another.
 **Status.** BUILT on branch `set-lanes`, UNAUDITED tooling. TODO 8g (2) (suites selected by changed bytecode), (3) (an
 explicit list of set-sensitive suites with a check) and (5) (generated code-hash pins) are still open.
 **Why.** `at-set.sh` rewrote `src/pqz/PqzSet.sol` in place, so a work tree ran one set at a time and `others` ran the
