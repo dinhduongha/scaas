@@ -37,6 +37,7 @@ POL = "clients/ua-rs/src/wallet/policy.rs"
 PQC = "clients/ua-rs/src/wallet/pqchat.rs"
 AC = "clients/scaas-sdk/src/app_core.rs"
 PQR = "clients/scaas-sdk/src/pqchat_records.rs"
+PQK = "clients/ua-rs/src/wallet/pqchat_keys.rs"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
@@ -360,6 +361,11 @@ MUTANTS = [
         "A-10: the factory class read at the head",
         [(AC, "            .read_at_block(final_block(profile), Purpose::Plain, |at| {\n                let d = data.clone();\n                async move { pool.call_at(&at, f, d).await.map(|b| b.to_vec()) }", "            .read_at_block(scaas_rpc::pool::BlockChoice::Latest, Purpose::Plain, |at| {\n                let d = data.clone();\n                async move { pool.call_at(&at, f, d).await.map(|b| b.to_vec()) }")],
         T + " --test app_core",
+    ),
+    (
+        "A-11: decode_inner copies past its input",
+        [(PQK, "    let v = a.bytes(at, (*left).min(PT_MAX))?;", "    let v = a.bytes(at, PT_MAX)?;")],
+        U + " --lib decode_budget",
     ),
 ]
 

@@ -428,7 +428,10 @@ pub fn decode_inner(b: &[u8]) -> Result<Inner> {
     let parents = (0..np)
         .map(|i| w32(p + 32 + 32 * i))
         .collect::<Result<Vec<_>>>()?;
-    let ct = a.bytes(a.tail(m, m + 192)?, PT_MAX)?;
+    // T26 A-11: the byte strings of a canonical encoding never overlap, so all of them together fit in `b`; aliasing offsets
+    // run out of this budget before they are copied
+    let mut left = b.len();
+    let ct = take(&a, a.tail(m, m + 192)?, &mut left)?;
     let header = Header {
         session_id: w32(m)?,
         epoch_id: w32(m + 32)?,
@@ -437,7 +440,7 @@ pub fn decode_inner(b: &[u8]) -> Result<Inner> {
         counter,
         parents,
     };
-    let sig = decode_uasig(&a, s)?;
+    let sig = decode_uasig(&a, s, &mut left)?;
     // the canonical form only: a re-encoding equal to the input (no trailing bytes, no aliasing offsets)
     let out = Inner {
         header,
@@ -450,9 +453,16 @@ pub fn decode_inner(b: &[u8]) -> Result<Inner> {
     Ok(out)
 }
 
-fn decode_uasig(a: &Abi, s: usize) -> Result<UASig> {
-    let key_data = a.bytes(a.tail(s, s)?, PT_MAX)?;
-    let signature = a.bytes(a.tail(s, s + 32)?, PT_MAX)?;
+/// The byte string at `at`, at most [`PT_MAX`] and at most `left` bytes, then counted against `left`.
+fn take(a: &Abi, at: usize, left: &mut usize) -> Result<Vec<u8>> {
+    let v = a.bytes(at, (*left).min(PT_MAX))?;
+    *left -= v.len();
+    Ok(v)
+}
+
+fn decode_uasig(a: &Abi, s: usize, left: &mut usize) -> Result<UASig> {
+    let key_data = take(a, a.tail(s, s)?, left)?;
+    let signature = take(a, a.tail(s, s + 32)?, left)?;
     let ml = a.tail(s, s + 64)?;
     let n = a.num(ml, MEMBERS_MAX as u64)?;
     let mut members = Vec::with_capacity(n);
@@ -465,13 +475,13 @@ fn decode_uasig(a: &Abi, s: usize) -> Result<UASig> {
             let u = a.tail(il + 32, il + 32 + 32 * j)?;
             inner.push(InnerSig {
                 index: a.u16w(u)?,
-                sig: a.bytes(a.tail(u, u + 32)?, PT_MAX)?,
+                sig: take(a, a.tail(u, u + 32)?, left)?,
             });
         }
         members.push(MemberSig {
             index: a.u16w(t)?,
             members: inner,
-            sig: a.bytes(a.tail(t, t + 64)?, PT_MAX)?,
+            sig: take(a, a.tail(t, t + 64)?, left)?,
         });
     }
     Ok(UASig {
@@ -946,5 +956,52 @@ impl AppKeys {
         nonce: &[u8; 12],
     ) -> Result<Vec<u8>> {
         self.envelope_with(k, session, epoch, inner, nonce)
+    }
+}
+
+#[cfg(test)]
+mod decode_budget {
+    use super::*;
+
+    /// T26 A-11: a `UASig` whose `key_data` and `signature` offsets alias one byte string copies more than its input holds:
+    /// refused by the budget before the second copy; the same bytes without aliasing (each string once) decode.
+    #[test]
+    fn aliasing_offsets_run_out_of_budget() {
+        let w = |n: usize| {
+            let mut v = [0u8; 32];
+            v[24..].copy_from_slice(&(n as u64).to_be_bytes());
+            v
+        };
+        let l = 256;
+        // head: key_data, signature, members offsets; one byte string; an empty members list
+        let aliased = [
+            &w(96)[..],
+            &w(96),
+            &w(96 + 32 + l),
+            &w(l),
+            &vec![7u8; l],
+            &w(0),
+        ]
+        .concat();
+        let mut left = aliased.len();
+        assert_eq!(
+            decode_uasig(&Abi { b: &aliased }, 0, &mut left).err(),
+            Some(Error::Argument)
+        );
+        // control: two strings, each once
+        let plain = [
+            &w(96)[..],
+            &w(96 + 32 + l),
+            &w(96 + 2 * (32 + l)),
+            &w(l),
+            &vec![7u8; l],
+            &w(l),
+            &vec![7u8; l],
+            &w(0),
+        ]
+        .concat();
+        let mut left = plain.len();
+        let s = decode_uasig(&Abi { b: &plain }, 0, &mut left).unwrap();
+        assert_eq!((s.key_data.len(), s.signature.len()), (l, l));
     }
 }
