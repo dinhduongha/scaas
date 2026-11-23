@@ -960,6 +960,7 @@ impl AppKeys {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod decode_budget {
     use super::*;
 

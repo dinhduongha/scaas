@@ -822,6 +822,7 @@ pub(crate) fn now() -> Result<u64> {
     Ok((ms / 1000.0) as u64)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn link_install(
     s: &LinkSession,
     c: &SealedContainer,
@@ -1113,6 +1114,7 @@ mod vectors {
 
     impl Wallet {
         /// [`Wallet::from_link`] with the opener's clock at `now` (a vector row's).
+        #[allow(clippy::too_many_arguments)]
         pub fn vectors_from_link_at(
             session: LinkSession,
             c: &SealedContainer,

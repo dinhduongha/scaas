@@ -417,6 +417,7 @@ impl KemKeyPair {
     /// A member's share container `c` (opened by this key as `expect` says; purpose [`PURPOSE_PQZ_SHARE`]) sealed again, the same
     /// payload, to `to` (the one who rebuilds the key) and signed by `sender`. The share stays inside the library. Errors as
     /// [`KemKeyPair::open_container`] and [`seal_container`]; `Argument` for another purpose or a malformed payload.
+    #[allow(clippy::too_many_arguments)]
     pub fn reseal_pqz_share(
         &self,
         c: &SealedContainer,
