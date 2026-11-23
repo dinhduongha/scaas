@@ -84,7 +84,8 @@ always a ciphertext `ua-rs` made under this session's key. Every entry except th
 the message entry signs each message the user sends without a per-message prompt, because a prompt per chat message is not usable
 and its ciphertext can only be the user's content under the session's key. `pqchat-core` passes named fields and receives the
 `UASig`, the typed digest and the record's id; it never passes a digest. The SDK's generic app signing call stays closed to every
-SCaaS purpose and domain, `PURPOSE_PQCHAT` and `DS_C` included. So the SDK knows PqChat's record formats and none of its logic.
+SCaaS purpose and domain, `PURPOSE_PQCHAT`, `DS_C` and PqChat's app id and its `appPurpose` included (owner 2026-11-23;
+BUILT, UNAUDITED), while PqChat's own paths (the record entries, the card, the file seal) sign. So the SDK knows PqChat's record formats and none of its logic.
 Messages and leaves are signed by a leaf UA, never by an `msig` (UA-7 P13).
 
 ## 3. The Matrix store

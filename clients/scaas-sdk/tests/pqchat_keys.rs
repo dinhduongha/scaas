@@ -975,6 +975,64 @@ async fn generic_signing_refuses_pqchat() {
     assert_eq!(code(sign(AppPath::Portable, typed(mine)).await), "Ok");
 }
 
+/// Owner 2026-11-23 (T10b): under a scope of PqChat's own app id, the generic app signing is refused on both paths
+/// (`AppPurposeRefused`: PqChat's app purpose is a SCaaS purpose, `scaas-ua`'s generated list); the twins under another app
+/// id sign. PqChat's own paths are the named entries (`pqchat_sign_*`, the card, `seal_for_arweave`).
+#[tokio::test(flavor = "multi_thread")]
+async fn generic_signing_refuses_pqchat_app_id() {
+    let _one = ONE.lock().await;
+    let (sdk, seed, _c) = on_fake().await;
+    let typed = |domain: Value| {
+        let fields: Vec<Value> = [
+            ("name", "string"),
+            ("version", "string"),
+            ("chainId", "uint256"),
+            ("verifyingContract", "address"),
+            ("salt", "bytes32"),
+        ]
+        .iter()
+        .filter(|(k, _)| domain.get(*k).is_some())
+        .map(|(k, t)| json!({"name": k, "type": t}))
+        .collect();
+        json!({
+            "types": {"EIP712Domain": fields, "Note": [{"name": "body", "type": "string"}]},
+            "primaryType": "Note",
+            "domain": domain,
+            "message": {"body": "hello"},
+        })
+        .to_string()
+    };
+    let bound =
+        json!({"name": "My App", "version": "1", "chainId": 31337, "verifyingContract": VIEW});
+    let chain_bound = AppPath::ChainBound {
+        chain: "local".into(),
+        purpose: None,
+    };
+    for (id, want) in [
+        (keccak_hex(b"scaas.pqchat.v1"), "AppPurposeRefused"),
+        (APP_ID.to_string(), "Ok"),
+    ] {
+        let a = AppCore::new(
+            sdk.clone(),
+            AppDesc {
+                app_id: Some(id.clone()),
+                ..desc(&[PQC])
+            },
+        )
+        .unwrap();
+        let mine = json!({"name": "My App", "version": "1", "salt": id});
+        let p = a
+            .sign_app_record(ua(&seed, 0x0131), AppPath::Portable, typed(mine))
+            .await;
+        assert_eq!(code(p), want, "portable under {id}");
+        let b = a
+            .sign_app_record(ua(&seed, 0x0131), chain_bound.clone(), typed(bound.clone()))
+            .await;
+        assert_eq!(code(b), want, "chain-bound under {id}");
+        drop(a);
+    }
+}
+
 /// `read_app`: a named JSON answer from the entry's outputs at the final block; trusted reads skip a discovered-only list
 /// elsewhere (the KEM read's test); bounds by name.
 #[tokio::test(flavor = "multi_thread")]
