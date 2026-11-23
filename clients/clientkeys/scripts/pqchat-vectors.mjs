@@ -852,7 +852,7 @@ write("cards.json", {
 // Spec docs/superpowers/specs/2026-11-23-pqchat-treekem.md §4, §5 (treeId, genesisCtx), §6, §8; plan T1a. Members' KEM keys are
 // real (kemKey of rnd("tree/kem/<name>/…")); UAs are mldsa65 UAs of one seed named in UA order (fx.rankedPeople), so a
 // test registers them and every session below, listed by name, is strictly sorted by (ua, keyId).
-const treePeople = fx.rankedPeople(rnd("tree/mldsa65-bip39-seed", 64), ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]);
+const treePeople = fx.rankedPeople(rnd("tree/mldsa65-bip39-seed", 64), [..."ABCDEFGHIJ"]);
 const treeKeys = Object.fromEntries(
   ["A", "A2", "A3", "A4", "A5", "B", "C", "C2", "D", "E", "F", "G", "H", "I", "J"].map((name, i) => {
     const kem = pc.kemKey(rnd(`tree/kem/${name}/mlkem-keygen-seed`, 64), rnd(`tree/kem/${name}/x25519-secret`));
