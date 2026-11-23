@@ -21,6 +21,7 @@ when mainnet 22776 launches, which only the owner may touch.
 | `docs/` | Rules by component, `decisions.md`, `research/`, `history/` | `scripts/docs_check.py` |
 | `*/legacy/` | Superseded code, not built | do not edit |
 | `TODO.md`, `COMPLETED.md` | Work order, done work | |
+| `.agents/skills/` | Agent skills: `scaas-review` (any spec or code review), `scaas-audit` (an AI audit round). Codex, Gemini and Copilot read this path; Claude Code reads it through the committed link `.claude/skills` | |
 
 ## Which source wins
 
@@ -162,7 +163,7 @@ notes start with the research banner. Prefer Mermaid for flows; SVG overviews wh
 State what you ran and its result. Report a failure with its output; do not edit a pin, a bound or a test to go green. A small change: edit, one
 test, the touched gates. Multi-step gates log per step and resume. Full output stays in git-ignored `.log` files; commit one
 `step | commit | rc | counts` summary and short evidence a doc quotes, with no absolute paths.
-A review (spec or code, any reviewer, the audit rounds) covers every dimension of [docs/review.md](docs/review.md), with one area
+A review (spec or code, any reviewer, the audit rounds) follows the skill `scaas-review` or `scaas-audit` and covers every dimension of [docs/review.md](docs/review.md), with one area
 per layer touched, a cross-layer area, a cryptography area and an adversarial area ([ARCH-POS-22](docs/review.md#ARCH-POS-22)).
 A round of several tasks on one branch (owner 2026-11-18): each task runs its own suites at the default set, its mutants and
 every pin it moves (old → new); the full matrix (every forge directory, the set-sensitive tests at the four sets, node and e2e,

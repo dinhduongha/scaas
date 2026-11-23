@@ -24,7 +24,8 @@ __pycache__/
 *.log
 
 # Claude Code worktrees
-.claude/
+.claude/*
+!.claude/skills
 
 # Local review notes and scratch (kept on disk, not versioned)
 reviews/
