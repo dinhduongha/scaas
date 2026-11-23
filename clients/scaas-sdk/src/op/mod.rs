@@ -266,12 +266,15 @@ pub(crate) fn evm(sdk: &Sdk, chain: &str) -> Result<(ChainProfile, u64, Arc<EvmP
     sdk.evm(chain)
 }
 
+/// A simulation's error: a revert keeps the endpoint's text (capped and cleaned by `scaas-rpc`, CLI-RPC-11: the decoded reason,
+/// or the data's hex), so a write the chain refuses names its error (decision (161): a refused `updateMsig` was an empty
+/// `Revert`).
 pub(crate) fn sim(e: SimError) -> SdkError {
     match e {
-        SimError::Revert(_) => SdkError::Rpc(scaas_rpc::RpcError::Revert {
+        SimError::Revert(reason) => SdkError::Rpc(scaas_rpc::RpcError::Revert {
             endpoint: 0,
             data: vec![],
-            reason: String::new(),
+            reason,
         }),
         SimError::Transport(_) => SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
             last: None,

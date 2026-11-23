@@ -35,6 +35,7 @@ VLT = "clients/scaas-sdk/src/vault/mod.rs"
 ROOTS = "clients/scaas-sdk/src/vault/roots.rs"
 POL = "clients/ua-rs/src/wallet/policy.rs"
 PQC = "clients/ua-rs/src/wallet/pqchat.rs"
+OPM = "clients/scaas-sdk/src/op/mod.rs"
 REVM = "clients/scaas-rpc/src/evm.rs"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
@@ -374,6 +375,11 @@ MUTANTS = [
         "Sticky: read_line pinned on every chain",
         [(LINE, "    Ok(if pool.pinned_reads() || choice != BlockChoice::Latest {", "    Ok(if true {")],
         T + " --lib account::msig::tests::msig_on_a_two_generation_line",
+    ),
+    (
+        "(161): a simulated revert loses its reason",
+        [(OPM, "        SimError::Revert(reason) => SdkError::Rpc(scaas_rpc::RpcError::Revert {\n            endpoint: 0,\n            data: vec![],\n            reason,", "        SimError::Revert(_) => SdkError::Rpc(scaas_rpc::RpcError::Revert {\n            endpoint: 0,\n            data: vec![],\n            reason: String::new(),")],
+        T + " --lib line::tests::a_simulated_revert_keeps_its_reason",
     ),
 ]
 

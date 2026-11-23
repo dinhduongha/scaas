@@ -5,6 +5,7 @@
 //! `holder` and the PQZ attachment at `pqzHome`; never assume the bound registry holds the record. Every read goes through
 //! the chain's pool (the profile's RPC list under its policy, ARCH-POS-15); only the SDK reads the line (owner C6: no RPC in
 //! the `ua-*` libraries). UNAUDITED.
+use crate::op::sim;
 use crate::{Sdk, SdkError};
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, U256};
@@ -63,21 +64,6 @@ impl UaLine {
     pub fn pqz_target(&self) -> Result<String, SdkError> {
         self.pqz_home.clone().ok_or(SdkError::PqzHomeNone)
     }
-}
-
-/// A read's failure as the SDK names it (the reason never carried: CLI-RPC-11).
-fn sim(e: scaas_rpc::evm::SimError) -> SdkError {
-    SdkError::Rpc(match e {
-        scaas_rpc::evm::SimError::Revert(_) => scaas_rpc::RpcError::Revert {
-            endpoint: 0,
-            data: vec![],
-            reason: String::new(),
-        },
-        scaas_rpc::evm::SimError::Transport(_) => scaas_rpc::RpcError::EndpointAllFailed {
-            last: None,
-            failover_revert: None,
-        },
-    })
 }
 
 fn addr(a: Address) -> String {
@@ -474,6 +460,13 @@ mod tests {
 
     fn w(b: u8) -> [u8; 32] {
         [b; 32]
+    }
+
+    /// Decision (161): a simulation's revert keeps the chain's reason (a refused write named its error nowhere before).
+    #[test]
+    fn a_simulated_revert_keeps_its_reason() {
+        let e = crate::op::sim(scaas_rpc::evm::SimError::Revert("UAPqzHolder(0x01)".into()));
+        assert!(format!("{e:?}").contains("UAPqzHolder(0x01)"), "{e:?}");
     }
 
     #[test]
