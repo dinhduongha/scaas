@@ -19,7 +19,7 @@ use fake_http::serve;
 use scaas_sdk::vault::{ImportWords, MemoryStore};
 use scaas_sdk::wallet::{
     NativeKeyRef, SignedOpBlob, SorobanImportExpect, SorobanNativeSend, SorobanOpKind,
-    SorobanOpRequest, SorobanPath, Wallet,
+    SorobanOpRequest, SorobanPath, SorobanPrepared, Wallet,
 };
 use scaas_sdk::{
     ChainProfile, EndpointConfig, Family, FamilyParams, Finality, Limits, ListedToken, NativeCap,
@@ -1061,4 +1061,71 @@ async fn an_own_landing_between_the_reads_is_never_consumed() {
     }
     assert_eq!(t.w.soroban_follow(id.clone()).await.unwrap(), "sent");
     assert_eq!(t.w.soroban_follow(id).await.unwrap(), "landed");
+}
+
+/// Review T26 B-4 (CLI-SDK-08, CLI-SDK-09): a `SorobanPrepared` is a plain record a caller can build, so `soroban_submit` and
+/// `soroban_hand_off` run `prepare`'s checks again before the subject signs: an unlisted token (`ProfileMismatch`), another
+/// `from` (`Argument`), an expiry ledger beyond the window (`Argument`), a `valid_until` past or beyond the window
+/// (`ValidUntilRefused`); nothing is signed or sent. The twins: the prepared op as `prepare` gave it submits and hands off.
+#[tokio::test(flavor = "multi_thread")]
+async fn submit_and_hand_off_check_a_handed_back_op_again() {
+    let t = setup(None, scaas_rpc::Policy::Failover, None).await;
+    let p = t.w.soroban_prepare(pay(&t)).await.unwrap();
+    let bad = [
+        (
+            SorobanPrepared {
+                contract: fam()["sac"].as_str().unwrap().into(),
+                ..p.clone()
+            },
+            "ProfileMismatch",
+        ),
+        (
+            SorobanPrepared {
+                from: g(1),
+                ..p.clone()
+            },
+            "Argument",
+        ),
+        (
+            SorobanPrepared {
+                expiry: u32::MAX,
+                ..p.clone()
+            },
+            "Argument",
+        ),
+        (
+            SorobanPrepared {
+                valid_until: NOW,
+                ..p.clone()
+            },
+            "ValidUntilRefused",
+        ),
+        (
+            SorobanPrepared {
+                valid_until: NOW + 86_401,
+                ..p.clone()
+            },
+            "ValidUntilRefused",
+        ),
+    ];
+    let q =
+        t.w.soroban_quote(p.clone(), SorobanPath::Gateway)
+            .await
+            .unwrap();
+    for (b, want) in &bad {
+        assert_eq!(
+            code(t.w.soroban_submit(b.clone(), q.clone()).await),
+            *want,
+            "submit {b:?}"
+        );
+        assert_eq!(
+            code(t.w.soroban_hand_off(b.clone()).await),
+            *want,
+            "hand off {b:?}"
+        );
+    }
+    assert!(t.gateway.lock().unwrap().is_empty(), "nothing sent");
+    t.w.soroban_hand_off(p.clone()).await.unwrap();
+    t.w.soroban_submit(p, q).await.unwrap();
+    assert_eq!(t.gateway.lock().unwrap().len(), 1);
 }

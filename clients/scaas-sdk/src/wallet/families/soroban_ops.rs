@@ -656,6 +656,35 @@ fn listed(c: &Chain, contract: &str) -> Result<(), SdkError> {
     }
 }
 
+/// Review T26 B-4 (CLI-SDK-08, CLI-SDK-09): `prepare`'s checks again before the subject authorizes an op the caller handed back
+/// (a `SorobanPrepared` is a plain record a binding can build): the token listed (`ProfileMismatch`), `from` the subject's
+/// own `G…` (`Argument`), `valid_until` ahead within the window (`ValidUntilRefused`), the expiry ledger within the window
+/// of the latest ledger (`Argument`).
+async fn own_terms(
+    sdk: &Sdk,
+    c: &Chain,
+    sor: &Soroban,
+    p: &SorobanPrepared,
+    passphrase: &str,
+) -> Result<(), SdkError> {
+    listed(c, &p.contract)?;
+    let k = p.subject.as_ref().ok_or(SdkError::Argument)?;
+    if p.from != g_of(&stellar(sdk, k)?.2) {
+        return Err(SdkError::Argument);
+    }
+    let now = sdk.now();
+    let window = c
+        .profile
+        .max_valid_secs
+        .unwrap_or(sdk.limits.max_valid_secs);
+    if p.valid_until <= now || p.valid_until - now > window {
+        return Err(SdkError::ValidUntilRefused);
+    }
+    let ledger = u32::try_from(latest(sor).await?).map_err(|_| SdkError::Argument)?;
+    let window = u32::try_from(window).map_err(|_| SdkError::ValidUntilRefused)?;
+    checked(p, passphrase, ledger, window).map(|_| ())
+}
+
 fn signature(p: &SorobanPrepared) -> Result<Option<[u8; 64]>, SdkError> {
     p.signature
         .as_deref()
@@ -960,6 +989,10 @@ impl Wallet {
             .spawn(async move {
                 let c = sdk.chain(&p.chain)?;
                 let (sor, nid, passphrase) = soroban(c)?;
+                // an op the subject authorizes here (signed, or by its own transaction's source) is checked as `prepare` did
+                if p.signature.is_none() {
+                    own_terms(&sdk, c, sor, &p, passphrase).await?;
+                }
                 let op = rebuilt(&p, passphrase)?;
                 // the subject's signature, made once when the path needs it (an op signed already is never signed again)
                 let sign = || -> Result<[u8; 64], SdkError> {
@@ -1078,10 +1111,11 @@ impl Wallet {
         self.sdk
             .spawn(async move {
                 let c = sdk.chain(&p.chain)?;
-                let (_, _, passphrase) = soroban(c)?;
+                let (sor, _, passphrase) = soroban(c)?;
                 if p.signature.is_some() || p.op.is_some() {
                     return Err(SdkError::Argument);
                 }
+                own_terms(&sdk, c, sor, &p, passphrase).await?;
                 let op = rebuilt(&p, passphrase)?;
                 let k = p.subject.as_ref().ok_or(SdkError::Argument)?;
                 let sig = stellar(&sdk, k)?.1.sign_soroban_auth(&op)?;
