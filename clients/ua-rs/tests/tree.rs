@@ -580,7 +580,7 @@ fn new_home(
 
 // ------------------------------------------------------------------ tree-secrets.json
 
-/// A vector person's ML-DSA-65 key: `ua_secret(rnd(tree-secrets/mldsa65-bip39-seed, 64), mldsa65, 0, i)` (A = 0 … H = 7),
+/// A vector person's ML-DSA-65 key: `ua_secret(rnd(tree-secrets/mldsa65-bip39-seed, 64), mldsa65, 0, i)`, `i` its `index`,
 /// signing as clientkeys' `signUA(…, {extraEntropy: false})`, the deterministic variant (FIPS 204, `rnd` zero).
 struct Person {
     ua: [u8; 32],
@@ -646,7 +646,7 @@ impl World {
             .unwrap()
             .iter()
             .map(|(n, p)| {
-                let i = "ABCDEFGH".find(n.as_str()).unwrap() as u32;
+                let i = p["index"].as_u64().unwrap() as u32;
                 (n.clone(), Person::new(&seed, i, p))
             })
             .collect();

@@ -310,25 +310,62 @@ contract PqChatTreeTest is PqChatBase {
 
     // ----- the cold tree, written with the wraps (C15, C34) -----
 
-    /// One root whatever the order of the wraps: all with the record, in reverse one per transaction, in order one per
-    /// transaction; equal to the harness's root over the same leaves; `treeId` the session's struct hash, the head epoch 0.
+    /// Every `treeHash.cold` row of `tree.json` created on chain as a session of the row's members, in the row's order (its
+    /// people registered under their vector UAs, each member key its KEM version `keyId`): one root whatever the order of
+    /// the wraps (all with the record, in reverse one per transaction, in order one per transaction), equal to the row's
+    /// `treeHash`; `treeId` the session's struct hash, the head epoch 0, `used` and `leaves` the row's.
     function test_genesisTreeHashWithTheWraps() public {
-        IPqChat.MemberKey[] memory m = _first(5);
-        bytes32 want = _expectedRoot(m, "e2e");
-        for (uint64 order; order < 3; ++order) {
-            (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _tsession(m, 100 + order, address(chat));
-            bytes32 sid = _create(chat, s, order == 0 ? w : new IPqChat.Wrap[](0));
-            for (uint256 j; order != 0 && j < w.length; ++j) {
-                uint256 i = order == 1 ? w.length - 1 - j : j;
-                assertEq(_genesis(sid), 0, "no genesis hash before the last wrap");
-                chat.addWraps(sid, uint32(i), _one(w[i]));
+        string memory tj = _tj();
+        for (uint256 r; r < 6; ++r) {
+            string memory row = string.concat(".treeHash.cold[", vm.toString(r), "]");
+            IPqChat.MemberKey[] memory m = _vectorMembers(tj, tj.readStringArray(string.concat(row, ".members")));
+            bytes32 want = tj.readBytes32(string.concat(row, ".tree.treeHash"));
+            uint256 shape =
+                tj.readUint(string.concat(row, ".tree.used")) | tj.readUint(string.concat(row, ".tree.leaves")) << 32;
+            for (uint64 order; order < 3; ++order) {
+                (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) =
+                    _tsession(m, uint64(100 + 3 * r + order), address(chat));
+                bytes32 sid = _create(chat, s, order == 0 ? w : new IPqChat.Wrap[](0));
+                for (uint256 j; order != 0 && j < w.length; ++j) {
+                    uint256 i = order == 1 ? w.length - 1 - j : j;
+                    assertEq(_genesis(sid), 0, "no genesis hash before the last wrap");
+                    chat.addWraps(sid, uint32(i), _one(w[i]));
+                }
+                assertTrue(chat.epochComplete(sid));
+                assertEq(_genesis(sid), want, string.concat(row, " genesisTreeHash"));
+                assertEq(bytes32(_at(address(chat), _t(sid) + 2)), sid, "the head is epoch 0");
+                (bytes32 hs,) = h.structHashes(s, _anyMessage());
+                assertEq(bytes32(_at(address(chat), _t(sid))), hs, "treeId = hashStruct(PqChatSession)");
+                assertEq(_at(address(chat), _t(sid) + 3), shape, "used, leaves, owed 0");
             }
-            assertTrue(chat.epochComplete(sid));
-            assertEq(_genesis(sid), want, "genesisTreeHash");
-            assertEq(bytes32(_at(address(chat), _t(sid) + 2)), sid, "the head is epoch 0");
-            (bytes32 hs,) = h.structHashes(s, _anyMessage());
-            assertEq(bytes32(_at(address(chat), _t(sid))), hs, "treeId = hashStruct(PqChatSession)");
-            assertEq(_at(address(chat), _t(sid) + 3), 5 | 8 << 32, "used 5, leaves 8, owed 0");
+        }
+    }
+
+    /// (ua, keyId) => its KEM version is set
+    mapping(bytes32 => bool) internal vectorKemSet;
+
+    /// The members `names` of a `tree.json` row as they are listed: each person registered once under its vector UA (the
+    /// mldsa65 key of `people`, KEM version 0 a stand-in), each key set once as its KEM version `keyId`.
+    function _vectorMembers(string memory tj, string[] memory names) internal returns (IPqChat.MemberKey[] memory m) {
+        m = new IPqChat.MemberKey[](names.length);
+        for (uint256 i; i < names.length; ++i) {
+            string memory who = string(abi.encodePacked(bytes(names[i])[0]));
+            bytes32 ua = tj.readBytes32(string.concat(".people.", who, ".ua"));
+            if (keyOf_[ua].length == 0) {
+                bytes memory key = tj.readBytes(string.concat(".people.", who, ".publicKey"));
+                IUARegistry.UAAttrs memory a;
+                a.kem = _kem(uint8(bytes(who)[0]));
+                assertEq(_register(p, ML, key, a, _pop(p, ML, key, a), ""), ua, "the vector UA registered");
+                keyOf_[ua] = key;
+            }
+            uint64 keyId = uint64(keyIds[_row(names[i])]);
+            assertEq(keyUas[_row(names[i])], ua);
+            bytes32 k = keccak256(abi.encode(ua, keyId));
+            if (!vectorKemSet[k]) {
+                _setKem(ua, keyId, _kemOf(_keyPk(names[i])));
+                vectorKemSet[k] = true;
+            }
+            m[i] = IPqChat.MemberKey(ua, keyId, bytes32(0));
         }
     }
 

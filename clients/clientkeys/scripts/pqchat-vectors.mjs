@@ -850,11 +850,13 @@ write("cards.json", {
 
 // ------------------------------------------------------------------ tree.json (PqChat TreeKEM, T1a)
 // Spec docs/superpowers/specs/2026-11-23-pqchat-treekem.md §4, §5 (treeId, genesisCtx), §6, §8; plan T1a. Members' KEM keys are
-// real (kemKey of rnd("tree/kem/<name>/…")); UAs are labels here (rnd("tree/ua/<name>")), the registry binding is T3's.
+// real (kemKey of rnd("tree/kem/<name>/…")); UAs are mldsa65 UAs of one seed named in UA order (fx.rankedPeople), so a
+// test registers them and every session below, listed by name, is strictly sorted by (ua, keyId).
+const treePeople = fx.rankedPeople(rnd("tree/mldsa65-bip39-seed", 64), ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]);
 const treeKeys = Object.fromEntries(
   ["A", "A2", "A3", "A4", "A5", "B", "C", "C2", "D", "E", "F", "G", "H", "I", "J"].map((name, i) => {
     const kem = pc.kemKey(rnd(`tree/kem/${name}/mlkem-keygen-seed`, 64), rnd(`tree/kem/${name}/x25519-secret`));
-    const ua = hex(rnd(`tree/ua/${name.replace(/\d$/, "")}`));
+    const ua = hex(treePeople.get(name[0]).ua);
     return [
       name,
       { name, ua, keyId: Number(name.slice(1)) || 1, kemPk: hex(kem.kemPk), kemHash: hex(kem.kemPkHash), i },
@@ -862,7 +864,11 @@ const treeKeys = Object.fromEntries(
   }),
 );
 const leafOf = (n) => ({ ua: treeKeys[n].ua, keyId: treeKeys[n].keyId, kemHash: treeKeys[n].kemHash });
-const named = (ns) => ns.map(leafOf);
+const named = (ns) => {
+  const m = ns.map(leafOf);
+  fx.assertSorted(m, ns.join(","));
+  return m;
+};
 const treeRow = (t) => ({ ...tr.treeJson(t), nodeHashes: t.hash, treeHash: t.hash[tr.root(t.leaves)] });
 const trees = {};
 const cold = (name, ns) => (trees[name] = tr.coldTree(named(ns)));
@@ -1125,6 +1131,7 @@ const tSession = {
   sealedInfo: hex(rnd("tree/session/sealed-info", 284)),
   groupMode: 1,
 };
+fx.assertSorted(tSession.members, "the digest session");
 const tSid = hex(pc.sessionId(tSession.creator, tSession.nonce));
 const tTreeId = hex(tr.treeId(tSession));
 const tGenesis = hex(tr.genesisCtx(tSession));
@@ -1232,24 +1239,25 @@ const scenario = (name, note, members, steps) => {
     }),
   };
 };
-const START = ["E", "A", "B"];
+// the start sorted by ua (A < B < E): A at leaf 0, B at 1, E (the admin) at 2
+const START = ["A", "B", "E"];
 const leaveSteps = (how) => [
-  { name: "B adds a copy of A3 as its keyId 13", by: ["B", 2], adds: [add(3, "B", 13, "A3")] },
-  { name: "B takes it out (a pair)", by: ["B", 2], removes: [rem(3, "B", 13)] },
-  { name: "B adds a copy of A2 as its keyId 12 (live)", by: ["B", 2], adds: [add(3, "B", 12, "A2")] },
+  { name: "B adds a copy of A3 as its keyId 13", by: ["B", 1], adds: [add(3, "B", 13, "A3")] },
+  { name: "B takes it out (a pair)", by: ["B", 1], removes: [rem(3, "B", 13)] },
+  { name: "B adds a copy of A2 as its keyId 12 (live)", by: ["B", 1], adds: [add(3, "B", 12, "A2")] },
   ...(how === "commit" ? [] : [{ name: `B's ${how}`, leave: ["B"] }]),
   {
     name: "E blanks B's leaves: every key they hold is session-wide; the earlier pair stays",
-    by: ["E", 0],
-    removes: [rem(2, "B", 1), rem(3, "B", 12)],
+    by: ["E", 2],
+    removes: [rem(1, "B", 1), rem(3, "B", 12)],
     probes: [
-      { name: "A adds A2", by: ["A", 1], adds: [add(2, "A", 2, "A2")], verdict: "PqChatTreeKeyReturn" },
-      { name: "E adds A2's bytes under D", by: ["E", 0], adds: [add(2, "D", 1, "A2")], verdict: "PqChatTreeKeyReturn" },
-      { name: "E adds B with a fresh key", by: ["E", 0], adds: [add(2, "B", 20, "J")], verdict: "PqChatTreeReturn" },
+      { name: "A adds A2", by: ["A", 0], adds: [add(1, "A", 2, "A2")], verdict: "PqChatTreeKeyReturn" },
+      { name: "E adds A2's bytes under D", by: ["E", 2], adds: [add(1, "D", 1, "A2")], verdict: "PqChatTreeKeyReturn" },
+      { name: "E adds B with a fresh key", by: ["E", 2], adds: [add(1, "B", 20, "J")], verdict: "PqChatTreeReturn" },
       {
         name: "A adds A3, the key B took out earlier",
-        by: ["A", 1],
-        adds: [add(2, "A", 3, "A3")],
+        by: ["A", 0],
+        adds: [add(1, "A", 3, "A3")],
         verdict: "accepted",
       },
     ],
@@ -1261,20 +1269,20 @@ const noReturn = [
     "B registers A's next public key as its own version, adds it by a plain commit and takes it out: only (B, kemHash) is set",
     START,
     [
-      { name: "B adds a copy of A2 as its keyId 12", by: ["B", 2], adds: [add(3, "B", 12, "A2")] },
+      { name: "B adds a copy of A2 as its keyId 12", by: ["B", 1], adds: [add(3, "B", 12, "A2")] },
       {
         name: "B takes it out",
-        by: ["B", 2],
+        by: ["B", 1],
         removes: [rem(3, "B", 12)],
         probes: [
           {
             name: "B adds it again as keyId 13",
-            by: ["B", 2],
+            by: ["B", 1],
             adds: [add(3, "B", 13, "A2")],
             verdict: "PqChatTreeOwnKeyReturn",
           },
-          { name: "A adds A2 by its own commit", by: ["A", 1], adds: [add(3, "A", 2, "A2")], verdict: "accepted" },
-          { name: "E adds A2 for A", by: ["E", 0], adds: [add(3, "A", 2, "A2")], verdict: "accepted" },
+          { name: "A adds A2 by its own commit", by: ["A", 0], adds: [add(3, "A", 2, "A2")], verdict: "accepted" },
+          { name: "E adds A2 for A", by: ["E", 2], adds: [add(3, "A", 2, "A2")], verdict: "accepted" },
         ],
       },
     ],
@@ -1290,21 +1298,21 @@ const noReturn = [
         ["A3", 4],
         ["A4", 5],
       ].flatMap(([k, leaf]) => [
-        { name: `B adds a copy of ${k}`, by: ["B", 2], adds: [add(leaf, "B", 10 + Number(k[1]), k)] },
-        { name: `B takes out its copy of ${k}`, by: ["B", 2], removes: [rem(leaf, "B", 10 + Number(k[1]))] },
-        { name: `A adds ${k}`, by: ["A", 1], adds: [add(leaf, "A", Number(k[1]), k)] },
+        { name: `B adds a copy of ${k}`, by: ["B", 1], adds: [add(leaf, "B", 10 + Number(k[1]), k)] },
+        { name: `B takes out its copy of ${k}`, by: ["B", 1], removes: [rem(leaf, "B", 10 + Number(k[1]))] },
+        { name: `A adds ${k}`, by: ["A", 0], adds: [add(leaf, "A", Number(k[1]), k)] },
       ]),
       {
         name: "B adds a copy of A5 and keeps it live",
-        by: ["B", 2],
+        by: ["B", 1],
         adds: [add(6, "B", 15, "A5")],
-        probes: [{ name: "A adds A5", by: ["A", 1], adds: [add(7, "A", 5, "A5")], verdict: "PqChatTreeKeyLive" }],
+        probes: [{ name: "A adds A5", by: ["A", 0], adds: [add(7, "A", 5, "A5")], verdict: "PqChatTreeKeyLive" }],
       },
       {
         name: "E removes B's copy; B keeps its keyId 1",
-        by: ["E", 0],
+        by: ["E", 2],
         removes: [rem(6, "B", 15)],
-        probes: [{ name: "A adds A5", by: ["A", 1], adds: [add(6, "A", 5, "A5")], verdict: "accepted" }],
+        probes: [{ name: "A adds A5", by: ["A", 0], adds: [add(6, "A", 5, "A5")], verdict: "accepted" }],
       },
     ],
   ),
@@ -1328,17 +1336,17 @@ const noReturn = [
     [
       {
         name: "E replaces A's key 1 by A2",
-        by: ["E", 0],
-        removes: [rem(1, "A", 1)],
-        adds: [add(1, "A", 2, "A2")],
+        by: ["E", 2],
+        removes: [rem(0, "A", 1)],
+        adds: [add(0, "A", 2, "A2")],
         probes: [
           {
             name: "E adds A's old key under A again",
-            by: ["E", 0],
+            by: ["E", 2],
             adds: [add(3, "A", 3, "A")],
             verdict: "PqChatTreeOwnKeyReturn",
           },
-          { name: "E adds A's old bytes under D", by: ["E", 0], adds: [add(3, "D", 1, "A")], verdict: "accepted" },
+          { name: "E adds A's old bytes under D", by: ["E", 2], adds: [add(3, "D", 1, "A")], verdict: "accepted" },
         ],
       },
     ],
@@ -1351,28 +1359,28 @@ const noReturn = [
     [
       {
         name: "E adds A2 for A",
-        by: ["E", 0],
+        by: ["E", 2],
         adds: [add(3, "A", 2, "A2")],
         probes: [
           {
             name: "under the same UA",
-            by: ["E", 0],
-            removes: [rem(1, "A", 1)],
-            adds: [add(1, "A", 3, "A")],
+            by: ["E", 2],
+            removes: [rem(0, "A", 1)],
+            adds: [add(0, "A", 3, "A")],
             verdict: "PqChatTreeOwnKeyReturn",
           },
           {
             name: "under another UA, A stays",
-            by: ["E", 0],
-            removes: [rem(1, "A", 1)],
-            adds: [add(1, "D", 1, "A")],
+            by: ["E", 2],
+            removes: [rem(0, "A", 1)],
+            adds: [add(0, "D", 1, "A")],
             verdict: "accepted",
           },
           {
             name: "under another UA, A goes",
-            by: ["E", 0],
-            removes: [rem(1, "A", 1), rem(3, "A", 2)],
-            adds: [add(1, "D", 1, "A")],
+            by: ["E", 2],
+            removes: [rem(0, "A", 1), rem(3, "A", 2)],
+            adds: [add(0, "D", 1, "A")],
             verdict: "PqChatTreeKeyReturn",
           },
         ],
@@ -1398,9 +1406,14 @@ write("tree.json", {
     "keccak256(0x1901 ‖ DS_C ‖ structHash) and signedDigest = uaMessage(0x0131 mldsa65, PURPOSE_PQCHAT, typed) of the signed " +
     "records. noReturn (R16): scenarios from a cold tree, each step a commit or a treeLeave / treeRemove mark (leave) with the " +
     "tree and its sets after it, and probes: an Add commit on that tree with its verdict (accepted or the named error). " +
-    "The tree records' UAs are labels; the members' KEM keys are real.",
+    "people: the mldsa65 UAs (pqKeygen of rnd(tree/mldsa65-bip39-seed, 64), account 0, index) and public keys, named A … J " +
+    "in the order of their UAs, so every session here, listed by name, is strictly sorted by (ua, keyId) as the contract " +
+    "requires; the members' KEM keys are real.",
   typehashes: Object.fromEntries(
     Object.entries(tr.TREE_TYPE_STRINGS).map(([n, s]) => [n, { type: s, hash: hex(tr.TREE_TYPEHASH[n]) }]),
+  ),
+  people: Object.fromEntries(
+    [...treePeople].map(([n, k]) => [n, { index: k.index, ua: hex(k.ua), publicKey: hex(k.publicKey) }]),
   ),
   keys: Object.values(treeKeys).map(({ i, ...k }) => k),
   treeMath: {
@@ -1476,7 +1489,7 @@ write("tree.json", {
   const people = Object.fromEntries(
     [...new Set(DEVICE_NAMES.map((n) => n[0]))].map((n) => [
       n,
-      { ua: fx.personOf(n).ua, publicKey: fx.personOf(n).publicKey },
+      { index: fx.personOf(n).index, ua: fx.personOf(n).ua, publicKey: fx.personOf(n).publicKey },
     ]),
   );
   const main = worlds[0][1];
@@ -1583,7 +1596,8 @@ write("tree.json", {
       "schedule without init, K, the tree wrap, the info and the marker) and §10 (replay), plan " +
       "docs/superpowers/plans/2026-11-23-pqchat-treekem.md T1b; by src/treekem.js, the worlds of scripts/treekem-fixture.mjs. " +
       "H(ikm, info, n) = HKDF-SHA-256(ikm, salt empty, info, n); labels are scaas/pqchat/v1/tree/<name>. people: UAs (mldsa65, " +
-      "pqKeygen of rnd(tree-secrets/mldsa65-bip39-seed, 64), account 0, index A=0 … H=7) and their public keys; devices: a " +
+      "pqKeygen of rnd(tree-secrets/mldsa65-bip39-seed, 64), account 0, index; A … H named in the order of their UAs, so " +
+      "every session's members are strictly sorted by (ua, keyId)) and their public keys; devices: a " +
       "person's KEM version keyId (A2 = A's version 2), kemSeed = HKDF-Expand(HKDF-Extract(\"scaas.ua.kem.v1\", " +
       'rnd(tree-secrets/kem/<person>, 64)), "scaas.kem.1" ‖ ua ‖ be64 keyId, 96). secrets: per commit of the main world its ' +
       "pathContext, ps[0] = H(kemSeed, …/commit ‖ pathContext), ps[0..m] and the node key hashes. pathCt: inputs and outputs " +

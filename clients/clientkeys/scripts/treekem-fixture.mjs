@@ -22,11 +22,30 @@ const PEOPLE = ["A", "B", "C", "D", "E", "F", "G", "H"];
 /** Every device a scenario names; the registry holds them all. */
 const DEVICES = [...PEOPLE, "A2", "B2", "C2", "C3", "E2"];
 
-/** A person: its UA (mldsa65, account 0, index i) and the HKDF-Extract of its KEM seed. */
+/** People `names` of one seed (mldsa65, account 0, indexes 0 … n-1), named in the order of their UAs: the first name gets
+ *  the lowest UA. A session's members listed by name are then strictly sorted by (ua, keyId), as the contract requires. */
+export function rankedPeople(seed, names) {
+  const keys = names
+    .map((_, index) => ({ index, ...pqKeygen(seed, "mldsa65", 0, index) }))
+    .sort((a, b) => (hex(a.ua) < hex(b.ua) ? -1 : 1));
+  return new Map(names.map((n, r) => [n, keys[r]]));
+}
+/** Throws unless `members` ({ua, keyId}) are strictly sorted by (ua, keyId): `PqGroupBase` refuses any other session. */
+export function assertSorted(members, what) {
+  for (let i = 1; i < members.length; i++) {
+    const [a, b] = [members[i - 1], members[i]];
+    if (!(a.ua < b.ua || (a.ua === b.ua && a.keyId < b.keyId)))
+      throw new Error(`${what}: members not strictly sorted by (ua, keyId) at ${i}`);
+  }
+}
+let ranked;
+/** A person: its UA (mldsa65, account 0, the index rankedPeople gives it) and the HKDF-Extract of its KEM seed. */
 const person = (name) => {
-  const k = pqKeygen(SEED, "mldsa65", 0, PEOPLE.indexOf(name));
+  ranked ??= rankedPeople(SEED, PEOPLE);
+  const k = ranked.get(name);
   return {
     name,
+    index: k.index,
     ua: hex(k.ua),
     publicKey: hex(k.publicKey),
     secretKey: k.secretKey,
@@ -81,6 +100,7 @@ export function createSession({
     members: members.map((n) => ({ ua: deviceOf(n).ua, keyId: deviceOf(n).keyId, via: Z32 })),
     groupMode: 1,
   };
+  assertSorted(session.members, `session ${tag}`);
   const genesis = tk.createGenesis(sc, {
     session,
     kemPks: members.map((n) => deviceOf(n).kemPk),
