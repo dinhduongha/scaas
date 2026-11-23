@@ -29,4 +29,20 @@ M27 the checkpoint below the pin passed | 1 red: `tree_refusals_beside_twins` | 
 M28 the epoch-0 leaves not compared with the signed members | 1 red: `tree_refusals_beside_twins` | 101
 M29 the snapshot not compared with the head's tree hash | 1 red: `tree_refusals_beside_twins` | 101
 M30 the next info bucket admitted | 1 red: `tree_refusals_beside_twins` | 101
-killed | 30 of 30
+M31 an added key not authenticated by its record | 1 red: `tree_refusals_beside_twins` | 101
+M32 an added key not named by the Add's kemHash | 1 red: `tree_refusals_beside_twins` | 101
+M33 a genesis member's key not authenticated | 1 red: `tree_refusals_beside_twins` | 101
+M34 an epoch-0 leaf target taken as bare bytes | 1 red: `tree_refusals_beside_twins` | 101
+M35 a leaf target's record not authenticated | 1 red: `tree_refusals_beside_twins` | 101
+M36 a version record's signature not checked | 2 red: `tree_kem_record_check`, `tree_refusals_beside_twins` | 101
+M37 a version record not bound to its UA | 2 red: `tree_kem_record_check`, `tree_refusals_beside_twins` | 101
+M38 version 0's hash commit not compared | 1 red: `tree_kem_record_check` | 101
+M39 version 0's full key not compared | 1 red: `tree_kem_record_check` | 101
+M40 version 0 not bound to its UA | 1 red: `tree_kem_record_check` | 101
+M41 version 0's proof of possession not checked | 1 red: `tree_kem_record_check` | 101
+M42 a registration taken for a version above 0 | 1 red: `tree_kem_record_check` | 101
+M43 the generic record path takes a tree record | 1 red: `tree_signing_ops` | 101
+M44 the tree's path takes any record | 1 red: `tree_signing_ops` | 101
+M45 a leave's review without "cannot come back" | 1 red: `tree_signing_ops` | 101
+M46 the review's admin change against the new list | 1 red: `tree_commit_review` | 101
+killed | 46 of 46

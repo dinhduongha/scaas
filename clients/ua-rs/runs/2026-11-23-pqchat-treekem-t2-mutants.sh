@@ -5,7 +5,8 @@
 # `git diff --exit-code`. Writes one row per mutant, `mutant | tests that went red | rc`, to
 # runs/2026-11-23-pqchat-treekem-t2-mutants.txt; full output to the git-ignored .log. M1-M17 are T1b's list in Rust; the
 # others are T2's (a held node kept after a Remove, the admission skipped for an added key, a nonce reused, K refused by the
-# mode-0 entries) and the other checks of src/wallet/tree.rs.
+# mode-0 entries) and the other checks of src/wallet/tree.rs; M31-M45 the registry KEM record check before an encapsulation
+# (src/wallet/tree_public.rs, its three call sites) and the tree's signing operations (src/wallet/pqchat.rs, the reviews).
 #   CAPPED_SLOTS=4 CARGO_INCREMENTAL=0 ../../scripts/capped bash runs/2026-11-23-pqchat-treekem-t2-mutants.sh   (from clients/ua-rs)
 set -u
 cd "$(dirname "$0")/.."
@@ -19,6 +20,8 @@ echo "mutant | tests that went red | rc" >"$OUT"
 : >"$LOG"
 T=src/wallet/tree.rs
 K=src/wallet/pqchat_keys.rs
+P=src/wallet/tree_public.rs
+C=src/wallet/pqchat.rs
 total=0
 killed=0
 
@@ -126,6 +129,29 @@ mutate M27 'the checkpoint below the pin passed' $T '        if p.tree_id != sel
 mutate M28 'the epoch-0 leaves not compared with the signed members' $T '            if want != got || b32j(&a.t, "genesisTreeHash")? != g.tree_hash() {' '            if b32j(&a.t, "genesisTreeHash")? != g.tree_hash() {'
 mutate M29 'the snapshot not compared with the head'"'"'s tree hash' $T '            if snap != b32j(&rec, "treeHash")? || b32j(&a.t, "treeHash")? != b32j(&rec, "treeHash")?' '            if b32j(&a.t, "treeHash")? != b32j(&rec, "treeHash")?'
 mutate M30 'the next info bucket admitted' $T '    if 12 + pt.len() + 16 > TREE_INFO_MAX {' '    if 12 + pt.len() + 16 > 16_412 {'
+mutate M31 'an added key not authenticated by its record' $T '            let k = kem_record_key(&x.ua, x.key_id, r)?;' '            let k = r.kem_pk().to_vec();'
+mutate M32 'an added key not named by the Add'"'"'s kemHash' $T '            if keccak256(&k) != x.kem_hash {' '            if x.kem_hash == [9; 32] {'
+mutate M33 'a genesis member'"'"'s key not authenticated' $T '            let k = kem_record_key(ua, *key_id, r)?;' '            let k = r.kem_pk().to_vec();'
+mutate M34 'an epoch-0 leaf target taken as bare bytes' $T '        (Node::Leaf(l), TargetKey::Key(k)) if parent_epoch > 0 => (k, l.kem_hash),' '        (Node::Leaf(l), TargetKey::Key(k)) => (k, l.kem_hash),'
+mutate M35 'a leaf target'"'"'s record not authenticated' $T '        (Node::Leaf(l), TargetKey::Record(r)) => (kem_record_key(&l.ua, l.key_id, &r)?, l.kem_hash),' '        (Node::Leaf(l), TargetKey::Record(r)) => (r.kem_pk().to_vec(), l.kem_hash),'
+mutate M36 'a version record'"'"'s signature not checked' $P '            crate::ua_portable::check_kem_record(*kind, key_data, ua, version, kem_pk, sig, &none)
+                .is_ok()' '            version > 0 && crate::ua_of(*kind, key_data).ok() == Some(*ua)'
+mutate M37 'a version record not bound to its UA' $P '            crate::ua_portable::check_kem_record(*kind, key_data, ua, version, kem_pk, sig, &none)' '            crate::ua_portable::check_kem_record(*kind, key_data, &crate::ua_of(*kind, key_data).unwrap_or_default(), version, kem_pk, sig, &none)'
+mutate M38 'version 0'"'"'s hash commit not compared' $P '                keccak256(kem_pk) == attrs.kem_pk_hash' '                true'
+mutate M39 'version 0'"'"'s full key not compared' $P '                attrs.kem.kem_pk() == *kem_pk' '                true'
+mutate M40 'version 0 not bound to its UA' $P '                && crate::derive_ua(*kind, key_data, false).ok() == Some(*ua)' ''
+mutate M41 'version 0'"'"'s proof of possession not checked' $P '                && crate::ua_portable::check_registration(*kind, key_data, attrs, pop, &[], &none)
+                    .is_ok()' ''
+mutate M42 'a registration taken for a version above 0' $P '            version == 0
+                && !kem_pk.is_empty()' '            !kem_pk.is_empty()'
+mutate M43 'the generic record path takes a tree record' $C '    if !RECORDS.contains(&td.primary_type()) {' '    if !RECORDS.contains(&td.primary_type()) && !TREE_RECORDS.contains(&td.primary_type()) {'
+mutate M44 'the tree'"'"'s path takes any record' $C '    if !TREE_RECORDS.contains(&td.primary_type()) {' '    if false {'
+mutate M45 'a leave'"'"'s review without "cannot come back"' $T '        "PqChatTreeLeave",
+        rec,
+        vec![("cannotComeBack".into(), back)],' '        "PqChatTreeLeave",
+        rec,
+        vec![],'
+mutate M46 'the review'"'"'s admin change against the new list' $T '        let changed = a.admins != a.parent_admins;' '        let changed = a.admins != a.admins.clone();'
 
 echo "[mutants] done: $killed of $total killed"
 echo "killed | $killed of $total" >>"$OUT"
