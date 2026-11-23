@@ -37,7 +37,7 @@ MUTANTS = [
      T, "e2e_run"),
     ("5 the home slot ignored",
      [(SE, "        if let Some(c) = self.child_of(s, &epoch).await? {",
-       "        if let Some(c) = {\n            let _ = s;\n            None::<String>\n        } {")],
+       "        if let Some(c) = self.child_of(s, &epoch).await?.filter(|_| {\n            self.unfinal.lock().unwrap_or_else(std::sync::PoisonError::into_inner).contains_key(&epoch)\n        }) {")],
      T, "e2e_run"),
     ("6 the counter check dropped",
      [(MS, "        if seen.contains(&r.counter)\n            || (seen.len() >= SEEN_MAX && seen.first().is_some_and(|m| r.counter <= *m))\n        {\n            return Err(DropReason::Counter);\n        }\n", "")],
