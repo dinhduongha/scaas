@@ -322,10 +322,24 @@ pub(crate) async fn read_record(
     landed: Landed,
     ua: &[u8; 32],
 ) -> Result<bool, SdkError> {
-    let tx = TransactionRequest::default()
-        .with_to(registry)
-        .with_input(record_call(landed, ua));
-    let out = pool.call_tx(tx).await.map_err(sim)?;
+    // T26 A2-2: the record and its second view one logical read, on one endpoint at one block
+    let (out, out2) = pool
+        .read_at_block(
+            scaas_rpc::pool::BlockChoice::Latest,
+            scaas_rpc::Purpose::Plain,
+            |at| async move {
+                let out = pool.call_at(&at, registry, record_call(landed, ua)).await?;
+                let out2 = match record_call2(landed, ua) {
+                    Some(c2) if record_holds(landed, &out) == Some(true) => {
+                        Some(pool.call_at(&at, registry, c2).await?.to_vec())
+                    }
+                    _ => None,
+                };
+                Ok((out.to_vec(), out2))
+            },
+        )
+        .await?
+        .value;
     let bad = || {
         SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
             last: None,
@@ -335,18 +349,10 @@ pub(crate) async fn read_record(
     if !record_holds(landed, &out).ok_or_else(bad)? {
         return Ok(false);
     }
-    let Some(c2) = record_call2(landed, ua) else {
-        return Ok(true);
-    };
-    let out = pool
-        .call_tx(
-            TransactionRequest::default()
-                .with_to(registry)
-                .with_input(c2),
-        )
-        .await
-        .map_err(sim)?;
-    record_holds2(landed, &out).ok_or_else(bad)
+    match out2 {
+        None => Ok(true),
+        Some(out) => record_holds2(landed, &out).ok_or_else(bad),
+    }
 }
 
 /// `pqzKeyAt`'s `(address ptr, bytes32 pqzPopHash, bool proven)`: `proven`.

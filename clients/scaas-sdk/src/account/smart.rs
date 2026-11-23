@@ -171,7 +171,6 @@ async fn key_index_of(
     account: [u8; 20],
     signer: &KeyRef,
 ) -> Result<U256, SdkError> {
-    use alloy::network::TransactionBuilder;
     let (_, _, pool) = crate::op::evm(sdk, chain)?;
     // an EVM key of the seed or imported (spec §6.7): its address
     let crate::op::Key::Native(_, k) = crate::op::key(sdk, signer)? else {
@@ -184,7 +183,7 @@ async fn key_index_of(
     let want = key_words(&SubjectKeyArgs::secp256k1(
         &k.address().ok_or(SdkError::Argument)?,
     )?)?;
-    let call = |sig: &str, arg: Option<u64>| {
+    let data = |sig: &str, arg: Option<u64>| {
         let mut d = scaas_ua::keccak256(sig.as_bytes())
             .get(..4)
             .unwrap_or_default()
@@ -192,21 +191,37 @@ async fn key_index_of(
         if let Some(a) = arg {
             d.extend_from_slice(&U256::from(a).to_be_bytes::<32>());
         }
-        let tx = alloy::rpc::types::TransactionRequest::default()
-            .with_to(alloy::primitives::Address::from(account))
-            .with_input(alloy::primitives::Bytes::from(d));
-        let pool = pool.clone();
-        async move { pool.call_tx(tx).await.map_err(crate::op::sim) }
+        alloy::primitives::Bytes::from(d)
     };
-    let next = call("nextKeyIndex()", None).await?;
-    let next = u64::try_from(U256::from_be_slice(
-        next.get(..32).ok_or(SdkError::Argument)?,
-    ))
-    .unwrap_or(u64::MAX);
-    for i in 0..next.min(KEY_SLOTS_READ) {
-        if call("keyAt(uint256)", Some(i)).await?.as_ref() == want.as_slice() {
-            return Ok(U256::from(i));
-        }
+    let to = alloy::primitives::Address::from(account);
+    // T26 A2-2: `nextKeyIndex()` and every `keyAt(i)` one logical read, on one endpoint at one block
+    let (next, found) = pool
+        .read_at_block(
+            scaas_rpc::pool::BlockChoice::Latest,
+            scaas_rpc::Purpose::Plain,
+            |at| {
+                let (pool, want) = (pool.clone(), want.clone());
+                async move {
+                    let next = pool.call_at(&at, to, data("nextKeyIndex()", None)).await?;
+                    let next = next.get(..32).map_or(u64::MAX, |w| {
+                        u64::try_from(U256::from_be_slice(w)).unwrap_or(u64::MAX)
+                    });
+                    for i in 0..next.min(KEY_SLOTS_READ) {
+                        let k = pool
+                            .call_at(&at, to, data("keyAt(uint256)", Some(i)))
+                            .await?;
+                        if k.as_ref() == want.as_slice() {
+                            return Ok((next, Some(i)));
+                        }
+                    }
+                    Ok((next, None))
+                }
+            },
+        )
+        .await?
+        .value;
+    if let Some(i) = found {
+        return Ok(U256::from(i));
     }
     Err(if next > KEY_SLOTS_READ {
         SdkError::Argument

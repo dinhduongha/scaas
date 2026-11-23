@@ -39,6 +39,9 @@ AC = "clients/scaas-sdk/src/app_core.rs"
 PQR = "clients/scaas-sdk/src/pqchat_records.rs"
 PQK = "clients/ua-rs/src/wallet/pqchat_keys.rs"
 OPS = "clients/scaas-sdk/src/wallet/ops.rs"
+CPQ = "clients/scaas-sdk/src/confidential/pqz.rs"
+FPQ = "clients/ua-rs/src/facade/pqz.rs"
+DLY = "clients/scaas-sdk/src/admin/delay.rs"
 TOOLS = '"$(git rev-parse --git-common-dir)/../scratchpad/tools'
 JS = "cd clients/scaas-sdk/bindings/js && WASM_BINDGEN=" + TOOLS + '/wasm-bindgen/bin/wasm-bindgen" bash run.sh'
 F = (
@@ -377,6 +380,26 @@ MUTANTS = [
         "B2-9: a transfer skips the receiver check",
         [(OPS, "                crate::line::receiver_registered(&sdk, &req.chain, &id32(&req.to)?).await?;\n                let kind = kind_of(&sdk, &req.chain, \"UAMetaTransfer\", token).await?;\n                let mut m", "                let kind = kind_of(&sdk, &req.chain, \"UAMetaTransfer\", token).await?;\n                let mut m")],
         T + " --test account_ops pay_to_unregistered_derived_ua",
+    ),
+    (
+        "A2-4: the SDK requires a proven holder key on an OFFCHAIN token",
+        [(CPQ, "    if !(proven || offchain)\n", "    if !proven\n")],
+        T + " --test confidential_pqz offchain_holder_key_need_not_be_proven",
+    ),
+    (
+        "A2-4: the facade requires a proven holder key on an OFFCHAIN token",
+        [(FPQ, "    if !(proven == 1 || proven == 0 && offchain) || added > 1 {", "    if proven != 1 || added > 1 {")],
+        T + " --test confidential_pqz offchain_holder_key_need_not_be_proven",
+    ),
+    (
+        "A2-3: governance_delay takes a token of another factory",
+        [(DLY, "                if word(f, 0)?.get(12..) != Some(&factory[..])\n                    || small", "                if word(f, 0)?.get(12..).is_none()\n                    || small")],
+        T + " --test governance_delay the_token_is_the_profile_factorys",
+    ),
+    (
+        "A2-3: governance_delay takes another class",
+        [(DLY, "? != CLASS_TOKEN\n", "? > CLASS_TOKEN + 1\n")],
+        T + " --test governance_delay the_token_is_the_profile_factorys",
     ),
 ]
 
