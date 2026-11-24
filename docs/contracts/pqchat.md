@@ -99,7 +99,8 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
 - **The owner UA names the instance and nothing more** (Q2): `owner()` returns it; it has no power over sessions, epochs,
   messages, topics, entries or votes, and no entry reads it. The instance has no pause, no admin and no upgrade.
 - **Introspection**: `factoryInfo()` returns `(factory, chainUid, contractClass = 3, kind = 0, version,
-  initialized)` (CTR-GOV-23: no owner in it; the instance's `owner()` answers its owner UA); `supportsInterface` answers ERC-165 (`0x01ffc9a7`) and `type(IPqChat).interfaceId`.
+  initialized)` (CTR-GOV-23: no owner in it; the instance's `owner()` answers its owner UA); `supportsInterface` answers ERC-165 (`0x01ffc9a7`), `type(IPqChat).interfaceId` (`0x7b7acc12`) and the tree views'
+  `type(IPqChatTreeViews).interfaceId` (`0xec42e734`).
 - **The body module** ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30), applied by 3C-D2 when the release passed the
   33,594 B line at 34,223 B): `PqChatTopics` holds the bodies of the public topics and votes (§9: the six writes and
   fourteen views). The release keeps every entry of `IPqChat` (one ABI, one `interfaceId`) and the bodies of the 1:1
@@ -867,6 +868,14 @@ scheme 1, in minimal scope (a commit with an UpdatePath, Adds and Removes, Welco
   `src/pqchat/PqChatTree.sol`, PqChat's body module, holds PqChat's entries and the glue to `PqChatCore`, which fixes the
   base's hooks for PqChat (the namespace `scaas.pqchat.tree`, the typehashes `TreeLeaf` and `TreeParent`, the bounds, the
   errors). Its interface for inheritors: [§17](#17-pqgrouptree-the-group-tree-for-inheritors).
+- **The tree views (owner 2026-11-24, option A; BUILT on branch `pqchat-treekem`, UNAUDITED).** The views of the spec's §6
+  (`treeOf`, `treeLeaves`, `treeNodes`, `treeNodeKey`, `commitOf`, `pathListOf`, `pathKeys`, `pathCtAt`, `goneOf`,
+  `goneKeyOf`, `goneOwnKeyOf`; interface `IPqChatTreeViews`) are a third body module, `src/pqchat/PqChatTreeViews.sol`,
+  read-only: `PqChat`'s `fallback` sends it every selector `PqChat` does not have, by `DELEGATECALL` in the instance's
+  state, return and revert data verbatim. The fallback is not payable; the module has no `fallback`, so a selector it lacks
+  reverts with empty data, and its runtime holds no writing opcode (`SSTORE`, `TSTORE`, `LOG`, `CREATE`, `CREATE2`, `CALL`,
+  `CALLCODE`, `DELEGATECALL`, `SELFDESTRUCT`; scanned by `test/pqchat/PqChatTreeViews.t.sol`), so it cannot be a path to a
+  write. `modules()` lists three: `PqChatTopics`, `PqChatTree`, `PqChatTreeViews`.
 - **Owner rulings on the first spec's open points (2026-11-23):** the leaf is the registry KEM key, not refreshed per commit; a
   non-admin commits only for its own UA's leaves; no tree session on a `none` home or a replica; ML-KEM-1024 the one node
   scheme; `TREE_LEAVES_MAX` = 256, confirmed: one session record creates up to about 200 keys at a 60 M block, the rest come

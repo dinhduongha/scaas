@@ -169,6 +169,18 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
         return _tree(sessionId).treeId != 0;
     }
 
+    /// @dev A path ciphertext packed: mlkemCt (1,568) ‖ x25519Eph (32) ‖ sealedSecret (48).
+    uint256 internal constant PATH_CT = 1648;
+
+    /// @dev A tree session's tree, else the flat session's `PqChatModeEntry(0)` (`PqChatUnknown` when there is none).
+    function _treeOf(bytes32 sid) internal view returns (Tree storage t) {
+        t = _tree(sid);
+        if (t.treeId == 0) {
+            _known(sid);
+            revert IPqChat.PqChatModeEntry(0);
+        }
+    }
+
     /// @dev Every `PqGroupBase` code to its `PqChat` error (CTR-PQV-12: the selectors unchanged), for `PqChat` and the tree
     ///      module; the env and nonce codes as `_fail` here.
     function _chatFail(uint8 code, uint256 a, uint256 b) internal pure {

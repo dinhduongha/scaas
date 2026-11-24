@@ -6,6 +6,8 @@ import {PqChatTypes} from "./PqChatTypes.sol";
 import {PqChatCore} from "./PqChatCore.sol";
 import {PqChatTopics} from "./PqChatTopics.sol";
 import {PqChatTree} from "./PqChatTree.sol";
+import {PqChatTreeViews} from "./PqChatTreeViews.sol";
+import {IPqChatTreeViews} from "./IPqChatTreeViews.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
@@ -20,7 +22,8 @@ import {RescueLib} from "../governance/RescueLib.sol";
 ///         registry, `chain_uid`, the code-size limit `params[0]`. State in the ERC-7201 namespace `scaas.pqchat`.
 ///         Records are stored in SSTORE2 blobs (3C-D3), never only in an event. The public topics and votes run in the
 ///         body module `PqChatTopics` by `DELEGATECALL` (CTR-TOK-30, 3C-D2); the sessions, messages and the store, the 1:1
-///         path, stay here. The TreeKEM mode (`groupMode = 1`, CTR-CHAT-26) runs in the body module `PqChatTree`.
+///         path, stay here. The TreeKEM mode (`groupMode = 1`, CTR-CHAT-26) runs in the body module `PqChatTree`; its
+///         views (`IPqChatTreeViews`) in the read-only body module `PqChatTreeViews`, reached by the `fallback`.
 ///         **UNAUDITED.**
 contract PqChat is IPqChat, PqChatCore {
     uint16 internal constant CLASS = 3;
@@ -40,18 +43,21 @@ contract PqChat is IPqChat, PqChatCore {
     address internal immutable TOPICS;
     /// @notice The body module of the TreeKEM mode (`PqChatTree`, CTR-CHAT-26), named in `implArgs`.
     address internal immutable TREE;
+    /// @notice The read-only body module of the tree views (`PqChatTreeViews`, owner 2026-11-24), named in `implArgs`.
+    address internal immutable VIEWS;
 
-    /// @notice `(ReleaseId, factory_, implArgs)` (topics spec §11), `implArgs = abi.encode(topics, tree)`: the body modules
-    ///         `PqChatTopics` and `PqChatTree` of this factory (CTR-TOK-30, 3C-D2, CTR-CHAT-26), code present. The
-    ///         implementation is locked.
+    /// @notice `(ReleaseId, factory_, implArgs)` (topics spec §11), `implArgs = abi.encode(topics, tree, views)`: the body
+    ///         modules `PqChatTopics`, `PqChatTree` and `PqChatTreeViews` of this factory (CTR-TOK-30, 3C-D2, CTR-CHAT-26),
+    ///         code present. The implementation is locked.
     constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory implArgs) {
         if (id.contractClass != CLASS || id.kind != KIND || id.version == 0 || factory_ == address(0)) {
             revert PqChatEnv();
         }
-        (address topics_, address tree_) = abi.decode(implArgs, (address, address));
+        (address topics_, address tree_, address views_) = abi.decode(implArgs, (address, address, address));
         if (topics_.code.length == 0 || PqChatTopics(topics_).FACTORY() != factory_) revert PqChatEnv();
         if (tree_.code.length == 0 || PqChatTree(tree_).FACTORY() != factory_) revert PqChatEnv();
-        (FACTORY, VERSION, TOPICS, TREE) = (factory_, id.version, topics_, tree_);
+        if (views_.code.length == 0 || PqChatTreeViews(views_).FACTORY() != factory_) revert PqChatEnv();
+        (FACTORY, VERSION, TOPICS, TREE, VIEWS) = (factory_, id.version, topics_, tree_, views_);
         _s().initialized = true;
     }
 
@@ -89,7 +95,7 @@ contract PqChat is IPqChat, PqChatCore {
     }
 
     function supportsInterface(bytes4 id) external pure returns (bool) {
-        return id == 0x01ffc9a7 || id == type(IPqChat).interfaceId;
+        return id == 0x01ffc9a7 || id == type(IPqChat).interfaceId || id == type(IPqChatTreeViews).interfaceId;
     }
 
     /// @notice 3C-D1: a `chain_uid`, a registry and a code-size limit of at least 24,576 B.
@@ -624,8 +630,23 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @notice The body modules (CTR-TOK-30), as the token faces list theirs.
     function modules() external view returns (address[] memory m) {
-        m = new address[](2);
-        (m[0], m[1]) = (TOPICS, TREE);
+        m = new address[](3);
+        (m[0], m[1], m[2]) = (TOPICS, TREE, VIEWS);
+    }
+
+    /// @notice Owner 2026-11-24 (option A): a selector this contract does not have goes to the read-only `PqChatTreeViews`
+    ///         by `DELEGATECALL` (the tree views, `IPqChatTreeViews`), its return and revert data verbatim; the module has
+    ///         no `fallback`, so a selector it lacks too reverts with empty data, and it writes nothing. Not payable: a call
+    ///         with value is refused.
+    fallback() external {
+        address v = VIEWS;
+        assembly {
+            calldatacopy(0, 0, calldatasize())
+            let ok := delegatecall(gas(), v, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            if iszero(ok) { revert(0, returndatasize()) }
+            return(0, returndatasize())
+        }
     }
 
     // ------------------------------------------------------------------ internal: the group's errors (PqGroupBase)

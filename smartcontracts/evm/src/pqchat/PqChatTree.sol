@@ -164,15 +164,6 @@ contract PqChatTree is PqChatCore {
     ///      keccak256(""), keccak256("")))`, pinned against the vectors' `digests.emptyPathList`.
     bytes32 internal constant EMPTY_PATH_LIST = 0x314f8c453563644126ee2ba7f65398ffecccac5e0b863019a52ec0f677f605da;
 
-    /// @dev A tree session's tree, else the flat session's `PqChatModeEntry(0)` (`PqChatUnknown` when there is none).
-    function _treeOf(bytes32 sid) internal view returns (Tree storage t) {
-        t = _tree(sid);
-        if (t.treeId == 0) {
-            _known(sid);
-            revert IPqChat.PqChatModeEntry(0);
-        }
-    }
-
     function _delta(IPqChat.PqChatCommit memory c) internal pure returns (Delta memory d) {
         (d.author, d.leaf, d.keyId, d.leaves, d.epoch) = (c.author, c.leaf, c.keyId, c.leaves, c.epoch);
         (d.admins, d.removes, d.adds) = (c.admins, c.removes, c.adds);
@@ -269,9 +260,6 @@ contract PqChatTree is PqChatCore {
             g.ctAt[first + q] = ptr | ((q - from) * PATH_CT) << 160;
         }
     }
-
-    /// @dev A path ciphertext packed: mlkemCt (1,568) ‖ x25519Eph (32) ‖ sealedSecret (48).
-    uint256 internal constant PATH_CT = 1648;
 
     function _packCt(bytes memory buf, uint256 off, IPqChat.PathCt calldata ct) private pure {
         bytes calldata a = ct.mlkemCt;

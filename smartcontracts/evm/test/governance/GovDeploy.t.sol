@@ -172,13 +172,17 @@ contract GovDeployTest is Test {
         assertEq(uint256(e.params[0]), h.chainCodeLimit(), "params[0]: the declared code limit");
         address topics = vm.parseJsonAddress(json, ".pqchat_topics");
         address tree = vm.parseJsonAddress(json, ".pqchat_tree");
-        assertEq(e.libs.length, 2);
+        address views = vm.parseJsonAddress(json, ".pqchat_tree_views");
+        assertEq(e.libs.length, 3);
         assertEq(e.libs[0], topics, "the body module pinned in libs (CTR-TOK-30, 3C-D2)");
         assertEq(e.libCodeHashes[0], topics.codehash);
         assertEq(e.libs[1], tree, "the tree module pinned in libs (CTR-CHAT-26)");
         assertEq(e.libCodeHashes[1], tree.codehash);
+        assertEq(e.libs[2], views, "the tree views module pinned in libs (owner 2026-11-24)");
+        assertEq(e.libCodeHashes[2], views.codehash);
         assertEq(PqChat(r.implementation).modules()[0], topics, "named in implArgs");
         assertEq(PqChat(r.implementation).modules()[1], tree, "named in implArgs");
+        assertEq(PqChat(r.implementation).modules()[2], views, "named in implArgs");
         address inst = vm.parseJsonAddress(json, ".pqchat_instance");
         assertEq(IPqChat(inst).owner(), bytes32(0), "owned by no UA");
         (IOpenFactory.Created[] memory page, uint256 total) = f.contractsPage(3, 0, 8);

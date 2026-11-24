@@ -554,12 +554,13 @@ contract PqChatTreeTest is PqChatBase {
         chat.rekey(e, ew, _sig(f.creator, h.epoch(e)));
     }
 
-    /// CTR-TOK-30: the release lists both modules; the tree module called directly has no env.
+    /// CTR-TOK-30: the release lists its three modules; the tree module called directly has no env.
     function test_treeModuleListedAndNoEnvAlone() public {
         address[] memory m = chat.modules();
-        assertEq(m.length, 2);
+        assertEq(m.length, 3);
         assertEq(m[0], address(topics));
         assertEq(m[1], address(treeModule));
+        assertEq(m[2], address(viewsModule));
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _tsession(_first(2), 1, address(chat));
         IUARegistry.UASig memory sig;
         vm.expectRevert(IPqChat.PqChatEnv.selector);
