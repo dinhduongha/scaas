@@ -36,14 +36,29 @@ for d in $DIRS; do STEPS+=("forge-$d|smartcontracts/evm|$(fdir "$d")"); done
 
 cmd_of() {
     local s
-    for s in "${STEPS[@]}"; do [[ ${s%%|*} == "$1" ]] && { echo "$s"; return 0; }; done
+    for s in "${STEPS[@]}"; do [[ ${s%%|*} == "$1" ]] && {
+        echo "$s"
+        return 0
+    }; done
     return 1
 }
-[[ ${1:-} == --list ]] && { for s in "${STEPS[@]}"; do echo "${s%%|*}"; done; exit 0; }
+[[ ${1:-} == --list ]] && {
+    for s in "${STEPS[@]}"; do echo "${s%%|*}"; done
+    exit 0
+}
 FORCE=
-[[ ${1:-} == --force ]] && { FORCE=1; shift; }
-[[ $# -ge 1 ]] || { echo "usage: $0 [--list] [--force] <step>..."; exit 2; }
-for s in "$@"; do cmd_of "$s" >/dev/null || { echo "[G] no such step: $s (--list)" >&2; exit 2; }; done
+[[ ${1:-} == --force ]] && {
+    FORCE=1
+    shift
+}
+[[ $# -ge 1 ]] || {
+    echo "usage: $0 [--list] [--force] <step>..."
+    exit 2
+}
+for s in "$@"; do cmd_of "$s" >/dev/null || {
+    echo "[G] no such step: $s (--list)" >&2
+    exit 2
+}; done
 sha=$(git rev-parse --short=9 HEAD)
 X=":!$SUMMARY"
 clean() { git diff --quiet HEAD -- . "$X" && git diff --quiet --cached HEAD -- . "$X"; }
@@ -71,7 +86,10 @@ for s in "$@"; do
     fi
     state=clean
     clean || state=dirty
-    { echo "# $name at commit $sha"; echo "# tree $state; $dir: $cmd"; } >"$log"
+    {
+        echo "# $name at commit $sha"
+        echo "# tree $state; $dir: $cmd"
+    } >"$log"
     echo "[G] $name start ($dir, tree $state)"
     t0=$SECONDS
     (while sleep 30; do echo "[G] $name running $((SECONDS - t0)) s"; done) &
@@ -90,6 +108,9 @@ for s in "$@"; do
     else
         n="$n; tree dirty, no summary row"
     fi
-    if ((rc == 0)); then echo "[G] $name ok in $((SECONDS - t0)) s: $n"; else echo "[G] $name FAIL rc=$rc in $((SECONDS - t0)) s: $n ($log)"; worst=1; fi
+    if ((rc == 0)); then echo "[G] $name ok in $((SECONDS - t0)) s: $n"; else
+        echo "[G] $name FAIL rc=$rc in $((SECONDS - t0)) s: $n ($log)"
+        worst=1
+    fi
 done
 exit $worst
