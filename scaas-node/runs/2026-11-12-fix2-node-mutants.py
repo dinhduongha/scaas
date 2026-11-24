@@ -1,7 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # Fable fix round 2, part node: one mutant per new guard (N-1..N-4); each must fail its test. Each file is restored after.
-import subprocess, sys, shutil, os
+# A hung run (owner 2026-11-24, scripts/mutant_guard.py): past 3 x its unmutated baseline (at least 10 min, or `--timeout N`)
+# its process group is killed and it reads `killed (timeout N s)`; the file is restored on every exit (SIGINT / SIGTERM too);
+# a target file that differs from HEAD refuses the run.
+import sys, os
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))  # scaas-node
+sys.path.insert(0, os.path.join('..', 'scripts'))
+import mutant_guard as guard  # noqa: E402
 M = [
  ("N1 no FeatureDisabled branch", "src/dex/venue.rs",
   "    } else if topic0 == crate::abi::IGovernance::FeatureDisabled::SIGNATURE_HASH {\n        // the DEX's only",
@@ -23,17 +28,20 @@ M = [
   "    if let Err(e) = crate::submit::refuse_payee_fee_fields(&job) {", "    if let Err(e) = Err::<(), _>(()).or(Ok::<(), String>(())).and(Err::<(), String>(String::new())).or_else(|_| Ok::<(), String>(())) {", "payee_fee_fields_are_refused"),
  ("N4b no PAYEE code", "src/submit.rs", "anyhow::bail!(\"PAYEE_FEE_REFUSED:", "anyhow::bail!(\"PAYEE_FEE:", "payee_fee_fields_are_refused"),
 ]
+guard.refuse_dirty([m[1] for m in M], '.')
 for name, f, a, b, test in M:
     src = open(f).read(); assert src.count(a) == 1, name
-    shutil.copy(f, f + '.bak')
+    cmd = ['../scripts/capped', 'cargo', 'test', '--lib', '--', test]
+    lim, saved = guard.limit(cmd), {f: open(f, 'rb').read()}
     try:
         open(f, 'w').write(src.replace(a, b))
-        r = subprocess.run(['../scripts/capped', 'cargo', 'test', '--lib', '--', test], capture_output=True, text=True)
+        r = guard.run(cmd, lim, capture_output=True, text=True)
         out = r.stdout + r.stderr
         killed = 'FAILED' in out or 'panicked' in out
         comp = 'error[' in out
         line = next((l for l in out.splitlines() if 'panicked' in l or 'assertion' in l), '')
         nxt = [l for l in out.splitlines() if l.startswith('assertion') or 'left:' in l][:1]
-        print(f"{name}: {'KILLED' if killed and not comp else ('COMPILE-ERR' if comp else 'SURVIVED')} {nxt}", flush=True)
+        verdict = 'KILLED' if killed and not comp else ('COMPILE-ERR' if comp else 'SURVIVED')
+        print(f"{name}: {guard.outcome(r, verdict)} {nxt}", flush=True)
     finally:
-        shutil.move(f + '.bak', f)
+        guard.restore(saved)

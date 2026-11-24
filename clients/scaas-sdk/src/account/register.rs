@@ -322,10 +322,24 @@ pub(crate) async fn read_record(
     landed: Landed,
     ua: &[u8; 32],
 ) -> Result<bool, SdkError> {
-    let tx = TransactionRequest::default()
-        .with_to(registry)
-        .with_input(record_call(landed, ua));
-    let out = pool.call_tx(tx).await.map_err(sim)?;
+    // T26 A2-2: the record and its second view one logical read, on one endpoint at one block
+    let (out, out2) = pool
+        .read_at_block(
+            scaas_rpc::pool::BlockChoice::Latest,
+            scaas_rpc::Purpose::Plain,
+            |at| async move {
+                let out = pool.call_at(&at, registry, record_call(landed, ua)).await?;
+                let out2 = match record_call2(landed, ua) {
+                    Some(c2) if record_holds(landed, &out) == Some(true) => {
+                        Some(pool.call_at(&at, registry, c2).await?.to_vec())
+                    }
+                    _ => None,
+                };
+                Ok((out.to_vec(), out2))
+            },
+        )
+        .await?
+        .value;
     let bad = || {
         SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
             last: None,
@@ -335,37 +349,17 @@ pub(crate) async fn read_record(
     if !record_holds(landed, &out).ok_or_else(bad)? {
         return Ok(false);
     }
-    let Some(c2) = record_call2(landed, ua) else {
-        return Ok(true);
-    };
-    let out = pool
-        .call_tx(
-            TransactionRequest::default()
-                .with_to(registry)
-                .with_input(c2),
-        )
-        .await
-        .map_err(sim)?;
-    record_holds2(landed, &out).ok_or_else(bad)
+    match out2 {
+        None => Ok(true),
+        Some(out) => record_holds2(landed, &out).ok_or_else(bad),
+    }
 }
 
-/// `pqzKeyAt(ua, 0).proven`: a PoP verifier checked version 0's proof.
-async fn pqz_proven(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<bool, SdkError> {
-    let mut d = selector("pqzKeyAt(bytes32,uint64)");
-    d.extend_from_slice(ua);
-    d.extend_from_slice(&word_u64(0));
-    let tx = TransactionRequest::default()
-        .with_to(registry)
-        .with_input(Bytes::from(d));
-    let out = pool.call_tx(tx).await.map_err(sim)?;
-    // `(address ptr, bytes32 pqzPopHash, bool proven)`
-    word(&out, 2)
+/// `pqzKeyAt`'s `(address ptr, bytes32 pqzPopHash, bool proven)`: `proven`.
+fn proven_of(out: &[u8]) -> Option<bool> {
+    word(out, 2)
         .filter(|w| *w <= U256::from(1))
         .map(|w| w == U256::from(1))
-        .ok_or(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
-            last: None,
-            failover_revert: None,
-        }))
 }
 
 /// `pqzKeyAt(ua, 0).pqzPopHash`: the hash of the proof the registration committed to (`storePqzPop` takes only that proof).
@@ -402,20 +396,18 @@ async fn kem_pk_hash(
         .with_to(registry)
         .with_input(Bytes::from(d));
     let out = pool.call_tx(tx).await.map_err(sim)?;
-    let bad = || {
-        SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
-            last: None,
-            failover_revert: None,
-        })
-    };
-    // `(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop)`: `attrs` by its offset, `kemPkHash` its fourth word
-    let off = word(&out, 2)
-        .and_then(|w| usize::try_from(w).ok())
-        .ok_or_else(bad)?;
-    let at = off.checked_add(96).ok_or_else(bad)?;
-    out.get(at..at.checked_add(32).ok_or_else(bad)?)
-        .and_then(|w| w.try_into().ok())
-        .ok_or_else(bad)
+    kem_hash_of(&out).ok_or(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
+        last: None,
+        failover_revert: None,
+    }))
+}
+
+/// `registrationOf`'s `(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop)`: `attrs` by its offset,
+/// `kemPkHash` its fourth word.
+fn kem_hash_of(out: &[u8]) -> Option<[u8; 32]> {
+    let off = word(out, 2).and_then(|w| usize::try_from(w).ok())?;
+    let at = off.checked_add(96)?;
+    out.get(at..at.checked_add(32)?)?.try_into().ok()
 }
 
 /// A verify row's signer of an `msig` slot of kind `kind`: an EOA member the native reference (0), any other its kind (a kind
@@ -668,10 +660,14 @@ pub(crate) async fn keep_with(
         registration,
         to: registry,
     });
-    sdk.registry_writes
+    let mut t = sdk
+        .registry_writes
         .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .insert(w.id.clone(), w.clone());
+        .unwrap_or_else(PoisonError::into_inner);
+    // review A2-9: a write no caller holds any more is gone (the table never grows with writes prepared and dropped)
+    t.retain(|_, x| x.strong_count() > 0);
+    t.insert(w.id.clone(), Arc::downgrade(&w));
+    drop(t);
     Ok(w)
 }
 
@@ -931,7 +927,7 @@ fn known(sdk: &Sdk, w: &Arc<RegistryWrite>) -> Result<(), SdkError> {
         .unwrap_or_else(PoisonError::into_inner)
         .get(&w.id)
     {
-        Some(x) if Arc::ptr_eq(x, w) => Ok(()),
+        Some(x) if std::ptr::eq(x.as_ptr(), Arc::as_ptr(w)) => Ok(()),
         _ => Err(SdkError::PreparedUnknown),
     }
 }
@@ -943,7 +939,7 @@ fn take(sdk: &Sdk, w: &Arc<RegistryWrite>) -> Result<(), SdkError> {
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     match t.get(&w.id) {
-        Some(x) if Arc::ptr_eq(x, w) => {
+        Some(x) if std::ptr::eq(x.as_ptr(), Arc::as_ptr(w)) => {
             t.remove(&w.id);
             Ok(())
         }
@@ -1114,27 +1110,6 @@ fn pqz_attr(
     Err(SdkError::FeatureMissing)
 }
 
-/// `ReceiverUnregistered` (spec §7.1): `to` a derived UA (not a native id: its top 12 bytes not all zero) that the profile's
-/// registry does not hold, or on a profile naming no registry (fail closed: owner 2026-11-19, R3); a native id passes.
-pub(crate) async fn receiver_registered(
-    sdk: &Sdk,
-    chain: &str,
-    to: &[u8; 32],
-) -> Result<(), SdkError> {
-    if to.get(..12).is_some_and(|h| h.iter().all(|b| *b == 0)) {
-        return Ok(());
-    }
-    let (profile, _, pool) = evm(sdk, chain)?;
-    let Some(registry) = profile.registry.as_deref() else {
-        return Err(SdkError::ReceiverUnregistered);
-    };
-    let registry: Address = registry.parse().map_err(|_| SdkError::Argument)?;
-    match read_record(&pool, registry, Landed::Registered, to).await? {
-        true => Ok(()),
-        false => Err(SdkError::ReceiverUnregistered),
-    }
-}
-
 impl Account {
     /// Prepares the registration of `req.key` (spec §7): the arguments and the PoP by `scaas-ua`, then the writes (the
     /// registration, `storePqzPop` when split, `setKemKey` for a hash-committed KEM key), in the order they must land; an
@@ -1254,7 +1229,7 @@ impl Account {
                             .lock()
                             .unwrap_or_else(PoisonError::into_inner)
                             .entry(write.id.clone())
-                            .or_insert_with(|| write.clone());
+                            .or_insert_with(|| Arc::downgrade(&write));
                         return Err(e);
                     }
                 };
@@ -1310,21 +1285,68 @@ impl Account {
         self.sdk
             .spawn(async move {
                 let ua: [u8; 32] = unhex(&ua)?.try_into().map_err(|_| SdkError::Argument)?;
-                let (_, _, pool) = evm(&sdk, &chain)?;
-                let registry = registry_of(&sdk, &chain)?;
-                let registered = read_record(&pool, registry, Landed::Registered, &ua).await?;
-                if !registered {
+                // F2 (A2-2): one read of the line; the record at its holder, the PQZ attachment at its home (CTR-UA-71)
+                let (r, _) = crate::line::read_line(
+                    &sdk,
+                    &chain,
+                    scaas_rpc::pool::BlockChoice::Latest,
+                    scaas_rpc::Purpose::Plain,
+                    |pool, at, line| async move {
+                        let bad = || crate::line::malformed(&at, "a registration view");
+                        let Some((h, _, home)) = line.holder_of(&pool, &at, ua).await? else {
+                            return Ok(None);
+                        };
+                        let p = home.unwrap_or(h);
+                        let reg = pool
+                            .call_at(
+                                &at,
+                                h,
+                                Bytes::from(
+                                    [selector("registrationOf(bytes32)"), ua.to_vec()].concat(),
+                                ),
+                            )
+                            .await?;
+                        let kem = pool
+                            .call_at(&at, h, record_call(Landed::Kem(0), &ua))
+                            .await?;
+                        let pop = pool
+                            .call_at(&at, p, record_call(Landed::PqzPop(0), &ua))
+                            .await?;
+                        let key = pool
+                            .call_at(
+                                &at,
+                                p,
+                                Bytes::from(
+                                    [
+                                        selector("pqzKeyAt(bytes32,uint64)"),
+                                        ua.to_vec(),
+                                        word_u64(0).to_vec(),
+                                    ]
+                                    .concat(),
+                                ),
+                            )
+                            .await?;
+                        Ok(Some((
+                            kem_hash_of(&reg).ok_or_else(bad)?,
+                            record_holds(Landed::Kem(0), &kem).ok_or_else(bad)?,
+                            record_holds(Landed::PqzPop(0), &pop).ok_or_else(bad)?,
+                            proven_of(&key).ok_or_else(bad)?,
+                        )))
+                    },
+                )
+                .await?;
+                let Some((kem_pk_hash, kem_stored, pqz_pop_stored, pqz_proven)) = r else {
                     return Ok(RegistrationState {
                         kem_pk_hash: hex(&[0; 32]),
                         ..Default::default()
                     });
-                }
+                };
                 Ok(RegistrationState {
-                    registered,
-                    kem_pk_hash: hex(&kem_pk_hash(&pool, registry, &ua).await?),
-                    kem_stored: read_record(&pool, registry, Landed::Kem(0), &ua).await?,
-                    pqz_pop_stored: read_record(&pool, registry, Landed::PqzPop(0), &ua).await?,
-                    pqz_proven: pqz_proven(&pool, registry, &ua).await?,
+                    registered: true,
+                    kem_pk_hash: hex(&kem_pk_hash),
+                    kem_stored,
+                    pqz_pop_stored,
+                    pqz_proven,
                 })
             })
             .await

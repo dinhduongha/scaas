@@ -28,6 +28,18 @@ use std::sync::Arc;
 /// SDK calls without a command of their own, each with its reason.
 pub const EXCLUDED: &[(&str, &str)] = &[
     (
+        "AppPrepared::sign",
+        "signed inside `app-core prepare-app-record` / `prepare-pqvault-record`, after the confirm on its review (T26 A-5)",
+    ),
+    (
+        "PqChatPrepared::sign",
+        "signed inside `app-core prepare-pqchat-*` / `pqchat-prepare-session` / `-epoch`, after the confirm on its review (T26 A-5)",
+    ),
+    (
+        "PqCardPrepared::sign",
+        "signed inside `app-core prepare-pqchat-card`, after the confirm on its review (T26 A-5)",
+    ),
+    (
         "lib::load_check",
         "a binding's load check against the library it loads (spec §16.3); the CLI links the SDK it was built with",
     ),
@@ -237,6 +249,7 @@ calls! { cx;
 
     // ---- vault
     "vault seeds" "Vault::seeds" {} => js(sdk(cx).vault().seeds().await?);
+    "vault accept-rollback" "Vault::accept_rollback" {} => { sdk(cx).vault().accept_rollback().await?; ok() };
     "vault seed" "Vault::seed" {seed: String} => js(sdk(cx).vault().seed(seed).await?);
     "vault generate" "Vault::generate" {label: String} ["vault-passphrase"] => {
         let vault_passphrase = cx.secret("vault-passphrase")?;
@@ -634,15 +647,17 @@ calls! { cx;
     "app-core app-root-key" "AppCore::app_root_key" {account: KeyRef} => handle(cx.app()?.app_root_key(account)?, key_shown());
     "app-core account-ua" "AppCore::account_ua" {account: KeyRef} => hexed("ua", &cx.app()?.account_ua(&account)?);
     "app-core destroy" "AppCore::destroy" {key: H<Arc<AppKey>>} => { cx.app()?.destroy(key.0)?; ok() };
-    "app-core sign-app-record" "AppCore::sign_app_record" {account: KeyRef, path: AppPath, typed_json: String} @sign => {
-        cx.confirm(json!({"sign": "an app record", "account": account, "path": path, "typed_data": typed_json}))?;
-        js(cx.app()?.sign_app_record(account, path, typed_json).await?)
+    "app-core prepare-app-record" "AppCore::prepare_app_record" {account: KeyRef, path: AppPath, typed_json: String} @sign => {
+        let p = cx.app()?.prepare_app_record(account.clone(), path, typed_json).await?;
+        cx.confirm(json!({"sign": "an app record", "account": account, "review": review(&p.review), "digest": p.digest}))?;
+        js(p.sign().await?)
     };
     "app-core kem-wrap" "AppCore::kem_wrap" {chain: String, recipient: String, kem_version: u64, key: H<Arc<AppKey>>, label: Vec<u8>, aad: Vec<u8>} => js(cx.app()?.kem_wrap(chain, recipient, kem_version, key.0, label, aad).await?);
     "app-core verify-app-record" "AppCore::verify_app_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_app_record(chain, ua, path, typed_json, sig).await?);
-    "app-core sign-pqvault-record" "AppCore::sign_pqvault_record" {account: KeyRef, path: AppPath, records: Option<String>, typed_json: String} @sign => {
-        cx.confirm(json!({"sign": "a PqVault record", "account": account, "path": path, "records": records, "typed_data": typed_json}))?;
-        js(cx.app()?.sign_pqvault_record(account, path, records, typed_json).await?)
+    "app-core prepare-pqvault-record" "AppCore::prepare_pqvault_record" {account: KeyRef, path: AppPath, records: Option<String>, typed_json: String} @sign => {
+        let p = cx.app()?.prepare_pqvault_record(account.clone(), path, records.clone(), typed_json).await?;
+        cx.confirm(json!({"sign": "a PqVault record", "account": account, "records": records, "review": review(&p.review), "digest": p.digest}))?;
+        js(p.sign().await?)
     };
     "app-core verify-pqvault-record" "AppCore::verify_pqvault_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_pqvault_record(chain, ua, path, typed_json, sig).await?);
     "app-core verify-app-record-key" "AppCore::verify_app_record_key" {kind: u16, key_data: Vec<u8>, path: AppPath, purpose: Option<String>, typed_json: String, signature: Vec<u8>} => named("valid", cx.app()?.verify_app_record_key(kind, key_data, path, purpose, typed_json, signature)?);
@@ -651,7 +666,9 @@ calls! { cx;
         cx.confirm(json!({"review": review(&call.review), "quote": call.quote}))?;
         named("tx", sdk(cx).wallet().submit_native_send(call.quote).await?)
     };
-    "app-core read-app" "AppCore::read_app" {chain: String, contract: String, entry: String, args: String, trusted: bool} => named("result", raw_json(cx.app()?.read_app(chain, contract, entry, args, trusted).await?));
+    "app-core read-app" "AppCore::read_app" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app(chain, contract, entry, args).await?));
+    "app-core read-app-plain" "AppCore::read_app_plain" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app_plain(chain, contract, entry, args).await?));
+    "app-core read-app-agreed" "AppCore::read_app_agreed" {chain: String, contract: String, entry: String, args: String} => named("result", raw_json(cx.app()?.read_app_agreed(chain, contract, entry, args).await?));
     "app-core pqchat-epoch-key" "AppCore::pqchat_epoch_key" {seed: String} => handle(cx.app()?.pqchat_epoch_key(&seed)?, key_shown());
     "app-core pqchat-wrap" "AppCore::pqchat_wrap" {chain: String, k: H<Arc<AppKey>>, session_id: String, epoch_id: String, member: String, key_id: u64} => js(cx.app()?.pqchat_wrap(chain, k.0, session_id, epoch_id, member, key_id).await?);
     "app-core pqchat-unwrap" "AppCore::pqchat_unwrap" {account: KeyRef, session_id: String, epoch_id: String, wrap: PqWrap} => handle(cx.app()?.pqchat_unwrap(account, session_id, epoch_id, wrap)?, key_shown());
@@ -678,15 +695,21 @@ calls! { cx;
         let c = Arc::new(SecretBytes::from_zeroizing(zeroize::Zeroizing::new(content)).map_err(SdkError::Ua)?);
         let p = cx.app()?.pqchat_open_file(c, object)?; p.with(|b| hexed("file", b))
     };
-    "app-core pqchat-sign-session" "AppCore::pqchat_sign_session" {account: KeyRef, k: H<Arc<AppKey>>, r: PqSessionNew} @sign => {
-        cx.confirm(json!({"sign": "a PqChat session", "account": account, "record": r}))?; js(cx.app()?.pqchat_sign_session(account, k.0, r).await?)
+    "app-core pqchat-prepare-session" "AppCore::pqchat_prepare_session" {account: KeyRef, k: H<Arc<AppKey>>, r: PqSessionNew} @sign => {
+        let p = cx.app()?.pqchat_prepare_session(account.clone(), k.0, r).await?;
+        cx.confirm(json!({"sign": "a PqChat session", "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
     };
-    "app-core pqchat-sign-epoch" "AppCore::pqchat_sign_epoch" {account: KeyRef, k: H<Arc<AppKey>>, r: PqEpochNew} @sign => {
-        cx.confirm(json!({"sign": "a PqChat epoch", "account": account, "record": r}))?; js(cx.app()?.pqchat_sign_epoch(account, k.0, r).await?)
+    "app-core pqchat-prepare-epoch" "AppCore::pqchat_prepare_epoch" {account: KeyRef, k: H<Arc<AppKey>>, r: PqEpochNew} @sign => {
+        let p = cx.app()?.pqchat_prepare_epoch(account.clone(), k.0, r).await?;
+        cx.confirm(json!({"sign": "a PqChat epoch", "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
     };
     "app-core verify-pqchat-record" "AppCore::verify_pqchat_record" {chain: String, ua: String, name: String, record_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_pqchat_record(chain, ua, name, record_json, sig).await?);
-    "app-core sign-pqchat-card" "AppCore::sign_pqchat_card" {account: KeyRef, kem_version: u64, matrix_id: String} @sign => {
-        cx.confirm(json!({"sign": "a PqChat contact card", "account": account, "kemVersion": kem_version, "matrixId": matrix_id}))?; js(cx.app()?.sign_pqchat_card(account, kem_version, matrix_id).await?)
+    "app-core prepare-pqchat-card" "AppCore::prepare_pqchat_card" {account: KeyRef, kem_version: u64, matrix_id: String} @sign => {
+        let p = cx.app()?.prepare_pqchat_card(account.clone(), kem_version, matrix_id).await?;
+        cx.confirm(json!({"sign": "a PqChat contact card", "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
     };
     "app-core verify-pqchat-card" "AppCore::verify_pqchat_card" {chain: String, ua: String, card: PqChatCard, sig: AppUaSig} => named("valid", cx.app()?.verify_pqchat_card(chain, ua, card, sig).await?);
     "app-core pqchat-decode-payload" "AppCore::pqchat_decode_payload" {payload: Vec<u8>} => js(cx.app()?.pqchat_decode_payload(payload)?);
@@ -694,17 +717,61 @@ calls! { cx;
     "app-core pqchat-message-id" "AppCore::pqchat_message_id" {r: PqChatMessage} => named("messageId", cx.app()?.pqchat_message_id(r)?);
     "app-core pqchat-session-id" "AppCore::pqchat_session_id" {creator: String, nonce: u64} => named("sessionId", cx.app()?.pqchat_session_id(creator, nonce)?);
     "app-core pqchat-epoch-id" "AppCore::pqchat_epoch_id" {session_id: String, author: String, nonce: u64} => named("epochId", cx.app()?.pqchat_epoch_id(session_id, author, nonce)?);
-    "app-core sign-pqchat-session" "AppCore::sign_pqchat_session" {account: KeyRef, r: PqChatSession} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_session(account, r).await?) };
-    "app-core sign-pqchat-epoch" "AppCore::sign_pqchat_epoch" {account: KeyRef, r: PqChatEpoch} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_epoch(account, r).await?) };
-    "app-core sign-pqchat-leave" "AppCore::sign_pqchat_leave" {account: KeyRef, r: PqChatLeave} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_leave(account, r).await?) };
-    "app-core sign-pqchat-remove" "AppCore::sign_pqchat_remove" {account: KeyRef, r: PqChatRemove} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_remove(account, r).await?) };
-    "app-core sign-pqchat-message" "AppCore::sign_pqchat_message" {account: KeyRef, r: PqChatMessage} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_message(account, r).await?) };
-    "app-core sign-pqchat-topic" "AppCore::sign_pqchat_topic" {account: KeyRef, r: PqTopic} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic(account, r).await?) };
-    "app-core sign-pqchat-topic-update" "AppCore::sign_pqchat_topic_update" {account: KeyRef, r: PqTopicUpdate} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_update(account, r).await?) };
-    "app-core sign-pqchat-topic-writer" "AppCore::sign_pqchat_topic_writer" {account: KeyRef, r: PqTopicWriter} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_writer(account, r).await?) };
-    "app-core sign-pqchat-topic-entry" "AppCore::sign_pqchat_topic_entry" {account: KeyRef, r: PqTopicEntry} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_entry(account, r).await?) };
-    "app-core sign-pqchat-topic-edit" "AppCore::sign_pqchat_topic_edit" {account: KeyRef, r: PqTopicEdit} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_edit(account, r).await?) };
-    "app-core sign-pqchat-topic-vote" "AppCore::sign_pqchat_topic_vote" {account: KeyRef, r: PqTopicVote} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_vote(account, r).await?) };
+    "app-core prepare-pqchat-session" "AppCore::prepare_pqchat_session" {account: KeyRef, r: PqChatSession} @sign => {
+        let p = cx.app()?.prepare_pqchat_session(account.clone(), r).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
+    "app-core prepare-pqchat-epoch" "AppCore::prepare_pqchat_epoch" {account: KeyRef, r: PqChatEpoch} @sign => {
+        let p = cx.app()?.prepare_pqchat_epoch(account.clone(), r).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
+    "app-core prepare-pqchat-leave" "AppCore::prepare_pqchat_leave" {account: KeyRef, r: PqChatLeave} @sign => {
+        let p = cx.app()?.prepare_pqchat_leave(account.clone(), r).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
+    "app-core prepare-pqchat-remove" "AppCore::prepare_pqchat_remove" {account: KeyRef, r: PqChatRemove} @sign => {
+        let p = cx.app()?.prepare_pqchat_remove(account.clone(), r).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
+    "app-core prepare-pqchat-message" "AppCore::prepare_pqchat_message" {account: KeyRef, r: PqChatMessage} @sign => {
+        let p = cx.app()?.prepare_pqchat_message(account.clone(), r).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
+    "app-core prepare-pqchat-topic" "AppCore::prepare_pqchat_topic" {account: KeyRef, r: PqTopic} @sign => {
+        let p = cx.app()?.prepare_pqchat_topic(account.clone(), r).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
+    "app-core prepare-pqchat-topic-update" "AppCore::prepare_pqchat_topic_update" {account: KeyRef, r: PqTopicUpdate} @sign => {
+        let p = cx.app()?.prepare_pqchat_topic_update(account.clone(), r).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
+    "app-core prepare-pqchat-topic-writer" "AppCore::prepare_pqchat_topic_writer" {account: KeyRef, r: PqTopicWriter} @sign => {
+        let p = cx.app()?.prepare_pqchat_topic_writer(account.clone(), r).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
+    "app-core prepare-pqchat-topic-entry" "AppCore::prepare_pqchat_topic_entry" {account: KeyRef, r: PqTopicEntry} @sign => {
+        let p = cx.app()?.prepare_pqchat_topic_entry(account.clone(), r).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
+    "app-core prepare-pqchat-topic-edit" "AppCore::prepare_pqchat_topic_edit" {account: KeyRef, r: PqTopicEdit} @sign => {
+        let p = cx.app()?.prepare_pqchat_topic_edit(account.clone(), r).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
+    "app-core prepare-pqchat-topic-vote" "AppCore::prepare_pqchat_topic_vote" {account: KeyRef, r: PqTopicVote} @sign => {
+        let p = cx.app()?.prepare_pqchat_topic_vote(account.clone(), r).await?;
+        cx.confirm(json!({"sign": p.record, "account": account, "review": review(&p.review), "typed": p.typed}))?;
+        js(p.sign().await?)
+    };
 }
 
 /// A JSON text the SDK returned (a node's or a contract's answer), as JSON; text that is not JSON stays a string.

@@ -330,6 +330,23 @@ pub const MIGRATION_WARNING: &str =
     "The old ciphertexts stay on chain for ever, readable with the old seed (and the old \
      passphrase). Every secret listed must be changed at its service.";
 
+/// A record's member list (owner (M) 2026-11-23, CTR-CHAT-24): every `(ua, keyId)` the caller names, strictly ascending, a
+/// repeated one once; more than [`KEYS_PER_UA_MAX`] keys of one UA is `Shape` (the contract's refusal, before any SDK call).
+fn member_keys(given: &[MemberKey]) -> Result<Vec<MemberKey>> {
+    let mut m = given.to_vec();
+    m.sort_by_key(|k| (k.ua, k.key_id.0));
+    m.dedup_by_key(|k| (k.ua, k.key_id.0));
+    if m.windows(KEYS_PER_UA_MAX + 1)
+        .any(|w| w.first().map(|k| k.ua) == w.last().map(|k| k.ua))
+    {
+        return Err(Error::Shape);
+    }
+    Ok(m)
+}
+
+/// The keys one member UA may hold in an epoch (CTR-CHAT-24, the shared base's cap).
+pub const KEYS_PER_UA_MAX: usize = 8;
+
 fn nonce_of(b: &[u8]) -> u64 {
     // ponytail: 53 bits, so every JSON reader (clientkeys included) holds it exactly; a collision is a refused write
     let mut w = [0u8; 8];
@@ -992,9 +1009,7 @@ impl PqVault {
         let seed = self.p1(account).await?;
         pass.check_new()?;
         let me = self.ua(account)?;
-        let mut members = members.to_vec();
-        members.sort_by_key(|m| m.ua);
-        members.dedup_by_key(|m| m.ua);
+        let members = member_keys(members)?;
         if !members.iter().any(|m| m.ua == me) {
             return Err(Error::NotMember);
         }
@@ -1077,9 +1092,7 @@ impl PqVault {
         if let Some(p) = pass {
             p.check_new()?;
         }
-        let mut members = members.to_vec();
-        members.sort_by_key(|m| m.ua);
-        members.dedup_by_key(|m| m.ua);
+        let members = member_keys(members)?;
         let mut admins = admins.to_vec();
         admins.sort();
         admins.dedup();

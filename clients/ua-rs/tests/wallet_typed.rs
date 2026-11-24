@@ -1697,6 +1697,11 @@ fn erc7739_kat_and_expect() {
         native_ecdsa(&address, &mine.digest().unwrap(), &sig),
         "positive control"
     );
+    // review A2-8: the SCaaS entry signer refuses an ERC-7739 nest (an app's typed data), beside `Expect::Any`
+    assert_eq!(
+        scaas_ua::wallet::sign_scaas(&key, &mine, expect(b20(&m["wallet"]))).err(),
+        Some(Error::Argument)
+    );
     assert_eq!(
         key.sign_typed(&order, expect(b20(&m["wallet"]))).err(),
         Some(Error::PolicyRefused),

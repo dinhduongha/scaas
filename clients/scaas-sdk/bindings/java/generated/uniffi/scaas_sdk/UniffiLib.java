@@ -1955,6 +1955,15 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_fn_method_vault_accept_rollback
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_vault_accept_rollback = findDowncallHandle("uniffi_scaas_sdk_fn_method_vault_accept_rollback", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG));
+
+    static long uniffi_scaas_sdk_fn_method_vault_accept_rollback(long ptr) {
+        try {
+            return (long) MH_uniffi_scaas_sdk_fn_method_vault_accept_rollback.invokeExact(ptr);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_fn_method_vault_change_passphrase
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_vault_change_passphrase = findDowncallHandle("uniffi_scaas_sdk_fn_method_vault_change_passphrase", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG));
 
@@ -5255,6 +5264,15 @@ final class UniffiLib {
     static short uniffi_scaas_sdk_checksum_method_subscription_next() {
         try {
             return (short) MH_uniffi_scaas_sdk_checksum_method_subscription_next.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_method_vault_accept_rollback
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_vault_accept_rollback = findDowncallHandle("uniffi_scaas_sdk_checksum_method_vault_accept_rollback", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_method_vault_accept_rollback() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_method_vault_accept_rollback.invokeExact();
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 

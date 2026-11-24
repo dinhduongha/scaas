@@ -80,7 +80,7 @@ those fields (so they change only while the seed is unlocked); it binds `id`, `l
 Rows of a locked seed are **unverified**: shown with that mark, never used as a receive address or a destination
 (`AccountUnverified`). **Writers:** every read-modify-write runs under the store's lock and replaces the item only at the expected
 `rev` (`StoreConflict` after three tries); the replaced container is kept as `keystore.prev`; where a keychain exists a small anchor
-`{rev, sha256}` detects an older container put back (`KeystoreRollback`, shown, not fatal). The container is a file (or IndexedDB)
+`{rev, sha256}` detects an older container put back (`KeystoreRollback`, shown, not fatal; while it holds every keystore write is `KeystoreRollback` and writes nothing, until the user accepts the copy with `Vault::accept_rollback`, which rewrites the anchor over it: review T26 A-6, BUILT, UNAUDITED). The container is a file (or IndexedDB)
 through the app's `SecureStore`, whose small keychain items hold only the anchor and the platform unlock secret; it receives vault
 ciphertext and public fields only, and a failed write keeps the old item (`VaultIo`). clientkeys writes the container's vectors first
 (`smartcontracts/vectors/keystore/`); scaas-app's default build, which has no `ua-rs`, reads and writes the same container.
@@ -149,8 +149,7 @@ it only over its own preparation (`PreparedStale` otherwise; review 2026-11-20, 
 registry, collecting a `registerMsig` PoP slot from another device, and the local check of a slot's signatures (the registry
 checks them; PLANNED). PLANNED (review 2026-11-20, F26): SDK calls for the registry entries `setPqzKey` (a new PQZ key version),
 `setPqzScopedKey`, `storePqzScopedPop`, `registerMuSig2` and `registerFrost`; their rows exist in `ua-rs`
-(`wallet/entries/registry.rs`). PLANNED (F2): registry records read from a generation-2 registry, which answers a UA
-registered in its predecessor from there; it waits for the cross-generation rule of branch `multi-gen-verify`. On PqVault's dedicated path BUILT (controller call 2026-11-22, [CLI-PQV-15](../decisions.md#CLI-PQV-15) (8), UNAUDITED): a native member of an `msig` signs `UAAuth` in the domain of the generation that holds the `msig` (`holderOf`), a native signer in the profile's registry's own, each at its `generation()`; `verify_pqvault_record` reads the same; tested on a two-generation anvil (`clients/pqvault-core/tests/e2e.rs` `pqvault_records_on_a_two_generation_line`). The generic paths keep generation 1 only. **Sponsored registration** (owner 2026-11-17, "OK, all four points as proposed"): a payment to an unregistered derived UA is `ReceiverUnregistered`; the receiver's app makes its portable registration blob (the `register` arguments with the PoP, which binds no caller, and the KEM record when set), the sender's app checks it (the UA equals the intended receiver and its key data, the kind is enabled on the chain, the PoP verifies locally, the KEM record is present and verifies when `kemPkHash` is set) before anything is sent, submits it paying the gas, adds the KEM key by `setKemKey`, and pays only after the registration lands. BUILT (plan T13b; `clients/scaas-sdk/src/account/sponsor.rs`, clientkeys `registrationBlob` and `smartcontracts/vectors/ua/registration_blobs.json`, `tests/account_ops.rs`, the `sdk-e2e` sponsored registration then pay): `registration_blob` and `prepare_submit_registration` for the single-key entries (`register`, `registerWebAuthn`); a blob is the typed `RegistrationBlob` (`from_json` / `to_json`, the named-field JSON text), at most 768 KiB, the largest registration any parameter set allows with headroom (spec §7.1 gives the derivation), depth 4, so a registration carrying a PQZ key's proof fits one and is split by the sender as §7's; `prepare_submit_registration` takes the payer and returns `RegistryWrite` values; `wallet`'s `prepare_pay` answers `ReceiverUnregistered` for a derived UA the profile's registry does not hold, and for any derived UA on a profile naming no registry (fail closed); a registry write whose payer transaction fails to sign stays submittable (owner 2026-11-19, the four rulings recorded under CLI-SDK-30 in decisions.md).
+(`wallet/entries/registry.rs`). F2, registry records on a line of generations: BUILT (owner 2026-11-23; controller call (120) of CLI-SDK-33's T26 area A entry, UNAUDITED): every SDK registry read that chooses a domain, a signer set or a write target goes through one line reader (`line::read_line`: the bound registry's line walked and checked, every call by one endpoint at one block; a holder off the line, a broken line or a revert is an error, never a fallback): a record is read at the generation that holds it (`holderOf`), its PQZ attachment at its home; a native member of an `msig` signs `UAAuth` in the holder's domain, a native signer in the profile's registry's own, each at its generation; on the generic app-record entries, PqVault's and PqChat's paths, `msig` signing and writes, the write targets and `registration_of`; tested on a two-generation anvil (`clients/pqvault-core/tests/e2e.rs` `pqvault_records_on_a_two_generation_line`). A chain with `pinnedReads` false (Moonbeam, Moonbase) reads them by the sticky read (owner 2026-11-23, "Sticky endpoint", decisions CLI-SDK-33 (160), [scaas-rpc CLI-RPC-04](scaas-rpc.md#CLI-RPC-04); BUILT, `line::read_one`): every call of one read by one endpoint at its latest block, its head read before and after, a moved head retried at most 3 times, then `HeadMoving`; so signing and the `msig` writes work there, while a read that feeds a decryption (app-record verification) stays `PinnedReadsUntrusted`. **Sponsored registration** (owner 2026-11-17, "OK, all four points as proposed"): a payment to an unregistered derived UA is `ReceiverUnregistered`; the receiver's app makes its portable registration blob (the `register` arguments with the PoP, which binds no caller, and the KEM record when set), the sender's app checks it (the UA equals the intended receiver and its key data, the kind is enabled on the chain, the PoP verifies locally, the KEM record is present and verifies when `kemPkHash` is set) before anything is sent, submits it paying the gas, adds the KEM key by `setKemKey`, and pays only after the registration lands. BUILT (plan T13b; `clients/scaas-sdk/src/account/sponsor.rs`, clientkeys `registrationBlob` and `smartcontracts/vectors/ua/registration_blobs.json`, `tests/account_ops.rs`, the `sdk-e2e` sponsored registration then pay): `registration_blob` and `prepare_submit_registration` for the single-key entries (`register`, `registerWebAuthn`); a blob is the typed `RegistrationBlob` (`from_json` / `to_json`, the named-field JSON text), at most 768 KiB, the largest registration any parameter set allows with headroom (spec §7.1 gives the derivation), depth 4, so a registration carrying a PQZ key's proof fits one and is split by the sender as §7's; `prepare_submit_registration` takes the payer and returns `RegistryWrite` values; `wallet`'s `prepare_pay` answers `ReceiverUnregistered` for a derived UA the profile's registry does not hold, and for any derived UA on a profile naming no registry (fail closed); a registry write whose payer transaction fails to sign stays submittable (owner 2026-11-19, the four rulings recorded under CLI-SDK-30 in decisions.md).
 
 ## 5. Operations
 
@@ -331,7 +330,7 @@ and `pqchat-records`, `tests/app_core.rs` `no_app_core_below_the_sdk`; `app-core
 An app core (`pqchat-core`, `pqvault-core`, a third party's) depends on `scaas-sdk` with the feature `app-core` and on nothing
 below it that touches a key or a node; the SDK names no app core and holds no app logic, while the record types of SCaaS
 contracts (`PqChat`'s among them, behind the feature `pqchat-records`) are named, typed SDK entries as every SCaaS
-contract's are under [CLI-SDK-08](#CLI-SDK-08); `PqVault`'s records have two signing calls, `sign_pqvault_record` and
+contract's are under [CLI-SDK-08](#CLI-SDK-08); `PqVault`'s records have two signing calls, `prepare_pqvault_record` and
 `verify_pqvault_record`, and no other PqVault logic (owner 2026-11-22, [CLI-PQV-13](../decisions.md#CLI-PQV-13)). scaas-app's one
 library is `app-core-rust` (scaas-app's contract section 12), with the features `native-core` (on by default), `scaas`,
 `pqchat` and `pqvault` (each implying `scaas`); the SDK defines no aggregating crate.
@@ -364,14 +363,21 @@ purpose constant (the guard on the chain-bound path) and every domain of a SCaaS
 address, by chain), each refusal tested with a positive control and a mutant. Reads of ciphertexts the app core decrypts are decryption reads under
 [CLI-SDK-10](#CLI-SDK-10); writes are operations under [CLI-SDK-08](#CLI-SDK-08). Design: spec §12.
 
-Built additions (pqchat-core T1, 2026-11-21; BUILT, UNAUDITED): `read_app(chain, contract, entry, args, trusted)` reads a
+Built additions (pqchat-core T1, 2026-11-21; BUILT, UNAUDITED): `read_app(chain, contract, entry, args)` reads a
 `view` or `pure` entry of any contract by its JSON ABI item and named arguments at the profile's final block and answers
 named JSON (outputs and tuple components by name, integers as decimal strings, bytes and addresses as `0x` hex), bounded
 (entry 64 KiB, arguments 128 KiB, answer 1 MiB, output types nesting at most 16 levels: `Argument`), as a read that feeds a
-decryption when `trusted`; `read_app_agreed`, the same read as an agreed read (CLI-RPC-05) whatever the chain's list policy, an
-app core's explicit option (CTR-CHAT-23 (d), owner 2026-11-23; `src/app_core/agreed.rs`, BUILT on `pqchat-sigs`). PqChat's key entries (`pqchat_*`, feature `pqchat-records`) are thin calls of `ua-rs`
+decryption by default (`read_app`; `read_app_plain` for a read that never feeds one, T26 B-17); `read_app_agreed`, the same
+read as an agreed read (CLI-RPC-05) whatever the chain's list policy, an app core's explicit option, also a read that feeds a
+decryption (CTR-CHAT-23 (d), owner 2026-11-23; `src/app_core/agreed.rs`, BUILT on `pqchat-sigs`). PqChat's key entries
+(`pqchat_*`, feature `pqchat-records`) are thin calls of `ua-rs`
 `pqchat_keys` on the scope's handles, only in a scope that declared `scaas/pqchat/v1/` (`AppLabelRefused`); the signing ones
-take the sender, creator or author from the account and never a digest or a ciphertext of the caller's. The feature
+take the sender, creator or author from the account and never a digest or a ciphertext of the caller's. PqChat's record
+entries (`prepare_pqchat_*`, `prepare_pqchat_card`) also work only in that scope (T26 A-9); they take the record's signer field as
+given, and the contract refuses a record whose signer is not that field. Every PqChat signature but S5's is prepared, then
+signed (T26 A-5, decisions (125), (135)): `prepare_pqchat_*`, `prepare_pqchat_card`, `pqchat_prepare_session` / `_epoch`
+return the review and the typed digest (`PqChatPrepared`, `PqCardPrepared`), and nothing is signed until their `sign()`;
+`pqchat_seal_message` (S5) signs without a per-signature review (CLI-PQC-04). The feature
 `vectors` (bit 28) adds test-only entries (key bytes in and out, fixed randomness): a release build refuses it
 (`compile_error!`), `scripts/check_test_features.py` keeps it out of every shipped artifact and the bind-gen check out of
 every binding. It runs alone, in its own test (`--test pqchat_keys`): a `vectors` build of `ua-rs` refuses key handles until
@@ -383,16 +389,16 @@ wrap read from state, checked by the app core against `wrapHashes[i]` before it 
 an app core holds its plaintexts without a `scaas-ua` dependency of its own.
 Three more `vectors` entries are pqchat-core T11's hostile harness (2026-11-23; BUILT, UNAUDITED), each sealing what an
 honest client never seals: `pqchat_vectors_envelope` (the envelope of a record and a signature given apart, such as a
-record signed through the generic `sign_pqchat_message` by a UA other than its sender), `pqchat_vectors_seal_padded` (S5 from
+record signed through the generic `prepare_pqchat_message` by a UA other than its sender), `pqchat_vectors_seal_padded` (S5 from
 a given padded plaintext: a non-zero fill stays) and `pqchat_vectors_seal_info_raw` (a `sealedInfo` of a given plaintext,
 neither canonicalised nor padded); `tests/pqchat_keys.rs` `hostile_seals_for_the_e2e` reproduces the `envelope` and
 `sealedInfo` rows through them and shows K5 and the content check refuse the hostile forms.
-The signed contact card (UA-7 §14 O7, owner 2026-11-22; BUILT, UNAUDITED): `sign_pqchat_card(account, kem_version,
-matrix_id)` signs `PqChatCard(bytes32 ua, uint64 kemVersion, string matrixId)` in `DS_C` under `PURPOSE_PQCHAT`, the UA from
+The signed contact card (UA-7 §14 O7, owner 2026-11-22; BUILT, UNAUDITED): `prepare_pqchat_card(account, kem_version,
+matrix_id)`, then `sign()`, signs `PqChatCard(bytes32 ua, uint64 kemVersion, string matrixId)` in `DS_C` under `PURPOSE_PQCHAT`, the UA from
 the account, the Matrix id empty or well formed (`Argument`); `verify_pqchat_card(chain, ua, card, sig)` is V1's check of a
 card for `ua` (its `ua` that UA, its Matrix id well formed, the signature the UA's on the registry's records read at the final
 block as a read that feeds a decryption), `false` with no detail. Rows: `smartcontracts/vectors/pqchat/cards.json`.
-`sign_app_record` and `verify_app_record` refuse a scope of PqChat's app id `keccak256("scaas.pqchat.v1")` on both paths
+`prepare_app_record` and `verify_app_record` refuse a scope of PqChat's app id `keccak256("scaas.pqchat.v1")` on both paths
 (`AppPurposeRefused`: its `appPurpose` is in `ua-rs`'s generated SCaaS list, owner 2026-11-23; BUILT, UNAUDITED); PqChat's
 named entries, the card calls and `seal_for_arweave` under its scope still sign.
 `argon2id_passphrase` (PqVault V9, 2026-11-21; BUILT, UNAUDITED) is `argon2id` of a typed passphrase after RFC 8265's
@@ -401,10 +407,10 @@ a composed and a decomposed form of one passphrase give one key; the normalisati
 (`smartcontracts/vectors/pqvault/`) run through this surface only (BUILT, UNAUDITED; `tests/app_core_vault_rows.rs` under
 `vectors`, `tests/app_core_vault_records.rs` in the main suite: typed digests in both domains, both signing paths,
 the verification); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](ua-libraries.md#CLI-PQV-12) in decisions.md.
-PqVault's records are signed and verified by `sign_pqvault_record` and `verify_pqvault_record` (owner 2026-11-22,
+PqVault's records are signed and verified by `prepare_pqvault_record` and `verify_pqvault_record` (owner 2026-11-22,
 [CLI-PQV-13](../decisions.md#CLI-PQV-13); BUILT, UNAUDITED): thin calls of `ua-rs`'s `wallet::pqvault` with the generic
-calls' profile checks, accepting PqVault's domains `DS_V` / `DS_B` and its seven structs only; `sign_app_record` and
-`verify_app_record` refuse every PqVault record (its domain name, its app id, its purpose `P_V`). `sign_pqvault_record`
+calls' profile checks, accepting PqVault's domains `DS_V` / `DS_B` and its seven structs only; `prepare_app_record` and
+`verify_app_record` refuse every PqVault record (its domain name, its app id, its purpose `P_V`). `prepare_pqvault_record`
 signs as an `msig` too (`KeyRef::Msig`; owner 2026-11-22, [CLI-PQV-15](../decisions.md#CLI-PQV-15); BUILT, UNAUDITED):
 the `msig`'s records read as the generic `msig` path reads them, local key slots only, `ua-rs`'s `pqvault::sign_msig`;
 `AppSigned.members` carries the slots; an `msig` signer's records chain is the explicit `records` argument (required on the

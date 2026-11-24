@@ -12,7 +12,10 @@
 #[path = "common/fake_chain.rs"]
 mod fake_chain;
 
+#[path = "common/prepared.rs"]
+mod prepared;
 use fake_chain::{fake, keccak_hex, serve, Fake};
+use prepared::SignPrepared as _;
 use scaas_sdk::app_core::{AppCore, AppDesc, AppKeyUsage, AppPath, AppUaSig};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_keys::{PqMessageHeader, PqSessionNew};
@@ -633,7 +636,7 @@ async fn sealed_info_rows_and_s1() {
     let info = pq("messages")["sealedInfo"][0]["info"].clone();
     let k = a.pqchat_epoch_key(&seed).unwrap();
     let signed = a
-        .pqchat_sign_session(
+        .pqchat_prepare_session(
             ua(&seed, 0x0131),
             k.clone(),
             PqSessionNew {
@@ -655,6 +658,9 @@ async fn sealed_info_rows_and_s1() {
                 info_json: info.to_string(),
             },
         )
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap();
     let want: Vec<String> = sr["wrapHashes"].as_array().unwrap().iter().map(s).collect();
@@ -990,19 +996,13 @@ async fn read_app_agreed_is_the_agreed_read() {
         .to_string();
     answer(&chain, VIEW, "sigStore()", &[], w(2));
     let plain = a
-        .read_app(
-            "local".into(),
-            VIEW.into(),
-            entry.clone(),
-            "{}".into(),
-            true,
-        )
+        .read_app("local".into(), VIEW.into(), entry.clone(), "{}".into())
         .await
         .unwrap();
     assert_eq!(plain, json!({"0": "2"}).to_string());
     assert_eq!(
         code(
-            a.read_app_agreed("local".into(), VIEW.into(), entry, "{}".into(), true)
+            a.read_app_agreed("local".into(), VIEW.into(), entry, "{}".into())
                 .await
         ),
         "Argument"
@@ -1011,7 +1011,7 @@ async fn read_app_agreed_is_the_agreed_read() {
 
 /// Owner 2026-11-23 (T10b): under a scope of PqChat's own app id, the generic app signing is refused on both paths
 /// (`AppPurposeRefused`: PqChat's app purpose is a SCaaS purpose, `scaas-ua`'s generated list); the twins under another app
-/// id sign. PqChat's own paths are the named entries (`pqchat_sign_*`, the card, `seal_for_arweave`).
+/// id sign. PqChat's own paths are the named entries (`pqchat_prepare_*`, the card, `seal_for_arweave`).
 #[tokio::test(flavor = "multi_thread")]
 async fn generic_signing_refuses_pqchat_app_id() {
     let _one = ONE.lock().await;
@@ -1100,16 +1100,18 @@ async fn read_app_named_json() {
     answer(&chain, VIEW, "storedRange(bytes32)", &eid, out);
     let args = json!({"epochId": format!("0x{}", hexs(&eid))}).to_string();
     for trusted in [false, true] {
-        let got = a
-            .read_app(
-                "local".into(),
-                VIEW.into(),
-                entry.clone(),
-                args.clone(),
-                trusted,
-            )
-            .await
-            .unwrap();
+        let (c, v, e, x) = (
+            "local".to_string(),
+            VIEW.to_string(),
+            entry.clone(),
+            args.clone(),
+        );
+        let got = if trusted {
+            a.read_app(c, v, e, x).await
+        } else {
+            a.read_app_plain(c, v, e, x).await
+        }
+        .unwrap();
         let v: Value = serde_json::from_str(&got).unwrap();
         assert_eq!(
             v,
@@ -1130,14 +1132,14 @@ async fn read_app_named_json() {
     let bad = json!({"epoch": format!("0x{}", hexs(&eid))}).to_string();
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), entry.clone(), bad, false)
+            a.read_app_plain("local".into(), VIEW.into(), entry.clone(), bad)
                 .await
         ),
         "Argument"
     );
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), "{".into(), args.clone(), false)
+            a.read_app_plain("local".into(), VIEW.into(), "{".into(), args.clone())
                 .await
         ),
         "Argument"
@@ -1145,7 +1147,7 @@ async fn read_app_named_json() {
     let pay = entry.replace("\"view\"", "\"nonpayable\"");
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), pay, args.clone(), false)
+            a.read_app_plain("local".into(), VIEW.into(), pay, args.clone())
                 .await
         ),
         "Argument"
@@ -1161,27 +1163,15 @@ async fn read_app_named_json() {
         .to_string()
     };
     let at16 = a
-        .read_app(
-            "local".into(),
-            VIEW.into(),
-            deep_entry(16),
-            args.clone(),
-            false,
-        )
+        .read_app_plain("local".into(), VIEW.into(), deep_entry(16), args.clone())
         .await
         .unwrap();
     assert_eq!(at16.matches("\"x\":").count(), 17, "{at16}");
     assert!(at16.contains("\"x\":\"5\""), "{at16}");
     assert_eq!(
         code(
-            a.read_app(
-                "local".into(),
-                VIEW.into(),
-                deep_entry(17),
-                args.clone(),
-                false
-            )
-            .await
+            a.read_app_plain("local".into(), VIEW.into(), deep_entry(17), args.clone())
+                .await
         ),
         "Argument"
     );
@@ -1193,7 +1183,7 @@ async fn read_app_named_json() {
         .to_string()
     };
     let d16 = a
-        .read_app("local".into(), VIEW.into(), dims(16), args.clone(), false)
+        .read_app_plain("local".into(), VIEW.into(), dims(16), args.clone())
         .await
         .unwrap();
     assert_eq!(
@@ -1202,7 +1192,7 @@ async fn read_app_named_json() {
     );
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), dims(17), args, false)
+            a.read_app_plain("local".into(), VIEW.into(), dims(17), args)
                 .await
         ),
         "Argument"
@@ -1226,8 +1216,8 @@ fn bit_and_no_caller_ciphertext() {
     let mut seen = 0;
     for f in [
         "pqchat_seal_message",
-        "pqchat_sign_session",
-        "pqchat_sign_epoch",
+        "pqchat_prepare_session",
+        "pqchat_prepare_epoch",
     ] {
         let at = src.find(&format!("pub async fn {f}(")).unwrap();
         let sig = &src[at..at + src[at..].find('{').unwrap()];
@@ -1332,6 +1322,91 @@ async fn v1_msig_minimal_and_accepted() {
     );
 }
 
+/// TODO 8b-8 (4), CLI-PQC-15 on F2's line (CTR-UA-70): V1, the check behind a kept signature (`require_signed_records` and
+/// every `sstore2` home), reads the signer's record where the line says: `holderOf` on the bound registry (generation 2)
+/// names generation 1, whose record verifies, though the bound registry holds none; every call of it at one block. The
+/// controls: the holder the bound registry itself (no record there: false), a holder off the line (the read fails).
+#[tokio::test(flavor = "multi_thread")]
+async fn v1_follows_the_registry_line() {
+    let _one = ONE.lock().await;
+    let (sdk, _seed, chain) = on_fake().await;
+    let a = AppCore::new(sdk, desc(&[PQC])).unwrap();
+    let rec = pq("records");
+    let r = &rec["message"];
+    let x = rec["signers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["name"] == r["signer"])
+        .unwrap();
+    let (id, kind) = (a32(&x["ua"]), x["kind"].as_u64().unwrap() as u16);
+    const OLD: &str = "0x5ca00000000000000000000000000000000000a0";
+    let addr = |a: &str| format!("{:0>64}", a.trim_start_matches("0x"));
+    answer(&chain, REGISTRY, "generation()", &[], w(2));
+    answer(&chain, REGISTRY, "predecessor()", &[], addr(OLD));
+    let holder = |h: &str| {
+        answer(
+            &chain,
+            REGISTRY,
+            "holderOf(bytes32)",
+            &id,
+            format!("{}{}{}", addr(h), w(u64::from(kind)), w(0)),
+        )
+    };
+    holder(OLD);
+    let kd = unhex(&x["publicKey"]);
+    answer(
+        &chain,
+        OLD,
+        "registrationOf(bytes32)",
+        &id,
+        format!(
+            "{}{}{}{}{}{}{}",
+            w(u64::from(kind)),
+            w(0xa0),
+            w(0),
+            w(0),
+            w(0),
+            w(kd.len() as u64),
+            pad(&kd)
+        ),
+    );
+    let check = || {
+        a.verify_pqchat_record(
+            "local".into(),
+            s(&x["ua"]),
+            "PqChatMessage".into(),
+            r["record"].to_string(),
+            sig_of(&r["uaSig"]),
+        )
+    };
+    chain.lock().unwrap().requests.clear();
+    assert!(
+        check().await.unwrap(),
+        "the record at its holder, generation 1"
+    );
+    let blocks: std::collections::BTreeSet<String> = chain
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .filter(|q| q.contains("eth_call"))
+        .map(|q| {
+            let t = q.split("\"blockHash\":\"").nth(1).unwrap_or_default();
+            t.get(..66).unwrap_or(t).to_string()
+        })
+        .collect();
+    assert_eq!(blocks.len(), 1, "one block: {blocks:?}");
+    assert!(blocks.iter().all(|b| b.starts_with("0x")), "{blocks:?}");
+    holder(REGISTRY);
+    assert!(
+        !check().await.unwrap(),
+        "the bound registry holds no record"
+    );
+    holder("0x00000000000000000000000000000000000000ee");
+    assert!(check().await.is_err(), "a holder off the line");
+}
+
 /// The contact card (UA-7 §14 O7) on the fake registry: every card row verifies for its UA at the final block, each refused
 /// row is false beside its passing twin; the account signs its own card (its UA, the KEM version and Matrix id given, the
 /// row's typed digest), which verifies; a malformed Matrix id and a native key refused (`Argument`).
@@ -1399,7 +1474,10 @@ async fn cards_sign_and_verify() {
     let me = k.ua().unwrap();
     reg_answer(&chain, &me, 0x0131, &key_data);
     let signed = a
-        .sign_pqchat_card(ua(&seed, 0x0131), 1, "@alice:example.org".into())
+        .prepare_pqchat_card(ua(&seed, 0x0131), 1, "@alice:example.org".into())
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap();
     assert_eq!(
@@ -1430,8 +1508,13 @@ async fn cards_sign_and_verify() {
         .unwrap());
     assert_eq!(
         code(
-            a.sign_pqchat_card(ua(&seed, 0x0131), 1, "alice:example.org".into())
-                .await
+            async {
+                a.prepare_pqchat_card(ua(&seed, 0x0131), 1, "alice:example.org".into())
+                    .await?
+                    .sign()
+                    .await
+            }
+            .await
         ),
         "Argument"
     );
@@ -1441,7 +1524,15 @@ async fn cards_sign_and_verify() {
         index: 0,
     };
     assert_eq!(
-        code(a.sign_pqchat_card(native, 1, String::new()).await),
+        code(
+            async {
+                a.prepare_pqchat_card(native, 1, String::new())
+                    .await?
+                    .sign()
+                    .await
+            }
+            .await
+        ),
         "Argument"
     );
 }

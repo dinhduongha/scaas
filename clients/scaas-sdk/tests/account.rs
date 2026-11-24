@@ -697,6 +697,21 @@ fn holder_view(
     )
 }
 
+/// The line `gens` (newest first, the first the bound registry): each `generation()` and `predecessor()` (F2).
+fn line_views(gens: &[&str]) -> Vec<(String, String, String)> {
+    let mut v = vec![];
+    for (i, g) in gens.iter().enumerate() {
+        let p = gens.get(i + 1).copied().unwrap_or(ZERO);
+        v.push((
+            (*g).into(),
+            sel("generation()"),
+            format!("0x{}", n((gens.len() - i) as u64)),
+        ));
+        v.push(((*g).into(), sel("predecessor()"), format!("0x{}", word(p))));
+    }
+    v
+}
+
 fn kind_home_view(registry: &str, kind: u64, home: &str) -> (String, String, String) {
     (
         registry.into(),
@@ -732,10 +747,14 @@ async fn register_target_is_kindHome() {
 async fn key_write_target_is_holder() {
     let (ua, none) = (ua_of(0x11), ua_of(0x12));
     let f = line_fake(
-        vec![
-            holder_view(REGISTRY, &ua, REGISTRY, 0x0101, ZERO),
-            holder_view(REGISTRY, &none, ZERO, 0, ZERO),
-        ],
+        [
+            vec![
+                holder_view(REGISTRY, &ua, REGISTRY, 0x0101, ZERO),
+                holder_view(REGISTRY, &none, ZERO, 0, ZERO),
+            ],
+            line_views(&[REGISTRY]),
+        ]
+        .concat(),
         &[],
     );
     let s = open(MemoryStore::new(), &[serve(f).await]).await;
@@ -759,10 +778,14 @@ async fn pqz_write_target_is_home() {
     let (ua, homeless) = (ua_of(0x21), ua_of(0x22));
     let gen2 = "0x5ca00000000000000000000000000000000000b2";
     let f = line_fake(
-        vec![
-            holder_view(REGISTRY, &ua, GEN1, 0x0101, gen2),
-            holder_view(REGISTRY, &homeless, GEN1, 0x0101, ZERO),
-        ],
+        [
+            vec![
+                holder_view(REGISTRY, &ua, GEN1, 0x0101, gen2),
+                holder_view(REGISTRY, &homeless, GEN1, 0x0101, ZERO),
+            ],
+            line_views(&[REGISTRY, gen2, GEN1]),
+        ]
+        .concat(),
         &[],
     );
     let s = open(MemoryStore::new(), &[serve(f).await]).await;
@@ -785,7 +808,11 @@ async fn pqz_write_target_is_home() {
 async fn gen1_holder_read_through_gen2_registry() {
     let ua = ua_of(0x31);
     let f = line_fake(
-        vec![holder_view(REGISTRY, &ua, GEN1, 0x0132, REGISTRY)],
+        [
+            vec![holder_view(REGISTRY, &ua, GEN1, 0x0132, REGISTRY)],
+            line_views(&[REGISTRY, GEN1]),
+        ]
+        .concat(),
         &[],
     );
     let s = open(MemoryStore::new(), &[serve(f).await]).await;

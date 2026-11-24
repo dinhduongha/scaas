@@ -633,6 +633,9 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_subscription_next_blocking() != 19717) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_method_vault_accept_rollback_blocking() != 30181) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_method_vault_change_passphrase_blocking() != 7889) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
@@ -3241,6 +3244,12 @@ Vault::Vault(const Vault &other) : instance(0) {
 
 
 
+void Vault::accept_rollback_blocking(std::shared_ptr<CancelToken> cancel) {
+    uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_vault_accept_rollback_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterOptionalCancelToken::lower(cancel));
+}
 void Vault::change_passphrase_blocking(const std::string &seed, const std::shared_ptr<SecretBytes> &old, const std::shared_ptr<SecretBytes> &new_, std::shared_ptr<CancelToken> cancel) {
     uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_vault_change_passphrase_blocking,
@@ -9056,6 +9065,7 @@ PqzTransferMulti FfiConverterTypePqzTransferMulti::read(RustStream &stream) {
         FfiConverterString::read(stream),
         FfiConverterUInt64::read(stream),
         FfiConverterSequenceTypePqzLeg::read(stream),
+        FfiConverterUInt32::read(stream),
         FfiConverterString::read(stream),
         FfiConverterUInt64::read(stream),
         FfiConverterTypeEnvelope::read(stream)
@@ -9069,6 +9079,7 @@ void FfiConverterTypePqzTransferMulti::write(RustStream &stream, const PqzTransf
     FfiConverterString::write(stream, val.batch);
     FfiConverterUInt64::write(stream, val.key_version);
     FfiConverterSequenceTypePqzLeg::write(stream, val.legs);
+    FfiConverterUInt32::write(stream, val.decoys);
     FfiConverterString::write(stream, val.decoy_fee);
     FfiConverterUInt64::write(stream, val.valid_until_block);
     FfiConverterTypeEnvelope::write(stream, val.envelope);
@@ -9083,6 +9094,7 @@ uint64_t FfiConverterTypePqzTransferMulti::allocation_size(const PqzTransferMult
         FfiConverterString::allocation_size(val.batch) +
         FfiConverterUInt64::allocation_size(val.key_version) +
         FfiConverterSequenceTypePqzLeg::allocation_size(val.legs) +
+        FfiConverterUInt32::allocation_size(val.decoys) +
         FfiConverterString::allocation_size(val.decoy_fee) +
         FfiConverterUInt64::allocation_size(val.valid_until_block) +
         FfiConverterTypeEnvelope::allocation_size(val.envelope);
@@ -10613,7 +10625,8 @@ TokenBalance FfiConverterTypeTokenBalance::read(RustStream &stream) {
         FfiConverterString::read(stream),
         FfiConverterString::read(stream),
         FfiConverterUInt8::read(stream),
-        FfiConverterString::read(stream)
+        FfiConverterString::read(stream),
+        FfiConverterOptionalString::read(stream)
     };
 }
 
@@ -10622,6 +10635,7 @@ void FfiConverterTypeTokenBalance::write(RustStream &stream, const TokenBalance 
     FfiConverterString::write(stream, val.display);
     FfiConverterUInt8::write(stream, val.decimals);
     FfiConverterString::write(stream, val.amount);
+    FfiConverterOptionalString::write(stream, val.unknown);
 }
 
 uint64_t FfiConverterTypeTokenBalance::allocation_size(const TokenBalance &val) {
@@ -10630,7 +10644,8 @@ uint64_t FfiConverterTypeTokenBalance::allocation_size(const TokenBalance &val) 
         FfiConverterString::allocation_size(val.address) +
         FfiConverterString::allocation_size(val.display) +
         FfiConverterUInt8::allocation_size(val.decimals) +
-        FfiConverterString::allocation_size(val.amount);
+        FfiConverterString::allocation_size(val.amount) +
+        FfiConverterOptionalString::allocation_size(val.unknown);
     
 }
 
@@ -17556,6 +17571,12 @@ L1Fee FfiConverterL1Fee::read(RustStream &stream) {
     case 1:
         return L1Fee::kOpStack;
         
+    case 2:
+        return L1Fee::kInEstimate;
+        
+    case 3:
+        return L1Fee::kLinea;
+        
     default:
         throw std::runtime_error("No matching L1Fee variant");
     }
@@ -17566,6 +17587,14 @@ void FfiConverterL1Fee::write(RustStream &stream, const L1Fee &val) {
         
     case L1Fee::kOpStack:
         stream << static_cast<int32_t>(1);
+        break;
+        
+    case L1Fee::kInEstimate:
+        stream << static_cast<int32_t>(2);
+        break;
+        
+    case L1Fee::kLinea:
+        stream << static_cast<int32_t>(3);
         break;
         
     default:

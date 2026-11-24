@@ -352,10 +352,10 @@ async fn reg_setup(name: &str, block: u64, rows: Vec<crate::GasBase>) -> Reg {
         finality: Finality::Finalized,
         tx_gas_cap: Some(1 << 24),
         tokens: vec![],
-        gas: crate::GasRows {
+        gas: crate::op::gas::with_tx(crate::GasRows {
             base: rows,
             verify: vec![],
-        },
+        }),
         max_valid_secs: None,
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
@@ -552,6 +552,30 @@ async fn pq_registration_step_that_does_not_fit_refused() {
             .len(),
         2,
         "the control"
+    );
+}
+
+/// Review A2-9: a registry write whose every handle the caller dropped is pruned at the next preparation; the writes still
+/// held stay (twin).
+#[tokio::test(flavor = "multi_thread")]
+async fn dropped_registry_writes_are_pruned() {
+    let t = reg_setup(PQ, 150_000_000, reg_rows(300_000, 2_000_000)).await;
+    let n = || t.sdk.registry_writes.lock().unwrap().len();
+    let first = writes(&t.sdk, "local", &t.payer, t.ua, &t.args, None)
+        .await
+        .unwrap();
+    let kept = writes(&t.sdk, "local", &t.payer, t.ua, &t.args, None)
+        .await
+        .unwrap();
+    assert_eq!(n(), first.len() + kept.len(), "both held");
+    drop(first);
+    let third = writes(&t.sdk, "local", &t.payer, t.ua, &t.args, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        n(),
+        kept.len() + third.len(),
+        "the dropped ones pruned, the held ones kept"
     );
 }
 
@@ -817,7 +841,9 @@ fn registry_write_shapes() {
 /// The round's merge review A3 (§12, CTR-UA-65): a registry write goes where it belongs on the bound registry's line: a key
 /// write (`setKemKey`, `acceptMembership`, `updateMsig`) to the UA's holder, a PQZ write to its PQZ home (the holder where
 /// it has none), `registerMsig` to the bound registry, a registration of a kind the bound registry carries verify-only
-/// refused (`RegistrationVerifyOnly`); a UA no generation holds yet, or a registry without `holderOf`, the bound registry.
+/// refused (`RegistrationVerifyOnly`); a UA no generation holds yet the bound registry. F2 (review A-7): the line is read
+/// (generation 3 over 2 over 1); a holder or a home off it, a line that is not consecutive and a `holderOf` revert are errors,
+/// never the bound registry.
 #[tokio::test(flavor = "multi_thread")]
 async fn write_targets_follow_the_line() {
     const G1: &str = "0x5ca00000000000000000000000000000000000b1";
@@ -873,9 +899,19 @@ async fn write_targets_follow_the_line() {
         let pool = pool.clone();
         async move { crate::line::write_target(&pool, bound, entry, ua, kind).await }
     };
-    // control: no holderOf answer (a registry before the line): the bound registry
+    // control: the bound registry, a generation 1, holds the UA (the fake's default): the bound registry
     assert_eq!(t("setKemKey", None).await.unwrap(), bound);
     assert_eq!(t("storePqzPop", None).await.unwrap(), bound);
+    // the line: the bound registry generation 3 over G2 over G1
+    let gen = keccak_hex(b"generation()")[..10].to_string();
+    let pred = keccak_hex(b"predecessor()")[..10].to_string();
+    let word = |a: &str| format!("0x{:0>64}", a.trim_start_matches("0x"));
+    for (r, g, p) in [(REGISTRY, 3, G2), (G2, 2, G1), (G1, 1, "0x0")] {
+        let mut c = chain.lock().unwrap();
+        c.answers
+            .push((r.into(), gen.clone(), format!("0x{g:064x}")));
+        c.answers.push((r.into(), pred.clone(), word(p)));
+    }
     // holderOf(ua) = (G1, 0x0131, G2)
     let mut a = String::from("0x");
     a.push_str(&format!("{:0>64}", &G1[2..]));
@@ -896,6 +932,43 @@ async fn write_targets_follow_the_line() {
         assert_eq!(t(e, None).await.unwrap(), g2, "{e}: the PQZ home");
     }
     assert_eq!(t("registerMsig", None).await.unwrap(), bound);
+    // F2 (A-7): a home off the line, a holder off it, a broken line and a revert are errors, never the bound registry
+    let set_holder = |h: &str, home: &str| {
+        let mut c = chain.lock().unwrap();
+        c.answers.retain(|(_, d, _)| !d.starts_with(&sel));
+        c.answers.push((
+            REGISTRY.into(),
+            format!("{sel}{}", "07".repeat(32)),
+            format!("{}{:064x}{}", word(h), 0x0131, &word(home)[2..]),
+        ));
+    };
+    let off = "0x5ca00000000000000000000000000000000000b9";
+    set_holder(G1, off);
+    assert!(t("storePqzPop", None).await.is_err(), "a home off the line");
+    set_holder(off, G2);
+    assert!(t("setKemKey", None).await.is_err(), "a holder off the line");
+    set_holder(G1, G2);
+    assert_eq!(t("setKemKey", None).await.unwrap(), g1, "the control again");
+    let gen_of = |r: &str, g: u64| {
+        let mut c = chain.lock().unwrap();
+        c.answers.retain(|(x, d, _)| !(x == r && *d == gen));
+        c.answers
+            .push((r.into(), gen.clone(), format!("0x{g:064x}")));
+    };
+    gen_of(G2, 1);
+    assert!(
+        t("setKemKey", None).await.is_err(),
+        "a line that is not consecutive"
+    );
+    gen_of(G2, 2);
+    chain
+        .lock()
+        .unwrap()
+        .answers
+        .retain(|(_, d, _)| !d.starts_with(&sel));
+    chain.lock().unwrap().call_revert = true;
+    assert!(t("setKemKey", None).await.is_err(), "a holderOf revert");
+    chain.lock().unwrap().call_revert = false;
     // the bound registry its own kindHome (the fake's default): registered there; another home: refused
     assert_eq!(t("register", Some(0x0131)).await.unwrap(), bound);
     chain
@@ -922,7 +995,7 @@ fn registry_margin_on_the_data_dependent_parts_only() {
         per_item: None,
         line: Default::default(),
     };
-    let chain = crate::GasRows {
+    let chain = crate::op::gas::with_tx(crate::GasRows {
         base: vec![
             row("register", "ua-0x0131", 1_000_000, 100_000),
             row("register", "ua-0x0132", 2_000_000, 200_000),
@@ -930,7 +1003,7 @@ fn registry_margin_on_the_data_dependent_parts_only() {
             row("registerMsig", "msig", 500_000, 50_000),
         ],
         verify: vec![v(0x0131, 100_000), v(0x0102, 300_000), v(0x0135, 900_000)],
-    };
+    });
     let q = |rows: &[(&str, &str)], signers: &[u16]| {
         let rows: Vec<(String, String)> = rows
             .iter()

@@ -5,11 +5,16 @@
 //! `holder` and the PQZ attachment at `pqzHome`; never assume the bound registry holds the record. Every read goes through
 //! the chain's pool (the profile's RPC list under its policy, ARCH-POS-15); only the SDK reads the line (owner C6: no RPC in
 //! the `ua-*` libraries). UNAUDITED.
+use crate::op::sim;
 use crate::{Sdk, SdkError};
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, U256};
 use alloy::rpc::types::TransactionRequest;
 use alloy::sol_types::SolCall;
+use scaas_rpc::evm::EvmPool;
+use scaas_rpc::pool::{BlockChoice, ReadAt, ReadError};
+use scaas_rpc::{EndpointFailure, FailureKind, Purpose};
+use std::sync::Arc;
 
 /// The registry views the line reads (a private module: the generated call types stay out of the bindings' surface).
 mod abi {
@@ -18,6 +23,7 @@ mod abi {
         function kindHome(uint16 kind) external view returns (address);
         function kindEnabled(uint16 kind) external view returns (bool);
         function predecessor() external view returns (address);
+        function generation() external view returns (uint256);
         function uaCount(uint16 kind) external view returns (uint256);
         function uaPage(uint16 kind, uint256 start, uint256 n) external view returns (bytes32[]);
         function pqzKeyOf(bytes32 ua) external view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
@@ -58,21 +64,6 @@ impl UaLine {
     pub fn pqz_target(&self) -> Result<String, SdkError> {
         self.pqz_home.clone().ok_or(SdkError::PqzHomeNone)
     }
-}
-
-/// A read's failure as the SDK names it (the reason never carried: CLI-RPC-11).
-fn sim(e: scaas_rpc::evm::SimError) -> SdkError {
-    SdkError::Rpc(match e {
-        scaas_rpc::evm::SimError::Revert(_) => scaas_rpc::RpcError::Revert {
-            endpoint: 0,
-            data: vec![],
-            reason: String::new(),
-        },
-        scaas_rpc::evm::SimError::Transport(_) => scaas_rpc::RpcError::EndpointAllFailed {
-            last: None,
-            failover_revert: None,
-        },
-    })
 }
 
 fn addr(a: Address) -> String {
@@ -126,23 +117,26 @@ pub(crate) async fn register_target(
 /// (and a cache part) of a kind to `kindHome(kind)` ([`register_target`]: refused where that is another generation),
 /// `registerMsig` to the bound registry (every generation registers an `msig`), a key write (`setKemKey`,
 /// `acceptMembership`, `updateMsig`) to the UA's holder, a PQZ write (`storePqzPop`, `setPqzKey`, the scoped ones) to its PQZ
-/// home. A UA not registered yet (the second part of a registration, the KEM fill of one) and a registry without `holderOf`
-/// (an answer that does not decode, a revert) go to the bound registry, as before the line.
+/// home. A UA not registered yet (the second part of a registration, the KEM fill of one) goes to the bound registry. The
+/// holder comes from [`Line`] (F2, review A-7): one endpoint at one block; a holder or home off the line and a revert are the
+/// error, never a fallback.
 pub(crate) async fn write_target(
-    pool: &scaas_rpc::evm::EvmPool,
+    pool: &EvmPool,
     registry: Address,
     entry: &str,
     ua: [u8; 32],
     kind: Option<u16>,
 ) -> Result<Address, SdkError> {
     let line = || async {
-        match view(pool, registry, holderOfCall { ua: ua.into() }).await {
-            Ok(r) if r.holder != Address::ZERO => Ok(Some((r.holder, r.pqzHome))),
-            Ok(_)
-            | Err(SdkError::AbiMismatch)
-            | Err(SdkError::Rpc(scaas_rpc::RpcError::Revert { .. })) => Ok(None),
-            Err(e) => Err(e),
-        }
+        Ok::<_, SdkError>(
+            read_one(pool, BlockChoice::Latest, Purpose::Plain, |at| async move {
+                Line::read(pool, &at, registry)
+                    .await?
+                    .holder_of(pool, &at, ua)
+                    .await
+            })
+            .await?,
+        )
     };
     match entry {
         "register" | "registerWebAuthn" | "registerMuSig2" | "registerFrost"
@@ -150,30 +144,229 @@ pub(crate) async fn write_target(
             register_target(pool, registry, kind.ok_or(SdkError::Argument)?).await
         }
         "setKemKey" | "acceptMembership" | "updateMsig" => {
-            Ok(line().await?.map_or(registry, |(h, _)| h))
+            Ok(line().await?.map_or(registry, |(h, _, _)| h))
         }
-        "storePqzPop" | "setPqzKey" | "setPqzScopedKey" | "storePqzScopedPop" => Ok(line()
-            .await?
-            .map_or(registry, |(h, p)| if p == Address::ZERO { h } else { p })),
+        "storePqzPop" | "setPqzKey" | "setPqzScopedKey" | "storePqzScopedPop" => {
+            Ok(line().await?.map_or(registry, |(h, _, p)| p.unwrap_or(h)))
+        }
         _ => Ok(registry),
     }
 }
 
-/// The UA's line on the bound `registry`: one `holderOf(ua)` (§11.1); `UaUnregistered` where no generation holds it.
+/// The UA's line on the bound `registry`: its holder, kind and PQZ home by [`Line`] (§11.1);
+/// `UaUnregistered` where no generation holds it.
 pub(crate) async fn ua_line(
-    pool: &scaas_rpc::evm::EvmPool,
+    pool: &EvmPool,
     registry: Address,
     ua: [u8; 32],
 ) -> Result<UaLine, SdkError> {
-    let r = view(pool, registry, holderOfCall { ua: ua.into() }).await?;
-    if r.holder == Address::ZERO {
-        return Err(SdkError::UaUnregistered);
-    }
-    Ok(UaLine {
-        holder: addr(r.holder),
-        kind: r.kind,
-        pqz_home: (r.pqzHome != Address::ZERO).then(|| addr(r.pqzHome)),
+    let r = read_one(pool, BlockChoice::Latest, Purpose::Plain, |at| async move {
+        Line::read(pool, &at, registry)
+            .await?
+            .holder_of(pool, &at, ua)
+            .await
     })
+    .await?;
+    let (holder, kind, pqz_home) = r.ok_or(SdkError::UaUnregistered)?;
+    Ok(UaLine {
+        holder: addr(holder),
+        kind,
+        pqz_home: pqz_home.map(addr),
+    })
+}
+
+/// A read's block (the pinned read of CLI-RPC-05).
+pub(crate) type At = ReadAt<alloy::primitives::B256>;
+
+/// An answer endpoint `at` gave that no honest registry gives: that endpoint's failure (the read fails over, never guesses).
+pub(crate) fn malformed(at: &At, why: &str) -> ReadError {
+    ReadError::Failure(EndpointFailure::new(
+        at.endpoint,
+        FailureKind::AnswerMalformed,
+        why,
+    ))
+}
+
+/// `eth_call` of `sig(args…)` on `to` at the read's block.
+pub(crate) async fn call_at(
+    pool: &EvmPool,
+    at: &At,
+    to: Address,
+    sig: &str,
+    args: &[[u8; 32]],
+) -> Result<Vec<u8>, ReadError> {
+    let sel = scaas_ua::keccak256(sig.as_bytes());
+    let d = [sel.get(..4).unwrap_or_default(), &args.concat()].concat();
+    pool.call_at(at, to, d.into()).await.map(|b| b.to_vec())
+}
+
+/// One view call `c` on `to` at the read's block; an answer that does not decode is the endpoint's failure.
+async fn view_at<C: SolCall>(
+    pool: &EvmPool,
+    at: &At,
+    to: Address,
+    c: C,
+) -> Result<C::Return, ReadError> {
+    let out = pool.call_at(at, to, c.abi_encode().into()).await?;
+    C::abi_decode_returns(&out).map_err(|_| malformed(at, "a registry view that does not decode"))
+}
+
+/// F2 (owner 2026-11-23; CTR-UA-70, CTR-UA-72; folds in review A-7): the bound registry's line as one endpoint answers it at
+/// one block, oldest generation first (`gens[g - 1]` is generation `g`, the last the bound registry). Every SDK registry read
+/// goes through it ([`read_line`]): a record is read at its holder, a native key signs `UAAuth` in the holder's domain at the
+/// holder's generation, a key write goes to the holder; a holder off the line, a line that is not consecutive and a revert are
+/// the read's failure, never a fallback to the bound registry. UNAUDITED.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Line {
+    gens: Vec<Address>,
+}
+
+impl Line {
+    /// The walk from `bound` (`predecessor()`, at most [`MAX_GENERATION`]), each `generation()` one below its successor's and
+    /// generation 1's predecessor 0: anything else is the endpoint's failure.
+    pub(crate) async fn read(pool: &EvmPool, at: &At, bound: Address) -> Result<Line, ReadError> {
+        let mut gens = vec![bound];
+        let top = view_at(pool, at, bound, generationCall {}).await?;
+        let top = usize::try_from(top)
+            .ok()
+            .filter(|g| (1..=MAX_GENERATION).contains(g))
+            .ok_or_else(|| malformed(at, "a generation outside 1..=16"))?;
+        loop {
+            let last = *gens.last().ok_or(malformed(at, "empty line"))?;
+            let p = view_at(pool, at, last, predecessorCall {}).await?;
+            if gens.len() == top {
+                if p != Address::ZERO {
+                    return Err(malformed(at, "generation 1 with a predecessor"));
+                }
+                break;
+            }
+            if p == Address::ZERO || gens.contains(&p) {
+                return Err(malformed(at, "a line that is not consecutive"));
+            }
+            let g = view_at(pool, at, p, generationCall {}).await?;
+            if g != U256::from(top - gens.len()) {
+                return Err(malformed(at, "a line that is not consecutive"));
+            }
+            gens.push(p);
+        }
+        gens.reverse();
+        Ok(Line { gens })
+    }
+
+    /// The bound registry (the profile's).
+    pub(crate) fn bound(&self) -> Address {
+        self.gens.last().copied().unwrap_or_default()
+    }
+
+    /// `a`'s generation, `None` off the line.
+    pub(crate) fn generation(&self, a: Address) -> Option<u32> {
+        let i = self.gens.iter().position(|g| *g == a)?;
+        u32::try_from(i + 1).ok()
+    }
+
+    /// The generation holding `ua`'s record, its kind and its PQZ home (`None`: no home on the walk): one `holderOf(ua)` on the bound
+    /// registry; `None` where no generation holds it (a native-space id without a call). A holder or home off the line is the
+    /// endpoint's failure (A-7).
+    pub(crate) async fn holder_of(
+        &self,
+        pool: &EvmPool,
+        at: &At,
+        ua: [u8; 32],
+    ) -> Result<Option<(Address, u16, Option<Address>)>, ReadError> {
+        if scaas_ua::in_native_space(&ua) {
+            return Ok(None);
+        }
+        let r = view_at(pool, at, self.bound(), holderOfCall { ua: ua.into() }).await?;
+        if r.holder == Address::ZERO {
+            return Ok(None);
+        }
+        let on = |a: Address| self.generation(a).is_some();
+        if !on(r.holder) || (r.pqzHome != Address::ZERO && !on(r.pqzHome)) {
+            return Err(malformed(at, "a holder off the line"));
+        }
+        let home = (r.pqzHome != Address::ZERO).then_some(r.pqzHome);
+        Ok(Some((r.holder, r.kind, home)))
+    }
+
+    /// [`Line::holder_of`]'s holder.
+    pub(crate) async fn holder(
+        &self,
+        pool: &EvmPool,
+        at: &At,
+        ua: [u8; 32],
+    ) -> Result<Option<Address>, ReadError> {
+        Ok(self.holder_of(pool, at, ua).await?.map(|(h, _, _)| h))
+    }
+
+    /// The `UAAuth` domain a native key signs in for a record `holder` holds (CTR-UA-60: the bound registry hands the check
+    /// to the holder): the holder's own at its generation; `None` (a native signer, a native id, an unregistered one) the
+    /// bound registry's.
+    pub(crate) fn domain(
+        &self,
+        holder: Option<Address>,
+        chain_id: u64,
+        chain_uid: [u8; 32],
+    ) -> scaas_ua::Domain {
+        let at = holder
+            .filter(|h| self.generation(*h).is_some())
+            .unwrap_or(self.bound());
+        scaas_ua::Domain {
+            generation: self.generation(at).unwrap_or(1),
+            chain_id,
+            registry: at.into_array(),
+            chain_uid,
+        }
+    }
+}
+
+/// F2's reader: `f` over chain `chain`'s line (the profile's registry), every call of it by one endpoint at one block
+/// (`choice`; ARCH-POS-15: a logical read never mixes nodes or blocks, review A2-2), under `purpose`. `f` gets the pool, the
+/// block and the [`Line`] read at it; the answer is `f`'s with that line. `Argument` without a registry. On a chain whose RPC
+/// is not trusted on a pinned read (the profile's `pinnedReads` false) a read at the latest block is the sticky read
+/// ([`read_one`]); a read feeding a decryption or at another block is `PinnedReadsUntrusted` there.
+pub(crate) async fn read_line<T, F, Fut>(
+    sdk: &Sdk,
+    chain: &str,
+    choice: BlockChoice,
+    purpose: Purpose,
+    f: F,
+) -> Result<(T, Line), SdkError>
+where
+    T: Clone + PartialEq,
+    F: Fn(Arc<EvmPool>, At, Line) -> Fut,
+    Fut: std::future::Future<Output = Result<T, ReadError>>,
+{
+    let (bound, pool) = self::bound(sdk, chain)?;
+    let (f, p) = (&f, &pool);
+    Ok(read_one(&pool, choice, purpose, |at| async move {
+        let line = Line::read(p, &at, bound).await?;
+        let v = f(p.clone(), at, line.clone()).await?;
+        Ok((v, line))
+    })
+    .await?)
+}
+
+/// One logical read on `pool` (ARCH-POS-15; owner 2026-11-23, "Sticky endpoint"): pinned to one block by one endpoint
+/// ([`EvmPool::read_at_block`]) where the chain's pinned reads are trusted; else, at the latest block, the sticky read
+/// ([`EvmPool::read_sticky`]: one endpoint whose head did not move, a read feeding a decryption refused); another block
+/// choice there is `PinnedReadsUntrusted`.
+pub(crate) async fn read_one<T, F, Fut>(
+    pool: &EvmPool,
+    choice: BlockChoice,
+    purpose: Purpose,
+    f: F,
+) -> Result<T, scaas_rpc::RpcError>
+where
+    T: Clone + PartialEq,
+    F: Fn(At) -> Fut,
+    Fut: std::future::Future<Output = Result<T, ReadError>>,
+{
+    Ok(if pool.pinned_reads() || choice != BlockChoice::Latest {
+        pool.read_at_block(choice, purpose, f).await?
+    } else {
+        pool.read_sticky(purpose, f).await?
+    }
+    .value)
 }
 
 /// The decoy candidates (owner P19, §11.2 M5): the lists, oldest generation first, each `(ua, key hash)`, concatenated;
@@ -260,6 +453,34 @@ pub(crate) async fn decoy_candidates(
     Ok(distinct_by_key(&lists))
 }
 
+/// `ReceiverUnregistered` (spec §7.1, owner 2026-11-19 R3; T26 B2-9): `to` a derived UA (not a native id: its top 12 bytes
+/// not all zero) that no generation of the profile's line holds (one `holderOf(to)` on the bound registry by [`read_line`]:
+/// one endpoint, one block), or a profile naming no registry (fail closed); a native id passes. Every payment prepare calls
+/// it, in every build with `evm`.
+pub(crate) async fn receiver_registered(
+    sdk: &Sdk,
+    chain: &str,
+    to: &[u8; 32],
+) -> Result<(), SdkError> {
+    if to.get(..12).is_some_and(|h| h.iter().all(|b| *b == 0)) {
+        return Ok(());
+    }
+    let (profile, _, _) = crate::op::evm(sdk, chain)?;
+    if profile.registry.is_none() {
+        return Err(SdkError::ReceiverUnregistered);
+    }
+    let to = *to;
+    let (held, _) = read_line(
+        sdk,
+        chain,
+        BlockChoice::Latest,
+        Purpose::Plain,
+        |pool, at, line| async move { Ok(line.holder(&pool, &at, to).await?.is_some()) },
+    )
+    .await?;
+    held.then_some(()).ok_or(SdkError::ReceiverUnregistered)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::indexing_slicing)]
@@ -267,6 +488,13 @@ mod tests {
 
     fn w(b: u8) -> [u8; 32] {
         [b; 32]
+    }
+
+    /// Decision (161): a simulation's revert keeps the chain's reason (a refused write named its error nowhere before).
+    #[test]
+    fn a_simulated_revert_keeps_its_reason() {
+        let e = crate::op::sim(scaas_rpc::evm::SimError::Revert("UAPqzHolder(0x01)".into()));
+        assert!(format!("{e:?}").contains("UAPqzHolder(0x01)"), "{e:?}");
     }
 
     #[test]

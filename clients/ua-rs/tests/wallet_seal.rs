@@ -156,7 +156,11 @@ fn open_row(kk: &KemKeyPair, c: &SealedContainer, r: &Value) -> Result<Vec<u8>, 
     };
     let accepted_ref: Option<&scaas_ua::ua_portable::Accepted> =
         if acc.is_some() { Some(&accepted) } else { None };
-    kk.open_container(c, &e.get(), &members, accepted_ref)
+    // T26 A2-1: a row's `msigCurrent` (CTR-UA-44) through the bindings' parser
+    let cur = r.get("msigCurrent").map_or_else(Default::default, |x| {
+        scaas_ua::wallet::CurrentJson::from_json(x.to_string().as_bytes()).unwrap()
+    });
+    kk.open_container(c, &e.get(), &members, &|id| cur.lookup(id), accepted_ref)
         .map(|p| p.to_vec())
 }
 
@@ -551,7 +555,7 @@ fn seal_json_acceptance() {
         assert_eq!(got.err().map(|e| e.code()), want, "{}", r["id"]);
         n += 1;
     }
-    assert_eq!(n, 28);
+    assert_eq!(n, 32);
 }
 
 /// An `msig` member of an `msig` sender signs only by its own list: a signature of its own in its slot is `SealOpen` (clientkeys
@@ -596,12 +600,13 @@ fn msig_sender_without_accepted_refused() {
     let map = members_of(r);
     let members = move |id: [u8; 32]| map.get(&id).cloned();
     assert_eq!(
-        kk.open_container(&c, &e.get(), &members, None).err(),
+        kk.open_container(&c, &e.get(), &members, &|_| None, None)
+            .err(),
         Some(Error::ContainerSender)
     );
     let nobody = |_: [u8; 32], _: u16| false;
     assert_eq!(
-        kk.open_container(&c, &e.get(), &members, Some(&nobody))
+        kk.open_container(&c, &e.get(), &members, &|_| None, Some(&nobody))
             .err(),
         Some(Error::ContainerSender)
     );
@@ -618,12 +623,13 @@ fn single_key_sender_never_asks_accepted() {
     let members = |_: [u8; 32]| -> Option<(u16, Vec<u8>)> { panic!("members asked") };
     let accepted = |_: [u8; 32], _: u16| -> bool { panic!("accepted asked") };
     assert_eq!(
-        *kk.open_container(&c, &e.get(), &members, Some(&accepted))
+        *kk.open_container(&c, &e.get(), &members, &|_| None, Some(&accepted))
             .unwrap(),
         bytes(&r["pt"])
     );
     assert_eq!(
-        *kk.open_container(&c, &e.get(), &members, None).unwrap(),
+        *kk.open_container(&c, &e.get(), &members, &|_| None, None)
+            .unwrap(),
         bytes(&r["pt"])
     );
 }
@@ -644,7 +650,7 @@ fn approved_set_bounded() {
         sender: ExpectedSender::Set(&set),
         recipient: e.recipient,
     };
-    assert!(kk.open_container(&c, &ok, &none, None).is_ok()); // control: 64
+    assert!(kk.open_container(&c, &ok, &none, &|_| None, None).is_ok()); // control: 64
     set.push([2u8; 32]);
     let over = ContainerExpect {
         purpose: &e.purpose,
@@ -652,7 +658,7 @@ fn approved_set_bounded() {
         recipient: e.recipient,
     };
     assert_eq!(
-        kk.open_container(&c, &over, &none, None).err(),
+        kk.open_container(&c, &over, &none, &|_| None, None).err(),
         Some(Error::Argument)
     );
 }
@@ -792,6 +798,7 @@ fn release_link_round_trip() {
         &SealedContainer::from_json(c.to_json().as_bytes()).unwrap(),
         &expect,
         &none,
+        &|_| None,
         None,
         "",
     )
@@ -852,6 +859,7 @@ mod vectors {
             &container(&r["container"])?,
             &e.get(),
             &none,
+            &|_| None,
             None,
             "",
             opener_now(v, r),
@@ -1083,12 +1091,12 @@ mod vectors {
         let e = Expect::of(&r["expect"]);
         let none = |_: [u8; 32]| None;
         let now = opener_now(&v, r);
-        Wallet::vectors_from_link_at(s, &c, &e.get(), &none, None, "", now).unwrap();
+        Wallet::vectors_from_link_at(s, &c, &e.get(), &none, &|_| None, None, "", now).unwrap();
         assert_eq!(probe.decaps(&ct, &eph).err(), Some(Error::KeyRevoked));
         let s = session(&v, Some("00000000"));
         let probe = s.vectors_key();
         assert_eq!(
-            Wallet::vectors_from_link_at(s, &c, &e.get(), &none, None, "", now).err(),
+            Wallet::vectors_from_link_at(s, &c, &e.get(), &none, &|_| None, None, "", now).err(),
             Some(Error::SealOpen)
         );
         assert_eq!(probe.decaps(&ct, &eph).err(), Some(Error::KeyRevoked));

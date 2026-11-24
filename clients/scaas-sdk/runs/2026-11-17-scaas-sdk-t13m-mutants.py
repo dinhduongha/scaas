@@ -27,7 +27,7 @@ MUTANTS = [
      [(R, "super::msig::decode_structure(out).map(|kd| scaas_ua::keccak256(&kd) == h)", "{ let _ = (out, h); Some(true) }")],
      L + "update_msig_current"),
     ("M4: holds_pqz_key never read",
-     [(M, "holds_pqz_key: word(&key, 0).ok_or_else(bad)? != U256::ZERO,", "holds_pqz_key: word(&key, 0).ok_or_else(bad)?.is_zero() && false,")],
+     [(M, "holds_pqz_key: word(&key, 0).ok_or(SdkError::Argument)? != U256::ZERO,", "holds_pqz_key: word(&key, 0).ok_or(SdkError::Argument)?.is_zero() && false,")],
      L + "update_msig_current"),
 ]
 

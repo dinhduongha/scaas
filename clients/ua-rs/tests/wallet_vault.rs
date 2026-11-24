@@ -111,6 +111,7 @@ fn restore(
         c,
         &expect_of(&s, kk),
         &none,
+        &|_| None,
         None,
         current,
         rollback,
@@ -386,7 +387,7 @@ fn bip39_passphrase_absent_from_every_payload() {
     let c = w.backup_seal(&key, &[recipient_of(&kk)]).unwrap().remove(0);
     let s = [sender];
     let pt = kk
-        .open_container(&c, &expect_of(&s, &kk), &none, None)
+        .open_container(&c, &expect_of(&s, &kk), &none, &|_| None, None)
         .unwrap();
     let manifest = w.manifest().to_json();
     for n in &needles {
@@ -727,7 +728,7 @@ fn seal_json_restore_rows() {
             .unwrap()
             .kem_key(num(&o["version"]))
             .unwrap();
-        let got = Wallet::restore_backup(&ok, &c, &x, &none, None, None, None, "");
+        let got = Wallet::restore_backup(&ok, &c, &x, &none, &|_| None, None, None, None, "");
         let want = r["error"].as_str().unwrap_or("ok");
         assert_eq!(code(got), want, "{}", r["id"]);
     }
@@ -947,7 +948,7 @@ fn backup_whose_entropy_does_not_derive_sender_refused() {
     // the container itself opens (the check is after decryption, before install)
     let set = [ua];
     assert!(kk
-        .open_container(&c, &expect_of(&set, &kk), &none, None)
+        .open_container(&c, &expect_of(&set, &kk), &none, &|_| None, None)
         .is_ok());
     // a restore opens scaas/backup/v1 only
     let x = ContainerExpect {
@@ -957,7 +958,15 @@ fn backup_whose_entropy_does_not_derive_sender_refused() {
     };
     assert_eq!(
         code(Wallet::restore_backup(
-            &kk, &c, &x, &none, None, None, None, ""
+            &kk,
+            &c,
+            &x,
+            &none,
+            &|_| None,
+            None,
+            None,
+            None,
+            ""
         )),
         "Argument"
     );
@@ -983,7 +992,9 @@ fn link_installs_manifest_and_secrets() {
         sender: ExpectedSender::Ua(b32(&l["expect"]["sender"]["ua"])),
         recipient: session.recipient(),
     };
-    let w = Wallet::vectors_from_link_at(session, &c, &x, &none, None, "", num(&o["now"])).unwrap();
+    let w =
+        Wallet::vectors_from_link_at(session, &c, &x, &none, &|_| None, None, "", num(&o["now"]))
+            .unwrap();
     let payload: Value = serde_json::from_slice(&h(l["pt"].as_str().unwrap())).unwrap();
     let entries = arr(&payload["manifest"], "entries");
     assert_eq!(w.manifest().entries.len(), entries.len());

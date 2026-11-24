@@ -4,8 +4,8 @@ a saving operation on a row without save answers | killed | ../../scripts/capped
 the quote never saves | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops pay_with_paymeta_v3
 parse: save dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_extra_fields_parse
 parse: save not held to its measurement | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_extra_fields_parse
-sig_bytes not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee
-sig_bytes at 16 gas a byte | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee
+sig_bytes not added | killed | ede15d371 | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee | panicked at src/op/gas.rs:2306:9:
+sig_bytes at 16 gas a byte | killed | ede15d371 | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee | panicked at src/op/gas.rs:2306:9:
 parse: sig_bytes unbounded | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_extra_fields_parse
 parse: sig_bytes dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_extra_fields_parse
 reference: a sig_bytes away from its measurement | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources

@@ -5,7 +5,8 @@ package uniffi.scaas_sdk;
  */
 public class PayMeta {
     /**
-     * `0x` + 64 hex; `None`: 32 random bytes
+     * `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+     * the same pay lane, however its ids and amounts are spelt)
      */
     private java.lang.String salt;
     /**

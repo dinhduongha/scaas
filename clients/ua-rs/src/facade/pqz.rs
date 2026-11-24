@@ -391,7 +391,15 @@ const MAT: u8 = 1;
 /// `proveDiscloseSender`'s `legKeyRecords`: at most this many versions of the leg's owner, tried in order.
 const LEG_KEYS_MAX: usize = 64;
 /// The location fields every words command takes.
-const LOC: &[&str] = &["chainUid", "token", "block", "psid", "blobs", "keyRecord"];
+const LOC: &[&str] = &[
+    "chainUid",
+    "token",
+    "block",
+    "psid",
+    "blobs",
+    "keyRecord",
+    "pqzVerifyMode",
+];
 /// An account's words and a debit's caller fields (the facade sets opTag, the id, `auditorOn`, `salt`, `p`, `sendCounter`).
 const ACCT: &[&str] = &[
     "ua",
@@ -904,19 +912,34 @@ impl Blobs {
     }
 }
 
-/// The registered PQZ key of the holder whose registry word `pqzKey[ua]` is `record` (`ptr ‖ proven ‖ added`): proven, its
-/// code `0x00 ‖ pk` of this set's length (`PqzCore._keyPtr`). The caller compares it with the handle's key before any use.
-fn registered_key(record: &Word, blobs: &mut Blobs) -> Result<Vec<u8>> {
+/// The registered PQZ key of the holder whose registry word `pqzKey[ua]` is `record` (`ptr ‖ proven ‖ added`): usable as the
+/// token reads it (`PqzCore._usable`: proven, or the token's `pqzVerifyMode` is `OFFCHAIN`), its code `0x00 ‖ pk` of this
+/// set's length (`PqzCore._keyPtr`). The caller compares it with the handle's key before any use.
+fn registered_key(record: &Word, blobs: &mut Blobs, offchain: bool) -> Result<Vec<u8>> {
     only_low(record, 22)?;
     let (ptr, proven, added) = (
         lo_addr(record, 0)?,
         lo_u64(record, 20, 1)?,
         lo_u64(record, 21, 1)?,
     );
-    if proven != 1 || added > 1 {
+    if !(proven == 1 || proven == 0 && offchain) || added > 1 {
         return Err(Error::Argument);
     }
     pk(blobs.data(&ptr)?.to_vec())
+}
+
+/// The token's `pqzVerifyMode` as the caller read it from slot 0: `PRECOMPILE` 0 (also when absent), `OFFCHAIN` 1, else
+/// `Argument`.
+fn offchain(f: &Fields<'_>) -> Result<bool> {
+    match f
+        .has("pqzVerifyMode")
+        .then(|| f.u64("pqzVerifyMode"))
+        .transpose()?
+    {
+        None | Some(0) => Ok(false),
+        Some(1) => Ok(true),
+        _ => Err(Error::Argument),
+    }
 }
 
 /// `u ‖ v` (64-bit lanes) of a stored entry: the packed `u` at byte `u_off`, `v` at `v_off` of the data (`PqzCt.loadBlob`); an
@@ -1031,7 +1054,7 @@ fn own(f: &Fields<'_>, op7: bool, debit: bool) -> Result<(Word, Own)> {
     let id = system(&f.word("psid")?)?;
     let shield_in = if debit { f.u64("shieldIn")? } else { 0 };
     let mut blobs = Blobs::new(f)?;
-    let key = registered_key(&f.word("keyRecord")?, &mut blobs)?;
+    let key = registered_key(&f.word("keyRecord")?, &mut blobs, offchain(f)?)?;
     let stale = stale(f)?;
     let a = acct(&f.words("account")?, &f.word("sendCounterWord")?)?;
     let acc_words = f.words("accWords")?;
@@ -1703,7 +1726,7 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
         "auditRead" | "proveDisclose" => {
             let id = system(&f.word("psid")?)?;
             let mut blobs = Blobs::new(f)?;
-            let key = registered_key(&f.word("keyRecord")?, &mut blobs)?;
+            let key = registered_key(&f.word("keyRecord")?, &mut blobs, offchain(f)?)?;
             let e = entry(f, &mut blobs)?;
             blobs.done()?;
             let j = usize::try_from(f.u64("leg")?).map_err(|_| Error::Argument)?;
@@ -1760,14 +1783,14 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
             let mut blobs = Blobs::new(f)?;
             // `keyRecord` is `fromUA`'s (the handle's own: the sender), `legKeyRecords` the leg owner's versions (one is the
             // statement's `pk`), at most 64
-            let key = registered_key(&f.word("keyRecord")?, &mut blobs)?;
+            let key = registered_key(&f.word("keyRecord")?, &mut blobs, offchain(f)?)?;
             let records = f.words("legKeyRecords")?;
             if records.is_empty() || records.len() > LEG_KEYS_MAX {
                 return Err(Error::Argument);
             }
             let pk_ts = records
                 .iter()
-                .map(|r| registered_key(r, &mut blobs))
+                .map(|r| registered_key(r, &mut blobs, offchain(f)?))
                 .collect::<Result<Vec<_>>>()?;
             let e = entry(f, &mut blobs)?;
             blobs.done()?;
@@ -1793,7 +1816,7 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
         "openMemo" => {
             system(&f.word("psid")?)?;
             let mut blobs = Blobs::new(f)?;
-            let key = registered_key(&f.word("keyRecord")?, &mut blobs)?;
+            let key = registered_key(&f.word("keyRecord")?, &mut blobs, offchain(f)?)?;
             let e = entry(f, &mut blobs)?;
             blobs.done()?;
             let memo = f.bytes("memo")?;

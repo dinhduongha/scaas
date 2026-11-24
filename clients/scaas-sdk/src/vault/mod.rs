@@ -70,6 +70,26 @@ pub(crate) fn anchor(rev: u64, container: &[u8]) -> Result<Vec<u8>, SdkError> {
     Ok(a)
 }
 
+/// The anchor's verdict on the stored container `item` (parsed as `keystore`): below the anchor's `rev`, or another hash at
+/// the same `rev`, or none where an anchor exists.
+fn rolled_back(
+    item: &Option<StoredItem>,
+    keystore: &Keystore,
+    head: Option<StoredItem>,
+) -> Result<bool, SdkError> {
+    Ok(match head {
+        None => false,
+        Some(h) => match item {
+            None => true,
+            Some(i) => {
+                let head_rev = store::rev_of(&h.bytes);
+                keystore.rev < head_rev
+                    || (keystore.rev == head_rev && anchor(keystore.rev, &i.bytes)? != h.bytes)
+            }
+        },
+    })
+}
+
 /// The keystore item of one store, read and replaced under the rules of §6.3.
 pub(crate) struct KeystoreFile {
     store: Arc<dyn SecureStore>,
@@ -95,18 +115,20 @@ impl KeystoreFile {
             Some(i) => Keystore::parse(&i.bytes)?,
             None => Keystore::default(),
         };
-        let rollback = match self.get(HEAD).await? {
-            None => false,
-            Some(h) => match &item {
-                None => true,
-                Some(i) => {
-                    let head_rev = store::rev_of(&h.bytes);
-                    keystore.rev < head_rev
-                        || (keystore.rev == head_rev && anchor(keystore.rev, &i.bytes)? != h.bytes)
-                }
-            },
-        };
+        let rollback = rolled_back(&item, &keystore, self.get(HEAD).await?)?;
         Ok(Loaded { keystore, rollback })
+    }
+
+    /// Review A-6 (spec §6.3: the user accepts an older copy deliberately): the anchor rewritten over the stored container as
+    /// it is, under the store's lock, so it is no longer `KeystoreRollback` and writes resume. Nothing else changes.
+    pub(crate) async fn accept_rollback(&self) -> Result<(), SdkError> {
+        let _lock = self.store.lock(KEYSTORE.into()).await.map_err(io)?;
+        let Some(item) = self.get(KEYSTORE).await? else {
+            return Ok(());
+        };
+        let ks = Keystore::parse(&item.bytes)?;
+        let prev = self.get(HEAD).await?.map(|h| h.rev);
+        self.put(HEAD, prev, anchor(ks.rev, &item.bytes)?).await
     }
 
     /// Applies `change` to the stored container under the store's lock and writes it at `rev + 1`: the replaced bytes first
@@ -144,7 +166,13 @@ impl KeystoreFile {
             Some(i) => Keystore::parse(&i.bytes)?,
             None => Keystore::default(),
         };
+        // the change first: a writer's own refusal (an entry whose MAC fails, A-1, locks its seed) comes before the verdict
         change(&mut ks)?;
+        // review A-6: an older copy put back is never written over (the write would lower the anchor and erase the
+        // evidence) until the user accepts it (`Vault::accept_rollback`)
+        if rolled_back(&item, &ks, self.get(HEAD).await?)? {
+            return Err(SdkError::KeystoreRollback);
+        }
         ks.rev = ks.rev.checked_add(1).ok_or(SdkError::Argument)?;
         let text = ks.serialize()?.into_bytes();
         let head = anchor(ks.rev, &text)?;

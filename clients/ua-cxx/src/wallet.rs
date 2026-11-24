@@ -17,8 +17,8 @@ use ua::facade::{pqz as fpqz, zether as fzether};
 use ua::wallet as uw;
 use zeroize::Zeroize;
 
-/// The surface generation of this bridge, in step with the C ABI's `SCAAS_UA_ABI_VERSION` (6, ua-rs-sign T12).
-pub const ABI_VERSION: u32 = 6;
+/// The surface generation of this bridge, in step with the C ABI's `SCAAS_UA_ABI_VERSION` (6, ua-rs-sign T12; 7, T26 A2-1).
+pub const ABI_VERSION: u32 = 7;
 /// The PQZ facade's largest output (`SCAAS_UA_PQZ_OUT_MAX`): a proof is sized by this bound, never by a size query.
 pub const PQZ_OUT_MAX: usize = 1_052_672;
 const _: () = assert!(PQZ_OUT_MAX >= fpqz::OUT_MAX);
@@ -162,30 +162,35 @@ mod ffi {
             sender: &Key,
             recipients: &[Recipient],
         ) -> Result<Vec<String>>;
-        // `members_json` / `accepted_json`: "" = none / no lookup
+        // `members_json` / `accepted_json` / `current_json`: "" = none / no lookup / no msig updated
         fn wallet_restore_backup(
             kk: &KemKey,
             container_json: &str,
             expect_json: &str,
             members_json: &str,
             accepted_json: &str,
+            current_json: &str,
             bip39_passphrase: &mut [u8],
         ) -> Result<Box<Restored>>;
+        #[allow(clippy::too_many_arguments)]
         fn wallet_restore_backup_over(
             kk: &KemKey,
             container_json: &str,
             expect_json: &str,
             members_json: &str,
             accepted_json: &str,
+            current_json: &str,
             current: &Wallet,
             bip39_passphrase: &mut [u8],
         ) -> Result<Box<Restored>>;
+        #[allow(clippy::too_many_arguments)]
         fn wallet_restore_backup_rollback(
             kk: &KemKey,
             container_json: &str,
             expect_json: &str,
             members_json: &str,
             accepted_json: &str,
+            current_json: &str,
             current: &Wallet,
             bip39_passphrase: &mut [u8],
         ) -> Result<Box<Restored>>;
@@ -203,6 +208,7 @@ mod ffi {
             expect_json: &str,
             members_json: &str,
             accepted_json: &str,
+            current_json: &str,
             bip39_passphrase: &mut [u8],
         ) -> Result<Box<Wallet>>;
         fn wallet_zether_key(
@@ -304,6 +310,7 @@ mod ffi {
             expect_json: &str,
             members_json: &str,
             accepted_json: &str,
+            current_json: &str,
         ) -> Result<Vec<u8>>;
         fn link_session_new() -> Result<Box<LinkSession>>;
         fn link_session_kem_pk(s: &LinkSession) -> Result<Vec<u8>>;
@@ -519,14 +526,21 @@ fn key(k: KeyInner) -> Box<Key> {
     Box::new(Key(Arc::new(k), Live::new()))
 }
 
-/// The opener's three JSON inputs, as ua-c's: `expect_json` required, `members_json` "" = none, `accepted_json` "" = no lookup.
+/// The opener's four JSON inputs, as ua-c's: `expect_json` required, `members_json` "" = none, `accepted_json` "" = no lookup,
+/// `current_json` "" = no `msig` updated.
 struct Opening {
     expect: uw::ContainerExpectJson,
     members: uw::MembersJson,
     accepted: Option<uw::AcceptedJson>,
+    current: uw::CurrentJson,
 }
 impl Opening {
-    fn read(expect_json: &str, members_json: &str, accepted_json: &str) -> R<Opening> {
+    fn read(
+        expect_json: &str,
+        members_json: &str,
+        accepted_json: &str,
+        current_json: &str,
+    ) -> R<Opening> {
         let members = if members_json.is_empty() {
             uw::MembersJson::default()
         } else {
@@ -537,10 +551,16 @@ impl Opening {
         } else {
             Some(uw::AcceptedJson::from_json(accepted_json.as_bytes())?)
         };
+        let current = if current_json.is_empty() {
+            uw::CurrentJson::default()
+        } else {
+            uw::CurrentJson::from_json(current_json.as_bytes())?
+        };
         Ok(Opening {
             expect: uw::ContainerExpectJson::from_json(expect_json.as_bytes())?,
             members,
             accepted,
+            current,
         })
     }
     fn with<T>(
@@ -548,15 +568,18 @@ impl Opening {
         f: impl FnOnce(
             &uw::ContainerExpect,
             &ua::ua_portable::Members,
+            &ua::ua_portable::Current,
             Option<&ua::ua_portable::Accepted>,
         ) -> T,
     ) -> T {
         let members = |id: [u8; 32]| self.members.lookup(id);
+        let current = |id: [u8; 32]| self.current.lookup(id);
         let accepted =
             |id: [u8; 32], i: u16| self.accepted.as_ref().is_some_and(|a| a.accepted(id, i));
         f(
             &self.expect.get(),
             &members,
+            &current,
             self.accepted
                 .as_ref()
                 .map(|_| &accepted as &ua::ua_portable::Accepted),
@@ -741,6 +764,7 @@ fn restore(
     expect_json: &str,
     members_json: &str,
     accepted_json: &str,
+    current_json: &str,
     current: Option<&Wallet>,
     rollback: Option<uw::AllowRollback>,
     bip39_passphrase: &mut [u8],
@@ -748,11 +772,21 @@ fn restore(
     let r = guard(|| {
         let (c, o) = (
             container(container_json)?,
-            Opening::read(expect_json, members_json, accepted_json)?,
+            Opening::read(expect_json, members_json, accepted_json, current_json)?,
         );
         let pass = text(bip39_passphrase)?;
-        let w = o.with(|e, m, acc| {
-            uw::Wallet::restore_backup(&kk.0, &c, e, m, acc, current.map(|w| &w.0), rollback, pass)
+        let w = o.with(|e, m, x, acc| {
+            uw::Wallet::restore_backup(
+                &kk.0,
+                &c,
+                e,
+                m,
+                x,
+                acc,
+                current.map(|w| &w.0),
+                rollback,
+                pass,
+            )
         })?;
         Ok(Box::new(Restored(w)))
     });
@@ -765,6 +799,7 @@ fn wallet_restore_backup(
     expect_json: &str,
     members_json: &str,
     accepted_json: &str,
+    current_json: &str,
     bip39_passphrase: &mut [u8],
 ) -> R<Box<Restored>> {
     restore(
@@ -773,17 +808,20 @@ fn wallet_restore_backup(
         expect_json,
         members_json,
         accepted_json,
+        current_json,
         None,
         None,
         bip39_passphrase,
     )
 }
+#[allow(clippy::too_many_arguments)]
 fn wallet_restore_backup_over(
     kk: &KemKey,
     container_json: &str,
     expect_json: &str,
     members_json: &str,
     accepted_json: &str,
+    current_json: &str,
     current: &Wallet,
     bip39_passphrase: &mut [u8],
 ) -> R<Box<Restored>> {
@@ -793,17 +831,20 @@ fn wallet_restore_backup_over(
         expect_json,
         members_json,
         accepted_json,
+        current_json,
         Some(current),
         None,
         bip39_passphrase,
     )
 }
+#[allow(clippy::too_many_arguments)]
 fn wallet_restore_backup_rollback(
     kk: &KemKey,
     container_json: &str,
     expect_json: &str,
     members_json: &str,
     accepted_json: &str,
+    current_json: &str,
     current: &Wallet,
     bip39_passphrase: &mut [u8],
 ) -> R<Box<Restored>> {
@@ -814,6 +855,7 @@ fn wallet_restore_backup_rollback(
         expect_json,
         members_json,
         accepted_json,
+        current_json,
         Some(current),
         allow,
         bip39_passphrase,
@@ -847,12 +889,13 @@ fn wallet_from_link(
     expect_json: &str,
     members_json: &str,
     accepted_json: &str,
+    current_json: &str,
     bip39_passphrase: &mut [u8],
 ) -> R<Box<Wallet>> {
     let r = guard(|| {
         let (c, o) = (
             container(container_json)?,
-            Opening::read(expect_json, members_json, accepted_json)?,
+            Opening::read(expect_json, members_json, accepted_json, current_json)?,
         );
         let pass = text(bip39_passphrase)?;
         let taken =
@@ -860,7 +903,7 @@ fn wallet_from_link(
                 .map_err(|_| argument())?
                 .take()
                 .ok_or_else(|| UaErr("UAKeyRevoked".into()))?;
-        let w = o.with(|e, m, acc| uw::Wallet::from_link(taken, &c, e, m, acc, pass))?;
+        let w = o.with(|e, m, x, acc| uw::Wallet::from_link(taken, &c, e, m, x, acc, pass))?;
         Ok(Box::new(Wallet(w, Live::new())))
     });
     wipe(&mut [bip39_passphrase]);
@@ -1181,14 +1224,17 @@ fn open_container(
     expect_json: &str,
     members_json: &str,
     accepted_json: &str,
+    current_json: &str,
 ) -> R<Vec<u8>> {
     guard(|| {
         let (c, o) = (
             container(container_json)?,
-            Opening::read(expect_json, members_json, accepted_json)?,
+            Opening::read(expect_json, members_json, accepted_json, current_json)?,
         );
-        Ok(o.with(|e, m, acc| kk.0.open_container(&c, e, m, acc))?
-            .to_vec())
+        Ok(
+            o.with(|e, m, x, acc| kk.0.open_container(&c, e, m, x, acc))?
+                .to_vec(),
+        )
     })
 }
 fn link_session_new() -> R<Box<LinkSession>> {

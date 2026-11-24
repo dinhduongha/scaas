@@ -30,9 +30,20 @@ pub enum AgreedError {
 #[derive(Debug, Clone, PartialEq)]
 pub enum FamilyError {
     Failure(EndpointFailure),
-    Rpc { method: String, error: Value },
-    Graphql { errors: Value },
-    Status { status: u16, message: String },
+    Rpc {
+        method: String,
+        error: Value,
+    },
+    Graphql {
+        errors: Value,
+    },
+    Status {
+        status: u16,
+        message: String,
+    },
+    /// the caller's argument out of form, refused before any request: never an endpoint's failure, so a failover does not
+    /// blame every endpoint for it (T26 B2-12)
+    Argument(&'static str),
 }
 
 impl FamilyError {
@@ -65,6 +76,7 @@ impl std::fmt::Display for FamilyError {
                 )
             }
             FamilyError::Status { status, message } => write!(f, "HTTP {status}: {message}"),
+            FamilyError::Argument(what) => write!(f, "argument: {what}"),
         }
     }
 }

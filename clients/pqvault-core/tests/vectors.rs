@@ -10,10 +10,13 @@
     clippy::panic
 )]
 
+#[path = "../../scaas-sdk/tests/common/prepared.rs"]
+mod prepared;
 use pqvault_core::content;
 use pqvault_core::keys::{self, ItemAt};
 use pqvault_core::records::*;
 use pqvault_core::{Error, PqVault};
+use prepared::SignPrepared as _;
 use scaas_sdk::app_core::{AppCore, AppKey, AppKeyUsage, AppPath, SecretBytes};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::vault::{ImportWords, MemoryStore};
@@ -153,7 +156,9 @@ async fn records_ids_scopes_and_digests() {
         d["purpose"]["appId"].as_str().unwrap()
     );
     let mut n = 0;
-    for v in d["vaults"].as_array().unwrap() {
+    // every vault's records, then CTR-PQV-18's `createTreeKem` (groupMode 1 in mode 0; `verify` refuses it: tests/core.rs)
+    let tk = serde_json::json!({"mode": 0, "vaultId": d["createTreeKem"]["id"], "records": [d["createTreeKem"].clone()]});
+    for v in d["vaults"].as_array().unwrap().iter().chain([&tk]) {
         let mode = v["mode"].as_u64().unwrap();
         let dom = if mode == 0 {
             Domain::Portable
@@ -265,7 +270,7 @@ async fn records_ids_scopes_and_digests() {
             n += 1;
         }
     }
-    assert_eq!(n, 23);
+    assert_eq!(n, 24);
     let m = &d["modes"];
     let ids: Vec<B32> = m["sameCreatorNonce"]
         .as_array()

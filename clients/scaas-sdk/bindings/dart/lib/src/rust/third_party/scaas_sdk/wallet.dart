@@ -876,7 +876,8 @@ sealed class PayBody with _$PayBody {
 
 /// A pay's `PayMeta` v3 (CTR-MTX-26): committed to by the signed `entryRef` (`metaPayId`).
 class PayMeta {
-  /// `0x` + 64 hex; `None`: 32 random bytes
+  /// `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+  /// the same pay lane, however its ids and amounts are spelt)
   final String? salt;
 
   /// a UUIDv7 in its text form, or `0x` + 64 hex; `None`: no number
@@ -1343,19 +1344,28 @@ class TokenBalance {
   final String display;
   final int decimals;
 
-  /// the smallest unit, decimal
+  /// the smallest unit, decimal; empty when `unknown` is set
   final String amount;
+
+  /// set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+  /// `frozen`): the amount is unknown, never a false 0
+  final String? unknown;
 
   const TokenBalance({
     required this.address,
     required this.display,
     required this.decimals,
     required this.amount,
+    this.unknown,
   });
 
   @override
   int get hashCode =>
-      address.hashCode ^ display.hashCode ^ decimals.hashCode ^ amount.hashCode;
+      address.hashCode ^
+      display.hashCode ^
+      decimals.hashCode ^
+      amount.hashCode ^
+      unknown.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1365,7 +1375,8 @@ class TokenBalance {
           address == other.address &&
           display == other.display &&
           decimals == other.decimals &&
-          amount == other.amount;
+          amount == other.amount &&
+          unknown == other.unknown;
 }
 
 /// A token as the wallet shows it.

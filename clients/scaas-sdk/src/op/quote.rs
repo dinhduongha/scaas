@@ -16,6 +16,9 @@ use std::sync::Arc;
 /// The OP Stack `GasPriceOracle` predeploy and its `getL1Fee(bytes)` (plan T38).
 const GAS_PRICE_ORACLE: Address = address!("420000000000000000000000000000000000000f");
 const GET_L1_FEE: [u8; 4] = [0x49, 0x94, 0x8e, 0x0e];
+/// Arbitrum's `NodeInterface` (`0x…C8`) and its `gasEstimateL1Component(address,bool,bytes)` (T26 B2-1).
+const NODE_INTERFACE: Address = address!("00000000000000000000000000000000000000c8");
+const GAS_ESTIMATE_L1: [u8; 4] = [0x77, 0xd4, 0x88, 0xa2];
 
 /// The `msig` kind: an `msig` signer's verify row (spec §13.3).
 const MSIG: u16 = 0x0120;
@@ -134,8 +137,47 @@ pub(crate) async fn l1_fee(
     Ok(a.value)
 }
 
-/// `q`'s `max_cost` with the L1 data fee of its transaction to `to` with `value` and `data` (plan T38): `gas_limit × max fee`
-/// + [`l1_fee`] of the unsigned transaction, within the SDK's caps (`FeeAboveCap` counts it).
+/// The L1 component of a transaction to `to` with calldata `data` on an `InEstimate` chain (T26 B2-1): Arbitrum's
+/// `NodeInterface.gasEstimateL1Component(to, false, data)` (`0x…C8`, answered by `eth_call` only) read at one block, pinned by
+/// hash, its first word a `uint64` (else the endpoint's `AnswerMalformed`).
+pub(crate) async fn l1_gas(pool: &EvmPool, to: Address, data: &[u8]) -> Result<u64, SdkError> {
+    // gasEstimateL1Component(address,bool,bytes): to, false, the offset 96, the length, the bytes padded to a word
+    let mut call = GAS_ESTIMATE_L1.to_vec();
+    call.extend_from_slice(&[0u8; 12]);
+    call.extend_from_slice(to.as_slice());
+    call.extend_from_slice(&[0u8; 32]);
+    call.extend_from_slice(&U256::from(96).to_be_bytes::<32>());
+    call.extend_from_slice(&U256::from(data.len()).to_be_bytes::<32>());
+    call.extend_from_slice(data);
+    call.resize(call.len() + (32 - data.len() % 32) % 32, 0);
+    let call = Bytes::from(call);
+    let a = pool
+        .read_at_block(BlockChoice::Latest, Purpose::Plain, |at| {
+            let call = call.clone();
+            async move {
+                let r = pool.call_at(&at, NODE_INTERFACE, call).await?;
+                r.get(..32)
+                    .filter(|w| r.len() == 96 && w.iter().take(24).all(|b| *b == 0))
+                    .and_then(|w| w.get(24..))
+                    .and_then(|w| <[u8; 8]>::try_from(w).ok())
+                    .map(u64::from_be_bytes)
+                    .ok_or_else(|| {
+                        ReadError::Failure(EndpointFailure::new(
+                            at.endpoint,
+                            FailureKind::AnswerMalformed,
+                            "gasEstimateL1Component's answer is no (uint64, uint256, uint256)",
+                        ))
+                    })
+            }
+        })
+        .await?;
+    Ok(a.value)
+}
+
+/// `q` with the L1 cost of its transaction to `to` with `value` and `data` by the profile's model (plan T38; T26 B2-1):
+/// `InEstimate` sets the gas limit to `gas` plus [`l1_gas`] with the margin (a native send's estimate holds it already) and
+/// holds it to the chain's caps; `Linea` raises the fees to `linea_estimateGas`'s; then `max_cost` is `gas_limit × max fee`
+/// + [`l1_fee`] of the unsigned transaction (`OpStack`), within the SDK's caps (`FeeAboveCap` counts it).
 pub(crate) async fn with_l1(
     sdk: &Sdk,
     chain: &str,
@@ -145,6 +187,36 @@ pub(crate) async fn with_l1(
     data: &[u8],
 ) -> Result<(), SdkError> {
     let (profile, chain_id, pool) = evm(sdk, chain)?;
+    let estimated = q
+        .gas_from
+        .as_ref()
+        .is_some_and(|f| f.base == GasFrom::Estimate);
+    match profile.l1_fee {
+        Some(crate::L1Fee::InEstimate) if !estimated => {
+            let own = q.gas.unwrap_or(q.gas_limit).min(q.gas_limit);
+            let l1 = l1_gas(&pool, to, data).await?;
+            q.gas_limit = own.saturating_add(super::gas::with_margin(l1));
+            let block = pool.block_gas().await.map_err(sim)?;
+            above_caps(&profile, q.regular_gas, q.gas_limit, block.limit)?;
+        }
+        Some(crate::L1Fee::Linea) => {
+            let from: Address = q
+                .payer
+                .as_deref()
+                .and_then(|a| a.parse().ok())
+                .ok_or(SdkError::Argument)?;
+            let l = pool
+                .linea_fees(from, to, value, Bytes::from(data.to_vec()), Purpose::Plain)
+                .await?;
+            let up = |a: &str, b: u128| a.parse::<u128>().map(|a| a.max(b).to_string());
+            q.max_fee_per_gas =
+                up(&q.max_fee_per_gas, l.max_fee_per_gas).map_err(|_| SdkError::Argument)?;
+            q.max_priority_fee_per_gas =
+                up(&q.max_priority_fee_per_gas, l.max_priority_fee_per_gas)
+                    .map_err(|_| SdkError::Argument)?;
+        }
+        _ => {}
+    }
     let fee = q
         .max_fee_per_gas
         .parse::<u128>()
@@ -209,10 +281,9 @@ pub(crate) async fn self_relay(
         g
     } else if relayed {
         return Err(SdkError::GasUnquoted);
-    } else if data.is_empty() && pool.code(to).await.map_err(sim)?.is_empty() {
-        Figure::whole(21_000, GasSources::both(GasFrom::Estimate)) // a plain transfer to an account without code
     } else {
-        // the estimate with the value sent (T13b ruling 5): a payable path's cost, a non-payable target's revert
+        // the estimate with the value sent (T13b ruling 5): a payable path's cost, a non-payable target's revert; a plain
+        // transfer too (T26 B2-1: no figure in code; a chain whose estimate carries more, an L1 part or an account's creation)
         let g = pool
             .simulate_value(from, to, value, data.clone())
             .await
@@ -380,7 +451,12 @@ pub(crate) async fn signed_quote(
     let own_regular = own.as_ref().map_or(0, |f| f.regular);
     let (base, base_regular, gas_from) = match own {
         Some(f) if f.gas > q.gas_limit => (f.gas, f.regular.max(q_regular), Some(f.from)),
-        _ => (q.gas_limit, q_regular.max(own_regular), q.gas_from.clone()),
+        // the quote's own figure (`gas`): its gas limit less an L1 component (`InEstimate`), which `with_l1` adds again
+        _ => (
+            q.gas.unwrap_or(q.gas_limit).min(q.gas_limit),
+            q_regular.max(own_regular),
+            q.gas_from.clone(),
+        ),
     };
     let base_regular = base_regular.min(base);
     let counted = super::gas::counted_bytes(
@@ -392,7 +468,10 @@ pub(crate) async fn signed_quote(
         gas_from.as_ref(),
         unsigned,
     );
-    let gas = super::gas::signed_gas(base, counted, signed);
+    let per_byte = super::gas::tx_gas(&c.profile.gas, &c.profile.gas_opt_in, &sdk.gas_tables)
+        .ok_or(SdkError::GasUnquoted)?
+        .per_byte;
+    let gas = super::gas::signed_gas(base, counted, signed, per_byte);
     if gas > sdk.limits.max_gas {
         return Err(SdkError::SignedGasAboveCap);
     }

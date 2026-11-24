@@ -21,8 +21,11 @@ pub struct TokenBalance {
     pub address: String,
     pub display: String,
     pub decimals: u8,
-    /// the smallest unit, decimal
+    /// the smallest unit, decimal; empty when `unknown` is set
     pub amount: String,
+    /// set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+    /// `frozen`): the amount is unknown, never a false 0
+    pub unknown: Option<String>,
 }
 
 /// An account's balances at one block.
@@ -141,6 +144,7 @@ async fn evm_balances(sdk: &crate::Sdk, chain: &str, id: &str) -> Result<Balance
                 display: i.display,
                 decimals: i.decimals,
                 amount: v.to_string(),
+                unknown: None,
             })
             .collect(),
     })

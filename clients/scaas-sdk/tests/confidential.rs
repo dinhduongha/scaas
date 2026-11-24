@@ -715,7 +715,7 @@ async fn pairs_setup_verify(
         "mtxConfidentialTransferSingle",
         "mtxUnshield",
     ];
-    p.gas = scaas_sdk::GasRows {
+    p.gas = with_tx(scaas_sdk::GasRows {
         base: entries
             .iter()
             .flat_map(|e| {
@@ -744,7 +744,7 @@ async fn pairs_setup_verify(
                 per_item: None,
             })
             .collect(),
-    };
+    });
     let (s, seed) = sdk(p).await;
     let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
     let k2 = s.confidential().zether_key(seed.clone(), 1).await.unwrap();
@@ -1577,4 +1577,24 @@ async fn zether_decoy_list_at_kind_home() {
         reads_at(&c, G1) > 0 && reads_at(&c, REGISTRY) == 0,
         "the list's length read at the kind's home"
     );
+}
+
+/// `rows` with the transaction row at Ethereum's figures (T26 B2-1: the SDK carries no gas figure; a test's table does).
+fn with_tx(mut rows: scaas_sdk::GasRows) -> scaas_sdk::GasRows {
+    rows.base.push(scaas_sdk::GasBase {
+        entry: "transaction".into(),
+        kind: "evm".into(),
+        fresh: false,
+        gas: 21_000,
+        per_byte: Some(scaas_sdk::GasPerByte {
+            input: "calldata".into(),
+            gas: 64,
+        }),
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
+        regular: None,
+    });
+    rows
 }

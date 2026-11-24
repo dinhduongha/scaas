@@ -28,6 +28,16 @@ use std::sync::Arc;
 const ZERO20: &str = "0x0000000000000000000000000000000000000000";
 const ZERO32: &str = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
+/// The signer's UA kind enabled on the chain's profile, as `Op::prepare` checks it (owner 2026-11-22: `KindDisabled` before
+/// anything is read or signed; T26 B2-8).
+fn kind_gate(sdk: &Sdk, chain: &str, signer: &KeyRef) -> Result<(), SdkError> {
+    if let KeyRef::Ua { kind, .. } = signer {
+        let (profile, _, _) = evm(sdk, chain)?;
+        crate::op::ua_kind_enabled(&profile, *kind)?;
+    }
+    Ok(())
+}
+
 /// The DEX module.
 #[derive(Clone)]
 pub struct Dex {
@@ -502,6 +512,7 @@ impl Dex {
         self.sdk
             .spawn(async move {
                 no_group(&req.signer)?;
+                kind_gate(&sdk, &req.chain, &req.signer)?;
                 let dex = addr20(&req.dex.to_ascii_lowercase())?;
                 listed(&sdk, &req.chain, &dex)?;
                 let sell = addr20(&req.sell_token.to_ascii_lowercase())?;
@@ -591,13 +602,23 @@ impl Dex {
             .await
     }
 
-    /// Signs a prepared order under its check (the user confirmed its review): its hash, the order and the signature.
+    /// Signs a prepared order under its check (the user confirmed its review): its hash, the order and the signature. The
+    /// check's clock is the head's time read now, never the prepare's (T26 B2-8): an order held past its window is refused.
     pub async fn sign_order(&self, order: Arc<PreparedOrder>) -> Result<SignedOrder, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
+                kind_gate(&sdk, &order.chain, &order.signer)?;
+                let (_, _, pool) = evm(&sdk, &order.chain)?;
+                let (_, at) = head(&pool).await?;
+                let mut expect = order.expect.clone();
+                if let Expect::TradeOrder { now, .. } | Expect::LiquidityOrder { now, .. } =
+                    &mut expect
+                {
+                    *now = at;
+                }
                 let k = key_opened(&sdk, &order.signer).await?;
-                let s = crate::op::submit::sign_one(&sdk, &k, &order.td, &order.expect).await?;
+                let s = crate::op::submit::sign_one(&sdk, &k, &order.td, &expect).await?;
                 let o = match &order.body {
                     Some(b) => b.get("order").cloned().ok_or(SdkError::Internal)?,
                     None => canonical(&order.td)?,
@@ -640,6 +661,7 @@ impl Dex {
         self.sdk
             .spawn(async move {
                 no_group(&req.signer)?;
+                kind_gate(&sdk, &req.chain, &req.signer)?;
                 let dex = addr20(&req.dex.to_ascii_lowercase())?;
                 listed(&sdk, &req.chain, &dex)?;
                 let sell = addr20(&req.sell_token.to_ascii_lowercase())?;
@@ -849,6 +871,7 @@ impl Dex {
         self.sdk
             .spawn(async move {
                 no_group(&req.signer)?;
+                kind_gate(&sdk, &req.chain, &req.signer)?;
                 let dex = addr20(&req.dex.to_ascii_lowercase())?;
                 let entry = listed(&sdk, &req.chain, &dex)?;
                 if !entry.liquidity {

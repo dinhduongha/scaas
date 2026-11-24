@@ -335,6 +335,28 @@ contract PqVaultTypesTest is Test {
         }
     }
 
+    /// CTR-PQV-18: the vector's `createTreeKem` (groupMode 1, mode 0) hashes as the type string says, its id and blob as any
+    /// create record's; the record is refused by name (`test/pqvault/PqVaultGroupMode.t.sol`).
+    function test_createTreeKemVector() public view {
+        string memory p = ".createTreeKem";
+        IPqVault.PqVaultCreate memory v = _create(string.concat(p, ".record"));
+        assertEq(v.groupMode, 1);
+        assertEq(h.create(v, PqVaultTypes.DS_V), _b32(string.concat(p, ".typed")));
+        v.groupMode = 0;
+        assertTrue(h.create(v, PqVaultTypes.DS_V) != _b32(string.concat(p, ".typed")), "groupMode is in the digest");
+        v.groupMode = 1;
+        assertEq(
+            PqVaultTypes.vaultId(v.creator, v.nonce, v.mode, v.homeChain, v.homeVaultContract),
+            _b32(string.concat(p, ".id"))
+        );
+        assertEq(
+            keccak256(abi.encode(v, _sig(p))),
+            keccak256(vm.parseJsonBytes(rec, string.concat(p, ".blob"))),
+            "the stored blob"
+        );
+        assertEq(vm.parseJsonString(rec, string.concat(p, ".error")), "PqVaultModeUnsupported(1)");
+    }
+
     /// One change at a time moves the create digest: mode, home, passKdf, passSalt, a member's via.
     function test_oneFieldMovesTheDigest() public view {
         IPqVault.PqVaultCreate memory v = _create(".vaults[0].records[0].record");

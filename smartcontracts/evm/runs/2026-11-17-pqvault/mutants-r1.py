@@ -6,11 +6,17 @@ fails (rc != 0) with a test red. In the shape of runs/2026-11-10-ua-mtx-merge-3c
 Usage (from smartcontracts/evm): python3 runs/2026-11-17-pqvault/mutants-r1.py list | run <id> [<id> ...] | all
 Full output: runs/2026-11-17-pqvault/r1/mut-<id>.log (git-ignored); `mutant | tests that went red | rc` on stdout, copied into
 runs/2026-11-17-pqvault-summary.txt.
+A hung run (owner 2026-11-24, scripts/mutant_guard.py): past 3 x its unmutated baseline (at least 10 min, or `--timeout N`)
+its process group is killed and it reads `killed (timeout N s)`; the file is restored on every exit (SIGINT / SIGTERM too); a
+target file that differs from HEAD refuses the run.
 """
 import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "scripts"))
+import mutant_guard as guard  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EVM = os.path.dirname(os.path.dirname(HERE))
@@ -51,6 +57,7 @@ def red_tests(log):
 def run(mid):
     path, old, new, match = MUTANTS[mid]
     full = os.path.join(EVM, path)
+    guard.refuse_dirty([full], EVM)
     src = open(full).read()
     if src.count(old) != 1:
         raise SystemExit(f"{mid}: the mutated text occurs {src.count(old)} times in {path}")
@@ -60,20 +67,20 @@ def run(mid):
         mutated = mutated.replace(*CLOSE)
     os.makedirs(os.path.join(HERE, "r1"), exist_ok=True)
     logp = os.path.join(HERE, "r1", f"mut-{mid}.log")
+    env = {**os.environ, "FOUNDRY_TEST": "test/ua", "FOUNDRY_SCRIPT": "test/ua", "FOUNDRY_OUT": "out/mutants-pv",
+           "FOUNDRY_CACHE_PATH": "cache/mutants-pv"}
+    cmd = [CAPPED, FORGE, "test", "-j", "1", "--match-path", f"test/ua/{match}"]
+    lim, saved = guard.limit(cmd, cwd=EVM, env=env), {full: open(full, "rb").read()}
     try:
         open(full, "w").write(mutated)
-        env = {**os.environ, "FOUNDRY_TEST": "test/ua", "FOUNDRY_SCRIPT": "test/ua", "FOUNDRY_OUT": "out/mutants-pv",
-               "FOUNDRY_CACHE_PATH": "cache/mutants-pv"}
-        cmd = [CAPPED, FORGE, "test", "-j", "1", "--match-path", f"test/ua/{match}"]
         with open(logp, "w") as log:
-            rc = subprocess.call(cmd, cwd=EVM, env=env, stdout=log, stderr=subprocess.STDOUT)
+            r = guard.run(cmd, lim, cwd=EVM, env=env, stdout=log, stderr=subprocess.STDOUT)
     finally:
-        open(full, "w").write(src)
-    if open(full).read() != src:
-        raise SystemExit(f"{mid}: {path} not restored")
+        guard.restore(saved)
+    rc = r.returncode
     out = open(logp).read()
     red = red_tests(out)
-    note = ", ".join(red) if red else ("compile error" if "Compiler run failed" in out else "none")
+    note = guard.outcome(r, ", ".join(red) if red else ("compile error" if "Compiler run failed" in out else "none"))
     print(f"{mid} | {note} | {rc}", flush=True)
 
 

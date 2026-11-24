@@ -10,7 +10,8 @@ public enum FfiConverterTypeTokenBalance implements FfiConverterRustBuffer<Token
       FfiConverterString.INSTANCE.read(buf),
       FfiConverterString.INSTANCE.read(buf),
       FfiConverterByte.INSTANCE.read(buf),
-      FfiConverterString.INSTANCE.read(buf)
+      FfiConverterString.INSTANCE.read(buf),
+      FfiConverterOptionalString.INSTANCE.read(buf)
     );
   }
 
@@ -20,7 +21,8 @@ public enum FfiConverterTypeTokenBalance implements FfiConverterRustBuffer<Token
             FfiConverterString.INSTANCE.allocationSize(value.address()) +
             FfiConverterString.INSTANCE.allocationSize(value.display()) +
             FfiConverterByte.INSTANCE.allocationSize(value.decimals()) +
-            FfiConverterString.INSTANCE.allocationSize(value.amount())
+            FfiConverterString.INSTANCE.allocationSize(value.amount()) +
+            FfiConverterOptionalString.INSTANCE.allocationSize(value.unknown())
       );
   }
 
@@ -30,6 +32,7 @@ public enum FfiConverterTypeTokenBalance implements FfiConverterRustBuffer<Token
       FfiConverterString.INSTANCE.write(value.display(), buf);
       FfiConverterByte.INSTANCE.write(value.decimals(), buf);
       FfiConverterString.INSTANCE.write(value.amount(), buf);
+      FfiConverterOptionalString.INSTANCE.write(value.unknown(), buf);
   }
 }
 

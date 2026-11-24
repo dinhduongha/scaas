@@ -443,8 +443,9 @@ class PqzTransfer {
           envelope == other.envelope;
 }
 
-/// `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
-/// fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+/// `UAPqzTransfer` / `UAPqzTransferCompact`: the real `legs` and `decoys` legs of amount 0 the SDK draws from the registry
+/// line's `0x0142` lists, every leg's position shuffled (CTR-UA-29; their count one the set builds, 1, 2, 4 or 8),
+/// `decoy_fee` the per-leg fee (decimal; at least the token's `minDecoyFee`, the contract's check).
 class PqzTransferMulti {
   final KeyRef signer;
   final String chain;
@@ -452,6 +453,7 @@ class PqzTransferMulti {
   final String batch;
   final BigInt keyVersion;
   final List<PqzLeg> legs;
+  final int decoys;
   final String decoyFee;
   final BigInt validUntilBlock;
   final Envelope envelope;
@@ -463,6 +465,7 @@ class PqzTransferMulti {
     required this.batch,
     required this.keyVersion,
     required this.legs,
+    required this.decoys,
     required this.decoyFee,
     required this.validUntilBlock,
     required this.envelope,
@@ -476,6 +479,7 @@ class PqzTransferMulti {
       batch.hashCode ^
       keyVersion.hashCode ^
       legs.hashCode ^
+      decoys.hashCode ^
       decoyFee.hashCode ^
       validUntilBlock.hashCode ^
       envelope.hashCode;
@@ -491,6 +495,7 @@ class PqzTransferMulti {
           batch == other.batch &&
           keyVersion == other.keyVersion &&
           legs == other.legs &&
+          decoys == other.decoys &&
           decoyFee == other.decoyFee &&
           validUntilBlock == other.validUntilBlock &&
           envelope == other.envelope;

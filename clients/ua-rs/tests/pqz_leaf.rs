@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! P6h (3), CLI-SGN-52: [`Wallet::seal_pq_key`] (the key worker: the registry-class leaf `seed32` derived in the arena and sealed
+//! P6h (3), CLI-SGN-55: [`Wallet::seal_pq_key`] (the key worker: the registry-class leaf `seed32` derived in the arena and sealed
 //! as vault v2, label `pqz:registry:<account>:<index>:<version>`) and [`PqzKey::open_leaf`] (the Zether worker / `pqz-cli` side:
 //! the leaf alone into its own store, never the seed), against smartcontracts/vectors/ua/pqz_leaf.json (written by clientkeys
 //! scripts/pqz-leaf-vectors.mjs). Every refusal of `open_leaf` is `VaultOpen`, each beside its control. UNAUDITED.

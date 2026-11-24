@@ -88,6 +88,11 @@ struct T {
 /// the rows' wrapper listed, a factory that catalogues the rows' tokens and not `OUTSIDE`; `gateways` gateways, the first
 /// `dead` of them refusing connections.
 async fn setup(gateways: usize, dead: usize) -> T {
+    setup_with(gateways, dead, |_| {}).await
+}
+
+/// [`setup`] with the profile changed by `edit` before `Sdk::open` (T26 B2-8: a profile that disables a kind).
+async fn setup_with(gateways: usize, dead: usize, edit: impl FnOnce(&mut ChainProfile)) -> T {
     let v = load();
     let salt = v["ops"]["UABurn"]["domains"]["token"]["domain"]["salt"]
         .as_str()
@@ -142,7 +147,7 @@ async fn setup(gateways: usize, dead: usize) -> T {
             gws.push(endpoint(&serve(chain.clone()).await));
         }
     }
-    let profile = ChainProfile {
+    let mut profile = ChainProfile {
         key: "local".into(),
         family: Family::Evm,
         chain_id: Some(CHAIN_ID),
@@ -186,6 +191,7 @@ async fn setup(gateways: usize, dead: usize) -> T {
         disabled_kinds: vec![],
         family_params: None,
     };
+    edit(&mut profile);
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![profile],
         store: MemoryStore::new(),
@@ -675,6 +681,69 @@ async fn a_group_is_no_order_signer() {
     assert_eq!(
         code(dex.prepare_liquidity_order(liquidity(&t, DEX)).await),
         "Ok"
+    );
+}
+
+/// T26 B2-8: the DEX's own signing path holds `Op::prepare`'s two checks. A UA signer of a kind the profile disables is
+/// `KindDisabled` at the trade and liquidity prepares and at `cancel_all`, before anything is read or signed; `sign_order`
+/// checks the order's window against the head's time when it signs, not the prepare's. Controls: the same signer on a profile
+/// that does not disable its kind prepares; an order signed before its window ends signs.
+#[tokio::test(flavor = "multi_thread")]
+async fn dex_signing_holds_the_kind_gate_and_a_fresh_clock() {
+    let ua = |t: &T| {
+        let KeyRef::Imported { seed, .. } = t.signer.clone() else {
+            panic!()
+        };
+        KeyRef::Ua {
+            seed,
+            kind: 0x0131,
+            account: 0,
+            index: 0,
+        }
+    };
+    let t = setup_with(1, 0, |p| p.disabled_kinds = vec!["mldsa65".into()]).await;
+    let dex = t.sdk.dex();
+    let n = requests(&t);
+    let mut o = order(&t, TOKEN, DEX);
+    o.signer = ua(&t);
+    assert_eq!(code(dex.prepare_trade_order(o).await), "KindDisabled");
+    let mut l = liquidity(&t, DEX);
+    l.signer = ua(&t);
+    assert_eq!(code(dex.prepare_liquidity_order(l).await), "KindDisabled");
+    let c = CancelAll {
+        signer: ua(&t),
+        chain: "local".into(),
+        sell_token: TOKEN.into(),
+        dex: DEX.into(),
+        batch: "7".into(),
+        min_nonce: None,
+    };
+    assert_eq!(code(dex.cancel_all(c).await), "KindDisabled");
+    assert_eq!(requests(&t), n, "nothing read");
+    let t = setup(1, 0).await;
+    let mut o = order(&t, TOKEN, DEX);
+    o.signer = ua(&t);
+    assert_eq!(
+        code(t.sdk.dex().prepare_trade_order(o).await),
+        "Ok",
+        "control: the kind enabled"
+    );
+    // the clock: prepared while the window is open, signed after it closed on the chain
+    let dex = t.sdk.dex();
+    let p = dex
+        .prepare_trade_order(order(&t, TOKEN, DEX))
+        .await
+        .unwrap();
+    assert_eq!(
+        code(dex.sign_order(p.clone()).await),
+        "Ok",
+        "control: signed in its window"
+    );
+    t.chain.lock().unwrap().timestamp = 1_800_000_301;
+    assert_ne!(
+        code(dex.sign_order(p).await),
+        "Ok",
+        "signed after its window on the head's clock"
     );
 }
 

@@ -1404,6 +1404,11 @@ uint64_t uniffi_scaas_sdk_fn_clone_vault(uint64_t handle, RustCallStatus *_Nonnu
 void uniffi_scaas_sdk_fn_free_vault(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_VAULT_ACCEPT_ROLLBACK
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_VAULT_ACCEPT_ROLLBACK
+uint64_t uniffi_scaas_sdk_fn_method_vault_accept_rollback(uint64_t ptr
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_VAULT_CHANGE_PASSPHRASE
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_VAULT_CHANGE_PASSPHRASE
 uint64_t uniffi_scaas_sdk_fn_method_vault_change_passphrase(uint64_t ptr, RustBuffer seed, uint64_t old, uint64_t new
@@ -3458,6 +3463,12 @@ uint16_t uniffi_scaas_sdk_checksum_method_sdk_watch(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_SUBSCRIPTION_NEXT
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_SUBSCRIPTION_NEXT
 uint16_t uniffi_scaas_sdk_checksum_method_subscription_next(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_VAULT_ACCEPT_ROLLBACK
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_VAULT_ACCEPT_ROLLBACK
+uint16_t uniffi_scaas_sdk_checksum_method_vault_accept_rollback(void
     
 );
 #endif

@@ -20,6 +20,11 @@ abstract class ArcSeedBackup implements RustOpaqueInterface {}
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Vault>>
 abstract class Vault implements RustOpaqueInterface {
+  /// Accepts the stored keystore as it is after a `KeystoreRollback` (spec §6.3, review A-6): the user chose the older copy
+  /// deliberately; the anchor is rewritten over it and writes resume. While a rollback holds, every write of the keystore is
+  /// `KeystoreRollback` and changes nothing.
+  Future<void> acceptRollback();
+
   /// A new vault passphrase for every vault of the seed: the pin envelope re-wrapped, the data key kept (CLI-UAL-19), so the PRF
   /// envelope still opens. `VaultOpen` for a wrong old one, `VaultPassphraseWeak` for a new one under vault v1's rule.
   Future<void> changePassphrase({
@@ -41,7 +46,8 @@ abstract class Vault implements RustOpaqueInterface {
   /// [1, n)), `DerivationPassphraseShort`, `VaultPassphraseWeak`, `SeedExists`, `LabelTaken`.
   Future<NewSeed> deriveFromKey({required DeriveFromKey req});
 
-  /// Root (c)'s new seed set (spec §6.6). `OriginSignature` (the signatures differ, a wrong length, `r` / `s` / `v` out of
+  /// Root (c)'s new seed set (spec §6.6): the two signatures come from two requests to the wallet (one handle given for both is
+  /// `Argument`). `OriginSignature` (the signatures differ, a wrong length, `r` / `s` / `v` out of
   /// range, recovering to another address), `DerivationPassphraseShort`, `VaultPassphraseWeak`, `SeedExists`, `LabelTaken`.
   Future<NewSeed> deriveFromSignature({required DeriveFromSignature req});
 

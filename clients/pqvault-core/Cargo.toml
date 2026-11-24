@@ -29,6 +29,9 @@ alloy = { version = "~1.6", default-features = false, features = ["std", "sol-ty
 [dev-dependencies]
 # the tests' chain profiles name scaas-rpc's endpoint class and policy (never a dependency of the library: tests/deps.rs)
 scaas-rpc = { path = "../scaas-rpc", default-features = false }
+# tests/devices.rs: the repository seed's KEM keys at several versions (the registry's `kemKeyAt` answers); never in the
+# crate's normal graph (`depends_on_the_sdk_only`)
+scaas-ua = { path = "../ua-rs", default-features = false, features = ["wallet"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
 
 # the ML-KEM and Argon2id code crawls unoptimised: dependencies at opt-level 3, as the SDK

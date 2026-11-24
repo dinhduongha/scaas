@@ -112,7 +112,7 @@ public class WalletTests : IDisposable
     public void LoadRefusesWrongAbiOrFeatures()
     {
         UaLib.Load();
-        UaLib.AbiVersionHook = _ => 5;
+        UaLib.AbiVersionHook = _ => 6;
         UaLib.ResetLoad();
         try
         {
@@ -125,20 +125,20 @@ public class WalletTests : IDisposable
             UaLib.AbiVersionHook = v => v;
         }
         UaLib.Load();
-        // ua-rs-native (spec §10.2): a good build carries FeatureNativeNetworks; an older v6 library without it is refused
+        // ua-rs-native (spec §10.2): a good build carries FeatureNativeNetworks; a library without it is refused
         const ulong good = UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqz | UaLib.FeaturePqzSetN2304Kmax4096 | UaLib.FeatureNativeNetworks;
-        UaLib.CheckBuild(6, good);
-        UaLib.CheckBuild(6, UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeatureNativeNetworks);
-        foreach (var (abi, f) in new (uint, ulong)[] { (5, good), (7, good), (6, good & ~UaLib.FeatureWallet), (6, good & ~UaLib.FeaturePq), (6, good | 1UL << 13), (6, good & ~UaLib.FeatureNativeNetworks), (6, good | UaLib.FeatureVectors),
-                     (6, good | UaLib.FeaturePqzSetN2048Kmax1024), (6, UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqz),
-                     (6, UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqzSetN2304Kmax4096) })
+        UaLib.CheckBuild(7, good);
+        UaLib.CheckBuild(7, UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeatureNativeNetworks);
+        foreach (var (abi, f) in new (uint, ulong)[] { (6, good), (8, good), (7, good & ~UaLib.FeatureWallet), (7, good & ~UaLib.FeaturePq), (7, good | 1UL << 13), (7, good & ~UaLib.FeatureNativeNetworks), (7, good | UaLib.FeatureVectors),
+                     (7, good | UaLib.FeaturePqzSetN2048Kmax1024), (7, UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqz),
+                     (7, UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqzSetN2304Kmax4096) })
             Assert.Throws<LibraryMismatchException>(() => UaLib.CheckBuild(abi, f));
     }
 
     [Fact]
-    public void AbiVersionIs6AndFeatures()
+    public void AbiVersionIs7AndFeatures()
     {
-        Assert.Equal(6u, UaLib.AbiVersion());
+        Assert.Equal(7u, UaLib.AbiVersion());
         var f = UaLib.Features();
         Assert.True((f & UaLib.FeatureWallet) != 0 && (f & UaLib.FeaturePq) != 0 && (f & UaLib.FeatureExternal) == 0 && (f & UaLib.FeatureVectors) == 0);
         Assert.Equal("UAKindUnavailable", Code(() => UaLib.ExternalKeyNew("{\"kind\":257,\"keyData\":\"0x\"}")));
@@ -501,12 +501,12 @@ public class WalletTests : IDisposable
             if (Has(r, "link")) continue; // a fixed session exists under `vectors` only
             var kk = Opener(r);
             var c = Has(r, "restore") && r.GetProperty("restore").GetBoolean()
-                ? Code(() => Wallet.RestoreBackup(kk, J(r, "container")!, J(r, "expect")!, J(r, "members"), J(r, "accepted"))?.Dispose())
-                : Code(() => kk.OpenContainer(J(r, "container")!, J(r, "expect")!, J(r, "members"), J(r, "accepted")));
+                ? Code(() => Wallet.RestoreBackup(kk, J(r, "container")!, J(r, "expect")!, J(r, "members"), J(r, "accepted"), J(r, "msigCurrent"))?.Dispose())
+                : Code(() => kk.OpenContainer(J(r, "container")!, J(r, "expect")!, J(r, "members"), J(r, "accepted"), J(r, "msigCurrent")));
             Assert.Equal(Has(r, "error") && S(r, "error") != "" ? "UA" + S(r, "error") : "", c);
             n++;
         }
-        Assert.Equal(28, n);
+        Assert.Equal(32, n); // T26 A2-1: 28 -> 32 (four msigCurrent rows)
     }
 
     string UaOf(ushort kind, WalletKey k) => Hx(UA.DeriveUA(kind, k.KeyData()));
@@ -532,8 +532,8 @@ public class WalletTests : IDisposable
             var rollback = Has(r, "allowRollback") && r.GetProperty("allowRollback").GetBoolean();
             Wallet? got = null;
             var code = Code(() => got = rollback
-                ? Wallet.RestoreBackupRollback(Opener(r), J(r, "container")!, J(r, "expect")!, null, null, cur)
-                : Wallet.RestoreBackup(Opener(r), J(r, "container")!, J(r, "expect")!, null, null, cur));
+                ? Wallet.RestoreBackupRollback(Opener(r), J(r, "container")!, J(r, "expect")!, null, null, null, cur)
+                : Wallet.RestoreBackup(Opener(r), J(r, "container")!, J(r, "expect")!, null, null, null, cur));
             if (Has(r, "error") && S(r, "error") != "") Assert.Equal("UA" + S(r, "error"), code);
             else Assert.Equal(("", r.GetProperty("install").GetBoolean()), (code, got is not null));
             got?.Dispose();

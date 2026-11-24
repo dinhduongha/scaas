@@ -3,7 +3,10 @@
     scripts/capped python3 pqz-core/ffi/wallet-wasm/mutants.py
 A positive control (no change: the test passes), then one change at a time in the wrapper (lib.rs: the module rebuilt at
 n2304-kmax4096) or the loader / handle (clientkeys src), clientkeys' test/pqz-wallet-wasm.test.js at n2304-kmax4096 and
-n2048-kmax1024; each mutant must turn it red. The file is restored after each. Full output in target/mutants/*.log."""
+n2048-kmax1024; each mutant must turn it red. The file is restored after each. Full output in target/mutants/*.log.
+A hung build or test (owner 2026-11-24, scripts/mutant_guard.py): past 3 x the control's run of the same step (at least 10 min,
+or `--timeout N`) its process group is killed and a hung test reads `killed (timeout N s)`; the file is restored on every exit
+(SIGINT / SIGTERM too); a target file that differs from HEAD refuses the run."""
 
 import os
 import shutil
@@ -11,6 +14,9 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "scripts"))
+import mutant_guard as guard  # noqa: E402
+
 CK = os.path.normpath(os.path.join(HERE, "..", "..", "..", "clients", "clientkeys"))
 OUT, M = os.path.join(HERE, "target", "out"), os.path.join(HERE, "target", "mutants")
 SETS = ["n2304-kmax4096", "n2048-kmax1024"]
@@ -68,9 +74,16 @@ MUTANTS = [
 ]
 
 
+LIM, HUNG = {}, []
+
+
 def sh(cmd, log, **kw):
     with open(log, "a") as f:
-        return subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, **kw).returncode
+        r = guard.run(cmd, LIM.get(cmd[0], guard.TIMEOUT), stdout=f, stderr=subprocess.STDOUT, **kw)
+    LIM.setdefault(cmd[0], guard.deadline(r.seconds))  # the control's run of each step sets its deadline
+    if r.timeout:
+        HUNG.append(guard.outcome(r, ""))
+    return r.returncode
 
 
 def build(log):
@@ -83,6 +96,7 @@ def test(log):
 
 
 def main():
+    guard.refuse_dirty([LIB, LOADER, HANDLE], HERE)
     os.makedirs(M, exist_ok=True)
     for s in SETS:
         for f in (f"pqz_wallet_{s}.wasm", f"cases-{s}.json"):
@@ -101,12 +115,14 @@ def main():
             return 1
         log = os.path.join(M, f"mutant-{i}.log")
         open(log, "w").close()
+        saved = {path: open(path, "rb").read()}
+        HUNG.clear()
         try:
             open(path, "w").write(src.replace(old, new))
             rb = build(log) if path == LIB else 0
             rc = test(log) if rb == 0 else None
         finally:
-            open(path, "w").write(src)
+            guard.restore(saved)
             if path == LIB:  # the unchanged module again before the next mutant
                 rr = build(os.path.join(M, f"restore-{i}.log"))
                 if rr:
@@ -115,7 +131,9 @@ def main():
         # a mutant that does not build is no kill: it must build and turn the test red
         ok = rb == 0 and rc != 0
         killed += ok
-        print(f"{name}: build rc={rb}, test rc={rc}: {'killed' if ok else 'SURVIVED'}", flush=True)
+        print(
+            f"{name}: build rc={rb}, test rc={rc}: {(HUNG[-1] if HUNG else 'killed') if ok else 'SURVIVED'}", flush=True
+        )
     rc = test(os.path.join(M, "control-after.log"))  # the control again on the restored tree
     print(f"mutants killed {killed}/{len(MUTANTS)}; control after: rc={rc}")
     return 0 if killed == len(MUTANTS) and rc == 0 else 1

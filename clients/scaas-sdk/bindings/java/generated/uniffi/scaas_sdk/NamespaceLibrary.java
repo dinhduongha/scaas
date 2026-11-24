@@ -679,6 +679,9 @@ final class NamespaceLibrary {
         if (UniffiLib.uniffi_scaas_sdk_checksum_method_subscription_next() != ((short) 46941)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
+        if (UniffiLib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback() != ((short) 51021)) {
+            throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+        }
         if (UniffiLib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != ((short) 63580)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }

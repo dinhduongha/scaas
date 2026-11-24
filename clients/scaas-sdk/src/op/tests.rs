@@ -228,7 +228,7 @@ fn gas_rows(g: u64) -> crate::GasRows {
             per_item: None,
         })
         .to_vec();
-    crate::GasRows { base, verify }
+    crate::op::gas::with_tx(crate::GasRows { base, verify })
 }
 
 fn ua() -> String {
@@ -537,6 +537,77 @@ async fn fee_zero_is_kept() {
             || row.op_json.to_string().contains("\"fee\":0"),
         "{}",
         row.op_json
+    );
+}
+
+/// T26 B2-1: on an `InEstimate` chain (Arbitrum) a table-quoted self-relay's gas limit is its figure (`gas`) plus
+/// `NodeInterface.gasEstimateL1Component` over its calldata, with the margin, and `max_cost` counts it; without the model no
+/// read and the gas limit is the figure (the control).
+#[tokio::test(flavor = "multi_thread")]
+async fn in_estimate_adds_the_l1_component() {
+    for model in [None, Some(crate::L1Fee::InEstimate)] {
+        let t = setup(0, |pr, _| pr.l1_fee = model).await;
+        t.chain.lock().unwrap().answers.push((
+            "0x00000000000000000000000000000000000000c8".into(),
+            "0x77d488a2".into(),
+            format!("0x{:064x}{:064x}{:064x}", 7_000, 1, 1),
+        ));
+        let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+        let path = SubmitPath::SelfRelay { payer: payer(&t) };
+        let q = t.sdk.op().quote(p.clone(), path).await.unwrap();
+        let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+        let own = gas::with_margin(100_000 + 21_000 + 64 * len);
+        assert_eq!(q.gas, Some(own), "{model:?}");
+        let l1 = model.map_or(0, |_| gas::with_margin(7_000));
+        assert_eq!(q.gas_limit, own + l1, "{model:?}");
+        let fee: u128 = q.max_fee_per_gas.parse().unwrap();
+        assert_eq!(q.max_cost, (u128::from(q.gas_limit) * fee).to_string());
+        let reads = t
+            .chain
+            .lock()
+            .unwrap()
+            .requests
+            .iter()
+            .filter(|r| r.contains("0x77d488a2"))
+            .count();
+        assert_eq!(reads > 0, model.is_some(), "{model:?}");
+    }
+}
+
+/// T26 B2-1: the transaction's own gas is table data: a profile whose tables carry no transaction row quotes nothing
+/// (`GasUnquoted`; a gateway quote `gas: None`), the control with it quotes.
+#[tokio::test(flavor = "multi_thread")]
+async fn no_transaction_row_no_figure() {
+    let t = setup(0, |pr, _| pr.gas.base.retain(|b| b.entry != gas::TX_ENTRY)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t) };
+    assert_eq!(code(t.sdk.op().quote(p, path.clone()).await), "GasUnquoted");
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t) };
+    assert!(t.sdk.op().quote(p, path).await.is_ok(), "control");
+    // an app's own figure (an operation with no row of its own) without the transaction row: no figure either, never one on a
+    // made-up transaction cost; the control with the row
+    let key = ("mtxPay", "token", 0x0101, false);
+    let plain = &gas::OpGas::PLAIN;
+    let none = crate::GasRows::default();
+    assert_eq!(
+        gas::quoted(&none, &[], &[], Some(9), key, 10, plain).unwrap(),
+        None
+    );
+    let with = gas::with_tx(crate::GasRows::default());
+    assert!(gas::quoted(&with, &[], &[], Some(9), key, 10, plain)
+        .unwrap()
+        .is_some());
+    // a gateway quote too: the operation's row alone gives no figure (`gas: None`), never one on a made-up transaction cost
+    let t = setup(1, |pr, _| pr.gas.base.retain(|b| b.entry != gas::TX_ENTRY)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert_eq!(gateway_quote(&t, &p).await.gas, None, "no transaction row");
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert!(
+        gateway_quote(&t, &p).await.gas.is_some(),
+        "control: with it"
     );
 }
 
@@ -1248,7 +1319,8 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
     let only = |signer: u16, fresh: bool| {
         move |p: &mut ChainProfile, _: &mut Limits| {
             let mut g = gas_rows(100_000);
-            g.base.retain(|r| r.fresh == fresh);
+            g.base
+                .retain(|r| r.fresh == fresh || r.entry == gas::TX_ENTRY);
             g.verify.retain(|r| r.signer == signer);
             p.gas = g;
         }
@@ -1496,7 +1568,8 @@ async fn quote_names_its_gas_source_in_order() {
     let src = |opt: &'static [&'static str], chain: bool| {
         move |p: &mut ChainProfile, _: &mut Limits| {
             if !chain {
-                p.gas = Default::default();
+                // the chain's transaction row only (T26 B2-1: the transaction's own gas is data, the app's figure its execution)
+                p.gas = gas::with_tx(Default::default());
             }
             p.gas_opt_in = opt.iter().map(|s| s.to_string()).collect();
         }
@@ -1713,6 +1786,67 @@ async fn from_block_is_the_final_block_at_submit() {
     }
     let s = t.sdk.op().state(op).await.unwrap();
     assert!(matches!(s, OpState::Landed { block: 0x1c, .. }), "{s:?}");
+}
+
+/// T26 B-13: a poll scans only the blocks after the last decisive read at the final block that found no event; the event
+/// in a later block still lands the operation. Control: the first poll scans from the row's `from_block`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_poll_scans_only_the_blocks_after_the_last() {
+    let t = setup(1, |_, _| {}).await;
+    t.chain.lock().unwrap().finalized = 0x18;
+    let (op, digest) = submitted(&t, "token", TOKEN, "5").await;
+    let from = |c: &Fake| -> Vec<String> {
+        c.lock()
+            .unwrap()
+            .requests
+            .iter()
+            .filter_map(|r| serde_json::from_str::<Value>(r).ok())
+            .filter(|r| r["method"] == "eth_getLogs")
+            .map(|r| {
+                r["params"][0]["fromBlock"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string()
+            })
+            .collect()
+    };
+    t.chain.lock().unwrap().finalized = 0x20;
+    t.chain.lock().unwrap().requests.clear();
+    let s = t.sdk.op().state(op.clone()).await.unwrap();
+    assert!(!s.is_terminal(), "{s:?}");
+    assert_eq!(
+        from(&t.chain),
+        ["0x18"],
+        "control: the first poll from the row's from_block"
+    );
+    {
+        let mut c = t.chain.lock().unwrap();
+        c.requests.clear();
+        c.logs.push(executed_log(TOKEN, &digest, 0x1c, false));
+        c.head = 0x30;
+        c.finalized = 0x28;
+    }
+    let s = t.sdk.op().state(op.clone()).await.unwrap();
+    assert_eq!(
+        from(&t.chain),
+        ["0x21"],
+        "the second poll after the blocks already read"
+    );
+    assert!(
+        !s.is_terminal(),
+        "an event in a block already read is not looked for again: {s:?}"
+    );
+    {
+        let mut c = t.chain.lock().unwrap();
+        c.logs.push(executed_log(TOKEN, &digest, 0x2c, false));
+        c.nonces.insert(TOKEN.into(), 1);
+        c.finalized = 0x30;
+    }
+    let s = t.sdk.op().state(op).await.unwrap();
+    assert!(
+        matches!(s, OpState::Landed { block: 0x2c, .. }),
+        "a later block's event: {s:?}"
+    );
 }
 
 /// P3: one `Prepared`, two concurrent `submit`s: one signs and writes, the other is `PreparedUnknown`.
@@ -3180,10 +3314,57 @@ async fn bls_multi_register_quote_by_n() {
         .collect();
     big.sdk
         .op()
-        .register_bls_multi("local".into(), d64, parts, q)
+        .register_bls_multi("local".into(), d64.clone(), parts, q)
         .await
         .unwrap();
     sent_txs(&big, 1).await;
+    // T26 B2-3: a chain without a per-transaction cap holds the registration to half its block gas limit, at the quote and at
+    // `register_bls_multi`, before anything is signed; the control above (200 M, a cap of 2^24) sent it
+    let uncapped = setup(0, |p, l| {
+        p.registry = Some(REGISTRY.into());
+        p.gas_opt_in = vec![gas::REFERENCE.into()];
+        p.tx_gas_cap = None;
+        l.max_gas = 1 << 26;
+    })
+    .await;
+    uncapped.chain.lock().unwrap().block_gas_limit = 200_000_000;
+    let q = uncapped
+        .sdk
+        .op()
+        .quote_register_bls_multi("local".into(), d64.clone(), payer(&uncapped))
+        .await
+        .unwrap();
+    let half = q.gas_limit * 2 - 2;
+    uncapped.chain.lock().unwrap().block_gas_limit = half;
+    assert_eq!(
+        code(
+            uncapped
+                .sdk
+                .op()
+                .quote_register_bls_multi("local".into(), d64.clone(), payer(&uncapped))
+                .await
+        ),
+        "GasAboveBlockShare"
+    );
+    let parts: Vec<_> = (0..64)
+        .map(|a| {
+            uncapped
+                .sdk
+                .op()
+                .bls_multi_pop_part(bls_member(&uncapped, &d64, a))
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(
+        code(
+            uncapped
+                .sdk
+                .op()
+                .register_bls_multi("local".into(), d64.clone(), parts, q)
+                .await
+        ),
+        "GasAboveBlockShare"
+    );
     let (d, _) = bls_group(&[0, 1], 2);
     let none = setup(0, |p, _| p.gas_opt_in = vec![gas::REFERENCE.into()]).await;
     assert_eq!(

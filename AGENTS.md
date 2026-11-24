@@ -21,6 +21,7 @@ when mainnet 22776 launches, which only the owner may touch.
 | `docs/` | Rules by component, `decisions.md`, `research/`, `history/` | `scripts/docs_check.py` |
 | `*/legacy/` | Superseded code, not built | do not edit |
 | `TODO.md`, `COMPLETED.md` | Work order, done work | |
+| `.agents/skills/` | Agent skills: `scaas-review` (any spec or code review), `scaas-audit` (an AI audit round). Codex, Gemini and Copilot read this path; Claude Code reads it through the committed link `.claude/skills` | |
 
 ## Which source wins
 
@@ -70,10 +71,12 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 - Authorization lives in contracts. Off-chain checks are extra and never the only guard. The node never holds subject funds or keys; a lane key
   holds gas only and never a contract role.
 - Fail closed: a refusal, a named error, zero sends. Reports must not overstate: cryptographic code is `UNAUDITED` unless an AI audit round
-  ([ARCH-POS-14](docs/decisions.md#ARCH-POS-14)) covers it at its current commit; then it is `AI-AUDITED (Fable, Opus,
-  GPT-6.1-Sol, Gemini 4 Argon)`. Code changed after its round is `UNAUDITED` again. Never "independent" or "external".
+  ([ARCH-POS-14](docs/decisions.md#ARCH-POS-14)) covers it at its current commit; then it is `AI-AUDITED (<models of the round>)`,
+  naming the models the round's ledger records (e.g. "Fable, Opus, GPT-6.2-astra, Gemini 4 Argon"). Code changed after its round is `UNAUDITED` again. Never "independent" or "external".
 - A green gate is not evidence of soundness. Three P0s here sat behind green tests. A negative test must be able to fail: positive control, one
   change at a time, mutants.
+- Mutant runners go through `scripts/mutant_guard.py` ([ARCH-POS-23](docs/decisions.md#ARCH-POS-23)): a deadline per mutant, the
+  restore on every exit, a dirty target refused.
 - Fixing a transcript, statement or signature bug: check the same class everywhere (C, Rust, wasm32, generic and specialised verifiers). The
   first fix of one P0 missed the same class.
 
@@ -162,6 +165,8 @@ notes start with the research banner. Prefer Mermaid for flows; SVG overviews wh
 State what you ran and its result. Report a failure with its output; do not edit a pin, a bound or a test to go green. A small change: edit, one
 test, the touched gates. Multi-step gates log per step and resume. Full output stays in git-ignored `.log` files; commit one
 `step | commit | rc | counts` summary and short evidence a doc quotes, with no absolute paths.
+A review (spec or code, any reviewer, the audit rounds) follows the skill `scaas-review` or `scaas-audit` and covers every dimension of [docs/review.md](docs/review.md), with one area
+per layer touched, a cross-layer area, a cryptography area and an adversarial area ([ARCH-POS-22](docs/review.md#ARCH-POS-22)).
 A round of several tasks on one branch (owner 2026-11-18): each task runs its own suites at the default set, its mutants and
 every pin it moves (old → new); the full matrix (every forge directory, the set-sensitive tests at the four sets, node and e2e,
 clients, vectors) runs once at the round's end, before the merge, on the final tree. The rules above still decide what that

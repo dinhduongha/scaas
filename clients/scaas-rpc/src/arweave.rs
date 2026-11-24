@@ -154,28 +154,57 @@ impl Gateways {
                 return Err(RpcError::AgreementNeedsThree);
             }
         }
-        let deadline = Some(self.pool.deadline());
-        let answers = futures::future::join_all((0..n).map(|i| async move {
-            self.pool.admit(self, i, deadline).await?;
-            self.raw_at(i, id, len, check, deadline).await
-        }))
-        .await;
+        // one gateway at a time, the bytes of the first answer kept and every later answer reduced to its SHA-256 (T26 B-21:
+        // never n copies of an object of up to 1 GiB at once); the group that wins without them read again from a member
         let mut failures = vec![];
-        let mut groups: Vec<([u8; 32], Vec<usize>, Vec<u8>)> = vec![];
-        for (i, a) in answers.into_iter().enumerate() {
+        let mut groups: Vec<([u8; 32], Vec<usize>)> = vec![];
+        let mut kept: Option<([u8; 32], Vec<u8>)> = None;
+        let wins = |g: &([u8; 32], Vec<usize>)| {
+            g.1.len() >= need && (purpose == Purpose::Plain || g.1.iter().any(|&m| trusted(m)))
+        };
+        for i in 0..n {
+            if groups.iter().any(wins) {
+                break;
+            }
+            let deadline = Some(self.pool.deadline());
+            let a = match self.pool.admit(self, i, deadline).await {
+                Ok(()) => self.raw_at(i, id, len, check, deadline).await,
+                Err(e) => Err(e),
+            };
             match a {
-                Ok((b, h)) => match groups.iter_mut().find(|g| g.0 == h) {
-                    Some(g) => g.1.push(i),
-                    None => groups.push((h, vec![i], b)),
-                },
+                Ok((b, h)) => {
+                    match groups.iter_mut().find(|g| g.0 == h) {
+                        Some(g) => g.1.push(i),
+                        None => groups.push((h, vec![i])),
+                    }
+                    if kept.is_none() {
+                        kept = Some((h, b));
+                    }
+                }
                 Err(e) => failures.push(e),
             }
         }
         let largest = groups.iter().map(|g| g.1.len()).max().unwrap_or(0);
-        match groups.into_iter().find(|g| {
-            g.1.len() >= need && (purpose == Purpose::Plain || g.1.iter().any(|&m| trusted(m)))
-        }) {
-            Some((_, _, b)) => Ok(b),
+        let won = groups.iter().find(|g| wins(g)).cloned();
+        match won {
+            Some((h, _)) if kept.as_ref().is_some_and(|k| k.0 == h) => {
+                Ok(kept.map(|k| k.1).unwrap_or_default())
+            }
+            Some((h, members)) => {
+                let mut last = None;
+                for i in members {
+                    let deadline = Some(self.pool.deadline());
+                    match self.raw_at(i, id, len, check, deadline).await {
+                        Ok((b, again)) if again == h => return Ok(b),
+                        Ok(_) => {}
+                        Err(e) => last = Some(e),
+                    }
+                }
+                Err(RpcError::EndpointAllFailed {
+                    last,
+                    failover_revert: None,
+                })
+            }
             None => Err(RpcError::EndpointNoMajority {
                 n,
                 need,

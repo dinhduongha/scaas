@@ -54,7 +54,8 @@ pub struct Envelope {
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
 pub struct PayMeta {
-    /// `0x` + 64 hex; `None`: 32 random bytes
+    /// `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+    /// the same pay lane, however its ids and amounts are spelt)
     pub salt: Option<String>,
     /// a UUIDv7 in its text form, or `0x` + 64 hex; `None`: no number
     pub pay_no: Option<String>,
@@ -368,6 +369,18 @@ fn derived_salt(m: &PayMeta, context: &[&str]) -> [u8; 32] {
         b.extend_from_slice(part.as_bytes());
     }
     scaas_ua::keccak256(&b)
+}
+
+/// An amount in its canonical decimal form (no leading zero), so a derived salt does not depend on its spelling (T26 B2-10).
+fn canon_amount(s: &str) -> Result<String, SdkError> {
+    Ok(U256::from_str_radix(s, 10)
+        .map_err(|_| SdkError::Argument)?
+        .to_string())
+}
+
+/// A 32-byte id in its canonical form (lower-case `0x` hex), for a derived salt (T26 B2-10).
+fn canon_id(s: &str) -> Result<String, SdkError> {
+    Ok(hex(&id32(s)?))
 }
 
 /// A pay lane's batch (`payLane(entryRef)`), decimal.
@@ -706,6 +719,8 @@ impl Wallet {
         self.sdk
             .spawn(async move {
                 let token = addr20(&req.token.to_ascii_lowercase())?;
+                // a derived UA the line does not hold: refused before anything is prepared (spec §7.1, R16; T26 B2-9)
+                crate::line::receiver_registered(&sdk, &req.chain, &id32(&req.to)?).await?;
                 let kind = kind_of(&sdk, &req.chain, "UAMetaTransfer", token).await?;
                 let mut m = Map::new();
                 m.insert(
@@ -740,13 +755,18 @@ impl Wallet {
             .spawn(async move {
                 let token = addr20(&req.token.to_ascii_lowercase())?;
                 // a derived UA the registry does not hold: refused before anything is prepared (spec §7.1, R16)
-                #[cfg(feature = "account")]
-                crate::account::receiver_registered(&sdk, &req.chain, &id32(&req.to)?).await?;
+                crate::line::receiver_registered(&sdk, &req.chain, &id32(&req.to)?).await?;
                 let kind = kind_of(&sdk, &req.chain, "UAMetaTransfer", token).await?;
                 let from = from_of(&sdk, &req.signer, "UAMetaTransfer").await?;
                 let (mj, entry_ref, ua, review) = meta(
                     &req.meta,
-                    &[&req.chain, &hex(&token), &from, &req.to, &req.value],
+                    &[
+                        &req.chain,
+                        &hex(&token),
+                        &from,
+                        &canon_id(&req.to)?,
+                        &canon_amount(&req.value)?,
+                    ],
                 )?;
                 let mut m = Map::new();
                 m.insert("from".into(), json!(from));
@@ -783,6 +803,8 @@ impl Wallet {
         self.sdk
             .spawn(async move {
                 let token = addr20(&req.token.to_ascii_lowercase())?;
+                // a derived UA the line does not hold: refused before anything is prepared (spec §7.1, R16; T26 B2-9)
+                crate::line::receiver_registered(&sdk, &req.chain, &id32(&req.to)?).await?;
                 let kind = kind_of(&sdk, &req.chain, "UAPayWithTax", token).await?;
                 let from = from_of(&sdk, &req.signer, "UAMetaTransfer").await?;
                 let tax_mode = req.tax_mode.to_string();
@@ -790,10 +812,10 @@ impl Wallet {
                     &req.chain,
                     &hex(&token),
                     &from,
-                    &req.to,
-                    &req.value,
+                    &canon_id(&req.to)?,
+                    &canon_amount(&req.value)?,
                     &tax_mode,
-                    &req.tax,
+                    &canon_amount(&req.tax)?,
                 ];
                 let (mj, entry_ref, _, review) = meta(&req.meta, &context.map(String::as_str))?;
                 let mut p = Map::new();
@@ -825,7 +847,16 @@ impl Wallet {
                 let kind = kind_of(&sdk, &req.chain, "UAPayeeFee", token).await?;
                 let pm = &req.payment;
                 let (mj, entry_ref, _, review) =
-                    meta(&req.meta, &[&req.chain, &hex(&token), &pm.from, &pm.to, &pm.value])?;
+                    meta(
+                        &req.meta,
+                        &[
+                            &req.chain,
+                            &hex(&token),
+                            &canon_id(&pm.from)?,
+                            &canon_id(&pm.to)?,
+                            &canon_amount(&pm.value)?,
+                        ],
+                    )?;
                 let payee = id32(&pm.to)?;
                 let mut p = Map::new();
                 p.insert("from".into(), json!(hex(&id32(&pm.from)?)));
@@ -882,6 +913,8 @@ impl Wallet {
         self.sdk
             .spawn(async move {
                 let wallet = addr20(&req.wallet.to_ascii_lowercase())?;
+                // a derived UA the line does not hold: refused before anything is prepared (spec §7.1, R16; T26 B2-9)
+                crate::line::receiver_registered(&sdk, &req.chain, &id32(&req.payee)?).await?;
                 let kind = kind_of(&sdk, &req.chain, "UAPayUnderMandate", wallet).await?;
                 let token = addr20(&req.token.to_ascii_lowercase())?;
                 let from = from_of(&sdk, &req.signer, "UAPayUnderMandate").await?;

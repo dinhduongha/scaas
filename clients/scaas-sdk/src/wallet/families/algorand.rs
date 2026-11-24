@@ -102,7 +102,25 @@ async fn pass(
             .get_raw(i, &format!("/v2/applications/{app}/box"), &q)
             .await
         {
-            Err(FamilyError::Status { status: 404, .. }) => out.push("0".into()),
+            // a zero balance only by algod's own word for an absent box of an app it holds (T26 B2-6): a proxy's 404, or a
+            // listed app the network lacks, is the endpoint's malformed answer, never a silent 0
+            Err(FamilyError::Status {
+                status: 404,
+                message,
+            }) if message == "box not found" => {
+                alg.get(i, &format!("/v2/applications/{app}"))
+                    .await
+                    .map_err(|e| match e {
+                        FamilyError::Status { status: 404, .. } => {
+                            malformed(i, "a listed app the network does not hold")
+                        }
+                        e => failed(i, e),
+                    })?;
+                out.push("0".into());
+            }
+            Err(FamilyError::Status { status: 404, .. }) => {
+                return Err(malformed(i, "a 404 that is not algod's box not found"))
+            }
             r => {
                 let v = r
                     .and_then(|b| {
@@ -125,8 +143,9 @@ async fn pass(
     Ok((rounds, (native, out)))
 }
 
-/// The set on endpoint `i` at one round (`want`, or any when `None`): a pass whose answers name two rounds, or not `want`, is
-/// read again once. A set with no answer naming a round (a UA id whose boxes are all absent) stands at the endpoint's
+/// The set on endpoint `i` at one round (`want`'s or a later one, any when `None`; algod serves its current round only, so a
+/// majority member answering after the first moved on is read at its own round, T26 B2-6): a pass whose answers name two
+/// rounds, or one before `want`, is read again once. A set with no answer naming a round (a UA id whose boxes are all absent) stands at the endpoint's
 /// `last-round` read after it.
 async fn set(
     alg: &Algorand,
@@ -146,7 +165,7 @@ async fn set(
                     .ok_or_else(|| malformed(i, "a status without last-round"))?
             }
         };
-        if rounds.iter().all(|x| *x == r) && want.is_none_or(|w| w == r) {
+        if rounds.iter().all(|x| *x == r) && want.is_none_or(|w| r >= w) {
             return Ok((r, v));
         }
     }
@@ -183,6 +202,7 @@ pub(crate) async fn balances(c: &Chain, id: &str) -> Result<Balances, SdkError> 
                 display: t.symbol.clone(),
                 decimals: t.decimals,
                 amount,
+                unknown: None,
             })
             .collect(),
     })

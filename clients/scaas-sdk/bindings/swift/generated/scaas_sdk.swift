@@ -6418,6 +6418,8 @@ public func FfiConverterTypeSubscription_lower(_ value: Subscription) -> UInt64 
  */
 public protocol VaultProtocol: AnyObject, Sendable {
     
+    func acceptRollback() async throws 
+    
     func changePassphrase(seed: String, old: SecretBytes, new: SecretBytes) async throws 
     
     func confirmBackup(seed: String) async throws 
@@ -6541,6 +6543,23 @@ open class Vault: VaultProtocol, @unchecked Sendable {
 
     
 
+    
+open func acceptRollback()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_vault_accept_rollback(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_void,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_void,
+            freeFunc: ffi_scaas_sdk_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
     
 open func changePassphrase(seed: String, old: SecretBytes, new: SecretBytes)async throws   {
     return
@@ -8993,8 +9012,9 @@ public struct ChainProfile: Equatable, Hashable {
      */
     public var familyParams: FamilyParams?
     /**
-     * the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-     * and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+     * the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+     * (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+     * Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
      * `Sdk::open` on another family)
      */
     public var l1Fee: L1Fee?
@@ -9067,8 +9087,9 @@ public struct ChainProfile: Equatable, Hashable {
          * `Sdk::open`
          */familyParams: FamilyParams?, 
         /**
-         * the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-         * and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+         * the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+         * (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+         * Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
          * `Sdk::open` on another family)
          */l1Fee: L1Fee?, 
         /**
@@ -10293,7 +10314,8 @@ public func FfiConverterTypeGasLine_lower(_ value: GasLine) -> RustBuffer {
 
 /**
  * A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
- * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+ * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded), `data` (`mtxExecute`'s call data) or
+ * `calldata` (the transaction row's, entry `transaction` kind `evm`: the price of a byte of the transaction's calldata).
  */
 public struct GasPerByte: Equatable, Hashable {
     public var input: String
@@ -13324,7 +13346,8 @@ public func FfiConverterTypePay_lower(_ value: Pay) -> RustBuffer {
  */
 public struct PayMeta: Equatable, Hashable {
     /**
-     * `0x` + 64 hex; `None`: 32 random bytes
+     * `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+     * the same pay lane, however its ids and amounts are spelt)
      */
     public var salt: String?
     /**
@@ -13341,7 +13364,8 @@ public struct PayMeta: Equatable, Hashable {
     // declare one manually.
     public init(
         /**
-         * `0x` + 64 hex; `None`: 32 random bytes
+         * `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+         * the same pay lane, however its ids and amounts are spelt)
          */salt: String?, 
         /**
          * a UUIDv7 in its text form, or `0x` + 64 hex; `None`: no number
@@ -14386,8 +14410,9 @@ public func FfiConverterTypePqzTransfer_lower(_ value: PqzTransfer) -> RustBuffe
 
 
 /**
- * `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
- * fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+ * `UAPqzTransfer` / `UAPqzTransferCompact`: the real `legs` and `decoys` legs of amount 0 the SDK draws from the registry
+ * line's `0x0142` lists, every leg's position shuffled (CTR-UA-29; their count one the set builds, 1, 2, 4 or 8),
+ * `decoy_fee` the per-leg fee (decimal; at least the token's `minDecoyFee`, the contract's check).
  */
 public struct PqzTransferMulti: Equatable, Hashable {
     public var signer: KeyRef
@@ -14396,19 +14421,21 @@ public struct PqzTransferMulti: Equatable, Hashable {
     public var batch: String
     public var keyVersion: UInt64
     public var legs: [PqzLeg]
+    public var decoys: UInt32
     public var decoyFee: String
     public var validUntilBlock: UInt64
     public var envelope: Envelope
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(signer: KeyRef, chain: String, token: String, batch: String, keyVersion: UInt64, legs: [PqzLeg], decoyFee: String, validUntilBlock: UInt64, envelope: Envelope) {
+    public init(signer: KeyRef, chain: String, token: String, batch: String, keyVersion: UInt64, legs: [PqzLeg], decoys: UInt32, decoyFee: String, validUntilBlock: UInt64, envelope: Envelope) {
         self.signer = signer
         self.chain = chain
         self.token = token
         self.batch = batch
         self.keyVersion = keyVersion
         self.legs = legs
+        self.decoys = decoys
         self.decoyFee = decoyFee
         self.validUntilBlock = validUntilBlock
         self.envelope = envelope
@@ -14436,6 +14463,7 @@ public struct FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer {
                 batch: FfiConverterString.read(from: &buf), 
                 keyVersion: FfiConverterUInt64.read(from: &buf), 
                 legs: FfiConverterSequenceTypePqzLeg.read(from: &buf), 
+                decoys: FfiConverterUInt32.read(from: &buf), 
                 decoyFee: FfiConverterString.read(from: &buf), 
                 validUntilBlock: FfiConverterUInt64.read(from: &buf), 
                 envelope: FfiConverterTypeEnvelope.read(from: &buf)
@@ -14449,6 +14477,7 @@ public struct FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer {
         FfiConverterString.write(value.batch, into: &buf)
         FfiConverterUInt64.write(value.keyVersion, into: &buf)
         FfiConverterSequenceTypePqzLeg.write(value.legs, into: &buf)
+        FfiConverterUInt32.write(value.decoys, into: &buf)
         FfiConverterString.write(value.decoyFee, into: &buf)
         FfiConverterUInt64.write(value.validUntilBlock, into: &buf)
         FfiConverterTypeEnvelope.write(value.envelope, into: &buf)
@@ -16893,20 +16922,30 @@ public struct TokenBalance: Equatable, Hashable {
     public var display: String
     public var decimals: UInt8
     /**
-     * the smallest unit, decimal
+     * the smallest unit, decimal; empty when `unknown` is set
      */
     public var amount: String
+    /**
+     * set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+     * `frozen`): the amount is unknown, never a false 0
+     */
+    public var unknown: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(address: String, display: String, decimals: UInt8, 
         /**
-         * the smallest unit, decimal
-         */amount: String) {
+         * the smallest unit, decimal; empty when `unknown` is set
+         */amount: String, 
+        /**
+         * set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+         * `frozen`): the amount is unknown, never a false 0
+         */unknown: String?) {
         self.address = address
         self.display = display
         self.decimals = decimals
         self.amount = amount
+        self.unknown = unknown
     }
 
     
@@ -16928,7 +16967,8 @@ public struct FfiConverterTypeTokenBalance: FfiConverterRustBuffer {
                 address: FfiConverterString.read(from: &buf), 
                 display: FfiConverterString.read(from: &buf), 
                 decimals: FfiConverterUInt8.read(from: &buf), 
-                amount: FfiConverterString.read(from: &buf)
+                amount: FfiConverterString.read(from: &buf), 
+                unknown: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -16937,6 +16977,7 @@ public struct FfiConverterTypeTokenBalance: FfiConverterRustBuffer {
         FfiConverterString.write(value.display, into: &buf)
         FfiConverterUInt8.write(value.decimals, into: &buf)
         FfiConverterString.write(value.amount, into: &buf)
+        FfiConverterOptionString.write(value.unknown, into: &buf)
     }
 }
 
@@ -26537,7 +26578,7 @@ public enum GasFrom: Equatable, Hashable {
      */
     case app
     /**
-     * a native send's own estimate (or 21,000 for a plain transfer to an account without code)
+     * a native send's own estimate (`eth_estimateGas`, a plain transfer's too)
      */
     case estimate
 
@@ -27029,6 +27070,16 @@ public enum L1Fee: Equatable, Hashable {
      * OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
      */
     case opStack
+    /**
+     * the L1 cost charged as gas (Arbitrum, the profile's `in-estimate`): a table-quoted transaction's gas limit adds
+     * `NodeInterface.gasEstimateL1Component` (`0x…C8`) over its calldata, with the margin; an estimate holds it already
+     */
+    case inEstimate
+    /**
+     * the L1 cost carried by the priority fee (Linea, the profile's `linea`): the fees are `linea_estimateGas`'s over the
+     * transaction, never below the chain's own
+     */
+    case linea
 
 
 
@@ -27052,6 +27103,10 @@ public struct FfiConverterTypeL1Fee: FfiConverterRustBuffer {
         
         case 1: return .opStack
         
+        case 2: return .inEstimate
+        
+        case 3: return .linea
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -27062,6 +27117,14 @@ public struct FfiConverterTypeL1Fee: FfiConverterRustBuffer {
         
         case .opStack:
             writeInt(&buf, Int32(1))
+        
+        
+        case .inEstimate:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .linea:
+            writeInt(&buf, Int32(3))
         
         }
     }
@@ -31790,6 +31853,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_subscription_next() != 46941) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_vault_accept_rollback() != 51021) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != 63580) {

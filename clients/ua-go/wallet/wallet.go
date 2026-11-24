@@ -4,7 +4,7 @@
 // plan T13e). The identity port (the parent package ua) stays this module's own code and the independent cross-check; signing,
 // KEM, seal, vault, backup, link and the Zether and PQZ facades are the library's.
 //
-// Load: every constructor checks once that scaas_ua_abi_version() is 6 and scaas_ua_features() a build this package knows
+// Load: every constructor checks once that scaas_ua_abi_version() is 7 and scaas_ua_features() a build this package knows
 // (ErrLibraryMismatch otherwise). Secrets: secret inputs are []byte (a string cannot be wiped); a NUL-terminated copy this
 // package makes of one is wiped after the call; secret outputs are []byte the caller wipes with Wipe. Handles: each type owns
 // one library handle, freed once by Close or by its finalizer; Close waits for calls in flight on it. The library is linked from
@@ -29,7 +29,7 @@ import (
 )
 
 // ABIVersion is the C ABI this package speaks.
-const ABIVersion = 6
+const ABIVersion = 7
 
 // The scaas_ua_features() bits.
 const (
@@ -75,7 +75,7 @@ const (
 )
 
 var (
-	// ErrLibraryMismatch: the library is not ABI 6, or its feature bits are not a build this package knows.
+	// ErrLibraryMismatch: the library is not ABI 7, or its feature bits are not a build this package knows.
 	ErrLibraryMismatch = errors.New("scaas_ua: libscaas_ua_c is not a build this binding knows")
 	// ErrClosed: a call on a handle after its Close (it never reaches the library).
 	ErrClosed = errors.New("scaas_ua: handle closed")
@@ -838,18 +838,19 @@ func (w *Wallet) ExportPqzLeafRaw(account, index uint32) ([]byte, error) {
 	return leaf, nil
 }
 
-func restore(rollback bool, kk *KemKey, container, expect, members, accepted string, current *Wallet, bip39Passphrase []byte) (*Wallet, error) {
+func restore(rollback bool, kk *KemKey, container, expect, members, accepted, msigCurrent string, current *Wallet, bip39Passphrase []byte) (*Wallet, error) {
 	var a args
 	defer a.done()
 	var w *C.ScaasUaWallet
 	var installed C.bool
 	err := useAll(func(ps []unsafe.Pointer) error {
 		return call(func() C.ScaasUaStatus {
-			kk, c, e, m, ac, cur, bp := kkp(ps[0]), a.str(container), a.str(expect), a.opt(members), a.opt(accepted), wp(ps[1]), a.secret(bip39Passphrase)
+			kk, c, e, m, ac, mc := kkp(ps[0]), a.str(container), a.str(expect), a.opt(members), a.opt(accepted), a.opt(msigCurrent)
+			cur, bp := wp(ps[1]), a.secret(bip39Passphrase)
 			if rollback {
-				return C.scaas_ua_wallet_restore_backup_rollback(kk, c, e, m, ac, cur, bp, &w, &installed)
+				return C.scaas_ua_wallet_restore_backup_rollback(kk, c, e, m, ac, mc, cur, bp, &w, &installed)
 			}
-			return C.scaas_ua_wallet_restore_backup(kk, c, e, m, ac, cur, bp, &w, &installed)
+			return C.scaas_ua_wallet_restore_backup(kk, c, e, m, ac, mc, cur, bp, &w, &installed)
 		})
 	}, hdOf(kk, kk == nil), hdOf(current, current == nil))
 	if err != nil || !bool(installed) {
@@ -859,25 +860,26 @@ func restore(rollback bool, kk *KemKey, container, expect, members, accepted str
 }
 
 // RestoreBackup is the wallet a backup container carries, or nil when current holds that generation already (an older one is
-// UABackupRollback). members and accepted "" are none.
-func RestoreBackup(kk *KemKey, container, expect, members, accepted string, current *Wallet, bip39Passphrase []byte) (*Wallet, error) {
-	return restore(false, kk, container, expect, members, accepted, current, bip39Passphrase)
+// UABackupRollback). members, accepted and msigCurrent ({"<msig id>": {msig, enabled}}, an updated msig's current structure,
+// CTR-UA-44) "" are none.
+func RestoreBackup(kk *KemKey, container, expect, members, accepted, msigCurrent string, current *Wallet, bip39Passphrase []byte) (*Wallet, error) {
+	return restore(false, kk, container, expect, members, accepted, msigCurrent, current, bip39Passphrase)
 }
 
 // RestoreBackupRollback is RestoreBackup that may install an older backup: only after the user confirmed the rollback.
-func RestoreBackupRollback(kk *KemKey, container, expect, members, accepted string, current *Wallet, bip39Passphrase []byte) (*Wallet, error) {
-	return restore(true, kk, container, expect, members, accepted, current, bip39Passphrase)
+func RestoreBackupRollback(kk *KemKey, container, expect, members, accepted, msigCurrent string, current *Wallet, bip39Passphrase []byte) (*Wallet, error) {
+	return restore(true, kk, container, expect, members, accepted, msigCurrent, current, bip39Passphrase)
 }
 
 // FromLink is the wallet a link container carries to session (which it consumes).
-func FromLink(s *LinkSession, container, expect, members, accepted string, bip39Passphrase []byte) (*Wallet, error) {
+func FromLink(s *LinkSession, container, expect, members, accepted, msigCurrent string, bip39Passphrase []byte) (*Wallet, error) {
 	var a args
 	defer a.done()
 	var w *C.ScaasUaWallet
 	if err := useAll(func(ps []unsafe.Pointer) error {
 		return call(func() C.ScaasUaStatus {
 			return C.scaas_ua_wallet_from_link((*C.ScaasUaLinkSession)(ps[0]), a.str(container), a.str(expect), a.opt(members), a.opt(accepted),
-				a.secret(bip39Passphrase), &w)
+				a.opt(msigCurrent), a.secret(bip39Passphrase), &w)
 		})
 	}, hdOf(s, s == nil)); err != nil {
 		return nil, err
@@ -1114,14 +1116,15 @@ func (k *KemKey) Open(purpose string, aad, mlkemCt []byte, x25519Eph [32]byte, c
 	return r, err
 }
 
-// OpenContainer is the plaintext of a sealed container accepted as expect says (members, accepted "" = none); the caller wipes it.
-func (k *KemKey) OpenContainer(container, expect, members, accepted string) ([]byte, error) {
+// OpenContainer is the plaintext of a sealed container accepted as expect says (members, accepted, msigCurrent "" = none); the
+// caller wipes it.
+func (k *KemKey) OpenContainer(container, expect, members, accepted, msigCurrent string) ([]byte, error) {
 	var a args
 	defer a.done()
 	var r []byte
 	err := k.h.use(func(p unsafe.Pointer) (err error) {
 		r, err = secretOut(func(o unsafe.Pointer, n *C.size_t) C.ScaasUaStatus {
-			return C.scaas_ua_open_container(kkp(p), a.str(container), a.str(expect), a.opt(members), a.opt(accepted), (*C.uint8_t)(o), n)
+			return C.scaas_ua_open_container(kkp(p), a.str(container), a.str(expect), a.opt(members), a.opt(accepted), a.opt(msigCurrent), (*C.uint8_t)(o), n)
 		})
 		return
 	})

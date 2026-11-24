@@ -2,7 +2,13 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # split.rs mutants (review 3w-delta U1h-2): each applied alone, the split test run, the source restored
 # usage (from the repo root, under scripts/capped): python3 -I <this> pqz-core/pqzl <log> [M1,M2,...]; restores each source after its run
-import os, pathlib, subprocess, sys
+# A hung run (owner 2026-11-24, scripts/mutant_guard.py): past 3 x its unmutated baseline (at least 10 min, or `--timeout N`)
+# its process group is killed and it reads `killed (timeout N s)`; the source is restored on every exit (SIGINT / SIGTERM
+# too); a target file that differs from HEAD refuses the run.
+import os, pathlib, sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "scripts"))
+import mutant_guard as guard  # noqa: E402
 
 root = pathlib.Path(sys.argv[1])  # pqz-core/pqzl
 log = pathlib.Path(sys.argv[2])
@@ -45,27 +51,25 @@ M = [
 ]
 out = []
 sel = sys.argv[3].split(",") if len(sys.argv) > 3 else None
+guard.refuse_dirty([root / m[1] for m in M], root)
 for name, f, a, b, feat in M:
     if sel and name.split()[0] not in sel:
         continue
     p = root / f
     src = p.read_text()
     assert src.count(a) == 1, name
-    p.write_text(src.replace(a, b))
+    args = (
+        ["--no-default-features", "--features", f"set-{os.environ.get('PQZ_SET', 'n2304-kmax4096')},test-hooks"]
+        if feat == "generic-only"
+        else ["--features", feat]
+    )
+    cmd = ["cargo", "test", "-j2", "--release", "--offline", *args, "--test", "split", "--", "--test-threads=1"]
+    lim, saved = guard.limit(cmd, cwd=root / "rust"), {p: p.read_bytes()}
     try:
-        args = (
-            ["--no-default-features", "--features", f"set-{os.environ.get('PQZ_SET', 'n2304-kmax4096')},test-hooks"]
-            if feat == "generic-only"
-            else ["--features", feat]
-        )
-        r = subprocess.run(
-            ["cargo", "test", "-j2", "--release", "--offline", *args, "--test", "split", "--", "--test-threads=1"],
-            cwd=root / "rust",
-            capture_output=True,
-            text=True,
-        )
+        p.write_text(src.replace(a, b))
+        r = guard.run(cmd, lim, cwd=root / "rust", capture_output=True, text=True)
     finally:
-        p.write_text(src)
+        guard.restore(saved)
     txt = r.stdout + r.stderr
     with log.open("a") as fh:
         fh.write(f"===== {name}\n{txt}\n")
@@ -75,7 +79,7 @@ for name, f, a, b, feat in M:
         for l in txt.splitlines()
         if "panicked" in l or l.strip().startswith(("left:", "right:")) or "failed:" in l or ": a cheating proof" in l
     ][:12]
-    line = f"{name}: rc {r.returncode}, {'RED' if r.returncode else 'GREEN (mutant survived)'}; failed: {[l.split()[1] for l in fails]}"
+    line = f"{name}: rc {r.returncode}, {guard.outcome(r, 'RED') if r.returncode else 'GREEN (mutant survived)'}; failed: {[l.split()[1] for l in fails]}"
     print(line, *pan, sep="\n  ", flush=True)
     out.append(r.returncode != 0)
 print(f"mutants red: {sum(out)}/{len(out)}")
