@@ -532,6 +532,229 @@ reach forward.
   version in `deps` and checks the row in `validateEnv`. Do not offer R-c in SCaaS releases. Rule on the registry-line fix
   before the freeze.
 
+### 7.2 Registry generations and the router: G1 against G3
+
+The owner's direction (2026-11-24, Q10): "Đồng ý là mỗi thế hệ Registry đi theo 1 Router, nhưng không nhất thiết phải new
+router. Đánh giá việc này xem sao." (Agreed: each registry generation goes with a router, but not necessarily a new router.
+Evaluate it.) This section evaluates. No option is ruled. Lines are at `origin/ua-rs-sign` plus the `virtual` commit of this
+branch. All code named is **UNAUDITED**.
+
+#### 7.2.1 In plain words
+
+- A **role holder** (an admin, a minter, …) that is a PQ key or an `msig` cannot send a transaction itself. It signs, and the
+  chain's **governance router** checks the signature and calls the token. The token asks one thing: "did my router send
+  this?" (`_govSubject()`, `GovernanceBase.sol:64-68`). It trusts whoever the router names.
+- The router checks a PQ or `msig` signature in a **UA registry**. Registries come in **generations**: a new generation adds
+  kinds (for example `mldsa65`) and new records. A later generation can read every earlier one (it walks back), but an
+  earlier one never sees a later one (`UARegistry.sol:996-1002`).
+- Today the router is bound to **one** generation, a constructor immutable (`UAMetaTxBase.sol:35`, `:51`). The factory may
+  publish an env whose registry is a later generation (CTR-UA-67, `OpenFactory.sol:981-987`), but every instance still gets
+  the one router (`_chainEnv`, `OpenFactory.sol:1002-1005`). So a token made on a generation-2 env checks its own signed calls
+  on generation 2, while its governance is checked on generation 1. A role holder that only generation 2 knows is refused
+  (`UAUnauthorized`, the four `RouterRegistryLineTest` tests).
+- **G1** makes the one router ask, per call, "which registry does this token use?", and read the answer from the token's own
+  code, which the factory wrote. **G3** gives each generation its own router (the same code, deployed again as a catalogue
+  version) and makes new token versions name it.
+
+```mermaid
+flowchart TB
+    H["Role holder: a PQ key or msig\nheld in generation 2"] -- "signs a governance op" --> R
+
+    subgraph TODAY["Today"]
+        R["Chain router\nregistry = gen 1 (immutable)"] -- "check the signature" --> G1R["Registry gen 1:\ndoes not know gen 2 records"]
+        G1R -- "UAUnauthorized" --> X["refused"]
+    end
+
+    H -. "G1" .-> RG1
+    subgraph OPT_G1["G1: one router for every generation"]
+        RG1["Chain router\n(the same address)"] -- "1. infoOf(target): factory-made?" --> F["OpenFactory index"]
+        RG1 -- "2. read the registry in the target's code\n(written by the factory)" --> T1["Token on a gen-2 env"]
+        RG1 -- "3. check the signature there" --> G2A["Registry gen 2\n(walks back to gen 1 when needed)"]
+        RG1 -- "4. call" --> T1
+    end
+
+    H -. "G3" .-> RG3
+    subgraph OPT_G3["G3: one router per generation"]
+        T3["New token version on a gen-2 env\n_govRouter() = its env dep"] -- "names" --> RG3["Router version 2\n(catalogue row, registry = gen 2)"]
+        RG3 -- "check the signature" --> G2B["Registry gen 2"]
+        RG3 -- "call" --> T3
+    end
+```
+
+#### 7.2.2 Out of the running
+
+- **G1′, rejected (owner 2026-11-24).** A router that checks against "the newest generation" through a pointer the registrar
+  sets. Owner, verbatim: "Do nguy hiểm của G1', registrar có quá nhiều quyền lực, nên loại nó. Cân nhắc G1 và G3." (Because
+  G1′ is dangerous, the registrar has too much power, drop it; consider G1 and G3.) One wrong pointer would move the
+  governance of every token at once. The mutant `address r = GEN2` in `RouterG1Test` is G1′ in miniature: it turns
+  `test_g1_gen1Instance_staysOnGen1` red, because a generation-1 token's governance would then follow the pointer and leave
+  the token's own path.
+- **G2, out on cost and risk.** A forward walk needs a successor pointer in a registry that has no admin and an immutable
+  `predecessor` (`UARegistry.sol:142`); anyone can deploy a registry naming generation 1 as its predecessor, so a "first
+  successor" pointer is a squatting target, and a fake successor with a lying verifier passes any id it holds. Choosing the
+  true successor needs an authority, which is what the env publication already is: that leads back to G1.
+- **G4, out on cost.** A new router and a new factory line per generation: a second catalogue, index, directory and creator
+  namespace, and the SDK and node learn every factory. It stays the fallback if neither G1 nor G3 is taken.
+
+#### 7.2.3 G1: one router, the target's own env registry
+
+**The change [I], in `GovernanceRouterBase` (frozen code).**
+- A constructor immutable `FACTORY` (and a `factory()` view). Deploy order: the factory, then the router naming it, then
+  `configureChain`, whose code-hash pin (`OpenFactory.sol:174`, `_checkRouter` `:181-190`) covers the immutable, so the
+  factory needs no change.
+- `_uaCall` (`GovernanceRouterBase.sol:508-524`) builds its pipeline context with the registry chosen for `target`: when the
+  target's code has the EIP-1167 clone form and `IOpenFactory(FACTORY).infoOf(target).addr == target`
+  (`OpenFactory.sol:943`, `_created` `:1134-1138`), the registry at code offset 77 (`ChainEnvCode.OFF_REGISTRY`,
+  `ChainEnvCode.sol:28`), when non-zero; else the router's own registry. Today it passes `_mtxCtx()` unchanged (`:521`).
+- Non-factory targets keep the router's registry: the factory itself (registrar ops, `mtxCreate*`), the compliance
+  registry, applications.
+- Smart-key hash and Hedera flag stay the router's: an env's `smartKeyAccountImpl` must already match the router's clone
+  hash (`OpenFactory.sol:988-992`).
+
+**Tested [F]** (`RouterG1Test`, a test-only `LineRouter` that does this in an `_mtxCtx` override, reading the target from
+the op's calldata; the real change passes `_uaCall`'s `target`; the fixture answers `infoOf` as the clones' factory):
+- `test_g1_gen2Instance_oneRouterServesBothGenerations`: today's router refuses the generation-2 holder on a token of a
+  generation-2 env (`UAUnauthorized(pq65)`); `LineRouter` serves `pq65`, `msig2`, and the generation-1 `pq` and `msig`.
+- `test_g1_gen1Instance_staysOnGen1`: a generation-1 env token stays on generation 1: `pq65` refused, `pq` served.
+- `test_g1_notFactoryMade_ownRegistry_mutantAccepts`: a clone the factory did not make, whose code names generation 2, gets
+  the router's own registry (refused, no nonce spent); the mutant that believes the code accepts it.
+- Mutants, each red: no registry switch (2 of 3 red), no factory check (1 of 3), the G1′ pointer (1 of 3).
+
+**Which instances it serves.** New instances only. A token made on a generation-1 env asks generation 1 on its own path and,
+under G1, through the router too. Already-deployed tokens stay on generation 1 under both G1 and G3. A G1 router must be
+deployed with the next chain reset; the router on the SCaaS testnet today has no `FACTORY`.
+
+**Parity (CTR-UA-27): holds by construction.** Governance and the token's own signed calls use the same generation, so a
+holder that can sign a transfer can sign a governance op, and the other way round.
+
+**Replay.** One router, one EIP-712 domain, as today. The signature names `target`, so the registry chosen is a function of
+signed data. A UA id is held in one generation only (a later generation refuses an id an earlier one holds,
+`UARegistry.sol:84`), so the router's one nonce space per id does not alias.
+
+**Risks.**
+- *A fake registry.* The router believes only a registry the factory wrote into a factory-made clone, and that registry
+  passed the env line check when the admin published the env (CTR-UA-67). That is the trust the token's own signed path
+  already has; G1 adds none for the token. A target that merely answers a registry is never asked.
+- *Nonce burning.* If the admin publishes an env with a bad registry, that registry could pass any id for calls to that env's
+  instances. The router's nonces are shared, so such calls could burn any victim's router nonce on a lane (a denial of
+  service; the subject is named only to the live target, which is one of that env's instances, so nothing is forged on other
+  contracts). Today a bad env registry burns only that token's own nonces. Accepted as part of the env publication trust, or
+  fixed by keying nonces per registry (more frozen code; not proposed).
+- *Reentrancy through the lookup.* None: `infoOf` is a view on an immutable address, called under the router's lock
+  (`_enter`, `:516`), and `EXTCODECOPY` runs no code.
+- *Limit, shared with G3.* Factory ops keep the router's own generation. A UA only generation 2 knows cannot be the
+  registrar or create an instance through the router; a native or generation-1 account creates and names it in the
+  config.
+
+**Gas [E], not measured** (no calibration without the owner): one `EXTCODECOPY` of 97 bytes on the target (the target's cold
+access is paid once, by this or by the call that follows), one cold `CALL` to the factory (2,600) and its record slots
+(`infoOf` returns the whole `Created`: about three cold `SLOAD`s), about 9 to 11 k per router op on a factory-made target;
+nothing extra on another target beyond the code copy.
+
+**Node and SDK.** No change. One router address, the same ABI, domain name and typed rows (`typed.rs:68`); one
+`governance_routers` row (`scaas-node/src/config.rs:345-349`). The SDK keeps the profile's one `router`
+(`clients/scaas-sdk/src/admin.rs:331-337`). Deploy scripts and books pass the factory to the router.
+
+**Effort [E].** 2 to 4 days: the base change, the four line tests turned to G1 expectations, gas pins moved (old → new),
+the size gate, deploy scripts and the node e2e deploy; every forge directory at the default set and the set-sensitive tests
+at the other three (a shared base, AGENTS.md); a Fable review; the router falls under the audit round.
+
+#### 7.2.4 G3: the same router code, one deployment per generation (R-b)
+
+**The router.** `GovernanceRouter` itself answers no `factoryInfo`, `validateEnv` or `modules`, so a catalogue row needs a
+thin child that adds those views (`CatalogueRouter` in `RouterPerReleaseTest`, `test_rb_routerVersionInCatalogue_pickedByRelease`).
+Its domain name stays "SCaaS GovernanceRouter", so the node's typed rows fit. New code, but a post-freeze release.
+
+**The key question: can a new instance of an existing kind choose router 2 without a factory change? Only through a new
+release version, never through a new env alone [F].** `ChainEnv.govRouter` is the factory's one router
+(`OpenFactory.sol:1002-1005`), and every existing kind reads it (`MetaTokenBase.sol:158`, `SCaaSDexAdmin.sol:58`). A new env
+can name a generation-2 registry, but not another router. The next release version of a kind must override `_govRouter`
+to read its env, which the `virtual` keywords now allow. Per kind:
+
+| Kind | Router in its next version | What that version needs |
+|---|---|---|
+| Normal, Wrapped (kinds 0, 1) | `deps[0]` (unused today) | the override in the release and in every body module (the generated faces, `script/modules/gen_faces.py`; CTR-TOK-30), `validateEnv` pinning the catalogue row; a new env and release per generation |
+| PQZ kinds (4, 5) | `deps[1]` (`deps[0]` is the verifier, `PqzLayer.sol:89`) | the same |
+| Zether kinds (2, 3) | a `params` word (all four deps used, `ZetherLayer.sol:59-90`) | the same, plus a reader of the params word |
+| Regulated kinds (8–13) | as their base kind | the same, plus a compliance registry bound to router N: the token requires the registry's `govRouter()` to be its own (`RegulatedLib.sol:150-152`), and the factory's one compliance entry must name the chain's router (`OpenFactory.sol:213`); so one compliance registry and its KYC set-up per generation, named in `initArgs` |
+| `SCaaSDex` | `deps[0]` (unused today) | the override in the release and in `SCaaSDexGovernanceModule` |
+| PqChat, PqVault (`PqGroupBase`) | none: not governed | nothing; they check signatures on their own env registry (`PqChat.sol:92`, `PqVault.sol:115`), so a generation-N env already serves generation-N users |
+| Generic classes (≥ 3, e.g. a multi-token kind) | `deps` by design (P3) | nothing new |
+
+**The operational rule: grant a role only to a UA the token's router can verify.**
+- *Enforced on chain today?* Only at use. `grantRole` checks zero, pools, the bit, the feature and, for regulated
+  contract-only roles, the `msig` kind (`GovernanceLib.sol:584-609`); it does not ask whether the router can verify the
+  account. A grant to such an account is a dead role: the router refuses it at every use (fail closed), and the admin can
+  revoke it.
+- *Admin transfer is safe:* two steps, the new admin accepts through the router (`GovernanceLib.sol:487-502`).
+- *The gap:* the initial admin and holders at `initialize` have no accept step (`GovernanceLib.init`, `initHolder`). A
+  token whose admin only a later generation knows than its router's has no working admin, for good. Under G3 this
+  happens whenever an existing release that reads `ChainEnv.govRouter` gets a generation-N env, which CTR-UA-67 allows
+  today. Under G1 it cannot happen, because router and token use one registry.
+- *Should `grantRole` refuse such a UA?* Not proposed. It needs a `holderOf` read in `GovernanceLib` (frozen code), costs gas
+  on every grant, and would refuse a legitimate grant to a UA registered later.
+- *SDK warning: yes, under either option.* Before a grant or a creation, resolve `holderOf(ua)` on the router's registry
+  (under G1: the token's env registry) and warn when the holder is 0. Not frozen.
+
+**Already-deployed tokens.** They stay on generation 1, as under G1.
+
+**Replay.** Each router has its own domain (`verifyingContract`), so two routers never take each other's signatures
+(`test_p3_replayAcrossRouters_refused`).
+
+**Node and SDK.** Each router version is a `governance_routers` row, or the node learns them from the catalogue (node work).
+The SDK must pick the router per target from the instance's `GOV_ROUTER()` (`GovernanceBase.sol:258`) instead of the
+profile's one `router` (`admin.rs:331-337`), and keep the chain's router for factory ops. The creator path does not move:
+the factory takes `subject()` only from its own router (`OpenFactory.sol:1095-1100`); a creation sent through router N
+would be recorded under `pad(routerN)`, one namespace shared by all its users, so router N must not be used for `mtxCreate*`.
+
+**Frozen code.** None beyond the `virtual` keywords, which are in.
+
+**Effort [E].** First time: 1 to 2 weeks (the override as a compile-time variant in the generator and the kinds, the router
+child, the regulated compliance path, SDK router choice, node rows, tests). Then per generation: a router deployment and row,
+and a new env plus a release version of every governed kind (about 15 implementations and their modules), one compliance
+registry, node config and SDK release data.
+
+#### 7.2.5 Side by side
+
+| | G1: one router, the target's env registry | G3: a router version per generation (R-b) |
+|---|---|---|
+| Frozen code before the freeze | `GovernanceRouterBase`: `FACTORY` immutable, registry chosen per target in `_uaCall` | none (the `virtual` keywords are in) |
+| Serves | every new instance of every kind, on any generation's env | only new instances of new release versions that read the router from their env |
+| Already-deployed instances | stay on generation 1 | stay on generation 1 |
+| CTR-UA-27 parity | by construction | for new versions only; an existing release on a generation-N env breaks it |
+| Replay separation | one domain; signed `target` decides the registry | one domain per router (tested) |
+| Node rows | unchanged: one `governance_routers` row | one row per router version, or read from the catalogue |
+| SDK discovery | unchanged: the profile's router | per target `GOV_ROUTER()`; the chain's router for factory ops |
+| Risks | a bad env registry can burn router nonces of any id (denial of service); a frozen-code change before the audit | a dead initial admin when an old release meets a newer env; per-generation compliance registries; more moving parts per generation |
+| Effort [E] | 2–4 days, once | 1–2 weeks, then a release round per generation |
+
+#### 7.2.6 Recommendation [I]
+
+**Take G1 before the freeze; keep R-b for routers with new ops.** G1 is one local change in one frozen contract. It makes
+governance follow the token's own generation for every kind, with no new release per kind and per generation, and no node or
+SDK change. It cannot be added later: after the freeze the chain's router is fixed and every existing kind reads it, so a
+G1 router after the freeze would be a G3 deployment anyway. R-b still serves new kinds that need new ops, and a
+catalogued router inherits G1 from the base.
+
+If the owner prefers no frozen-code change, take G3 with these rules: no generation-N env for a release that reads
+`ChainEnv.govRouter`, and the SDK warning above.
+
+**Must land before the freeze, under G1:**
+1. `GovernanceRouterBase`: the `FACTORY` immutable and `factory()` view; the per-target registry in `_uaCall` (clone form,
+   then `infoOf(target).addr == target`, then code offset 77 when non-zero, else the router's own registry).
+   `GovernanceRouter`'s constructor takes the factory.
+2. Deploy order and scripts: the factory, the router naming it, `configureChain`; books and the node e2e deploy.
+3. Tests: the four `RouterRegistryLineTest` cases turned to the G1 expectations, `RouterG1Test` on the real change and a real
+   `OpenFactory`, gas pins with old → new figures, the size gate; every forge directory at the default set and the
+   set-sensitive tests at the other three.
+4. A decisions entry for the ruling and its rule in `docs/contracts/token-wrappers.md` §6.1; a Fable review; the audit
+   round's scope.
+
+Not frozen, either option: the SDK warning on grants and creations.
+
+**Owner questions still open.** G1 or G3 (Q10). Whether a bad env registry's reach to router nonces (G1) is accepted. Whether
+a UA only a later generation knows should be able to create instances or hold factory roles (neither option gives it).
+
 ## 8. Open questions, TODO items, effort
 
 **Open questions for the owner** (no rulings here):
