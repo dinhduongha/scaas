@@ -239,6 +239,7 @@ macro_rules! binding_list {
                 async admin_ua_approve_release / admin_ua_approve_release_blocking (req: UaApproveRelease) -> Arc<Prepared>;
                 async admin_ua_revoke_approval / admin_ua_revoke_approval_blocking (req: UaRevokeApproval) -> Arc<Prepared>;
                 async admin_ua_cancel_nonce / admin_ua_cancel_nonce_blocking (req: UaCancelNonce) -> Arc<Prepared>;
+                async admin_ua_cancel_nonce_for / admin_ua_cancel_nonce_for_blocking (req: UaCancelNonceFor) -> Arc<Prepared>;
             }
         }
     };

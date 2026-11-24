@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {GovernanceRouterBase} from "../../src/governance/GovernanceRouterBase.sol";
 import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
 import {SdkGasRouterFix} from "./SdkGasFixtures.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
@@ -167,7 +168,9 @@ contract SdkGasWalletTest is SdkGasLedger {
     }
 }
 
-/// The `gov_router` domain kind's `mtxCancelNonce` (variant `router`): the ordered cancel on the router, by a native key.
+/// The `gov_router` domain kind's `mtxCancelNonce` (variant `router`): the ordered cancel on the router, by a native key; and
+/// the keyed cancel `mtxCancelNonceFor` (CTR-GOV-33 Change) by the same key, on the router's own map (a native id: one map
+/// for every target).
 contract SdkGasRouterTest is SdkGasRouterFix {
     function setUp() public override {
         super.setUp();
@@ -176,5 +179,14 @@ contract SdkGasRouterTest is SdkGasRouterFix {
 
     function test_sdkGas_router() public {
         _both("gov_router", "mtxCancelNonce", "router", address(router), _sgFrom(), _cancel);
+        _both("gov_router", "mtxCancelNonceFor", "router", address(router), _sgFrom(), _cancelFor);
+    }
+
+    function _cancelFor(address c, uint256 nonce) internal view returns (bytes memory) {
+        uint256 lane = SG_LANE + 1;
+        bytes32 d = _sgNamed(
+            c, "UACancelNonceFor(bytes32 from,address target,uint256 lane,", abi.encode(SG_PAYEE, lane), nonce
+        );
+        return abi.encodeCall(GovernanceRouterBase.mtxCancelNonceFor, (_sgE(nonce), SG_PAYEE, lane, _sgUaSig(d)));
     }
 }

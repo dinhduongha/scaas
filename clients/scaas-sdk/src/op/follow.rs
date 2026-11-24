@@ -113,6 +113,9 @@ impl Op {
                         .copied()
                         .unwrap_or(0);
                     let (kind, from_block) = (row.kind.clone(), row.from_block.max(scanned));
+                    // a router op of a derived id reads the map the router checks it on, as prepare and submit did (G1,
+                    // CTR-GOV-33; review D-1: `mtxNonce` there read another map, a spent nonce of it `consumed` while in flight)
+                    let target = super::gov_target(&row.message);
                     let (lane, filter, kind) = (&lane, &filter, kind.as_str());
                     let pool = &pool;
                     let read = |choice| {
@@ -141,7 +144,7 @@ impl Op {
                                         .call_at(
                                             &at,
                                             contract,
-                                            nonce_call(kind, from, *batch, None),
+                                            nonce_call(kind, from, *batch, target),
                                         )
                                         .await?;
                                     if w.len() != 32 {

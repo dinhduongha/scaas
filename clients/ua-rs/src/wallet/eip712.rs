@@ -1010,6 +1010,8 @@ const OPS: &[Op] = &[
     // the three-key model (CTR-PQZ-38, CTR-PQZ-40): the holder-signed rollover of an opening token, its own struct (no envelope)
     raw("PqzRollOver", "bytes32 ua,uint64 keyVersion,uint64 rollSeq,uint64 rolled,uint64 n,uint64[] skip,bytes32 entriesHash,uint64 validUntilBlock,bytes32 chainUid", &[P]),
     raw("ZetherSetRollOverMode", "bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock", &[Z]),
+    // CTR-GOV-33 Change (owner 2026-11-24): the keyed cancel, `lane` in the map the router checks for an op on `target`
+    op("UACancelNonceFor", "address target,uint256 lane", &[ROUTER], None),
     op("UAGrantRole", "address target,uint8 bit,bytes32 account,bytes32 chainUid", &[ROUTER], None),
     op("UARevokeRole", "address target,uint8 bit,bytes32 account,bytes32 chainUid", &[ROUTER], None),
     op("UASetGrant", "address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid", &[ROUTER], None),

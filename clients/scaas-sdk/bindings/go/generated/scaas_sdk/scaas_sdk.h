@@ -811,6 +811,11 @@ uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_grant(uint64_t ptr, Ru
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(uint64_t ptr, RustBuffer req
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ADMIN_ADMIN_UA_CANCEL_NONCE_FOR
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ADMIN_ADMIN_UA_CANCEL_NONCE_FOR
+uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(uint64_t ptr, RustBuffer req
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ADMIN_ADMIN_UA_CANCEL_RATE
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ADMIN_ADMIN_UA_CANCEL_RATE
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate(uint64_t ptr, RustBuffer req
@@ -2830,6 +2835,12 @@ uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_grant(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ADMIN_ADMIN_UA_CANCEL_NONCE
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ADMIN_ADMIN_UA_CANCEL_NONCE
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ADMIN_ADMIN_UA_CANCEL_NONCE_FOR
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ADMIN_ADMIN_UA_CANCEL_NONCE_FOR
+uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for(void
     
 );
 #endif

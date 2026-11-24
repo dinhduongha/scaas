@@ -260,6 +260,9 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     // the Change of CTR-GOV-28 in round 3zb + 3zc (O5, O6, owner 2026-11-13): every op of a role holder and `UASetWrapLimits`
     // names the target's chain word last too (`chainUid`; a job without it is `BAD_PAYLOAD`, old rows in
     // legacy/burner-wrap-caps/typed_v3.rs)
+    // CTR-GOV-33 Change (owner 2026-11-24): the keyed cancel, `lane` in the map the router checks for an op on `target` (no
+    // chain word: the router calls no target); its subject's nonce is the router's `mtxNonceFor(target, …)` as every row here
+    ("UACancelNonceFor", "mtxCancelNonceFor", GR, "bytes32 from,address target,uint256 lane,E", ""),
     ("UAGrantRole", "mtxGrantRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
     ("UARevokeRole", "mtxRevokeRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
     ("UASetGrant", "mtxSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid,E", ""),
@@ -3125,10 +3128,10 @@ mod tests {
         // the three-key model (CTR-PQZ-41): -> (103, 137, 136), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
         // round 3zc (CTR-GOV-30): -> (105, 139, 138), the router's `UASetMaxSupply`, `UASetMaxWrapSupply`
         // set-auditor (CTR-GOV-31): -> (108, 143, 140), the router's `UASetAuditorKey`, `UASetAuditorUA` and the raw
-        // `AuditorConsent` (two token domains, no entry)
+        // `AuditorConsent` (two token domains, no entry); CTR-GOV-33 Change: -> (109, 144, 141), the router's `UACancelNonceFor`
         assert_eq!(
             (structs, domains, calldata),
-            (108, 143, 140),
+            (109, 144, 141),
             "every row was walked (two creations and the approvals left out by vectors())"
         );
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
@@ -3142,10 +3145,11 @@ mod tests {
         // owner 2026-11-12: -> 107, `UACreateInstance`
         // the three-key model (CTR-PQZ-41): -> 108, `PqzRollOver`; round 3zc (CTR-GOV-30): -> 110, `UASetMaxSupply`,
         // `UASetMaxWrapSupply`; set-auditor (CTR-GOV-31): -> 113, `UASetAuditorKey`, `UASetAuditorUA`, `AuditorConsent`
+        // CTR-GOV-33 Change: -> 114, `UACancelNonceFor`
         assert_eq!(
             rows().iter().filter(|r| r.typed).count(),
-            113,
-            "108 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations"
+            114,
+            "109 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations"
         );
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
@@ -3619,6 +3623,34 @@ mod tests {
         assert_eq!(
             row_of("UAOperatorTransfer", "gov_router").fields[2],
             ("bytes32".into(), "account".into())
+        );
+    }
+
+    /// CTR-GOV-33 Change (owner 2026-11-24): the keyed cancel is a row of `gov_router` alone, the contract's struct, and its
+    /// `target` is the op's `gov_target`, so a derived subject's nonce is read as `mtxNonceFor(target, …)` like every router row.
+    #[test]
+    fn keyed_cancel_row() {
+        let r = row_of("UACancelNonceFor", "gov_router");
+        assert_eq!((r.contracts, r.entry), (GR, "mtxCancelNonceFor"));
+        assert_eq!(
+            r.type_string(),
+            format!("UACancelNonceFor(bytes32 from,address target,uint256 lane,{E_FIELDS})")
+        );
+        assert!(r.ua() && r.enveloped && r.sig == Some(Sig::Ua));
+        let v = vectors();
+        let op = Op::parse(&op_of("UACancelNonceFor", "gov_router", &v).unwrap(), FEE).unwrap();
+        let t: Address = v["ops"]["UACancelNonceFor"]["message"]["target"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(op.gov_target, Some(t));
+        assert_eq!(
+            rows()
+                .iter()
+                .filter(|x| x.entry == "mtxCancelNonceFor")
+                .count(),
+            1
         );
     }
 

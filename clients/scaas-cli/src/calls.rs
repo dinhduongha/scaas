@@ -599,6 +599,7 @@ calls! { cx;
     "admin ua-approve-release" "Admin::admin_ua_approve_release" (r: UaApproveRelease) @op => sdk(cx).admin().admin_ua_approve_release(r).await?;
     "admin ua-revoke-approval" "Admin::admin_ua_revoke_approval" (r: UaRevokeApproval) @op => sdk(cx).admin().admin_ua_revoke_approval(r).await?;
     "admin ua-cancel-nonce" "Admin::admin_ua_cancel_nonce" (r: UaCancelNonce) @op => sdk(cx).admin().admin_ua_cancel_nonce(r).await?;
+    "admin ua-cancel-nonce-for" "Admin::admin_ua_cancel_nonce_for" (r: UaCancelNonceFor) @op => sdk(cx).admin().admin_ua_cancel_nonce_for(r).await?;
 
     // ---- app-core (spec §12): key handles live in this process, named by `--as` in a session
     "app-core random-bytes" "AppCore::random_bytes" {seed: String, n: u32} => hexed("bytes", &cx.app()?.random_bytes(&seed, n)?);

@@ -98,6 +98,7 @@ uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_approve_release_blocking(uint
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_approve_token_release_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_grant_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
+uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_create_dex_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_create_instance_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
@@ -443,6 +444,7 @@ uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_approve_release_blockin
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_approve_token_release_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_grant_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_blocking();
+uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_create_dex_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_create_instance_blocking();

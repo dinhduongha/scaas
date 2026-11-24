@@ -245,11 +245,17 @@ that per-transaction cap holds the registration to half its block gas limit and 
 BUILT: plan T10, T11b, `src/op/follow.rs`, `src/op/tests.rs`, `tests/wallet.rs`, `soroban_ops.rs`; PLANNED (review 2026-11-20,
 F12): DEX order and cancel rows ending without their event). Terminal, from a decisive read at the profile's final block only: `Landed` (the executed event of the operation's digest,
 `UAMetaTransactionExecuted` on tokens, mandate wallets and the governance router, `MetaTransactionExecuted` on `SmartKeyAccount`; for a
-registry write, its record present), `Consumed` (the lane nonce spent without that event), `Expired` (`validUntil` passed with the nonce
+registry write, its record present), `Consumed` (the lane nonce spent without that event; a `GovernanceRouter` op of a derived id reads
+the map the router checks it on, `mtxNonceFor(target, …)`, as prepare and submit do: review D-1, BUILT on branch `router-cancel`,
+`a_router_ops_follow_reads_the_target_keyed_nonce`), `Expired` (`validUntil` passed with the nonce
 unspent), each with its `basis` (`Majority`: the strict majority's agreed read at `finalized`; `OneEndpoint`: endpoint 0's alone
 under `failover`; CLI-RPC-09's "their text says they rest on one endpoint", review T26 B-14), and for an EVM native send `Reverted` (final and reverted; owner 2026-11-18, ruling 4). Everything else is `InFlight` with its detail: queued or sent, the gateways' merged state (never terminal, every node `dead`
 included), a self-relay transaction that failed or was replaced (not a failed operation: the signed operation is public and may still
-land). While in flight the user may wait, resend the same bytes, or cancel the lane's nonce, which makes the operation `Consumed`.
+land). While in flight the user may wait, resend the same bytes, or cancel the lane's nonce, which makes the operation `Consumed`; a
+router op of a derived id on a target of another registry generation is cancelled in that target's keyed map by
+`admin_ua_cancel_nonce_for` (`UACancelNonceFor`, [CTR-GOV-33](../contracts/token-wrappers.md#CTR-GOV-33); the router's `mtxCancelNonce`
+reaches only its own map). `mtxNonceFor` answers for the target as it is: a client reads it for an op on a new instance only once
+the instance exists (review G-6).
 After a restart every operation resumes from the chain. On Soroban (review T26 B-1 to B-3, `soroban_follow`) one endpoint answers
 every fact of a step, the op's spent entries before its transaction's status, and decides only when the read is decisive (agreed;
 under `failover` endpoint 0, not `discovered`); every bound is the chain's: a transfer's or burn's auth entry ends only past its

@@ -258,6 +258,12 @@ library GovernanceRouterTypes {
         "UASetChainEntries(bytes32 from,address target,ChainEntries entries,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
         "ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash)"
     );
+
+    // ---- the keyed cancel (CTR-GOV-33 Change, owner 2026-11-24): `lane` of `from` in the map the router checks for an op on
+    //      `target`; no chain word (the router calls no target)
+    bytes32 internal constant UA_CANCEL_NONCE_FOR = keccak256(
+        "UACancelNonceFor(bytes32 from,address target,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
 }
 
 /// @title What every governance router of a chain shares (CTR-GOV-15 Change, owner 2026-11-04): the flow and the owner's and
@@ -280,6 +286,9 @@ library GovernanceRouterTypes {
 abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     /// @notice A signed op names a `target` with no code: the call would do nothing and spend the nonce.
     error TargetHasNoCode(address target);
+
+    /// @notice `mtxCancelNonceFor` bumped `ua`'s lane `batch` in `registry`'s keyed map (CTR-GOV-33): `newNonce` its next nonce.
+    event UANonceCancelledAt(bytes32 indexed ua, address indexed registry, uint256 indexed batch, uint256 newNonce);
 
     // Transient slots, written as literals (assembly takes no keccak256 constant).
     bytes32 private constant _SUBJECT = 0x20935f8cb59257160a8ea6e9f7009952d0d53b805b693a0e0c04a129f2a5ab0e; // keccak256("scaas.govrouter.subject")
@@ -521,6 +530,42 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         );
     }
 
+    // ------------------------------------------------------------------ the keyed cancel (CTR-GOV-33)
+
+    /// @notice The ordered cancel of `e.from`'s `lane` in the map the router checks for an op on `target` (CTR-GOV-33 Change,
+    ///         owner 2026-11-24), over `UACancelNonceFor`: so a derived signer on another registry's map can kill an op it
+    ///         signed and did not send. The registry is `registryFor(target)`, as for the op itself, never one the caller
+    ///         names; the router calls nothing. Where that is the router's own map (a native id, or a target of the router's
+    ///         registry) it does what `mtxCancelNonce` does (`UANonceCancelled`); else the cancel's own nonce is spent and `lane`
+    ///         bumped by one in `(registryFor(target), from)`'s map (`_preAt`, `UANonceCancelledAt`). Fee mode `NONE`, as every op.
+    function mtxCancelNonceFor(
+        MetaTxLib.UAEnvelope calldata e,
+        address target,
+        uint256 lane,
+        IUARegistry.UASig calldata auth
+    ) external {
+        bool outer = _enter();
+        (MtxPipelineLib.Out memory o, address r) = _pre(
+            GovernanceRouterTypes.UA_CANCEL_NONCE_FOR,
+            e,
+            target,
+            abi.encode(target, lane),
+            abi.encodeCall(IMetaTx.cancelNonce, (lane)),
+            auth
+        );
+        if (r == _registry()) {
+            emit IUALedger.UANonceCancelled(e.from, lane, _bumpNonce(e.from, lane));
+        } else {
+            uint256 n;
+            unchecked {
+                n = ++_routerNonces().nonce[r][e.from][lane];
+            }
+            emit UANonceCancelledAt(e.from, r, lane, n);
+        }
+        emit IUALedger.UAMetaTransactionExecuted(e.from, msg.sender, e.batch, e.nonce, o.digest, o.feeTo, o.fee);
+        _exit(outer);
+    }
+
     // ------------------------------------------------------------------ no generic path (governance spec §3.6, B-14)
 
     /// @dev `executeMetaTransaction`: an op signed as a `bytes data` blob is refused, whatever it calls.
@@ -584,21 +629,34 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         IUARegistry.UASig calldata auth
     ) internal {
         bool outer = _enter();
+        (MtxPipelineLib.Out memory o,) = _pre(typehash, e, target, _signed(target, words), data, auth);
+        _call(e.from, target, data);
+        emit IUALedger.UAMetaTransactionExecuted(e.from, msg.sender, e.batch, e.nonce, o.digest, o.feeTo, o.fee);
+        _exit(outer);
+    }
+
+    /// @dev The checks of an op (and of the keyed cancel) on the registry `r` it is checked on: a native id the router's own
+    ///      (no registry call), a derived id `registryFor(target)`; the router's own map through `preNamedUA`, any other
+    ///      registry's through `_preAt`. `args` the struct's words after `from`, `data` the call whose facts are checked.
+    function _pre(
+        bytes32 typehash,
+        MetaTxLib.UAEnvelope calldata e,
+        address target,
+        bytes memory args,
+        bytes memory data,
+        IUARegistry.UASig calldata auth
+    ) private returns (MtxPipelineLib.Out memory o, address r) {
         MtxPipelineLib.Envelope memory env = MtxPipelineLib.Envelope(
             e.from, 0, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient
         );
         MtxPipelineLib.Ctx memory c = _mtxCtx();
-        address r = UAKinds.inNativeSpace(e.from) ? c.registry : registryFor(target);
-        MtxPipelineLib.Out memory o;
+        r = UAKinds.inNativeSpace(e.from) ? c.registry : registryFor(target);
         if (r == c.registry) {
-            o = MtxPipelineLib.preNamedUA(c, typehash, env, _signed(target, words), _facts(data), auth);
+            o = MtxPipelineLib.preNamedUA(c, typehash, env, args, _facts(data), auth);
         } else {
             c.registry = r;
-            o = _preAt(c, typehash, env, _signed(target, words), _facts(data), auth);
+            o = _preAt(c, typehash, env, args, _facts(data), auth);
         }
-        _call(e.from, target, data);
-        emit IUALedger.UAMetaTransactionExecuted(e.from, msg.sender, e.batch, e.nonce, o.digest, o.feeTo, o.fee);
-        _exit(outer);
     }
 
     /// @dev `MtxPipelineLib.preNamedUA`'s steps in its order, for a derived id on a target whose registry `c.registry` is not

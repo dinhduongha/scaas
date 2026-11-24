@@ -2858,9 +2858,10 @@ mod tests {
         // the three-key model (CTR-PQZ-41): -> (133, 3, 133), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
         // round 3zc (CTR-GOV-30): -> (135, 3, 135), the router's `UASetMaxSupply`, `UASetMaxWrapSupply`
         // set-auditor (CTR-GOV-31): -> (137, 3, 137), the router's `UASetAuditorKey`, `UASetAuditorUA`
+        // CTR-GOV-33 Change: -> (138, 3, 138), the router's `UACancelNonceFor`
         assert_eq!(
             (sent, relayed, refused),
-            (137, 3, 137),
+            (138, 3, 138),
             "the walk reached every row with an entry; the relay fees: submit.rs"
         );
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
@@ -2877,10 +2878,11 @@ mod tests {
         // `mtxSetAuditorKey`, `mtxSetAuditorUA`; bls-multi Task 10: -> 148, the registry's `registerBlsMulti`
         // PqVault plan V8 (CTR-PQV-11): -> 156, `PqVault`'s eight plain rows; chains-arweave T9: -> 157, `PqChatStore`'s
         // `storeMessage` (contract kind `pqchatstore`); PqChat TreeKEM T4 (CTR-CHAT-27): 157 -> 163, `PqChat`'s six tree writes
+        // CTR-GOV-33 Change: 163 -> 164, the router's `UACancelNonceFor`
         assert_eq!(
             typed::rows().iter().filter(|r| !r.entry.is_empty()).count(),
-            163,
-            "table rows: 111 typed with an entry, 52 plain"
+            164,
+            "table rows: 112 typed with an entry, 52 plain"
         );
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
@@ -4012,8 +4014,8 @@ mod tests {
         // round 3s (CTR-GOV-24): -> 50, `mtxSetAllowed`, `mtxSetDenied`, `mtxEnableFeature`; round 3t: -> 51, `mtxSetVerifierFee`
         // owner 2026-11-12: -> 53, `mtxCreateToken`, `mtxCreateDex`; -> 54, `mtxCreateInstance`; round 3zc (CTR-GOV-30): -> 56,
         // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` (the 25 ops of the Change of CTR-GOV-28 moved selector in place); set-auditor
-        // (CTR-GOV-31): -> 58, `mtxSetAuditorKey`, `mtxSetAuditorUA`
-        assert_eq!(router.len(), 58, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the three creations (a token, a DEX, an instance), bit 32's two ops; the four release approvals (3r) in NOT_ROWS");
+        // (CTR-GOV-31): -> 58, `mtxSetAuditorKey`, `mtxSetAuditorUA`; CTR-GOV-33 Change: -> 59, `mtxCancelNonceFor`
+        assert_eq!(router.len(), 59, "19 ops, the eight regulated controls (plan T32), the ordered cancel and the keyed one, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the three creations (a token, a DEX, an instance), bit 32's two ops; the four release approvals (3r) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows()
             .iter()
             .filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router"))
@@ -4799,8 +4801,9 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // NODE-JOB-29 (TODO 3zh MD-14): -> 307, the registry's `cacheExpandedKey` (PERMISSIONLESS)
     // set-auditor (CTR-GOV-31): -> 309, the router's `mtxSetAuditorKey`, `mtxSetAuditorUA`; GOVERNED 309 -> 317, `setAuditorKey`
     // BIT(32) on the Zether kinds 2, 3, 10, 11 and `setAuditorUA` BIT(32) on the PQZ kinds 4, 5, 12, 13
-    // bls-multi Task 10: -> 310, the registry's `registerBlsMulti` (SIGNED)
-    const ROWED: usize = 310;
+    // bls-multi Task 10: -> 310, the registry's `registerBlsMulti` (SIGNED); CTR-GOV-33 Change: -> 311, the router's
+    // `mtxCancelNonceFor` (SIGNED)
+    const ROWED: usize = 311;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 206;
     const GOVERNED: usize = 317;

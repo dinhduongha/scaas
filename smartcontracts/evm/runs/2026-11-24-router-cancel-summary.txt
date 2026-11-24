@@ -1,0 +1,31 @@
+# The keyed cancel (CTR-GOV-33 Change, owner 2026-11-24), branch router-cancel from origin/ua-rs-sign 8cac68125: step | commit | rc | counts
+# Logs: runs/2026-11-24-router-cancel/<step>.log (git-ignored); the mutant table runs/2026-11-24-router-cancel/mutants.txt.
+# Default set n2304-kmax4096. Per-set runs: none; the router's 40 transitive imports hold no PqzSet, so its bytecode and every
+# router gas, address and typehash pin moved here are set-independent; no set-sensitive pin moved.
+red | forge RouterPerRelease.t.sol --match-test cancelFor (mtxCancelNonceFor a stub) | uncommitted, before f301f2bee | 1 | 1 passed 8 failed (the twin passes) (forge)
+green | forge test/governance (before the G-2 tests) | f301f2bee less G-2 | 0 | 977 passed 0 failed 0 skipped (967 + 10) (forge)
+green | forge RouterPerRelease.t.sol (with the G-2 tests) | f301f2bee | 0 | 39 passed 0 failed (26 + 4 + 9 suites) (forge)
+mutants | script/governance/g1_mutants.py (17, RouterPerRelease.t.sol) | f301f2bee | - | 17 of 17 killed, each by at least one behavioural test (the G1 four, the cancel's eight, Fable G-2's five)
+size | size gate | f301f2bee | 0 | GovernanceRouter runtime 30,767 -> 31,306 B (2,210 B under the 33,516 B T-2 line)
+forge | test/metatx (MsgSenderLint's pin 6 then still unmoved) | f301f2bee less that pin | 1 | 549 passed 1 failed 1 skipped: test_msgSenderReadsArePinned 7 != 6 (forge)
+forge | test/metatx/MsgSenderLint.t.sol after the pin 6 -> 7 | f301f2bee | 0 | 2 passed 0 failed (forge)
+forge | test/gas (the 18 router runs re-measured one forge run each, SDK_GAS_WRITE) | f301f2bee | 0 | 406 passed 0 failed 1 skipped (forge)
+forge | test/as | f301f2bee | 0 | 568 passed 0 failed 0 skipped (forge)
+forge | test/merge | f301f2bee | 0 | 350 passed 0 failed 0 skipped (forge)
+forge | test/v2 | f301f2bee | 0 | 756 passed 0 failed 0 skipped (forge)
+sdk-gas | clients/scaas-sdk/gas/generate.py --check | f301f2bee | 0 | check ok
+sdk-gas | clients/scaas-sdk/gas/test_generate.py (red first: KeyError 'transaction') | f0562976e | 0 | [test_generate] ok
+clientkeys | node --test test/*.test.js | f301f2bee | 0 | 658 tests, 653 passed 0 failed (node)
+node | cargo test --lib (CAPPED_MEM 6G) | 256001538 | 0 | 898 passed 0 failed (897 + keyed_cancel_row) (cargo)
+node | cargo clippy --all-targets -D warnings | 256001538 | 0 | -
+ua-rs | cargo test --locked --no-fail-fast | bb8dd3f9b | 0 | 631 passed 0 failed 3 ignored, 64 binaries (cargo)
+zether-prover | cargo test --locked | bb8dd3f9b | 0 | 86 passed 0 failed 2 ignored (cargo)
+scaas-sdk | D-1 red first (follow.rs with target None) | uncommitted, before bb8dd3f9b | 101 | 0 passed 1 failed (cargo)
+scaas-sdk | cargo test --locked --no-fail-fast | bb8dd3f9b | 0 | 287 passed 0 failed 12 ignored (286 + D-1) (cargo)
+scaas-sdk | cargo clippy --all-targets -D warnings | bb8dd3f9b | 0 | -
+scaas-cli | cargo test --locked | bb8dd3f9b | 0 | 22 passed 0 failed (cargo)
+bindings | runs/2026-11-17-scaas-sdk-gen.sh --check (dart, cpp, cs, python, kotlin, swift, java, go) | bb8dd3f9b | 0 | no drift, no test-only entry
+docs | scripts/docs_check.py check, paths, test_docs_check.py | 463e3a5cc | 0 | 0 errors, 7 warnings (line budgets); 0 machine paths; ok
+node | cargo test --test e2e --ignored (all 27 at once, CAPPED_MEM 6G) | 463e3a5cc | 143 | killed: the capped scope's OOM killer (27 anvils and deploys at once); CI runs --test-threads=1
+node | cargo test --test e2e --ignored --test-threads=1 (anvil from ~/.foundry/bin) | 463e3a5cc | 101 | 26 passed 1 failed: relayed_zether_proof_under_the_ua_tag (no release zether-cli in the worktree) (cargo)
+node | that test by name, zether-cli built as CI builds it (--release --features hazmat) | 463e3a5cc | 0 | 1 passed 0 failed (cargo)

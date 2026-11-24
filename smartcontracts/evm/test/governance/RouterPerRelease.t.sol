@@ -16,6 +16,8 @@ import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
+import {SigCheck} from "../../src/common/SigCheck.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -990,7 +992,7 @@ contract RouterG1Test is RegistryLineFixture {
             "no factory, eoa",
             "router on gen2, pq65"
         ];
-        uint256[7] memory pin = [uint256(123_766), 138_803, 122_352, 105_498, 121_870, 105_498, 122_957];
+        uint256[7] memory pin = [uint256(123_827), 138_864, 122_413, 105_559, 121_931, 105_559, 123_018];
         for (uint256 i; i < 7; ++i) {
             emit log_named_uint(n[i], g[i]);
         }
@@ -1047,6 +1049,336 @@ contract RouterG1Test is RegistryLineFixture {
         assertEq(router.mtxNonceFor(t2, eoa, 0), router.mtxNonce(eoa, 0));
         _mintBy(router, t2, eoa);
         assertEq(router.mtxNonce(eoa, 0), 1);
+        assertEq(router.mtxNonceFor(t2, eoa, 0), 1, "a native id on a gen-2 env target: the one map (G-2)");
         assertEq(router.mtxNonceFor(address(f), eoa, 0), 1);
+    }
+
+    // ---- the keyed path's own checks, each on a generation-2 env target (Fable G-2, 2026-11-24): the signature, the envelope
+    //      order, the delegated relayer, `registryFor`'s zero and suffix checks
+
+    /// A signature over another digest by the holder's own key, on a gen-2 target: `UAUnauthorized` from generation 2, nothing
+    /// spent in either map; the control (the right digest) runs.
+    function test_g1_keyedPath_wrongSignatureRefused() public {
+        address t2 = _ftoken(GEN2, pq65, "a");
+        bytes memory args = abi.encode(BOB, uint256(5));
+        MetaTxLib.UAEnvelope memory e = _envelope(router, pq65, 0);
+        bytes32 wrong = _digest(router, OP_MINT, e, t2, abi.encode(BOB, uint256(6)));
+        bytes memory cd = _calldata(OP_MINT, e, t2, args, _tail(abi.encode(_auth(pq65, wrong))));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq65));
+        _run(cd);
+        assertEq(router.mtxNonceFor(t2, pq65, 0), 0, "the keyed map: nothing spent");
+        assertEq(router.mtxNonce(pq65, 0), 0, "the one map: nothing spent");
+        _mintBy(router, t2, pq65);
+    }
+
+    /// `preNamedUA`'s order on the keyed path: a bad nonce and a bad signature together give `MetaTxBadNonce`.
+    function test_g1_keyedPath_nonceBeforeSignature() public {
+        address t2 = _ftoken(GEN2, pq65, "a");
+        MetaTxLib.UAEnvelope memory e = _envelope(router, pq65, 0);
+        e.nonce = 7;
+        IUARegistry.UASig memory forged;
+        forged.signature = hex"00";
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 0, 7));
+        _run(_calldata(OP_MINT, e, t2, abi.encode(BOB, uint256(5)), _tail(abi.encode(forged))));
+    }
+
+    /// Fee bits 3 (no such fee mode) on the keyed path: `MetaTxUnknownMode` at the envelope, before the call check.
+    function test_g1_keyedPath_feeBits3Refused() public {
+        address t2 = _ftoken(GEN2, pq65, "a");
+        bytes memory args = abi.encode(BOB, uint256(5));
+        MetaTxLib.UAEnvelope memory e = _envelope(router, pq65, 0);
+        e.mode = 0x30;
+        bytes memory cd = _signedAt(router, OP_MINT, e, t2, args, args);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, uint32(0x30)));
+        _run(cd);
+    }
+
+    /// A bound relayer with an EIP-7702 delegation designator as its code, on the keyed path: `CallerDelegated`, before the
+    /// signature (the fixture signs relayer 0, so without the check the refusal would be `UAUnauthorized`).
+    function test_g1_keyedPath_delegatedRelayerRefused() public {
+        address t2 = _ftoken(GEN2, pq65, "a");
+        bytes memory args = abi.encode(BOB, uint256(5));
+        MetaTxLib.UAEnvelope memory e = _envelope(router, pq65, 0);
+        (e.mode, e.relayer) = (MetaTxLib.MODE_RESTRICT_RELAYER, address(0x7702));
+        bytes memory cd = _signedAt(router, OP_MINT, e, t2, args, args);
+        vm.etch(address(0x7702), abi.encodePacked(hex"ef0100", address(0xdead)));
+        vm.prank(address(0x7702));
+        vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, address(0x7702)));
+        _run(cd);
+        assertEq(router.mtxNonceFor(t2, pq65, 0), 0, "nothing spent");
+    }
+
+    /// `registryFor` on an indexed clone (the fixture as factory): an env registry 0 is the router's own; a clone whose
+    /// EIP-1167 suffix is broken is not the clone form, so its code's registry (generation 2) is not read.
+    function test_g1_registryFor_zeroAndSuffixChecks() public {
+        GovernanceRouter rf = new GovernanceRouter(chainUidA, PREG, _fixtureSka(), false, address(this));
+        NormalToken z = _token(address(0), address(rf), pq, true);
+        assertEq(rf.registryFor(address(z)), PREG, "an env registry 0: the router's own");
+        NormalToken t2 = _token(GEN2, address(rf), pq65, true);
+        assertEq(rf.registryFor(address(t2)), GEN2, "the control: an indexed gen-2 clone");
+        bytes memory c = address(t2).code;
+        c[31] = bytes1(uint8(c[31]) ^ 0x01);
+        address odd = address(0x0dd);
+        vm.etch(odd, c);
+        made[odd] = true;
+        assertEq(rf.registryFor(odd), PREG, "the suffix broken: not the clone form");
+    }
+
+    // ---- the keyed cancel (CTR-GOV-33 Change, owner 2026-11-24): `mtxCancelNonceFor`
+
+    string constant CANCEL_FOR =
+        "UACancelNonceFor(bytes32 from,address target,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
+    address constant RELAYER = address(0x5E1A);
+
+    /// The cancel's calldata: `e.from` cancels `lane` in the map the router checks for an op on `target`; `e` the cancel's own
+    /// envelope (an unbound relayer and fee recipient 0 in the message, as the contract hashes them).
+    function _cancelFor(MetaTxLib.UAEnvelope memory e, address target, uint256 lane)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes32 h = keccak256(
+            bytes.concat(
+                abi.encode(keccak256(bytes(CANCEL_FOR)), e.from, target, lane),
+                abi.encode(
+                    e.batch,
+                    e.nonce,
+                    e.validUntil,
+                    e.mode,
+                    e.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 ? e.relayer : address(0),
+                    e.fee,
+                    e.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT != 0 ? e.feeRecipient : address(0)
+                )
+            )
+        );
+        bytes32 d = keccak256(abi.encodePacked("\x19\x01", _domain(router), h));
+        return abi.encodeCall(router.mtxCancelNonceFor, (e, target, lane, _auth(e.from, d)));
+    }
+
+    /// The cancel's envelope on lane `batch`, at the nonce the router checks for `target` there.
+    function _envFor(bytes32 from, address target, uint256 batch)
+        internal
+        view
+        returns (MetaTxLib.UAEnvelope memory e)
+    {
+        e = _envelope(router, from, batch);
+        e.nonce = router.mtxNonceFor(target, from, batch);
+    }
+
+    /// `cd` with its `target` word (after the eight envelope words) replaced.
+    function _withTarget(bytes memory cd, address t) internal pure returns (bytes memory) {
+        return bytes.concat(_slice(cd, 0, 4 + 256), abi.encode(t), _slice(cd, 4 + 288, cd.length));
+    }
+
+    /// The twin of the next test: a gen-2 holder's op, signed at its keyed nonce and held back, lands later when nothing cancels it.
+    function test_cancelFor_twin_heldOpLands() public {
+        address t2 = _ftoken(GEN2, pq65, "a");
+        bytes memory held = _sFor(router, OP_MINT, pq65, t2, abi.encode(BOB, uint256(5)));
+        _run(held);
+        assertEq(NormalToken(t2).balanceOf(BOB), 5, "the held op landed");
+    }
+
+    /// A holder only generation 2 knows, on a target whose env is generation 2, cancels lane 0 in that registry's map (the
+    /// cancel sent on lane 1): the op it signed at lane 0 and never sent is then refused; the next nonce runs.
+    function test_cancelFor_gen2Env_heldOpRefused() public {
+        address t2 = _ftoken(GEN2, pq65, "a");
+        bytes memory held = _sFor(router, OP_MINT, pq65, t2, abi.encode(BOB, uint256(5)));
+        bytes memory cd = _cancelFor(_envFor(pq65, t2, 1), t2, 0);
+        vm.expectEmit(address(router));
+        emit GovernanceRouterBase.UANonceCancelledAt(pq65, GEN2, 0, 1);
+        _run(cd);
+        assertEq(router.mtxNonceFor(t2, pq65, 0), 1, "lane 0 cancelled at generation 2");
+        assertEq(router.mtxNonceFor(t2, pq65, 1), 1, "the cancel's own lane spent");
+        assertEq(router.mtxNonce(pq65, 0), 0, "the router's own map: untouched");
+        assertEq(router.mtxNonce(pq65, 1), 0);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
+        _run(held);
+        assertEq(NormalToken(t2).balanceOf(BOB), 0, "the held op did not land");
+        _mintBy(router, t2, pq65);
+    }
+
+    /// One map per registry: a cancel naming one gen-2 target cancels the lane for every target of generation 2, and for a
+    /// target of generation 1 nothing.
+    function test_cancelFor_oneMapPerRegistry() public {
+        address t2 = _ftoken(GEN2, pq, "a");
+        address t2b = _ftoken(GEN2, pq, "b");
+        address t1 = _ftoken(PREG, pq, "c");
+        bytes memory held = _sFor(router, OP_MINT, pq, t2b, abi.encode(BOB, uint256(5)));
+        _run(_cancelFor(_envFor(pq, t2, 1), t2, 0));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
+        _run(held);
+        assertEq(router.mtxNonceFor(t1, pq, 0), 0, "generation 1: untouched");
+        _mintBy(router, t1, pq);
+    }
+
+    /// A hostile env registry (it passes any id): a forged cancel as a real holder naming a token on that registry lands in that
+    /// registry's map only; the holder's held op at generation 2 still lands. The same forgery naming a gen-2 target is refused.
+    function test_cancelFor_badEnvRegistry_cannotCancelRealNonce() public {
+        address bad = _ftoken(address(yes), pq, "x");
+        address t2 = _ftoken(GEN2, pq, "y");
+        bytes memory held = _sFor(router, OP_MINT, pq, t2, abi.encode(BOB, uint256(5)));
+        IUARegistry.UASig memory forged;
+        forged.signature = hex"00";
+        router.mtxCancelNonceFor(_envFor(pq, bad, 0), bad, 0, forged);
+        assertEq(router.mtxNonceFor(bad, pq, 0), 2, "the bad registry's map: the cancel's nonce and the lane");
+        assertEq(router.mtxNonceFor(t2, pq, 0), 0, "generation 2's map: untouched");
+        assertEq(router.mtxNonce(pq, 0), 0, "the router's own map: untouched");
+        MetaTxLib.UAEnvelope memory e = _envFor(pq, t2, 1);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
+        router.mtxCancelNonceFor(e, t2, 0, forged);
+        _run(held);
+        assertEq(NormalToken(t2).balanceOf(BOB), 5, "the held op still lands");
+    }
+
+    /// The cancel is spent once: sent again, `MetaTxBadNonce`. Its signature names `target`, so the registry: the same bytes with
+    /// another target, on a map still at that nonce, are refused by the signature, a target of the same registry (gen 2) and of
+    /// another (gen 1), before and after it is spent.
+    function test_cancelFor_replay_refused() public {
+        address t2 = _ftoken(GEN2, pq, "a");
+        address t2b = _ftoken(GEN2, pq, "b");
+        address t1 = _ftoken(PREG, pq, "c");
+        bytes memory cd = _cancelFor(_envFor(pq, t2, 1), t2, 0);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
+        _run(_withTarget(cd, t2b));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
+        _run(_withTarget(cd, t1));
+        _run(cd);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
+        _run(cd);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
+        _run(_withTarget(cd, t1));
+        assertEq(router.mtxNonceFor(t2, pq, 0), 1);
+        assertEq(router.mtxNonceFor(t1, pq, 0), 0, "generation 1: untouched");
+        assertEq(router.mtxNonceFor(t1, pq, 1), 0);
+    }
+
+    /// The router's own map: a keyed cancel leaves it; `mtxCancelNonce` still bumps it and leaves the keyed map.
+    function test_cancelFor_ownMapUnaffected_mtxCancelNonceWorks() public {
+        address t2 = _ftoken(GEN2, pq, "a");
+        _run(_cancelFor(_envFor(pq, t2, 0), t2, 0));
+        assertEq(router.mtxNonceFor(t2, pq, 0), 2, "the cancel on lane 0 at nonce 0, then lane 0 bumped");
+        assertEq(router.mtxNonce(pq, 0), 0, "the router's own map: untouched");
+        MetaTxLib.UAEnvelope memory e = _envelope(router, pq, 0);
+        bytes32 c = keccak256(
+            abi.encode(
+                MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+                e.from,
+                uint256(0),
+                e.batch,
+                e.nonce,
+                e.validUntil,
+                e.mode,
+                address(0),
+                e.fee,
+                address(0)
+            )
+        );
+        router.mtxCancelNonce(e, 0, _auth(pq, keccak256(abi.encodePacked("\x19\x01", _domain(router), c))));
+        assertEq(router.mtxNonce(pq, 0), 2, "mtxCancelNonce: the own map");
+        assertEq(router.mtxNonceFor(t2, pq, 0), 2, "the keyed map: unchanged by it");
+    }
+
+    /// Controller call (2026-11-24): where the router checks an op on its own map (a native id on any target; a derived id on a
+    /// target of the router's own registry, the factory itself, an address with no code), `mtxCancelNonceFor` is `mtxCancelNonce`:
+    /// the cancel's nonce and `lane` in the one map, `UANonceCancelled`; no keyed map moves.
+    function test_cancelFor_nativeAndOwnRegistry_asMtxCancelNonce() public {
+        address t2 = _ftoken(GEN2, eoa, "a");
+        vm.expectEmit(address(router));
+        emit IUALedger.UANonceCancelled(eoa, 0, 2);
+        _run(_cancelFor(_envFor(eoa, t2, 0), t2, 0));
+        assertEq(router.mtxNonce(eoa, 0), 2, "a native id: the one map");
+        assertEq(router.mtxNonceFor(t2, eoa, 0), 2);
+        address[3] memory on = [_ftoken(PREG, pq, "b"), address(f), BOB];
+        for (uint256 i; i < 3; ++i) {
+            bytes memory cd = _cancelFor(_envFor(pq, on[i], 0), on[i], 5);
+            vm.expectEmit(address(router));
+            emit IUALedger.UANonceCancelled(pq, 5, i + 1);
+            _run(cd);
+        }
+        assertEq(router.mtxNonce(pq, 0), 3, "the cancels' own lane, in the one map");
+        assertEq(router.mtxNonce(pq, 5), 3, "the cancelled lane, in the one map");
+        assertEq(router.mtxNonceFor(_ftoken(GEN2, pq, "c"), pq, 5), 0, "generation 2's map: untouched");
+    }
+
+    /// Fee 0 from any sender; a paid mode refused on both paths as on every router op (fee mode `NONE`); a bound relayer: only
+    /// it; an expired envelope refused. Nothing is spent by a refusal.
+    function test_cancelFor_feeAndRelayer() public {
+        address t2 = _ftoken(GEN2, pq65, "a");
+        address t1 = _ftoken(PREG, pq, "b");
+        bytes memory cd = _cancelFor(_envFor(pq65, t2, 1), t2, 0);
+        vm.prank(address(0xBEEF));
+        _run(cd);
+        assertEq(router.mtxNonceFor(t2, pq65, 0), 1, "fee 0, any sender");
+        MetaTxLib.UAEnvelope memory e = _envFor(pq65, t2, 1);
+        (e.mode, e.fee) = (MetaTxLib.MODE_FEE_FIXED, 1);
+        cd = _cancelFor(e, t2, 0);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, MetaTxLib.MODE_FEE_FIXED));
+        _run(cd);
+        e = _envFor(pq, t1, 1);
+        (e.mode, e.fee) = (MetaTxLib.MODE_FEE_FIXED, 1);
+        cd = _cancelFor(e, t1, 0);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, MetaTxLib.MODE_FEE_FIXED));
+        _run(cd);
+        e = _envFor(pq65, t2, 1);
+        (e.mode, e.relayer) = (MetaTxLib.MODE_RESTRICT_RELAYER, RELAYER);
+        cd = _cancelFor(e, t2, 0);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnauthorizedRelayer.selector, RELAYER, address(this)));
+        _run(cd);
+        e = _envFor(pq65, t2, 1);
+        e.validUntil = block.timestamp - 1;
+        bytes memory expired = _cancelFor(e, t2, 0);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxExpired.selector, e.validUntil, block.timestamp));
+        _run(expired);
+        assertEq(router.mtxNonceFor(t2, pq65, 0), 1, "nothing spent by a refusal");
+        assertEq(router.mtxNonceFor(t2, pq65, 1), 1);
+        assertEq(router.mtxNonce(pq, 1), 0);
+        vm.prank(RELAYER);
+        _run(cd);
+        assertEq(router.mtxNonceFor(t2, pq65, 0), 2, "the bound relayer's send");
+    }
+
+    /// The gas of one cancel, each a transaction (`isolate`): the keyed path (a gen-2 holder on a gen-2 env target) and the own
+    /// map (a gen-1 holder on a gen-1 env target; a native id), against `mtxCancelNonce` of the same gen-1 holder.
+    function test_cancelFor_gas() public {
+        uint256[4] memory g;
+        address t2 = _ftoken(GEN2, pq65, "a");
+        address t1 = _ftoken(PREG, pq, "b");
+        g[0] = _gasOf(_cancelFor(_envFor(pq65, t2, 1), t2, 0));
+        g[1] = _gasOf(_cancelFor(_envFor(pq, t1, 1), t1, 0));
+        g[2] = _gasOf(_cancelFor(_envFor(eoa, t2, 1), t2, 0));
+        MetaTxLib.UAEnvelope memory e = _envelope(router, pq, 2);
+        bytes32 c = keccak256(
+            abi.encode(
+                MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+                e.from,
+                uint256(3),
+                e.batch,
+                e.nonce,
+                e.validUntil,
+                e.mode,
+                address(0),
+                e.fee,
+                address(0)
+            )
+        );
+        g[3] = _gasOf(
+            abi.encodeCall(
+                router.mtxCancelNonce, (e, 3, _auth(pq, keccak256(abi.encodePacked("\x19\x01", _domain(router), c))))
+            )
+        );
+        string[4] memory n = ["keyed, gen2 env, pq65", "own, gen1 env, pq", "own, native", "mtxCancelNonce, pq"];
+        uint256[4] memory pin = [uint256(94_086), 92_199, 72_445, 88_894];
+        for (uint256 i; i < 4; ++i) {
+            emit log_named_uint(n[i], g[i]);
+        }
+        for (uint256 i; i < 4; ++i) {
+            assertEq(g[i], pin[i], n[i]);
+        }
+    }
+
+    function _gasOf(bytes memory cd) internal returns (uint256) {
+        (bool ok,) = address(router).call(cd);
+        assertTrue(ok, "cancelled");
+        return vm.lastCallGas().gasTotalUsed;
     }
 }

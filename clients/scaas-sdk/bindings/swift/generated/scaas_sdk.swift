@@ -1398,6 +1398,8 @@ public protocol AdminProtocol: AnyObject, Sendable {
     
     func adminUaCancelNonce(req: UaCancelNonce) async throws  -> Prepared
     
+    func adminUaCancelNonceFor(req: UaCancelNonceFor) async throws  -> Prepared
+    
     func adminUaCancelRate(req: UaCancelRate) async throws  -> Prepared
     
     func adminUaCreateDex(req: UaCreateDex) async throws  -> Prepared
@@ -1672,6 +1674,23 @@ open func adminUaCancelNonce(req: UaCancelNonce)async throws  -> Prepared  {
                 uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(
                     self.uniffiCloneHandle(),
                     FfiConverterTypeUaCancelNonce_lower(req)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_u64,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_u64,
+            freeFunc: ffi_scaas_sdk_rust_future_free_u64,
+            liftFunc: FfiConverterTypePrepared_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func adminUaCancelNonceFor(req: UaCancelNonceFor)async throws  -> Prepared  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeUaCancelNonceFor_lower(req)
                 )
             },
             pollFunc: ffi_scaas_sdk_rust_future_poll_u64,
@@ -17961,6 +17980,96 @@ public func FfiConverterTypeUaCancelNonce_lower(_ value: UaCancelNonce) -> RustB
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UACancelNonceFor
+ */
+public struct UaCancelNonceFor: Equatable, Hashable {
+    public var signer: KeyRef
+    public var chain: String
+    /**
+     * the lane, decimal
+     */
+    public var batch: String
+    public var target: String
+    public var lane: String
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    public var chainUid: String?
+    public var envelope: Envelope
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(signer: KeyRef, chain: String, 
+        /**
+         * the lane, decimal
+         */batch: String, target: String, lane: String, 
+        /**
+         * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+         */chainUid: String?, envelope: Envelope) {
+        self.signer = signer
+        self.chain = chain
+        self.batch = batch
+        self.target = target
+        self.lane = lane
+        self.chainUid = chainUid
+        self.envelope = envelope
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension UaCancelNonceFor: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUaCancelNonceFor: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UaCancelNonceFor {
+        return
+            try UaCancelNonceFor(
+                signer: FfiConverterTypeKeyRef.read(from: &buf), 
+                chain: FfiConverterString.read(from: &buf), 
+                batch: FfiConverterString.read(from: &buf), 
+                target: FfiConverterString.read(from: &buf), 
+                lane: FfiConverterString.read(from: &buf), 
+                chainUid: FfiConverterOptionString.read(from: &buf), 
+                envelope: FfiConverterTypeEnvelope.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UaCancelNonceFor, into buf: inout [UInt8]) {
+        FfiConverterTypeKeyRef.write(value.signer, into: &buf)
+        FfiConverterString.write(value.chain, into: &buf)
+        FfiConverterString.write(value.batch, into: &buf)
+        FfiConverterString.write(value.target, into: &buf)
+        FfiConverterString.write(value.lane, into: &buf)
+        FfiConverterOptionString.write(value.chainUid, into: &buf)
+        FfiConverterTypeEnvelope.write(value.envelope, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUaCancelNonceFor_lift(_ buf: RustBuffer) throws -> UaCancelNonceFor {
+    return try FfiConverterTypeUaCancelNonceFor.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUaCancelNonceFor_lower(_ value: UaCancelNonceFor) -> RustBuffer {
+    return FfiConverterTypeUaCancelNonceFor.lower(value)
+}
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
  * UACancelRate
  */
 public struct UaCancelRate: Equatable, Hashable {
@@ -31433,6 +31542,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce() != 48105) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for() != 20110) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate() != 38309) {

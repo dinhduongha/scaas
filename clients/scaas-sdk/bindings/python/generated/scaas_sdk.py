@@ -615,6 +615,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce() != 48105:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for() != 20110:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate() != 38309:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_create_dex() != 41403:
@@ -1911,6 +1913,11 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce.argtypes = (
     _UniffiRustBuffer,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3248,6 +3255,9 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_grant.restype 
 _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate.restype = ctypes.c_uint16
@@ -17761,6 +17771,76 @@ class _UniffiFfiConverterTypeUaCancelNonce(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypeEnvelope.write(value.envelope, buf)
 
 @dataclass
+class UaCancelNonceFor:
+    """
+    A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+    UACancelNonceFor
+"""
+    def __init__(self, *, signer:KeyRef, chain:str, batch:str, target:str, lane:str, chain_uid:typing.Optional[str], envelope:Envelope):
+        self.signer = signer
+        self.chain = chain
+        self.batch = batch
+        self.target = target
+        self.lane = lane
+        self.chain_uid = chain_uid
+        self.envelope = envelope
+        
+        
+
+    
+    def __str__(self):
+        return "UaCancelNonceFor(signer={}, chain={}, batch={}, target={}, lane={}, chain_uid={}, envelope={})".format(self.signer, self.chain, self.batch, self.target, self.lane, self.chain_uid, self.envelope)
+    def __eq__(self, other):
+        if self.signer != other.signer:
+            return False
+        if self.chain != other.chain:
+            return False
+        if self.batch != other.batch:
+            return False
+        if self.target != other.target:
+            return False
+        if self.lane != other.lane:
+            return False
+        if self.chain_uid != other.chain_uid:
+            return False
+        if self.envelope != other.envelope:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeUaCancelNonceFor(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return UaCancelNonceFor(
+            signer=_UniffiFfiConverterTypeKeyRef.read(buf),
+            chain=_UniffiFfiConverterString.read(buf),
+            batch=_UniffiFfiConverterString.read(buf),
+            target=_UniffiFfiConverterString.read(buf),
+            lane=_UniffiFfiConverterString.read(buf),
+            chain_uid=_UniffiFfiConverterOptionalString.read(buf),
+            envelope=_UniffiFfiConverterTypeEnvelope.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeKeyRef.check_lower(value.signer)
+        _UniffiFfiConverterString.check_lower(value.chain)
+        _UniffiFfiConverterString.check_lower(value.batch)
+        _UniffiFfiConverterString.check_lower(value.target)
+        _UniffiFfiConverterString.check_lower(value.lane)
+        _UniffiFfiConverterOptionalString.check_lower(value.chain_uid)
+        _UniffiFfiConverterTypeEnvelope.check_lower(value.envelope)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeKeyRef.write(value.signer, buf)
+        _UniffiFfiConverterString.write(value.chain, buf)
+        _UniffiFfiConverterString.write(value.batch, buf)
+        _UniffiFfiConverterString.write(value.target, buf)
+        _UniffiFfiConverterString.write(value.lane, buf)
+        _UniffiFfiConverterOptionalString.write(value.chain_uid, buf)
+        _UniffiFfiConverterTypeEnvelope.write(value.envelope, buf)
+
+@dataclass
 class UaCancelRate:
     """
     A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
@@ -27063,6 +27143,8 @@ class AdminProtocol(typing.Protocol):
         raise NotImplementedError
     async def admin_ua_cancel_nonce(self, req: UaCancelNonce) -> Prepared:
         raise NotImplementedError
+    async def admin_ua_cancel_nonce_for(self, req: UaCancelNonceFor) -> Prepared:
+        raise NotImplementedError
     async def admin_ua_cancel_rate(self, req: UaCancelRate) -> Prepared:
         raise NotImplementedError
     async def admin_ua_create_dex(self, req: UaCreateDex) -> Prepared:
@@ -27312,6 +27394,23 @@ class Admin(AdminProtocol):
         _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
         return await _uniffi_rust_call_async(
             _UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_u64,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_u64,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_u64,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def admin_ua_cancel_nonce_for(self, req: UaCancelNonceFor) -> Prepared:
+        
+        _UniffiFfiConverterTypeUaCancelNonceFor.check_lower(req)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeUaCancelNonceFor.lower(req),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypePrepared.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(*_uniffi_lowered_args),
             _UniffiLib.ffi_scaas_sdk_rust_future_poll_u64,
             _UniffiLib.ffi_scaas_sdk_rust_future_complete_u64,
             _UniffiLib.ffi_scaas_sdk_rust_future_free_u64,
@@ -33090,6 +33189,7 @@ __all__ = [
     "UaApproveTokenRelease",
     "UaCancelGrant",
     "UaCancelNonce",
+    "UaCancelNonceFor",
     "UaCancelRate",
     "UaCreateDex",
     "UaCreateInstance",

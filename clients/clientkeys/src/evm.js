@@ -754,6 +754,9 @@ const OPS = {
   // `UA<Op>`, `target` (the governed contract) the first op word, identities `bytes32`, fee mode NONE; no generic path.
   // CTR-GOV-28 (owner 2026-11-13): every admin op names the target's chain word last (`chainUid`), signed and forwarded;
   // its Change in round 3zb + 3zc (O5, O6): every op of a role holder, `UASetWrapLimits` and the two cap setters too
+  // CTR-GOV-33 Change (owner 2026-11-24): the ordered cancel of `lane` in the map the router checks for an op on `target` (a
+  // derived signer's keyed map on another registry; the one map otherwise, as `UACancelNonce`); no chain word, nothing is called
+  UACancelNonceFor: { fields: "address target,uint256 lane", on: ROUTER },
   UAGrantRole: { fields: "address target,uint8 bit,bytes32 account,bytes32 chainUid", on: ROUTER },
   UARevokeRole: { fields: "address target,uint8 bit,bytes32 account,bytes32 chainUid", on: ROUTER },
   UASetGrant: { fields: "address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid", on: ROUTER },

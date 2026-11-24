@@ -46,6 +46,9 @@ pub struct Chain {
     pub base_fee: u64,
     /// lane nonce by contract (lower-case `0x` hex): `mtxNonce` answers it for any `from` and lane
     pub nonces: HashMap<String, u64>,
+    /// a router's keyed nonce by contract (G1, CTR-GOV-33): `mtxNonceFor` answers it for any target, `from` and lane, a map of
+    /// its own (review D-1: one number for both views hid a follow that read the wrong one)
+    pub nonces_for: HashMap<String, u64>,
     /// the first block whose state holds `nonces` (below it `mtxNonce` answers 0; review T26 B-11)
     pub nonces_from: u64,
     pub code: HashMap<String, String>,
@@ -127,6 +130,7 @@ impl Default for Chain {
             base_fee: 7,
             nonces: HashMap::new(),
             nonces_from: 0,
+            nonces_for: HashMap::new(),
             code: HashMap::new(),
             logs: vec![],
             receipts: HashMap::new(),
@@ -379,8 +383,13 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 || data.starts_with(&sel("mtxNonce(address,uint256)"))
                 || data.starts_with(&sel("mtxNonceFor(address,bytes32,uint256)"))
             {
+                let map = if data.starts_with(&sel("mtxNonceFor(address,bytes32,uint256)")) {
+                    &c.nonces_for
+                } else {
+                    &c.nonces
+                };
                 let n = if at >= c.nonces_from {
-                    c.nonces.get(&to).copied().unwrap_or(0)
+                    map.get(&to).copied().unwrap_or(0)
                 } else {
                     0
                 };

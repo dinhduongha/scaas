@@ -1335,9 +1335,10 @@ contract GovRouterAdminTest is UARegistryBase {
 
     /// The router's typed entries go from 38 to 53 (round 3r), 53 to 56 (round 3s: `mtxSetAllowed`, `mtxSetDenied`,
     /// `mtxEnableFeature`), 56 to 57 (round 3t: `mtxSetVerifierFee`), 57 to 59 (round 3zc: `mtxSetMaxSupply`,
-    /// `mtxSetMaxWrapSupply`, CTR-GOV-30), 59 to 61 (set-auditor A6: `mtxSetAuditorKey`, `mtxSetAuditorUA`, CTR-GOV-31): every
-    /// `mtx` entry of its ABI but the ordered cancel and the two generic refusals.
-    function test_routerHas61TypedOps() public view {
+    /// `mtxSetMaxWrapSupply`, CTR-GOV-30), 59 to 61 (set-auditor A6: `mtxSetAuditorKey`, `mtxSetAuditorUA`, CTR-GOV-31), 61 to 62
+    /// (the keyed cancel `mtxCancelNonceFor`, CTR-GOV-33 Change, a typed op on a `target`): every `mtx` entry of its ABI but
+    /// the ordered cancel and the two generic refusals.
+    function test_routerHas62TypedOps() public view {
         string memory a = vm.readFile(
             string.concat(vm.envOr("FOUNDRY_OUT", string("out")), "/GovernanceRouter.sol/GovernanceRouter.json")
         );
@@ -1351,7 +1352,7 @@ contract GovRouterAdminTest is UARegistryBase {
             if (_starts(s, "mtxNonceFor(")) continue; // G1's nonce view (CTR-GOV-33)
             ++n;
         }
-        assertEq(n, 61);
+        assertEq(n, 62);
     }
 
     function _starts(bytes memory s, string memory p) internal pure returns (bool) {
