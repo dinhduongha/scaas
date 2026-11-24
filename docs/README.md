@@ -119,7 +119,7 @@ See [architecture.md](architecture.md#profiles).
 
 3. **Check the status tags** — every section says whether it is BUILT, SPECIFIED or PLANNED
    ([status tags](#status-tags)). Confidential-amount contracts stay behind their production gate until an
-   independent audit. The built code still has some older lines; the component docs mark them **Transitional (BUILT)**.
+   AI audit round covers them ([ARCH-POS-14](decisions.md#ARCH-POS-14)). The built code still has some older lines; the component docs mark them **Transitional (BUILT)**.
 4. **Look up why** — every rule links to its entry in [decisions.md](decisions.md), with the reason and the cost of
    getting it wrong.
 5. **Build and test** — `smartcontracts/scripts/{build,test}.sh <family>`; docs check:
