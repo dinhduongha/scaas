@@ -145,6 +145,26 @@ monochrome setting turn colour off; an ASCII setting replaces box-drawing and sy
 footer; outside a text field keys are commands, inside one they are input (CLI-TUI-16). No mouse is needed. Below 80 × 24 the TUI
 shows only a message asking for a larger terminal.
 
+<a id="CLI-TUI-18"></a>**CLI-TUI-18** — **Two key maps, `basic` by default and `vim` as an option; no prefix keys** (owner 2026-11-24;
+SPECIFIED).
+- **`keymap = "basic"`, the default, is modeless:**
+  - movement: the arrows, `Tab` / `Shift-Tab`, `PgUp` / `PgDn`, `Home` / `End`;
+  - `Enter` opens and `Esc` goes back;
+  - `/` searches, `Ctrl-P` opens the command palette, `?` opens help.
+- **`keymap = "vim"`, chosen in the config, adds:** `h j k l`, `gg` / `G`, `Ctrl-D` / `Ctrl-U` and `:` commands.
+- **The same under both maps:**
+  - inside a text field every printable key is input (CLI-TUI-07, CLI-TUI-16), so there is no modal editing in fields;
+  - a secret field and the confirm screen behave alike;
+  - the confirm key is `Ctrl-Y` on the confirm screen only (CLI-TUI-08).
+- **Footer:** it lists the current screen's keys under either map.
+- **Never bound:**
+  - prefix sequences in the manner of tmux;
+  - `Ctrl-B` (tmux) and `Ctrl-A` (screen);
+  - `Ctrl-S` / `Ctrl-Q` (flow control) and `Ctrl-\`.
+- **Never needed** (each may be a second key, never the only one): `Alt` combinations and function keys, which break over SSH and
+  on macOS terminals.
+- **`Ctrl-Z`** locks the secret screens before the process suspends (CLI-TUI-16).
+
 ## 6. Keys, clipboard and reveal
 
 No proposal awaits the owner here: Q-T5, Q-T6 and Q-T7 were agreed on 2026-11-24 and Q-T2 answered yes the same day (spec §16).

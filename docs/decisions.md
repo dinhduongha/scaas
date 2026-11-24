@@ -12605,6 +12605,26 @@ Change (owner 2026-11-24, the answer to spec §16 Q-T7, verbatim on the Source l
 **Cost if wrong.** A second implementation beside the SDK; a raw signing path reachable from a screen.
 **Source.** CLI-SDK-12, CLI-SDK-17; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §3, §18.
 
+### CLI-TUI-18 — Two key maps, `basic` by default and `vim` as an option; no prefix keys
+- old: — · status: current · owner: yes · date: 2026-11-24 · normative: clients/scaas-tui.md#CLI-TUI-18 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-18).)
+- A modeless `basic` map is the default: arrows, `Tab`, `Enter`, `Esc`, `/`, `Ctrl-P`, `?`.
+- An optional `vim` map adds `h j k l`, `gg` / `G`, `Ctrl-D` / `Ctrl-U` and `:`.
+- Text fields, secret fields and the `Ctrl-Y` confirm are identical under both maps.
+- The footer lists the keys under either map.
+- No tmux-style prefix keys. `Ctrl-B`, `Ctrl-A`, `Ctrl-S` / `Ctrl-Q` and `Ctrl-\` are never bound.
+- `Alt` and function keys are never the only key for an action.
+
+**Status.** SPECIFIED. UNAUDITED.
+**Why.**
+- The TUI often runs inside tmux or screen over SSH, where a prefix collides.
+- Modal keys invite actions typed by mistake in a wallet, and the surveyed Vim-only client (iamb) assumes the user knows Vim.
+- A key-hint footer (nchat) serves users new to terminals, while Vim users keep an opt-in map (nostui, iamb).
+
+**Cost if wrong.** A key that quits or confirms by mistake; a TUI unusable inside tmux.
+**Source.** Owner 2026-11-24, verbatim "Đồng ý" to the controller's proposal (no tmux keys, Vim as an option, a basic modeless map by default); the [chat TUI survey](research/2026-11-24-chat-tui-survey.md).
+
 ### CLI-TUI-30 — Owner rulings of the TUI spec, 2026-11-09 to 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-TUI-30 · superseded-by: —
 
