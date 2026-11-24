@@ -97,7 +97,7 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
     `pqz-core/params/sets/gen_set.py`; never edit it.
 - `lib/` is not committed. `scripts/evm_libs.sh install`, then `check` (commit and sha256 pins).
 - **Size gate** (`scripts/size_gate.py`, `size-baseline.json`): a ratchet; the ceiling is 131,072 B runtime and 262,144 B init on the reset
-  chain (CTR-GOV-19, NET-EVM-06). Kinds above 64 KiB are pinned in `_above64KiB` (today `WrappedPqzToken`). Prefer the levers in
+  chain (CTR-GOV-19, NET-EVM-06). No contract is above 64 KiB since the body-module split; the `_above64KiB` pin is gone. Prefer the levers in
   `docs/research/evm-size-levers.md`.
 - **Gas pins move only with old → new figures in the commit.** A set-parameter change is the owner's.
 - **Storage layout is pinned** (`test/v2/layout/`); so are typehashes (`*TypehashIsPinned`).
@@ -185,7 +185,7 @@ matrix holds.
 Oversized jobs get the terminal killed by `systemd-oomd`, and every agent with it.
 
 - Heavy commands (`cargo`, `forge`, `anvil`, `npm`, `dotnet`, `gate.sh`) go through `scripts/capped`, **foreground**. Never inside `timeout`.
-- `capped` caps at 4 GB with 2 machine-wide slots. Do not raise `CAPPED_MEM` next to other jobs. The whole node suite needs 6 GB, alone.
+- `capped` caps at 4 GB with 3 machine-wide slots by default (`CAPPED_SLOTS`; 4 for the per-set gates). Do not raise `CAPPED_MEM` next to other jobs. The whole node suite needs 6 GB, alone.
 - **Docker bypasses `capped`:** cap it with `--memory` and limit build jobs.
 - After `capped dotnet …`, run `dotnet build-server shutdown`: VBCSCompiler keeps the lock and later jobs wait silently.
 - Never wait with `until`, `sleep` loops or `pgrep -f`: such a loop matches itself and hangs. Leave no background shell or `anvil`.
