@@ -16,7 +16,7 @@ EVM=smartcontracts/evm
 HERE=$EVM/runs/2026-11-24-router-g1/${GATE_TAG:-matrix}
 mkdir -p "$HERE" "$EVM/out"
 C="$ROOT/scripts/capped"
-export PATH="$HOME/.foundry/bin:$PATH"      # at-set.sh calls forge by name
+export PATH="$HOME/.foundry/bin:$PATH"        # at-set.sh calls forge by name
 L=$EVM/out/${GATE_LOCK:-router-g1-gates}.lock # GATE_LOCK: a second lane (never beside a set-* step: at-set.sh rewrites PqzSet.sol)
 exec 9>"$L"
 flock -n 9 || {
