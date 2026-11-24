@@ -304,6 +304,10 @@ test("a value nested beyond 128 levels is refused before it is lifted, and the i
   for (let i = 0; i < 100; i++) ok = [ok];
   const verdict = (op) => ({ chain: "nowhere", token: "0x" + "11".repeat(20), op, statement: "0x", proof: "0x" });
   assert.equal(await failure(s.confidential().request_verdict(verdict(deep))), "Argument", "refused before the lift");
-  assert.equal(await failure(s.confidential().request_verdict(verdict(ok))), "ChainUnknown", "the twin: 100 levels lift");
+  assert.equal(
+    await failure(s.confidential().request_verdict(verdict(ok))),
+    "ChainUnknown",
+    "the twin: 100 levels lift",
+  );
   assert.deepEqual(await s.vault().seeds(), [], "the instance lives on");
 });
