@@ -504,6 +504,7 @@ pub fn op(o: &Map<String, Value>, entry: &str, types: &Types) -> Result<Op> {
         typed,
         lane: Some((t.from, t.batch, t.nonce)),
         valid_until: t.validUntil.saturating_to(),
+        gov_target: None,
     })
 }
 
