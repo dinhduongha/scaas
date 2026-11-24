@@ -541,6 +541,28 @@ contract PqChatTreeRulesTest is PqChatTreeModel {
         _land(st, m, n);
     }
 
+    /// C39 (A-1, D-6, F-6, E-5 of the code review of 2026-11-24): B holds a leaf with A's key bytes and another leaf; the
+    /// admin A removes that leaf, adds another key at it and adds its own key at a new leaf. A leaf is live while this
+    /// commit has not removed it, so both orders of the two Adds are accepted and complete.
+    function test_c39_addOrderIndependent() public {
+        _open(); // the vectors in this call's memory
+        M memory m = _abe(_list(A, E));
+        _setKem(B, 12, _kemOf(_j().readBytes(".devices.A2.kemPk")));
+        _setKem(E, 40, _variant("B", 7));
+        (Step memory st, M memory n) = _build(m, 1, _chs(_add(3, B, 12)), _list(A, E));
+        n = _land(st, n, m);
+        Ch[] memory one = new Ch[](3);
+        (one[0], one[1], one[2]) = (_rm(3, B, 12), _add(3, E, 40), _add(4, A, 2));
+        Ch[] memory two = new Ch[](3);
+        (two[0], two[1], two[2]) = (_rm(3, B, 12), _add(4, A, 2), _add(3, E, 40));
+        uint256 snap = vm.snapshotState();
+        (Step memory s1, M memory n1) = _build(n, 0, one, _list(A, E));
+        _land(s1, n1, n); // the refilled leaf before the freed key's new leaf
+        vm.revertToState(snap);
+        (Step memory s2, M memory n2) = _build(n, 0, two, _list(A, E));
+        _land(s2, n2, n); // the other order
+    }
+
     /// (5) and fable-r3-4: an admin's commit that removes X's only leaf and adds X's new key completes; X stays a member,
     /// its old key at the pair level, `owed` 0. The Remove alone makes X gone (kind 2), and a later Add of X is refused.
     function test_r16_replacementOfAnOnlyKey() public {

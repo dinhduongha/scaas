@@ -27,7 +27,7 @@ abstract contract PqGroupTree {
     uint8 internal constant T_OWN_KEY_RETURN = 6; // (ua, kemHash): an Add under `ua` of a key of its pair set (R16)
     uint8 internal constant T_ADMINS = 7; // (): no admin with a live leaf would remain (C24)
     uint8 internal constant T_BACKLOG = 8; // (owed): more leaves owed at the head than a commit may change (C21)
-    uint8 internal constant T_TARGETS = 9; // (index): the path length or the target count differs from the walk
+    uint8 internal constant T_TARGETS = 9; // (count): the path length or the target count differs from the walk
     uint8 internal constant T_HASH = 10; // (computed): the signed tree hash differs from the walk's root (R12)
     uint8 internal constant T_REMOVED_KEPT = 11; // (head, ua): a gone UA keeps a leaf, is an admin or the author
     uint8 internal constant T_NOT_MEMBER = 12; // (ua): no live leaf, or gone
@@ -371,7 +371,8 @@ abstract contract PqGroupTree {
             bytes32 k = _admittedKey(reg, a.ua, a.keyId);
             if (k != a.kemHash) _treeFail(T_KEM_KEY, uint256(a.ua), a.keyId);
             uint256 lk = t.liveKey[k];
-            if (lk != 0 && w.st[2 * (lk - 1)] != 1) _treeFail(T_KEY_LIVE, uint256(k), 0);
+            // C39: live while this commit has not removed its leaf (0); removed (1) or removed and refilled (2) frees it
+            if (lk != 0 && w.st[2 * (lk - 1)] == 0) _treeFail(T_KEY_LIVE, uint256(k), 0);
             for (uint256 j; j < i; ++j) {
                 if (d.adds[j].kemHash == k) _treeFail(T_KEY_LIVE, uint256(k), 0);
             }
