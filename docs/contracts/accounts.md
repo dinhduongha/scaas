@@ -2420,6 +2420,26 @@ checks "same code"; the guards are the deploy's walk check against the book ([CT
 governance-published env ([CTR-UA-67](#CTR-UA-67)); the only recovery from a faulty generation is a sibling line from the one below
 it, losing the records of the faulty generation and every later one.
 
+<a id="CTR-UA-73"></a>**CTR-UA-73** — **A contract serves the UAs of its env's registry generation and the generations before it,
+never later ones** (owner 2026-11-24; BUILT: the code already behaves so; UNAUDITED).
+- **Why:** the registry line walks back only (§1.8.1). A contract reads its signers and its derived receivers from the
+  registry in its env. That generation knows its own records and the older ones, never a newer one.
+- **A UA held only in a later generation:**
+  - cannot receive a transfer from a contract on an older env (`UANotRegistered`);
+  - cannot sign there (`UAUnauthorized`);
+  - cannot hold a role there.
+
+  The contract refuses the call; nothing is lost.
+- **Governance:** G1 resolves role holders through each factory-made target's own env registry
+  (the G1 router change, being built on top of [CTR-GOV-32](token-wrappers.md#CTR-GOV-32)), so it follows the same rule. Factory operations use the router's own
+  generation.
+- **The way to reach older contracts:**
+  - a UA whose kind the older generation also supports registers there too: the same bytes and the same id, since
+    registration is portable ([CTR-UA-31](#CTR-UA-31));
+  - a UA of a kind that only a later generation has works only with contracts on that generation's env or a later
+    one.
+- **Clients:** they check before signing ([CLI-SDK-34](../clients/scaas-sdk.md#CLI-SDK-34)).
+
 <a id="CTR-UA-65"></a>**CTR-UA-65** — **The node, indexers, the SDK and clients address the line, not one registry** (owner rulings
 of spec §0.2 – §0.4, W2 and P19 among them; node BUILT, `d019be659`, `e6268a472`, [job-api.md](../node/job-api.md#NODE-JOB-19), [ops.md](../node/ops.md); scaas-sdk BUILT,
 `535bf1dcb`; clients' target check BUILT, `ff732ade0`, `9cac74ea0`, `afbc160f2` (the ua-rs bindings' export PLANNED)).
