@@ -6,6 +6,9 @@ the same process (finally). Killed = forge fails (rc != 0) with a test red.
 Usage (from smartcontracts/evm): python3 runs/2026-11-17-set-auditor/mutants.py <task> list | run <id> ... | all
 Full output: runs/2026-11-17-set-auditor/<task>/mut-<id>.log (git-ignored); `mutant | tests that went red | rc` on stdout and
 appended to runs/2026-11-17-set-auditor/<task>/mutants.txt.
+A hung run (owner 2026-11-24, scripts/mutant_guard.py): past 3 x its unmutated baseline (at least 10 min, or `--timeout N`)
+its process group is killed and it reads `killed (timeout N s)`; the file is restored on every exit (SIGINT / SIGTERM too); a
+target file that differs from HEAD refuses the run.
 """
 import os
 import re
@@ -15,6 +18,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 EVM = os.path.dirname(os.path.dirname(HERE))
 CAPPED = os.path.join(EVM, "..", "..", "scripts", "capped")
+sys.path.insert(0, os.path.join(EVM, "..", "..", "scripts"))
+import mutant_guard as guard  # noqa: E402
 FORGE = os.path.expanduser("~/.foundry/bin/forge")
 
 GB = "src/governance/GovernanceBits.sol"
@@ -252,6 +257,7 @@ def red_tests(log):
 def run(task, mid):
     path, old, new, tdir, match = MUTANTS[task][mid]
     full = os.path.join(EVM, path)
+    guard.refuse_dirty([full], EVM)
     src = open(full).read()
     if src.count(old) != 1:
         raise SystemExit(f"{mid}: the mutated text occurs {src.count(old)} times in {path}")
@@ -259,25 +265,25 @@ def run(task, mid):
     os.makedirs(out, exist_ok=True)
     logp = os.path.join(out, f"mut-{mid}.log")
     name = tdir.replace("/", "-")
+    if tdir.startswith("@"):  # a Rust crate (repository-relative), `match` its cargo test arguments
+        cwd, env = os.path.join(EVM, "..", "..", tdir[1:]), dict(os.environ)
+        cmd = [CAPPED, "cargo", "test", "-j", "2", "--locked", *match.split()]
+    else:
+        cwd = EVM
+        env = {**os.environ, "FOUNDRY_TEST": tdir, "FOUNDRY_SCRIPT": tdir, "FOUNDRY_OUT": f"out/mut-sa-{name}",
+               "FOUNDRY_CACHE_PATH": f"cache/mut-sa-{name}"}
+        cmd = [CAPPED, FORGE, "test", "-j", "2", "--match-path", f"{tdir}/{match}"]
+    lim, saved = guard.limit(cmd, cwd=cwd, env=env), {full: open(full, "rb").read()}
     try:
         open(full, "w").write(src.replace(old, new))
-        if tdir.startswith("@"):  # a Rust crate (repository-relative), `match` its cargo test arguments
-            cwd, env = os.path.join(EVM, "..", "..", tdir[1:]), dict(os.environ)
-            cmd = [CAPPED, "cargo", "test", "-j", "2", "--locked", *match.split()]
-        else:
-            cwd = EVM
-            env = {**os.environ, "FOUNDRY_TEST": tdir, "FOUNDRY_SCRIPT": tdir, "FOUNDRY_OUT": f"out/mut-sa-{name}",
-                   "FOUNDRY_CACHE_PATH": f"cache/mut-sa-{name}"}
-            cmd = [CAPPED, FORGE, "test", "-j", "2", "--match-path", f"{tdir}/{match}"]
         with open(logp, "w") as log:
-            rc = subprocess.call(cmd, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT)
+            r = guard.run(cmd, lim, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT)
     finally:
-        open(full, "w").write(src)
-    if open(full).read() != src:
-        raise SystemExit(f"{mid}: {path} not restored")
+        guard.restore(saved)
+    rc = r.returncode
     t = open(logp).read()
     red = red_tests(t)
-    note = ", ".join(red) if red else ("compile error" if "Compiler run failed" in t else "none")
+    note = guard.outcome(r, ", ".join(red) if red else ("compile error" if "Compiler run failed" in t else "none"))
     line = f"{mid} | {note} | {rc}"
     print(line, flush=True)
     with open(os.path.join(out, "mutants.txt"), "a") as f:

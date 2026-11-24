@@ -4,14 +4,26 @@
 # suites run, the file restored by `git checkout` and checked by `git diff --exit-code`. Writes one row per mutant,
 # `mutant | test that went red | rc`, to runs/2026-11-08-ua-mtx-merge-t46-mutants.txt; full output to the git-ignored .log.
 #   ../../scripts/capped bash runs/2026-11-08-ua-mtx-merge-t46-mutants.sh   (from clients/clientkeys)
+# A hung run (owner 2026-11-24, scripts/mutant_guard.py): past 3 x the unmutated baseline (at least 10 min, or `--timeout N`
+# given to the guard) its process group is killed, and the row reads `killed (timeout N s)`; the mutated file is restored on
+# every exit (SIGINT / SIGTERM too); a target file that differs from HEAD refuses the run.
 set -u
 cd "$(dirname "$0")/.."
 OUT=runs/2026-11-08-ua-mtx-merge-t46-mutants.txt
 LOG=runs/2026-11-08-ua-mtx-merge-t46-mutants.log
-git diff --quiet -- src scripts test || {
-    echo 'the tree is not clean'
+GUARD="python3 -I ../../scripts/mutant_guard.py"
+TESTS=(node --test test/pqz-verdict.test.js test/typed-ops.test.js)
+git diff --quiet HEAD -- src scripts test || {
+    echo "refused: differs from HEAD (a leftover mutation: a run died): $(git diff --name-only HEAD -- src scripts test)"
     exit 2
 }
+base=$($GUARD time -- "${TESTS[@]}") || {
+    echo 'the unmutated baseline is red'
+    exit 2
+}
+cur=
+trap '[ -z "$cur" ] || git checkout -- "$cur"' EXIT
+trap 'exit 130' INT TERM HUP
 echo "mutant | test that went red | rc" >"$OUT"
 : >"$LOG"
 
@@ -25,17 +37,23 @@ mutate() {
         echo "$id $what | NOT APPLIED | 3" >>"$OUT"
         return
     }
+    cur=$file
     local out rc red
-    out=$(node --test test/pqz-verdict.test.js test/typed-ops.test.js 2>&1)
+    out=$($GUARD exec "$base" -- "${TESTS[@]}" 2>&1)
     rc=$?
     printf '=== %s %s (rc %s)\n%s\n' "$id" "$what" "$rc" "$out" >>"$LOG"
     red=$(printf '%s\n' "$out" | sed -n '/^✖ failing tests:/,$p' | grep '^✖ ' | grep -v 'failing tests:' |
         sed -E 's/^✖ //; s/ \([0-9.]+ms\)$//' | sort -u)
     local n
     n=$(printf '%s\n' "$red" | grep -c . || true)
-    echo "$id $what | ${n} red: $(printf '%s\n' "$red" | sed 's/.*/`&`/' | paste -sd ',' - | sed 's/`,`/`, `/g') | $rc" >>"$OUT"
+    if [ "$rc" -eq 124 ]; then
+        echo "$id $what | $(printf '%s\n' "$out" | grep -o 'killed (timeout [0-9]* s)' | tail -1) | $rc" >>"$OUT"
+    else
+        echo "$id $what | ${n} red: $(printf '%s\n' "$red" | sed 's/.*/`&`/' | paste -sd ',' - | sed 's/`,`/`, `/g') | $rc" >>"$OUT"
+    fi
     git checkout -- "$file"
-    git diff --exit-code --quiet -- "$file" || {
+    cur=
+    git diff --exit-code --quiet HEAD -- "$file" || {
         echo "$file not restored"
         exit 4
     }

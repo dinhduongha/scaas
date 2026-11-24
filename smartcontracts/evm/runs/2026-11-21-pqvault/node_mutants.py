@@ -3,10 +3,14 @@
 then `cargo test --lib` filtered to the PqVault and PqChat tests (through scripts/capped), the file restored; killed when the run
 fails. One line per mutant; logs in runs/2026-11-21-pqvault/node-mutants/<name>.log (git-ignored). From the repository root:
   python3 smartcontracts/evm/runs/2026-11-21-pqvault/node_mutants.py [name ...]
+A hung run: the run past its deadline (3 x the unmutated baseline, at least 10 min, or `--timeout N`) has its process group killed and reads `killed (timeout N s)`; a target file that differs from HEAD refuses the run; the restore holds on SIGINT / SIGTERM (scripts/mutant_guard.py, owner 2026-11-24).
 """
 import os
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "scripts"))
+import mutant_guard as guard  # noqa: E402
 
 G = "scaas-node/src/guard.rs"
 T = "scaas-node/src/typed.rs"
@@ -24,24 +28,28 @@ M = [
 ]
 
 
+CMD = ["../scripts/capped", "cargo", "test", "-j", "2", "--lib", "--", "pqvault", "pqchat", "instance_rows", "a_pqvault"]
+
+
 def run(name, path, old, new):
+    guard.refuse_dirty([path], ".")
     src = open(path).read()
     if src.count(old) != 1:
         return f"{name} | {path} | NOT APPLIED ({src.count(old)} matches)"
     os.makedirs("smartcontracts/evm/runs/2026-11-21-pqvault/node-mutants", exist_ok=True)
     log = f"smartcontracts/evm/runs/2026-11-21-pqvault/node-mutants/{name}.log"
+    lim, saved = guard.limit(CMD, cwd="scaas-node"), {path: open(path, "rb").read()}
     try:
         open(path, "w").write(src.replace(old, new))
         with open(log, "w") as f:
-            r = subprocess.run(["../scripts/capped", "cargo", "test", "-j", "2", "--lib", "--", "pqvault", "pqchat",
-                                "instance_rows", "a_pqvault"], cwd="scaas-node", stdout=f, stderr=subprocess.STDOUT)
+            r = guard.run(CMD, lim, cwd="scaas-node", stdout=f, stderr=subprocess.STDOUT)
     finally:
-        open(path, "w").write(src)
+        guard.restore(saved)
     t = open(log, errors="replace").read()
     fails = sorted({l.split()[1] for l in t.splitlines() if l.startswith("test ") and l.endswith("FAILED")})
     if r.returncode != 0 and not fails:
         fails = ["(build)"]
-    return f"{name} | {path} | {'KILLED' if r.returncode != 0 else 'SURVIVED'} | {', '.join(fails[:6])}"
+    return f"{name} | {path} | {guard.outcome(r, 'KILLED' if r.returncode != 0 else 'SURVIVED')} | {', '.join(fails[:6])}"
 
 
 if __name__ == "__main__":

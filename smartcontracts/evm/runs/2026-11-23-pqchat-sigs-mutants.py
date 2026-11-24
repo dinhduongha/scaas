@@ -4,11 +4,14 @@
 test. One mutant per run on a clean tree, `forge test` over test/pqchat, every file restored byte for byte after it; a mutant that
 does not compile kills nothing; a mutant that passes is a finding (exit 1).
   python3 -I smartcontracts/evm/runs/2026-11-23-pqchat-sigs-mutants.py [first last]   (from the worktree root, foreground)
-  python3 -I smartcontracts/evm/runs/2026-11-23-pqchat-sigs-mutants.py check           (every replacement found once, no run)"""
+  python3 -I smartcontracts/evm/runs/2026-11-23-pqchat-sigs-mutants.py check           (every replacement found once, no run)
+A hung run: the run past its deadline (3 x the unmutated baseline, at least 10 min, or `--timeout N`) has its process group killed and reads `killed (timeout N s)`; a target file that differs from HEAD refuses the run; the restore holds on SIGINT / SIGTERM (scripts/mutant_guard.py, owner 2026-11-24)."""
 import os
 import re
-import subprocess
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+import mutant_guard as guard  # noqa: E402
 
 E = "smartcontracts/evm/"
 P = E + "src/pqchat/PqChat.sol"
@@ -55,9 +58,12 @@ if sys.argv[1:] == ["check"]:
     raise SystemExit(0)
 bad = 0
 lo, hi = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) == 3 else (1, len(M))
+guard.refuse_dirty([f for _, reps in M[lo - 1:hi] for f, _, _ in reps], ".")
+lim = guard.limit(FORGE[0], cwd=FORGE[1])
 for n, (name, reps) in enumerate(M[lo - 1:hi], lo):
     suite, cwd = FORGE
     orig = {f: open(f, encoding="utf-8").read() for f, _, _ in reps}
+    saved = {f: open(f, "rb").read() for f in orig}
     new = dict(orig)
     for f, a, b in reps:
         assert new[f].count(a) == 1, (name, a)
@@ -65,18 +71,15 @@ for n, (name, reps) in enumerate(M[lo - 1:hi], lo):
     try:
         for f, s in new.items():
             open(f, "w", encoding="utf-8").write(s)
-        r = subprocess.run(suite, capture_output=True, text=True, cwd=cwd)
+        r = guard.run(suite, lim, capture_output=True, text=True, cwd=cwd)
     finally:
-        for f, s in orig.items():
-            open(f, "w", encoding="utf-8").write(s)
-    for f, s in orig.items():
-        assert open(f, encoding="utf-8").read() == s
+        guard.restore(saved)
     out = r.stdout + r.stderr
     loaded = "Compiler run failed" not in out
     failed = sorted(set(re.findall(r"^\[FAIL[^\]]*\] (\w+)\(", out, re.M)))
-    survived = r.returncode == 0 or not loaded
+    survived = not r.timeout and (r.returncode == 0 or not loaded)
     bad += survived
-    verdict = "SURVIVED" if r.returncode == 0 else "NO-LOAD " if not loaded else "killed  "
+    verdict = guard.outcome(r, "SURVIVED" if r.returncode == 0 else "NO-LOAD " if not loaded else "killed  ")
     where = ", ".join(sorted({f.split("/")[-1] for f, _, _ in reps}))
     print(f"{verdict} | M{n} {name} | {where} | rc={r.returncode} | {len(failed)} failed: {', '.join(failed)[:200]}", flush=True)
 print(f"mutants M{lo}-M{hi} of {len(M)}, survived or not loaded: {bad}")

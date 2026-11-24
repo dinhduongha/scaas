@@ -1,10 +1,27 @@
 #!/bin/bash
 # typed-signing N1 mutants: one rule, one edit, the named test must fail; restore, cmp. Usage: <script> [names...]
+# A hung run (owner 2026-11-24, scripts/mutant_guard.py): past 3 x its unmutated baseline (at least 10 min) its process group
+# is killed and it reads `KILLED ... killed (timeout N s)`; the file is restored on every exit (SIGINT / SIGTERM too); a
+# target file that differs from HEAD refuses the run.
 cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 2
+git diff --quiet HEAD -- scaas-node/src || {
+    echo "refused: differs from HEAD (a leftover mutation: a run died): $(git diff --name-only HEAD -- scaas-node/src)"
+    exit 2
+}
 S=$(mktemp -d) || exit 2
+cur=
+trap '[ -z "$cur" ] || cp "$S/mut.orig" "$cur"' EXIT
+trap 'exit 130' INT TERM HUP
+declare -A base
 run() { # name file python-replace-from python-replace-to test
     local name=$1 f=$2 from=$3 to=$4 test=$5
+    local cmd=(scripts/capped cargo test -j2 --manifest-path scaas-node/Cargo.toml --lib --offline "$test" -- --test-threads=2)
+    [ -n "${base[$test]:-}" ] || base[$test]=$(python3 -I scripts/mutant_guard.py time -- "${cmd[@]}") || {
+        echo "$name: the unmutated baseline of $test is red"
+        exit 2
+    }
     cp "$f" "$S/mut.orig"
+    cur=$f
     python3 - "$f" "$from" "$to" <<'P' || {
 import sys
 p,a,b=sys.argv[1:4]
@@ -15,14 +32,19 @@ P
         echo "$name: pattern not found"
         return 1
     }
-    scripts/capped cargo test -j2 --manifest-path scaas-node/Cargo.toml --lib --offline "$test" -- --test-threads=2 >"$S/mut.log" 2>&1
+    python3 -I scripts/mutant_guard.py exec "${base[$test]}" -- "${cmd[@]}" >"$S/mut.log" 2>&1
     local rc=$?
     cp "$S/mut.orig" "$f"
-    cmp "$f" "$S/mut.orig" && echo "restored $f"
+    cur=
+    cmp "$f" "$S/mut.orig" && echo "restored $f" || {
+        echo "$f not restored"
+        exit 4
+    }
     local r
     r=$(grep -E '^test result|^error(\[|:)' "$S/mut.log" | head -1)
     local p
     p=$(grep -E 'panicked at|BAD_SIGNATURE|missing row|moved one|one call' "$S/mut.log" | head -2 | cut -c1-170 | tr '\n' ' ')
+    [ $rc -eq 124 ] && p=$(grep -o 'killed (timeout [0-9]* s)' "$S/mut.log" | tail -1)
     if [ $rc -ne 0 ]; then echo "KILLED $name by $test (rc=$rc): $r | $p"; else echo "SURVIVED $name ($test): $r"; fi
 }
 want=" $* "

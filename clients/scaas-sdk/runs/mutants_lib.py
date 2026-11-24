@@ -11,11 +11,13 @@ applies one mutant at a time, runs its test command from the worktree root (the 
 foreground), restores the files byte for byte, and records the outcome in the task's `-mutants.txt`: `killed` (the intended
 test failed: the mutant's optional fourth element `expect`, else the test its command names; a failure line is required),
 `survived` (it passed), `not loaded` (the mutant does not compile, in any toolchain), `other failure` (red, but not by the
-intended assertion: no kill; merged-tree review M12). Each row is
+intended assertion: no kill; merged-tree review M12), `killed (timeout N s)` (the run passed its deadline: 3 x the
+command's baseline, at least 10 min, or `--timeout N`; its whole process group is killed, and it counts as killed; owner
+2026-11-24). A target file that differs from HEAD refuses the run (rc 2: a leftover mutation); every mutated file is
+restored and checked in a `finally`, on SIGINT / SIGTERM too (scripts/mutant_guard.py). Each row is
 `name | outcome | commit[ dirty] | test | first failure line`, `dirty` when tracked files other than the runs records differed
 from HEAD. A run of named mutants keeps the record's other rows (each with its own commit). Last line:
 `N mutants, K killed, S survived, L not loaded, O other failure`. Full output in a git-ignored `.log` beside it."""
-import hashlib
 import os
 import re
 import subprocess
@@ -23,6 +25,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+import mutant_guard as G  # noqa: E402
 # the test commands see foundry's tools as the gate runner's steps do (`anvil`, `cast`, `forge` of the e2e tests)
 os.environ["PATH"] = f"{Path.home() / '.foundry' / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}"
 RUNS = "clients/scaas-sdk/runs"
@@ -138,17 +142,20 @@ def run(task, mutants, only=None):
     if bad:
         print(f"[mutants] {task}: refused, mutants that do not load:\n" + "\n".join(bad))
         return 2
+    G.refuse_dirty([f for m in sel for f, _, _ in m[1]], ROOT)
     sha = git("rev-parse", "--short=9", "HEAD").stdout.strip()
     dirty = git("diff", "--quiet", "HEAD", "--", ".", *NOT_CODE).returncode != 0
     at = sha + (" dirty" if dirty else "")
     with log.open("a" if only else "w") as lg:
         lg.write(f"# {task} mutants at commit {at}\n")
         cmds = list(dict.fromkeys(m[2] for m in sel))
+        base = {}
         for k, cmd in enumerate(cmds, 1):
             print(f"[mutants] {task} baseline {k}/{len(cmds)}: running", flush=True)
-            p = subprocess.run(cmd, shell=True, cwd=ROOT, capture_output=True, text=True)
+            p = G.run(cmd, G.TIMEOUT, shell=True, cwd=ROOT, capture_output=True, text=True)
+            base[cmd] = p.seconds
             text = p.stdout + p.stderr
-            lg.write(f"\n## baseline\n$ {cmd}\nrc={p.returncode}\n{text[-6000:]}\n")
+            lg.write(f"\n## baseline\n$ {cmd}\nrc={p.returncode} in {p.seconds:.0f} s\n{text[-6000:]}\n")
             if p.returncode != 0:
                 print(f"[mutants] {task}: FAIL baseline red (rc={p.returncode}): {cmd}\n  {failure_line(text)}")
                 return 2
@@ -167,21 +174,24 @@ def run(task, mutants, only=None):
             if only and name not in only:
                 if name in kept:
                     rows.append(kept[name])
-                    counts[kept[name].split(" | ")[1]] += 1
+                    counts[G.counted(kept[name].split(" | ")[1])] += 1
                 continue
-            files = {f: (ROOT / f).read_bytes() for f, _, _ in edits}
-            digest = {f: hashlib.sha256(b).hexdigest() for f, b in files.items()}
+            files = {ROOT / f: (ROOT / f).read_bytes() for f, _, _ in edits}
             by = "-"
             try:
                 for f, old, new in edits:
                     text = (ROOT / f).read_text()
                     (ROOT / f).write_text(text.replace(old, new, 1))
-                print(f"[mutants] {task} {k}/{len(mutants)} {name}: running", flush=True)
-                p = subprocess.run(cmd, shell=True, cwd=ROOT, capture_output=True, text=True)
+                limit = G.deadline(base[cmd])
+                print(f"[mutants] {task} {k}/{len(mutants)} {name}: running (deadline {limit} s)", flush=True)
+                p = G.run(cmd, limit, shell=True, cwd=ROOT, capture_output=True, text=True)
                 text = p.stdout + p.stderr
-                lg.write(f"\n## {name}\n$ {cmd}\nrc={p.returncode}\n{text[-6000:]}\n")
+                lg.write(f"\n## {name}\n$ {cmd}\nrc={p.returncode} in {p.seconds:.0f} s"
+                         f"{f' (timeout {p.timeout} s)' if p.timeout else ''}\n{text[-6000:]}\n")
                 by = failure_line(text)
-                if p.returncode == 0:
+                if p.timeout:
+                    outcome = G.outcome(p, "killed")
+                elif p.returncode == 0:
                     outcome, by = "survived", "-"
                 elif any(e in text for e in COMPILE_ERRORS):
                     outcome = "not loaded"
@@ -191,11 +201,8 @@ def run(task, mutants, only=None):
                     # red, but not by the assertion the mutant names (or no failure line at all): no kill (M12)
                     outcome = "other failure"
             finally:
-                for f, b in files.items():
-                    (ROOT / f).write_bytes(b)
-                for f in files:
-                    assert hashlib.sha256((ROOT / f).read_bytes()).hexdigest() == digest[f], f"{f} not restored"
-            counts[outcome] += 1
+                G.restore(files)
+            counts[G.counted(outcome)] += 1
             rows.append(f"{name} | {outcome} | {at} | {cmd.split('&&')[-1].strip()} | {by}")
             print(f"[mutants] {task} {name}: {outcome}", flush=True)
     total = sum(counts.values())
