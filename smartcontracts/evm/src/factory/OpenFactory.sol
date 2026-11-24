@@ -712,9 +712,9 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         if (block.timestamp < r.usableFrom) revert DexVersionNotYetUsable(version, r.usableFrom);
         bytes32 creatorId = _creatorId();
         dex = _instance(creatorId, CLASS_DEX, 0, salt, impl, _chainEnv(DEX_DOMAIN, r.envVersion));
+        _index(dex, creatorId, CLASS_DEX, 0, version); // G-1: indexed before its code runs
         ISCaaSDex(dex).initialize(creatorId, version, initArgs);
         _requireChainUid(dex, chainUid);
-        _index(dex, creatorId, CLASS_DEX, 0, version);
         emit DexCreated(dex, creatorId, version, impl);
     }
 
@@ -874,6 +874,7 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         (address impl, IFactoryToken.ChainEnv memory e) = _usableRelease(id, initCall);
         bytes32 creatorId = _creatorId();
         instance = _instance(creatorId, id.contractClass, id.kind, salt, impl, e);
+        _index(instance, creatorId, id.contractClass, id.kind, id.version); // G-1: indexed before its code runs
         _initInstance(instance, creatorId, initCall);
         _recordInstance(instance, creatorId, id, impl);
     }
@@ -919,8 +920,8 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         }
     }
 
-    /// @dev Steps 5-6: the clone's `factoryInfo()` names this factory, this chain, the release and `initialized`; then the
-    ///      record and `InstanceCreated`.
+    /// @dev Steps 5-6: the clone's `factoryInfo()` names this factory, this chain, the release and `initialized`; then
+    ///      `InstanceCreated` (the record was written before the initializer, CTR-GOV-33 G-1).
     function _recordInstance(address instance, bytes32 creatorId, ReleaseId calldata id, address impl) private {
         (bool got, FactoryInfo memory fi) = _factoryInfo(instance);
         if (
@@ -928,7 +929,6 @@ contract OpenFactory is IOpenFactory, UAAdmin {
                 || fi.kind != id.kind || fi.version != id.version
         ) revert InstanceInfoMismatch(instance);
         if (fi.chainUid != chainUid) revert ChainUidMismatch(chainUid, fi.chainUid);
-        _index(instance, creatorId, id.contractClass, id.kind, id.version);
         emit InstanceCreated(instance, creatorId, id.contractClass, id.kind, id.version, impl);
     }
 
@@ -1223,9 +1223,10 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         if (ok) w = abi.decode(ret, (uint256));
     }
 
-    /// @dev The generic gate (the kind enabled), the CREATE3 clone with its env, `initialize` with the creator's
+    /// @dev The generic gate (the kind enabled), the CREATE3 clone with its env, its record (before any of its code runs:
+    ///      CTR-GOV-33 G-1, so `registryFor` is fixed for the whole transaction), `initialize` with the creator's
     ///      `initArgs`, the `chainUid()` post-check (an unregistered implementation's code is unvetted: what it reports as
-    ///      its domain salt must be this factory's), then the record and its lists, the leg index and the event from the
+    ///      its domain salt must be this factory's), then the leg index and the event from the
     ///      token's own views (no `admin()` read: 3r R1).
     function _create(
         TokenKind kind,
@@ -1238,10 +1239,10 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         if (!tokenKindEnabled(kind)) revert KindDisabled(kind);
         bytes32 creatorId = _creatorId();
         token = _instance(creatorId, CLASS_TOKEN, uint16(kind), salt, impl, _chainEnv(uint8(kind), envVersion));
+        _index(token, creatorId, CLASS_TOKEN, uint16(kind), version); // G-1: indexed before its code runs
         IFactoryToken(token).initialize(creatorId, version, initArgs);
         _requireChainUid(token, chainUid);
         IGovernance t = IGovernance(token);
-        _index(token, creatorId, CLASS_TOKEN, uint16(kind), version);
         address[] memory us = IFactoryToken(token).underlyings();
         if (us.length > MAX_LEGS) revert UnderlyingCountInvalid(us.length);
         for (uint256 i; i < us.length; ++i) {

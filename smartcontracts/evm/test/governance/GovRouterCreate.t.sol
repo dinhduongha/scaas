@@ -258,7 +258,8 @@ contract GovRouterCreateTest is GovRouterFixture {
         assertEq(NoteKind(inner).seenCreator(), nid(outer));
         assertEq(f.creating(), bytes32(0), "restored");
         (IOpenFactory.Created[] memory p,) = f.contractsPage(4, 0, 10);
-        assertEq(p[0].addr, inner, "the nested record first");
-        assertEq(p[1].addr, outer);
+        // CTR-GOV-33 G-1 (2026-11-24): an instance is indexed before its initializer runs, so the outer record comes first
+        assertEq(p[0].addr, outer, "the outer record first");
+        assertEq(p[1].addr, inner);
     }
 }

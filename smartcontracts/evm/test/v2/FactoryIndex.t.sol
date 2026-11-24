@@ -413,10 +413,10 @@ contract FactoryIndexTest is IndexAsserts {
         address t = f.createTokenUnregistered(NORMAL, address(outer), "", "outer");
         (IOpenFactory.Created[] memory p, uint256 n) = f.contractsPage(TOKEN, 0, 10);
         assertEq(n, 2);
-        address nested = p[0].addr;
-        assertEq(p[1].addr, t, "the outer one last");
-        assertEq(p[0].creatorId, nid(t), "the nested creation's creator is the outer clone");
-        assertEq(p[1].creatorId, nid(relayer));
+        address nested = p[1].addr;
+        assertEq(p[0].addr, t, "the outer one first: indexed before its initializer (CTR-GOV-33 G-1)");
+        assertEq(p[1].creatorId, nid(t), "the nested creation's creator is the outer clone");
+        assertEq(p[0].creatorId, nid(relayer));
         assertEq(f.creatorOf(nested), t);
         assertEq(f.creatorOf(t), relayer);
     }

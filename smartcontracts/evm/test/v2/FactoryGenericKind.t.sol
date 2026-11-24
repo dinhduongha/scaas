@@ -390,10 +390,10 @@ contract FactoryGenericKindTest is Test {
         address outer = f.createInstance(_id(4, 0, 16), "outer", _noteCall(nid(alice), "outer"));
         (IOpenFactory.Created[] memory p, uint256 n) = f.contractsPage(4, 0, 10);
         assertEq(n, 2);
-        assertEq(p[1].addr, outer);
-        assertEq(p[0].creatorId, nid(outer), "the nested creator: the outer clone");
-        assertEq(p[1].creatorId, nid(alice));
-        assertEq(NoteKind(p[0].addr).seenCreator(), nid(outer));
+        assertEq(p[0].addr, outer);
+        assertEq(p[1].creatorId, nid(outer), "the nested creator: the outer clone");
+        assertEq(p[0].creatorId, nid(alice));
+        assertEq(NoteKind(p[1].addr).seenCreator(), nid(outer));
         assertEq(BadKind(outer).seenCreator(), nid(alice));
         assertEq(BadKind(outer).seenAfter(), nid(alice), "creating() restored after the nested creation");
         assertEq(f.creating(), bytes32(0));
