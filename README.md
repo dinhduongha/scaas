@@ -1161,8 +1161,8 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 
 ## 18. Free Pay
 
-If you find SCaaS useful, you can pay for it. This is not a donation: the developer does not need donations. Pay any
-amount you want, whenever you want, or not at all.
+If you find SCaaS useful, you can pay for it. This is not a donation. Pay any amount you want, whenever you want, or not
+at all.
 
 Free Pay carries no warranty and no obligation, and nothing is bound to it: it buys no support, no rights and no
 license terms. The license is the same whether you pay or not.
