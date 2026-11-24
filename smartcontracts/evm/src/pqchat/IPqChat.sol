@@ -317,9 +317,9 @@ interface IPqChat {
     error PqChatPathHash(bytes32 epochId, uint256 index);
     /// @notice A piece landed twice.
     error PqChatPathStored(bytes32 epochId, uint256 index);
-    /// @notice At acceptance the path length or the target count differs from the walk; when the list lands, its target
-    ///         `index` differs from the expected one.
-    error PqChatTreeTargets(uint256 index);
+    /// @notice At acceptance the path length or the target count differs from the walk (`count` the walk's); when the list
+    ///         lands, its targets differ from the expected ones (`count` is `ctCount`: only their hash is kept, A-5).
+    error PqChatTreeTargets(uint256 count);
     /// @notice At acceptance: `treeHash` differs from the root `computed` (R12, C7).
     error PqChatTreeHash(bytes32 computed);
     /// @notice CTR-CHAT-27 C18: a key that a live leaf already holds (`kemHash = keccak256(kemPk)`).
