@@ -127,7 +127,7 @@ Each is the controller's (owner: no) unless marked; the owner may override any. 
 | C6 | (owner, R7) No unmerged leaves: an Add blanks the new leaf's direct path; no truncation of the tree; every commit carries a path | simpler resolution on chain (note §8.5); blank levels cost nothing because the path is filtered |
 | C7 | (owner, R12) The contract keeps the tree hash and computes the commit's tree in memory **when the record is accepted**: the signed `treeHash`, `ctCount`, the path length and the removed UAs are compared then, the target list when it lands | a wrong value is never staged and never becomes an epoch, so no client ever has to reject an accepted commit (§8; fable-r2-3) |
 | C8 | (owner, R7) A non-admin author changes keys of its own UA only | a tree is stateful: dropping another member's leaf lasts until an Add (§9) |
-| C9 | Leaving and removing in a tree session name a **complete epoch of the session: the head or an ancestor of it**, and **take effect on the head when they land**: the UA is `gone` from the head's number, every leaf it holds at the head is owed, and the record is kept under the head's epoch; a staged, losing or unknown epoch is refused (`PqChatIncomplete`, `PqChatUnknown`). In a tree session every complete epoch is on the head's chain (C4, C20, CTR-CHAT-08), so "complete and of this session" is the whole ancestor check: one read, no walk (Change 2026-11-24, E-3). **The same rule holds in mode 0 and in PqVault** (owner 2026-11-24: "Yes, both modes"): at home their `remove` / `leave` and `removeVaultMembers` / `leaveVault` name the head or an ancestor and apply at the head (CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06); a replica has no head and keeps the epoch named | the next commit is the only one that can honour them. **Chain-level front-running is in the threat model (owner 2026-11-24):** under "the head only" a member about to be removed lands a commit first, the exit names a parent that now has a child and is void, and that repeats for ever (E-3) |
+| C9 | Leaving and removing in a tree session name a **complete epoch of the session: the head or an ancestor of it**, and **take effect on the head when they land**: the UA is `gone` from the head's number, every leaf it holds at the head is owed, and the record is kept under the head's epoch; a staged, losing or unknown epoch is refused (`PqChatIncomplete`, `PqChatUnknown`). In a tree session every complete epoch is on the head's chain (C4, C20, CTR-CHAT-08), so "complete and of this session" is the whole ancestor check: three slots of the named epoch and two for the head's number, no walk (Change 2026-11-24, E-3). **An exit expires by a bounded lag (Change 2026-11-24, the spec check, sc-E-2, sc-F-5):** it is valid only while `head.epoch ≤ named.epoch + EXIT_LAG_MAX`, `EXIT_LAG_MAX` = 16, else `PqChatExitLag(named, head)`; no typehash moves. **A repeat is refused:** an exit whose UAs it would newly flag at the head number none is `PqChatNotMember` (A-4, sc-E-5). **The same rules hold in mode 0 and in PqVault** (owner 2026-11-24: "Yes, both modes"): at home their `remove` / `leave` and `removeVaultMembers` / `leaveVault` name the head or an ancestor within the lag and apply at the head; a replica applies a flag the home applied at a later epoch by the lag rule of CTR-CHAT-20 (CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06) | the next commit is the only one that can honour them. **Chain-level front-running is in the threat model (owner 2026-11-24):** under "the head only" a member about to be removed lands a commit first, the exit names a parent that now has a child and is void, and that repeats for ever (E-3). **Why 16:** to void one exit a front-runner must complete 17 epochs in a row before it lands, each a commit or rekey of its own with a PQ signature check and its pieces, against which the admin re-signs one record at the new head; a held, delayed or reverted-and-copied exit dies after 16 epochs of the group's own activity, so a decision is never applied to a group much changed since (sc-E-2's scenarios); 32 would double the front-runner's cost for twice the window, and the ratio, not the window, is what stops it |
 | C10 | (owner, R8) `TREE_LEAVES_MAX` = 256 (depth 8); (controller) `TREE_CHANGES_MAX` = 32 adds plus removes per commit | §13 |
 | C11 | A tree session's control-plane records are always verified by the client, whatever `require_signed_records` says | C1's reason |
 | C12 | The epoch secret is confirmed by opening the commit's `sealedInfo`, which a tree commit may not leave empty; no separate confirmation tag | the tag would sit outside the signed record; `sealedInfo` is already an AEAD under a key from `K` (fable-13) |
@@ -416,8 +416,8 @@ ordered by path level upward, then by ascending target. The epoch id and the non
 | `addPath(bytes32 epochId, uint32 firstCt, PathCt[] cts)` | none | ciphertexts `firstCt..`, at least one (`PqChatShape`, C40), each against its hash in the landed list (`PqChatPathList` before the list) |
 | the three piece entries on epoch 0 of a tree session | | refused by name, `PqChatUnknown(epochId)`: epoch 0 has no commit and no pieces but its wraps (Change 2026-11-24, A-3) |
 | `addWraps(bytes32 epochId, uint32 first, Wrap[] wraps)` | none | unchanged entry: epoch 0's wraps, and a commit's Welcome wraps (`wraps[i]` names `adds[i]`) |
-| `treeLeave(PqChatTreeLeave l, UASig sig)` | the leaver | names the head or an ancestor of it and applies at the head (C9); the UA is `gone` from then on (C28) |
-| `treeRemove(PqChatTreeRemove r, UASig sig)` | an admin of the head | names the head or an ancestor of it, `nextEpoch` the number of the epoch named plus one, and applies at the head (C9); bounded (C21); the UAs are `gone` from then on (C28) |
+| `treeLeave(PqChatTreeLeave l, UASig sig)` | the leaver | names the head or an ancestor of it within `EXIT_LAG_MAX` epochs and applies at the head (C9); the UA is `gone` from then on (C28) |
+| `treeRemove(PqChatTreeRemove r, UASig sig)` | an admin of the head | names the head or an ancestor of it within `EXIT_LAG_MAX` epochs, `nextEpoch` the number of the epoch named plus one, and applies at the head (C9); bounded (C21); the UAs are `gone` from then on (C28) |
 | `postMessage`, `storeMessage` | as today | unchanged records |
 | `rekey`, `leave`, `remove` on a tree session; `commit`, `treeLeave`, `treeRemove` on a flat one | | refused: `PqChatModeEntry(groupMode)` |
 
@@ -435,7 +435,8 @@ of a key taken out of a UA that went, C28) and `goneOwnKeyOf(sessionId, ua, kemH
 endEpoch)` (the pair set: the period of a key taken out of a UA that stayed, R16). `epochSig(epochId)`, `wrapAt`, `epochsOf`,
 `latestEpoch`, `epochComplete`, `childOf`, `leftIn`, `removedIn`, `removal*`, `leave*` serve both modes (in a tree session
 `leftIn`, `removedIn`, `removal*` and `leave*` are keyed by the epoch an exit was **applied at**, the head when it landed;
-the kept record names that epoch or an ancestor of it, C9), and `epochComplete`
+the kept record names that epoch or an ancestor of it, and the events `PqChatLeft` and `PqChatRemoved` carry that epoch
+too, C9), and `epochComplete`
 of a tree epoch is true exactly when it took its slot (C20); `epochOf` of a tree epoch above 0 is `PqChatModeEntry(1)`.
 
 **Events** (never the only copy): `PqChatEpochAdded` and `PqChatEpochComplete` as today, `PqChatWraps` for Welcome wraps,
@@ -611,7 +612,7 @@ commit that fits one transaction is checked whole in that transaction. Until ste
 
 **Membership in a tree session**, for the shared entries: `postMessage` and `treeLeave` ask that the author UA holds a live
 leaf (`keysOf > 0`) and is not `gone`; `postMessage` names the head, `treeLeave` the head or an ancestor of it (a complete
-epoch of the session, C9); `treeRemove` asks a live admin of the head's list, names the head or an ancestor of it, and
+epoch of the session within `EXIT_LAG_MAX`, C9); `treeRemove` asks a live admin of the head's list, names the head or an ancestor of it, and
 its UAs are members at the head and not `gone` (A-4). An exit is applied at the head (§9, "Exits apply at the head").
 
 **Only clients can check** (RFC 9420 has the same limit; so has a flat wrap): that a node key derives from its path secret, and
@@ -642,8 +643,11 @@ compares `keccak256` of every derived `kemPk` with the signed `nodeKeyHashes`, t
 2. **a head above epoch 0: the forward walk (C25; Change 2026-11-24, E-1, C-1, B-1, F-1).** The tree a commit is built on
    is the tree the device reached by applying every record in order, never a served snapshot. It starts from the cold tree
    of step 3 (a device with no verified tree: a fresh restore, a commit joiner) or from the public tree it verified itself
-   at its pin (kept with the pin; without it, from the cold tree), and for each record `m` from there to the head it
-   verifies, before it applies the next:
+   at its pin (kept with the pin; without it, from the cold tree). **The pin keeps the exits too (the spec check, sc-F-3):** with
+   the record's hash and the public tree, every exit the device verified up to and at the pinned epoch (each UA with its
+   kind and the epoch it was applied at; at least those whose UA still holds a leaf or sits in `admins`); a walk from the
+   pin starts with them, reads the exit lists of the pinned epoch again (they grow while it is the head), and a read that
+   shows fewer is a lying read. For each record `m` from there to the head it verifies, before it applies the next:
    - `m`'s id is the one `epochsOf` holds at its number, `treeId` the pinned one, and the signature verifies for the
      signer's kind (§10 step 3: every kind the contract accepts);
    - `parentEpochId` is the previous record's id and `parentTreeHash` the hash of the tree built so far (the rebuilt
@@ -651,9 +655,18 @@ compares `keccak256` of every derived `kemPk` with the signed `nodeKeyHashes`, t
    - the author holds the live leaf `leaf` with `(author, keyId)` **on the tree built so far**, and is not `gone` there
      (the exits applied up to the previous epoch, §10 step 5);
    - the author has the right of §9 on that tree, against the previous record's `admins` and those exits;
-   - the Removes name live leaves of that tree and the Adds blank leaves or leaves this commit frees, each Add's
-     `kemHash` as signed; applied with the path's `nodeKeyHashes` (§4), **the tree after `m` hashes to `m`'s signed
-     `treeHash`**, and its size is `m`'s `leaves`.
+   - **first, before it allocates anything, the bounds of C10 and C24 (the spec check, sc-F-7, sc-E-8):** `m`'s `sessionId` and
+     `epoch` are the walk's; `leaves` a power of two, at most `TREE_LEAVES_MAX` and not below the walk's `used`;
+     `removes` plus `adds` at most `TREE_CHANGES_MAX`; `admins` at most `TREE_ADMINS_MAX`; `nodeKeyHashes` at most
+     `depth(leaves)`; one `wrapHashes` entry per add; `ctCount < leaves`; `sealedInfo` 1 to `TREE_INFO_MAX` bytes;
+   - **then every acceptance check of §8 whose inputs are the record and the walk's state**, in §8's order: the author's
+     leaf, the Removes (live leaves of that tree, not the author's), the Adds (blank leaves or leaves this commit frees, no
+     `gone` UA, no `kemHash` live or added twice or in a no-return set of the walk, at most `KEYS_PER_UA_MAX` per UA),
+     `admins` (sorted, no `gone` UA, none this commit leaves with no leaf), no `gone` UA keeps a leaf, the rights of §9,
+     the path length and the target count of the walk. Only the registry reads are left to the contract, which made
+     them: an Add's key enters by its signed `kemHash`. So the contract's negative vectors are the walk's;
+   - applied with the path's `nodeKeyHashes` (§4), **the tree after `m` hashes to `m`'s signed `treeHash`**, and its size
+     is `m`'s `leaves`.
 
    A record that fails any of these cannot be the home's state (the contract refuses such a commit, R12), so it is **a
    lying read, not "not followed"**: the device reads again from another node, shows "read corrupted" while none agrees,
@@ -786,10 +799,16 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   checked and applied **at the head when it lands**, whatever commits completed after the epoch it names:
   - **the ancestor check** is "complete and of this session": in a tree session every complete epoch is on the head's chain
     (C4, one child per parent; C20, complete exactly when it took its slot). A staged or losing epoch is
-    `PqChatIncomplete`, an unknown one `PqChatUnknown`; nothing else names an epoch off the head's chain. One read, no walk
-    and no depth bound;
+    `PqChatIncomplete`, an unknown one `PqChatUnknown`; nothing else names an epoch off the head's chain. It reads three
+    slots of the named epoch (`sessionId`; `epoch` with `wraps`; `landed`) and two for the head's number (`head`, its
+    `epoch`): no walk and no depth bound;
+  - **the lag bound (the spec check, sc-E-2, sc-F-5, sc-F-6):** the exit is valid only while `head.epoch ≤ named.epoch +
+    EXIT_LAG_MAX`, `EXIT_LAG_MAX` = 16 (C9's reason), else `PqChatExitLag(named, head)`. So a delayed, held or reverted
+    exit dies by itself after 16 epochs; a front-runner must complete 17 epochs before one exit lands to void it, and the
+    admin then re-signs at the new head;
   - **checked at the head:** the leaver a live member there; the remover a live admin of the head's list, every UA it names
-    a member there (a live leaf, or in the head's `admins`) and not `gone` (A-4); `nextEpoch` is the number of the epoch named plus one (a
+    a member there (a live leaf, or in the head's `admins`) and not `gone` (A-4). **A `treeRemove` may name its own signer**
+    (the spec check, sc-F-2): that is how a keyless admin (an `msig`, which cannot `treeLeave`) goes; its evidence is that record; `nextEpoch` is the number of the epoch named plus one (a
     signed lower bound, not the head's); C21's bound and C24's admin rule (read with C38) on the head's leaves and admins;
   - **applied at the head:** each UA it newly makes `gone` is `gone` from the head's number, so its later commits,
     messages and leaves are refused (`PqChatNotMember`, and a staged one of its own fails completion's step 1); every leaf
@@ -802,14 +821,17 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   - **a closed session (C38)** is judged on the head too: an exit that leaves no UA that is not `gone` with a live leaf
     there closes it and is accepted;
   - **a staged commit** when an exit lands is void as before (fable-r3-9): completion's step 1 refuses it;
-  - **replay of the record:** it lands once, its nonce spent in `scopeEpoch(sessionId, signer)` (`PqChatNonceUsed`). It
-    no longer expires when the head moves: **a signed exit stays valid until it lands**, while its signer keeps the right
-    at the head and its UAs are members there. A UA goes once (R14): **a `treeRemove` naming a UA that is `gone` already is
-    refused whole** (`PqChatNotMember(ua)`, Change 2026-11-24, A-4), so no record is stored for nobody; a named UA's
-    front-running `treeLeave` thus voids a removal of several UAs once (that UA is out for good), and the admin resends
-    it without that UA. To withdraw an exit it signed and gave out, a device spends that nonce first: the nonce scope is the
-    commits', so its next commit may be drawn with it (a commit's nonce is never reused, C17). The signing review says
-    that the exit applies whenever it lands.
+  - **replay of the record:** it lands once, its nonce spent in `scopeEpoch(sessionId, signer)` (`PqChatNonceUsed`), and
+    only within the lag above. A UA goes once (R14): **a `treeRemove` naming a UA that is `gone` already is refused whole**
+    (`PqChatNotMember(ua)`, Change 2026-11-24, A-4), so no record is stored for nobody; a named UA's front-running
+    `treeLeave` thus voids a removal of several UAs once (that UA is out for good), and the admin resends it without that
+    UA. There is no withdrawal (the code review's text "spend the nonce" is withdrawn, sc-E-3, sc-F-6): an exit that has left the
+    device applies if it lands within the lag, and the signing review says so ("applies if it lands within 16 epochs of
+    epoch n");
+  - **what the exited UA still reads (sc-F-9):** it holds the head's `K` and node secrets until the commit that honours the
+    exit, and no commit is automatic (C22): messages under the head reach it until a member's user commits. The client
+    shows a head with `owed > 0` as "removal pending: … still reads", and every member's client offers its user the honouring
+    commit next;
 - **Bounded per head (C21; codex-6, fable-2, codex-r2-7):** a `treeRemove` and a `treeLeave` add the live leaves of the UAs
   they newly make `gone` to the head's `owed`, and are `PqChatTreeBacklog(owed)` when that would exceed `TREE_CHANGES_MAX`. So
   the forced Removes always fit one commit, with any room left for other changes, and the honest builder never needs more
@@ -820,8 +842,8 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   only member left leaves; the last two leave on one head; an admin without a leaf removes the members that remain),
   nobody can author the commit that would honour it, and nothing can be added (R14): the session is **closed** for good.
   The contract does not refuse that record and writes nothing more for the session: the head and its epoch stay, `owed`
-  stays above 0, `treeLeaves` keeps the leaves as they are with their `joinEpoch`, `goneOf` names each UA with the head it
-  named, and **`goneKeyOf` and `goneOwnKeyOf` stay unset for those leaves**. A key on such a leaf has its period from
+  stays above 0, `treeLeaves` keeps the leaves as they are with their `joinEpoch`, `goneOf` names each UA with the head its
+  exit was applied at, and **`goneKeyOf` and `goneOwnKeyOf` stay unset for those leaves**. A key on such a leaf has its period from
   `joinEpoch` to the head, which is what its device read and what §10 step 3 takes for a live leaf. No message, commit
   or leave is accepted after it (each asks a member that is not `gone`), and a `treeRemove` may name only a UA that is not
   `gone` yet, a keyless admin (a UA already `gone` is `PqChatNotMember`, A-4). Clients show a
@@ -866,8 +888,11 @@ whether the device follows every epoch or none; so are later polls of the contra
      kind, an `msig` by its quorum over the kept `UASig`, WebAuthn, by the same check as mode 0's records**, and the
      forward walk's checks of §8 step 2 hold (`parentEpochId`, `parentTreeHash` against the walk's tree, the author's
      leaf and right, the tree after it against its `treeHash`). Records only: no list, ciphertext or wrap is read outside
-     the secret range. They are the home's state, read under ARCH-POS-15 as the head is. The cost is one record per epoch
-     since the device's verified tree, every record since creation for a fresh restore;
+     the secret range. They are the home's state, read under ARCH-POS-15 as the head is. The cost is one record and its exit lists per
+     epoch since the device's verified tree; for a fresh restore or a joiner, every record since creation **and the cold
+     tree's member keys, up to 256 authenticated registry key reads** (`kemKeyAt` with its kept signature, §8 step 5).
+     It has no bound: any member lengthens it by a commit each (a plain commit with no change is one transaction). The
+     device keeps its verified tree, exits and pin, so it pays this once (the spec check, sc-E-8, sc-F-11);
    - **the secret range: the epochs the key was in the tree.** `joinEpoch` to the head for a live key; `joinEpoch` to
      `endEpoch − 1` for a key that was taken out. **`endEpoch` is the number of the commit that blanks the leaf:** its
      record must hold the key in its `removes`, and the device opens nothing there, because it is not in that tree.
@@ -882,18 +907,29 @@ whether the device follows every epoch or none; so are later polls of the contra
    and the exits applied up to the parent (step 5), and its tree hashes to its signed `treeHash`. A record that fails is
    a lying read (§8 step 2), not "not followed", and the walk stops there: no pin, nothing built above it. A message
    author is checked against the roster of its epoch.
-5. **Exits and rights evidence (codex-r2-6; Change 2026-11-24, E-3, F-2, F-3).** The walk knows a UA as `gone` from the
-   epoch its exit was applied at (C9). A non-admin's commit `n` may drop another UA's leaves, and drops a `gone` admin
-   from `admins` (it must), only for a UA `gone` at the parent; such a commit is plain (§9). For each UA so dropped:
-   `goneOf` gives the kind and the number `h ≤ n − 1` of the head the exit was applied at; the `PqChatTreeLeave` or
-   `PqChatTreeRemove` record kept under epoch `h` and its signature are read (`leave*`, `removal*` of `epochsOf` at `h`)
-   and verified **for the signer's kind** (step 3): `treeId` is the pinned one; the record names epoch `h` or an ancestor
-   of it on the walk's chain (its `epochId` is the one `epochsOf` holds at that number, and a removal's `nextEpoch` is
-   that number plus one); the signer is that UA (a leave) or a UA of epoch `h`'s `admins` (a removal) that is not `gone`
-   at `h`; and the UA is a member at `h` on the walk's tree. The UA's own commits up to `h` are valid: the exit did not
-   exist on chain before. A UA goes once (R14), so this is one record per UA for the life of the session. Without valid
-   evidence the commit cannot be the home's state: a lying read (step 4). A reader that cannot verify a signer kind the
-   contract accepts (an `msig` admin's removal, a WebAuthn admin's) is a defect of the reader, never "read corrupted".
+5. **Exits and rights evidence (codex-r2-6; Change 2026-11-24, E-3, F-2, F-3; the spec check, sc-E-1, sc-F-1, sc-F-2, sc-E-7,
+   sc-F-8).** The walk takes the exits of every epoch `h` of the public range from fixed reads, whatever the records say
+   (C22): `leaveCount` with `leaveAt` and `leaveSig`, and `removalCount` with `removalAt` and `removalSig`, of the id
+   `epochsOf` holds at `h`; `goneOf` is only compared with what they give. **A kept record is an exit applied at `h`
+   exactly when the contract could have accepted it there, judged order-free among the exits kept under the same `h`:**
+   - its signature verifies for the signer's kind (step 3) and its `treeId` is the pinned one;
+   - it names `h` or an ancestor within the lag: its `epochId` is the one `epochsOf` holds at its number `a`, with
+     `h − EXIT_LAG_MAX ≤ a ≤ h`, and a removal's `nextEpoch` is `a + 1`. For an `a` below the device's verified tree
+     the number comes from `commitOf(epochId).epoch` (0 for the `sessionId`), then `epochsOf` at it, read as the head is;
+   - **a leave:** its signer is the UA, holding a live leaf on the walk's tree at `h`, and not `gone` before `h`;
+   - **a removal:** its signer is in epoch `h`'s `admins` and not `gone` before `h` (its own exit, if any, applied at `h`
+     or later); each UA it names holds a live leaf on the walk's tree at `h` **or is in `h`'s `admins`** (a keyless admin
+     is removable), and is not `gone` before `h`. A removal may name its own signer (§9).
+
+   Exits on one head have no order in state (two lists), and the contract took each kept record while its checks held,
+   so **no chain the home accepted fails here**: a removal and its signer's own leave on one head, in either order, are
+   both valid. The converse, a record shown as kept under `h` that the contract refused, needs an endpoint that lies
+   about the lists: its effect is that the true next commit fails the walk (a lying read: read from another node), or a
+   commit signed by a member that uses it (R10). From `h + 1` on the walk counts every UA these records name, and every
+   leaver, as `gone`; a non-admin's commit may drop exactly their leaves and drop them from `admins` (plain, §9). The UA's
+   own commits up to `h` are valid: the exit did not exist on chain before. A record that fails is not the home's state:
+   a lying read (step 4). A reader that cannot verify a signer kind the contract accepts (an `msig` admin's removal, a
+   WebAuthn admin's) is a defect of the reader, never "read corrupted".
 6. For each commit of the secret range in which the device's key is live and not the author: `pathListOf`, compared with `ctListHash`;
    then the index `j` of **the one target that is its leaf's node or an ancestor of it** (targets are disjoint subtrees, so tree
    math on the list alone finds it; no secret is consulted) and `pathCtAt(epochId, j)`, compared with `ctHashes[j]`. For a join
@@ -986,8 +1022,8 @@ reads `commitOf(epochId)` and finds its own record, sends the pieces through the
 an encryption and a decryption, so a discovered node counts only under the majority option with at least three nodes.
 
 **An exit and a commit race (C9; E-3).** A `treeLeave` or `treeRemove` is not a candidate for the head's slot: it names
-the head or an ancestor and applies at whatever head it lands on, so a commit that completes first does not void it, and the
-next commit owes it. A commit staged when it lands is void (fable-r3-9). An exit naming a staged or losing epoch is
+the head or an ancestor within `EXIT_LAG_MAX` = 16 epochs and applies at whatever head it lands on, so a commit that
+completes first does not void it, and the next commit owes it; past the lag it is `PqChatExitLag`. A commit staged when it lands is void (fable-r3-9). An exit naming a staged or losing epoch is
 `PqChatIncomplete`.
 
 **A candidate is published (C26, codex-4).** Whatever a commit seals, its path secrets and its `sealedInfo`, is disclosed to
@@ -1028,6 +1064,7 @@ New errors (existing ones keep their meaning: `PqChatShape`, `PqChatKemKey`, `Pq
 | `PqChatTreeLeaf(uint32 leaf)` | a leaf that is not live with the named key, not blank for an Add, the author's own in a Remove, or out of range |
 | `PqChatTreeKeyLive(bytes32 kemHash)` | a key that a live leaf already holds, or added twice (C18) |
 | `PqChatTreeAdmins()` | no admin with a live leaf would remain while a UA that is not `gone` keeps one (C24, C38) |
+| `PqChatExitLag(uint64 named, uint64 head)` | a `treeLeave` or `treeRemove` (and, in mode 0, a `leave` or `remove` at home) whose epoch is more than `EXIT_LAG_MAX` = 16 below the head (C9, the spec check) |
 | `PqChatTreeBacklog(uint256 owed)` | a `treeRemove` or `treeLeave` that would owe more than `TREE_CHANGES_MAX` leaves at the head (C21) |
 | `PqChatPathList(bytes32 epochId)` | a list that does not hash to `ctListHash`, a second list, or a ciphertext before the list |
 | `PqChatPathHash(bytes32 epochId, uint256 index)` | a node key or ciphertext that does not hash to its signed hash, or has the wrong size |
@@ -1213,7 +1250,7 @@ line in `size-baseline.json`.
 
 | Threat | Outcome |
 |---|---|
-| A lying endpoint substitutes a node key or a live leaf's key | the client recomputes `treeHash` over `keyHash` and `kemHash`, verifies the head commit's kept signature and compares each fetched key with its hash before it encrypts (§8, C11, C18) |
+| A lying endpoint substitutes a node key or a live leaf's key | the client builds the tree by the forward walk, whose `keyHash` and `kemHash` entries come from verified records only (C25), and compares each fetched key with its hash in that tree before it encrypts (§8, C11, C18) |
 | A lying endpoint substitutes the key of an added member, or of a member at creation (codex-1) | the registry record is verified against the UA before encapsulation (§8 step 5); an Add with a `kemHash` the registry does not hold is never accepted |
 | A lying endpoint serves, at an epoch-0 head, a leaf of a UA outside the signed member list, with its genuine registry key and a matching root (codex-r2-1) | the client takes no leaf from a view there: it rebuilds the tree from the signed `members` (§8 step 3) |
 | A removed device keeps a second leaf with the same key bytes, or with another encoding of the same X25519 point (codex-2, fable-10, codex-r2-2) | one live leaf per `kemHash`, enforced at every wrap of epoch 0 and every Add; one encoding per point (C32). A second leaf with a **related** key is the row on equivalent keys below |
@@ -1229,7 +1266,8 @@ line in `size-baseline.json`.
 | A leave or removal signed for one home is replayed in a twin session at another (codex-r2-5) | `PqChatTreeLeave` and `PqChatTreeRemove` sign `treeId` (C30) |
 | A device that fell behind refreshes and republishes old room or store lists (codex-r2-3, fable-r2-5) | it seals the marker; a full info is sealed only by a device that holds the one in force; a changed one is taken only from an admin (C33) |
 | A device misses the epoch that changed the info, follows again through another member's commit, and its next commit (a new device key, an Add) seals the retired info (fable-r3-1) | a device that did not follow an epoch has no info in force from that epoch on: it seals the marker until a commit it follows carries a full info, taken under the joiner rule and never sealed while flagged (C33) |
-| An endpoint, alone or with any registered UA or a removed member, serves a forged continuation: a head signed by a UA that holds no leaf on the true tree, a leaf planted in a blank position, a roster that judges its own author (E-1, C-1, B-1, F-1, the code review of 2026-11-24) | the device walks forward (C25, §8 step 2): each record's author must hold its leaf, not `gone`, with its right, on the tree the walk built from the signed members or from the device's verified pin, and the tree after it must hash to its signed `treeHash`. A planted leaf is on no tree the walk builds, so the record is a lying read: never followed, never pinned, never built on. **Left:** which candidate won is the home's state, read under ARCH-POS-15; a forged continuation needs the signature of a UA that holds the author's leaf on the walk's tree (R10). A UA whose exit landed but was not yet honoured still holds its leaves on that tree: with an endpoint that hides the exit (`goneOf`) and the commits after it, it can sign a continuation from them; that is the residual of the row "A stale endpoint hides the newest commits" (a checkpoint cannot show a removal never served; a changed info waits for R13's majority read), and on a fresh honest read the true chain conflicts with it at that number (C26) |
+| An endpoint, alone or with any registered UA or a removed member, serves a forged continuation: a head signed by a UA that holds no leaf on the true tree, a leaf planted in a blank position, a roster that judges its own author (E-1, C-1, B-1, F-1, the code review of 2026-11-24) | the device walks forward (C25, §8 step 2): each record's author must hold its leaf, not `gone`, with its right, on the tree the walk built from the signed members or from the device's verified pin, and the tree after it must hash to its signed `treeHash`. A planted leaf is on no tree the walk builds, so the record is a lying read: never followed, never pinned, never built on. **Left, at its real scope (the spec check, sc-F-4, sc-E-6; accepted residual, controller call):** the walk proves a rightful chain, not the home's. (a) **A device with no verified tree** (a fresh restore, a commit joiner) can be forked from any epoch `k` by any UA that had the right at `k` (a member for a plain commit, an admin for any change, the creator for a twin genesis), with one endpoint that serves the true records to `k` and its own after: a removed ex-admin can even add the victim there with a Welcome. (b) **An endpoint alone**, with no new signature, can hide an exit (`goneOf` and the exit lists) and serve as the next epoch a commit the exit voided, staged when it landed, whose record and pieces are public. A device that holds a verified tree above `k` is safe from (a) below its pin and sees (b) only for exits it has not read yet. **What mitigates them:** the reads that feed a decryption are made under ARCH-POS-15, and a device with no verified tree writes its first pin only from a strict-majority read over at least 3 named endpoints at a final block, else it shows the head as "unconfirmed" until such a read agrees (R13's rule for a changed info stays); the walk limits who can fork to a UA that held the right at `k`, and the exit lag (C9) limits how long a hidden exit stays useful; on a later honest read the true chain conflicts with the fork at its number and C26's majority rule settles it |
+| A member lengthens a fresh restore's walk by landing many plain commits (sc-E-8) | not bounded inside the trust model: a signed tree of a later epoch is what the forward walk replaced (E-1). The cost is stated (§10 step 3: one record and its exit lists per epoch, up to 256 registry key reads for the cold tree); each commit costs its author a transaction with a PQ signature check; the device keeps its verified tree, exits and pin, so it pays once; the SDK reads records in pages |
 | An insider commits garbage to some or all members (bad ciphertexts, or a node key that does not match its secret) | they do not follow that epoch; with C23 the next commit that reaches their leaves heals them, and an admin's removal of the committer restores in one commit every member that holds the older nodes (§10). Neither contract nor others see it (RFC 9420's limit) |
 | An insider lands a node key nobody can encapsulate to (codex-8) | refused when it lands: the admission check (C19) |
 | An insider signs a wrong count, path length or `treeHash`, or keeps a removed UA | the record is refused at acceptance (C7, R12); nothing is staged |
@@ -1241,7 +1279,7 @@ line in `size-baseline.json`.
 | Two commits race | one child per parent; the loser rebuilds with a new nonce |
 | Removals and leaves pile up beyond one commit (codex-6, fable-2, codex-r2-7) | refused at the `treeRemove` or `treeLeave`: `PqChatTreeBacklog` (C21) |
 | A staged record that can never complete, to spend sponsors' gas and fill state (codex-20, fable-r2-3) | refused at acceptance: shapes, counts, the walk and the tree hash (C7, C24, R12); every piece checked when it lands. **Left (fable-r3-6):** a race on the head (a UA that went, another commit that won), and an author that signs the hash of a node key that fails the admission check, a hash no piece matches, or holds a piece back: the record is accepted and the commit never completes. The contract cannot see it at acceptance. The node guards a relayer's gas: it relays a commit only when it holds the whole set and every piece passes (§8, §15); a sender outside the node pays for what it fills |
-| A member about to be removed, or any member, lands a commit before a `treeRemove` or `treeLeave` (chain-level front-running; owner 2026-11-24: in the threat model; E-3) | an exit names the head or an ancestor and applies at the head it lands on (C9): a commit that won first does not void it. The UA is `gone` at once and its later commits are refused; every leaf it holds at the head is owed, a front-running commit's Adds of its own included (at most `KEYS_PER_UA_MAX`), and the next commit must remove them. The front-runner gains only the epochs its own commits took before the exit landed. **Left:** an exit voids every commit staged when it lands (the next row); an admin can still front-run another admin's `treeRemove` by an admin commit that changes the admin list (equal power between admins) |
+| A member about to be removed, or any member, lands a commit before a `treeRemove` or `treeLeave` (chain-level front-running; owner 2026-11-24: in the threat model; E-3) | an exit names the head or an ancestor within `EXIT_LAG_MAX` = 16 epochs and applies at the head it lands on (C9): a commit that won first does not void it; to void it a front-runner must complete 17 epochs before it lands, and the admin then re-signs at the new head. The UA is `gone` at once and its later commits are refused; every leaf it holds at the head is owed, a front-running commit's Adds of its own included (at most `KEYS_PER_UA_MAX`), and the next commit must remove them. The front-runner gains only the epochs its own commits took before the exit landed. **Left:** an exit voids every commit staged when it lands (the next row); an admin can still front-run another admin's `treeRemove` by an admin commit that changes the admin list (equal power between admins) |
 | A member leaves, or an admin removes a UA, while a commit is staged (fable-r3-9) | by design the staged commit fails step 1 and is void: a cold commit of 14 transactions is lost each time. Any member can do it once per UA (R14 bounds it: a UA goes once); an admin as often as it removes. The author rebuilds on the head it reads then |
 | A removed admin and a leaving admin trap the honouring commit (fable-r2-6) | dropping `gone` UAs from `admins` is exempt from the admin-with-a-leaf rule |
 | An admin removes another admin's last leaf by a commit and keeps that UA in the signed `admins`: a `gone` admin at the head (codex-r3-10) | refused at acceptance: `admins` is judged against the UAs the commit leaves with no leaf (`PqChatRemovedKept`); with a replacement key in the same commit the UA stays |
@@ -1339,7 +1377,7 @@ No record, typehash, derivation or byte format moved; `goneOf`'s epoch and the t
 
 | Finding | Change | Sections |
 |---|---|---|
-| E-3 (P2), Fable code review 2026-11-24 | a leave or removal names the head or an ancestor of it and applies at the head when it lands; `gone` from the head's number, the leaves held there owed, the record kept under the head's epoch; the ancestor check is "complete and of this session", one read; a signed exit stays valid until it lands. Owner 2026-11-24 (translated; verbatim in the register's CTR-CHAT-27 Source line): "Yes, front-running at the chain level is in the threat model." | §2 C9, C21; §6; §8; §9; §10 step 5; §11; §14 |
+| E-3 (P2), Fable code review 2026-11-24 | a leave or removal names the head or an ancestor of it and applies at the head when it lands; `gone` from the head's number, the leaves held there owed, the record kept under the head's epoch; the ancestor check is "complete and of this session" (three slots of the named epoch, two for the head's number); valid within `EXIT_LAG_MAX` = 16 epochs (the spec check). Owner 2026-11-24 (translated; verbatim in the register's CTR-CHAT-27 Source line): "Yes, front-running at the chain level is in the threat model." | §2 C9, C21; §6; §8; §9; §10 step 5; §11; §14 |
 | E-1 (P0), C-1 (P1), B-1 (P1), F-1 (P1) | the client verifies the chain forward from the cold tree of the signed members (or its own verified tree at its pin): each record's author, leaf, right and resulting `treeHash` on the tree built so far; no roster undone from a served snapshot; every device without a verified tree, a commit joiner included, reads from the session record; the commit-signing operation builds on the walk's tree only; at an epoch-0 head it builds on the rebuilt cold tree and compares every leaf position | §2 C25, C26; §8 steps 1 to 3; §10 steps 2 to 4; §14; §15 |
 | C-3 (P2) | a record that fails the walk is a lying read, not "not followed": no pin, nothing built on it | §2 C26; §8 step 2; §10 step 4 |
 | F-2, E-2 (P2) | dropping a `gone` admin is plain; a non-admin's `admins` is the parent's less every UA `gone` at the parent, as the contract judges it | §9; §10 step 5 |
@@ -1359,6 +1397,24 @@ No record, typehash, derivation or byte format moved; `goneOf`'s epoch and the t
 
 The other findings of that review change no rule of this spec: their fixes are code, tests, gas rows, layout pins,
 docs or client hardening (A-7 to A-11 among them, in the contract round).
+
+**The spec check of 2026-11-24 (Fable, areas F and E, on `c05619c9a`; ids `sc-F-n`, `sc-E-n`), fixed in place.** No
+record, typehash, derivation or byte format moved; two named errors added (`PqChatExitLag`, `PqVaultExitLag`):
+
+| Finding | Change | Sections |
+|---|---|---|
+| sc-E-2 (P1), sc-F-5 (P2) | an exit expires by a bounded lag: valid only while `head.epoch ≤ named.epoch + EXIT_LAG_MAX`, 16, with the reason; in all three settings | §2 C9; §6; §8; §9; §11; §14; CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06 |
+| sc-E-3, sc-F-6 (P2) | the withdrawal by spending the nonce is withdrawn; the lag ends an exit | §9; CTR-CHAT-20 |
+| sc-E-1 (P1), sc-F-1, sc-F-2 (P2) | the replay's exit evidence is exactly what the contract could accept at `h`, order-free among the exits kept under `h`; a keyless admin is removable; a `treeRemove` may name its own signer | §9; §10 step 5; CLI-PQC-17 |
+| sc-F-3 (P2) | the pin keeps the verified exits with the tree | §8 step 2; CLI-PQC-17 |
+| sc-F-4, sc-E-6 (P2, P3) | the residual at its scope: a device with no verified tree forked from any epoch by a UA that had the right there; an endpoint alone serving a voided staged commit; mitigations (a first pin from a strict-majority read, the lag); accepted residual (controller call) | §14 |
+| sc-E-4 (P2) | in a mode-0 or PqVault replica a flag only allows a plain drop, at the parent or an ancestor at most 16 above, and never refuses a child, so the home's chain is stored | CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06 |
+| sc-E-5 (P3) | an exit that newly flags nobody is refused in mode 0 and PqVault too (A-4, one rule) | §2 C9; CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06 |
+| sc-F-7, sc-E-7, sc-F-8 (P3) | the walk applies every acceptance check on its inputs after the bounds, before it allocates; the fixed reads of each epoch's exits; the read for an ancestor below the pin | §8 step 2; §10 step 5 |
+| sc-E-8, sc-F-11 (P3) | a fresh restore's cost stated (every record, up to 256 authenticated registry key reads), not bounded; a §14 row | §10 step 3; §14 |
+| sc-F-9 (P3) | an exited UA reads the head's epoch until the honouring commit; "removal pending" shown | §9 |
+| sc-F-10 (P2), sc-E-9 (P3) | the plan amended: the forward walk in T1b and T6b, the withdrawn mutant, task T11 with the tests of every amended rule | plan |
+| sc-F-11, sc-E-9 (P3) | stale sentences fixed; "one read" corrected to the slots read; the operators' note on exit jobs | §2 C9; §9; §14; `pqchat.md`; `job-api.md` |
 
 **After round 3: the owner's R16 (the controller's finding of a front-running burn), in place.** A contract rule and storage
 change only; no record, typehash or derivation moved:

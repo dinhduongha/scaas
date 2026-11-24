@@ -127,8 +127,11 @@ seed-derived vault key exists; epochs, wraps in chunks, the home-instance slot, 
 - **Exits apply at the head (Change 2026-11-24, E-3 of the TreeKEM code review; owner 2026-11-24: "Yes, both modes", one rule for the group
   code; SPECIFIED, the code follows on branch `review-fix-contract`):** `removeVaultMembers` and `leaveVault` take
   [CTR-CHAT-20](pqchat.md#CTR-CHAT-20)'s and [CTR-CHAT-10](pqchat.md#CTR-CHAT-10)'s change with `PqVault*` errors: at
-  home the epoch named is the head or an ancestor of it, complete, and the exit is checked and applied at the head; in a
-  replica, as before. The exposure was the same though only admins rekey ([CTR-PQV-13](#CTR-PQV-13)): an admin about to be
+  home the epoch named is the head or an ancestor of it within `EXIT_LAG_MAX` = 16 epochs (`PqVaultExitLag` beyond),
+  complete, and the exit is checked and applied at the head; an exit that would newly flag nobody there is
+  `PqVaultNotMember` (A-4, one rule in the three settings); there is no withdrawal, the lag ends an exit that has left the
+  device; in a replica the exit flags the epoch it names and a flag only allows a plain drop, at its parent or an
+  ancestor at most 16 epochs above, never refuses a child (the spec check, sc-E-2, sc-E-4, sc-E-5). The exposure was the same though only admins rekey ([CTR-PQV-13](#CTR-PQV-13)): an admin about to be
   removed by another landed an admin rekey first and the removal was `PqVaultEpochTaken`, and any admin's rekey that kept a
   leaver left its leave on an epoch with a child. Item writes already name the head at home
   ([CTR-PQV-07](#CTR-PQV-07)), so a member removed or left at the head writes no item under it ([CTR-PQV-14](#CTR-PQV-14)),

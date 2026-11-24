@@ -240,8 +240,12 @@ by [CTR-CHAT-23](../contracts/pqchat.md#CTR-CHAT-23); the default off a controll
 - **On an `sstore2` instance** the session and epoch records (`sessionSig`, `epochSig`), the parent's leaves and removals (from
   the kept `leaveAt` / `removalAt` records, each with its signer's signature, kept under the parent and naming it or,
   at home since the change of 2026-11-24 to [CTR-CHAT-20](../contracts/pqchat.md#CTR-CHAT-20) and
-  [CTR-CHAT-10](../contracts/pqchat.md#CTR-CHAT-10) (SPECIFIED), an ancestor of it on the home's chain, its signer judged at
-  the parent; the `leftIn` and `removedIn`
+  [CTR-CHAT-10](../contracts/pqchat.md#CTR-CHAT-10) (SPECIFIED), an ancestor of it on the home's chain at most
+  `EXIT_LAG_MAX` = 16 epochs above; each is judged order-free among the exits kept under the parent, exactly as the
+  contract could have accepted it there (a remover in the parent's admins, whose own leave or removal
+  kept under the same parent does not void it, in either order; the UAs it names members or admins of the parent; a
+  leaver a member of the parent), so no chain the home took
+  is refused; the `leftIn` and `removedIn`
   flags are not read there) and a posted message (`messageSig`) each count only when their signer's `UASig` verifies over the
   typed digest the SDK rebuilds from the record's fields (V1, the signer's registry record a trusted read along F2's registry
   line: `holderOf` on the bound registry names the generation whose record is read, every call of it by one endpoint at one
@@ -293,8 +297,12 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
   `sealedInfo` or `admins`, and on a mismatch the epoch is replayed from the majority's record with its metadata), reads every page of a tree snapshot at one block, at an epoch-0 head rebuilds the tree from the signed member list and builds on it, **builds only on the tree it reached by
   walking every record forward from that cold tree or from its own verified tree at its pin** (each record's signature for
   the signer's kind, its parent's id and the walk's tree hash, the author's live leaf, not gone, and its right on that tree,
-  the tree after it against its signed `treeHash`; a record that fails is a lying read, never followed, pinned or built on;
-  the served snapshot is only compared; Change 2026-11-24, the code review's E-1, C-1, B-1, F-1, C-3), compares each target key with its hash in the tree, and has `ua-rs` verify against the
+  the tree after it against its signed `treeHash`, after the bounds of the tree checked before anything is allocated, and
+  every other acceptance check of the contract whose inputs are the record and the walk's state; a record that fails is a
+  lying read, never followed, pinned or built on; the served snapshot is only compared; the pin keeps the verified tree
+  **and the exits verified up to it**, so a restart cannot follow a removed UA's next epoch; a device with no verified tree
+  writes its first pin only from a strict-majority read over at least 3 named endpoints, else it shows the head as
+  "unconfirmed"; Change 2026-11-24, the code review's E-1, C-1, B-1, F-1, C-3, and the spec check), compares each target key with its hash in the tree, and has `ua-rs` verify against the
   registry record every key no signed tree hash covers yet (an added key, a member at creation), in every tree session; reads
   follow [CLI-PQC-13](#CLI-PQC-13). What a candidate seals counts as disclosed to every key of the tree it was built on.
 - **Session info.** A commit seals the full info only when the device holds the one in force at the parent; otherwise the
@@ -340,7 +348,10 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
   removed it, and nothing at that commit. A genesis key joins by the signed `members` and its wrap. The roster of each epoch
   is the forward walk's tree, never a snapshot with later commits undone; a non-admin's drop of another UA, and its drop of
   a gone admin from `admins` (plain, as the contract judges it), needs that UA's signed leave or removal, kept under the
-  epoch it was applied at; every tree record's signature is verified for the signer's kind, an `msig` or WebAuthn admin's
+  epoch `h` it was applied at and read for every epoch from the fixed lists (`leaveCount` / `removalCount` and their
+  records); it counts when the contract could have accepted it at `h`, judged order-free among the exits kept under `h`
+  (the remover in `h`'s `admins` and not gone before `h`, a removal of its own signer or of a keyless admin included; the
+  epoch it names at most 16 below `h`), so no chain the home accepted is a lying read; every tree record's signature is verified for the signer's kind, an `msig` or WebAuthn admin's
   included (Change 2026-11-24, E-3, F-2, F-3); a key has one period per UA in a session (`goneOwnKeyOf`, then `goneKeyOf`);
   which epoch won is the home's state.
 - **Not followed.** A missing or wrong ciphertext leaves that epoch unreadable on the device: it is shown, the reads go on

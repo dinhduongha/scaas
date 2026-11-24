@@ -434,10 +434,18 @@ review's P1-2 fix (b); **BUILT** on `ua-mtx-merge`, plan 3c, UNAUDITED; UA-7 spe
   `review-fix-contract`).** Replaces "at home with no complete child" above:
   - `epochId` is the head or an ancestor of it: stored for `sessionId` and complete (`PqChatUnknown`, `PqChatIncomplete`).
     At home a child completes only by taking its parent's slot ([CTR-CHAT-08](#CTR-CHAT-08)), so every complete epoch is
-    on the home's chain and that is the whole ancestor check, one read; a child of `epochId` no longer voids the removal
-    (no `PqChatEpochTaken`). `nextEpoch` stays `epoch(epochId) + 1`, a signed lower bound;
+    on the home's chain and that is the whole ancestor check: three slots of `epochId` (`sessionId`; `epoch` with
+    `wraps`; `landed`) and three for the head's number (`epochsOf`'s length and last entry, its `epoch`); a child of
+    `epochId` no longer voids the removal (no `PqChatEpochTaken`). `nextEpoch` stays `epoch(epochId) + 1`, a signed lower
+    bound;
+  - **the lag (the spec check, sc-E-2, sc-F-5):** valid only while `epoch(head) ≤ epoch(epochId) +
+    EXIT_LAG_MAX`, `EXIT_LAG_MAX` = 16 ([CTR-CHAT-27](#CTR-CHAT-27)'s C9 gives the reason), else
+    `PqChatExitLag(named, head)`. So a delayed, held or reverted removal dies after 16 epochs, and an old removal is not
+    replayed after a re-add; a front-runner must complete 17 epochs before one removal lands to void it;
   - the rest is checked **at the home's head** (the last of `epochsOf`): `admin` a live admin of the head, each UA a
-    member or an admin of the head (`PqChatNotAdmin`, `PqChatNotMember`);
+    member or an admin of the head **and not already removed from it** (`PqChatNotAdmin`, `PqChatNotMember`; a removal
+    that would newly flag nobody is not stored, A-4 and sc-E-5); a removal may name its own signer (a keyless admin goes
+    so);
   - it is applied **at the head**: `removedIn(head, ua)`, the record under the head (`removalCount(head)`,
     `removalAt(head, i)`), `PqChatRemoved(sessionId, head, admin, members)`; the head's child completes only without them
     and a removed member's rekey of the head is `PqChatNotMember`, as above;
@@ -446,17 +454,23 @@ review's P1-2 fix (b); **BUILT** on `ua-mtx-merge`, plan 3c, UNAUDITED; UA-7 spe
     reads nothing from that epoch on. An epoch a front-runner completed before the removal landed holds it and is read by
     it: that is all a front-run gains. A child staged on the head when the removal lands completes no more
     (`PqChatRemovedKept`);
-  - a signed removal stays valid until it lands, while its admin keeps the right at the head and its UAs are there; its
-    nonce is spent once; a device withdraws one by spending that nonce first (the scope is the admin's rekeys');
-  - **in a replica** there is no slot and no head: the removal flags the epoch it names, as before, and no child voids it.
-- After it: a child of `epochId` completes (in `rekey` or the last `addWraps`) only if its members and admins hold no
-  removed UA and its author is none (`PqChatRemovedKept(epochId, ua)`); a removed member's rekey of `epochId` is refused
-  `PqChatNotMember`; dropping a removed member is a plain rekey, as dropping a leaver is. An admin that was removed from
+  - its nonce is spent once, within the lag; there is no withdrawal: a removal that has left the device applies if it
+    lands within 16 epochs, and the signing review says so;
+  - **in a replica** (the spec check, sc-E-4) there is no slot and no head: the removal flags the epoch it names (complete, its
+    UAs newly flagged there), and **in a replica a flag only allows, never refuses**: a child is not refused there for
+    keeping a UA flagged at its parent or for its author's flag (`PqChatRemovedKept` and the removed author's
+    `PqChatNotMember` are the home's), and a plain rekey may drop a UA flagged at its parent **or at an ancestor at most
+    `EXIT_LAG_MAX` epochs above it**, which is where the home may have applied it. So a replica stores the home's chain
+    after an exit that named an ancestor, in either copying order; membership is read at home
+    ([CTR-CHAT-14](#CTR-CHAT-14)). The extra cost, at most 16 parent reads per dropped UA, is a replica's only.
+- After it: a child of the epoch it was applied at (the head at home) completes (in `rekey` or the last `addWraps`) only
+  if its members and admins hold no removed UA and its author is none (`PqChatRemovedKept(epoch, ua)`); a removed
+  member's rekey of that epoch is refused `PqChatNotMember`; dropping a removed member is a plain rekey, as dropping a leaver is. An admin that was removed from
   `epochId` or left it makes no membership change and removes nobody (`PqChatNotAdmin`) (controller call 2026-11-21, the
   PqVault code review F1, F2, F7, one rule in `PqGroupBase`; BUILT on `pqvault-v`, UNAUDITED).
 - `leave` stays the member's own flag (a child may keep a leaver); both may hold for one UA.
-- Recovery: `removedIn(epochId, ua)`, `removalCount(epochId)`, `removalAt(epochId, i)`; `PqChatRemoved(sessionId, epochId,
-  admin, members)` notifies. A 2-person chat is unchanged.
+- Recovery: `removedIn(epochId, ua)`, `removalCount(epochId)`, `removalAt(epochId, i)`, each keyed by the epoch the
+  removal was applied at; `PqChatRemoved(sessionId, epochId, admin, members)` notifies, with that epoch. A 2-person chat is unchanged.
 - **Membership change**: any member or admin added, or one dropped without having left. Its author must be an admin of
   the parent (`PqChatNotAdmin(author)`). An `msig` admin signs by its quorum ([CTR-CHAT-03](#CTR-CHAT-03)).
 - **O2**: a plain rekey may take a parent's slot before an admin's change; the admin rekeys again from the new epoch, with
@@ -471,12 +485,14 @@ and its nonce 3C-D8 are a controller call, owner may override).
 `leave(PqChatLeave l, UASig sig)`: `l.epochId` stored for `l.sessionId` (`PqChatUnknown(epochId)`), `l.member` in its
 `members` (`PqChatNotMember(member)`), signed by `member`, nonce in the epoch scope `(sessionId, member)` shared with its
 rekeys. **At home, applied at the head (Change 2026-11-24, E-3; owner 2026-11-24: "Yes, both modes"; SPECIFIED, the code follows):**
-`l.epochId` is the head or an ancestor of it, complete (`PqChatIncomplete` for a staged or losing child, which was
-accepted before), `l.member` a member of the head, and the flag, the kept record and `PqChatLeft` are the head's
-(`leftIn(head, member)`), so a plain rekey from the head may drop the leaver whichever child completed after the epoch it
-named; in a replica, as before. The leaver keeps the head's key and every earlier one it was wrapped into; the next
-epoch that drops it is wrapped without it. It sets `leftIn(epochId, member)` and emits `PqChatLeft`; a repeated leave with a fresh nonce is accepted and
-changes nothing more. The flag is read only by the plain-rekey test of [CTR-CHAT-09](#CTR-CHAT-09): until the next
+`l.epochId` is the head or an ancestor of it within `EXIT_LAG_MAX` = 16 epochs (`PqChatExitLag` beyond; the spec check),
+complete (`PqChatIncomplete` for a staged or losing child, which was accepted before), `l.member` a member of the head
+that has not left it and was not removed from it (`PqChatNotMember`: a repeated leave is refused, the spec check, sc-E-5), and
+the flag, the kept record and `PqChatLeft` are the head's (`leftIn(head, member)`), so a plain rekey from the head may
+drop the leaver whichever child completed after the epoch it named. In a replica the leave flags the epoch it names
+(any stored one, its member not flagged there yet), under the replica rule of [CTR-CHAT-20](#CTR-CHAT-20) (a flag only
+allows). The leaver keeps the head's key and every earlier one it was wrapped into; the next epoch that drops it is
+wrapped without it. The flag is read only by the plain-rekey test of [CTR-CHAT-09](#CTR-CHAT-09): until the next
 epoch, the member stays in the epoch's list, may still post in it and keeps its `sessionsOf` entry. An admin that is not a
 member cannot leave, so only a membership change drops it. Consent stays in clients: a member that never accepted a
 session leaves it this way (D5).
@@ -647,8 +663,8 @@ Status: **BUILT**. Errors are those of `IPqChat.sol`; "registry" means the bubbl
 | `createSession(s, wraps, sig)` | anyone submits; `s.creator` signs | shapes, KEM keys, creator in both lists, home named, signature, nonce, wraps | `PqChatShape`, `PqChatKemKey`, registry, `PqChatNonceUsed`, `PqChatWrapHash` |
 | `rekey(e, wraps, sig)` | anyone submits; `e.author` signs | parent, number, home slot, shapes, rights, signature, nonce, wraps | `PqChatUnknown`, `PqChatIncomplete`, `PqChatEpochNumber`, `PqChatEpochTaken`, `PqChatShape`, `PqChatKemKey`, `PqChatNotMember`, `PqChatNotAdmin`, registry, `PqChatNonceUsed`, `PqChatWrapHash` |
 | `addWraps(epochId, first, wraps)` | anyone, unsigned | epoch known, home slot free, range, hash, shape, landed once | `PqChatUnknown`, `PqChatEpochTaken`, `PqChatShape`, `PqChatWrapHash`, `PqChatWrapStored` |
-| `leave(l, sig)` | anyone submits; `l.member` signs | epoch of that session, member of it, signature, nonce | `PqChatUnknown`, `PqChatNotMember`, registry, `PqChatNonceUsed` |
-| `remove(r, sig)` | anyone submits; `r.admin` signs | epoch of that session, complete, no complete child at home, `nextEpoch`, 1–16 sorted members of it, admin of it, signature, nonce | `PqChatUnknown`, `PqChatIncomplete`, `PqChatEpochTaken`, `PqChatEpochNumber`, `PqChatShape`, `PqChatNotAdmin`, `PqChatNotMember`, registry, `PqChatNonceUsed` |
+| `leave(l, sig)` | anyone submits; `l.member` signs | epoch of that session; at home complete, the head or an ancestor within `EXIT_LAG_MAX`, the member a member of the head not flagged there yet (in a replica: of the epoch named); signature, nonce (SPECIFIED 2026-11-24, CTR-CHAT-10) | `PqChatUnknown`, `PqChatIncomplete`, `PqChatExitLag`, `PqChatNotMember`, registry, `PqChatNonceUsed` |
+| `remove(r, sig)` | anyone submits; `r.admin` signs | epoch of that session, complete; at home the head or an ancestor within `EXIT_LAG_MAX`, checked at the head (in a replica: at the epoch named); `nextEpoch`; 1–16 sorted members of it not removed there yet; a live admin of it; signature, nonce (SPECIFIED 2026-11-24, CTR-CHAT-20; `PqChatEpochTaken` no longer) | `PqChatUnknown`, `PqChatIncomplete`, `PqChatExitLag`, `PqChatEpochNumber`, `PqChatShape`, `PqChatNotAdmin`, `PqChatNotMember`, registry, `PqChatNonceUsed` |
 | `postMessage(m, sig)` | anyone submits; `m.sender` signs | epoch of that session, complete, at home no complete child, sender a member, signature, nonce, one blob | `PqChatUnknown`, `PqChatIncomplete`, `PqChatEpochTaken`, `PqChatNotMember`, registry, `PqChatNonceUsed`, `PqChatShape` |
 | `storeMessage(v, hint, env)` | anyone, unsigned | `v == 1`, one blob | `PqChatShape` |
 | `createTopic(t, sig)` | anyone submits; `t.owner` signs | name length, home named, signature, nonce | `PqTopicShape`, registry, `PqChatNonceUsed` |
@@ -952,11 +968,11 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
 - **Removal, leaving and admins.** **Exits apply at the head (Change 2026-11-24, E-3, on the owner's ruling that
   chain-level front-running is in the threat model; SPECIFIED, the code follows on branch `review-fix-contract`):** a
   `treeLeave` or `treeRemove` names a complete epoch of the session, the head or an ancestor of it (in a tree session every
-  complete epoch is on the head's chain, so that is one read; a staged or losing epoch is `PqChatIncomplete`, an unknown one
+  complete epoch is on the head's chain, so that is three slots of the named epoch and two for the head's number; a staged or losing epoch is `PqChatIncomplete`, an unknown one
   `PqChatUnknown`), and is checked and applied at the head when it lands: a commit that completed first does not void it;
   the UA is gone from the head's number, every leaf it holds there is owed, and the record is kept under the head's epoch
-  (`goneOf`, `leave*`, `removal*`, `leftIn`, `removedIn` name that epoch). A signed exit stays valid until it lands; its
-  nonce is spent once. A `treeRemove` naming a UA already gone is refused whole (`PqChatNotMember`, A-4). A leave is forced like a removal: the next commit blanks the leaves. A `treeRemove` or a
+  (`goneOf`, `leave*`, `removal*`, `leftIn`, `removedIn` name that epoch). An exit is valid only within `EXIT_LAG_MAX` = 16 epochs of
+  the head (`PqChatExitLag`; the spec check, no withdrawal); its nonce is spent once. A `treeRemove` naming a UA already gone is refused whole (`PqChatNotMember`, A-4). A leave is forced like a removal: the next commit blanks the leaves. A `treeRemove` or a
   `treeLeave` is `PqChatTreeBacklog` when the leaves owed at the head would exceed `TREE_CHANGES_MAX`; a commit that changes
   `admins` otherwise than by dropping UAs that are gone, and a `treeRemove`, leave an admin with a live leaf
   (`PqChatTreeAdmins`). **A closed session:** when no UA that is not gone holds a live leaf (the last member left, or

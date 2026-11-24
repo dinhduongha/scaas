@@ -972,7 +972,12 @@ Welcome wraps than adds; an empty `members`. What needs the chain's state is the
 none changed. **Not built yet (plan T4, after the merge):** the whole-set guard (fable-r3-6) and the order of C37 when the node
 relays a commit's set. **SPECIFIED (Change 2026-11-24, the code review's D-4 and D-7; the node's own fix follows):**
 `createSession` with `groupMode = 1` is bounded by the tree's bounds at creation (`members` 256, `admins` 32,
-`sealedInfo` 4,124 B), and an `addPath` with no ciphertext is refused, as the contract refuses both (C40).
+`sealedInfo` 4,124 B), and an `addPath` with no ciphertext is refused, as the contract refuses both (C40). **For operators
+(SPECIFIED, the spec check's change of 2026-11-24 to C9, CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06):** an exit (`treeLeave`,
+`treeRemove`, mode 0's `leave` and `remove`, PqVault's `leaveVault` and `removeVaultMembers`) applies at the head when it
+lands, up to `EXIT_LAG_MAX` = 16 epochs after the epoch it names, and anyone may land its public calldata after a revert;
+so a job of an exit that reverted is not `dead` while the head is within the lag and its nonce is unspent, and the node
+reports `dead` only past `PqChatExitLag` / `PqVaultExitLag` or `PqChatNonceUsed`.
 
 <a id="pqvault-calls"></a>**PqVault calls** (PqVault plan V8, [CTR-PQV-11](../contracts/pqvault.md#CTR-PQV-11),
 [CTR-PQV-13](../contracts/pqvault.md#CTR-PQV-13); BUILT, branch `pqvault-v`, UNAUDITED). `PqVault` is a factory kind (class 4, kind 0 on

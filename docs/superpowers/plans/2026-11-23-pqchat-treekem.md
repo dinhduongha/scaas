@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-23):** PLANNED, nothing built. **UNAUDITED.** Revision 3, after two review rounds by Codex and Fable and a
+**Status (2026-11-23; amended 2026-11-24 after the code review and its spec check, task T11):** PLANNED, nothing built. **UNAUDITED.** Revision 3, after two review rounds by Codex and Fable and a
 third, focused round by Fable (`fable-r3-n`), whose fixes moved no record, typehash or derivation; then the owner's R16
 (the key no-return set two-level), a contract rule and storage change that moved none either; then a third round by
 Codex (`codex-r3-n`: 0 P0, 6 P1, 6 P2, 1 P3), fixed in place: no record, typehash, derivation or view moved, one check
@@ -149,8 +149,10 @@ foreground.
 
 - [ ] The path secrets, node keys from the 96-byte seed form, `pathContext` and `ps[0]`, the path ciphertext (`kek`, `aad`), the
       schedule without `init` (`ctx` with `parentTreeHash`, `joiner`, `S`, `K`; epoch 0 under `genesisCtx`), the tree wrap
-      label, the info marker and the info in force (C33), building and processing a commit, the joiner's path, the roster by
-      undo with the rights evidence, replay with its fixed read list (spec §5, §10).
+      label, the info marker and the info in force (C33), building and processing a commit, the joiner's path, **the forward
+      walk** from the cold tree of the signed members (or a verified pin with its exits) with the exits of each epoch and
+      the rights evidence judged as the contract accepts them, replay with its fixed read list (spec §5, §8 step 2, §10;
+      C25 as amended 2026-11-24; T11 lists the rows).
 - [ ] **Creation in order (codex-r2-4):** a test builds a session from `genesisCtx` to the signature with no placeholder; on
       a **completed** genesis a fresh store recovers `K_0` from its own wrap read back from state, and every stored wrap
       matches `wrapHashes`. No test rebuilds a wrap: the signed ciphertexts are made once (codex-r3-5; the incomplete
@@ -176,8 +178,8 @@ foreground.
       retired info appears in no later record; a control in which it followed `e` seals the full info.
 - [ ] Rows of Codex's round 3, each with its control:
       **the retired key (codex-r3-1):** a key joins at 2, is removed at 5, the head is 9, with Adds and Removes of other
-      UAs in 6 to 9; the read list is the records of 1 to 9, the ciphertexts of 2 to 4 and nothing at 5; the rosters of
-      2 to 4 by undo from the head equal the scenario's; the same for a **genesis** key taken out (`members[i]`, wrap
+      UAs in 6 to 9; the read list is the session record and the records of 1 to 9 with their exit lists, the ciphertexts
+      of 2 to 4 and nothing at 5; the rosters of 2 to 4 by the forward walk equal the scenario's; the same for a **genesis** key taken out (`members[i]`, wrap
       `i`, no record before 0);
       **the twin outside the tree (codex-r3-2):** two signed records with one id, one parent and one `treeHash` and
       another `sealedInfo`: two `hashStruct`s, and the true child fits both;
@@ -200,7 +202,7 @@ foreground.
       the last info read; **the gap ignored** (a device that follows again keeps the info it held before the epoch it missed; fable-r3-1); the compromise warning folded into "not followed"; a tree wrap under the flat label; a processed commit that skips the derived-key
       comparison; a joiner that skips its path ciphertext (the third-member row must fail); a ciphertext index chosen from the
       held secrets instead of the list (the read list of the failing member must differ and the test must see it); **the
-      undo stopped at the key's `endEpoch`** (the retired-key row must fail); **the own-commit test on node keys only**
+      walk stopped at the key's `endEpoch`** (the retired-key row must fail); **the own-commit test on node keys only**
       (the empty-path row must fail); a ciphertext opened at `endEpoch`.
 
 ### T2. `ua-rs`: the tree behind handles (`clients/ua-rs`)
@@ -451,10 +453,10 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
 
 ### T6b. `pqchat-core`: replay, the store, not followed
 
-- [ ] Replay from state (spec §10) on a fresh store: the fixed read list, the checks at the read boundary, the starting
-      roster anchored to the head's signed root, the roster by undo, the rights check with the signed leave or removal of
+- [ ] Replay from state (spec §10) on a fresh store: the fixed read list, the checks at the read boundary, the forward
+      walk from the cold tree, or from the pin with its tree and exits (C25, C26 as amended 2026-11-24), the rights check with the signed leave or removal of
       each dropped UA (codex-r2-6), the one period of a `(ua, kemHash)` (`goneOwnKeyOf`, then `goneKeyOf`; R16), **the two
-      ranges (codex-r3-1): records from the join's parent to the anchored head, ciphertexts from the join to `endEpoch − 1`,
+      ranges (codex-r3-1): records from the session record (or the verified pin) to the head, ciphertexts from the join to `endEpoch − 1`,
       nothing opened at `endEpoch`, a genesis join by the signed `members`; a key on a leaf of a closed session read to
       the head (C38)**, the compromise warning (R10) **with what the foreign commit changed, kept until the roster is
       reconciled (codex-r3-3), and raised for an empty path by `sealedInfo` (codex-r3-4)**; the store's tree rows as a cache; the "not followed" state:
@@ -470,9 +472,57 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
       unchanged third member as message author (codex-11); a losing signed candidate is not followed; the real-crypto e2e gate.
 - [ ] Mutants: any automatic write after a failed open; a held send flushed; a read skipped after a failed open; a dropped UA
       accepted without its signed leave or removal; replay that reads an event; replay
-      that opens anything before the join or reads a record before the join's parent; the undo stopped at `endEpoch`; the
+      that opens anything before the join, **or starts its walk at the join's parent instead of the session record (the
+      joiner row of T11 must fail: there is no verified tree at the join's parent; the mutant of revision 3, "reads a
+      record before the join's parent", is withdrawn because that read is now required)**; the walk stopped at
+      `endEpoch`; the
       join's author judged without the parent's `admins`; the warning cleared by a refresh while a foreign leaf stays;
       a commit author not checked against the roster.
+
+### T11. The rule changes of the code review of 2026-11-24 and its spec check (branch `review-fix-contract`)
+
+Spec §2 C9, C21, C25, C26, C38, C39, C40, §8, §9, §10, §14, §17; CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06, CTR-GOV-33. The
+contract part runs on `review-fix-contract`; the client parts belong to T1b, T2 and T6b of the clients' round, which
+read the rows below. Every test has its positive control; every new check its mutant (`scripts/mutant_guard.py`).
+
+- [ ] **C9, tree (contract):** an exit naming the head, the parent and epoch 0 after two commits lands and is kept under
+      the head; `goneOf`'s number, `leave*`, `removal*`, `leftIn`, `removedIn` and the events name the head; a staged, a
+      losing and a foreign epoch are `PqChatIncomplete` / `PqChatUnknown`; the front-run (a commit of M with 7 own Adds
+      completes, then the removal of M lands): all 8 leaves owed, the next commit without them refused; a staged commit
+      of M void after it; `PqChatTreeBacklog` counted at the head of application; **the lag:** an exit at exactly
+      `EXIT_LAG_MAX` below the head lands, one more is `PqChatExitLag`; the same nonce twice is `PqChatNonceUsed`; a
+      removal naming its own signer (a keyless admin) lands; remove-then-leave by one admin on one head both land.
+- [ ] **C9, mode 0 and PqVault (contract):** `PqChatEpochs.t.sol`'s removal attack turned round (a plain rekey first, the
+      removal still lands at the new head and the next rekey must drop M); a leave naming an ancestor lets a plain rekey
+      of the head drop the leaver; a leave on a staged child is `PqChatIncomplete`; a removal by an admin that is live at
+      the named epoch and not at the head is `PqChatNotAdmin`; the lag at its limit and one over (`PqChatExitLag`,
+      `PqVaultExitLag`); a removed vault member's item write at the head is `PqVaultNotMember`; **the replica (sc-E-4):**
+      the home's chain M-keeps-F, removal named at E applied at F, G drops M, copied to a replica in both orders (the
+      removal before and after F): every epoch is stored; a flag 17 epochs above is not used.
+- [ ] **A-4, all three settings:** an exit that would newly flag nobody at the epoch it applies to is refused whole
+      (`PqChatNotMember` / `PqVaultNotMember`): a repeated leave, a removal of a removed UA, a removal after one named UA's
+      own leave ran first; the control with a new UA lands.
+- [ ] **C39:** the two Add orders of A-1's scenario both accepted; the leaf-mark mutant (`st != 1`) red.
+- [ ] **C40:** an empty `addPath` is `PqChatShape`, a one-ciphertext one lands; at the node, the empty one refused.
+- [ ] **C25 / C26 (vectors, both readers; T1b, T2, T6b):** the walk from the cold tree and from a pin give the same tree
+      and roster at every epoch of the scenario rows; E-1's reproducers as rows (a head signed by a UA with no leaf; a leaf
+      planted in a blank position): each "read corrupted", no pin moves, `prepare` refuses; a non-admin's commit that
+      drops a `gone` admin followed, one that drops a live admin a lying read; a commit and a `treeRemove` signed by an
+      `msig` and by a WebAuthn admin replay; a removed keyless admin honoured by a non-admin, and a removal and its
+      signer's leave on one head in both orders (sc-E-1, sc-F-1, sc-F-2): followed; an exit under `h` naming an ancestor
+      two epochs below, and one naming an epoch 17 below or a losing epoch (a lying read); evidence under the wrong epoch,
+      by a non-admin of `h`, with another `treeId`: each a lying read; **a restart between an exit and its honouring
+      commit, then an epoch signed by the exited UA (sc-F-3): refused from the pin's exits**; a record with `leaves` above
+      256 or a list above its cap refused before allocation (sc-F-7); a joiner at 5 with a head of 9 reads the session
+      record and records 1 to 9 with their exit lists and opens nothing before 5 (the read list compared, C22); a
+      non-zero unbound value wherever a digest is reproduced.
+- [ ] **Mutants, one per walk check:** the id at its number, `treeId`, the signature per kind, `parentEpochId`,
+      `parentTreeHash`, the author's leaf, `gone`, the right, `treeHash`, `leaves`, the bounds before allocation, the
+      pin's exits ignored; in the contracts: "the head" replaced by "the epoch named" in each of the three apply steps,
+      the completeness test dropped, the session test dropped, the lag test dropped, the repeat refusal dropped, the
+      replica's ancestor walk dropped.
+- [ ] **G-1, G-3 (contract):** `G1Window.t.sol` red before the reorder and green after; `configureChain` with a router
+      naming factory 0 or another factory refused (`RouterFactoryMismatch`), the fixtures' routers naming their factory.
 
 ### T7. Bindings
 
