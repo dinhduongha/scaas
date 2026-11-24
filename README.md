@@ -1083,8 +1083,7 @@ EIP-1167 clone at a CREATE3 address through a factory, then uses it by meta-tran
     certificates, serials and receivables;
   - [traceability and provenance](docs/research/2026-11-24-traceability.md), for lots, signed supply-chain events and
     ERP production orders;
-  - [sealed bids where losers need not open](docs/research/2026-11-24-zama-lessons.md#7a-sealed-bids-where-losers-need-not-open),
-    the direction for a tender v2;
+  - [sealed-bid auctions](docs/research/2026-11-24-zama-lessons.md#7a-sealed-bids-where-losers-need-not-open);
   - [off-chain ledger backends](docs/research/2026-11-24-offchain-ledger-backends.md), for the cases that need no
     chain;
   - **PqChat**, post-quantum end-to-end chat with sessions kept in contract state: the
