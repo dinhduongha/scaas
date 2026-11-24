@@ -468,6 +468,15 @@ before any decryption, the key read inside `ua-rs` (BUILT, UNAUDITED; CLI `app-c
 pqchat-open-file`; tests `tests/pqchat_keys.rs`). The kept bytes are the app core's (`KeptUpload`); `keep_up(kept, now)` takes the
 app's clock.
 
+<a id="CLI-SDK-34"></a>**CLI-SDK-34** — **Before signing, the SDK checks that the target contract's registry generation knows every
+derived UA the operation names** (owner 2026-11-24; SPECIFIED).
+- **What is checked:** the signer, the receivers and the role holders, by `kindOf` on the registry in the target's env
+  ([CTR-UA-73](../contracts/accounts.md#CTR-UA-73)).
+- **An unknown UA is refused before signing,** with a named error that says which UA, which generation, and the way out:
+  - when the kind exists in that generation, the UA registers there too, with the same bytes and the same id;
+  - when it does not, the user uses another UA or a native address.
+- **Wallets:** a wallet creating a UA registers it in the oldest generation still in use that supports its kind.
+
 ## 8. Runtime, events, errors
 
 <a id="CLI-SDK-11"></a>**CLI-SDK-11** — **The SDK is async on tokio and reports by subscription** (BUILT: plan T1, T14, `tests/history.rs`). The API is `async`;

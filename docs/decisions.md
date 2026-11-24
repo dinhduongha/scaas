@@ -5612,6 +5612,23 @@ asks it of a later generation, so later registry code must keep it (the round's 
 
 ## 25. Contracts — Post-quantum Zether
 
+### CTR-UA-73 — A contract serves the UAs of its env's registry generation and older ones, never later ones
+- old: — · status: current · owner: yes · date: 2026-11-24 · normative: contracts/accounts.md#CTR-UA-73 · superseded-by: —
+
+**Rule.** (Summary; normative [accounts.md](contracts/accounts.md#CTR-UA-73).)
+- A contract reads signers and derived receivers from the registry in its env, and the registry line walks back only.
+- A UA held only in a later generation cannot receive from, sign on, or hold a role on a contract with an older env; the
+  call is refused and nothing is lost.
+- G1, the router change being built on top of CTR-GOV-32, follows the same rule for governance.
+- A UA whose kind the older generation supports registers there too, with the same id. A kind only a later generation
+  has works only on contracts of that env or a later one.
+
+**Status.** BUILT (the code already behaves so: `MtxPipelineLib` `kindOf` on the env registry, `UANotRegistered`). UNAUDITED.
+**Why.** A forward walk (G2) or a registrar pointer to the newest generation (G1′) would let a registry or the registrar
+reach every deployed contract. The owner rejected both, so older contracts stay on their generation.
+**Cost if wrong.** A user cannot pay a newer-kind UA from an older token; clients must explain why ([CLI-SDK-34](clients/scaas-sdk.md#CLI-SDK-34)).
+**Source.** Owner 2026-11-24, verbatim "Tức là tương tác với UA Gen2." then "Ok. ghi vào đi", after the controller showed that a Gen-1 token refuses a Gen-2-only receiver with `UANotRegistered`.
+
 ### CTR-UA-29 — The registry keeps an on-chain list of the UAs of each kind
 - old: — · status: current · owner: yes · date: 2026-10-17 · normative: contracts/accounts.md#CTR-UA-29 · superseded-by: —
 
@@ -12456,6 +12473,21 @@ Change (owner 2026-11-23, "agreed, add it", relayed by the coordinator; owner: y
 The rules are in [clients/scaas-tui.md](clients/scaas-tui.md); the design is the [scaas-tui spec](superpowers/specs/2026-11-17-scaas-tui.md), a frame whose parts that wait on unsettled SDK sections are marked (its §15), with open points in its §16 (Q-T2, Q-T5, Q-T6 and Q-T7 answered on 2026-11-24) and Fable's review of 2026-11-17 applied (its §18). Owner entries carry the owner's words only; the controller's means and proposals have entries of their own (Fable U14).
 
 
+
+### CLI-SDK-34 — Before signing, the SDK checks that the target's registry generation knows every derived UA named
+- old: — · status: current · owner: yes · date: 2026-11-24 · normative: clients/scaas-sdk.md#CLI-SDK-34 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-34).)
+- The SDK checks the signer, the receivers and the role holders by `kindOf` on the target's env registry before
+  signing.
+- An unknown UA is refused with a named error naming the UA, the generation and the way out: register there too, or
+  use another UA or a native address.
+- Wallets register a new UA in the oldest generation in use that supports its kind.
+
+**Status.** SPECIFIED.
+**Why.** [CTR-UA-73](contracts/accounts.md#CTR-UA-73): the contract refuses such a call anyway. The SDK says why before the user signs.
+**Cost if wrong.** A refused transaction after signing, and a user who does not know why.
+**Source.** Owner 2026-11-24, verbatim "Ok. ghi vào đi".
 
 ### CLI-TUI-01 — The TUI is a thin front-end over `scaas-sdk`, for SCaaS only
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-01 · superseded-by: —
