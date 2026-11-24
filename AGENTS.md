@@ -75,6 +75,8 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
   naming the models the round's ledger records (e.g. "Fable, Opus, GPT-6.2-astra, Gemini 4 Argon"). Code changed after its round is `UNAUDITED` again. Never "independent" or "external".
 - A green gate is not evidence of soundness. Three P0s here sat behind green tests. A negative test must be able to fail: positive control, one
   change at a time, mutants.
+- Mutant runners go through `scripts/mutant_guard.py` ([ARCH-POS-23](docs/decisions.md#ARCH-POS-23)): a deadline per mutant, the
+  restore on every exit, a dirty target refused.
 - Fixing a transcript, statement or signature bug: check the same class everywhere (C, Rust, wasm32, generic and specialised verifiers). The
   first fix of one P0 missed the same class.
 

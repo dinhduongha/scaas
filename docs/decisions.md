@@ -517,6 +517,27 @@ decides a merge. Disk: one `out/` per lane.
 **Source.** Owner 2026-11-24 (relayed by the controller), verbatim "Làm sao nhớ để các lần sau review cũng phải đủ các hướng và phạm vi … Nếu được thì ghi vào tài liệu tổng quát"; the five TreeKEM code-review areas agreed the same day ("Đồng ý").
 Change (owner 2026-11-24, agreed): security and cryptography are two dimensions (2 cryptography, 3 security; thirteen in all), and a cryptography area reads each primitive vertically through every implementation, as the earlier PQZ core reviews did.
 
+<a id="ARCH-POS-23"></a>
+### ARCH-POS-23 — Every mutant runner goes through `scripts/mutant_guard.py`
+- old: — · status: current · owner: yes · date: 2026-11-24 · normative: decisions.md#ARCH-POS-23 · superseded-by: —
+
+**Rule.** Every mutant runner runs its test commands through `scripts/mutant_guard.py` (a shell runner through its `time` and
+`exec` command line). Each mutant has a deadline of 3 x its command's unmutated baseline, at least 600 s, or an explicit
+`--timeout N`, counted from when the `scripts/capped` slot is held (capped's `[capped] slot acquired` line; a command without
+capped at once; the wait for a slot never counts, and each later capped step starts its own clock). At the deadline the
+command's whole process group is killed, and the outcome is `killed (timeout N s)`: it counts as killed and is recorded apart
+from a normal kill. Every mutated file is restored, and checked byte for byte, on every exit: success, failure, timeout, an
+exception, SIGINT, SIGTERM and SIGHUP; a restore that fails stops the whole run. A target file that differs from HEAD (a leftover
+mutation of a run that died) refuses the run and is named. The runners of rounds closed before 2026-11-14 are not migrated;
+each moves to the guard when it is next rerun.
+**Status.** BUILT on branch `mutant-timeout`, UNAUDITED tooling: the shared runners and the standalone ones from 2026-11-14 on;
+the guard's `--self-test` covers a hung mutant, a SIGTERM mid-run, a slot wait and a dirty target.
+**Why.** T26's C-6 mutant hung `node --test` on a 100000-level value: three runs ran for up to 4 h 35 min with no deadline,
+the runner restored `js.rs` only after the test returned, so a killed run left it mutated, and a capped slot stayed held.
+**Cost if wrong.** A deadline that counted the slot wait would record a surviving mutant as killed; hence the clock starts at
+the held slot. A baseline is one more run per command.
+**Source.** Owner 2026-11-24, verbatim "Có, sửa mutant đi" (yes, fix the mutant runners).
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 
