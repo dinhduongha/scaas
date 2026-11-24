@@ -8,7 +8,8 @@
 # (rc=0) at the same commit on a clean tree is skipped unless --force. Heavy steps go through scripts/capped, in the foreground.
 # Scope (AGENTS.md, "any other contract change"): every forge directory at the default set, then the set-sensitive tests and
 # test/modules at the three other sets, one set at a time (memory allows one lane: `sets-<set>-sensitive`, then
-# `sets-<set>-modules`); the gas file under `--enable-tx-gas-limit` with its positive control (`treegas`); every treekem
+# `sets-<set>-modules`); the gas file's rows, then its positive control under `--enable-tx-gas-limit` (`treegas`; forge's
+# flag caps state gas too, so the rows assert regular < 2^24 themselves); every treekem
 # mutant runner's check mode; the docs. clientkeys did not change in T3d. The round's matrix (node, e2e, every client)
 # runs once at its end (T10b).
 set -uo pipefail
@@ -27,7 +28,7 @@ STEPS=(
     "uagas|smartcontracts/evm|FOUNDRY_TEST=test/ua FOUNDRY_SCRIPT=test/ua $cap forge test -j 1 --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'"
     "size|smartcontracts/evm|T=\$(mktemp -d) && $cap forge build src --sizes --json > \"\$T\"/sizes.json && python3 ../../scripts/size_gate.py \"\$T\"/sizes.json size-baseline.json; r=\$?; rm -rf \"\$T\"; exit \$r"
     "fmt|smartcontracts/evm|forge fmt --check src test"
-    "treegas|smartcontracts/evm|TREE_GAS_CAP=1 FOUNDRY_TEST=test/pqchat FOUNDRY_SCRIPT=test/pqchat $cap forge test -j 1 --enable-tx-gas-limit --match-path test/pqchat/PqChatTreeGas.t.sol -vv"
+    "treegas|smartcontracts/evm|FOUNDRY_TEST=test/pqchat FOUNDRY_SCRIPT=test/pqchat $cap forge test -j 1 --match-path test/pqchat/PqChatTreeGas.t.sol -vv && TREE_GAS_CAP=1 FOUNDRY_TEST=test/pqchat FOUNDRY_SCRIPT=test/pqchat $cap forge test -j 1 --enable-tx-gas-limit --match-path test/pqchat/PqChatTreeGas.t.sol --match-contract PqChatTreeGasCapTest -vv"
     "mutants|.|for x in a b c d; do python3 -I smartcontracts/evm/runs/2026-11-23-pqchat-treekem-t3\$x-mutants.py check || exit 1; done && bash clients/clientkeys/runs/2026-11-23-pqchat-treekem-t1a-mutants.sh check && bash clients/clientkeys/runs/2026-11-23-pqchat-treekem-t1b-mutants.sh check && bash clients/ua-rs/runs/2026-11-23-pqchat-treekem-t2-mutants.sh check"
     "docs|.|python3 scripts/docs_check.py check && python3 scripts/docs_check.py paths && python3 scripts/test_docs_check.py"
 )

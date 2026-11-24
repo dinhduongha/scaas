@@ -940,7 +940,17 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   incomplete one is usable by nobody.
 - **Bounds.** `TREE_LEAVES_MAX` = 256 keys (owner), `TREE_CHANGES_MAX` = 32 adds plus removes per commit, `TREE_ADMINS_MAX` =
   32, `TREE_INFO_MAX` = 4,124 B (at creation too), 64 leaves per `treeLeaves` call, at most 8 keys per UA. The contract enforces no minimum size; "useful from about 7 keys, where
-  several members commit" is a client hint. Gas figures: the spec's §13 (estimates until the plan's gas task pins them): the dearest
+  several members commit" is a client hint. **Measured (plan T3d, `test/pqchat/PqChatTreeGas.t.sol`, forge, the verify's gas
+  added from [accounts.md](accounts.md): `mldsa65` 5,950,000, `mldsa87` 8,860,000; asked = (regular + state) x 1.05):** the
+  completion at its bounds with the held ciphertext 10.66 M regular, 37.27 M state, 50.3 M asked, 352 new slots and the
+  ciphertext's own (pinned); codex-r3-6's fixture 8.11 M, 25.03 M, 34.8 M, 227 + 1 (pinned); the record at its bounds
+  12.5 M / 15.4 M regular (ML-DSA-65 / -87), 33.0 M / 35.1 M asked before the verify; the last live leaf's commit at its
+  bounds, one transaction, 11.2 M / 14.2 M regular (under 2^24 by 2.6 M with ML-DSA-87); acceptance and completion in one
+  transaction 23.1 M regular, over 2^24, so the record goes alone; the list of 255 targets 16.3 M asked, the node keys of
+  depth 8 22.1 M, one ciphertext 3.1 M; the node keys as the last piece at the bound 63.8 M asked, over a 60 M block (C37);
+  the session record at 64 / 128 / 192 / 256 keys 22.9 / 37.8 / 59.5 / 75.8 M asked with the verify (256 over, as the spec
+  says); 15 genesis wraps 53.3 M; a `treeLeaves` page of 64 1.62 M (an `eth_call` well under 2^24; the full tree 6.48 M in
+  four calls). Every other row fits. The spec's estimates: §13. The dearest
   transaction of a commit is the completion at its bounds with the last ciphertext, about 49.1 M asked (352 new slots,
   37.3 M of state gas: 32 Adds of UAs with no session, scattered over a tree of 256 with one live leaf); a record at its
   bounds asks 42.9 M signed with ML-DSA-87 (37.6 M with ML-DSA-65). Whichever piece lands last pays the completion, so
