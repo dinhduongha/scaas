@@ -3,7 +3,8 @@
 # NFT and multi-token kinds
 
 Research of 2026-11-24 for the owner ("Bây giờ cần là xem xét NFT (multi NFT)": now we need to look at NFTs, multi-NFT).
-Nothing here is built, specified or ruled. Every design below is a proposal. All SCaaS code named here is **UNAUDITED**
+Nothing here is built, specified or ruled, except where §8 records an owner answer of 2026-11-24. Every design
+below is a proposal. All SCaaS code named here is **UNAUDITED**
 ([ARCH-POS-14](../decisions.md#ARCH-POS-14)).
 
 Tags:
@@ -532,6 +533,10 @@ reach forward.
   version in `deps` and checks the row in `validateEnv`. Do not offer R-c in SCaaS releases. Rule on the registry-line fix
   before the freeze.
 
+**Owner answers (2026-11-24).** Q10: owner direction, no ruling on the options yet; they are evaluated in §7.2. Q11 and
+Q12: R-b plus opt-in user routers, ruled in [CTR-GOV-32](../contracts/token-wrappers.md#CTR-GOV-32). Q13: yes, built (the `virtual`
+keywords, no bytecode change). The verbatim answers are in §8.
+
 ### 7.2 Registry generations and the router: G1 against G3
 
 The owner's direction (2026-11-24, Q10): "Đồng ý là mỗi thế hệ Registry đi theo 1 Router, nhưng không nhất thiết phải new
@@ -778,6 +783,19 @@ a UA only a later generation knows should be able to create instances or hold fa
 - **Q12.** R-c: no user routers in SCaaS releases, or only in a marked opt-in class?
 - **Q13.** Should `virtual` go on `MetaTokenBase._govRouter` and `SCaaSDexAdmin._govRouter` before the freeze (expected
   bytecode-neutral), so that later ERC-20 or DEX versions can name a router?
+
+**Owner answers of 2026-11-24 to Q10–Q13** (relayed by the controller; the rulings live in [decisions.md](../decisions.md)):
+
+- **Q10 (a), owner direction, not a ruling:** "Đồng ý là mỗi thế hệ Registry đi theo 1 Router, nhưng không nhất thiết phải
+  new router. Đánh giá việc này xem sao." (Each registry generation goes with a router, but that need not be a new router.
+  Evaluate it.) Options evaluated in §7.2; no ruling on G1–G4. Then, on G1′: "Do nguy hiểm của G1', registrar có quá nhiều
+  quyền lực, nên loại nó. Cân nhắc G1 và G3." (G1′ is dangerous, the registrar has too much power: drop it; consider G1 and
+  G3.) G1′ is rejected (owner); G1 against G3 is still open.
+- **Q11 and Q12 (b), ruled:** "R-b + opt-in user routers": registrar-approved router versions in the generic catalogue are
+  the default; a user-supplied router only in a marked opt-in class. [CTR-GOV-32](../contracts/token-wrappers.md#CTR-GOV-32), SPECIFIED.
+- **Q13 (c), ruled and built:** "Yes, add" `virtual` to `MetaTokenBase._govRouter` and `SCaaSDexAdmin._govRouter` before the
+  freeze. BUILT on branch `router-gen`, with every contract's init and runtime bytecode byte-identical
+  ([CTR-GOV-32](../contracts/token-wrappers.md#CTR-GOV-32)'s Change).
 
 **Proposed TODO items:**
 

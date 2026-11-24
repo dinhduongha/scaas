@@ -913,6 +913,31 @@ chains T74; `test/v2/ChainNeutral.t.sol`, `ChainNeutralFactory.t.sol`, `test/gov
   every kind's runtime +0.8 to +1.2 KB.
 - One `IOpenFactory` and one `IFactoryToken` (the v1 and v2 interfaces are in `legacy/`).
 
+<a id="CTR-GOV-32"></a>**CTR-GOV-32** — **Router versions: registrar-approved catalogue rows by default; user routers only in a
+marked opt-in class** (owner 2026-11-24, "R-b + opt-in user routers"). **SPECIFIED** (nothing in `src/`; the path is shown on
+today's factory by `test/governance/RouterPerRelease.t.sol`, UNAUDITED).
+- **The router of a governed contract** is the one its `_govRouter()` returns: the chain's router (`ChainEnv.govRouter`, set
+  once by `configureChain`, [CTR-TOK-29](#CTR-TOK-29)) for today's kinds, or a router version that a release reads from its own
+  env (`deps`, or a `params` word where its deps are full). `GOV_ROUTER()` names it. An instance never changes routers.
+- **Default: a catalogued router version.** A router version is a release of a router class in the generic catalogue
+  ([CTR-TOK-28](#CTR-TOK-28)): `deployImplementation` under the registrar's approval, used at its catalogue address, never
+  cloned (its kind stays disabled). It is a child of `GovernanceRouterBase` and inherits every admin and holder op. A release
+  that names a router version checks in `validateEnv` that the env's router is `classReleaseOf(class, kind,
+  version).implementation` and not deprecated; a twin of the same code at another address is refused. The router class
+  number is assigned when the first router version is specified.
+- **Opt-in: a user router.** A router that a creator supplies (in `initArgs` or `initCall`) is allowed only in releases of a
+  class marked for it; no other SCaaS release takes one. Its reach is that creator's instances. Wallets, SDKs and indexers
+  flag such an instance's router as **"not the chain's router"**: a `GOV_ROUTER()` that is neither `directory().govRouter`
+  nor a catalogued router row is a user router.
+- **Separation.** Each router has its own EIP-712 domain (`verifyingContract`, chain id, chain word), so routers never take
+  each other's signatures; each speaks only to contracts that name it (`_govSubject()`).
+- **Node and SDK.** A node relays a router's ops only when the router is in its `governance_routers` list ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)); a
+  client signs for the instance's `GOV_ROUTER()`.
+- **Later ERC-20 and DEX versions.** `MetaTokenBase._govRouter` and `SCaaSDexAdmin._govRouter` are `virtual` (owner
+  2026-11-24; BUILT, no bytecode change), so their next release versions can read a router from their env.
+- **Registry generations** (owner direction 2026-11-24: each generation goes with a router, not necessarily a new one):
+  open; the options are evaluated in the research note `2026-11-24-nft-multi-token` §7.2 (background, not normative).
+
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `initArgs`.
 
 ### 6.2 Transitional (BUILT)
