@@ -181,7 +181,7 @@ fn write_canonical(v: &Value, out: &mut String) -> Result<()> {
 
 /// The canonical JSON of the JSON text `text` (bounded: [`PT_MAX`] bytes, [`JSON_DEPTH`]), in memory wiped on drop (a
 /// content may carry a file key); the parsed value wiped too.
-fn canonical_of_text(text: &[u8]) -> Result<Zeroizing<String>> {
+pub(super) fn canonical_of_text(text: &[u8]) -> Result<Zeroizing<String>> {
     let mut v = super::bounded::json(text, PT_MAX, JSON_DEPTH).map_err(|_| Error::PqChatContent)?;
     let c = canonical_zeroizing(&v, text.len());
     super::bounded::wipe(&mut v);
@@ -530,7 +530,7 @@ impl AppKeys {
     /// An epoch key `K`: a `Derive` handle this scope drew or unwrapped.
     fn epoch_key(&self, k: &KeyHandle) -> Result<Zeroizing<[u8; 32]>> {
         self.check_usage(k, KeyUsage::Derive)?;
-        if !matches!(k.origin, Origin::Drawn | Origin::Unwrapped) {
+        if !matches!(k.origin, Origin::Drawn | Origin::Unwrapped | Origin::Tree) {
             return Err(Error::AppKeyUsage);
         }
         self.bytes(k)
@@ -851,7 +851,7 @@ impl AppKeys {
 }
 
 /// `unpad`, then the canonical check: the content re-serialised must equal its bytes.
-fn canonical_content(pt: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+pub(super) fn canonical_content(pt: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
     let c = unpad(pt)?;
     let again = canonical_of_text(&c)?;
     if again.as_bytes() != c.as_slice() {

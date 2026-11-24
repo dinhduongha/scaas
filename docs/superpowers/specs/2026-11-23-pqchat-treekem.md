@@ -432,6 +432,13 @@ of a tree epoch is true exactly when it took its slot (C20); `epochOf` of a tree
 `PqChatPath(bytes32 indexed epochId, uint8 piece, uint32 first, uint32 count)` per landed piece (`piece`: 1 list, 2 keys,
 3 ciphertexts).
 
+**Two layers (owner 2026-11-23).** The tree math, the tree hash, the admission check, the R16 sets, the acceptance and
+completion checks and the tree storage (§7) are `src/pqgroup/PqGroupTree.sol`, an abstract base for any system that needs a
+group tree, with no app name, domain, record typehash or error of its own: the inheritor fixes its namespace (ERC-7201 of its
+namespace id followed by `.tree`; PqChat's is `scaas.pqchat.tree`), the leaf and parent typehashes of the tree hash (its type
+strings are its label; PqChat's are §4's), its bounds and its errors by hooks. Everything below named for PqChat is
+`PqChatTree`'s, on that base (CTR-CHAT-26, `docs/contracts/pqchat.md` §17).
+
 **The module (R2).** `PqChatTree`, a DELEGATECALL body module beside `PqChatTopics`: `PqChat` gains an immutable `TREE`, lists
 it in `modules()`, forwards `commit`, `addPathList`, `addPathKeys`, `addPath` and the tree views by `msg.data`, forwards
 `addWraps` and `postMessage` when their session is a tree session, and calls the module's creation step from
@@ -644,7 +651,8 @@ Per UA, as `PqGroupBase` judges them (CTR-CHAT-09, CTR-CHAT-20, CTR-CHAT-10, CTR
   `treeRemove` only.
 - **An admin with a leaf always remains (C24, codex-21):** a commit that changes `admins` otherwise than by dropping `gone` UAs
   must leave one admin UA with a live leaf, and a `treeRemove` whose UAs include every admin that holds a leaf is
-  `PqChatTreeAdmins`. `treeLeave` is never refused for it: a group whose last such admin leaves keeps its plain commits and
+  `PqChatTreeAdmins` **while a UA that is not `gone` keeps a live leaf after it**: the `treeRemove` that closes the session (C38)
+  is never refused for it (CTR-CHAT-27 Change 2026-11-24). `treeLeave` is never refused for it: a group whose last such admin leaves keeps its plain commits and
   loses admin commits for good (nobody can add a member, R14), as a flat group whose last admin left; clients warn that admin
   before it signs and show the state after. The order "an admin removes the other admin, then leaves" completes: the commit
   that drops both from `admins` is exempt (fable-r2-6).
@@ -927,7 +935,7 @@ New errors (existing ones keep their meaning: `PqChatShape`, `PqChatKemKey`, `Pq
 | `PqChatTreeOwnKeyReturn(bytes32 ua, bytes32 kemHash)` | an Add, under UA `ua`, of a key taken out of that UA's own leaves while it stayed a member (the pair set; R16, C28) |
 | `PqChatTreeLeaf(uint32 leaf)` | a leaf that is not live with the named key, not blank for an Add, the author's own in a Remove, or out of range |
 | `PqChatTreeKeyLive(bytes32 kemHash)` | a key that a live leaf already holds, or added twice (C18) |
-| `PqChatTreeAdmins()` | no admin with a live leaf would remain (C24) |
+| `PqChatTreeAdmins()` | no admin with a live leaf would remain while a UA that is not `gone` keeps one (C24, C38) |
 | `PqChatTreeBacklog(uint256 owed)` | a `treeRemove` or `treeLeave` that would owe more than `TREE_CHANGES_MAX` leaves at the head (C21) |
 | `PqChatPathList(bytes32 epochId)` | a list that does not hash to `ctListHash`, a second list, or a ciphertext before the list |
 | `PqChatPathHash(bytes32 epochId, uint256 index)` | a node key or ciphertext that does not hash to its signed hash, or has the wrong size |

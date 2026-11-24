@@ -256,12 +256,10 @@ const H = (ikm, info) => hkdf(sha256, ikm, new Uint8Array(0), info, 32);
 const label = (s, ...parts) => concatBytes(utf8ToBytes(s), ...parts.map(bytes));
 const ZERO_NONCE = new Uint8Array(12);
 
-export const wrapKek = (ss, session, epoch, member, keyId, kemPk) =>
-  H(
-    ss,
-    label("scaas/pqchat/v1/wrap", session, epoch, member, u64be(keyId), Uint8Array.of(1), keccak_256(bytes(kemPk))),
-  );
-const wrapAad = (session, epoch, member, keyId) =>
+/** `lbl`: the flat label; a tree session's wraps take `…/tree/wrap` (TreeKEM spec §5, fable-13). */
+export const wrapKek = (ss, session, epoch, member, keyId, kemPk, lbl = "scaas/pqchat/v1/wrap") =>
+  H(ss, label(lbl, session, epoch, member, u64be(keyId), Uint8Array.of(1), keccak_256(bytes(kemPk))));
+export const wrapAad = (session, epoch, member, keyId) =>
   concatBytes(bytes(session), bytes(epoch), bytes(member), u64be(keyId));
 
 /** Seals `K` to one member: returns the encapsulation, `kek`, `sealedKey` (48 B) and the `Wrap` struct. */

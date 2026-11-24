@@ -11,6 +11,9 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
+import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
+import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
+import {IPqChatTreeViews} from "../../src/pqchat/IPqChatTreeViews.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChatBase} from "./PqChatBase.sol";
 
@@ -33,6 +36,7 @@ contract PqChatTest is PqChatBase {
         assertEq(chatB.owner(), bytes32(0), "owner 0 allowed");
         assertTrue(chat.supportsInterface(0x01ffc9a7));
         assertTrue(chat.supportsInterface(type(IPqChat).interfaceId));
+        assertTrue(chat.supportsInterface(type(IPqChatTreeViews).interfaceId));
         assertFalse(chat.supportsInterface(0xffffffff));
         // the implementation: locked, chain-neutral
         IOpenFactory.FactoryInfo memory r = PqChat(impl).factoryInfo();
@@ -226,8 +230,8 @@ contract PqChatTest is PqChatBase {
     /// CTR-TOK-30 (owner 2026-11-10): the factory reads `modules()` once, at the release, so the answer is fixed by code
     /// (immutables): an initialized clone answers the release's set, and still after a write to its state.
     function test_modules_fixedByCode() public {
-        address[] memory want = new address[](1);
-        want[0] = address(topics);
+        address[] memory want = new address[](3);
+        (want[0], want[1], want[2]) = (address(topics), address(treeModule), address(viewsModule));
         bytes32 m = keccak256(abi.encode(PqChat(impl).modules()));
         assertEq(m, keccak256(abi.encode(want)), "the release");
         assertEq(keccak256(abi.encode(chat.modules())), m, "the initialized clone");
@@ -240,13 +244,51 @@ contract PqChatTest is PqChatBase {
     /// refused. The module called directly has no env; through an instance it runs in the instance's state.
     function test_constructor_refusesAnotherModule() public {
         vm.expectRevert(IPqChat.PqChatEnv.selector);
-        new PqChat(IOpenFactory.ReleaseId(3, 0, 1), address(f), abi.encode(address(0xBEEF)));
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(0xBEEF), address(treeModule), address(viewsModule))
+        );
         PqChatTopics other = new PqChatTopics(address(0xFAC7));
         vm.expectRevert(IPqChat.PqChatEnv.selector);
-        new PqChat(IOpenFactory.ReleaseId(3, 0, 1), address(f), abi.encode(address(other)));
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(other), address(treeModule), address(viewsModule))
+        );
+        // CTR-CHAT-26: the tree module likewise
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(topics), address(0xBEEF), address(viewsModule))
+        );
+        PqChatTree otherTree = new PqChatTree(address(0xFAC7));
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(topics), address(otherTree), address(viewsModule))
+        );
+        // the tree views module likewise (owner 2026-11-24)
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(topics), address(treeModule), address(0xBEEF))
+        );
+        PqChatTreeViews otherViews = new PqChatTreeViews(address(0xFAC7));
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(topics), address(treeModule), address(otherViews))
+        );
         address[] memory m = PqChat(impl).modules();
-        assertEq(m.length, 1);
-        assertEq(m[0], address(topics), "the release names its module");
+        assertEq(m.length, 3);
+        assertEq(m[0], address(topics), "the release names its modules");
+        assertEq(m[1], address(treeModule));
+        assertEq(m[2], address(viewsModule));
         IPqChat.PqTopic memory t;
         (t.admin, t.homeChain, t.homeChatContract, t.name) = (ids[0], bytes32(uint256(1)), address(chat), "t");
         IUARegistry.UASig memory sig;

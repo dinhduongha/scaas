@@ -289,9 +289,8 @@ abstract contract PqGroupBase {
 
     // ------------------------------------------------------------------ wraps
 
-    /// @dev P11: `wraps` as indices `first..` of `epochId`, each against its signed hash, then its shape and its member's
-    ///      `ua` / `keyId` (3C-D6), stored once; packed as many per blob as the limit holds, one slot each (pointer | offset
-    ///      << 160). The epoch completes when its last wrap lands (`complete`); the caller emits the events of both.
+    /// @dev P11: `_storeWraps`, then `landed` counts them; the epoch completes when its last wrap lands (`complete`,
+    ///      `_complete`); the caller emits the events of both.
     function _land(
         bytes32 epochId,
         Epoch storage ep,
@@ -302,21 +301,42 @@ abstract contract PqGroupBase {
         uint256 limit
     ) internal returns (bool complete) {
         uint256 n = wraps.length;
+        _storeWraps(epochId, ep, first, wraps, members, hashes, limit);
+        uint32 landed = ep.landed + uint32(n);
+        ep.landed = landed;
+        if (landed == ep.wraps && n != 0) {
+            _complete(epochId, ep);
+            return true;
+        }
+    }
+
+    /// @dev P11: `wraps` as indices `first..` of `epochId`, each against its signed hash, then its shape and its member's
+    ///      `ua` / `keyId` (3C-D6), stored once; packed as many per blob as the limit holds, one slot each (pointer | offset
+    ///      << 160). Counts nothing: the caller owns `landed` (a tree epoch counts its pieces, CTR-CHAT-27 C20).
+    function _storeWraps(
+        bytes32 epochId,
+        Epoch storage ep,
+        uint256 first,
+        IPqChat.Wrap[] calldata wraps,
+        IPqChat.MemberKey[] memory members,
+        bytes32[] memory hashes,
+        uint256 limit
+    ) internal {
+        uint256 n = wraps.length;
         if (first + n > members.length) _fail(F_SHAPE, 0, 0);
         uint256 per = (_codeCap(limit) - 1) / WRAP_BYTES;
         for (uint256 j; j < n; j += per) {
             _blob(epochId, ep, first, wraps, j, n - j < per ? n : j + per, members, hashes);
         }
-        uint32 landed = ep.landed + uint32(n);
-        ep.landed = landed;
-        if (landed == ep.wraps && n != 0) {
-            if (ep.epoch != 0) {
-                if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it
-                if (_epochs()[ep.sessionId].home) _childOf()[ep.parent] = epochId; // P9: the slot, home only
-                _chain()[ep.sessionId].push(epochId); // owner 2026-11-10: `epochsOf`
-            }
-            return true;
-        }
+    }
+
+    /// @dev The completion of epoch `epochId` above 0 (epoch 0 has nothing to take): P48's check, the home slot (P9) and
+    ///      `epochsOf` (owner 2026-11-10).
+    function _complete(bytes32 epochId, Epoch storage ep) internal {
+        if (ep.epoch == 0) return;
+        if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it
+        if (_epochs()[ep.sessionId].home) _childOf()[ep.parent] = epochId; // P9: the slot, home only
+        _chain()[ep.sessionId].push(epochId); // owner 2026-11-10: `epochsOf`
     }
 
     /// @dev One blob of `wraps[from..to)`, indices `first + from..`.

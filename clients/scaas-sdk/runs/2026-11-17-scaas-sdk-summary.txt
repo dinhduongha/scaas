@@ -402,12 +402,14 @@ sdk-uniffi | 78d410f45 | 0 | 21 passed, 0 failed, 0 ignored (4 binaries)
 sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 sdk-vectors | 190cc2ba7 | 0 | 21 passed, 0 failed, 0 ignored (2 binaries)
-ua-test | 190cc2ba7 | 0 | 629 passed, 0 failed, 3 ignored (64 binaries)
-ua-clippy | 190cc2ba7 | 0 | -
-ua-vectors | 190cc2ba7 | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
-ua-appcore | 190cc2ba7 | 0 | 20 passed, 0 failed, 0 ignored (1 binaries)
 ua-verify-only | 190cc2ba7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
 ua-core | 190cc2ba7 | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
+cli | 190cc2ba7 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+bind-gen | 190cc2ba7 | 0 | -
+ua-appcore | 82dd42c18 | 0 | 29 passed, 0 failed, 0 ignored (2 binaries)
+ua-vectors | 82dd42c18 | 0 | 740 passed, 0 failed, 6 ignored (72 binaries)
+ua-test | 82dd42c18 | 0 | 630 passed, 0 failed, 3 ignored (64 binaries)
+ua-clippy | 82dd42c18 | 0 | -
 rpc-test | 2592e0de8 | 0 | 232 passed, 0 failed, 10 ignored (23 binaries)
 sdk-clippy | 2592e0de8 | 0 | -
 ua-clippy | 2592e0de8 | 0 | -

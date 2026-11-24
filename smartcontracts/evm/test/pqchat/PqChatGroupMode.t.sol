@@ -5,12 +5,12 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChatBase} from "./PqChatBase.sol";
 
-/// CTR-CHAT-25 (owner 2026-11-23): `PqChatSession.groupMode`, 0 flat wraps, 1 TreeKEM, fixed at creation; this release accepts
-/// 0 only and refuses every other value by name before anything else is checked (a later catalogued release accepts 1 with
-/// the same struct and typehash). No epoch, leave or removal record names a mode, so no child can change it.
+/// CTR-CHAT-25, CTR-CHAT-26 (owner 2026-11-23): `PqChatSession.groupMode`, 0 flat wraps, 1 TreeKEM, fixed at creation; this
+/// release accepts 0 and 1 and refuses 2-255 by name before anything else is checked. No epoch, leave or removal record names
+/// a mode, so no child can change it. The tree mode's own checks: `PqChatTree.t.sol`.
 contract PqChatGroupModeTest is PqChatBase {
-    function test_onlyFlatWrapsAccepted() public {
-        for (uint8 mode = 1; mode != 0; mode = mode == 1 ? 2 : mode == 2 ? 255 : 0) {
+    function test_onlyFlatWrapsAndTreeKemAccepted() public {
+        for (uint8 mode = 2; mode != 0; mode = mode == 2 ? 3 : mode == 3 ? 255 : 0) {
             (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(2, mode, address(chat));
             s.groupMode = mode;
             IUARegistry.UASig memory sig = _sig(s.creator, h.session(s));
@@ -24,8 +24,9 @@ contract PqChatGroupModeTest is PqChatBase {
         assertEq(got.groupMode, 0);
     }
 
-    /// The vector row `sessionTreeKem` (groupMode 1, signed by its creator) is refused by name, as the row says.
-    function test_theTreeKemVectorIsRefused() public {
+    /// The vector row `sessionTreeKem` (groupMode 1, signed by its creator) is no longer refused by its mode: its members
+    /// are not registered here, so it stops at their keys (P3) after the mode check.
+    function test_theTreeKemVectorPassesTheModeCheck() public {
         string memory rec = vm.readFile("../vectors/pqchat/records.json");
         string memory p = ".sessionTreeKem.record";
         IPqChat.PqChatSession memory s;
@@ -37,20 +38,26 @@ contract PqChatGroupModeTest is PqChatBase {
         s.admins = vm.parseJsonBytes32Array(rec, string.concat(p, ".admins"));
         s.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));
         s.sealedInfo = vm.parseJsonBytes(rec, string.concat(p, ".sealedInfo"));
+        s.members = new IPqChat.MemberKey[](s.wrapHashes.length);
+        for (uint256 i; i < s.members.length; ++i) {
+            string memory q = string.concat(p, ".members[", vm.toString(i), "]");
+            s.members[i].ua = vm.parseJsonBytes32(rec, string.concat(q, ".ua"));
+            s.members[i].keyId = uint64(vm.parseJsonUint(rec, string.concat(q, ".keyId")));
+        }
         IUARegistry.UASig memory sig;
         sig.signature = vm.parseJsonBytes(rec, ".sessionTreeKem.uaSig.signature");
-        assertEq(vm.parseJsonString(rec, ".sessionTreeKem.error"), "PqChatModeUnsupported(1)");
-        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatModeUnsupported.selector, uint8(1)));
+        assertEq(s.groupMode, 1);
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatKemKey.selector, s.members[0].ua, s.members[0].keyId));
         chat.createSession(s, new IPqChat.Wrap[](0), sig);
     }
 
-    /// The refusal comes first: a mode-1 record with a signature of nobody and unregistered members is refused by its mode.
+    /// The refusal comes first: a mode-2 record with a signature of nobody and unregistered members is refused by its mode.
     function test_theModeIsCheckedFirst() public {
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(2, 3, address(chat));
-        s.groupMode = 1;
+        s.groupMode = 2;
         s.members[0].keyId = 77; // a KEM version nobody holds
         IUARegistry.UASig memory nobody;
-        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatModeUnsupported.selector, uint8(1)));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatModeUnsupported.selector, uint8(2)));
         chat.createSession(s, w, nobody);
     }
 }

@@ -5,6 +5,9 @@ import {IPqChat} from "./IPqChat.sol";
 import {PqChatTypes} from "./PqChatTypes.sol";
 import {PqChatCore} from "./PqChatCore.sol";
 import {PqChatTopics} from "./PqChatTopics.sol";
+import {PqChatTree} from "./PqChatTree.sol";
+import {PqChatTreeViews} from "./PqChatTreeViews.sol";
+import {IPqChatTreeViews} from "./IPqChatTreeViews.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
@@ -19,7 +22,9 @@ import {RescueLib} from "../governance/RescueLib.sol";
 ///         registry, `chain_uid`, the code-size limit `params[0]`. State in the ERC-7201 namespace `scaas.pqchat`.
 ///         Records are stored in SSTORE2 blobs (3C-D3), never only in an event. The public topics and votes run in the
 ///         body module `PqChatTopics` by `DELEGATECALL` (CTR-TOK-30, 3C-D2); the sessions, messages and the store, the 1:1
-///         path, stay here. **UNAUDITED.**
+///         path, stay here. The TreeKEM mode (`groupMode = 1`, CTR-CHAT-26) runs in the body module `PqChatTree`; its
+///         views (`IPqChatTreeViews`) in the read-only body module `PqChatTreeViews`, reached by the `fallback`.
+///         **UNAUDITED.**
 contract PqChat is IPqChat, PqChatCore {
     uint16 internal constant CLASS = 3;
     uint16 internal constant KIND = 0;
@@ -36,16 +41,23 @@ contract PqChat is IPqChat, PqChatCore {
     uint64 internal immutable VERSION;
     /// @notice The body module of the topics (`PqChatTopics`, CTR-TOK-30), named in `implArgs`.
     address internal immutable TOPICS;
+    /// @notice The body module of the TreeKEM mode (`PqChatTree`, CTR-CHAT-26), named in `implArgs`.
+    address internal immutable TREE;
+    /// @notice The read-only body module of the tree views (`PqChatTreeViews`, owner 2026-11-24), named in `implArgs`.
+    address internal immutable VIEWS;
 
-    /// @notice `(ReleaseId, factory_, implArgs)` (topics spec §11), `implArgs = abi.encode(topics)`: the body module
-    ///         `PqChatTopics` of this factory (CTR-TOK-30, 3C-D2), code present. The implementation is locked.
+    /// @notice `(ReleaseId, factory_, implArgs)` (topics spec §11), `implArgs = abi.encode(topics, tree, views)`: the body
+    ///         modules `PqChatTopics`, `PqChatTree` and `PqChatTreeViews` of this factory (CTR-TOK-30, 3C-D2, CTR-CHAT-26),
+    ///         code present. The implementation is locked.
     constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory implArgs) {
         if (id.contractClass != CLASS || id.kind != KIND || id.version == 0 || factory_ == address(0)) {
             revert PqChatEnv();
         }
-        address topics_ = abi.decode(implArgs, (address));
+        (address topics_, address tree_, address views_) = abi.decode(implArgs, (address, address, address));
         if (topics_.code.length == 0 || PqChatTopics(topics_).FACTORY() != factory_) revert PqChatEnv();
-        (FACTORY, VERSION, TOPICS) = (factory_, id.version, topics_);
+        if (tree_.code.length == 0 || PqChatTree(tree_).FACTORY() != factory_) revert PqChatEnv();
+        if (views_.code.length == 0 || PqChatTreeViews(views_).FACTORY() != factory_) revert PqChatEnv();
+        (FACTORY, VERSION, TOPICS, TREE, VIEWS) = (factory_, id.version, topics_, tree_, views_);
         _s().initialized = true;
     }
 
@@ -83,7 +95,7 @@ contract PqChat is IPqChat, PqChatCore {
     }
 
     function supportsInterface(bytes4 id) external pure returns (bool) {
-        return id == 0x01ffc9a7 || id == type(IPqChat).interfaceId;
+        return id == 0x01ffc9a7 || id == type(IPqChat).interfaceId || id == type(IPqChatTreeViews).interfaceId;
     }
 
     /// @notice 3C-D1: a `chain_uid`, a registry and a code-size limit of at least 24,576 B.
@@ -115,6 +127,7 @@ contract PqChat is IPqChat, PqChatCore {
         ep.wraps = uint32(s.members.length);
         ep.home = s.homeChain == uid && s.homeChatContract == address(this);
         emit PqChatSessionCreated(sid, s.creator, s.homeChain);
+        if (s.groupMode == 1) _forwardAs(PqChatTree.treeCreate.selector); // CTR-CHAT-26: the tree and its wraps
         _indexAll(sid, s.members);
         _landWraps(sid, ep, 0, wraps, s.members, s.wrapHashes, limit);
     }
@@ -128,7 +141,7 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @dev P8, 3C-D6: the lists, the creator a member and an admin, the home instance named (P32).
     function _checkSession(IUARegistry reg, PqChatSession calldata s) internal view {
-        if (s.groupMode != 0) revert PqChatModeUnsupported(s.groupMode); // CTR-CHAT-25: this release runs flat wraps only
+        if (s.groupMode > 1) revert PqChatModeUnsupported(s.groupMode); // CTR-CHAT-25, CTR-CHAT-26: flat wraps and TreeKEM
         MemberKey[] memory members = s.members;
         bytes32[] memory admins = s.admins;
         _checkLists(reg, admins, members, s.wrapHashes.length, 2);
@@ -145,6 +158,7 @@ contract PqChat is IPqChat, PqChatCore {
         returns (bytes32 eid)
     {
         (IUARegistry reg, uint256 limit,) = _env();
+        if (_isTree(e.sessionId)) revert PqChatModeEntry(1); // CTR-CHAT-27: a tree session's epochs are commits
         _indexAdded(e, _rightsOf(reg, _parentOf(e.parentEpochId, e.sessionId, e.epoch), e));
         _auth(reg, e.author, PqChatTypes.hashEpoch(e), sig);
         _useNonce(PqChatTypes.scopeEpoch(e.sessionId, e.author), e.nonce);
@@ -183,9 +197,44 @@ contract PqChat is IPqChat, PqChatCore {
         }
     }
 
+    // ------------------------------------------------------------------ CTR-CHAT-27: the tree entries, in `PqChatTree`
+
+    function commit(
+        PqChatCommit calldata,
+        uint32[] calldata,
+        bytes32[] calldata,
+        bytes[] calldata,
+        PathCt[] calldata,
+        Wrap[] calldata,
+        IUARegistry.UASig calldata
+    ) external returns (bytes32) {
+        _forward(TREE);
+    }
+
+    function addPathList(bytes32, uint32[] calldata, bytes32[] calldata) external {
+        _forward(TREE);
+    }
+
+    function addPathKeys(bytes32, bytes[] calldata) external {
+        _forward(TREE);
+    }
+
+    function addPath(bytes32, uint32, PathCt[] calldata) external {
+        _forward(TREE);
+    }
+
+    function treeLeave(PqChatTreeLeave calldata, IUARegistry.UASig calldata) external {
+        _forward(TREE);
+    }
+
+    function treeRemove(PqChatTreeRemove calldata, IUARegistry.UASig calldata) external {
+        _forward(TREE);
+    }
+
     function addWraps(bytes32 epochId, uint32 first, Wrap[] calldata wraps) external {
         (, uint256 limit,) = _env();
         Epoch storage ep = _known(epochId);
+        if (_isTree(ep.sessionId)) _forward(TREE); // CTR-CHAT-26: the leaves land with the wraps
         _slotFree(ep, epochId);
         (, MemberKey[] memory members, bytes32[] memory hashes) = _lists(ep);
         _landWraps(epochId, ep, first, wraps, members, hashes, limit);
@@ -208,6 +257,7 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @notice P12: a member of `epochId` leaves it; the next epoch may drop it as a plain rekey (3C-D8).
     function leave(PqChatLeave calldata l, IUARegistry.UASig calldata sig) external {
+        if (_isTree(l.sessionId)) revert PqChatModeEntry(1); // C30: `treeLeave`
         (IUARegistry reg, uint256 limit,) = _env();
         Epoch storage ep = _known(l.epochId);
         if (ep.sessionId != l.sessionId) revert PqChatUnknown(l.epochId);
@@ -223,6 +273,7 @@ contract PqChat is IPqChat, PqChatCore {
     /// @notice P48 (owner 2026-11-10): an admin of the complete epoch `r.epochId` removes 1..REMOVE_MAX of its members,
     ///         strictly sorted; at home only while it has no complete child. The record and its `sigHash` in state.
     function remove(PqChatRemove calldata r, IUARegistry.UASig calldata sig) external {
+        if (_isTree(r.sessionId)) revert PqChatModeEntry(1); // C30: `treeRemove`
         (IUARegistry reg, uint256 limit,) = _env();
         Epoch storage ep = _known(r.epochId);
         if (ep.sessionId != r.sessionId) revert PqChatUnknown(r.epochId);
@@ -252,6 +303,7 @@ contract PqChat is IPqChat, PqChatCore {
     /// @notice P16, D11: a member of the complete epoch `epochId` posts; the record and `keccak256(abi.encode(sig))` in one
     ///         blob appended to the session's list, the signature's bytes in the event.
     function postMessage(PqChatMessage calldata m, IUARegistry.UASig calldata sig) external returns (uint256 index) {
+        if (_isTree(m.sessionId)) _forward(TREE); // CTR-CHAT-27: a member holds a live leaf and is not gone
         (IUARegistry reg, uint256 limit,) = _env();
         Epoch storage ep = _known(m.epochId);
         if (ep.sessionId != m.sessionId) revert PqChatUnknown(m.epochId);
@@ -262,15 +314,7 @@ contract PqChat is IPqChat, PqChatCore {
         if (child != 0) revert PqChatEpochTaken(m.epochId, child);
         (, MemberKey[] memory mk,) = _lists(ep);
         if (_memberAt(mk, m.sender) == type(uint256).max) revert PqChatNotMember(m.sender);
-        bytes32 hm = PqChatTypes.hashMessage(m);
-        _auth(reg, m.sender, hm, sig);
-        _useNonce(PqChatTypes.scopeMessage(m.epochId, m.sender, m.device), m.counter);
-        bytes memory blob = _blob(abi.encode(m), sig);
-        if (blob.length + 2 > _codeCap(limit)) revert PqChatShape(); // one blob (P16), the kept signature included
-        address[] storage list = _s().messages[m.sessionId];
-        index = list.length;
-        list.push(_put(blob, limit));
-        emit PqChatMessagePosted(m.sessionId, PqChatTypes.typed(hm), m.sender, index, sig);
+        index = _post(reg, limit, m, sig);
     }
 
     /// @notice P29: no signature, membership or nonce; the payload `abi.encode(v, hint, env)` raw in one blob.
@@ -293,6 +337,7 @@ contract PqChat is IPqChat, PqChatCore {
     function epochOf(bytes32 epochId) external view returns (PqChatEpoch memory e, bytes32 sigHash) {
         Epoch storage ep = _known(epochId);
         if (ep.sessionId == epochId) revert PqChatUnknown(epochId);
+        if (_isTree(ep.sessionId)) revert PqChatModeEntry(1); // a tree epoch is a commit
         (e, sigHash) = abi.decode(_get(ep.record), (PqChatEpoch, bytes32));
     }
 
@@ -321,44 +366,16 @@ contract PqChat is IPqChat, PqChatCore {
         return _s().removals[epochId].length;
     }
 
+    /// @notice Both modes (spec §6): a tree session's `PqChatTreeRemove` without its `treeId` (the session's, `treeOf`).
     function removalAt(bytes32 epochId, uint256 index) external view returns (PqChatRemove memory r, bytes32 sigHash) {
-        (r, sigHash) = abi.decode(_get(_s().removals[epochId][index]), (PqChatRemove, bytes32));
+        bytes memory b = _get(_s().removals[epochId][index]);
+        if (!_isTree(_s().epochs[epochId].sessionId)) return abi.decode(b, (PqChatRemove, bytes32));
+        PqChatTreeRemove memory t;
+        (t, sigHash) = abi.decode(b, (PqChatTreeRemove, bytes32));
+        r = PqChatRemove(t.sessionId, t.epochId, t.nextEpoch, t.members, t.admin, t.nonce);
     }
 
     // ------------------------------------------------------------------ CTR-CHAT-23: the kept signatures
-
-    /// @dev An `sstore2` instance keeps each signed record as `abi.encode(record, sigHash, sig)`.
-    function _keep() internal view returns (bool) {
-        return _s().sigStore == SIG_SSTORE2;
-    }
-
-    /// @dev The stored form of a signed record whose ABI tuple is dynamic, from `rec = abi.encode(record)` (`0x20` and its
-    ///      tail): `abi.encode(record, sigHash)` on a `none` instance, `abi.encode(record, sigHash, sig)` on an `sstore2` one
-    ///      (byte for byte; built here because the compiler's tuple encoder of a calldata record and signature runs out of
-    ///      stack). `sigHash = keccak256(abi.encode(sig))`.
-    function _blob(bytes memory rec, IUARegistry.UASig calldata sig) internal view returns (bytes memory out) {
-        bytes memory es = abi.encode(sig);
-        bytes32 sh = keccak256(es);
-        bool keep = _keep();
-        uint256 r = rec.length - 32;
-        uint256 e = keep ? es.length - 32 : 0;
-        uint256 head = keep ? 96 : 64;
-        out = new bytes(head + r + e);
-        assembly ("memory-safe") {
-            let o := add(out, 32)
-            mstore(o, head)
-            mstore(add(o, 32), sh)
-            if keep { mstore(add(o, 64), add(head, r)) }
-            mcopy(add(o, head), add(rec, 64), r)
-            if keep { mcopy(add(add(o, head), r), add(es, 64), e) }
-        }
-    }
-
-    /// @dev `PqGroupBase._authorOf` for both forms: the blob's first word is the record's offset (64 without the signature,
-    ///      96 with it), `author` the record's second field.
-    function _authorOf(Epoch storage ep) internal view override returns (bytes32) {
-        return _word(ep.record, uint256(_word(ep.record, 0)) + 32);
-    }
 
     function _kept() internal view {
         if (!_keep()) revert PqChatSigNotStored();
@@ -405,13 +422,19 @@ contract PqChat is IPqChat, PqChatCore {
         return _s().leaves[epochId].length;
     }
 
+    /// @notice Both modes (spec §6): a tree session's `PqChatTreeLeave` without its `treeId` (the session's, `treeOf`).
     function leaveAt(bytes32 epochId, uint256 index) external view returns (PqChatLeave memory l, bytes32 sigHash) {
-        (l, sigHash) = abi.decode(_get(_s().leaves[epochId][index]), (PqChatLeave, bytes32));
+        bytes memory b = _get(_s().leaves[epochId][index]);
+        if (!_isTree(_s().epochs[epochId].sessionId)) return abi.decode(b, (PqChatLeave, bytes32));
+        PqChatTreeLeave memory t;
+        (t, sigHash) = abi.decode(b, (PqChatTreeLeave, bytes32));
+        l = PqChatLeave(t.sessionId, t.epochId, t.member, t.nonce);
     }
 
+    /// @notice Both modes: a `PqChatTreeLeave` is five static words, a `PqChatLeave` four.
     function leaveSig(bytes32 epochId, uint256 index) external view returns (IUARegistry.UASig memory) {
         _kept();
-        _returnSig(_get(_s().leaves[epochId][index]), 5);
+        _returnSig(_get(_s().leaves[epochId][index]), _isTree(_s().epochs[epochId].sessionId) ? 6 : 5);
     }
 
     function nonceUsed(bytes32 scope, uint64 nonce) external view returns (bool) {
@@ -493,27 +516,27 @@ contract PqChat is IPqChat, PqChatCore {
     // ------------------------------------------------------------------ public topics: the module (CTR-TOK-30, 3C-D2)
 
     function createTopic(PqTopic calldata, IUARegistry.UASig calldata) external returns (bytes32) {
-        _forward();
+        _forward(TOPICS);
     }
 
     function updateTopic(PqTopicUpdate calldata, IUARegistry.UASig calldata) external {
-        _forward();
+        _forward(TOPICS);
     }
 
     function setTopicWriter(PqTopicWriter calldata, IUARegistry.UASig calldata) external {
-        _forward();
+        _forward(TOPICS);
     }
 
     function postEntry(PqTopicEntry calldata, IUARegistry.UASig calldata) external returns (bytes32) {
-        _forward();
+        _forward(TOPICS);
     }
 
     function editEntry(PqTopicEdit calldata, IUARegistry.UASig calldata) external {
-        _forward();
+        _forward(TOPICS);
     }
 
     function voteEntry(PqTopicVote calldata, IUARegistry.UASig calldata) external {
-        _forward();
+        _forward(TOPICS);
     }
 
     function topicOf(bytes32) external view returns (PqTopic memory, uint64) {
@@ -574,8 +597,17 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @dev CTR-TOK-30's unguarded stub (no entry here holds a guard): `DELEGATECALL` of this call's calldata to the module,
     ///      its revert data verbatim on failure, else its return data verbatim.
-    function _forward() internal {
-        (bool ok, bytes memory ret) = TOPICS.delegatecall(msg.data);
+    function _forward(address module) internal {
+        _call(module, msg.data);
+    }
+
+    /// @dev `_forward` to `PqChatTree` under the selector `sel` of the same arguments (its step after this entry's part).
+    function _forwardAs(bytes4 sel) internal {
+        _call(TREE, bytes.concat(sel, msg.data[4:]));
+    }
+
+    function _call(address module, bytes memory data) private {
+        (bool ok, bytes memory ret) = module.delegatecall(data);
         assembly ("memory-safe") {
             if iszero(ok) { revert(add(ret, 32), mload(ret)) }
             return(add(ret, 32), mload(ret))
@@ -584,7 +616,7 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @dev A `view` entry (the module's body writes nothing): `_forward` under a view cast, as the token faces do.
     function _forwardView() internal view {
-        function() f = _forward;
+        function() f = _forwardTopics;
         function() view v;
         assembly ("memory-safe") {
             v := f
@@ -592,28 +624,35 @@ contract PqChat is IPqChat, PqChatCore {
         v();
     }
 
-    /// @notice The body module (CTR-TOK-30), as the token faces list theirs.
+    function _forwardTopics() internal {
+        _forward(TOPICS);
+    }
+
+    /// @notice The body modules (CTR-TOK-30), as the token faces list theirs.
     function modules() external view returns (address[] memory m) {
-        m = new address[](1);
-        m[0] = TOPICS;
+        m = new address[](3);
+        (m[0], m[1], m[2]) = (TOPICS, TREE, VIEWS);
+    }
+
+    /// @notice Owner 2026-11-24 (option A): a selector this contract does not have goes to the read-only `PqChatTreeViews`
+    ///         by `DELEGATECALL` (the tree views, `IPqChatTreeViews`), its return and revert data verbatim; the module has
+    ///         no `fallback`, so a selector it lacks too reverts with empty data, and it writes nothing. Not payable: a call
+    ///         with value is refused.
+    fallback() external {
+        address v = VIEWS;
+        assembly {
+            calldatacopy(0, 0, calldatasize())
+            let ok := delegatecall(gas(), v, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            if iszero(ok) { revert(0, returndatasize()) }
+            return(0, returndatasize())
+        }
     }
 
     // ------------------------------------------------------------------ internal: the group's errors (PqGroupBase)
 
-    /// @dev Every `PqGroupBase` code to its `PqChat` error (CTR-PQV-12: the selectors unchanged); the env and nonce codes as the
-    ///      body module raises them (`PqChatCore._fail`).
+    /// @dev `PqChatCore._chatFail`: every `PqGroupBase` code to its `PqChat` error (CTR-PQV-12: the selectors unchanged).
     function _fail(uint8 code, uint256 a, uint256 b) internal pure override {
-        if (code == F_SHAPE) revert PqChatShape();
-        if (code == F_KEM_KEY) revert PqChatKemKey(bytes32(a), uint64(b));
-        if (code == F_WRAP_HASH) revert PqChatWrapHash(bytes32(a), b);
-        if (code == F_WRAP_STORED) revert PqChatWrapStored(bytes32(a), b);
-        if (code == F_UNKNOWN) revert PqChatUnknown(bytes32(a));
-        if (code == F_INCOMPLETE) revert PqChatIncomplete(bytes32(a));
-        if (code == F_EPOCH_NUMBER) revert PqChatEpochNumber(uint64(a), uint64(b));
-        if (code == F_EPOCH_TAKEN) revert PqChatEpochTaken(bytes32(a), bytes32(b));
-        if (code == F_NOT_ADMIN) revert PqChatNotAdmin(bytes32(a));
-        if (code == F_NOT_MEMBER) revert PqChatNotMember(bytes32(a));
-        if (code == F_REMOVED_KEPT) revert PqChatRemovedKept(bytes32(a), bytes32(b));
-        super._fail(code, a, b);
+        _chatFail(code, a, b);
     }
 }
