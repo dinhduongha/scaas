@@ -19,8 +19,8 @@ integration branch: `git show origin/ua-rs-sign:docs/review.md`, or `origin/dev`
 1. **Pin the tree and the scope.**
    - Create a detached, read-only worktree at the exact commit: `git worktree add --detach .claude/worktrees/<subject>-review <SHA>`.
    - Reviewers never read a moving branch.
-   - The change is the diff from the merge base, never from `main` (a branch can be hundreds of thousands of lines ahead of
-     `main`): `git diff --stat $(git merge-base origin/<integration> <SHA>) <SHA>`.
+   - The change is the diff from the merge base, never from `main` (from `main` it also counts every unmerged round on the
+     integration branch): `git diff --stat $(git merge-base origin/<integration> <SHA>) <SHA>`.
    - The areas' files come from that list. Add the vectors and tests the change reads, since dimensions 8 and 12 need them.
 2. **Make the directory.**
    - `scratchpad/<subject>-review-<YYYYMMDD-HHMM>/`, in local time. It is git-ignored and never pushed.
