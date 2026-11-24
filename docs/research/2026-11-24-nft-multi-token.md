@@ -439,6 +439,99 @@ The options [I]:
 freeze. Only the bit numbers and the class number should be reserved early, as documentation. If P3 does not hold, P1 is
 the only path that keeps parity without a contract in the middle, and P1 is pre-freeze work. The owner's choice is Q1.
 
+### 7.1 N2 result (2026-11-24): P3 checked, router versions, the registry line
+
+Test: `smartcontracts/evm/test/governance/RouterPerRelease.t.sol` (13 tests, green; `test/governance/*` 640 passed). Lines are
+at the branch point `origin/ua-rs-sign`. No `src/` change. All code named is **UNAUDITED**.
+
+**P3 checked: yes [F], for a generic release that inherits `GovernanceBaseCore` itself.**
+
+- The factory checks only the count of `deps` (`OpenFactory.sol:973`, at most 4) and never reads them; the head's `govRouter` is
+  always the factory's own, set once (`_chainEnv`, `:1002`; `configureChain`, `ChainAlreadyConfigured` `:164`). What a dep means
+  is the release's call: `validateEnv` by staticcall (`:1070`, from `_checkRelease` `:1176`).
+- `_govRouter()` is `internal view virtual` (`GovernanceBase.sol:44`); `_govSubject()` asks only `_govRouter()` (`:64-68`). A
+  release overrides it with `ChainEnvCode.dep(0)` (`ChainEnvCode.sol:93`). `GOV_ROUTER()` (`GovernanceBase.sol:258`) then names
+  the release's router, the client's discovery view.
+- A second router is a child of `GovernanceRouterBase` (`GovernanceRouterBase.sol:271`) that calls the internal `_ua` (`:493`)
+  per new op; it inherits every admin and holder op. It uses the same registry, `requireAuthorized` (a view with no caller
+  check) and its own nonces. Its EIP-712 domain carries `verifyingContract` and the chain word (`SaltedEIP712.sol:103-105`), so
+  two routers never accept each other's signatures (native: `MetaTxBadSignature`; derived: `UAUnauthorized`).
+- Each router speaks only to contracts that name it: `_govSubject()` asks only `msg.sender == _govRouter()`. The chain's router
+  on the new instance and the second router on an existing token each get `NotAdmin(pad(router))`.
+- Pin: the env (governance publishes it; its hash sits in the release row) plus the release's `validateEnv`. In the test the
+  release pins the router's code hash through `implArgs`, which the approval key binds. `SaltedEIP712` keeps `address(this)` and
+  the separator as immutables (`:35`, `:37`), so a router's code hash names one deployment.
+- A rogue router named by a release speaks for anyone on that release's instances only (`test_p3_rogueRouter_bindsOnlyItsRelease`).
+  That is acceptable because a release and its env are governance's choice, as the env registry is under CTR-UA-67.
+- Mutants, red: the release reading `ChainEnv.govRouter` instead fails 6 of 8 P3 tests at `NotAdmin(pad(r2))`. With
+  `validateEnv`'s pin removed, the rogue dep passes.
+- **Limit.** `MetaTokenBase._govRouter` (`MetaTokenBase.sol:158`) and `SCaaSDexAdmin._govRouter` (`SCaaSDexAdmin.sol:58`) are
+  overrides without `virtual`. A later ERC-20 or DEX version built on them cannot name another router unless those sources gain
+  `virtual`, a change expected to be bytecode-neutral. The multi-token kind is not ERC-20, so P3 holds for it without this.
+- The governance spec §3.2 says a release takes its router "from its `Env.govRouter`". `Env` has no such field
+  (`IFactoryToken.Env`): the built path is `deps`.
+
+**The registry line: the chain's router does not follow it [F].** The router's registry is an immutable (`UAMetaTxBase.sol:35`,
+`:51`, `:277`). The line walks back only: `_holderKind` asks the `predecessor` (`UARegistry.sol:996-1002`;
+`UARegistryCoreLib.sol:136-144`). Generation N therefore never sees a record of N+1. Neither the views nor the signature check
+reach forward.
+
+- **Q1:** an `msig` held in generation 2, whose members are generation-1 keys, is refused by the chain's router (generation 1)
+  with `UAUnauthorized(msig2)` (`UARegistry.sol:904-912`: holder 0, `via(0)` false).
+- **Q2:** a kind only generation 2 has (`mldsa65`) is refused the same way, `UAUnauthorized(pq65)`. It is never `UAConfig`.
+- **Controls:** a router bound to generation 2 serves holders of both generations (the walk back hands the check to the holder,
+  CTR-UA-60). A mutant that binds the chain's router to generation 2 turns both refusals green.
+- **Consequence:** a token from an env naming generation 2 (CTR-UA-67) checks its own `mtx*` on generation 2, but its
+  governance goes through the generation-1 router. A PQ role holder of a generation-2-only kind cannot act, which breaks
+  CTR-UA-27 parity. P3 helps only new releases that name a router bound to the newer generation. Instances of the existing
+  kinds keep `ChainEnv.govRouter`.
+- **Smallest pre-freeze fix (proposal, not built):** the router authenticates a factory-made target through the target's own
+  env registry.
+  - The router takes the factory as a constructor immutable (it is deployed before `configureChain`).
+  - In `_uaCall` it uses the registry of `ChainEnv` (code offset 77) when `factory.infoOf(target)` names an instance, and its own
+    registry otherwise (the factory itself, a compliance registry, applications).
+  - That registry passed the CTR-UA-67 line check when its env was published, so governance and the token's own path use one
+    generation. It costs one staticcall and one `EXTCODECOPY`.
+  - What changes: `GovernanceRouterBase` (frozen). It must not trust a registry the target merely answers: a fake one could burn
+    a victim's router nonce on any lane.
+  - The alternative is a ruling that a new generation comes with a new router and a new factory line.
+
+**Router versions (owner 2026-11-24: "each new kind carries its own child router, or register different versions?").**
+
+| | R-a: release names its router in `deps` | R-b: router versions in the catalogue | R-c: user-supplied router |
+|---|---|---|---|
+| Who adds | registrar (env and release) | registrar: a router is a generic release of a router class | the creator, per instance (in `initCall`) |
+| Pin | env + `validateEnv` (code hash = one deployment) | catalogue row `classReleaseOf(class, kind, version).implementation`, init-code and `implArgs` hashes bound by the approval | none intrinsic (a code hash cannot pin a template) |
+| Today's code | works (P3 tests) | works: `test_rb_routerVersionInCatalogue_pickedByRelease` | works, release code only |
+| Blast radius of a bad router | that release's instances | releases that pick that version | that creator's instances |
+
+- **R-b, as tested.** A router child answers `factoryInfo`, ERC-165, `validateEnv` and `modules()`. `deployImplementation`
+  CREATE2s it under the registrar's approval (`OpenFactory.sol:756`), and it is used at its catalogue address, never cloned. One
+  wart: `initSelector` must be non-zero, so the router class's kind stays disabled. A twin of the same code outside the catalogue
+  is refused, and so is a deprecated row at release deployment.
+- **`ChainEnv`.** It holds one `govRouter` (head offset 97) plus `deps` (at most 4) and `params` (at most 2 words). A list or map
+  of router versions in `ChainEnv` would be a factory and `ChainEnvCode` change; R-a and R-b do not need one. A kind using all 4
+  deps (the Zether envs) could carry its router in a `params` word.
+- **R-c precedent.** The compliance registry: the creator names it in `initArgs`, the release pins its code hash and requires its
+  `govRouter()` to be the token's (`RegulatedLib.sol:147-153`). For a router the safe form of R-c is "the creator picks a
+  catalogue version at creation", which is R-b per instance (mixed). An arbitrary user router needs its own marked class, and
+  wallets and indexers must show "not a catalogued router": compare `GOV_ROUTER()` with the catalogue and `directory().govRouter`.
+- **Upgrade path.** The router is fixed per instance (a dep in the clone's code). A new registry generation means a new router
+  version, then a new env, then a new release, which serves new instances only, as "nothing deployed is upgraded" requires. An
+  instance never switches routers.
+- **Replay.** Separation comes from the domain's `verifyingContract`, chain id and chain word for any versions; the name may stay
+  one.
+- **Node.** `governance_routers` is already a list ("a second router is a config row", `scaas-node/src/config.rs:345-349`).
+  The typed rows and the domain name are fixed per contract kind (`typed.rs:68`), so a router with new ops needs node rows. The
+  node could learn the set from the router class's catalogue rows instead of config. Node work, not frozen.
+- **SDK.** A client reads `GOV_ROUTER()` of the instance, already deployed in every `GovernanceBase` contract.
+- **Before the freeze.** For R-a and R-b, nothing in contracts; reserve the router class number as documentation. For R-c,
+  nothing in contracts; a rule. The registry-line fix above, if wanted, must land before the freeze. So must `virtual` on the
+  two `_govRouter` overrides, if later ERC-20 or DEX versions should name a router.
+- **Recommendation [I].** Take R-b as the default: router versions as registrar-approved catalogue rows, and a release names its
+  version in `deps` and checks the row in `validateEnv`. Do not offer R-c in SCaaS releases. Rule on the registry-line fix
+  before the freeze.
+
 ## 8. Open questions, TODO items, effort
 
 **Open questions for the owner** (no rulings here):
@@ -456,6 +549,12 @@ the only path that keeps parity without a contract in the middle, and P1 is pre-
 - **Q7.** Family order: which non-EVM families get the kind, and when (NEAR's NEP-245 is the closest fit)?
 - **Q8.** A regulated variant (freeze, force, KYC per id) in the first release, or later?
 - **Q9.** Confidential amounts per id (PQZ): wanted at all, and in which order against the other PQZ work?
+- **Q10.** The registry line (§7.1): before the freeze, should the chain's router authenticate a factory-made target through
+  the target's env registry? Or is the rule "a new generation brings a new router and factory line"?
+- **Q11.** Router versions (§7.1): R-b (catalogue rows, registrar only) as the default, with a router class number reserved?
+- **Q12.** R-c: no user routers in SCaaS releases, or only in a marked opt-in class?
+- **Q13.** Should `virtual` go on `MetaTokenBase._govRouter` and `SCaaSDexAdmin._govRouter` before the freeze (expected
+  bytecode-neutral), so that later ERC-20 or DEX versions can name a router?
 
 **Proposed TODO items:**
 
