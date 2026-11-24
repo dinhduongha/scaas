@@ -5632,7 +5632,7 @@ asks it of a later generation, so later registry code must keep it (the round's 
 - A contract reads signers and derived receivers from the registry in its env, and the registry line walks back only.
 - A UA held only in a later generation cannot receive from, sign on, or hold a role on a contract with an older env; the
   call is refused and nothing is lost.
-- G1, the router change being built on top of CTR-GOV-32, follows the same rule for governance.
+- G1 ([CTR-GOV-33](contracts/token-wrappers.md#CTR-GOV-33)) follows the same rule for governance.
 - A UA whose kind the older generation supports registers there too, with the same id. A kind only a later generation
   has works only on contracts of that env or a later one.
 

@@ -946,7 +946,9 @@ every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `t
   `registryFor(target)`: when `target`'s code has the EIP-1167 clone form, its env registry (code offset 77,
   `ChainEnvCode.OFF_REGISTRY`) is not 0 and not the router's own, and the factory's index names it
   (`IOpenFactory(factory()).infoOf(target).addr == target`), that env registry; otherwise the router's own `registry()`.
-  The router never asks the target. A native signer uses no registry (its own key) and is unchanged.
+  The router never asks the target. A native signer uses no registry (its own key) and is unchanged. So the router follows
+  [CTR-UA-73](accounts.md#CTR-UA-73): a target serves its env's generation and the older ones; factory operations stay on
+  the router's own generation.
 - **One reader for every factory-made form.** The factory writes every instance it makes through one path (`_instance`:
   `ChainEnvCode.encode` behind the 45-byte proxy, CTR-TOK-29) and indexes it through one (`_index`), for tokens
   (`createToken`, `createTokenUnregistered`), the DEX (`createDex`) and generic catalogue instances (`createInstance`). No

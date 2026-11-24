@@ -2431,7 +2431,7 @@ never later ones** (owner 2026-11-24; BUILT: the code already behaves so; UNAUDI
 
   The contract refuses the call; nothing is lost.
 - **Governance:** G1 resolves role holders through each factory-made target's own env registry
-  (the G1 router change, being built on top of [CTR-GOV-32](token-wrappers.md#CTR-GOV-32)), so it follows the same rule. Factory operations use the router's own
+  ([CTR-GOV-33](token-wrappers.md#CTR-GOV-33)), so it follows the same rule. Factory operations use the router's own
   generation.
 - **The way to reach older contracts:**
   - a UA whose kind the older generation also supports registers there too: the same bytes and the same id, since
