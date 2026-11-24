@@ -25,11 +25,11 @@ FORGE = (
 V = E + "src/pqchat/PqChatTreeViews.sol"
 M = [
     # the read-only module (the scan)
-    ("a writing entry in the views module", [(V, "    function _slice(", "    function poke() external {\n        _s().ownerUA = 0;\n    }\n\n    function _slice(")]),
-    ("an entry that sends value in the views module", [(V, "    function _slice(", "    function sweep() external {\n        payable(msg.sender).transfer(1);\n    }\n\n    function _slice(")]),
+    ("a writing entry in the views module", [(V, "    function _slice(", "    function mutantPoke() external {\n        _s().ownerUA = 0;\n    }\n\n    function _slice(")]),
+    ("an entry that sends value in the views module", [(V, "    function _slice(", "    function mutantSweep() external {\n        payable(msg.sender).transfer(1);\n    }\n\n    function _slice(")]),
     # the forwarding path
     ("the fallback forwards to the tree module", [(P, "        address v = VIEWS;", "        address v = TREE;")]),
-    ("the fallback payable", [(P, "    fallback() external {", "    fallback() external payable {")]),
+    ("a receive() that takes value (a payable fallback itself the compiler refuses at every typed conversion of an address)", [(P, "    fallback() external {", "    receive() external payable {}\n\n    fallback() external {")]),
     ("the views' interface id not reported", [(P, " || id == type(IPqChatTreeViews).interfaceId;", ";")]),
     ("modules() of two", [(P, "        m = new address[](3);\n        (m[0], m[1], m[2]) = (TOPICS, TREE, VIEWS);", "        m = new address[](2);\n        (m[0], m[1]) = (TOPICS, TREE);")]),
     ("the constructor takes another factory's views module", [(P, " || PqChatTreeViews(views_).FACTORY() != factory_) revert PqChatEnv();", ") revert PqChatEnv();")]),
