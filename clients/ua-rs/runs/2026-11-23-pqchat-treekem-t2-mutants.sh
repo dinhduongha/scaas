@@ -8,16 +8,36 @@
 # mode-0 entries) and the other checks of src/wallet/tree.rs; M31-M45 the registry KEM record check before an encapsulation
 # (src/wallet/tree_public.rs, its three call sites) and the tree's signing operations (src/wallet/pqchat.rs, the reviews).
 #   CAPPED_SLOTS=4 CARGO_INCREMENTAL=0 ../../scripts/capped bash runs/2026-11-23-pqchat-treekem-t2-mutants.sh   (from clients/ua-rs)
+#   bash runs/2026-11-23-pqchat-treekem-t2-mutants.sh check   (every replacement found exactly once; nothing written, nothing run)
+# A hung run (owner 2026-11-24, scripts/mutant_guard.py): past 3 x the unmutated baseline (at least 10 min, or `--timeout N`
+# given to the guard) its process group is killed, and the row reads `killed (timeout N s)`; the mutated file is restored on
+# every exit (SIGINT / SIGTERM too); a target file that differs from HEAD refuses the run.
 set -u
 cd "$(dirname "$0")/.."
 OUT=runs/2026-11-23-pqchat-treekem-t2-mutants.txt
 LOG=runs/2026-11-23-pqchat-treekem-t2-mutants.log
-git diff --quiet -- src tests || {
-    echo 'the tree is not clean'
-    exit 2
-}
-echo "mutant | tests that went red | rc" >"$OUT"
-: >"$LOG"
+GUARD="python3 -I ../../scripts/mutant_guard.py"
+TESTS=(cargo test -j 2 --features app-core,vectors --test tree)
+CHECK=0
+[ "${1:-}" = check ] && CHECK=1
+cur=
+checked=0
+missing=0
+if [ $CHECK = 0 ]; then
+    git diff --quiet HEAD -- src tests || {
+        echo "refused: differs from HEAD (a leftover mutation: a run died): $(git diff --name-only HEAD -- src tests)"
+        exit 2
+    }
+    echo "[mutants] start: the unmutated run (the guard's baseline)"
+    base=$($GUARD time -- "${TESTS[@]}") || {
+        echo 'the unmutated baseline is red'
+        exit 2
+    }
+    trap '[ -z "$cur" ] || git checkout -- "$cur"' EXIT
+    trap 'exit 130' INT TERM HUP
+    echo "mutant | tests that went red | rc" >"$OUT"
+    : >"$LOG"
+fi
 T=src/wallet/tree.rs
 K=src/wallet/pqchat_keys.rs
 P=src/wallet/tree_public.rs
@@ -29,19 +49,31 @@ killed=0
 mutate() {
     local id=$1 what=$2 file=$3
     total=$((total + 1))
-    python3 -I -c '
+    MUT_CHECK=$CHECK python3 -I -c '
+import os
 import sys
 f, a, b = sys.argv[1:]
 s = open(f).read()
 if s.count(a) != 1:
     sys.exit(f"not exactly once in {f}: {a}")
+if os.environ.get("MUT_CHECK") == "1":
+    sys.exit(0)
 open(f, "w").write(s.replace(a, b))' "$file" "$4" "$5" || {
+        [ $CHECK = 1 ] && {
+            missing=$((missing + 1))
+            return
+        }
         echo "$id $what | NOT APPLIED | 3" >>"$OUT"
         echo "[mutants] $id NOT APPLIED"
         return
     }
+    if [ $CHECK = 1 ]; then
+        checked=$((checked + 1))
+        return
+    fi
+    cur=$file
     local out rc red n
-    out=$(cargo test -j 2 --features app-core,vectors --test tree 2>&1)
+    out=$($GUARD exec "$base" -- "${TESTS[@]}" 2>&1)
     rc=$?
     printf '=== %s %s (rc %s)\n%s\n' "$id" "$what" "$rc" "$out" >>"$LOG"
     red=$(printf '%s\n' "$out" | sed -nE 's/^test (.*) \.\.\. FAILED$/\1/p' | sort -u)
@@ -50,20 +82,19 @@ open(f, "w").write(s.replace(a, b))' "$file" "$4" "$5" || {
         red='does not compile'
         n=1
     fi
-    [ "$rc" -ne 0 ] && [ "$n" -gt 0 ] && killed=$((killed + 1))
-    echo "$id $what | ${n} red: $(printf '%s\n' "$red" | sed 's/.*/`&`/' | paste -sd ',' - | sed 's/`,`/`, `/g') | $rc" >>"$OUT"
+    { [ "$rc" -eq 124 ] || { [ "$rc" -ne 0 ] && [ "$n" -gt 0 ]; }; } && killed=$((killed + 1))
+    if [ "$rc" -eq 124 ]; then
+        echo "$id $what | $(printf '%s\n' "$out" | grep -o 'killed (timeout [0-9]* s)' | tail -1) | $rc" >>"$OUT"
+    else
+        echo "$id $what | ${n} red: $(printf '%s\n' "$red" | sed 's/.*/`&`/' | paste -sd ',' - | sed 's/`,`/`, `/g') | $rc" >>"$OUT"
+    fi
     echo "[mutants] $id rc $rc, $n red ($killed of $total killed)"
     git checkout -- "$file"
-    git diff --exit-code --quiet -- "$file" || {
+    cur=
+    git diff --exit-code --quiet HEAD -- "$file" || {
         echo "$file not restored"
         exit 4
     }
-}
-
-echo "[mutants] start: the unmutated run"
-cargo test -j 2 --features app-core,vectors --test tree >>"$LOG" 2>&1 || {
-    echo 'the unmutated tree is red'
-    exit 5
 }
 
 mutate M1 'pathContext without parentTreeHash' $T '        b32j(rec, "parentTreeHash")?,
@@ -144,7 +175,9 @@ mutate M41 'version 0'"'"'s proof of possession not checked' $P '               
                     .is_ok()' ''
 mutate M42 'a registration taken for a version above 0' $P '            version == 0
                 && !kem_pk.is_empty()' '            !kem_pk.is_empty()'
-mutate M43 'the generic record path takes a tree record' $C '    if !RECORDS.contains(&td.primary_type()) {' '    if !RECORDS.contains(&td.primary_type()) && !TREE_RECORDS.contains(&td.primary_type()) {'
+mutate M43 'the generic record path takes a tree record' $C '    RECORDS.contains(&td.primary_type())
+        && td' '    (RECORDS.contains(&td.primary_type()) || TREE_RECORDS.contains(&td.primary_type()))
+        && td'
 mutate M44 'the tree'"'"'s path takes any record' $C '    if !TREE_RECORDS.contains(&td.primary_type()) {' '    if false {'
 mutate M45 'a leave'"'"'s review without "cannot come back"' $T '        "PqChatTreeLeave",
         rec,
@@ -152,6 +185,11 @@ mutate M45 'a leave'"'"'s review without "cannot come back"' $T '        "PqChat
         rec,
         vec![],'
 mutate M46 'the review'"'"'s admin change against the new list' $T '        let changed = a.admins != a.parent_admins;' '        let changed = a.admins != a.admins.clone();'
+if [ $CHECK = 1 ]; then
+    echo "$checked mutants found exactly once, $missing not"
+    [ $missing = 0 ]
+    exit
+fi
 
 echo "[mutants] done: $killed of $total killed"
 echo "killed | $killed of $total" >>"$OUT"

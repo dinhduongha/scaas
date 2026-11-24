@@ -5,38 +5,72 @@
 # per mutant, `mutant | test that went red | rc`, to runs/2026-11-23-pqchat-treekem-t1b-mutants.txt; full output to the
 # git-ignored .log. M1-M17 are the plan's list; the others are the other checks of src/treekem.js.
 #   ../../scripts/capped bash runs/2026-11-23-pqchat-treekem-t1b-mutants.sh   (from clients/clientkeys)
+#   bash runs/2026-11-23-pqchat-treekem-t1b-mutants.sh check   (every replacement found exactly once; nothing written, nothing run)
+# A hung run (owner 2026-11-24, scripts/mutant_guard.py): past 3 x the unmutated baseline (at least 10 min, or `--timeout N`
+# given to the guard) its process group is killed, and the row reads `killed (timeout N s)`; the mutated file is restored on
+# every exit (SIGINT / SIGTERM too); a target file that differs from HEAD refuses the run.
 set -u
 cd "$(dirname "$0")/.."
 OUT=runs/2026-11-23-pqchat-treekem-t1b-mutants.txt
 LOG=runs/2026-11-23-pqchat-treekem-t1b-mutants.log
-git diff --quiet -- src scripts test || {
-    echo 'the tree is not clean'
-    exit 2
-}
-echo "mutant | test that went red | rc" >"$OUT"
-: >"$LOG"
+GUARD="python3 -I ../../scripts/mutant_guard.py"
+TESTS=(node --test test/treekem.test.js)
+CHECK=0
+[ "${1:-}" = check ] && CHECK=1
+cur=
+checked=0
+missing=0
+if [ $CHECK = 0 ]; then
+    git diff --quiet HEAD -- src scripts test || {
+        echo "refused: differs from HEAD (a leftover mutation: a run died): $(git diff --name-only HEAD -- src scripts test)"
+        exit 2
+    }
+    base=$($GUARD time -- "${TESTS[@]}") || {
+        echo 'the unmutated baseline is red'
+        exit 2
+    }
+    trap '[ -z "$cur" ] || git checkout -- "$cur"' EXIT
+    trap 'exit 130' INT TERM HUP
+    echo "mutant | test that went red | rc" >"$OUT"
+    : >"$LOG"
+fi
 T=src/treekem.js
 
 # mutate <id> <description> <file> <old> <new>: the old text must occur exactly once
 mutate() {
     local id=$1 what=$2 file=$3
-    node -e '
+    MUT_CHECK=$CHECK node -e '
     const fs = require("fs"); const [f, a, b] = process.argv.slice(1); const s = fs.readFileSync(f, "utf8");
     if (s.split(a).length !== 2) { console.error(`not exactly once in ${f}: ${a}`); process.exit(3); }
+    if (process.env.MUT_CHECK === "1") process.exit(0);
     fs.writeFileSync(f, s.replace(a, () => b));' "$file" "$4" "$5" || {
+        [ $CHECK = 1 ] && {
+            missing=$((missing + 1))
+            return
+        }
         echo "$id $what | NOT APPLIED | 3" >>"$OUT"
         return
     }
+    if [ $CHECK = 1 ]; then
+        checked=$((checked + 1))
+        return
+    fi
+    cur=$file
     local out rc red n
-    out=$(node --test test/treekem.test.js 2>&1)
+    out=$($GUARD exec "$base" -- "${TESTS[@]}" 2>&1)
     rc=$?
     printf '=== %s %s (rc %s)\n%s\n' "$id" "$what" "$rc" "$out" >>"$LOG"
     red=$(printf '%s\n' "$out" | sed -n '/^✖ failing tests:/,$p' | grep '^✖ ' | grep -v 'failing tests:' |
         sed -E 's/^✖ //; s/ \([0-9.]+ms\)$//' | sort -u)
     n=$(printf '%s\n' "$red" | grep -c . || true)
-    echo "$id $what | ${n} red: $(printf '%s\n' "$red" | sed 's/.*/`&`/' | paste -sd ',' - | sed 's/`,`/`, `/g') | $rc" >>"$OUT"
+    if [ "$rc" -eq 124 ]; then
+        echo "$id $what | $(printf '%s\n' "$out" | grep -o 'killed (timeout [0-9]* s)' | tail -1) | $rc" >>"$OUT"
+    else
+        echo "$id $what | ${n} red: $(printf '%s\n' "$red" | sed 's/.*/`&`/' | paste -sd ',' - | sed 's/`,`/`, `/g') | $rc" >>"$OUT"
+    fi
     git checkout -- "$file"
-    git diff --exit-code --quiet -- "$file" || {
+    cur=
+    git diff --exit-code --quiet HEAD -- "$file" || {
         echo "$file not restored"
         exit 4
     }
@@ -129,4 +163,9 @@ mutate M45 'the info bound unchecked' $T '  if (12 + pt.length + 16 > TREE_INFO_
 mutate M46 'the marker sealed as a full info' $T \
     'const pt = pc.pad(info === null ? new Uint8Array(0) : utf8ToBytes(pc.canonicalJson(info)));' \
     'const pt = pc.pad(utf8ToBytes(pc.canonicalJson(info)));'
+if [ $CHECK = 1 ]; then
+    echo "$checked mutants found exactly once, $missing not"
+    [ $missing = 0 ]
+    exit
+fi
 cat "$OUT"
