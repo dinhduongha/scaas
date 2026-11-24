@@ -977,10 +977,24 @@ every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `t
   published (one that passes any id) can spend only its own map's nonces, never an id's nonce at the router's registry.
   `mtxNonceFor(target, from, lane)` returns the nonce the router checks for an op on `target`; a client signs it and the node
   reads it ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)). The checks on that map run in `preNamedUA`'s order with its
-  errors (`_preAt`).
+  errors (`_preAt`). It answers for `target` as it is when read: for an address not created yet it is the router's own map,
+  so a client reads it for an op on a new instance only once the instance exists (an op signed ahead at the wrong map's
+  nonce is refused `MetaTxBadNonce`, fail closed; review G-6, controller call 2026-11-24).
 - **`UACancelNonce` is unchanged**: `mtxCancelNonce(e, lane, auth)` authenticates on the router's own registry and bumps
   the one map, so it cancels a native id's lanes everywhere and a derived id's at the router's registry; it does not reach
-  an env registry's map (no op cancels there yet, an open question for the owner).
+  an env registry's map.
+- **The keyed cancel** (owner 2026-11-24; BUILT on branch `router-cancel`, UNAUDITED): `mtxCancelNonceFor(e, target, lane,
+  auth)` over `UACancelNonceFor(bytes32 from,address target,uint256 lane,<envelope>)` (typehash `0xf95871f9…f41f0c4e`, the
+  router's domain, no chain word: it calls nothing) cancels `lane` in the map the router checks for an op on `target`. The
+  registry is `registryFor(target)`, as for the op, never one the caller names. Its checks are the op's (`_pre`): the
+  relayer binding, expiry, mode, its own envelope nonce spent in that map (so it is replay-safe, and its signature names
+  `target`, so the registry), the signature on that registry, fee mode `NONE` (relayable at fee 0, a paid mode refused as on
+  every router op). Then `lane` is bumped by one: in the keyed map `(registry, from, lane)` (`UANonceCancelledAt(ua,
+  registry, batch, newNonce)`), or, for a native id or a target on the router's own registry, exactly as `mtxCancelNonce`
+  (the one map, `UANonceCancelled`; controller call 2026-11-24: identical, not a refusal, so a client may use
+  `mtxNonceFor` and `mtxCancelNonceFor` for every target). A bad env registry can bump only its own map's lanes. Tests:
+  `RouterG1Test` `test_cancelFor_*`; the node row `UACancelNonceFor` ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)); the
+  SDK `admin_ua_cancel_nonce_for` ([CLI-SDK-18](../clients/scaas-sdk.md#CLI-SDK-18)).
 - **Replay.** One router, one EIP-712 domain. The signature names `target`, and `target` fixes the registry, so a signature
   spent in one map is valid in no other.
 - **Deploy order.** The factory, then the router naming it (`GovernanceRouter(chainUid, registry, smartKeyAccountImpl,
@@ -988,7 +1002,8 @@ every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `t
   with factory 0 gives every target its own registry.
 - **Cost** (`test_g1_gas`, `mtxMint`): a derived signer on a factory-made target of another generation pays the code copy and
   one `infoOf` call, +809 gas against the same op on a router of that generation; on a target of the router's own generation
-  the code copy only, +482; a native signer +0.
+  the code copy only, +482; a native signer +0. The keyed cancel (`test_cancelFor_gas`): 94,086 gas on a gen-2 target,
+  92,199 on the router's own map (a gen-1 holder), against 88,894 for `mtxCancelNonce`.
 
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `initArgs`.
 
