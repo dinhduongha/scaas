@@ -238,7 +238,10 @@ by [CTR-CHAT-23](../contracts/pqchat.md#CTR-CHAT-23); the default off a controll
   its store; a later different answer, or a value neither 0 nor 2, is a forged one (`control`). So an endpoint cannot report
   `none` for an `sstore2` instance this device has seen.
 - **On an `sstore2` instance** the session and epoch records (`sessionSig`, `epochSig`), the parent's leaves and removals (from
-  the kept `leaveAt` / `removalAt` records, each with its signer's signature and naming the parent; the `leftIn` and `removedIn`
+  the kept `leaveAt` / `removalAt` records, each with its signer's signature, kept under the parent and naming it or,
+  at home since the change of 2026-11-24 to [CTR-CHAT-20](../contracts/pqchat.md#CTR-CHAT-20) and
+  [CTR-CHAT-10](../contracts/pqchat.md#CTR-CHAT-10) (SPECIFIED), an ancestor of it on the home's chain, its signer judged at
+  the parent; the `leftIn` and `removedIn`
   flags are not read there) and a posted message (`messageSig`) each count only when their signer's `UASig` verifies over the
   typed digest the SDK rebuilds from the record's fields (V1, the signer's registry record a trusted read along F2's registry
   line: `holderOf` on the bound registry names the generation whose record is read, every call of it by one endpoint at one

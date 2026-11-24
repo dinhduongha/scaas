@@ -411,10 +411,12 @@ the parent** (owner D4 of 2026-11-04, O2 and O4; the exact test 3C-D7 is a contr
 - **Plain rekey**: `members(e)` by `ua` equals `members(parent)` minus entries that left the parent epoch, and `admins(e)`
   equals `admins(parent)` minus entries that left; `keyId` and `via` may change. Its author must be a member of the parent
   that has not left it (`PqChatNotMember(author)`; Fable review 2026-11-10, P1-2 fix (a)).
-- **The limit** (UA-7 spec P9): the first complete child wins, so a member about to be removed can keep answering each
-  new tip with its own plain rekey that keeps it; the admin rekeys again from that child. Liveness only (the member never
-  reads an epoch it is not wrapped into); `leave` ends it for a member who leaves, `remove` (CTR-CHAT-20) for one who
-  does not.
+- **The limit** (UA-7 spec P9): the first complete child wins, so a member can take the slot before an admin's
+  membership change (O2) and the admin rekeys again from that child. Liveness only (the member never reads an epoch it is
+  not wrapped into). **An exit is not exposed to it (Change 2026-11-24, E-3; owner 2026-11-24: "Yes, both modes"; SPECIFIED, the code follows on
+  branch `review-fix-contract`):** at home `remove` ([CTR-CHAT-20](#CTR-CHAT-20)) and `leave`
+  ([CTR-CHAT-10](#CTR-CHAT-10)) name the head or an ancestor of it and apply at the head, so a member about to be removed
+  can no longer keep itself in by answering each new tip, and a member's rekey no longer voids another's leave.
 
 <a id="CTR-CHAT-20"></a>**CTR-CHAT-20** — **An admin of an epoch removes members of it with a signed `remove`; a child of
 that epoch then completes only without them, and a removed member authors no rekey of it** (owner 2026-11-10, on the Fable
@@ -427,6 +429,26 @@ review's P1-2 fix (b); **BUILT** on `ua-mtx-merge`, plan 3c, UNAUDITED; UA-7 spe
   admin that is no member, an `msig`, is removable: controller call 2026-11-21, the PqVault code review F3); `admin` an
   admin of `epochId` (`PqChatNotAdmin`) who signs it; the nonce in the epoch scope `(sessionId, admin)` (`PqChatNonceUsed`).
   Anyone submits it, relayable with a fee of 0. The record and its `sigHash` are kept in state.
+- **At home, applied at the head (Change 2026-11-24, E-3 of the TreeKEM code review, the rule of
+  [CTR-CHAT-27](#CTR-CHAT-27)'s C9 in mode 0; owner 2026-11-24: "Yes, both modes"; SPECIFIED, the code follows on branch
+  `review-fix-contract`).** Replaces "at home with no complete child" above:
+  - `epochId` is the head or an ancestor of it: stored for `sessionId` and complete (`PqChatUnknown`, `PqChatIncomplete`).
+    At home a child completes only by taking its parent's slot ([CTR-CHAT-08](#CTR-CHAT-08)), so every complete epoch is
+    on the home's chain and that is the whole ancestor check, one read; a child of `epochId` no longer voids the removal
+    (no `PqChatEpochTaken`). `nextEpoch` stays `epoch(epochId) + 1`, a signed lower bound;
+  - the rest is checked **at the home's head** (the last of `epochsOf`): `admin` a live admin of the head, each UA a
+    member or an admin of the head (`PqChatNotAdmin`, `PqChatNotMember`);
+  - it is applied **at the head**: `removedIn(head, ua)`, the record under the head (`removalCount(head)`,
+    `removalAt(head, i)`), `PqChatRemoved(sessionId, head, admin, members)`; the head's child completes only without them
+    and a removed member's rekey of the head is `PqChatNotMember`, as above;
+  - **wraps and epoch keys:** the removed UA keeps the key of the head and of every epoch it was wrapped into (nothing
+    takes a key back). The next rekey from the head drops it and draws a fresh `K` wrapped to its own members only, so it
+    reads nothing from that epoch on. An epoch a front-runner completed before the removal landed holds it and is read by
+    it: that is all a front-run gains. A child staged on the head when the removal lands completes no more
+    (`PqChatRemovedKept`);
+  - a signed removal stays valid until it lands, while its admin keeps the right at the head and its UAs are there; its
+    nonce is spent once; a device withdraws one by spending that nonce first (the scope is the admin's rekeys');
+  - **in a replica** there is no slot and no head: the removal flags the epoch it names, as before, and no child voids it.
 - After it: a child of `epochId` completes (in `rekey` or the last `addWraps`) only if its members and admins hold no
   removed UA and its author is none (`PqChatRemovedKept(epochId, ua)`); a removed member's rekey of `epochId` is refused
   `PqChatNotMember`; dropping a removed member is a plain rekey, as dropping a leaver is. An admin that was removed from
@@ -448,7 +470,12 @@ and its nonce 3C-D8 are a controller call, owner may override).
 
 `leave(PqChatLeave l, UASig sig)`: `l.epochId` stored for `l.sessionId` (`PqChatUnknown(epochId)`), `l.member` in its
 `members` (`PqChatNotMember(member)`), signed by `member`, nonce in the epoch scope `(sessionId, member)` shared with its
-rekeys. It sets `leftIn(epochId, member)` and emits `PqChatLeft`; a repeated leave with a fresh nonce is accepted and
+rekeys. **At home, applied at the head (Change 2026-11-24, E-3; owner 2026-11-24: "Yes, both modes"; SPECIFIED, the code follows):**
+`l.epochId` is the head or an ancestor of it, complete (`PqChatIncomplete` for a staged or losing child, which was
+accepted before), `l.member` a member of the head, and the flag, the kept record and `PqChatLeft` are the head's
+(`leftIn(head, member)`), so a plain rekey from the head may drop the leaver whichever child completed after the epoch it
+named; in a replica, as before. The leaver keeps the head's key and every earlier one it was wrapped into; the next
+epoch that drops it is wrapped without it. It sets `leftIn(epochId, member)` and emits `PqChatLeft`; a repeated leave with a fresh nonce is accepted and
 changes nothing more. The flag is read only by the plain-rekey test of [CTR-CHAT-09](#CTR-CHAT-09): until the next
 epoch, the member stays in the epoch's list, may still post in it and keeps its `sessionsOf` entry. An admin that is not a
 member cannot leave, so only a membership change drops it. Consent stays in clients: a member that never accepted a

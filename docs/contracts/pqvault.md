@@ -124,6 +124,15 @@ seed-derived vault key exists; epochs, wraps in chunks, the home-instance slot, 
   with at least 1 member at creation, `homeVaultContract` for the home address and `PqVault*` errors, and who may rekey
   as [CTR-PQV-13](#CTR-PQV-13) states.
 - Sharing a vault is a `rekeyVault` to the new members with a wrap per member.
+- **Exits apply at the head (Change 2026-11-24, E-3 of the TreeKEM code review; owner 2026-11-24: "Yes, both modes", one rule for the group
+  code; SPECIFIED, the code follows on branch `review-fix-contract`):** `removeVaultMembers` and `leaveVault` take
+  [CTR-CHAT-20](pqchat.md#CTR-CHAT-20)'s and [CTR-CHAT-10](pqchat.md#CTR-CHAT-10)'s change with `PqVault*` errors: at
+  home the epoch named is the head or an ancestor of it, complete, and the exit is checked and applied at the head; in a
+  replica, as before. The exposure was the same though only admins rekey ([CTR-PQV-13](#CTR-PQV-13)): an admin about to be
+  removed by another landed an admin rekey first and the removal was `PqVaultEpochTaken`, and any admin's rekey that kept a
+  leaver left its leave on an epoch with a child. Item writes already name the head at home
+  ([CTR-PQV-07](#CTR-PQV-07)), so a member removed or left at the head writes no item under it ([CTR-PQV-14](#CTR-PQV-14)),
+  and the next rekey, wrapped without it, holds a fresh `K`.
 
 <a id="CTR-PQV-13"></a>**CTR-PQV-13** — **`PqVault` is class 4, kind 0; its write names differ from PqChat's so no write
 selector is shared; every `rekeyVault` is authored by an admin of the parent epoch who was not removed from it** (controller
