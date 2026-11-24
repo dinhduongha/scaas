@@ -1,0 +1,19 @@
+# t4 mutants at commit 02ec3fe50 (name | outcome | test)
+a missing bound on addPathList's ctTargets | killed | ../scripts/capped cargo test --locked --lib pqchat
+a missing bound on commit's ctTargets | killed | ../scripts/capped cargo test --locked --lib pqchat
+TREE_ADMINS_MAX one above the contract's | killed | ../scripts/capped cargo test --locked --lib pqchat
+TREE_INFO_MAX one above the contract's | killed | ../scripts/capped cargo test --locked --lib pqchat
+treeRemove's members one above | killed | ../scripts/capped cargo test --locked --lib pqchat
+the changes bound counts removes alone | killed | ../scripts/capped cargo test --locked --lib pqchat
+the path bounded by the cap, not depth(leaves) | killed | ../scripts/capped cargo test --locked --lib pqchat
+ctCount up to leaves | killed | ../scripts/capped cargo test --locked --lib pqchat
+an empty sealedInfo accepted | killed | ../scripts/capped cargo test --locked --lib pqchat
+a commit's node keys of any size | killed | ../scripts/capped cargo test --locked --lib pqchat
+a path ciphertext's sealed secret of any size above 48 | killed | ../scripts/capped cargo test --locked --lib pqchat
+addPath without firstCt | killed | ../scripts/capped cargo test --locked --lib pqchat
+a commit's wraps up to the changes bound | killed | ../scripts/capped cargo test --locked --lib pqchat
+the lists read after the parse only | killed | ../scripts/capped cargo test --locked --lib pqchat
+an unsigned piece relayed with the option off | killed | ../scripts/capped cargo test --locked --lib pqchat
+a node row missing (treeLeave) | killed | ../scripts/capped cargo test --locked --lib pqchat
+a contract entry missing (treeRemove) | killed | ../scripts/capped cargo test --locked --lib pqchat
+17 mutants, 17 killed, 0 survived (0 killed elsewhere), 0 not loaded
