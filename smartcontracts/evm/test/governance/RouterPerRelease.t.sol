@@ -954,6 +954,93 @@ contract RouterG1Test is RegistryLineFixture {
         _mintBy(router, t1, pq);
     }
 
+    /// The namespace `scaas.govrouter.nonce` (ERC-7201) and its key order `(registry, id, lane)`: read with `vm.load` after a
+    /// write through the router's own path.
+    function test_g1_nonceNamespacePinned() public {
+        bytes32 root = keccak256(abi.encode(uint256(keccak256("scaas.govrouter.nonce")) - 1)) & ~bytes32(uint256(0xff));
+        assertEq(root, 0x3b7181b4a1cb09fc268151c43768a834fdadbe3ebbd3b129e4bbaea7d311e100);
+        address t2 = _ftoken(GEN2, pq65, "a");
+        _mintBy(router, t2, pq65);
+        bytes32 slot = keccak256(abi.encode(uint256(0), keccak256(abi.encode(pq65, keccak256(abi.encode(GEN2, root))))));
+        assertEq(uint256(vm.load(address(router), slot)), 1, "nonce[GEN2][pq65][0]");
+    }
+
+    /// The gas of one router op (`mtxMint`, fresh lane 0, a first mint), each a transaction (`isolate`): G1's full path (a
+    /// derived signer on a factory-made target of another generation: the code copy, `infoOf`, the keyed nonce) against
+    /// the same op where the env is the router's own (the code copy only) and on a router without a factory.
+    function test_g1_gas() public {
+        uint256[7] memory g;
+        g[0] = _mintGas(_ftoken(GEN2, pq65, "a"), pq65); // full path, a gen-2 holder
+        g[1] = _mintGas(_ftoken(GEN2, pq, "b"), pq); // full path, a gen-1 holder (gen 2 walks back)
+        g[2] = _mintGas(_ftoken(PREG, pq, "c"), pq); // a gen-1 env: the code copy, then the one map
+        g[3] = _mintGas(_ftoken(GEN2, eoa, "d"), eoa); // a native signer: no lookup
+        // the same op on a router with no factory (every target its own registry), on a clone governed by it
+        GovernanceRouter r0 = new GovernanceRouter(chainUidA, PREG, _fixtureSka(), false, address(0));
+        g[4] = _mintGasOn(r0, address(_token(PREG, address(r0), pq, false)), pq);
+        g[5] = _mintGasOn(r0, address(_token(PREG, address(r0), eoa, false)), eoa);
+        // a gen-2 holder on a router whose own registry is generation 2 (the code copy, then the one map): g[0] less this is
+        // G1's lookup and keyed nonce
+        g[6] = _mintGasOn(router2, address(_token(GEN2, address(router2), pq65, false)), pq65);
+        string[7] memory n = [
+            "gen2 env, pq65",
+            "gen2 env, pq",
+            "gen1 env, pq",
+            "gen2 env, eoa",
+            "no factory, pq",
+            "no factory, eoa",
+            "router on gen2, pq65"
+        ];
+        uint256[7] memory pin = [uint256(123_766), 138_803, 122_352, 105_498, 121_870, 105_498, 122_957];
+        for (uint256 i; i < 7; ++i) {
+            emit log_named_uint(n[i], g[i]);
+        }
+        for (uint256 i; i < 7; ++i) {
+            assertEq(g[i], pin[i], n[i]);
+        }
+    }
+
+    function _mintGas(address t, bytes32 from) internal returns (uint256) {
+        return _mintGasOn(router, t, from);
+    }
+
+    function _mintGasOn(GovernanceRouter r, address t, bytes32 from) internal returns (uint256) {
+        bytes memory cd = _sFor(r, OP_MINT, from, t, abi.encode(BOB, uint256(5)));
+        (bool ok,) = address(r).call(cd);
+        assertTrue(ok, "minted");
+        return vm.lastCallGas().gasTotalUsed;
+    }
+
+    /// The keyed path's envelope (`_preAt`) refuses as `preNamedUA` does, by the same errors: an expired envelope, a bound
+    /// relayer that is not the sender, an unknown mode, a fee mode the router does not support; the control runs.
+    function test_g1_keyedPath_envelopeRefusals() public {
+        address t2 = _ftoken(GEN2, pq65, "a");
+        bytes memory args = abi.encode(BOB, uint256(5));
+        MetaTxLib.UAEnvelope memory e = _envelope(router, pq65, 0);
+        e.validUntil = block.timestamp - 1;
+        bytes memory cd = _signedAt(router, OP_MINT, e, t2, args, args);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxExpired.selector, e.validUntil, block.timestamp));
+        _run(cd);
+        e = _envelope(router, pq65, 0);
+        (e.mode, e.relayer) = (MetaTxLib.MODE_RESTRICT_RELAYER, address(0xdead));
+        cd = _signedAt(router, OP_MINT, e, t2, args, args);
+        vm.expectRevert(
+            abi.encodeWithSelector(IMetaTx.MetaTxUnauthorizedRelayer.selector, address(0xdead), address(this))
+        );
+        _run(cd);
+        e = _envelope(router, pq65, 0);
+        e.mode = 0x100;
+        cd = _signedAt(router, OP_MINT, e, t2, args, args);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, uint32(0x100)));
+        _run(cd);
+        e = _envelope(router, pq65, 0);
+        e.mode = MetaTxLib.MODE_FEE_FIXED;
+        cd = _signedAt(router, OP_MINT, e, t2, args, args);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, MetaTxLib.MODE_FEE_FIXED));
+        _run(cd);
+        assertEq(router.mtxNonceFor(t2, pq65, 0), 0, "nothing spent");
+        _mintBy(router, t2, pq65);
+    }
+
     /// A native id uses no registry: one map for every target (`mtxNonce`), on any env.
     function test_g1_nativeId_oneMap() public {
         address t2 = _ftoken(GEN2, eoa, "a");

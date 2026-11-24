@@ -1066,8 +1066,10 @@ contract GovDeployTest is Test {
         // gains `requirePortableApp` and `UAKinds` `appPurpose`, CTR-UA-46; its code unchanged):
         // 0x36Ebc0Ab03EB1B67D37b6443FD04C06a4E3AB091; setAuditor A1-A8 (bit 32 AUDITOR: the router's `mtxSetAuditorKey` /
         // `mtxSetAuditorUA` ops and their typehashes) and code-format F2 (`bytecode_hash = "none"`: no metadata hash):
-        // 0x7dABB8aA4F869fCC1449eF2f999af56C94058c56; bls-multi Task 5 (kind 0x0121 in `UAKinds`, compiled into `GovernanceLib`, whose address the router's code holds) -> this
-        assertEq(router, 0x49Df7BEb6eb1073e98A9E9A9a1acdD23C088BFe2, "GovernanceRouter");
+        // 0x7dABB8aA4F869fCC1449eF2f999af56C94058c56; bls-multi Task 5 (kind 0x0121 in `UAKinds`, compiled into `GovernanceLib`, whose address the router's code holds):
+        // 0x49Df7BEb6eb1073e98A9E9A9a1acdD23C088BFe2; router-g1 G1 (CTR-GOV-33: the `factory` constructor argument, 0 here,
+        // `registryFor`, `mtxNonceFor`, the keyed nonces) -> this
+        assertEq(router, 0xc9c9D1fCB3143fE165F8a6DcE2A0fB29e157ea1d, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

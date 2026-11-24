@@ -1788,7 +1788,9 @@ contract TypedOpsRouterTest is UALedgerBase {
         me = vm.parseJsonBytes32(j, ".key.ua");
         assertEq(me, bytes32(uint256(uint160(signer))), "the key's UA is its native id");
         router = vm.parseJsonAddress(j, domainField("UAGrantRole", K, "domain.verifyingContract"));
-        deployCodeTo("GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false), router);
+        deployCodeTo(
+            "GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false, address(0)), router
+        );
         normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         dexImpl = address(new SCaaSDex(address(this), dexArgs(address(this))));

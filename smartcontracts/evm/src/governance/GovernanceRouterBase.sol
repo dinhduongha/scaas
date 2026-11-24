@@ -627,7 +627,8 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         uint256 expected = lane[e.batch];
         if (expected != e.nonce) revert IMetaTx.MetaTxBadNonce(expected, e.nonce);
         o.digest = MessageHashUtils.toTypedDataHash(c.domainSeparator, MtxPipelineLib._namedHash(typehash, e, args));
-        MtxPipelineLib._authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
+        // `_authorize` of a derived id: `c.registry` is not 0 here (`registryFor` returned it for a non-zero env registry)
+        IUARegistry(c.registry).requireAuthorized(e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
         // `_close`: the allow-list verdict is `_facts`' true (the router's ops are on no list), then shape, nonce, fee
         MtxPipelineLib._checkCall(f.sel, f.len, f.feeClass, f.amountArg, f.staticLen, e.mode, f.supported);
         unchecked {

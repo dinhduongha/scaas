@@ -1348,6 +1348,7 @@ contract GovRouterAdminTest is UARegistryBase {
             if (s[0] != "m" || s[1] != "t" || s[2] != "x") continue;
             if (_starts(s, "mtxCancelNonce(") || _starts(s, "mtxExecute(") || _starts(s, "mtxBatch(")) continue;
             if (_starts(s, "mtxNonce(") || _starts(s, "mtxDigest(") || _starts(s, "mtxSelectors(")) continue; // the views
+            if (_starts(s, "mtxNonceFor(")) continue; // G1's nonce view (CTR-GOV-33)
             ++n;
         }
         assertEq(n, 61);
@@ -1375,7 +1376,9 @@ contract GovRouterAdminRowsTest is UALedgerBase {
         super.setUp();
         j = vm.readFile(TYPED_OPS);
         router = vm.parseJsonAddress(j, domainField("UAPublishTokenEnv", K, "domain.verifyingContract"));
-        deployCodeTo("GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false), router);
+        deployCodeTo(
+            "GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false, address(0)), router
+        );
     }
 
     function test_rows_runOnTheRouter() public {
