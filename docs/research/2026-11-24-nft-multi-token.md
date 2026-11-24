@@ -544,6 +544,11 @@ router. Đánh giá việc này xem sao." (Agreed: each registry generation goes
 Evaluate it.) This section evaluates. No option is ruled. Lines are at `origin/ua-rs-sign` plus the `virtual` commit of this
 branch. All code named is **UNAUDITED**.
 
+**Chosen: G1** (owner 2026-11-24, verbatim "G1 before the freeze"; then "việc kiểm không chỉ giới hạn ở T (token) mà ở các
+app khác", the check covers every governed app, not only tokens). Built on branch `router-g1` as
+[CTR-GOV-33](../contracts/token-wrappers.md#CTR-GOV-33), with the nonces keyed by `(registry, id)` (§7.2.7). The analysis below
+is kept as it was written before the ruling.
+
 #### 7.2.1 In plain words
 
 - A **role holder** (an admin, a minter, …) that is a PQ key or an `msig` cannot send a transaction itself. It signs, and the
@@ -760,6 +765,33 @@ Not frozen, either option: the SDK warning on grants and creations.
 **Owner questions still open.** G1 or G3 (Q10). Whether a bad env registry's reach to router nonces (G1) is accepted. Whether
 a UA only a later generation knows should be able to create instances or hold factory roles (neither option gives it).
 
+#### 7.2.7 As built (branch `router-g1`)
+
+- `registryFor(target)` in `GovernanceRouterBase`: the clone form, then the env registry at offset 77 (0 or the router's own
+  stops here, no factory call), then `infoOf(target).addr == target`; else the router's own. A native signer skips it.
+- **Every governed contract** (the owner's scope). The factory writes all its instances through one path (`_instance`,
+  `ChainEnvCode`) and indexes them through one (`_index`), so one reader serves the token kinds, `SCaaSDex` and generic catalogue
+  instances. No factory view returns an instance's registry (`infoOf`'s `Created` has no env version). The inventory, with the
+  registry G1 uses per contract, is in [CTR-GOV-33](../contracts/token-wrappers.md#CTR-GOV-33). The fallback (the router's own
+  registry) applies to the factory itself, `ComplianceRegistry`, every release and module, `SmartKeyAccount` and the wallets.
+  Gap: a UA only a later generation knows cannot hold those contracts' roles.
+- **Nonce burning, fixed.** A derived signer's nonce on a registry other than the router's own is keyed `(registry, id, lane)`
+  (`scaas.govrouter.nonce`, `mtxNonceFor`), so a bad env registry spends only its own map. Native ids and the router's registry
+  keep `mtxNonce`; `UACancelNonce` is unchanged and does not reach an env registry's map (open, below). The node
+  (`subject_nonce`) and the SDK (`nonce_call`) read `mtxNonceFor` for a derived router op.
+- Tests: `RouterRegistryLineTest` (the four line tests at G1's expectations) and `RouterG1Test` (a real `OpenFactory`: a token,
+  the DEX, a generic class, the factory itself, a fake clone, the bad registry, replay, the cancel, a native id). Mutants and
+  gates: `smartcontracts/evm/runs/2026-11-24-router-g1-summary.txt`.
+- **Gas, measured [F]** (`test_g1_gas`, one `mtxMint` per transaction under `isolate`, a first mint on lane 0, a stand-in
+  verifier): a generation-2 holder on a generation-2 env token through the chain's router 123,766, against 122,957 for the same
+  op on a router whose own registry is generation 2: **+809** for the code copy's share, `infoOf` and the keyed nonce, much less
+  than the +9 to 11 k estimated above, because `_preAt` runs inline where the router's own path pays the library's
+  `DELEGATECALL` and its ABI copy. A generation-1 holder on a generation-2 env token: 138,803 (the generation-2 registry's walk
+  back is the registry's cost). On a generation-1 env token: 122,352 against 121,870 on a router without a factory (+482, the code
+  copy). A native signer: 105,498 either way (+0).
+- **Open (owner):** a cancel for an env registry's map would be a new typed op (`UACancelNonce` names no registry), frozen code
+  before the freeze.
+
 ## 8. Open questions, TODO items, effort
 
 **Open questions for the owner** (no rulings here):
@@ -791,6 +823,8 @@ a UA only a later generation knows should be able to create instances or hold fa
   Evaluate it.) Options evaluated in §7.2; no ruling on G1–G4. Then, on G1′: "Do nguy hiểm của G1', registrar có quá nhiều
   quyền lực, nên loại nó. Cân nhắc G1 và G3." (G1′ is dangerous, the registrar has too much power: drop it; consider G1 and
   G3.) G1′ is rejected (owner); G1 against G3 is still open.
+- **Q10, ruled (owner 2026-11-24):** "G1 before the freeze", the check covering every governed app ("việc kiểm không chỉ giới
+  hạn ở T (token) mà ở các app khác"); [CTR-GOV-33](../contracts/token-wrappers.md#CTR-GOV-33), built on branch `router-g1`.
 - **Q11 and Q12 (b), ruled:** "R-b + opt-in user routers": registrar-approved router versions in the generic catalogue are
   the default; a user-supplied router only in a marked opt-in class. [CTR-GOV-32](../contracts/token-wrappers.md#CTR-GOV-32), SPECIFIED.
 - **Q13 (c), ruled and built:** "Yes, add" `virtual` to `MetaTokenBase._govRouter` and `SCaaSDexAdmin._govRouter` before the

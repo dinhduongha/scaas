@@ -935,8 +935,58 @@ today's factory by `test/governance/RouterPerRelease.t.sol`, UNAUDITED).
   client signs for the instance's `GOV_ROUTER()`.
 - **Later ERC-20 and DEX versions.** `MetaTokenBase._govRouter` and `SCaaSDexAdmin._govRouter` are `virtual` (owner
   2026-11-24; BUILT, no bytecode change), so their next release versions can read a router from their env.
-- **Registry generations** (owner direction 2026-11-24: each generation goes with a router, not necessarily a new one):
-  open; the options are evaluated in the research note `2026-11-24-nft-multi-token` §7.2 (background, not normative).
+- **Registry generations** (owner 2026-11-24: each generation goes with a router, not necessarily a new one): the chain's
+  router follows each target's env registry, [CTR-GOV-33](#CTR-GOV-33) (G1).
+
+<a id="CTR-GOV-33"></a>**CTR-GOV-33** — **G1: one router for every registry generation; a derived signer is checked on the
+registry of the op's target, its nonce keyed by that registry** (owner 2026-11-24, "G1 before the freeze"; the check covers
+every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `test/governance/RouterPerRelease.t.sol`
+`RouterRegistryLineTest`, `RouterG1Test`), UNAUDITED.
+- **Which registry.** For an op `mtx<Op>(e, target, …)` of a derived signer (not in the native space) the router uses
+  `registryFor(target)`: when `target`'s code has the EIP-1167 clone form, its env registry (code offset 77,
+  `ChainEnvCode.OFF_REGISTRY`) is not 0 and not the router's own, and the factory's index names it
+  (`IOpenFactory(factory()).infoOf(target).addr == target`), that env registry; otherwise the router's own `registry()`.
+  The router never asks the target. A native signer uses no registry (its own key) and is unchanged.
+- **One reader for every factory-made form.** The factory writes every instance it makes through one path (`_instance`:
+  `ChainEnvCode.encode` behind the 45-byte proxy, CTR-TOK-29) and indexes it through one (`_index`), for tokens
+  (`createToken`, `createTokenUnregistered`), the DEX (`createDex`) and generic catalogue instances (`createInstance`). No
+  factory view returns an instance's registry (`infoOf`'s `Created` holds no env version), so the router reads the env
+  the factory wrote once the index names the address.
+
+  | Contract | The router targets it | Factory-made, path | Env registry | G1 uses |
+  |---|---|---|---|---|
+  | Token kinds 0-13 | yes (`ChainEnv.govRouter`) | yes: `createToken`, `createTokenUnregistered` | clone code, offset 77 | the env registry |
+  | `SCaaSDex` (its body modules run by `DELEGATECALL` in the clone) | yes | yes: `createDex` | clone code, offset 77 | the env registry |
+  | A generic class instance (class ≥ 3) governed by `ChainEnv.govRouter` | yes | yes: `createInstance` | clone code, offset 77 | the env registry |
+  | A generic instance naming its own router in `deps` (P3, R-b) | no: its router is another | yes: `createInstance` | clone code, offset 77 | that router's choice |
+  | PqChat, PqChatTopics, PqVault | no: not governed (no `_govSubject`) | yes: `createInstance` | clone code, offset 77 | the env registry, never asked |
+  | Releases: token, DEX and generic implementations, body modules, catalogued router versions | no (an all-zero env; modules `onlyDelegated`) | `deploy*Implementation` (`CREATE2`), not indexed | none | the router's own |
+  | `OpenFactory` (registrar ops, `mtxCreate*`) | yes (`UAAdmin`) | no | none | the router's own |
+  | `ComplianceRegistry` (its admin, KYC providers) | yes (`UAAdmin`) | no | none | the router's own |
+  | `SmartKeyAccount` | no: not governed | an EIP-1167 clone of `SmartKeyAccountFactory`, no env, not indexed | none | the router's own |
+  | `RelayFeeRouter`, `RelayFeeExecutor`, `RescueVault`, `MandateWallet` | no: no router admin | no | none | the router's own |
+
+- **The gap, shared with G3.** A contract the factory did not make keeps the router's own generation: a UA only a later
+  generation knows cannot hold the factory's admin or registrar role, a compliance registry's admin or KYC seat, or create
+  an instance through the router (`mtxCreate*` targets the factory); a native or router-generation account does that.
+- **Nonces keyed by `(registry, id)`.** A derived signer's nonce on a registry other than the router's own lives in the
+  router's ERC-7201 namespace `scaas.govrouter.nonce` (`mapping(registry => mapping(id => mapping(lane => nonce)))`); the
+  router's own registry and every native id keep the one map of `scaas.metatx` (`mtxNonce`). So a bad env registry an admin
+  published (one that passes any id) can spend only its own map's nonces, never an id's nonce at the router's registry.
+  `mtxNonceFor(target, from, lane)` returns the nonce the router checks for an op on `target`; a client signs it and the node
+  reads it ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)). The checks on that map run in `preNamedUA`'s order with its
+  errors (`_preAt`).
+- **`UACancelNonce` is unchanged**: `mtxCancelNonce(e, lane, auth)` authenticates on the router's own registry and bumps
+  the one map, so it cancels a native id's lanes everywhere and a derived id's at the router's registry; it does not reach
+  an env registry's map (no op cancels there yet, an open question for the owner).
+- **Replay.** One router, one EIP-712 domain. The signature names `target`, and `target` fixes the registry, so a signature
+  spent in one map is valid in no other.
+- **Deploy order.** The factory, then the router naming it (`GovernanceRouter(chainUid, registry, smartKeyAccountImpl,
+  hedera, factory)`; `factory()` reads it back), then `configureChain`, whose code-hash pin covers the immutable. A router
+  with factory 0 gives every target its own registry.
+- **Cost** (`test_g1_gas`, `mtxMint`): a derived signer on a factory-made target of another generation pays the code copy and
+  one `infoOf` call, +809 gas against the same op on a router of that generation; on a target of the router's own generation
+  the code copy only, +482; a native signer +0.
 
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `initArgs`.
 

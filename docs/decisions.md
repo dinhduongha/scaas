@@ -2534,6 +2534,19 @@ Change (owner 2026-11-24, Q13, verbatim in Source; status: BUILT at `fef021147` 
 
 Change (owner 2026-11-24, Q10, verbatim in Source; status: owner direction, not a ruling): each UA registry generation goes with a router, which need not be a new router. Options evaluated in the research note's §7.2 (see Source); no ruling on G1 (one router reading each factory-made target's env registry) or G3 (a catalogued router version per generation). Rejected by the owner: G1′, a router that follows a registrar-set pointer to the newest generation (the registrar would hold too much power). Out on cost and risk: G2 (a forward walk of the line), G4 (a new router and factory line per generation).
 
+Change (owner 2026-11-24, verbatim "G1 before the freeze"; status: BUILT on branch `router-g1`, UNAUDITED): Q10 is ruled G1,
+[CTR-GOV-33](contracts/token-wrappers.md#CTR-GOV-33): the chain's router checks a derived signer on the registry of each factory-made target's env, for
+every governed contract, not only tokens.
+
+### CTR-GOV-33 — G1: one router for every registry generation; a derived signer checked on its target's env registry, its nonce keyed by that registry
+- old: — · status: current · owner: yes · date: 2026-11-24 · normative: contracts/token-wrappers.md#CTR-GOV-33 · superseded-by: —
+
+**Rule.** `GovernanceRouterBase` names the chain's `OpenFactory` (`factory()`, a constructor immutable). For an op of a derived signer it uses `registryFor(target)`: the env registry the factory wrote into a target it made (EIP-1167 clone form, `infoOf(target).addr == target`, code offset 77, not 0), else the router's own. The router never trusts a registry the target reports. One reader serves every factory-made form (token kinds, `SCaaSDex`, generic catalogue instances); everything else (the factory itself, a compliance registry, releases, wallets) gets the router's own registry. A derived signer's nonce on another registry is keyed `(registry, id, lane)` in `scaas.govrouter.nonce` (`mtxNonceFor(target, from, lane)`); native ids and the router's own registry keep `mtxNonce`; `UACancelNonce` is unchanged. Deploy order: the factory, the router naming it, `configureChain`.
+**Status.** BUILT on branch `router-g1` (`src/governance/GovernanceRouterBase.sol`, `GovernanceRouter.sol`; `test/governance/RouterPerRelease.t.sol` `RouterRegistryLineTest`, `RouterG1Test`; `script/DeployBase.sol`; node `subject_nonce`; SDK `nonce_call`), UNAUDITED; the router falls under the audit round.
+**Why.** Governance follows the token's own generation for every kind, so CTR-UA-27 parity holds by construction with one router, one domain, one node row, and no new release per kind and generation. It cannot be added after the freeze: every existing kind reads the chain's router. The nonce keying confines a bad env registry (one that passes any id) to its own map, so it can never burn an id's nonce at the router's registry.
+**Cost if wrong.** A derived op on a factory-made target of another generation pays one code copy and one `infoOf` call; the router's code grows; a UA only a later generation knows still cannot act on contracts the factory did not make (the factory's and a compliance registry's roles); no op cancels a nonce in an env registry's map.
+**Source.** Research note [2026-11-24-nft-multi-token](research/2026-11-24-nft-multi-token.md) §7.2. Owner 2026-11-24, relayed by the controller, verbatim: "G1 before the freeze"; then, on its scope, verbatim: "việc kiểm không chỉ giới hạn ở T (token) mà ở các app khác" (the check is not limited to tokens but covers the other apps too). The nonce keying by `(registry, id)` is the controller's proposal in the build brief (controller call, owner may override).
+
 ## 17. Contracts — Meta-transactions
 
 ### CTR-MTX-01 — Payment is a MetaTransfer with entryRef ≠ 0

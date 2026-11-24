@@ -590,7 +590,7 @@ runner for every EVM-contract family (Hedera), so one rule on every chain (BUILT
 After `valid_until` the subject nonce of GRAM/Solana/Aptos/Sui lanes may be pruned (Sui: permissionless `prune`) and read as 0; consumption checks are
 only made while `now ≤ valid_until + clock_skew_secs`, and expiry decides after that.
 
-EVM view names (BUILT, P5): `mtxNonce(from, batch)`, `mtxDigest(m)` / `mtxTransferDigest(t)`; the views stay on the contracts, but since typed-signing N1 the node reads no digest view: it relays the named entries of its own table ([NODE-JOB-20](job-api.md#NODE-JOB-20)) and computes the typed digest locally (`mtxExecuteTransfer` for a `MetaTransfer`; `executeMetaTransaction` and the generic entries stay on the contracts, [contracts/metatx.md](../contracts/metatx.md)).
+EVM view names (BUILT, P5): `mtxNonce(from, batch)` (a `GovernanceRouter` op of a derived subject: `mtxNonceFor(target, from, batch)`, the map of the registry the router checks it on, [CTR-GOV-33](../contracts/token-wrappers.md#CTR-GOV-33); BUILT on branch `router-g1`), `mtxDigest(m)` / `mtxTransferDigest(t)`; the views stay on the contracts, but since typed-signing N1 the node reads no digest view: it relays the named entries of its own table ([NODE-JOB-20](job-api.md#NODE-JOB-20)) and computes the typed digest locally (`mtxExecuteTransfer` for a `MetaTransfer`; `executeMetaTransaction` and the generic entries stay on the contracts, [contracts/metatx.md](../contracts/metatx.md)).
 
 ### 9.1 Shared submit path
 
