@@ -252,6 +252,30 @@ public class Admin implements AutoCloseable, AdminInterface {
 
   
     @Override
+    public java.util.concurrent.CompletableFuture<Prepared> adminUaCancelNonceFor(UaCancelNonceFor req){
+        return adminUaCancelNonceFor(req, java.util.concurrent.ForkJoinPool.commonPool());
+    }public java.util.concurrent.CompletableFuture<Prepared> adminUaCancelNonceFor(UaCancelNonceFor req, java.util.concurrent.Executor uniffiExecutor
+    ){
+        return UniffiAsyncHelpers.uniffiRustCallAsync(
+        uniffiExecutor,
+        callWithHandle(uniffiHandle -> {
+            return UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(
+                uniffiHandle,
+                FfiConverterTypeUaCancelNonceFor.INSTANCE.lower(req)
+            );
+        }),
+        (future, callback, continuationHandle) -> UniffiLib.ffi_scaas_sdk_rust_future_poll_u64(future, callback, continuationHandle),
+        (_allocator, future, continuation) -> UniffiLib.ffi_scaas_sdk_rust_future_complete_u64(future, continuation),
+        (future) -> UniffiLib.ffi_scaas_sdk_rust_future_free_u64(future),
+        // lift function
+        (it) -> FfiConverterTypePrepared.INSTANCE.lift(it),
+        // Error FFI converter
+        new SdkExceptionErrorHandler()
+    );
+    }
+
+  
+    @Override
     public java.util.concurrent.CompletableFuture<Prepared> adminUaCancelRate(UaCancelRate req){
         return adminUaCancelRate(req, java.util.concurrent.ForkJoinPool.commonPool());
     }public java.util.concurrent.CompletableFuture<Prepared> adminUaCancelRate(UaCancelRate req, java.util.concurrent.Executor uniffiExecutor

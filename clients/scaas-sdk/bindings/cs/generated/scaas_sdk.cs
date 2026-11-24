@@ -1464,6 +1464,8 @@ static class _UniFFILib {
     
     
     
+    
+    
 
     static _UniFFILib() {
         _UniFFILib.uniffiCheckContractApiVersion();
@@ -2076,6 +2078,17 @@ static class _UniFFILib {
     public static extern
 #endif
      ulong uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(ulong @ptr,RustBuffer @req
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ulong uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(ulong @ptr,RustBuffer @req
     );
 
     #if NET8_0_OR_GREATER
@@ -6354,6 +6367,17 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ushort uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ushort uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate(
     );
 
@@ -9078,6 +9102,12 @@ static class _UniFFILib {
             }
         }
         {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for();
+            if (checksum != 20110) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for` checksum `20110`, library returned `{checksum}`");
+            }
+        }
+        {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate();
             if (checksum != 38309) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate` checksum `38309`, library returned `{checksum}`");
@@ -11559,6 +11589,8 @@ internal interface IAdmin {
     /// <exception cref="SdkException"></exception>
     Task<Prepared> AdminUaCancelNonce(UaCancelNonce @req);
     /// <exception cref="SdkException"></exception>
+    Task<Prepared> AdminUaCancelNonceFor(UaCancelNonceFor @req);
+    /// <exception cref="SdkException"></exception>
     Task<Prepared> AdminUaCancelRate(UaCancelRate @req);
     /// <exception cref="SdkException"></exception>
     Task<Prepared> AdminUaCreateDex(UaCreateDex @req);
@@ -11892,6 +11924,28 @@ internal class Admin : IAdmin, IDisposable {
         // Get rust future
         CallWithPointer(thisPtr => {
             return _UniFFILib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(thisPtr, FfiConverterTypeUaCancelNonce.INSTANCE.Lower(@req));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_u64(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_u64(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_u64(future),
+        // Lift
+        (result) => FfiConverterTypePrepared.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
+    
+    /// <exception cref="SdkException"></exception>
+    public async Task<Prepared> AdminUaCancelNonceFor(UaCancelNonceFor @req) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(thisPtr, FfiConverterTypeUaCancelNonceFor.INSTANCE.Lower(@req));
         }),
         // Poll
         (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_u64(future, continuation, data),
@@ -26447,6 +26501,72 @@ class FfiConverterTypeUaCancelNonce: FfiConverterRustBuffer<UaCancelNonce> {
             FfiConverterTypeKeyRef.INSTANCE.Write(value.Signer, stream);
             FfiConverterString.INSTANCE.Write(value.Chain, stream);
             FfiConverterString.INSTANCE.Write(value.Batch, stream);
+            FfiConverterString.INSTANCE.Write(value.Lane, stream);
+            FfiConverterOptionalString.INSTANCE.Write(value.ChainUid, stream);
+            FfiConverterTypeEnvelope.INSTANCE.Write(value.Envelope, stream);
+    }
+}
+
+
+
+/// <summary>
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+/// UACancelNonceFor
+/// </summary>
+/// <param name="Batch">
+/// the lane, decimal
+/// </param>
+/// <param name="ChainUid">
+/// the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+/// </param>
+internal record UaCancelNonceFor (
+    KeyRef Signer, 
+    string Chain, 
+    /// <summary>
+    /// the lane, decimal
+    /// </summary>
+    string Batch, 
+    string Target, 
+    string Lane, 
+    /// <summary>
+    /// the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+    /// </summary>
+    string? ChainUid, 
+    Envelope Envelope
+) {
+}
+
+class FfiConverterTypeUaCancelNonceFor: FfiConverterRustBuffer<UaCancelNonceFor> {
+    public static FfiConverterTypeUaCancelNonceFor INSTANCE = new FfiConverterTypeUaCancelNonceFor();
+
+    public override UaCancelNonceFor Read(BigEndianStream stream) {
+        return new UaCancelNonceFor(
+            Signer: FfiConverterTypeKeyRef.INSTANCE.Read(stream),
+            Chain: FfiConverterString.INSTANCE.Read(stream),
+            Batch: FfiConverterString.INSTANCE.Read(stream),
+            Target: FfiConverterString.INSTANCE.Read(stream),
+            Lane: FfiConverterString.INSTANCE.Read(stream),
+            ChainUid: FfiConverterOptionalString.INSTANCE.Read(stream),
+            Envelope: FfiConverterTypeEnvelope.INSTANCE.Read(stream)
+        );
+    }
+
+    public override int AllocationSize(UaCancelNonceFor value) {
+        return 0
+            + FfiConverterTypeKeyRef.INSTANCE.AllocationSize(value.Signer)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Chain)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Batch)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Target)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Lane)
+            + FfiConverterOptionalString.INSTANCE.AllocationSize(value.ChainUid)
+            + FfiConverterTypeEnvelope.INSTANCE.AllocationSize(value.Envelope);
+    }
+
+    public override void Write(UaCancelNonceFor value, BigEndianStream stream) {
+            FfiConverterTypeKeyRef.INSTANCE.Write(value.Signer, stream);
+            FfiConverterString.INSTANCE.Write(value.Chain, stream);
+            FfiConverterString.INSTANCE.Write(value.Batch, stream);
+            FfiConverterString.INSTANCE.Write(value.Target, stream);
             FfiConverterString.INSTANCE.Write(value.Lane, stream);
             FfiConverterOptionalString.INSTANCE.Write(value.ChainUid, stream);
             FfiConverterTypeEnvelope.INSTANCE.Write(value.Envelope, stream);

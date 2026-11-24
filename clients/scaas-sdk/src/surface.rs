@@ -755,6 +755,12 @@ pub const ENTRY_POINTS: &[EntryPoint] = &[
         pairs: &[("UACancelNonce", "gov_router")],
     },
     EntryPoint {
+        function: "admin_ua_cancel_nonce_for",
+        module: "admin",
+        feature: "admin",
+        pairs: &[("UACancelNonceFor", "gov_router")],
+    },
+    EntryPoint {
         function: "sign_zether_auditor_consent",
         module: "admin",
         feature: "admin",

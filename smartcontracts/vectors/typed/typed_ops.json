@@ -7517,6 +7517,109 @@
       },
       "structHash": "0x13826672c2d4802e370461f7903e69b9f3e8f22a291da75fdd1590ff325b3514"
     },
+    "UACancelNonceFor": {
+      "typeString": "UACancelNonceFor(bytes32 from,address target,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+      "typehash": "0xf95871f9b540540086a6c02b3913b94db8c1b97f96855346e198e85ff41f0c4e",
+      "on": [
+        "GovernanceRouter"
+      ],
+      "types": {
+        "EIP712Domain": [
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "type": "string"
+          },
+          {
+            "name": "chainId",
+            "type": "uint256"
+          },
+          {
+            "name": "verifyingContract",
+            "type": "address"
+          },
+          {
+            "name": "salt",
+            "type": "bytes32"
+          }
+        ],
+        "UACancelNonceFor": [
+          {
+            "name": "from",
+            "type": "bytes32"
+          },
+          {
+            "name": "target",
+            "type": "address"
+          },
+          {
+            "name": "lane",
+            "type": "uint256"
+          },
+          {
+            "name": "batch",
+            "type": "uint256"
+          },
+          {
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "name": "validUntil",
+            "type": "uint256"
+          },
+          {
+            "name": "mode",
+            "type": "uint32"
+          },
+          {
+            "name": "relayer",
+            "type": "address"
+          },
+          {
+            "name": "fee",
+            "type": "uint256"
+          },
+          {
+            "name": "feeRecipient",
+            "type": "address"
+          }
+        ]
+      },
+      "domains": {
+        "gov_router": {
+          "domain": {
+            "name": "SCaaS GovernanceRouter",
+            "version": "1",
+            "chainId": "31337",
+            "verifyingContract": "0x5ca00000000000000000000000000000000000a7",
+            "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+          },
+          "domainSeparator": "0x1180e86bbe4e0d524335f0b21dcc1c2cdcc6de5f45c9b148c495e441398f3285",
+          "digest": "0xa96b5bef3ad48e674cc5eecf1e521f1334c4a04ebc844c68cd68167eff5d5cb6",
+          "signature": "0x5c09268fadaebab52ebd62378294913fb6d24c802241506671a498d9305e0a0b57d04bb311565ca331270d9c3540e4bc7349d6c143380b1e8a168260e918502c1b",
+          "abi": "mtxCancelNonceFor((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+          "selector": "0x5c1ba162",
+          "calldata": "0x5c1ba162000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f900000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006b49d32c0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000beef00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a8e54f1b3a8757cfcadc9f0b308962f1548ca76600000000000000000000000000000000000000000000000000000000000207880000000000000000000000000000000000000000000000000000000000000160000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000415c09268fadaebab52ebd62378294913fb6d24c802241506671a498d9305e0a0b57d04bb311565ca331270d9c3540e4bc7349d6c143380b1e8a168260e918502c1b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        }
+      },
+      "message": {
+        "from": "0x000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9",
+        "target": "0xa8e54f1b3a8757cfcadc9f0b308962f1548ca766",
+        "lane": "133000",
+        "batch": "7",
+        "nonce": "0",
+        "validUntil": "1800000300",
+        "mode": 1,
+        "relayer": "0x000000000000000000000000000000000000beef",
+        "fee": "0",
+        "feeRecipient": "0x0000000000000000000000000000000000000000"
+      },
+      "structHash": "0x452e609acbc73adbeded4c066d5ee77d55ee5e1b98f7f43882226e1eae4902c6"
+    },
     "UAGrantRole": {
       "typeString": "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
       "typehash": "0x7e30f73602b0877ac8eae6e0b6425bcc72048f392c9e414d1c8a97fbd4f8da33",

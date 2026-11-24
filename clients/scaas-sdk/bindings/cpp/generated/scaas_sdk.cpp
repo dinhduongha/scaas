@@ -243,6 +243,9 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_blocking() != 62016) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for_blocking() != 28234) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate_blocking() != 41744) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
@@ -1531,6 +1534,12 @@ std::shared_ptr<Prepared> Admin::admin_ua_cancel_nonce_blocking(const UaCancelNo
         uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_blocking,
         uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterTypeUaCancelNonce::lower(req), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
+std::shared_ptr<Prepared> Admin::admin_ua_cancel_nonce_for_blocking(const UaCancelNonceFor &req, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterPrepared::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterTypeUaCancelNonceFor::lower(req), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
 }
 std::shared_ptr<Prepared> Admin::admin_ua_cancel_rate_blocking(const UaCancelRate &req, std::shared_ptr<CancelToken> cancel) {
     return uniffi::FfiConverterPrepared::lift(uniffi::rust_call(
@@ -3601,6 +3610,9 @@ uint64_t Wallet::_uniffi_internal_clone_handle() const {
         this->instance
     );
 }
+
+
+
 
 
 
@@ -11216,6 +11228,60 @@ uint64_t FfiConverterTypeUaCancelNonce::allocation_size(const UaCancelNonce &val
         FfiConverterKeyRef::allocation_size(val.signer) +
         FfiConverterString::allocation_size(val.chain) +
         FfiConverterString::allocation_size(val.batch) +
+        FfiConverterString::allocation_size(val.lane) +
+        FfiConverterOptionalString::allocation_size(val.chain_uid) +
+        FfiConverterTypeEnvelope::allocation_size(val.envelope);
+    
+}
+
+
+UaCancelNonceFor FfiConverterTypeUaCancelNonceFor::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterTypeUaCancelNonceFor::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterTypeUaCancelNonceFor::lower(const UaCancelNonceFor &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterTypeUaCancelNonceFor::write(stream, val);
+
+    return std::move(buf);
+}
+
+UaCancelNonceFor FfiConverterTypeUaCancelNonceFor::read(RustStream &stream) {
+    return {
+        FfiConverterKeyRef::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterOptionalString::read(stream),
+        FfiConverterTypeEnvelope::read(stream)
+    };
+}
+
+void FfiConverterTypeUaCancelNonceFor::write(RustStream &stream, const UaCancelNonceFor &val) {
+    FfiConverterKeyRef::write(stream, val.signer);
+    FfiConverterString::write(stream, val.chain);
+    FfiConverterString::write(stream, val.batch);
+    FfiConverterString::write(stream, val.target);
+    FfiConverterString::write(stream, val.lane);
+    FfiConverterOptionalString::write(stream, val.chain_uid);
+    FfiConverterTypeEnvelope::write(stream, val.envelope);
+}
+
+uint64_t FfiConverterTypeUaCancelNonceFor::allocation_size(const UaCancelNonceFor &val) {
+    
+    return 
+        FfiConverterKeyRef::allocation_size(val.signer) +
+        FfiConverterString::allocation_size(val.chain) +
+        FfiConverterString::allocation_size(val.batch) +
+        FfiConverterString::allocation_size(val.target) +
         FfiConverterString::allocation_size(val.lane) +
         FfiConverterOptionalString::allocation_size(val.chain_uid) +
         FfiConverterTypeEnvelope::allocation_size(val.envelope);

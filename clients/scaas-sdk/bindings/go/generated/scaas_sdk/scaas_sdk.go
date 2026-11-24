@@ -1061,6 +1061,15 @@ func uniffiCheckChecksums() {
 	}
 	{
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for()
+		})
+		if checksum != 20110 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate()
 		})
 		if checksum != 38309 {
@@ -4561,6 +4570,7 @@ type AdminInterface interface {
 	AdminUaApproveTokenRelease(req UaApproveTokenRelease) (*Prepared, error)
 	AdminUaCancelGrant(req UaCancelGrant) (*Prepared, error)
 	AdminUaCancelNonce(req UaCancelNonce) (*Prepared, error)
+	AdminUaCancelNonceFor(req UaCancelNonceFor) (*Prepared, error)
 	AdminUaCancelRate(req UaCancelRate) (*Prepared, error)
 	AdminUaCreateDex(req UaCreateDex) (*Prepared, error)
 	AdminUaCreateInstance(req UaCreateInstance) (*Prepared, error)
@@ -4811,6 +4821,39 @@ func (_self *Admin) AdminUaCancelNonce(req UaCancelNonce) (*Prepared, error) {
 		},
 		C.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(
 			_pointer, FfiConverterUaCancelNonceINSTANCE.Lower(req)),
+		// pollFn
+		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_poll_u64(handle, continuation, data)
+		},
+		// freeFn
+		func(handle C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_free_u64(handle)
+		},
+	)
+
+	if err == nil {
+		return res, nil
+	}
+
+	return res, err
+}
+
+func (_self *Admin) AdminUaCancelNonceFor(req UaCancelNonceFor) (*Prepared, error) {
+	_pointer := _self.ffiObject.incrementPointer("*Admin")
+	defer _self.ffiObject.decrementPointer()
+	res, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
+		// completeFn
+		func(handle C.uint64_t, status *C.RustCallStatus) C.uint64_t {
+			res := C.ffi_scaas_sdk_rust_future_complete_u64(handle, status)
+			return res
+		},
+		// liftFn
+		func(ffi C.uint64_t) *Prepared {
+			return FfiConverterPreparedINSTANCE.Lift(ffi)
+		},
+		C.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(
+			_pointer, FfiConverterUaCancelNonceForINSTANCE.Lower(req)),
 		// pollFn
 		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
 			C.ffi_scaas_sdk_rust_future_poll_u64(handle, continuation, data)
@@ -20882,6 +20925,74 @@ func (c FfiConverterUaCancelNonce) Write(writer io.Writer, value UaCancelNonce) 
 type FfiDestroyerUaCancelNonce struct{}
 
 func (_ FfiDestroyerUaCancelNonce) Destroy(value UaCancelNonce) {
+	value.Destroy()
+}
+
+// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+// UACancelNonceFor
+type UaCancelNonceFor struct {
+	Signer KeyRef
+	Chain  string
+	// the lane, decimal
+	Batch  string
+	Target string
+	Lane   string
+	// the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+	ChainUid *string
+	Envelope Envelope
+}
+
+func (r *UaCancelNonceFor) Destroy() {
+	FfiDestroyerKeyRef{}.Destroy(r.Signer)
+	FfiDestroyerString{}.Destroy(r.Chain)
+	FfiDestroyerString{}.Destroy(r.Batch)
+	FfiDestroyerString{}.Destroy(r.Target)
+	FfiDestroyerString{}.Destroy(r.Lane)
+	FfiDestroyerOptionalString{}.Destroy(r.ChainUid)
+	FfiDestroyerEnvelope{}.Destroy(r.Envelope)
+}
+
+type FfiConverterUaCancelNonceFor struct{}
+
+var FfiConverterUaCancelNonceForINSTANCE = FfiConverterUaCancelNonceFor{}
+
+func (c FfiConverterUaCancelNonceFor) Lift(rb RustBufferI) UaCancelNonceFor {
+	return LiftFromRustBuffer[UaCancelNonceFor](c, rb)
+}
+
+func (c FfiConverterUaCancelNonceFor) Read(reader io.Reader) UaCancelNonceFor {
+	return UaCancelNonceFor{
+		FfiConverterKeyRefINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterOptionalStringINSTANCE.Read(reader),
+		FfiConverterEnvelopeINSTANCE.Read(reader),
+	}
+}
+
+func (c FfiConverterUaCancelNonceFor) Lower(value UaCancelNonceFor) C.RustBuffer {
+	return LowerIntoRustBuffer[UaCancelNonceFor](c, value)
+}
+
+func (c FfiConverterUaCancelNonceFor) LowerExternal(value UaCancelNonceFor) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[UaCancelNonceFor](c, value))
+}
+
+func (c FfiConverterUaCancelNonceFor) Write(writer io.Writer, value UaCancelNonceFor) {
+	FfiConverterKeyRefINSTANCE.Write(writer, value.Signer)
+	FfiConverterStringINSTANCE.Write(writer, value.Chain)
+	FfiConverterStringINSTANCE.Write(writer, value.Batch)
+	FfiConverterStringINSTANCE.Write(writer, value.Target)
+	FfiConverterStringINSTANCE.Write(writer, value.Lane)
+	FfiConverterOptionalStringINSTANCE.Write(writer, value.ChainUid)
+	FfiConverterEnvelopeINSTANCE.Write(writer, value.Envelope)
+}
+
+type FfiDestroyerUaCancelNonceFor struct{}
+
+func (_ FfiDestroyerUaCancelNonceFor) Destroy(value UaCancelNonceFor) {
 	value.Destroy()
 }
 

@@ -4352,8 +4352,9 @@ pub(crate) mod tests {
         // round 3t: -> 131, the router's `UASetVerifierFee`; owner 2026-11-12: -> 132, the router's `UACreateInstance`
         // the three-key model (CTR-PQZ-41): -> 133, `PqzRollOver`; round 3zc (CTR-GOV-30): -> 135, the router's
         // `UASetMaxSupply`, `UASetMaxWrapSupply`; set-auditor (CTR-GOV-31): -> 137, the router's `UASetAuditorKey`, `UASetAuditorUA`
+        // CTR-GOV-33 Change: -> 138, the router's `UACancelNonceFor`
         assert_eq!(
-            n, 137,
+            n, 138,
             "every row with an entry, but the relay fees (relay_fee_call_object)"
         );
     }

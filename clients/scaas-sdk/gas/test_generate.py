@@ -14,6 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import generate
 
 V = "verify_0x0108_delta"
+# the transaction's own row (T26 B2-1), which generate.table writes first, from the input list's `transaction`
+TX = {"gas": 21_000, "per_byte": 64, "source": "t"}
 
 
 def table(m, kinds=("token", "zether"), entries=("mtxPay",), native=None, per_item=None, full=False, fresh_only=False):
@@ -31,11 +33,13 @@ def table(m, kinds=("token", "zether"), entries=("mtxPay",), native=None, per_it
         "margin": {},
         "stand_in": {},
         "base": [{"kinds": list(kinds), "entries": list(entries), **({"fresh_only": True} if fresh_only else {})}],
+        "transaction": TX,
     }
     m = dict(m, verify_native_sig_bytes=96)
     m.setdefault(V, 1_000)
     t = generate.table(inputs, m)
-    return t if full else {(r["kind"], r["entry"], r["fresh"]): r for r in t["base"]}
+    assert t["base"][0]["entry"] == "transaction", "the transaction's row first"
+    return t if full else {(r["kind"], r["entry"], r["fresh"]): r for r in t["base"][1:]}
 
 
 def lanes(kind, entry, variant, fresh):
@@ -121,10 +125,13 @@ def main():
             "stand_in": {},
             "base_stand_in": inputs_si,
             "base": [{"kinds": ["zether", "pqz"], "entries": ["mtxRollOver"]}],
+            "transaction": TX,
         },
         dict(sb, verify_native_sig_bytes=96, **{V: 1_000}),
     )
-    got = {(x["kind"], x.get("stand_in")) for x in t["base"]}
+    tx = t["base"][0]
+    assert (tx["entry"], tx["kind"], tx["gas"], tx["per_byte"]["gas"]) == ("transaction", "evm", 21_000, 64), tx
+    got = {(x["kind"], x.get("stand_in")) for x in t["base"][1:]}
     assert got == {("pqz", "the PQZ precompile's stand-in"), ("zether", None)}, got
     # CTR-UA-65: the line's rows, the kind's delta plus the line's figure less the holder's; the write path d times the
     # dearest step; the kind's sig_bytes and margin, marked stand_in

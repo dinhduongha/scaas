@@ -515,6 +515,15 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for = findDowncallHandle("uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT));
+
+    static long uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(long ptr, java.lang.foreign.MemorySegment req) {
+        try {
+            return (long) MH_uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for.invokeExact(ptr, req);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate = findDowncallHandle("uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT));
 
@@ -4004,6 +4013,15 @@ final class UniffiLib {
     static short uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce() {
         try {
             return (short) MH_uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for = findDowncallHandle("uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for.invokeExact();
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 

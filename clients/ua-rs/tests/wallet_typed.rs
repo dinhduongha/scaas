@@ -157,8 +157,9 @@ fn typed_ops_json_rows() {
     }
     // the seventh sync (ua-mtx-merge 44cd27d2e): + 27 ops (the three-key `PqzRollOver`, the admin ops for UA*Ownership, the
     // verifier fee, wrap limits, supply caps, lists, catalogue and chain entries ops of the router); 3h T61: + UASetProofStore;
-    // set-auditor: + UASetAuditorKey, UASetAuditorUA (router) and AuditorConsent (Zether and PQZ domains)
-    assert_eq!((ops, rows), (114, 149));
+    // set-auditor: + UASetAuditorKey, UASetAuditorUA (router) and AuditorConsent (Zether and PQZ domains); CTR-GOV-33's Change:
+    // (114, 149) -> (115, 150), the router's UACancelNonceFor
+    assert_eq!((ops, rows), (115, 150));
 }
 
 /// `ua/portable.json` and `ua/nested.json`: the typed data of every registration, KEM record, PQZ key record and acceptance hashes
