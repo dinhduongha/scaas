@@ -1,0 +1,56 @@
+# The 2026-11-24 review fixes, contract phase (branch review-fix-contract), against the spec at dfa5744cc.
+# Runner: runs/2026-11-24-review-fix-contract/gates.sh (logs git-ignored under runs/2026-11-24-review-fix-contract/<tag>/).
+
+step | commit | rc | counts
+forge-governance (G-1) | G-1 commit | 0 | 980 passed (first run 979/1: the nested index order, pin moved)
+forge-factory (G-1) | G-1 commit | 0 | 2 passed
+forge-v2 (G-1) | G-1 commit | 0 | 756 passed (first run 3 red: two nested-order pins, OpenFactory size pin; moved)
+forge-gas (G-1) | G-1 commit | 0 | SdkGasRouterAdmin 4 passed after 39 sdk_gas rows moved (+17 to +25); the full dir ran 404/2 before the move
+forge-pqchat (A-1, A-5, with D-7 and A-3 in the tree) | A-1 commit | 0 | 214 passed, 1 skipped
+forge-pqvault | A-1 commit | 0 | 96 passed
+size (A-1 + A-5) | A-5 commit | 0 | 182 contracts; PqChatTree 35,267 -> 35,265
+size (with D-7 + A-3) | uncommitted | 1 | PqChatTree 35,329 > 35,286 (the plain T-1 line)
+
+## Done (committed)
+- G-1: index before the initializer (red: "mid-creation: indexed, the env registry: ...07 != ...08").
+- A-1 / C39: `st == 0` in _walkAdds (red: PqChatTreeKeyLive in test_c39_addOrderIndependent).
+- A-5: PqChatTreeTargets(count).
+
+## Built and tested, not committed: blocked on PqChatTree's size
+- D-7 / C40 (empty addPath -> PqChatShape) and A-3 (tree epoch-0 pieces -> PqChatUnknown): green in
+  test_piecesByAThirdParty (red first: "next call did not revert as expected", then "reverted ... without data"),
+  but PqChatTree grows to 35,329 B, over the 35,286 line. The work is in the work tree and in
+  scratchpad/review-fix-contract/d7-a3-wip.patch (main checkout, git-ignored).
+- Next step: the owner's pre-approved split (treeLeave / treeRemove and their helpers into PqChatTreeMembers), done
+  together with E-3's tree part, which adds code to the same two entries.
+
+## Left, in order
+0. Merge origin/ua-rs-sign (d34fcf566, with router-cancel) into review-fix-contract by a merge commit, on a clean work
+   tree (the D-7 / A-3 work: apply scratchpad/review-fix-contract/d7-a3-wip.patch after it). Expected conflicts:
+   test/vectors/sdk_gas.json (re-measure the gov_router_mtxCreate* rows with SDK_GAS_WRITE through the SDK gas runner and
+   generate.py, never hand-merged), size-baseline.json, the GovDeploy / router-address pins, docs/decisions.md. Then
+   rerun the G-1 gates (governance, factory, v2, gas) and the SDK's `cargo test --lib op::gas` (not run here: stopped
+   while compiling).
+1. PqChatTreeMembers split + E-3 tree (C9: ancestor check, EXIT_LAG_MAX = 16, PqChatExitLag, apply at t.head: gone at
+   the head's number, record/flags/events under the head) + A-4 already in the tree; then commit D-7 and A-3.
+2. E-3 mode 0 (PqChat.leave / remove at home: the head from epochsOf's tail, the lag, apply at the head; A-4 repeats
+   refused) and PqVault (leaveVault / removeVaultMembers, PqVaultExitLag); the replica rule in PqGroupBase (_keeps
+   allows a UA flagged at the parent or an ancestor at most 16 above; _noneRemoved and the removed-author refusal home
+   only). PqChat has 374 B under its line; stop and report if it or PqVault would go over (no split pre-approved).
+3. G-3: the check is written (scratchpad/review-fix-contract/g3-*.patch) but every test fixture that configures a
+   factory builds its router with factory 0: about 25 construction sites across test/{governance,v2,as,pqz,gas,merge}
+   must name their factory (the factory's address predicted before the router), and a router naming the factory makes
+   every derived op on it pay the code copy (G-4: +482 / +809), so the SDK gas rows of derived signers move by the
+   hundreds. Ask the controller before that churn.
+4. A-6 (neutral TreeAdd / TreeRemove in src/pqgroup/, the base's 256-leaf limit in _treeOpen), F-5 (root of a one-leaf
+   tree; needs a small PqGroupTree harness, none exists). D-4, contract side verified by reading: PqChatTree.treeCreate
+   refuses `sealedInfo` above TREE_INFO_MAX (4,124 B) and `_treeOpen` refuses `used` above 256 and `admins` above 32
+   (PqChatShape); the tests at 257 / 33 / 4,125 belong to A-7; the node's rows are the node's own fix.
+5. A-7 (fable-A's 24-row mutant table: a negative test with its control per row) and the T11 contract tests; the
+   mutant runner runs/2026-11-24-review-fix-contract-mutants.py through scripts/mutant_guard.py.
+6. A-8 (the last-live-leaf gas row at the spec's bound), A-9 (layout rows for `staged`, the views module's
+   storage[0] check), A-10 (pqchat.md §2, §10, §12, §17), A-11 (each module's release ask through PqChat.s.sol's own
+   `new {salt}` path against 60 M; the fix is the CREATE2 deployer with an explicit gas limit).
+7. The round's matrix on the final tree: every forge directory at the default set, the three other sets one at a time
+   (sensitive, modules), size, layout / typehash / selector pins, forge fmt --check, format.sh --check, docs_check, and
+   node lib / clippy / e2e if a selector, typehash or row moves.
