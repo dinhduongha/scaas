@@ -37,7 +37,8 @@ given. A companion note on traceability is being written on another branch as
 8. [Rules check and the trust label](#8-rules-check-and-the-trust-label)
 9. [Multi-company use](#9-multi-company-use)
 10. [Recommendation, the pre-freeze question, owner questions, TODO items](#10-recommendation-the-pre-freeze-question-owner-questions-todo-items)
-11. [Sources and what could not be verified](#11-sources-and-what-could-not-be-verified)
+11. [Owner direction: a backend service with on-chain or off-chain per part (2026-11-24)](#11-owner-direction-a-backend-service-with-on-chain-or-off-chain-per-part-2026-11-24)
+12. [Sources and what could not be verified](#12-sources-and-what-could-not-be-verified)
 
 ## 0. Summary
 
@@ -65,6 +66,11 @@ given. A companion note on traceability is being written on another branch as
   ([CTR-UA-45](../contracts/accounts.md#CTR-UA-45), BUILT) already gives off-chain records and login intents their signature
   domain. One convention needs a decision before clients ship, but no contract change: how a PqChat or PqVault record names an
   off-chain home (§5.4).
+- **Owner direction of 2026-11-24 (§11) supersedes "the registry stays on chain"** in this summary and in §4, §5 and §10.1: the
+  UA registry and the KEM key directory become **optional per deployment**, on chain or off chain under a **key-transparency
+  log** (witnessed, anchored, each UA monitoring its own history). Instead of one backend, a backend-agnostic **ledger service**
+  sits between SCaaS and the backend, as the Arweave store does; off-chain data is **readable by anyone, like chain state**,
+  protected by cryptography only. Value stays on chain.
 
 ## 1. The service model: signed services, with or without a chain
 
@@ -209,7 +215,7 @@ off-chain store keeps SCaaS's signatures; it gives up SCaaS's executor.
 | PQZ and Zether (shield, transfer, unshield, rollover) | **never** | "never lose ciphertext" (ciphertext stays in contract state), double-spend, no decryption oracle ([ARCH-POS-13](../decisions.md#ARCH-POS-13)) |
 | Mandates, `SmartKeyAccount` key operations, governance grants and roles | **never** | authority over value must be ordered against the value operations it governs |
 | Tender commits, reveals and deposits | **never** | deposits are value; the deadline needs a shared order |
-| UA registration, KEM key records, PQZ key records | **never off chain only** | the key directory every verifier resolves against; an operator that shows a different key to one reader enables a man-in-the-middle on KEM wraps (§5.3) |
+| UA registration, KEM key records, PQZ key records | **never off chain only**; revised by the owner's direction of 2026-11-24: **off chain only as a key-transparency log** (§11.4) | the key directory every verifier resolves against; an operator that shows a different key to one reader enables a man-in-the-middle on KEM wraps (§5.3) |
 | Traceability events and attestations (see `docs/research/2026-11-24-traceability.md`) | **fits**, with an anchor | signed by the subject UA, no value moves; existence and order are what matter |
 | Audit and journal logs (the node's hash-chained `audit_log`, job journals, admin audit) | **fits**; anchoring adds what the chain alone does not | already hash-chained in the store ([NODE-ADM-07](../node/admin-auth.md#NODE-ADM-07)) [F]; anchoring the head makes a rewrite evident to outsiders [I] |
 | Document hashes and commitments (`entryRef` metadata, `documentRef`, batch roots) | **fits** | already commitment-only and Merkle-batched ([INT-ERP-23](../integration.md#INT-ERP-23)); the architecture already advises a periodic Merkle root for high-frequency streams ([architecture.md §2](../architecture.md#service-model), condition 4) [F] |
@@ -252,8 +258,8 @@ or depends on the operator); **does not map** (needs a chain; noted and skipped,
 
 | Function / rule | Needs a chain? | Off-chain mapping | What changes |
 |---|---|---|---|
-| UA registry: `register`, the registration `pop`, `registrationOf` ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)) | **yes**, for a directory nobody administers | stays on chain; the service and clients read it under ARCH-POS-15 | nothing; an off-chain copy would be a key-transparency log with witnesses (weaker: a split view of a key is a man-in-the-middle) |
-| KEM key versions: `setKemKey`, `kemKeyOf`, `kemKeyAt` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)) | **yes**, as above | stays on chain | nothing |
+| UA registry: `register`, the registration `pop`, `registrationOf` ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)) | **yes**, for a directory nobody administers | on chain, read under ARCH-POS-15; or, per the owner's direction (§11.4), off chain as a key-transparency log | on chain: nothing; off chain: **maps, weaker** (§11.4: no forgery, but omission, staleness and split views are detected, not prevented) |
+| KEM key versions: `setKemKey`, `kemKeyOf`, `kemKeyAt` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)) | **yes**, as above | as above | as above; staleness of the latest version is the main residual (§11.4) |
 | Revocation | — | the registry is monotonic: no revocation, rotation is a new UA or a new KEM version ([accounts.md §1.1](../contracts/accounts.md#scope)) [F] | nothing to map; §7.5 covers judging entries by time |
 | Signature check `requirePortable` / `requirePortableApp` | no: the check is a pure function of key data | the service verifies with `ua-rs`; the key data comes from the registry | **maps** |
 
@@ -337,10 +343,11 @@ authors' signatures decide what a client accepts, and the contract never reads a
    its own signed removal or rekey is not in the log [I].
 3. **Metadata.** The operator sees who writes to which session, when, and how much. On a public chain everyone sees that; on a
    private service only the operator does; Arweave makes it public again. Off chain is no worse than the chain for metadata, and
-   better when the service is private [I].
+   better when the service is private [I]. Under the owner's direction of 2026-11-24 (§11.6) off-chain data is readable by anyone,
+   so metadata is public as on a public chain, and the mitigations of §11.6 apply.
 
 The key directory is the exception: an off-chain directory that shows Bob a KEM key the operator holds breaks confidentiality, so
-the registry and KEM records stay on chain (or in a witnessed key-transparency log, never a plain table).
+the registry and KEM records stay on chain or go into a witnessed key-transparency log, never a plain table (§11.4).
 
 ### 5.4 Naming an off-chain home (convention, no contract change)
 
@@ -363,8 +370,9 @@ have. The same holds for PqVault's `homeChain` / `homeVaultContract`. This is a 
 - **PqChat, 1:1 and small groups: can run off chain** for messages (already so) and, with a verifiable log, for the control
   plane, when members accept one sequencer's liveness. Needs an anchor (or witnesses among members) for the epoch order.
 - **PqChat public topics:** fully off chain; public data; counts trusted unless recounted from a complete log.
-- **Must stay on chain:** the UA registry, the KEM key directory, the chain-bound PqVault mode, and any session whose users want
-  a removal that no single operator can block.
+- **Must stay on chain:** the chain-bound PqVault mode, and any session whose users want a removal that no single operator can
+  block. The UA registry and the KEM key directory were in this list; under the owner's direction of 2026-11-24 they may go off
+  chain as a key-transparency log (§11.4), with the verdicts per profile in §11.7.
 
 ## 6. The hybrid: a verifiable log anchored on chains
 
@@ -553,7 +561,9 @@ its own node's job API and feeds ([integration.md](../integration.md)).
 
 ### 10.1 Recommendation [I]
 
-1. Keep every value, authority and key-directory operation on chain. Do not offer an off-chain backend for them.
+1. Keep every value and authority operation on chain. Do not offer an off-chain backend for them. (The key directory was in
+   this line; the owner's direction of 2026-11-24 supersedes that: the registry and the KEM keys are optional per deployment,
+   on chain or off chain under a key-transparency log, §11.4. Points 2 to 5 become parts of the ledger service of §11.2.)
 2. Offer an **`anchored-log`** backend as a node service for traceability events, attestations, audit logs, document commitments
    and credentials: a C2SP transparency log (Tessera-compatible tiles), witnesses among operators or companies, and a periodic
    anchor on one or more chains through a new `LogAnchor` class.
@@ -613,7 +623,403 @@ is not recommended.
 
 None of these blocks the freeze or the audit (§10.2).
 
-## 11. Sources and what could not be verified
+## 11. Owner direction: a backend service with on-chain or off-chain per part (2026-11-24)
+
+The owner, 2026-11-24, verbatim: "Chọn backend nào => chỗ này có thể viết API service đứng giữa scaas và backend, như đã làm với
+arweave làm lưu trữ. Có thể tùy chọn: đăng ký UA trên chain, hoặc offchain. Data và execute cũng vậy .v.v. hãy xem dữ liệu offchain
+là readable như onchain. Bảo vệ dữ liệu bằng mật mã."
+
+In English: instead of choosing one backend, write an **API service between SCaaS and the backend**, as was done for Arweave
+storage. Each part is **optional per deployment**: UA registration on chain or off chain; data and execution likewise; and so on.
+**Treat off-chain data as readable like on-chain data.** Protect data with cryptography.
+
+This section is a proposal for the owner, like the rest of the note; nothing in it is ruled, specified or built. It revises three
+earlier conclusions, each marked where it stood: "the registry and the KEM key directory stay on chain" (§0, §4, §5, §10.1);
+"on a private service only the operator sees metadata" (§5.3); and the choice of one backend (§3, §10.1 point 5), which becomes
+a choice per deployment behind one service.
+
+### 11.1 What the Arweave store did, and what carries over
+
+[F], read 2026-11-24:
+
+- **The backend is untrusted and talked to through lists.** `scaas-rpc`'s `arweave` module reads from a list of gateways and posts
+  to a list of bundlers, under CLI-RPC-01 to CLI-RPC-11; "no key, no signing, no payment" in that crate
+  ([CLI-RPC-13](../clients/scaas-rpc.md#CLI-RPC-13), [CLI-RPC-14](../clients/scaas-rpc.md#CLI-RPC-14)).
+- **Every answer is checked by the caller.** A body that fails the caller's `check` is that gateway's failure, and failover moves
+  on; "settled" needs a strict majority of at least two gateways run by different operators, depth, and the bytes
+  (CLI-RPC-13; [ARCH-POS-20](../decisions.md#ARCH-POS-20) C16).
+- **Sealing and signing stay in `ua-rs`.** The upload key is derived and used inside one `ua-rs` call
+  ([CLI-UAL-64](../clients/ua-libraries.md#CLI-UAL-64)); padding is inside the AEAD
+  ([CLI-UAL-65](../clients/ua-libraries.md#CLI-UAL-65)).
+- **The SDK holds the calls** (`seal_for_arweave`, `upload_file`, `fetch_file`, `open_file`, [CLI-SDK-21](../clients/scaas-sdk.md#CLI-SDK-21)).
+  "Arweave never depends on the node" (CLI-SDK-21, decisions CLI-SDK-32).
+- **The node offers an optional service only:** the credit payer, off by default, whose guarantee is the node's so that every
+  consumer gets the same service ([NODE-SPN-05](../node/sponsorship.md#NODE-SPN-05)).
+- **Everything uploaded is public and permanent;** the user is told so, and the metadata cost is stated (CLI-SDK-21).
+
+The pattern that carries over [I]: an **open protocol** to an untrusted backend; **lists of endpoints**; **every answer checked
+against a signature or a proof** by the client; signing and sealing in `ua-rs`; an **optional node service**, never a dependency
+of the client; **public data**, with confidentiality from encryption and the metadata cost said plainly. What Arweave does not
+have, and the ledger service needs, is **order**, **current state** and **rule execution**.
+
+### 11.2 The ledger service
+
+**What it is [I].** A backend-agnostic API service, the **ledger service**, with one open protocol and pluggable backends. It
+accepts typed, client-signed intents; runs the checks of its pinned **rule set**; appends each accepted intent to an append-only
+log; keeps the resulting state in a verifiable map; and publishes checkpoints that commit to both. It generalises the
+`anchored-log` of §6 and §7 by adding execution and current state: `LogBackend` (§7.1) becomes its storage seam.
+
+```mermaid
+flowchart LR
+  C["client (SDK)<br/>signs typed intent in ua-rs"] -->|"same signed bytes<br/>to a list of endpoints"| S["ledger service<br/>rule set pinned by hash"]
+  S --> X["execute: signature, nonce,<br/>rights, limits, shapes"]
+  X --> L["append-only log<br/>(intent, result)"]
+  X --> M["verifiable map<br/>(key → current value)"]
+  L --> P["checkpoint<br/>(size, logRoot, mapRoot, ruleSet)"]
+  M --> P
+  P --> W["witnesses<br/>cosign; optionally re-execute"]
+  P --> A["anchor on chains<br/>(LogAnchor, §6.4)"]
+  L --> B[("backend: Postgres, S3 Object Lock,<br/>Tessera tiles, immudb, a chain")]
+  M --> B
+  R["anyone: replay and verify"] --> L
+  R --> P
+```
+
+**Interface (named fields, JSON; reads unauthenticated) [I]:**
+
+| Operation | Shape | Answer |
+|---|---|---|
+| Submit | `POST /v1/ledger/intents` with `{ledgerId, typehash, fields: {…named…}, sig: UASig}`; the service rebuilds the digest from the named fields and refuses hex bundles, as the job API does ([NODE-JOB-02](../node/job-api.md#NODE-JOB-02), `HEX_ARGS_REFUSED`) | `accepted {index, leafHash, promise}` (a signed promise to include it within the merge bound, the role of Apple's Signed Mutation Timestamp [V, Apple]), or `refused {error}` signed by the ledger key (§11.5) |
+| Read by key | `GET /v1/ledger/map/{key}?size=` | the value, its map inclusion proof, or a **non-inclusion** proof, against a checkpoint |
+| Read by range | `GET /v1/ledger/log?from=&to=` | entries with their results; static C2SP tiles for bulk readers ([F], `tlog-tiles`) |
+| Read by prefix | `GET /v1/ledger/map?prefix=` | the keys under a prefix with a proof that the list is complete (a sorted map gives range completeness; a hashed one does not) |
+| Proofs | `GET /v1/ledger/proof/inclusion?index=&size=`, `/proof/consistency?from=&to=` | RFC 6962 / RFC 9162 proofs [F] |
+| Checkpoint | `GET /v1/ledger/checkpoint` | a C2SP `tlog-checkpoint` signed note carrying `size`, `logRoot`, `mapRoot`, `ruleSet` and the time, with witness cosignatures (`tlog-cosignature`) [F, formats] |
+| Anchor | `GET /v1/ledger/anchors` | `[{chainKey, instance, block, size, root}]`, each to be read from the chain by the client itself, never taken from this answer |
+| Info | `GET /v1/ledger/info` | `ledgerId`, the rule-set id, the ledger's signing UA, the witness list and quorum, the backend class |
+
+**Two structures, one checkpoint [I].** The **log** gives order and history (what was asked, what it did); the **map** gives
+current state with proofs (`latest KEM version of a UA`, `the head epoch of a session`, `items of a vault`), so a reader need not
+replay to read one value. Every checkpoint commits to both. A map keyed by a sorted key (a Merkle tree over sorted keys, or a
+sparse Merkle tree over a key's hash with a sorted index beside it) answers "this key is absent", which a plain log cannot
+(§2, "absence … not provable"). That answers the completeness gap of `sessionsOf` and `vaultsOf` noted in §5.2.
+
+**Backends behind it [I].** The proof format is the service's, never the backend's: one checkpoint, one proof format, one client
+verifier whatever the backend. A backend decides only durability and how hard tampering is for the operator itself:
+
+| Backend | Role | What it adds against the operator |
+|---|---|---|
+| Postgres / Supabase | queue of pending intents, map rows, tiles as rows | nothing (§3.1): the proofs come from the service's own tree |
+| S3 Object Lock (compliance mode) | tiles and checkpoints as write-once objects with conditional writes (`If-None-Match`) | a published tile cannot be overwritten or deleted during the retention period, even by the account's root user [V, §3.1]; withholding stays possible |
+| Tessera (POSIX or S3 tiles) | the log natively in C2SP form | open formats, mirrors (`tlog-mirror`) [F, §3.1] |
+| immudb | log and map in one verifiable database | its own client proofs [V]; the service still publishes its own checkpoints; BSL 1.1 limits offering it as a service [F, §3.1] |
+| a chain | the SCaaS contracts themselves | consensus, the `contract` label; the service is then only a read façade over chain state (and adds nothing a client must trust) |
+
+**Where it lives [I].** One crate, two ways to run it: as a **node module** (off by default, like the Arweave payer,
+NODE-SPN-05), or as a **separate binary** for operators who run no relayer; both from the same code. It is open like the node: a
+rule set is data (typehash allow-lists and bounds in release data, pinned by hash, like a store contract's code hash in
+ARCH-POS-20 C4), never a consumer's name in code (AGENTS.md "The node is open", `docs_check.py consumer`). Any
+app on the open portable namespace ([CTR-UA-45](../contracts/accounts.md#CTR-UA-45) path A) can have a rule set. The ledger's
+signing key is the fourth key class of §7.6 (Q5); a witness key is a fifth.
+
+**How the SDK talks to it [I].** A `ledger` module in `scaas-rpc`, under CLI-RPC-01 to CLI-RPC-11 like `arweave`: a list of
+endpoints, each `named`, `default` or `discovered` ([ARCH-POS-15](../decisions.md#ARCH-POS-15)); **reads** fail over, one endpoint
+answering a whole read, and every answer is accepted only when its proof verifies against a checkpoint with the configured witness
+quorum, so a lying endpoint is that endpoint's failure (as CLI-RPC-13); the **agreement option** asks a strict majority of
+endpoints for the same checkpoint root at the same size; **writes** post the same signed bytes to one or more endpoints, never
+re-signed. A read of a KEM key used to wrap for someone is treated like a read that feeds a decryption: a discovered endpoint
+counts only under the agreement option with at least three endpoints, because a substituted or stale key there breaks
+confidentiality [I; ARCH-POS-15 names PQZ and Zether only, so this is an extension for the owner, Q15].
+
+### 11.3 Per-part placement and deployment profiles
+
+Each part of a deployment is placed **on chain** (the SCaaS contracts), **off chain** (the ledger service, no anchor), or **off
+chain plus anchor** (checkpoints cosigned by witnesses and anchored on one or more chains, §6). Value has one placement only.
+
+**Trust labels [I].** `contract` (today's model); `ledger` (the service executes, anyone replays; order, completeness and
+availability are the operator's, and a fork is evident only to readers who compare checkpoints or witnesses who cosign);
+`ledger-anchored` (as `ledger`, plus witnesses and chain anchors make a fork of the anchored sequence evident to everyone who reads
+the anchor chain); `kt` and `kt-anchored` (the key directory as a key-transparency log, §11.4, with a witness quorum always, and
+anchors for `kt-anchored`). The earlier `anchored-log` (§8) stays the name of a log whose entries carry signatures but no rule set.
+
+**The matrix [I]** (who enforces · what a client verifies · what an operator can still do · label):
+
+| Part | Placement | Who enforces | What a client verifies | What an operator can still do | Label |
+|---|---|---|---|---|---|
+| **UA registration and key records** (`register` and its `pop`, `registerMsig`, `updateMsig`, derived UAs) | on chain | the registry ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07), [CTR-UA-15](../contracts/accounts.md#CTR-UA-15)) | the record from a list of RPC nodes (ARCH-POS-15) | a relayer refuses or delays; another lands it | `contract` |
+| | off chain | **not offered**: a plain table lets one reader see another structure or miss an `msig` update | — | — | — |
+| | off chain plus anchor, as a key-transparency log | the ledger service runs the registry's checks in software; witnesses cosign consistent checkpoints | the record's own signatures (the id is the hash of its key data, CTR-UA-02), a map proof against a cosigned checkpoint, the anchor; its own history by monitoring | refuse a registration or an update; show a stale view up to the freshness bound; split views, detected by witnesses, anchors and owner monitoring | `kt-anchored` (`kt` where no chain exists to anchor on) |
+| **KEM keys** (`setKemKey` versions, [CTR-UA-32](../contracts/accounts.md#CTR-UA-32)) and **PQZ key records** ([CTR-UA-42](../contracts/accounts.md#CTR-UA-42)) | on chain | the registry | as above | as above | `contract` |
+| | off chain | not offered, as above | — | — | — |
+| | off chain plus anchor (key transparency) | the service; witnesses | every version is signed by the UA, so it cannot be forged; the latest version under a checkpoint younger than the freshness bound | withhold the newest KEM version (senders wrap to an older key), split views; detected, not prevented | `kt-anchored` |
+| **App data**: PqChat and PqVault records, traceability events, documents and commitments | on chain | the app contract | contract state from a list of nodes | refuse or delay; another relayer lands it | `contract` |
+| | off chain | the ledger service under the app's rule set | signatures, the map and log proofs, replay of the rule set | drop, withhold, reorder racing writes, equivocate (seen only by readers who compare), lose data without mirrors | `ledger` |
+| | off chain plus anchor | the service; witnesses; anchor contracts check consistency | as above, plus cosignatures and the anchor on each configured chain | drop, withhold, choose the order of racing writes; cannot fork an anchored sequence unseen | `ledger-anchored` |
+| **Execution and rule checks** of non-value operations | on chain | the contract code | the call's effect in state | nothing beyond censorship | `contract` |
+| | off chain | the service's pinned rule set; anyone who replays | replay the log against the rule set, compare signed state roots (§11.5) | run a wrong transition, provable from public data after the fact; refuse | `ledger` |
+| | off chain plus anchor | as above; validating witnesses if configured | as above, plus anchored state roots | as above; a wrong transition under an anchored root is public evidence against the ledger key | `ledger-anchored` |
+| **Payment and fees** | on chain | the token contracts, `RelayFeeRouter` ([CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27)) | balances in state | — | `contract` |
+| | off chain (the service's own fees) | the service's quota and budget code, as the node's sponsorship (§1.4) | its own receipts | refuse service, over-charge within what the user signed | `ledger` |
+| | off chain plus anchor | the payment itself stays on chain; only the service's metering is anchored | the on-chain payment, the metering log | as above | `contract` for the payment, `ledger-anchored` for metering |
+| **Value**: balances, tokens, DEX settlement, PQZ, Zether, mandates, governance (§4) | on chain only | the contracts | state | — | `contract` |
+
+**Deployment profiles [I]:**
+
+| Profile | Registry and KEM keys | App data | Execution of non-value ops | Value | Labels |
+|---|---|---|---|---|---|
+| **full-chain** (today) | on chain | on chain | on chain | on chain | `contract` |
+| **hybrid** | on chain | off chain plus anchor (or off chain, for a private deployment) | off chain plus anchor | on chain | `contract` + `ledger-anchored` (or `ledger`) |
+| **full-offchain** | key-transparency log, anchored | off chain plus anchor | off chain plus anchor | none, or on a chain where the UA is copied (§11.4) | `kt-anchored` + `ledger-anchored` |
+| full-offchain without any chain | key-transparency log, witnessed only | off chain | off chain | **none** | `kt` + `ledger` |
+
+A deployment names its placement per part in release data (a **deployment manifest**: per part, the placement, the chains and
+their instances, the ledgers with their ids, keys, rule-set hashes and witness quorums); the SDK routes each part by it and
+refuses an answer from a home the manifest does not name [I]. A profile is a preset of that manifest, never a code path.
+
+### 11.4 Off-chain UA registration as a key-transparency log
+
+This revises §4, §5.2 and §10.1, which kept the registry on chain. It is acceptable only as a **key-transparency log** [I].
+
+**What the precedents do** [F unless marked]:
+
+- **CONIKS** (Melara et al., USENIX Security 2015): a key directory as a verifiable map; users check their own bindings
+  ("downloading less than 20 kB per day" at billions of users) and auditors check non-equivocation (about 2.5 kB per provider per
+  day) [V, the paper's own figures].
+- **Keybase:** per-user signature chains, their heads as leaves of a Merkle tree, the root pushed to the Stellar blockchain
+  about once an hour since 20 Jan 2020 (to Bitcoin before) [V, Keybase docs].
+- **WhatsApp:** an "append-only AKD of public keys mapped to user accounts", changes batched into epochs, inclusion and key
+  history proofs, clients that verify automatically, audit proofs published for anyone (2023-04-13) [V, Meta]; the library
+  `meta/akd`, Rust, Apache-2.0, v0.13.0 (2026-08-13) [F, GitHub API]; Cloudflare's auditor Plexi checks the audit proofs
+  (announced 2024-09) [V, Cloudflare].
+- **Apple iMessage Contact Key Verification:** a verifiable log-backed map after CONIKS, VRF-hidden identifiers, Signed Mutation
+  Timestamps, and devices that check a change is merged within a 48-hour maximum merge delay [V, Apple security blog].
+- **Google Key Transparency:** the Trillian-based project, archived (last push 2021-07-05, v0.3.0 2020-07-03) [F, GitHub API].
+- **IETF KEYTRANS:** `draft-ietf-keytrans-architecture-12` (2026-11-16) and `draft-ietf-keytrans-protocol-06` (2026-11-02)
+  [F, datatracker]. The architecture says a label's owner monitors it "for as long as they own it"; detection works because "any
+  version shown to other users is also visible to the label's owner"; KT "does not itself determine whether a new version of a
+  label was authorized"; an offline owner's unauthorized change "may not be detected at all"; and a log "can always refuse to
+  answer requests that would reveal its own misbehavior" [F, the draft's text].
+
+**Why SCaaS fits KT better than a phone-number directory [I].** In WhatsApp or iMessage the server binds a name to a key, so the
+main attack is a **substituted key**. In SCaaS the binding is self-certifying: a UA is `keccak256(keccak256(kind_tag) ‖ key_data)`
+([CTR-UA-02](../contracts/accounts.md#CTR-UA-02)), the registration `pop` is portable and covers the PQZ key and the first KEM
+record ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)), and every later KEM or PQZ version is signed by the UA
+([CTR-UA-32](../contracts/accounts.md#CTR-UA-32), [CTR-UA-42](../contracts/accounts.md#CTR-UA-42)). An operator cannot forge a
+record. What it can do is **omit** (hide a registration, a newer KEM version, an `msig` update), **serve a stale view**, and **show
+different views to different readers**. The name-to-UA binding (contact cards, handles) is outside the registry and stays the
+client's (out of scope here). So "a substituted key is detected" becomes, in SCaaS: an omitted or stale record and a split view
+are detected, by witnesses and by each UA monitoring its own history.
+
+**The log's content [I].** The ledger's rule set for the directory is the registry's: it accepts exactly the records the chain
+registry accepts, byte for byte, and runs the same checks in software with the same bounds, so every record stays copyable to a
+chain:
+
+| Record | Off-chain form | Check, as on chain |
+|---|---|---|
+| Registration and `pop` | the same `register(kind, keyData, attrs, pop, pqzPop)` fields; `DS_P` has "no chain key, no `chainUid` and no registry address" [F, CTR-UA-07] | the kind's verifier in software for every kind (no gas bound, but the same caps: the `msig` slot caps of [CTR-UA-44](../contracts/accounts.md#CTR-UA-44), the `bls12381-multi` member cap of [CTR-UA-52](../contracts/accounts.md#CTR-UA-52)); minimal form of stored `msig` signatures; the id's top 96 bits non-zero ([CTR-UA-03](../contracts/accounts.md#CTR-UA-03)) |
+| `registerMsig`, acceptances | the same typed entries ([CTR-UA-36](../contracts/accounts.md#CTR-UA-36), [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)) | the same |
+| `updateMsig` | **not portable today:** `UAMsigUpdate` binds `chainUid` and `registry`, "a signed update serves exactly one registry", `validUntilBlock` is a block number [F, [CTR-UA-44](../contracts/accounts.md#CTR-UA-44)]. Proposal: on a ledger, the same struct with `chainUid = ledgerId`, `registry = address(0)` and `validUntilBlock` read as a log size; one update history per ledger, as per registry | the same checks; a ledger id is a domain-separated hash that is no chain's `chain_uid`, so a ledger update can never verify on a chain registry (Q16) |
+| KEM versions | `setKemKey` records: each `(ua, version)` once, in any order, never overwritten; `kemKeyOf` = the highest stored version [F, CTR-UA-32]; an `msig` holds no KEM key [F] | the same; map key `(ua, version)` plus the UA's highest version |
+| PQZ key versions | `setPqzKey` (strictly sequential), `storePqzPop` [F, CTR-UA-42] | the same; the `R_REG` proof checked by `pqz-core`'s verifier where the service has it, else stored unproven and marked so, as a chain without the verifier does ([CTR-UA-31](../contracts/accounts.md#CTR-UA-31)) |
+| One key, one purpose | `keyOwner[keyHash] = ua` per ledger | uniqueness per ledger, as it is per chain (CTR-UA-31) |
+| Revocation | none: the registry is monotonic ([CTR-UA-15](../contracts/accounts.md#CTR-UA-15)) | **by time** [I]: a reader takes the highest KEM version under a checkpoint no older than the freshness bound; publishing version v + 1 retires v for every honest reader within that bound. Authority at a time uses §7.5's window |
+
+**Derived UAs** need nothing new: the id is a pure function on every chain and every ledger ([CTR-UA-04](../contracts/accounts.md#CTR-UA-04)).
+Their **balances** are value ([CTR-UA-18](../contracts/accounts.md#CTR-UA-18)) and stay on chain.
+
+**The map and the checkpoint [I].** Map key = the UA id (public, as on chain: unlike CONIKS and Apple, no VRF to hide ids, because
+the owner's direction makes off-chain data readable like chain state; Q18). Map value = a commitment to the record and its version
+lists. Each checkpoint carries `mapRoot` and is cosigned by a witness quorum; `kt-anchored` adds the anchor of §6.4. A lookup returns
+the value and its proof, or a non-inclusion proof (needed: "receiving to an unregistered derived id is refused",
+[CTR-UA-06](../contracts/accounts.md#CTR-UA-06)).
+
+**Monitoring by each UA [I].** The SDK of every UA keeps the records it signed (the `msig` client rule already keeps "the signed
+updates and the key records in one ordered log", CTR-UA-44 [F]). At least once per freshness bound it reads its own map entry at
+the latest cosigned checkpoint and checks: every record it signed and the service promised is included by the merge bound; nothing
+it did not sign is under its id (impossible for a valid signature, so a hit is evidence of a broken verifier); the history is
+consistent with the last checkpoint it saw. On a miss it re-posts the same signed bytes to the ledger's other endpoints, keeps the
+signed promise as evidence, and warns the user. Witnesses check consistency between checkpoints; anchors give everyone one
+reference per chain; a contact that wraps to a UA reads under the agreement option (§11.2).
+
+**What stays weaker than on chain, plainly [I]:**
+
+1. **One sequencer instead of consensus.** The ledger can refuse a registration, a KEM version or an `msig` update **forever**. On
+   chain any relayer, or the subject, lands it ([architecture.md §1.1](../architecture.md#authority-model)).
+2. **Detection, not prevention.** A split view is detected after the fact: between checkpoints, and only under the assumption
+   that the witnesses do not collude with the operator (the KEYTRANS draft's own assumption [F]). On chain a reader of final state
+   on honest nodes sees one history.
+3. **Freshness.** A sender can be served an older KEM version until the freshness bound: messages wrapped in that window go to a
+   key the recipient may have retired because it leaked. On chain the lag is the finality gate.
+4. **Monitoring is the owner's job.** An offline UA learns late, or never, that its update was withheld (KEYTRANS §7 [F]). An
+   `msig` update that removed a member is the sharpest case: until it lands, readers of that ledger still count the removed
+   member.
+5. **Uniqueness per ledger only.** `keyOwner` holds per ledger, as per chain; two ledgers can hold the same key under different UAs.
+6. **Configuration is trusted.** The ledger key, the witness list and quorum are pinned in release data; modified client software
+   defeats KT (KEYTRANS §7.3 [F]), as it defeats a chain client.
+7. **Availability.** The map and log need mirrors; a chain's state is kept by every full node.
+
+**Moving between off chain and on chain, or both [I].** The same bytes work everywhere, so moving is copying:
+
+- **Off chain → on chain:** anyone submits the same `register` (or `registerMsig`) bytes to a chain registry, the copy
+  CTR-UA-31 already allows; then each KEM version (any order) and each PQZ version (in order). The id is the same (a pure
+  function); the portable domains `DS_P` and the app domains of path A ([CTR-UA-46](../contracts/accounts.md#CTR-UA-46)) carry no
+  chain, so every signature verifies there. `msig` updates do not move: on a new registry the first structure is in power until an
+  update signed for that registry lands, "copies to a new registry start from it" [F, CTR-UA-44].
+- **On chain → off chain:** the ledger imports from `registrationOf`, `popOf` and the KEM and PQZ records, read through a list of
+  nodes, and **re-checks every signature itself**; a chain read is never trusted as a verdict.
+- **Both:** a UA may be registered on chains and on ledgers at once. KEM versions are UA-signed and write-once, so a reader takes
+  the **union** of the versions it sees and the highest version; two **different** keys for one `(ua, version)` across homes are
+  evidence of misuse (CTR-UA-32's client rule "one key per version" was broken) and that version is refused by the reader. A ledger
+  is not a generation of any chain's registry line ([§1.8.1](../contracts/accounts.md#registry-line)); nothing on chain forwards
+  to it, and an on-chain `requireAuthorized` reads only its own chain's registry, so a UA that needs value on a chain must be
+  copied there.
+
+### 11.5 Off-chain execution and replay
+
+**The checker [I].** The ledger service runs the same checks as the contract: the signature (through the registry or the KT map at
+the checkpoint the intent names), the nonce bitmap, expiry, rights, limits and shapes. The rule set is a release with a hash,
+the same typed records and the same bounds as the contract's; one specification, two implementations (Solidity and Rust), the
+same vector rows accepted and refused by both (AGENTS.md "Clients and vectors"). For each intent the log holds `{intent,
+prevStateRoot, newStateRoot, result}`; a refused intent gets a **signed refusal** with its named error, so a refusal is evidence
+and differs visibly from silence (whether refusals are logged too is Q17).
+
+**Replay [I].** All data is readable, so anyone (a member, an auditor, a witness, a company's own node) downloads the log from a
+cosigned checkpoint, re-executes it with the reference implementation and compares state roots. A wrong transition is a
+**fraud proof in the plain sense**: a checkpoint signed by the ledger key over a state root that the public log and the public rule
+set contradict. It is public evidence, not an on-chain remedy: no contract re-executes it (that would be a rollup's fraud-proof
+game, out of scope here) [I]. **Validating witnesses** (an option): a witness cosigns a checkpoint only after re-executing its
+batch; with a quorum of such witnesses a client accepts no state a quorum did not check. At that point the system is close to a
+permissioned chain (§9 (c)), and running the SCaaS contracts on one may serve better [I].
+
+**Equivocation [I].** Witnesses refuse an inconsistent checkpoint; anchors give one reference per chain; members of a PqChat or
+PqVault session can exchange the checkpoints they built on inside their encrypted messages, so a split view of the session's order
+shows up at the next message; the signed `parentTreeHash` of a TreeKEM commit already exposes a forked head (§5.2).
+
+**What cannot be made safe off chain without consensus [I].** **Double-spend of value**: an operator can show two histories that
+each spend one balance to a different receiver, and a receiver who acted on its view (delivered goods, released a payment
+elsewhere) cannot be made whole by detection. The §4 list of "never off chain" stands for value: balances, mint and burn, DEX
+settlement, PQZ and Zether, mandates and key authority over value, governance, tender deposits. The same holds for anything a party
+acts on irreversibly from one read, unless it waits for an anchor and a witness quorum and accepts the residual.
+
+**Signed state roots per batch (optional) [I].** Each checkpoint signs `mapRoot`; a light client reads one key with a map proof
+and needs no replay; anchoring `mapRoot` as well as the log root lets a chain reader check current state too. Cost: one more 32-byte
+word per anchor (§6.2).
+
+### 11.6 Readable like on chain, protected by cryptography
+
+**The principle [I].** Everything a ledger holds is public: served to anyone, mirrored by anyone, readable like contract state.
+Confidentiality comes from encryption, integrity from signatures and proofs, never from who may read.
+
+- **Every confidential field is ciphertext:** scheme 1 KEM + AEAD (ML-KEM-1024 + X25519, [CTR-UA-32](../contracts/accounts.md#CTR-UA-32)),
+  in the PqChat and PqVault record formats and the file frame with padding inside the AEAD ([CLI-UAL-65](../clients/ua-libraries.md#CLI-UAL-65)).
+  **PQZ and Zether ciphertexts stay on chain** ("never lose ciphertext", AGENTS.md): a ledger may mirror them, never as the only
+  copy, and a wallet decrypts them only from chain reads under ARCH-POS-15, never from a ledger copy (Q21).
+- **Access control is not a security boundary.** JWTs, the `Session` token of §1.3 and gateway credentials serve rate limits,
+  quotas and abuse control only. A design whose confidentiality depends on a read being refused is a defect. Writes are
+  authorised per request by the subject's signature, never by a token (§1.3).
+- **Metadata leaks as on a public chain:** who (every record names its signing UA, an obligation of CTR-UA-46 (b)), when (index
+  and checkpoint time), sizes, which session or vault, and the graph of who writes where. Reads leak too: the endpoint sees who
+  asks for which key. Mitigations, none complete [I]: **padding** of every ciphertext to power-of-two buckets (as ARCH-POS-20 C10);
+  **per-session or per-vault UAs** (a fresh derived UA per purpose, cheap to register off chain, one key one purpose,
+  [CTR-UA-10](../contracts/accounts.md#CTR-UA-10)); **batching** (writes released at fixed intervals, so time inside a batch is
+  hidden); **bulk reads** of whole static tiles from mirrors or a CDN instead of key lookups, which hides interest; no IP kept with
+  a UA, as NODE-SPN-05 keeps none with an upload address. This revises §5.3 item 3: off chain is no longer more private than a
+  public chain.
+- **ARCH-POS-13** [F, rule; I, application]: the service never decrypts or decapsulates; it checks signatures, hashes, lengths and
+  shapes only. Clients decapsulate and open KEM + AEAD content read from a ledger; the KEM and the one-shot AEAD keyed by it are
+  outside the rule by the Change of 2026-11-13 ([ARCH-POS-13](../decisions.md#ARCH-POS-13)). As CLI-SDK-21 already does for files,
+  a failure is shown on the device only and nothing the client sends depends on it. No PQZ or Zether key ever touches ledger
+  data.
+
+### 11.7 PqChat and PqVault under each profile
+
+| Product | full-chain | hybrid | full-offchain |
+|---|---|---|---|
+| PqVault, personal vault | today | **§5.5 holds:** fits best off chain; registry and KEM on chain | **fits:** only the user's own devices write and read their own KEM keys, so KT staleness hurts nobody else; residuals: availability, censorship of the user's own writes [I] |
+| PqVault, shared vault and share box | today | §5.5: sequencer, witnesses or anchor; the removal-censorship residual | as hybrid, plus KEM staleness and split views of the other members' keys (§11.4 points 2 and 3) |
+| PqVault, chain-bound mode 1 | today | on chain only | **does not map** (bound to one contract) |
+| PqChat, 1:1 and small groups | today | §5.5: control plane on the ledger, messages on Matrix or the store list | fits, with every member monitoring its own KEM versions and wrapping only to keys under a fresh cosigned checkpoint; residuals as hybrid plus §11.4 |
+| PqChat public topics | today | fully off chain | fully off chain |
+| Sessions whose users want a removal no single operator can block | today | on chain | **does not fit** |
+
+**What changes in §5 [I].** The identity rows of §5.2 and the "must stay on chain" line of §5.5 are revised as marked there.
+Every other verdict of §5 stands. An off-chain home is still named by §5.4's convention (`homeChain = ledgerId`); a session's
+store list ([UA-7 spec §4.2](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md)) could gain a ledger store kind for messages,
+but that is a later step and the owner's call (Q8).
+
+### 11.8 Rules check under the direction
+
+| Rule | Under the direction [I] |
+|---|---|
+| "The smart contracts are the API services; the contracts check everything themselves" | becomes **"the checker checks everything itself, and anyone can replay"**: on chain the checker is the contract; off chain it is the ledger service's pinned rule set, and the full log, the rule set and the reference implementation are public so that any party can re-execute. The label says which (§11.3) |
+| One rule on every chain | **and on every backend:** the same typed records, bounds, checks and proof format whether the ledger keeps its data in Postgres, S3, Tessera tiles, immudb or a chain; a backend changes durability, never a rule. No split by chain kind ([NET-ALL-20](../networks/README.md#NET-ALL-20)) |
+| The node is open | the ledger service is generic; rule sets are data in release data; no consumer name in code; any app on path A gets a rule set |
+| Explicit parameters | named fields in JSON, typed EIP-712 records, `bytes` only for a signature, ciphertext, key or proof; hex bundles refused |
+| Every state-changing `mtx*` is relayable | the analogue holds: anyone may post a signed intent, with a fee of 0 |
+| Every RPC consumer takes a list of nodes | every ledger consumer takes a list of endpoints (§11.2) |
+| Never lose ciphertext; never a decryption oracle | §11.6 |
+| The node never holds subject funds or keys | holds: the ledger and witness keys are new classes, never subject keys and never lane keys (Q5) |
+| Maximal support (ARCH-POS-18) | every kind verifies in software off chain, with the same caps |
+
+**Labels per profile:** full-chain `contract`; hybrid `contract` + `ledger-anchored` (`ledger` for a private deployment);
+full-offchain `kt-anchored` + `ledger-anchored`; without any chain `kt` + `ledger`. A deployment states its labels per part; a
+client shows the label of the home it read from.
+
+### 11.9 The pre-freeze question, owner questions, TODO items
+
+**Does anything need a contract change before the EVM freeze? No [I].**
+
+- **A domain or purpose for off-chain records:** ledger rule sets, checkpoints and `Session` intents sign in the open portable
+  app namespace ([CTR-UA-45](../contracts/accounts.md#CTR-UA-45) path A, BUILT); the KT directory reuses the registry's own
+  portable records (`DS_P`, `PURPOSE_KEM`, `PURPOSE_PQZ_KEY`), which carry no chain [F]. Nothing new in the registry.
+- **`msig` updates on a ledger:** a convention on the existing `UAMsigUpdate` (§11.4), verified by the ledger, never by a chain;
+  no contract change, but a decision before clients ship (Q16).
+- **The "home" convention:** a client convention on existing fields (§5.4, Q8).
+- **Anchor classes:** a new class on the generic catalogue after the freeze ([CTR-TOK-28](../contracts/token-wrappers.md#CTR-TOK-28),
+  BUILT) [F]; anchoring `mapRoot` too is a field of that new class.
+- **A chain contract that accepts a UA registered only on a ledger** (through a KT proof) would be a registry change; the registry
+  line admits later generations ([§1.8.1](../contracts/accounts.md#registry-line)), so even that would not need to land before the
+  freeze, and it is not recommended: copying the registration to the chain (CTR-UA-31) does the same today.
+
+**Open questions for the owner (no rulings here):**
+
+- **Q11** The ledger service as one open protocol with pluggable backends, one crate run as a node module (off by default) or a
+  separate binary?
+- **Q12** The three profiles (full-chain, hybrid, full-offchain) and the labels `contract`, `ledger`, `ledger-anchored`, `kt`,
+  `kt-anchored`; which profile is built first?
+- **Q13** The off-chain registry only as a key-transparency log: is an anchor required (`kt-anchored`), or may a chainless
+  deployment run `kt` on witnesses alone? And the witness quorum (with Q9).
+- **Q14** The freshness bound for KEM reads and the merge bound for promises (Apple uses 48 hours [V]); one value for every
+  deployment, or per deployment?
+- **Q15** Treat a KEM-key read for wrapping like a read that feeds a decryption under ARCH-POS-15 (discovered endpoints only under
+  the agreement option with at least three)?
+- **Q16** `msig` updates on a ledger: `UAMsigUpdate` with `chainUid = ledgerId`, `registry = address(0)`, `validUntilBlock` as a log
+  size?
+- **Q17** Signed refusals: returned only, or also logged?
+- **Q18** Public UA ids in the KT map (no VRF), consistent with "readable like on chain"; and per-session UAs, padding and batching as
+  defaults?
+- **Q19** A UA in both homes: the union rule for KEM versions, and refusal of a version with two different keys?
+- **Q20** Validating witnesses (re-execute before cosigning) as an option, or consistency-only witnesses?
+- **Q21** May a ledger mirror PQZ and Zether ciphertexts (never as the only copy, never read for a decryption)?
+
+**Proposed TODO items, dependencies and rough effort [E]** (they extend OL-1 to OL-10; OL-4 and OL-2 fold into OL-12 and OL-14):
+
+| Item | Depends on | Layer | Effort |
+|---|---|---|---|
+| **OL-11** Owner answers to Q11–Q21 | this section, OL-1 | — | — |
+| **OL-12** Spec: the ledger service protocol (routes, named fields, log and map, checkpoint with `mapRoot` and rule-set id, proofs, promises, signed refusals), the deployment manifest, the labels; vectors in every client; Fable and Codex review | OL-11, OL-2 | docs, vectors | 3–4 weeks |
+| **OL-13** Spec: the key-transparency directory (map layout, monitoring, freshness, `msig` updates on a ledger, import from and copy to chain registries, the union rule) | OL-12 | docs, vectors | 2–3 weeks |
+| **OL-14** The ledger service crate: rule-set engine, log and map, backends Postgres, S3 Object Lock and Tessera-compatible tiles (immudb after a licence check), node module and binary | OL-12 | node | 6–10 weeks |
+| **OL-15** `scaas-rpc` `ledger` module: endpoint lists, proof checks, agreement option | OL-12 | clients | 2–3 weeks |
+| **OL-16** SDK: KT lookups, owner monitoring, the manifest's per-part routing | OL-13, OL-15 | clients | 3–4 weeks |
+| **OL-17** KT rule set: the registry's checks in software for every kind, bounds equal to the contract's; cross-rows with the forge tests (the same rows accepted and refused) | OL-13, OL-14 | node, vectors | 3–5 weeks |
+| **OL-18** Reference replayer and the validating-witness mode | OL-14, OL-5 | node, clients | 2–3 weeks |
+| **OL-19** PqVault and PqChat under the profiles (extends OL-8 and OL-9) | OL-16, OL-17, Q8 | clients | with OL-8, OL-9 |
+| **OL-20** `LogAnchor` carrying `mapRoot` (extends OL-3) | OL-12 | contracts | with OL-3 |
+
+None of these blocks the freeze or the audit.
+
+## 12. Sources and what could not be verified
 
 **Web sources** (read 2026-11-24 unless stated):
 
@@ -647,6 +1053,16 @@ None of these blocks the freeze or the audit (§10.2).
   [Pro releases](https://docs.datomic.com/releases-pro.html), [Nubank FAQ](https://building.nubank.com/datomic-is-available-free-of-licensing-fees/).
 - DPoP: [RFC 9449](https://www.rfc-editor.org/rfc/rfc9449); Sign-In with Ethereum: [EIP-4361](https://eips.ethereum.org/EIPS/eip-4361);
   ML-DSA sizes: [FIPS 204](https://csrc.nist.gov/pubs/fips/204/final).
+- Key transparency (§11.4): CONIKS, [USENIX Security 2015](https://www.usenix.org/conference/usenixsecurity15/technical-sessions/presentation/melara)
+  and [ePrint 2014/1004](https://ia.cr/2014/1004); Keybase, [Merkle root in Stellar](https://book.keybase.io/docs/server/stellar) and
+  [in Bitcoin (deprecated)](https://book.keybase.io/docs/server/merkle-root-in-bitcoin-blockchain); WhatsApp,
+  [Meta engineering, 2023-04-13](https://engineering.fb.com/2023/04/13/security/whatsapp-key-transparency/) and the
+  [whitepaper](https://www.whatsapp.com/security/WhatsApp-Key-Transparency-Whitepaper.pdf) (not read in full); `meta/akd`,
+  `google/keytransparency` and `cloudflare/plexi` status from the GitHub API; Cloudflare,
+  [Plexi](https://blog.cloudflare.com/key-transparency) [V]; Apple,
+  [iMessage Contact Key Verification](https://security.apple.com/blog/imessage-contact-key-verification/) [V]; IETF KEYTRANS,
+  [architecture](https://datatracker.ietf.org/doc/html/draft-ietf-keytrans-architecture) (-12 read) and
+  [protocol](https://datatracker.ietf.org/doc/draft-ietf-keytrans-protocol/) (-06, revision and date from the datatracker API, not read).
 
 **Not verified:**
 
@@ -657,5 +1073,10 @@ None of these blocks the freeze or the audit (§10.2).
 - The Tessera announcement's own date (taken from the v1.0.0 tag), and whether Rekor v2 has built in witnessing since its GA.
 - immudb's proof formats in detail (the README names verified reads, not inclusion and consistency proofs as such).
 - That Google Cloud offers no managed ledger database: inferred from finding none, not from a statement.
+- §11.4: the CONIKS and Apple figures (20 kB and 2.5 kB a day; the 48-hour merge delay) are the authors' own claims; the
+  WhatsApp whitepaper and the KEYTRANS protocol draft were not read in full; the KEYTRANS quotes come from the architecture
+  draft -12 through a fetch tool's extraction, not checked line by line against the text.
+- §11.2: that a sorted verifiable map with range-completeness proofs fits Tessera or any listed backend is our design
+  inference; no listed product ships such a map with C2SP checkpoints.
 - Every gas figure in §6.2 marked [E] is an estimate from the repository's measured rows, not a measurement of a `LogAnchor`;
   the anchor's real cost needs a forge run after OL-3.
