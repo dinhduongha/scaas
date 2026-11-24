@@ -1087,8 +1087,11 @@ EIP-1167 clone at a CREATE3 address through a factory, then uses it by meta-tran
     the direction for a tender v2;
   - [off-chain ledger backends](docs/research/2026-11-24-offchain-ledger-backends.md), for the cases that need no
     chain;
-  - [PqChat](docs/research/pqchat-overview.md) and [PqVault](docs/research/pqvault.md), for messaging and shared
-    secrets;
+  - **PqChat**, post-quantum end-to-end chat with sessions kept in contract state: the
+    [overview](docs/research/pqchat-overview.md), the [contract](docs/contracts/pqchat.md) and the
+    [client core](docs/clients/pqchat-core.md);
+  - **PqVault**, post-quantum notes, passwords and secrets shared with named members: the
+    [research](docs/research/pqvault.md) and the [contract](docs/contracts/pqvault.md);
   - [AI agents](docs/research/node-ai-agents.md), for agents that pay and sign through the node.
 
 <details>
