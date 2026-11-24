@@ -1924,6 +1924,8 @@ pub struct Op {
     /// `(from as an id, batch, nonce)` of a nonce envelope: the subject the node reads back (R80).
     pub lane: Option<(B256, U256, U256)>,
     pub valid_until: u64,
+    /// A `gov_router` op's `target` (G1, CTR-GOV-33): a derived subject's nonce is the router's `mtxNonceFor(target, …)`.
+    pub gov_target: Option<Address>,
 }
 
 const OP_KEYS: [&str; 10] = [
@@ -2287,6 +2289,10 @@ impl Op {
             pqz_verdict,
             pqz_fee,
         };
+        let gov_target = match contract {
+            "gov_router" => a.vals.get("target").and_then(|v| v.as_address()),
+            _ => None,
+        };
         Ok(Op {
             row,
             to,
@@ -2294,6 +2300,7 @@ impl Op {
             typed,
             lane,
             valid_until,
+            gov_target,
         })
     }
 }

@@ -138,7 +138,11 @@ impl Op {
                             let spent = match lane {
                                 Some((from, batch, nonce)) => {
                                     let w = pool
-                                        .call_at(&at, contract, nonce_call(kind, from, *batch))
+                                        .call_at(
+                                            &at,
+                                            contract,
+                                            nonce_call(kind, from, *batch, None),
+                                        )
                                         .await?;
                                     if w.len() != 32 {
                                         return Err(ReadError::Failure(

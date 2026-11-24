@@ -87,6 +87,9 @@ pub struct MetaRef {
     /// The subject's nonce is `mtxNonce(address, batch)` (`SmartKeyAccount`, `IMetaTxAddress`); else `mtxNonce(bytes32, batch)`
     /// (tokens, the router, the mandate wallets: one nonce map on ids, ua-mtx-merge plan T14).
     pub addr_nonce: bool,
+    /// A router op's `target` (G1, CTR-GOV-33): a derived subject's nonce is `mtxNonceFor(target, from, batch)` on the router,
+    /// keyed by the registry the router checks it on; `None` elsewhere and for a router's `UACancelNonce` (no target).
+    pub gov_target: Option<Address>,
 }
 
 impl MetaRef {
@@ -99,6 +102,7 @@ impl MetaRef {
             digest,
             ua: false,
             addr_nonce: false,
+            gov_target: None,
         }
     }
 
@@ -111,6 +115,7 @@ impl MetaRef {
             digest,
             ua: true,
             addr_nonce: false,
+            gov_target: None,
         }
     }
 }
@@ -439,6 +444,7 @@ fn work_of_op_with(
         digest: None,
         ua,
         addr_nonce,
+        gov_target: p.gov_target,
     });
     Ok((
         Work {
@@ -2100,6 +2106,7 @@ pub(crate) mod tests {
             digest: None,
             ua: true,
             addr_nonce: false,
+            gov_target: None,
         };
         assert!(ours(&m, svc, svc, lane), "the service relayed it");
         assert!(ours(&m, svc, lane, lane));
@@ -7891,7 +7898,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
                 nonce: U256::ZERO,
                 digest: None,
                 ua: true,
-                addr_nonce: false
+                addr_nonce: false,
+                gov_target: None
             })
         );
         assert_eq!(w.valid_until, m.valid_until().saturating_to::<u64>());

@@ -746,6 +746,13 @@ sol! {
         function classReleaseOf(ReleaseId calldata id) external view returns (ClassRelease memory);
     }
 
+    /// The chain's `GovernanceRouter` under G1 (CTR-GOV-33): a derived subject's nonce for an op on `target` is keyed by the
+    /// registry the router checks it on (`registryFor(target)`), so the node reads it here, not with `mtxNonce`.
+    #[derive(Debug)]
+    interface IGovRouterNonce {
+        function mtxNonceFor(address target, bytes32 from, uint256 lane) external view returns (uint256);
+    }
+
     /// `IGovernance`'s events the indexer reads (M-08) and the errors of a role or a pending the node names (§3.1).
     #[derive(Debug)]
     interface IGovernance {

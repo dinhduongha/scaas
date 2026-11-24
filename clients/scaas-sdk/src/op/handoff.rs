@@ -278,7 +278,8 @@ impl Op {
                 }
                 let batch = dec(env.get("batch").ok_or(SdkError::Argument)?)?;
                 let nonce = dec(env.get("nonce").ok_or(SdkError::Argument)?)?;
-                if lane_nonce(&pool, Address::from(contract), "token", &from, batch).await? > nonce
+                if lane_nonce(&pool, Address::from(contract), "token", &from, batch, None).await?
+                    > nonce
                 {
                     return Err(SdkError::ImportConsumed);
                 }

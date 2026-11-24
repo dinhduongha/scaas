@@ -377,6 +377,7 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 ok(json!(out))
             } else if data.starts_with(&sel("mtxNonce(bytes32,uint256)"))
                 || data.starts_with(&sel("mtxNonce(address,uint256)"))
+                || data.starts_with(&sel("mtxNonceFor(address,bytes32,uint256)"))
             {
                 let n = if at >= c.nonces_from {
                     c.nonces.get(&to).copied().unwrap_or(0)

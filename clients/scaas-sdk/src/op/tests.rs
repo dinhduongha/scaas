@@ -3755,3 +3755,35 @@ async fn strict_majority_ends_a_failed_operation_at_the_finalized_block() {
         }
     }
 }
+
+/// G1 (CTR-GOV-33): a router op of a derived id reads `mtxNonceFor(target, from, lane)`; a native id, another kind or no target
+/// `mtxNonce(bytes32,uint256)`.
+#[test]
+fn a_router_ops_derived_lane_reads_the_target_keyed_nonce() {
+    let sel = |s: &[u8]| scaas_ua::keccak256(s)[..4].to_vec();
+    let (derived, native, t) = (
+        [0xd1u8; 32],
+        [[0u8; 12].as_slice(), &[0xa1u8; 20]].concat(),
+        [0x70u8; 20],
+    );
+    let d = super::nonce_call("gov_router", &derived, U256::from(3), Some(t));
+    assert_eq!(d[..4], sel(b"mtxNonceFor(address,bytes32,uint256)"));
+    assert_eq!(
+        (&d[16..36], &d[36..68], d[68..100][31]),
+        (&t[..], &derived[..], 3)
+    );
+    assert_eq!(d.len(), 100);
+    let plain = sel(b"mtxNonce(bytes32,uint256)");
+    assert_eq!(
+        super::nonce_call("gov_router", &native, U256::ZERO, Some(t))[..4],
+        plain
+    );
+    assert_eq!(
+        super::nonce_call("token", &derived, U256::ZERO, Some(t))[..4],
+        plain
+    );
+    assert_eq!(
+        super::nonce_call("gov_router", &derived, U256::ZERO, None)[..4],
+        plain
+    );
+}

@@ -417,7 +417,17 @@ impl Op {
             let batch = dec(e.get("batch").ok_or(SdkError::Argument)?)?;
             let nonce = match e.get("nonce") {
                 Some(n) => dec(n)?,
-                None => lane_nonce(&pool, Address::from(d.contract), d.kind, &from, batch).await?,
+                None => {
+                    lane_nonce(
+                        &pool,
+                        Address::from(d.contract),
+                        d.kind,
+                        &from,
+                        batch,
+                        super::gov_target(&message),
+                    )
+                    .await?
+                }
             };
             if let Some(e) = envelope_mut(&mut message) {
                 e.insert("nonce".into(), Value::String(nonce.to_string()));

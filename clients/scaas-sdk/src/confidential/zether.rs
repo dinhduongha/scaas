@@ -800,7 +800,7 @@ impl super::Confidential {
                 let r = read::zether(&sdk, &p.chain, &p.token, Some(&y), ua, &others).await?;
                 let e = &p.envelope;
                 let batch = dec(&json!(p.batch))?;
-                let nonce = lane_nonce(&pool, Address::from(t), "zether", &ua, batch).await?;
+                let nonce = lane_nonce(&pool, Address::from(t), "zether", &ua, batch, None).await?;
                 // canonical (an unbound relayer / fee recipient is 0, `MetaTxLib.canon`): what the binding is taken over
                 let bound = |bit: u32, a: &Option<String>| {
                     if e.mode & bit != 0 {

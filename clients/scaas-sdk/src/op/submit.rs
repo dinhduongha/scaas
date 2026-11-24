@@ -31,7 +31,15 @@ pub(crate) async fn fresh(sdk: &Sdk, p: &Prepared) -> Result<(), SdkError> {
         return Err(SdkError::PreparedStale);
     }
     if let Some((from, batch, nonce)) = &p.t.lane {
-        let at = lane_nonce(&pool, Address::from(p.t.contract), p.t.kind, from, *batch).await?;
+        let at = lane_nonce(
+            &pool,
+            Address::from(p.t.contract),
+            p.t.kind,
+            from,
+            *batch,
+            super::gov_target(&p.t.message),
+        )
+        .await?;
         if at != *nonce {
             return Err(SdkError::PreparedStale);
         }

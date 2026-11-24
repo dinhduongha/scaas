@@ -373,7 +373,7 @@ impl super::Confidential {
                 // the envelope's binding over the lane's next nonce (`PqzLayer._uaEnvelopeBinding`)
                 let e = &d.envelope;
                 let batch = dec(&json!(d.batch))?;
-                let nonce = lane_nonce(&pool, Address::from(t), "pqz", &ua, batch).await?;
+                let nonce = lane_nonce(&pool, Address::from(t), "pqz", &ua, batch, None).await?;
                 let word = |x: U256| x.to_be_bytes::<32>();
                 let binding = envelope_binding(
                     chain_id,

@@ -329,8 +329,21 @@ impl Chain {
 
     /// The subject's next nonce on its lane (R80), by the contract's kind (ua-mtx-merge plan T14): `mtxNonce(bytes32 id, batch)`
     /// on a token, the router and a mandate wallet (one nonce map on ids, CTR-UA-26: an address envelope's `from` padded),
-    /// `mtxNonce(address, batch)` on `SmartKeyAccount`.
+    /// `mtxNonce(address, batch)` on `SmartKeyAccount`. A router op of a derived subject (G1, CTR-GOV-33): `mtxNonceFor(target,
+    /// from, batch)`, the map of the registry the router checks it on (a native id has one map, `mtxNonce`).
     pub async fn subject_nonce(&self, m: &MetaRef) -> Result<U256> {
+        if let Some(target) = m.gov_target.filter(|_| m.from[..12] != [0u8; 12]) {
+            return self
+                .view(
+                    m.token,
+                    crate::abi::IGovRouterNonce::mtxNonceForCall {
+                        target,
+                        from: m.from,
+                        lane: m.batch,
+                    },
+                )
+                .await;
+        }
         if m.addr_nonce {
             return self
                 .view(
@@ -865,7 +878,8 @@ pub(crate) mod tests {
                 nonce: U256::ZERO,
                 digest: None,
                 ua: true,
-                addr_nonce: false
+                addr_nonce: false,
+                gov_target: None
             })
             .await
             .unwrap(),
@@ -886,6 +900,7 @@ pub(crate) mod tests {
             digest: None,
             ua: true,
             addr_nonce: false,
+            gov_target: None,
         };
         let at = |n: u64| -> fn(&Value) -> Value {
             match n {
@@ -916,6 +931,62 @@ pub(crate) mod tests {
                 .await
                 .unwrap(),
             "spent on a failover endpoint stands"
+        );
+    }
+
+    /// G1 (CTR-GOV-33): a router op of a derived subject reads `mtxNonceFor(target, from, batch)` (the map of the registry the
+    /// router checks it on); a native subject, and any job without a router target, `mtxNonce`. The fake answers 7 to the first
+    /// and 3 to the second, so a wrong view is a wrong number.
+    #[tokio::test]
+    async fn a_router_ops_derived_subject_reads_the_target_keyed_nonce() {
+        let (rpc, _) = fake_rpc(|r| {
+            if r["method"].as_str() == Some("eth_blockNumber") {
+                return json!({"result": "0x10"});
+            }
+            let call = &r["params"][0];
+            let data = call["input"]
+                .as_str()
+                .or(call["data"].as_str())
+                .unwrap_or("");
+            let sel = alloy::hex::encode(crate::abi::IGovRouterNonce::mtxNonceForCall::SELECTOR);
+            let n = if data.trim_start_matches("0x").starts_with(&sel) {
+                7
+            } else {
+                3
+            };
+            json!({"result": format!("0x{n:064x}")})
+        })
+        .await;
+        let c = chain_of(&[&rpc]);
+        let m = |from: B256, gov_target: Option<Address>| MetaRef {
+            token: Address::repeat_byte(0x60),
+            from,
+            batch: U256::ZERO,
+            nonce: U256::ZERO,
+            digest: None,
+            ua: true,
+            addr_nonce: false,
+            gov_target,
+        };
+        let (derived, native) = (
+            B256::repeat_byte(0xd1),
+            Address::repeat_byte(0xa1).into_word(),
+        );
+        let t = Some(Address::repeat_byte(0x70));
+        assert_eq!(
+            c.subject_nonce(&m(derived, t)).await.unwrap(),
+            U256::from(7),
+            "derived, router op: mtxNonceFor"
+        );
+        assert_eq!(
+            c.subject_nonce(&m(native, t)).await.unwrap(),
+            U256::from(3),
+            "native: mtxNonce"
+        );
+        assert_eq!(
+            c.subject_nonce(&m(derived, None)).await.unwrap(),
+            U256::from(3),
+            "no router target: mtxNonce"
         );
     }
 
@@ -1507,6 +1578,7 @@ pub(crate) mod tests {
             digest: None,
             ua,
             addr_nonce: false,
+            gov_target: None,
         };
         let (ua_ev, mtx_ev) = (
             IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH,
