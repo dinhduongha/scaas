@@ -840,6 +840,17 @@ contract GovRouterTypehashTest is Test {
         assertEq(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, 0xcd17c2129240241748e841a7f0572558b9c5a900a47bc540170a8c258d291c54);
     }
 
+    /// The keyed cancel (CTR-GOV-33 Change, owner 2026-11-24): `UACancelNonce`'s words with `target` after `from`, no chain word.
+    function test_uaCancelNonceForTypehashIsPinned() public pure {
+        assertEq(
+            T.UA_CANCEL_NONCE_FOR,
+            keccak256(
+                "UACancelNonceFor(bytes32 from,address target,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+            )
+        );
+        assertEq(T.UA_CANCEL_NONCE_FOR, 0xf95871f9b540540086a6c02b3913b94db8c1b97f96855346e198e85ff41f0c4e);
+    }
+
     /// Round 3zc (spec 2026-11-13-burner-wrap-caps.md §3.7, CTR-GOV-30): the admin's two supply-cap ops, the word last.
     function test_uaSetMaxSupplyTypehashIsPinned() public pure {
         assertEq(

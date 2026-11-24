@@ -2285,6 +2285,15 @@ contract TypedOpsRouterTest is UALedgerBase {
         assertEq(GovernanceRouter(router).mtxNonce(me, _uint("UACancelNonce", "lane")), 1);
     }
 
+    /// The keyed cancel (CTR-GOV-33 Change): the row's native signer is on the router's own map whatever the target (here no
+    /// code, nothing is called), so the row cancels `lane` there, as `UACancelNonce`.
+    function test_routerRow_UACancelNonceFor() public {
+        string memory op = "UACancelNonceFor";
+        _row(op);
+        assertEq(GovernanceRouter(router).mtxNonce(me, _uint(op, "lane")), 1);
+        assertEq(GovernanceRouter(router).mtxNonceFor(_addr(op, "target"), me, _uint(op, "lane")), 1);
+    }
+
     function _noEntry(string memory op, bytes32 who, uint256 lane) internal {
         checkRow(j, op, K);
         (bool ok, bytes memory ret) = router.call(vm.parseJsonBytes(j, domainField(op, K, "calldata")));

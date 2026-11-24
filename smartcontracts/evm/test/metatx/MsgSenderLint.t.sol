@@ -231,8 +231,8 @@ contract MsgSenderLintTest is Test {
         );
         assertEq(
             _count("src/governance/GovernanceRouterBase.sol", "msg.sender", false),
-            6,
-            "GovernanceRouterBase: subject()'s target compare, the event relayer (ua-mtx-merge T7: 3 -> 2, _mtxCall to legacy); G1 (CTR-GOV-33) 2 -> 6: _preAt's relayer binding (compare, error, designator refusal) and default fee recipient"
+            7,
+            "GovernanceRouterBase: subject()'s target compare, the event relayer (ua-mtx-merge T7: 3 -> 2, _mtxCall to legacy); G1 (CTR-GOV-33) 2 -> 6: _preAt's relayer binding (compare, error, designator refusal) and default fee recipient; the keyed cancel 6 -> 7: its event relayer"
         );
         assertEq(_count("src/governance/GovernanceRouter.sol", "msg.sender", false), 0, "GovernanceRouter");
         // ua-mtx-merge T3b (Q6): every authority check reads `_subject()` (CTR-ACC-12), none `msg.sender`
