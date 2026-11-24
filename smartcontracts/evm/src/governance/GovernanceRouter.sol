@@ -23,8 +23,9 @@ import {IComplianceRegistry} from "../regulated/IComplianceRegistry.sol";
 ///        field and forwards it as the entry's trailing argument (CTR-GOV-28 and its Change of round 3zb + 3zc). Domain
 ///        `("SCaaS GovernanceRouter", "1", chainId, router, chain_uid)`. **UNAUDITED.**
 contract GovernanceRouter is GovernanceRouterBase {
-    constructor(bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
-        GovernanceRouterBase("SCaaS GovernanceRouter", chainUid_, registry_, smartKeyAccountImpl_, hedera_)
+    /// @param factory_ the chain's `OpenFactory`, deployed first (G1, CTR-GOV-33); 0 = none.
+    constructor(bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_, address factory_)
+        GovernanceRouterBase("SCaaS GovernanceRouter", chainUid_, registry_, smartKeyAccountImpl_, hedera_, factory_)
     {}
 
     // ------------------------------------------------------------------ the powers on the token kinds

@@ -205,7 +205,7 @@ contract FactoryAdminTest is UARegistryBase {
         c[0] = UARegistry.KindConfig(K1, address(mock), 50_000, false, 0);
         c[1] = UARegistry.KindConfig(ML44, address(mock), CAP, false, 0);
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, address(0), true, c);
-        router = new GovernanceRouter(chainUidA, PREG, address(0), false);
+        router = new GovernanceRouter(chainUidA, PREG, address(0), false, address(0));
         trouter = new TestRouter(chainUidA, PREG);
         Vm.Wallet memory w = vm.createWallet("k1 signer");
         k1Key = abi.encodePacked(w.publicKeyX, w.publicKeyY);

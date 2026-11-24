@@ -558,13 +558,13 @@ abstract contract DeployBase is DeployBook {
             (bool bls,) = _precompiles(); // fail before deploying anything (CTR-ZTH-52: the only chain requirement)
             require(bls, "DEPLOY_ZETHER: the chain has no EIP-2537 (BLS12-381 precompiles)");
         }
-        // round 3r (spec §6, §13.10): the relay pair under RELAY_SALT (reused when there), the UA registry, the router, the
-        // compliance registry and ZetherStatements, then the factory: the registrar's native id is its only constructor
-        // argument, its first admin, and its address depends on none of them; this chain's values are its one-time
-        // `configureChain`, then the directory (`setChainEntries`). The admin deploys the releases itself: its own deploy is
-        // its own approval (spec §5.6).
-        UARegistry reg = _deployShared(smartKeyAccountImpl, isHedera);
+        // round 3r (spec §6, §13.10) and G1 (CTR-GOV-33): the factory first (the registrar's native id is its only constructor
+        // argument, its first admin, and its address depends on nothing else), then the relay pair under RELAY_SALT (reused
+        // when there), the UA registry, the router naming the factory, the compliance registry and ZetherStatements; this
+        // chain's values are the factory's one-time `configureChain`, then the directory (`setChainEntries`). The admin
+        // deploys the releases itself: its own deploy is its own approval (spec §5.6).
         f = new OpenFactory{salt: salt}(MetaTxLib.pad(registrar));
+        UARegistry reg = _deployShared(address(f), smartKeyAccountImpl, isHedera);
         if (register) _configureChain(f, registrar);
         if (register && !configureOnly) _writeDirectory(f, reg);
         vm.serializeAddress("deploy", "token_factory", address(f));
@@ -638,13 +638,17 @@ abstract contract DeployBase is DeployBook {
         );
     }
 
-    /// @notice The shared contracts before the factory (spec §13.10): the relay pair under `RELAY_SALT` (reused when there),
-    ///         the UA registry, the router (before every release: its address is in the env), the `ComplianceRegistry` with
+    /// @notice The shared contracts after the factory, before `configureChain` (spec §13.10; G1, CTR-GOV-33): the relay pair under
+    ///         `RELAY_SALT` (reused when there), the UA registry, the router naming `factory` (before every release: its
+    ///         address is in the env), the `ComplianceRegistry` with
     ///         `DEPLOY_REGULATED`, `ZetherStatements` with `DEPLOY_ZETHER`.
-    function _deployShared(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
+    function _deployShared(address factory, address smartKeyAccountImpl, bool isHedera)
+        internal
+        returns (UARegistry reg)
+    {
         (relayFeeRouter, relayFeeExecutor) = _deployRelayFeeRouter();
         reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
-        _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera);
+        _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera, factory);
         if (deployRegulated) complianceRegistry = _deployComplianceRegistry();
         if (deployZether) zetherStatements = address(new ZetherStatements{salt: salt}());
     }
@@ -917,13 +921,16 @@ abstract contract DeployBase is DeployBook {
     /// @notice The chain's `GovernanceRouter` (CTR-GOV-15 Change, owner 2026-11-04; plan T11) by CREATE2: no owner, no
     ///         state, `chain_uid` and the UA registry in its constructor, so one predictable address per chain. Deployed
     ///         before the releases, whose `Env.govRouter` names it. JSON `governance_router`. **UNAUDITED.**
-    function _deployGovRouter(address reg, address smartKeyAccountImpl, bool isHedera) internal {
-        GovernanceRouter r = new GovernanceRouter{salt: salt}(uid, reg, smartKeyAccountImpl, isHedera);
+    function _deployGovRouter(address reg, address smartKeyAccountImpl, bool isHedera, address factory) internal {
+        GovernanceRouter r = new GovernanceRouter{salt: salt}(uid, reg, smartKeyAccountImpl, isHedera, factory);
         _gate(address(r));
+        require(r.factory() == factory && factory.code.length != 0, "router: names this run's factory (CTR-GOV-33)");
         govRouter = address(r);
         govRouterCodeHash = _builtHash(
             govRouter,
-            abi.encodePacked(type(GovernanceRouter).creationCode, abi.encode(uid, reg, smartKeyAccountImpl, isHedera)),
+            abi.encodePacked(
+                type(GovernanceRouter).creationCode, abi.encode(uid, reg, smartKeyAccountImpl, isHedera, factory)
+            ),
             salt
         );
         vm.serializeAddress("deploy", "governance_router", govRouter);

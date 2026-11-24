@@ -21,7 +21,9 @@ import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UACall} from "../ua/UACall.sol";
 import {IGovernanceRouter} from "../../src/governance/IGovernanceRouter.sol";
-import {plainEnv} from "../helpers/Catalogue.sol";
+import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 
@@ -40,7 +42,7 @@ contract ThingRouter is GovernanceRouterBase {
     );
 
     constructor(bytes32 chainUid_, address registry_, address ska_, bool hedera_)
-        GovernanceRouterBase("SCaaS ThingRouter", chainUid_, registry_, ska_, hedera_)
+        GovernanceRouterBase("SCaaS ThingRouter", chainUid_, registry_, ska_, hedera_, address(0))
     {}
 
     function mtxDoThing(
@@ -103,7 +105,7 @@ contract ThingKind is GovernanceBase, IThing {
     }
 
     // ---- P3: the router is the release's own env dep
-    function _govRouter() internal view override returns (address) {
+    function _govRouter() internal view virtual override returns (address) {
         return ChainEnvCode.dep(0);
     }
 
@@ -530,9 +532,11 @@ contract RouterPerReleaseTest is GovRouterFixture {
     }
 }
 
-/// The owner's addition (2026-11-24): does the chain's router follow the multi-generation registry line? The router is bound to
-/// one generation (`UAMetaTxBaseCore` `registry_`, immutable); the line walks **back** only (`predecessor`), so generation N
-/// cannot find a record of N + 1. **UNAUDITED.**
+/// The owner's addition (2026-11-24): the chain's router and the multi-generation registry line. The line walks **back** only
+/// (`predecessor`), so generation N cannot find a record of N + 1. G1 (CTR-GOV-33, owner 2026-11-24): the router checks a derived
+/// signer on the registry its target's env names when the factory made the target, so a token on a generation-2 env is governed
+/// on generation 2 by the one chain router. Here the fixture plays the factory (`infoOf`), as it is the clones' `FACTORY`.
+/// **UNAUDITED.**
 abstract contract RegistryLineFixture is GovRouterFixture {
     address constant GEN2 = address(0x5cA0000000000000000000000000000000000008);
     uint16 constant ML65 = UAKinds.MLDSA65; // a kind only generation 2 has
@@ -542,6 +546,7 @@ abstract contract RegistryLineFixture is GovRouterFixture {
     bytes msig2Data;
     bytes32 msig2; // an msig (re-enabled in every generation) held in generation 2, members in generation 1
     GovernanceRouter router2; // a router bound to generation 2
+    mapping(address => bool) internal made; // the fixture's index, as `OpenFactory.infoOf`
 
     function setUp() public virtual override {
         super.setUp();
@@ -571,10 +576,16 @@ abstract contract RegistryLineFixture is GovRouterFixture {
         for (uint256 i; i < 2; ++i) {
             gen2.acceptMembership(msig2, _acceptKeySig(msig2Data, ML44, mkeys[i]));
         }
-        router2 = new GovernanceRouter(chainUidA, GEN2, _fixtureSka(), false);
+        router2 = new GovernanceRouter(chainUidA, GEN2, _fixtureSka(), false, address(this));
+        // the chain's router under G1: generation 1, the fixture as its factory
+        router = new GovernanceRouter(chainUidA, PREG, _fixtureSka(), false, address(this));
     }
 
-    function _auth(bytes32 id, bytes32 digest) internal view override returns (IUARegistry.UASig memory a) {
+    function infoOf(address c) external view returns (IOpenFactory.Created memory x) {
+        if (made[c]) (x.addr, x.contractClass) = (c, 1);
+    }
+
+    function _auth(bytes32 id, bytes32 digest) internal view virtual override returns (IUARegistry.UASig memory a) {
         if (id == pq65) a.signature = _sig(pq65Key, UAKinds.uaMessage(ML65, UAKinds.PURPOSE_METATX, digest));
         else if (id == msig2) a.members = _m2Sigs(msig2, UAKinds.PURPOSE_METATX, digest);
         else a = super._auth(id, digest);
@@ -596,127 +607,30 @@ abstract contract RegistryLineFixture is GovRouterFixture {
         }
     }
 
-    function _mintBy(GovernanceRouter r, NormalToken t, bytes32 from) internal {
-        bytes memory a = abi.encode(BOB, uint256(5));
-        _runOn(r, _signed(r, OP_MINT, from, 0, address(t), a, a));
-    }
-
-    function _tokenOn(address r, bytes32 minter) internal returns (NormalToken t) {
-        t = _normal(eoa, minter, 0);
-        if (r != address(router)) {
-            IFactoryToken.ChainEnv memory e = EnvKit.env(chainUidA, PREG, _fixtureSka(), false, r);
-            t = NormalToken(EnvKit.clone(normalImpl, e));
-            IFactoryToken.TokenConfig memory c;
-            (c.name, c.symbol, c.decimals, c.features, c.admin) = ("G", "G", 6, 1 | (uint256(1) << MINT), eoa);
-            c.roles.minter = minter;
-            t.initialize(nid(address(this)), 1, abi.encode(c));
-        }
-    }
-}
-
-contract RouterRegistryLineTest is RegistryLineFixture {
-    function test_line_gen2SeesGen1_gen1DoesNotSeeGen2() public view {
-        (address h,,) = gen2.holderOf(pq);
-        assertEq(h, PREG, "a later generation walks back to the holder");
-        (h,,) = preg.holderOf(pq65);
-        assertEq(h, address(0), "an earlier generation has no successor: a later record is unknown");
-        assertEq(router.registry(), PREG, "the chain's router: generation 1, immutable");
-    }
-
-    /// Q2: a kind only generation 2 has. Refused by the chain's router (generation 1): `UAUnauthorized`, not `UAConfig`.
-    function test_line_gen2OnlyKind_chainRouterRefuses() public {
-        NormalToken t = _tokenOn(address(router), pq65);
-        bytes memory a = abi.encode(BOB, uint256(5));
-        bytes memory cd = _signed(router, OP_MINT, pq65, 0, address(t), a, a);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq65));
-        _run(cd);
-        // the control: a generation-1 PQ holder on the same router
-        _mintBy(router, _tokenOn(address(router), pq), pq);
-    }
-
-    /// Q1: a kind generation 1 also has (`msig`, its members generation-1 keys), the record held in generation 2. Refused alike:
-    /// generation 1 forwards nothing forward, neither the views nor the signature check.
-    function test_line_gen2Record_gen1Kind_chainRouterRefuses() public {
-        NormalToken t = _tokenOn(address(router), msig2);
-        bytes memory a = abi.encode(BOB, uint256(5));
-        bytes memory cd = _signed(router, OP_MINT, msig2, 0, address(t), a, a);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, msig2));
-        _run(cd);
-        _mintBy(router, _tokenOn(address(router), msig), msig); // the control: generation 1's msig
-    }
-
-    /// The direction that works: a router bound to generation 2 authenticates both generations' holders (the walk back hands the
-    /// signature check to the holder, CTR-UA-60). A token reaches it only if its `ChainEnv.govRouter` names it.
-    function test_line_routerOnGen2_servesBoth() public {
-        _mintBy(router2, _tokenOn(address(router2), pq65), pq65);
-        _mintBy(router2, _tokenOn(address(router2), msig2), msig2);
-        _mintBy(router2, _tokenOn(address(router2), pq), pq);
-        _mintBy(router2, _tokenOn(address(router2), msig), msig);
-        // a token on the chain's router does not listen to it
-        NormalToken t = _tokenOn(address(router), pq65);
-        bytes memory a = abi.encode(BOB, uint256(5));
-        bytes memory cd = _signed(router2, OP_MINT, pq65, 0, address(t), a, a);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, nid(address(router2))));
-        _runOn(router2, cd);
-    }
-}
-
-/// Option G1 (research note 2026-11-24-nft-multi-token §7.2): one router for every registry generation. For a target the factory
-/// made (`infoOf(target).addr == target`), the router checks a derived signer on the registry in that target's code
-/// (`ChainEnvCode` offset 77, written by the factory, its line checked when the env was published, CTR-UA-67); for any other
-/// target its own registry. Never a registry the target answers. Prototype only: the target is read from the op's calldata
-/// (word 9, after the static `UAEnvelope`), where the proposed change passes `_uaCall`'s `target`. `trustCode` is the mutant
-/// that reads the code without asking the factory. Test-only. **UNAUDITED.**
-contract LineRouter is GovernanceRouter {
-    address public immutable FACTORY;
-    bool internal immutable TRUST_CODE;
-
-    constructor(address factory_, bytes32 uid, address registry_, address ska, bool trustCode)
-        GovernanceRouter(uid, registry_, ska, false)
+    /// `op` by `from` on `target` through `r`, at the nonce `r` checks for that target (`mtxNonceFor`).
+    function _sFor(GovernanceRouter r, uint256 op, bytes32 from, address target, bytes memory args)
+        internal
+        view
+        returns (bytes memory)
     {
-        (FACTORY, TRUST_CODE) = (factory_, trustCode);
+        MetaTxLib.UAEnvelope memory e = _envelope(r, from, 0);
+        e.nonce = r.mtxNonceFor(target, from, 0);
+        return _signedAt(r, op, e, target, args, args);
     }
 
-    function _mtxCtx() internal view override returns (MtxPipelineLib.Ctx memory c) {
-        c = super._mtxCtx();
-        if (msg.data.length < 292) return c;
-        address t = address(uint160(uint256(bytes32(msg.data[260:292]))));
-        if (!TRUST_CODE && IOpenFactory(FACTORY).infoOf(t).addr != t) return c;
-        address r = envRegistryOf(t);
-        if (r != address(0)) c.registry = r;
+    function _mintBy(GovernanceRouter r, address t, bytes32 from) internal {
+        uint256 b = NormalToken(t).balanceOf(BOB);
+        _runOn(r, _sFor(r, OP_MINT, from, t, abi.encode(BOB, uint256(5))));
+        assertEq(NormalToken(t).balanceOf(BOB), b + 5, "minted");
     }
 
-    /// The registry in `t`'s code when it is a clone (the EIP-1167 prefix and suffix), else 0.
-    function envRegistryOf(address t) public view returns (address r) {
-        assembly ("memory-safe") {
-            let m := mload(0x40)
-            extcodecopy(t, m, 0, 97)
-            if and(
-                eq(shr(176, mload(m)), 0x363d3d373d3d3d363d73),
-                eq(shr(136, mload(add(m, 30))), 0x5af43d82803e903d91602b57fd5bf3)
-            ) { r := shr(96, mload(add(m, 77))) }
-        }
-    }
-}
-
-/// G1 against today's router on the same tokens. The fixture stands in for the factory (`infoOf`), as it already is the
-/// clones' `FACTORY`. **UNAUDITED.**
-contract RouterG1Test is RegistryLineFixture {
-    mapping(address => bool) internal made;
-    LineRouter lr; // G1: one router, its own registry generation 1
-    LineRouter trusting; // the mutant: the target's code without the factory's word
-
-    function setUp() public override {
-        super.setUp();
-        lr = new LineRouter(address(this), chainUidA, PREG, _fixtureSka(), false);
-        trusting = new LineRouter(address(this), chainUidA, PREG, _fixtureSka(), true);
+    function _mintRefused(GovernanceRouter r, address t, bytes32 from) internal {
+        bytes memory cd = _sFor(r, OP_MINT, from, t, abi.encode(BOB, uint256(5)));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, from));
+        _runOn(r, cd);
     }
 
-    function infoOf(address c) external view returns (IOpenFactory.Created memory x) {
-        if (made[c]) (x.addr, x.contractClass) = (c, 1);
-    }
-
-    /// A NormalToken clone on env `(reg, r)`, minter `minter`; `listed`: in the factory's index.
+    /// A NormalToken clone on env `(reg, r)`, minter `minter`; `listed`: in the fixture's index.
     function _token(address reg, address r, bytes32 minter, bool listed) internal returns (NormalToken t) {
         if (normalImpl == address(0)) _normal(eoa, eoa, 0);
         t = NormalToken(EnvKit.clone(normalImpl, EnvKit.env(chainUidA, reg, _fixtureSka(), false, r)));
@@ -726,48 +640,326 @@ contract RouterG1Test is RegistryLineFixture {
         t.initialize(nid(address(this)), 1, abi.encode(c));
         made[address(t)] = listed;
     }
+}
 
-    function _mintCd(GovernanceRouter r, NormalToken t, bytes32 from) internal view returns (bytes memory) {
-        bytes memory a = abi.encode(BOB, uint256(5));
-        return _signed(r, OP_MINT, from, 0, address(t), a, a);
+/// The four registry-line tests at G1's expectations: red on the router before G1 (its one registry), green with it.
+contract RouterRegistryLineTest is RegistryLineFixture {
+    function test_line_gen2SeesGen1_gen1DoesNotSeeGen2() public {
+        (address h,,) = gen2.holderOf(pq);
+        assertEq(h, PREG, "a later generation walks back to the holder");
+        (h,,) = preg.holderOf(pq65);
+        assertEq(h, address(0), "an earlier generation has no successor: a later record is unknown");
+        assertEq(router.registry(), PREG, "the chain's router: generation 1, immutable");
+        assertEq(router.factory(), address(this));
+        assertEq(router.registryFor(address(_token(GEN2, address(router), pq65, true))), GEN2, "a gen-2 env: gen 2");
+        assertEq(router.registryFor(address(_token(PREG, address(router), pq65, true))), PREG, "a gen-1 env: gen 1");
     }
 
-    /// A gen-2 env instance (CTR-UA-67): today's router refuses its gen-2 holder (the gap); G1 serves both generations.
-    function test_g1_gen2Instance_oneRouterServesBothGenerations() public {
-        NormalToken today = _token(GEN2, address(router), pq65, true);
-        bytes memory cd = _mintCd(router, today, pq65);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq65));
-        _run(cd);
-        assertEq(lr.envRegistryOf(address(today)), GEN2);
+    /// Q2: a kind only generation 2 has. On a generation-2 env token the chain's router serves it; on a generation-1 env token it
+    /// is refused, `UAUnauthorized`, as on that token's own path (CTR-UA-27 parity).
+    function test_line_gen2OnlyKind_gen2EnvServed_gen1EnvRefused() public {
+        _mintBy(router, address(_token(GEN2, address(router), pq65, true)), pq65);
+        _mintRefused(router, address(_token(PREG, address(router), pq65, true)), pq65);
+        _mintBy(router, address(_token(PREG, address(router), pq, true)), pq); // the control: a gen-1 holder, gen-1 env
+    }
+
+    /// Q1: a kind generation 1 also has (`msig`, its members generation-1 keys), the record held in generation 2: likewise.
+    function test_line_gen2Record_gen1Kind_gen2EnvServed_gen1EnvRefused() public {
+        _mintBy(router, address(_token(GEN2, address(router), msig2, true)), msig2);
+        _mintRefused(router, address(_token(PREG, address(router), msig2, true)), msig2);
+        _mintBy(router, address(_token(PREG, address(router), msig, true)), msig); // the control: generation 1's msig
+    }
+
+    /// The chain's router serves both generations' holders on a generation-2 env (the walk back hands the check to the holder,
+    /// CTR-UA-60), as a router bound to generation 2 does; a token on the chain's router still does not listen to that one.
+    function test_line_chainRouter_gen2Env_servesBoth() public {
         bytes32[4] memory who = [pq65, msig2, pq, msig];
         for (uint256 i; i < 4; ++i) {
-            NormalToken t = _token(GEN2, address(lr), who[i], true);
-            _runOn(lr, _mintCd(lr, t, who[i]));
-            assertEq(t.balanceOf(BOB), 5);
+            _mintBy(router, address(_token(GEN2, address(router), who[i], true)), who[i]);
+            _mintBy(router2, address(_token(GEN2, address(router2), who[i], true)), who[i]);
+        }
+        NormalToken t = _token(GEN2, address(router), pq65, true);
+        bytes memory cd = _sFor(router2, OP_MINT, pq65, address(t), abi.encode(BOB, uint256(5)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, nid(address(router2))));
+        _runOn(router2, cd);
+    }
+}
+
+/// A registry that passes any id: the bad env registry an admin could publish (it answers the env checks: the chain word and a
+/// line reaching the router's registry).
+contract YesRegistry {
+    bytes32 public immutable chainUid;
+
+    constructor(bytes32 uid) {
+        chainUid = uid;
+    }
+
+    function lineReaches(address) external pure returns (uint256) {
+        return 1;
+    }
+
+    function requireAuthorized(bytes32, bytes32, bytes32, IUARegistry.UASig calldata) external pure {}
+}
+
+/// A generic release (class 6) governed by the chain's router (`ChainEnv.govRouter`), as today's kinds are. Test-only.
+contract ChainThingKind is ThingKind {
+    constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory implArgs)
+        ThingKind(id, factory_, implArgs)
+    {}
+
+    function _govRouter() internal view override returns (address) {
+        return ChainEnvCode.govRouter();
+    }
+
+    function validateEnv(IFactoryToken.ChainEnv calldata) external pure override {}
+}
+
+/// G1 on the real router and a real `OpenFactory`, per factory-made form (a token, the DEX, a generic catalogue class), a chain
+/// contract the factory did not make (the factory itself), a clone the factory did not make, the nonce keying by registry
+/// (CTR-GOV-33). Deploy order: the factory, the router naming it, `configureChain`. **UNAUDITED.**
+contract RouterG1Test is RegistryLineFixture {
+    address constant REGISTRAR = address(0x5E6);
+    uint16 constant CLS = 6;
+    uint8 constant DO_THING = 128;
+    OpenFactory f;
+    YesRegistry yes;
+    bytes32 u;
+
+    function setUp() public override {
+        super.setUp();
+        f = new OpenFactory(nid(REGISTRAR));
+        router = new GovernanceRouter(chainUidA, PREG, _fixtureSka(), false, address(f));
+        EnvKit.configure(f, chainUidA, 0, address(router));
+        u = EnvKit.uidOf(address(f));
+        yes = new YesRegistry(chainUidA);
+        // NORMAL releases: 1 on a generation-2 env, 2 on generation 1, 3 on the bad registry
+        address[3] memory regs = [GEN2, PREG, address(yes)];
+        for (uint256 i; i < 3; ++i) {
+            Catalogue.plain(
+                f,
+                IOpenFactory.TokenKind.NORMAL,
+                uint64(i + 1),
+                type(NormalToken).creationCode,
+                regs[i],
+                _fixtureSka(),
+                false
+            );
         }
     }
 
-    /// A gen-1 env instance stays on generation 1 under G1: its gen-2 holder is refused, as on the token's own path (parity).
-    function test_g1_gen1Instance_staysOnGen1() public {
-        NormalToken t = _token(PREG, address(lr), pq65, true);
-        bytes memory cd = _mintCd(lr, t, pq65);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq65));
-        _runOn(lr, cd);
-        NormalToken c = _token(PREG, address(lr), pq, true);
-        _runOn(lr, _mintCd(lr, c, pq));
-        assertEq(c.balanceOf(BOB), 5, "the control: a gen-1 holder");
+    function _version(address reg) internal view returns (uint64) {
+        return reg == GEN2 ? 1 : reg == PREG ? 2 : 3;
     }
 
-    /// A target the factory did not make: its code naming generation 2 is not believed (own registry, nonce untouched). The
-    /// mutant that believes the code accepts it: the factory's word is the guard.
-    function test_g1_notFactoryMade_ownRegistry_mutantAccepts() public {
-        NormalToken t = _token(GEN2, address(lr), pq65, false);
-        bytes memory cd = _mintCd(lr, t, pq65);
+    function _ftoken(address reg, bytes32 minter, bytes32 salt) internal returns (address) {
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.features, c.admin) = ("G", "G", 6, 1 | (uint256(1) << MINT), eoa);
+        c.roles.minter = minter;
+        return f.createToken(IOpenFactory.TokenKind.NORMAL, _version(reg), abi.encode(c), salt);
+    }
+
+    function _fdex(address reg, bytes32 admin_, bytes32 salt) internal returns (SCaaSDex d) {
+        uint64 v = reg == GEN2 ? 1 : 2;
+        if (f.latestDexVersion() < v) Catalogue.dex(f, v, type(SCaaSDex).creationCode, _fixtureSka(), reg);
+        d = SCaaSDex(
+            f.createDex(v, abi.encode(ISCaaSDex.DexConfig(admin_, 0, TREASURY, false, 0, address(0), 0, 0)), salt)
+        );
+    }
+
+    function _fthing(address reg, bytes32 admin_, bytes32 salt) internal returns (ThingKind t) {
+        uint64 v = reg == GEN2 ? 1 : 2;
+        if (f.latestClassVersion(CLS, 0) < v) {
+            vm.startPrank(REGISTRAR);
+            f.publishClassEnv(CLS, 0, uint16(v), u, plainEnv(address(f), _fixtureSka(), chainUidA, reg, false));
+            f.deployImplementation(
+                IOpenFactory.ReleaseId(CLS, 0, v),
+                uint16(v),
+                IThing.initialize.selector,
+                type(IThing).interfaceId,
+                type(ChainThingKind).creationCode,
+                abi.encode(bytes32(0)),
+                u
+            );
+            f.setClassKindEnabled(CLS, 0, true, u);
+            vm.stopPrank();
+        }
+        t = ThingKind(
+            f.createInstance(IOpenFactory.ReleaseId(CLS, 0, v), salt, abi.encodeCall(IThing.initialize, (admin_, 0)))
+        );
+    }
+
+    function _refused(uint256 op, bytes32 from, address target, bytes memory args) internal {
+        bytes memory cd = _sFor(router, op, from, target, args);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, from));
+        _run(cd);
+    }
+
+    // ---- the factory-made forms: each reads its env registry; a gen-1 env stays on generation 1
+
+    function test_g1_token_gen2Env_bothGenerations_gen1EnvStays() public {
+        address t2 = _ftoken(GEN2, pq65, "a");
+        assertEq(router.registryFor(t2), GEN2);
+        _mintBy(router, t2, pq65);
+        _mintBy(router, _ftoken(GEN2, msig2, "b"), msig2);
+        _mintBy(router, _ftoken(GEN2, pq, "c"), pq); // a gen-1 holder on a gen-2 env (the walk back)
+        _mintBy(router, _ftoken(GEN2, msig, "d"), msig);
+        address t1 = _ftoken(PREG, pq65, "e");
+        assertEq(router.registryFor(t1), PREG);
+        _mintRefused(router, t1, pq65);
+        _mintBy(router, _ftoken(PREG, pq, "f"), pq);
+        assertEq(router.mtxNonceFor(t2, pq65, 0), 1, "the gen-2 holder's nonce, at generation 2");
+        assertEq(router.mtxNonce(pq65, 0), 0, "the router's own registry's map untouched");
+    }
+
+    function test_g1_dex_gen2Env_bothGenerations_gen1EnvStays() public {
+        SCaaSDex d2 = _fdex(GEN2, pq65, "a");
+        assertEq(router.registryFor(address(d2)), GEN2);
+        _runOn(router, _sFor(router, SET_LISTED_ONLY, pq65, address(d2), abi.encode(true)));
+        assertTrue(d2.listedOnly(), "a gen-2 admin on a gen-2 env DEX");
+        SCaaSDex d2b = _fdex(GEN2, pq, "b");
+        _runOn(router, _sFor(router, SET_LISTED_ONLY, pq, address(d2b), abi.encode(true)));
+        assertTrue(d2b.listedOnly(), "a gen-1 admin on a gen-2 env DEX");
+        SCaaSDex d1 = _fdex(PREG, pq65, "c");
+        assertEq(router.registryFor(address(d1)), PREG);
+        _refused(SET_LISTED_ONLY, pq65, address(d1), abi.encode(true));
+        SCaaSDex d1b = _fdex(PREG, pq, "d");
+        _runOn(router, _sFor(router, SET_LISTED_ONLY, pq, address(d1b), abi.encode(true)));
+        assertTrue(d1b.listedOnly(), "a gen-1 admin on a gen-1 env DEX");
+    }
+
+    function test_g1_genericClass_gen2Env_bothGenerations_gen1EnvStays() public {
+        ThingKind i2 = _fthing(GEN2, pq65, "a");
+        assertEq(i2.GOV_ROUTER(), address(router), "governed by the chain's router");
+        assertEq(router.registryFor(address(i2)), GEN2);
+        bytes memory a = abi.encode(DO_THING, msig, EnvKit.codeUidOf(address(i2)));
+        _runOn(router, _sFor(router, GRANT_ROLE, pq65, address(i2), a));
+        assertTrue(i2.hasRole(DO_THING, msig), "a gen-2 admin on a gen-2 env instance");
+        ThingKind i2b = _fthing(GEN2, pq, "b");
+        a = abi.encode(DO_THING, msig, EnvKit.codeUidOf(address(i2b)));
+        _runOn(router, _sFor(router, GRANT_ROLE, pq, address(i2b), a));
+        assertTrue(i2b.hasRole(DO_THING, msig), "a gen-1 admin on a gen-2 env instance");
+        ThingKind i1 = _fthing(PREG, pq65, "c");
+        assertEq(router.registryFor(address(i1)), PREG);
+        _refused(GRANT_ROLE, pq65, address(i1), abi.encode(DO_THING, msig, EnvKit.codeUidOf(address(i1))));
+        ThingKind i1b = _fthing(PREG, pq, "d");
+        a = abi.encode(DO_THING, msig, EnvKit.codeUidOf(address(i1b)));
+        _runOn(router, _sFor(router, GRANT_ROLE, pq, address(i1b), a));
+        assertTrue(i1b.hasRole(DO_THING, msig), "a gen-1 admin on a gen-1 env instance");
+    }
+
+    // ---- not factory-made: the router's own registry
+
+    /// A chain contract the factory did not make (the factory itself, an `IAdmin`): its own registry, generation 1. A gen-2
+    /// pending admin cannot accept through the router (the known limit: factory ops keep the router's generation).
+    function test_g1_notFactoryMade_chainContract_ownRegistry() public {
+        assertEq(router.registryFor(address(f)), PREG);
+        vm.prank(REGISTRAR);
+        f.transferAdmin(pq65, u);
+        bytes memory cd = _sFor(router, ACCEPT_ADMIN, pq65, address(f), "");
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq65));
-        _runOn(lr, cd);
-        assertEq(lr.mtxNonce(pq65, 0), 0, "no nonce spent");
-        NormalToken m = _token(GEN2, address(trusting), pq65, false);
-        _runOn(trusting, _mintCd(trusting, m, pq65));
-        assertEq(m.balanceOf(BOB), 5, "the mutant took the target's own word");
+        _run(cd);
+        vm.prank(REGISTRAR);
+        f.transferAdmin(pq, u);
+        _run(_sFor(router, ACCEPT_ADMIN, pq, address(f), ""));
+        assertEq(f.admin(), pq, "a gen-1 admin accepts through the router");
+    }
+
+    /// A clone-form contract the factory did not make, whose code names generation 2: not believed (own registry, no nonce
+    /// spent in either map).
+    function test_g1_fakeInstance_ignored() public {
+        NormalToken fake = _token(GEN2, address(router), pq65, false);
+        assertEq(router.registryFor(address(fake)), PREG);
+        _mintRefused(router, address(fake), pq65);
+        assertEq(router.mtxNonce(pq65, 0), 0);
+        assertEq(router.mtxNonceFor(address(fake), pq65, 0), 0);
+        assertEq(router.registryFor(BOB), PREG, "no code: own");
+    }
+
+    // ---- the nonce keying (CTR-GOV-33)
+
+    /// A token whose env names a registry that passes any id: a forged op as a real gen-1 id lands on that token (the env
+    /// publication's trust), but it spends that registry's nonce only; the id's nonce at the real registry stays, and its
+    /// own op on a real token still runs at nonce 0.
+    function test_g1_badEnvRegistry_burnsOnlyItsOwnNonces() public {
+        address bad = _ftoken(address(yes), pq, "x");
+        address real = _ftoken(PREG, pq, "y");
+        assertEq(router.registryFor(bad), address(yes));
+        MetaTxLib.UAEnvelope memory e = _envelope(router, pq, 0);
+        IUARegistry.UASig memory forged;
+        forged.signature = hex"00";
+        bytes memory args = abi.encode(BOB, uint256(5));
+        for (uint256 i; i < 3; ++i) {
+            e.nonce = i;
+            _run(_calldata(OP_MINT, e, bad, args, _tail(abi.encode(forged))));
+        }
+        assertEq(router.mtxNonceFor(bad, pq, 0), 3, "the bad registry's map");
+        assertEq(router.mtxNonce(pq, 0), 0, "the real registry's nonce of the id: untouched");
+        assertEq(router.mtxNonceFor(real, pq, 0), 0);
+        _mintBy(router, real, pq);
+        assertEq(router.mtxNonce(pq, 0), 1);
+        // the forgery does not reach the real token
+        e.nonce = 1;
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
+        _run(_calldata(OP_MINT, e, real, args, _tail(abi.encode(forged))));
+    }
+
+    /// Replay across registries: the signature names `target`, which fixes the registry. An op spent at generation 2 replays
+    /// nowhere: again on its target `MetaTxBadNonce`; on a gen-1 target, whose map is still at the same nonce, refused.
+    function test_g1_replayAcrossRegistries_refused() public {
+        address t2 = _ftoken(GEN2, pq, "a");
+        address t1 = _ftoken(PREG, pq, "b");
+        bytes memory cd = _sFor(router, OP_MINT, pq, t2, abi.encode(BOB, uint256(5)));
+        _run(cd);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
+        _run(cd);
+        assertEq(router.mtxNonceFor(t1, pq, 0), 0, "the gen-1 map: still at nonce 0");
+        bytes memory swapped = bytes.concat(_slice(cd, 0, 4 + 256), abi.encode(t1), _slice(cd, 4 + 288, cd.length));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
+        _run(swapped);
+    }
+
+    function _slice(bytes memory b, uint256 from, uint256 to) internal pure returns (bytes memory r) {
+        r = new bytes(to - from);
+        for (uint256 i; i < r.length; ++i) {
+            r[i] = b[from + i];
+        }
+    }
+
+    /// `UACancelNonce` keeps its semantics: the router's own map (a native id everywhere, a derived id at the router's
+    /// registry); a gen-2 env map is not touched by it.
+    function test_g1_cancelNonce_ownMapOnly() public {
+        address t2 = _ftoken(GEN2, pq, "a");
+        address t1 = _ftoken(PREG, pq, "b");
+        MetaTxLib.UAEnvelope memory e = _envelope(router, pq, 0);
+        bytes32 c = keccak256(
+            abi.encode(
+                MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+                e.from,
+                uint256(0),
+                e.batch,
+                e.nonce,
+                e.validUntil,
+                e.mode,
+                address(0),
+                e.fee,
+                address(0)
+            )
+        );
+        router.mtxCancelNonce(e, 0, _auth(pq, keccak256(abi.encodePacked("\x19\x01", _domain(router), c))));
+        // the cancel ran on lane 0 at nonce 0 and bumped lane 0: lane 0 is at 2
+        assertEq(router.mtxNonce(pq, 0), 2);
+        assertEq(router.mtxNonceFor(t1, pq, 0), 2, "gen-1 env: the router's own map");
+        assertEq(router.mtxNonceFor(t2, pq, 0), 0, "gen-2 env: its own map");
+        _mintBy(router, t2, pq);
+        _mintBy(router, t1, pq);
+    }
+
+    /// A native id uses no registry: one map for every target (`mtxNonce`), on any env.
+    function test_g1_nativeId_oneMap() public {
+        address t2 = _ftoken(GEN2, eoa, "a");
+        assertEq(router.mtxNonceFor(t2, eoa, 0), router.mtxNonce(eoa, 0));
+        _mintBy(router, t2, eoa);
+        assertEq(router.mtxNonce(eoa, 0), 1);
+        assertEq(router.mtxNonceFor(address(f), eoa, 0), 1);
     }
 }

@@ -41,7 +41,7 @@ contract GovWrapLimitsTest is WrapLimitsBase {
 
     function setUp() public override {
         super.setUp();
-        router = new GovernanceRouter(chainUidA, REG_L, address(0), false);
+        router = new GovernanceRouter(chainUidA, REG_L, address(0), false, address(0));
         (address[] memory l, uint256[] memory n) = _one(u);
         IFactoryToken.TokenConfig memory c = _cfg(
             l,

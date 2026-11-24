@@ -33,7 +33,7 @@ contract ListRouterTest is ListFixture {
 
     function _router() internal override returns (address) {
         ureg = new StubUARegistry(UID);
-        router = new GovernanceRouter(UID, address(ureg), address(0), false);
+        router = new GovernanceRouter(UID, address(ureg), address(0), false, address(0));
         return address(router);
     }
 

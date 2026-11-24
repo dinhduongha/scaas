@@ -116,7 +116,7 @@ contract FactoryDirectoryTest is Test {
         impl = skaf.IMPLEMENTATION();
         ureg = new StubUARegistry(UID);
         ureg.setSmartKeyCloneHash(EnvKit.cloneHash(impl));
-        router = new GovernanceRouter(UID, address(ureg), impl, false);
+        router = new GovernanceRouter(UID, address(ureg), impl, false, address(0));
         trouter = new TestRouter(UID, address(ureg));
         relay = new RelayFeeRouter();
         creg = new ComplianceRegistry(nid(deployer), address(router), UID);
@@ -261,8 +261,8 @@ contract FactoryDirectoryTest is Test {
     function test_configureChain_routerRegistryZeroOrNoCode() public {
         OpenFactory u = new OpenFactory(nid(deployer));
         EnvKit.genesis(UID);
-        GovernanceRouter r0 = new GovernanceRouter(UID, address(0), address(0), false);
-        GovernanceRouter rn = new GovernanceRouter(UID, address(0xD1), address(0), false);
+        GovernanceRouter r0 = new GovernanceRouter(UID, address(0), address(0), false, address(0));
+        GovernanceRouter rn = new GovernanceRouter(UID, address(0xD1), address(0), false, address(0));
         bytes4 e = IFactoryDirectory.RouterRegistryInvalid.selector;
         _refused(deployer, address(u), _ccd(address(r0), _h(address(r0))), abi.encodeWithSelector(e, address(0)));
         _refused(deployer, address(u), _ccd(address(rn), _h(address(rn))), abi.encodeWithSelector(e, address(0xD1)));
@@ -280,18 +280,18 @@ contract FactoryDirectoryTest is Test {
     function test_configureChain_cloneHashOfTheRegistry() public {
         OpenFactory u = new OpenFactory(nid(deployer));
         EnvKit.genesis(UID);
-        GovernanceRouter rx = new GovernanceRouter(UID, address(ureg), address(0xBEEF), false);
+        GovernanceRouter rx = new GovernanceRouter(UID, address(ureg), address(0xBEEF), false, address(0));
         _refused(
             deployer,
             address(u),
             _ccd(address(rx), _h(address(rx))),
             _cloneErr(EnvKit.cloneHash(address(0xBEEF)), EnvKit.cloneHash(impl))
         );
-        GovernanceRouter r0 = new GovernanceRouter(UID, address(ureg), address(0), false);
+        GovernanceRouter r0 = new GovernanceRouter(UID, address(ureg), address(0), false, address(0));
         _refused(
             deployer, address(u), _ccd(address(r0), _h(address(r0))), _cloneErr(bytes32(0), EnvKit.cloneHash(impl))
         );
-        GovernanceRouter mute = new GovernanceRouter(UID, address(relay), address(0), false); // relay: no smartKeyCloneHash()
+        GovernanceRouter mute = new GovernanceRouter(UID, address(relay), address(0), false, address(0)); // relay: no smartKeyCloneHash()
         _refused(deployer, address(u), _ccd(address(mute), _h(address(mute))), _cloneErr(bytes32(0), bytes32(0)));
         assertEq(IRouterCloneHash(address(router)).smartKeyCloneHash(), EnvKit.cloneHash(impl), "the router's view");
         _call(deployer, address(u), _ccd(address(router), _h(address(router)))); // positive control
@@ -659,7 +659,7 @@ contract FactoryDirectoryTest is Test {
         g1 = _gen(UID, address(0), impl);
         g2 = _gen(UID, address(g1), impl);
         g3 = _gen(UID, address(g2), impl);
-        f = _factory(address(new GovernanceRouter(UID, address(g1), impl, false)));
+        f = _factory(address(new GovernanceRouter(UID, address(g1), impl, false, address(0))));
     }
 
     function _mismatch(OpenFactory f, address root, address got) internal {

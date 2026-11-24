@@ -24,7 +24,7 @@ contract SingletonRescueTest is PqChatBase {
         s = [
             address(p),
             address(f),
-            address(new GovernanceRouter(chainUidA, REG_P, address(0), false)),
+            address(new GovernanceRouter(chainUidA, REG_P, address(0), false, address(0))),
             address(new RelayFeeRouter()),
             address(chat),
             address(new PqVault(IOpenFactory.ReleaseId(4, 0, 1), address(f), ""))

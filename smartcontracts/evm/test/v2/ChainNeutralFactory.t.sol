@@ -59,7 +59,7 @@ contract ChainNeutralFactoryTest is Test {
         ureg = new StubUARegistry(UID_);
         // the router and its registry name one SmartKeyAccount implementation, 0xBEEF, the DEX env's (spec §13.4)
         ureg.setSmartKeyCloneHash(EnvKit.cloneHash(address(0xBEEF)));
-        router = new GovernanceRouter(UID_, address(ureg), address(0xBEEF), false);
+        router = new GovernanceRouter(UID_, address(ureg), address(0xBEEF), false, address(0));
         f = EnvKit.factory(registrar, UID_, 0, address(router));
         normalImpl = NormalToken(
             Catalogue.plain(f, NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0xBEEF), false)
@@ -174,7 +174,7 @@ contract ChainNeutralFactoryTest is Test {
     function test_configureChain_routerOfAnotherChainRefused() public {
         OpenFactory g = new OpenFactory(nid(registrar));
         EnvKit.genesis(UID_);
-        GovernanceRouter other = new GovernanceRouter(keccak256("other"), address(0), address(0), false);
+        GovernanceRouter other = new GovernanceRouter(keccak256("other"), address(0), address(0), false, address(0));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID_, keccak256("other")));
         g.configureChain(UID_, 0, address(other), address(other).codehash, 0, bytes32(0));
@@ -422,7 +422,7 @@ contract ChainNeutralFactoryTest is Test {
         SmartKeyAccountFactory skaf = new SmartKeyAccountFactory{salt: 0}(uid);
         StubUARegistry reg = new StubUARegistry{salt: 0}(uid);
         reg.setSmartKeyCloneHash(EnvKit.cloneHash(skaf.IMPLEMENTATION()));
-        GovernanceRouter r = new GovernanceRouter{salt: 0}(uid, address(reg), skaf.IMPLEMENTATION(), false);
+        GovernanceRouter r = new GovernanceRouter{salt: 0}(uid, address(reg), skaf.IMPLEMENTATION(), false, address(0));
         RelayFeeRouter relay = new RelayFeeRouter{salt: 0}();
         ComplianceRegistry c = new ComplianceRegistry{salt: 0}(nid(registrar), address(r), uid);
         g = new OpenFactory{salt: 0}(nid(registrar));

@@ -720,7 +720,7 @@ contract GovDeployTest is Test {
     /// (x 64/63 for the probe's call), EIP-8037 state gas, the total and x 1.05 (`--gas-estimate-multiplier 105`) against a
     /// 200 M block; regular under 2^24 (EIP-7825). Printed for runs/2026-11-03-governance-deploy-gas.txt.
     function test_releaseGasPerKind() public {
-        address router = address(new GovernanceRouter(ZUID, address(this), ska, false));
+        address router = address(new GovernanceRouter(ZUID, address(this), ska, false, address(0)));
         ZetherInnerProductVerifierBls12381 ip = new ZetherInnerProductVerifierBls12381();
         zdeps = [
             address(new ZetherTransferVerifierBls12381(ip)),
@@ -754,7 +754,9 @@ contract GovDeployTest is Test {
             _release(type(NormalPqzToken).creationCode, IOpenFactory.TokenKind.NORMAL_PQZ, router),
             _release(type(WrappedPqzToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ, router),
             _dex(router),
-            abi.encodePacked(type(GovernanceRouter).creationCode, abi.encode(ZUID, address(this), ska, false)),
+            abi.encodePacked(
+                type(GovernanceRouter).creationCode, abi.encode(ZUID, address(this), ska, false, address(0))
+            ),
             _release(type(WrappedRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_REGULATED, router),
             _release(type(WrappedPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, router),
             _release(type(NormalRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_REGULATED, router),
@@ -951,7 +953,8 @@ contract GovDeployTest is Test {
                         bytes32(0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164),
                         address(0x838b5D28fbc07844a070818012A8a68980688C26),
                         address(0x428C6e1Cad562Dc16b2bf19515B9b08dD0361e8f),
-                        false
+                        false,
+                        address(0)
                     )
                 )
             ),

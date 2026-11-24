@@ -162,7 +162,7 @@ abstract contract GovRouterFixture is UARegistryBase {
     function setUp() public virtual override {
         super.setUp();
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, address(0), true, _mockPqCfg());
-        router = new GovernanceRouter(chainUidA, PREG, _fixtureSka(), false);
+        router = new GovernanceRouter(chainUidA, PREG, _fixtureSka(), false, address(0));
         pqKey = _ml(1);
         pq = _register(preg, ML44, pqKey);
         Member[] memory m = new Member[](3);
@@ -1001,8 +1001,9 @@ contract GovRouterTest is GovRouterFixture {
     /// R-02 on the real router: the same signature on a second router (another chain's `chain_uid`, or the same chain's second deployment) and on
     /// another chain id: `verifyingContract`, `chain_uid` and `chainId` are in the domain.
     function test_refuted_replayAcrossRoutersAndChains() public {
-        GovernanceRouter other = new GovernanceRouter(chainUidA, PREG, address(0), false);
-        GovernanceRouter otherUid = new GovernanceRouter(keccak256("another chain"), PREG, address(0), false);
+        GovernanceRouter other = new GovernanceRouter(chainUidA, PREG, address(0), false, address(0));
+        GovernanceRouter otherUid =
+            new GovernanceRouter(keccak256("another chain"), PREG, address(0), false, address(0));
         NormalToken t = _normal(pq, pq, 0);
         bytes memory cd = _op(OP_MINT, pq, address(t), abi.encode(BOB, uint256(1)));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));

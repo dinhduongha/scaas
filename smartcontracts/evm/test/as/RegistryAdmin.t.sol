@@ -178,7 +178,7 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         super.setUp();
         vm.warp(1_800_000_000);
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, address(0), true, _kinds());
-        router = new GovernanceRouter(chainUidA, PREG, address(0), false);
+        router = new GovernanceRouter(chainUidA, PREG, address(0), false, address(0));
         trouter = new RegistryTestRouter(chainUidA, PREG);
         k1Key = _k1Key();
         k1 = _register(preg, K1, k1Key);
@@ -669,7 +669,7 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
             true,
             _kinds()
         );
-        GovernanceRouter routerB = new GovernanceRouter(uidB, address(pregB), address(0), false);
+        GovernanceRouter routerB = new GovernanceRouter(uidB, address(pregB), address(0), false, address(0));
         assertEq(_register(pregB, ML44, mlKey), ml, "one derived id on both chains");
         IRegistryAdmin cb = _reg(nid(admin), address(routerB));
         _call(admin, address(cb), _xfer(ml));

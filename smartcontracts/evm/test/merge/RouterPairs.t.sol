@@ -379,7 +379,7 @@ contract RouterPairsTest is GovRouterFixture {
     /// A native id needs no registry (B, R9): on a router with none, an EOA runs every kind of op; a derived id there is
     /// `UALedgerOff` by name (C).
     function test_routerEoaWithoutRegistry() public {
-        router = new GovernanceRouter(chainUidA, address(0), address(0), false);
+        router = new GovernanceRouter(chainUidA, address(0), address(0), false, address(0));
         assertEq(address(router.registry()), address(0));
         NormalToken t = _normal(eoa, eoa, 0);
         _m(OP_MINT, eoa, address(t), abi.encode(BOB, uint256(5)));

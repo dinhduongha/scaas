@@ -507,7 +507,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
 
     /// The three ops relayed through a router at fee 0 for the owner `nId` (its own key, no registry call).
     function test_router_pqzVerifierOps() public {
-        GovernanceRouter router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false);
+        GovernanceRouter router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false, address(0));
         OpenFactory f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(router));
         Catalogue.release(
