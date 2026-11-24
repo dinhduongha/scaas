@@ -10,11 +10,22 @@ forge-pqchat (A-1, A-5, with D-7 and A-3 in the tree) | A-1 commit | 0 | 214 pas
 forge-pqvault | A-1 commit | 0 | 96 passed
 size (A-1 + A-5) | A-5 commit | 0 | 182 contracts; PqChatTree 35,267 -> 35,265
 size (with D-7 + A-3) | uncommitted | 1 | PqChatTree 35,329 > 35,286 (the plain T-1 line)
+sdk-gas measure (merge) | ccf6c43db | 0 | the 4 SdkGasRouterAdmin.t.sol runs, 1 passed each; generate.py --check ok; test_generate ok; 39 rows +17/+24/+25 vs ua-rs-sign
+docs (merge) | ccf6c43db | 0 | docs_check check: 0 errors, 7 warnings
 
 ## Done (committed)
 - G-1: index before the initializer (red: "mid-creation: indexed, the env registry: ...07 != ...08").
 - A-1 / C39: `st == 0` in _walkAdds (red: PqChatTreeKeyLive in test_c39_addOrderIndependent).
 - A-5: PqChatTreeTargets(count).
+
+## Stopped 2026-11-24 (owner: machine shutdown), after step 0 (the merge)
+- HEAD ccf6c43db: merge of origin/ua-rs-sign (d34fcf566). One conflict, test/vectors/sdk_gas.json, re-measured (above)
+  and reference.json regenerated; size-baseline.json and decisions.md merged without conflict.
+- Not run after the merge yet: the G-1 gates (forge governance, factory, v2, gas), the size gate, and the SDK's
+  `cargo test --lib op::gas`. Run them first on resume.
+- D-7 / A-3 WIP: local branch review-fix-contract-d7a3-wip (0b9128e26, one commit on ccf6c43db) and
+  scratchpad/review-fix-contract/d7-a3-wip.git.patch (main checkout, git-ignored; the older d7-a3-wip.patch beside it is
+  rtk's summary output, not a patch). The work tree of review-fix-contract is clean.
 
 ## Built and tested, not committed: blocked on PqChatTree's size
 - D-7 / C40 (empty addPath -> PqChatShape) and A-3 (tree epoch-0 pieces -> PqChatUnknown): green in
@@ -25,12 +36,8 @@ size (with D-7 + A-3) | uncommitted | 1 | PqChatTree 35,329 > 35,286 (the plain 
   together with E-3's tree part, which adds code to the same two entries.
 
 ## Left, in order
-0. Merge origin/ua-rs-sign (d34fcf566, with router-cancel) into review-fix-contract by a merge commit, on a clean work
-   tree (the D-7 / A-3 work: apply scratchpad/review-fix-contract/d7-a3-wip.patch after it). Expected conflicts:
-   test/vectors/sdk_gas.json (re-measure the gov_router_mtxCreate* rows with SDK_GAS_WRITE through the SDK gas runner and
-   generate.py, never hand-merged), size-baseline.json, the GovDeploy / router-address pins, docs/decisions.md. Then
-   rerun the G-1 gates (governance, factory, v2, gas) and the SDK's `cargo test --lib op::gas` (not run here: stopped
-   while compiling).
+0. Done (ccf6c43db). On resume: rerun the G-1 gates (governance, factory, v2, gas), the size gate and the SDK's
+   `cargo test --lib op::gas`; then cherry-pick review-fix-contract-d7a3-wip's commit as the work tree for step 1.
 1. PqChatTreeMembers split + E-3 tree (C9: ancestor check, EXIT_LAG_MAX = 16, PqChatExitLag, apply at t.head: gone at
    the head's number, record/flags/events under the head) + A-4 already in the tree; then commit D-7 and A-3.
 2. E-3 mode 0 (PqChat.leave / remove at home: the head from epochsOf's tail, the lag, apply at the head; A-4 repeats
