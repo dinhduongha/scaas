@@ -17,6 +17,8 @@ while :; do
     exec {fd}>"$f"
     if flock -n "$fd"; then
       [ -z "$said" ] || echo "[capped] slot $i free after $((SECONDS - said)) s: $1" >&2
+      # the slot is held: scripts/mutant_guard.py starts a mutant's deadline at this line (ARCH-POS-23)
+      echo "[capped] slot acquired" >&2
       exec systemd-run --user --scope --quiet -p MemoryMax="${CAPPED_MEM:-4G}" -p MemorySwapMax=2G -- "$@"
     fi
     exec {fd}>&-

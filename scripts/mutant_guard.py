@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""The mutant runners' guard (owner 2026-11-24): a hung mutant blocks nothing and corrupts nothing. The shared runners
+"""The mutant runners' guard (ARCH-POS-23, owner 2026-11-24): a hung mutant blocks nothing and corrupts nothing. The shared runners
 (clients/scaas-sdk/runs/mutants_lib.py, clients/scaas-rpc/runs/mutants_lib.py, runs/mutants_lib.py, the ua-rs-native and
 bls-multi `mutants-run.py`, smartcontracts/evm/script/wraplimit/mutants.py) and the standalone ones still run use it:
   refuse_dirty(files, root)  before the first mutant: a target file that differs from HEAD is a leftover mutation of a run
@@ -9,7 +9,8 @@ bls-multi `mutants-run.py`, smartcontracts/evm/script/wraplimit/mutants.py) and 
                              node children too), and any child left after a normal exit; the result carries `seconds` and
                              `timeout` (the deadline in s when it passed, else None)
   deadline(base)             the per-mutant deadline in s: `--timeout N` from the command line, else 3 x the measured
-                             baseline `base`, at least 10 min
+                             baseline `base`, at least 10 min; counted from when capped holds its slot (its `[capped]
+                             slot acquired` line; a command without capped at once), never the wait for a slot
   limit(cmd, **kw)           a runner without its own baseline: `cmd` run once on the unmutated tree per (cmd, cwd, env),
                              required green (else rc 2), and its deadline; call it before the mutation is written
   restore(saved)             every mutated file written back with the signals held off, then checked byte for byte; a file
@@ -27,6 +28,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -114,28 +116,86 @@ def _kill(p):
         signal.pthread_sigmask(signal.SIG_SETMASK, old)
 
 
+WAIT, HELD = b"[capped] waiting for a free slot", b"[capped] slot acquired"
+
+
+def _sink(target, fd):
+    """Where a stream the caller named goes: (fd to write to or None, collect)."""
+    if target is subprocess.PIPE:
+        return None, True
+    if target is subprocess.DEVNULL:
+        return None, False
+    if target is None:
+        return fd, False
+    return (target if isinstance(target, int) else target.fileno()), False
+
+
 def run(cmd, deadline=None, **kw):
+    """The deadline counts only the time a step runs: a command that names capped starts its clock at capped's `slot
+    acquired` line; any other at once; a `waiting for a free slot` line stops the clock and each `slot acquired` line
+    (a later capped step) starts it again. The output reaches the caller's targets as subprocess.run's would."""
     if kw.pop("capture_output", False):
         kw["stdout"] = kw["stderr"] = subprocess.PIPE
+    text = kw.pop("text", False)
+    out_t, err_t = kw.pop("stdout", None), kw.pop("stderr", None)
+    merged = err_t is subprocess.STDOUT  # one pipe, as the caller's order
+    sinks = {"out": _sink(out_t, 1), "err": None if merged else _sink(err_t, 2)}
+    got = {"out": [], "err": []}
     t0 = time.monotonic()
-    p = subprocess.Popen(cmd, start_new_session=True, **kw)
+    clock = {"start": None if "capped" in repr(cmd) else t0, "ran": 0.0}
+    lock = threading.Lock()
+
+    def pump(stream, name):
+        fd, keep = sinks[name]
+        for ln in iter(stream.readline, b""):
+            if ln.startswith((WAIT, HELD)):
+                with lock:
+                    now = time.monotonic()
+                    if clock["start"] is not None:
+                        clock["ran"] += now - clock["start"]
+                    clock["start"] = now if ln.startswith(HELD) else None
+            if fd is not None:
+                os.write(fd, ln)
+            if keep:
+                got[name].append(ln)
+
+    err_pipe = subprocess.STDOUT if merged else subprocess.PIPE
+    p = subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.PIPE, stderr=err_pipe, **kw)
+    readers = [threading.Thread(target=pump, args=(p.stdout, "out"), daemon=True)]
+    if not merged:
+        readers.append(threading.Thread(target=pump, args=(p.stderr, "err"), daemon=True))
+    for th in readers:
+        th.start()
     hit = None
     try:
-        out, err = p.communicate(timeout=deadline)
-    except subprocess.TimeoutExpired:
-        hit = deadline
-        _kill(p)
-        try:
-            out, err = p.communicate(timeout=10)
-        except subprocess.TimeoutExpired:  # a child that left the group holds the pipe: give up its output
-            out = err = "" if kw.get("text") else b""
+        while p.poll() is None:
+            try:
+                p.wait(0.2)
+            except subprocess.TimeoutExpired:
+                pass
+            with lock:
+                start = clock["start"]
+            if deadline is not None and start is not None and time.monotonic() - start > deadline and p.poll() is None:
+                hit = deadline
+                _kill(p)
     except BaseException:
         _kill(p)
         raise
     # a child the test left behind (an anvil, a cargo job) goes with its group
     _killpg(p.pid, signal.SIGKILL)
+    for th in readers:  # a child that left the group may hold a pipe: its output is given up after 10 s
+        th.join(10)
+    with lock:
+        ran = clock["ran"] + (time.monotonic() - clock["start"] if clock["start"] is not None else 0.0)
+
+    def done(chunks):
+        b = b"".join(chunks)
+        return b.decode(errors="replace") if text else b
+
+    out = done(got["out"]) if out_t is subprocess.PIPE else None
+    err = done(got["err"]) if err_t is subprocess.PIPE else None
     r = subprocess.CompletedProcess(cmd, p.returncode, out, err)
-    r.seconds, r.timeout, r.pid = time.monotonic() - t0, hit, p.pid
+    r.seconds, r.timeout, r.pid = ran, hit, p.pid
     return r
 
 
@@ -165,6 +225,13 @@ def counted(text):
 
 def _scenario(name, d):
     """One case of the self-test, in its own process: the test command writes its group's id to `pid`."""
+    if name == "slot":  # a capped that holds its slot after 5 s, then a step of 1 s, under `--timeout 3`
+        cap = Path(d) / "capped"
+        cap.write_text('#!/bin/sh\nsleep 5\necho "[capped] slot acquired" >&2\nexec "$@"\n')
+        cap.chmod(0o755)
+        r = run([str(cap), "sh", "-c", "sleep 1; echo done"], deadline(1), capture_output=True, text=True)
+        print(outcome(r, f"rc {r.returncode} {r.stdout.strip()}"), flush=True)
+        return
     f = Path(d) / "a.txt"
     saved = {f: f.read_bytes()}
     f.write_bytes(b"mutated\n")
@@ -242,6 +309,16 @@ def _self_test():
             line(p.returncode == 128 + signal.SIGTERM, f"sigterm: the runner stopped, rc {p.returncode}")
         line(restored, f"{name}: the file restored")
         line(not left, f"{name}: no child process left")
+    # the slot wait is not the step's time: the deadline starts when capped holds its slot
+    d = tempfile.mkdtemp()
+    p = subprocess.run(
+        [sys.executable, "-I", __file__, "--timeout", "3", "--scenario", "slot", d],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    line(p.stdout.strip() == "rc 0 done", f"slot: a 5 s slot wait, then 1 s under --timeout 3: {p.stdout.strip()!r}")
+    shutil.rmtree(d)
     d = tempfile.mkdtemp()
     subprocess.run(["git", "init", "-q", d], check=True)
     (Path(d) / "a.txt").write_text("original\n")
