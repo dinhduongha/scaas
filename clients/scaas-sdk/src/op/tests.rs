@@ -3756,6 +3756,50 @@ async fn strict_majority_ends_a_failed_operation_at_the_finalized_block() {
     }
 }
 
+/// Review D-1 (G1, CTR-GOV-33): a router op of a derived id is followed on the map the router checks it on, `mtxNonceFor`, as
+/// prepare and submit read it. A UA administering targets of two generations: the router's one map (`mtxNonce`) at 5, the
+/// target's keyed map at 0. The op signed at keyed nonce 0 stays in flight while the keyed map is at 0, whatever the one map
+/// says, and is `Consumed` once the keyed map passes it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_router_ops_follow_reads_the_target_keyed_nonce() {
+    let t = setup(0, |_, _| {}).await;
+    let (router, target) = (OTHER, "0x5ca00000000000000000000000000000000000f6");
+    t.chain.lock().unwrap().nonces.insert(router.into(), 5);
+    let until = t.chain.lock().unwrap().timestamp + 3600;
+    let mut d = cancel(&t, "gov_router", router, "5", "0");
+    d.name = "UACancelNonceFor";
+    d.message = json!({"from": ua(), "target": target, "lane": "5", "batch": "7", "validUntil": until.to_string(),
+        "mode": 0, "relayer": ZERO, "fee": "0", "feeRecipient": ZERO});
+    let p = prepare(&t, d).await;
+    assert_eq!(
+        p.t.message["nonce"],
+        json!("0"),
+        "prepare read the keyed map"
+    );
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    let op = t.sdk.op().submit(p, q).await.unwrap();
+    assert!(
+        matches!(
+            t.sdk.op().state(op.clone()).await.unwrap(),
+            OpState::InFlight { .. }
+        ),
+        "the keyed map still at the op's nonce: in flight, the one map's 5 is another map's"
+    );
+    t.chain.lock().unwrap().nonces_for.insert(router.into(), 1);
+    assert_eq!(
+        t.sdk.op().state(op).await.unwrap(),
+        OpState::Consumed {
+            basis: crate::events::Basis::OneEndpoint
+        },
+        "the keyed map past it"
+    );
+}
+
 /// G1 (CTR-GOV-33): a router op of a derived id reads `mtxNonceFor(target, from, lane)`; a native id, another kind or no target
 /// `mtxNonce(bytes32,uint256)`.
 #[test]

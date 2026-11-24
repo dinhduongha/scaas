@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! T8g: the `GovernanceRouter` rows (`gov_router`; spec 2026-11-02-governance §3.2): its closed table, every op naming its target
 //! and (CTR-GOV-28) the target's chain word; the creations take a named config (`init!`) or the initializer call (`initcall!`),
-//! whose keccak is the signed `initHash`. The ordered cancel `UACancelNonce` is in `token.rs`. A copy of
+//! whose keccak is the signed `initHash`. The ordered cancel `UACancelNonce` is in `token.rs`; the keyed one `UACancelNonceFor` here. A copy of
 //! `scaas-node/src/typed.rs` `TYPED`, held equal by `tests/entries.rs`.
 use super::Def;
 
 const GR: &[&str] = &["gov_router"];
 
 pub(super) const ROWS: &[Def] = &[
+    // CTR-GOV-33 Change (owner 2026-11-24): the keyed cancel (`lane` in the map the router checks for an op on `target`)
+    ("UACancelNonceFor", "mtxCancelNonceFor", GR, "bytes32 from,address target,uint256 lane,E", ""),
     ("UAGrantRole", "mtxGrantRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
     ("UARevokeRole", "mtxRevokeRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
     ("UASetGrant", "mtxSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid,E", ""),

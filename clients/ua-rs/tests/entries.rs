@@ -871,8 +871,8 @@ fn entries_router() {
     table_both_ways("gov_router");
     assert_eq!(
         vector_pairs("gov_router"),
-        // set-auditor (CTR-GOV-31): 60 -> 62, `UASetAuditorKey`, `UASetAuditorUA`
-        62,
+        // set-auditor (CTR-GOV-31): 60 -> 62, `UASetAuditorKey`, `UASetAuditorUA`; CTR-GOV-33 Change: 62 -> 63, `UACancelNonceFor`
+        63,
         "every GovernanceRouter pair of typed_ops.json"
     );
     canon_unbound("gov_router");

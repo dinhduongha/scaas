@@ -168,6 +168,8 @@ pub(crate) const QUOTABLE: &[(&str, &[&str])] = &[
         "mtxCancelNonce",
         &["token", "zether", "pqz", "wallet", "gov_router", "account"],
     ),
+    // CTR-GOV-33's Change: the router's keyed cancel (`gov_router_mtxCancelNonceFor_*` of sdk_gas.json)
+    ("mtxCancelNonceFor", &["gov_router"]),
     ("mtxBurn", TOKEN_KINDS),
     ("mtxWrap", TOKEN_KINDS),
     ("mtxWrapLeg", TOKEN_KINDS),

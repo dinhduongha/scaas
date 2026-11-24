@@ -205,7 +205,11 @@ async fn every_router_row_is_its_digest() {
         }
         n += 1;
     }
-    assert_eq!(n, 62, "every router pair, UACancelNonce among them");
+    // CTR-GOV-33 Change: 62 -> 63, `UACancelNonceFor`
+    assert_eq!(
+        n, 63,
+        "every router pair, UACancelNonce and UACancelNonceFor among them"
+    );
 }
 
 /// A creation's signed `initHash` is the keccak of what `scaas-ua` encodes of its named config (token, DEX) or its initializer

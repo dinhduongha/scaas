@@ -887,6 +887,8 @@ external fun uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_grant(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce(
 ): Short
+external fun uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for(
+): Short
 external fun uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_admin_admin_ua_create_dex(
@@ -1426,6 +1428,8 @@ external fun uniffi_scaas_sdk_fn_method_admin_admin_ua_approve_token_release(`pt
 external fun uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_grant(`ptr`: Long,`req`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(`ptr`: Long,`req`: RustBuffer.ByValue,
+): Long
+external fun uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(`ptr`: Long,`req`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate(`ptr`: Long,`req`: RustBuffer.ByValue,
 ): Long
@@ -2292,6 +2296,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce() != 48105.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for() != 20110.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate() != 38309.toShort()) {
@@ -4622,6 +4629,8 @@ public interface AdminInterface {
     
     suspend fun `adminUaCancelNonce`(`req`: UaCancelNonce): Prepared
     
+    suspend fun `adminUaCancelNonceFor`(`req`: UaCancelNonceFor): Prepared
+    
     suspend fun `adminUaCancelRate`(`req`: UaCancelRate): Prepared
     
     suspend fun `adminUaCreateDex`(`req`: UaCreateDex): Prepared
@@ -4963,6 +4972,27 @@ open class Admin: Disposable, AutoCloseable, AdminInterface
             UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(
                 uniffiHandle,
                 FfiConverterTypeUaCancelNonce.lower(`req`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypePrepared.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `adminUaCancelNonceFor`(`req`: UaCancelNonceFor) : Prepared {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(
+                uniffiHandle,
+                FfiConverterTypeUaCancelNonceFor.lower(`req`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_u64(future, callback, continuation) },
@@ -21727,6 +21757,79 @@ public object FfiConverterTypeUaCancelNonce: FfiConverterRustBuffer<UaCancelNonc
             FfiConverterTypeKeyRef.write(value.`signer`, buf)
             FfiConverterString.write(value.`chain`, buf)
             FfiConverterString.write(value.`batch`, buf)
+            FfiConverterString.write(value.`lane`, buf)
+            FfiConverterOptionalString.write(value.`chainUid`, buf)
+            FfiConverterTypeEnvelope.write(value.`envelope`, buf)
+    }
+}
+
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UACancelNonceFor
+ */
+data class UaCancelNonceFor (
+    var `signer`: KeyRef
+    , 
+    var `chain`: kotlin.String
+    , 
+    /**
+     * the lane, decimal
+     */
+    var `batch`: kotlin.String
+    , 
+    var `target`: kotlin.String
+    , 
+    var `lane`: kotlin.String
+    , 
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    var `chainUid`: kotlin.String?
+    , 
+    var `envelope`: Envelope
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUaCancelNonceFor: FfiConverterRustBuffer<UaCancelNonceFor> {
+    override fun read(buf: ByteBuffer): UaCancelNonceFor {
+        return UaCancelNonceFor(
+            FfiConverterTypeKeyRef.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterTypeEnvelope.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: UaCancelNonceFor) = (
+            FfiConverterTypeKeyRef.allocationSize(value.`signer`) +
+            FfiConverterString.allocationSize(value.`chain`) +
+            FfiConverterString.allocationSize(value.`batch`) +
+            FfiConverterString.allocationSize(value.`target`) +
+            FfiConverterString.allocationSize(value.`lane`) +
+            FfiConverterOptionalString.allocationSize(value.`chainUid`) +
+            FfiConverterTypeEnvelope.allocationSize(value.`envelope`)
+    )
+
+    override fun write(value: UaCancelNonceFor, buf: ByteBuffer) {
+            FfiConverterTypeKeyRef.write(value.`signer`, buf)
+            FfiConverterString.write(value.`chain`, buf)
+            FfiConverterString.write(value.`batch`, buf)
+            FfiConverterString.write(value.`target`, buf)
             FfiConverterString.write(value.`lane`, buf)
             FfiConverterOptionalString.write(value.`chainUid`, buf)
             FfiConverterTypeEnvelope.write(value.`envelope`, buf)
