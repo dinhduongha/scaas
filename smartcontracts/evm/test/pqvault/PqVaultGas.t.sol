@@ -263,9 +263,11 @@ contract PqVaultGasTest is PqVaultBase {
             // CTR-PQV-18 (2026-11-23, `groupMode` in the create record, 0 only, the last field):
             // 30,825 -> 31,786 B; regular
             // 2,087,684 -> 2,150,099; state 47,737,530 -> 49,207,860 (+961 x 1,530)
-            assertEq(r.code.length, 31_786, "the PqVault runtime (size-baseline.json row)");
-            assertApproxEqAbs(regular, 2_150_099, SLACK, "deployImplementation regular");
-            assertEq(state, 49_207_860, "deployImplementation state");
+            // TreeKEM T3a part 1 (`PqGroupBase._land` split): 31,786 -> 31,826 B; regular 2,150,099 -> 2,154,260; state
+            // 49,207,860 -> 49,269,060 (+40 x 1,530)
+            assertEq(r.code.length, 31_826, "the PqVault runtime (size-baseline.json row)");
+            assertApproxEqAbs(regular, 2_154_260, SLACK, "deployImplementation regular");
+            assertEq(state, 49_269_060, "deployImplementation state");
         }
     }
 

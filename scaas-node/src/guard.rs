@@ -2876,11 +2876,11 @@ mod tests {
         // NODE-JOB-29 (TODO 3zh MD-14): -> 145, the registry's `cacheExpandedKey`; set-auditor (CTR-GOV-31): -> 147, the router's
         // `mtxSetAuditorKey`, `mtxSetAuditorUA`; bls-multi Task 10: -> 148, the registry's `registerBlsMulti`
         // PqVault plan V8 (CTR-PQV-11): -> 156, `PqVault`'s eight plain rows; chains-arweave T9: -> 157, `PqChatStore`'s
-        // `storeMessage` (contract kind `pqchatstore`)
+        // `storeMessage` (contract kind `pqchatstore`); PqChat TreeKEM T4 (CTR-CHAT-27): 157 -> 163, `PqChat`'s six tree writes
         assert_eq!(
             typed::rows().iter().filter(|r| !r.entry.is_empty()).count(),
-            157,
-            "table rows: 111 typed with an entry, 46 plain"
+            163,
+            "table rows: 111 typed with an entry, 52 plain"
         );
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
@@ -5622,6 +5622,18 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         ));
     }
 
+    /// CTR-CHAT-27: `PqChatTree.treeCreate`, the module's creation step that `PqChat.createSession` calls; no row of any kind.
+    const TREE_CREATE: &str = "treeCreate((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes,uint8),\
+        (bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
+    /// `PqChat`'s unsigned writes (UA-7 P17; CTR-CHAT-27: the tree commit's three pieces), under `params.relay_unsigned_pqchat`.
+    const UNSIGNED_PQCHAT: [&str; 5] = [
+        "storeMessage",
+        "addWraps",
+        "addPathList",
+        "addPathKeys",
+        "addPath",
+    ];
+
     /// The `PqChat` writes as `IPqChat.sol` declares them ([`iface_writes`]).
     fn pqchat_writes() -> Vec<String> {
         iface_writes("pqchat/IPqChat.sol")
@@ -5985,7 +5997,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .iter()
             .filter(|s| !s.starts_with("initialize("))
             .collect();
-        assert_eq!((all.len(), writes.len()), (14, 13), "{all:?}");
+        assert_eq!((all.len(), writes.len()), (20, 19), "{all:?}"); // CTR-CHAT-27: + the six tree writes
         let theirs: HashSet<[u8; 4]> = writes.iter().map(|s| sel(s)).collect();
         let ours: HashSet<[u8; 4]> = typed::rows()
             .iter()
@@ -5996,6 +6008,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let forge: HashSet<[u8; 4]> = [
             "821d41ae", "1222a945", "2b9ab93a", "3c289881", "6035115c", "a52f4d6d", "95660a78",
             "47bee6d5", "c8de3d2d", "04857ea8", "1fd5aeac", "f3ee47ee", "5aee92d5",
+            // CTR-CHAT-27: commit, addPathList, addPathKeys, addPath, treeLeave, treeRemove
+            "9575f9cb", "0b9b356b", "de142cf8", "44889230", "12a4e9ac", "eb3f5236",
         ]
         .iter()
         .map(|h| alloy::hex::decode(h).unwrap().try_into().unwrap())
@@ -6033,12 +6047,18 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 );
             }
         }
+        // CTR-CHAT-27: `treeCreate` is the module's step under `createSession`, the tree views `PqChatTreeViews`' (read-only)
         for s in [
             "initialize(bytes32,uint8)",
             "owner()",
             "sessionOf(bytes32)",
             "storedRange(bytes8,uint256,uint256)",
             "topicOf(bytes32)",
+            TREE_CREATE,
+            "treeOf(bytes32)",
+            "treeLeaves(bytes32,uint256,uint256)",
+            "commitOf(bytes32)",
+            "pathListOf(bytes32)",
         ] {
             for k in kinds {
                 assert!(row(sel(s), k).is_none(), "{s} on {k}");
@@ -6202,9 +6222,9 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         }
         assert_eq!(
             (entries.len(), *reads.lock().unwrap()),
-            (13, 1),
+            (19, 1),
             "infoOf read once, then cached"
-        ); // P48: + remove
+        ); // P48: + remove; CTR-CHAT-27: + the six tree writes
         for (to, c, what) in [
             (v0, cfg.clone(), "version 0"),
             (c4, cfg.clone(), "class 4"),
@@ -6234,6 +6254,9 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             "sessionOf(bytes32)",
             "storedRange(bytes8,uint256,uint256)",
             "transfer(address,uint256)",
+            TREE_CREATE,
+            "treeOf(bytes32)",
+            "commitOf(bytes32)",
         ] {
             let mut w = work("postMessage", chat);
             w.data = cast(s);
@@ -6344,7 +6367,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             Default::default(),
         )
         .unwrap();
-        for entry in ["storeMessage", "addWraps"] {
+        for entry in UNSIGNED_PQCHAT {
             unpaid(shut.check(&chain, &work(entry)).await, entry);
             unpaid(off.check(&chain, &work(entry)).await, entry);
         }
@@ -6354,7 +6377,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             Default::default(),
         )
         .unwrap();
-        for entry in ["storeMessage", "addWraps"] {
+        for entry in UNSIGNED_PQCHAT {
             open.check(&chain, &work(entry))
                 .await
                 .unwrap_or_else(|e| panic!("{entry} under the lane policy: {e:?}"));
@@ -6426,7 +6449,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 typed: Some(t),
             }
         };
-        for entry in ["storeMessage", "addWraps", "postMessage"] {
+        for entry in
+            UNSIGNED_PQCHAT
+                .iter()
+                .chain(&["postMessage", "commit", "treeLeave", "treeRemove"])
+        {
             paid.check(&chain, &relayed(chat, work(entry).data))
                 .await
                 .unwrap_or_else(|e| panic!("{entry} as a relay fee's call: {e:?}"));

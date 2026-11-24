@@ -4956,8 +4956,28 @@
  ],
  "PqChat": [
   {
+   "sig": "addPath(bytes32,uint32,(bytes,bytes32,bytes)[])",
+   "class": "PERMISSIONLESS(unsigned pieces of a staged tree commit, each checked against its signed hash and the walk; treekem spec section 8)",
+   "error": ""
+  },
+  {
+   "sig": "addPathKeys(bytes32,bytes[])",
+   "class": "PERMISSIONLESS(unsigned pieces of a staged tree commit, each checked against its signed hash and the walk; treekem spec section 8)",
+   "error": ""
+  },
+  {
+   "sig": "addPathList(bytes32,uint32[],bytes32[])",
+   "class": "PERMISSIONLESS(unsigned pieces of a staged tree commit, each checked against its signed hash and the walk; treekem spec section 8)",
+   "error": ""
+  },
+  {
    "sig": "addWraps(bytes32,uint32,(bytes32,uint64,bytes,bytes32,bytes)[])",
    "class": "PERMISSIONLESS(unsigned wraps of an epoch, checked against its signed hash; pqchat.md section 10)",
+   "error": ""
+  },
+  {
+   "sig": "commit((bytes32,bytes32,uint64,uint64,bytes32,bytes32,bytes32,uint32,uint64,uint32,bytes32[],(uint32,bytes32,uint64)[],(uint32,bytes32,uint64,bytes32,bytes32)[],bytes32[],bytes32[],uint32,bytes32,bytes32,bytes),uint32[],bytes32[],bytes[],(bytes,bytes32,bytes)[],(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
    "error": ""
   },
   {
@@ -5018,6 +5038,16 @@
   {
    "sig": "storeMessage(uint8,bytes8,bytes)",
    "class": "PERMISSIONLESS(an unsigned blob, one per call; pqchat.md section 10)",
+   "error": ""
+  },
+  {
+   "sig": "treeLeave((bytes32,bytes32,bytes32,bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "treeRemove((bytes32,bytes32,bytes32,uint64,bytes32[],bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
    "error": ""
   },
   {

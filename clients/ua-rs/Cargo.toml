@@ -481,6 +481,11 @@ required-features = ["fam-near", "fam-algorand"]
 name = "app_core"
 required-features = ["app-core", "vectors"]
 
+# PqChat TreeKEM plan T2: every row of vectors/pqchat/tree.json and tree-secrets.json, the scenarios' replays
+[[test]]
+name = "tree"
+required-features = ["app-core", "vectors"]
+
 # plan T27.soroban / T41.soroban: the op envelope and the native transaction against the clientkeys rows
 [[test]]
 name = "families_soroban"

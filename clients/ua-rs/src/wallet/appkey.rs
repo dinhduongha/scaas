@@ -58,6 +58,8 @@ pub(super) enum Origin {
     Derived,
     /// a PqChat sender-chain position (`pqchat_keys`): its chain and counter on the handle
     Chain,
+    /// a TreeKEM epoch key `K_e` (`tree`): derived inside the boundary from secrets no caller chose, an epoch key as mode 0's
+    Tree,
 }
 
 /// A key in the arena. No `Clone`, `Debug` or byte accessor; released by [`AppKeys::destroy`] or the wallet's `lock`.

@@ -229,30 +229,39 @@ foreground.
 
 ### T3a. Contract: the module, its storage, the cold tree (`smartcontracts/evm`)
 
-- [ ] `PqGroupBase._land` split into storing wraps and completing an epoch; `_authorOf`'s offset-free form moved from `PqChat`
+**Two layers (owner 2026-11-23, CTR-CHAT-26):** the tree math, the tree hash, the admission check, the tree storage and, from
+T3b, the R16 sets and the acceptance and completion checks are `src/pqgroup/PqGroupTree.sol`, an abstract base for any
+contract that keeps a group tree, app-agnostic (its namespace, typehashes, bounds and errors by hooks the inheritor fixes;
+`docs/contracts/pqchat.md` §17); PqChat's entries, domain, typehashes and the glue are `PqChatTree` and `PqChatCore`.
+
+- [x] `PqGroupBase._land` split into storing wraps and completing an epoch; `_authorOf`'s offset-free form moved from `PqChat`
       to a base the module inherits (fable-U2); mode 0's behaviour and events unchanged (`PqChat` and `PqVault` bytecode may
       move: size and gas pins old → new in the commit).
-- [ ] `src/pqchat/PqChatTree.sol` (SPDX header), a DELEGATECALL body module as `PqChatTopics`; namespace `scaas.pqchat.tree`
+- [x] `src/pqchat/PqChatTree.sol` (SPDX header), a DELEGATECALL body module as `PqChatTopics`; namespace `scaas.pqchat.tree`
       (spec §7), with `gone`, and the two key sets of R16, `goneOwnKey[ua][kemHash]` and `goneKey[kemHash]`, apart; `PqChat` gains the immutable `TREE`, `modules()` lists it, the factory release and `script/onchain/PqChat.s.sol`
       pass it. Library-split checks: storage through the hooks only, no `this`, `msg.sender` unused, return data forwarded.
-- [ ] `createSession` with `groupMode = 1`: `PqChatTreeSigStore`, `PqChatTreeHome`, the caps (`TREE_INFO_MAX` too), `treeId`;
+- [x] `createSession` with `groupMode = 1`: `PqChatTreeSigStore`, `PqChatTreeHome`, the caps (`TREE_INFO_MAX` too), `treeId`;
       only the creator indexed at the record; **leaf `i`, `liveKey`, `keysOf`, the hashes above it and the UA's `sessionsOf`
       entry written when wrap `i` lands (C15, C34)**, with the admission check (canonical `pk_X`, C32) and `PqChatTreeKeyLive`;
       `genesisTreeHash` when epoch 0 completes; `groupMode` 2–255 still `PqChatModeUnsupported`; `rekey` on a tree session
       `PqChatModeEntry`.
-- [ ] Tests first (`test/pqchat/PqChatTree.t.sol`), each refusal with its positive control; the cold `treeHash` against the
+- [x] Tests first (`test/pqchat/PqChatTree.t.sol`), each refusal with its positive control; the cold `treeHash` against the
       vector rows, with the wraps landed in order, in reverse and one per transaction; every `admission` row; two members with
       one key; the author read from a three-part blob; `test/v2/layout/` gains the module's namespace (the pair set and the
       session-wide set at distinct pinned slots, R16) and proves `PqChat`'s and `PqVault`'s layouts unmoved.
-- [ ] Gates: every forge directory at the default set; the size gate (`PqChat` under 35,286 B, a new `PqChatTree` row with its
-      reason); `forge fmt --check`.
-- [ ] Mutants: mode 1 accepted on a `none` home; on a replica; the cap off by one; a leaf hash without its index or without
+- [x] Gates: every forge directory at the default set; the size gate (`PqChat` under 35,286 B, a new `PqChatTree` row with its
+      reason; built: `PqChatTree` 11,696 B fits EIP-170, so the gate takes no row for it, as for `PqChatTopics`);
+      `forge fmt --check`.
+- [x] Mutants: mode 1 accepted on a `none` home; on a replica; the cap off by one; a leaf hash without its index or without
       `kemHash`; the leaves written in the record's transaction; the pair set stored in the session-wide mapping by `kemHash`
       alone (the layout pin and T3b's churn test must fail, R16); every member indexed in the record's transaction (the gas row
       at 192 first-time UAs must fail, codex-r2-8); the author offset back to the constant 96; the admission check reduced to
       scheme and length.
 
 ### T3b. Contract: `commit`, the pieces, completion
+
+The checks and the tree writes below go into `PqGroupTree` (app-agnostic, by its hooks; a new error code is a `T_*` code that
+`PqChatCore._treeFail` maps), the entries, records and typehashes into `PqChatTree` and `PqChatTypes` (T3a's two layers).
 
 - [ ] `PqChatTypes`: the eight typehashes and hashes (`*TypehashIsPinned` against the vectors); `IPqChat`: the structs, entries,
       views, errors and the `PqChatPath` event of spec §6 and §11.
@@ -365,7 +374,12 @@ foreground.
 
 ### T4. Node: typed and guard rows (`scaas-node`)
 
-- [ ] `typed.rs`: `TYPED` rows for `PqChatCommit`, `TreeAdd`, `TreeRemove`, `PathList`, `PathCt`, `PqChatTreeLeave`,
+**Progress (2026-11-24, owner ruling: TreeKEM merges into `ua-rs-sign` once, after T3b, T3c and T4's allow-list part).** The
+allow-list part is done: the rows, the bounds, `guard.rs`, the both-ways audit, the vector rows' calldata, the docs of the
+six calls (`runs/2026-11-23-pqchat-treekem-t4-summary.txt`, mutants in `-t4-mutants.txt`). Left for after the merge: the
+whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-set guard's text and refusal in `job-api.md`.
+
+- [x] `typed.rs`: `TYPED` rows for `PqChatCommit`, `TreeAdd`, `TreeRemove`, `PathList`, `PathCt`, `PqChatTreeLeave`,
       `PqChatTreeRemove`; entry rows `commit`, `treeLeave`, `treeRemove` (record and `UASig`) and `addPathList`, `addPathKeys`, `addPath` (no signature); every array bounded by length and depth before bytes
       are built, **with the contract's bounds** (`TREE_LEAVES_MAX`, `TREE_CHANGES_MAX`, `TREE_ADMINS_MAX`, `TREE_INFO_MAX`, the
       depth, `ctCount < leaves`; codex-20). `guard.rs`: `commit`, `treeLeave`, `treeRemove` as the signed writes, the three unsigned entries under

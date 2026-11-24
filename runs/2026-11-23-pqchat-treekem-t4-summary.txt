@@ -1,0 +1,10 @@
+# PqChat TreeKEM T4, the allow-list part (node rows, decode bounds, both-ways audit), at 02ec3fe50
+# step | commit | rc | counts
+red: cargo test --lib pqchat, rows and bounds disabled | 02ec3fe50 (tests), rows off | 101 | 3 passed, 6 failed (both-ways audit, class-3, unsigned, jobs, tree vectors, tree bounds)
+green: cargo test --lib pqchat | 02ec3fe50 | 0 | 9 passed
+node: CAPPED_MEM=6G capped cargo test --locked | 02ec3fe50 | 0 | lib 896 passed; integration targets green, the --ignored ones not run
+clippy --all-targets -D warnings | 02ec3fe50 | 0 | clean
+format.sh --check rust | 02ec3fe50 | 0 | 20 parts ok
+docs_check check | 02ec3fe50 | 0 | 0 errors, 7 budget warnings as before
+e2e --ignored | not run | - | no deploy or e2e path touched
+mutants (runs/2026-11-23-pqchat-treekem-t4-mutants.py) | 02ec3fe50 | 0 | 17 mutants, 17 killed

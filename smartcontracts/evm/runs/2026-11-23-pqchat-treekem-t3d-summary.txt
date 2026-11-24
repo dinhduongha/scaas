@@ -1,0 +1,41 @@
+docs | d334fcd7c | 0 | check: 0 error(s), 7 warning(s), 16 note(s)
+fmt | d334fcd7c | 0 | -
+forge-account | d334fcd7c | 0 | forge: 103 passed, 0 failed
+forge-as | d334fcd7c | 0 | forge: 568 passed, 0 failed
+forge-confidential | d334fcd7c | 0 | -
+forge-factory | d334fcd7c | 0 | -
+forge-fork | d334fcd7c | 0 | -
+forge-gas | d334fcd7c | 0 | forge: 406 passed, 0 failed
+forge-governance | d334fcd7c | 0 | forge: 942 passed, 0 failed
+forge-hedera | d334fcd7c | 0 | forge: 20 passed, 0 failed
+forge-liquidity | d334fcd7c | 0 | forge: 93 passed, 0 failed
+forge-merge | d334fcd7c | 0 | forge: 350 passed, 0 failed
+forge-metatx | d334fcd7c | 0 | forge: 549 passed, 0 failed
+forge-modules | d334fcd7c | 0 | forge: 35 passed, 0 failed
+forge-p6f | d334fcd7c | 0 | -
+forge-pqchat | d334fcd7c | 0 | forge: 213 passed, 0 failed
+forge-pqvault | d334fcd7c | 0 | forge: 96 passed, 0 failed
+forge-pqz | d334fcd7c | 0 | forge: 694 passed, 0 failed
+forge-pqzh | d334fcd7c | 0 | forge: 42 passed, 0 failed
+forge-research | d334fcd7c | 0 | forge: 360 passed, 0 failed
+forge-top | d334fcd7c | 0 | forge: 29 passed, 0 failed
+forge-ua | d334fcd7c | 0 | forge: 1044 passed, 0 failed
+forge-v2 | d334fcd7c | 0 | forge: 756 passed, 0 failed
+forge-wallet | d334fcd7c | 0 | forge: 185 passed, 0 failed
+forge-wrap | d334fcd7c | 0 | forge: 324 passed, 0 failed
+forge-zether | d334fcd7c | 0 | forge: 478 passed, 0 failed
+mutants | d334fcd7c | 0 | -
+sets-n2048-modules | d334fcd7c | 0 | forge: 35 passed, 0 failed
+sets-n2048-sensitive | d334fcd7c | 0 | forge: 1595 passed, 0 failed
+sets-n2560-modules | d334fcd7c | 0 | forge: 35 passed, 0 failed
+sets-n2560-sensitive | d334fcd7c | 0 | forge: 1589 passed, 0 failed
+sets-n2816-modules | d334fcd7c | 0 | forge: 35 passed, 0 failed
+sets-n2816-sensitive | d334fcd7c | 0 | forge: 1577 passed, 0 failed
+size | d334fcd7c | 0 | size gate: 0 error(s), 182 contracts
+treegas | d334fcd7c | 0 | forge: 3 passed, 0 failed
+uagas | d334fcd7c | 0 | forge: 29 passed, 0 failed
+mutants-run | 9077f15b5 | 0 | t3d runner 19 of 20 killed, 0 survived, 1 not loaded (M4: solc refuses a payable fallback or receive on PqChat); runner checks: t1a 27, t1b 46, t2 46, t3a 30, t3b 43, t3c 5, t3d 20
+left: the treeLeaves page as an eth_call on the local Nethermind copy (pqz-core/nethermind/chain/copy.sh exists, but no PqChat deploy with a 256-key tree session for it): measured in forge, 1,618,828 a page of 64 (6.48 M the tree in four calls), under 4 M and 2^24.
+left: spec §13 rows not measured in T3d: the commit table (2 / 8 / 64 / 256 keys: warm, after one removal, cold, the flat rekey column) and the whole-warm-commit rows (64, 256 keys); a genesis wrap typical vs first of a subtree as separate rows (15 wraps in one transaction measured, 53.3 M); a transaction whose wraps each open a subtree (addWraps lands a contiguous range); the acceptance tree check alone on a warm tree; a Remove with its key slot at each level and an Add's three cold reads (R16); treeLeave / treeRemove with ML-DSA-87; an msig author.
+left: spec §13's note "8 and 119 when the author's sibling is added" measured as 6 and 119 (decisions CTR-CHAT-27 Change T3d (6)); the spec text itself not edited.
+left: forge 1.8.5's --enable-tx-gas-limit caps state gas too, so the §13 rows run without it and assert regular < 2^24 themselves; a run under EIP-8037's own rule (state outside the cap) needs a tool that implements it.

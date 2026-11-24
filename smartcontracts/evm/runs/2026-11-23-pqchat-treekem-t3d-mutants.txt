@@ -1,0 +1,21 @@
+killed   | M1 a writing entry in the views module (mutantPoke) | PqChatTreeViews.sol | rc=1 | 2 failed: test_fallbackReachesNoOtherModule, test_viewsModuleIsReadOnly
+killed   | M2 an entry that sends value in the views module (mutantSweep) | PqChatTreeViews.sol | rc=1 | 2 failed: test_fallbackReachesNoOtherModule, test_viewsModuleIsReadOnly
+killed   | M3 the fallback forwards to the tree module | PqChat.sol | rc=1 | 7 failed: test_fallbackReachesNoOtherModule, test_fallbackRefusesValueAndUnknown, test_goneViews, test_viewPages, test_viewsChangeNoStorage, test_viewsOfAFlatSession, test_viewsReadTheTree
+NO-LOAD  | M4 a receive() that takes value | PqChat.sol | rc=1 | 0 failed: solc refuses it, as it refuses a payable fallback: Error (7398) "Explicit type conversion not allowed from non-payable address to contract PqChat, which has a payable fallback function" at every typed cast (script/onchain/PqChat.s.sol); test_fallbackRefusesValueAndUnknown guards the behaviour
+killed   | M5 the views' interface id not reported | PqChat.sol | rc=1 | 2 failed: test_instance_factoryInfoAndInterfaces, test_interfaceIdsArePinned
+killed   | M6 modules() of two | PqChat.sol | rc=1 | 3 failed: test_constructor_refusesAnotherModule, test_modules_fixedByCode, test_treeModuleListedAndNoEnvAlone
+killed   | M7 the constructor takes another factory's views module | PqChat.sol | rc=1 | 1 failed: test_constructor_refusesAnotherModule
+killed   | M8 TREE_LEAF_PAGE_MAX 65 | PqChatTreeViews.sol | rc=1 | 1 failed: test_viewPages
+killed   | M9 TREE_RANGE_MAX 257 | PqChatTreeViews.sol | rc=1 | 1 failed: test_viewPages
+killed   | M10 a page not cut at the end | PqChatTreeViews.sol | rc=1 | 2 failed: test_viewPages, test_viewsReadTheTree
+killed   | M11 a page past the end not empty | PqChatTreeViews.sol | rc=1 | 1 failed: test_viewPages
+killed   | M12 treeLeaves bounded by leaves, not used | PqChatTreeViews.sol | rc=1 | 2 failed: test_viewPages, test_viewsReadTheTree
+killed   | M13 treeNodes one node past the tree | PqChatTreeViews.sol | rc=1 | 2 failed: test_viewPages, test_viewsReadTheTree
+killed   | M14 a blank leaf read as live | PqChatTreeViews.sol | rc=1 | 1 failed: test_goneViews
+killed   | M15 treeNodes: a leaf without its joinEpoch | PqChatTreeViews.sol | rc=1 | 1 failed: test_viewsReadTheTree
+killed   | M16 treeOf without owed | PqChatTreeViews.sol | rc=1 | 1 failed: test_goneViews
+killed   | M17 commitOf decodes epoch 0 | PqChatTreeViews.sol | rc=1 | 1 failed: test_viewsReadTheTree
+killed   | M18 goneOwnKeyOf reads the session-wide set | PqChatTreeViews.sol | rc=1 | 1 failed: test_goneViews
+killed   | M19 pathCtAt: sealedSecret at the wrong offset | PqChatTreeViews.sol | rc=1 | 1 failed: test_viewsReadTheTree
+killed   | M20 pathListOf: the hashes read from the targets' part | PqChatTreeViews.sol | rc=1 | 1 failed: test_viewsReadTheTree
+mutants M1-M20 of 20: 19 killed, 0 survived, 1 not loaded (M4, refused by the compiler); M1, M2 re-run under new names (their first run collided with the test harnesses' poke / sweep), M4 re-run as receive() (its first form, a payable fallback, the same compiler refusal)
