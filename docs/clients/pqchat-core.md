@@ -287,8 +287,11 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
   only its id; a mismatch at a pinned number is settled by a strict-majority read over at least 3 nodes, else the session
   shows "conflicting head" and nothing is built on it; **before it extends its state above a pin it compares the record
   that won at the pinned number with the pin**, because a child binds its parent's id and tree hash and not its
-  `sealedInfo` or `admins`, and on a mismatch the epoch is replayed from the majority's record with its metadata), reads every page of a tree snapshot at one block, at an epoch-0 head rebuilds the tree from the signed member list, recomputes the tree hash, verifies the head commit's
-  kept signature and its author's right, compares each target key with its hash in the tree, and has `ua-rs` verify against the
+  `sealedInfo` or `admins`, and on a mismatch the epoch is replayed from the majority's record with its metadata), reads every page of a tree snapshot at one block, at an epoch-0 head rebuilds the tree from the signed member list and builds on it, **builds only on the tree it reached by
+  walking every record forward from that cold tree or from its own verified tree at its pin** (each record's signature for
+  the signer's kind, its parent's id and the walk's tree hash, the author's live leaf, not gone, and its right on that tree,
+  the tree after it against its signed `treeHash`; a record that fails is a lying read, never followed, pinned or built on;
+  the served snapshot is only compared; Change 2026-11-24, the code review's E-1, C-1, B-1, F-1, C-3), compares each target key with its hash in the tree, and has `ua-rs` verify against the
   registry record every key no signed tree hash covers yet (an added key, a member at creation), in every tree session; reads
   follow [CLI-PQC-13](#CLI-PQC-13). What a candidate seals counts as disclosed to every key of the tree it was built on.
 - **Session info.** A commit seals the full info only when the device holds the one in force at the parent; otherwise the
@@ -329,11 +332,13 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
   opens or not, and each fetched record, list, ciphertext, wrap and key is compared with its signed hash before use: the
   Welcome wrap and the joiner's path ciphertext, then one path ciphertext per later commit (the target that covers the device's
   leaf), each derived node key compared with the signed hash, `sealedInfo` opened as the confirmation. **Two ranges:** the
-  commit records are read from the join's parent (for its admin list) to the anchored head, also after the key was taken
-  out; ciphertexts are opened only while the key was in the tree, from the join to the epoch before the commit that
+  commit records are read from the session record (or from the device's own verified tree at its pin) to the head, a
+  commit joiner's included, also after the key was taken out; ciphertexts are opened only while the key was in the tree, from the join to the epoch before the commit that
   removed it, and nothing at that commit. A genesis key joins by the signed `members` and its wrap. The roster of each epoch
-  is the live leaves with every later commit undone, anchored to the head's signed tree hash; a non-admin's drop of another UA
-  needs that UA's signed leave or removal; a key has one period per UA in a session (`goneOwnKeyOf`, then `goneKeyOf`);
+  is the forward walk's tree, never a snapshot with later commits undone; a non-admin's drop of another UA, and its drop of
+  a gone admin from `admins` (plain, as the contract judges it), needs that UA's signed leave or removal, kept under the
+  epoch it was applied at; every tree record's signature is verified for the signer's kind, an `msig` or WebAuthn admin's
+  included (Change 2026-11-24, E-3, F-2, F-3); a key has one period per UA in a session (`goneOwnKeyOf`, then `goneKeyOf`);
   which epoch won is the home's state.
 - **Not followed.** A missing or wrong ciphertext leaves that epoch unreadable on the device: it is shown, the reads go on
   unchanged, and nothing is sent automatically ([CLI-PQC-07](#CLI-PQC-07)). The device follows again at the next commit that

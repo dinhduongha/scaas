@@ -953,7 +953,12 @@ every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `t
   `ChainEnvCode.encode` behind the 45-byte proxy, CTR-TOK-29) and indexes it through one (`_index`), for tokens
   (`createToken`, `createTokenUnregistered`), the DEX (`createDex`) and generic catalogue instances (`createInstance`). No
   factory view returns an instance's registry (`infoOf`'s `Created` holds no env version), so the router reads the env
-  the factory wrote once the index names the address.
+  the factory wrote once the index names the address. **Indexed before it runs (Change 2026-11-24, the code review's
+  G-1; SPECIFIED, the code follows on branch `review-fix-contract`):** in every creation path the factory indexes the
+  instance (`_index`) **before** it calls the instance's initializer, so `registryFor(target)` gives one answer from the
+  first moment the instance's code exists, for the whole creation transaction; a revert of the initializer unwinds the
+  index with it. Before, the initializer ran unindexed, a router op it relayed was checked on the router's own registry
+  and map, and the same signature ran again on the env registry's map after creation.
 
   | Contract | The router targets it | Factory-made, path | Env registry | G1 uses |
   |---|---|---|---|---|
@@ -981,11 +986,14 @@ every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `t
 - **`UACancelNonce` is unchanged**: `mtxCancelNonce(e, lane, auth)` authenticates on the router's own registry and bumps
   the one map, so it cancels a native id's lanes everywhere and a derived id's at the router's registry; it does not reach
   an env registry's map (no op cancels there yet, an open question for the owner).
-- **Replay.** One router, one EIP-712 domain. The signature names `target`, and `target` fixes the registry, so a signature
-  spent in one map is valid in no other.
+- **Replay.** One router, one EIP-712 domain. The signature names `target`, and `target` fixes the registry for the
+  target's whole life, its creation transaction included (above), so a signature spent in one map is valid in no other.
 - **Deploy order.** The factory, then the router naming it (`GovernanceRouter(chainUid, registry, smartKeyAccountImpl,
   hedera, factory)`; `factory()` reads it back), then `configureChain`, whose code-hash pin covers the immutable. A router
-  with factory 0 gives every target its own registry.
+  with factory 0 gives every target its own registry. **`configureChain` refuses a router whose `factory()` is not this
+  factory** (`RouterFactoryMismatch(named)`; a router that answers no word fails closed), so G1 cannot be switched off by
+  configuring a router built with factory 0 or another factory (Change 2026-11-24, the code review's G-3; SPECIFIED, the
+  code follows); the deploy script's check stays as a second line.
 - **Cost** (`test_g1_gas`, `mtxMint`): a derived signer on a factory-made target of another generation pays the code copy and
   one `infoOf` call, +809 gas against the same op on a router of that generation; on a target of the router's own generation
   the code copy only, +482; a native signer +0.

@@ -970,7 +970,9 @@ ciphertexts above `ctCount` (on `addPath`, `firstCt` plus the count above 255), 
 Welcome wraps than adds; an empty `members`. What needs the chain's state is the contract's. A record or a list as hex is
 `HEX_ARGS_REFUSED`; the decode follows the type, so a hostile depth stops at the type's. **For operators:** job shapes were added,
 none changed. **Not built yet (plan T4, after the merge):** the whole-set guard (fable-r3-6) and the order of C37 when the node
-relays a commit's set.
+relays a commit's set. **SPECIFIED (Change 2026-11-24, the code review's D-4 and D-7; the node's own fix follows):**
+`createSession` with `groupMode = 1` is bounded by the tree's bounds at creation (`members` 256, `admins` 32,
+`sealedInfo` 4,124 B), and an `addPath` with no ciphertext is refused, as the contract refuses both (C40).
 
 <a id="pqvault-calls"></a>**PqVault calls** (PqVault plan V8, [CTR-PQV-11](../contracts/pqvault.md#CTR-PQV-11),
 [CTR-PQV-13](../contracts/pqvault.md#CTR-PQV-13); BUILT, branch `pqvault-v`, UNAUDITED). `PqVault` is a factory kind (class 4, kind 0 on

@@ -912,15 +912,24 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   keys of its own UA only); the signed `admins` against the UAs that are gone **and the UAs the commit itself leaves with
   no leaf** (`PqChatRemovedKept`; a UA that gets a replacement key in the same commit stays); an Add's `scheme == 1`, its `kemHash` against the registry and the public-key admission check of
   scheme 1 (also on every node key: `PqChatKemKey`); the no-return sets; shapes and sizes; **and, at acceptance, the tree of
-  the commit computed in memory on the head:** no leaf of a UA that left or was removed, the path length and the target count
+  the commit computed in memory on the head:** an Add's key held by a leaf that a Remove of the same commit takes out is
+  free whatever the order of the Adds (C39, Change 2026-11-24, SPECIFIED); no leaf of a UA that left or was removed, the path length and the target count
   of the resolution walk (`PqChatTreeTargets`), and the root after the changes and the new keys against `treeHash`
-  (`PqChatTreeHash`); then every piece against its signed hash, once, the list's targets against the expected ones. So no
+  (`PqChatTreeHash`); then every piece against its signed hash, once, the list's targets against the expected ones; an `addPath` with no
+  ciphertext is `PqChatShape` (C40, Change 2026-11-24, SPECIFIED). So no
   record is staged whose public inputs could not complete on the head it was accepted on; completion checks again only the
   UAs that went since, and writes. A node key or ciphertext is known at acceptance only by its signed hash: an author can
   sign one that no valid piece matches, and that commit never completes; the node relays a commit only when it holds the
   whole set and every piece passes. About 3 M more regular gas at acceptance at the bounds (estimate). **Checked by clients only:** that a node key derives from its path secret and that a ciphertext opens to it; a member
   that cannot follow an epoch shows it and sends nothing by itself.
-- **Removal, leaving and admins.** A leave is forced like a removal: the next commit blanks the leaves. A `treeRemove` or a
+- **Removal, leaving and admins.** **Exits apply at the head (Change 2026-11-24, E-3, on the owner's ruling that
+  chain-level front-running is in the threat model; SPECIFIED, the code follows on branch `review-fix-contract`):** a
+  `treeLeave` or `treeRemove` names a complete epoch of the session, the head or an ancestor of it (in a tree session every
+  complete epoch is on the head's chain, so that is one read; a staged or losing epoch is `PqChatIncomplete`, an unknown one
+  `PqChatUnknown`), and is checked and applied at the head when it lands: a commit that completed first does not void it;
+  the UA is gone from the head's number, every leaf it holds there is owed, and the record is kept under the head's epoch
+  (`goneOf`, `leave*`, `removal*`, `leftIn`, `removedIn` name that epoch). A signed exit stays valid until it lands; its
+  nonce is spent once. A `treeRemove` naming a UA already gone is refused whole (`PqChatNotMember`, A-4). A leave is forced like a removal: the next commit blanks the leaves. A `treeRemove` or a
   `treeLeave` is `PqChatTreeBacklog` when the leaves owed at the head would exceed `TREE_CHANGES_MAX`; a commit that changes
   `admins` otherwise than by dropping UAs that are gone, and a `treeRemove`, leave an admin with a live leaf
   (`PqChatTreeAdmins`). **A closed session:** when no UA that is not gone holds a live leaf (the last member left, or
@@ -996,10 +1005,14 @@ through four hooks, each a constant in the inheritor:
 | `_treeBounds()` | the most leaf positions and admins of a group | 256, 32 |
 | `_treeFail(code, a, b)` | its named error for each `T_*` code (`T_SHAPE`, `T_KEM_KEY(ua, keyId)`, `T_KEY_LIVE(kemHash)`) | `PqChatShape`, `PqChatKemKey`, `PqChatTreeKeyLive` |
 
-Rights, records, signatures, the order of epochs and the indexes of members are the inheritor's. What the base gives:
+Rights, records, signatures, the order of epochs and the indexes of members are the inheritor's. **Change 2026-11-24 (the
+code review's A-6, SPECIFIED):** the two record structs a commit's walk reads, `TreeAdd` and `TreeRemove`, move to a
+neutral file of `src/pqgroup/` that `IPqChat` uses (no type string and no ABI moves), so an inheritor imports nothing of
+PqChat; the base serves at most 256 leaf positions (depth 8) and refuses an inheritor's `_treeBounds()` above that. What the base gives:
 `_treeOpen` (a cold tree of `used` positions, `leaves` the next power of two, its admin list), `_treeSetLeaf` (the key
 admitted, one live leaf per `kemHash`, `keysOf` and the ancestors' `th` written bottom-up; it returns whether the UA was
-not listed yet, `_treeListed` marks one), `_treeGenesis` (the head and the genesis tree hash), `_treeHash`, RFC 9420
+not listed yet, `_treeListed` marks one), `_treeGenesis` (the head and the genesis tree hash), `_treeHash` (for a one-leaf tree the leaf's `th`, also in a commit's
+walk: Change 2026-11-24, F-5, SPECIFIED), RFC 9420
 Appendix C's math, and `_admissible`, the public admission check of a scheme-1 `kemPk` (spec §8, C19, C32). The storage
 layout is pinned in `test/v2/layout/namespaces.json` (`pqchatTree`): per group `treeId`, `genesisTreeHash`, the head,
 `used`, `leaves` and `owed`, per leaf two slots, per parent its `th` and its key, `keysOf`, `liveKey`, `gone`, the pair set
