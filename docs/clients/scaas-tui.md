@@ -19,15 +19,17 @@ one program. Rules marked owner below carry the owner's words only; every means 
 3. [The terminal](#3-the-terminal)
 4. [Endpoints, profiles and limits](#4-endpoints-profiles-and-limits)
 5. [Accessibility](#5-accessibility)
-6. [Proposals awaiting the owner](#6-proposals-awaiting-the-owner)
+6. [Keys, clipboard and reveal](#6-keys-clipboard-and-reveal)
 
 ## 1. Scope
 
 <a id="CLI-TUI-01"></a>**CLI-TUI-01** — **The TUI is a thin front-end over `scaas-sdk`, for SCaaS only** (owner 2026-11-09,
 2026-11-17; SPECIFIED). One binary, working locally and over SSH, a thin layer over the same library API as the CLI and the app,
 with no code path of its own: it calls `scaas-sdk` and nothing below it. It is the fourth front-end of scaas-app's view-model contract
-(`app-common/viewmodel/`). SCaaS only: no native-chain app core and no Trust Wallet Core. Whether it links app cores (`pqchat-core`,
-`pqvault-core`) is open (spec §16, Q-T2).
+(`app-common/viewmodel/`). SCaaS only: no native-chain app core and no Trust Wallet Core. It links the app cores `pqchat-core`
+and `pqvault-core` (owner 2026-11-24, spec §16 Q-T2), each as a crate behind its own feature, so it has chat and vault screens; their
+own rules hold in the TUI as in any app: every signature and key operation goes through the SDK, and no key reaches an app core
+([CLI-PQC-03](pqchat-core.md#CLI-PQC-03), [CLI-PQC-04](pqchat-core.md#CLI-PQC-04), [CLI-PQV-12](ua-libraries.md#CLI-PQV-12)).
 
 <a id="CLI-TUI-17"></a>**CLI-TUI-17** — **The build and the process hold the TUI to the SDK's surface** (controller call; SPECIFIED).
 The TUI links `scaas-sdk` as a crate and is its own one Rust library ([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12)). It holds no
@@ -143,18 +145,20 @@ monochrome setting turn colour off; an ASCII setting replaces box-drawing and sy
 footer; outside a text field keys are commands, inside one they are input (CLI-TUI-16). No mouse is needed. Below 80 × 24 the TUI
 shows only a message asking for a larger terminal.
 
-## 6. Proposals awaiting the owner
+## 6. Keys, clipboard and reveal
 
-<a id="CLI-TUI-13"></a>**CLI-TUI-13** — **The one native key is an EVM payer key, through the SDK** (proposal, spec Q-T5; SPECIFIED).
-The TUI shows the EVM payer key the SDK's self-relay needs (its address, balance, the "linked on chain to the subject" line) and
-offers the SDK's EVM native send; no other native network. The native send stays out of the build until the owner answers Q-T5 and
-the SDK reports its ends in `OpState` as CLI-TUI-03's second class.
+No proposal awaits the owner here: Q-T5, Q-T6 and Q-T7 were agreed on 2026-11-24 and Q-T2 answered yes the same day (spec §16).
 
-<a id="CLI-TUI-14"></a>**CLI-TUI-14** — **The clipboard holds public values only, and only when the user turns it on** (proposal,
-spec Q-T6; SPECIFIED). Off by default. When turned on in the config, a key copies one public value (a UA id, an address, an
+<a id="CLI-TUI-13"></a>**CLI-TUI-13** — **The one native key is an EVM payer key, through the SDK** (owner 2026-11-24, spec Q-T5;
+SPECIFIED). The TUI shows the EVM payer key the SDK's self-relay needs (its address, balance, the "linked on chain to the subject" line)
+and offers the SDK's EVM native send; no other native network. The native send stays out of the build until the SDK reports its ends
+in `OpState` as CLI-TUI-03's second class.
+
+<a id="CLI-TUI-14"></a>**CLI-TUI-14** — **The clipboard holds public values only, and only when the user turns it on** (owner
+2026-11-24, spec Q-T6; SPECIFIED). Off by default. When turned on in the config, a key copies one public value (a UA id, an address, an
 operation's digest) by OSC 52; no other value can be copied.
 
 <a id="CLI-TUI-15"></a>**CLI-TUI-15** — **A seed's words are revealed only after the user types `reveal`, with a warning where the
-screen may be recorded** (proposal, spec Q-T7; SPECIFIED). The reveal screen always asks for the typed word `reveal`. It adds a warning
+screen may be recorded** (owner 2026-11-24, spec Q-T7; SPECIFIED). The reveal screen always asks for the typed word `reveal`. It adds a warning
 when the session looks remote or multiplexed (`SSH_CONNECTION`, `SSH_TTY`, `TMUX`, `STY`) or the terminal does not confirm the
 alternate screen; these are hints, not a guarantee. Leaving the reveal follows [CLI-TUI-16](#CLI-TUI-16).

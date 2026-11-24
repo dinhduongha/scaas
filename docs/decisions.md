@@ -12440,18 +12440,20 @@ Change (owner 2026-11-23, "agreed, add it", relayed by the coordinator; owner: y
 
 ## 42. Clients — terminal UI (`scaas-tui`)
 
-The rules are in [clients/scaas-tui.md](clients/scaas-tui.md); the design is the [scaas-tui spec](superpowers/specs/2026-11-17-scaas-tui.md), a frame whose parts that wait on unsettled SDK sections are marked (its §15), with open points in its §16 and Fable's review of 2026-11-17 applied (its §18). Owner entries carry the owner's words only; the controller's means and proposals have entries of their own (Fable U14).
+The rules are in [clients/scaas-tui.md](clients/scaas-tui.md); the design is the [scaas-tui spec](superpowers/specs/2026-11-17-scaas-tui.md), a frame whose parts that wait on unsettled SDK sections are marked (its §15), with open points in its §16 (Q-T2, Q-T5, Q-T6 and Q-T7 answered on 2026-11-24) and Fable's review of 2026-11-17 applied (its §18). Owner entries carry the owner's words only; the controller's means and proposals have entries of their own (Fable U14).
 
 
 
 ### CLI-TUI-01 — The TUI is a thin front-end over `scaas-sdk`, for SCaaS only
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-01 · superseded-by: —
 
-**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-01).) One binary, local and over SSH, a thin layer over the same library API as the CLI and the app with no code path of its own; over `scaas-sdk`; the view-model contract's fourth front-end; SCaaS only, no native-chain app core, no Trust Wallet Core; app cores an open point.
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-01).) One binary, local and over SSH, a thin layer over the same library API as the CLI and the app with no code path of its own; over `scaas-sdk`; the view-model contract's fourth front-end; SCaaS only, no native-chain app core, no Trust Wallet Core; links the app cores `pqchat-core` and `pqvault-core` (owner 2026-11-24).
 **Status.** SPECIFIED (plan `2026-11-17-scaas-tui`). UNAUDITED.
 **Why.** Owner 2026-11-09 (TODO 11, as recommended) and 2026-11-17 (TODO 8b). The 2026-11-09 "linked directly" to `ua-rs` is replaced by "over `scaas-sdk`".
 **Cost if wrong.** The TUI and the app show or sign different things for one operation.
-**Source.** TODO 8b, 11; owner 2026-11-09 (as recommended), 2026-11-17 "Ok, theo đề xuất, viết TUI sau SDK"; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §1–§3.
+**Source.** TODO 8b, 11; owner 2026-11-09 (as recommended), 2026-11-17 "Ok, theo đề xuất, viết TUI sau SDK"; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §1–§3; owner 2026-11-24 "Q-T2: TUI có link pqchat-core và pqvault-core không: Có" (spec §1 O8, §16 Q-T2).
+
+Change (owner 2026-11-24, the answer to spec §16 Q-T2, verbatim on the Source line; owner: yes; status: SPECIFIED): old, whether the TUI links app cores was open. New: **the TUI links `pqchat-core` and `pqvault-core`**, each as a crate behind its own feature (`pqchat`, `pqvault`), so it has chat and vault screens (spec §5.10); their rules hold unchanged: every signature and key operation through the SDK, key handles only in the app core, no key byte in it or in the TUI (CLI-PQC-03, CLI-PQC-04, CLI-PQV-12). Plan T14 (vault part A, chat part B) moves from PLANNED to a scheduled task of the plan; the chat part waits for scaas-app's `app-matrix` to be linkable by revision (the one Matrix stack). Nothing built. UNAUDITED.
 
 ### CLI-TUI-02 — The signing screen shows every named field before anything is signed
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-02 · superseded-by: —
@@ -12553,31 +12555,37 @@ The rules are in [clients/scaas-tui.md](clients/scaas-tui.md); the design is the
 **Source.** CLI-SDK-09, CLI-RPC-05; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §10, §18.
 
 ### CLI-TUI-13 — The one native key is an EVM payer key, through the SDK
-- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-13 · superseded-by: —
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-13 · superseded-by: —
 
-**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-13).) The payer key's address, balance and linkage line, and the SDK's EVM native send; no other network; the native send out of the build until the owner answers and the SDK reports its ends.
-**Status.** SPECIFIED, proposal (spec Q-T5). UNAUDITED.
-**Why.** Controller's reading of "SCaaS only": self-relay is the only path for entries no gateway takes (SDK §13.3) and needs gas. Moved out of CLI-TUI-01 (Fable U14); the native send's ends are U12.
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-13).) The payer key's address, balance and linkage line, and the SDK's EVM native send; no other network; the native send out of the build until the SDK reports its ends.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Controller's reading of "SCaaS only", agreed by the owner on 2026-11-24: self-relay is the only path for entries no gateway takes (SDK §13.3) and needs gas. Moved out of CLI-TUI-01 (Fable U14); the native send's ends are U12.
 **Cost if wrong.** A native-chain path in a SCaaS-only program; or no way to pay gas for self-relay.
-**Source.** SDK spec §8.5, §13.3; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §16 Q-T5.
+**Source.** SDK spec §8.5, §13.3; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §16 Q-T5; owner 2026-11-24 "Q-T5: Đúng" (spec §1 O8).
+
+Change (owner 2026-11-24, the answer to spec §16 Q-T5, verbatim on the Source line; owner: yes; status: SPECIFIED): old, a proposal awaiting the owner. New: agreed as recommended (Q-T5 (b)): the EVM payer key, its balance and the SDK's EVM native send, no other native network. The native send stays out of the build until the SDK reports its ends in `OpState` (spec §15 D8); that condition no longer waits on the owner. Nothing built. UNAUDITED.
 
 ### CLI-TUI-14 — The clipboard holds public values only, and only when the user turns it on
-- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-14 · superseded-by: —
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-14 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-14).) Off by default; when on, one public value (UA id, address, operation digest) by OSC 52; nothing else.
-**Status.** SPECIFIED, proposal (spec Q-T6). UNAUDITED.
-**Why.** Controller proposal beside the owner's "no secret on the clipboard"; moved out of CLI-TUI-04 (Fable U14).
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Controller proposal beside the owner's "no secret on the clipboard", agreed by the owner on 2026-11-24; moved out of CLI-TUI-04 (Fable U14).
 **Cost if wrong.** A clipboard write the owner did not want.
-**Source.** [spec](superpowers/specs/2026-11-17-scaas-tui.md) §8, §16 Q-T6.
+**Source.** [spec](superpowers/specs/2026-11-17-scaas-tui.md) §8, §16 Q-T6; owner 2026-11-24 "Q-T6: Đúng" (spec §1 O8).
+
+Change (owner 2026-11-24, the answer to spec §16 Q-T6, verbatim on the Source line; owner: yes; status: SPECIFIED): old, a proposal awaiting the owner. New: agreed as recommended (Q-T6 (b)): off by default; when turned on, one public value by OSC 52; a secret never. So a PqVault secret field is not copied in the TUI (spec §5.10): CLI-PQV-04's copy with a 30 s clear is not offered here. Nothing built. UNAUDITED.
 
 ### CLI-TUI-15 — A seed's words are revealed only after the user types `reveal`, with a warning where the screen may be recorded
-- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-15 · superseded-by: —
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-15 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-15).) Typed `reveal` always; a warning when SSH or a multiplexer is seen or the alternate screen is not confirmed, as hints.
-**Status.** SPECIFIED, proposal (spec Q-T7). UNAUDITED.
+**Status.** SPECIFIED. UNAUDITED.
 **Why.** Fable U8, U21: the SSH check is a heuristic and a multiplexer without the alternate screen keeps the words in history, so the typed gate is always on and the hints only add a warning. Moved out of CLI-TUI-04 (U14).
 **Cost if wrong.** Words revealed into a pane's history without a warning.
-**Source.** [spec](superpowers/specs/2026-11-17-scaas-tui.md) §5.3, §8, §16 Q-T7.
+**Source.** [spec](superpowers/specs/2026-11-17-scaas-tui.md) §5.3, §8, §16 Q-T7; owner 2026-11-24 "Q-T7: Đúng" (spec §1 O8).
+
+Change (owner 2026-11-24, the answer to spec §16 Q-T7, verbatim on the Source line; owner: yes; status: SPECIFIED): old, a proposal awaiting the owner. New: agreed as recommended (Q-T7 (c)): the typed `reveal` always; SSH, a multiplexer or an unconfirmed alternate screen add a warning, as hints. Nothing built. UNAUDITED.
 
 ### CLI-TUI-16 — The means that keep secrets off the terminal
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-16 · superseded-by: —
@@ -12604,7 +12612,10 @@ The rules are in [clients/scaas-tui.md](clients/scaas-tui.md); the design is the
 **Status.** SPECIFIED. UNAUDITED.
 **Why.** One place for the rulings, each with the rule that carries it.
 **Cost if wrong.** A ruling restated from memory with a changed meaning.
-**Source.** TODO 8b, 11; owner 2026-11-09 "Terminal UI for wallet + chat (owner 2026-11-09, as recommended)"; owner 2026-11-17 "Ok, theo đề xuất, viết TUI sau SDK", "Đồng ý đảo chiều", "pqchat-core cũng đảo chiều luôn", "cứ viết spec, để có khung sẵn"; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §1.
+**Source.** TODO 8b, 11; owner 2026-11-09 "Terminal UI for wallet + chat (owner 2026-11-09, as recommended)"; owner 2026-11-17 "Ok, theo đề xuất, viết TUI sau SDK", "Đồng ý đảo chiều", "pqchat-core cũng đảo chiều luôn", "cứ viết spec, để có khung sẵn"; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §1; owner 2026-11-24 "Q-T2: TUI có link pqchat-core và pqvault-core không: Có. Q-T5: Đúng. Q-T6: Đúng. Q-T7: Đúng." (spec §1 O8).
+
+Change (owner 2026-11-24, answers to spec §16, verbatim on the Source line; owner: yes; status: SPECIFIED): (O8) Q-T2 yes: the TUI links `pqchat-core` and `pqvault-core` (CLI-TUI-01, spec §5.10, plan T14); Q-T5, Q-T6 and Q-T7 agreed as recommended (CLI-TUI-13, CLI-TUI-14, CLI-TUI-15, now owner rules). UNAUDITED.
+
 ## 43. Clients — chat app core (`pqchat-core`)
 
 The rules are in [clients/pqchat-core.md](clients/pqchat-core.md); the design is the [pqchat-core spec](superpowers/specs/2026-11-17-pqchat-core.md) (Fable's review of 2026-11-17 applied, its §14), the plan its [build plan](superpowers/plans/2026-11-17-pqchat-core.md). The protocol stays normative in [contracts/pqchat.md](contracts/pqchat.md) and the UA-7 spec.
