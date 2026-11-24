@@ -628,6 +628,52 @@ tender v2. When it is specified, run a crypto review of the three points above. 
 only. Timing is the owner's (Q14);
 the tender is not built, so nothing waits on it.
 
+### 7b. The combined design: the owner's direction with A (controller proposal, 2026-11-24)
+
+The owner asked whether the direction of §7a and option A fit together, and for the best combination. They fit:
+
+- **The owner's direction alone is sound but leaves the free option.** Only the winner proves; losers open nothing; a loser
+  who sees a worse claimed price reveals and wins; non-revealers are refunded. Its gap is the free option of §7a: the holder
+  of the best bid can decline to reveal at no cost. A bidder with several UAs can also hold several bids and reveal the one it
+  likes.
+- **A closes that gap without slashing.** The sealed copy lets the buyer reveal the best bid **on the bidder's behalf**. The
+  contract checks only that the opening matches the commitment, so the buyer is not trusted for correctness.
+
+**The combined flow** [I]:
+
+| Phase | What happens |
+|---|---|
+| Commit (until `commitDeadline`) | The commitment `H(BID_TAG, chainid, tender, tenderId, bidder, price, salt)`, plus the deposit, plus the sealed copy of `(price, salt)`: scheme 1 KEM + AEAD to the tender's buyer key, aad bound to the commitment, stored in state. One bid per UA. |
+| Claim (window 1) | The bidder, **or the buyer on its behalf**, reveals an opening. The contract keeps the best revealed bid. |
+| Challenge (window 2) | A loser who sees a worse leading price reveals its own and leads if better. The direction (forward or reverse) is a tender parameter. |
+| Settle | The best revealed bid wins; a tie goes to the earliest commit `seq`. **Only the winner's deposit stays bound**, until award or performance. **Every other deposit is refunded automatically, non-revealers included.** |
+
+**Checks** [I]:
+- **ARCH-POS-13:** the bid sits outside it (scheme 1 KEM + AEAD; the 2026-11-13 Change). No PQZ or Zether key encrypts bid
+  data. A confidential PQZ deposit stays under the rule as any PQZ token does.
+- **Never lose ciphertext:** the sealed copy is in state.
+- **Explicit parameters:** price, salt and ciphertext are named fields.
+- **Relayable:** every step is an `mtx*` entry, with a fee of 0 too. The buyer's reveal is permissionless, like `revealBid`.
+
+**Open points for the owner** (they extend Q10–Q13):
+- **(a) A junk sealed copy.** A bidder pairs a valid commitment with a copy the buyer cannot open, to keep the free option.
+  - Proposal: the buyer flags "unopenable". A flagged bidder must reveal by the end of window 2, or its deposit goes to a
+    neutral sink, not to the buyer.
+  - A false flag gains the buyer nothing, and an honest bidder clears it by revealing.
+  - A public proof that a copy is well formed (deterministic coins from the salt, §7a point 2) would remove the flag. Its cost
+    is software ML-KEM, X25519 and AES-GCM on chain.
+- **(b) Early buyer knowledge.** A copy sealed at commit time lets the buyer decrypt during bidding and tip a favoured bidder.
+  - In a pure-price tender the buyer loses nothing by this, but other bidders lose fairness. In public procurement this is a
+    corruption risk.
+  - The choice: **sealed at commit** (no free option; the buyer sees prices early), or **sealed after the deadline** (no early
+    knowledge; the free option partly returns).
+  - There is a middle form: a small non-refundable commit fee with sealing after the deadline.
+- **(c) A wrong pick by the buyer** needs no separate penalty: a better bidder challenges by revealing.
+- **(d) The buyer's key:** the registry KEM version, as in PqChat, or a fresh KEM key per tender, as in Q13.
+
+**Recommendation** [I]: specify tender v2 as this combined design. Settle (a) and (b) first; they decide whether the free
+option is fully closed. Run the crypto review of §7a's three points with it.
+
 ## 8. Proposed TODO items
 
 No rulings; each item waits for the owner.
