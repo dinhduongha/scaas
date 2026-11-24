@@ -374,7 +374,12 @@ The checks and the tree writes below go into `PqGroupTree` (app-agnostic, by its
 
 ### T4. Node: typed and guard rows (`scaas-node`)
 
-- [ ] `typed.rs`: `TYPED` rows for `PqChatCommit`, `TreeAdd`, `TreeRemove`, `PathList`, `PathCt`, `PqChatTreeLeave`,
+**Progress (2026-11-24, owner ruling: TreeKEM merges into `ua-rs-sign` once, after T3b, T3c and T4's allow-list part).** The
+allow-list part is done: the rows, the bounds, `guard.rs`, the both-ways audit, the vector rows' calldata, the docs of the
+six calls (`runs/2026-11-23-pqchat-treekem-t4-summary.txt`, mutants in `-t4-mutants.txt`). Left for after the merge: the
+whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-set guard's text and refusal in `job-api.md`.
+
+- [x] `typed.rs`: `TYPED` rows for `PqChatCommit`, `TreeAdd`, `TreeRemove`, `PathList`, `PathCt`, `PqChatTreeLeave`,
       `PqChatTreeRemove`; entry rows `commit`, `treeLeave`, `treeRemove` (record and `UASig`) and `addPathList`, `addPathKeys`, `addPath` (no signature); every array bounded by length and depth before bytes
       are built, **with the contract's bounds** (`TREE_LEAVES_MAX`, `TREE_CHANGES_MAX`, `TREE_ADMINS_MAX`, `TREE_INFO_MAX`, the
       depth, `ctCount < leaves`; codex-20). `guard.rs`: `commit`, `treeLeave`, `treeRemove` as the signed writes, the three unsigned entries under

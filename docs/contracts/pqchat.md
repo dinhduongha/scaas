@@ -959,6 +959,9 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   is one transaction, about 47 M asked and near 2^24 regular with ML-DSA-87 at its bounds; the session record,
   mode 0's, holds about 200 member keys at a 60 M block (68 to 71 M asked at 256), so a tree of 256 keys is reached by Adds
   there.
+- **The node.** `scaas-node`'s rows of the six tree writes, their lists and shapes at the bounds above, equal to the contract's
+  both directions ([job-api](../node/job-api.md#pqchat-tree-calls); Change 2026-11-24, plan T4's allow-list part, BUILT on
+  branch `pqchat-treekem`). The whole-set guard and the order of C37 at the node are SPECIFIED (plan T4, after the merge).
 - **Open with the owner:** nothing (the spec's §16).
 
 <a id="CTR-CHAT-28"></a>**CTR-CHAT-28** — **The tree is app-agnostic: its labels and the app's scope are parameters, PqChat is one

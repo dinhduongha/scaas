@@ -160,6 +160,15 @@ const NESTED: &[(&str, &str)] = &[
     ("PqTopicEntry", "bytes32 topicId,bytes32 author,uint64 nonce,bytes32 parentId,EntryRef ref,string mediaType,bytes body"),
     ("PqTopicEdit", "bytes32 entryId,bytes32 author,uint64 nonce,uint32 version,string mediaType,bytes body"),
     ("PqTopicVote", "bytes32 entryId,bytes32 voter,int8 value,uint64 seq"),
+    // CTR-CHAT-27 (spec 2026-11-23-pqchat-treekem §6): the tree records by the contract's field names; `PathList` is hashed into
+    // `ctListHash`, never sent whole; the rows' lists at the contract's bounds ([`tree_lists`], [`tree_shape`])
+    ("TreeAdd", "uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash"),
+    ("TreeRemove", "uint32 leaf,bytes32 ua,uint64 keyId"),
+    ("PqChatCommit", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo"),
+    ("PathList", "uint32[] ctTargets,bytes32[] ctHashes"),
+    ("PathCt", "bytes mlkemCt,bytes32 x25519Eph,bytes sealedSecret"),
+    ("PqChatTreeLeave", "bytes32 sessionId,bytes32 treeId,bytes32 epochId,bytes32 member,uint64 nonce"),
+    ("PqChatTreeRemove", "bytes32 sessionId,bytes32 treeId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce"),
     // `IPqVault`'s records (pqvault spec §5.2), by the contract's field names; `MemberKey` and `Wrap` are PqChat's
     ("PqVaultCreate", "bytes32 creator,uint64 nonce,uint8 mode,bytes32 homeChain,address homeVaultContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo,uint8 groupMode"),
     ("PqVaultEpoch", "bytes32 vaultId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo"),
@@ -391,6 +400,15 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("leave", PC, "PqChatLeave l,UASig sig"),
     ("remove", PC, "PqChatRemove r,UASig sig"),
     ("postMessage", PC, "PqChatMessage m,UASig sig"),
+    // CTR-CHAT-27 (spec 2026-11-23-pqchat-treekem §6): the tree writes; `commit`, `treeLeave`, `treeRemove` signed, the three
+    // pieces unsigned (the guard's unsigned-write rule, `params.relay_unsigned_pqchat`, as `addWraps`); `createSession`,
+    // `addWraps` and `postMessage` serve both modes
+    ("commit", PC, "PqChatCommit c,uint32[] ctTargets,bytes32[] ctHashes,bytes[] nodeKeys,PathCt[] cts,Wrap[] wraps,UASig sig"),
+    ("addPathList", PC, "bytes32 epochId,uint32[] ctTargets,bytes32[] ctHashes"),
+    ("addPathKeys", PC, "bytes32 epochId,bytes[] nodeKeys"),
+    ("addPath", PC, "bytes32 epochId,uint32 firstCt,PathCt[] cts"),
+    ("treeLeave", PC, "PqChatTreeLeave l,UASig sig"),
+    ("treeRemove", PC, "PqChatTreeRemove r,UASig sig"),
     ("storeMessage", PC, "uint8 v,bytes8 hint,bytes env"),
     ("storeMessage", PCS, "uint8 v,bytes8 hint,bytes env"),
     ("createTopic", PC, "PqTopic t,UASig sig"),
@@ -897,6 +915,164 @@ fn compliance_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
         .collect();
     if n[0] > COMPLIANCE_MAX_ROWS || n.iter().any(|x| *x != n[0]) {
         bail!("BAD_PAYLOAD: args.accounts: at most {COMPLIANCE_MAX_ROWS} rows, one flags and one until each");
+    }
+    Ok(())
+}
+
+/// CTR-CHAT-27 (spec 2026-11-23-pqchat-treekem §2 C10, C14, C21, C24, §13): `PqChatCore`'s tree bounds and `PqGroupTree`'s
+/// sizes, so the node refuses what the contract refuses and nothing it accepts. A path holds at most `depth(TREE_LEAVES_MAX)`
+/// node keys and `TREE_LEAVES_MAX - 1` ciphertexts (`ctCount < leaves`).
+const TREE_LEAVES_MAX: u64 = 256;
+const TREE_ADMINS_MAX: usize = 32;
+const TREE_CHANGES_MAX: usize = 32;
+const TREE_INFO_MAX: usize = 4124;
+const TREE_DEPTH_MAX: usize = 8;
+const TREE_CTS_MAX: usize = TREE_LEAVES_MAX as usize - 1;
+/// A node key (`0x01 ‖ ek ‖ pk_X`), a path ciphertext's ML-KEM ciphertext and its sealed secret.
+const KEM_PK: usize = 1601;
+const MLKEM_CT: usize = 1568;
+const SEALED_SECRET: usize = 48;
+/// The lists of the tree entries at their caps, read off the JSON before any element is parsed (C24, C10, C14). A
+/// `treeRemove` names UAs that each hold a live leaf or are admins of the head: at most `TREE_CHANGES_MAX` leafy UAs (C21:
+/// the leaves owed at a head) plus `TREE_ADMINS_MAX` admins.
+const TREE_LISTS: &[(&str, &str, usize)] = &[
+    ("commit", "/c/admins", TREE_ADMINS_MAX),
+    ("commit", "/c/removes", TREE_CHANGES_MAX),
+    ("commit", "/c/adds", TREE_CHANGES_MAX),
+    ("commit", "/c/wrapHashes", TREE_CHANGES_MAX),
+    ("commit", "/c/nodeKeyHashes", TREE_DEPTH_MAX),
+    ("commit", "/ctTargets", TREE_CTS_MAX),
+    ("commit", "/ctHashes", TREE_CTS_MAX),
+    ("commit", "/nodeKeys", TREE_DEPTH_MAX),
+    ("commit", "/cts", TREE_CTS_MAX),
+    ("commit", "/wraps", TREE_CHANGES_MAX),
+    ("addPathList", "/ctTargets", TREE_CTS_MAX),
+    ("addPathList", "/ctHashes", TREE_CTS_MAX),
+    ("addPathKeys", "/nodeKeys", TREE_DEPTH_MAX),
+    ("addPath", "/cts", TREE_CTS_MAX),
+    (
+        "treeRemove",
+        "/r/members",
+        TREE_CHANGES_MAX + TREE_ADMINS_MAX,
+    ),
+];
+
+fn tree_lists(entry: &str, args: &Value) -> Result<()> {
+    for (_, p, max) in TREE_LISTS.iter().filter(|t| t.0 == entry) {
+        if args
+            .pointer(p)
+            .and_then(Value::as_array)
+            .is_some_and(|a| a.len() > *max)
+        {
+            bail!(
+                "BAD_PAYLOAD: args{}: more than {max} (PqChat's tree bound)",
+                p.replace('/', ".")
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The shapes of a parsed tree entry that the contract refuses on the record or the piece alone (C24, §8): the sums and the
+/// relations between its lists, `leaves` and the path's depth, `ctCount < leaves`, `sealedInfo`'s size, each node key and
+/// path ciphertext of its exact size. What needs the chain's state (the head, the tree, the hashes) is the contract's.
+fn tree_shape(entry: &str, fields: &[(String, String)], vals: &[Val]) -> Result<()> {
+    let bad = |what: &str| Err(anyhow!("BAD_PAYLOAD: args.{what} (PqChat's tree bound)"));
+    let at = |n: &str| pos(fields, n).map(|i| &vals[i]);
+    let len = |v: Option<&Val>| v.map_or(0, arr_len);
+    let num = |v: Option<&Val>| {
+        v.and_then(Val::as_uint)
+            .map_or(u64::MAX, |x| x.0.saturating_to())
+    };
+    let sized = |v: Option<&Val>, n: usize| {
+        v.and_then(Val::as_array)
+            .is_some_and(|a| a.iter().all(|x| x.as_bytes().is_some_and(|b| b.len() == n)))
+    };
+    let cts_sized = |v: Option<&Val>| {
+        v.and_then(Val::as_array).is_some_and(|a| {
+            a.iter().all(|x| {
+                x.as_tuple().is_some_and(|t| {
+                    t[0].as_bytes().is_some_and(|b| b.len() == MLKEM_CT)
+                        && t[2].as_bytes().is_some_and(|b| b.len() == SEALED_SECRET)
+                })
+            })
+        })
+    };
+    match entry {
+        "commit" => {
+            let Some(Val::Tuple(c)) = at("c") else {
+                return bad("c: not a record");
+            };
+            let cf = &NESTED_MAP["PqChatCommit"];
+            let cv = |n: &str| pos(cf, n).map(|i| &c[i]);
+            let (leaves, ct_count) = (num(cv("leaves")), num(cv("ctCount")));
+            let (adds, keys) = (len(cv("adds")), len(cv("nodeKeyHashes")));
+            let depth = leaves.max(1).next_power_of_two().trailing_zeros() as usize;
+            let info = cv("sealedInfo")
+                .and_then(Val::as_bytes)
+                .map_or(0, <[u8]>::len);
+            let list = len(at("ctTargets"));
+            if len(cv("removes")) + adds > TREE_CHANGES_MAX {
+                return bad(&format!("c: removes plus adds above {TREE_CHANGES_MAX}"));
+            }
+            if leaves > TREE_LEAVES_MAX {
+                return bad(&format!("c.leaves: above {TREE_LEAVES_MAX}"));
+            }
+            if ct_count >= leaves || keys > depth || (ct_count == 0) != (keys == 0) {
+                return bad("c: ctCount below leaves, at most depth(leaves) nodeKeyHashes, none exactly when no ciphertext");
+            }
+            if len(cv("wrapHashes")) != adds {
+                return bad("c.wrapHashes: one per add");
+            }
+            if info == 0 || info > TREE_INFO_MAX {
+                return bad(&format!("c.sealedInfo: 1 to {TREE_INFO_MAX} bytes"));
+            }
+            if list != len(at("ctHashes")) || (list != 0 && list as u64 != ct_count) {
+                return bad("ctTargets: absent, or ctCount entries with one ctHashes each");
+            }
+            let nk = len(at("nodeKeys"));
+            if (nk != 0 && nk != keys) || !sized(at("nodeKeys"), KEM_PK) {
+                return bad(&format!(
+                    "nodeKeys: absent, or one per nodeKeyHashes of {KEM_PK} bytes"
+                ));
+            }
+            let cts = len(at("cts"));
+            if cts as u64 > ct_count || (cts != 0 && list == 0) || !cts_sized(at("cts")) {
+                return bad("cts: at most ctCount, only with the list, each of its sizes");
+            }
+            if len(at("wraps")) > adds {
+                return bad("wraps: at most one per add");
+            }
+        }
+        "addPathList" => {
+            let n = len(at("ctTargets"));
+            if n == 0 || n != len(at("ctHashes")) {
+                return bad("ctTargets: 1 or more, one ctHashes each");
+            }
+        }
+        "addPathKeys" => {
+            if len(at("nodeKeys")) == 0 || !sized(at("nodeKeys"), KEM_PK) {
+                return bad(&format!("nodeKeys: 1 or more, each of {KEM_PK} bytes"));
+            }
+        }
+        "addPath" => {
+            if num(at("firstCt")).saturating_add(len(at("cts")) as u64) > TREE_CTS_MAX as u64
+                || !cts_sized(at("cts"))
+            {
+                return bad(&format!(
+                    "cts: firstCt plus the count at most {TREE_CTS_MAX}, each of its sizes"
+                ));
+            }
+        }
+        "treeRemove" => {
+            let Some(Val::Tuple(r)) = at("r") else {
+                return bad("r: not a record");
+            };
+            if len(pos(&NESTED_MAP["PqChatTreeRemove"], "members").map(|i| &r[i])) == 0 {
+                return bad("r.members: 1 or more");
+            }
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -1685,6 +1861,9 @@ pub fn assemble(
             .as_ref()
             .map(|c| json!(format!("{:#x}", keccak256(c))))
     });
+    if row.contracts == PC {
+        tree_lists(row.entry, args)?;
+    }
     let mut vals: Vec<Val> = Vec::new();
     for (ty, n) in &row.fields {
         let (src, p) = match &init_hash {
@@ -1713,6 +1892,9 @@ pub fn assemble(
     }
     if row.name == "cacheExpandedKey" {
         cache_bounds(&row.fields, &vals)?;
+    }
+    if row.contracts == PC {
+        tree_shape(row.entry, &row.fields, &vals)?;
     }
     if row.typed {
         normalize(&row.fields, &mut vals, fee_recipient)?;
@@ -2765,7 +2947,32 @@ pub mod testkit {
     /// T93: a `PqChat` job of `entry` on `instance`, every argument named, each value from its type and a running counter (a
     /// list holds one element, an `int8` is -1), so no two fields carry the same bytes.
     pub fn pqchat_op(entry: &str, instance: Address) -> Value {
-        factory_kind_op("pqchat", entry, instance)
+        let mut o = factory_kind_op("pqchat", entry, instance);
+        // CTR-CHAT-27: a tree entry's sample in the contract's shapes (`tree_shape`): a commit at 2 leaves with one path
+        // ciphertext, node keys and path ciphertexts of their sizes
+        let a = &mut o["args"];
+        let b = |n: usize, x: u8| json!(format!("0x{}", alloy::hex::encode(vec![x; n])));
+        if entry == "commit" {
+            (a["c"]["leaves"], a["c"]["ctCount"]) = (json!(2), json!(1));
+        }
+        for k in a
+            .get_mut("nodeKeys")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            *k = b(super::KEM_PK, 0x01);
+        }
+        for c in a
+            .get_mut("cts")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            (c["mlkemCt"], c["sealedSecret"]) =
+                (b(super::MLKEM_CT, 0xc7), b(super::SEALED_SECRET, 0x5e));
+        }
+        o
     }
 
     /// A `PqVault` job of `entry` on `instance`, as [`pqchat_op`].
@@ -2938,10 +3145,11 @@ mod tests {
         // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
         // CTR-UA-44 (TODO 3ze): -> 35, the registry's `updateMsig`; NODE-JOB-29 (TODO 3zh MD-14): -> 36, the registry's `cacheExpandedKey`
         // bls-multi Task 10: -> 37, the registry's `registerBlsMulti`; PqVault plan V8 (CTR-PQV-11): -> 45, `PqVault`'s eight writes;
-        // chains-arweave T9: -> 46, `PqChatStore`'s `storeMessage` (contract kind `pqchatstore`)
+        // chains-arweave T9: -> 46, `PqChatStore`'s `storeMessage` (contract kind `pqchatstore`); PqChat TreeKEM T4 (CTR-CHAT-27):
+        // 46 -> 52, `PqChat`'s six tree writes
         assert_eq!(
             rows().iter().filter(|r| !r.typed).count(),
-            46,
+            52,
             "the wallet's three flat builders are gone (MD-11 (a))"
         );
     }
@@ -5321,7 +5529,7 @@ mod tests {
             .iter()
             .filter(|r| r.contracts.contains(&"pqchat"))
             .collect();
-        assert_eq!(ours.len(), 13);
+        assert_eq!(ours.len(), 19); // CTR-CHAT-27: + the six tree writes
         for r in &ours {
             assert_eq!(
                 (r.typed, r.enveloped, r.sig, r.contracts, r.sent),
@@ -5416,6 +5624,9 @@ mod tests {
             ("addWraps", "wraps"),
             ("postMessage", "m"),
             ("postEntry", "e"),
+            ("commit", "c"),
+            ("treeRemove", "r"),
+            ("addPath", "cts"),
         ] {
             let e = refused(entry, &|o| {
                 if path == "args" {
@@ -5484,6 +5695,525 @@ mod tests {
             format!("{:#x}", keccak256(th("PqTopic"))),
             "0x66954727fc72dc7660d7951b1a698a5f2fe331ec190195d0b0908f659510828e"
         ); // 3r: `admin`
+    }
+
+    /// The tree vectors' numbers as decimal strings (the node's form for a `uint64`).
+    fn strings(v: &Value) -> Value {
+        match v {
+            Value::Number(n) => json!(n.to_string()),
+            Value::Array(a) => Value::Array(a.iter().map(strings).collect()),
+            Value::Object(o) => {
+                Value::Object(o.iter().map(|(k, x)| (k.clone(), strings(x))).collect())
+            }
+            x => x.clone(),
+        }
+    }
+
+    /// The six tree jobs built from `tree.json`'s rows: the signed commit with its list and a first ciphertext, each piece
+    /// entry on the commit's epoch, the leave and the removal records; `sig` a placeholder (the contract checks it).
+    fn tree_jobs() -> Vec<(&'static str, Value)> {
+        let v: Value = serde_json::from_str(include_str!(
+            "../../smartcontracts/vectors/pqchat/tree.json"
+        ))
+        .unwrap();
+        let d = &v["digests"];
+        let rec = |s: &str| {
+            strings(
+                &d["records"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|r| r["struct"] == s)
+                    .unwrap()["record"],
+            )
+        };
+        let (list, ct, eid) = (rec("PathList"), rec("PathCt"), d["epochId"].clone());
+        let key = v["keys"][0]["kemPk"].clone();
+        let sig = json!({"keyData": "0x01", "signature": "0x02", "members": []});
+        let job = |entry: &str, args: Value| {
+            json!({"entry": entry, "contract": "pqchat", "token": format!("{:#x}", Address::repeat_byte(0xc3)),
+                "validUntil": "4000000000", "args": args})
+        };
+        vec![
+            (
+                "commit",
+                job(
+                    "commit",
+                    json!({"c": rec("PqChatCommit"), "ctTargets": list["ctTargets"], "ctHashes": list["ctHashes"],
+                "nodeKeys": [key, key], "cts": [ct], "wraps": [], "sig": sig}),
+                ),
+            ),
+            (
+                "addPathList",
+                job(
+                    "addPathList",
+                    json!({"epochId": eid, "ctTargets": list["ctTargets"], "ctHashes": list["ctHashes"]}),
+                ),
+            ),
+            (
+                "addPathKeys",
+                job("addPathKeys", json!({"epochId": eid, "nodeKeys": [key]})),
+            ),
+            (
+                "addPath",
+                job(
+                    "addPath",
+                    json!({"epochId": eid, "firstCt": "2", "cts": [ct]}),
+                ),
+            ),
+            (
+                "treeLeave",
+                job(
+                    "treeLeave",
+                    json!({"l": rec("PqChatTreeLeave"), "sig": sig}),
+                ),
+            ),
+            (
+                "treeRemove",
+                job(
+                    "treeRemove",
+                    json!({"r": rec("PqChatTreeRemove"), "sig": sig}),
+                ),
+            ),
+        ]
+    }
+
+    /// CTR-CHAT-27 (plan 2026-11-23-pqchat-treekem T4): the tree rows against `smartcontracts/vectors/pqchat/tree.json`
+    /// (clientkeys): each node struct's type string and typehash, each signed record's and piece's struct hash (the commit's
+    /// `ctListHash` is the list's); a job of each of the six entries from the vector rows is the calldata of `IPqChat`'s entry
+    /// (the `sol!` declaration below, its selector forge's), decoding back to the same named fields.
+    #[test]
+    fn pqchat_tree_rows_are_the_vectors() {
+        use alloy::sol_types::SolCall;
+        let v: Value = serde_json::from_str(include_str!(
+            "../../smartcontracts/vectors/pqchat/tree.json"
+        ))
+        .unwrap();
+        let mut n = 0;
+        for (name, t) in v["typehashes"].as_object().unwrap() {
+            let Some(f) = nested(name) else {
+                assert!(
+                    matches!(name.as_str(), "TreeGenesis" | "TreeLeaf" | "TreeParent"),
+                    "{name}: hashed, never sent"
+                );
+                continue;
+            };
+            let s = type_string(name, f);
+            assert_eq!(
+                (s.as_str(), format!("{:#x}", keccak256(&s))),
+                (
+                    t["type"].as_str().unwrap(),
+                    t["hash"].as_str().unwrap().into()
+                ),
+                "{name}"
+            );
+            n += 1;
+        }
+        assert_eq!(n, 7);
+        let d = &v["digests"];
+        for r in d["records"].as_array().unwrap() {
+            let s = r["struct"].as_str().unwrap();
+            let val = parse(s, &strings(&r["record"]), s).unwrap();
+            assert_eq!(
+                format!("{:#x}", struct_hash_of(s, &val).unwrap()),
+                r["structHash"].as_str().unwrap(),
+                "{s}"
+            );
+            if s == "PathList" {
+                assert_eq!(
+                    r["structHash"], d["records"][0]["record"]["ctListHash"],
+                    "the commit's ctListHash"
+                );
+            }
+        }
+        alloy::sol! {
+            struct TreeAdd { uint32 leaf; bytes32 ua; uint64 keyId; bytes32 via; bytes32 kemHash; }
+            struct TreeRemove { uint32 leaf; bytes32 ua; uint64 keyId; }
+            struct PqChatCommit { bytes32 sessionId; bytes32 author; uint64 nonce; uint64 epoch; bytes32 parentEpochId; bytes32 treeId;
+                bytes32 parentTreeHash; uint32 leaf; uint64 keyId; uint32 leaves; bytes32[] admins; TreeRemove[] removes; TreeAdd[] adds;
+                bytes32[] wrapHashes; bytes32[] nodeKeyHashes; uint32 ctCount; bytes32 ctListHash; bytes32 treeHash; bytes sealedInfo; }
+            struct PathCt { bytes mlkemCt; bytes32 x25519Eph; bytes sealedSecret; }
+            struct Wrap { bytes32 member; uint64 keyId; bytes mlkemCt; bytes32 x25519Eph; bytes sealedKey; }
+            struct PqChatTreeLeave { bytes32 sessionId; bytes32 treeId; bytes32 epochId; bytes32 member; uint64 nonce; }
+            struct PqChatTreeRemove { bytes32 sessionId; bytes32 treeId; bytes32 epochId; uint64 nextEpoch; bytes32[] members; bytes32 admin;
+                uint64 nonce; }
+            struct InnerSig { uint16 index; bytes sig; }
+            struct MemberSig { uint16 index; InnerSig[] members; bytes sig; }
+            struct UASig { bytes keyData; bytes signature; MemberSig[] members; }
+            function commit(PqChatCommit c, uint32[] ctTargets, bytes32[] ctHashes, bytes[] nodeKeys, PathCt[] cts, Wrap[] wraps,
+                UASig sig) external;
+            function addPathList(bytes32 epochId, uint32[] ctTargets, bytes32[] ctHashes) external;
+            function addPathKeys(bytes32 epochId, bytes[] nodeKeys) external;
+            function addPath(bytes32 epochId, uint32 firstCt, PathCt[] cts) external;
+            function treeLeave(PqChatTreeLeave l, UASig sig) external;
+            function treeRemove(PqChatTreeRemove r, UASig sig) external;
+        }
+        fn same<C: SolCall>(data: &[u8]) -> (String, bool) {
+            let c = C::abi_decode(data).unwrap_or_else(|e| panic!("{}: {e}", C::SIGNATURE));
+            (alloy::hex::encode(&data[..4]), c.abi_encode() == data)
+        }
+        let at = Address::repeat_byte(0xc3);
+        for (entry, job) in tree_jobs() {
+            let p = Op::parse(&job, FEE).unwrap_or_else(|e| panic!("{entry}: {e:#}"));
+            let (sel, round) = match entry {
+                "commit" => same::<commitCall>(&p.data),
+                "addPathList" => same::<addPathListCall>(&p.data),
+                "addPathKeys" => same::<addPathKeysCall>(&p.data),
+                "addPath" => same::<addPathCall>(&p.data),
+                "treeLeave" => same::<treeLeaveCall>(&p.data),
+                _ => same::<treeRemoveCall>(&p.data),
+            };
+            let forge = match entry {
+                "commit" => "9575f9cb",
+                "addPathList" => "0b9b356b",
+                "addPathKeys" => "de142cf8",
+                "addPath" => "44889230",
+                "treeLeave" => "12a4e9ac",
+                _ => "eb3f5236",
+            };
+            assert_eq!(
+                (sel.as_str(), round),
+                (forge, true),
+                "{entry}: IPqChat's calldata"
+            );
+            let back = call_op("pqchat", at, &p.data, "4000000000").unwrap();
+            assert_eq!(
+                strings(&back["args"]),
+                job["args"],
+                "{entry}: the calldata's named fields"
+            );
+        }
+        let c = commitCall::abi_decode(&Op::parse(&tree_jobs()[0].1, FEE).unwrap().data).unwrap();
+        let rec = &d["records"][0]["record"];
+        assert_eq!(
+            (
+                format!("{:#x}", c.c.ctListHash),
+                c.ctTargets,
+                alloy::hex::encode_prefixed(&c.c.sealedInfo)
+            ),
+            (
+                rec["ctListHash"].as_str().unwrap().into(),
+                vec![0, 4, 6],
+                rec["sealedInfo"].as_str().unwrap().into()
+            )
+        );
+    }
+
+    /// CTR-CHAT-27 (spec §2 C10, C14, C21, C24, §13; plan T4, codex-20): each tree bound refused one over by name, beside its
+    /// twin at the bound that parses; a list's cap is read before any element (`TREE_LISTS`); a depth bomb stops at the type's
+    /// depth; a record or a list as hex is `HEX_ARGS_REFUSED`.
+    #[test]
+    fn pqchat_tree_bounds_are_the_contract() {
+        let jobs: HashMap<&str, Value> = tree_jobs().into_iter().collect();
+        let run = |entry: &str, f: &dyn Fn(&mut Value)| {
+            let mut o = jobs[entry].clone();
+            f(&mut o["args"]);
+            Op::parse(&o, FEE).map(|_| ()).map_err(|e| e.to_string())
+        };
+        let pair = |entry: &str, ok: &dyn Fn(&mut Value), no: &dyn Fn(&mut Value), why: &str| {
+            run(entry, ok).unwrap_or_else(|e| panic!("{entry} {why}: the twin at the bound: {e}"));
+            let e = run(entry, no).expect_err(why);
+            assert!(
+                e.starts_with("BAD_PAYLOAD: args") && e.contains(why),
+                "{entry} {why}: {e}"
+            );
+        };
+        let h = |i: usize| json!(format!("{:#x}", B256::from(U256::from(i + 1))));
+        let hs = |n: usize| Value::Array((0..n).map(h).collect());
+        let b = |n: usize| json!(format!("0x{}", "ab".repeat(n)));
+        let key = jobs["addPathKeys"]["args"]["nodeKeys"][0].clone();
+        let ct = jobs["addPath"]["args"]["cts"][0].clone();
+        let keys = |n: usize| Value::Array(vec![key.clone(); n]);
+        let cts = |n: usize| Value::Array(vec![ct.clone(); n]);
+        let rm = |n: usize| {
+            Value::Array(
+                (0..n)
+                    .map(|i| json!({"leaf": i, "ua": h(i), "keyId": "1"}))
+                    .collect(),
+            )
+        };
+        let add = |n: usize| {
+            Value::Array((0..n).map(|i| json!({"leaf": i, "ua": h(i), "keyId": "1", "via": h(0), "kemHash": h(i)})).collect())
+        };
+        let wrap = json!({"member": h(0), "keyId": "1", "mlkemCt": b(1568), "x25519Eph": h(1), "sealedKey": b(48)});
+        // a commit at leaves 256 (depth 8): `n_ct` ciphertexts in the list, `n_keys` node keys
+        let big = |a: &mut Value, leaves: usize, n_ct: usize, n_keys: usize| {
+            a["c"]["leaves"] = json!(leaves);
+            a["c"]["ctCount"] = json!(n_ct);
+            a["c"]["nodeKeyHashes"] = hs(n_keys);
+            a["nodeKeys"] = keys(n_keys);
+            a["ctTargets"] = Value::Array((0..n_ct).map(|i| json!(i)).collect());
+            a["ctHashes"] = hs(n_ct);
+        };
+        let no_adds = |a: &mut Value| {
+            a["c"]["adds"] = json!([]);
+            a["c"]["wrapHashes"] = json!([]);
+        };
+        // commit: the record (C10, C24)
+        pair(
+            "commit",
+            &|a| a["c"]["admins"] = hs(32),
+            &|a| a["c"]["admins"] = hs(33),
+            "c.admins: more than 32",
+        );
+        pair(
+            "commit",
+            &|a| a["c"]["removes"] = rm(31),
+            &|a| a["c"]["removes"] = rm(32),
+            "c: removes plus adds above 32",
+        );
+        pair(
+            "commit",
+            &|a| {
+                no_adds(a);
+                a["c"]["removes"] = rm(32)
+            },
+            &|a| {
+                no_adds(a);
+                a["c"]["removes"] = rm(33)
+            },
+            "c.removes: more than 32",
+        );
+        pair(
+            "commit",
+            &|a| {
+                a["c"]["adds"] = add(32);
+                a["c"]["wrapHashes"] = hs(32)
+            },
+            &|a| {
+                a["c"]["adds"] = add(33);
+                a["c"]["wrapHashes"] = hs(33)
+            },
+            "c.adds: more than 32",
+        );
+        pair(
+            "commit",
+            &|a| a["c"]["wrapHashes"] = hs(1),
+            &|a| a["c"]["wrapHashes"] = hs(2),
+            "c.wrapHashes: one per add",
+        );
+        pair(
+            "commit",
+            &|a| big(a, 256, 255, 8),
+            &|a| big(a, 257, 255, 8),
+            "c.leaves: above 256",
+        );
+        pair(
+            "commit",
+            &|a| big(a, 256, 255, 8),
+            &|a| big(a, 256, 255, 9),
+            "c.nodeKeyHashes: more than 8",
+        );
+        pair(
+            "commit",
+            &|a| big(a, 256, 255, 8),
+            &|a| big(a, 256, 256, 8),
+            "ctTargets: more than 255",
+        );
+        let depth = "c: ctCount below leaves, at most depth(leaves) nodeKeyHashes";
+        pair("commit", &|a| big(a, 4, 3, 2), &|a| big(a, 4, 3, 3), depth);
+        pair("commit", &|a| big(a, 4, 3, 2), &|a| big(a, 4, 4, 2), depth);
+        pair("commit", &|a| big(a, 4, 1, 1), &|a| big(a, 4, 0, 1), depth);
+        pair(
+            "commit",
+            &|a| a["c"]["sealedInfo"] = b(4124),
+            &|a| a["c"]["sealedInfo"] = b(4125),
+            "c.sealedInfo: 1 to 4124",
+        );
+        pair(
+            "commit",
+            &|a| a["c"]["sealedInfo"] = b(1),
+            &|a| a["c"]["sealedInfo"] = b(0),
+            "c.sealedInfo: 1 to 4124",
+        );
+        // commit: the pieces it carries (C14, §8: each whole or absent, a first chunk)
+        let list = "ctTargets: absent, or ctCount entries";
+        pair(
+            "commit",
+            &|a| a["ctHashes"] = hs(3),
+            &|a| a["ctHashes"] = hs(2),
+            list,
+        );
+        pair(
+            "commit",
+            &|a| {
+                a["ctTargets"] = json!([]);
+                a["ctHashes"] = json!([]);
+                a["cts"] = json!([])
+            },
+            &|a| {
+                a["ctTargets"] = json!([0, 4]);
+                a["ctHashes"] = hs(2);
+                a["cts"] = json!([])
+            },
+            list,
+        );
+        let nk = "nodeKeys: absent, or one per nodeKeyHashes of 1601 bytes";
+        pair(
+            "commit",
+            &|a| a["nodeKeys"] = json!([]),
+            &|a| a["nodeKeys"] = keys(1),
+            nk,
+        );
+        pair(
+            "commit",
+            &|a| a["nodeKeys"] = keys(2),
+            &|a| a["nodeKeys"][1] = b(1600),
+            nk,
+        );
+        let c = "cts: at most ctCount, only with the list";
+        pair("commit", &|a| a["cts"] = cts(3), &|a| a["cts"] = cts(4), c);
+        pair(
+            "commit",
+            &|a| {
+                a["ctTargets"] = json!([]);
+                a["ctHashes"] = json!([]);
+                a["cts"] = json!([])
+            },
+            &|a| {
+                a["ctTargets"] = json!([]);
+                a["ctHashes"] = json!([]);
+                a["cts"] = cts(1)
+            },
+            c,
+        );
+        pair(
+            "commit",
+            &|a| a["cts"][0]["mlkemCt"] = b(1568),
+            &|a| a["cts"][0]["mlkemCt"] = b(1567),
+            c,
+        );
+        pair(
+            "commit",
+            &|a| a["cts"][0]["sealedSecret"] = b(48),
+            &|a| a["cts"][0]["sealedSecret"] = b(49),
+            c,
+        );
+        pair(
+            "commit",
+            &|a| a["wraps"] = json!([wrap.clone()]),
+            &|a| a["wraps"] = json!([wrap.clone(), wrap.clone()]),
+            "wraps: at most one per add",
+        );
+        // the pieces' own entries
+        let pl = |a: &mut Value, n: usize, m: usize| {
+            a["ctTargets"] = Value::Array((0..n).map(|i| json!(i)).collect());
+            a["ctHashes"] = hs(m);
+        };
+        pair(
+            "addPathList",
+            &|a| pl(a, 255, 255),
+            &|a| pl(a, 256, 256),
+            "ctTargets: more than 255",
+        );
+        pair(
+            "addPathList",
+            &|a| pl(a, 1, 1),
+            &|a| pl(a, 0, 0),
+            "ctTargets: 1 or more, one ctHashes each",
+        );
+        pair(
+            "addPathList",
+            &|a| pl(a, 2, 2),
+            &|a| pl(a, 2, 1),
+            "ctTargets: 1 or more, one ctHashes each",
+        );
+        pair(
+            "addPathKeys",
+            &|a| a["nodeKeys"] = keys(8),
+            &|a| a["nodeKeys"] = keys(9),
+            "nodeKeys: more than 8",
+        );
+        let pk = "nodeKeys: 1 or more, each of 1601 bytes";
+        pair(
+            "addPathKeys",
+            &|a| a["nodeKeys"] = keys(1),
+            &|a| a["nodeKeys"] = json!([]),
+            pk,
+        );
+        pair(
+            "addPathKeys",
+            &|a| a["nodeKeys"] = keys(1),
+            &|a| a["nodeKeys"][0] = b(1602),
+            pk,
+        );
+        let ap = "cts: firstCt plus the count at most 255";
+        pair(
+            "addPath",
+            &|a| a["firstCt"] = json!(254),
+            &|a| a["firstCt"] = json!(255),
+            ap,
+        );
+        pair(
+            "addPath",
+            &|a| {
+                a["firstCt"] = json!(0);
+                a["cts"] = cts(255)
+            },
+            &|a| {
+                a["firstCt"] = json!(0);
+                a["cts"] = cts(256)
+            },
+            "cts: more than 255",
+        );
+        pair(
+            "addPath",
+            &|a| a["cts"][0]["sealedSecret"] = b(48),
+            &|a| a["cts"][0]["sealedSecret"] = b(47),
+            ap,
+        );
+        // treeRemove (C21: at most 32 leafy UAs and 32 admins)
+        pair(
+            "treeRemove",
+            &|a| a["r"]["members"] = hs(64),
+            &|a| a["r"]["members"] = hs(65),
+            "r.members: more than 64",
+        );
+        pair(
+            "treeRemove",
+            &|a| a["r"]["members"] = hs(1),
+            &|a| a["r"]["members"] = json!([]),
+            "r.members: 1 or more",
+        );
+        // a list's cap before its elements: 33 admins that are not even words
+        let e = run("commit", &|a| {
+            a["c"]["admins"] = Value::Array(vec![json!({}); 33])
+        })
+        .unwrap_err();
+        assert_eq!(
+            e, "BAD_PAYLOAD: args.c.admins: more than 32 (PqChat's tree bound)",
+            "before any element is read"
+        );
+        // a depth bomb: the parse recurses over the type, never the JSON
+        let mut deep = json!([]);
+        for _ in 0..100_000 {
+            deep = Value::Array(vec![deep]);
+        }
+        let mut c = strings(&jobs["commit"]["args"]["c"]);
+        c["adds"] = deep;
+        let e = parse("PqChatCommit", &c, "c").unwrap_err().to_string();
+        assert_eq!(
+            e, "BAD_PAYLOAD: c.adds[0]: not an object",
+            "a hostile depth stops at the type's"
+        );
+        std::mem::forget(c); // serde_json's drop recurses over the 100,000 levels
+                             // the old hex forms, beside the control
+        let blob = json!(format!("0x{}", "00".repeat(256)));
+        for (entry, path) in [
+            ("commit", "c"),
+            ("commit", "ctTargets"),
+            ("commit", "nodeKeys"),
+            ("commit", "cts"),
+            ("addPathList", "ctHashes"),
+            ("addPathKeys", "nodeKeys"),
+            ("addPath", "cts"),
+            ("treeLeave", "l"),
+            ("treeRemove", "r"),
+        ] {
+            run(entry, &|_| ()).unwrap();
+            let e = run(entry, &|a| a[path] = blob.clone()).unwrap_err();
+            assert!(e.starts_with("HEX_ARGS_REFUSED"), "{entry} {path}: {e}");
+        }
     }
     /// PqVault plan V8 (CTR-PQV-11): the eight `PqVault` rows are plain rows of kind `pqvault` alone, no envelope, no fee, no
     /// signature outside `args`; every job is named fields, its calldata decodes back to the same fields and rebuilds the same
