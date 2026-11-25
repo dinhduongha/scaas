@@ -147,6 +147,10 @@ M = [
     ("js", "R8: clientkeys' cap back at 256", [(PT, "export const TREE_LEAVES_MAX = 512;", "export const TREE_LEAVES_MAX = 256;")]),
     ("node", "R8: the node's cap back at 256", [(N, "const TREE_LEAVES_MAX: u64 = 512;", "const TREE_LEAVES_MAX: u64 = 256;")]),
     ("node", "R8: the node's depth back at 8", [(N, "const TREE_DEPTH_MAX: usize = 9;", "const TREE_DEPTH_MAX: usize = 8;")]),
+    # ---- C10 32 -> 20 (owner 2026-11-25): each reader's change bound
+    ("rs", "C10: ua-rs at 21 changes", [(RP, "pub const TREE_CHANGES_MAX: usize = 20;", "pub const TREE_CHANGES_MAX: usize = 21;")]),
+    ("js", "C10: clientkeys at 21 changes", [(PT, "export const TREE_CHANGES_MAX = 20;", "export const TREE_CHANGES_MAX = 21;")]),
+    ("node", "C10: the node at 21 changes", [(N, "const TREE_CHANGES_MAX: usize = 20;", "const TREE_CHANGES_MAX: usize = 21;")]),
 ]
 
 if sys.argv[1:] == ["check"]:

@@ -36,12 +36,8 @@ ENV = dict(
     FOUNDRY_CACHE_PATH="cache/rfc-mutants",
     PATH=os.path.expanduser("~/.foundry/bin") + os.pathsep + os.environ.get("PATH", ""),
 )
-# test_lastLiveLeafAtTheSpecBound left out since R8's 512 (2026-11-25): its ML-DSA-87 row is the open finding (red at HEAD)
-FORGE = (
-    [CAPPED, "forge", "test", "-j", "1", "--no-match-test",
-     "test_gas_deployImplementation|test_gas_deployModule|test_lastLiveLeafAtTheSpecBound"],
-    E,
-)
+# test_lastLiveLeafAtTheSpecBound was left out for M74-M77 (its ML-DSA-87 row red at 32 changes); green at C10's 20, it runs
+FORGE = ([CAPPED, "forge", "test", "-j", "1", "--no-match-test", "test_gas_deployImplementation|test_gas_deployModule"], E)
 M = [
     # the split
     ("treeLeave forwarded to the tree module", [(P, "    function treeLeave(PqChatTreeLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(MEMBERS);", "    function treeLeave(PqChatTreeLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(TREE);")]),
@@ -135,6 +131,9 @@ M = [
     ("R8: the base's limit back at 256", [(G, "uint256 internal constant TREE_LEAVES_LIMIT = 512;", "uint256 internal constant TREE_LEAVES_LIMIT = 256;")]),
     ("R8: PqChat's cap back at 256", [(C, "uint256 internal constant TREE_LEAVES_MAX = 512;", "uint256 internal constant TREE_LEAVES_MAX = 256;")]),
     ("R8: PqChat's cap at 513", [(C, "uint256 internal constant TREE_LEAVES_MAX = 512;", "uint256 internal constant TREE_LEAVES_MAX = 513;"), (G, "uint256 internal constant TREE_LEAVES_LIMIT = 512;", "uint256 internal constant TREE_LEAVES_LIMIT = 513;")]),
+    # C10 32 -> 20 (owner 2026-11-25)
+    ("C10: 21 changes", [(C, "uint256 internal constant TREE_CHANGES_MAX = 20;", "uint256 internal constant TREE_CHANGES_MAX = 21;")]),
+    ("C10: 19 changes", [(C, "uint256 internal constant TREE_CHANGES_MAX = 20;", "uint256 internal constant TREE_CHANGES_MAX = 19;")]),
 ]
 
 if sys.argv[1:] == ["check"]:
