@@ -650,3 +650,8 @@ cannot forge a record (every record is client-signed), but it can refuse or dela
 walk forward as on chain; immudb gives a tamper-evident log, Supabase does not. Of the Farcaster note's questions, the
 committee, the availability certificate and the node set are moot; delegated keys and "never delete accepted records" wait
 for such a build.
+**Owner, 2026-11-25 (the service's job):** "API service đó có nhiệm vụ kiểm chữ ký từ UA, thay vì JWT như truyền thống.
+Open cho đọc (như on-chain)." The API service authenticates **each record by its UA signature** (and nonce), with the
+contract's own rules, instead of JWT sessions or tokens; **reads are open to anyone**, as on chain (the data are
+ciphertexts). It needs the UAs' keys: the on-chain UA registry or an off-chain one, per deployment (2026-11-24); the
+verification code is best the one already in ua-rs / scaas-node, so the off-chain rules equal the contract's.
