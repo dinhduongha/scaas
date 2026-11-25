@@ -106,7 +106,7 @@ PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatCon
   never counted (the creator, or the author of the resetting commit), so `sincePath + adds.length` is at most 511 and a bound
   of 511 or 512 could never refuse: it would mean the same as 0. 510 is the largest value that can bind. One meaning per
   value.
-- **The client default (C46; decided in §15.1).** `scaas-sdk` and `pqchat-core` put **24** there when the caller names no
+- **The client default (C46; decided in §15.1).** `scaas-sdk` and `pqchat-core` put **20** there when the caller names no
   value; 0 is allowed only when named, and then the client warns after 24 (§6.4). The `createSession` review shows it: "key
   refresh forced after N added keys" or, for 0, "key refresh never forced; the admins are warned after 24 added keys"; the
   session's details show the same line to every member.
@@ -582,7 +582,7 @@ admin are known limits (§15.2), recorded, not fixed.
 | An author signs a wrong tag on purpose | anchored members keep the chain's key and see "the author did not hold the epoch" (§6.2); it costs the author a record and stops nobody |
 | **Info wipe by a cheap record (F-10 a)** | a path-less record with a wrong tag (or a `sealedInfo` that does not open) leaves every member with no info in force (C33's gap rule, which keeps the lists from suspect leaves); a member can do it with an own-key Add for about 20 M asked (today a garbage path commit to everyone, 62 M and more), and an admin must then establish the info anew under R13. The gap rule stands; the cost is this row |
 | **Bound burn (F-10 b)** | own-key leaves count (R18), so three or four members can use up N = 24 and the admin's next Add pays the path form; mild, and the forced commit is the healthy one |
-| **A path commit starved by one-transaction path-less Adds (F-5)** | after a run the tree is cold and the next path commit takes several transactions; any path-less Add of a plain record that fits one transaction takes the slot and the staged path commit is `PqChatEpochTaken` (its pieces stay in state). Honest clients build no path-less Add while a path commit is staged on the head (§6.5); with N > 0 the contract ends a hostile run at N; with 0 a member's own-key Adds are bounded by `KEYS_PER_UA_MAX` and the default of 24 (§3.1) closes most sessions; an admin doing it is a known limit |
+| **A path commit starved by one-transaction path-less Adds (F-5)** | after a run the tree is cold and the next path commit takes several transactions; any path-less Add of a plain record that fits one transaction takes the slot and the staged path commit is `PqChatEpochTaken` (its pieces stay in state). Honest clients build no path-less Add while a path commit is staged on the head (§6.5); with N > 0 the contract ends a hostile run at N; with 0 a member's own-key Adds are bounded by `KEYS_PER_UA_MAX` and the default of 20 (§3.1) closes most sessions; an admin doing it is a known limit |
 | **The first path commit after a long run (D-10)** | with 0 and a group grown to 400 keys by path-less Adds, an exit forces a commit of about 400 ciphertexts (about 1.1 G of state gas, 20 transactions or more), no path-less Add is accepted until it lands, and the leaver reads meanwhile (sc-F-9); not new in kind (a cold tree costs the same today, spec §13), shown by the warning and the quote (§6.4) |
 | Cheap epochs void an exit (C9) | a front-runner must still complete 17 epochs before the exit lands; a path-less epoch costs about 20 M asked instead of 62 M at 256 keys. A non-admin holds at most `KEYS_PER_UA_MAX` keys at once, but one path commit removing its 7 own keys frees the room and 7 fresh registry versions follow: about 14 or 15 of the 17 epochs at the path-less price, roughly 0.45 G asked against 1.05 G at 256 keys [E] (F-9). C9's ratio of 17 signed records to one re-signed exit stands; **no cap on path-less commits per run** (C42, controller; research §6.4). An admin front-running another admin is equal power, as today |
 | Cheap Adds loop the tree | they cannot: a path-less commit needs an Add, a leaf is freed only by a Remove, which carries a path; `TREE_LEAVES_MAX`, `TREE_CHANGES_MAX`, `KEYS_PER_UA_MAX` hold |
@@ -658,7 +658,7 @@ part is tagged owner or controller.
 - **CTR-CHAT-28** (controller): "Change (2026-11-25): the labels `next`, `add-joiner`, `confirm`, `add-nonce`."
 - **CLI-PQC-17** (client rules): "Change (2026-11-25): **owner (R18):** the admins' warning. **Controller (C45–C47, under
   the grant, owner may veto):** the threshold `W(N)` and the deferred cost; the review line of a path-less Add; the default
-  form, its fallback and no path-less Add while a path commit is staged; the default bound 24 in the creation review;
+  form, its fallback and no path-less Add while a path commit is staged; the default bound 20 in the creation review;
   anchored devices, the state 'the author did not hold the epoch', 'followed, info not taken', the joiner's 'Welcome may not
   match'; the leaves under review in every path commit's review; the own-commit test by the seed-derived nonce."
 - **The base spec** `2026-11-23-pqchat-treekem.md`: a Change line under its status pointing at this delta, and its §3 and §5
@@ -769,7 +769,7 @@ the foreground.
 | P3 | `ua-rs`: `next` in the head handle and its lifetime, the handle's parent check, the named operation, `addNonce` and the own-commit test, processing, replay, the states of §6; the mode-0 session writer (`wallet/pqchat.rs`) with the two fields at 0; reads the regenerated rows | `ua-rs` tests and clippy; mutants |
 | P4 | Contract: `PqChatTypes` (session, genesis, commit), `createSession`'s bounds, `PqGroupTree` (the field and the branch of §5.1, the counter, two codes, no targets hash for `ctCount` 0), `PqChatTree`, `treeOf`; §13's tests and mutants; layout, typehash and interfaceId pins; gas pins moved by the record bytes, old → new; the size rows of §9 moved old → new with the reason (over the error line: stop and ask); `deploy_pqchatstore.py`'s `ipqchat_id` and the deploy e2e | every forge directory at the default set; `script/pqz/at-set.sh others sensitive` and `others modules` (a shared PqChat change, not PQZ); the size gate; the deploy e2e |
 | P5 | Node: §8's rows, bounds, `TREE_CREATE`, selector audit both ways; §13's node tests and mutants; the whole-set guard and C37's order for a path-less set (T4's guard is built by then) | `cargo test`, `cargo clippy --all-targets -- -D warnings`; e2e |
-| P6 | `scaas-sdk`: ABI rows, the default bound 24 and its review line, the planner's path-less form with its conditions (no staged path commit), the held wrap when sent in several transactions, both prices and the deferred cost, chunks computed per operation; the mode-0 writer (`pqchat_records.rs`) with the two fields at 0 | sdk tests |
+| P6 | `scaas-sdk`: ABI rows, the default bound 20 and its review line, the planner's path-less form with its conditions (no staged path commit), the held wrap when sent in several transactions, both prices and the deferred cost, chunks computed per operation; the mode-0 writer (`pqchat_records.rs`) with the two fields at 0 | sdk tests |
 | P7 | `pqchat-core`: the walk, the states of §6.2 / §6.3, the leaves under review, the warning `W(N)`, the default form and its fallback; the mode-0 writer (`session.rs`) and `abi.json`; §13's trace tests | `pqchat-core` tests, hostile tests, trace tests |
 | P7b | Bindings: regenerate `pqchat-core`'s bindings with the changed `createSession`, `commit`, `treeOf` and the new errors; the per-language smoke tests; after `capped dotnet`, `dotnet build-server shutdown` | the bindings' smoke tests |
 | P8 | Gas rows of §9 with D-3's rows, before any new gas row or fit is pinned; on the local Nethermind copy with 2^24 enforced; a quiet machine, the owner asked first (AGENTS.md) | the gas suite; rows pinned |
@@ -794,7 +794,7 @@ stays UNAUDITED until an AI audit round covers it at its commit. Merge and push 
 2. **Own-key Adds count toward the bound: yes, R18 as ruled** (not a call; §5.3).
 3. **The signal: an explicit `bool pathless` field (C42; D-11, "explicit parameters")**; the contract requires the
    path-less shape exactly when it is true (§3.2, §5.1).
-4. **The client default `pathRefreshBound` = 24 (C41, C46; D-2)**, shown in the `createSession` review; 0 allowed when named,
+4. **The client default `pathRefreshBound` = 20 (C41, C46; D-2; owner 2026-11-25: "bound mặc định 24 => 20 chứ?", to match `TREE_CHANGES_MAX` = 20)**, shown in the `createSession` review; 0 allowed when named,
    with the client warning after 24.
 5. **The contract cap 510 (C41; claude-6, superseding 511):** the largest value that can bind (§3.1).
 6. **The warning threshold for every N (C46; D-12):** `W(0)` = 24, `W(N) = max(1, N − ⌈N/4⌉)` (§6.4).
