@@ -114,12 +114,11 @@ chain_uid = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"
 # generation is refused before sending: UA_VERIFY_ONLY (a registration off kindHome(kind)), UA_WRONG_GENERATION (a key
 # write off holderOf(ua), a PQZ write off pqzHomeOf(ua)). A relayed PQ register over max_gas_per_tx or the block gas limit
 # is refused UA_REGISTER_SPLIT
-governance_routers = ["0xB6507C187BAc79eE48Bc55272Bf4aa6696555f70"]
-# GovernanceRouter ("governance_router" in deployments/<key>.json): the only
-# targets of gov_router jobs, direct or relayed (empty: refused); on 7622
-# since reset 2 (2026-11-10, NET-EVM-11): the Step 5 deploy's router
-# (GovDeploy.t.sol test_routerAndRelayFeeRouterNewAddresses); a PQZ e2e
-# run adds its own book's router here
+# governance_routers = ["0x..."]                # GovernanceRouter ("governance_router" in deployments/<key>.json): the only
+# targets of gov_router jobs, direct or relayed (empty: refused). Every entry is a router of the current release (with
+# `mtxNonceFor`, CTR-GOV-33; NODE-JOB-19): a router deployed before it, such as reset 2's on 7622, has no such view, so
+# a derived subject's job on it is requeued without end. Set it from the deploy JSON of the chain's current release;
+# a PQZ e2e run adds its own book's router here
 # compliance_registry = "0x..."                  # ComplianceRegistry ("compliance_registry" in deployments/<key>.json,
 # DEPLOY_REGULATED=1): the canonical registry the regulated kinds 8-13
 # pin; the DEX venue's pre-check reads it (NODE-DEX-11). An address, no

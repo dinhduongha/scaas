@@ -907,14 +907,17 @@ router job carries no generation: the router is deployed once per chain and UA r
 `governance_router`). A lane stays no holder: it relays what the subject signed. No existing job's shape changes.
 Operators: set `governance_routers` to the deploy JSON's `governance_router`, plus the router of any other release set on the chain
 (the PQZ e2e stack's `governance_router` in `deployments/scaas-testnet-pqz.json`); unset, a router job is `CALL_TARGET_REFUSED`.
+Every address listed is a router of the current release, with `mtxNonceFor` (CTR-GOV-33; the router's address moved with it): on an
+older router the view reverts, the nonce read fails and a derived subject's job is requeued without end, never `consumed` or `dead`.
 
 <a id="pqchat-calls"></a>**`PqChat` instances** (BUILT on branch `ua-mtx-merge`, plan T93; UA-7 spec
 [P17](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#74-the-node) and
 [P32](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#21-instances-pqchat-is-a-factory-kind-d22), topics spec
 [P45](../superpowers/specs/2026-11-07-pqchat-public-topics.md#7-node-and-indexer)). `PqChat` is a factory kind (class 3, kind 0 on
-`OpenFactory`'s generic path) and the contract kind `pqchat` of the table: its thirteen writes are plain rows, `createSession`, `rekey`,
+`OpenFactory`'s generic path) and the contract kind `pqchat` of the table: its thirteen writes of the flat mode and the topics are plain rows, `createSession`, `rekey`,
 `addWraps`, `leave`, `remove` (UA-7 P48, owner 2026-11-10), `postMessage`, `storeMessage`, `createTopic`, `updateTopic`, `setTopicWriter`, `postEntry`, `editEntry` and
-`voteEntry`, equal to `IPqChat`'s both directions (`initialize` is the factory's alone and no row). The rule of kind `pqchat`
+`voteEntry`, and the six tree writes ([below](#pqchat-tree-calls)) make nineteen, equal to `IPqChat`'s both directions (`initialize` is
+the factory's alone and no row). The rule of kind `pqchat`
 (`guard.rs` `Rule::FactoryClass(3)`, the generic factory-class rule of factory index §8.6): the target is a contract the chain's
 `token_factory` lists with `infoOf(target).contractClass == 3` and `version ≠ 0`, read at lease and cached (a record never changes);
 otherwise, or with no `token_factory`, `CALL_TARGET_REFUSED`. An instance answers no `chainUid()` (its records are portable), so the
@@ -973,9 +976,10 @@ ciphertexts above `ctCount` (on `addPath`, `firstCt` plus the count above 255), 
 Welcome wraps than adds; an empty `members`. What needs the chain's state is the contract's. A record or a list as hex is
 `HEX_ARGS_REFUSED`; the decode follows the type, so a hostile depth stops at the type's. **For operators:** job shapes were added,
 none changed. **Not built yet (plan T4, after the merge):** the whole-set guard (fable-r3-6) and the order of C37 when the node
-relays a commit's set. **SPECIFIED (Change 2026-11-24, the code review's D-4 and D-7; the node's own fix follows):**
+relays a commit's set. **BUILT (Change 2026-11-24, the code review's D-4 and D-7; `typed.rs` `tree_shape`):**
 `createSession` with `groupMode = 1` is bounded by the tree's bounds at creation (`members` 256, `admins` 32,
-`sealedInfo` 4,124 B), and an `addPath` with no ciphertext is refused, as the contract refuses both (C40). **For operators
+`sealedInfo` 4,124 B; mode 0 has none of these), and an `addPath` with no ciphertext is refused (`cts: 1 or more`), as the
+contract refuses both (C40). **For operators
 (SPECIFIED, the spec check's change of 2026-11-24 to C9, CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06):** an exit (`treeLeave`,
 `treeRemove`, mode 0's `leave` and `remove`, PqVault's `leaveVault` and `removeVaultMembers`) applies at the head when it
 lands, up to `EXIT_LAG_MAX` = 16 epochs after the epoch it names, and anyone may land its public calldata after a revert;

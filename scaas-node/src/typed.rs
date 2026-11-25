@@ -1059,12 +1059,45 @@ fn tree_shape(entry: &str, fields: &[(String, String)], vals: &[Val]) -> Result<
             }
         }
         "addPath" => {
+            // D-7 (C40): an empty piece writes nothing, as `_landCts` refuses it
+            if len(at("cts")) == 0 {
+                return bad("cts: 1 or more");
+            }
             if num(at("firstCt")).saturating_add(len(at("cts")) as u64) > TREE_CTS_MAX as u64
                 || !cts_sized(at("cts"))
             {
                 return bad(&format!(
                     "cts: firstCt plus the count at most {TREE_CTS_MAX}, each of its sizes"
                 ));
+            }
+        }
+        "createSession" => {
+            // D-4 (C10, C24 at creation): a tree session's record within the tree's bounds; mode 0 has none of these
+            let Some(Val::Tuple(t)) = at("s") else {
+                return bad("s: not a record");
+            };
+            let sf = &NESTED_MAP["PqChatSession"];
+            let sv = |n: &str| pos(sf, n).map(|i| &t[i]);
+            if num(sv("groupMode")) == 1 {
+                if len(sv("members")) as u64 > TREE_LEAVES_MAX {
+                    return bad(&format!(
+                        "s.members: above {TREE_LEAVES_MAX} in a tree session"
+                    ));
+                }
+                if len(sv("admins")) > TREE_ADMINS_MAX {
+                    return bad(&format!(
+                        "s.admins: above {TREE_ADMINS_MAX} in a tree session"
+                    ));
+                }
+                if sv("sealedInfo")
+                    .and_then(Val::as_bytes)
+                    .map_or(0, <[u8]>::len)
+                    > TREE_INFO_MAX
+                {
+                    return bad(&format!(
+                        "s.sealedInfo: above {TREE_INFO_MAX} bytes in a tree session"
+                    ));
+                }
             }
         }
         "treeRemove" => {
@@ -5943,7 +5976,16 @@ mod tests {
     /// depth; a record or a list as hex is `HEX_ARGS_REFUSED`.
     #[test]
     fn pqchat_tree_bounds_are_the_contract() {
-        let jobs: HashMap<&str, Value> = tree_jobs().into_iter().collect();
+        let mut jobs: HashMap<&str, Value> = tree_jobs().into_iter().collect();
+        // D-4: a tree session's record (tree.json's digest session, groupMode 1)
+        let mut cs = jobs["treeLeave"].clone();
+        let v: Value = serde_json::from_str(include_str!(
+            "../../smartcontracts/vectors/pqchat/tree.json"
+        ))
+        .unwrap();
+        cs["entry"] = json!("createSession");
+        cs["args"] = json!({"s": strings(&v["digests"]["session"]), "wraps": [], "sig": cs["args"]["sig"].clone()});
+        jobs.insert("createSession", cs);
         let run = |entry: &str, f: &dyn Fn(&mut Value)| {
             let mut o = jobs[entry].clone();
             f(&mut o["args"]);
@@ -6201,6 +6243,76 @@ mod tests {
             &|a| a["cts"][0]["sealedSecret"] = b(47),
             ap,
         );
+        // D-7 (C40): an empty addPath
+        pair(
+            "addPath",
+            &|a| a["cts"] = cts(1),
+            &|a| a["cts"] = json!([]),
+            "cts: 1 or more",
+        );
+        // D-4 (C10, C24 at creation): a tree session's record; the same lists in mode 0 parse (no tree bound there)
+        let members = |n: usize| {
+            Value::Array(
+                (0..n)
+                    .map(|i| json!({"ua": h(i), "keyId": "1", "via": h(0)}))
+                    .collect(),
+            )
+        };
+        let leaves = TREE_LEAVES_MAX as usize;
+        let tree = |a: &mut Value| a["s"]["groupMode"] = json!(1);
+        let flat = |a: &mut Value| a["s"]["groupMode"] = json!(0);
+        pair(
+            "createSession",
+            &|a| {
+                tree(a);
+                a["s"]["members"] = members(leaves);
+                a["s"]["wrapHashes"] = hs(leaves)
+            },
+            &|a| {
+                tree(a);
+                a["s"]["members"] = members(leaves + 1);
+                a["s"]["wrapHashes"] = hs(leaves + 1)
+            },
+            &format!("s.members: above {leaves} in a tree session"),
+        );
+        pair(
+            "createSession",
+            &|a| {
+                tree(a);
+                a["s"]["admins"] = hs(32)
+            },
+            &|a| {
+                tree(a);
+                a["s"]["admins"] = hs(33)
+            },
+            "s.admins: above 32 in a tree session",
+        );
+        pair(
+            "createSession",
+            &|a| {
+                tree(a);
+                a["s"]["sealedInfo"] = b(4124)
+            },
+            &|a| {
+                tree(a);
+                a["s"]["sealedInfo"] = b(4125)
+            },
+            "s.sealedInfo: above 4124 bytes in a tree session",
+        );
+        let over_members = |a: &mut Value| {
+            a["s"]["members"] = members(leaves + 1);
+            a["s"]["wrapHashes"] = hs(leaves + 1)
+        };
+        let over_admins = |a: &mut Value| a["s"]["admins"] = hs(33);
+        let over_info = |a: &mut Value| a["s"]["sealedInfo"] = b(4125);
+        let over: [&dyn Fn(&mut Value); 3] = [&over_members, &over_admins, &over_info];
+        for f in over {
+            run("createSession", &|a| {
+                flat(a);
+                f(a)
+            })
+            .expect("mode 0: no tree bound");
+        }
         // treeRemove (C21: at most 32 leafy UAs and 32 admins)
         pair(
             "treeRemove",
