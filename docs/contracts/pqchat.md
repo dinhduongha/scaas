@@ -241,6 +241,10 @@ owner may override). Status: **BUILT on branch `pqchat-sigs` (EVM), UNAUDITED** 
 [`2026-11-23-pqchat-signatures.md`](../superpowers/plans/2026-11-23-pqchat-signatures.md); `test/pqchat/PqChatSigs.t.sol`,
 `PqChatSigGas.t.sol`; 14 of 14 mutants).
 
+- **An `msig` signer.** The kept `UASig` (and so its `sigHash`) carries the structure version the registry accepted it under, for the
+  signer and for each `msig` member of it ([CTR-UA-74](accounts.md#CTR-UA-74)); a reader verifies the record against `msigAt` of
+  that version by the [reader rule](accounts.md#msig-reader-rule), never against the current structure. Nothing here changed: the
+  contract passes the `UASig` on and keeps it whole.
 - **The setting.** `initialize(bytes32 ownerUA, uint8 sigStore)`: 0 `none`, 2 `sstore2`, PQZ's numbering of its proof-storage
   setting (`NONE` 0, `LOG` 1, `SSTORE2` 2); 1 (no log mode: recovery is from state alone, [CTR-CHAT-14](#CTR-CHAT-14)) and every
   other value refuse `PqChatSigStore(sigStore)`. No setter: the setting holds for the instance's life. `sigStore()` reads it,

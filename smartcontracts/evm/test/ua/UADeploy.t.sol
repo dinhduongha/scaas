@@ -497,11 +497,14 @@ contract UADeployTest is Test {
         // multi-gen-verify Task 8 moved the PQZ readers out of the Aux library (35,670 -> 33,858 B): all three libraries (core
         // 23,465, registration 31,665, Aux 33,858 B) are now below the registry (35,166 B), whose gate is checked first, so
         // theirs are implied by it (was, after the split: the Aux library above the registry, the next gate refused)
+        // CTR-UA-74 (owner 2026-11-25): `msigAt` and two `pure` views moved in, the Aux library (35,099 B) is above the registry
+        // (35,069 B) again and is the next gate refused, as after the split
         assertLt(lib, need);
         assertLt(rl, need);
-        assertLt(key, need);
+        assertGt(key, need);
         _refused(h, need - 1, need, "UARegistry");
-        uint256 top = need;
+        _refused(h, need, key, "UARegistryAuxLib");
+        uint256 top = key;
         uint256 token = h.gasNeed("NormalToken");
         uint256 dex = h.gasNeed("SCaaSDex");
         if (token > top) top = token;
