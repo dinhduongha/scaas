@@ -240,13 +240,21 @@ by [CTR-CHAT-23](../contracts/pqchat.md#CTR-CHAT-23); the default off a controll
 - **On an `sstore2` instance** the session and epoch records (`sessionSig`, `epochSig`), the parent's leaves and removals (from
   the kept `leaveAt` / `removalAt` records, each with its signer's signature, kept under the parent and naming it or,
   at home since the change of 2026-11-24 to [CTR-CHAT-20](../contracts/pqchat.md#CTR-CHAT-20) and
-  [CTR-CHAT-10](../contracts/pqchat.md#CTR-CHAT-10) (SPECIFIED), an ancestor of it on the home's chain at most
-  `EXIT_LAG_MAX` = 16 epochs above; each is judged order-free among the exits kept under the parent, exactly as the
+  [CTR-CHAT-10](../contracts/pqchat.md#CTR-CHAT-10) (BUILT), an ancestor of it on the home's chain at most
+  `EXIT_LAG_MAX` = 16 epochs above, each ancestor the record its id names (the id recomputed, of the session, its number one
+  below, fable re-review D2-1); each is judged order-free among the exits kept under the parent, exactly as the
   contract could have accepted it there (a remover in the parent's admins, whose own leave or removal
-  kept under the same parent does not void it, in either order; the UAs it names members or admins of the parent; a
-  leaver a member of the parent), so no chain the home took
-  is refused; the `leftIn` and `removedIn`
-  flags are not read there) and a posted message (`messageSig`) each count only when their signer's `UASig` verifies over the
+  kept under the same parent does not void it, in either order; 1 to 16 UAs strictly sorted, each a member or an admin of
+  the parent, `nextEpoch` the named number plus one; a leaver a member of the parent; at most as many records as the
+  parent has UAs), so no chain the home took is refused; the `leftIn` and `removedIn`
+  flags are not read there). A child is plain exactly as the contract's `_keeps` judges it: the parent's lists less some
+  UAs that left or were removed there, a flagged UA dropped or kept (E-1). Every record is the one its id names, and an
+  epoch counts only through its chain down to the signed session record: each link judged against its parent with the
+  parent's exits, the verified epochs remembered per instance so each is walked once (U-1, `reads.rs` `walk`, BUILT
+  2026-11-25, UNAUDITED). A replica's record counts only when it equals the home's, which was judged at home, so no exit
+  is read at a replica (E-5). Left to the read trust (CLI-PQC-13): a genuine leave of a UA that is still a member, shown
+  again under a later head within the lag (the contract refuses the replay by its spent nonce, which a reader cannot
+  see), makes a non-admin's drop of that UA look plain and a posted message (`messageSig`) each count only when their signer's `UASig` verifies over the
   typed digest the SDK rebuilds from the record's fields (V1, the signer's registry record a trusted read along F2's registry
   line: `holderOf` on the bound registry names the generation whose record is read, every call of it by one endpoint at one
   block; the SDK's `tests/pqchat_keys.rs` `v1_follows_the_registry_line`, TODO 8b-8 (4)), `sealedInfo` included;
@@ -304,8 +312,13 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
   **and the exits verified up to it**, so a restart cannot follow a removed UA's next epoch; a device with no verified tree
   writes its first pin only from a strict-majority read over at least 3 named endpoints, else it shows the head as
   "unconfirmed"; Change 2026-11-24, the code review's E-1, C-1, B-1, F-1, C-3, and the spec check), compares each target key with its hash in the tree, and has `ua-rs` verify against the
-  registry record every key no signed tree hash covers yet (an added key, a member at creation), in every tree session; reads
-  follow [CLI-PQC-13](#CLI-PQC-13). What a candidate seals counts as disclosed to every key of the tree it was built on.
+  registry record every key no signed tree hash covers yet (an added key, a member at creation, every leaf of the cold
+  tree a walk rebuilds: `kemKeyAt` with its kept signature, the re-review's C-1, BUILT in `ua-rs` and clientkeys 2026-11-25,
+  UNAUDITED), in every tree session; an `msig` signer is verified on its current structure and enabled slots (CTR-UA-44,
+  F-1; a record signed before an update that disabled its slot is the owner's open question F-1b); reads
+  follow [CLI-PQC-13](#CLI-PQC-13). A replay resumes from the device's previous one (`tree_resume`: its pin, the node keys
+  it held, the info in force there) and reads and opens only the epochs after it, and a walk holds the public tree at its
+  start and its head only, so a device pays the history once (spec §10 step 3; the re-review's E-3, BUILT 2026-11-25). What a candidate seals counts as disclosed to every key of the tree it was built on.
 - **Session info.** A commit seals the full info only when the device holds the one in force at the parent; otherwise the
   marker "unchanged" (empty content). A device that did not follow an epoch has no info in force from that epoch on: it
   seals the marker until a commit it follows carries a full info, taken under the joiner rule and never sealed while

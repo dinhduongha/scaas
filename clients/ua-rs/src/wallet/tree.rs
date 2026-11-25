@@ -186,6 +186,10 @@ impl EpochFields {
 /// The filtered path of a commit from its list alone: the distinct common ancestors of the author's leaf and each target, in
 /// list order. `None` when a target is not under the author's direct path.
 pub fn path_from_list(author_leaf: u32, ct_targets: &[u32], leaves: u32) -> Option<Vec<u32>> {
+    // B-5: a leaf outside the tree has no path (and `2 * leaf` stays in range)
+    if author_leaf >= leaves {
+        return None;
+    }
     let up = direct_path(2 * author_leaf, leaves);
     let mut p: Vec<u32> = Vec::new();
     for &t in ct_targets {
@@ -413,16 +417,13 @@ pub struct Genesis {
     pub k: KeyHandle,
 }
 
-/// What a commit is built from: the parent tree and head (its admins for the review), the author's leaf and its KEM key (its
-/// seed derives `ps[0]`), the Removes and the Adds with each added key's registry record, the admins and the info (`None`:
-/// the marker). `key_of(node)` gives a target of the parent tree: a node's key, a leaf's key, or on an epoch-0 head a leaf's
-/// registry record; each is checked here ([`TargetKey`]).
+/// What a commit is built from: the head the forward walk verified ([`Prepared`]: its tree, id, number, tree hash and admins,
+/// spec §15, C26, B2-9; never a tree the caller assembles), the author's leaf and its KEM key (its seed derives `ps[0]`), the
+/// Removes and the Adds with each added key's registry record, the admins and the info (`None`: the marker). `key_of(node)`
+/// gives a target of the parent tree: a node's key, a leaf's key, or on an epoch-0 head a leaf's registry record; each is
+/// checked here ([`TargetKey`]).
 pub struct CommitInput<'a> {
-    pub tree: &'a Tree,
-    pub parent_epoch_id: [u8; 32],
-    pub parent_epoch: u64,
-    pub parent_tree_hash: [u8; 32],
-    pub parent_admins: Vec<[u8; 32]>,
+    pub parent: &'a Prepared,
     pub session_id: [u8; 32],
     pub tree_id: [u8; 32],
     pub author: [u8; 32],
@@ -630,11 +631,14 @@ impl AppKeys {
         nonce: u64,
         rand: Rand,
     ) -> Result<BuiltCommit> {
-        // the tree the parent's signed hash covers and the author's own leaf key (F-4): `pathContext` binds both
-        if a.tree.tree_hash() != a.parent_tree_hash {
+        let pr = a.parent;
+        let tree = &pr.tree;
+        // the tree the parent's signed hash covers and the author's own leaf key (F-4): `pathContext` binds both (the first holds
+        // by construction of `Prepared` since B2-9; kept as a check)
+        if tree.tree_hash() != pr.parent_tree_hash {
             return refuse(TreeError::Parent);
         }
-        if a.tree.leaf(a.leaf).map(|l| l.kem_hash) != Some(keccak256(&a.kem.kem_pk())) {
+        if tree.leaf(a.leaf).map(|l| l.kem_hash) != Some(keccak256(&a.kem.kem_pk())) {
             return refuse(TreeError::KeyHash);
         }
         // each added key authenticated by its registry record and named by the Add's kemHash (spec §8 step 5)
@@ -654,13 +658,13 @@ impl AppKeys {
             removes: a.removes.clone(),
             adds: add_recs.clone(),
         };
-        let p = a.tree.filtered_path_after(&ch)?;
+        let p = tree.filtered_path_after(&ch)?;
         let ct_targets: Vec<u32> = p.iter().flat_map(|q| q.targets.iter().copied()).collect();
         let removes: Vec<Value> = a.removes.iter().map(Remove::to_json).collect();
         let adds: Vec<Value> = add_recs.iter().map(Add::to_json).collect();
         let mut rec = json!({
-            "sessionId": hx(&a.session_id), "author": hx(&a.author), "nonce": nonce, "epoch": a.parent_epoch + 1,
-            "parentEpochId": hx(&a.parent_epoch_id), "treeId": hx(&a.tree_id), "parentTreeHash": hx(&a.parent_tree_hash),
+            "sessionId": hx(&a.session_id), "author": hx(&a.author), "nonce": nonce, "epoch": pr.parent_epoch + 1,
+            "parentEpochId": hx(&pr.parent_epoch_id), "treeId": hx(&a.tree_id), "parentTreeHash": hx(&pr.parent_tree_hash),
             "leaf": a.leaf, "keyId": a.key_id, "removes": removes, "adds": adds,
         });
         let ctx = path_context(sc, &rec, &ct_targets)?;
@@ -677,7 +681,7 @@ impl AppKeys {
                 let j = cts.len();
                 let kem_pk = match add_recs.iter().position(|x| 2 * x.leaf == t) {
                     Some(i) => add_keys.get(i).cloned().ok_or(Error::Argument)?,
-                    None => target_key(a.tree, a.parent_epoch, t, (a.key_of)(t)?)?,
+                    None => target_key(tree, pr.parent_epoch, t, (a.key_of)(t)?)?,
                 };
                 super::tree_public::admit_kem_key(&kem_pk)?;
                 let at = CtAt {
@@ -694,10 +698,9 @@ impl AppKeys {
             }
         }
         let ct_hashes = cts.iter().map(|c| c.hash(sc)).collect::<Result<Vec<_>>>()?;
-        let applied = a.tree.apply_commit(&ch, &node_key_hashes)?;
+        let applied = tree.apply_commit(&ch, &node_key_hashes)?;
         // what the contract judges at acceptance, before anything is signed (§8, §9, D-5)
-        a.tree
-            .judge_commit(&applied.tree, &ch, &a.admins, &a.parent_admins)?;
+        tree.judge_commit(&applied.tree, &ch, &a.admins, &pr.parent_admins)?;
         let obj = rec.as_object_mut().ok_or(Error::Argument)?;
         obj.insert("leaves".into(), json!(applied.tree.leaves));
         obj.insert(
@@ -720,9 +723,9 @@ impl AppKeys {
         let f = EpochFields {
             tree_id: a.tree_id,
             epoch_id,
-            epoch: a.parent_epoch + 1,
-            parent_epoch_id: a.parent_epoch_id,
-            parent_tree_hash: a.parent_tree_hash,
+            epoch: pr.parent_epoch + 1,
+            parent_epoch_id: pr.parent_epoch_id,
+            parent_tree_hash: pr.parent_tree_hash,
             tree_hash: applied.tree_hash,
             admins: a.admins.clone(),
         };
@@ -865,7 +868,8 @@ impl PreparedCommit {
     }
 }
 
-/// `PqChatTreeLeave`'s named fields (spec §6): `member` leaves the session `treeId` at its head `epochId`.
+/// `PqChatTreeLeave`'s named fields (spec §6): `member` leaves the session `treeId`, naming `epochId` (the head or an
+/// ancestor within [`EXIT_LAG_MAX`]; applied at the head, C9).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TreeLeave {
     pub session_id: [u8; 32],
@@ -875,7 +879,8 @@ pub struct TreeLeave {
     pub nonce: u64,
 }
 
-/// `PqChatTreeRemove`'s named fields (spec §6): the admin `admin` removes `members` at the head `epochId`.
+/// `PqChatTreeRemove`'s named fields (spec §6): the admin `admin` removes `members`, naming `epochId` (the head or an
+/// ancestor within [`EXIT_LAG_MAX`]; applied at the head, C9).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TreeRemove {
     pub session_id: [u8; 32],
@@ -887,32 +892,45 @@ pub struct TreeRemove {
     pub nonce: u64,
 }
 
-/// A `treeLeave` prepared for the leaver's signature: the review names the session by `treeId` and says the UA cannot come
-/// back (C30, R14).
+/// A `treeLeave` prepared for the leaver's signature: the review names the session by `treeId`, says the UA cannot come
+/// back (C30, R14) and that the leave applies if it lands within the lag (spec §9).
 pub fn tree_prepare_leave(sc: &TreeScope, l: &TreeLeave) -> Result<TreePrepared> {
     let rec = json!({"sessionId": hx(&l.session_id), "treeId": hx(&l.tree_id), "epochId": hx(&l.epoch_id),
         "member": hx(&l.member), "nonce": l.nonce});
     let back = "this UA can never come back to this session (R14)".to_string();
+    let within = applies_within(&format!("the epoch it names ({})", hx(&l.epoch_id)));
     TreePrepared::new(
         sc,
         "PqChatTreeLeave",
         rec,
-        vec![("cannotComeBack".into(), back)],
+        vec![("cannotComeBack".into(), back), within],
     )
 }
 
-/// A `treeRemove` prepared for the admin's signature: the review names the session by `treeId` and says the removed UAs
-/// cannot come back (C30, R14).
+/// A `treeRemove` prepared for the admin's signature: the review names the session by `treeId`, says the removed UAs
+/// cannot come back (C30, R14) and that the removal applies if it lands within the lag of epoch `nextEpoch - 1` (spec §9).
 pub fn tree_prepare_remove(sc: &TreeScope, r: &TreeRemove) -> Result<TreePrepared> {
     let members: Vec<String> = r.members.iter().map(|m| hx(m)).collect();
     let rec = json!({"sessionId": hx(&r.session_id), "treeId": hx(&r.tree_id), "epochId": hx(&r.epoch_id),
         "nextEpoch": r.next_epoch, "members": members, "admin": hx(&r.admin), "nonce": r.nonce});
     let back = "the removed UAs can never come back to this session (R14)".to_string();
+    let within = applies_within(&format!("epoch {}", r.next_epoch.saturating_sub(1)));
     TreePrepared::new(
         sc,
         "PqChatTreeRemove",
         rec,
-        vec![("cannotComeBack".into(), back)],
+        vec![("cannotComeBack".into(), back), within],
+    )
+}
+
+/// The exit review's line (spec §9, sc-E-3, sc-F-6; F-4 / B2-10): an exit is applied at the head whenever it lands within
+/// [`EXIT_LAG_MAX`] epochs of the epoch it names, and it cannot be withdrawn.
+fn applies_within(named: &str) -> ReviewLine {
+    (
+        "appliesWithin".into(),
+        format!(
+            "applies if it lands within {EXIT_LAG_MAX} epochs of {named}; it cannot be withdrawn"
+        ),
     )
 }
 
@@ -933,7 +951,7 @@ impl AppKeys {
         nonce: u64,
         rand: Rand,
     ) -> Result<PreparedCommit> {
-        let changed = a.admins != a.parent_admins;
+        let changed = a.admins != a.parent.parent_admins;
         let info = match a.info {
             Some(j) => canonical_of_text(j)?.to_string(),
             None => "unchanged (the marker)".to_string(),
@@ -999,13 +1017,20 @@ impl core::fmt::Display for View<'_> {
     }
 }
 
-/// The home's views (JSON in the contract views' shape, as clientkeys' `reader`), and the registry's records of the signers
-/// (signature checks, never session reads): a UA's `(kind, key data)` and whether slot `index` of an `msig` is accepted and
-/// enabled on the registry (`memberAccepted`).
+/// The home's views (JSON in the contract views' shape, as clientkeys' `reader`; `kemKeyAt` the registry's `{kemPk, sig}`), and
+/// the registry's records of the signers (signature checks, never session reads): a UA's `(kind, key data)` (the first
+/// structure of an `msig`, its id), whether slot `index` of an `msig` is accepted and enabled on the registry
+/// (`memberAccepted`), an `msig`'s current structure and enabled word, and a UA's registration for its version-0 KEM key.
 pub trait TreeReader {
     fn read(&mut self, v: View) -> Result<Value>;
     fn ua_key_of(&self, ua: &[u8; 32]) -> Option<(u16, Vec<u8>)>;
     fn accepted(&self, ua: &[u8; 32], index: u16) -> bool;
+    /// An `msig`'s current structure on the registry (`msigOf`: every slot, disabled ones included) and its `msigStateOf`
+    /// enabled word (big-endian, bit i = slot i); `None` for one never updated (CTR-UA-44, F-1): what verifies its records.
+    fn current(&self, ua: &[u8; 32]) -> Option<(Vec<u8>, [u8; 32])>;
+    /// A UA's registration (`registrationOf`: its attributes and `pop`), the record of its version-0 KEM key (§8 step 5);
+    /// `None` when the reader has none (that key is then `TreeKemRecord`).
+    fn registration(&self, ua: &[u8; 32]) -> Option<(crate::ua_portable::UAAttrs, Vec<u8>)>;
 }
 
 /// A record's signature for its signer's kind, as the contract's `requirePortable` judges it (F-3): a single key of each
@@ -1041,9 +1066,10 @@ fn verified(
             }
         };
         let members = |id: [u8; 32]| rd.ua_key_of(&id);
-        let current = |_: [u8; 32]| None;
+        // F-1, CTR-UA-44: an `msig` by its current structure and enabled slots, as mode 0's records and the contract
+        let current = |id: [u8; 32]| rd.current(&id);
         let accepted = |id: [u8; 32], i: u16| rd.accepted(&id, i);
-        crate::ua_portable::check_portable_current(
+        Some(crate::ua_portable::check_portable_current(
             kind,
             &key_data,
             signer,
@@ -1053,10 +1079,44 @@ fn verified(
             &members,
             &current,
             Some(&accepted),
-        )
-        .ok()
+        ))
     })();
-    ok.ok_or(Error::Tree(TreeError::ReadCorrupted))
+    match ok {
+        Some(Ok(())) => Ok(()),
+        // spec §10 step 5 (C-7): a signer kind the contract accepts that this reader cannot verify is a defect of the reader
+        Some(Err(crate::UAError::NotVerifiable)) => Err(Error::Ua(crate::UAError::NotVerifiable)),
+        _ => corrupt(),
+    }
+}
+/// The key of `(ua, keyId)` a cold tree's leaf takes (§8 steps 3 and 5, C-1, F-2, B2-5): the registry's `kemKeyAt`
+/// `{kemPk, sig}`, authenticated by its record ([`kem_record_key`]): a version above 0 by `setKemKey`'s kept signature, version 0
+/// by the registration's proof of possession. A key that fails: `TreeKemRecord`.
+fn kem_at(rd: &mut dyn TreeReader, ua: &[u8; 32], key_id: u64) -> Result<Vec<u8>> {
+    let v = rd.read(View::KemKeyAt(ua, key_id))?;
+    let (kem_pk, sig) = served((|| {
+        Some((bytes(v.get("kemPk")?).ok()?, bytes(v.get("sig")?).ok()?))
+    })())?;
+    let (kind, key_data) = rd.ua_key_of(ua).ok_or(Error::Tree(TreeError::KemRecord))?;
+    let rec = if key_id > 0 {
+        KemRecord::Version {
+            kind,
+            key_data,
+            kem_pk,
+            sig,
+        }
+    } else {
+        let (attrs, pop) = rd
+            .registration(ua)
+            .ok_or(Error::Tree(TreeError::KemRecord))?;
+        KemRecord::Registration {
+            kind,
+            key_data,
+            attrs,
+            pop,
+            kem_pk,
+        }
+    };
+    kem_record_key(ua, key_id, &rec)
 }
 fn corrupt<T>() -> Result<T> {
     refuse(TreeError::ReadCorrupted)
@@ -1064,9 +1124,6 @@ fn corrupt<T>() -> Result<T> {
 /// A served value that does not decode: a lying read (B-9).
 fn served<T>(v: Option<T>) -> Result<T> {
     v.ok_or(Error::Tree(TreeError::ReadCorrupted))
-}
-fn kem_hash_of(v: &Value) -> Result<[u8; 32]> {
-    Ok(keccak256(&bytes(v)?))
 }
 
 /// The most epochs an exit may name below the head it is applied at (C9, the spec check sc-E-2).
@@ -1125,9 +1182,11 @@ impl Pin {
 }
 
 /// The forward walk of §8 step 2 and §10 steps 2, 4 and 5 (C25): the session record, the snapshot, then every record from
-/// the cold tree of the signed members (or from the public tree of a checkpoint) to the head, each checked before it is
-/// applied, with the exits kept under each epoch. Per epoch: the tree after its commit, its admins, the `gone` register
-/// before its exits, the exits applied at it, the commit's targets.
+/// the cold tree of the signed members (each key authenticated by its registry record, C-1) or from the public tree of a
+/// checkpoint to the head, each checked before it is applied, with the exits kept under each epoch. Per epoch: its record,
+/// admins and the commit's targets; the tree after its commit, the `gone` register before its exits and the exits applied at it
+/// only at the start, the head and the epochs `keep` names (every epoch for [`tree_pins`]), so a long session never holds a
+/// tree per epoch (E-3, B2-2); the ids below a pin from verified records only (C-3).
 struct Walk {
     s0: Value,
     sid: [u8; 32],
@@ -1136,6 +1195,10 @@ struct Walk {
     leaves: Vec<Value>,
     ids: Vec<[u8; 32]>,
     head: u64,
+    /// the epoch the walk starts at: 0, or the checkpoint's
+    n0: u64,
+    /// the ids below `n0`, each from the verified record above it (C-3)
+    below: std::cell::RefCell<BTreeMap<u64, [u8; 32]>>,
     recs: BTreeMap<u64, Value>,
     trees: BTreeMap<u64, Tree>,
     admins: BTreeMap<u64, Vec<[u8; 32]>>,
@@ -1165,11 +1228,34 @@ fn holds(t: &Tree, ua: &[u8; 32]) -> bool {
     (0..t.leaves).any(|i| t.leaf(i).is_some_and(|l| l.ua == *ua))
 }
 
+/// The leaves `ua` holds in `t`.
+fn leaves_of(t: &Tree, ua: &[u8; 32]) -> usize {
+    (0..t.leaves)
+        .filter(|i| t.leaf(*i).is_some_and(|l| l.ua == *ua))
+        .count()
+}
+
 impl Walk {
-    fn new(sc: &TreeScope, rd: &mut dyn TreeReader, pin: Option<&Pin>) -> Result<Walk> {
+    /// `keep`: the epochs besides the start and the head whose tree, register and exits the walk holds (`None`: every one).
+    fn new(
+        sc: &TreeScope,
+        rd: &mut dyn TreeReader,
+        pin: Option<&Pin>,
+        keep: Option<&[u64]>,
+    ) -> Result<Walk> {
         let s = rd.read(View::SessionOf)?;
         let s0 = served(s.get("record").cloned())?;
         let creator = served(b32j(&s0, "creator").ok())?;
+        // B-5, B2-7: the signed members and the info bounded before anything is read for them (the info as a commit's, C-5)
+        let bounded = (|| {
+            Some(
+                s0.get("members")?.as_array()?.len() <= TREE_LEAVES_MAX as usize
+                    && (1..=TREE_INFO_MAX).contains(&bytes(s0.get("sealedInfo")?).ok()?.len()),
+            )
+        })();
+        if bounded != Some(true) {
+            return corrupt();
+        }
         verified(
             sc,
             &*rd,
@@ -1203,6 +1289,8 @@ impl Walk {
             leaves,
             ids,
             head,
+            n0: pin.map_or(0, |p| p.epoch),
+            below: Default::default(),
             trees: BTreeMap::new(),
             admins: BTreeMap::new(),
             gone_at: BTreeMap::new(),
@@ -1240,9 +1328,12 @@ impl Walk {
                 w.targets.insert(n, targets);
             }
             let admins = list(w.rec(n)?, "admins", b32)?;
-            w.trees.insert(n, tree.clone());
+            let kept = n == n0 || n == head || keep.is_none_or(|k| k.contains(&n));
+            if kept {
+                w.trees.insert(n, tree.clone());
+                w.gone_at.insert(n, gone.clone());
+            }
             w.admins.insert(n, admins);
-            w.gone_at.insert(n, gone.clone());
             let ex = w.exits_at(sc, rd, n, &tree, &gone)?;
             if pin.is_some_and(|p| n == n0 && !p.exits.iter().all(|e| ex.contains(e))) {
                 return corrupt();
@@ -1251,7 +1342,9 @@ impl Walk {
                 gone.entry(*ua).or_insert((*kind, n));
             }
             tree.mark_gone(&ex.iter().map(|x| x.0).collect::<Vec<_>>());
-            w.exits.insert(n, ex);
+            if kept {
+                w.exits.insert(n, ex);
+            }
             if n == head {
                 break;
             }
@@ -1271,21 +1364,110 @@ impl Walk {
         Ok(w)
     }
 
-    /// The cold tree rebuilt from the signed member list and the registry's keys (codex-r2-1).
+    /// The cold tree rebuilt from the signed member list (codex-r2-1), each key authenticated by its registry record
+    /// ([`kem_at`], C-1); a list the contract refuses (one key at two leaves): a lying read.
     fn cold(&self, rd: &mut dyn TreeReader) -> Result<Tree> {
-        let members = list(&self.s0, "members", |m| {
-            Ok((b32j(m, "ua")?, u64j(m, "keyId")?))
-        })?;
+        let members = served(
+            list(&self.s0, "members", |m| {
+                Ok((b32j(m, "ua")?, u64j(m, "keyId")?))
+            })
+            .ok(),
+        )?;
         let mut leaves = Vec::new();
         for (ua, key_id) in members {
-            let k = rd.read(View::KemKeyAt(&ua, key_id))?;
+            let k = kem_at(rd, &ua, key_id)?;
             leaves.push(Leaf {
                 ua,
                 key_id,
-                kem_hash: kem_hash_of(&k)?,
+                kem_hash: keccak256(&k),
             });
         }
-        Tree::cold(&leaves)
+        Tree::cold(&leaves).map_err(|_| Error::Tree(TreeError::ReadCorrupted))
+    }
+
+    /// The record at number `n` whose id is `id` (a verified record's `parentEpochId`): its id recomputed, its number, session
+    /// and signature (C-3, below a checkpoint).
+    fn record_below(
+        &self,
+        sc: &TreeScope,
+        rd: &mut dyn TreeReader,
+        n: u64,
+        id: [u8; 32],
+    ) -> Result<Value> {
+        let v = rd.read(View::CommitOf(n))?;
+        let c = served(v.get("record").cloned())?;
+        let ok = (|| {
+            Some(
+                u64j(&c, "epoch").ok()? == n
+                    && b32j(&c, "sessionId").ok()? == self.sid
+                    && sc.epoch_id(
+                        &self.sid,
+                        &b32j(&c, "author").ok()?,
+                        u64j(&c, "nonce").ok()?,
+                    ) == id,
+            )
+        })();
+        if ok != Some(true) {
+            return corrupt();
+        }
+        verified(
+            sc,
+            &*rd,
+            "PqChatCommit",
+            &c,
+            &b32j(&c, "author")?,
+            served(v.get("sig"))?,
+        )?;
+        Ok(c)
+    }
+
+    /// The id at number `m` from verified data only (C-3): epoch 0's is the session's; at or above the walk's start the id
+    /// list its records were checked against; below a checkpoint each record's `parentEpochId` down from the pinned record,
+    /// every one read and checked.
+    fn id_at(&self, sc: &TreeScope, rd: &mut dyn TreeReader, m: u64) -> Result<[u8; 32]> {
+        if m == 0 {
+            return Ok(self.sid);
+        }
+        if m >= self.n0 {
+            return at(&self.ids, m);
+        }
+        let mut k = self.n0;
+        while k > m {
+            let known = self.below.borrow().contains_key(&(k - 1));
+            if !known {
+                let above = if k == self.n0 {
+                    self.rec(k)?.clone()
+                } else {
+                    let id = self
+                        .below
+                        .borrow()
+                        .get(&k)
+                        .copied()
+                        .ok_or(Error::Argument)?;
+                    self.record_below(sc, rd, k, id)?
+                };
+                let parent = b32j(&above, "parentEpochId")?;
+                self.below.borrow_mut().insert(k - 1, parent);
+            }
+            k -= 1;
+        }
+        self.below.borrow().get(&m).copied().ok_or(Error::Argument)
+    }
+
+    /// The number an exit `r` names: of the session, `h` or an ancestor within [`EXIT_LAG_MAX`], by verified ids (C-3).
+    fn named(&self, sc: &TreeScope, rd: &mut dyn TreeReader, h: u64, r: &Value) -> Result<u64> {
+        let (sid, id) = served((|| {
+            Some((b32j(r, "sessionId").ok()?, b32j(r, "epochId").ok()?))
+        })())?;
+        if sid != self.sid {
+            return corrupt();
+        }
+        for m in (h.saturating_sub(EXIT_LAG_MAX)..=h).rev() {
+            if self.id_at(sc, rd, m)? == id {
+                return Ok(m);
+            }
+        }
+        corrupt()
     }
 
     /// Commit `n`'s record: its id at its number, `sessionId`, `treeId`, the bounds of C10 and C24 before anything is
@@ -1360,8 +1542,10 @@ impl Walk {
     /// §10 step 5: the exits kept under epoch `h`, each one an exit applied at `h` exactly when the contract could have
     /// accepted it there, judged order-free among those kept under `h` (on `tree`, `h`'s admins and the `gone` register
     /// before them): its signature for its signer's kind and the pinned `treeId`; an epoch named `h` or an ancestor within
-    /// [`EXIT_LAG_MAX`]; a leave by a UA live at `h`; a removal by an admin of `h`, of UAs live at `h` or in its admins,
-    /// strictly sorted, `nextEpoch` the named number plus one; nobody gone before `h`.
+    /// [`EXIT_LAG_MAX`], numbered from verified data ([`Walk::named`], C-3); a leave by a UA live at `h`; a removal by an admin
+    /// of `h`, of UAs live at `h` or in its admins, strictly sorted, `nextEpoch` the named number plus one; nobody gone before
+    /// `h`. Together (B2-6): no UA exits twice under one head (A-4), the leaves they owe fit one commit (C21), and the last
+    /// admin with a leaf goes by a removal only when no member keeps a leaf (C24 read with C38).
     fn exits_at(
         &self,
         sc: &TreeScope,
@@ -1372,11 +1556,6 @@ impl Walk {
     ) -> Result<Vec<([u8; 32], u8)>> {
         let before = |ua: &[u8; 32]| gone.get(ua).is_some_and(|g| g.1 < h);
         let admins = self.admins.get(&h).ok_or(Error::Argument)?;
-        let named = |r: &Value| -> Option<u64> {
-            let id = b32j(r, "epochId").ok()?;
-            let n = self.ids.iter().position(|x| *x == id)? as u64;
-            (b32j(r, "sessionId").ok()? == self.sid && n <= h && n + EXIT_LAG_MAX >= h).then_some(n)
-        };
         let count = |v: Value| served(v.as_u64().filter(|k| *k <= EXITS_MAX));
         let mut out = Vec::new();
         for i in 0..count(rd.read(View::LeaveCount(h))?)? {
@@ -1385,10 +1564,13 @@ impl Walk {
             let (r, member) = served((|| {
                 let member = b32j(r0, "member").ok()?;
                 let r = json!({"sessionId": r0.get("sessionId")?, "treeId": hx(&self.tree_id),
-                    "epochId": r0.get("epochId")?, "member": hx(&member), "nonce": r0.get("nonce")?});
-                named(&r)?;
-                (holds(tree, &member) && !before(&member)).then_some((r, member))
+                    "epochId": r0.get("epochId")?, "member": hx(&member), "nonce": r0.get("nonce")?.as_u64()?});
+                Some((r, member))
             })())?;
+            self.named(sc, rd, h, &r)?;
+            if !holds(tree, &member) || before(&member) {
+                return corrupt();
+            }
             verified(
                 sc,
                 &*rd,
@@ -1402,24 +1584,28 @@ impl Walk {
         for i in 0..count(rd.read(View::RemovalCount(h))?)? {
             let v = rd.read(View::RemovalAt(h, i as usize))?;
             let r0 = served(v.get("record"))?;
-            let (r, admin, members) = served((|| {
+            let (r, admin, members, next) = served((|| {
                 let admin = b32j(r0, "admin").ok()?;
                 let members = list(r0, "members", b32).ok()?;
+                let next = r0.get("nextEpoch")?.as_u64()?;
                 let r = json!({"sessionId": r0.get("sessionId")?, "treeId": hx(&self.tree_id),
-                    "epochId": r0.get("epochId")?, "nextEpoch": r0.get("nextEpoch")?,
+                    "epochId": r0.get("epochId")?, "nextEpoch": next,
                     "members": members.iter().map(|m| hx(m)).collect::<Vec<_>>(), "admin": hx(&admin),
-                    "nonce": r0.get("nonce")?});
-                let n = named(&r)?;
-                let ok = u64j(r0, "nextEpoch").ok()? == n + 1
-                    && !members.is_empty()
-                    && members.windows(2).all(|x| x.first() < x.get(1))
-                    && admins.contains(&admin)
-                    && !before(&admin)
-                    && members
-                        .iter()
-                        .all(|m| (holds(tree, m) || admins.contains(m)) && !before(m));
-                ok.then_some((r, admin, members))
+                    "nonce": r0.get("nonce")?.as_u64()?});
+                Some((r, admin, members, next))
             })())?;
+            let n = self.named(sc, rd, h, &r)?;
+            let ok = next == n + 1
+                && !members.is_empty()
+                && members.windows(2).all(|x| x.first() < x.get(1))
+                && admins.contains(&admin)
+                && !before(&admin)
+                && members
+                    .iter()
+                    .all(|m| (holds(tree, m) || admins.contains(m)) && !before(m));
+            if !ok {
+                return corrupt();
+            }
             verified(
                 sc,
                 &*rd,
@@ -1429,6 +1615,20 @@ impl Walk {
                 served(v.get("sig"))?,
             )?;
             out.extend(members.into_iter().map(|m| (m, 2)));
+        }
+        let goes: BTreeSet<[u8; 32]> = out.iter().map(|x| x.0).collect();
+        let leafy = |u: &[u8; 32]| admins.contains(u) && holds(tree, u);
+        let stays = |u: &[u8; 32]| !goes.contains(u) && !before(u);
+        let member_stays = (0..tree.leaves).any(|i| tree.leaf(i).is_some_and(|l| stays(&l.ua)));
+        let owed: usize = out.iter().map(|(u, _)| leaves_of(tree, u)).sum();
+        if goes.len() != out.len()
+            || owed > TREE_CHANGES_MAX
+            || (admins.iter().any(leafy)
+                && !admins.iter().any(|u| leafy(u) && stays(u))
+                && member_stays
+                && !out.iter().any(|(u, k)| *k == 1 && leafy(u)))
+        {
+            return corrupt();
         }
         Ok(out)
     }
@@ -1520,14 +1720,36 @@ impl Walk {
 
 /// The public tree a commit is built on (§8 steps 1 to 3, C25, C26): the tree the forward walk reached at the head (from the
 /// checkpoint, or from the cold tree of the signed members; at an epoch-0 head the cold tree itself, B-1), its no-return sets
-/// and the exits of the head included, and the parent's id, number, tree hash and admins; the pin of the head.
+/// and the exits of the head included, and the parent's id, number, tree hash and admins; the pin of the head. Made only by
+/// [`tree_prepare`] (B2-9): its fields are read, never set, outside this module.
 pub struct Prepared {
-    pub tree: Tree,
-    pub parent_epoch_id: [u8; 32],
-    pub parent_epoch: u64,
-    pub parent_tree_hash: [u8; 32],
-    pub parent_admins: Vec<[u8; 32]>,
-    pub pin: Pin,
+    tree: Tree,
+    parent_epoch_id: [u8; 32],
+    parent_epoch: u64,
+    parent_tree_hash: [u8; 32],
+    parent_admins: Vec<[u8; 32]>,
+    pin: Pin,
+}
+
+impl Prepared {
+    pub fn tree(&self) -> &Tree {
+        &self.tree
+    }
+    pub fn parent_epoch_id(&self) -> [u8; 32] {
+        self.parent_epoch_id
+    }
+    pub fn parent_epoch(&self) -> u64 {
+        self.parent_epoch
+    }
+    pub fn parent_tree_hash(&self) -> [u8; 32] {
+        self.parent_tree_hash
+    }
+    pub fn parent_admins(&self) -> &[[u8; 32]] {
+        &self.parent_admins
+    }
+    pub fn pin(&self) -> &Pin {
+        &self.pin
+    }
 }
 
 /// [`Prepared`] from the views, by the forward walk from `store` (its tree and exits) or from the cold tree; never a served
@@ -1537,7 +1759,7 @@ pub fn tree_prepare(
     rd: &mut dyn TreeReader,
     store: Option<&Pin>,
 ) -> Result<Prepared> {
-    let w = Walk::new(sc, rd, store)?;
+    let w = Walk::new(sc, rd, store, Some(&[]))?;
     Ok(Prepared {
         parent_epoch_id: at(&w.ids, w.head)?,
         parent_epoch: w.head,
@@ -1551,19 +1773,38 @@ pub fn tree_prepare(
 /// The checkpoint of every epoch of the walk from the cold tree (a test's comparison: a walk from any of them reaches the
 /// same head; clientkeys `pinsOf`).
 pub fn tree_pins(sc: &TreeScope, rd: &mut dyn TreeReader) -> Result<Vec<Pin>> {
-    let w = Walk::new(sc, rd, None)?;
+    let w = Walk::new(sc, rd, None, None)?;
     (0..=w.head).map(|n| w.pin_at(sc, n)).collect()
+}
+
+/// The epochs whose public tree the walk from `pin` (or from the cold tree) holds when it is done: its start and the head
+/// (E-3, B2-2: never a tree per epoch). A test's measure (feature `vectors`).
+#[cfg(feature = "vectors")]
+pub fn tree_walk_trees(
+    sc: &TreeScope,
+    rd: &mut dyn TreeReader,
+    pin: Option<&Pin>,
+) -> Result<Vec<u64>> {
+    Ok(Walk::new(sc, rd, pin, Some(&[]))?
+        .trees
+        .keys()
+        .copied()
+        .collect())
 }
 
 /// The key of target `x` of `tree`, fetched and checked against the hash that entered the root (`TreeKeyHash`, codex-1): a
 /// leaf's from the registry, a node's from the home.
 pub fn key_of(rd: &mut dyn TreeReader, tree: &Tree, x: u32) -> Result<Vec<u8>> {
     let (k, want) = match tree.node(x) {
-        Node::Leaf(l) => (rd.read(View::KemKeyAt(&l.ua, l.key_id))?, l.kem_hash),
+        Node::Leaf(l) => {
+            let v = rd.read(View::KemKeyAt(&l.ua, l.key_id))?;
+            (served(v.get("kemPk").cloned())?, l.kem_hash)
+        }
         Node::Parent(kh) => (rd.read(View::TreeNodeKey(x))?, *kh),
         Node::Blank => return refuse(TreeError::KeyHash),
     };
-    let k = bytes(&k)?;
+    // B-9: a served key that does not decode is a lying read
+    let k = served(bytes(&k).ok())?;
     if keccak256(&k) != want {
         return refuse(TreeError::KeyHash);
     }
@@ -1629,7 +1870,7 @@ pub struct Replay {
     pub leaf: u32,
     pub join_epoch: u64,
     pub end_epoch: Option<u64>,
-    /// by epoch, every epoch: the forward walk's trees (§10 step 4, C25)
+    /// by epoch, the epochs of the secret range: the forward walk's leaves (§10 step 4, C25; E-3: never the whole history)
     pub rosters: BTreeMap<u64, Roster>,
     pub epochs: Vec<EpochRow>,
     pub warnings: Vec<Warning>,
@@ -1694,93 +1935,112 @@ impl AppKeys {
         store: Option<&Pin>,
         keys_from: u64,
     ) -> Result<Option<Replay>> {
+        self.replay(sc, rd, dev, store, None, keys_from)
+    }
+
+    /// [`AppKeys::tree_replay`] resumed from the device's previous replay `from` (spec §10 step 3, E-3, B2-2): the walk starts at
+    /// its pin, and only the epochs after it are read and opened, with the node keys it held and the info in force there, so
+    /// the device pays the history once. `from` a replay whose key is still in the tree (`TreePeriod` else).
+    pub fn tree_resume(
+        &self,
+        sc: &TreeScope,
+        rd: &mut dyn TreeReader,
+        dev: &TreeDevice,
+        from: Replay,
+        keys_from: u64,
+    ) -> Result<Option<Replay>> {
+        self.replay(sc, rd, dev, None, Some(from), keys_from)
+    }
+
+    fn replay(
+        &self,
+        sc: &TreeScope,
+        rd: &mut dyn TreeReader,
+        dev: &TreeDevice,
+        store: Option<&Pin>,
+        from: Option<Replay>,
+        keys_from: u64,
+    ) -> Result<Option<Replay>> {
         let kem_hash = keccak256(&dev.kem.kem_pk());
-        let a = Walk::new(sc, rd, None)?;
-        a.check_pin(sc, store)?;
-        let head = a.head;
-        // 3. the key's one period (C28, R16)
-        let found = a.leaves.iter().position(|l| {
-            b32j(l, "ua").ok() == Some(dev.ua)
-                && u64j(l, "keyId").ok() == Some(dev.key_id)
-                && b32j(l, "kemHash").ok() == Some(kem_hash)
-        });
-        let (join_epoch, end_epoch) = match found {
-            Some(i) => (
-                served(a.leaves.get(i).and_then(|l| u64j(l, "joinEpoch").ok()))?,
-                None,
-            ),
+        let a = match &from {
+            Some(f) => Walk::new(sc, rd, Some(&f.pin), Some(&[]))?,
             None => {
-                let mut g = rd.read(View::GoneOwnKeyOf(&dev.ua, &kem_hash))?;
-                if g.get("gone") != Some(&json!(true)) {
-                    g = rd.read(View::GoneKeyOf(&kem_hash))?;
-                }
-                if g.get("gone") != Some(&json!(true)) {
-                    return Ok(None);
-                }
-                let (j, e) = (u64j(&g, "joinEpoch")?, u64j(&g, "endEpoch")?);
-                if !(e > j && e <= head) {
+                let keep: Vec<u64> = store.map(|p| p.epoch).into_iter().collect();
+                let a = Walk::new(sc, rd, None, Some(&keep))?;
+                a.check_pin(sc, store)?;
+                a
+            }
+        };
+        let (head, n0) = (a.head, a.n0);
+        let mine_at = |t: &Tree, l: u32| {
+            t.leaf(l)
+                .is_some_and(|x| x.ua == dev.ua && x.key_id == dev.key_id && x.kem_hash == kem_hash)
+        };
+        let (leaf, join_epoch, end_epoch, wrap_index) = match &from {
+            Some(f) => {
+                // the period resumed: the pinned tree holds the device's leaf; its Remove, if any, a record of this walk
+                let t0 = a.trees.get(&n0).ok_or(Error::Argument)?;
+                if f.end_epoch.is_some() || !mine_at(t0, f.leaf) {
                     return refuse(TreeError::Period);
                 }
-                (j, Some(e))
+                let mut end = None;
+                for n in n0 + 1..=head {
+                    let removes = list(a.rec(n)?, "removes", Remove::from_json)?;
+                    if removes
+                        .iter()
+                        .any(|r| r.leaf == f.leaf && r.ua == dev.ua && r.key_id == dev.key_id)
+                    {
+                        end = Some(n);
+                        break;
+                    }
+                }
+                (f.leaf, f.join_epoch, end, None)
+            }
+            None => {
+                let (leaf, join_epoch, end_epoch, wrap_index) =
+                    self.period(&a, rd, sc, dev, &kem_hash)?;
+                let Some(leaf) = leaf else { return Ok(None) };
+                (leaf, join_epoch, end_epoch, Some(wrap_index))
             }
         };
-        if join_epoch > head {
-            return refuse(TreeError::Period);
-        }
-        // the join by its kind, the end by its Remove
-        let (wrap_index, leaf) = if join_epoch == 0 {
-            let members = list(&a.s0, "members", |m| {
-                Ok((b32j(m, "ua")?, u64j(m, "keyId")?))
-            })?;
-            let i = members
-                .iter()
-                .position(|m| *m == (dev.ua, dev.key_id))
-                .ok_or(Error::Tree(TreeError::Period))?;
-            let li = u32::try_from(i).map_err(|_| Error::Argument)?;
-            let cold = a.trees.get(&0).ok_or(Error::Argument)?;
-            if cold.leaf(li).map(|l| l.kem_hash) != Some(kem_hash) {
-                return refuse(TreeError::Period);
-            }
-            (i, li)
-        } else {
-            let adds = list(a.rec(join_epoch)?, "adds", Add::from_json)?;
-            let i = adds
-                .iter()
-                .position(|x| x.ua == dev.ua && x.key_id == dev.key_id && x.kem_hash == kem_hash)
-                .ok_or(Error::Tree(TreeError::Period))?;
-            (i, adds.get(i).map(|x| x.leaf).ok_or(Error::Argument)?)
-        };
-        if found.is_some_and(|i| i as u64 != u64::from(leaf)) {
-            return refuse(TreeError::Period);
-        }
-        if let Some(e) = end_epoch {
-            let removes = list(a.rec(e)?, "removes", Remove::from_json)?;
-            if !removes
-                .iter()
-                .any(|r| r.leaf == leaf && r.ua == dev.ua && r.key_id == dev.key_id)
-            {
-                return refuse(TreeError::Period);
-            }
-        }
         let last = end_epoch.map_or(head, |e| e - 1);
-        // 4. the rosters: the walk's trees (C25)
-        let rosters: BTreeMap<u64, Roster> = a
-            .trees
-            .iter()
-            .map(|(n, t)| {
-                let r = (0..t.leaves)
-                    .map(|i| t.leaf(i).map(|l| (l.ua, l.key_id)))
-                    .collect();
-                (*n, r)
-            })
-            .collect();
+        let first = if from.is_some() { n0 + 1 } else { join_epoch };
+        // 4. the rosters of the secret range: the walk's leaves, from its first tree through each record's Removes and Adds
+        let mut rosters: BTreeMap<u64, Roster> = BTreeMap::new();
+        {
+            let t0 = a.trees.get(&n0).ok_or(Error::Argument)?;
+            let mut ros: Roster = (0..t0.leaves)
+                .map(|i| t0.leaf(i).map(|l| (l.ua, l.key_id)))
+                .collect();
+            if first <= n0 {
+                rosters.insert(n0, ros.clone());
+            }
+            for n in n0 + 1..=last {
+                let c = a.rec(n)?;
+                for r in list(c, "removes", Remove::from_json)? {
+                    if let Some(x) = ros.get_mut(r.leaf as usize) {
+                        *x = None;
+                    }
+                }
+                ros.resize(u32j(c, "leaves")? as usize, None);
+                for x in list(c, "adds", Add::from_json)? {
+                    if let Some(y) = ros.get_mut(x.leaf as usize) {
+                        *y = Some((x.ua, x.key_id));
+                    }
+                }
+                if n >= first {
+                    rosters.insert(n, ros.clone());
+                }
+            }
+        }
         // 6. the secret range's pieces, by public data only, all read before anything is opened (C22)
         let mut plan: Vec<Piece> = Vec::new();
-        for n in join_epoch..=last {
+        for n in first..=last {
             if n == 0 {
                 let wrap = rd.read(View::WrapAt(0, leaf as usize))?;
                 let want = list(&a.s0, "wrapHashes", b32)?;
-                if Some(wrap_hash(sc, &wrap)?) != want.get(leaf as usize).copied() {
+                // B-9: a wrap that does not decode is a lying read
+                if Some(served(wrap_hash(sc, &wrap).ok())?) != want.get(leaf as usize).copied() {
                     return corrupt();
                 }
                 plan.push(Piece {
@@ -1833,7 +2093,7 @@ impl AppKeys {
                     p.ct = Some(ct);
                 }
             }
-            if n == join_epoch {
+            if let (true, Some(wrap_index)) = (n == join_epoch, wrap_index) {
                 let wrap = rd.read(View::WrapAt(n, wrap_index))?;
                 let want = list(&c, "wrapHashes", b32)?;
                 if Some(served(wrap_hash(sc, &wrap).ok())?) != want.get(wrap_index).copied() {
@@ -1843,10 +2103,17 @@ impl AppKeys {
             }
             plan.push(p);
         }
-        // the secrets, from those bytes only
-        let mut held: BTreeMap<u32, KemKeyPair> = BTreeMap::new();
-        let mut in_force: Option<String> = None;
-        let mut flagged = false;
+        // the secrets, from those bytes only (resumed: the node keys held and the info in force at the pin)
+        let (mut held, mut in_force, mut flagged) = match from {
+            Some(f) => {
+                let (i, fl) = f
+                    .epochs
+                    .last()
+                    .map_or((None, false), |e| (e.in_force.clone(), e.flagged));
+                (f.held, i, fl)
+            }
+            None => (BTreeMap::new(), None, false),
+        };
         let mut epochs = Vec::new();
         let mut warnings = Vec::new();
         for p in plan {
@@ -1913,11 +2180,12 @@ impl AppKeys {
             }
             if state == State::Compromise {
                 let adds = list(&c, "adds", Add::from_json)?;
+                // C-2, B2-7: an added leaf is left when the walk's head tree still holds that Add's key at its leaf (a pair has
+                // one period, C28); the served `joinEpoch` decides nothing
+                let top = a.trees.get(&head).ok_or(Error::Argument)?;
                 let live = |x: &Add| {
-                    a.leaves.get(x.leaf as usize).is_some_and(|l| {
-                        b32j(l, "ua").ok() == Some(x.ua)
-                            && u64j(l, "keyId").ok() == Some(x.key_id)
-                            && u64j(l, "joinEpoch").ok() == Some(n)
+                    top.leaf(x.leaf).is_some_and(|l| {
+                        l.ua == x.ua && l.key_id == x.key_id && l.kem_hash == x.kem_hash
                     })
                 };
                 warnings.push(Warning {
@@ -1951,6 +2219,87 @@ impl AppKeys {
             held,
             pin: a.pin_at(sc, head)?,
         }))
+    }
+
+    /// §10 step 3, the key's one period (C28, R16): its leaf and join from the served leaves (or its end from the key views),
+    /// each checked against the walk: the join by its kind (the cold tree's member, or the Add of its epoch), the end by its
+    /// Remove. `(None, ..)`: the key is in no period of this session. Returns the leaf, the join, the end and the wrap's index.
+    fn period(
+        &self,
+        a: &Walk,
+        rd: &mut dyn TreeReader,
+        _sc: &TreeScope,
+        dev: &TreeDevice,
+        kem_hash: &[u8; 32],
+    ) -> Result<(Option<u32>, u64, Option<u64>, usize)> {
+        let head = a.head;
+        let found = a.leaves.iter().position(|l| {
+            b32j(l, "ua").ok() == Some(dev.ua)
+                && u64j(l, "keyId").ok() == Some(dev.key_id)
+                && b32j(l, "kemHash").ok() == Some(*kem_hash)
+        });
+        let (join_epoch, end_epoch) = match found {
+            Some(i) => (
+                served(a.leaves.get(i).and_then(|l| u64j(l, "joinEpoch").ok()))?,
+                None,
+            ),
+            None => {
+                let mut g = rd.read(View::GoneOwnKeyOf(&dev.ua, kem_hash))?;
+                if g.get("gone") != Some(&json!(true)) {
+                    g = rd.read(View::GoneKeyOf(kem_hash))?;
+                }
+                if g.get("gone") != Some(&json!(true)) {
+                    return Ok((None, 0, None, 0));
+                }
+                // B-9: a period that does not decode is a lying read
+                let (j, e) = served((|| {
+                    Some((u64j(&g, "joinEpoch").ok()?, u64j(&g, "endEpoch").ok()?))
+                })())?;
+                if !(e > j && e <= head) {
+                    return refuse(TreeError::Period);
+                }
+                (j, Some(e))
+            }
+        };
+        if join_epoch > head {
+            return refuse(TreeError::Period);
+        }
+        // the join by its kind, the end by its Remove
+        let (wrap_index, leaf) = if join_epoch == 0 {
+            let members = list(&a.s0, "members", |m| {
+                Ok((b32j(m, "ua")?, u64j(m, "keyId")?))
+            })?;
+            let i = members
+                .iter()
+                .position(|m| *m == (dev.ua, dev.key_id))
+                .ok_or(Error::Tree(TreeError::Period))?;
+            let li = u32::try_from(i).map_err(|_| Error::Argument)?;
+            let cold = a.trees.get(&0).ok_or(Error::Argument)?;
+            if cold.leaf(li).map(|l| l.kem_hash) != Some(*kem_hash) {
+                return refuse(TreeError::Period);
+            }
+            (i, li)
+        } else {
+            let adds = list(a.rec(join_epoch)?, "adds", Add::from_json)?;
+            let i = adds
+                .iter()
+                .position(|x| x.ua == dev.ua && x.key_id == dev.key_id && x.kem_hash == *kem_hash)
+                .ok_or(Error::Tree(TreeError::Period))?;
+            (i, adds.get(i).map(|x| x.leaf).ok_or(Error::Argument)?)
+        };
+        if found.is_some_and(|i| i as u64 != u64::from(leaf)) {
+            return refuse(TreeError::Period);
+        }
+        if let Some(e) = end_epoch {
+            let removes = list(a.rec(e)?, "removes", Remove::from_json)?;
+            if !removes
+                .iter()
+                .any(|r| r.leaf == leaf && r.ua == dev.ua && r.key_id == dev.key_id)
+            {
+                return refuse(TreeError::Period);
+            }
+        }
+        Ok((Some(leaf), join_epoch, end_epoch, wrap_index))
     }
 
     fn open_genesis(

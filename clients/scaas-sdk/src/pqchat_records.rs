@@ -327,6 +327,16 @@ enum Id {
     Of(&'static str, Vec<[u8; 32]>),
 }
 
+/// The exit review's line (spec §9, sc-E-3, sc-F-6; F-4 / D2-3): an exit is applied at the head whenever it lands within
+/// `EXIT_LAG_MAX` = 16 epochs of the epoch it names, and it cannot be withdrawn.
+fn applies_within(named: &str) -> crate::op::ReviewField {
+    crate::app_core::field(
+        "appliesWithin",
+        format!("applies if it lands within 16 epochs of {named}; it cannot be withdrawn"),
+        Source::Derived,
+    )
+}
+
 fn card_of(c: &PqChatCard) -> Result<pqchat::Card, SdkError> {
     Ok(pqchat::Card {
         ua: w32(&c.ua)?,
@@ -415,27 +425,36 @@ impl AppCore {
         self.prepare_pq(account, "PqChatEpoch", m, id, wh).await
     }
 
-    /// `PqChatLeave`.
+    /// `PqChatLeave`; its review says that it applies if it lands within the lag (spec §9, F-4 / D2-3: a signed exit cannot be
+    /// withdrawn).
     pub async fn prepare_pqchat_leave(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqChatLeave,
     ) -> Result<PqChatPrepared, SdkError> {
+        let named = format!("the epoch it names ({})", r.epoch_id);
         let m = json!({"sessionId": r.session_id, "epochId": r.epoch_id, "member": r.member, "nonce": r.nonce});
-        self.prepare_pq(account, "PqChatLeave", m, Id::Typed, vec![])
-            .await
+        let mut p = self
+            .prepare_pq(account, "PqChatLeave", m, Id::Typed, vec![])
+            .await?;
+        p.review.push(applies_within(&named));
+        Ok(p)
     }
 
-    /// `PqChatRemove`.
+    /// `PqChatRemove`; its review says that it applies if it lands within the lag of the epoch it names (`nextEpoch - 1`).
     pub async fn prepare_pqchat_remove(
         self: &Arc<Self>,
         account: KeyRef,
         r: PqChatRemove,
     ) -> Result<PqChatPrepared, SdkError> {
+        let named = format!("epoch {}", r.next_epoch.saturating_sub(1));
         let m = json!({"sessionId": r.session_id, "epochId": r.epoch_id, "nextEpoch": r.next_epoch,
             "members": r.members, "admin": r.admin, "nonce": r.nonce});
-        self.prepare_pq(account, "PqChatRemove", m, Id::None, vec![])
-            .await
+        let mut p = self
+            .prepare_pq(account, "PqChatRemove", m, Id::None, vec![])
+            .await?;
+        p.review.push(applies_within(&named));
+        Ok(p)
     }
 
     /// `PqChatMessage`.

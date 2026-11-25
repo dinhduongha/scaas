@@ -49,9 +49,42 @@ pub fn shapes(e: &Epoch) -> Result<(), DropReason> {
     Ok(())
 }
 
-/// A child against its verified parent (CTR-CHAT-08, CTR-CHAT-09, CTR-CHAT-20): its number the parent's plus one; a plain
-/// rekey (the parent's members and admins minus those who left) by a member of the parent who neither left nor was removed;
-/// anything else by an admin of the parent who was not removed; no removed UA kept.
+/// The contract's `_keeps` (PqGroupBase.sol, 3C-D7) over two sorted lists: `child` is `parent` less some UAs `flagged` there
+/// (left or removed); a flagged UA may be dropped or kept, nothing else dropped, nothing added.
+pub fn keeps<'a>(
+    parent: impl IntoIterator<Item = &'a String>,
+    child: &[&String],
+    flagged: impl Fn(&String) -> bool,
+) -> bool {
+    let mut j = 0;
+    for p in parent {
+        if child.get(j) == Some(&p) {
+            j += 1;
+        } else if child.get(j).is_some_and(|c| *c < p) || !flagged(p) {
+            // a UA added, or one dropped that neither left nor was removed
+            return false;
+        }
+    }
+    j == child.len()
+}
+
+/// A rekey of `parent` with the distinct UAs `uas` and the admins `admins` is plain (E-1, CTR-CHAT-09, CTR-CHAT-20): both lists
+/// the parent's less some UAs that left it or were removed from it, as the contract's `_keeps` judges them.
+pub fn plain(
+    uas: &[&String],
+    admins: &[String],
+    parent: &Epoch,
+    left: &[String],
+    removed: &[String],
+) -> bool {
+    let flagged = |u: &String| left.contains(u) || removed.contains(u);
+    let admins: Vec<&String> = admins.iter().collect();
+    keeps(distinct(parent), uas, flagged) && keeps(&parent.admins, &admins, flagged)
+}
+
+/// A child against its verified parent (CTR-CHAT-08, CTR-CHAT-09, CTR-CHAT-20, the contract's `_rights` and `_noneRemoved`):
+/// its number the parent's plus one; a plain rekey ([`plain`]) by a member of the parent who did not leave it; anything else by
+/// a live admin of the parent (in its admins, neither left nor removed); its author not removed and no removed UA kept.
 pub fn child(
     child: &Epoch,
     parent: &Epoch,
@@ -65,20 +98,11 @@ pub fn child(
     {
         return Err(DropReason::Control);
     }
-    let kept = |u: &String| !left.contains(u);
-    // per UA (CTR-CHAT-24): a member's keys may change in a plain rekey
-    let plain = distinct(child)
-        .into_iter()
-        .eq(distinct(parent).into_iter().filter(|u| kept(u)))
-        && child
-            .admins
-            .iter()
-            .eq(parent.admins.iter().filter(|u| kept(u)));
     let a = &child.author;
-    let rights = if plain {
+    let rights = if plain(&distinct(child), &child.admins, parent, left, removed) {
         parent.has_member(a) && !left.contains(a)
     } else {
-        parent.admins.contains(a)
+        parent.admins.contains(a) && !left.contains(a) && !removed.contains(a)
     };
     let keeps_removed = removed
         .iter()

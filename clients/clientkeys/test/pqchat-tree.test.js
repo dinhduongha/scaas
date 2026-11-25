@@ -664,6 +664,8 @@ test("tree.json treeHash rows: cold trees, commits from their before tree, refus
     assert.deepEqual(json(asRow(t)), row.tree, row.name);
     trees[row.name] = row.tree;
   }
+  // the resolution rows' trees are before trees too (the commit at depth 9, F-5)
+  for (const row of V.resolution) trees[row.name] = row.tree;
   for (const row of V.treeHash.commits) {
     const r = tr.applyCommit(tr.treeFromJson(trees[row.before]), row.commit);
     assert.deepEqual(json(asRow(r.tree)), row.after, row.name);
@@ -678,6 +680,9 @@ test("tree.json treeHash rows: cold trees, commits from their before tree, refus
   for (const n of ["C commits", "A removes E", "A adds F", "growth 2 to 4", "growth 8 to 16", "a key change"])
     assert.ok(names.includes(n), n);
   assert.ok(names.includes("an Add and a Remove under a copath child of the author"));
+  const deep = V.treeHash.commits.find((r) => r.name === "a commit at depth 9 (F-5)");
+  assert.equal(deep.after.leaves, 512);
+  assert.equal(deep.commit.nodeKeyHashes.length, 9);
 });
 
 test("tree.json admission rows: each refusal by its check, its twin accepted; the torsion-shifted keys admitted (R15)", () => {

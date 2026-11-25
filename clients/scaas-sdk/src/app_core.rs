@@ -1196,8 +1196,24 @@ impl AppCore {
     /// checks of a chain-bound domain as [`Self::prepare_app_record`]'s. The generic call refuses every PqVault record.
     /// `records`: the profile whose registry holds an `msig` signer's records on the portable path (controller call
     /// 2026-11-22, explicit parameters: required there, `Argument` without); on the chain-bound path the path's chain (`records`
-    /// none or that chain); for a single key on the portable path none (`Argument` when given: nothing reads it).
+    /// none or that chain); for a single key on the portable path none (`Argument` when given: nothing reads it). A leave or a
+    /// removal's review also says that it applies if it lands within 16 epochs of the epoch it names (spec §9, F-4 / D2-3).
     pub async fn prepare_pqvault_record(
+        self: &Arc<Self>,
+        account: KeyRef,
+        path: AppPath,
+        records: Option<String>,
+        typed_json: String,
+    ) -> Result<AppPrepared, SdkError> {
+        let within = vault_exit_line(&typed_json);
+        let mut p = self
+            .prepare_pqvault_inner(account, path, records, typed_json)
+            .await?;
+        p.review.extend(within);
+        Ok(p)
+    }
+
+    async fn prepare_pqvault_inner(
         self: &Arc<Self>,
         account: KeyRef,
         path: AppPath,
@@ -1652,6 +1668,28 @@ impl AppCore {
             kind, &key_data, &p, &typed, &signature,
         ))
     }
+}
+
+/// A PqVault exit's review line (CTR-PQV-06, spec §9: applied at the head whenever it lands within 16 epochs of the epoch it
+/// names; it cannot be withdrawn): a `PqVaultRemove` names epoch `nextEpoch - 1`, a `PqVaultLeave` its `epochId`. Other records:
+/// none. The typed JSON is parsed again by the call; a shape it refuses gives no line here.
+fn vault_exit_line(typed_json: &str) -> Option<ReviewField> {
+    let v: serde_json::Value = serde_json::from_str(typed_json).ok()?;
+    let m = v.get("message")?;
+    let named = match v.get("primaryType")?.as_str()? {
+        "PqVaultRemove" => {
+            let n = m.get("nextEpoch")?;
+            let n = n.as_u64().or_else(|| n.as_str()?.parse().ok())?;
+            format!("epoch {}", n.saturating_sub(1))
+        }
+        "PqVaultLeave" => format!("the epoch it names ({})", m.get("epochId")?.as_str()?),
+        _ => return None,
+    };
+    Some(field(
+        "appliesWithin",
+        format!("applies if it lands within 16 epochs of {named}; it cannot be withdrawn"),
+        Source::Derived,
+    ))
 }
 
 pub(crate) fn field(name: &str, value: String, source: Source) -> ReviewField {

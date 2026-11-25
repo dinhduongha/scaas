@@ -232,9 +232,12 @@ export function openTreeWrap(sc, { wrap, ctxId, epochId, kemPk }, key) {
 
 // ------------------------------------------------------------------ creation in order (C29, codex-r2-4)
 
-/** `session` without `wrapHashes` and `sealedInfo`; `kemPks[i]` the key of `members[i]`; `rand(name, n)` the randomness.
- *  In order: genesisCtx → joiner_0, K_0 → the wraps and sealedInfo → the record → treeId (the signature is the caller's). */
-export function createGenesis(sc, { session, kemPks, info, rand }) {
+/** `session` without `wrapHashes` and `sealedInfo`; `kems[i]` the registry record `{ kemPk, sig }` of `members[i]`'s key,
+ *  authenticated before it is used (`recordKey`, C-1; `uaRecordOf`, `accepted` the signers' registry records); `rand(name, n)`
+ *  the randomness. In order: genesisCtx → joiner_0, K_0 → the wraps and sealedInfo → the record → treeId (the signature is the
+ *  caller's). */
+export function createGenesis(sc, { session, kems, uaRecordOf, accepted, info, rand }) {
+  const kemPks = session.members.map((m, i) => recordKey(m.ua, m.keyId, kems[i], uaRecordOf, accepted));
   const fields = genesisFields(session);
   const joiner0 = rand("joiner-0", 32);
   const sch = schedule(sc, joiner0, fields);
@@ -280,7 +283,8 @@ export function pathFromList(authorLeaf, ctTargets, leaves) {
 }
 
 /** Builds a commit on `tree` (the parent tree, src/pqchat-tree.js form) at `parent` (`{ epochId, epoch, treeHash }`).
- *  `adds[i]` is a `TreeAdd` with its `kemPk`; `keyOf(node)` the key of a target the parent tree holds (a leaf's registry key
+ *  `adds[i]` is a `TreeAdd` with its `kemPk` and `sig` (its registry record, authenticated by `uaRecordOf` and `accepted`,
+ *  C-1); `keyOf(node)` the key of a target the parent tree holds (a leaf's registry key
  *  or a node key); `info` a full info or null (the marker); `rand(name, n)` the randomness. `faults` is for refusal rows
  *  only (a commit whose author signs what it built wrong: `nodeKeys`, `ct[j]` a `sealedSecret`, `eph[j]` a small-order
  *  `x25519Eph` of ciphertext j, `welcomeJoiner`, `welcomeEph[i]` the same in Welcome i, `infoK`);
@@ -289,7 +293,12 @@ export function pathFromList(authorLeaf, ctTargets, leaves) {
 export function buildCommit(sc, a, faults = {}) {
   const adds = a.adds ?? [];
   const removes = a.removes ?? [];
-  const addRecs = adds.map(({ kemPk, ...x }) => x);
+  const addRecs = adds.map(({ kemPk, sig, ...x }) => x);
+  // C-1: each added key authenticated by its registry record, and the Add's kemHash its hash, before it is used
+  for (const x of adds) {
+    const k = recordKey(x.ua, x.keyId, x, a.uaRecordOf, a.accepted);
+    if (kemHashOf(k) !== hex(x.kemHash)) refuse("TreeKeyHash");
+  }
   const p = tr.filteredPathAfter(a.tree, a.leaf, { removes, adds: addRecs });
   const ctTargets = p.flatMap((q) => q.targets);
   const head = {
@@ -398,12 +407,13 @@ const keptExit = ({ treeId, ...r }) => r;
 
 /** A model of one home's state for a tree session (spec §6, §7): the records with their signatures, the pieces, the exits kept
  *  under each epoch, the leaves' `joinEpoch` and wrap index, the node keys, `gone` and the key periods. `kems`: `"<ua>/<keyId>"`
- *  → `kemPk` (the registry), `uaRecords`: ua → its registry record `{ kind, keyData }` (an `msig`'s members by their own). The
+ *  → `{ kemPk, sig }` (the registry's `kemKeyAt`), `uaRecords`: ua → its registry record `{ kind, keyData }`, an updated
+ *  `msig`'s with `current` and `enabled` (CTR-UA-44; an `msig`'s members by their own). The
  *  contract's checks are pqchat-tree.js's `applyCommit` and the pieces' hashes; the model lands what it is given, as an
  *  endpoint that lies would serve it. */
 export function newHome({ genesis, sig, kems, uaRecords }) {
   const s = genesis.record;
-  const tree = tr.coldTree(s.members.map((m) => ({ ...m, kemHash: kemHashOf(kems.get(`${m.ua}/${m.keyId}`)) })));
+  const tree = tr.coldTree(s.members.map((m) => ({ ...m, kemHash: kemHashOf(kems.get(`${m.ua}/${m.keyId}`).kemPk) })));
   return {
     sessionId: genesis.sessionId,
     treeId: genesis.treeId,
@@ -527,7 +537,8 @@ export function reader(h, tamper = (_, v) => v) {
     goneOf: view("goneOf", (ua) => h.gone.get(ua) ?? { kind: 0, epoch: 0 }),
     goneOwnKeyOf: view("goneOwnKeyOf", (ua, kemHash) => period(`pair/${ua}/${kemHash}`)),
     goneKeyOf: view("goneKeyOf", (kemHash) => period(`wide/${kemHash}`)),
-    kemKeyAt: view("kemKeyAt", (ua, keyId) => h.kems.get(`${ua}/${keyId}`) ?? "0x"),
+    /** The registry's `kemKeyAt(ua, version)`: the key and `setKemKey`'s kept signature (§8 step 5). */
+    kemKeyAt: view("kemKeyAt", (ua, keyId) => h.kems.get(`${ua}/${keyId}`) ?? { kemPk: "0x", sig: "0x" }),
     /** The registry's record of a UA `{ kind, keyData }` and an `msig` slot's acceptance, not logged: signature checks,
      *  never session reads. */
     uaRecordOf: (ua) => h.uaRecords.get(ua) ?? null,
@@ -545,8 +556,28 @@ const corrupt = (read) => {
   throw e;
 };
 const sameList = (x, y) => x.length === y.length && x.every((v, i) => hex(v) === hex(y[i]));
+/** A served value of the shape `ok` asks for, else a lying read (C-6: never a TypeError or RangeError of the reader). */
+const served = (v, ok, read) => {
+  let good = false;
+  try {
+    good = ok(v) === true;
+  } catch {
+    good = false;
+  }
+  return good ? v : corrupt(read);
+};
+const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const isHex = (v) => typeof v === "string" && /^0x([0-9a-fA-F]{2})*$/.test(v);
+const isB32 = (v) => typeof v === "string" && /^0x[0-9a-fA-F]{64}$/.test(v);
+const isNat = (v) => Number.isSafeInteger(v) && v >= 0;
+/** A signer kind the contract accepts and this reader has no verifier for (the group kinds 0x0110 to 0x0113) is a defect of
+ *  the reader, never a lying read (spec §10 step 5, C-7): `UANotVerifiable` by its name. */
+const notVerifiable = (e) => {
+  if (e?.code === "UANotVerifiable") refuse("UANotVerifiable");
+};
 /** A record's signature for its signer's kind, as the contract's `requirePortable` judges it (F-3): a single key of each holder
- *  kind, an `msig` by its kept members, WebAuthn. */
+ *  kind, an `msig` by its kept members over its current structure and enabled slots (the reader's `uaRecordOf` gives them,
+ *  CTR-UA-44, F-1), WebAuthn. */
 function verified(sc, rd, struct, record, signer, sig, read) {
   let ok = true;
   try {
@@ -555,32 +586,76 @@ function verified(sc, rd, struct, record, signer, sig, read) {
       rd.uaRecordOf,
       rd.accepted,
     );
-  } catch {
+  } catch (e) {
+    notVerifiable(e);
     ok = false;
   }
   if (!ok) corrupt(read);
 }
+/** The key of `(ua, keyId)` a cold tree's leaf takes (§8 steps 3 and 5, C-1): the registry's `kemKeyAt` `{ kemPk, sig }`,
+ *  authenticated by its record: `setKemKey`'s signature over `kemRecordDigest` for a version above 0. Version 0 is the
+ *  registration's key, authenticated by its proof of possession (ua-rs `kem_record_key`); this reference has no registration
+ *  read and refuses it. A key that fails: `TreeKemRecord`. */
+function kemAt(rd, ua, keyId) {
+  const read = `kemKeyAt(${ua},${keyId})`;
+  const v = served(rd.kemKeyAt(ua, keyId), (x) => isObj(x) && isHex(x.kemPk) && isHex(x.sig), read);
+  return recordKey(ua, keyId, v, rd.uaRecordOf, rd.accepted);
+}
+/** A key of `(ua, keyId)` no signed tree hash covers yet (§8 step 5, codex-1, C-1: a cold tree's leaf, an Add's key, a member's
+ *  key at creation), authenticated by its registry record `rec` `{ kemPk, sig }` before it is used: `setKemKey`'s signature
+ *  over `kemRecordDigest(ua, version, kemPk)` (`uaRecordOf`, `accepted`: the signers' registry records). Version 0 (the
+ *  registration's key, ua-rs `KemRecord::Registration`) has no read here: refused. A key that fails: `TreeKemRecord`. */
+export function recordKey(ua, keyId, rec, uaRecordOf, accepted) {
+  if (!(keyId > 0) || !isObj(rec) || !isHex(rec.kemPk) || !isHex(rec.sig) || b(rec.kemPk).length === 0)
+    refuse("TreeKemRecord");
+  try {
+    uv.verifyKemRecord({ ua: hex(ua), version: keyId, kemPk: rec.kemPk, sig: rec.sig }, uaRecordOf, accepted);
+  } catch (e) {
+    notVerifiable(e);
+    refuse("TreeKemRecord");
+  }
+  return rec.kemPk;
+}
 const leafView = (n) => (n ? { ua: n.ua, keyId: n.keyId, kemHash: n.kemHash } : { ua: ZERO, keyId: 0, kemHash: ZERO });
 const holds = (t, ua) => t.nodes.some((n, x) => x % 2 === 0 && n?.ua === ua);
+const leavesOf = (t, ua) => t.nodes.filter((n, x) => x % 2 === 0 && n?.ua === ua).length;
 /** The most epochs an exit may name below the head it is applied at (C9, the spec check sc-E-2). */
 export const EXIT_LAG_MAX = 16;
+/** The most exits one head keeps: each newly flags a UA with a leaf or a keyless admin (A-4); ua-rs `EXITS_MAX` (C-6). */
+export const EXITS_MAX = tr.TREE_LEAVES_MAX + tr.TREE_ADMINS_MAX;
 const isPow2 = (n) => Number.isInteger(n) && n > 0 && (n & (n - 1)) === 0;
 
 /** §8 step 2, §10 steps 2, 4 and 5: the session record, the snapshot, then every record from the cold tree of the signed
- *  members (or from the public tree verified at `pin`) to the head, each checked before it is applied, with the exits kept
- *  under each epoch; the snapshot only compared with the result. Returns per epoch the tree after its commit, its admins,
- *  the `gone` register before its exits, the exits applied at it, the commit's targets, and the pin of the head. */
-function walk(sc, rd, pin = null) {
-  const s = rd.sessionOf();
-  verified(sc, rd, "PqChatSession", s.record, s.record.creator, s.sig, "sessionOf()");
+ *  members (each key authenticated by its registry record, C-1) or from the public tree verified at `pin` to the head, each
+ *  checked before it is applied, with the exits kept under each epoch; the snapshot only compared with the result. Returns per
+ *  epoch its record, admins and the commit's targets; the tree after its commit, the `gone` register before its exits and the
+ *  exits applied at it only at the start, the head and the epochs `keep` names (`"all"`: every epoch), so a long session never
+ *  holds a tree per epoch (E-3, B2-2); the ids below a pin only from verified records (C-3). */
+function walk(sc, rd, pin = null, keep = []) {
+  const s = served(rd.sessionOf(), (x) => isObj(x) && isObj(x.record), "sessionOf()");
   const S0 = s.record;
+  // B-5: the signed members and the info bounded before anything is read for them (the info as a commit's, C-5)
+  served(
+    S0,
+    (r) =>
+      isB32(r.creator) &&
+      Array.isArray(r.members) &&
+      r.members.length <= tr.TREE_LEAVES_MAX &&
+      r.members.every((m) => isObj(m) && isB32(m.ua) && isNat(m.keyId)) &&
+      Array.isArray(r.admins) &&
+      isHex(r.sealedInfo) &&
+      b(r.sealedInfo).length >= 1 &&
+      b(r.sealedInfo).length <= TREE_INFO_MAX,
+    "sessionOf()",
+  );
+  verified(sc, rd, "PqChatSession", S0, S0.creator, s.sig, "sessionOf()");
   if (S0.groupMode !== 1) refuse("PqChatModeEntry");
   const sid = hex(pc.sessionId(S0.creator, S0.nonce));
   const treeId = hex(tr.treeId(S0));
-  const t = rd.treeOf();
-  const leaves = rd.treeLeaves();
-  const nodes = rd.treeNodes();
-  const ids = rd.epochsOf().map(hex);
+  const t = served(rd.treeOf(), isObj, "treeOf()");
+  const leaves = served(rd.treeLeaves(), (x) => Array.isArray(x) && x.every(isObj), "treeLeaves()");
+  const nodes = served(rd.treeNodes(), (x) => Array.isArray(x) && x.every(isObj), "treeNodes()");
+  const ids = served(rd.epochsOf(), (x) => Array.isArray(x) && x.every(isB32), "epochsOf()").map(hex);
   const head = ids.length - 1;
   if (head < 0 || ids[0] !== sid) corrupt("epochsOf()");
   const a = {
@@ -592,28 +667,36 @@ function walk(sc, rd, pin = null) {
     leaves,
     ids,
     head,
+    n0: pin ? pin.epoch : 0,
     recs: [S0],
     trees: [],
     admins: [],
     goneAt: [],
     exits: [],
     targets: [],
+    below: new Map(),
   };
-  let n0 = 0;
+  const kept = (n) => keep === "all" || n === a.n0 || n === head || keep.includes(n);
   let tree;
   let gone = new Map();
   if (pin) {
     if (pin.treeId !== treeId || head < pin.epoch) refuse("TreeCheckpoint");
-    n0 = pin.epoch;
-    if (n0 > 0) a.recs[n0] = commitAt(sc, rd, a, n0);
-    if (recordHash(a, n0) !== pin.hash) refuse("TreeConflict");
+    if (a.n0 > 0) a.recs[a.n0] = commitAt(sc, rd, a, a.n0);
+    if (recordHash(a, a.n0) !== pin.hash) refuse("TreeConflict");
     tree = tr.treeFromJson(pin.tree);
     gone = new Map(pin.gone.map(([ua, kind, epoch]) => [ua, { kind, epoch }]));
   } else {
-    tree = tr.coldTree(S0.members.map((m) => ({ ...m, kemHash: kemHashOf(rd.kemKeyAt(m.ua, m.keyId)) })));
+    const cold = S0.members.map((m) => ({ ...m, kemHash: kemHashOf(kemAt(rd, m.ua, m.keyId)) }));
+    try {
+      tree = tr.coldTree(cold);
+    } catch (e) {
+      // a signed member list the contract refuses (one key at two leaves): a lying read
+      if (e instanceof pc.PqChatError) corrupt("sessionOf()");
+      throw e;
+    }
   }
-  for (let n = n0; ; n++) {
-    if (n > n0) {
+  for (let n = a.n0; ; n++) {
+    if (n > a.n0) {
       const c = (a.recs[n] = commitAt(sc, rd, a, n));
       const where = `commitOf(${n})`;
       if (c.parentEpochId !== ids[n - 1] || c.parentTreeHash !== tr.treeHash(tree)) corrupt(where);
@@ -636,18 +719,17 @@ function walk(sc, rd, pin = null) {
       for (const ua of tree.goneUa) if (!gone.has(ua)) gone.set(ua, { kind: 2, epoch: n });
       a.targets[n] = applied.ctTargets;
     }
-    a.trees[n] = tree;
     a.admins[n] = (n === 0 ? S0 : a.recs[n]).admins.map(hex);
-    a.goneAt[n] = new Map(gone);
+    if (kept(n)) [a.trees[n], a.goneAt[n]] = [tree, new Map(gone)];
     const ex = exitsAt(sc, rd, a, n, tree, gone);
-    if (pin && n === n0 && !pin.exits.every(([ua, kind]) => ex.some((x) => x.ua === ua && x.kind === kind)))
+    if (pin && n === a.n0 && !pin.exits.every(([ua, kind]) => ex.some((x) => x.ua === ua && x.kind === kind)))
       corrupt(`leaveCount(${n})`);
     for (const x of ex) if (!gone.has(x.ua)) gone.set(x.ua, { kind: x.kind, epoch: n });
     tree = tr.markGone(
       tree,
       ex.map((x) => x.ua),
     );
-    a.exits[n] = ex;
+    if (kept(n)) a.exits[n] = ex;
     if (n === head) break;
   }
   a.tree = tree;
@@ -670,50 +752,86 @@ function walk(sc, rd, pin = null) {
   return a;
 }
 
+/** The record at number `n` on the home's chain whose id is `id` (a verified record's `parentEpochId`): its id recomputed, its
+ *  number, session and signature (C-3, below a pin). */
+function recordBelow(sc, rd, a, n, id) {
+  const read = `commitOf(${n})`;
+  const v = served(rd.commitOf(n), (x) => isObj(x) && isObj(x.record), read);
+  const c = v.record;
+  served(c, (r) => r.epoch === n && r.sessionId === a.sid && hex(pc.epochId(a.sid, r.author, r.nonce)) === id, read);
+  verified(sc, rd, "PqChatCommit", c, c.author, v.sig, read);
+  return c;
+}
+/** The id at number `m` from verified data only (C-3): at or above the walk's start, the id list the records were checked
+ *  against; below a pin, each record's `parentEpochId` down from the pinned record, every one read and checked. */
+function idAt(sc, rd, a, m) {
+  if (m >= a.n0 || m === 0) return m === 0 ? a.sid : a.ids[m];
+  if (!a.below.has(m)) {
+    for (let k = a.n0; k > m; k--) {
+      if (a.below.has(k - 1)) continue;
+      const above = k === a.n0 ? a.recs[a.n0] : recordBelow(sc, rd, a, k, a.below.get(k));
+      a.below.set(k - 1, hex(above.parentEpochId));
+    }
+  }
+  return a.below.get(m);
+}
+
 /** Commit `n`'s record: its id at its number, `sessionId`, `treeId`, the bounds of C10 and C24 before anything is allocated
  *  (sc-F-7), then its author's signature. */
 function commitAt(sc, rd, a, n) {
-  const { record: c, sig } = rd.commitOf(n);
   const where = `commitOf(${n})`;
+  const { record: c, sig } = served(rd.commitOf(n), (x) => isObj(x) && isObj(x.record), where);
   const len = (v) => (Array.isArray(v) ? v.length : Infinity);
-  if (
-    c.epoch !== n ||
-    c.sessionId !== a.sid ||
-    hex(pc.epochId(a.sid, c.author, c.nonce)) !== a.ids[n] ||
-    c.treeId !== a.treeId ||
-    !isPow2(c.leaves) ||
-    c.leaves > tr.TREE_LEAVES_MAX ||
-    !Number.isInteger(c.leaf) ||
-    c.leaf >= c.leaves ||
-    len(c.removes) + len(c.adds) > tr.TREE_CHANGES_MAX ||
-    len(c.admins) > tr.TREE_ADMINS_MAX ||
-    len(c.nodeKeyHashes) > Math.log2(c.leaves) ||
-    len(c.wrapHashes) !== len(c.adds) ||
-    !(c.ctCount < c.leaves) ||
-    b(c.sealedInfo).length < 1 ||
-    b(c.sealedInfo).length > TREE_INFO_MAX ||
-    [...c.removes, ...c.adds].some((x) => !Number.isInteger(x.leaf) || x.leaf >= c.leaves)
-  )
-    corrupt(where);
-  verified(sc, rd, "PqChatCommit", c, c.author, sig, where);
+  const ok = served(
+    c,
+    (r) =>
+      r.epoch === n &&
+      r.sessionId === a.sid &&
+      hex(pc.epochId(a.sid, r.author, r.nonce)) === a.ids[n] &&
+      r.treeId === a.treeId &&
+      isPow2(r.leaves) &&
+      r.leaves <= tr.TREE_LEAVES_MAX &&
+      Number.isInteger(r.leaf) &&
+      r.leaf < r.leaves &&
+      len(r.removes) + len(r.adds) <= tr.TREE_CHANGES_MAX &&
+      len(r.admins) <= tr.TREE_ADMINS_MAX &&
+      len(r.nodeKeyHashes) <= Math.log2(r.leaves) &&
+      len(r.wrapHashes) === len(r.adds) &&
+      r.ctCount < r.leaves &&
+      isHex(r.sealedInfo) &&
+      b(r.sealedInfo).length >= 1 &&
+      b(r.sealedInfo).length <= TREE_INFO_MAX &&
+      [...r.removes, ...r.adds].every((x) => isObj(x) && Number.isInteger(x.leaf) && x.leaf < r.leaves),
+    where,
+  );
+  verified(sc, rd, "PqChatCommit", ok, ok.author, sig, where);
   return c;
 }
 
 /** §10 step 5: the exits kept under epoch `h`, each one an exit applied at `h` exactly when the contract could have accepted
  *  it there, judged order-free among those kept under `h` (on `tree`, `h`'s admins and the `gone` register before them):
- *  its signature for its signer's kind and the pinned `treeId`; an epoch named `h` or an ancestor within the lag; a leave by
- *  a UA live at `h`; a removal by an admin of `h`, of UAs live at `h` or in its admins; nobody gone before `h`. */
+ *  its signature for its signer's kind and the pinned `treeId`; an epoch named `h` or an ancestor within the lag, numbered
+ *  from verified data (C-3); a leave by a UA live at `h`; a removal by an admin of `h`, of UAs live at `h` or in its admins;
+ *  nobody gone before `h`. Together (B2-6): no UA exits twice under one head (A-4), the leaves they owe fit one commit (C21),
+ *  and the last admin with a leaf goes by a removal only when no member keeps a leaf (C24 read with C38). */
 function exitsAt(sc, rd, a, h, tree, gone) {
   const out = [];
   const before = (ua) => gone.has(ua) && gone.get(ua).epoch < h;
   const named = (r, read) => {
-    const n = a.ids.indexOf(hex(r.epochId));
-    if (r.sessionId !== a.sid || n < 0 || n > h || n < h - EXIT_LAG_MAX) corrupt(read);
-    return n;
+    if (r.sessionId !== a.sid) corrupt(read);
+    for (let m = h; m >= 0 && m >= h - EXIT_LAG_MAX; m--) if (idAt(sc, rd, a, m) === hex(r.epochId)) return m;
+    return corrupt(read);
   };
-  for (let i = 0, k = rd.leaveCount(h); i < k; i++) {
+  const count = (v, read) => served(v, (x) => isNat(x) && x <= EXITS_MAX, read);
+  const exit = (v, ok, read) =>
+    served(
+      v,
+      (x) => isObj(x) && isObj(x.record) && isB32(x.record.sessionId) && isB32(x.record.epochId) && ok(x.record),
+      read,
+    );
+  for (let i = 0, k = count(rd.leaveCount(h), `leaveCount(${h})`); i < k; i++) {
     const read = `leaveAt(${h},${i})`;
-    const { record, sig } = rd.leaveAt(h, i);
+    const { record, sig } = exit(rd.leaveAt(h, i), (r) => isB32(r.member) && isNat(r.nonce), read);
     const r = {
       sessionId: record.sessionId,
       treeId: a.treeId,
@@ -726,9 +844,19 @@ function exitsAt(sc, rd, a, h, tree, gone) {
     verified(sc, rd, "PqChatTreeLeave", r, r.member, sig, read);
     out.push({ ua: r.member, kind: 1 });
   }
-  for (let i = 0, k = rd.removalCount(h); i < k; i++) {
+  for (let i = 0, k = count(rd.removalCount(h), `removalCount(${h})`); i < k; i++) {
     const read = `removalAt(${h},${i})`;
-    const { record, sig } = rd.removalAt(h, i);
+    const { record, sig } = exit(
+      rd.removalAt(h, i),
+      (r) =>
+        isNat(r.nextEpoch) &&
+        isNat(r.nonce) &&
+        isB32(r.admin) &&
+        Array.isArray(r.members) &&
+        r.members.length <= EXITS_MAX &&
+        r.members.every(isB32),
+      read,
+    );
     const r = {
       sessionId: record.sessionId,
       treeId: a.treeId,
@@ -750,6 +878,19 @@ function exitsAt(sc, rd, a, h, tree, gone) {
     verified(sc, rd, "PqChatTreeRemove", r, r.admin, sig, read);
     for (const m of r.members) out.push({ ua: m, kind: 2 });
   }
+  const goes = new Set(out.map((x) => x.ua));
+  const leafyAdmin = (u) => a.admins[h].includes(u) && holds(tree, u);
+  const stays = (u) => !goes.has(u) && !before(u);
+  const memberStays = tree.nodes.some((x, i) => i % 2 === 0 && x && stays(x.ua));
+  if (
+    goes.size !== out.length ||
+    out.reduce((sum, x) => sum + leavesOf(tree, x.ua), 0) > tr.TREE_CHANGES_MAX ||
+    (a.admins[h].some(leafyAdmin) &&
+      !a.admins[h].some((u) => leafyAdmin(u) && stays(u)) &&
+      memberStays &&
+      !out.some((x) => x.kind === 1 && leafyAdmin(x.ua)))
+  )
+    corrupt(`removalCount(${h})`);
   return out;
 }
 
@@ -757,7 +898,7 @@ const recordHash = (a, n) =>
   hex(n === 0 ? pc.structHash("PqChatSession", a.S0) : tr.treeStructHash("PqChatCommit", a.recs[n]));
 /** The checkpoint at epoch `n` of a walk (C26, the spec check sc-F-3): the treeId, the number, the hash of the record that won
  *  there, the public tree after its commit with its no-return sets, the `gone` register before its exits (`[ua, kind, epoch]`)
- *  and the exits applied at it (`[ua, kind]`), each list sorted. */
+ *  and the exits applied at it (`[ua, kind]`), each list sorted. `n` an epoch the walk kept. */
 export function pinAt(a, n) {
   const byUa = (x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : x[1] - y[1]);
   return {
@@ -769,11 +910,14 @@ export function pinAt(a, n) {
     exits: a.exits[n].map((x) => [x.ua, x.kind]).sort(byUa),
   };
 }
+/** The epochs whose public tree the walk from `pin` (or the cold tree) holds when it is done: its start and the head (E-3: no
+ *  tree per epoch; a test's measure). */
+export const walkTrees = (sc, rd, pin = null) => Object.keys(walk(sc, rd, pin).trees).map(Number);
 /** The checkpoint of every epoch of the walk from the cold tree (a test's comparison: a walk from any of them reaches the
  *  same head). */
 export function pinsOf(sc, rd) {
-  const a = walk(sc, rd);
-  return a.trees.map((_, n) => pinAt(a, n));
+  const a = walk(sc, rd, null, "all");
+  return a.recs.map((_, n) => pinAt(a, n));
 }
 /** A walk from the cold tree checked against the device's checkpoint: never below it, the record that won there the pinned one
  *  (`TreeConflict`: the majority read of C26), and the walk at that number holds the pinned tree, register and every pinned
@@ -794,59 +938,86 @@ function checkPin(a, store) {
 // ------------------------------------------------------------------ replay (§10)
 
 /** A device's replay from the home's state alone (§10). `dev`: `{ ua, keyId, kemPk, key (kem.js: decaps), kemSeed }`
- *  (`kemSeed` the 96-byte seed of the key, null for a random key); `store` its checkpoint or null. The forward walk from the
- *  cold tree first (C25); the reads are fixed by public data and made whole before anything is opened (C22). Returns the
- *  reads, the key's period, the rosters (the walk's trees), and per epoch of the secret range its state ("followed", "not
- *  followed" with a reason, "compromise"), `K`, and the info in force (C33); the compromise warnings (R10, codex-r3-3); the
- *  next pin. A record that fails the walk throws `TreeReadCorrupted`. */
-export function replay(sc, rd, dev, store = null) {
+ *  (`kemSeed` the 96-byte seed of the key, null for a random key); `store` its checkpoint or null; `from` the device's previous
+ *  replay (its pin, the node keys it held and the info in force there), so the walk starts at that pin and only the epochs
+ *  after it are read and opened: the device pays the history once (spec §10 step 3, E-3). Otherwise the forward walk from the
+ *  cold tree first (C25), checked against `store`; the reads are fixed by public data and made whole before anything is
+ *  opened (C22). Returns the reads, the key's period, the rosters of the secret range (the walk's leaves at each of its
+ *  epochs), and per epoch of the range its state ("followed", "not followed" with a reason, "compromise"), `K`, and the info in
+ *  force (C33); the compromise warnings (R10, codex-r3-3); the next pin. A record that fails the walk throws
+ *  `TreeReadCorrupted`. */
+export function replay(sc, rd, dev, store = null, from = null) {
   const kemHash = kemHashOf(dev.kemPk);
-  const a = walk(sc, rd);
-  checkPin(a, store);
-  const { S0, ids, head, recs, leaves } = a;
-  // 3. the key's one period (C28, R16)
-  let leaf = leaves.findIndex((l) => l.ua === dev.ua && l.keyId === dev.keyId && l.kemHash === kemHash);
+  const a = from ? walk(sc, rd, from.pin) : walk(sc, rd, null, store ? [store.epoch] : []);
+  if (!from) checkPin(a, store);
+  const { S0, ids, head, recs, leaves, n0 } = a;
+  const mineAt = (t, l) => {
+    const x = t.nodes[2 * l];
+    return x?.ua === dev.ua && x.keyId === dev.keyId && x.kemHash === kemHash;
+  };
+  let leaf;
   let joinEpoch;
   let endEpoch = null;
-  if (leaf >= 0) joinEpoch = leaves[leaf].joinEpoch;
-  else {
-    let g = rd.goneOwnKeyOf(dev.ua, kemHash);
-    if (!g.gone) g = rd.goneKeyOf(kemHash);
-    if (!g.gone) return { inSession: false, reads: rd.log };
-    ({ joinEpoch, endEpoch } = g);
-    if (!(endEpoch > joinEpoch && endEpoch <= head)) refuse("TreePeriod");
-  }
-  if (!(joinEpoch <= head)) refuse("TreePeriod");
-  // the join by its kind, the end by its Remove
-  let wrapIndex;
-  let at;
-  if (joinEpoch === 0) {
-    at = S0.members.findIndex((m) => m.ua === dev.ua && m.keyId === dev.keyId);
-    if (at < 0 || a.trees[0].nodes[2 * at].kemHash !== kemHash) refuse("TreePeriod");
-    wrapIndex = at;
+  let wrapIndex = -1;
+  if (from) {
+    // the period resumed: the pinned tree holds the device's leaf; its Remove, if any, is a record of this walk
+    ({ leaf, joinEpoch } = from);
+    if (from.endEpoch !== null || !mineAt(a.trees[n0], leaf)) refuse("TreePeriod");
+    for (let n = n0 + 1; n <= head && endEpoch === null; n++)
+      if (recs[n].removes.some((r) => r.leaf === leaf && r.ua === dev.ua && r.keyId === dev.keyId)) endEpoch = n;
   } else {
-    wrapIndex = recs[joinEpoch].adds.findIndex(
-      (x) => x.ua === dev.ua && x.keyId === dev.keyId && x.kemHash === kemHash,
-    );
-    if (wrapIndex < 0) refuse("TreePeriod");
-    at = recs[joinEpoch].adds[wrapIndex].leaf;
+    // 3. the key's one period (C28, R16)
+    leaf = leaves.findIndex((l) => l.ua === dev.ua && l.keyId === dev.keyId && l.kemHash === kemHash);
+    if (leaf >= 0) joinEpoch = leaves[leaf].joinEpoch;
+    else {
+      let g = served(rd.goneOwnKeyOf(dev.ua, kemHash), isObj, `goneOwnKeyOf(${dev.ua},${kemHash})`);
+      if (g.gone !== true) g = served(rd.goneKeyOf(kemHash), isObj, `goneKeyOf(${kemHash})`);
+      if (g.gone !== true) return { inSession: false, reads: rd.log };
+      ({ joinEpoch, endEpoch } = g);
+      if (!(isNat(joinEpoch) && isNat(endEpoch) && endEpoch > joinEpoch && endEpoch <= head)) refuse("TreePeriod");
+    }
+    if (!(isNat(joinEpoch) && joinEpoch <= head)) refuse("TreePeriod");
+    // the join by its kind, the end by its Remove
+    let at;
+    if (joinEpoch === 0) {
+      at = S0.members.findIndex((m) => m.ua === dev.ua && m.keyId === dev.keyId);
+      if (at < 0 || a.trees[0].nodes[2 * at].kemHash !== kemHash) refuse("TreePeriod");
+      wrapIndex = at;
+    } else {
+      wrapIndex = recs[joinEpoch].adds.findIndex(
+        (x) => x.ua === dev.ua && x.keyId === dev.keyId && x.kemHash === kemHash,
+      );
+      if (wrapIndex < 0) refuse("TreePeriod");
+      at = recs[joinEpoch].adds[wrapIndex].leaf;
+    }
+    if (leaf >= 0 && leaf !== at) refuse("TreePeriod");
+    leaf = at;
+    const mine = (r) => r.leaf === leaf && r.ua === dev.ua && r.keyId === dev.keyId;
+    if (endEpoch !== null && !recs[endEpoch].removes.some(mine)) refuse("TreePeriod");
   }
-  if (leaf >= 0 && leaf !== at) refuse("TreePeriod");
-  leaf = at;
-  const mine = (r) => r.leaf === leaf && r.ua === dev.ua && r.keyId === dev.keyId;
-  if (endEpoch !== null && !recs[endEpoch].removes.some(mine)) refuse("TreePeriod");
   const last = endEpoch === null ? head : endEpoch - 1;
-  // 4. the rosters: the walk's trees (C25)
-  const rosters = a.trees.map((t) =>
-    Array.from({ length: t.leaves }, (_, i) => {
-      const n = t.nodes[2 * i];
-      return n ? { ua: n.ua, keyId: n.keyId } : null;
-    }),
-  );
+  const first = from ? n0 + 1 : joinEpoch;
+  // 4. the rosters of the secret range: the walk's leaves, from its first tree through each record's Removes and Adds (C25)
+  const rosters = [];
+  {
+    const t0 = a.trees[n0];
+    const ros = Array.from({ length: t0.leaves }, (_, i) => {
+      const x = t0.nodes[2 * i];
+      return x ? { ua: x.ua, keyId: x.keyId } : null;
+    });
+    if (first <= n0) rosters[n0] = [...ros];
+    for (let n = n0 + 1; n <= last; n++) {
+      const c = recs[n];
+      for (const r of c.removes) ros[r.leaf] = null;
+      while (ros.length < c.leaves) ros.push(null);
+      for (const x of c.adds) ros[x.leaf] = { ua: x.ua, keyId: x.keyId };
+      if (n >= first) rosters[n] = [...ros];
+    }
+  }
   const adminsAt = (n) => a.admins[n];
   // 6. the secret range's pieces, by public data only, all read before anything is opened (C22)
   const plan = [];
-  for (let n = joinEpoch; n <= last; n++) {
+  for (let n = first; n <= last; n++) {
     if (n === 0) {
       const wrap = rd.wrapAt(0, leaf);
       if (hex(pc.structHash("Wrap", wrap)) !== S0.wrapHashes[leaf]) corrupt(`wrapAt(0,${leaf})`);
@@ -855,7 +1026,11 @@ export function replay(sc, rd, dev, store = null) {
     }
     const c = recs[n];
     const p = { n, own: c.author === dev.ua && c.keyId === dev.keyId && c.leaf === leaf, j: -1 };
-    p.list = rd.pathListOf(n);
+    p.list = served(
+      rd.pathListOf(n),
+      (x) => isObj(x) && Array.isArray(x.ctTargets) && Array.isArray(x.ctHashes),
+      `pathListOf(${n})`,
+    );
     if (
       JSON.stringify(p.list.ctTargets) !== JSON.stringify(a.targets[n]) ||
       p.list.ctHashes.length !== c.ctCount ||
@@ -866,20 +1041,21 @@ export function replay(sc, rd, dev, store = null) {
       const mine = new Set([2 * leaf, ...tr.directPath(2 * leaf, c.leaves)]);
       p.j = p.list.ctTargets.findIndex((x) => mine.has(x));
       if (p.j >= 0) {
-        p.ct = rd.pathCtAt(n, p.j);
+        p.ct = served(rd.pathCtAt(n, p.j), isObj, `pathCtAt(${n},${p.j})`);
         if (hex(tr.treeStructHash("PathCt", p.ct)) !== p.list.ctHashes[p.j]) corrupt(`pathCtAt(${n},${p.j})`);
       }
     }
-    if (n === joinEpoch) {
-      p.wrap = rd.wrapAt(n, wrapIndex);
+    if (n === joinEpoch && wrapIndex >= 0) {
+      p.wrap = served(rd.wrapAt(n, wrapIndex), isObj, `wrapAt(${n},${wrapIndex})`);
       if (hex(pc.structHash("Wrap", p.wrap)) !== c.wrapHashes[wrapIndex]) corrupt(`wrapAt(${n},${wrapIndex})`);
     }
     plan.push(p);
   }
   // the secrets, from those bytes only
-  const held = new Map([[2 * leaf, { kemPk: hex(dev.kemPk), key: dev.key }]]);
-  let inForce = null;
-  let flagged = false;
+  const held = from ? new Map(from.heldKeys) : new Map([[2 * leaf, { kemPk: hex(dev.kemPk), key: dev.key }]]);
+  const was = from?.epochs.at(-1);
+  let inForce = was ? was.inForce : null;
+  let flagged = was ? was.flagged : false;
   const epochs = [];
   const warnings = [];
   for (const p of plan) {
@@ -911,8 +1087,12 @@ export function replay(sc, rd, dev, store = null) {
       [inForce, flagged] = [null, false];
     }
     if (res.state === "compromise") {
-      const live = (x) =>
-        leaves[x.leaf]?.ua === x.ua && leaves[x.leaf].keyId === x.keyId && leaves[x.leaf].joinEpoch === n;
+      // C-2, B2-7: an added leaf is left when the walk's head tree still holds that Add's key at its leaf (a pair has one
+      // period, C28); the served `joinEpoch` decides nothing
+      const live = (x) => {
+        const y = a.trees[head].nodes[2 * x.leaf];
+        return y?.ua === x.ua && y.keyId === x.keyId && y.kemHash === x.kemHash;
+      };
       warnings.push({
         epoch: n,
         adds: c.adds.map((x) => ({ leaf: x.leaf, ua: x.ua, keyId: x.keyId })),
@@ -977,6 +1157,8 @@ function finish(sc, a, c, p, dev, commitSecret) {
 function othersCommit(sc, a, dev, p, held) {
   const c = a.recs[p.n];
   const path = pathFromList(c.leaf, p.list.ctTargets, c.leaves);
+  // unreachable after the walk (C-8): it holds the list to the walk's targets and the path length to `nodeKeyHashes`; kept as
+  // the reason ua-rs names too
   if (!path || path.length !== c.nodeKeyHashes.length) return { state: "not followed", reason: "list" };
   if (p.j < 0) return { state: "not followed", reason: "wrong target" };
   const t = p.list.ctTargets[p.j];
@@ -1007,6 +1189,7 @@ function ownCommit(sc, a, dev, p) {
   const c = a.recs[p.n];
   if (!dev.kemSeed) return { state: "not followed", reason: "random key" };
   const path = pathFromList(c.leaf, p.list.ctTargets, c.leaves);
+  // unreachable after the walk (C-8), as in othersCommit
   if (!path || path.length !== c.nodeKeyHashes.length) return { state: "compromise" };
   const ps = pathSecrets(sc, firstPathSecret(sc, dev.kemSeed, pathContext(sc, c, p.list.ctTargets)), path.length);
   const derived = [];
@@ -1040,7 +1223,10 @@ export function prepareCommit(sc, rd, store = null) {
   const keyOf = (x) => {
     const n = t.nodes[x];
     if (!n || (x % 2 === 1 && a.head === 0)) refuse("TreeKeyHash");
-    const k = x % 2 === 0 ? rd.kemKeyAt(n.ua, n.keyId) : rd.treeNodeKey(x);
+    const k =
+      x % 2 === 0
+        ? served(rd.kemKeyAt(n.ua, n.keyId), (v) => isObj(v) && isHex(v.kemPk), `kemKeyAt(${n.ua},${n.keyId})`).kemPk
+        : served(rd.treeNodeKey(x), isHex, `treeNodeKey(${x})`);
     if (kemHashOf(k) !== (x % 2 === 0 ? n.kemHash : n.keyHash)) refuse("TreeKeyHash");
     return k;
   };

@@ -11,7 +11,7 @@ import { encodeMemberSigs } from "../src/ua-verify.js";
 import { p256 } from "@noble/curves/nist.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { kemPrk, kemKeyFromPrk, kemSeedFromPrk } from "../src/kem.js";
-import { hex, keccak_256, utf8ToBytes, concatBytes, fromHex, b64url, abiEncode } from "../src/bytes.js";
+import { hex, keccak_256, utf8ToBytes, concatBytes, fromHex, b64url, abiEncode, word } from "../src/bytes.js";
 
 export const sc = tk.PQCHAT_TREE;
 /** keccak256("scaas/pqchat/vectors/<name>/0") ‖ keccak256("…/1") ‖ …, the first n bytes (as pqchat-vectors.mjs). */
@@ -71,6 +71,17 @@ export function deviceOf(name) {
 }
 const MLDSA65 = PQ_KINDS.mldsa65.kind;
 const pqSign = (secretKey, purpose, digest) => signUA("mldsa65", secretKey, purpose, digest, { extraEntropy: false });
+/** A device's KEM key as the registry's `kemKeyAt` serves it: the key and its person's `setKemKey` signature over
+ *  `kemRecordDigest(ua, keyId, kemPk)` (§8 step 5, C-1). */
+const kemRecs = new Map();
+export function kemRecOf(name) {
+  if (!kemRecs.has(name)) {
+    const d = deviceOf(name);
+    const digest = ua.kemRecordDigest({ ua: d.ua, version: d.keyId, kemPk: d.kemPk });
+    kemRecs.set(name, { kemPk: d.kemPk, sig: hex(pqSign(personOf(name[0]).secretKey, ua.KEM_TAG, digest)) });
+  }
+  return kemRecs.get(name);
+}
 /** The keyless admins (no KEM key, never a leaf; spec §9: they act by `treeRemove` only), each with its registry record and its
  *  portable signature (F-3): `M`, a 2-of-2 `msig` over two ML-DSA-65 UAs of the seed (indexes 8 and 9, outside the people);
  *  `W`, a WebAuthn P-256 UA. */
@@ -101,7 +112,36 @@ export function keylessOf(name) {
         [authData, cd, sig.subarray(0, 32), sig.subarray(32, 64)],
       );
     };
+    // `N` (F-1): a 2-of-2 `msig` over the seed's indexes 10 and 11, then updated on its registry (CTR-UA-44): slot 2 (index
+    // 12) appended, the threshold lowered to 1, slot 0 disabled. Its id is its first structure's; it signs by slot 2 alone.
+    const nFirst = [10, 11]
+      .map((i) => ({ i, ...pqKeygen(SEED, "mldsa65", 0, i) }))
+      .map((k) => ({ kind: MLDSA65, id: hex(k.ua), weight: 1, k }))
+      .sort((x, y) => (x.id < y.id ? -1 : 1));
+    const n2 = { ...pqKeygen(SEED, "mldsa65", 0, 12) };
+    const nSlots = [...nFirst, { kind: MLDSA65, id: hex(n2.ua), weight: 1, k: n2 }];
+    const nKey = ua.encodeMsig(2, nFirst);
+    const nUa = hex(ua.deriveUA(0x0120, nKey));
+    const nSign = (slots) => (purpose, digest) => {
+      const md = ua.memberDigest(nUa, ua.uaMessage(0x0120, purpose, digest));
+      const list = slots.map((index) => ({
+        index,
+        members: [],
+        sig: pqSign(nSlots[index].k.secretKey, ua.purposeTag("member"), md),
+      }));
+      return { signature: "0x", members: hex(encodeMemberSigs(list)) };
+    };
     keyless = {
+      N: {
+        ua: nUa,
+        kind: 0x0120,
+        keyData: hex(nKey),
+        current: hex(ua.encodeMsig(1, nSlots)),
+        enabled: hex(word(6n)),
+        subs: nSlots.map((m) => ({ ua: m.id, kind: MLDSA65, keyData: hex(m.k.publicKey) })),
+        sign: nSign([2]),
+        signBy: nSign,
+      },
       M: {
         ua: mUa,
         kind: 0x0120,
@@ -128,26 +168,34 @@ export function keylessOf(name) {
   }
   return keyless[name];
 }
-/** A record's signature by `who` (a person: ML-DSA-65; `M` or `W`: a keyless admin's portable signature). */
+const KEYLESS = ["M", "W", "N"];
+/** A record's signature by `who` (a person: ML-DSA-65; `M`, `W` or `N`: a keyless admin's portable signature). */
 export const sign = (who, struct, record) =>
-  who === "M" || who === "W"
+  KEYLESS.includes(who)
     ? keylessOf(who).sign(sc.purpose, sc.typed(struct, record))
     : hex(pqSign(personOf(who).secretKey, sc.purpose, sc.typed(struct, record)));
-/** The registry records of every signer: `ua` → `{ kind, keyData }`. */
+/** The registry records of every signer: `ua` → `{ kind, keyData }`, an updated `msig`'s with `current` and `enabled`. */
 export const uaRecords = () =>
   new Map([
     ...PEOPLE.map((n) => [personOf(n).ua, { kind: MLDSA65, keyData: personOf(n).publicKey }]),
-    ...["M", "W"].flatMap((n) =>
-      [keylessOf(n), ...keylessOf(n).subs].map((k) => [k.ua, { kind: k.kind, keyData: k.keyData }]),
-    ),
+    ...KEYLESS.flatMap((n) => {
+      const k = keylessOf(n);
+      const top = {
+        kind: k.kind,
+        keyData: k.keyData,
+        ...(k.current ? { current: k.current, enabled: k.enabled } : {}),
+      };
+      return [[k.ua, top], ...k.subs.map((x) => [x.ua, { kind: x.kind, keyData: x.keyData }])];
+    }),
   ]);
 const registry = (names) => ({
-  kems: new Map(names.map((n) => [`${deviceOf(n).ua}/${deviceOf(n).keyId}`, deviceOf(n).kemPk])),
+  kems: new Map(names.map((n) => [`${deviceOf(n).ua}/${deviceOf(n).keyId}`, kemRecOf(n)])),
   uaRecords: uaRecords(),
 });
+const uaRecordOf = (u) => uaRecords().get(u) ?? null;
 /** A person's or a keyless admin's UA by name. */
-export const uaOf = (name) => (name === "M" || name === "W" ? keylessOf(name).ua : personOf(name).ua);
-/** The leaves of the head as `(ua, keyId)` or null: what a replay's roster by undo must give back. */
+export const uaOf = (name) => (KEYLESS.includes(name) ? keylessOf(name).ua : personOf(name).ua);
+/** The leaves of the head as `(ua, keyId)` or null: what the forward walk's roster of that epoch is (C25). */
 const roster = (h) =>
   Array.from({ length: h.tree.leaves }, (_, i) => {
     const n = h.tree.nodes[2 * i];
@@ -179,7 +227,9 @@ export function createSession({
   assertSorted(session.members, `session ${tag}`);
   const genesis = tk.createGenesis(sc, {
     session,
-    kemPks: members.map((n) => deviceOf(n).kemPk),
+    kems: members.map(kemRecOf),
+    uaRecordOf,
+    accepted: () => true,
     info,
     rand: (name, n) => rnd(`tree-secrets/${tag}/genesis/${name}`, n),
   });
@@ -224,10 +274,12 @@ export function commit(w, name, o = {}) {
         keyId: deviceOf(n).keyId,
         via: via ?? Z32,
         kemHash: hex(keccak_256(fromHex(deviceOf(n).kemPk))),
-        kemPk: deviceOf(n).kemPk,
+        ...kemRecOf(n),
       })),
       admins: o.admins ? sortedUas(o.admins) : headRecord.admins,
       info,
+      uaRecordOf,
+      accepted: () => true,
       keyOf: prep.keyOf,
       rand: (x, n) => rnd(`tree-secrets/${step}/${x}`, n),
     },
@@ -508,6 +560,67 @@ export function lagScenario() {
   return w;
 }
 
+/** F-1: the keyless admin N, an `msig` updated on its registry (CTR-UA-44: slot 2 appended, threshold 1, slot 0 disabled),
+ *  removes D by slot 2 alone after the update (applied at 1); the non-admin B honours it (2); C commits (3). Every device
+ *  follows: N is verified on its current structure and enabled slots. */
+export function msigUpdatedScenario() {
+  const w = createSession({
+    tag: "msig-updated",
+    creator: "A",
+    nonce: 15,
+    admins: ["A", "N"],
+    members: ["A", "B", "C", "D"],
+    info: INFO.I1,
+  });
+  commit(w, "B"); // 1
+  gone(w, 2, "N", ["D"], 1);
+  commit(w, "B", { removes: ["D"] }); // 2
+  commit(w, "C"); // 3
+  return w;
+}
+/** C-1: an epoch-0 head (A the admin, B, C): every target of the first commit a key the registry record authenticates. */
+export function genesisScenario() {
+  return createSession({
+    tag: "genesis",
+    creator: "A",
+    nonce: 16,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: INFO.I1,
+  });
+}
+/** The extra keys of B, C and D (versions 2 to 8, KEYS_PER_UA_MAX) the world `backlog` holds. */
+export const BACKLOG_KEYS = ["B", "C", "D"].flatMap((n) => [2, 3, 4, 5, 6, 7, 8].map((k) => `${n}${k}`));
+/** B2-6 (C21): A (the admin) and B, C, D with eight keys each, 25 leaves of 32; nothing committed. */
+export function backlogScenario() {
+  const keys = (n) => [n, ...BACKLOG_KEYS.filter((x) => x[0] === n)];
+  return createSession({
+    tag: "backlog",
+    creator: "A",
+    nonce: 17,
+    admins: ["A"],
+    members: ["A", ...keys("B"), ...keys("C"), ...keys("D")],
+    info: INFO.I1,
+    devicesKnown: [...new Set([...DEVICES, ...BACKLOG_KEYS])],
+  });
+}
+/** C-5 (the flag): C misses B's commit (1); B's full info at 2 is the first C takes from a non-admin, so C flags it; A, an
+ *  admin, seals the same full info at 3, which clears the flag. */
+export function flagClearScenario() {
+  const w = createSession({
+    tag: "flag-clear",
+    creator: "A",
+    nonce: 18,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: INFO.I1,
+  });
+  commitBadFor(w, "B", ["C"]); // 1
+  commit(w, "B"); // 2
+  commit(w, "A", { info: INFO.I1 }); // 3
+  return w;
+}
+
 const leafOf = (t, d) => t.nodes.findIndex((n, x) => x % 2 === 0 && n?.ua === d.ua && n.keyId === d.keyId) / 2;
 /** What an endpoint serves for a commit `built` (signed `sig`) it adds on the head of `w` with the tree after it: the views of
  *  the walk's reads that change, by read name. */
@@ -566,11 +679,14 @@ function forgedCommit(w, name, tree, o = {}) {
       keyId: deviceOf(n).keyId,
       via: Z32,
       kemHash: hex(keccak_256(fromHex(deviceOf(n).kemPk))),
-      kemPk: deviceOf(n).kemPk,
+      ...kemRecOf(n),
     })),
     admins: o.admins ? sortedUas(o.admins) : head.record.admins,
     info: null,
-    keyOf: (x) => (x % 2 === 0 ? h.kems.get(`${tree.nodes[x].ua}/${tree.nodes[x].keyId}`) : h.nodeKey.get(x).kemPk),
+    uaRecordOf,
+    accepted: () => true,
+    keyOf: (x) =>
+      x % 2 === 0 ? h.kems.get(`${tree.nodes[x].ua}/${tree.nodes[x].keyId}`).kemPk : h.nodeKey.get(x).kemPk,
     rand: (x, n) => rnd(`tree-secrets/${w.tag}/forged/${name}/${x}`, n),
   });
   if (o.edit) built.record = o.edit({ ...built.record });
@@ -581,7 +697,7 @@ function keptRemoval(w, admin, members, named, nonce, treeId = w.home.treeId, o 
   const h = w.home;
   const epochId = typeof named === "number" ? h.epochs[named].id : named;
   const record = {
-    sessionId: h.sessionId,
+    sessionId: o.sessionId ?? h.sessionId,
     treeId,
     epochId,
     nextEpoch: o.nextEpoch ?? (typeof named === "number" ? named : 0) + 1,
@@ -590,7 +706,17 @@ function keptRemoval(w, admin, members, named, nonce, treeId = w.home.treeId, o 
     nonce,
   };
   const { treeId: _, ...kept } = record;
-  return { record: kept, sig: sign(admin, "PqChatTreeRemove", record) };
+  const sig = o.signBy
+    ? o.signBy(sc.purpose, sc.typed("PqChatTreeRemove", record))
+    : sign(admin, "PqChatTreeRemove", record);
+  return { record: kept, sig };
+}
+/** A leave by `who` on world `w`, kept under its head, naming epoch `named` (a number). */
+function keptLeave(w, who, named, nonce) {
+  const h = w.home;
+  const record = { sessionId: h.sessionId, treeId: h.treeId, epochId: h.epochs[named].id, member: uaOf(who), nonce };
+  const { treeId: _, ...kept } = record;
+  return { record: kept, sig: sign(who, "PqChatTreeLeave", record) };
 }
 
 /** The lying reads of plan T11 (C25, C26, E-1, F-1, sc-F-3, sc-F-7, E-4): per row the world, the device, the views the endpoint
@@ -878,6 +1004,372 @@ export function lies(worlds) {
         replay: "TreeReadCorrupted",
         prepare: "TreeReadCorrupted",
       },
+    );
+    // C-3: a walk from the pin at 17 numbers an exit's named epoch from verified records only: an `epochsOf` that lies
+    // below the pin, and a removal (signed by the admin) naming the false id, are a lying read; from the cold tree too
+    const pin = replayOf(w, "B").pin;
+    const ids = tk.reader(w.home).epochsOf();
+    const x = hex(rnd("tree-secrets/lies/below-pin"));
+    const below = keptRemoval(w, "A", ["C"], x, 6, w.home.treeId, { nextEpoch: 17 });
+    add(
+      "an epochsOf that lies below the pin, an exit naming its false id (C-3)",
+      "lag",
+      "B",
+      { "epochsOf()": ids.map((id, n) => (n === 16 ? x : id)), "removalCount(17)": 1, "removalAt(17,0)": below },
+      { replay: "TreeReadCorrupted", prepare: "TreeReadCorrupted" },
+      pin,
+    );
+    add(
+      "a pinned walk with an exit 16 below the head (C-3, its control)",
+      "lag",
+      "B",
+      { "removalCount(17)": 1, "removalAt(17,0)": at16 },
+      { replay: null, prepare: null },
+      pin,
+    );
+  }
+  const lie = { replay: "TreeReadCorrupted", prepare: "TreeReadCorrupted" };
+  {
+    // C-1, F-2, B2-5: an epoch-0 head whose endpoint substitutes C's key consistently (kemKeyAt, treeLeaves, treeOf)
+    const w = W("genesis");
+    const [C, H] = [deviceOf("C"), deviceOf("H")];
+    const hHash = hex(keccak_256(fromHex(H.kemPk)));
+    const t = tr.coldTree(
+      [deviceOf("A"), deviceOf("B"), C].map((d) => ({
+        ua: d.ua,
+        keyId: d.keyId,
+        kemHash: d === C ? hHash : hex(keccak_256(fromHex(d.kemPk))),
+      })),
+    );
+    const leaves = tk.reader(w.home).treeLeaves();
+    leaves[2] = { ...leaves[2], kemHash: hHash };
+    const th = tr.treeHash(t);
+    const swap = {
+      [`kemKeyAt(${C.ua},1)`]: { kemPk: H.kemPk, sig: kemRecOf("C").sig },
+      "treeLeaves()": leaves,
+      "treeOf()": { ...tk.reader(w.home).treeOf(), treeHash: th, genesisTreeHash: th },
+    };
+    add("an epoch-0 head with a consistent substituted member key (C-1)", "genesis", "A", swap, {
+      replay: "TreeKemRecord",
+      prepare: "TreeKemRecord",
+    });
+    // C's own signed key of version 3 served as its version 1: the record names the version, refused
+    add(
+      "a member key signed for another version (C-1)",
+      "genesis",
+      "A",
+      { [`kemKeyAt(${C.ua},1)`]: kemRecOf("C3") },
+      { replay: "TreeKemRecord", prepare: "TreeKemRecord" },
+    );
+    // an epochsOf whose first id is not the session's (C-5; at an epoch-0 head no record's parent checks it)
+    add(
+      "an epochsOf whose first id is not the session's (C-5)",
+      "genesis",
+      "A",
+      {
+        "epochsOf()": [hex(rnd("tree-secrets/lies/first"))],
+      },
+      lie,
+    );
+    // C-4: an epoch-0 snapshot whose leaf is not the cold tree's
+    const gl = tk.reader(w.home).treeLeaves();
+    add(
+      "an epoch-0 snapshot with another leaf key (C-4)",
+      "genesis",
+      "A",
+      {
+        "treeLeaves()": gl.map((l, i) => (i === 2 ? { ...l, kemHash: hHash } : l)),
+      },
+      { replay: "TreeGenesisLeaves", prepare: "TreeGenesisLeaves" },
+    );
+    // a session record whose creator's signature does not verify (F-6)
+    const s0 = tk.reader(w.home).sessionOf();
+    add(
+      "a session record with another record's signature (F-6)",
+      "genesis",
+      "A",
+      {
+        "sessionOf()": { record: s0.record, sig: sign("A", "PqChatSession", { ...s0.record, nonce: 99 }) },
+      },
+      lie,
+    );
+    // a session record of groupMode 0 its creator signed (C-5: the walk reads tree sessions only)
+    const m0 = { ...s0.record, groupMode: 0 };
+    add(
+      "a session record of groupMode 0 (C-5)",
+      "genesis",
+      "A",
+      { "sessionOf()": { record: m0, sig: sign("A", "PqChatSession", m0) } },
+      {
+        replay: "PqChatModeEntry",
+        prepare: "PqChatModeEntry",
+      },
+    );
+    // a session record its creator signed with 4,125 B of sealedInfo (C-5, B-5: bounded as a commit's)
+    const big = { ...s0.record, sealedInfo: hex(new Uint8Array(4125)) };
+    add(
+      "a session record with 4,125 B of sealedInfo (C-5)",
+      "genesis",
+      "A",
+      {
+        "sessionOf()": { record: big, sig: sign("A", "PqChatSession", big) },
+      },
+      lie,
+    );
+    // a session record listing C's key twice, each version signed by C (C-5: one key one leaf)
+    const twice = {
+      ...s0.record,
+      members: [...s0.record.members, { ua: C.ua, keyId: 2, via: Z32 }],
+    };
+    const dup = ua.kemRecordDigest({ ua: C.ua, version: 2, kemPk: C.kemPk });
+    add(
+      "a session record with one key at two leaves (C-5)",
+      "genesis",
+      "A",
+      {
+        "sessionOf()": { record: twice, sig: sign("A", "PqChatSession", twice) },
+        [`kemKeyAt(${C.ua},2)`]: { kemPk: C.kemPk, sig: hex(pqSign(personOf("C").secretKey, ua.KEM_TAG, dup)) },
+      },
+      lie,
+    );
+  }
+  {
+    // F-1: N's removal by its enabled slot 1 after the update is accepted; by its disabled slot 0, a lying read
+    const w = W("msig-updated");
+    const N = keylessOf("N");
+    const by = (slots, nonce) => keptRemoval(w, "N", ["C"], 3, nonce, w.home.treeId, { signBy: N.signBy(slots) });
+    add(
+      "a removal by an updated msig's enabled slot (F-1)",
+      "msig-updated",
+      "A",
+      { "removalCount(3)": 1, "removalAt(3,0)": by([1], 7) },
+      {
+        replay: null,
+        prepare: null,
+      },
+    );
+    add(
+      "a removal by an updated msig's disabled slot (F-1)",
+      "msig-updated",
+      "A",
+      { "removalCount(3)": 1, "removalAt(3,0)": by([0], 8) },
+      lie,
+    );
+    add(
+      "a removal by an msig's first quorum after its update (F-1)",
+      "msig-updated",
+      "A",
+      {
+        "removalCount(3)": 1,
+        "removalAt(3,0)": by([0, 1], 9),
+      },
+      lie,
+    );
+  }
+  {
+    // B2-6, C21: the leaves owed at one head fit one commit: B, C and D owe 24, refused; B and C owe 16, accepted
+    const w = W("backlog");
+    add(
+      "exits that owe more leaves than one commit removes (C21, B2-6)",
+      "backlog",
+      "A",
+      {
+        "removalCount(0)": 1,
+        "removalAt(0,0)": keptRemoval(w, "A", ["B", "C", "D"], 0, 5),
+      },
+      lie,
+    );
+    add(
+      "exits that owe 16 leaves (C21, the control)",
+      "backlog",
+      "A",
+      {
+        "removalCount(0)": 1,
+        "removalAt(0,0)": keptRemoval(w, "A", ["B", "C"], 0, 5),
+      },
+      { replay: null, prepare: null },
+    );
+  }
+  {
+    const w = W("small");
+    // B2-6: one UA exits twice under one head (its leave and a removal naming it; neither order lands)
+    add(
+      "a UA that exits twice under one head (B2-6)",
+      "small",
+      "A",
+      {
+        "leaveCount(1)": 1,
+        "leaveAt(1,0)": keptLeave(w, "C", 1, 5),
+        "removalCount(1)": 1,
+        "removalAt(1,0)": keptRemoval(w, "A", ["C"], 1, 6),
+      },
+      lie,
+    );
+    // C24: the only admin that holds a leaf removes itself while B and C keep theirs
+    add(
+      "the last admin with a leaf removed while members stay (C24, B2-6)",
+      "small",
+      "B",
+      {
+        "removalCount(1)": 1,
+        "removalAt(1,0)": keptRemoval(w, "A", ["A"], 1, 5),
+      },
+      lie,
+    );
+    // M17 of the round's runner: a leave (no nextEpoch to catch it) naming an epoch that is not the home's
+    const far = {
+      sessionId: w.home.sessionId,
+      treeId: w.home.treeId,
+      epochId: hex(rnd("tree-secrets/lies/losing-epoch")),
+    };
+    const farLeave = { ...far, member: uaOf("C"), nonce: 5 };
+    const { treeId: _f, ...farKept } = farLeave;
+    add(
+      "a leave naming an epoch that is not the home's",
+      "small",
+      "A",
+      {
+        "leaveCount(1)": 1,
+        "leaveAt(1,0)": { record: farKept, sig: sign("C", "PqChatTreeLeave", farLeave) },
+      },
+      lie,
+    );
+    // C-5: the exit's sessionId, a removal of no UA
+    add(
+      "a removal of another sessionId (C-5)",
+      "small",
+      "A",
+      {
+        "removalCount(1)": 1,
+        "removalAt(1,0)": keptRemoval(w, "A", ["C"], 1, 5, w.home.treeId, {
+          sessionId: hex(rnd("tree-secrets/lies/sid")),
+        }),
+      },
+      lie,
+    );
+    add(
+      "a removal that names no UA (C-5)",
+      "small",
+      "A",
+      { "removalCount(1)": 1, "removalAt(1,0)": keptRemoval(w, "A", [], 1, 5) },
+      lie,
+    );
+    // C-5: a commit whose signed epoch is not its number; one with an empty sealedInfo
+    const f1 = forgedCommit(w, "B", w.home.tree, { edit: (r) => ({ ...r, epoch: 5 }) });
+    add("a commit whose signed epoch is not its number (C-5)", "small", "C", served(w, f1.built, f1.sig), lie);
+    const f2 = forgedCommit(w, "B", w.home.tree, { edit: (r) => ({ ...r, sealedInfo: "0x" }) });
+    add("a commit with an empty sealedInfo (C-5)", "small", "C", served(w, f2.built, f2.sig), lie);
+    // C-5: epochsOf whose epoch 0 is not the session; the snapshot's treeId, used, node list, genesisTreeHash
+    const rd = tk.reader(w.home);
+    const t = rd.treeOf();
+    const root = { replay: "TreeHeadRoot", prepare: "TreeHeadRoot" };
+    add(
+      "a snapshot of another treeId (C-5)",
+      "small",
+      "A",
+      { "treeOf()": { ...t, treeId: hex(rnd("tree-secrets/lies/tid")) } },
+      root,
+    );
+    add(
+      "a snapshot whose used is not the walk's (C-5)",
+      "small",
+      "A",
+      { "treeOf()": { ...t, used: t.used + 1 } },
+      root,
+    );
+    add(
+      "a snapshot with another genesisTreeHash (C-5)",
+      "small",
+      "A",
+      {
+        "treeOf()": { ...t, genesisTreeHash: hex(rnd("tree-secrets/lies/genesis")) },
+      },
+      root,
+    );
+    add(
+      "a node list one entry longer (C-5)",
+      "small",
+      "A",
+      { "treeNodes()": [...rd.treeNodes(), { hash: Z32, keyHash: Z32, epoch: 0 }] },
+      root,
+    );
+    // C-6: served values of a wrong shape and an exit count above EXITS_MAX: lying reads, never a TypeError
+    add("an exit count of 545 (C-6)", "small", "A", { "leaveCount(1)": 545 }, lie);
+    add("an exit count that is a string (C-6)", "small", "A", { "leaveCount(1)": "1" }, lie);
+    add("a commit record that is null (C-6)", "small", "A", { "commitOf(1)": null }, lie);
+    add("a node list that is null (C-6)", "small", "A", { "treeNodes()": null }, lie);
+    add(
+      "a removal whose members are not a list (C-6)",
+      "small",
+      "A",
+      {
+        "removalCount(1)": 1,
+        "removalAt(1,0)": {
+          ...keptRemoval(w, "A", ["C"], 1, 5),
+          record: { ...keptRemoval(w, "A", ["C"], 1, 5).record, members: "0x00" },
+        },
+      },
+      lie,
+    );
+    // F-6, C-5: a stored pin whose tree differs from the walk's; one whose gone register differs
+    const pin = replayOf(w, "A").pin;
+    const tree = JSON.parse(JSON.stringify(pin.tree));
+    tree.nodes[4] = { ...tree.nodes[4], kemHash: hex(keccak_256(fromHex(deviceOf("H").kemPk))) };
+    add(
+      "a pin whose tree differs (F-6)",
+      "small",
+      "A",
+      {},
+      { replay: "TreeReadCorrupted", prepare: "TreeHeadRoot" },
+      {
+        ...pin,
+        tree,
+      },
+    );
+    add(
+      "a pin whose gone register differs (C-5)",
+      "small",
+      "A",
+      {},
+      { replay: "TreeReadCorrupted", prepare: null },
+      {
+        ...pin,
+        gone: [[uaOf("H"), 1, 0]],
+      },
+    );
+    // C-4: the refusals by name, each from one lying read or pin: a pin above the head, a pin of another record there, a
+    // leaf's period past the head
+    add(
+      "a pin above the head (C-4)",
+      "small",
+      "A",
+      {},
+      { replay: "TreeCheckpoint", prepare: "TreeCheckpoint" },
+      {
+        ...pin,
+        epoch: pin.epoch + 1,
+      },
+    );
+    add(
+      "a pin of another record at its number (C-4)",
+      "small",
+      "A",
+      {},
+      { replay: "TreeConflict", prepare: "TreeConflict" },
+      {
+        ...pin,
+        hash: hex(rnd("tree-secrets/lies/pin-hash")),
+      },
+    );
+    const lv = rd.treeLeaves();
+    add(
+      "a leaf whose joinEpoch is past the head (C-4)",
+      "small",
+      "B",
+      {
+        "treeLeaves()": lv.map((l, i) => (i === 1 ? { ...l, joinEpoch: 5 } : l)),
+      },
+      { replay: "TreePeriod", prepare: null },
     );
   }
   return rows;

@@ -484,7 +484,8 @@ impl PqChat {
 
     /// A new epoch of `s` after the open `parent` (S2): `epoch = parent + 1`, a fresh `K`, the members expanded and wrapped
     /// at their highest versions, those who left or were removed dropped. A plain rekey (the parent's members and admins
-    /// minus those who left) by a member of the parent; anything else by an admin of it (`NotAdmin`). The author must not
+    /// less UAs that left or were removed, [`crate::check::plain`]) by a member of the parent; anything else by an admin of it
+    /// (`NotAdmin`). The author must not
     /// have left nor been removed (`NotMember`); the home's slot must be free (`EpochTaken`: rebuild on the winner,
     /// [`PqChat::child_of`]).
     pub async fn rekey(
@@ -524,13 +525,10 @@ impl PqChat {
         if w.keys.is_empty() {
             return Err(PqChatError::MembersInvalid);
         }
-        let kept = |u: &&String| !left.contains(u);
-        let plain = w
-            .keys
-            .iter()
-            .map(|m| &m.ua)
-            .eq(crate::check::distinct(p).into_iter().filter(kept))
-            && admins.iter().eq(p.admins.iter().filter(kept));
+        // E-1: plain as the contract's `_keeps` (the flagged UAs dropped here, left or removed)
+        let mut uas: Vec<&String> = w.keys.iter().map(|m| &m.ua).collect();
+        uas.dedup();
+        let plain = crate::check::plain(&uas, &admins, p, &left, &removed);
         if plain && !p.has_member(&ua) {
             return Err(PqChatError::NotMember);
         }
@@ -716,8 +714,49 @@ impl PqChat {
         best.ok_or(refused.unwrap_or(PqChatError::Internal))
     }
 
-    /// An admin's `remove` of `members` from `e` before its next epoch (P48, S3): signed, prepared. `e` is the head or an ancestor
-    /// within 16 epochs (the contract applies it at the head, C9); a UA already out at `e` is `NotMember`.
+    /// The home's head for an exit naming `e` (D2-4): the contract checks and applies a leave or removal at the head (C9,
+    /// CTR-CHAT-10, CTR-CHAT-20), so the builder judges it there: `latestEpoch` (a trusted read) and its record, `e` the head
+    /// or an ancestor at most [`crate::signed::EXIT_LAG_MAX`] below it (`ExitLag`, the contract's `PqChatExitLag`).
+    async fn exit_head(&self, s: &SessionRef, e: &Epoch) -> Result<Epoch, PqChatError> {
+        let id = self.latest_epoch(s).await?;
+        let h = if id == e.id {
+            e.clone()
+        } else {
+            self.signed_record_at(&s.chain, &s.home, &s.session_id, &id)
+                .await
+                .map_err(|_| PqChatError::Internal)?
+                .ok_or(PqChatError::Internal)?
+        };
+        if h.epoch < e.epoch || h.epoch > e.epoch + crate::signed::EXIT_LAG_MAX {
+            return Err(PqChatError::ExitLag);
+        }
+        Ok(h)
+    }
+
+    /// Whether `ua` is flagged by `item` (`leftIn` or `removedIn`, a trusted read at home) at `e`.
+    async fn flag(
+        &self,
+        s: &SessionRef,
+        e: &Epoch,
+        item: &'static str,
+        ua: &str,
+    ) -> Result<bool, PqChatError> {
+        let v = self
+            .net
+            .read(
+                &s.chain,
+                &s.home,
+                item,
+                json!({"epochId": e.id, "member": ua}),
+            )
+            .await?;
+        Ok(at(&v, "0") == true)
+    }
+
+    /// An admin's `remove` of `members` naming `e` (P48, S3): signed, prepared. `e` is the head or an ancestor within 16 epochs,
+    /// and the contract checks and applies it at the head (C9), so the builder does (D2-4, [`Self::exit_head`]): the signer a
+    /// live admin of the head (`NotAdmin`), each UA a member or an admin of it (`MembersInvalid`) not already removed there
+    /// (`NotMember`, A-4); only those UAs' flags are read.
     pub async fn remove(
         &self,
         s: &SessionRef,
@@ -729,18 +768,24 @@ impl PqChat {
     ) -> Result<AppCall, PqChatError> {
         seed_of(&me.key)?;
         let ua = me.ua.to_ascii_lowercase();
-        if !e.admins.contains(&ua) {
-            return Err(PqChatError::NotAdmin);
-        }
         let m = sorted(members, None)?;
-        if m.is_empty() || m.iter().any(|u| !(e.has_member(u) || e.admins.contains(u))) {
+        if m.is_empty() || m.len() > crate::signed::REMOVE_MAX {
             return Err(PqChatError::MembersInvalid);
         }
-        // a UA already out at `e` is the contract's PqChatNotMember (A-4: a repeat newly flags nobody)
-        let left = self.flags(s, e, "IPqChat.leftIn").await?;
-        let removed = self.flags(s, e, "IPqChat.removedIn").await?;
-        if m.iter().any(|u| left.contains(u) || removed.contains(u)) {
-            return Err(PqChatError::NotMember);
+        let h = self.exit_head(s, e).await?;
+        if !h.admins.contains(&ua)
+            || self.flag(s, &h, "IPqChat.leftIn", &ua).await?
+            || self.flag(s, &h, "IPqChat.removedIn", &ua).await?
+        {
+            return Err(PqChatError::NotAdmin);
+        }
+        if m.iter().any(|u| !(h.has_member(u) || h.admins.contains(u))) {
+            return Err(PqChatError::MembersInvalid);
+        }
+        for u in &m {
+            if self.flag(s, &h, "IPqChat.removedIn", u).await? {
+                return Err(PqChatError::NotMember);
+            }
         }
         let r = PqChatRemove {
             session_id: s.session_id.clone(),
@@ -763,7 +808,8 @@ impl PqChat {
             .await
     }
 
-    /// The account's `leave` of `e` (CTR-CHAT-10, S3): signed, prepared, applied at the head (C9); a repeat is `NotMember`.
+    /// The account's `leave` naming `e` (CTR-CHAT-10, S3): signed, prepared, checked and applied at the head (C9, D2-4,
+    /// [`Self::exit_head`]): a member of the head that neither left nor was removed there (`NotMember`, A-4).
     pub async fn leave(
         &self,
         s: &SessionRef,
@@ -774,13 +820,11 @@ impl PqChat {
     ) -> Result<AppCall, PqChatError> {
         seed_of(&me.key)?;
         let ua = me.ua.to_ascii_lowercase();
-        if !e.has_member(&ua) {
-            return Err(PqChatError::NotMember);
-        }
-        // a repeated leave, or one after a removal, is the contract's PqChatNotMember (A-4)
-        let left = self.flags(s, e, "IPqChat.leftIn").await?;
-        let removed = self.flags(s, e, "IPqChat.removedIn").await?;
-        if left.contains(&ua) || removed.contains(&ua) {
+        let h = self.exit_head(s, e).await?;
+        if !h.has_member(&ua)
+            || self.flag(s, &h, "IPqChat.leftIn", &ua).await?
+            || self.flag(s, &h, "IPqChat.removedIn", &ua).await?
+        {
             return Err(PqChatError::NotMember);
         }
         let l = PqChatLeave {

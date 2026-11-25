@@ -42,13 +42,15 @@ pub enum TreeError {
     Checkpoint,
     Conflict,
     Period,
+    /// Plan T2's name, kept (B-7): the rosters are the forward walk's (C25), so no served roster is judged and none raises it
     Roster,
     /// a fetched key that is not the one its hash entered the root with (codex-1)
     KeyHash,
     InfoSize,
-    /// a node key derived from a path secret that is not the one the commit signed (`nodeKeyHashes`)
+    /// a node key derived from a path secret that is not the one the commit signed (`nodeKeyHashes`). Plan T2's name, kept
+    /// (B-7): a replay reports this as the state "node key mismatch", so no refusal raises it today
     KeyMismatch,
-    /// a target whose secret this state does not hold
+    /// a target whose secret this state does not hold. Plan T2's name, kept (B-7): reported as the state "target not held"
     NotHeld,
     /// a KEM key its registry record does not authenticate (spec §8 step 5, codex-1)
     KemRecord,
@@ -322,6 +324,10 @@ impl Tree {
     /// The filtered path of leaf `leaf`: each ancestor whose copath child resolves to something, upward.
     pub fn filtered_path(&self, leaf: u32) -> Vec<PathStep> {
         let mut out = Vec::new();
+        // B-5: a caller's leaf outside the tree has no path (and `2 * leaf` stays in range)
+        if leaf >= self.leaves {
+            return out;
+        }
         let mut below = 2 * leaf;
         for node in direct_path(below, self.leaves) {
             if let Some(child) = sibling(below, self.leaves) {
@@ -573,9 +579,16 @@ impl Tree {
         Ok(())
     }
 
+    /// [`Tree::from_json`] for the vector readers (feature `vectors`): a caller builds no commit on a tree it parsed (spec
+    /// §15, B2-9); the signing operations take the forward walk's [`super::tree::Prepared`].
+    #[cfg(feature = "vectors")]
+    pub fn vectors_from_json(j: &Value) -> Result<Tree> {
+        Tree::from_json(j)
+    }
+
     /// A tree from the JSON form of `tree.json` (`leaves`, `used`, `nodes`, the no-return sets), bounded before it is used
     /// (B-5): `leaves` a power of two at most [`TREE_LEAVES_MAX`] (or 0 with no node), `used ≤ leaves`, one node per position.
-    pub fn from_json(j: &Value) -> Result<Tree> {
+    pub(crate) fn from_json(j: &Value) -> Result<Tree> {
         let (leaves, used) = (u32j(j, "leaves")?, u32j(j, "used")?);
         let width = j.get("nodes").and_then(Value::as_array).map(Vec::len);
         if !(leaves == 0 || leaves.is_power_of_two() && leaves <= TREE_LEAVES_MAX)

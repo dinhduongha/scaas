@@ -91,6 +91,8 @@ codes! {
     CardRefused,
     /// CLI-PQC-15: under `require_signed_records`, a home that keeps no signatures (`sigStore` `none`)
     HomeUnsigned,
+    /// a leave or removal naming an epoch more than 16 below the home's head (C9, the contract's `PqChatExitLag`; D2-4)
+    ExitLag,
 }
 
 impl fmt::Display for PqChatError {

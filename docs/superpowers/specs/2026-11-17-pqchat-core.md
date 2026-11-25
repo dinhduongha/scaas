@@ -365,6 +365,7 @@ operation states).
 | `Internal` | no better name; carries nothing |
 | `CardRefused` | a contact card that does not count for its UA (UA-7 §14 O7, CLI-PQC-05): not its signature, or not well formed |
 | `HomeUnsigned` | under `require_signed_records`, a session created on a home that keeps no signatures (`sigStore` `none`; CLI-PQC-15, owner 2026-11-23) |
+| `ExitLag` | a leave or removal naming an epoch more than 16 below the home's head, refused before it is signed (C9, the contract's `PqChatExitLag`; fable re-review D2-4, 2026-11-25) |
 
 ## 9. Threat model
 

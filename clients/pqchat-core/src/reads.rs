@@ -4,11 +4,13 @@
 use crate::check::{self, DropReason};
 use crate::model::at;
 use crate::model::{self, Epoch};
+use crate::signed::EXIT_LAG_MAX;
 use crate::{Items, PqChat, PqChatError};
 use scaas_sdk::app_core::AppKey;
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_records::PqWrap;
 use serde_json::json;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 /// `IUARegistry.checkedOf`'s `kem` value of a UA without a usable KEM key.
@@ -238,9 +240,11 @@ impl PqChat {
         me: &str,
         replica: Option<&str>,
     ) -> Result<crate::message::OpenEpoch, DropReason> {
-        let home = self.checked_at(s, &s.home, epoch_id).await?;
+        let home = self.checked_at(s, &s.home, epoch_id, true).await?;
         if let Some(rep) = replica {
-            let r = self.checked_at(s, rep, epoch_id).await?;
+            // E-5, D2-2: the replica's record counts only when it equals the home's, judged above (membership is the home's,
+            // CTR-CHAT-14); a replica keeps an exit under the epoch it names, so its parent's exits are not read there
+            let r = self.checked_at(s, rep, epoch_id, false).await?;
             Self::replica(&home, &r)?;
         }
         let k = self
@@ -253,12 +257,14 @@ impl PqChat {
         })
     }
 
-    /// The record `epoch_id` of `s` at `contract`, listed and checked (its parent read at the same instance).
+    /// The record `epoch_id` of `s` at `contract`, listed and checked; with `judge`, against its parent at the same instance: on
+    /// a `none` instance the one link on the contract's flags; on an `sstore2` one by [`Self::walk`].
     async fn checked_at(
         &self,
         s: &SessionRef,
         contract: &str,
         epoch_id: &str,
+        judge: bool,
     ) -> Result<Epoch, DropReason> {
         if !self
             .listed(&s.chain, contract)
@@ -269,21 +275,88 @@ impl PqChat {
         }
         // CLI-PQC-15: on an `sstore2` instance each record counts only with its author's kept signature; a `none` one is
         // refused under `require_signed_records`
-        let read = |id: String| async move {
-            self.signed_record_at(&s.chain, contract, &s.session_id, &id)
-                .await?
-                .ok_or(DropReason::Control)
-        };
-        let e = read(epoch_id.to_string()).await?;
+        let e = self.read_at(s, contract, epoch_id).await?;
         if e.session_id != s.session_id.to_ascii_lowercase() {
             return Err(DropReason::Control);
         }
         check::shapes(&e)?;
-        if e.epoch > 0 {
-            let p = read(e.parent.clone()).await?;
-            let (left, removed) = self.left_and_removed(&s.chain, contract, &p).await?;
-            check::child(&e, &p, &left, &removed)?;
+        if e.epoch == 0 || !judge {
+            return Ok(e);
         }
+        if self.verifies(&s.chain, contract).await? {
+            return self.walk(s, contract, e).await;
+        }
+        let p = self.read_at(s, contract, &e.parent).await?;
+        let (left, removed) = self.left_and_removed(&s.chain, contract, &p).await?;
+        check::child(&e, &p, &left, &removed)?;
         Ok(e)
+    }
+
+    async fn read_at(&self, s: &SessionRef, contract: &str, id: &str) -> Result<Epoch, DropReason> {
+        self.signed_record_at(&s.chain, contract, &s.session_id, id)
+            .await?
+            .ok_or(DropReason::Control)
+    }
+
+    /// U-1, D2-1 (an `sstore2` instance): `e` and its ancestors down to the signed session record, or to an epoch this device
+    /// verified before at this instance, each record bound to its id and each link judged by [`check::child`] with the exits its
+    /// parent keeps, named among the parent's verified ancestors. So an endpoint cannot serve a parent of its choosing: every
+    /// right comes from the session's creator down. The verified epochs are remembered (id → number and parent), so a device
+    /// walks each epoch once. ponytail: one store item per session, one entry per epoch; prune when histories grow large.
+    async fn walk(&self, s: &SessionRef, contract: &str, e: Epoch) -> Result<Epoch, DropReason> {
+        let key = format!(
+            "verified/{}/{}/{}",
+            s.chain,
+            contract.to_ascii_lowercase(),
+            s.session_id.to_ascii_lowercase()
+        );
+        let items = Items(&*self.store);
+        let mut seen: BTreeMap<String, (u64, String)> = items
+            .get(&key)
+            .map_err(|_| DropReason::Control)?
+            .unwrap_or_default();
+        let mut chain = vec![e];
+        while let Some(cur) = chain.last() {
+            if cur.epoch == 0 || seen.contains_key(&cur.id) {
+                break;
+            }
+            let p = self.read_at(s, contract, &cur.parent).await?;
+            check::shapes(&p)?;
+            chain.push(p);
+        }
+        // the ids by number down from `e`: the records read, then the remembered ones by their parent links
+        let mut ids: Vec<String> = chain.iter().map(|x| x.id.clone()).collect();
+        let mut x = ids.last().cloned().unwrap_or_default();
+        while ids.len() < chain.len() + EXIT_LAG_MAX as usize {
+            match seen.get(&x) {
+                Some((n, parent)) if *n > 0 => {
+                    ids.push(parent.clone());
+                    x = parent.clone();
+                }
+                _ => break,
+            }
+        }
+        for (i, pair) in chain.windows(2).enumerate() {
+            let [c, p] = pair else { continue };
+            let names = ids
+                .iter()
+                .skip(i + 1)
+                .take(EXIT_LAG_MAX as usize + 1)
+                .cloned()
+                .collect();
+            let (left, removed) = self.exits_of(&s.chain, contract, p, Some(names)).await?;
+            check::child(c, p, &left, &removed)?;
+        }
+        for c in &chain {
+            seen.insert(c.id.clone(), (c.epoch, c.parent.clone()));
+        }
+        items
+            .update::<BTreeMap<String, (u64, String)>, _>(&key, |old| {
+                let mut m = old.unwrap_or_default();
+                m.extend(seen.clone());
+                Ok(m)
+            })
+            .map_err(|_| DropReason::Control)?;
+        chain.into_iter().next().ok_or(DropReason::Control)
     }
 }
