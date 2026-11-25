@@ -1718,7 +1718,7 @@ without it reverts, which is a refusal). `UAVerifyGas` when too little gas is le
 <a id="CTR-UA-74"></a>**CTR-UA-74** — **Every version of an `msig`'s structure stays readable, and an `msig`'s signature names the
 version it was accepted under** (owner 2026-11-25, on finding F-1b of the Fable re-review: add the view "msig structure by version" to the
 registry, a contract fix before the freeze, in this round; verbatim in [decisions.md](../decisions.md); the version tag and its form are
-controller calls under that ruling).
+controller calls under that ruling, its place inside the signature object an owner ruling of 2026-11-26, R-4, in the same entry).
 UNAUDITED. **EVM: BUILT** (contract side; the client readers are a follow-up, listed below). Soroban, NEAR and Algorand: with their
 `updateMsig` round ([Staging](#msig-staging)), the same rule; the other families have no `msig`.
 
