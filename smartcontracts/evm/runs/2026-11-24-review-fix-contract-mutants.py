@@ -3,7 +3,8 @@
 """The 2026-11-24 review fixes, contract phase (branch review-fix-contract): each check the round adds is caught by a test.
 So far: the PqChatTreeMembers split (owner 2026-11-24), E-3's exits at the head with the lag (C9), A-4, D-7 / C40, A-3;
 E-3 in mode 0 and PqVault with the replica rule (M21-); A-7's table, A-6, F-5, D-4, A-9 and G-3 (M42-); R8, C10 (M74-);
-the re-review of 2026-11-25: E-2, A-16, A-13, A-14, A-15 (M80-M107), G-7, G-9, G-10 (M108-M112). One mutant per run, `forge test` over test/pqchat alone, or the
+the re-review of 2026-11-25: E-2, A-16, A-13, A-14, A-15 (M80-M107), G-7, G-9, G-10 (M108-M112); the fix check of 2026-11-26:
+M90's PqVault twin, A-1 (M113-M115). One mutant per run, `forge test` over test/pqchat alone, or the
 directory a mutant names (FOUNDRY_TEST), with **no gas or size row** (A-14 of the re-review: a row moves with any code
 change, so it is not the test of a rule): every contract whose name holds `Gas` and every gas or size test elsewhere
 (`NO_GAS`) is left out for every mutant, so a kill is a behavioural test's; each result line names every test that
@@ -32,6 +33,7 @@ G = E + "src/pqgroup/PqGroupTree.sol"
 F = E + "src/factory/OpenFactoryLib.sol"
 O = E + "src/factory/OpenFactory.sol"
 R = E + "src/governance/GovernanceRouterBase.sol"
+U = E + "src/ua/UARegistryCoreLib.sol"
 DB = E + "script/DeployBase.sol"
 CAPPED = os.path.abspath("scripts/capped")
 ENV = dict(
@@ -183,6 +185,11 @@ M = [
     ("G-9: a DEX indexed after its initializer", [(O, "        _index(dex, creatorId, CLASS_DEX, 0, version); // G-1: indexed before its code runs\n        ISCaaSDex(dex).initialize(creatorId, version, initArgs);\n", "        ISCaaSDex(dex).initialize(creatorId, version, initArgs);\n        _index(dex, creatorId, CLASS_DEX, 0, version);\n")], "governance"),
     ("G-9: an instance indexed after its initializer", [(O, "        _index(instance, creatorId, id.contractClass, id.kind, id.version); // G-1: indexed before its code runs\n        _initInstance(instance, creatorId, initCall);\n", "        _initInstance(instance, creatorId, initCall);\n        _index(instance, creatorId, id.contractClass, id.kind, id.version);\n")], "governance"),
     ("G-10: the book's open_factory_lib another address", [(DB, 'vm.serializeAddress("deploy", "open_factory_lib", address(OpenFactoryLib));', 'vm.serializeAddress("deploy", "open_factory_lib", address(uint160(1)));')], "governance"),
+    # the fix check of 2026-11-26: M90's PqVault twin (fable-A note); A-1, a portable msig record's tag not checked (the
+    # replica's verbatim copy after updateMsig would land)
+    ("A-16 PqVault: the removed count not kept", [(V, "        ep.removed += _flagRemoved(ep, r.members);", "        _flagRemoved(ep, r.members);")], "pqvault"),
+    ("A-1: requirePortable takes any tag of an msig", [(U, "            ok = auth.keyData.length == 0 && UAStore.verOk(auth.signature, d)\n                && _msig(ua, md, typedDigest, false,", "            ok = auth.keyData.length == 0\n                && _msig(ua, md, typedDigest, false,")]),
+    ("A-1 PqVault: requirePortableApp takes any tag of an msig", [(U, "            ok = auth.keyData.length == 0 && UAStore.verOk(auth.signature, d)\n                && _msig(ua, md, typedDigest, false,", "            ok = auth.keyData.length == 0\n                && _msig(ua, md, typedDigest, false,")], "pqvault"),
 ]
 
 if sys.argv[1:] == ["check"]:
