@@ -719,6 +719,9 @@ export function lies(worlds) {
     forged("a non-admin's Remove of a live UA's leaf", { removes: ["C"] }, "A");
     forged("a non-admin's Add of another UA", { adds: [["D", 3]] }, "A");
     forged("a commit whose leaves is not its tree's", { edit: (r) => ({ ...r, leaves: 8 }) });
+    forged("a commit signed for another treeId", {
+      edit: (r) => ({ ...r, treeId: hex(rnd("tree-secrets/lies/tree-id")) }),
+    });
     forged("a commit of another sessionId", { edit: (r) => ({ ...r, sessionId: hex(rnd("tree-secrets/lies/sid")) }) });
     forged("a commit whose parentEpochId is not its parent's", {
       edit: (r) => ({ ...r, parentEpochId: hex(rnd("tree-secrets/lies/parent")) }),

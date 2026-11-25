@@ -156,7 +156,7 @@ for n, (suite, name, reps) in enumerate(M[lo - 1:hi], lo):
     finally:
         guard.restore(saved)
     out = r.stdout + r.stderr
-    loaded = not re.search(r"^error(\[E\d+\])?:", out, re.M)
+    loaded = not re.search(r"could not compile|^error\[E\d+\]", out, re.M)
     red = sorted(set(re.findall(r"^test (\w+) \.\.\. FAILED", out, re.M) + re.findall(r"^✖ (.{0,60})", out, re.M)))
     survived = not r.timeout and (r.returncode == 0 or not loaded)
     bad += survived
