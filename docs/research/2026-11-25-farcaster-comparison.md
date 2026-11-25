@@ -465,3 +465,11 @@ or scheduled; the name was the controller's label for the owner's research direc
 and a backend such as immudb, Supabase, S3 or Arweave). Read every "ledger service", "after the freeze, with the ledger
 service's spec" and "the ledger" in this note as "a possible off-chain deployment, if one is ever decided". `groupMode = 2`
 and `3` are only reserved values; the questions here wait until such a build is decided.
+
+**Owner, 2026-11-25 (the off-chain shape):** "Ở Offchain mode, chỉ cần 1 API SERVICE đảm nhiệm việc đọc ghi vào
+immutabledb / supabase". If an off-chain mode is ever built, it is **one API service** that reads and writes the store
+(immudb, Supabase, ...): no BFT committee, no on-chain node set, no availability certificate. That service orders commits; it
+cannot forge a record (every record is client-signed), but it can refuse or delay; clients still verify every signature and
+walk forward as on chain; immudb gives a tamper-evident log, Supabase does not. Of the Farcaster note's questions, the
+committee, the availability certificate and the node set are moot; delegated keys and "never delete accepted records" wait
+for such a build.
