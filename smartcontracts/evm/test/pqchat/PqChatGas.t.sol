@@ -83,9 +83,11 @@ contract PqChatGasTest is PqTopicsBase {
     // Owner 2026-11-24 (the pre-approved split): `treeLeave` / `treeRemove` forwarded to `PqChatTreeMembers`, the immutable
     // `MEMBERS` and its check in the constructor, `modules()` of four: 34,912 -> 34,978 B; regular 2,410,162 -> 2,430,967;
     // state 53,990,640 -> 54,091,620 (+66 x 1,530); asked x 1.05 59,348,716 of 60 M.
-    uint256 internal constant RUNTIME = 34_978;
-    uint256 internal constant RELEASE_REGULAR = 2_430_967;
-    uint256 internal constant RELEASE_STATE = 54_091_620;
+    // E-3 in mode 0 (owner 2026-11-25: `leave` and `remove` moved to `PqChatTreeMembers`, forwarded): 34,978 -> 32,891 B;
+    // regular 2,430,967 -> 2,293,654; state 54,091,620 -> 50,898,510 (-2,087 x 1,530); asked x 1.05 55,851,772 of 60 M.
+    uint256 internal constant RUNTIME = 32_891;
+    uint256 internal constant RELEASE_REGULAR = 2_293_654;
+    uint256 internal constant RELEASE_STATE = 50_898_510;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice:
     // 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
@@ -148,7 +150,8 @@ contract PqChatGasTest is PqTopicsBase {
         // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
         // regular 371,249 -> 373,424
         // TreeKEM T3a (CTR-CHAT-27: `rekey` reads the tree namespace to refuse a tree session): regular 373,424 -> 375,895
-        _row("rekey 2 members, plain, first epoch list entry", 375_895, 8_131_950);
+        // E-3's replica rule (`_rights` reads the session's `home` flag): regular 375,895 -> 376,487
+        _row("rekey 2 members, plain, first epoch list entry", 376_487, 8_131_950);
 
         (e, ew) = _epoch(sid, ids[0], 1, 2, e1, s.admins, s.members);
         sig = _sig(e.author, h.epoch(e));
@@ -158,7 +161,8 @@ contract PqChatGasTest is PqTopicsBase {
         // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
         // regular 371,131 -> 373,306
         // TreeKEM T3a (the tree-session read in `rekey`): regular 373,306 -> 375,633
-        _row("rekey 2 members, plain, next epoch list entry", 375_633, 8_034_030);
+        // E-3's replica rule (`_rights` reads the session's `home` flag): regular 375,633 -> 376,225
+        _row("rekey 2 members, plain, next epoch list entry", 376_225, 8_034_030);
 
         IPqChat.PqChatMessage memory m = _msg(sid, e2, ids[1], 0, 1040); // a 1,024-B bucket + the GCM-SIV tag
         sig = _sig(m.sender, h.message(m));
@@ -181,7 +185,9 @@ contract PqChatGasTest is PqTopicsBase {
         // CTR-CHAT-23 (`sstore2` keeps the leave record and its signature: a blob, the list's slots):
         // 107,485 / 97,920 ->
         // 150,721 / 1,116,900
-        _row("leave 2 members", 153_039, 1_116_900);
+        // E-3 in mode 0 (owner 2026-11-25: forwarded to `PqChatTreeMembers`; at home the head read from `epochsOf`; a
+        // member already flagged refused, sc-E-5): regular 153,039 -> 169,067
+        _row("leave 2 members", 169_067, 1_116_900);
     }
 
     /// Owner (M) 2026-11-23 (CTR-CHAT-24): a member's device key is one more `(ua, keyId)` entry and one more wrap: a
@@ -313,7 +319,9 @@ contract PqChatGasTest is PqTopicsBase {
         // pqvault review F2 / F7 (`_liveAdmin`: the admin's removed and left flags read cold):
         // regular 168,513 -> 173,112
         // CTR-CHAT-23: 173,112 / 1,067,940 -> 176,666 / 1,459,620
-        _row("remove 1 of 3 members", 179_122, 1_459_620);
+        // E-3 in mode 0 (owner 2026-11-25: forwarded to `PqChatTreeMembers`; the head read from `epochsOf`, A-4):
+        // regular 179,122 -> 184,160
+        _row("remove 1 of 3 members", 184_160, 1_459_620);
         IPqChat.MemberKey[] memory m = new IPqChat.MemberKey[](2);
         (m[0], m[1]) = (s.members[0], s.members[1]);
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[0], 1, 1, sid, s.admins, m);
@@ -328,7 +336,8 @@ contract PqChatGasTest is PqTopicsBase {
         // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
         // regular 389,335 -> 391,869
         // TreeKEM T3a (the tree-session read in `rekey`): regular 391,869 -> 394,329
-        _row("rekey dropping the removed member, 2 left", 394_329, 8_034_030);
+        // E-3's replica rule (`_rights`, `_complete` read the session's `home` flag): regular 394,329 -> 394,875
+        _row("rekey dropping the removed member, 2 left", 394_875, 8_034_030);
     }
 
     // ----- topics (topics spec §6) -----

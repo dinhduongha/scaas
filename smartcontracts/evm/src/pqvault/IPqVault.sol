@@ -152,6 +152,9 @@ interface IPqVault {
     error PqVaultUnknown(bytes32 id);
     error PqVaultIncomplete(bytes32 epochId);
     error PqVaultEpochNumber(uint64 expected, uint64 got);
+    /// @notice C9 (Change 2026-11-24, E-3): an exit naming epoch number `named` lands at a head numbered `head`, more than
+    ///         `EXIT_LAG_MAX` (16) above it.
+    error PqVaultExitLag(uint64 named, uint64 head);
     error PqVaultEpochTaken(bytes32 parentEpochId, bytes32 child);
     error PqVaultNotMember(bytes32 ua);
     error PqVaultNotAdmin(bytes32 ua);

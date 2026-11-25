@@ -195,6 +195,7 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
         if (code == F_NOT_ADMIN) revert IPqChat.PqChatNotAdmin(bytes32(a));
         if (code == F_NOT_MEMBER) revert IPqChat.PqChatNotMember(bytes32(a));
         if (code == F_REMOVED_KEPT) revert IPqChat.PqChatRemovedKept(bytes32(a), bytes32(b));
+        if (code == F_EXIT_LAG) revert IPqChat.PqChatExitLag(uint64(a), uint64(b));
         PqChatCore._fail(code, a, b);
     }
 

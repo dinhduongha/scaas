@@ -108,7 +108,8 @@ contract PqVaultGasTest is PqVaultBase {
         _share(vid, vid, 7, 2, 0);
         // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
         // regular 398,975 -> 400,264
-        _row("rekeyVault 1 -> 2 members (share), both wraps", 400_264, 9_943_470);
+        // E-3's replica rule (`_liveAdmin` reads the vault's `home` flag): regular 400,264 -> 400,814
+        _row("rekeyVault 1 -> 2 members (share), both wraps", 400_814, 9_943_470);
     }
 
     function test_gas_sharedVault() public {
@@ -121,12 +122,14 @@ contract PqVaultGasTest is PqVaultBase {
         IUARegistry.UASig memory sig = _sig(ids[0], h.remove(r, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
         vault.removeVaultMembers(r, sig);
-        _row("removeVaultMembers 1 of 3", 176_568, 1_410_660);
+        // E-3 (the head read from `epochsOf`, A-4): regular 176,568 -> 178,182
+        _row("removeVaultMembers 1 of 3", 178_182, 1_410_660);
         IPqVault.PqVaultLeave memory l = IPqVault.PqVaultLeave(vid, vid, ids[1], 2);
         sig = _sig(ids[1], h.leave(l, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
         vault.leaveVault(l, sig);
-        _row("leaveVault", 111_431, 195_840);
+        // E-3 (at home: the head read from `epochsOf`; a member already flagged refused, sc-E-5): regular 111,431 -> 119,566
+        _row("leaveVault", 119_566, 195_840);
         (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
             _epoch(vid, ids[0], 3, 1, vid, _list(ids[0]), _members(1));
         sig = _sig(e.author, h.epoch(e, PqVaultTypes.DS_V));
@@ -134,7 +137,8 @@ contract PqVaultGasTest is PqVaultBase {
         vault.rekeyVault(e, w, sig);
         // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
         // regular 320,352 -> 321,710
-        _row("rekeyVault 3 -> 1 after a removal and a leave", 321_710, 6_773_310);
+        // E-3's replica rule (`_liveAdmin`, `_keeps` read the vault's `home` flag): regular 321,710 -> 322,260
+        _row("rekeyVault 3 -> 1 after a removal and a leave", 322_260, 6_773_310);
         (bytes32 v2,) = _createVault(2, 3, 0);
         (e, w) = _epoch(v2, ids[0], 1, 1, v2, _list(ids[0]), _members(1));
         sig = _sig(e.author, h.epoch(e, PqVaultTypes.DS_V));
@@ -142,7 +146,8 @@ contract PqVaultGasTest is PqVaultBase {
         vault.rekeyVault(e, w, sig);
         // owner (M) 2026-11-23, CTR-CHAT-24: members by `(ua, keyId)`, the distinct-UA count:
         // regular 310,007 -> 310,972
-        _row("rekeyVault 2 -> 1", 310_972, 6_871_230);
+        // E-3's replica rule (`_liveAdmin` reads the vault's `home` flag): regular 310,972 -> 311,520
+        _row("rekeyVault 2 -> 1", 311_520, 6_871_230);
     }
 
     function test_gas_chunks() public {
@@ -265,9 +270,12 @@ contract PqVaultGasTest is PqVaultBase {
             // 2,087,684 -> 2,150,099; state 47,737,530 -> 49,207,860 (+961 x 1,530)
             // TreeKEM T3a part 1 (`PqGroupBase._land` split): 31,786 -> 31,826 B; regular 2,150,099 -> 2,154,260; state
             // 49,207,860 -> 49,269,060 (+40 x 1,530)
-            assertEq(r.code.length, 31_826, "the PqVault runtime (size-baseline.json row)");
-            assertApproxEqAbs(regular, 2_154_260, SLACK, "deployImplementation regular");
-            assertEq(state, 49_269_060, "deployImplementation state");
+            // E-3 (Change 2026-11-24: `leaveVault` / `removeVaultMembers` at the head with the lag, A-4; the replica rule in
+            // `PqGroupBase`): 31,826 -> 32,131 B; regular 2,154,260 -> 2,172,984; state 49,269,060 -> 49,735,710
+            // (+305 x 1,530)
+            assertEq(r.code.length, 32_131, "the PqVault runtime (size-baseline.json row)");
+            assertApproxEqAbs(regular, 2_172_984, SLACK, "deployImplementation regular");
+            assertEq(state, 49_735_710, "deployImplementation state");
         }
     }
 

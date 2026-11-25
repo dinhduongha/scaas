@@ -42,6 +42,7 @@ abstract contract PqGroupBase {
     uint8 internal constant F_REMOVED_KEPT = 10; // (epochId, ua)
     uint8 internal constant F_NONCE_USED = 11; // (scope, nonce)
     uint8 internal constant F_ENV = 12; // ()
+    uint8 internal constant F_EXIT_LAG = 13; // (named, head): C9's lag (Change 2026-11-24, E-3)
 
     struct Epoch {
         bytes32 sessionId; // 0 = unknown
@@ -144,6 +145,26 @@ abstract contract PqGroupBase {
         if (ep.sessionId == 0) _fail(F_UNKNOWN, uint256(epochId), 0);
     }
 
+    /// @dev C9 in mode 0 and PqVault (CTR-CHAT-10, CTR-CHAT-20, CTR-PQV-06; Change 2026-11-24, E-3): the epoch an exit naming
+    ///      `epochId` acts on, `at`, and the named epoch's number. At home `epochId` is complete and of the session, so the head
+    ///      or an ancestor of it (CTR-CHAT-08: every complete epoch is on the home's chain), at most `EXIT_LAG_MAX` below the
+    ///      head (`F_EXIT_LAG`), and `at` is the head (the last of `epochsOf`, else epoch 0); in a replica it is `epochId`.
+    function _exitAt(bytes32 sessionId, bytes32 epochId)
+        internal
+        view
+        returns (bytes32 at, Epoch storage ep, uint64 named)
+    {
+        ep = _known(epochId);
+        if (ep.sessionId != sessionId) _fail(F_UNKNOWN, uint256(epochId), 0);
+        (at, named) = (epochId, ep.epoch);
+        if (!_epochs()[sessionId].home) return (at, ep, named);
+        if (ep.landed != ep.wraps) _fail(F_INCOMPLETE, uint256(epochId), 0);
+        bytes32[] storage c = _chain()[sessionId];
+        at = c.length == 0 ? sessionId : c[c.length - 1];
+        ep = _epochs()[at];
+        if (ep.epoch > named + EXIT_LAG_MAX) _fail(F_EXIT_LAG, named, ep.epoch);
+    }
+
     /// @notice P9, P10: the parent `parentEpochId` stored and complete in this instance, of `sessionId`, `epoch == parent + 1`, the
     ///         home slot free.
     function _parentOf(bytes32 parentEpochId, bytes32 sessionId, uint64 epoch)
@@ -173,10 +194,13 @@ abstract contract PqGroupBase {
         bytes32 author
     ) internal view returns (bytes32[] memory pu) {
         pu = _uas(pm);
-        if (pe.removed != 0 && pe.removedOf[author]) _fail(F_NOT_MEMBER, uint256(author), 0); // P48
+        bool home = _epochs()[pe.sessionId].home; // the author's flags refuse at home only (sc-E-4: in a replica a flag allows)
+        if (home && pe.removed != 0 && pe.removedOf[author]) _fail(F_NOT_MEMBER, uint256(author), 0); // P48
         if (_keeps(pe, pa, admins) && _keeps(pe, pu, _uas(members))) {
             // Fable P1-2 (a): a member who left the parent authors no plain rekey of it (it would keep itself in)
-            if (_memberAt(pm, author) == type(uint256).max || pe.left[author]) _fail(F_NOT_MEMBER, uint256(author), 0);
+            if (_memberAt(pm, author) == type(uint256).max || (home && pe.left[author])) {
+                _fail(F_NOT_MEMBER, uint256(author), 0);
+            }
         } else if (!_liveAdmin(pe, pa, author)) {
             _fail(F_NOT_ADMIN, uint256(author), 0);
         }
@@ -184,9 +208,10 @@ abstract contract PqGroupBase {
 
     /// @dev One rule for PqChat and PqVault (Fable code review of PqVault F2, F7; controller call 2026-11-21): an admin of `pe`
     ///      acts on it (a membership change, a removal; every PqVault rekey) only while it is in `pe`'s admin list, not removed
-    ///      from `pe` and has not left it (as O3 (b) for item writes).
+    ///      from `pe` and has not left it (as O3 (b) for item writes). In a replica a flag only allows (sc-E-4): the admin
+    ///      list alone.
     function _liveAdmin(Epoch storage pe, bytes32[] memory admins, bytes32 ua) internal view returns (bool) {
-        return _has(admins, ua) && !pe.removedOf[ua] && !pe.left[ua];
+        return _has(admins, ua) && (!_epochs()[pe.sessionId].home || (!pe.removedOf[ua] && !pe.left[ua]));
     }
 
     /// @dev Fable code review of PqVault F3 (controller call 2026-11-21, one rule for PqChat and PqVault): a `remove` takes a UA
@@ -200,15 +225,29 @@ abstract contract PqGroupBase {
         return _memberAt(members, ua) != type(uint256).max || _has(admins, ua);
     }
 
-    /// @dev 3C-D7: `child` (sorted) is `parent` (sorted) minus entries that left the parent epoch.
+    /// @dev 3C-D7: `child` (sorted) is `parent` (sorted) minus entries that left the parent epoch or were removed from it.
     function _keeps(Epoch storage pe, bytes32[] memory parent, bytes32[] memory child) internal view returns (bool) {
         uint256 j;
         for (uint256 i; i < parent.length; ++i) {
             if (j < child.length && child[j] == parent[i]) ++j;
             else if (j < child.length && child[j] < parent[i]) return false; // added
-            else if (!pe.left[parent[i]] && !pe.removedOf[parent[i]]) return false; // dropped without leaving or removal
+            else if (!_flagged(pe, parent[i])) return false; // dropped without leaving or removal
         }
         return j == child.length;
+    }
+
+    /// @dev `ua` left `pe` or was removed from it; in a replica also at an ancestor at most `EXIT_LAG_MAX` above it, where the
+    ///      home may have applied an exit that named it (CTR-CHAT-20, the spec check sc-E-4), among the epochs stored here.
+    function _flagged(Epoch storage pe, bytes32 ua) internal view returns (bool) {
+        if (pe.left[ua] || pe.removedOf[ua]) return true;
+        if (_epochs()[pe.sessionId].home) return false;
+        Epoch storage a = pe;
+        for (uint256 k; k < EXIT_LAG_MAX && a.epoch != 0; ++k) {
+            a = _epochs()[a.parent];
+            if (a.sessionId == 0) return false; // not stored in this replica
+            if (a.left[ua] || a.removedOf[ua]) return true;
+        }
+        return false;
     }
 
     /// @dev The distinct UAs of a member list (sorted by `(ua, keyId)`, owner (M) 2026-11-23: a UA's keys are adjacent), in
@@ -336,8 +375,10 @@ abstract contract PqGroupBase {
     ///      `epochsOf` (owner 2026-11-10).
     function _complete(bytes32 epochId, Epoch storage ep) internal {
         if (ep.epoch == 0) return;
-        if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it
-        if (_epochs()[ep.sessionId].home) _childOf()[ep.parent] = epochId; // P9: the slot, home only
+        if (_epochs()[ep.sessionId].home) {
+            if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it; at home only (sc-E-4)
+            _childOf()[ep.parent] = epochId; // P9: the slot, home only
+        }
         _chain()[ep.sessionId].push(epochId); // owner 2026-11-10: `epochsOf`
     }
 

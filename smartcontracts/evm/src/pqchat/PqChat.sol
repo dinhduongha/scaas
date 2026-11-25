@@ -260,49 +260,14 @@ contract PqChat is IPqChat, PqChatCore {
         if (complete) emit PqChatEpochComplete(epochId);
     }
 
-    /// @notice P12: a member of `epochId` leaves it; the next epoch may drop it as a plain rekey (3C-D8).
-    function leave(PqChatLeave calldata l, IUARegistry.UASig calldata sig) external {
-        if (_isTree(l.sessionId)) revert PqChatModeEntry(1); // C30: `treeLeave`
-        (IUARegistry reg, uint256 limit,) = _env();
-        Epoch storage ep = _known(l.epochId);
-        if (ep.sessionId != l.sessionId) revert PqChatUnknown(l.epochId);
-        (, MemberKey[] memory m,) = _lists(ep);
-        if (_memberAt(m, l.member) == type(uint256).max) revert PqChatNotMember(l.member);
-        _auth(reg, l.member, PqChatTypes.hashLeave(l), sig);
-        _useNonce(PqChatTypes.scopeEpoch(l.sessionId, l.member), l.nonce);
-        ep.left[l.member] = true;
-        if (_keep()) _s().leaves[l.epochId].push(_put(abi.encode(l, keccak256(abi.encode(sig)), sig), limit));
-        emit PqChatLeft(l.sessionId, l.epochId, l.member);
+    /// @notice P12, CTR-CHAT-10 (E-3): in `PqChatTreeMembers` with the tree's exits (owner 2026-11-25).
+    function leave(PqChatLeave calldata, IUARegistry.UASig calldata) external {
+        _forward(MEMBERS);
     }
 
-    /// @notice P48 (owner 2026-11-10): an admin of the complete epoch `r.epochId` removes 1..REMOVE_MAX of its members,
-    ///         strictly sorted; at home only while it has no complete child. The record and its `sigHash` in state.
-    function remove(PqChatRemove calldata r, IUARegistry.UASig calldata sig) external {
-        if (_isTree(r.sessionId)) revert PqChatModeEntry(1); // C30: `treeRemove`
-        (IUARegistry reg, uint256 limit,) = _env();
-        Epoch storage ep = _known(r.epochId);
-        if (ep.sessionId != r.sessionId) revert PqChatUnknown(r.epochId);
-        if (ep.landed != ep.wraps) revert PqChatIncomplete(r.epochId);
-        bytes32 child = _s().childOf[r.epochId];
-        if (child != 0) revert PqChatEpochTaken(r.epochId, child);
-        if (r.nextEpoch != ep.epoch + 1) revert PqChatEpochNumber(ep.epoch + 1, r.nextEpoch);
-        uint256 n = r.members.length;
-        if (n == 0 || n > REMOVE_MAX) revert PqChatShape();
-        (bytes32[] memory admins, MemberKey[] memory m,) = _lists(ep);
-        if (!_liveAdmin(ep, admins, r.admin)) revert PqChatNotAdmin(r.admin); // F2, F7 (controller call 2026-11-21)
-        for (uint256 i; i < n; ++i) {
-            if (i > 0 && r.members[i] <= r.members[i - 1]) revert PqChatShape();
-            if (!_removable(m, admins, r.members[i])) revert PqChatNotMember(r.members[i]); // F3
-        }
-        _auth(reg, r.admin, PqChatTypes.hashRemove(r), sig);
-        _useNonce(PqChatTypes.scopeEpoch(r.sessionId, r.admin), r.nonce);
-        uint256 added;
-        for (uint256 i; i < n; ++i) {
-            if (!ep.removedOf[r.members[i]]) (ep.removedOf[r.members[i]], added) = (true, added + 1);
-        }
-        ep.removed += uint16(added);
-        _s().removals[r.epochId].push(_put(_blob(abi.encode(r), sig), limit));
-        emit PqChatRemoved(r.sessionId, r.epochId, r.admin, r.members);
+    /// @notice P48, CTR-CHAT-20 (E-3): in `PqChatTreeMembers` with the tree's exits (owner 2026-11-25).
+    function remove(PqChatRemove calldata, IUARegistry.UASig calldata) external {
+        _forward(MEMBERS);
     }
 
     /// @notice P16, D11: a member of the complete epoch `epochId` posts; the record and `keccak256(abi.encode(sig))` in one

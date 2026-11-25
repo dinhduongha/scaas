@@ -186,16 +186,26 @@ contract PqVaultEpochsTest is PqVaultBase {
         _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultUnknown.selector, x));
         r.epochId = vid;
         _remove(vault, r); // the control
+        // replayed: the UA is removed there already, so the record is refused whole (A-4, before the nonce)
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultNotMember.selector, ids[2]));
+        r.members = _list(ids[1]); // the same nonce for another UA: spent
         _refusedRemove(
             r,
             ids[0],
             abi.encodeWithSelector(IPqVault.PqVaultNonceUsed.selector, PqVaultTypes.scopeEpoch(vid, ids[0]), uint64(7))
         );
+        r.members = _list(ids[2]);
         (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
             _epoch(vid, ids[0], 1, 1, vid, _admins(), _without(_members(3), ids[2]));
         bytes32 eid = _rekey(vault, e, w, 0);
         r.nonce = 8;
-        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultEpochTaken.selector, vid, eid));
+        // E-3 (C9): epoch 0 named after a child took its slot is checked and applied at the head, where ids[2] is no member
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultNotMember.selector, ids[2]));
+        r.members = _list(ids[1]);
+        _remove(vault, r); // the control: applied at the head
+        assertTrue(vault.removedIn(eid, ids[1]), "at the head");
+        assertFalse(vault.removedIn(vid, ids[1]));
+        assertEq(vault.removalCount(eid), 1);
     }
 
     // ----- the slot, the parent, nonces (P9, P10) -----
@@ -410,9 +420,8 @@ contract PqVaultEpochsTest is PqVaultBase {
         assertTrue(vault.leftIn(vid, ids[2]));
         l = IPqVault.PqVaultLeave(vid, vid, ids[2], 1);
         sig = _sig(ids[2], h.leave(l, PqVaultTypes.DS_V));
-        vm.expectRevert(
-            abi.encodeWithSelector(IPqVault.PqVaultNonceUsed.selector, PqVaultTypes.scopeEpoch(vid, ids[2]), uint64(1))
-        );
+        // a repeated leave: the member is flagged there already (sc-E-5, before the nonce)
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultNotMember.selector, ids[2]));
         vault.leaveVault(l, sig);
     }
 
@@ -430,5 +439,55 @@ contract PqVaultEpochsTest is PqVaultBase {
         vault.rekeyVault(e, ew, bad);
         vault.rekeyVault(e, ew, _nativeMsigSig(ms, h.epoch(e, PqVaultTypes.DS_V), 0));
         assertTrue(vault.epochComplete(PqVaultTypes.epochId(vid2, ms, 1)));
+    }
+
+    // ----- E-3 (CTR-PQV-06 with CTR-CHAT-10 / -20; Change 2026-11-24; owner: "Yes, both modes") -----
+
+    function _plain(PqVault c, uint64 n, uint64 number, bytes32 parent, IPqChat.MemberKey[] memory m)
+        internal
+        returns (bytes32)
+    {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) = _epoch(vid, ids[0], n, number, parent, _admins(), m);
+        return _rekey(c, e, w, 0);
+    }
+
+    /// At home exits naming epoch 0 after an admin rekey took its slot land at the head; the lag refuses at 17 above.
+    function test_e3_exitsApplyAtTheHeadWithinTheLag() public {
+        bytes32 e1 = _plain(vault, 1, 1, vid, _members(3)); // the front-running admin rekey
+        _leave(vault, vid, ids[1], 1);
+        assertTrue(vault.leftIn(e1, ids[1]), "at the head");
+        assertFalse(vault.leftIn(vid, ids[1]));
+        IPqVault.PqVaultRemove memory r = _rm(vid, 1, _list(ids[2]), ids[0], 50);
+        _remove(vault, r);
+        assertTrue(vault.removedIn(e1, ids[2]), "at the head");
+        assertFalse(vault.removedIn(vid, ids[2]));
+        assertEq(vault.removalCount(e1), 1);
+        IPqChat.MemberKey[] memory two = _without(_members(3), ids[2]); // P48: e1's child drops the removed UA
+        bytes32 p = e1;
+        for (uint64 i = 2; i <= 17; ++i) {
+            p = _plain(vault, i, i, p, two); // ids[1], the leaver, kept: the admin's choice
+        }
+        r = _rm(vid, 1, _list(ids[1]), ids[0], 51);
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultExitLag.selector, uint64(0), uint64(17)));
+        (r.epochId, r.nextEpoch) = (e1, 2); // the control: one epoch younger
+        _remove(vault, r);
+        assertTrue(vault.removedIn(p, ids[1]));
+    }
+
+    /// The replica rule (sc-E-4): an admin flagged as removed in a replica still rekeys there; at home it is
+    /// `PqVaultNotAdmin`.
+    function test_replica_removalFlagRefusesNoAdmin() public {
+        (IPqVault.PqVaultCreate memory v0, IPqChat.Wrap[] memory vw) = _vault(3, 1, 0, address(vault));
+        vaultB.createVault(v0, vw, _createSig(v0, address(vault)));
+        IPqVault.PqVaultRemove memory r = _rm(vid, 1, _list(ids[0]), ids[0], 7); // a removal may name its signer
+        _remove(vault, r);
+        _remove(vaultB, r);
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _members(3));
+        IUARegistry.UASig memory es = _sig(e.author, h.epoch(e, PqVaultTypes.DS_V));
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[0]));
+        vault.rekeyVault(e, w, es); // at home
+        bytes32 eid = vaultB.rekeyVault(e, w, es);
+        assertTrue(vaultB.epochComplete(eid), "a replica stores it");
     }
 }
