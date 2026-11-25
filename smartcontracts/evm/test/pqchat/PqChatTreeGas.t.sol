@@ -192,8 +192,7 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         internal
         returns (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w)
     {
-        (s.creator, s.nonce, s.homeChain, s.homeChatContract) =
-        (members[0].ua, ++nonceN, _j().readBytes32(".scenarios[0].genesis.record.homeChain"), address(vchat));
+        (s.creator, s.nonce, s.homeChain, s.homeChatContract) = (members[0].ua, ++nonceN, homeChain_, address(vchat));
         (s.admins, s.members, s.groupMode, s.sealedInfo) = (admins, members, 1, hex"5ea1");
         w = _wraps(members, PqChatTypes.sessionId(s.creator, s.nonce));
         s.wrapHashes = _hashes(w);
@@ -369,7 +368,6 @@ contract PqChatTreeGasTest is PqChatTreeModel {
     /// new root's `keyAt`, `childOf` and `epochsOf`) and the ciphertext's own slot. Then `treeLeave` and `treeRemove` with
     /// their `gone` slots.
     function test_completionFixture32To64() public {
-        _open(); // the vectors in this call's memory
         bytes32[] memory p = _people(4, 8);
         M memory m = _session(_keysOf(p, 8), _list(p[0]), true);
         (Step memory st, M memory n) = _build(m, 0, _noCh(), _list(p[0])); // the author's path made warm
@@ -411,7 +409,6 @@ contract PqChatTreeGasTest is PqChatTreeModel {
     /// the held ciphertext: its new slots (`BOUND_SLOTS`) and the ciphertext's own. The removals send thousands of
     /// ciphertexts, past the suite's 2^33 of gas for one test: their commits (no row) run with gas metering paused.
     function test_completionAtTheBound() public {
-        _open(); // the vectors in this call's memory
         bytes32[] memory p = _people(128, 4);
         M memory m = _session(_keysOf(p, 4), _list(p[0]), false);
         _pages(m);
@@ -509,7 +506,6 @@ contract PqChatTreeGasTest is PqChatTreeModel {
     /// no piece; ML-DSA-65 and ML-DSA-87, pinned, each under 2^24. The tree: the 21 UAs and 60 of 4 keys (261 keys, so 512
     /// leaf positions), the 60 removed first, five a commit.
     function test_lastLiveLeafAtTheSpecBound() public {
-        _open(); // the vectors in this call's memory
         bytes32[] memory p = _people(CHANGES + 1, 1);
         bytes32[] memory f = _people(60, 4);
         IPqChat.MemberKey[] memory mk = _merged(p, f, 4);
@@ -570,7 +566,6 @@ contract PqChatTreeGasTest is PqChatTreeModel {
     /// a keyless admin's ML-DSA-87 removal of the author, the last UA with a leaf, whose C24 test scans all 512 positions
     /// (`_treeHasMember`) after `_treeLeafyAdmin` read the 32 admins.
     function test_lastLiveLeafOnTheWorstHead() public {
-        _open(); // the vectors in this call's memory
         (M memory m, uint32 at, bytes32 author, bytes32[] memory q2) = _worstHead();
         Step memory st = _worstCommit(m, at, _withAuthor(author, q2));
         // the closing removal: a keyless admin removes the author, the last UA with a leaf
@@ -776,7 +771,6 @@ contract PqChatTreeGasTest is PqChatTreeModel {
 
     /// The session records at 64, 128 and 192 member keys fit; 15 genesis wraps in one transaction.
     function test_sessionRecords() public {
-        _open(); // the vectors in this call's memory
         bytes32[] memory p = _people(24, 8);
         IPqChat.MemberKey[] memory all = _keysOf(p, 8);
         for (uint256 k = 64; k <= 192; k += 64) {

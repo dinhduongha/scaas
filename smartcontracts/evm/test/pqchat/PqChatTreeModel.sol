@@ -45,10 +45,19 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
 
     uint64 internal nonceN = 1000;
     bytes internal nodeKey; // an admitted key, every path node's
+    /// The vectors' values the model reads, kept in storage: a test that runs at the bounds does not hold the whole of
+    /// `tree-secrets.json` in its memory (its memory cost grows with the square of the file).
+    bytes32 internal homeChain_;
+    mapping(string => bytes) internal devKem_;
 
     function setUp() public virtual override {
         super.setUp();
         nodeKey = _j().readBytes(".devices.H.kemPk");
+        homeChain_ = _j().readBytes32(".scenarios[0].genesis.record.homeChain");
+        string[] memory devs = vm.parseJsonKeys(_j(), ".devices");
+        for (uint256 i; i < devs.length; ++i) {
+            devKem_[devs[i]] = _j().readBytes(string.concat(".devices.", devs[i], ".kemPk"));
+        }
     }
 
     // ----- keys -----
@@ -60,7 +69,9 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
 
     /// An admitted key: device `name`'s bytes with another canonical `pk_X`.
     function _variant(string memory name, uint256 seed) internal view returns (IUARegistry.KemKey memory k) {
-        k = _kemOf(_j().readBytes(string.concat(".devices.", name, ".kemPk")));
+        bytes memory pk = devKem_[name];
+        require(pk.length != 0, "no such device");
+        k = _kemOf(pk);
         k.x25519 = bytes32(uint256(keccak256(abi.encode(name, seed))) & ~uint256(0xff) | 1); // pk_X < 2^249, little-endian
     }
 
@@ -69,8 +80,7 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
     /// A tree session on `vchat` of `members` (sorted by `(ua, keyId)`), created by `members[0].ua` with `admins`.
     function _open(IPqChat.MemberKey[] memory members, bytes32[] memory admins) internal returns (M memory m) {
         IPqChat.PqChatSession memory s;
-        (s.creator, s.nonce, s.homeChain, s.homeChatContract) =
-        (members[0].ua, ++nonceN, _j().readBytes32(".scenarios[0].genesis.record.homeChain"), address(vchat));
+        (s.creator, s.nonce, s.homeChain, s.homeChatContract) = (members[0].ua, ++nonceN, homeChain_, address(vchat));
         (s.admins, s.members, s.groupMode, s.sealedInfo) = (admins, members, 1, hex"5ea1");
         IPqChat.Wrap[] memory w = _wraps(members, PqChatTypes.sessionId(s.creator, s.nonce));
         s.wrapHashes = _hashes(w);
