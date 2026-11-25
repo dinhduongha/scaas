@@ -67,6 +67,8 @@ abstract contract PqChatTreeWorld is PqChatBase {
     mapping(string => bytes32) internal person;
     /// The kind of a keyless admin registered by `_keyless` (0: an ML-DSA-65 person or member).
     mapping(bytes32 => uint16) internal kindOf;
+    /// An `msig` admin's row in `.signers` (its `versions`, CTR-UA-74), set by `_keyless`.
+    mapping(bytes32 => string) internal signerKey;
 
     function setUp() public virtual override {
         super.setUp();
@@ -278,7 +280,12 @@ abstract contract PqChatTreeWorld is PqChatBase {
         } else {
             IPqChat.PqChatTreeRemove memory x = _removeRec(r);
             uint256 n0 = c.removalCount(head);
-            c.treeRemove(x, _sigBy(x.admin, th2.treeRemove(x)));
+            c.treeRemove(
+                x,
+                kindOf[x.admin] == UAKinds.MSIG
+                    ? _msigSig(string.concat(g, ".sig"), x.admin, th2.treeRemove(x))
+                    : _sigBy(x.admin, th2.treeRemove(x))
+            );
             for (uint256 i; i < x.members.length; ++i) {
                 (uint256 kind,) = _gone(c, sid, x.members[i]);
                 assertEq(kind, 2, string.concat(_stepKey(si, k), ": a removed UA gone"));
@@ -358,7 +365,92 @@ abstract contract PqChatTreeWorld is PqChatBase {
             // PQ-eligible (two ML-DSA-65 members): registered by its members' PoP over the registration digest
             IUARegistry.MemberSig[] memory pop = _slots(ua, d, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG));
             assertEq(UACall.register(p, UAKinds.MSIG, d, _none(), abi.encode(pop), ""), ua, "the msig admin");
-            (keyOf_[ua], kindOf[ua]) = (d, UAKinds.MSIG);
+            (keyOf_[ua], kindOf[ua], signerKey[ua]) = (d, UAKinds.MSIG, k);
+        }
+    }
+
+    /// An `msig` admin's signature as the vector `sig` (`{signature, members}`) gives it: its version tag as it is, the
+    /// slots its `MemberSig[]` names re-signed in the mock verifier's form over the structure of that version. The `msig` is
+    /// first updated on the test registry up to the tag's version (A-2 of the Fable fix check, worlds 17 and 21).
+    function _msigSig(string memory key, bytes32 ua, bytes32 digest) internal returns (IUARegistry.UASig memory s) {
+        s.signature = _j().readBytes(string.concat(key, ".signature"));
+        uint64 v = s.signature.length == 0 ? 0 : uint64(bytes8(s.signature));
+        _updateTo(ua, v);
+        uint16[] memory named = _named(string.concat(key, ".members"));
+        bytes memory d = _structureAt(ua, v);
+        bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_PQCHAT, digest);
+        s.members = new IUARegistry.MemberSig[](named.length);
+        for (uint256 i; i < named.length; ++i) {
+            uint16 x = named[i];
+            s.members[i] = IUARegistry.MemberSig(
+                x,
+                new IUARegistry.InnerSig[](0),
+                _sig(keyOf_[_slotId(d, x)], UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md))
+            );
+        }
+    }
+
+    /// The slot indexes of a vector `abi.encode(MemberSig[])` (each element's first word; read by offset, the decoder of
+    /// a nested struct array does not fit this contract's stack).
+    function _named(string memory key) internal view returns (uint16[] memory x) {
+        bytes memory e = _j().readBytes(key);
+        uint256 base = _w(e, 0) + 32;
+        x = new uint16[](_w(e, base - 32));
+        for (uint256 i; i < x.length; ++i) {
+            x[i] = uint16(_w(e, base + _w(e, base + 32 * i)));
+        }
+    }
+
+    function _w(bytes memory e, uint256 o) internal pure returns (uint256 v) {
+        assembly ("memory-safe") {
+            v := mload(add(add(e, 32), o))
+        }
+    }
+
+    /// The structure bytes of `ua` at `v`: the registration's at 0, else the vector row `versions[v - 1].msig`.
+    function _structureAt(bytes32 ua, uint64 v) internal view returns (bytes memory) {
+        if (v == 0) return keyOf_[ua];
+        string memory k = string.concat(signerKey[ua], ".versions[", vm.toString(v - 1), "]");
+        assertEq(_u(k, ".version"), v, "the versions row");
+        return _j().readBytes(string.concat(k, ".msig"));
+    }
+
+    /// `updateMsig` of `ua` on the test registry to each vector version up to `v`, signed by every slot of the stored
+    /// structure; each appended slot accepts.
+    function _updateTo(bytes32 ua, uint64 v) internal {
+        (uint64 cur,,) = p.msigStateOf(ua);
+        for (; cur < v; ++cur) {
+            _updateOne(ua, cur);
+        }
+        (cur,,) = p.msigStateOf(ua);
+        assertEq(cur, v, "the msig at the tag's version");
+    }
+
+    function _updateOne(bytes32 ua, uint64 cur) internal {
+        bytes memory od = _structureAt(ua, cur);
+        IUARegistry.MsigStructure memory st = UACall.structure(_structureAt(ua, cur + 1));
+        uint256 en = _u(string.concat(signerKey[ua], ".versions[", vm.toString(cur), "]"), ".enabled");
+        bytes32 typed = UAKinds.msigUpdateDigest(ua, chainUidA, address(p), cur + 1, st, en, uint64(block.number));
+        _send(ua, cur + 1, st, en, _slots(ua, od, UAKinds.PURPOSE_MSIG_UPDATE, typed));
+        _acceptFrom(ua, st, (od.length - 4) / 36);
+    }
+
+    function _send(
+        bytes32 ua,
+        uint64 v,
+        IUARegistry.MsigStructure memory st,
+        uint256 en,
+        IUARegistry.MemberSig[] memory q
+    ) internal {
+        p.updateMsig(ua, v, st, en, uint64(block.number), q, chainUidA);
+    }
+
+    /// Slots `from` on of `ua`'s structure `st` accept (the slots an update appended).
+    function _acceptFrom(bytes32 ua, IUARegistry.MsigStructure memory st, uint256 from) internal {
+        for (uint256 i = from; i < st.members.length; ++i) {
+            bytes32 id = st.members[i].id;
+            bytes memory sig = _sig(keyOf_[id], UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, id)));
+            p.acceptMembership(ua, IUARegistry.MemberSig(uint16(i), new IUARegistry.InnerSig[](0), sig));
         }
     }
 
@@ -606,6 +698,47 @@ contract PqChatTreeScenarioTest is PqChatTreeWorld {
 
     function test_scenario_returned() public {
         _run(15, false);
+    }
+
+    // A-2 of the Fable fix check (2026-11-26): worlds 17 to 21, and the world count pinned. 17 and 21 sign `treeRemove` by
+    // the updated `msig` N with its version tag (`_msigSig` updates it on the test registry first); 18 and 19 have no step
+    // (their genesis lands); 20 is commits alone.
+
+    /// The number of worlds in `tree-secrets.json`, each played by a test here: a new world is red until it is played and
+    /// this constant moves. The merge with branch `review-fix4-client` (its nested-msig world) sets it to that file's count.
+    uint256 internal constant WORLDS = 22;
+
+    function test_scenario_worldCount() public {
+        _open();
+        assertEq(_len(".scenarios"), WORLDS, "every world of tree-secrets.json is played");
+        assertFalse(_has(_ix(".scenarios", WORLDS)));
+    }
+
+    function test_scenario_msigUpdated() public {
+        _open();
+        _keyless();
+        _run(17, false);
+        (uint64 v,,) = p.msigStateOf(_b32(_stepKey(17, 1), ".gone.record.admin"));
+        assertEq(v, 1, "the remove's tag named version 1");
+    }
+
+    function test_scenario_genesis() public {
+        _run(18, false);
+    }
+
+    function test_scenario_backlog() public {
+        _run(19, false);
+    }
+
+    function test_scenario_flagClear() public {
+        _run(20, true);
+    }
+
+    /// N's version-0 removal (by the slot the update disables), the update, then its version-1 removal by the appended slot.
+    function test_scenario_msigHistory() public {
+        _open();
+        _keyless();
+        _run(21, false);
     }
 
     /// The lag world (17 commits), then C9's lag on its head: a leave naming epoch 0, 17 below the head, is
