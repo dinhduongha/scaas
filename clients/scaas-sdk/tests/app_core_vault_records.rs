@@ -669,6 +669,23 @@ async fn native_member_in_an_msig() {
     );
     state(0b11);
     assert!(verify(seat(&nm["mode0"]["signature"])).await);
+    // C-3 (CTR-UA-74 step 6): the versions call names the msig's version on a pass (0: no tag), none on a refusal
+    let versions = |sig: AppUaSig| {
+        let (a, ms, t) = (a.clone(), ms.clone(), t.clone());
+        async move {
+            a.verify_pqvault_record_versions("local".into(), ms, AppPath::Portable, t, sig)
+                .await
+                .unwrap()
+        }
+    };
+    assert_eq!(
+        versions(seat(&nm["mode0"]["signature"])).await,
+        Some(vec![scaas_sdk::app_core::MsigVersion {
+            msig: ms.to_ascii_lowercase(),
+            version: 0
+        }])
+    );
+    assert_eq!(versions(seat(&nm["mode1"]["signature"])).await, None);
 }
 
 fn code(e: scaas_sdk::SdkError) -> &'static str {

@@ -306,6 +306,60 @@ pub struct AppInnerSig {
     pub sig: Vec<u8>,
 }
 
+/// CTR-UA-74 step 6: an `msig` (lower-case hex) and the structure version a verified record's signature names for it: the signer's
+/// tag, or a signing `msig` member slot's ([`AppCore::verify_pqvault_record_versions`], `verify_pqchat_record_versions`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MsigVersion {
+    pub msig: String,
+    pub version: u64,
+}
+
+/// CTR-UA-74 step 6 along one chain of records read in order (a session's epochs, a vault's epochs): `named`, a record's
+/// [`MsigVersion`]s, against `seen`, the highest version per `msig` the chain named before it. One lower: `false` (the record is
+/// refused, `seen` unchanged); else each raised into `seen`.
+pub fn msig_versions_up(seen: &mut BTreeMap<String, u64>, named: &[MsigVersion]) -> bool {
+    if named
+        .iter()
+        .any(|x| x.version < seen.get(&x.msig).copied().unwrap_or(0))
+    {
+        return false;
+    }
+    for x in named {
+        let e = seen.entry(x.msig.clone()).or_insert(0);
+        *e = (*e).max(x.version);
+    }
+    true
+}
+
+impl AppUaSig {
+    /// A-1 (CTR-UA-74): this kept signature with its `msig` version tags emptied, the signer's `signature` when it signs by
+    /// `members` (an `msig`) and each slot's `sig` that signs by its own leaves (an `msig` member): what a replica's copy of a
+    /// record is compared by with the home's, since a copy carries the tag of the replica registry's current version and
+    /// everything else the home kept. For a signature verified first: a verified one's shape gives its kinds (a single key signs
+    /// with no `members`, a single-key slot with no leaves).
+    pub fn without_tags(&self) -> AppUaSig {
+        if self.members.is_empty() {
+            return self.clone();
+        }
+        AppUaSig {
+            key_data: self.key_data.clone(),
+            signature: vec![],
+            members: self
+                .members
+                .iter()
+                .map(|m| AppMemberSig {
+                    sig: if m.members.is_empty() {
+                        m.sig.clone()
+                    } else {
+                        vec![]
+                    },
+                    ..m.clone()
+                })
+                .collect(),
+        }
+    }
+}
+
 impl From<&MemberSig> for AppMemberSig {
     fn from(m: &MemberSig) -> AppMemberSig {
         AppMemberSig {
@@ -549,6 +603,34 @@ async fn tagged_versions(
         }
     }
     Ok(())
+}
+
+/// CTR-UA-74 step 6: the `(msig, version)`s `sig` of `id` names on `state` ([`scaas_ua::ua_portable::named_versions`]); none for
+/// a native id (no record); `None` when one does not decode.
+pub(crate) fn named_versions(
+    id: &[u8; 32],
+    sig: &UASig,
+    state: &AppRecordState,
+) -> Option<Vec<MsigVersion>> {
+    let Some((kind, key_data)) = (state.members)(*id) else {
+        return Some(vec![]);
+    };
+    let v = scaas_ua::ua_portable::named_versions(
+        kind,
+        &key_data,
+        id,
+        sig,
+        state.members,
+        state.msig_at,
+    )?;
+    Some(
+        v.into_iter()
+            .map(|(m, version)| MsigVersion {
+                msig: hex(&m),
+                version,
+            })
+            .collect(),
+    )
 }
 
 /// A named argument of an app entry as an ABI value of the parameter `(ty, components)`: a tuple from an object of exactly its
@@ -1553,6 +1635,7 @@ impl AppCore {
             scaas_ua::wallet::verify_app_record,
         )
         .await
+        .map(|v| v.is_some())
     }
 
     /// Whether `sig` is `ua`'s signature of the PqVault record `typed_json` on `path`, PqVault's dedicated path (owner
@@ -1566,6 +1649,22 @@ impl AppCore {
         typed_json: String,
         sig: AppUaSig,
     ) -> Result<bool, SdkError> {
+        self.verify_pqvault_record_versions(chain, ua, path, typed_json, sig)
+            .await
+            .map(|v| v.is_some())
+    }
+
+    /// [`Self::verify_pqvault_record`] with what CTR-UA-74 step 6 holds along a vault's chain: on a pass every `(msig, version)`
+    /// the signature names ([`MsigVersion`]: an `msig` signer's tag and each signing `msig` member slot's; none for a single key
+    /// or a native id); `None` on a refusal.
+    pub async fn verify_pqvault_record_versions(
+        self: &Arc<Self>,
+        chain: String,
+        ua: String,
+        path: AppPath,
+        typed_json: String,
+        sig: AppUaSig,
+    ) -> Result<Option<Vec<MsigVersion>>, SdkError> {
         self.verify_with(
             chain,
             ua,
@@ -1587,7 +1686,7 @@ impl AppCore {
         typed_json: String,
         sig: AppUaSig,
         f: fn(&[u8; 32], &UaPath, &TypedData, &UASig, &AppRecordState) -> bool,
-    ) -> Result<bool, SdkError> {
+    ) -> Result<Option<Vec<MsigVersion>>, SdkError> {
         let id = hex32(&ua)?;
         let typed = TypedData::from_json(typed_json.as_bytes()).map_err(SdkError::Ua)?;
         let p = match &path {
@@ -1613,6 +1712,8 @@ impl AppCore {
         let sig = UASig::from(&sig);
         self.with_records(&chain, id, chain_bound, &sig, |state| {
             f(&id, &p, &typed, &sig, state)
+                .then(|| named_versions(&id, &sig, state))
+                .flatten()
         })
         .await
     }

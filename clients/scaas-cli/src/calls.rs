@@ -40,6 +40,14 @@ pub const EXCLUDED: &[(&str, &str)] = &[
         "signed inside `app-core prepare-pqchat-card`, after the confirm on its review (T26 A-5)",
     ),
     (
+        "app_core::msig_versions_up",
+        "CTR-UA-74 step 6 over values a reader holds along its chain (`verify-*-record-versions` give them); no chain read",
+    ),
+    (
+        "AppUaSig::without_tags",
+        "A-1: a pure transform of a kept signature a reader already holds (the replica compare); no chain read",
+    ),
+    (
         "lib::load_check",
         "a binding's load check against the library it loads (spec §16.3); the CLI links the SDK it was built with",
     ),
@@ -661,6 +669,7 @@ calls! { cx;
         js(p.sign().await?)
     };
     "app-core verify-pqvault-record" "AppCore::verify_pqvault_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_pqvault_record(chain, ua, path, typed_json, sig).await?);
+    "app-core verify-pqvault-record-versions" "AppCore::verify_pqvault_record_versions" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("versions", cx.app()?.verify_pqvault_record_versions(chain, ua, path, typed_json, sig).await?);
     "app-core verify-app-record-key" "AppCore::verify_app_record_key" {kind: u16, key_data: Vec<u8>, path: AppPath, purpose: Option<String>, typed_json: String, signature: Vec<u8>} => named("valid", cx.app()?.verify_app_record_key(kind, key_data, path, purpose, typed_json, signature)?);
     "app-core prepare-app-call" "AppCore::prepare_app_call" {chain: String, contract: String, entry: String, args: String, payer: KeyRef} @sign => {
         let call = cx.app()?.prepare_app_call(chain, contract, entry, args, payer).await?;
@@ -707,6 +716,7 @@ calls! { cx;
         js(p.sign().await?)
     };
     "app-core verify-pqchat-record" "AppCore::verify_pqchat_record" {chain: String, ua: String, name: String, record_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_pqchat_record(chain, ua, name, record_json, sig).await?);
+    "app-core verify-pqchat-record-versions" "AppCore::verify_pqchat_record_versions" {chain: String, ua: String, name: String, record_json: String, sig: AppUaSig} => named("versions", cx.app()?.verify_pqchat_record_versions(chain, ua, name, record_json, sig).await?);
     "app-core prepare-pqchat-card" "AppCore::prepare_pqchat_card" {account: KeyRef, kem_version: u64, matrix_id: String} @sign => {
         let p = cx.app()?.prepare_pqchat_card(account.clone(), kem_version, matrix_id).await?;
         cx.confirm(json!({"sign": "a PqChat contact card", "account": account, "review": review(&p.review), "typed": p.typed}))?;

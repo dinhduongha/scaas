@@ -524,12 +524,30 @@ impl AppCore {
         record_json: String,
         sig: AppUaSig,
     ) -> Result<bool, SdkError> {
+        self.verify_pqchat_record_versions(chain, ua, name, record_json, sig)
+            .await
+            .map(|v| v.is_some())
+    }
+
+    /// [`Self::verify_pqchat_record`] with what CTR-UA-74 step 6 holds along a session's epochs: on a pass every `(msig, version)`
+    /// the signature names ([`crate::app_core::MsigVersion`]: an `msig` signer's tag and each signing `msig` member slot's; none for
+    /// a single key); `None` on a refusal.
+    pub async fn verify_pqchat_record_versions(
+        self: &Arc<Self>,
+        chain: String,
+        ua: String,
+        name: String,
+        record_json: String,
+        sig: AppUaSig,
+    ) -> Result<Option<Vec<crate::app_core::MsigVersion>>, SdkError> {
         let id = h32(&ua)?;
         let v = scaas_ua::wallet::bounded::json(record_json.as_bytes(), 1 << 20, pk::JSON_DEPTH)?;
         let td = pqchat::typed(&name, v)?;
         let sig = UASig::from(&sig);
         self.with_records(&chain, id, false, &sig, |state| {
             pqchat::verify(&id, &td, &sig, state)
+                .then(|| crate::app_core::named_versions(&id, &sig, state))
+                .flatten()
         })
         .await
     }

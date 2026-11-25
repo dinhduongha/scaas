@@ -999,7 +999,7 @@ async fn verify_app_record_reads_the_registry() {
     );
     assert!(
         verify(ms, AppPath::Portable, pa.clone(), app_sig(&ma)).await,
-        "kept at version 0: the first structure, the native slot disabled since"
+        "a single record alone (no chain) kept at version 0: the first structure, the native slot disabled since"
     );
     let v1 = scaas_ua::encode_msig(1, &m);
     let at1 = |id: [u8; 32], _: Option<u64>| (id == ms).then(|| (v1.clone(), [0xff; 32], 1));
@@ -1013,6 +1013,28 @@ async fn verify_app_record_reads_the_registry() {
         verify(ms, AppPath::Portable, pa.clone(), app_sig(&m1)).await,
         "kept at version 1: msigAt(ms, 1)"
     );
+    // C-3, R-2 (CTR-UA-74 step 6): along one chain the record at version 0 after the one at version 1 is refused, though each
+    // verifies alone; the versions as the tags name them, the order kept by `msig_versions_up` (pqchat-core's walk, pqvault-core)
+    let named = |s: &scaas_ua::ua_portable::UASig| {
+        vec![scaas_sdk::app_core::MsigVersion {
+            msig: hx(&ms),
+            version: scaas_ua::ua_portable::tag_version(&s.signature).unwrap(),
+        }]
+    };
+    let mut seen = std::collections::BTreeMap::new();
+    assert!(scaas_sdk::app_core::msig_versions_up(
+        &mut seen,
+        &named(&ma)
+    ));
+    assert!(scaas_sdk::app_core::msig_versions_up(
+        &mut seen,
+        &named(&m1)
+    ));
+    assert!(
+        !scaas_sdk::app_core::msig_versions_up(&mut seen, &named(&ma)),
+        "along a chain: version 0 after version 1 refused"
+    );
+    assert_eq!(seen[&hx(&ms)], 1, "a refusal leaves the versions seen");
     let mut m3 = app_sig(&m1);
     m3.signature = 3u64.to_be_bytes().to_vec();
     assert!(
