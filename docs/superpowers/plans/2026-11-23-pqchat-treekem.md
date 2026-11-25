@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-23; amended 2026-11-24 after the code review and its spec check, task T11):** PLANNED, nothing built. **UNAUDITED.** Revision 3, after two review rounds by Codex and Fable and a
+**Status (2026-11-23; amended 2026-11-24 after the code review and its spec check, task T11):** PLANNED; BUILT (UNAUDITED): the contract (plan T1a-T3d with the code review's fixes of 2026-11-24 on branch `review-fix-contract`), clientkeys and `ua-rs` (T1a, T1b, the forward walk of C25 / C26), the node's rows and bounds (T4's allow-list part, D-4, D-7); PLANNED: T4's whole-set guard and C37's order at the node, T5-T10. **UNAUDITED.** Revision 3, after two review rounds by Codex and Fable and a
 third, focused round by Fable (`fable-r3-n`), whose fixes moved no record, typehash or derivation; then the owner's R16
 (the key no-return set two-level), a contract rule and storage change that moved none either; then a third round by
 Codex (`codex-r3-n`: 0 P0, 6 P1, 6 P2, 1 P3), fixed in place: no record, typehash, derivation or view moved, one check

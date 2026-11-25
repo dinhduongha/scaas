@@ -49,6 +49,7 @@ const SPEC = {
 const STRUCT_OF = {
   session: "PqChatSession",
   sessionTreeKem: "PqChatSession",
+  sessionMode2: "PqChatSession",
   epoch: "PqChatEpoch",
   epochDevices: "PqChatEpoch",
   leave: "PqChatLeave",
@@ -202,6 +203,10 @@ test("session records: digests, ids, scopes, the message signature and blob", ()
   assert.equal(R.sessionTreeKem.record.groupMode, 1);
   assert.equal(R.sessionTreeKem.error, undefined);
   checkRow("sessionTreeKem", R.sessionTreeKem);
+  // review C-5: the reserved mode 2 (with 3, after the freeze) is a signed record refused by name
+  assert.equal(R.sessionMode2.record.groupMode, 2);
+  assert.equal(R.sessionMode2.error, "PqChatModeUnsupported");
+  checkRow("sessionMode2", R.sessionMode2);
   for (const rec of [S.record, E.record, L.record, Mg.record]) {
     for (const [f, v] of Object.entries(rec))
       if (f !== "groupMode")

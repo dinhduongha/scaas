@@ -199,6 +199,27 @@ contract PqChatTypesTest is Test {
         assertEq(keccak256(abi.encode(_uaSig(rec, ".sessionTreeKem.uaSig"))), _b32(rec, ".sessionTreeKem.sigHash"));
     }
 
+    /// Review C-5: the vector's `sessionMode2` (groupMode 2, reserved) hashes as any session; its row names the refusal.
+    function test_sessionMode2Vector() public view {
+        string memory p = ".sessionMode2.record";
+        IPqChat.PqChatSession memory s;
+        s.creator = _b32(rec, string.concat(p, ".creator"));
+        s.nonce = _u64(rec, string.concat(p, ".nonce"));
+        s.homeChain = _b32(rec, string.concat(p, ".homeChain"));
+        s.homeChatContract = vm.parseJsonAddress(rec, string.concat(p, ".homeChatContract"));
+        s.groupMode = uint8(vm.parseJsonUint(rec, string.concat(p, ".groupMode")));
+        s.admins = vm.parseJsonBytes32Array(rec, string.concat(p, ".admins"));
+        s.members = _membersAt(rec, p);
+        s.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));
+        s.sealedInfo = vm.parseJsonBytes(rec, string.concat(p, ".sealedInfo"));
+        assertEq(s.groupMode, 2);
+        assertEq(h.session(s), _b32(rec, ".sessionMode2.typed"));
+        assertEq(
+            vm.parseJsonString(rec, ".sessionMode2.error"), "PqChatModeUnsupported", "refused by its mode (review C-5)"
+        );
+        assertEq(keccak256(abi.encode(_uaSig(rec, ".sessionMode2.uaSig"))), _b32(rec, ".sessionMode2.sigHash"));
+    }
+
     function test_epochAndLeaveVectors() public view {
         string memory p = ".epoch.record";
         IPqChat.PqChatEpoch memory e;

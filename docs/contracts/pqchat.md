@@ -421,7 +421,7 @@ the parent** (owner D4 of 2026-11-04, O2 and O4; the exact test 3C-D7 is a contr
   that has not left it (`PqChatNotMember(author)`; Fable review 2026-11-10, P1-2 fix (a)).
 - **The limit** (UA-7 spec P9): the first complete child wins, so a member can take the slot before an admin's
   membership change (O2) and the admin rekeys again from that child. Liveness only (the member never reads an epoch it is
-  not wrapped into). **An exit is not exposed to it (Change 2026-11-24, E-3; owner 2026-11-24: "Yes, both modes"; SPECIFIED, the code follows on
+  not wrapped into). **An exit is not exposed to it (Change 2026-11-24, E-3; owner 2026-11-24: "Yes, both modes"; BUILT on
   branch `review-fix-contract`):** at home `remove` ([CTR-CHAT-20](#CTR-CHAT-20)) and `leave`
   ([CTR-CHAT-10](#CTR-CHAT-10)) name the head or an ancestor of it and apply at the head, so a member about to be removed
   can no longer keep itself in by answering each new tip, and a member's rekey no longer voids another's leave.
@@ -438,7 +438,7 @@ review's P1-2 fix (b); **BUILT** on `ua-mtx-merge`, plan 3c, UNAUDITED; UA-7 spe
   admin of `epochId` (`PqChatNotAdmin`) who signs it; the nonce in the epoch scope `(sessionId, admin)` (`PqChatNonceUsed`).
   Anyone submits it, relayable with a fee of 0. The record and its `sigHash` are kept in state.
 - **At home, applied at the head (Change 2026-11-24, E-3 of the TreeKEM code review, the rule of
-  [CTR-CHAT-27](#CTR-CHAT-27)'s C9 in mode 0; owner 2026-11-24: "Yes, both modes"; SPECIFIED, the code follows on branch
+  [CTR-CHAT-27](#CTR-CHAT-27)'s C9 in mode 0; owner 2026-11-24: "Yes, both modes"; BUILT on branch
   `review-fix-contract`).** Replaces "at home with no complete child" above:
   - `epochId` is the head or an ancestor of it: stored for `sessionId` and complete (`PqChatUnknown`, `PqChatIncomplete`).
     At home a child completes only by taking its parent's slot ([CTR-CHAT-08](#CTR-CHAT-08)), so every complete epoch is
@@ -492,7 +492,7 @@ and its nonce 3C-D8 are a controller call, owner may override).
 
 `leave(PqChatLeave l, UASig sig)`: `l.epochId` stored for `l.sessionId` (`PqChatUnknown(epochId)`), `l.member` in its
 `members` (`PqChatNotMember(member)`), signed by `member`, nonce in the epoch scope `(sessionId, member)` shared with its
-rekeys. **At home, applied at the head (Change 2026-11-24, E-3; owner 2026-11-24: "Yes, both modes"; SPECIFIED, the code follows):**
+rekeys. **At home, applied at the head (Change 2026-11-24, E-3; owner 2026-11-24: "Yes, both modes"; BUILT on branch `review-fix-contract`):**
 `l.epochId` is the head or an ancestor of it within `EXIT_LAG_MAX` = 16 epochs (`PqChatExitLag` beyond; the spec check),
 complete (`PqChatIncomplete` for a staged or losing child, which was accepted before), `l.member` a member of the head
 that has not left it and was not removed from it (`PqChatNotMember`: a repeated leave is refused, the spec check, sc-E-5), and
@@ -882,8 +882,8 @@ store path, as HCS does on Hedera; the contract, its state storage and its bound
 
 ## 16. The TreeKEM mode (`groupMode = 1`)
 
-Status: **SPECIFIED**; the cold tree (creation, the leaves with the wraps, the genesis tree hash) **BUILT** on branch
-`pqchat-treekem` (plan T3a); commits are T3b. **UNAUDITED** (spec [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md),
+Status: **SPECIFIED**; the cold tree (creation, the leaves with the wraps, the genesis tree hash) and the commits **BUILT** on
+branch `pqchat-treekem` (plan T3a-T3d), with the code review's fixes of 2026-11-24 on branch `review-fix-contract`. **UNAUDITED** (spec [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md),
 plan [`2026-11-23-pqchat-treekem.md`](../superpowers/plans/2026-11-23-pqchat-treekem.md)). It builds on branch `pqchat-sigs`:
 the signature-storage setting per home, several `keyId`s per member UA, and `groupMode` in `PqChatSession`.
 
@@ -978,17 +978,17 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   no leaf** (`PqChatRemovedKept`; a UA that gets a replacement key in the same commit stays); an Add's `scheme == 1`, its `kemHash` against the registry and the public-key admission check of
   scheme 1 (also on every node key: `PqChatKemKey`); the no-return sets; shapes and sizes; **and, at acceptance, the tree of
   the commit computed in memory on the head:** an Add's key held by a leaf that a Remove of the same commit takes out is
-  free whatever the order of the Adds (C39, Change 2026-11-24, SPECIFIED); no leaf of a UA that left or was removed, the path length and the target count
+  free whatever the order of the Adds (C39, Change 2026-11-24, BUILT); no leaf of a UA that left or was removed, the path length and the target count
   of the resolution walk (`PqChatTreeTargets`), and the root after the changes and the new keys against `treeHash`
   (`PqChatTreeHash`); then every piece against its signed hash, once, the list's targets against the expected ones; an `addPath` with no
-  ciphertext is `PqChatShape` (C40, Change 2026-11-24, SPECIFIED). So no
+  ciphertext is `PqChatShape` (C40, Change 2026-11-24, BUILT). So no
   record is staged whose public inputs could not complete on the head it was accepted on; completion checks again only the
   UAs that went since, and writes. A node key or ciphertext is known at acceptance only by its signed hash: an author can
   sign one that no valid piece matches, and that commit never completes; the node relays a commit only when it holds the
   whole set and every piece passes. About 3 M more regular gas at acceptance at the bounds (estimate). **Checked by clients only:** that a node key derives from its path secret and that a ciphertext opens to it; a member
   that cannot follow an epoch shows it and sends nothing by itself.
 - **Removal, leaving and admins.** **Exits apply at the head (Change 2026-11-24, E-3, on the owner's ruling that
-  chain-level front-running is in the threat model; SPECIFIED, the code follows on branch `review-fix-contract`):** a
+  chain-level front-running is in the threat model; BUILT on branch `review-fix-contract`):** a
   `treeLeave` or `treeRemove` names a complete epoch of the session, the head or an ancestor of it (in a tree session every
   complete epoch is on the head's chain, so that is three slots of the named epoch and two for the head's number; a staged or losing epoch is `PqChatIncomplete`, an unknown one
   `PqChatUnknown`), and is checked and applied at the head when it lands: a commit that completed first does not void it;
@@ -1035,13 +1035,14 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   60 M block (256 keys over it, above), so a tree of 256 keys is reached by Adds.
 - **The node.** `scaas-node`'s rows of the six tree writes, their lists and shapes at the bounds above, equal to the contract's
   both directions ([job-api](../node/job-api.md#pqchat-tree-calls); Change 2026-11-24, plan T4's allow-list part, BUILT on
-  branch `pqchat-treekem`). The whole-set guard and the order of C37 at the node are SPECIFIED (plan T4, after the merge).
+  branch `pqchat-treekem`), with `createSession`'s tree bounds at creation and the empty `addPath` refused (D-4, D-7, BUILT on
+  branch `review-fix-contract`). The whole-set guard and the order of C37 at the node are SPECIFIED (plan T4, after the merge).
 - **Open with the owner:** nothing (the spec's §16).
 
 <a id="CTR-CHAT-28"></a>**CTR-CHAT-28** — **The tree is app-agnostic: its labels and the app's scope are parameters, PqChat is one
 instance** (owner 2026-11-23, in the
 [register](../decisions.md#ctr-chat-28--the-tree-is-app-agnostic-its-labels-and-app-scope-are-parameters-pqchat-is-one-instance)).
-Status: clientkeys and `ua-rs` **BUILT**, the contract's cold tree **BUILT** (`PqGroupTree`, [§17](#17-pqgrouptree-the-group-tree-for-inheritors)), its commits **SPECIFIED**, **UNAUDITED**.
+Status: clientkeys and `ua-rs` **BUILT**, the contract's cold tree **BUILT** (`PqGroupTree`, [§17](#17-pqgrouptree-the-group-tree-for-inheritors)), its commits **BUILT**, **UNAUDITED**.
 
 - **Labels.** Every tree label is `<prefix>/<name>` (`path`, `node`, `commit`, `ct`, `joiner`, `epoch`, `key`, `wrap`, and the
   tags of `path-context` and `context`); PqChat's prefix is `scaas/pqchat/v1/tree`.

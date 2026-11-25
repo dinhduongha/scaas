@@ -27,9 +27,32 @@ contract PqChatGroupModeTest is PqChatBase {
     /// The vector row `sessionTreeKem` (groupMode 1, signed by its creator) is no longer refused by its mode: its members
     /// are not registered here, so it stops at their keys (P3) after the mode check.
     function test_theTreeKemVectorPassesTheModeCheck() public {
+        (IPqChat.PqChatSession memory s, IUARegistry.UASig memory sig) = _vectorSession(".sessionTreeKem");
+        assertEq(s.groupMode, 1);
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatKemKey.selector, s.members[0].ua, s.members[0].keyId));
+        chat.createSession(s, new IPqChat.Wrap[](0), sig);
+    }
+
+    /// Review C-5: the vector row `sessionMode2` (groupMode 2, reserved for after the freeze, signed by its creator) is
+    /// refused by its mode, the row's error, before its unregistered members are read (the control: the row above, the
+    /// same record in mode 1, stops at the members).
+    function test_theMode2VectorIsRefusedByItsMode() public {
         string memory rec = vm.readFile("../vectors/pqchat/records.json");
-        string memory p = ".sessionTreeKem.record";
-        IPqChat.PqChatSession memory s;
+        assertEq(vm.parseJsonString(rec, ".sessionMode2.error"), "PqChatModeUnsupported");
+        (IPqChat.PqChatSession memory s, IUARegistry.UASig memory sig) = _vectorSession(".sessionMode2");
+        assertEq(s.groupMode, 2);
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatModeUnsupported.selector, uint8(2)));
+        chat.createSession(s, new IPqChat.Wrap[](0), sig);
+    }
+
+    /// A session row of `records.json` (`row` its key) with its signature.
+    function _vectorSession(string memory row)
+        internal
+        view
+        returns (IPqChat.PqChatSession memory s, IUARegistry.UASig memory sig)
+    {
+        string memory rec = vm.readFile("../vectors/pqchat/records.json");
+        string memory p = string.concat(row, ".record");
         s.creator = vm.parseJsonBytes32(rec, string.concat(p, ".creator"));
         s.nonce = uint64(vm.parseJsonUint(rec, string.concat(p, ".nonce")));
         s.homeChain = vm.parseJsonBytes32(rec, string.concat(p, ".homeChain"));
@@ -44,11 +67,7 @@ contract PqChatGroupModeTest is PqChatBase {
             s.members[i].ua = vm.parseJsonBytes32(rec, string.concat(q, ".ua"));
             s.members[i].keyId = uint64(vm.parseJsonUint(rec, string.concat(q, ".keyId")));
         }
-        IUARegistry.UASig memory sig;
-        sig.signature = vm.parseJsonBytes(rec, ".sessionTreeKem.uaSig.signature");
-        assertEq(s.groupMode, 1);
-        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatKemKey.selector, s.members[0].ua, s.members[0].keyId));
-        chat.createSession(s, new IPqChat.Wrap[](0), sig);
+        sig.signature = vm.parseJsonBytes(rec, string.concat(row, ".uaSig.signature"));
     }
 
     /// The refusal comes first: a mode-2 record with a signature of nobody and unregistered members is refused by its mode.

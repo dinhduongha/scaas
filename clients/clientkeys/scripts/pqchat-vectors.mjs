@@ -180,6 +180,9 @@ const session = {
 // CTR-CHAT-25, CTR-CHAT-26: the same session record with groupMode 1 (TreeKEM), the same struct and typehash; the release
 // with the tree module accepts the mode (2-255 are PqChatModeUnsupported)
 const sessionTreeKem = { ...session, nonce: 12, groupMode: 1 };
+// review C-5: a mode of the reserved range, signed, refused by name before anything else (2, the off-chain ledger's tree,
+// reserved with 3 for after the freeze, CTR-CHAT-25)
+const sessionMode2 = { ...session, nonce: 13, groupMode: 2 };
 
 const eid = hex(pc.epochId(sid, alice.ua, 8));
 const K1 = rnd("K/epoch-1");
@@ -304,7 +307,8 @@ write("records.json", {
     'members strictly sorted by (ua, keyId), one wrap per entry (keys.json wraps "epoch-2/*"), the MemberKey type unchanged.' +
     " The group mode (owner 2026-11-23, CTR-CHAT-25): PqChatSession carries uint8 groupMode as its last field, 0 flat " +
     "wraps; sessionTreeKem is the session with groupMode 1 (TreeKEM), signed; the mode is accepted from the tree module on " +
-    "(CTR-CHAT-26), 2-255 refused (PqChatModeUnsupported).",
+    "(CTR-CHAT-26), 2-255 refused (PqChatModeUnsupported); sessionMode2 is the session with groupMode 2, signed, and its " +
+    "error (PqChatModeUnsupported(2), checked before the lists, the signature and the nonce).",
   version: 1,
   domain,
   purpose,
@@ -338,6 +342,14 @@ write("records.json", {
     scope: pc.scopeSession(alice.ua),
     sig: sign(alice, "PqChatSession", sessionTreeKem),
   }),
+  sessionMode2: {
+    ...recordRow("PqChatSession", sessionMode2, alice, {
+      id: hex(pc.sessionId(alice.ua, 13)),
+      scope: pc.scopeSession(alice.ua),
+      sig: sign(alice, "PqChatSession", sessionMode2),
+    }),
+    error: "PqChatModeUnsupported",
+  },
   epochDevices: recordRow("PqChatEpoch", epochDevices, bob, {
     id: eid2,
     scope: pc.scopeEpoch(sid, bob.ua),

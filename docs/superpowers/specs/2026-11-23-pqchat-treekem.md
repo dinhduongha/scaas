@@ -1,6 +1,6 @@
 # PqChat TreeKEM mode (`groupMode = 1`), minimal scope: design
 
-**Status:** SPECIFIED, nothing built. **UNAUDITED**: a new cryptographic protocol; every construction below is a design, not a
+**Status:** SPECIFIED; BUILT (UNAUDITED): the contract (plan T1a-T3d with the code review's fixes of 2026-11-24 on branch `review-fix-contract`), clientkeys and `ua-rs` (T1a, T1b, the forward walk of C25 / C26), the node's rows and bounds (T4's allow-list part, D-4, D-7); PLANNED: T4's whole-set guard and C37's order at the node, T5-T10. **UNAUDITED**: a new cryptographic protocol; every construction below is a design, not a
 reviewed protocol. **Revision 3 (2026-11-23)**, after two review rounds by Codex and Fable: of revision 1 (`f42a75af2`; 22 and
 16 findings, 2 unsure) and of revision 2 (`29ba84732`; Codex 16, Fable 9 and 1 unsure). A finding is cited by its id where its
 fix sits (`codex-n`, `fable-n`; round 2: `codex-r2-n`, `fable-r2-n`; round 3: `fable-r3-n`, `codex-r3-n`); [§17](#17-what-revisions-2-and-3-changed) lists them. **A

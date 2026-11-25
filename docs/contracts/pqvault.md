@@ -125,7 +125,7 @@ seed-derived vault key exists; epochs, wraps in chunks, the home-instance slot, 
   as [CTR-PQV-13](#CTR-PQV-13) states.
 - Sharing a vault is a `rekeyVault` to the new members with a wrap per member.
 - **Exits apply at the head (Change 2026-11-24, E-3 of the TreeKEM code review; owner 2026-11-24: "Yes, both modes", one rule for the group
-  code; SPECIFIED, the code follows on branch `review-fix-contract`):** `removeVaultMembers` and `leaveVault` take
+  code; BUILT on branch `review-fix-contract`):** `removeVaultMembers` and `leaveVault` take
   [CTR-CHAT-20](pqchat.md#CTR-CHAT-20)'s and [CTR-CHAT-10](pqchat.md#CTR-CHAT-10)'s change with `PqVault*` errors: at
   home the epoch named is the head or an ancestor of it within `EXIT_LAG_MAX` = 16 epochs (`PqVaultExitLag` beyond),
   complete, and the exit is checked and applied at the head; an exit that would newly flag nobody there is

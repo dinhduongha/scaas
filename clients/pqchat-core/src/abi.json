@@ -178,6 +178,87 @@
   "stateMutability": "view",
   "type": "function"
  },
+ "IPqChat.addPath": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint32",
+    "name": "firstCt",
+    "type": "uint32"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "mlkemCt",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "x25519Eph",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedSecret",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PathCt[]",
+    "name": "cts",
+    "type": "tuple[]"
+   }
+  ],
+  "name": "addPath",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.addPathKeys": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes[]",
+    "name": "nodeKeys",
+    "type": "bytes[]"
+   }
+  ],
+  "name": "addPathKeys",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.addPathList": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint32[]",
+    "name": "ctTargets",
+    "type": "uint32[]"
+   },
+   {
+    "internalType": "bytes32[]",
+    "name": "ctHashes",
+    "type": "bytes32[]"
+   }
+  ],
+  "name": "addPathList",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
  "IPqChat.addWraps": {
   "inputs": [
    {
@@ -279,6 +360,286 @@
    }
   ],
   "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.commit": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "author",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "epoch",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "parentEpochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "treeId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "parentTreeHash",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint32",
+      "name": "leaf",
+      "type": "uint32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "keyId",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint32",
+      "name": "leaves",
+      "type": "uint32"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "admins",
+      "type": "bytes32[]"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint32",
+        "name": "leaf",
+        "type": "uint32"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "uint64",
+        "name": "keyId",
+        "type": "uint64"
+       }
+      ],
+      "internalType": "struct IPqGroupTree.TreeRemove[]",
+      "name": "removes",
+      "type": "tuple[]"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint32",
+        "name": "leaf",
+        "type": "uint32"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "uint64",
+        "name": "keyId",
+        "type": "uint64"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "via",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "kemHash",
+        "type": "bytes32"
+       }
+      ],
+      "internalType": "struct IPqGroupTree.TreeAdd[]",
+      "name": "adds",
+      "type": "tuple[]"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "wrapHashes",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "nodeKeyHashes",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "uint32",
+      "name": "ctCount",
+      "type": "uint32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "ctListHash",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "treeHash",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedInfo",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatCommit",
+    "name": "c",
+    "type": "tuple"
+   },
+   {
+    "internalType": "uint32[]",
+    "name": "ctTargets",
+    "type": "uint32[]"
+   },
+   {
+    "internalType": "bytes32[]",
+    "name": "ctHashes",
+    "type": "bytes32[]"
+   },
+   {
+    "internalType": "bytes[]",
+    "name": "nodeKeys",
+    "type": "bytes[]"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "mlkemCt",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "x25519Eph",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedSecret",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PathCt[]",
+    "name": "cts",
+    "type": "tuple[]"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "member",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "keyId",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes",
+      "name": "mlkemCt",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "x25519Eph",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedKey",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.Wrap[]",
+    "name": "wraps",
+    "type": "tuple[]"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "commit",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "nonpayable",
   "type": "function"
  },
  "IPqChat.createSession": {
@@ -2777,6 +3138,198 @@
    }
   ],
   "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.treeLeave": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "treeId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "epochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "member",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatTreeLeave",
+    "name": "l",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "treeLeave",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.treeRemove": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "treeId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "epochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nextEpoch",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "members",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "admin",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatTreeRemove",
+    "name": "r",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "treeRemove",
+  "outputs": [],
+  "stateMutability": "nonpayable",
   "type": "function"
  },
  "IPqChat.updateTopic": {
