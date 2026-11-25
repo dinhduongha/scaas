@@ -14,7 +14,7 @@ import {SSTORE2} from "../common/SSTORE2.sol";
 ///         PqChat's state and env through the hooks; called directly it has no env (`PqChatEnv`). No `this`, `msg.sender`
 ///         unused, no guard of its own (`PqChat` holds none), its return and revert data forwarded verbatim. Plan
 ///         2026-11-23-pqchat-treekem T3a (the cold tree written with the wraps) and T3b (`commit`, its pieces, completion,
-///         `treeLeave`, `treeRemove`, `postMessage`); the checks and the tree writes are `PqGroupTree`'s. **UNAUDITED.**
+///         `postMessage`; `treeLeave` and `treeRemove` moved to `PqChatTreeMembers`, owner 2026-11-24); the checks and the tree writes are `PqGroupTree`'s. **UNAUDITED.**
 contract PqChatTree is PqChatCore {
     /// @notice The factory whose `PqChat` releases name this module (checked by the release's constructor).
     address public immutable FACTORY;
@@ -173,6 +173,7 @@ contract PqChatTree is PqChatCore {
     /// @dev The record of a staged tree epoch whose slot is still free (`PqChatEpochTaken`).
     function _staging(bytes32 epochId, Epoch storage ep) internal view returns (IPqChat.PqChatCommit memory c) {
         if (!_isTree(ep.sessionId)) revert IPqChat.PqChatModeEntry(0);
+        if (ep.epoch == 0) revert IPqChat.PqChatUnknown(epochId); // A-3: epoch 0 has no commit and no pieces but its wraps
         _slotFree(ep, epochId);
         (c,) = abi.decode(_get(ep.record), (IPqChat.PqChatCommit, bytes32));
     }
@@ -229,7 +230,7 @@ contract PqChatTree is PqChatCore {
         address list = _staged(eid).list;
         if (list == address(0)) revert IPqChat.PqChatPathList(eid);
         uint256 n = cts.length;
-        if (first + n > (list.code.length - 1) / 36) revert IPqChat.PqChatShape();
+        if (n == 0 || first + n > (list.code.length - 1) / 36) revert IPqChat.PqChatShape(); // C40: at least one
         uint256 per = (_codeCap(limit) - 1) / PATH_CT;
         for (uint256 j; j < n; j += per) {
             _ctBlob(eid, list, first, cts, j, n - j < per ? n : j + per);
@@ -305,7 +306,7 @@ contract PqChatTree is PqChatCore {
         emit IPqChat.PqChatEpochComplete(eid);
     }
 
-    // ------------------------------------------------------------------ leave, removal, messages (§9)
+    // ------------------------------------------------------------------ messages (§9; `treeLeave`, `treeRemove`: PqChatTreeMembers)
 
     /// @dev The head of a tree session named by `epochId`: stored, of `sid`, complete, no child (C9, C20).
     function _head(bytes32 sid, bytes32 epochId) internal view returns (Epoch storage ep) {
@@ -314,52 +315,6 @@ contract PqChatTree is PqChatCore {
         if (ep.landed != ep.wraps) revert IPqChat.PqChatIncomplete(epochId);
         bytes32 child = _s().childOf[epochId];
         if (child != 0) revert IPqChat.PqChatEpochTaken(epochId, child);
-    }
-
-    /// @notice C9, C21, C28, C38: a live member leaves at the head; it is `gone` (kind 1) and its leaves are owed. The record
-    ///         that closes a session is accepted.
-    function treeLeave(IPqChat.PqChatTreeLeave calldata l, IUARegistry.UASig calldata sig) external {
-        (IUARegistry reg, uint256 limit,) = _env();
-        Tree storage t = _treeOf(l.sessionId);
-        if (l.treeId != t.treeId) revert IPqChat.PqChatTreeHome();
-        Epoch storage ep = _head(l.sessionId, l.epochId);
-        if (!_treeMember(t, l.member)) revert IPqChat.PqChatNotMember(l.member);
-        _auth(reg, l.member, PqChatTypes.hashTreeLeave(l), sig);
-        _useNonce(PqChatTypes.scopeEpoch(l.sessionId, l.member), l.nonce);
-        _treeGo(l.sessionId, l.member, 1, ep.epoch);
-        ep.left[l.member] = true;
-        _s().leaves[l.epochId].push(_put(abi.encode(l, keccak256(abi.encode(sig)), sig), limit));
-        emit IPqChat.PqChatLeft(l.sessionId, l.epochId, l.member);
-    }
-
-    /// @notice C9, C21, C24, C28, C38: a live admin of the head removes members or admins (strictly sorted); they are
-    ///         `gone` (kind 2) and their leaves are owed; an admin with a live leaf remains while any member keeps a leaf.
-    ///         The record that closes a session is accepted.
-    function treeRemove(IPqChat.PqChatTreeRemove calldata r, IUARegistry.UASig calldata sig) external {
-        (IUARegistry reg, uint256 limit,) = _env();
-        Tree storage t = _treeOf(r.sessionId);
-        if (r.treeId != t.treeId) revert IPqChat.PqChatTreeHome();
-        Epoch storage ep = _head(r.sessionId, r.epochId);
-        if (r.nextEpoch != ep.epoch + 1) revert IPqChat.PqChatEpochNumber(ep.epoch + 1, r.nextEpoch);
-        if (!_treeAdmin(t, r.admin)) revert IPqChat.PqChatNotAdmin(r.admin);
-        uint256 n = r.members.length;
-        if (n == 0) revert IPqChat.PqChatShape();
-        for (uint256 i; i < n; ++i) {
-            bytes32 u = r.members[i];
-            if (i > 0 && u <= r.members[i - 1]) revert IPqChat.PqChatShape();
-            if (t.keysOf[u].live == 0 && !_in(t.admins, u)) revert IPqChat.PqChatNotMember(u);
-        }
-        _auth(reg, r.admin, PqChatTypes.hashTreeRemove(r), sig);
-        _useNonce(PqChatTypes.scopeEpoch(r.sessionId, r.admin), r.nonce);
-        bool leafy = _treeLeafyAdmin(t);
-        for (uint256 i; i < n; ++i) {
-            _treeGo(r.sessionId, r.members[i], 2, ep.epoch);
-            ep.removedOf[r.members[i]] = true;
-        }
-        // C24 read with C38 (CTR-CHAT-27 Change 2026-11-24): refused only while a member that is not gone keeps a leaf
-        if (leafy && !_treeLeafyAdmin(t) && _treeHasMember(t)) revert IPqChat.PqChatTreeAdmins();
-        _s().removals[r.epochId].push(_put(_blob(abi.encode(r), sig), limit));
-        emit IPqChat.PqChatRemoved(r.sessionId, r.epochId, r.admin, r.members);
     }
 
     /// @notice `PqChat.postMessage` of a tree session: the sender a live member at the head.

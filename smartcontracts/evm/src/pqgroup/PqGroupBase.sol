@@ -25,6 +25,8 @@ abstract contract PqGroupBase {
     /// @dev Owner (M) 2026-11-23: the KEM keys one UA may hold in one epoch (its seed key and device keys), a controller call
     ///      from the gas figures: 8 keys of each of 2 members are 16 wraps, about a 16-member epoch, still landed in chunks.
     uint256 internal constant KEYS_PER_UA_MAX = 8;
+    /// @dev C9 (Change 2026-11-24, E-3): an exit names the head or an older complete epoch at most this many below it.
+    uint64 internal constant EXIT_LAG_MAX = 16;
 
     /// @dev What `_fail` raises, each contract by its own named error: `a`, `b` its arguments as words.
     uint8 internal constant F_SHAPE = 0; // ()

@@ -702,18 +702,20 @@ abstract contract DeployBase is DeployBook {
     ///         the module pinned in `libs`), release 1 from the chain-neutral init code with `implArgs` naming the module,
     ///         the `(3, 0)` switch on, and one instance owned by no UA when the notice period lets it be created now (JSON
     ///         `pqchat_instance`; else created after the notice period by anyone, `createInstance`). JSON
-    ///         `pqchat_implementation`, `pqchat_topics`, `pqchat_tree` (CTR-CHAT-26), `pqchat_tree_views` (owner 2026-11-24). **UNAUDITED.**
+    ///         `pqchat_implementation`, `pqchat_topics`, `pqchat_tree` (CTR-CHAT-26), `pqchat_tree_views`, `pqchat_tree_members` (owner 2026-11-24). **UNAUDITED.**
     function _deployPqChat(OpenFactory f, address reg) internal {
         _requireKindHere("PqChat", uid); // NET-ALL-25 (C18), where PqChat is created (review P3-1)
         address topics = _module("PqChatTopics.sol:PqChatTopics", abi.encode(address(f)), 3, 0);
         address tree = _module("PqChatTree.sol:PqChatTree", abi.encode(address(f)), 3, 0); // CTR-CHAT-26
         address views = _module("PqChatTreeViews.sol:PqChatTreeViews", abi.encode(address(f)), 3, 0); // owner 2026-11-24
-        f.publishClassEnv(3, 0, 1, f.chainUid(), _pqchatEnv(reg, topics, tree, views));
-        address impl = _pqchatRelease(f, abi.encode(topics, tree, views));
+        address members = _module("PqChatTreeMembers.sol:PqChatTreeMembers", abi.encode(address(f)), 3, 0); // owner 2026-11-24
+        f.publishClassEnv(3, 0, 1, f.chainUid(), _pqchatEnv(reg, topics, tree, views, members));
+        address impl = _pqchatRelease(f, abi.encode(topics, tree, views, members));
         f.setClassKindEnabled(3, 0, true, f.chainUid());
         vm.serializeAddress("deploy", "pqchat_topics", topics);
         vm.serializeAddress("deploy", "pqchat_tree", tree);
         vm.serializeAddress("deploy", "pqchat_tree_views", views);
+        vm.serializeAddress("deploy", "pqchat_tree_members", members);
         vm.serializeAddress("deploy", "pqchat_implementation", impl);
         IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
         if (f.classReleaseOf(id).usableFrom <= block.timestamp) {
@@ -766,7 +768,7 @@ abstract contract DeployBase is DeployBook {
     }
 
     /// @notice The class env 1 of `(3, 0)`: the registry, `params[0]` the declared code-size limit, the module in `libs`.
-    function _pqchatEnv(address reg, address topics, address tree, address views)
+    function _pqchatEnv(address reg, address topics, address tree, address views, address members)
         internal
         view
         returns (IFactoryToken.Env memory e)
@@ -774,10 +776,11 @@ abstract contract DeployBase is DeployBook {
         e.registry = reg;
         e.params = new bytes32[](1);
         e.params[0] = bytes32(_chainCodeLimit());
-        e.libs = new address[](3);
-        (e.libs[0], e.libs[1], e.libs[2]) = (topics, tree, views);
-        e.libCodeHashes = new bytes32[](3);
-        (e.libCodeHashes[0], e.libCodeHashes[1], e.libCodeHashes[2]) = (topics.codehash, tree.codehash, views.codehash);
+        e.libs = new address[](4);
+        (e.libs[0], e.libs[1], e.libs[2], e.libs[3]) = (topics, tree, views, members);
+        e.libCodeHashes = new bytes32[](4);
+        (e.libCodeHashes[0], e.libCodeHashes[1], e.libCodeHashes[2], e.libCodeHashes[3]) =
+        (topics.codehash, tree.codehash, views.codehash, members.codehash);
     }
 
     /// @notice DEX release 1 on env 1 after its gate, with the factory's chain word (Fable recheck-2 P3-1); its release row.

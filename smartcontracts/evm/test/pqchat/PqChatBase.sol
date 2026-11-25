@@ -12,6 +12,7 @@ import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
 import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
 import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
+import {PqChatTreeMembers} from "../../src/pqchat/PqChatTreeMembers.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {UARegistryBase} from "../ua/UARegistryBase.sol";
@@ -93,6 +94,7 @@ abstract contract PqChatBase is UARegistryBase {
     PqChatTopics internal topics; // the body module (CTR-TOK-30), pinned in the class env
     PqChatTree internal treeModule; // the TreeKEM body module (CTR-CHAT-26), pinned in the class env
     PqChatTreeViews internal viewsModule; // the read-only tree views module (owner 2026-11-24), pinned in `libs` too
+    PqChatTreeMembers internal membersModule; // the tree exits module (owner 2026-11-24), pinned in `libs` too
     address internal impl;
     PqChat internal chat; // instance A, the home of the sessions the tests create unless they say otherwise
     PqChat internal chatB; // instance B, a replica
@@ -117,6 +119,7 @@ abstract contract PqChatBase is UARegistryBase {
         topics = new PqChatTopics(address(f));
         treeModule = new PqChatTree(address(f));
         viewsModule = new PqChatTreeViews(address(f));
+        membersModule = new PqChatTreeMembers(address(f));
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 1, EnvKit.uidOf(address(f)), _classEnv(address(p), LIMIT));
         vm.prank(REGISTRAR);
@@ -143,16 +146,22 @@ abstract contract PqChatBase is UARegistryBase {
         e.registry = registry;
         e.params = new bytes32[](1);
         e.params[0] = bytes32(limit);
-        e.libs = new address[](3);
-        (e.libs[0], e.libs[1], e.libs[2]) = (address(topics), address(treeModule), address(viewsModule));
-        e.libCodeHashes = new bytes32[](3);
-        (e.libCodeHashes[0], e.libCodeHashes[1], e.libCodeHashes[2]) =
-        (address(topics).codehash, address(treeModule).codehash, address(viewsModule).codehash);
+        e.libs = new address[](4);
+        (e.libs[0], e.libs[1], e.libs[2], e.libs[3]) =
+        (address(topics), address(treeModule), address(viewsModule), address(membersModule));
+        e.libCodeHashes = new bytes32[](4);
+        (e.libCodeHashes[0], e.libCodeHashes[1], e.libCodeHashes[2], e.libCodeHashes[3]) =
+        (
+            address(topics).codehash,
+            address(treeModule).codehash,
+            address(viewsModule).codehash,
+            address(membersModule).codehash
+        );
     }
 
     /// The release's `implArgs`: its body modules.
     function _args() internal view returns (bytes memory) {
-        return abi.encode(address(topics), address(treeModule), address(viewsModule));
+        return abi.encode(address(topics), address(treeModule), address(viewsModule), address(membersModule));
     }
 
     /// An instance whose owner is `ownerUA`, created by it (the owner is 0 or the creator, D P3-1): a native id by its

@@ -19,6 +19,7 @@ import {PqChat as PqChatFace} from "../../src/pqchat/PqChat.sol";
 import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
 import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
 import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
+import {PqChatTreeMembers} from "../../src/pqchat/PqChatTreeMembers.sol";
 
 /// @dev `PqChatTypes` over calldata, run in the script's own EVM (never broadcast): the typed digests and ids.
 contract PqChatDigests {
@@ -167,14 +168,16 @@ contract PqChatOnchain is OnchainBase {
                 address topics = address(new PqChatTopics{salt: _salt("pqchat-topics")}(address(f)));
                 address tree = address(new PqChatTree{salt: _salt("pqchat-tree")}(address(f)));
                 address views = address(new PqChatTreeViews{salt: _salt("pqchat-tree-views")}(address(f)));
+                address members = address(new PqChatTreeMembers{salt: _salt("pqchat-tree-members")}(address(f)));
                 IFactoryToken.Env memory e;
                 e.registry = address(reg);
                 e.params = new bytes32[](1);
                 e.params[0] = bytes32(vm.envOr("CHAIN_CODE_LIMIT", uint256(131_072)));
-                (e.libs, e.libCodeHashes) = (new address[](3), new bytes32[](3));
+                (e.libs, e.libCodeHashes) = (new address[](4), new bytes32[](4));
                 (e.libs[0], e.libCodeHashes[0]) = (topics, topics.codehash);
                 (e.libs[1], e.libCodeHashes[1]) = (tree, tree.codehash);
                 (e.libs[2], e.libCodeHashes[2]) = (views, views.codehash);
+                (e.libs[3], e.libCodeHashes[3]) = (members, members.codehash);
                 f.publishClassEnv(3, 0, 1, f.chainUid(), e);
                 impl = f.deployImplementation{gas: RELEASE_GAS}(
                     id,
@@ -182,7 +185,7 @@ contract PqChatOnchain is OnchainBase {
                     IPqChat.initialize.selector,
                     type(IPqChat).interfaceId,
                     vm.getCode("PqChat.sol:PqChat"),
-                    abi.encode(topics, tree, views),
+                    abi.encode(topics, tree, views, members),
                     f.chainUid()
                 );
                 f.setClassKindEnabled(3, 0, true, f.chainUid());
@@ -196,6 +199,7 @@ contract PqChatOnchain is OnchainBase {
         _book(PqChatFace(impl).modules()[0], "PqChatTopics");
         _book(PqChatFace(impl).modules()[1], "PqChatTree");
         _book(PqChatFace(impl).modules()[2], "PqChatTreeViews");
+        _book(PqChatFace(impl).modules()[3], "PqChatTreeMembers");
     }
 
     function _instance() internal {

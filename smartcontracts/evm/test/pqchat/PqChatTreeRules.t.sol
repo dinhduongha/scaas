@@ -173,6 +173,16 @@ contract PqChatTreeRulesTest is PqChatTreeModel {
         vchat.addPathKeys(eid, st.nodeKeys);
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatPathStored.selector, eid, uint256(0)));
         vchat.addPathKeys(eid, st.nodeKeys);
+        // C40 (D-7): an empty `addPath` is refused like an empty list or key piece
+        vm.expectRevert(IPqChat.PqChatShape.selector);
+        vchat.addPath(eid, 0, new IPqChat.PathCt[](0));
+        // A-3: the piece entries on a tree session's epoch 0 are refused by name
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatUnknown.selector, m.sid));
+        vchat.addPathList(m.sid, st.ctTargets, st.ctHashes);
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatUnknown.selector, m.sid));
+        vchat.addPathKeys(m.sid, st.nodeKeys);
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatUnknown.selector, m.sid));
+        vchat.addPath(m.sid, 0, st.cts);
         IPqChat.PathCt[] memory one = new IPqChat.PathCt[](1);
         one[0] = st.cts[1];
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatPathHash.selector, eid, uint256(0)));

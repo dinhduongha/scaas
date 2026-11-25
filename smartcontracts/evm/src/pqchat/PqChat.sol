@@ -7,6 +7,7 @@ import {PqChatCore} from "./PqChatCore.sol";
 import {PqChatTopics} from "./PqChatTopics.sol";
 import {PqChatTree} from "./PqChatTree.sol";
 import {PqChatTreeViews} from "./PqChatTreeViews.sol";
+import {PqChatTreeMembers} from "./PqChatTreeMembers.sol";
 import {IPqChatTreeViews} from "./IPqChatTreeViews.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
@@ -45,19 +46,23 @@ contract PqChat is IPqChat, PqChatCore {
     address internal immutable TREE;
     /// @notice The read-only body module of the tree views (`PqChatTreeViews`, owner 2026-11-24), named in `implArgs`.
     address internal immutable VIEWS;
+    /// @notice The body module of a tree session's exits (`PqChatTreeMembers`, owner 2026-11-24), named in `implArgs`.
+    address internal immutable MEMBERS;
 
-    /// @notice `(ReleaseId, factory_, implArgs)` (topics spec §11), `implArgs = abi.encode(topics, tree, views)`: the body
-    ///         modules `PqChatTopics`, `PqChatTree` and `PqChatTreeViews` of this factory (CTR-TOK-30, 3C-D2, CTR-CHAT-26),
+    /// @notice `(ReleaseId, factory_, implArgs)` (topics spec §11), `implArgs = abi.encode(topics, tree, views, members)`: the body
+    ///         modules `PqChatTopics`, `PqChatTree`, `PqChatTreeViews` and `PqChatTreeMembers` of this factory (CTR-TOK-30, 3C-D2, CTR-CHAT-26),
     ///         code present. The implementation is locked.
     constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory implArgs) {
         if (id.contractClass != CLASS || id.kind != KIND || id.version == 0 || factory_ == address(0)) {
             revert PqChatEnv();
         }
-        (address topics_, address tree_, address views_) = abi.decode(implArgs, (address, address, address));
+        (address topics_, address tree_, address views_, address members_) =
+            abi.decode(implArgs, (address, address, address, address));
         if (topics_.code.length == 0 || PqChatTopics(topics_).FACTORY() != factory_) revert PqChatEnv();
         if (tree_.code.length == 0 || PqChatTree(tree_).FACTORY() != factory_) revert PqChatEnv();
         if (views_.code.length == 0 || PqChatTreeViews(views_).FACTORY() != factory_) revert PqChatEnv();
-        (FACTORY, VERSION, TOPICS, TREE, VIEWS) = (factory_, id.version, topics_, tree_, views_);
+        if (members_.code.length == 0 || PqChatTreeMembers(members_).FACTORY() != factory_) revert PqChatEnv();
+        (FACTORY, VERSION, TOPICS, TREE, VIEWS, MEMBERS) = (factory_, id.version, topics_, tree_, views_, members_);
         _s().initialized = true;
     }
 
@@ -224,11 +229,11 @@ contract PqChat is IPqChat, PqChatCore {
     }
 
     function treeLeave(PqChatTreeLeave calldata, IUARegistry.UASig calldata) external {
-        _forward(TREE);
+        _forward(MEMBERS);
     }
 
     function treeRemove(PqChatTreeRemove calldata, IUARegistry.UASig calldata) external {
-        _forward(TREE);
+        _forward(MEMBERS);
     }
 
     function addWraps(bytes32 epochId, uint32 first, Wrap[] calldata wraps) external {
@@ -630,8 +635,8 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @notice The body modules (CTR-TOK-30), as the token faces list theirs.
     function modules() external view returns (address[] memory m) {
-        m = new address[](3);
-        (m[0], m[1], m[2]) = (TOPICS, TREE, VIEWS);
+        m = new address[](4);
+        (m[0], m[1], m[2], m[3]) = (TOPICS, TREE, VIEWS, MEMBERS);
     }
 
     /// @notice Owner 2026-11-24 (option A): a selector this contract does not have goes to the read-only `PqChatTreeViews`

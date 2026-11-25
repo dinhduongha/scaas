@@ -99,7 +99,8 @@
       {"label": "PqChat", "artifact": "PqChat.sol/PqChat"},
       {"label": "PqChatTopics", "artifact": "PqChatTopics.sol/PqChatTopics", "via": ["PqChat"]},
       {"label": "PqChatTree", "artifact": "PqChatTree.sol/PqChatTree", "via": ["PqChat"]},
-      {"label": "PqChatTreeViews", "artifact": "PqChatTreeViews.sol/PqChatTreeViews", "via": ["PqChat"]}
+      {"label": "PqChatTreeViews", "artifact": "PqChatTreeViews.sol/PqChatTreeViews", "via": ["PqChat"]},
+      {"label": "PqChatTreeMembers", "artifact": "PqChatTreeMembers.sol/PqChatTreeMembers", "via": ["PqChat"]}
     ]
   }
 }

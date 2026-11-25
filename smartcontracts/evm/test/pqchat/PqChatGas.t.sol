@@ -80,9 +80,12 @@ contract PqChatGasTest is PqTopicsBase {
     // TreeKEM T3d (owner 2026-11-24, option A: the immutable `VIEWS` and its check in the constructor, the `fallback` to
     // the read-only `PqChatTreeViews`, `modules()` of three, its interface id in `supportsInterface`): 34,743 -> 34,912 B;
     // regular 2,383,116 -> 2,410,162; state 53,732,070 -> 53,990,640 (+169 x 1,530); asked x 1.05 59,220,842 of 60 M.
-    uint256 internal constant RUNTIME = 34_912;
-    uint256 internal constant RELEASE_REGULAR = 2_410_162;
-    uint256 internal constant RELEASE_STATE = 53_990_640;
+    // Owner 2026-11-24 (the pre-approved split): `treeLeave` / `treeRemove` forwarded to `PqChatTreeMembers`, the immutable
+    // `MEMBERS` and its check in the constructor, `modules()` of four: 34,912 -> 34,978 B; regular 2,410,162 -> 2,430,967;
+    // state 53,990,640 -> 54,091,620 (+66 x 1,530); asked x 1.05 59,348,716 of 60 M.
+    uint256 internal constant RUNTIME = 34_978;
+    uint256 internal constant RELEASE_REGULAR = 2_430_967;
+    uint256 internal constant RELEASE_STATE = 54_091_620;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice:
     // 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged

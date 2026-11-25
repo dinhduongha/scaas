@@ -274,6 +274,9 @@ interface IPqChat {
     error PqChatUnknown(bytes32 id);
     error PqChatIncomplete(bytes32 epochId);
     error PqChatEpochNumber(uint64 expected, uint64 got);
+    /// @notice C9 (Change 2026-11-24, E-3, sc-E-2): an exit naming epoch number `named` lands at a head numbered `head`, more
+    ///         than `EXIT_LAG_MAX` (16) above it.
+    error PqChatExitLag(uint64 named, uint64 head);
     /// @notice The home instance's child slot of `parentEpochId` is `child`'s (P9).
     error PqChatEpochTaken(bytes32 parentEpochId, bytes32 child);
     error PqChatNotAdmin(bytes32 author);
