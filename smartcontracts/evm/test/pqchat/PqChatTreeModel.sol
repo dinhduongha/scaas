@@ -39,6 +39,10 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
         uint64 keyId;
     }
 
+    /// The model's room: the contract's leaf positions (C10, R8: 512, depth 9) and nodes.
+    uint256 internal constant MODEL_LEAVES = 512;
+    uint256 internal constant MODEL_NODES = 2 * MODEL_LEAVES - 1;
+
     uint64 internal nonceN = 1000;
     bytes internal nodeKey; // an admitted key, every path node's
 
@@ -75,7 +79,13 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
         m.leaves = 1;
         while (m.leaves < m.used) m.leaves <<= 1;
         (m.ua, m.kid, m.kem, m.live, m.key) =
-        (new bytes32[](256), new uint64[](256), new bytes32[](256), new bool[](256), new bytes32[](511));
+        (
+            new bytes32[](MODEL_LEAVES),
+            new uint64[](MODEL_LEAVES),
+            new bytes32[](MODEL_LEAVES),
+            new bool[](MODEL_LEAVES),
+            new bytes32[](MODEL_NODES)
+        );
         for (uint256 i; i < members.length; ++i) {
             (m.ua[i], m.kid[i], m.kem[i], m.live[i]) =
             (members[i].ua, members[i].keyId, _kemHash(members[i].ua, members[i].keyId), true);
@@ -135,11 +145,17 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
     function _copy(M memory a) internal pure returns (M memory b) {
         (b.sid, b.treeId, b.head, b.epoch, b.used, b.leaves) = (a.sid, a.treeId, a.head, a.epoch, a.used, a.leaves);
         (b.ua, b.kid, b.kem, b.live, b.key) =
-        (new bytes32[](256), new uint64[](256), new bytes32[](256), new bool[](256), new bytes32[](511));
-        for (uint256 i; i < 256; ++i) {
+        (
+            new bytes32[](MODEL_LEAVES),
+            new uint64[](MODEL_LEAVES),
+            new bytes32[](MODEL_LEAVES),
+            new bool[](MODEL_LEAVES),
+            new bytes32[](MODEL_NODES)
+        );
+        for (uint256 i; i < MODEL_LEAVES; ++i) {
             (b.ua[i], b.kid[i], b.kem[i], b.live[i]) = (a.ua[i], a.kid[i], a.kem[i], a.live[i]);
         }
-        for (uint256 i; i < 511; ++i) {
+        for (uint256 i; i < MODEL_NODES; ++i) {
             b.key[i] = a.key[i];
         }
     }
@@ -206,8 +222,8 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
     /// The author's filtered path on `n` (after the changes): node keys, targets, stand-in ciphertexts, the list.
     function _path(M memory n, Step memory st) internal view {
         IPqChat.PqChatCommit memory c = st.c;
-        uint32[] memory tg = new uint32[](256);
-        bytes32[] memory nk = new bytes32[](9);
+        uint32[] memory tg = new uint32[](MODEL_LEAVES);
+        bytes32[] memory nk = new bytes32[](10);
         (uint256 t, uint256 k, uint256 x) = (0, 0, 2 * uint256(c.leaf));
         while (x != n.leaves - 1) {
             uint256 q = _par(x);

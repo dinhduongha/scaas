@@ -9,7 +9,7 @@ import { uaMessage } from "./ua.js";
 import { PqChatError, TYPE_STRINGS, DS_C, PURPOSE_PQCHAT, structHash, checkKemPk } from "./pqchat.js";
 
 /** `used ≤ TREE_LEAVES_MAX` (owner, R-ruling of 2026-11-23). */
-export const TREE_LEAVES_MAX = 256;
+export const TREE_LEAVES_MAX = 512; // R8: 256 -> 512 (owner 2026-11-25), depth 9
 /** The contract's other bounds of a commit (C10, C24; `PqGroupBase`, `PqGroupTree._treeBounds`): Adds plus Removes, the admin
  *  list, the live leaves of one UA after the commit (D-5). */
 export const TREE_CHANGES_MAX = 32;

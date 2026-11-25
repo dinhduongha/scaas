@@ -925,11 +925,11 @@ fn compliance_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
 /// CTR-CHAT-27 (spec 2026-11-23-pqchat-treekem §2 C10, C14, C21, C24, §13): `PqChatCore`'s tree bounds and `PqGroupTree`'s
 /// sizes, so the node refuses what the contract refuses and nothing it accepts. A path holds at most `depth(TREE_LEAVES_MAX)`
 /// node keys and `TREE_LEAVES_MAX - 1` ciphertexts (`ctCount < leaves`).
-const TREE_LEAVES_MAX: u64 = 256;
+const TREE_LEAVES_MAX: u64 = 512; // R8: 256 -> 512 (owner 2026-11-25), depth 9
 const TREE_ADMINS_MAX: usize = 32;
 const TREE_CHANGES_MAX: usize = 32;
 const TREE_INFO_MAX: usize = 4124;
-const TREE_DEPTH_MAX: usize = 8;
+const TREE_DEPTH_MAX: usize = 9;
 const TREE_CTS_MAX: usize = TREE_LEAVES_MAX as usize - 1;
 /// A node key (`0x01 ‖ ek ‖ pk_X`), a path ciphertext's ML-KEM ciphertext and its sealed secret.
 const KEM_PK: usize = 1601;
@@ -6017,7 +6017,7 @@ mod tests {
             Value::Array((0..n).map(|i| json!({"leaf": i, "ua": h(i), "keyId": "1", "via": h(0), "kemHash": h(i)})).collect())
         };
         let wrap = json!({"member": h(0), "keyId": "1", "mlkemCt": b(1568), "x25519Eph": h(1), "sealedKey": b(48)});
-        // a commit at leaves 256 (depth 8): `n_ct` ciphertexts in the list, `n_keys` node keys
+        // a commit at leaves 512 (depth 9): `n_ct` ciphertexts in the list, `n_keys` node keys
         let big = |a: &mut Value, leaves: usize, n_ct: usize, n_keys: usize| {
             a["c"]["leaves"] = json!(leaves);
             a["c"]["ctCount"] = json!(n_ct);
@@ -6075,21 +6075,21 @@ mod tests {
         );
         pair(
             "commit",
-            &|a| big(a, 256, 255, 8),
-            &|a| big(a, 257, 255, 8),
-            "c.leaves: above 256",
+            &|a| big(a, 512, 511, 9),
+            &|a| big(a, 513, 511, 9),
+            "c.leaves: above 512",
         );
         pair(
             "commit",
-            &|a| big(a, 256, 255, 8),
-            &|a| big(a, 256, 255, 9),
-            "c.nodeKeyHashes: more than 8",
+            &|a| big(a, 512, 511, 9),
+            &|a| big(a, 512, 511, 10),
+            "c.nodeKeyHashes: more than 9",
         );
         pair(
             "commit",
-            &|a| big(a, 256, 255, 8),
-            &|a| big(a, 256, 256, 8),
-            "ctTargets: more than 255",
+            &|a| big(a, 512, 511, 9),
+            &|a| big(a, 512, 512, 9),
+            "ctTargets: more than 511",
         );
         let depth = "c: ctCount below leaves, at most depth(leaves) nodeKeyHashes";
         pair("commit", &|a| big(a, 4, 3, 2), &|a| big(a, 4, 3, 3), depth);
@@ -6183,9 +6183,9 @@ mod tests {
         };
         pair(
             "addPathList",
-            &|a| pl(a, 255, 255),
-            &|a| pl(a, 256, 256),
-            "ctTargets: more than 255",
+            &|a| pl(a, 511, 511),
+            &|a| pl(a, 512, 512),
+            "ctTargets: more than 511",
         );
         pair(
             "addPathList",
@@ -6201,9 +6201,9 @@ mod tests {
         );
         pair(
             "addPathKeys",
-            &|a| a["nodeKeys"] = keys(8),
             &|a| a["nodeKeys"] = keys(9),
-            "nodeKeys: more than 8",
+            &|a| a["nodeKeys"] = keys(10),
+            "nodeKeys: more than 9",
         );
         let pk = "nodeKeys: 1 or more, each of 1601 bytes";
         pair(
@@ -6218,24 +6218,24 @@ mod tests {
             &|a| a["nodeKeys"][0] = b(1602),
             pk,
         );
-        let ap = "cts: firstCt plus the count at most 255";
+        let ap = "cts: firstCt plus the count at most 511";
         pair(
             "addPath",
-            &|a| a["firstCt"] = json!(254),
-            &|a| a["firstCt"] = json!(255),
+            &|a| a["firstCt"] = json!(510),
+            &|a| a["firstCt"] = json!(511),
             ap,
         );
         pair(
             "addPath",
             &|a| {
                 a["firstCt"] = json!(0);
-                a["cts"] = cts(255)
+                a["cts"] = cts(511)
             },
             &|a| {
                 a["firstCt"] = json!(0);
-                a["cts"] = cts(256)
+                a["cts"] = cts(512)
             },
-            "cts: more than 255",
+            "cts: more than 511",
         );
         pair(
             "addPath",

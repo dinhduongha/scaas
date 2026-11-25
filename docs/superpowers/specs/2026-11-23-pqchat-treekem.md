@@ -61,7 +61,9 @@ CLI-PQC-17 (owner). Ids of branch `pqchat-sigs` this builds on: CTR-CHAT-23 (sig
   commit (C5); a non-admin commits only for its own UA's leaves (C8); tree sessions are refused on `none` homes and on replicas
   (C1, C4); ML-KEM-1024 is the only node scheme (C2); no unmerged leaves (C6).
 - R8. `TREE_LEAVES_MAX` = 256, **confirmed on revision 2's figures:** one session record creates up to about 200 keys at a 60 M
-  block, the rest come by Adds (§13).
+  block, the rest come by Adds (§13). **Change (owner 2026-11-25, "OK, then raise it to 512"): 512, depth 9** (option (d) of
+  `docs/research/2026-11-25-treekem-beyond-256.md`; the measured rows in §13's "Measured at 512"). `TREE_CHANGES_MAX` stays 32
+  for now (C10, the controller's lever).
 - R9. The joiner secret is derived **without RFC 9420's `init` chain** (C23). A member that misses an epoch follows again at
   the next commit that reaches its leaf, or by a commit of its own.
 - R10. **The cost of R9 is accepted** (fable-r2-1): in mode 1, as in mode 0's `rekey`, one UA signature lets its holder build
@@ -128,7 +130,7 @@ Each is the controller's (owner: no) unless marked; the owner may override any. 
 | C7 | (owner, R12) The contract keeps the tree hash and computes the commit's tree in memory **when the record is accepted**: the signed `treeHash`, `ctCount`, the path length and the removed UAs are compared then, the target list when it lands | a wrong value is never staged and never becomes an epoch, so no client ever has to reject an accepted commit (§8; fable-r2-3) |
 | C8 | (owner, R7) A non-admin author changes keys of its own UA only | a tree is stateful: dropping another member's leaf lasts until an Add (§9) |
 | C9 | Leaving and removing in a tree session name a **complete epoch of the session: the head or an ancestor of it**, and **take effect on the head when they land**: the UA is `gone` from the head's number, every leaf it holds at the head is owed, and the record is kept under the head's epoch; a staged, losing or unknown epoch is refused (`PqChatIncomplete`, `PqChatUnknown`). In a tree session every complete epoch is on the head's chain (C4, C20, CTR-CHAT-08), so "complete and of this session" is the whole ancestor check: three slots of the named epoch and two for the head's number, no walk (Change 2026-11-24, E-3). **An exit expires by a bounded lag (Change 2026-11-24, the spec check, sc-E-2, sc-F-5):** it is valid only while `head.epoch ≤ named.epoch + EXIT_LAG_MAX`, `EXIT_LAG_MAX` = 16, else `PqChatExitLag(named, head)`; no typehash moves. **A repeat is refused:** an exit whose UAs it would newly flag at the head number none is `PqChatNotMember` (A-4, sc-E-5). **The same rules hold in mode 0 and in PqVault** (owner 2026-11-24: "Yes, both modes"): at home their `remove` / `leave` and `removeVaultMembers` / `leaveVault` name the head or an ancestor within the lag and apply at the head; a replica applies a flag the home applied at a later epoch by the lag rule of CTR-CHAT-20 (CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06) | the next commit is the only one that can honour them. **Chain-level front-running is in the threat model (owner 2026-11-24):** under "the head only" a member about to be removed lands a commit first, the exit names a parent that now has a child and is void, and that repeats for ever (E-3). **Why 16:** to void one exit a front-runner must complete 17 epochs in a row before it lands, each a commit or rekey of its own with a PQ signature check and its pieces, against which the admin re-signs one record at the new head; a held, delayed or reverted-and-copied exit dies after 16 epochs of the group's own activity, so a decision is never applied to a group much changed since (sc-E-2's scenarios); 32 would double the front-runner's cost for twice the window, and the ratio, not the window, is what stops it |
-| C10 | (owner, R8) `TREE_LEAVES_MAX` = 256 (depth 8); (controller) `TREE_CHANGES_MAX` = 32 adds plus removes per commit | §13 |
+| C10 | (owner, R8) `TREE_LEAVES_MAX` = 512 (depth 9; 256, depth 8, until 2026-11-25); (controller) `TREE_CHANGES_MAX` = 32 adds plus removes per commit | §13 |
 | C11 | A tree session's control-plane records are always verified by the client, whatever `require_signed_records` says | C1's reason |
 | C12 | The epoch secret is confirmed by opening the commit's `sealedInfo`, which a tree commit may not leave empty; no separate confirmation tag | the tag would sit outside the signed record; `sealedInfo` is already an AEAD under a key from `K` (fable-13) |
 | C13 | The tree hash covers node keys and leaf keys; **there is no parent hash** (revision 1's `parentHash` is dropped) | the contract compares the whole `treeHash`, which binds everything the parent hash bound, and no client step read it (fable-16; with it codex-19 has no second hash to disagree) |
@@ -447,7 +449,7 @@ of a tree epoch is true exactly when it took its slot (C20); `epochOf` of a tree
 completion checks and the tree storage (§7) are `src/pqgroup/PqGroupTree.sol`, an abstract base for any system that needs a
 group tree, with no app name, domain, record typehash or error of its own (Change 2026-11-24, A-6: its two record structs
 `TreeAdd` and `TreeRemove` live in a neutral file of `src/pqgroup/` that `IPqChat` uses, so no type string and no ABI
-moves; the base serves at most 256 leaf positions, depth 8, and refuses an inheritor's bound above it): the inheritor fixes its namespace (ERC-7201 of its
+moves; the base serves at most 512 leaf positions, depth 9 (256, depth 8, until R8's change of 2026-11-25), and refuses an inheritor's bound above it): the inheritor fixes its namespace (ERC-7201 of its
 namespace id followed by `.tree`; PqChat's is `scaas.pqchat.tree`), the leaf and parent typehashes of the tree hash (its type
 strings are its label; PqChat's are §4's), its bounds and its errors by hooks. Everything below named for PqChat is
 `PqChatTree`'s, on that base (CTR-CHAT-26, `docs/contracts/pqchat.md` §17).
@@ -1096,7 +1098,7 @@ the registry's.
 
 | Bound | Value |
 |---|---|
-| `TREE_LEAVES_MAX` | 256 keys (R8): depth 8, at most 8 node keys (12,808 B) and 255 ciphertexts per commit |
+| `TREE_LEAVES_MAX` | 512 keys (R8, owner 2026-11-25; was 256): depth 9, at most 9 node keys (14,409 B) and 511 ciphertexts per commit |
 | `TREE_CHANGES_MAX` | 32 adds plus removes per commit; also the leaves one head may owe to removals (C21) |
 | `TREE_ADMINS_MAX`, `TREE_INFO_MAX` | 32 admins; 4,124 B of `sealedInfo`: the 4,096-B bucket plus the 12-B nonce and the 16-B tag (C24, codex-r2-13) |
 | `KEYS_PER_UA_MAX` | 8 (CTR-CHAT-24) |
@@ -1132,7 +1134,32 @@ where several members commit" (C3).
 
 **Inclusion (EIP-8037, EIP-7825) [E].** A transaction fits when `(regular + state) × 1.05` (the "asked" figure) is within the
 block limit and its regular gas is under 2^24. The record, the list, the node keys, the ciphertexts and the wraps are separate
-pieces. Every row is for the cap of 256.
+pieces. Every row is for the cap of 256; the cap of 512 is measured below ("Measured at 512").
+
+**Measured at 512 (R8's change of 2026-11-25) [F, forge 1.8.5, `test/pqchat/PqChatTreeGas.t.sol`, `isolate`; 2^24 not
+enforced by forge, so each row is asserted against it; the verify's regular gas added as in T3d: ML-DSA-65 5.95 M, ML-DSA-87
+8.86 M]. UNAUDITED.**
+
+| Piece at 512 | Regular | State | Asked × 1.05 | Under 2^24 / within 60 M |
+|---|---:|---:|---:|---|
+| The session record, 512 member keys (with the ML-DSA-65 verify) | 28.6 M | 108.0 M | 143.4 M | no (as at 256: created by Adds) |
+| A commit's record, plain, the tree check on a cold tree of 512, ML-DSA-65 | 10.55 M | 7.97 M | 19.4 M | fits |
+| The list of a cold commit, 511 targets | 2.12 M | 28.53 M | 32.2 M | fits |
+| The node keys, depth 9 (9 keys) | 1.35 M | 22.33 M | 24.9 M | fits |
+| The record at its bounds (32 Adds, 32 admins, 4,124 B, a tree of 512 with one live leaf), ML-DSA-65 / ML-DSA-87 | 12.93 M / 15.88 M | 24.91 M / 26.92 M | 39.7 M / 44.9 M | fits; ML-DSA-87 0.90 M under 2^24 |
+| Completion at its bounds with the held ciphertext (384 new slots: 352 + 32 parents of the ninth level) | 11.62 M | 40.41 M | 54.6 M | fits, 5.4 M of block left |
+| The node keys as the last piece at the bound (C37: not this order) | 12.49 M | 52.58 M | 68.3 M | over the block, as at 256 |
+| The commit of the last live leaf, four UAs of 8 keys evicted (tree of 512), ML-DSA-65 / ML-DSA-87 | 11.88 M / 14.83 M | 22.22 M / 24.23 M | 35.8 M / 41.0 M | fits |
+| **A-8's last live leaf: 32 UAs of one key evicted by the commit alone, admins 1 → 32, 4,124 B (tree of 512, 33 live leaves), ML-DSA-65 / ML-DSA-87** | 15.13 M / **18.09 M** | 29.51 M / 31.52 M | 46.9 M / 52.1 M | ML-DSA-65 fits; **ML-DSA-87 over 2^24 by 1.31 M** |
+| `treeLeaves`, eight pages of 64 | 1.62 M each | 0 | | under 4 M each |
+
+- **The A-8 row was understated at 256.** Its pin (15.59 M with ML-DSA-87, 1.19 M under 2^24) was measured on a tree of 64
+  leaves; the same layout on a tree of 256 is 17.32 M, over 2^24 already, and 18.09 M at 512. The walk and the rehash of the
+  32 removed paths grow with the tree. With 24 changes at 512 the row is 16.48 M (0.29 M under); with 28 changes on a tree of
+  256, 16.57 M (scratch measurements of 2026-11-25, not pinned). The lever is C10's `TREE_CHANGES_MAX` (the controller's,
+  24 the planned fallback); nothing is changed here: **an ML-DSA-87 author cannot send that commit in one transaction while
+  the bound is 32 (open, the controller decides)**. No kind is disabled: ML-DSA-65 fits, and ML-DSA-87 fits every other row.
+- On Nethermind, with 2^24 enforced: see the summary file of the round (`smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`).
 
 | Piece | Regular | State | Asked | At a 60 M block |
 |---|---:|---:|---:|---|
@@ -1351,7 +1378,7 @@ line in `size-baseline.json`.
 
 | Point | Ruling |
 |---|---|
-| O1, the cap | `TREE_LEAVES_MAX` = 256 stays (R8). One record creates up to about 200 keys at a 60 M block; the rest come by Adds. Splitting the session record is not done |
+| O1, the cap | `TREE_LEAVES_MAX` = 256 stays (R8); raised to 512 on 2026-11-25 (R8's change). One record creates up to about 200 keys at a 60 M block; the rest come by Adds. Splitting the session record is not done |
 | O2, the joiner | without RFC 9420's `init` chain (R9); its cost is accepted, with the compromise warning (R10) |
 | Receipts | none automatic in a tree session; store reads by the hint stay (R11) |
 | Impossible commits | refused by the contract at acceptance (R12) |

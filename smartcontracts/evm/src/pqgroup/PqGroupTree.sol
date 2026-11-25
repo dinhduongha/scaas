@@ -34,9 +34,10 @@ abstract contract PqGroupTree {
     uint8 internal constant T_NOT_ADMIN = 13; // (ua): not a live admin of the head
 
     uint256 internal constant KEM_PK = 1601; // 0x01 ‖ ek (1,568) ‖ pk_X (32)
-    /// @dev The base's own bound on leaf positions, whatever `_treeBounds()` says (review A-6): a direct path is at most 8
-    ///      parents (`_walkPath`'s array of 9) and a path key's offset in its blob fits 16 bits (`keyAt`).
-    uint256 internal constant TREE_LEAVES_LIMIT = 256;
+    /// @dev The base's own bound on leaf positions, whatever `_treeBounds()` says (review A-6; owner R8 2026-11-25: 256 ->
+    ///      512): a direct path is at most 9 parents (`_walkPath`'s array of 10) and a path key's offset in its blob fits
+    ///      16 bits (`keyAt`: 9 x 1,601 B).
+    uint256 internal constant TREE_LEAVES_LIMIT = 512;
     uint256 internal constant P25519 = 2 ** 255 - 19;
 
     /// @dev A leaf, two slots: `ua`; `keyId`, `joinEpoch`, `wrapIndex` (the wrap that brought it), `live`.
@@ -146,7 +147,7 @@ abstract contract PqGroupTree {
     ///      (`bytes32 keyHash, bytes32 left, bytes32 right`): the inheritor's type strings are the tree hash's label.
     function _treeTypehashes() internal pure virtual returns (bytes32 leaf, bytes32 parent);
     /// @dev The most leaf positions and admins a group may have, changes per commit (also leaves owed at a head, C21) and
-    ///      live leaves per UA. Leaf positions stop at `TREE_LEAVES_LIMIT` (256) whatever this returns.
+    ///      live leaves per UA. Leaf positions stop at `TREE_LEAVES_LIMIT` (512) whatever this returns.
     function _treeBounds()
         internal
         pure
@@ -491,7 +492,7 @@ abstract contract PqGroupTree {
         uint256 x = 2 * uint256(d.leaf);
         uint256 root = w.leaves - 1;
         uint32[] memory tg = new uint32[](w.leaves);
-        uint256[] memory path = new uint256[](9);
+        uint256[] memory path = new uint256[](10);
         (uint256 n, uint256 k) = (0, 0);
         while (x != root) {
             uint256 p = _parentOf(x);

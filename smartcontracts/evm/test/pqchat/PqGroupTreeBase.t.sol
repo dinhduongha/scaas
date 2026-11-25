@@ -19,7 +19,7 @@ contract KemStub {
     }
 }
 
-/// `PqGroupTree` alone, under bounds above the base's own (512 leaf positions): a group `GID` of `used` positions with leaf
+/// `PqGroupTree` alone, under bounds above the base's own (1,024 leaf positions): a group `GID` of `used` positions with leaf
 /// 0 set, and the base's commit check.
 contract TreeHarness is PqGroupTree {
     bytes32 internal constant GID = keccak256("harness group");
@@ -35,7 +35,7 @@ contract TreeHarness is PqGroupTree {
     }
 
     function _treeBounds() internal pure override returns (uint256, uint256, uint256, uint256) {
-        return (512, 32, 32, 8);
+        return (1024, 32, 32, 8);
     }
 
     function _treeListedNew(bytes32, bytes32) internal override {}
@@ -58,8 +58,8 @@ contract TreeHarness is PqGroupTree {
     }
 }
 
-/// The base layer's own rules (review A-6, F-5), apart from PqChat: at most 256 leaf positions whatever the inheritor's
-/// bounds (a group of 257 refused at opening, an Add at position 256 refused), and a one-leaf tree's commit root is its
+/// The base layer's own rules (review A-6, F-5), apart from PqChat: at most 512 leaf positions whatever the inheritor's
+/// bounds (owner R8 2026-11-25, was 256: a group of 513 refused at opening, an Add at position 512 refused), and a one-leaf tree's commit root is its
 /// leaf's `th`, as `_treeHash` gives it (was 0). Each with its positive control. **UNAUDITED.**
 contract PqGroupTreeBaseTest is Test {
     bytes32 constant U = bytes32(uint256(0xA11CE));
@@ -92,22 +92,22 @@ contract PqGroupTreeBaseTest is Test {
         h.check(reg, _plain(1, bytes32(0)));
     }
 
-    /// A-6: `_treeOpen` refuses 257 positions under an inheritor bound of 512; 256 opens (the control).
-    function test_a6_openAbove256Refused() public {
+    /// A-6: `_treeOpen` refuses 513 positions under an inheritor bound of 1,024; 512 opens (the control).
+    function test_a6_openAbove512Refused() public {
         vm.expectRevert(_fail(0, 0, 0)); // T_SHAPE
-        h.open(reg, 257, U, admins);
-        h.open(reg, 256, U, admins);
+        h.open(reg, 513, U, admins);
+        h.open(reg, 512, U, admins);
     }
 
-    /// A-6: an Add at position 256 of a tree of 256 is `T_LEAF(256)` under an inheritor bound of 512; the same commit
+    /// A-6: an Add at position 512 of a tree of 512 is `T_LEAF(512)` under an inheritor bound of 1,024; the same commit
     /// without it is accepted (the control).
-    function test_a6_addAtPosition256Refused() public {
-        h.open(reg, 256, U, admins);
-        PqGroupTree.Delta memory d = _plain(256, h.hashOf(reg));
+    function test_a6_addAtPosition512Refused() public {
+        h.open(reg, 512, U, admins);
+        PqGroupTree.Delta memory d = _plain(512, h.hashOf(reg));
         assertEq(h.check(reg, d), d.treeHash, "control: no Add");
         d.adds = new IPqGroupTree.TreeAdd[](1);
-        d.adds[0] = IPqGroupTree.TreeAdd(256, bytes32(uint256(0xB0B)), 0, bytes32(0), bytes32(0));
-        vm.expectRevert(_fail(3, 256, 0)); // T_LEAF
+        d.adds[0] = IPqGroupTree.TreeAdd(512, bytes32(uint256(0xB0B)), 0, bytes32(0), bytes32(0));
+        vm.expectRevert(_fail(3, 512, 0)); // T_LEAF
         h.check(reg, d);
     }
 }

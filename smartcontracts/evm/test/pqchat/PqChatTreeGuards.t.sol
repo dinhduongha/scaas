@@ -10,7 +10,7 @@ import {stdJson} from "forge-std/StdJson.sol";
 /// The code review of 2026-11-24, area A (fable-A A-7): one negative test with its positive control for each guard of the
 /// tree's 24-row mutant table (row 5, `_treeGo`'s early return, is unreachable since A-4 refuses a `gone` UA in both exits:
 /// equivalent, no test), each row a mutant of `runs/2026-11-24-review-fix-contract-mutants.py`; D-4's contract side at
-/// creation (257 member keys, 33 admins, 4,125 B of `sealedInfo`); and the plan's T11 tree rows not covered elsewhere.
+/// creation (513 member keys, 33 admins, 4,125 B of `sealedInfo`); and the plan's T11 tree rows not covered elsewhere.
 /// Commits built on the test's own tree model. **UNAUDITED.**
 contract PqChatTreeGuardsTest is PqChatTreeModel {
     using stdJson for string;
@@ -486,13 +486,13 @@ contract PqChatTreeGuardsTest is PqChatTreeModel {
         assertEq(used, members, "the tree's positions");
     }
 
-    /// D-4 (C10, C24 at creation): 257 member keys, 33 admins, a 4,125-B `sealedInfo` are `PqChatShape`; 256, 32 and
+    /// D-4 (C10, C24 at creation): 513 member keys, 33 admins, a 4,125-B `sealedInfo` are `PqChatShape`; 512, 32 and
     /// 4,124 B are created.
     function test_d4_createSessionBounds() public {
         _open(); // the vectors in this call's memory
-        bytes32[] memory u = _many(257);
-        _createRefused(u, 257, 1, 4);
-        _create(u, 256, 1, 4); // control
+        bytes32[] memory u = _many(513);
+        _createRefused(u, 513, 1, 4);
+        _create(u, 512, 1, 4); // control
         _createRefused(u, 2, 33, 4);
         _create(u, 2, 32, 4); // control
         _createRefused(u, 2, 1, 4125);

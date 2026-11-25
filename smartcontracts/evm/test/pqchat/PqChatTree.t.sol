@@ -519,13 +519,13 @@ contract PqChatTreeTest is PqChatBase {
         }
     }
 
-    /// C10 (owner, R8): at most 256 leaf positions: 257 member keys refused, 256 accepted (no wrap sent; the registry's
+    /// C10 (owner, R8; 256 -> 512 owner 2026-11-25): at most 512 leaf positions: 513 member keys refused, 512 accepted (no wrap sent; the registry's
     /// key answer stubbed for the made-up ids, 8 keys each).
     function test_leafCap() public {
         bytes32 c = tm[tm.length - 1]; // the creator, above the made-up ids
         IUARegistry.KemKey memory k = _kemOf(_keyPk("A"));
         vm.mockCall(address(p), abi.encodeWithSelector(IUARegistry.kemKeyAt.selector), abi.encode(k, bytes("")));
-        for (uint256 n = 257; n >= 256; --n) {
+        for (uint256 n = 513; n >= 512; --n) {
             IPqChat.MemberKey[] memory m = new IPqChat.MemberKey[](n);
             for (uint256 i; i < n - 1; ++i) {
                 m[i] = IPqChat.MemberKey(bytes32(i / 8 + 1), uint64(i % 8), 0);
@@ -539,9 +539,9 @@ contract PqChatTreeTest is PqChatBase {
             s.wrapHashes = new bytes32[](n);
             s.sealedInfo = new bytes(284);
             IUARegistry.UASig memory sig = _sig(c, h.session(s));
-            if (n == 257) vm.expectRevert(IPqChat.PqChatShape.selector);
+            if (n == 513) vm.expectRevert(IPqChat.PqChatShape.selector);
             bytes32 sid = chat.createSession(s, new IPqChat.Wrap[](0), sig);
-            if (n == 256) assertEq(_at(address(chat), _t(sid) + 3), 256 | 256 << 32, "used 256, leaves 256");
+            if (n == 512) assertEq(_at(address(chat), _t(sid) + 3), 512 | 512 << 32, "used 512, leaves 512");
         }
     }
 

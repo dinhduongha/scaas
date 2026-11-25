@@ -558,7 +558,7 @@ impl AppKeys {
             admit_kem_key(&k)?;
             kem_pks.push(k);
         }
-        // the cold tree's own refusals before anything is signed (B-4): at most 256 keys, one leaf per key
+        // the cold tree's own refusals before anything is signed (B-4): at most TREE_LEAVES_MAX keys, one leaf per key
         let cold: Vec<Leaf> = members
             .iter()
             .zip(&kem_pks)

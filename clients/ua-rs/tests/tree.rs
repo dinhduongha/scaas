@@ -84,6 +84,62 @@ fn tree_json(t: &Tree) -> Value {
     j
 }
 
+// ------------------------------------------------------------------ the leaf bound (R8)
+
+/// R8 (owner 2026-11-25, 256 -> 512): a cold tree of 512 leaf positions (depth 9) is built and 513 refused; on the full tree
+/// leaf 0's cold path is 9 node keys and 511 targets; an Add at position 512 is a Leaf refusal and, after a Remove frees
+/// position 511, an Add there lands (the control).
+#[test]
+fn tree_leaf_bound_512() {
+    let leaf = |i: u32| {
+        let mut ua = [0u8; 32];
+        ua[28..].copy_from_slice(&(i + 1).to_be_bytes());
+        Leaf {
+            ua,
+            key_id: 1,
+            kem_hash: keccak256(&ua),
+        }
+    };
+    let full: Vec<Leaf> = (0..512).map(leaf).collect();
+    assert_eq!(
+        code(Tree::cold(&(0..513).map(leaf).collect::<Vec<_>>())),
+        "PqChatShape"
+    );
+    let t = Tree::cold(&full).unwrap();
+    assert_eq!(t.filtered_path(0).len(), 9);
+    assert_eq!(t.ct_targets(0).len(), 511);
+    let by = |removes: Vec<Remove>, adds: Vec<Add>| Changes {
+        author: full[0].ua,
+        leaf: 0,
+        key_id: 1,
+        removes,
+        adds,
+    };
+    let add = |at: u32| {
+        let n = leaf(600);
+        vec![Add {
+            leaf: at,
+            ua: n.ua,
+            key_id: 1,
+            via: ZERO,
+            kem_hash: n.kem_hash,
+        }]
+    };
+    let nk = vec![[7u8; 32]; 9];
+    assert_eq!(
+        code(t.apply_commit(&by(vec![], add(512)), &nk)),
+        "PqChatTreeLeaf"
+    );
+    let rm = vec![Remove {
+        leaf: 511,
+        ua: full[511].ua,
+        key_id: 1,
+    }];
+    let freed = t.apply_commit(&by(rm, vec![]), &nk).unwrap().tree;
+    let back = freed.apply_commit(&by(vec![], add(511)), &nk).unwrap();
+    assert_eq!(back.tree.leaves, 512);
+}
+
 // ------------------------------------------------------------------ tree.json
 
 #[test]

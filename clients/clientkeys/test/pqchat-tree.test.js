@@ -274,19 +274,21 @@ test("an Add takes a blank leaf below used or leaf used; leaves doubles; the rec
   );
 });
 
-test("the tree never grows past TREE_LEAVES_MAX", () => {
-  assert.equal(tr.TREE_LEAVES_MAX, 256);
-  const full = tr.coldTree(Array.from({ length: 256 }, (_, i) => key(`m${i}`)));
-  assert.equal(full.leaves, 256);
-  refused("PqChatShape", () => tr.coldTree(Array.from({ length: 257 }, (_, i) => key(`m${i}`))));
+test("the tree never grows past TREE_LEAVES_MAX (R8, owner 2026-11-25: 512, depth 9)", () => {
+  assert.equal(tr.TREE_LEAVES_MAX, 512);
+  const full = tr.coldTree(Array.from({ length: 512 }, (_, i) => key(`m${i}`)));
+  assert.equal(full.leaves, 512);
+  assert.equal(tr.filteredPath(full, 0).length, 9);
+  assert.equal(tr.ctTargets(full, 0).length, 511);
+  refused("PqChatShape", () => tr.coldTree(Array.from({ length: 513 }, (_, i) => key(`m${i}`))));
   refused("PqChatTreeLeaf", () =>
-    commit(full, by(key("m0"), 0), { adds: [{ leaf: 256, ...key("over") }], nodeKeyHashes: path(full, 0) }),
+    commit(full, by(key("m0"), 0), { adds: [{ leaf: 512, ...key("over") }], nodeKeyHashes: path(full, 0) }),
   );
   const freed = commit(full, by(key("m0"), 0), {
-    removes: [{ leaf: 255, ...key("m255") }],
+    removes: [{ leaf: 511, ...key("m511") }],
     nodeKeyHashes: path(full, 0),
   });
-  whole(commit(freed.tree, by(key("m0"), 0), { adds: [{ leaf: 255, ...key("over") }], nodeKeyHashes: path(full, 0) }));
+  whole(commit(freed.tree, by(key("m0"), 0), { adds: [{ leaf: 511, ...key("over") }], nodeKeyHashes: path(full, 0) }));
 });
 
 test("refusals, each with its twin: the author's leaf, a Remove's named key, the author's own leaf removed", () => {

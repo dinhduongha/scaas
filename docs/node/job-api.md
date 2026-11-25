@@ -967,17 +967,17 @@ sig)`, `treeLeave(l, sig)` and `treeRemove(r, sig)`; the unsigned pieces `addPat
 object of its fields. `createSession` (`groupMode = 1`), `addWraps` and `postMessage` serve both modes unchanged; the module's
 `treeCreate` and the tree views (`PqChatTreeViews`, read-only) are no row of any kind. Before any calldata is built the node
 refuses, `BAD_PAYLOAD` naming the path, what the contract refuses on the record or the piece alone: a list over its cap, read
-before its elements (`admins` 32; `removes`, `adds`, `wrapHashes`, `wraps` 32; `nodeKeyHashes`, `nodeKeys` 8; `ctTargets`,
-`ctHashes`, `cts` 255; a `treeRemove`'s `members` 64: the 32 leafy UAs a head may owe plus 32 admins); `removes` plus `adds`
-above 32; `leaves` above 256; `ctCount` not below `leaves`, more `nodeKeyHashes` than `depth(leaves)`, or a path without
+before its elements (`admins` 32; `removes`, `adds`, `wrapHashes`, `wraps` 32; `nodeKeyHashes`, `nodeKeys` 9; `ctTargets`,
+`ctHashes`, `cts` 511; a `treeRemove`'s `members` 64: the 32 leafy UAs a head may owe plus 32 admins); `removes` plus `adds`
+above 32; `leaves` above 512 (256 until the owner's change of 2026-11-25); `ctCount` not below `leaves`, more `nodeKeyHashes` than `depth(leaves)`, or a path without
 ciphertexts or the reverse; not one `wrapHashes` per add; `sealedInfo` outside 1 to 4,124 B; a list neither absent nor `ctCount`
 entries with one hash each (`addPathList`: at least one); node keys neither absent nor one per hash, or not 1,601 B; path
-ciphertexts above `ctCount` (on `addPath`, `firstCt` plus the count above 255), without the list, or not 1,568 B and 48 B; more
+ciphertexts above `ctCount` (on `addPath`, `firstCt` plus the count above 511), without the list, or not 1,568 B and 48 B; more
 Welcome wraps than adds; an empty `members`. What needs the chain's state is the contract's. A record or a list as hex is
 `HEX_ARGS_REFUSED`; the decode follows the type, so a hostile depth stops at the type's. **For operators:** job shapes were added,
 none changed. **Not built yet (plan T4, after the merge):** the whole-set guard (fable-r3-6) and the order of C37 when the node
 relays a commit's set. **BUILT (Change 2026-11-24, the code review's D-4 and D-7; `typed.rs` `tree_shape`):**
-`createSession` with `groupMode = 1` is bounded by the tree's bounds at creation (`members` 256, `admins` 32,
+`createSession` with `groupMode = 1` is bounded by the tree's bounds at creation (`members` 512, `admins` 32,
 `sealedInfo` 4,124 B; mode 0 has none of these), and an `addPath` with no ciphertext is refused (`cts: 1 or more`), as the
 contract refuses both (C40). **For operators
 (SPECIFIED, the spec check's change of 2026-11-24 to C9, CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06):** an exit (`treeLeave`,

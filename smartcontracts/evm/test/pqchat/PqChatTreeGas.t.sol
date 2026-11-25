@@ -63,13 +63,20 @@ contract PqChatTreeGasTest is PqChatTreeModel {
     uint256 internal constant SLACK = 2_000;
     uint256 internal constant FIXTURE_REGULAR = 8_110_908;
     uint256 internal constant FIXTURE_STATE = 25_032_330; // the spec's 25,030,800 + 1 B
-    uint256 internal constant BOUND_REGULAR = 10_657_386;
-    uint256 internal constant BOUND_STATE = 37_272_330; // the spec's 37,270,800 + 1 B
-    /// A-8: the last live leaf at the spec's bound, the verify's regular gas included (measured 2026-11-25, first pin).
-    uint256 internal constant LAST87_REGULAR = 15_588_376; // 1,188,840 under 2^24
-    uint256 internal constant LAST65_REGULAR = 12_637_463;
-    uint256 internal constant LAST87_STATE = 31_716_900; // asked x 1.05 49.7 M with the verify
-    uint256 internal constant LAST65_STATE = 29_709_540; // 44.5 M
+    /// R8 256 -> 512 (owner 2026-11-25): the bound on a tree of 512, 32 subtrees of 16. Old -> new: regular 10,657,386 ->
+    /// 11,623,478, state 37,272,330 -> 40,405,770 (asked x 1.05 54.6 M), new slots 352 -> 384 (32 parents more, one level).
+    uint256 internal constant BOUND_REGULAR = 11_623_478;
+    uint256 internal constant BOUND_STATE = 40_405_770;
+    uint256 internal constant BOUND_SLOTS = 384;
+    /// A-8: the last live leaf at the spec's bound, the verify's regular gas included. R8 (owner 2026-11-25): on a tree of
+    /// 512 (was a tree of 64, 33 leaves). Old -> new: ML-DSA-87 regular 15,588,376 -> 18,088,053, OVER 2^24 by 1,310,837
+    /// (on a tree of 256 the same layout is 17,322,116, over too: the old pin's tree of 64 understated the bound); state
+    /// 31,716,900 -> 31,521,060; ML-DSA-65 regular 12,637,463 -> 15,130,972 (9,180,972 + the verify), state 29,709,540 ->
+    /// 29,513,700.
+    uint256 internal constant LAST87_REGULAR = 18_088_053;
+    uint256 internal constant LAST65_REGULAR = 15_130_972;
+    uint256 internal constant LAST87_STATE = 31_521_060;
+    uint256 internal constant LAST65_STATE = 29_513_700;
 
     function _pin(uint256 r, uint256 s, uint256 pr, uint256 ps, string memory what) internal {
         if (vm.envOr("GAS_MEASURE", false)) return;
@@ -166,16 +173,24 @@ contract PqChatTreeGasTest is PqChatTreeModel {
     {
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _sessionRecord(members, admins, fits);
         m.sid = PqChatTypes.sessionId(s.creator, s.nonce);
+        vm.pauseGasMetering(); // the wraps: no row
         for (uint256 i; i < w.length; i += WRAP_PER) {
             uint256 to = i + WRAP_PER < w.length ? i + WRAP_PER : w.length;
             vchat.addWraps(m.sid, uint32(i), _slice(w, i, to));
         }
+        vm.resumeGasMetering();
         assertTrue(vchat.epochComplete(m.sid), "the session complete");
         (m.treeId, m.head, m.used) = (th2.sessionHash(s), m.sid, members.length);
         m.leaves = 1;
         while (m.leaves < m.used) m.leaves <<= 1;
         (m.ua, m.kid, m.kem, m.live, m.key) =
-        (new bytes32[](256), new uint64[](256), new bytes32[](256), new bool[](256), new bytes32[](511));
+        (
+            new bytes32[](MODEL_LEAVES),
+            new uint64[](MODEL_LEAVES),
+            new bytes32[](MODEL_LEAVES),
+            new bool[](MODEL_LEAVES),
+            new bytes32[](MODEL_NODES)
+        );
         for (uint256 i; i < members.length; ++i) {
             (m.ua[i], m.kid[i], m.kem[i], m.live[i]) =
             (members[i].ua, members[i].keyId, _kemHash(members[i].ua, members[i].keyId), true);
@@ -339,40 +354,46 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         _fits("treeRemove of one UA with its gone slot", VERIFY65);
     }
 
-    /// The bound (codex-r3-6) and every piece at 256 keys: a session of 256 keys (32 UAs x 8; its record over a 60 M block,
-    /// as the spec says), the four `treeLeaves` pages, a cold commit (its record with the tree check on a cold tree of 256,
-    /// the list of 255 targets, the node keys of depth 8, one ciphertext; then undone), the reachability of fable-3 (`treeRemove`s to
-    /// `owed` = 32, then the next commit's pieces, each fitting, in the order of C37), the removals down to one live leaf
-    /// (the last of them the commit of the last live leaf at its bounds, one transaction), then 32 Adds of UAs with no
-    /// session in 32 subtrees of 8, the admins 1 -> 32, 4,124 B of info: the record at its bounds, the node keys as the
-    /// last piece (over the block, C37), and the completion with the held ciphertext: the spec's 352 new slots and the
-    /// ciphertext's own.
+    /// The bound (codex-r3-6) and every piece at 512 keys (R8, owner 2026-11-25: 256 -> 512, depth 9): a session of 512 keys
+    /// (64 UAs x 8; its record over a 60 M block, as the spec says), the eight `treeLeaves` pages, a cold commit (its record
+    /// with the tree check on a cold tree of 512, the list of 511 targets, the node keys of depth 9, one ciphertext; then
+    /// undone), the reachability of fable-3 (`treeRemove`s to `owed` = 32, then the next commit's pieces, each fitting, in
+    /// the order of C37), the removals down to one live leaf (the last of them the commit of the last live leaf at its
+    /// bounds, one transaction), then 32 Adds of UAs with no session in 32 subtrees of 16, the admins 1 -> 32, 4,124 B of
+    /// info: the record at its bounds, the node keys as the last piece (over the block, C37), and the completion with the
+    /// held ciphertext: its new slots (`BOUND_SLOTS`) and the ciphertext's own. The removals down to one live leaf of 512
+    /// send thousands of ciphertexts, past the suite's 2^33 of gas for one test: their commits (no row) run with gas
+    /// metering paused.
     function test_completionAtTheBound() public {
         _open(); // the vectors in this call's memory
-        bytes32[] memory p = _people(32, 8);
+        bytes32[] memory p = _people(64, 8);
         M memory m = _session(_keysOf(p, 8), _list(p[0]), false);
         _pages(m);
         (Step memory st, M memory n) = _build(m, 0, _noCh(), _list(p[0]));
         uint256 snap = vm.snapshotState(); // the cold commit's pieces measured, then undone (the test's gas)
         _record(st, SIG65);
-        _fits("commit record, plain, the tree check on a cold tree of 256", VERIFY65);
+        _fits("commit record, plain, the tree check on a cold tree of 512", VERIFY65);
         _list(st);
-        _fits("the list of a cold commit, 255 targets", 0);
+        assertEq(st.ctTargets.length, 511, "511 targets");
+        _fits("the list of a cold commit, 511 targets", 0);
         _keys(st);
-        _fits("the node keys, depth 8", 0);
+        assertEq(st.nodeKeys.length, 9, "depth 9");
+        _fits("the node keys, depth 9", 0);
         _cts(st, 0, 1);
         _fits("one ciphertext in addPath", 0);
         vm.revertToState(snap);
         m = _reach(m, p);
-        for (uint256 g = 5; g < 25; g += 4) {
+        vm.pauseGasMetering();
+        for (uint256 g = 5; g < p.length - 7; g += 4) {
             (st, n) = _build(m, 0, _removesOf(m, p, g, g + 4), _list(p[0]));
             m = _landPieces(st, n, m);
         }
+        vm.resumeGasMetering();
         m = _lastLeaf(m, p);
         _bound(m, p);
     }
 
-    /// fable-3: `treeRemove` of four UAs (32 leaves owed), then the next commit, 32 forced Removes and the path to the 223
+    /// fable-3: `treeRemove` of four UAs (32 leaves owed), then the next commit, 32 forced Removes and the path to the 479
     /// live leaves left; each piece fits, sent in the order of C37.
     function _reach(M memory m, bytes32[] memory p) internal returns (M memory) {
         bytes32[] memory four = new bytes32[](4);
@@ -404,10 +425,11 @@ contract PqChatTreeGasTest is PqChatTreeModel {
     }
 
     /// The author's own seven other keys and three UAs, then the commit of the last live leaf at its bounds: 32 Removes
-    /// that evict four UAs by the commit alone (their `gone` and `goneKey` slots), 4,124 B of info; no piece, so one
-    /// transaction, with ML-DSA-65 and with ML-DSA-87.
+    /// that evict the last four UAs by the commit alone (their `gone` and `goneKey` slots), 4,124 B of info; no piece, so
+    /// one transaction, with ML-DSA-65 and with ML-DSA-87.
     function _lastLeaf(M memory m, bytes32[] memory p) internal returns (M memory) {
-        Ch[] memory three = _removesOf(m, p, 25, 28);
+        uint256 z = p.length;
+        Ch[] memory three = _removesOf(m, p, z - 7, z - 4);
         Ch[] memory c = new Ch[](three.length + 7);
         for (uint256 i; i < 7; ++i) {
             c[i] = Ch(false, uint32(1 + i), p[0], uint64(2 + i));
@@ -416,8 +438,10 @@ contract PqChatTreeGasTest is PqChatTreeModel {
             c[7 + i] = three[i];
         }
         (Step memory st, M memory n) = _build(m, 0, c, _list(p[0]));
+        vm.pauseGasMetering(); // no row
         m = _landPieces(st, n, m);
-        (st, n) = _build(m, 0, _removesOf(m, p, 28, 32), _list(p[0]));
+        vm.resumeGasMetering();
+        (st, n) = _build(m, 0, _removesOf(m, p, z - 4, z), _list(p[0]));
         st.c.sealedInfo = new bytes(4124);
         assertEq(st.c.ctCount + st.nodeKeys.length, 0, "no piece");
         ++nonceN;
@@ -431,20 +455,28 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         return n;
     }
 
-    /// A-8 (spec §13's row): the commit of the last live leaf at its bounds, one transaction: 32 Removes that evict 32 UAs
-    /// of one key each by the commit alone (32 `gone` and 32 `goneKey` slots), the admins 1 -> 32 (the author and 31
-    /// registered UAs with no leaf), 4,124 B of info, no piece; ML-DSA-87 and ML-DSA-65, pinned.
+    /// A-8 (spec §13's row): the commit of the last live leaf at its bounds, one transaction, on a tree of 512 (R8, depth
+    /// 9): 32 Removes that evict 32 UAs of one key each by the commit alone (32 `gone` and 32 `goneKey` slots), the admins
+    /// 1 -> 32 (the author and 31 registered UAs with no leaf), 4,124 B of info, no piece; ML-DSA-87 and ML-DSA-65,
+    /// pinned. The tree: the 33 UAs and 28 of 8 keys (257 keys, so 512 leaf positions), the 28 removed first, four a commit.
     function test_lastLiveLeafAtTheSpecBound() public {
         _open(); // the vectors in this call's memory
         bytes32[] memory p = _people(33, 1);
-        M memory m = _session(_keysOf(p, 1), _list(p[0]), true);
+        bytes32[] memory f = _people(28, 8);
+        M memory m = _session(_merged(p, f), _list(p[0]), false);
+        assertEq(m.leaves, 512, "depth 9");
         uint32 at;
         while (m.ua[at] != p[0]) ++at;
+        for (uint256 g; g < 28; g += 4) {
+            (Step memory sf, M memory nf) = _build(m, at, _removesOf(m, f, g, g + 4), _list(p[0]));
+            m = _landPieces(sf, nf, m);
+        }
         Ch[] memory c = new Ch[](32);
         uint256 k;
-        for (uint256 i; i < 33; ++i) {
-            if (i != at) c[k++] = Ch(false, uint32(i), m.ua[i], 1);
+        for (uint256 i; i < m.used; ++i) {
+            if (i != at && m.live[i]) c[k++] = Ch(false, uint32(i), m.ua[i], 1);
         }
+        assertEq(k, 32, "32 one-key UAs left beside the author");
         bytes32[] memory q = _people(31, 0);
         bytes32[] memory admins = new bytes32[](32);
         admins[0] = p[0];
@@ -461,29 +493,50 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         assertEq(st.c.ctCount + st.nodeKeys.length, 0, "no piece");
         ++nonceN;
         uint256 snap = vm.snapshotState();
-        _record(st, SIG87);
-        (uint256 r87, uint256 s87) =
-            _fits("the last live leaf at the spec's bound, ML-DSA-87, one transaction", VERIFY87);
-        _pin(r87, s87, LAST87_REGULAR, LAST87_STATE, "the last live leaf at the spec's bound, ML-DSA-87");
-        assertTrue(vchat.epochComplete(st.epochId), "complete in the one transaction");
-        (uint256 kind,) = _gone(vchat, m.sid, c[31].ua);
-        assertEq(kind, 2, "evicted by the commit alone");
-        vm.revertToState(snap);
         _record(st, SIG65);
         (uint256 r65, uint256 s65) =
             _fits("the last live leaf at the spec's bound, ML-DSA-65, one transaction", VERIFY65);
         _pin(r65, s65, LAST65_REGULAR, LAST65_STATE, "the last live leaf at the spec's bound, ML-DSA-65");
-        emit log_named_uint("GAS the last live leaf at the spec's bound, ML-DSA-87: under 2^24 by", CAP - r87);
+        assertTrue(vchat.epochComplete(st.epochId), "complete in the one transaction");
+        (uint256 kind,) = _gone(vchat, m.sid, c[31].ua);
+        assertEq(kind, 2, "evicted by the commit alone");
+        vm.revertToState(snap);
+        _record(st, SIG87);
+        (uint256 r87, uint256 s87) = _row("the last live leaf at the spec's bound, ML-DSA-87, one transaction");
+        r87 += VERIFY87;
+        _pin(r87, s87, LAST87_REGULAR, LAST87_STATE, "the last live leaf at the spec's bound, ML-DSA-87");
+        // R8 at 512: 18,088,053 by forge, over 2^24; the controller's lever is C10's TREE_CHANGES_MAX (not changed here)
+        _fits("the last live leaf at the spec's bound, ML-DSA-87, one transaction", VERIFY87);
     }
 
-    /// The bound: 32 Adds of UAs with no session in 32 subtrees of 8 of the tree of 256 with one live leaf, the admins
+    /// The member keys of `one` (key 1 each) and of `eight` (keys 1..8 each), both sorted, merged in `(ua, keyId)` order.
+    function _merged(bytes32[] memory one, bytes32[] memory eight)
+        internal
+        pure
+        returns (IPqChat.MemberKey[] memory mk)
+    {
+        mk = new IPqChat.MemberKey[](one.length + 8 * eight.length);
+        (uint256 i, uint256 j, uint256 k) = (0, 0, 0);
+        while (k < mk.length) {
+            if (j == eight.length || (i < one.length && one[i] < eight[j])) {
+                mk[k++] = _mk(one[i++], 1);
+            } else {
+                for (uint64 v = 1; v <= 8; ++v) {
+                    mk[k++] = _mk(eight[j], v);
+                }
+                ++j;
+            }
+        }
+    }
+
+    /// The bound: 32 Adds of UAs with no session in 32 subtrees of 16 of the tree of 512 with one live leaf, the admins
     /// 1 -> 32, 4,124 B of info, the author's path blank.
     function _bound(M memory m, bytes32[] memory p) internal {
         bytes32[] memory q = _people(32, 1);
         uint32[] memory at = new uint32[](32);
-        at[0] = 4; // in the author's subtree of 8, not its sibling: the spec's layout (6 keyAt, 121 parent hashes)
+        at[0] = 8; // in the author's subtree of 16, not its sibling: the spec's layout at depth 9 (6 keyAt)
         for (uint256 i = 1; i < 32; ++i) {
-            at[i] = uint32(8 * i);
+            at[i] = uint32(16 * i);
         }
         bytes32[] memory admins = new bytes32[](32);
         admins[0] = p[0];
@@ -508,7 +561,7 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         _fits("the node keys at the bound, six", 0);
         _middle(st, 0);
         (uint256 fresh, uint256 rc, uint256 sc) = _completion(st, "completion at its bounds with the held ciphertext");
-        assertEq(fresh, 352 + 1, "the spec's 352 new slots and the ciphertext's own");
+        assertEq(fresh, BOUND_SLOTS + 1, "the spec's new slots and the ciphertext's own");
         _pin(rc, sc, BOUND_REGULAR, BOUND_STATE, "the completion at its bounds");
         assertEq(_root(vchat, m.sid), _mRoot(n), "stored root is the model's");
         emit log_named_uint("GAS acceptance and completion in one transaction, ML-DSA-65, regular", r65 + rc);
@@ -537,18 +590,18 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         vm.revertToState(snap);
     }
 
-    /// The four `treeLeaves` pages of the full tree at one block (fable-r2-U1): each 64 leaves of versions above 0, under
+    /// The eight `treeLeaves` pages of the full tree at one block (fable-r2-U1): each 64 leaves of versions above 0, under
     /// 4 M (the plan's line) and 2^24 (Nethermind's `eth_call` cap).
     function _pages(M memory m) internal {
         IPqChatTreeViews v = IPqChatTreeViews(address(vchat));
         uint256 sum;
-        for (uint256 k; k < 4; ++k) {
+        for (uint256 k; k < m.used / 64; ++k) {
             assertEq(v.treeLeaves(m.sid, 64 * k, 64).length, 64, "a full page");
             (uint256 r,) = _row(string.concat("treeLeaves page ", vm.toString(k), ", 64 leaves"));
             assertLt(r, 4_000_000, "a page under 4 M");
             sum += r;
         }
-        emit log_named_uint("GAS treeLeaves, the full tree in four calls", sum);
+        emit log_named_uint("GAS treeLeaves, the full tree in eight calls", sum);
     }
 
     /// The session records at 64, 128 and 192 member keys fit; 15 genesis wraps in one transaction.

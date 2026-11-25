@@ -1023,6 +1023,14 @@ picture.nodes[10] = null;
 picture.nodes[5] = { keyHash: hex(rnd("tree/picture/node-key-hash/5")) };
 for (const x of [1, 3, 7]) picture.nodes[x] = { keyHash: hex(rnd(`tree/picture/node-key-hash/${x}`)) };
 tr.rehashAll(picture);
+// depth 9 (R8, owner 2026-11-25: 512 leaf positions): 300 positions, five live leaves spread over both halves, a key on the
+// root of each half (255, 767); a reader at the old bound of 256 refuses the tree
+const sparse = tr.coldTree(named(["A", "B", "C", "D", "E"]));
+const sparseLeaves = sparse.nodes.filter((n, x) => x % 2 === 0 && n);
+Object.assign(sparse, { leaves: 512, used: 300, nodes: Array(tr.nodeWidth(512)).fill(null) });
+[0, 37, 130, 256, 299].forEach((l, i) => (sparse.nodes[2 * l] = sparseLeaves[i]));
+for (const x of [255, 767]) sparse.nodes[x] = { keyHash: hex(rnd(`tree/sparse-512/node-key-hash/${x}`)) };
+tr.rehashAll(sparse);
 const resolutionRow = (name, t) => {
   const liveLeaves = [...Array(t.leaves).keys()].filter((l) => t.nodes[2 * l]);
   return {
@@ -1433,7 +1441,11 @@ write("tree.json", {
     sha256: "27f04891f56106593b74b674445f01b845e173953770c084deb2f8cf5592e2fc",
     rows: tr.treeMathRows([1, 2, 4, 8, 16, 32, 64, 128, 256, 512]),
   },
-  resolution: [resolutionRow("spec §4's picture", picture), resolutionRow("cold 3", trees["cold 3"])],
+  resolution: [
+    resolutionRow("spec §4's picture", picture),
+    resolutionRow("cold 3", trees["cold 3"]),
+    resolutionRow("sparse 512, depth 9", sparse),
+  ],
   treeHash: { cold: coldRows, commits: [...commitRows, ...twinRows, addD], refused: treeRefusals },
   admission: {
     accepted: admissionAccepted,

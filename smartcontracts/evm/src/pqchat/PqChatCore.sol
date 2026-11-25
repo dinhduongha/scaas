@@ -80,9 +80,9 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
 
     /// @dev `PqGroupTree`'s namespace for PqChat: ERC-7201 of `scaas.pqchat.tree` (the app's id `scaas.pqchat` + `.tree`).
     bytes32 internal constant TREE_SLOT = 0x6dbf1a211620db3f6ac9abbc89a5beccc42b16cce14417bf002a104ad4e19c00;
-    /// @dev CTR-CHAT-27 C10 (owner, R8): leaf positions of one tree session; C24: its admins and its `sealedInfo` (the
-    ///      sealed form of the 4,096-B padding bucket).
-    uint256 internal constant TREE_LEAVES_MAX = 256;
+    /// @dev CTR-CHAT-27 C10 (owner, R8; 256 -> 512 owner 2026-11-25): leaf positions of one tree session, depth 9; C24: its
+    ///      admins and its `sealedInfo` (the sealed form of the 4,096-B padding bucket).
+    uint256 internal constant TREE_LEAVES_MAX = 512;
     uint256 internal constant TREE_ADMINS_MAX = 32;
     uint256 internal constant TREE_INFO_MAX = 4124;
     /// @dev C10, C21: adds plus removes per commit, and the leaves one head may owe to removals.
