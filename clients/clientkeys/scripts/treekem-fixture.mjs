@@ -718,6 +718,22 @@ export function lies(worlds) {
     forged("an admin's admin list with no admin that holds a leaf", { admins: ["H"] }, "C", "A");
     forged("a non-admin's Remove of a live UA's leaf", { removes: ["C"] }, "A");
     forged("a non-admin's Add of another UA", { adds: [["D", 3]] }, "A");
+    forged("a commit whose leaves is not its tree's", { edit: (r) => ({ ...r, leaves: 8 }) });
+    forged("a commit whose ctCount is not its path's", { edit: (r) => ({ ...r, ctCount: r.ctCount - 1 }) });
+    const stranger = keptRemoval(w, "A", ["H"], 1, 5);
+    add("a removal of a UA that is no member", "small", "A", { "removalCount(1)": 1, "removalAt(1,0)": stranger }, lie);
+    const bLeave = { ...hLeave, member: uaOf("B") };
+    const { treeId: _b, ...keptB } = bLeave;
+    add(
+      "a leave signed by another UA",
+      "small",
+      "A",
+      {
+        "leaveCount(1)": 1,
+        "leaveAt(1,0)": { record: keptB, sig: sign("A", "PqChatTreeLeave", bLeave) },
+      },
+      lie,
+    );
     // a list whose targets are not the walk's: the author signs the hash of the reversed list
     const g2 = forgedCommit(w, "B", w.home.tree);
     const rev = [...g2.built.ctTargets].reverse();
@@ -769,6 +785,17 @@ export function lies(worlds) {
     add("the same without a pin: the residual of §14", "pin-exit", "A", hidden, { replay: null, prepare: null });
     // the removal not hidden: the exited UA's epoch is refused by the walk itself
     add("an epoch by a UA whose removal the walk read", "pin-exit", "A", served(w, f.built, f.sig), {
+      replay: "TreeReadCorrupted",
+      prepare: "TreeReadCorrupted",
+    });
+  }
+  {
+    // an empty path (the last live leaf) whose record signs another list hash than the empty one (codex-r2-14)
+    const w = W("empty-path");
+    const f = forgedCommit(w, "A", w.home.tree, {
+      edit: (r) => ({ ...r, ctListHash: hex(rnd("tree-secrets/lies/list")) }),
+    });
+    add("an empty path with another list hash", "empty-path", "A", served(w, f.built, f.sig), {
       replay: "TreeReadCorrupted",
       prepare: "TreeReadCorrupted",
     });

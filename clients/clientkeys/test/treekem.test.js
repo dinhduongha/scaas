@@ -1029,6 +1029,7 @@ test("the lies of plan T11 (E-1, F-1, sc-F-3, sc-F-7, E-4, the lag): replay and 
     ["pin-exit", f.smallScenario("pin-exit", true)],
     ["returned", f.returnedScenario()],
     ["lag", f.lagScenario()],
+    ["empty-path", f.emptyPathScenario(null)],
   ]);
   const code = (fn) => {
     try {
