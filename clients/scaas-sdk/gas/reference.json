@@ -6074,11 +6074,11 @@
       "kind": "ua-0x0130",
       "fresh": true,
       "gas": 40312000,
-      "measured": 40311111,
+      "measured": 40311089,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0130_cacheExpandedKey_fresh_p0",
       "regular": {
         "gas": 8596000,
-        "measured": 8595741,
+        "measured": 8595719,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0130_cacheExpandedKey_fresh_p0_regular"
       }
     },
@@ -6087,11 +6087,11 @@
       "kind": "ua-0x0131",
       "fresh": true,
       "gas": 42317000,
-      "measured": 42316583,
+      "measured": 42316561,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0131_cacheExpandedKey_fresh_p0,ua-0x0131_cacheExpandedKey_fresh_p1",
       "regular": {
         "gas": 9035000,
-        "measured": 9034493,
+        "measured": 9034471,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0131_cacheExpandedKey_fresh_p0_regular,ua-0x0131_cacheExpandedKey_fresh_p1_regular"
       }
     },
@@ -6113,11 +6113,11 @@
       "kind": "kem",
       "fresh": true,
       "gas": 2922000,
-      "measured": 2921407,
+      "measured": 2921409,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#kem_setKemKey_fresh_commit",
       "regular": {
         "gas": 91000,
-        "measured": 90907,
+        "measured": 90909,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#kem_setKemKey_fresh_commit_regular"
       }
     },
@@ -6166,8 +6166,8 @@
       "entry": "registerMsig",
       "kind": "msig",
       "fresh": true,
-      "gas": 1016000,
-      "measured": 1015549,
+      "gas": 1017000,
+      "measured": 1016052,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_registerMsig_fresh_native",
       "item": "members",
       "per_item": {
@@ -6179,7 +6179,7 @@
       },
       "regular": {
         "gas": 121000,
-        "measured": 120447,
+        "measured": 120950,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_registerMsig_n16_fresh_native_regular,msig_registerMsig_n2_fresh_native_regular,msig_registerMsig_n4_fresh_native_regular,msig_registerMsig_n8_fresh_native_regular"
       }
     },
@@ -6208,8 +6208,8 @@
       "entry": "updateMsig",
       "kind": "msig",
       "fresh": true,
-      "gas": 325000,
-      "measured": 324521,
+      "gas": 356000,
+      "measured": 355393,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_updateMsig_fresh_native",
       "item": "members",
       "per_item": {
@@ -6221,7 +6221,7 @@
       },
       "regular": {
         "gas": 73000,
-        "measured": 72071,
+        "measured": 72343,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_updateMsig_n16_fresh_native_regular,msig_updateMsig_n2_fresh_native_regular,msig_updateMsig_n4_fresh_native_regular,msig_updateMsig_n8_fresh_native_regular"
       }
     }
