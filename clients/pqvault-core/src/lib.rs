@@ -24,7 +24,9 @@ pub use records::{Addr, Signed, B32};
 pub use vault::*;
 
 use records::UaSig;
-use scaas_sdk::app_core::{AppCall, AppCore, AppDesc, AppKey, AppPath, AppSigned, AppWrap};
+use scaas_sdk::app_core::{
+    AppCall, AppCore, AppDesc, AppKey, AppPath, AppSigned, AppWrap, MsigVersion,
+};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::{Sdk, SdkError};
 use serde_json::Value;
@@ -116,7 +118,8 @@ pub trait Net: Send + Sync {
         path: AppPath,
         typed: String,
     ) -> Result<AppSigned, SdkError>;
-    /// `AppCore::verify_pqvault_record`.
+    /// `AppCore::verify_pqvault_record_versions`: on a pass every `(msig, version)` the signature names (CTR-UA-74 step 6), `None`
+    /// on a refusal.
     async fn verify(
         &self,
         chain: &str,
@@ -124,7 +127,7 @@ pub trait Net: Send + Sync {
         path: AppPath,
         typed: String,
         sig: UaSig,
-    ) -> Result<bool, SdkError>;
+    ) -> Result<Option<Vec<MsigVersion>>, SdkError>;
     /// `AppCore::kem_wrap`: `key` wrapped to `recipient`'s KEM key at `version`, read from `chain`'s registry.
     async fn kem_wrap(
         &self,
@@ -287,9 +290,9 @@ impl Net for SdkNet {
         path: AppPath,
         typed: String,
         sig: UaSig,
-    ) -> Result<bool, SdkError> {
+    ) -> Result<Option<Vec<MsigVersion>>, SdkError> {
         self.0
-            .verify_pqvault_record(chain.into(), records::hex(&ua.0), path, typed, sig)
+            .verify_pqvault_record_versions(chain.into(), records::hex(&ua.0), path, typed, sig)
             .await
     }
     async fn kem_wrap(

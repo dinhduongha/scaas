@@ -12,14 +12,15 @@
 
 use pqvault_core::records::*;
 use pqvault_core::{Error, Instance, Net, PqVault, VaultState};
-use scaas_sdk::app_core::{AppCall, AppKey, AppPath, AppSigned, AppWrap};
+use scaas_sdk::app_core::{AppCall, AppKey, AppPath, AppSigned, AppWrap, MsigVersion};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::vault::MemoryStore;
 use scaas_sdk::{Limits, RuntimeChoice, Sdk, SdkConfig, SdkError};
 use serde_json::Value;
 use std::sync::Arc;
 
-/// A seam whose signature check accepts every signature and that answers nothing else.
+/// A seam whose signature check accepts every signature and that answers nothing else; a signature with slots names its
+/// signer's version by its tag (an `msig`'s, for the step 6 rows).
 struct Accepting;
 #[async_trait::async_trait]
 impl Net for Accepting {
@@ -38,12 +39,23 @@ impl Net for Accepting {
     async fn verify(
         &self,
         _: &str,
-        _: B32,
+        ua: B32,
         _: AppPath,
         _: String,
-        _: UaSig,
-    ) -> Result<bool, SdkError> {
-        Ok(true)
+        sig: UaSig,
+    ) -> Result<Option<Vec<MsigVersion>>, SdkError> {
+        // an `msig` signer here: one with slots, its version the tag `signature` names (CTR-UA-74 step 2)
+        if sig.members.is_empty() {
+            return Ok(Some(vec![]));
+        }
+        let version = match sig.signature.len() {
+            0 => 0,
+            _ => u64::from_be_bytes(sig.signature.as_slice().try_into().unwrap()),
+        };
+        Ok(Some(vec![MsigVersion {
+            msig: hex(&ua.0),
+            version,
+        }]))
     }
     async fn kem_wrap(
         &self,
@@ -86,6 +98,8 @@ async fn vault() -> PqVault {
 }
 
 const ME: B32 = B32([0x11; 32]);
+/// One SDK scope at a time (an app's labels are the process's while its scope lives).
+static ONE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 const BOB: B32 = B32([0x22; 32]);
 
 /// A portable vault of ME (its admin) and BOB, then 17 epochs by ME: `epochs[0..=17]`, ids recomputed, parents chained.
@@ -166,6 +180,7 @@ fn with_removal(named: usize, next: u64, admin: B32) -> VaultState {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_removal_names_the_head_or_an_ancestor_within_16() {
+    let _one = ONE.lock().await;
     let pv = vault().await;
     let ok = |s: VaultState| {
         let pv = &pv;
@@ -194,5 +209,134 @@ async fn a_removal_names_the_head_or_an_ancestor_within_16() {
     assert!(matches!(
         ok(with_removal(1, 2, BOB)).await,
         Err(Error::ChainUnverified)
+    ));
+}
+
+/// An `msig`'s signature at `version` for the seam: one slot, the tag `signature`.
+fn at_version(version: u64) -> UaSig {
+    UaSig {
+        key_data: vec![],
+        signature: scaas_ua_tag(version),
+        members: vec![MemberSig {
+            index: 0,
+            members: vec![],
+            sig: vec![1],
+        }],
+    }
+}
+
+fn scaas_ua_tag(version: u64) -> Vec<u8> {
+    if version == 0 {
+        vec![]
+    } else {
+        version.to_be_bytes().to_vec()
+    }
+}
+
+/// C-3, R-2 (CTR-UA-74 step 6 along a vault): ME, an `msig` here, signs epoch 5 at version 1; epoch 9 under an empty tag (the
+/// old quorum, version 0) is refused, as is the create record at version 1 followed by epoch 1 at 0, and a removal kept under
+/// the head at version 0; each twin, at version 1, verifies.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_msig_version_never_goes_back_along_the_vault() {
+    let _one = ONE.lock().await;
+    let pv = vault().await;
+    let ok = |s: VaultState| {
+        let pv = &pv;
+        async move { pv.verify(s).await.map(|s| s.verified) }
+    };
+    let with = |at: &[(usize, u64)]| {
+        let mut s = chain();
+        for (i, v) in at {
+            s.epochs[*i].sig = at_version(*v);
+        }
+        s
+    };
+    assert!(ok(with(&[(5, 1), (9, 1)])).await.unwrap(), "twin: 1 then 1");
+    assert!(ok(with(&[(5, 0), (9, 1)])).await.unwrap(), "twin: 0 then 1");
+    assert!(matches!(
+        ok(with(&[(5, 1), (9, 0)])).await,
+        Err(Error::ChainUnverified)
+    ));
+    // the create record's signature is epoch 0's
+    assert!(matches!(
+        ok(with(&[(0, 1), (1, 0)])).await,
+        Err(Error::ChainUnverified)
+    ));
+    assert!(ok(with(&[(0, 1), (1, 1)])).await.unwrap());
+    let mut s = with_removal(17, 18, ME);
+    s.epochs[5].sig = at_version(1);
+    s.epochs[17].removals[0].sig = at_version(0);
+    assert!(matches!(ok(s).await, Err(Error::ChainUnverified)));
+    let mut s = with_removal(17, 18, ME);
+    s.epochs[5].sig = at_version(1);
+    s.epochs[17].removals[0].sig = at_version(1);
+    assert!(ok(s).await.unwrap(), "twin: the removal at 1");
+}
+
+/// A-1 (CTR-UA-74, CTR-PQV): an epoch an `msig` signed before an `updateMsig` (no tag), copied to a replica with its registry's
+/// current tag, agrees with the home's, as does one whose inner `msig` slot carries another tag; a copy that differs in anything
+/// but the tags (a single-key slot's signature, an inner leaf's) does not.
+#[test]
+fn a_replica_epoch_agrees_without_its_tags() {
+    let home = {
+        let mut e = chain().epochs[3].clone();
+        e.sig = UaSig {
+            key_data: vec![],
+            signature: vec![],
+            members: vec![
+                MemberSig {
+                    index: 0,
+                    members: vec![],
+                    sig: vec![7; 40],
+                },
+                MemberSig {
+                    index: 1,
+                    members: vec![InnerSig {
+                        index: 0,
+                        sig: vec![8; 40],
+                    }],
+                    sig: vec![],
+                },
+            ],
+        };
+        e
+    };
+    let copy = |f: fn(&mut UaSig)| {
+        let mut e = home.clone();
+        f(&mut e.sig);
+        e
+    };
+    assert!(pqvault_core::epoch_agrees(&home, &home.clone()));
+    assert!(
+        pqvault_core::epoch_agrees(&copy(|s| s.signature = 2u64.to_be_bytes().to_vec()), &home),
+        "the outer tag"
+    );
+    assert!(
+        pqvault_core::epoch_agrees(
+            &copy(|s| s.members[1].sig = 1u64.to_be_bytes().to_vec()),
+            &home
+        ),
+        "an inner msig slot's tag"
+    );
+    assert!(
+        !pqvault_core::epoch_agrees(&copy(|s| s.members[0].sig[0] ^= 1), &home),
+        "a single-key slot's signature"
+    );
+    assert!(
+        !pqvault_core::epoch_agrees(&copy(|s| s.members[1].members[0].sig[0] ^= 1), &home),
+        "an inner leaf's signature"
+    );
+    // a single key's signature is its signature, never a tag
+    let single = |sig: Vec<u8>| {
+        let mut e = home.clone();
+        e.sig = UaSig {
+            signature: sig,
+            ..UaSig::default()
+        };
+        e
+    };
+    assert!(!pqvault_core::epoch_agrees(
+        &single(vec![1; 8]),
+        &single(vec![2; 8])
     ));
 }
