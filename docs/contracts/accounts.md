@@ -700,11 +700,10 @@ Algorand: not built, see Staging; Solana, Move, TON and Cosmos have no `msig`.
   Client rule: at every change sign the same target for each `(chainUid, registry)` that holds or may hold the `msig`, keep the signed
   updates and the key records in one ordered log, and bring a new registry current by replaying them in order. A stored signature of an
   earlier structure was checked when it was written and is not re-judged later.
-  A reader judges a kept record by the structure version its signature names ([CTR-UA-74](#CTR-UA-74), the reader rule; the client
-  follow-up is listed there). Until that follow-up the client record checks judge every record of an updated `msig` by its current
-  structure (`msigOf` and `msigStateOf`'s `enabled`, never `registrationOf`): ua-rs `check_*_current`, clientkeys `verify*` with a record answering `current` / `enabled`, the scoped PQZ key
-  record too (K3-3: ua-rs `check_pqz_scoped_key_record_current`, clientkeys `verifyPqzScopedKeyRecord`; vectors `portable.json`
-  `msigUpdated`, `msigScopedKeyRecords`).
+  A reader judges a kept record by the structure version its signature names ([CTR-UA-74](#CTR-UA-74), the reader rule; BUILT in
+  the clients): ua-rs `check_*_current` over `ua_portable::MsigAt` (`msigAt` by version, `None` the current one), clientkeys
+  `verify*` with a record answering `versions`, the scoped PQZ key record too (K3-3: ua-rs `check_pqz_scoped_key_record_current`,
+  clientkeys `verifyPqzScopedKeyRecord`; vectors `portable.json` `msigUpdated`, `msigScopedKeyRecords`, each row with its tag).
 - **Gas** (measured, `test/ua/UARegistryMsigUpdate.t.sol`, `--isolate`, regular + EIP-8037 state). An update of the same count signed by
   two EOAs: 3 slots 551,292, 16 slots 1,310,222, 64 slots 4,245,434, 256 slots 16,000,442 (61,209 a slot, about 55 k of it the blob's state
   gas), so `MSIG_UPDATE_GAS = 400,000`, `MSIG_UPDATE_SLOT_GAS = 62,000` (since [CTR-UA-74](#CTR-UA-74): 450,000, the figures there). `requireAuthorized` of a 2-of-3 EOA `msig`, cold frame gas: 44,721
@@ -1753,7 +1752,8 @@ UNAUDITED. **EVM: BUILT** (contract side; the client readers are a follow-up, li
   (`memberSigHashOf`, `UAMemberSig`: its `pop` slot or its acceptance) is `abi.encode(InnerSig[])` followed by that member's tag, the
   same way; a copy to another registry replays the list with the tag of the member's version **there**. The registration bound counts 32 more bytes for an
   `msig` slot (`_slotBytes`).
-- <a id="msig-reader-rule"></a>**The reader rule** (ua-rs, clientkeys, every `ua-*` reader; mechanical):
+- <a id="msig-reader-rule"></a>**The reader rule** (ua-rs, clientkeys, every `ua-*` reader; mechanical; BUILT in ua-rs, clientkeys and
+  scaas-sdk, step 6 on the tree walk's pin `msigVersions`, UNAUDITED):
   1. Read the kept signature of the record (the `UASig`; on a `none` instance the bytes from any source, compared with the `sigHash`
      in state first). The signer is an `msig`: `keyData` is empty and `members` is not.
   2. `v` = the tag in `UASig.signature`: empty → 0; exactly 8 bytes → that big-endian `uint64`, which must be ≥ 1; any other length, or

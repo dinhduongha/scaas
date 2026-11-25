@@ -894,7 +894,11 @@ whether the device follows every epoch or none; so are later polls of the contra
      epoch since the device's verified tree; for a fresh restore or a joiner, every record since creation **and the cold
      tree's member keys, up to 512 authenticated registry key reads** (`kemKeyAt` with its kept signature, §8 step 5).
      It has no bound: any member lengthens it by a commit each (a plain commit with no change is one transaction). The
-     device keeps its verified tree, exits and pin, so it pays this once (the spec check, sc-E-8, sc-F-11);
+     device keeps its verified tree, exits and pin, so it pays this once (the spec check, sc-E-8, sc-F-11). Paying once needs
+     the resume input as well as the pin: the node keys the device held at the pin and the info in force there (and, for a
+     tree's `msig` signers, the versions the pin saw, CTR-UA-74), so a resumed replay reads and opens only the epochs after
+     the pin (ua-rs `tree_resume`, clientkeys `replay(.., from)`; E-3, B2-2); a device with the pin alone walks from it but
+     cannot open the epochs it already opened;
    - **the secret range: the epochs the key was in the tree.** `joinEpoch` to the head for a live key; `joinEpoch` to
      `endEpoch − 1` for a key that was taken out. **`endEpoch` is the number of the commit that blanks the leaf:** its
      record must hold the key in its `removes`, and the device opens nothing there, because it is not in that tree.
