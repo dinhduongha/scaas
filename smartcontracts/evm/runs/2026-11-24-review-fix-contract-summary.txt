@@ -16,6 +16,11 @@ forge-pqchat (split + E-3 tree + D-7 + A-3) | 3e0facc43 | 0 | 218 passed, 1 skip
 size (split) | 3e0facc43 | 0 | 183 contracts; PqChatTree 35,329 -> 32,702; PqChatTreeMembers 8,544; PqChat 34,912 -> 34,978 (baseline moved)
 pqchat release pins (split) | 3e0facc43 | 0 | regular 2,410,162 -> 2,430,967; state 53,990,640 -> 54,091,620; asked x 1.05 59,348,716 of 60 M
 mutants M1-M20 (split, E-3 tree, A-4, D-7, A-3) | test commit after 3e0facc43 | 0 | 20/20 killed (first run: M6 staged epoch, M15 / M16 head flags survived; test_e3_exitNamingAStagedEpoch and the leftIn / removedIn asserts added)
+forge-factory (post-merge) | 25066a1fa | 0 | 2 passed
+forge-gas (post-merge) | 25066a1fa | 0 | 406 passed, 1 skipped
+forge-governance (post-merge) | 25066a1fa + GovDeploy fix | 0 | 1009 passed (first run 1008/1: test_deployPqChatPath read 3 modules; the fourth added, in a block for the stack)
+forge-v2 (post-merge) | 25066a1fa | 0 | 756 passed
+sdk op::gas (post-merge) | 25066a1fa | 0 | 32 passed
 
 ## Done (committed)
 - G-1: index before the initializer (red: "mid-creation: indexed, the env registry: ...07 != ...08").
@@ -42,8 +47,7 @@ mutants M1-M20 (split, E-3 tree, A-4, D-7, A-3) | test commit after 3e0facc43 | 
 ## Done 2026-11-25
 - Step 1: the PqChatTreeMembers split + E-3 tree (C9 ancestor check, EXIT_LAG_MAX = 16, PqChatExitLag, applied at the
   head) + A-4 + D-7 + A-3 (3e0facc43); its tests and mutants (runs/2026-11-24-review-fix-contract-mutants.py, M1-M20).
-- Still not run after the merge: the G-1 forge gates (governance, factory, v2, gas) and the SDK's `cargo test --lib
-  op::gas` (2026-11-25: blocked first by free memory, 4 GB < the runner's 8 GB).
+- Step 0's post-merge gates: governance, factory, v2, gas, size, SDK op::gas, all green (rows above).
 
 ## Left, in order
 0. Done (ccf6c43db). On resume: rerun the G-1 gates (governance, factory, v2, gas), the size gate and the SDK's
