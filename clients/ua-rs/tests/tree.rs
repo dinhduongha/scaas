@@ -2476,3 +2476,56 @@ fn tree_judge_commit() {
         "accepted"
     );
 }
+
+/// The key's period from an endpoint (C28, codex-r2-10, C-7), as clientkeys' period test: an end at or below the join or past
+/// the head, and a join past the head, are `TreePeriod`; the honest period is the twin.
+#[test]
+fn tree_period_bounds() {
+    let v = pq("tree-secrets");
+    let (_w, keys) = keys();
+    let world = World::new(&v);
+    let sc = v["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "retired")
+        .unwrap();
+    let steps = sc["steps"].as_array().unwrap().len();
+    let mut home = scenario(&keys, &v, &world, sc, &mut vec![], Some(steps));
+    let dev = |n: &str| {
+        let (d, kem) = &world.devices[n];
+        TreeDevice {
+            ua: a32(&d["ua"]),
+            key_id: u(&d["keyId"]),
+            kem,
+        }
+    };
+    let (d, e) = (dev("D"), dev("E"));
+    let gone = format!("goneKeyOf({})", hx(&keccak256(&d.kem.kem_pk())));
+    assert!(keys
+        .tree_replay(SC, &mut home, &d, None, 0)
+        .unwrap()
+        .is_some());
+    let cases: [(String, fn(&mut Value)); 3] = [
+        (gone.clone(), |x| x["endEpoch"] = json!(0)),
+        (gone, |x| x["endEpoch"] = json!(99)),
+        ("treeLeaves()".into(), |x| x[3]["joinEpoch"] = json!(99)),
+    ];
+    for (i, (read, f)) in cases.into_iter().enumerate() {
+        let device = if i < 2 { &d } else { &e };
+        let mut t = Tamper {
+            home: &mut home,
+            read: read.clone(),
+            f,
+        };
+        assert_eq!(
+            code(keys.tree_replay(SC, &mut t, device, None, 0)),
+            "TreePeriod",
+            "{read}"
+        );
+    }
+    assert!(keys
+        .tree_replay(SC, &mut home, &e, None, 0)
+        .unwrap()
+        .is_some());
+}
