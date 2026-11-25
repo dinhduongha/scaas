@@ -5,9 +5,13 @@
 import * as pc from "../src/pqchat.js";
 import * as tr from "../src/pqchat-tree.js";
 import * as tk from "../src/treekem.js";
-import { pqKeygen, signUA } from "../src/pq.js";
+import { pqKeygen, signUA, PQ_KINDS } from "../src/pq.js";
+import * as ua from "../src/ua.js";
+import { encodeMemberSigs } from "../src/ua-verify.js";
+import { p256 } from "@noble/curves/nist.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { kemPrk, kemKeyFromPrk, kemSeedFromPrk } from "../src/kem.js";
-import { hex, keccak_256, utf8ToBytes, concatBytes, fromHex } from "../src/bytes.js";
+import { hex, keccak_256, utf8ToBytes, concatBytes, fromHex, b64url, abiEncode } from "../src/bytes.js";
 
 export const sc = tk.PQCHAT_TREE;
 /** keccak256("scaas/pqchat/vectors/<name>/0") ‖ keccak256("…/1") ‖ …, the first n bytes (as pqchat-vectors.mjs). */
@@ -65,19 +69,91 @@ export function deviceOf(name) {
   devices.set(name, d);
   return d;
 }
+const MLDSA65 = PQ_KINDS.mldsa65.kind;
+const pqSign = (secretKey, purpose, digest) => signUA("mldsa65", secretKey, purpose, digest, { extraEntropy: false });
+/** The keyless admins (no KEM key, never a leaf; spec §9: they act by `treeRemove` only), each with its registry record and its
+ *  portable signature (F-3): `M`, a 2-of-2 `msig` over two ML-DSA-65 UAs of the seed (indexes 8 and 9, outside the people);
+ *  `W`, a WebAuthn P-256 UA. */
+let keyless;
+export function keylessOf(name) {
+  if (!keyless) {
+    const subs = [8, 9].map((i) => ({ i, ...pqKeygen(SEED, "mldsa65", 0, i) }));
+    const members = subs
+      .map((k) => ({ kind: MLDSA65, id: hex(k.ua), weight: 1, k }))
+      .sort((x, y) => (x.id < y.id ? -1 : 1));
+    const mKey = ua.encodeMsig(2, members);
+    const mUa = hex(ua.deriveUA(0x0120, mKey));
+    // WebAuthn P-256 (ua-signers.mjs's form; its import chain needs packages this fixture does not): the key data
+    // `x ‖ y ‖ sha256(rpId)`, the assertion `abi.encode(authenticatorData, clientDataJSON, r, s)`
+    const wSk = rnd("tree-secrets/webauthn-admin");
+    const rp = sha256(utf8ToBytes("scaas.example"));
+    const wKey = concatBytes(p256.getPublicKey(wSk, false).subarray(1), rp);
+    const webauthn = (msg) => {
+      const authData = concatBytes(rp, Uint8Array.of(0x05), Uint8Array.of(0, 0, 0, 1));
+      const cd = utf8ToBytes(`{"type":"webauthn.get","challenge":"${b64url(msg)}","origin":"https://scaas.example"}`);
+      const sig = p256.sign(sha256(concatBytes(authData, sha256(cd))), wSk, {
+        prehash: false,
+        lowS: true,
+        format: "compact",
+      });
+      return abiEncode(
+        ["bytes", "bytes", "bytes32", "bytes32"],
+        [authData, cd, sig.subarray(0, 32), sig.subarray(32, 64)],
+      );
+    };
+    keyless = {
+      M: {
+        ua: mUa,
+        kind: 0x0120,
+        keyData: hex(mKey),
+        subs: members.map((m) => ({ ua: m.id, kind: MLDSA65, keyData: hex(m.k.publicKey) })),
+        sign: (purpose, digest) => {
+          const md = ua.memberDigest(mUa, ua.uaMessage(0x0120, purpose, digest));
+          const list = members.map((m, index) => ({
+            index,
+            members: [],
+            sig: pqSign(m.k.secretKey, ua.purposeTag("member"), md),
+          }));
+          return { signature: "0x", members: hex(encodeMemberSigs(list)) };
+        },
+      },
+      W: {
+        ua: hex(ua.deriveUA(0x0100, wKey)),
+        kind: 0x0100,
+        keyData: hex(wKey),
+        subs: [],
+        sign: (purpose, digest) => hex(webauthn(ua.uaMessage(0x0100, purpose, digest))),
+      },
+    };
+  }
+  return keyless[name];
+}
+/** A record's signature by `who` (a person: ML-DSA-65; `M` or `W`: a keyless admin's portable signature). */
 export const sign = (who, struct, record) =>
-  hex(signUA("mldsa65", personOf(who).secretKey, sc.purpose, sc.typed(struct, record), { extraEntropy: false }));
+  who === "M" || who === "W"
+    ? keylessOf(who).sign(sc.purpose, sc.typed(struct, record))
+    : hex(pqSign(personOf(who).secretKey, sc.purpose, sc.typed(struct, record)));
+/** The registry records of every signer: `ua` → `{ kind, keyData }`. */
+export const uaRecords = () =>
+  new Map([
+    ...PEOPLE.map((n) => [personOf(n).ua, { kind: MLDSA65, keyData: personOf(n).publicKey }]),
+    ...["M", "W"].flatMap((n) =>
+      [keylessOf(n), ...keylessOf(n).subs].map((k) => [k.ua, { kind: k.kind, keyData: k.keyData }]),
+    ),
+  ]);
 const registry = (names) => ({
   kems: new Map(names.map((n) => [`${deviceOf(n).ua}/${deviceOf(n).keyId}`, deviceOf(n).kemPk])),
-  uaKeys: new Map(PEOPLE.map((n) => [personOf(n).ua, personOf(n).publicKey])),
+  uaRecords: uaRecords(),
 });
+/** A person's or a keyless admin's UA by name. */
+export const uaOf = (name) => (name === "M" || name === "W" ? keylessOf(name).ua : personOf(name).ua);
 /** The leaves of the head as `(ua, keyId)` or null: what a replay's roster by undo must give back. */
 const roster = (h) =>
   Array.from({ length: h.tree.leaves }, (_, i) => {
     const n = h.tree.nodes[2 * i];
     return n ? { ua: n.ua, keyId: n.keyId } : null;
   });
-const sortedUas = (names) => [...new Set(names.map((n) => personOf(n).ua))].sort();
+const sortedUas = (names) => [...new Set(names.map(uaOf))].sort();
 
 /** A session's world: its home, the devices it knows (the registry), and its tag for the randomness. */
 export function createSession({
@@ -166,20 +242,22 @@ export function commit(w, name, o = {}) {
   return { built, sig };
 }
 
-/** A landed `treeLeave` by `name` or `treeRemove` by admin `name` of `members` (names of people), on the head. */
-export function gone(w, kind, name, members, nonce) {
+/** A landed `treeLeave` by `name` or `treeRemove` by admin `name` of `members` (names), naming the head or, with `named`, the
+ *  ancestor at that number (C9: applied at the head either way). */
+export function gone(w, kind, name, members, nonce, named = null) {
   const h = w.home;
-  const base = { sessionId: h.sessionId, treeId: h.treeId, epochId: h.epochs.at(-1).id };
+  const at = named ?? h.epochs.length - 1;
+  const base = { sessionId: h.sessionId, treeId: h.treeId, epochId: h.epochs[at].id };
   const [struct, record] =
     kind === 1
-      ? ["PqChatTreeLeave", { ...base, member: personOf(name).ua, nonce }]
+      ? ["PqChatTreeLeave", { ...base, member: uaOf(name), nonce }]
       : [
           "PqChatTreeRemove",
           {
             ...base,
-            nextEpoch: h.epochs.length,
-            members: members.map((n) => personOf(n).ua),
-            admin: personOf(name).ua,
+            nextEpoch: at + 1,
+            members: [...members.map(uaOf)].sort(),
+            admin: uaOf(name),
             nonce,
           },
         ];
@@ -362,4 +440,394 @@ export function adminGapScenario() {
   commit(w, "A"); // 3: auto, the marker
   commit(w, "A", { info: INFO.I3 }); // 4: established anew
   return w;
+}
+
+// ------------------------------------------------------------------ the rows of the code review of 2026-11-24 (plan T11)
+
+/** C9, F-2, F-3, the spec check sc-F-1 and sc-F-2: the keyless admins M (an `msig`) and W (WebAuthn) beside A. M removes D naming
+ *  epoch 0 two below the head (applied at 2); the non-admin B honours it (3); W removes M, a keyless admin (at 3); the
+ *  non-admin C drops the gone M from `admins` (4); W removes itself, A removes E and leaves, all on head 4; the non-admin B
+ *  drops A, E and W (5); C commits (6). Every chain the home accepted: every device follows. */
+export function exitsScenario() {
+  const w = createSession({
+    tag: "exits",
+    creator: "A",
+    nonce: 10,
+    admins: ["A", "M", "W"],
+    members: ["A", "B", "C", "D", "E"],
+    info: INFO.I1,
+  });
+  commit(w, "B"); // 1
+  commit(w, "C"); // 2
+  gone(w, 2, "M", ["D"], 1, 0);
+  commit(w, "B", { removes: ["D"] }); // 3
+  gone(w, 2, "W", ["M"], 1);
+  commit(w, "C", { admins: ["A", "W"] }); // 4
+  gone(w, 2, "W", ["W"], 2);
+  gone(w, 2, "A", ["E"], 1);
+  gone(w, 1, "A", [], 2);
+  commit(w, "B", { removes: ["A", "E"], admins: [] }); // 5
+  commit(w, "C"); // 6
+  return w;
+}
+/** C-2: a validly signed ciphertext with a small-order `x25519Eph` over A's leaf (1), a Welcome to D with one (2): "opening
+ *  failed" and "welcome disagrees" in both readers, never an abort. */
+export function smallOrderScenario() {
+  const w = createSession({
+    tag: "small-order",
+    creator: "A",
+    nonce: 11,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: INFO.I1,
+  });
+  const probe = commit(w, "B", { land: false });
+  w.steps.pop();
+  commit(w, "B", { faults: { eph: { [ctIndexFor(probe.built, "A")]: true } } }); // 1
+  commit(w, "A", { adds: [["D", 3]], faults: { welcomeEph: { 0: true } } }); // 2
+  return w;
+}
+/** The base of the lies below: A (admin), B, C; B commits (1); with `removeC`, A removes C on head 1, not honoured yet. */
+export function smallScenario(tag, removeC = false) {
+  const w = createSession({ tag, creator: "A", nonce: 12, admins: ["A"], members: ["A", "B", "C"], info: INFO.I1 });
+  commit(w, "B"); // 1
+  if (removeC) gone(w, 2, "A", ["C"], 1);
+  return w;
+}
+/** The lag (C9, EXIT_LAG_MAX): 17 plain commits by B and C. */
+export function lagScenario() {
+  const w = createSession({
+    tag: "lag",
+    creator: "A",
+    nonce: 13,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: INFO.I1,
+  });
+  for (let n = 1; n <= 17; n++) commit(w, n % 2 ? "B" : "C");
+  return w;
+}
+
+const leafOf = (t, d) => t.nodes.findIndex((n, x) => x % 2 === 0 && n?.ua === d.ua && n.keyId === d.keyId) / 2;
+/** What an endpoint serves for a commit `built` (signed `sig`) it adds on the head of `w` with the tree after it: the views of
+ *  the walk's reads that change, by read name. */
+function served(w, built, sig) {
+  const h = w.home;
+  const n = h.epochs.length;
+  const t = built.tree;
+  return {
+    "epochsOf()": [...h.epochs.map((e) => e.id), built.epochId],
+    [`commitOf(${n})`]: { record: built.record, sig },
+    "treeOf()": {
+      treeId: h.treeId,
+      leaves: t.leaves,
+      used: t.used,
+      treeHash: t.hash[tr.root(t.leaves)],
+      genesisTreeHash: h.genesisTreeHash,
+    },
+    "treeLeaves()": Array.from({ length: t.leaves }, (_, i) => {
+      const x = t.nodes[2 * i];
+      const j = h.join.get(i) ?? { joinEpoch: n, wrapIndex: 0 };
+      return x
+        ? { ua: x.ua, keyId: x.keyId, joinEpoch: j.joinEpoch, wrapIndex: j.wrapIndex, kemHash: x.kemHash }
+        : { ua: Z32, keyId: 0, joinEpoch: 0, wrapIndex: 0, kemHash: Z32 };
+    }),
+    "treeNodes()": t.hash.map((hash, x) => ({ hash, keyHash: t.nodes[x]?.keyHash ?? Z32, epoch: 0 })),
+    [`leaveCount(${n})`]: 0,
+    [`removalCount(${n})`]: 0,
+    [`pathListOf(${n})`]: { ctTargets: built.ctTargets, ctHashes: built.ctHashes },
+    ...Object.fromEntries(built.cts.map((c, j) => [`pathCtAt(${n},${j})`, c.ct])),
+  };
+}
+/** A commit by device `name` on the head of `w` built on `tree` (a lie's tree, or the true one), signed, never landed:
+ *  `o.admins` names, `o.removes` device names, `o.adds` `[device, leaf]`, `o.edit(record)` changes the record before it is
+ *  signed (an author that signs what the contract would refuse). */
+function forgedCommit(w, name, tree, o = {}) {
+  const d = deviceOf(name);
+  const h = w.home;
+  const head = h.epochs.at(-1);
+  const built = tk.buildCommit(sc, {
+    tree,
+    parent: { epochId: head.id, epoch: h.epochs.length - 1, treeHash: tr.treeHash(tree) },
+    sessionId: h.sessionId,
+    treeId: h.treeId,
+    author: d.ua,
+    leaf: leafOf(tree, d),
+    keyId: d.keyId,
+    kemSeed: d.kemSeed,
+    nonce: 900 + h.epochs.length,
+    removes: (o.removes ?? []).map((n) => {
+      const r = deviceOf(n);
+      return { leaf: leafOf(tree, r), ua: r.ua, keyId: r.keyId };
+    }),
+    adds: (o.adds ?? []).map(([n, leaf]) => ({
+      leaf,
+      ua: deviceOf(n).ua,
+      keyId: deviceOf(n).keyId,
+      via: Z32,
+      kemHash: hex(keccak_256(fromHex(deviceOf(n).kemPk))),
+      kemPk: deviceOf(n).kemPk,
+    })),
+    admins: o.admins ? sortedUas(o.admins) : head.record.admins,
+    info: null,
+    keyOf: (x) => (x % 2 === 0 ? h.kems.get(`${tree.nodes[x].ua}/${tree.nodes[x].keyId}`) : h.nodeKey.get(x).kemPk),
+    rand: (x, n) => rnd(`tree-secrets/${w.tag}/forged/${name}/${x}`, n),
+  });
+  if (o.edit) built.record = o.edit({ ...built.record });
+  return { built, sig: sign(name[0], "PqChatCommit", built.record) };
+}
+/** A removal record by `admin` of `members` on world `w`, kept under its head, naming epoch `named` (an id or a number). */
+function keptRemoval(w, admin, members, named, nonce, treeId = w.home.treeId, o = {}) {
+  const h = w.home;
+  const epochId = typeof named === "number" ? h.epochs[named].id : named;
+  const record = {
+    sessionId: h.sessionId,
+    treeId,
+    epochId,
+    nextEpoch: o.nextEpoch ?? (typeof named === "number" ? named : 0) + 1,
+    members: o.unsorted ? members.map(uaOf).sort().reverse() : members.map(uaOf).sort(),
+    admin: uaOf(admin),
+    nonce,
+  };
+  const { treeId: _, ...kept } = record;
+  return { record: kept, sig: sign(admin, "PqChatTreeRemove", record) };
+}
+
+/** The lying reads of plan T11 (C25, C26, E-1, F-1, sc-F-3, sc-F-7, E-4): per row the world, the device, the views the endpoint
+ *  replaces (by read name), the pin the device holds, and what replay and prepare give (null: accepted). `worlds` by name. */
+export function lies(worlds) {
+  const rows = [];
+  const add = (name, world, device, overrides, expect, pin = null) =>
+    rows.push({ name, world, device, overrides, pin, expect });
+  const W = (n) => worlds.get(n);
+  {
+    // E-1: H, a UA of no roster, signs the next epoch from the blank leaf 3 of the true tree
+    const w = W("small");
+    const fake = tr.treeFromJson(JSON.parse(JSON.stringify(tr.treeJson(w.home.tree))));
+    const H = deviceOf("H");
+    fake.nodes[6] = { ua: H.ua, keyId: H.keyId, kemHash: hex(keccak_256(fromHex(H.kemPk))) };
+    fake.used = 4;
+    tr.rehashAll(fake);
+    const f = forgedCommit(w, "H", fake);
+    add("forged head by a non-member (E-1)", "small", "A", served(w, f.built, f.sig), {
+      replay: "TreeReadCorrupted",
+      prepare: "TreeReadCorrupted",
+    });
+    // a non-admin's commit that drops a live admin: rights (§9), a lying read
+    const g = forgedCommit(w, "C", w.home.tree, { admins: [] });
+    add("a non-admin drops a live admin", "small", "A", served(w, g.built, g.sig), {
+      replay: "TreeReadCorrupted",
+      prepare: "TreeReadCorrupted",
+    });
+    // sc-F-7: a record with leaves 2^31, refused before anything is allocated
+    const big = served(w, g.built, g.sig);
+    big["commitOf(2)"].record = { ...big["commitOf(2)"].record, leaves: 2 ** 31 };
+    add("a record with leaves 2^31 (sc-F-7)", "small", "A", big, {
+      replay: "TreeReadCorrupted",
+      prepare: "TreeReadCorrupted",
+    });
+    // E-4: the contract serves `used` leaves, not `leaves`: accepted
+    const used = { "treeLeaves()": tk.reader(w.home).treeLeaves().slice(0, w.home.tree.used) };
+    add("the leaf list of used positions only (E-4)", "small", "A", used, { replay: null, prepare: null });
+    // exits kept under the head: an ancestor (epoch 0, one below) accepted; an unknown epoch, another treeId, a non-admin's
+    const ok = keptRemoval(w, "A", ["C"], 0, 5);
+    add(
+      "a removal naming the parent of the head",
+      "small",
+      "C",
+      { "removalCount(1)": 1, "removalAt(1,0)": ok },
+      {
+        replay: null,
+        prepare: null,
+      },
+    );
+    const lose = keptRemoval(w, "A", ["C"], hex(rnd("tree-secrets/lies/losing-epoch")), 5);
+    add(
+      "a removal naming an epoch that is not the home's",
+      "small",
+      "A",
+      {
+        "removalCount(1)": 1,
+        "removalAt(1,0)": lose,
+      },
+      { replay: "TreeReadCorrupted", prepare: "TreeReadCorrupted" },
+    );
+    const other = keptRemoval(w, "A", ["C"], 1, 5, hex(rnd("tree-secrets/lies/other-tree")));
+    add(
+      "a removal signed for another treeId",
+      "small",
+      "A",
+      { "removalCount(1)": 1, "removalAt(1,0)": other },
+      {
+        replay: "TreeReadCorrupted",
+        prepare: "TreeReadCorrupted",
+      },
+    );
+    const nonAdmin = keptRemoval(w, "B", ["C"], 1, 5);
+    add(
+      "a removal by a non-admin of the head",
+      "small",
+      "A",
+      {
+        "removalCount(1)": 1,
+        "removalAt(1,0)": nonAdmin,
+      },
+      { replay: "TreeReadCorrupted", prepare: "TreeReadCorrupted" },
+    );
+    const lie = { replay: "TreeReadCorrupted", prepare: "TreeReadCorrupted" };
+    const next = keptRemoval(w, "A", ["C"], 1, 5, w.home.treeId, { nextEpoch: 1 });
+    add(
+      "a removal whose nextEpoch is not the named number plus one",
+      "small",
+      "A",
+      {
+        "removalCount(1)": 1,
+        "removalAt(1,0)": next,
+      },
+      lie,
+    );
+    const unsorted = keptRemoval(w, "A", ["B", "C"], 1, 5, w.home.treeId, { unsorted: true });
+    add("a removal of two UAs out of order", "small", "A", { "removalCount(1)": 1, "removalAt(1,0)": unsorted }, lie);
+    const hLeave = {
+      sessionId: w.home.sessionId,
+      treeId: w.home.treeId,
+      epochId: w.home.epochs[1].id,
+      member: uaOf("H"),
+      nonce: 5,
+    };
+    const { treeId: _t, ...keptLeave } = hLeave;
+    add(
+      "a leave by a UA that holds no leaf",
+      "small",
+      "A",
+      {
+        "leaveCount(1)": 1,
+        "leaveAt(1,0)": { record: keptLeave, sig: sign("H", "PqChatTreeLeave", hLeave) },
+      },
+      lie,
+    );
+    // what only the bounds or a check of the walk refuse, each validly signed by its author (the contract refuses them)
+    const forged = (what, o, device = "C", author = "B") => {
+      const f = forgedCommit(w, author, w.home.tree, o);
+      add(what, "small", device, served(w, f.built, f.sig), lie);
+    };
+    forged("a commit with 4,125 B of sealedInfo", { edit: (r) => ({ ...r, sealedInfo: hex(new Uint8Array(4125)) }) });
+    forged("a commit with a wrap hash and no Add", {
+      edit: (r) => ({ ...r, wrapHashes: [hex(rnd("tree-secrets/lies/wrap"))] }),
+    });
+    forged("an admin's admin list with no admin that holds a leaf", { admins: ["H"] }, "C", "A");
+    forged("a non-admin's Remove of a live UA's leaf", { removes: ["C"] }, "A");
+    forged("a non-admin's Add of another UA", { adds: [["D", 3]] }, "A");
+    // a list whose targets are not the walk's: the author signs the hash of the reversed list
+    const g2 = forgedCommit(w, "B", w.home.tree);
+    const rev = [...g2.built.ctTargets].reverse();
+    const revH = [...g2.built.ctHashes].reverse();
+    g2.built.record = { ...g2.built.record, ctListHash: hex(tr.pathListHash(rev, revH)) };
+    const revSig = sign("B", "PqChatCommit", g2.built.record);
+    add(
+      "a list whose targets are not the walk's",
+      "small",
+      "C",
+      {
+        ...served(w, g2.built, revSig),
+        "pathListOf(2)": { ctTargets: rev, ctHashes: revH },
+      },
+      { replay: "TreeReadCorrupted", prepare: null },
+    );
+  }
+  {
+    // F-1 (a): C removed by A at 1 and the removal honoured at 2 by B; C served back on its old leaf signs epoch 3
+    const w = W("returned");
+    const fake = tr.treeFromJson(JSON.parse(JSON.stringify({ ...tr.treeJson(w.home.tree), goneUa: [], goneKey: [] })));
+    const C = deviceOf("C");
+    fake.nodes[4] = { ua: C.ua, keyId: C.keyId, kemHash: hex(keccak_256(fromHex(C.kemPk))) };
+    tr.rehashAll(fake);
+    const f = forgedCommit(w, "C", fake);
+    add("a removed member served back on its leaf (F-1)", "returned", "A", served(w, f.built, f.sig), {
+      replay: "TreeReadCorrupted",
+      prepare: "TreeReadCorrupted",
+    });
+  }
+  {
+    // sc-F-3: A's pin holds C's removal at 1; after a restart the endpoint hides it and serves an epoch 2 signed by C
+    const w = W("pin-exit");
+    const pin = replayOf(w, "A").pin;
+    const fake = tr.treeFromJson(JSON.parse(JSON.stringify({ ...tr.treeJson(w.home.tree), goneUa: [] })));
+    const f = forgedCommit(w, "C", fake);
+    const hidden = { ...served(w, f.built, f.sig), "removalCount(1)": 0 };
+    add(
+      "the pin's exit hidden, then an epoch by the exited UA (sc-F-3)",
+      "pin-exit",
+      "A",
+      hidden,
+      {
+        replay: "TreeReadCorrupted",
+        prepare: "TreeReadCorrupted",
+      },
+      pin,
+    );
+    add("the same without a pin: the residual of §14", "pin-exit", "A", hidden, { replay: null, prepare: null });
+    // the removal not hidden: the exited UA's epoch is refused by the walk itself
+    add("an epoch by a UA whose removal the walk read", "pin-exit", "A", served(w, f.built, f.sig), {
+      replay: "TreeReadCorrupted",
+      prepare: "TreeReadCorrupted",
+    });
+  }
+  {
+    // the lag: an exit kept under 17 naming 1 (16 below) accepted, naming 0 (17 below) a lying read
+    const w = W("lag");
+    const at16 = keptRemoval(w, "A", ["C"], 1, 5);
+    add(
+      "an exit 16 epochs below the head",
+      "lag",
+      "B",
+      { "removalCount(17)": 1, "removalAt(17,0)": at16 },
+      {
+        replay: null,
+        prepare: null,
+      },
+    );
+    const at17 = keptRemoval(w, "A", ["C"], 0, 5);
+    add(
+      "an exit 17 epochs below the head",
+      "lag",
+      "B",
+      { "removalCount(17)": 1, "removalAt(17,0)": at17 },
+      {
+        replay: "TreeReadCorrupted",
+        prepare: "TreeReadCorrupted",
+      },
+    );
+  }
+  return rows;
+}
+/** `returned`: A, B, C, E; B commits (1); A removes C at 1; B honours it (2). */
+export function returnedScenario() {
+  const w = createSession({
+    tag: "returned",
+    creator: "A",
+    nonce: 14,
+    admins: ["A"],
+    members: ["A", "B", "C", "E"],
+    info: INFO.I1,
+  });
+  commit(w, "B"); // 1
+  gone(w, 2, "A", ["C"], 1);
+  commit(w, "B", { removes: ["C"] }); // 2
+  return w;
+}
+/** A reader of world `w` with a lie row's views in place of the home's (by read name; each still logged). */
+export function lyingReader(w, overrides) {
+  const rd = tk.reader(w.home);
+  const out = { ...rd };
+  for (const [k, f] of Object.entries(rd)) {
+    if (typeof f !== "function" || k === "uaRecordOf" || k === "accepted") continue;
+    out[k] = (...a) => {
+      const read = `${k}(${a.join(",")})`;
+      if (!(read in overrides)) return f(...a);
+      rd.log.push(read);
+      return JSON.parse(JSON.stringify(overrides[read]));
+    };
+  }
+  return out;
 }

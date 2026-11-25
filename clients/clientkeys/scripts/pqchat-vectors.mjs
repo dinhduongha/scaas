@@ -1478,6 +1478,12 @@ write("tree.json", {
     ["empty-path", fx.emptyPathScenario(null)],
     ["empty-path-foreign", fx.emptyPathScenario("H")],
     ["admin-gap", fx.adminGapScenario()],
+    ["exits", fx.exitsScenario()],
+    ["small-order", fx.smallOrderScenario()],
+    ["small", fx.smallScenario("small")],
+    ["pin-exit", fx.smallScenario("pin-exit", true)],
+    ["returned", fx.returnedScenario()],
+    ["lag", fx.lagScenario()],
   ];
   const DEVICE_NAMES = ["A", "A2", "B", "B2", "C", "C2", "C3", "D", "E", "E2", "F", "G", "H"];
   const devices = Object.fromEntries(
@@ -1492,6 +1498,8 @@ write("tree.json", {
       { index: fx.personOf(n).index, ua: fx.personOf(n).ua, publicKey: fx.personOf(n).publicKey },
     ]),
   );
+  // every signer's registry record (F-3): the people's ML-DSA-65 keys, the keyless admins M (an msig) and W (WebAuthn), M's members
+  const signers = [...fx.uaRecords()].map(([ua, r]) => ({ ua, kind: r.kind, keyData: r.keyData }));
   const main = worlds[0][1];
   const commits = main.steps.filter((s) => s.built);
   const secrets = commits.map((s) => ({
@@ -1583,11 +1591,33 @@ write("tree.json", {
             info: r.epochs.map((e) => [e.info, e.inForce, e.flagged]),
             warnings: r.warnings,
             reads: r.reads,
+            pin: r.pin,
           },
         ];
       }),
     ),
+    // the checkpoint of every epoch (C26, sc-F-3): a walk from any of them gives the walk from the cold tree's head
+    pins: tk.pinsOf(sc, tk.reader(w.home)),
   }));
+  const byName = new Map(worlds);
+  const code = (f) => {
+    try {
+      f();
+      return null;
+    } catch (e) {
+      if (!e.code) throw e;
+      return e.code;
+    }
+  };
+  const lies = fx.lies(byName).map((r) => {
+    const w = byName.get(r.world);
+    const got = {
+      replay: code(() => tk.replay(sc, fx.lyingReader(w, r.overrides), fx.deviceOf(r.device), r.pin)),
+      prepare: code(() => tk.prepareCommit(sc, fx.lyingReader(w, r.overrides), r.pin)),
+    };
+    if (JSON.stringify(got) !== JSON.stringify(r.expect)) throw new Error(`lie ${r.name}: ${JSON.stringify(got)}`);
+    return r;
+  });
   write("tree-secrets.json", {
     description:
       COMMON.replace(/Sources: .*$/, "") +
@@ -1603,19 +1633,25 @@ write("tree.json", {
       "pathContext, ps[0] = H(kemSeed, …/commit ‖ pathContext), ps[0..m] and the node key hashes. pathCt: inputs and outputs " +
       "of each path ciphertext of the first two commits. schedule: ctx, S, K from the joiner and the context fields. " +
       "scenarios: each world's genesis, steps (a commit with every piece and its signature, or a landed treeLeave / " +
-      "treeRemove), rosters per epoch, and each device's replay: per epoch of its secret range [epoch, state, reason], K, " +
-      "[info, inForce, flagged], the compromise warnings and the reads in order. UNAUDITED.",
+      "treeRemove kept under the head), rosters per epoch, the pin of every epoch, and each device's replay: per epoch of its " +
+      "secret range [epoch, state, reason], K, [info, inForce, flagged], the compromise warnings, the reads in order and " +
+      "the pin of the head (C25, C26: the forward walk from the cold tree; an exit's views without treeId). signers: every " +
+      "signer's registry record (kind, keyData), the keyless admins M (msig 2-of-2) and W (WebAuthn) included (F-3); a " +
+      "signature is hex (a single key) or {signature, members} (an msig's abi.encode(MemberSig[])). lies: an endpoint's views " +
+      "replaced by read name, the device and its pin, and what replay and prepare give (null: accepted; plan T11). UNAUDITED.",
     labels: Object.fromEntries(
       ["path", "node", "commit", "ct", "joiner", "epoch", "key"].map((k) => [k, new TextDecoder().decode(sc[k])]),
     ),
     tags: { tagPath: hex(sc.tagPath), tagContext: hex(sc.tagContext), wrap: sc.wrap },
     infoMax: tk.TREE_INFO_MAX,
     people,
+    signers,
     devices,
     secrets,
     pathCt,
     schedule,
     scenarios,
+    lies,
   });
 }
 console.log(

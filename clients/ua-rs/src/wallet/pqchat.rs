@@ -237,7 +237,15 @@ fn sign_typed(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
 /// [`TREE_RECORDS`], else `Argument`; built by the tree's prepared operations under their scope's typed data) under the
 /// scope's `purpose`, as [`sign`] signs a record.
 pub(crate) fn sign_tree(key: &dyn Signer, td: &TypedData, purpose: &[u8; 32]) -> Result<UASig> {
-    if !TREE_RECORDS.contains(&td.primary_type()) {
+    // the record's own encodeType (B-2, as `own_struct`): not another struct under a tree record's name; the domain and the
+    // purpose are the scope's and stand in the review
+    let own = td
+        .to_value()
+        .get("message")
+        .cloned()
+        .and_then(|m| typed(td.primary_type(), m).ok())
+        .is_some_and(|t| t.encode_type() == td.encode_type());
+    if !TREE_RECORDS.contains(&td.primary_type()) || !own {
         return Err(Error::Argument);
     }
     sign_digest(key, &td.digest()?, purpose)

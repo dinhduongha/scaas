@@ -229,16 +229,16 @@ impl KemKeyPair {
         self.secret.revoke_store();
     }
 
-    /// `ss` of `(mlkem_ct, x25519_eph)`: `KemCheck` for an `mlkem_ct` of other than 1,568 bytes or a small-order `E`;
-    /// `KeyRevoked` once the wallet was locked. ML-KEM's implicit rejection kept: a wrong `mlkem_ct` gives another `ss`.
-    /// `HKDF-SHA-256(ikm = the key's 96-byte seed, salt empty, info, len)` (a TreeKEM committer's `ps[0]`, spec §5): inside
-    /// the store, out only through a handle.
+    /// `HKDF-SHA-256(ikm = the key's 96-byte seed, salt empty, info, len)` (a TreeKEM committer's `ps[0]`, spec §5): computed
+    /// inside the store; the bytes go to `tree.rs` only, which keeps them `Zeroizing` and hands out handles (B-11).
     #[cfg(feature = "app-core")]
     pub(super) fn seed_hkdf(&self, info: &[u8], len: usize) -> Result<Zeroizing<Vec<u8>>> {
         self.secret
             .with(|s| super::aead::hkdf_sha256(s, &[], info, len))?
     }
 
+    /// `ss` of `(mlkem_ct, x25519_eph)`: `KemCheck` for an `mlkem_ct` of other than 1,568 bytes or a small-order `E`;
+    /// `KeyRevoked` once the wallet was locked. ML-KEM's implicit rejection kept: a wrong `mlkem_ct` gives another `ss`.
     pub fn decaps(&self, mlkem_ct: &[u8], x25519_eph: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
         let pk_x = self.kem_pk.get(1 + EK..).ok_or(Error::Argument)?;
         self.secret

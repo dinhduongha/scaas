@@ -421,6 +421,22 @@ function recordOf(row, members) {
   if (!r || hex(ua.deriveUA(r.kind, r.keyData)) !== row.ua) refuse("UAUnauthorized", row.ua);
   return r.kind === 0x0120 ? { kind: r.kind, keyData: structureOf(r), eligible: enabledOf(r) } : r;
 }
+/** A portable record's signature `{ ua, purpose, digest, sig }` as `requirePortable` judges it (ua-rs `check_portable_current`): a single
+ *  key by its `signature`, an `msig` by its `members` (abi.encode(MemberSig[])), minimal, each slot accepted; the other field empty.
+ *  `sig`: a hex string (a single key's signature) or `{ signature, members }` (the kept `UASig` without key data). Throws `UAError`. */
+export function verifyPortable(row, members, accepted) {
+  const { kind, keyData, eligible } = recordOf(row, members);
+  const s = typeof row.sig === "string" ? { signature: row.sig, members: "0x" } : row.sig;
+  const [raw, other] = kind === 0x0120 ? [s.members, s.signature] : [s.signature, s.members];
+  if (toBytes(other).length !== 0 || eq(toBytes(row.purpose), toBytes(ua.POP_V2_TAG))) refuse("UAUnauthorized", row.ua);
+  const a = acceptance(accepted);
+  verdict(
+    signatureOk(kind, keyData, B(row.ua), row.purpose, row.digest, raw, members, a, eligible),
+    a,
+    "UAUnauthorized",
+    row.ua,
+  );
+}
 /** An acceptance `{ ua, index, sig, members }` as `acceptMembership` checks it, without its state (ua-rs `check_membership`, CTR-UA-37): what
  *  a client runs on the bytes of a slot a relayer attested (Soroban `membership_sig_of`, CTR-UA-34 rule 4). `members`: an `msig` member's list. */
 export function verifyMembership(row, members, accepted) {

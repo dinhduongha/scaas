@@ -14,6 +14,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// `used ≤ TREE_LEAVES_MAX` (owner, 2026-11-23).
 pub const TREE_LEAVES_MAX: u32 = 256;
+/// The contract's other bounds of a commit (C10, C24; `PqGroupBase`, `PqGroupTree._treeBounds`): Adds plus Removes, the admin
+/// list, the live leaves of one UA after the commit (D-5).
+pub const TREE_CHANGES_MAX: usize = 32;
+pub const TREE_ADMINS_MAX: usize = 32;
+pub const KEYS_PER_UA_MAX: usize = 8;
 pub const ZERO: [u8; 32] = [0; 32];
 const KEM_PK_LEN: usize = 1601;
 
@@ -47,6 +52,10 @@ pub enum TreeError {
     NotHeld,
     /// a KEM key its registry record does not authenticate (spec §8 step 5, codex-1)
     KemRecord,
+    /// a changed admin list with no admin that holds a live leaf after the commit (C24)
+    Admins,
+    /// a commit that is not plain by an author outside the head's admins (§9, C8)
+    NotAdmin,
 }
 
 impl TreeError {
@@ -74,6 +83,8 @@ impl TreeError {
             TreeError::KeyMismatch => "TreeKeyMismatch",
             TreeError::NotHeld => "TreeNotHeld",
             TreeError::KemRecord => "TreeKemRecord",
+            TreeError::Admins => "PqChatTreeAdmins",
+            TreeError::NotAdmin => "PqChatNotAdmin",
         }
     }
 }
@@ -254,7 +265,7 @@ impl Tree {
         }
     }
     pub fn leaf(&self, i: u32) -> Option<&Leaf> {
-        match self.node(2 * i) {
+        match self.node(i.checked_mul(2)?) {
             Node::Leaf(l) => Some(l),
             _ => None,
         }
@@ -406,6 +417,9 @@ impl Tree {
 
     /// The Removes and Adds of a commit with the refusals of §8: the tree after them, its path not yet set.
     fn apply_changes(&self, c: &Changes) -> Result<Tree> {
+        if c.removes.len() + c.adds.len() > TREE_CHANGES_MAX {
+            return refuse(TreeError::Shape);
+        }
         let mut t = self.clone();
         match t.leaf(c.leaf) {
             Some(me) if c.leaf < t.leaves && me.ua == c.author && me.key_id == c.key_id => {
@@ -478,6 +492,12 @@ impl Tree {
         if t.live().any(|n| t.gone_ua.contains(&n.ua)) {
             return refuse(TreeError::RemovedKept);
         }
+        if c.adds
+            .iter()
+            .any(|a| t.live().filter(|n| n.ua == a.ua).count() > KEYS_PER_UA_MAX)
+        {
+            return refuse(TreeError::Shape);
+        }
         for a in &c.adds {
             if t.gone_key.contains(&a.kem_hash) {
                 return refuse(TreeError::KeyReturn);
@@ -517,8 +537,53 @@ impl Tree {
         })
     }
 
-    /// A tree from the JSON form of `tree.json` (`leaves`, `used`, `nodes`, the no-return sets).
+    /// The admin list and the rights of a commit `c` (§8, §9; `PqGroupTree._walkJudge`, `_keepsAdmins`) on this tree (the
+    /// head's, its `gone_ua` the UAs gone there) and `after` ([`Tree::apply_commit`]'s): `admins` strictly sorted, at most
+    /// [`TREE_ADMINS_MAX`] (`PqChatShape`), none gone or left with no leaf by the commit (`PqChatRemovedKept`); a list other
+    /// than the head's less those UAs keeps one admin with a live leaf (`PqChatTreeAdmins`); the commit is plain (it keeps the
+    /// admins in that sense, adds only its author's UA, removes only its author's leaves or a gone UA's) or its author is in
+    /// `head_admins` (`PqChatNotAdmin`, C8). Dropping a gone admin is plain (F-2, E-2).
+    pub fn judge_commit(
+        &self,
+        after: &Tree,
+        c: &Changes,
+        admins: &[[u8; 32]],
+        head_admins: &[[u8; 32]],
+    ) -> Result<()> {
+        if admins.len() > TREE_ADMINS_MAX || admins.windows(2).any(|w| w.first() >= w.get(1)) {
+            return refuse(TreeError::Shape);
+        }
+        let out = |u: &[u8; 32]| after.gone_ua.contains(u);
+        if admins.iter().any(out) {
+            return refuse(TreeError::RemovedKept);
+        }
+        let kept: Vec<[u8; 32]> = head_admins.iter().filter(|x| !out(x)).copied().collect();
+        let keeps = admins == kept.as_slice();
+        if !keeps && !admins.iter().any(|x| after.live().any(|n| n.ua == *x)) {
+            return refuse(TreeError::Admins);
+        }
+        let plain = keeps
+            && c.adds.iter().all(|x| x.ua == c.author)
+            && c.removes
+                .iter()
+                .all(|x| x.ua == c.author || self.gone_ua.contains(&x.ua));
+        if !plain && !head_admins.contains(&c.author) {
+            return refuse(TreeError::NotAdmin);
+        }
+        Ok(())
+    }
+
+    /// A tree from the JSON form of `tree.json` (`leaves`, `used`, `nodes`, the no-return sets), bounded before it is used
+    /// (B-5): `leaves` a power of two at most [`TREE_LEAVES_MAX`] (or 0 with no node), `used ≤ leaves`, one node per position.
     pub fn from_json(j: &Value) -> Result<Tree> {
+        let (leaves, used) = (u32j(j, "leaves")?, u32j(j, "used")?);
+        let width = j.get("nodes").and_then(Value::as_array).map(Vec::len);
+        if !(leaves == 0 || leaves.is_power_of_two() && leaves <= TREE_LEAVES_MAX)
+            || used > leaves
+            || width != Some(node_width(leaves) as usize)
+        {
+            return refuse(TreeError::Shape);
+        }
         let nodes = j
             .get("nodes")
             .and_then(Value::as_array)
@@ -558,8 +623,8 @@ impl Tree {
             gone_own_key.insert(b32(&json!(ua))?, ks);
         }
         Ok(Tree {
-            leaves: u32j(j, "leaves")?,
-            used: u32j(j, "used")?,
+            leaves,
+            used,
             nodes,
             gone_ua: set("goneUa")?,
             gone_own_key,
@@ -800,11 +865,18 @@ pub fn kem_admission(kem_pk: &[u8]) -> Option<&'static str> {
     if kem_pk.len() != KEM_PK_LEN {
         return Some("wrong length");
     }
-    let ek = kem_pk.get(1..1569)?;
+    let Some(ek) = kem_pk.get(1..1569) else {
+        return Some("wrong length");
+    };
     if !super::kem::ek_modulus_ok(ek) {
         return Some("modulus check");
     }
-    let x: [u8; 32] = kem_pk.get(1569..)?.try_into().ok()?;
+    let Some(x) = kem_pk
+        .get(1569..)
+        .and_then(|x| <[u8; 32]>::try_from(x).ok())
+    else {
+        return Some("wrong length");
+    };
     if x[31] & 0x80 != 0 {
         return Some("pkX bit 255");
     }

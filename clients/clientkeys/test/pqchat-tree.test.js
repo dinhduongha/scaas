@@ -778,3 +778,59 @@ test("tree.json noReturn rows (R16): each step's tree and sets, and each probe's
     assert.deepEqual(last(n).goneUa, [keys.B.ua], n);
   }
 });
+
+// ------------------------------------------------------------------ the code review of 2026-11-24 (D-5, F-2, C-7)
+
+test("D-5: at most TREE_CHANGES_MAX changes and KEYS_PER_UA_MAX keys of one UA after a commit (PqChatShape), each beside its twin", () => {
+  const a = key("A");
+  const t = tr.coldTree([a, key("B")]);
+  const c = (adds) => ({ author: a.ua, leaf: 0, keyId: 1, removes: [], adds });
+  const own = (n) => Array.from({ length: n }, (_, i) => ({ leaf: 2 + i, ...key("A", 2 + i) }));
+  assert.ok(tr.filteredPathAfter(t, 0, c(own(7))));
+  refused("PqChatShape", () => tr.filteredPathAfter(t, 0, c(own(8))));
+  const others = (n) => Array.from({ length: n }, (_, i) => ({ leaf: 2 + i, ...key(`U${i}`) }));
+  assert.ok(tr.filteredPathAfter(t, 0, c(others(32))));
+  refused("PqChatShape", () => tr.filteredPathAfter(t, 0, c(others(33))));
+});
+
+test("judgeCommit (§8, §9; F-2, E-2): a non-admin drops a gone admin plainly; every refusal of the contract's _walkJudge beside its twin", () => {
+  const [A, B, C, E] = ["A", "B", "C", "E"].map((n) => key(n));
+  const t = tr.coldTree([A, B, C, E].sort((x, y) => (x.ua < y.ua ? -1 : 1)));
+  const leafOf = (k) => t.nodes.findIndex((n, x) => x % 2 === 0 && n?.ua === k.ua) / 2;
+  const sorted = (...ks) => ks.map((k) => k.ua).sort();
+  const head = sorted(A, E);
+  const judge = (tree, by, o) => {
+    const c = { author: by.ua, leaf: leafOf(by), keyId: 1, removes: [], adds: [], admins: head, ...o };
+    const after = tr.applyCommit(tree, {
+      ...c,
+      nodeKeyHashes: tr.filteredPathAfter(tree, c.leaf, c).map(() => id("k")),
+    });
+    return () => tr.judgeCommit(tree, after.tree, c, head);
+  };
+  const rm = (k) => ({ leaf: leafOf(k), ua: k.ua, keyId: 1 });
+  // E gone (an exit): the non-admin C's commit that removes E's leaf and drops E from admins is plain
+  const g = tr.markGone(t, [E.ua]);
+  judge(g, C, { removes: [rm(E)], admins: sorted(A) })();
+  refused("PqChatRemovedKept", judge(g, C, { removes: [rm(E)], admins: head }));
+  // a non-admin's other changes: an admin list changed otherwise, another UA's leaf, another UA's Add
+  refused("PqChatNotAdmin", judge(t, C, { admins: sorted(A) }));
+  refused("PqChatNotAdmin", judge(t, C, { removes: [rm(B)] }));
+  refused("PqChatNotAdmin", judge(t, C, { adds: [{ leaf: 4, ...key("D") }] }));
+  judge(t, A, { removes: [rm(B)] })();
+  judge(t, C, { adds: [{ leaf: 4, ...key("C", 2) }] })();
+  // the list: sorted, at most 32, none gone or left with no leaf, a changed list keeps an admin with a leaf
+  refused("PqChatShape", judge(t, A, { admins: [...head].reverse() }));
+  const many = Array.from({ length: 33 }, (_, i) => id(`admin/${i}`)).sort();
+  refused("PqChatShape", judge(t, A, { admins: many }));
+  refused("PqChatRemovedKept", judge(t, A, { removes: [rm(E)], admins: head }));
+  judge(t, A, { removes: [rm(E)], admins: sorted(A) })();
+  refused("PqChatTreeAdmins", judge(t, A, { admins: [id("keyless")] }));
+  judge(t, A, { admins: sorted(A, B) })();
+});
+
+test("C-7: a node outside the tree has no direct path (PqChatShape), never a loop", () => {
+  assert.deepEqual(tr.directPath(6, 4), [5, 3]);
+  refused("PqChatShape", () => tr.directPath(7, 4));
+  refused("PqChatShape", () => tr.directPath(-1, 4));
+  refused("PqChatShape", () => tr.directPath(99, 4));
+});

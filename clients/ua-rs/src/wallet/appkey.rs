@@ -482,6 +482,10 @@ impl AppKeys {
         if key.rooted {
             return Err(Error::AppKeyRooted);
         }
+        // a tree epoch key `K_e` is a handle and never wrapped (spec §15, B-8): a tree session needs no flat wrap of it
+        if matches!(key.origin, Origin::Tree) {
+            return Err(Error::Argument);
+        }
         let (mlkem_ct, x25519_eph, ss) = super::kem::encaps(kem_pk, m, e)?;
         let kek = wrap_kek(&ss, label, aad, kem_pk)?;
         let sealed_key = aead_seal(Alg::Aes256Gcm, &kek, &[0; 12], aad, &self.bytes(key)?[..])?;
