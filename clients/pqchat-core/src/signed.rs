@@ -13,6 +13,8 @@ use serde_json::{json, Value};
 pub const SIG_NONE: u64 = 0;
 /// `sstore2` keeps each control-plane record's and posted message's signature in state (the default of every new instance).
 pub const SIG_SSTORE2: u64 = 2;
+/// The most epochs a leave or removal names below the head it is applied at (C9, CTR-CHAT-20, Change 2026-11-24).
+pub const EXIT_LAG_MAX: u64 = 16;
 
 /// A `UASig` as the SDK's named JSON gives a view's tuple (`keyData`, `signature`, `members` with `index`, `members`, `sig`).
 pub fn ua_sig(v: &Value) -> Result<AppUaSig, DropReason> {
@@ -157,10 +159,37 @@ impl PqChat {
         Ok(Some(e))
     }
 
-    /// The members of `p` that left it and those a removal took out of it, on an `sstore2` instance from its kept `leave` and
-    /// `remove` records, each counted only when its signer's signature verifies and it names `p` (an endpoint cannot make a
-    /// non-admin's membership change look plain by reporting a leave nobody signed); on a `none` instance from the flags
-    /// (`leftIn`, `removedIn`) as the contract set them.
+    /// `p`'s id and those of its ancestors at most [`EXIT_LAG_MAX`] below it, read as stored: what an exit kept under `p` may
+    /// name (CTR-CHAT-20, CTR-CHAT-10: at home a leave or removal names the head or such an ancestor and is kept under the head
+    /// it is applied at; C9, Change 2026-11-24).
+    async fn exit_names(
+        &self,
+        chain: &str,
+        contract: &str,
+        p: &Epoch,
+    ) -> Result<Vec<String>, DropReason> {
+        let mut out = vec![p.id.clone()];
+        let mut cur = p.clone();
+        while cur.epoch > 0 && (out.len() as u64) <= EXIT_LAG_MAX {
+            match self
+                .signed_record_at(chain, contract, &p.session_id, &cur.parent)
+                .await?
+            {
+                Some(e) => {
+                    out.push(e.id.clone());
+                    cur = e;
+                }
+                None => break,
+            }
+        }
+        Ok(out)
+    }
+
+    /// The members of `p` that left it and those a removal took out of it, on an `sstore2` instance from the `leave` and
+    /// `remove` records kept under `p`, each counted only when its signer's signature verifies and it names `p` or an ancestor
+    /// of `p` within [`EXIT_LAG_MAX`] (exits apply at the head, C9; an endpoint cannot make a non-admin's membership change
+    /// look plain by reporting a leave nobody signed); on a `none` instance from the flags (`leftIn`, `removedIn`) as the
+    /// contract set them.
     pub async fn left_and_removed(
         &self,
         chain: &str,
@@ -204,9 +233,23 @@ impl PqChat {
                 .map_err(d)?;
             model::num(at(&v, "0")).map_err(d)
         };
-        let mine = |r: &Value| {
-            model::h(at(r, "sessionId")).is_ok_and(|x| x == p.session_id)
-                && model::h(at(r, "epochId")).is_ok_and(|x| x == p.id)
+        // the ancestors are read only when a record names another epoch than `p`
+        let mut names: Option<Vec<String>> = None;
+        let mut mine = async |r: &Value| -> Result<bool, DropReason> {
+            let (Ok(sid), Ok(eid)) = (model::h(at(r, "sessionId")), model::h(at(r, "epochId")))
+            else {
+                return Ok(false);
+            };
+            if sid != p.session_id {
+                return Ok(false);
+            }
+            if eid == p.id {
+                return Ok(true);
+            }
+            if names.is_none() {
+                names = Some(self.exit_names(chain, contract, p).await?);
+            }
+            Ok(names.as_ref().is_some_and(|n| n.contains(&eid)))
         };
         for i in 0..count("IPqChat.leaveCount").await? {
             let a = json!({ "epochId": p.id, "index": i.to_string() });
@@ -217,7 +260,7 @@ impl PqChat {
                 .map_err(d)?;
             let l = at(&v, "l");
             let member = model::h(at(l, "member")).map_err(d)?;
-            if mine(l) {
+            if mine(l).await? {
                 self.verify_kept(
                     chain,
                     contract,
@@ -239,7 +282,7 @@ impl PqChat {
                 .map_err(d)?;
             let r = at(&v, "r");
             let admin = model::h(at(r, "admin")).map_err(d)?;
-            if mine(r) {
+            if mine(r).await? {
                 self.verify_kept(
                     chain,
                     contract,

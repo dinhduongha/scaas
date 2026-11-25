@@ -44,6 +44,8 @@ fn batch_t() -> String {
 /// The contract's range caps (`VAULTS_RANGE_MAX`, `EPOCHS_RANGE_MAX`, `LATEST_RANGE_MAX`).
 const RANGE: u64 = 128;
 const LATEST: u64 = 16;
+/// The most epochs a leave or removal names below the head it is applied at (C9, CTR-PQV-06, Change 2026-11-24).
+pub const EXIT_LAG_MAX: u64 = 16;
 /// The removals read per epoch at most (each a `REMOVE_MAX` list): past it the state is not trusted.
 const REMOVALS_MAX: u64 = 64;
 /// The epochs of a vault read at most (ponytail: one cap; a longer history needs paging by the caller).
@@ -691,8 +693,13 @@ impl PqVault {
             }
             for r in &e.removals {
                 let x = &r.record;
+                // kept under the head it was applied at, naming it or an ancestor within EXIT_LAG_MAX (C9, CTR-PQV-06)
+                let named = s
+                    .epochs
+                    .get(i.saturating_sub(EXIT_LAG_MAX as usize)..=i)
+                    .and_then(|w| w.iter().find(|a| a.id == x.epoch_id));
                 if x.vault_id != s.vault_id
-                    || x.epoch_id != e.id
+                    || named.is_none_or(|a| x.next_epoch.0 != a.number + 1)
                     || !e.admins.contains(&x.admin)
                     || !self.verify_sig(&s, x.admin, x, &r.sig).await?
                 {
@@ -1182,6 +1189,10 @@ impl PqVault {
     pub async fn leave(&self, v: &Unlocked) -> Result<Signed<VaultLeave>> {
         self.p1(&v.account).await?;
         let e = v.state.newest().ok_or(Error::ChainUnverified)?;
+        // a member a removal already took out is the contract's PqVaultNotMember (A-4)
+        if e.removed().contains(&v.state.me) {
+            return Err(Error::NotMember);
+        }
         let nonce = nonce_of(&self.core.random_bytes(&v.seed, 8)?);
         let rec = VaultLeave {
             vault_id: v.state.vault_id,
@@ -1209,6 +1220,10 @@ impl PqVault {
         let mut list = members.to_vec();
         list.sort();
         list.dedup();
+        // a member already removed at the head is the contract's PqVaultNotMember (A-4: a repeat newly flags nobody)
+        if list.iter().any(|m| e.removed().contains(m)) {
+            return Err(Error::NotMember);
+        }
         let nonce = nonce_of(&self.core.random_bytes(&v.seed, 8)?);
         let rec = VaultRemove {
             vault_id: v.state.vault_id,
