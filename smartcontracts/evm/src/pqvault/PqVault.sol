@@ -231,6 +231,7 @@ contract PqVault is IPqVault, PqGroupBase {
     }
 
     function addVaultWraps(bytes32 epochId, uint32 first, IPqChat.Wrap[] calldata wraps) external {
+        if (wraps.length == 0) revert PqVaultShape(); // A-15 (as C40)
         (, uint256 limit,) = _env();
         Epoch storage ep = _known(epochId);
         _slotFree(ep, epochId);

@@ -121,7 +121,8 @@ seed-derived vault key exists; epochs, wraps in chunks, the home-instance slot, 
 - `createVault(PqVaultCreate, Wrap[], UASig)`, `rekeyVault(PqVaultEpoch, Wrap[], UASig)`, `addVaultWraps(epochId, first,
   Wrap[])` (unsigned), `leaveVault(PqVaultLeave, UASig)`, `removeVaultMembers(PqVaultRemove, UASig)`: the checks of
   [CTR-CHAT-06](pqchat.md#CTR-CHAT-06) to [CTR-CHAT-10](pqchat.md#CTR-CHAT-10) and [CTR-CHAT-20](pqchat.md#CTR-CHAT-20),
-  with at least 1 member at creation, `homeVaultContract` for the home address and `PqVault*` errors, and who may rekey
+  with at least 1 member at creation, `homeVaultContract` for the home address and `PqVault*` errors (an empty
+  `addVaultWraps` is `PqVaultShape`, as `addWraps`: Change 2026-11-25, A-15), and who may rekey
   as [CTR-PQV-13](#CTR-PQV-13) states.
 - Sharing a vault is a `rekeyVault` to the new members with a wrap per member.
 - **Exits apply at the head (Change 2026-11-24, E-3 of the TreeKEM code review; owner 2026-11-24: "Yes, both modes", one rule for the group

@@ -908,4 +908,19 @@ contract PqChatEpochsTest is PqChatBase {
     function test_a13_replicaWalkBoundRemovalLast() public {
         _replicaWalkBound(false);
     }
+
+    // ----- A-15 (controller call 2026-11-25, as C40): an empty `addWraps` is refused -----
+
+    /// An empty `addWraps` on a staged flat epoch is `PqChatShape` (it wrote nothing and emitted a piece event of count 0);
+    /// on the complete session epoch too. The control lands the staged epoch's remaining wraps.
+    function test_a15_emptyAddWrapsRefusedFlat() public {
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) = _epoch(sid, ids[0], 1, 1, sid, _admins(), _members(3));
+        bytes32 staged = chat.rekey(e, _slice(w, 0, 1), _sig(e.author, h.epoch(e)));
+        vm.expectRevert(IPqChat.PqChatShape.selector);
+        chat.addWraps(staged, 1, new IPqChat.Wrap[](0));
+        vm.expectRevert(IPqChat.PqChatShape.selector);
+        chat.addWraps(sid, 0, new IPqChat.Wrap[](0));
+        chat.addWraps(staged, 1, _slice(w, 1, 3)); // the control
+        assertTrue(chat.epochComplete(staged));
+    }
 }

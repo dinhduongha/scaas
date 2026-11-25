@@ -574,4 +574,22 @@ contract PqChatTreeGuardsTest is PqChatTreeModel {
         (t.treeHash, t.epochId) = (s.treeHash, s.epochId);
         t.c = abi.decode(abi.encode(s.c), (IPqChat.PqChatCommit));
     }
+
+    /// A-15 (controller call 2026-11-25, as C40): an empty `addWraps` on a tree session's epoch 0 or on a staged commit is
+    /// `PqChatShape`; the control lands the commit's one wrap and completes it.
+    function test_a15_emptyAddWrapsRefusedTree() public {
+        _open(); // the vectors in this call's memory
+        M memory m = _abe(_list(A));
+        vm.expectRevert(IPqChat.PqChatShape.selector);
+        vchat.addWraps(m.sid, 0, new IPqChat.Wrap[](0)); // epoch 0
+        (Step memory st,) = _build(m, 0, _chs(_add(3, C, 1)), _list(A));
+        ++nonceN;
+        bytes32 eid =
+            vchat.commit(st.c, st.ctTargets, st.ctHashes, st.nodeKeys, st.cts, new IPqChat.Wrap[](0), _signC(st.c));
+        assertFalse(vchat.epochComplete(eid));
+        vm.expectRevert(IPqChat.PqChatShape.selector);
+        vchat.addWraps(eid, 0, new IPqChat.Wrap[](0));
+        vchat.addWraps(eid, 0, st.wraps); // the control
+        assertTrue(vchat.epochComplete(eid));
+    }
 }

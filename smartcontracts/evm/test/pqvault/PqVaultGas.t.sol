@@ -276,9 +276,11 @@ contract PqVaultGasTest is PqVaultBase {
             // (+305 x 1,530)
             // E-2, A-16 (controller call 2026-11-25): 32,131 -> 32,619 B; regular 2,172,984 -> 2,204,192; state
             // 49,735,710 -> 50,482,350 (+488 x 1,530)
-            assertEq(r.code.length, 32_619, "the PqVault runtime (size-baseline.json row)");
-            assertApproxEqAbs(regular, 2_204_192, SLACK, "deployImplementation regular");
-            assertEq(state, 50_482_350, "deployImplementation state");
+            // A-15 (controller call 2026-11-25: an empty `addVaultWraps` is `PqVaultShape`): 32,619 -> 32,652 B; regular
+            // 2,204,192 -> 2,208,353; state 50,482,350 -> 50,532,840 (+33 x 1,530)
+            assertEq(r.code.length, 32_652, "the PqVault runtime (size-baseline.json row)");
+            assertApproxEqAbs(regular, 2_208_353, SLACK, "deployImplementation regular");
+            assertEq(state, 50_532_840, "deployImplementation state");
         }
     }
 

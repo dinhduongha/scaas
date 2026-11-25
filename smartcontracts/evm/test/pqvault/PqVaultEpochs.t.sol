@@ -594,4 +594,18 @@ contract PqVaultEpochsTest is PqVaultBase {
         _remove(vaultB, _rm(vid, 1, _list(ids[2]), ids[0], 7)); // the control
         assertTrue(vaultB.removedIn(vid, ids[2]));
     }
+
+    /// A-15 (controller call 2026-11-25, as C40): an empty `addVaultWraps` on a staged epoch or on the complete vault epoch
+    /// is `PqVaultShape`; the control lands the staged epoch's remaining wraps.
+    function test_a15_emptyAddVaultWrapsRefused() public {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _members(3));
+        bytes32 staged = vault.rekeyVault(e, _slice(w, 0, 1), _sig(e.author, h.epoch(e, PqVaultTypes.DS_V)));
+        vm.expectRevert(IPqVault.PqVaultShape.selector);
+        vault.addVaultWraps(staged, 1, new IPqChat.Wrap[](0));
+        vm.expectRevert(IPqVault.PqVaultShape.selector);
+        vault.addVaultWraps(vid, 0, new IPqChat.Wrap[](0));
+        vault.addVaultWraps(staged, 1, _slice(w, 1, 3)); // the control
+        assertTrue(vault.epochComplete(staged));
+    }
 }

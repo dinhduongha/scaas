@@ -88,9 +88,11 @@ contract PqChatGasTest is PqTopicsBase {
     // state 53,990,640 -> 54,091,620 (+66 x 1,530); asked x 1.05 59,348,716 of 60 M.
     // E-3 in mode 0 (owner 2026-11-25: `leave` and `remove` moved to `PqChatTreeMembers`, forwarded): 34,978 -> 32,891 B;
     // regular 2,430,967 -> 2,293,654; state 54,091,620 -> 50,898,510 (-2,087 x 1,530); asked x 1.05 55,851,772 of 60 M.
-    uint256 internal constant RUNTIME = 32_891;
-    uint256 internal constant RELEASE_REGULAR = 2_293_654;
-    uint256 internal constant RELEASE_STATE = 50_898_510;
+    // A-15 (controller call 2026-11-25: an empty `addWraps` is `PqChatShape`): 32,891 -> 32,924 B; regular 2,293,654 ->
+    // 2,295,734; state 50,898,510 -> 50,949,000 (+33 x 1,530); asked x 1.05 55,906,970 of 60 M.
+    uint256 internal constant RUNTIME = 32_924;
+    uint256 internal constant RELEASE_REGULAR = 2_295_734;
+    uint256 internal constant RELEASE_STATE = 50_949_000;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice:
     // 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged

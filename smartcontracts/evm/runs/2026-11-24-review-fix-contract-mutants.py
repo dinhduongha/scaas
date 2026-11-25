@@ -3,7 +3,7 @@
 """The 2026-11-24 review fixes, contract phase (branch review-fix-contract): each check the round adds is caught by a test.
 So far: the PqChatTreeMembers split (owner 2026-11-24), E-3's exits at the head with the lag (C9), A-4, D-7 / C40, A-3;
 E-3 in mode 0 and PqVault with the replica rule (M21-); A-7's table, A-6, F-5, D-4, A-9 and G-3 (M42-); R8, C10 (M74-);
-the re-review of 2026-11-25: E-2, A-16, A-13, A-14 (M80-). One mutant per run, `forge test` over test/pqchat alone, or the
+the re-review of 2026-11-25: E-2, A-16, A-13, A-14, A-15 (M80-). One mutant per run, `forge test` over test/pqchat alone, or the
 directory a mutant names (FOUNDRY_TEST), with **no gas or size row** (A-14 of the re-review: a row moves with any code
 change, so it is not the test of a rule): every contract whose name holds `Gas` and every gas or size test elsewhere
 (`NO_GAS`) is left out for every mutant, so a kill is a behavioural test's; each result line names every test that
@@ -170,6 +170,9 @@ M = [
     ("A-14 row 8: PqVaultRemoved with the epoch named", [(V, "emit PqVaultRemoved(r.vaultId, at, r.admin, r.members);", "emit PqVaultRemoved(r.vaultId, r.epochId, r.admin, r.members);")], "pqvault"),
     ("A-14 row 9: removeVaultMembers without the replica's Incomplete check", [(V, "        if (ep.landed != ep.wraps) revert PqVaultIncomplete(r.epochId); // a replica's epoch named\n", "")], "pqvault"),
     ("A-14 row 10: PqVault, a UA removed at the head may leave", [(V, "(home && (ep.left[l.member] || ep.removedOf[l.member]))) {\n            revert PqVault", "(home && ep.left[l.member])) {\n            revert PqVault")], "pqvault"),
+    # A-15: an empty addWraps / addVaultWraps refused in the entries
+    ("A-15: an empty addWraps accepted", [(P, "        if (wraps.length == 0) revert PqChatShape(); // A-15 (as C40): both modes, before the tree's forward\n", "")]),
+    ("A-15: an empty addVaultWraps accepted", [(V, "        if (wraps.length == 0) revert PqVaultShape(); // A-15 (as C40)\n", "")], "pqvault"),
 ]
 
 if sys.argv[1:] == ["check"]:
