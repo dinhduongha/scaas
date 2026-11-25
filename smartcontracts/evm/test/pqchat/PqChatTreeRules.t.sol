@@ -675,37 +675,40 @@ contract PqChatTreeRulesTest is PqChatTreeModel {
 
     // ----- C21 -----
 
-    /// 32 owed leaves accepted, one more leave `PqChatTreeBacklog(33)`; the commit of the 32 forced Removes completes.
+    /// 20 owed leaves accepted (C21, owner 2026-11-25: 20), one more leave `PqChatTreeBacklog(21)`; the commit of the 20
+    /// forced Removes completes.
     function test_backlogBound() public {
         _open(); // the vectors in this call\'s memory
-        string[4] memory who = ["B", "C", "D", "E"];
-        IPqChat.MemberKey[] memory mk = new IPqChat.MemberKey[](33);
+        string[3] memory who = ["B", "C", "D"];
+        uint64[3] memory keys = [uint64(8), 8, 4];
+        IPqChat.MemberKey[] memory mk = new IPqChat.MemberKey[](21);
         mk[0] = _mk(A, 1);
-        bytes32[] memory gone = new bytes32[](4);
-        for (uint256 u; u < 4; ++u) {
+        bytes32[] memory gone = new bytes32[](3);
+        uint256 k = 1;
+        for (uint256 u; u < 3; ++u) {
             bytes32 ua = person[who[u]];
             gone[u] = ua;
-            for (uint64 v = 20; v < 28; ++v) {
+            for (uint64 v = 20; v < 20 + keys[u]; ++v) {
                 _setKem(ua, v, _variant(who[u], v));
-                mk[1 + u * 8 + (v - 20)] = _mk(ua, v);
+                mk[k++] = _mk(ua, v);
             }
         }
         M memory m = _open(mk, _list(A));
         _removeT(m, A, gone);
         (,, uint256 owed) = _sizes(vchat, m.sid);
-        assertEq(owed, 32);
+        assertEq(owed, 20);
         IPqChat.PqChatTreeLeave memory l = IPqChat.PqChatTreeLeave(m.sid, m.treeId, m.head, A, ++nonceN);
         IUARegistry.UASig memory sg = _sig(A, th2.treeLeave(l));
-        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatTreeBacklog.selector, uint256(33)));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatTreeBacklog.selector, uint256(21)));
         vchat.treeLeave(l, sg);
-        Ch[] memory all = new Ch[](32);
-        for (uint256 i; i < 32; ++i) {
+        Ch[] memory all = new Ch[](20);
+        for (uint256 i; i < 20; ++i) {
             all[i] = _rm(uint32(1 + i), mk[1 + i].ua, mk[1 + i].keyId);
         }
         (Step memory st, M memory n) = _build(m, 0, all, _list(A));
         uint256 g0 = gasleft();
         _land(st, n, m);
-        emit log_named_uint("gas: commit of 32 forced Removes (whole, isolated off)", g0 - gasleft());
+        emit log_named_uint("gas: commit of 20 forced Removes (whole, isolated off)", g0 - gasleft());
     }
     // ----- gas (recorded only; T3c measures and pins the fixtures of spec §13) -----
 

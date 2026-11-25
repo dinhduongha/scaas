@@ -791,8 +791,8 @@ test("D-5: at most TREE_CHANGES_MAX changes and KEYS_PER_UA_MAX keys of one UA a
   assert.ok(tr.filteredPathAfter(t, 0, c(own(7))));
   refused("PqChatShape", () => tr.filteredPathAfter(t, 0, c(own(8))));
   const others = (n) => Array.from({ length: n }, (_, i) => ({ leaf: 2 + i, ...key(`U${i}`) }));
-  assert.ok(tr.filteredPathAfter(t, 0, c(others(32))));
-  refused("PqChatShape", () => tr.filteredPathAfter(t, 0, c(others(33))));
+  assert.ok(tr.filteredPathAfter(t, 0, c(others(20)))); // TREE_CHANGES_MAX 20 (owner 2026-11-25)
+  refused("PqChatShape", () => tr.filteredPathAfter(t, 0, c(others(21))));
 });
 
 test("judgeCommit (§8, §9; F-2, E-2): a non-admin drops a gone admin plainly; every refusal of the contract's _walkJudge beside its twin", () => {

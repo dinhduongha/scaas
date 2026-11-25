@@ -110,9 +110,11 @@ contract PqChatGasTest is PqTopicsBase {
     uint256 internal constant VIEWS_RUNTIME = 9_640;
     uint256 internal constant VIEWS_REGULAR = 660_455;
     uint256 internal constant VIEWS_STATE = 14_932_800; // asked x 1.05 16,372,917
-    uint256 internal constant MEMBERS_RUNTIME = 13_506;
+    // C10 32 -> 20 (owner 2026-11-25; the compiler's output for the new constant in C21's check):
+    // runtime 13,506 -> 13,507 B; state 20,847,780 -> 20,849,310 (+1 x 1,530); regular 910,116 unchanged
+    uint256 internal constant MEMBERS_RUNTIME = 13_507;
     uint256 internal constant MEMBERS_REGULAR = 910_116;
-    uint256 internal constant MEMBERS_STATE = 20_847_780; // asked x 1.05 22,845,790
+    uint256 internal constant MEMBERS_STATE = 20_849_310; // asked x 1.05 22,847,397
 
     function _row(string memory what, uint256 regular, uint256 state) internal {
         Vm.Gas memory g = vm.lastCallGas();

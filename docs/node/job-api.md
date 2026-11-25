@@ -967,9 +967,9 @@ sig)`, `treeLeave(l, sig)` and `treeRemove(r, sig)`; the unsigned pieces `addPat
 object of its fields. `createSession` (`groupMode = 1`), `addWraps` and `postMessage` serve both modes unchanged; the module's
 `treeCreate` and the tree views (`PqChatTreeViews`, read-only) are no row of any kind. Before any calldata is built the node
 refuses, `BAD_PAYLOAD` naming the path, what the contract refuses on the record or the piece alone: a list over its cap, read
-before its elements (`admins` 32; `removes`, `adds`, `wrapHashes`, `wraps` 32; `nodeKeyHashes`, `nodeKeys` 9; `ctTargets`,
-`ctHashes`, `cts` 511; a `treeRemove`'s `members` 64: the 32 leafy UAs a head may owe plus 32 admins); `removes` plus `adds`
-above 32; `leaves` above 512 (256 until the owner's change of 2026-11-25); `ctCount` not below `leaves`, more `nodeKeyHashes` than `depth(leaves)`, or a path without
+before its elements (`admins` 32; `removes`, `adds`, `wrapHashes`, `wraps` 20; `nodeKeyHashes`, `nodeKeys` 9; `ctTargets`,
+`ctHashes`, `cts` 511; a `treeRemove`'s `members` 52: the 20 leafy UAs a head may owe plus 32 admins); `removes` plus `adds`
+above 20 (32 until the owner's change of 2026-11-25); `leaves` above 512 (256 until the owner's change of 2026-11-25); `ctCount` not below `leaves`, more `nodeKeyHashes` than `depth(leaves)`, or a path without
 ciphertexts or the reverse; not one `wrapHashes` per add; `sealedInfo` outside 1 to 4,124 B; a list neither absent nor `ctCount`
 entries with one hash each (`addPathList`: at least one); node keys neither absent nor one per hash, or not 1,601 B; path
 ciphertexts above `ctCount` (on `addPath`, `firstCt` plus the count above 511), without the list, or not 1,568 B and 48 B; more

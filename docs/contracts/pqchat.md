@@ -304,10 +304,10 @@ its place last, after the TreeKEM research note, a controller call). Status: **B
 - **What it names** (owner 2026-11-23): a protocol id. 0 = flat; 1 = RFC 9420 tree rules over KEM scheme 1; 2–255 later
   variants. Flat (0) is this page: every epoch key wrapped to each member key. Mode 1 comes with a later catalogued release
   that widens the one check below, with the same struct and typehash, so clients and vectors stay stable across releases.
-- **Reserved (owner 2026-11-25; PLANNED, after the freeze, with the off-chain ledger service's spec):** `groupMode = 2`, the
-  ledger's large tree mode (a TreeKEM tree of depth up to 18, kept by the ledger); `groupMode = 3`, off-chain immutable
-  (membership on chain, the KEM bytes off chain). No contract change: this release refuses both, with 4-255,
-  `PqChatModeUnsupported` (the vector row `sessionMode2`); a later catalogued release defines them.
+- **Reserved values (owner 2026-11-25; reserved only: nothing specified, built or scheduled):** for a possible off-chain
+  deployment (an immutable store such as immudb, or Supabase), `groupMode = 2` is the whole group off chain (a tree of depth
+  up to 18) and `groupMode = 3` is the membership on chain with the KEM bytes off chain. No build is decided. Contracts refuse
+  both, with 4-255, `PqChatModeUnsupported` (the vector row `sessionMode2`).
 - **Fixed at creation:** only the session record names it; no epoch, leave or removal record carries it, so no child can
   change it (there is no field to change). `sessionOf` returns it with the record.
 - **Checked first** in `createSession`, before the lists, the KEM keys and the signature: a record of another mode costs no
@@ -1017,25 +1017,27 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   creation is finished only from the prepared pieces ([CLI-PQC-17](../clients/pqchat-core.md#CLI-PQC-17)); an
   incomplete one is usable by nobody.
 - **Bounds.** `TREE_LEAVES_MAX` = 512 keys, depth 9 (owner; 256, depth 8, until the owner's change of 2026-11-25, "OK, then raise it to
-  512"), `TREE_CHANGES_MAX` = 32 adds plus removes per commit, `TREE_ADMINS_MAX` =
+  512"), `TREE_CHANGES_MAX` = 20 adds plus removes per commit (owner 2026-11-25, "Choose 20", in English; 32 until then),
+  `TREE_ADMINS_MAX` =
   32, `TREE_INFO_MAX` = 4,124 B (at creation too), 64 leaves per `treeLeaves` call, at most 8 keys per UA. The contract enforces no minimum size; "useful from about 7 keys, where
-  several members commit" is a client hint. **Measured at 512 (plan T3d's harness, `test/pqchat/PqChatTreeGas.t.sol`, forge, the verify's gas
+  several members commit" is a client hint. **Measured at 512 and 20 changes (plan T3d's harness, `test/pqchat/PqChatTreeGas.t.sol`, forge, the verify's gas
   added from [accounts.md](accounts.md): `mldsa65` 5,950,000, `mldsa87` 8,860,000; asked = (regular + state) x 1.05):** the
-  completion at its bounds with the held ciphertext 11.62 M regular, 40.41 M state, 54.6 M asked, 384 new slots and the
-  ciphertext's own (pinned; 10.66 M, 37.27 M, 352 at 256); codex-r3-6's fixture 8.11 M, 25.03 M, 34.8 M, 227 + 1 (pinned);
-  the record at its bounds on a tree of 512 12.93 M / 15.88 M regular with the verify (ML-DSA-65 / -87), 39.7 M / 44.9 M
-  asked; the last live leaf's commit at the spec's bounds (32 Removes evicting 32 UAs by the commit alone, the admins 1 -> 32,
-  4,124 B of info; the code review's A-8, `test_lastLiveLeafAtTheSpecBound`, now on a tree of 512, pinned), one
-  transaction, 15.13 M / **18.09 M** regular with the verify: **over 2^24 by 1.31 M with ML-DSA-87** (open: the controller's
-  `TREE_CHANGES_MAX`, C10; the old pin, 15.59 M, was on a tree of 64, and the layout is 17.32 M on a tree of 256); the
-  lighter last leaf, 4 UAs evicted and one admin, 11.88 M / 14.83 M; acceptance and completion in one transaction over
-  2^24, so the record goes alone; the list of 511 targets 32.2 M asked, the node keys of depth 9 24.9 M; the node keys as
-  the last piece at the bound 68.3 M asked, over a 60 M block (C37); the session record at 64 / 128 / 192 keys 22.9 / 37.8 /
-  59.5 M asked with the verify, 257 and 512 over, as the spec says; 15 genesis wraps 53.3 M; a `treeLeaves` page of 64
-  1.62 M (an `eth_call` well under 2^24; the full tree 12.95 M in eight calls). Every other row fits; the spec's estimates
-  are its §13 ("Measured at 512"). The dearest transaction of a commit is the
-  completion at its bounds with the last ciphertext (above: 384 new slots, 32 Adds of UAs with no session scattered over
-  a tree of 512 with one live leaf). Whichever piece lands last pays the completion, so the pieces are sent in a fixed
+  completion at its bounds with the held ciphertext 7.96 M regular, 28.66 M state, 38.4 M asked, 264 new slots and the
+  ciphertext's own (pinned; 10.66 M, 37.27 M, 352 at 256 and 32 changes); codex-r3-6's fixture, 20 Adds, 5.29 M, 17.00 M,
+  145 + 1 (pinned); the record at its bounds on a tree of 512 10.69 M / 13.64 M regular with the verify (ML-DSA-65 / -87),
+  33.7 M / 38.9 M asked; the last live leaf's commit at the spec's bounds (20 Removes evicting 20 UAs by the commit alone,
+  the admins 1 -> 32, 4,124 B of info; the code review's A-8, `test_lastLiveLeafAtTheSpecBound`, on a tree of 512, pinned),
+  one transaction, 12.83 M / 15.78 M regular with the verify, 0.99 M under 2^24 with ML-DSA-87 (at 32 changes it was over:
+  18.09 M at 512 and 17.32 M on a tree of 256; the first pin, 15.59 M, was on a tree of 64); the lighter last leaf, five UAs
+  of 4 keys evicted and one admin, 10.19 M / 13.14 M; acceptance and completion in one transaction over 2^24, so the
+  record goes alone; the list of 511 targets 32.2 M asked, the node keys of depth 9 24.9 M; the node keys as the last
+  piece at the bound 52.1 M asked (over a 60 M block at 32 changes; C37's order kept); the session record at 64 / 128 /
+  192 keys 22.9 / 37.8 / 59.5 M asked with the verify, 257 and 512 over, as the spec says; 15 genesis wraps 53.3 M; a
+  `treeLeaves` page of 64 1.62 M (an `eth_call` well under 2^24; the full tree 12.95 M in eight calls). On a Nethermind
+  copy with 2^24 enforced the completion and A-8 with both signers are included (the spec's §13). Every other row fits;
+  the spec's estimates are its §13 ("Measured at 512 and 20 changes"). The dearest transaction of a commit is the
+  completion at its bounds with the last ciphertext (above: 264 new slots, 20 Adds of UAs with no session spread over a
+  tree of 512 with one live leaf). Whichever piece lands last pays the completion, so the pieces are sent in a fixed
   order with one ciphertext held back: with the node keys last that transaction would not fit a 60 M block. The commit of
   the last live leaf has no piece and is one transaction (above). The session record holds about 200 member keys at a
   60 M block (256 keys over it, above), so a tree of 256 keys is reached by Adds.

@@ -85,8 +85,9 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
     uint256 internal constant TREE_LEAVES_MAX = 512;
     uint256 internal constant TREE_ADMINS_MAX = 32;
     uint256 internal constant TREE_INFO_MAX = 4124;
-    /// @dev C10, C21: adds plus removes per commit, and the leaves one head may owe to removals.
-    uint256 internal constant TREE_CHANGES_MAX = 32;
+    /// @dev C10, C21: adds plus removes per commit, and the leaves one head may owe to removals (owner 2026-11-25: 32 ->
+    ///      20, so the one-transaction commit of the last live leaf fits 2^24 with an ML-DSA-87 author at 512 leaves).
+    uint256 internal constant TREE_CHANGES_MAX = 20;
 
     function _s() internal pure returns (S storage s) {
         assembly ("memory-safe") {

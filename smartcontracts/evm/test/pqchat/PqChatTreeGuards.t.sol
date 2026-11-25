@@ -286,21 +286,23 @@ contract PqChatTreeGuardsTest is PqChatTreeModel {
         }
     }
 
-    /// Row 11 (C10): 33 changes in one commit are `PqChatShape`; 32 land (C, D, F, G eight keys each).
+    /// Row 11 (C10, owner 2026-11-25: 20): 21 changes in one commit are `PqChatShape`; 20 land (C, D eight keys each, F
+    /// four).
     function test_a7_changesBound() public {
         _open(); // the vectors in this call's memory
         M memory m = _abe(_list(A));
-        string[4] memory who = ["C", "D", "F", "G"];
-        Ch[] memory c = new Ch[](33);
-        for (uint256 i; i < 4; ++i) {
-            _keys(person[who[i]], who[i], 40, 8);
-            _adds(c, 8 * i, uint32(3 + 8 * i), person[who[i]], 40, 8);
-        }
-        c[32] = _add(35, person["H"], 1);
+        Ch[] memory c = new Ch[](21);
+        _keys(person["C"], "C", 40, 8);
+        _adds(c, 0, 3, person["C"], 40, 8);
+        _keys(person["D"], "D", 40, 8);
+        _adds(c, 8, 11, person["D"], 40, 8);
+        _keys(person["F"], "F", 40, 4);
+        _adds(c, 16, 19, person["F"], 40, 4);
+        c[20] = _add(23, person["H"], 1);
         (Step memory x,) = _build(m, 0, c, _list(A));
         _refused(x, _err(IPqChat.PqChatShape.selector));
         assembly ("memory-safe") {
-            mstore(c, 32)
+            mstore(c, 20)
         }
         (Step memory st, M memory n) = _build(m, 0, c, _list(A));
         _land(st, n, m); // control

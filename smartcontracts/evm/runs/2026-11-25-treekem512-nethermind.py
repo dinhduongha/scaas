@@ -16,14 +16,19 @@ import subprocess
 import sys
 
 KEY = "0x" + "00" * 31 + "01"
-# (row, n, k): PqChatTreeGasReplicaTest's output for the forge figures of 889d4e731 (regular within 0.1 %, state within one slot)
+# (row, n, k): PqChatTreeGasReplicaTest's output for the forge figures (regular within 0.1 %, state within one slot)
 ROWS = [
-    ("completion at its bounds", 63667, 412),
-    ("record at its bounds ML-DSA-87", 122200, 274),
-    ("record at its bounds ML-DSA-65", 95715, 254),
-    ("last live leaf 4 UAs ML-DSA-87", 115235, 247),
-    ("last live leaf A-8 ML-DSA-87", 138123, 321),
-    ("last live leaf A-8 ML-DSA-65", 111567, 301),
+    # at 20 changes (C10, owner 2026-11-25): PqChatTreeGasReplicaTest's output for the pins of that commit
+    ("completion at its bounds (20 changes)", 42362, 292),
+    ("last live leaf A-8 ML-DSA-87 (20 changes)", 120632, 279),
+    ("last live leaf A-8 ML-DSA-65 (20 changes)", 94118, 259),
+    # at 32 changes (the run before C10's change)
+    ("completion at its bounds (32 changes)", 63667, 412),
+    ("record at its bounds ML-DSA-87 (32 changes)", 122200, 274),
+    ("record at its bounds ML-DSA-65 (32 changes)", 95715, 254),
+    ("last live leaf 4 UAs ML-DSA-87 (32 changes)", 115235, 247),
+    ("last live leaf A-8 ML-DSA-87 (32 changes)", 138123, 321),
+    ("last live leaf A-8 ML-DSA-65 (32 changes)", 111567, 301),
     ("control under 2^24", 162353, 10),
     ("control over 2^24", 163823, 10),
 ]

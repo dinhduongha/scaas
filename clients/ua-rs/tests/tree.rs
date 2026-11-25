@@ -2399,11 +2399,11 @@ fn tree_builder_bounds() {
         code(prep.tree.filtered_path_after(&ch(8, &|_| me.ua))),
         "PqChatShape"
     );
-    // 32 changes of distinct UAs, then 33 (TREE_CHANGES_MAX)
+    // 20 changes of distinct UAs, then 21 (TREE_CHANGES_MAX, owner 2026-11-25)
     let distinct = |i: u32| [i as u8 + 0x80; 32];
-    assert!(prep.tree.filtered_path_after(&ch(32, &distinct)).is_ok());
+    assert!(prep.tree.filtered_path_after(&ch(20, &distinct)).is_ok());
     assert_eq!(
-        code(prep.tree.filtered_path_after(&ch(33, &distinct))),
+        code(prep.tree.filtered_path_after(&ch(21, &distinct))),
         "PqChatShape"
     );
     // a tree's JSON out of bounds (B-5): 2^31 leaves, used above leaves, a node list of another width

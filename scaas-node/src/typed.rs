@@ -927,7 +927,7 @@ fn compliance_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
 /// node keys and `TREE_LEAVES_MAX - 1` ciphertexts (`ctCount < leaves`).
 const TREE_LEAVES_MAX: u64 = 512; // R8: 256 -> 512 (owner 2026-11-25), depth 9
 const TREE_ADMINS_MAX: usize = 32;
-const TREE_CHANGES_MAX: usize = 32;
+const TREE_CHANGES_MAX: usize = 20; // C10: 32 -> 20 (owner 2026-11-25)
 const TREE_INFO_MAX: usize = 4124;
 const TREE_DEPTH_MAX: usize = 9;
 const TREE_CTS_MAX: usize = TREE_LEAVES_MAX as usize - 1;
@@ -6039,33 +6039,33 @@ mod tests {
         );
         pair(
             "commit",
-            &|a| a["c"]["removes"] = rm(31),
-            &|a| a["c"]["removes"] = rm(32),
-            "c: removes plus adds above 32",
+            &|a| a["c"]["removes"] = rm(19),
+            &|a| a["c"]["removes"] = rm(20),
+            "c: removes plus adds above 20",
         );
         pair(
             "commit",
             &|a| {
                 no_adds(a);
-                a["c"]["removes"] = rm(32)
+                a["c"]["removes"] = rm(20)
             },
             &|a| {
                 no_adds(a);
-                a["c"]["removes"] = rm(33)
+                a["c"]["removes"] = rm(21)
             },
-            "c.removes: more than 32",
+            "c.removes: more than 20",
         );
         pair(
             "commit",
             &|a| {
-                a["c"]["adds"] = add(32);
-                a["c"]["wrapHashes"] = hs(32)
+                a["c"]["adds"] = add(20);
+                a["c"]["wrapHashes"] = hs(20)
             },
             &|a| {
-                a["c"]["adds"] = add(33);
-                a["c"]["wrapHashes"] = hs(33)
+                a["c"]["adds"] = add(21);
+                a["c"]["wrapHashes"] = hs(21)
             },
-            "c.adds: more than 32",
+            "c.adds: more than 20",
         );
         pair(
             "commit",
@@ -6313,12 +6313,12 @@ mod tests {
             })
             .expect("mode 0: no tree bound");
         }
-        // treeRemove (C21: at most 32 leafy UAs and 32 admins)
+        // treeRemove (C21: at most 20 leafy UAs and 32 admins)
         pair(
             "treeRemove",
-            &|a| a["r"]["members"] = hs(64),
-            &|a| a["r"]["members"] = hs(65),
-            "r.members: more than 64",
+            &|a| a["r"]["members"] = hs(52),
+            &|a| a["r"]["members"] = hs(53),
+            "r.members: more than 52",
         );
         pair(
             "treeRemove",

@@ -180,8 +180,8 @@ const session = {
 // CTR-CHAT-25, CTR-CHAT-26: the same session record with groupMode 1 (TreeKEM), the same struct and typehash; the release
 // with the tree module accepts the mode (2-255 are PqChatModeUnsupported)
 const sessionTreeKem = { ...session, nonce: 12, groupMode: 1 };
-// review C-5: a mode of the reserved range, signed, refused by name before anything else (2, the off-chain ledger's tree,
-// reserved with 3 for after the freeze, CTR-CHAT-25)
+// review C-5: a mode of the reserved range, signed, refused by name before anything else (2 and 3 are reserved values for
+// a possible off-chain deployment, nothing decided, CTR-CHAT-25)
 const sessionMode2 = { ...session, nonce: 13, groupMode: 2 };
 
 const eid = hex(pc.epochId(sid, alice.ua, 8));

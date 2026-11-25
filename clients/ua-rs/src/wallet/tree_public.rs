@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const TREE_LEAVES_MAX: u32 = 512; // R8: 256 -> 512 (owner 2026-11-25), depth 9
 /// The contract's other bounds of a commit (C10, C24; `PqGroupBase`, `PqGroupTree._treeBounds`): Adds plus Removes, the admin
 /// list, the live leaves of one UA after the commit (D-5).
-pub const TREE_CHANGES_MAX: usize = 32;
+pub const TREE_CHANGES_MAX: usize = 20; // C10: 32 -> 20 (owner 2026-11-25)
 pub const TREE_ADMINS_MAX: usize = 32;
 pub const KEYS_PER_UA_MAX: usize = 8;
 pub const ZERO: [u8; 32] = [0; 32];
