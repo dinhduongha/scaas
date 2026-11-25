@@ -655,3 +655,6 @@ Open cho đọc (như on-chain)." The API service authenticates **each record by
 contract's own rules, instead of JWT sessions or tokens; **reads are open to anyone**, as on chain (the data are
 ciphertexts). It needs the UAs' keys: the on-chain UA registry or an off-chain one, per deployment (2026-11-24); the
 verification code is best the one already in ua-rs / scaas-node, so the off-chain rules equal the contract's.
+**Owner, 2026-11-25:** "UA cũng đăng ký như onchain" — in an off-chain mode the UA is registered **as on chain**: the
+same registration records, rules and key formats (signing kinds, KEM keys, versions) as `UARegistry`, checked by the API
+service and kept in the store in place of the contract.
