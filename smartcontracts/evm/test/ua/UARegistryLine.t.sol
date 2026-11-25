@@ -122,6 +122,7 @@ contract FakeRegistry {
     function checkedOf(bytes32) external view probed returns (uint8, uint8, uint8) {}
     function memberSigHashOf(bytes32, uint256) external view probed returns (bytes32) {}
     function msigStateOf(bytes32) external view probed returns (uint64, uint256, uint256) {}
+    function msigAt(bytes32, uint64) external view probed returns (IUARegistry.MsigStructure memory s, uint256) {}
 }
 
 /// The line of generations (spec 2026-11-19-registry-verify-only-kinds §2, §11.1; plan Task 2): the kind word's flags, the
@@ -613,7 +614,7 @@ contract UARegistryLineTest is UARegistryBase {
 
     /// §11.3 (W3): each view a successor reads, missing on a predecessor, is `UAConfig(0)`; the control passes.
     function test_probe_missingView_UAConfig0() public {
-        bytes4[10] memory sel = [
+        bytes4[11] memory sel = [
             IUARegistry.holderOf.selector,
             IUARegistry.kindHome.selector,
             IUARegistry.verifierOf.selector,
@@ -623,7 +624,8 @@ contract UARegistryLineTest is UARegistryBase {
             IUARegistry.expandedKeyOf.selector,
             IUARegistry.checkedOf.selector,
             IUARegistry.memberSigHashOf.selector,
-            IUARegistry.msigStateOf.selector
+            IUARegistry.msigStateOf.selector,
+            IUARegistry.msigAt.selector // CTR-UA-74
         ];
         for (uint256 i; i < sel.length; ++i) {
             FakeRegistry f = new FakeRegistry(chainUidA, 1, address(0));

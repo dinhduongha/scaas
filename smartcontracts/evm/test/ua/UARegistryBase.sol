@@ -155,6 +155,9 @@ contract MockPredecessor {
 
     /// And CTR-UA-44's current-structure words.
     function msigStateOf(bytes32) external pure returns (uint64, uint256, uint256) {}
+
+    /// And CTR-UA-74's structure by version.
+    function msigAt(bytes32, uint64) external pure returns (IUARegistry.MsigStructure memory s, uint256) {}
 }
 
 abstract contract UARegistryBase is Test {

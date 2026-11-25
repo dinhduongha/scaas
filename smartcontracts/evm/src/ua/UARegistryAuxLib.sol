@@ -92,6 +92,23 @@ library UARegistryAuxLib {
         return UAKinds.pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash);
     }
 
+    /// CTR-UA-74 (2026-11-25): the two KEM record views, moved here as the five above were (the registry's bytes for `msigAt`).
+    function kemRecordHash(bytes32 ua, uint64 version, IUARegistry.KemKey calldata kem)
+        external
+        pure
+        returns (bytes32)
+    {
+        return UAKinds.kemRecordHash(ua, version, UAKinds.kemPk(kem));
+    }
+
+    function kemRecordDigest(bytes32 ua, uint64 version, IUARegistry.KemKey calldata kem)
+        external
+        pure
+        returns (bytes32)
+    {
+        return UAKinds.kemRecordDigest(ua, version, UAKinds.kemPk(kem));
+    }
+
     function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32) {
         return UAKinds.pqzKeyVersionDigest(ua, version, pqzKeyHash);
     }
@@ -287,7 +304,7 @@ library UARegistryAuxLib {
         u.stored = _stored(ua, version); // 3, 4
         u.st = structure;
         _target(u, enabled); // 5–8
-        u.t = UAStore.blob(u.st, enabled, version);
+        u.t = UAStore.blob(u.st, enabled, version, UAStore.layout().records[ua].keyPtr); // CTR-UA-74: the version before, kept
         _quorumSigned(
             u, UAKinds.msigUpdateDigest(ua, u.chainUid, address(this), version, u.st, enabled, validUntilBlock), sigs
         );
@@ -387,6 +404,40 @@ library UARegistryAuxLib {
             if (en >> i & 1 != 0 && UAStore.u16(d, 4 + 36 * i) == UAKinds.MSIG) return true;
         }
         return false;
+    }
+
+    /// `IUARegistry.msigAt` (CTR-UA-74): the structure and enabled word of version `version`, 0 the registration's, a later one its
+    /// `updateMsig` blob, found from the current blob by each blob's `prev`; empty for any other id and a version never stored.
+    /// Run by `_libView`.
+    function msigAt(bytes32 ua, uint64 version) external returns (IUARegistry.MsigStructure memory s, uint256 enabled) {
+        address h = UARegistryCoreLib._holder(ua);
+        if (h != address(0)) return IUARegistry(h).msigAt(ua, version);
+        IUARegistry.Record memory r = UAStore.layout().records[ua];
+        if (r.kind != UAKinds.MSIG) return (s, 0);
+        address ptr = r.keyPtr;
+        uint64 v;
+        if (ptr != address(0)) (, v) = UAStore.trailer(ptr);
+        if (version > v) return (s, 0);
+        // ponytail: one blob read per version back from the current one (a view; updates are rare and dear); an index of pointers
+        // if an `msig` ever lives through thousands of updates
+        for (; v > version; --v) {
+            ptr = UAStore.prevOf(ptr);
+        }
+        bytes memory d = UAStore.msig(ua, ptr);
+        return (_typed(d), UAStore.enabledOf(d));
+    }
+
+    /// The typed form of the structure bytes `d`, every slot.
+    function _typed(bytes memory d) private pure returns (IUARegistry.MsigStructure memory s) {
+        uint256 n = UAStore.u16(d, 2);
+        s.threshold = uint16(UAStore.u16(d, 0));
+        s.members = new IUARegistry.MsigMember[](n);
+        for (uint256 i; i < n; ++i) {
+            uint256 o = 4 + 36 * i;
+            s.members[i] = IUARegistry.MsigMember(
+                uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)), uint16(UAStore.u16(d, o + 34))
+            );
+        }
     }
 
     /// `IUARegistry.msigStateOf` (CTR-UA-44): run by `_libView`.
@@ -622,9 +673,10 @@ library UARegistryAuxLib {
         }
     }
 
-    /// The stored bytes of a portable `UASig`: `signature`, or an msig's `abi.encode(members)` (the pre-R1 form).
+    /// The stored bytes of a portable `UASig`: `signature`, or an msig's `abi.encode(members)` (the pre-R1 form) followed by its
+    /// version tag (CTR-UA-74: nothing at version 0, else 8 bytes, so a length ≡ 8 mod 32 says a tag is there).
     function _portableBytes(IUARegistry.UASig calldata sig) private pure returns (bytes memory) {
-        return sig.members.length != 0 ? abi.encode(sig.members) : sig.signature;
+        return sig.members.length != 0 ? bytes.concat(abi.encode(sig.members), sig.signature) : sig.signature;
     }
 
     // ----- KEM records (P4, P5, P7; UA8-D3–D5, D11, D12) -----
