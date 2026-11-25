@@ -335,6 +335,8 @@ interface IOpenFactory is IAdmin {
     error EntryMismatch(bytes4 view_);
     /// @notice `configureChain`: the router's `registry()` is no account with code (0 included), or no answer.
     error RouterRegistryInvalid(address registry);
+    /// @notice CTR-GOV-33 (G-3): `configureChain`'s router names another factory (`named`), or answers no `factory()`.
+    error RouterFactoryMismatch(address named);
     /// @notice A `SmartKeyAccount` clone code hash that is not the router's (`expected`): its registry's at
     ///         `configureChain`, the account factory's `IMPLEMENTATION()` clone at `setChainEntries`.
     error SmartKeyCloneHashMismatch(bytes32 expected, bytes32 got);

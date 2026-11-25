@@ -89,6 +89,7 @@ contract Misc is OnchainBase {
         _book(_dep("ua_registry_aux_lib"), "UARegistryAuxLib");
         _book(_dep("ua_registry_reg_lib"), "UARegistryRegLib");
         _book(address(f5), "OpenFactory");
+        if (vm.keyExistsJson(dj, ".open_factory_lib")) _book(_dep("open_factory_lib"), "OpenFactoryLib"); // G-3 on
         _book(_dep("compliance_registry"), "ComplianceRegistry");
         _registry();
         _factory();

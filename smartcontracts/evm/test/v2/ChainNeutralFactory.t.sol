@@ -59,7 +59,7 @@ contract ChainNeutralFactoryTest is Test {
         ureg = new StubUARegistry(UID_);
         // the router and its registry name one SmartKeyAccount implementation, 0xBEEF, the DEX env's (spec §13.4)
         ureg.setSmartKeyCloneHash(EnvKit.cloneHash(address(0xBEEF)));
-        router = new GovernanceRouter(UID_, address(ureg), address(0xBEEF), false, address(0));
+        router = new GovernanceRouter(UID_, address(ureg), address(0xBEEF), false, EnvKit.nextCreate(2)); // G-3: names the factory built next
         f = EnvKit.factory(registrar, UID_, 0, address(router));
         normalImpl = NormalToken(
             Catalogue.plain(f, NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0xBEEF), false)
@@ -79,6 +79,7 @@ contract ChainNeutralFactoryTest is Test {
 
     function test_configureChain_onceAndAdminOnly() public {
         OpenFactory g = new OpenFactory(nid(registrar));
+        GovernanceRouter rg = new GovernanceRouter(UID_, address(ureg), address(0xBEEF), false, address(g)); // G-3: names g
         assertEq(g.admin(), nid(registrar));
         assertEq(g.chainUid(), bytes32(0));
         EnvKit.genesis(UID_);
@@ -91,12 +92,12 @@ contract ChainNeutralFactoryTest is Test {
         g.configureChain(UID_, 0, address(0), bytes32(0), 0, bytes32(0));
         vm.etch(registrar, "");
         vm.expectEmit(true, false, false, true, address(g));
-        emit IOpenFactory.ChainConfigured(UID_, 10 minutes, address(router));
+        emit IOpenFactory.ChainConfigured(UID_, 10 minutes, address(rg));
         vm.prank(registrar);
-        g.configureChain(UID_, 10 minutes, address(router), address(router).codehash, 0, bytes32(0));
+        g.configureChain(UID_, 10 minutes, address(rg), address(rg).codehash, 0, bytes32(0));
         assertEq(g.chainUid(), UID_);
         assertEq(g.noticePeriod(), 10 minutes);
-        assertEq(g.govRouter(), address(router));
+        assertEq(g.govRouter(), address(rg));
         vm.prank(registrar);
         vm.expectRevert(IOpenFactory.ChainAlreadyConfigured.selector);
         g.configureChain(UID_, 0, address(0), bytes32(0), 0, bytes32(0));
@@ -173,14 +174,15 @@ contract ChainNeutralFactoryTest is Test {
 
     function test_configureChain_routerOfAnotherChainRefused() public {
         OpenFactory g = new OpenFactory(nid(registrar));
+        GovernanceRouter rg = new GovernanceRouter(UID_, address(ureg), address(0xBEEF), false, address(g)); // G-3: names g
         EnvKit.genesis(UID_);
         GovernanceRouter other = new GovernanceRouter(keccak256("other"), address(0), address(0), false, address(0));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID_, keccak256("other")));
         g.configureChain(UID_, 0, address(other), address(other).codehash, 0, bytes32(0));
         vm.prank(registrar);
-        g.configureChain(UID_, 0, address(router), address(router).codehash, 0, bytes32(0));
-        assertEq(g.govRouter(), address(router));
+        g.configureChain(UID_, 0, address(rg), address(rg).codehash, 0, bytes32(0));
+        assertEq(g.govRouter(), address(rg));
     }
 
     /// Nothing is published, deployed or created before `configureChain`; reads answer.
@@ -422,10 +424,10 @@ contract ChainNeutralFactoryTest is Test {
         SmartKeyAccountFactory skaf = new SmartKeyAccountFactory{salt: 0}(uid);
         StubUARegistry reg = new StubUARegistry{salt: 0}(uid);
         reg.setSmartKeyCloneHash(EnvKit.cloneHash(skaf.IMPLEMENTATION()));
-        GovernanceRouter r = new GovernanceRouter{salt: 0}(uid, address(reg), skaf.IMPLEMENTATION(), false, address(0));
+        g = new OpenFactory{salt: 0}(nid(registrar)); // before the router, which names it (G-3)
+        GovernanceRouter r = new GovernanceRouter{salt: 0}(uid, address(reg), skaf.IMPLEMENTATION(), false, address(g));
         RelayFeeRouter relay = new RelayFeeRouter{salt: 0}();
         ComplianceRegistry c = new ComplianceRegistry{salt: 0}(nid(registrar), address(r), uid);
-        g = new OpenFactory{salt: 0}(nid(registrar));
         vm.startPrank(registrar);
         g.configureChain(uid, 0, address(r), address(r).codehash, 0, bytes32(0));
         g.setChainEntries(

@@ -25,6 +25,14 @@ forge-pqchat (E-3 mode 0 + replica) | 7f8439265 | 0 | 226 passed, 1 skipped
 forge-pqvault (E-3 + replica) | 7f8439265 | 0 | 98 passed
 size (E-3 mode 0; owner: leave / remove to PqChatTreeMembers) | 7f8439265 | 0 | 183 contracts; PqChat 35,534 before the move -> 32,891; PqChatTreeMembers 13,506; PqChatTree 32,758; PqVault 32,131 (baseline moved)
 mutants M21-M41 (E-3 mode 0, PqVault, the replica rule) | 7f8439265 | 0 | 21/21 killed (runner: per-mutant test dir)
+forge-v2 (G-3, first run) | step 3 tree | 1 | 1 red: test_sizes, OpenFactory 35,355 > 35,239 (G-3 took it over the 35,286 line) -> OpenFactoryLib split
+size (G-3 + the split) | step 3 tree | 0 for OpenFactory | OpenFactory 35,239 -> 35,047 (35,355 unsplit), OpenFactoryLib 1,088 (a library, no row)
+forge-governance (G-3) | step 3 tree | 0 | 1009 passed (first run 994/15: GovRouterAdmin's binding matrix built two stacks on one router; g first)
+forge-as (G-3) | step 3 tree | 0 | 568 passed
+forge-v2 (G-3) | step 3 tree | 0 | 757 passed (+1: test_configureChain_routerNamesThisFactory)
+forge-factory (G-3) | step 3 tree | 0 | 2 passed
+forge-merge (G-3) | step 3 tree | 0 | 350 passed
+forge-pqz (G-3) | step 3 tree | 0 | 694 passed, 4 skipped
 
 ## Done (committed)
 - G-1: index before the initializer (red: "mid-creation: indexed, the env registry: ...07 != ...08").
@@ -54,6 +62,16 @@ mutants M21-M41 (E-3 mode 0, PqVault, the replica rule) | 7f8439265 | 0 | 21/21 
 - Step 2: E-3 in mode 0 and PqVault plus the replica rule (7f8439265); the owner moved mode 0's leave / remove into
   PqChatTreeMembers (2026-11-25) when E-3 took PqChat to 35,534 B; mutants M21-M41.
 - Step 0's post-merge gates: governance, factory, v2, gas, size, SDK op::gas, all green (rows above).
+
+- Step 3 (G-3, G-5): `configureChain` refuses a router whose `factory()` is not this factory (RouterFactoryMismatch;
+  no word fails closed). It took OpenFactory to 35,355 B, over the 35,286 line (an assembly form of the check saved
+  14 B only), so the router checks moved to the external library OpenFactoryLib.checkRouter (the owner's pre-approved
+  split; `self` passed, no storage, view; the factory 35,047 B, the library 1,088 B; the deploy books
+  `open_factory_lib`). Every fixture's router names its factory (EnvKit.nextCreate; GovRouterFixture._routerNaming;
+  rebuilt where a test configures another factory); the stand-in routers answer `factory()` with the caller. A view
+  test's state diff skips forge's own CREATE2 of the linked library (isolate). G-5: CTR-GOV-33's cost line, the
+  inventory table (PqChat's four body modules) and CTR-GOV-32's tag. Test: test_configureChain_routerNamesThisFactory
+  (0, another factory, no answer, the control). G-4 (the SDK rows) follows in its own commit.
 
 ## Left, in order
 0. Done (ccf6c43db). On resume: rerun the G-1 gates (governance, factory, v2, gas), the size gate and the SDK's

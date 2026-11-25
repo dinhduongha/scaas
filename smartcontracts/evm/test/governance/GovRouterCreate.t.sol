@@ -27,6 +27,11 @@ contract SubjectRouter {
         (chainUid, registry) = (uid, registry_);
     }
 
+    /// G-3: `configureChain` asks the router's `factory()`; a stand-in answers the factory that asks.
+    function factory() external view returns (address) {
+        return msg.sender;
+    }
+
     function smartKeyCloneHash() external view returns (bytes32) {
         return IUARegistry(registry).smartKeyCloneHash();
     }
@@ -75,6 +80,7 @@ contract GovRouterCreateTest is GovRouterFixture {
 
     function setUp() public override {
         super.setUp();
+        _routerNaming(EnvKit.nextCreate(2)); // G-3: the router names the factory built next
         f = EnvKit.factory(REGISTRAR, chainUidA, 0, address(router));
         // T66b: the releases' body modules (the token's, the DEX's D), pinned in their envs
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");

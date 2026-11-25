@@ -914,7 +914,8 @@ chains T74; `test/v2/ChainNeutral.t.sol`, `ChainNeutralFactory.t.sol`, `test/gov
 - One `IOpenFactory` and one `IFactoryToken` (the v1 and v2 interfaces are in `legacy/`).
 
 <a id="CTR-GOV-32"></a>**CTR-GOV-32** — **Router versions: registrar-approved catalogue rows by default; user routers only in a
-marked opt-in class** (owner 2026-11-24, "R-b + opt-in user routers"). **SPECIFIED** (nothing in `src/`; the path is shown on
+marked opt-in class** (owner 2026-11-24, "R-b + opt-in user routers"). **SPECIFIED** (nothing in `src/` but the two
+`virtual` `_govRouter` hooks below; the path is shown on
 today's factory by `test/governance/RouterPerRelease.t.sol`, UNAUDITED).
 - **The router of a governed contract** is the one its `_govRouter()` returns: the chain's router (`ChainEnv.govRouter`, set
   once by `configureChain`, [CTR-TOK-29](#CTR-TOK-29)) for today's kinds, or a router version that a release reads from its own
@@ -966,8 +967,8 @@ every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `t
   | `SCaaSDex` (its body modules run by `DELEGATECALL` in the clone) | yes | yes: `createDex` | clone code, offset 77 | the env registry |
   | A generic class instance (class ≥ 3) governed by `ChainEnv.govRouter` | yes | yes: `createInstance` | clone code, offset 77 | the env registry |
   | A generic instance naming its own router in `deps` (P3, R-b) | no: its router is another | yes: `createInstance` | clone code, offset 77 | that router's choice |
-  | PqChat, PqChatTopics, PqVault | no: not governed (no `_govSubject`) | yes: `createInstance` | clone code, offset 77 | the env registry, never asked |
-  | Releases: token, DEX and generic implementations, body modules, catalogued router versions | no (an all-zero env; modules `onlyDelegated`) | `deploy*Implementation` (`CREATE2`), not indexed | none | the router's own |
+  | PqChat, PqVault | no: not governed (no `_govSubject`) | yes: `createInstance` | clone code, offset 77 | the env registry, never asked |
+  | Releases: token, DEX and generic implementations, body modules (PqChat's `PqChatTopics`, `PqChatTree`, `PqChatTreeViews`, `PqChatTreeMembers` among them), catalogued router versions | no (an all-zero env; modules `onlyDelegated`) | `deploy*Implementation` (`CREATE2`), not indexed | none | the router's own |
   | `OpenFactory` (registrar ops, `mtxCreate*`) | yes (`UAAdmin`) | no | none | the router's own |
   | `ComplianceRegistry` (its admin, KYC providers) | yes (`UAAdmin`) | no | none | the router's own |
   | `SmartKeyAccount` | no: not governed | an EIP-1167 clone of `SmartKeyAccountFactory`, no env, not indexed | none | the router's own |
@@ -1006,11 +1007,15 @@ every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `t
   hedera, factory)`; `factory()` reads it back), then `configureChain`, whose code-hash pin covers the immutable. A router
   with factory 0 gives every target its own registry. **`configureChain` refuses a router whose `factory()` is not this
   factory** (`RouterFactoryMismatch(named)`; a router that answers no word fails closed), so G1 cannot be switched off by
-  configuring a router built with factory 0 or another factory (Change 2026-11-24, the code review's G-3; SPECIFIED, the
-  code follows); the deploy script's check stays as a second line.
+  configuring a router built with factory 0 or another factory (Change 2026-11-24, the code review's G-3; BUILT on
+  `review-fix-contract`: the router checks of `configureChain` moved to the external library `OpenFactoryLib.checkRouter`,
+  the factory's size split pre-approved by the owner; `FactoryDirectoryTest.test_configureChain_routerNamesThisFactory`;
+  UNAUDITED); the deploy script's check stays as a second line. Every test fixture builds its router naming its factory.
 - **Cost** (`test_g1_gas`, `mtxMint`): a derived signer on a factory-made target of another generation pays the code copy and
   one `infoOf` call, +809 gas against the same op on a router of that generation; on a target of the router's own generation
-  the code copy only, +482; a native signer +0. The keyed cancel (`test_cancelFor_gas`): 94,086 gas on a gen-2 target,
+  the code copy only, +482; a native signer +0 against a router of the same build with no factory (`test_g1_gas`).
+  Against the router before G1 every op pays for the larger router: a native `mtxMint` +377 (`plus_zero_gas.json`
+  105,145 → 105,522, commit `e421dde78`), `mtxCancelNonce` +12. The keyed cancel (`test_cancelFor_gas`): 94,086 gas on a gen-2 target,
   92,199 on the router's own map (a gen-1 holder), against 88,894 for `mtxCancelNonce`.
 
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `initArgs`.

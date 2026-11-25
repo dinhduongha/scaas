@@ -256,9 +256,12 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
         assertGt(_written(vm.stopAndReturnStateDiff()), 0, "the control writes");
     }
 
-    /// Slots written, accounts created or value moved in `d`.
+    /// Slots written, accounts created or value moved in `d`. Not counted: forge's own CREATE2 of a linked library through
+    /// the deterministic deployer, which `isolate = true` records in the window since `OpenFactory` links `OpenFactoryLib`
+    /// (G-3's split); a view's static frame can create nothing.
     function _written(VmSafe.AccountAccess[] memory d) internal pure returns (uint256 w) {
         for (uint256 i; i < d.length; ++i) {
+            if (d[i].kind == VmSafe.AccountAccessKind.Create && d[i].accessor == CREATE2_FACTORY) continue;
             if (d[i].kind == VmSafe.AccountAccessKind.Create || d[i].value != 0) ++w;
             for (uint256 j; j < d[i].storageAccesses.length; ++j) {
                 if (d[i].storageAccesses[j].isWrite) ++w;

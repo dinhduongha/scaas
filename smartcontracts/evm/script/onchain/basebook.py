@@ -66,6 +66,7 @@ def main():
         ("ua_registry_reg_lib", "UARegistryRegLib"),
         ("governance_router", "GovernanceRouter"),
         ("token_factory", "OpenFactory"),
+        ("open_factory_lib", "OpenFactoryLib"),
         ("relay_fee_router", "RelayFeeRouter"),
         ("relay_fee_executor", "RelayFeeExecutor"),
         ("compliance_registry", "ComplianceRegistry"),

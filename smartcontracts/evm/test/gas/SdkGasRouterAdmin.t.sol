@@ -51,6 +51,7 @@ contract SdkGasRouterAdminTest is SdkGasRouterBase {
         relay = new RelayFeeRouter();
         zs = new ZetherStatements();
         address a = address(uint160(uint256(eoa)));
+        _routerNaming(EnvKit.nextCreate(2)); // G-3: the router names the factory built next
         f = EnvKit.factory(a, chainUidA, 0, address(router));
         IFactoryToken.Env memory e;
         bytes32 fu = EnvKit.uidOf(address(f));
@@ -348,6 +349,7 @@ contract SdkGasRouterCreateTest is SdkGasRouterBase {
 
     function setUp() public override {
         super.setUp();
+        _routerNaming(EnvKit.nextCreate(2)); // G-3: the router names the factory built next
         f = EnvKit.factory(REGISTRAR, chainUidA, 0, address(router));
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
         (address[] memory dm, bytes memory dargs) = deployDexModules(address(f));

@@ -367,6 +367,7 @@ contract GovRouterAdminTest is UARegistryBase {
     /// a stranger relayer); and a `ComplianceRegistry(admin_, router)`.
     function _stack(bytes32 admin_) internal returns (OpenFactory f, ComplianceRegistry cr) {
         f = new OpenFactory(nid(deployer));
+        router = new GovernanceRouter(chainUidA, PREG, impl, false, address(f)); // G-3: the router names its factory
         EnvKit.genesis(chainUidA);
         IFactoryToken.Env memory e;
         vm.startPrank(deployer);
@@ -1093,8 +1094,9 @@ contract GovRouterAdminTest is UARegistryBase {
     /// is refused by the router (`UAUnauthorized(ml)`, no nonce spent); then the untouched call passes (the positive
     /// control) and has its effect. Answers the number of variants.
     function _matrix(uint8 op) internal returns (uint256 n) {
-        (OpenFactory f, ComplianceRegistry cr) = _stack(ml);
+        // G-3: each stack has its own router naming its factory (`_stack`), the last one built is `router`: `g` first
         (OpenFactory g, ComplianceRegistry cr2) = _stack(ml);
+        (OpenFactory f, ComplianceRegistry cr) = _stack(ml);
         if (op == REVOKE) _send(_base(APPROVE_TOKEN, f, cr), ml); // a stored approval to revoke
         P memory p = _base(op, f, cr);
         address other = p.target == address(f) ? address(g) : address(cr2);

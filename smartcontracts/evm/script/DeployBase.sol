@@ -5,6 +5,7 @@ import {console} from "forge-std/Script.sol";
 import {DeployBook} from "./DeployBook.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {OpenFactory} from "../src/factory/OpenFactory.sol";
+import {OpenFactoryLib} from "../src/factory/OpenFactoryLib.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
 import {ChainEnvCode} from "../src/factory/ChainEnvCode.sol";
@@ -536,12 +537,12 @@ abstract contract DeployBase is DeployBook {
         return false;
     }
 
-    /// @notice The token factory (`noticePeriod`) and the UA registry (`_deployUARegistry`, with its libraries `UARegistryCoreLib`, `UARegistryAuxLib` and `UARegistryRegLib`) by CREATE2; when the deployer
+    /// @notice The token factory (`noticePeriod`; its library `OpenFactoryLib`, G-3's size split) and the UA registry (`_deployUARegistry`, with its libraries `UARegistryCoreLib`, `UARegistryAuxLib` and `UARegistryRegLib`) by CREATE2; when the deployer
     ///         is the registrar (plan 5g-Z2: only the factory deploys releases), env version 1 of `NORMAL` and of the DEX
     ///         (`_env`: the factory, `chain_uid`, the registry, the `SmartKeyAccount` implementation, Hedera, the linked
     ///         libraries with their code hashes), then the `NORMAL` release (on that registry: the UA ledger, CTR-UA-18)
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
-    ///         the same init code. Writes `token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`,
+    ///         the same init code. Writes `token_factory`, `open_factory_lib`, `implementation_normal`, `dex_implementation`, `ua_registry`,
     ///         `ua_registry_core_lib`, `ua_registry_aux_lib`,
     ///         `relay_fee_router`, `relay_fee_executor`, `governance_router`, `chain_uid` into the JSON object `"deploy"`; with
     ///         `DEPLOY_WRAPPED` also the `WRAPPED` release (`_deployWrapped`, GD-12), with `DEPLOY_ZETHER` the Zether stack
@@ -568,6 +569,7 @@ abstract contract DeployBase is DeployBook {
         if (register) _configureChain(f, registrar);
         if (register && !configureOnly) _writeDirectory(f, reg);
         vm.serializeAddress("deploy", "token_factory", address(f));
+        vm.serializeAddress("deploy", "open_factory_lib", address(OpenFactoryLib)); // linked: in the factory's init code
         if (register && !configureOnly) {
             // the link closure of NormalToken's release (task 6; T66b §4.5: its body modules' link references): MtxPipelineLib,
             // which links HederaLib, and GovernanceLib (TradeLib's code is compiled into the module T)

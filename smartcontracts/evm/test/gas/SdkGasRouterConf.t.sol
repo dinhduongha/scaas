@@ -87,7 +87,7 @@ contract SdkGasRouterPqzTest is SdkGasRouterConfOps, PqzOffchainBase {
         _offStack();
         _sgDeployRegistry(address(reg), PQZ_UID, _sgPqzKeep(address(mlv), address(pqv)));
         sgPk = 0xA11CE;
-        gcRouter = new GovernanceRouter(PQZ_UID, address(reg), sgSka, false, address(0));
+        gcRouter = new GovernanceRouter(PQZ_UID, address(reg), sgSka, false, EnvKit.nextCreate(2)); // G-3: names the factory built next
         OpenFactory f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(gcRouter));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, _penv(), type(NormalPqzToken).creationCode);
@@ -140,7 +140,7 @@ contract SdkGasRouterZetherTest is SdkGasRouterConfOps, ZetherFixture {
         _sgDeployRegistry(address(reg), ZUID, _sgNoKeep());
         _users();
         sgPk = 0xA11CE;
-        gcRouter = new GovernanceRouter(ZUID, address(reg), sgSka, false, address(0));
+        gcRouter = new GovernanceRouter(ZUID, address(reg), sgSka, false, EnvKit.nextCreate(2)); // G-3: names the factory built next
         OpenFactory f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, ZUID, 0, address(gcRouter));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_ZETHER, 1, _zenv(), type(NormalZetherToken).creationCode);
@@ -202,7 +202,7 @@ contract SdkGasRouterPqzAuditorTest is SdkGasRouterConfOps, SdkGasMetered, PqzOf
         _offStack();
         _sgDeployRegistry(address(reg), PQZ_UID, _sgPqzKeep(address(mlv), address(pqv)));
         sgPk = 0xA11CE;
-        gcRouter = new GovernanceRouter(PQZ_UID, address(reg), sgSka, false, address(0));
+        gcRouter = new GovernanceRouter(PQZ_UID, address(reg), sgSka, false, EnvKit.nextCreate(2)); // G-3: names the factory built next
         OpenFactory f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(gcRouter));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, _penv(), type(NormalPqzToken).creationCode);

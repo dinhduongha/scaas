@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IGovernanceRouter} from "../governance/IGovernanceRouter.sol";
 import {IOpenFactory} from "./IOpenFactory.sol";
+import {OpenFactoryLib} from "./OpenFactoryLib.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
 import {ChainEnvCode} from "./ChainEnvCode.sol";
 import {Create3} from "./Create3.sol";
@@ -171,23 +172,14 @@ contract OpenFactory is IOpenFactory, UAAdmin {
             if (a == bytes32(0)) a = _history(refBlock);
             if (a == bytes32(0) || a != refHash) revert RefBlockMismatch(refBlock, refHash, a);
         }
-        if (govRouter_ != address(0)) _checkRouter(govRouter_, govRouterCodeHash, chainUid_);
-        else if (govRouterCodeHash != bytes32(0)) revert CodeHashMismatch(address(0), govRouterCodeHash, bytes32(0));
+        // the router's code hash, chain, registry, clone hash and `factory()` (G-3): `OpenFactoryLib` (the size split)
+        if (govRouter_ != address(0)) {
+            OpenFactoryLib.checkRouter(govRouter_, govRouterCodeHash, chainUid_, address(this));
+        } else if (govRouterCodeHash != bytes32(0)) {
+            revert CodeHashMismatch(address(0), govRouterCodeHash, bytes32(0));
+        }
         (chainUid, noticePeriod, govRouter) = (chainUid_, noticePeriod_, govRouter_);
         emit ChainConfigured(chainUid_, noticePeriod_, govRouter_);
-    }
-
-    /// @dev The router's code is the admin's hash, its `chainUid()` this chain's, its `registry()` an account with code
-    ///      (0 included in "no code"), its `smartKeyCloneHash()` its registry's; a call that answers no word fails closed.
-    function _checkRouter(address r, bytes32 codeHash, bytes32 chainUid_) private view {
-        _requireCode(r, codeHash);
-        _requireChainUid(r, chainUid_);
-        (bool ok, uint256 w) = _word(r, _REGISTRY);
-        address reg = address(uint160(w));
-        if (!ok || w >> 160 != 0 || reg.code.length == 0) revert RouterRegistryInvalid(reg);
-        (bool okR, uint256 a) = _word(r, _CLONE_HASH);
-        (bool okG, uint256 b) = _word(reg, _CLONE_HASH);
-        if (!okR || !okG || a != b) revert SmartKeyCloneHashMismatch(bytes32(a), bytes32(b));
     }
 
     // ------------------------------------------------------------------ the directory (spec §13)

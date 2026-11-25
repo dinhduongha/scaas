@@ -38,6 +38,7 @@ interface IFactoryDirectory {
     error CodeHashMismatch(address at_, bytes32 expected, bytes32 got);
     error EntryMismatch(bytes4 view_);
     error RouterRegistryInvalid(address registry);
+    error RouterFactoryMismatch(address named);
     error SmartKeyCloneHashMismatch(bytes32 expected, bytes32 got);
     error EnvRegistryMismatch(address expected, address got);
     error EnvSmartKeyAccountMismatch(bytes32 cloneHash, address got);
@@ -72,6 +73,20 @@ contract ForeignExecutorRouter {
 
     constructor(address executor) {
         EXECUTOR = executor;
+    }
+}
+
+/// A router stand-in with every view `configureChain` reads but `factory()` (G-3: no answer fails closed).
+contract FactorylessRouter {
+    bytes32 public immutable chainUid;
+    address public immutable registry;
+
+    constructor(bytes32 uid, address registry_) {
+        (chainUid, registry) = (uid, registry_);
+    }
+
+    function smartKeyCloneHash() external view returns (bytes32) {
+        return StubUARegistry(registry).smartKeyCloneHash();
     }
 }
 
@@ -140,8 +155,19 @@ contract FactoryDirectoryTest is Test {
     /// A factory of `deployer` on chain A, configured with router `r` (its own code hash).
     function _factory(address r) internal returns (OpenFactory f) {
         f = new OpenFactory(nid(deployer));
+        if (r != address(0) && r == address(router)) {
+            // G-3: `configureChain` requires the router to name this factory: the fixture's router and its compliance
+            // registry (which names the router, `setChainEntries`) are rebuilt for it
+            r = address(router = _routerFor(address(f)));
+            creg = new ComplianceRegistry(nid(deployer), r, UID);
+        }
         EnvKit.genesis(UID);
         _call(deployer, address(f), _ccd(r, _h(r)));
+    }
+
+    /// The fixture's router form naming factory `f_` (CTR-GOV-33 G-3).
+    function _routerFor(address f_) internal returns (GovernanceRouter) {
+        return new GovernanceRouter(UID, address(ureg), impl, false, f_);
     }
 
     /// The four entries of this chain, each with its own code hash.
@@ -242,6 +268,7 @@ contract FactoryDirectoryTest is Test {
     /// hash 0 is no router, router 0 with a hash is refused.
     function test_configureChain_routerCodeHash() public {
         OpenFactory u = new OpenFactory(nid(deployer));
+        router = _routerFor(address(u)); // G-3: the router of the controls names u
         EnvKit.genesis(UID);
         bytes32 h = _h(address(router));
         bytes32[3] memory bad = [_h(address(trouter)), bytes32(0), keccak256("")];
@@ -260,6 +287,7 @@ contract FactoryDirectoryTest is Test {
     /// fails closed.
     function test_configureChain_routerRegistryZeroOrNoCode() public {
         OpenFactory u = new OpenFactory(nid(deployer));
+        router = _routerFor(address(u)); // G-3: the router of the controls names u
         EnvKit.genesis(UID);
         GovernanceRouter r0 = new GovernanceRouter(UID, address(0), address(0), false, address(0));
         GovernanceRouter rn = new GovernanceRouter(UID, address(0xD1), address(0), false, address(0));
@@ -279,6 +307,7 @@ contract FactoryDirectoryTest is Test {
     /// D9: the router's `smartKeyCloneHash()` must be its registry's; a registry that answers none fails closed.
     function test_configureChain_cloneHashOfTheRegistry() public {
         OpenFactory u = new OpenFactory(nid(deployer));
+        router = _routerFor(address(u)); // G-3: the router of the controls names u
         EnvKit.genesis(UID);
         GovernanceRouter rx = new GovernanceRouter(UID, address(ureg), address(0xBEEF), false, address(0));
         _refused(
@@ -295,6 +324,23 @@ contract FactoryDirectoryTest is Test {
         _refused(deployer, address(u), _ccd(address(mute), _h(address(mute))), _cloneErr(bytes32(0), bytes32(0)));
         assertEq(IRouterCloneHash(address(router)).smartKeyCloneHash(), EnvKit.cloneHash(impl), "the router's view");
         _call(deployer, address(u), _ccd(address(router), _h(address(router)))); // positive control
+    }
+
+    /// G-3 (CTR-GOV-33): the router's `factory()` must be this factory: a router naming factory 0 or another factory is
+    /// `RouterFactoryMismatch(named)`, one that answers no `factory()` fails closed; the router naming it is configured.
+    function test_configureChain_routerNamesThisFactory() public {
+        OpenFactory u = new OpenFactory(nid(deployer));
+        EnvKit.genesis(UID);
+        bytes4 e = IFactoryDirectory.RouterFactoryMismatch.selector;
+        GovernanceRouter r0 = _routerFor(address(0));
+        _refused(deployer, address(u), _ccd(address(r0), _h(address(r0))), abi.encodeWithSelector(e, address(0)));
+        GovernanceRouter rx = _routerFor(address(0xFAC));
+        _refused(deployer, address(u), _ccd(address(rx), _h(address(rx))), abi.encodeWithSelector(e, address(0xFAC)));
+        FactorylessRouter mute = new FactorylessRouter(UID, address(ureg));
+        _refused(deployer, address(u), _ccd(address(mute), _h(address(mute))), abi.encodeWithSelector(e, address(0)));
+        GovernanceRouter ru = _routerFor(address(u));
+        _call(deployer, address(u), _ccd(address(ru), _h(address(ru)))); // positive control
+        assertEq(u.govRouter(), address(ru));
     }
 
     // ------------------------------------------------------------------ setChainEntries: write once (§13.3)
@@ -363,6 +409,7 @@ contract FactoryDirectoryTest is Test {
         OpenFactory f = _factory(address(router));
         _refused(STRANGER, address(f), _cd(_all()), abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(STRANGER)));
         OpenFactory u = new OpenFactory(nid(deployer));
+        router = _routerFor(address(u)); // G-3: the router of the controls names u
         _refused(deployer, address(u), _cd(_all()), abi.encodeWithSelector(IOpenFactory.ChainNotConfigured.selector));
         _call(deployer, address(f), _cd(_all())); // positive control
     }
@@ -659,7 +706,10 @@ contract FactoryDirectoryTest is Test {
         g1 = _gen(UID, address(0), impl);
         g2 = _gen(UID, address(g1), impl);
         g3 = _gen(UID, address(g2), impl);
-        f = _factory(address(new GovernanceRouter(UID, address(g1), impl, false, address(0))));
+        f = new OpenFactory(nid(deployer));
+        EnvKit.genesis(UID);
+        address r = address(new GovernanceRouter(UID, address(g1), impl, false, address(f))); // G-3: names f
+        _call(deployer, address(f), _ccd(r, _h(r)));
     }
 
     function _mismatch(OpenFactory f, address root, address got) internal {
@@ -744,6 +794,8 @@ contract FactoryDirectoryTest is Test {
     function test_gas_configureChainAndEntries() public {
         OpenFactory n = new OpenFactory(nid(deployer));
         OpenFactory f = new OpenFactory(nid(deployer));
+        router = _routerFor(address(f)); // G-3: names f; the compliance registry names the router
+        creg = new ComplianceRegistry(nid(deployer), address(router), UID);
         EnvKit.genesis(UID);
         _call(deployer, address(n), _ccd(address(0), bytes32(0)));
         Vm.Gas memory g0 = vm.lastCallGas();

@@ -162,7 +162,7 @@ abstract contract GovRouterFixture is UARegistryBase {
     function setUp() public virtual override {
         super.setUp();
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, address(0), true, _mockPqCfg());
-        router = new GovernanceRouter(chainUidA, PREG, _fixtureSka(), false, address(0));
+        router = new GovernanceRouter(chainUidA, PREG, _fixtureSka(), false, _routerFactory());
         pqKey = _ml(1);
         pq = _register(preg, ML44, pqKey);
         Member[] memory m = new Member[](3);
@@ -191,6 +191,15 @@ abstract contract GovRouterFixture is UARegistryBase {
         pkOf[wallet] = wpk;
         _rows();
         vm.warp(1_800_000_000);
+    }
+
+    /// The factory the fixture's router names (0: none, every target its own registry). A suite that configures a factory
+    /// with the router rebuilds it naming that factory (`_routerNaming`: `configureChain` checks it, CTR-GOV-33 G-3).
+    function _routerFactory() internal view virtual returns (address) {}
+
+    /// G-3: `router` rebuilt naming `factory_` (`EnvKit.nextCreate(2)` when the factory is the next CREATE after it).
+    function _routerNaming(address factory_) internal {
+        router = new GovernanceRouter(chainUidA, PREG, _fixtureSka(), false, factory_);
     }
 
     function _mockPqCfg() internal view returns (UARegistry.KindConfig[] memory c) {

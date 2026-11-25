@@ -254,6 +254,7 @@ contract RouterPerReleaseTest is GovRouterFixture {
 
     function setUp() public override {
         super.setUp();
+        _routerNaming(EnvKit.nextCreate(2)); // G-3: the router names the factory built next
         f = EnvKit.factory(REGISTRAR, chainUidA, 0, address(router));
         r2 = new ThingRouter(chainUidA, PREG, _fixtureSka(), false);
         _release(1, 1, address(r2), address(r2).codehash);

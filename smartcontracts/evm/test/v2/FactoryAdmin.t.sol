@@ -95,6 +95,11 @@ contract TestRouter {
         (chainUid, registry) = (uid, registry_);
     }
 
+    /// G-3: `configureChain` asks the router's `factory()`; a stand-in answers the factory that asks.
+    function factory() external view returns (address) {
+        return msg.sender;
+    }
+
     function smartKeyCloneHash() external view returns (bytes32) {
         return IUARegistry(registry).smartKeyCloneHash();
     }
@@ -285,6 +290,10 @@ contract FactoryAdminTest is UARegistryBase {
     }
 
     function _configure(OpenFactory f, address router_) internal {
+        // G-3: `configureChain` requires the router to name `f`: the fixture's router is rebuilt for it
+        if (router_ != address(0) && router_ == address(router)) {
+            router_ = address(router = new GovernanceRouter(chainUidA, PREG, address(0), false, address(f)));
+        }
         EnvKit.genesis(chainUidA);
         vm.prank(deployer);
         f.configureChain(chainUidA, 0, router_, EnvKit.codeHashOf(router_), 0, bytes32(0));

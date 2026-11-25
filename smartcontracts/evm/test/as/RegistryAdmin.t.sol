@@ -80,6 +80,11 @@ contract RegistryTestRouter {
         (chainUid, registry) = (uid, registry_);
     }
 
+    /// G-3: `configureChain` asks the router's `factory()`; a stand-in answers the factory that asks.
+    function factory() external view returns (address) {
+        return msg.sender;
+    }
+
     function smartKeyCloneHash() external view returns (bytes32) {
         return IUARegistry(registry).smartKeyCloneHash();
     }

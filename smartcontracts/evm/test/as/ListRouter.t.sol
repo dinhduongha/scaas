@@ -33,7 +33,7 @@ contract ListRouterTest is ListFixture {
 
     function _router() internal override returns (address) {
         ureg = new StubUARegistry(UID);
-        router = new GovernanceRouter(UID, address(ureg), address(0), false, address(0));
+        router = new GovernanceRouter(UID, address(ureg), address(0), false, EnvKit.nextCreate(2)); // G-3: names the factory built next
         return address(router);
     }
 
