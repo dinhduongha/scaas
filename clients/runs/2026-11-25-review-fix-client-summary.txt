@@ -1,0 +1,25 @@
+# The 2026-11-24 review fixes, client phase (branch review-fix-client, from review-fix-contract at 8daa69910), against the
+# TreeKEM spec as amended after the code review (C25, C26, C9, C39, C40; §8 step 2, §10 steps 2 to 5). Full logs git-ignored
+# (*.log beside this file); mutants: clients/runs/2026-11-25-review-fix-client-mutants.py. UNAUDITED.
+
+step | commit | rc | counts
+red first (fable-F-poc forged-head.mjs, gone-admin-rights.mjs) | 8daa69910 | 0 | before: the forged head "followed", K_2 the forger's, pin moved to it; the gone admin's honouring commit "not followed (rights)" for every device
+red first (the same PoCs) | 9515632ef | 0 | after: forged head TreeReadCorrupted; the honouring commit followed by A, B, C
+vectors pqchat-vectors.mjs (tree-secrets.json) | 85ee0024d | 0 | regenerated; the 11 frozen worlds' genesis, steps and rosters byte-identical; 6 new worlds, pins per epoch, reads and pin per replay, 34 lie rows; --check ok (576c95bcb: 35 rows, the treeId row)
+clientkeys node --test test/*.test.js | 9515632ef | 0 | 662 tests, 657 passed, 5 skipped (after npm ci --offline: @scure/sr25519 was missing from the local node_modules)
+clientkeys treekem + pqchat-tree + pqchat | 85ee0024d | 0 | 76 + 21 passed
+ua-rs cargo test --features app-core,vectors --test tree | 85ee0024d | 0 | 10 passed (tree_lies_and_pins: 34 rows and every epoch's pin; tree_builder_bounds; tree_judge_commit)
+ua-rs --test app_core arweave arweave_rows file_seal tree pqchat_keys | 9515632ef | 0 | 22 + 6 + 3 + 4 + 13 + 9 passed
+ua-rs clippy --all-targets --features app-core,vectors -D warnings | 9515632ef | 0 | clean
+mutants js M1-M42 | 904103674 | 1 | 34/42 killed; survivors M1, M3, M5, M6, M9, M17, M28 (no row isolated them), M8
+mutants js M1, M3, M5, M6, M8, M9, M17, M28 again | 85ee0024d | 1 | 7/8 killed by the six new rows; M8 (a gone author) equivalent: an author holds a live leaf, so "no gone UA keeps a leaf" refuses the same commit
+forge FOUNDRY_TEST=test/pqchat (reads tree-secrets.json scenarios 0-10, tree.json) | 85ee0024d | 0 | 24 suites: 260 passed, 1 skipped
+pqchat-core cargo test --test session --test signed | fa2cb442a | 0 | 16 + 8 passed (signed: a kept leave naming an ancestor is a candidate, one naming another epoch is not)
+pqvault-core cargo test --features vectors --test core --test devices --test vectors | fa2cb442a | 0 | 8 + 3 + 4 passed
+clippy -D warnings pqchat-core --all-targets, pqvault-core --all-targets --features vectors | fa2cb442a | 0 | clean (scaas-sdk's own dead-code warning, not of this round)
+mutants rs M43-M45 (first run) | 85ee0024d | 1 | M43, M45 killed (M43 first misread as not loaded by the runner, fixed 576c95bcb); M44 (treeId) survived -> the treeId lie row
+mutants rs M44-M85 | 576c95bcb (+ fa2cb442a, clients outside the targets) | 1 | 40/42 killed (M44 now killed by the treeId row); survivors M69 (the period's end), M70 (a join past the head): no Rust test of the period -> tree_period_bounds
+ua-rs --test tree tree_period_bounds | 70d174680 | 0 | 1 passed
+format.sh --check (every language) | 70d174680 | 0 | ok (hadolint's warnings on pqz-core Dockerfiles, not of this round)
+docs_check check / paths / test_docs_check | 70d174680 | 0 | 0 errors, 7 warnings (line budgets); 0 machine paths; ok
+mutants rs M69, M70 again | 70d174680 | 0 | 2/2 killed by tree_period_bounds. Round total: 85 mutants, 84 killed, 1 equivalent (js M8)
