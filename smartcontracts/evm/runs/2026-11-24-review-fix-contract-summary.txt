@@ -21,6 +21,10 @@ forge-gas (post-merge) | 25066a1fa | 0 | 406 passed, 1 skipped
 forge-governance (post-merge) | 25066a1fa + GovDeploy fix | 0 | 1009 passed (first run 1008/1: test_deployPqChatPath read 3 modules; the fourth added, in a block for the stack)
 forge-v2 (post-merge) | 25066a1fa | 0 | 756 passed
 sdk op::gas (post-merge) | 25066a1fa | 0 | 32 passed
+forge-pqchat (E-3 mode 0 + replica) | 7f8439265 | 0 | 226 passed, 1 skipped
+forge-pqvault (E-3 + replica) | 7f8439265 | 0 | 98 passed
+size (E-3 mode 0; owner: leave / remove to PqChatTreeMembers) | 7f8439265 | 0 | 183 contracts; PqChat 35,534 before the move -> 32,891; PqChatTreeMembers 13,506; PqChatTree 32,758; PqVault 32,131 (baseline moved)
+mutants M21-M41 (E-3 mode 0, PqVault, the replica rule) | 7f8439265 | 0 | 21/21 killed (runner: per-mutant test dir)
 
 ## Done (committed)
 - G-1: index before the initializer (red: "mid-creation: indexed, the env registry: ...07 != ...08").
@@ -47,6 +51,8 @@ sdk op::gas (post-merge) | 25066a1fa | 0 | 32 passed
 ## Done 2026-11-25
 - Step 1: the PqChatTreeMembers split + E-3 tree (C9 ancestor check, EXIT_LAG_MAX = 16, PqChatExitLag, applied at the
   head) + A-4 + D-7 + A-3 (3e0facc43); its tests and mutants (runs/2026-11-24-review-fix-contract-mutants.py, M1-M20).
+- Step 2: E-3 in mode 0 and PqVault plus the replica rule (7f8439265); the owner moved mode 0's leave / remove into
+  PqChatTreeMembers (2026-11-25) when E-3 took PqChat to 35,534 B; mutants M21-M41.
 - Step 0's post-merge gates: governance, factory, v2, gas, size, SDK op::gas, all green (rows above).
 
 ## Left, in order

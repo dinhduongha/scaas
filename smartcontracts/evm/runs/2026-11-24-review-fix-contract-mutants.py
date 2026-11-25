@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """The 2026-11-24 review fixes, contract phase (branch review-fix-contract): each check the round adds is caught by a test.
-So far: the PqChatTreeMembers split (owner 2026-11-24), E-3's exits at the head with the lag (C9), A-4, D-7 / C40, A-3.
-One mutant per run, `forge test` over test/pqchat alone (FOUNDRY_TEST) without the release-size row (a size pin alone kills
+So far: the PqChatTreeMembers split (owner 2026-11-24), E-3's exits at the head with the lag (C9), A-4, D-7 / C40, A-3;
+E-3 in mode 0 and PqVault with the replica rule (M21-). One mutant per run, `forge test` over test/pqchat alone, or
+test/pqvault for a mutant marked so (FOUNDRY_TEST) without the release-size row (a size pin alone kills
 every mutant of PqChat.sol, so it is left out), every file restored byte for byte after it; a mutant that does not compile
 kills nothing; a mutant that passes is a finding (exit 1).
   python3 -I smartcontracts/evm/runs/2026-11-24-review-fix-contract-mutants.py [first last]   (from the worktree root)
@@ -22,6 +23,8 @@ P = E + "src/pqchat/PqChat.sol"
 T = E + "src/pqchat/PqChatTree.sol"
 S = E + "src/pqchat/PqChatTreeMembers.sol"
 B = E + "src/pqgroup/PqGroupBase.sol"
+C = E + "src/pqchat/PqChatCore.sol"
+V = E + "src/pqvault/PqVault.sol"
 CAPPED = os.path.abspath("scripts/capped")
 ENV = dict(
     os.environ,
@@ -52,25 +55,52 @@ M = [
     ("a removal record under the named epoch", [(S, "        _s().removals[hid].push(", "        _s().removals[r.epochId].push(")]),
     ("the leave's flag not set on the head", [(S, "        head.left[l.member] = true;\n", "")]),
     ("the removal's flags not set on the head", [(S, "            head.removedOf[r.members[i]] = true;\n", "")]),
-    ("nextEpoch from the head, not the named epoch", [(S, "        if (r.nextEpoch != named + 1) revert", "        if (r.nextEpoch != head.epoch + 1) revert")]),
+    ("nextEpoch from the head, not the named epoch", [(S, "_exitAt(t, r.sessionId, r.epochId);\n        if (r.nextEpoch != named + 1) revert", "_exitAt(t, r.sessionId, r.epochId);\n        if (r.nextEpoch != head.epoch + 1) revert")]),
     # A-4
     ("A-4: a gone UA in a removal accepted", [(S, " || t.gone[u].kind != 0) {", ") {")]),
     # D-7 / C40, A-3
     ("D-7: an empty addPath accepted", [(T, "        if (n == 0 || first + n > (list.code.length - 1) / 36)", "        if (first + n > (list.code.length - 1) / 36)")]),
     ("A-3: commit pieces on epoch 0", [(T, "        if (ep.epoch == 0) revert IPqChat.PqChatUnknown(epochId); // A-3: epoch 0 has no commit and no pieces but its wraps\n", "")]),
+    # E-3 in mode 0 and PqVault: the base's `_exitAt`
+    ("mode 0: no lag at home", [(B, "        if (ep.epoch > named + EXIT_LAG_MAX) _fail(F_EXIT_LAG, named, ep.epoch);\n", "")]),
+    ("mode 0: applied at the named epoch, not the head", [(B, "        at = c.length == 0 ? sessionId : c[c.length - 1];\n        ep = _epochs()[at];\n", "")]),
+    ("mode 0: an incomplete epoch named at home", [(B, "        if (ep.landed != ep.wraps) _fail(F_INCOMPLETE, uint256(epochId), 0);\n        bytes32[] storage c", "        bytes32[] storage c")]),
+    ("PqChatExitLag not mapped", [(C, "        if (code == F_EXIT_LAG) revert IPqChat.PqChatExitLag(uint64(a), uint64(b));\n", "")]),
+    ("PqVaultExitLag not mapped", [(V, "        if (code == F_EXIT_LAG) revert PqVaultExitLag(uint64(a), uint64(b));\n", "")], "pqvault"),
+    # the replica rule (sc-E-4)
+    ("replica: a removed author refused", [(B, "        if (home && pe.removed != 0 && pe.removedOf[author])", "        if (pe.removed != 0 && pe.removedOf[author])")]),
+    ("replica: a leaver author refused", [(B, "|| (home && pe.left[author])) {", "|| pe.left[author]) {")]),
+    ("replica: an admin's flags refuse", [(B, "        return _has(admins, ua) && (!_epochs()[pe.sessionId].home || (!pe.removedOf[ua] && !pe.left[ua]));", "        return _has(admins, ua) && !pe.removedOf[ua] && !pe.left[ua];")], "pqvault"),
+    ("replica: no ancestor walk", [(B, "        if (_epochs()[pe.sessionId].home) return false;\n        Epoch storage a = pe;", "        return false;\n        Epoch storage a = pe;")]),
+    ("home: the ancestor walk at home too", [(B, "        if (_epochs()[pe.sessionId].home) return false;\n        Epoch storage a = pe;", "        Epoch storage a = pe;")]),
+    ("replica: _noneRemoved runs", [(B, "        if (_epochs()[ep.sessionId].home) {\n            if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it; at home only (sc-E-4)\n", "        if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep);\n        if (_epochs()[ep.sessionId].home) {\n")]),
+    # mode 0's entries, in PqChatTreeMembers (owner 2026-11-25)
+    ("mode 0: a repeated leave accepted", [(S, "        if (_memberAt(m, l.member) == type(uint256).max || ep.left[l.member] || ep.removedOf[l.member]) {", "        if (_memberAt(m, l.member) == type(uint256).max) {")]),
+    ("mode 0: A-4, a removed UA accepted", [(S, "            if (!_removable(m, admins, r.members[i]) || ep.removedOf[r.members[i]]) {", "            if (!_removable(m, admins, r.members[i])) {")]),
+    ("mode 0: the removal record under the named epoch", [(S, "        _s().removals[at].push(", "        _s().removals[r.epochId].push(")]),
+    ("mode 0: the leave event under the named epoch", [(S, "        emit IPqChat.PqChatLeft(l.sessionId, at, l.member);", "        emit IPqChat.PqChatLeft(l.sessionId, l.epochId, l.member);")]),
+    ("mode 0: nextEpoch from the head", [(S, "// a replica's epoch named\n        if (r.nextEpoch != named + 1)", "// a replica's epoch named\n        if (r.nextEpoch != ep.epoch + 1)")]),
+    ("PqChat.leave forwarded to the tree module", [(P, "    function leave(PqChatLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(MEMBERS);", "    function leave(PqChatLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(TREE);")]),
+    # PqVault
+    ("PqVault: a repeated leave accepted", [(V, "        if (_memberAt(m, l.member) == type(uint256).max || ep.left[l.member] || ep.removedOf[l.member]) {", "        if (_memberAt(m, l.member) == type(uint256).max) {")], "pqvault"),
+    ("PqVault: A-4, a removed UA accepted", [(V, "            if (!_removable(m, admins, r.members[i]) || ep.removedOf[r.members[i]]) {", "            if (!_removable(m, admins, r.members[i])) {")], "pqvault"),
+    ("PqVault: the removal record under the named epoch", [(V, "        _v().removals[at].push(", "        _v().removals[r.epochId].push(")], "pqvault"),
+    ("PqVault: nextEpoch from the head", [(V, "        if (r.nextEpoch != named + 1) revert PqVaultEpochNumber", "        if (r.nextEpoch != ep.epoch + 1) revert PqVaultEpochNumber")], "pqvault"),
 ]
 
 if sys.argv[1:] == ["check"]:
-    for name, reps in M:
+    for name, reps, *_ in M:
         for f, a, _ in reps:
             assert open(f, encoding="utf-8").read().count(a) == 1, (name, a)
     print(f"{len(M)} mutants, every replacement found once")
     raise SystemExit(0)
 bad = 0
 lo, hi = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) == 3 else (1, len(M))
-guard.refuse_dirty([f for _, reps in M[lo - 1:hi] for f, _, _ in reps], ".")
-lim = guard.limit(FORGE[0], cwd=FORGE[1], env=ENV)
-for n, (name, reps) in enumerate(M[lo - 1:hi], lo):
+guard.refuse_dirty([f for _, reps, *_ in M[lo - 1:hi] for f, _, _ in reps], ".")
+for n, (name, reps, *rest) in enumerate(M[lo - 1:hi], lo):
+    d = rest[0] if rest else "pqchat"
+    env = dict(ENV, FOUNDRY_TEST="test/" + d, FOUNDRY_OUT="out/rfc-mutants-" + d, FOUNDRY_CACHE_PATH="cache/rfc-mutants-" + d)
+    lim = guard.limit(FORGE[0], cwd=FORGE[1], env=env)
     suite, cwd = FORGE
     files = sorted({f for f, _, _ in reps})
     orig = {f: open(f, encoding="utf-8").read() for f in files}
@@ -82,7 +112,7 @@ for n, (name, reps) in enumerate(M[lo - 1:hi], lo):
     try:
         for f, s in new.items():
             open(f, "w", encoding="utf-8").write(s)
-        r = guard.run(suite, lim, capture_output=True, text=True, cwd=cwd, env=ENV)
+        r = guard.run(suite, lim, capture_output=True, text=True, cwd=cwd, env=env)
     finally:
         guard.restore(saved)
     out = r.stdout + r.stderr
