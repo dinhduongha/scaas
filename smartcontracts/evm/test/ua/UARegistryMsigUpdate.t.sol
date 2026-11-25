@@ -770,6 +770,64 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         r.requireAuthorized(out, UAKinds.PURPOSE_METATX, TX, t);
     }
 
+    /// CTR-UA-74: an `msig` member's slot object (its acceptance, its `pop` slot) is its list followed by its tag.
+    function test_history_memberObjectKeepsTheTag() public {
+        bytes32 in_ = _pq3(r);
+        innerSigners[in_] = _ids(ml[1], ml[2]);
+        Up memory u = _next(r, in_);
+        _append(u, ml[6], false);
+        _apply(r, u, _ids(ml[1], ml[2])); // the member at version 1
+
+        bytes32 out = _reg(r, 2, _ids(in_, ml[4], ml[5]), _w(3), _ids(ml[4], ml[5])); // `in_` accepts later
+        IUARegistry.MemberSig memory m = _sigs(
+            r, r.msigOf(out), out, _ids(in_), UAKinds.PURPOSE_MEMBERSHIP, UAKinds.membershipDigest(out, in_), true
+        )[0];
+        assertEq(m.sig, abi.encodePacked(uint64(1)));
+        assertEq(r.memberSigHashOf(out, m.index), keccak256(bytes.concat(abi.encode(m.members), m.sig)), "acceptance");
+
+        bytes32 out2 = _reg(r, 2, _ids(in_, ml[4], ml[6]), _w(3), _ids(in_, ml[4])); // `in_` signs the `pop`
+        IUARegistry.MemberSig[] memory pop = _sigs(
+            r, r.msigOf(out2), out2, _ids(in_, ml[4]), UAKinds.PURPOSE_POP_V2, _regDigest(out2, UAKinds.MSIG), true
+        );
+        m = pop[pop[0].members.length != 0 ? 0 : 1];
+        assertEq(m.sig, abi.encodePacked(uint64(1)));
+        assertEq(r.memberSigHashOf(out2, m.index), keccak256(bytes.concat(abi.encode(m.members), m.sig)), "pop slot");
+    }
+
+    /// CTR-UA-74: the bound counts the 32 bytes of an `msig` slot's version tag (`_slotBytes`): the same update passes on a
+    /// registry whose `txGasCap` is exactly its need and is refused `UAMsigSlots` one gas below.
+    function test_history_boundCountsTheTag() public {
+        uint256 n = 200;
+        uint256 w = 2 * UARegistryRegLib.MSIG_MEMBER_GAS + UARegistryRegLib.MSIG_ACCEPTED_GAS + 50_000
+            + (UARegistryRegLib.MSIG_MEMBER_GAS + UARegistryRegLib.MSIG_ACCEPTED_GAS + 400_000);
+        uint256 need = UARegistryRegLib.MSIG_UPDATE_GAS + n * UARegistryRegLib.MSIG_UPDATE_SLOT_GAS
+            + UARegistryRegLib.MSIG_UPDATE_INNER_GAS + w + 16 * ((192 + 32 + 128 + 3_328) + (192 + 1_024));
+        for (uint256 k; k < 2; ++k) {
+            txCap = uint64(need - k);
+            UARegistry x = _deploy(
+                address(uint160(REG_X) + uint160(k)),
+                keccak256("chain x"),
+                address(0),
+                false,
+                BUDGET,
+                address(0),
+                true,
+                _cfgsMl(400_000)
+            );
+            _members(x);
+            bytes32 i_ = _reg(x, 1, _ids(ml[1]), _w(1), _ids(ml[1]));
+            innerSigners[i_] = _ids(ml[1]);
+            bytes32 ua = _reg(x, 2, _ids(i_, a, b), _w(3), new bytes32[](0));
+            Up memory u = _next(x, ua);
+            for (uint256 j = 3; j < n; ++j) {
+                _append(u, EOA, bytes32(uint256(0x40000 + j)), 1, false);
+            }
+            if (k == 0) _apply(x, u, _ids(a, b));
+            else _refused(x, u, _ids(a, b), _slots(n));
+        }
+        txCap = 1 << 24;
+    }
+
     // ----- refusals: rows 1–4 -----
 
     function test_refusedChainUid() public {

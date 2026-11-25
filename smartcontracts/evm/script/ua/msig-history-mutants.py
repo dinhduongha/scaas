@@ -42,8 +42,18 @@ M = [
     ("tag-any-eight-bytes", STORE, VER, "return v == 0 ? tag.length == 0 : tag.length == 8;"),
     ("tag-any-at-version-0", STORE, VER, "return v == 0 || (tag.length == 8 && word(tag, 0) >> 192 == v);"),
     # the forgery's door: the form of before the first update accepted for ever
-    ("tag-empty-at-any-version", STORE, VER, "return tag.length == 0 || (tag.length == 8 && word(tag, 0) >> 192 == v);"),
-    ("tag-at-least-eight-bytes", STORE, VER, "return v == 0 ? tag.length == 0 : tag.length >= 8 && word(tag, 0) >> 192 == v;"),
+    (
+        "tag-empty-at-any-version",
+        STORE,
+        VER,
+        "return tag.length == 0 || (tag.length == 8 && word(tag, 0) >> 192 == v);",
+    ),
+    (
+        "tag-at-least-eight-bytes",
+        STORE,
+        VER,
+        "return v == 0 ? tag.length == 0 : tag.length >= 8 && word(tag, 0) >> 192 == v;",
+    ),
     ("tag-not-greater", STORE, VER, "return v == 0 ? tag.length == 0 : tag.length == 8 && word(tag, 0) >> 192 <= v;"),
     ("msigAt-serves-the-current", AUX, "            ptr = UAStore.prevOf(ptr);\n", ""),
     ("msigAt-answers-a-later-version", AUX, "        if (version > v) return (s, 0);\n", ""),
@@ -64,6 +74,18 @@ M = [
     ),
     ("gen2-msigAt-not-forwarded", AUX, "        if (h != address(0)) return IUARegistry(h).msigAt(ua, version);\n", ""),
     ("bound-without-the-tag-word", "src/ua/UARegistryRegLib.sol", "? 32 + _authBytes(", "? _authBytes("),
+    (
+        "accept-object-drops-the-tag",
+        CORE,
+        "bytes.concat(abi.encode(memberSig.members), memberSig.sig)",
+        "abi.encode(memberSig.members)",
+    ),
+    (
+        "pop-object-drops-the-tag",
+        "src/ua/UARegistryRegLib.sol",
+        "bytes.concat(abi.encode(m.members), m.sig)",
+        "abi.encode(m.members)",
+    ),
 ]
 
 
