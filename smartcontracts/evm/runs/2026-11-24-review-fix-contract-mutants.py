@@ -2,11 +2,13 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """The 2026-11-24 review fixes, contract phase (branch review-fix-contract): each check the round adds is caught by a test.
 So far: the PqChatTreeMembers split (owner 2026-11-24), E-3's exits at the head with the lag (C9), A-4, D-7 / C40, A-3;
-E-3 in mode 0 and PqVault with the replica rule (M21-); A-7's table, A-6, F-5, D-4, A-9 and G-3 (M42-). One mutant per run, `forge test` over test/pqchat alone, or
-test/pqvault for a mutant marked so (FOUNDRY_TEST) without the release-size and module-size rows (a size pin alone kills
-every mutant of PqChat.sol or of a module, so both are left out; M42-M73 ran with the module rows in and each was
-killed by a behavioural test besides them), every file restored byte for byte after it; a mutant that does not compile
-kills nothing; a mutant that passes is a finding (exit 1).
+E-3 in mode 0 and PqVault with the replica rule (M21-); A-7's table, A-6, F-5, D-4, A-9 and G-3 (M42-); R8, C10 (M74-);
+the re-review of 2026-11-25: E-2, A-16, A-13, A-14, A-15 (M80-M107), G-7, G-9, G-10 (M108-M112). One mutant per run, `forge test` over test/pqchat alone, or the
+directory a mutant names (FOUNDRY_TEST), with **no gas or size row** (A-14 of the re-review: a row moves with any code
+change, so it is not the test of a rule): every contract whose name holds `Gas` and every gas or size test elsewhere
+(`NO_GAS`) is left out for every mutant, so a kill is a behavioural test's; each result line names every test that
+failed. Every file restored byte for byte after it; a mutant that does not compile kills nothing; a mutant that passes
+is a finding (exit 1).
   python3 -I smartcontracts/evm/runs/2026-11-24-review-fix-contract-mutants.py [first last]   (from the worktree root)
   python3 -I smartcontracts/evm/runs/2026-11-24-review-fix-contract-mutants.py check           (every replacement found once)
 A hung run: the run past its deadline (3 x the unmutated baseline, at least 10 min, or `--timeout N`) has its process group
@@ -28,6 +30,9 @@ C = E + "src/pqchat/PqChatCore.sol"
 V = E + "src/pqvault/PqVault.sol"
 G = E + "src/pqgroup/PqGroupTree.sol"
 F = E + "src/factory/OpenFactoryLib.sol"
+O = E + "src/factory/OpenFactory.sol"
+R = E + "src/governance/GovernanceRouterBase.sol"
+DB = E + "script/DeployBase.sol"
 CAPPED = os.path.abspath("scripts/capped")
 ENV = dict(
     os.environ,
@@ -37,7 +42,12 @@ ENV = dict(
     PATH=os.path.expanduser("~/.foundry/bin") + os.pathsep + os.environ.get("PATH", ""),
 )
 # test_lastLiveLeafAtTheSpecBound was left out for M74-M77 (its ML-DSA-87 row red at 32 changes); green at C10's 20, it runs
-FORGE = ([CAPPED, "forge", "test", "-j", "1", "--no-match-test", "test_gas_deployImplementation|test_gas_deployModule"], E)
+# A-14 of the re-review (2026-11-25): no gas or size row kills a mutant. The contracts named `*Gas*`, and elsewhere the gas
+# rows (`test_gas_*`, `test_gasA_` to `test_gasP_` style rows, `test_gasPerEntry`, `test_gasCalldata`, `test_gasBatch*`, the
+# `*_gas` rows) and the size pin `test_sizes`; behavioural tests whose names hold "gas" (`test_gasBurning*`, `*Gasless*`) stay.
+# forge matches the pattern against `name(` (a `$` after the name matches nothing): each row ends at the parenthesis
+NO_GAS = r"^test_gas_|^test_gas[A-Z]_|^test_gas\(|^test_gasPerEntry\(|^test_gasCalldata\(|^test_gasBatch|_gas\(|^test_sizes\("
+FORGE = ([CAPPED, "forge", "test", "-j", "1", "--no-match-contract", "Gas", "--no-match-test", NO_GAS], E)
 M = [
     # the split
     ("treeLeave forwarded to the tree module", [(P, "    function treeLeave(PqChatTreeLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(MEMBERS);", "    function treeLeave(PqChatTreeLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(TREE);")]),
@@ -79,15 +89,15 @@ M = [
     ("home: the ancestor walk at home too", [(B, "        if (_epochs()[pe.sessionId].home) return false;\n        Epoch storage a = pe;", "        Epoch storage a = pe;")]),
     ("replica: _noneRemoved runs", [(B, "        if (_epochs()[ep.sessionId].home) {\n            if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it; at home only (sc-E-4)\n", "        if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep);\n        if (_epochs()[ep.sessionId].home) {\n")]),
     # mode 0's entries, in PqChatTreeMembers (owner 2026-11-25)
-    ("mode 0: a repeated leave accepted", [(S, "        if (_memberAt(m, l.member) == type(uint256).max || ep.left[l.member] || ep.removedOf[l.member]) {", "        if (_memberAt(m, l.member) == type(uint256).max) {")]),
-    ("mode 0: A-4, a removed UA accepted", [(S, "            if (!_removable(m, admins, r.members[i]) || ep.removedOf[r.members[i]]) {", "            if (!_removable(m, admins, r.members[i])) {")]),
+    ("mode 0: a repeated leave accepted", [(S, " || (home && (ep.left[l.member] || ep.removedOf[l.member]))) {\n            revert IPqChat", ") {\n            revert IPqChat")]),
+    ("mode 0: A-4, a removed UA accepted", [(S, " || (home && ep.removedOf[r.members[i]])) {\n                revert IPqChat", ") {\n                revert IPqChat")]),
     ("mode 0: the removal record under the named epoch", [(S, "        _s().removals[at].push(", "        _s().removals[r.epochId].push(")]),
     ("mode 0: the leave event under the named epoch", [(S, "        emit IPqChat.PqChatLeft(l.sessionId, at, l.member);", "        emit IPqChat.PqChatLeft(l.sessionId, l.epochId, l.member);")]),
     ("mode 0: nextEpoch from the head", [(S, "// a replica's epoch named\n        if (r.nextEpoch != named + 1)", "// a replica's epoch named\n        if (r.nextEpoch != ep.epoch + 1)")]),
     ("PqChat.leave forwarded to the tree module", [(P, "    function leave(PqChatLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(MEMBERS);", "    function leave(PqChatLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(TREE);")]),
     # PqVault
-    ("PqVault: a repeated leave accepted", [(V, "        if (_memberAt(m, l.member) == type(uint256).max || ep.left[l.member] || ep.removedOf[l.member]) {", "        if (_memberAt(m, l.member) == type(uint256).max) {")], "pqvault"),
-    ("PqVault: A-4, a removed UA accepted", [(V, "            if (!_removable(m, admins, r.members[i]) || ep.removedOf[r.members[i]]) {", "            if (!_removable(m, admins, r.members[i])) {")], "pqvault"),
+    ("PqVault: a repeated leave accepted", [(V, " || (home && (ep.left[l.member] || ep.removedOf[l.member]))) {\n            revert PqVault", ") {\n            revert PqVault")], "pqvault"),
+    ("PqVault: A-4, a removed UA accepted", [(V, " || (home && ep.removedOf[r.members[i]])) {\n                revert PqVault", ") {\n                revert PqVault")], "pqvault"),
     ("PqVault: the removal record under the named epoch", [(V, "        _v().removals[at].push(", "        _v().removals[r.epochId].push(")], "pqvault"),
     ("PqVault: nextEpoch from the head", [(V, "        if (r.nextEpoch != named + 1) revert PqVaultEpochNumber", "        if (r.nextEpoch != ep.epoch + 1) revert PqVaultEpochNumber")], "pqvault"),
     # A-7 (fable-A's table, by row; row 5, `_treeGo`'s early return, unreachable since A-4: equivalent, not run)
@@ -134,6 +144,45 @@ M = [
     # C10 32 -> 20 (owner 2026-11-25)
     ("C10: 21 changes", [(C, "uint256 internal constant TREE_CHANGES_MAX = 20;", "uint256 internal constant TREE_CHANGES_MAX = 21;")]),
     ("C10: 19 changes", [(C, "uint256 internal constant TREE_CHANGES_MAX = 20;", "uint256 internal constant TREE_CHANGES_MAX = 19;")]),
+    # the re-review of 2026-11-25. E-2: at home an exit's UAs in the named epoch's lists too
+    ("E-2 mode 0: a leaver not checked on the epoch named", [(S, "            if (_memberAt(m, l.member) == type(uint256).max) revert IPqChat.PqChatNotMember(l.member);\n", "")]),
+    ("E-2 mode 0: a removal's lists not checked on the epoch named", [(S, "        if (at != r.epochId) _namedLists(r.epochId, r.admin, r.members); // E-2 (controller call 2026-11-25)\n", "")]),
+    ("E-2: the named epoch's admin check dropped", [(B, "        if (!_has(admins, admin)) _fail(F_NOT_ADMIN, uint256(admin), 0);\n", "")]),
+    ("E-2: the named epoch's UA check dropped", [(B, "            if (!_removable(m, admins, uas[i])) _fail(F_NOT_MEMBER, uint256(uas[i]), 0);\n", "")]),
+    ("E-2 PqVault: a leaver not checked on the epoch named", [(V, "            if (_memberAt(m, l.member) == type(uint256).max) revert PqVaultNotMember(l.member);\n", "")], "pqvault"),
+    ("E-2 PqVault: a removal's lists not checked on the epoch named", [(V, "        if (at != r.epochId) _namedLists(r.epochId, r.admin, r.members); // E-2 (controller call 2026-11-25)\n", "")], "pqvault"),
+    # A-16: a replica takes a repeat
+    ("A-16 mode 0: a replica refuses a repeated leave", [(S, "(home && (ep.left[l.member] || ep.removedOf[l.member]))) {\n            revert IPqChat", "(ep.left[l.member] || ep.removedOf[l.member])) {\n            revert IPqChat")]),
+    ("A-16 mode 0: a replica refuses a repeated removal", [(S, "(home && ep.removedOf[r.members[i]])) {\n                revert IPqChat", "ep.removedOf[r.members[i]]) {\n                revert IPqChat")]),
+    ("A-16 PqVault: a replica refuses a repeated leave", [(V, "(home && (ep.left[l.member] || ep.removedOf[l.member]))) {\n            revert PqVault", "(ep.left[l.member] || ep.removedOf[l.member])) {\n            revert PqVault")], "pqvault"),
+    ("A-16 PqVault: a replica refuses a repeated removal", [(V, "(home && ep.removedOf[r.members[i]])) {\n                revert PqVault", "ep.removedOf[r.members[i]]) {\n                revert PqVault")], "pqvault"),
+    ("A-16 mode 0: the removed count not kept", [(S, "        ep.removed += _flagRemoved(ep, r.members);", "        _flagRemoved(ep, r.members);")]),
+    ("A-16: _flagRemoved sets no flag", [(B, "                ep.removedOf[uas[i]] = true;\n", "")]),
+    # A-13: the replica's ancestor walk
+    ("A-13: the walk bound 16 -> 1", [(B, "for (uint256 k; k < EXIT_LAG_MAX && a.epoch != 0; ++k)", "for (uint256 k; k < 1 && a.epoch != 0; ++k)")]),
+    ("A-13: the walk bound 16 -> 15", [(B, "for (uint256 k; k < EXIT_LAG_MAX && a.epoch != 0; ++k)", "for (uint256 k; k < EXIT_LAG_MAX - 1 && a.epoch != 0; ++k)")]),
+    ("A-13: the walk unbounded", [(B, "for (uint256 k; k < EXIT_LAG_MAX && a.epoch != 0; ++k)", "for (uint256 k; a.epoch != 0; ++k)")]),
+    ("A-13: an ancestor's removedOf not read", [(B, "            if (a.left[ua] || a.removedOf[ua]) return true;", "            if (a.left[ua]) return true;")]),
+    # A-14: fable-A's ten rows
+    ("A-14 row 1: mode 0's leave record under the named epoch", [(S, "if (_keep()) _s().leaves[at].push(", "if (_keep()) _s().leaves[l.epochId].push(")]),
+    ("A-14 row 2: treeLeave's PqChatLeft with the epoch named", [(S, "emit IPqChat.PqChatLeft(l.sessionId, hid, l.member);", "emit IPqChat.PqChatLeft(l.sessionId, l.epochId, l.member);")]),
+    ("A-14 row 3: treeRemove's PqChatRemoved with the epoch named", [(S, "emit IPqChat.PqChatRemoved(r.sessionId, hid, r.admin, r.members);", "emit IPqChat.PqChatRemoved(r.sessionId, r.epochId, r.admin, r.members);")]),
+    ("A-14 row 4: mode 0's PqChatRemoved with the epoch named", [(S, "emit IPqChat.PqChatRemoved(r.sessionId, at, r.admin, r.members);", "emit IPqChat.PqChatRemoved(r.sessionId, r.epochId, r.admin, r.members);")]),
+    ("A-14 row 5: mode 0 remove without the replica's Incomplete check", [(S, "        if (ep.landed != ep.wraps) revert IPqChat.PqChatIncomplete(r.epochId); // a replica's epoch named\n", "")]),
+    ("A-14 row 6: mode 0, a UA removed at the head may leave", [(S, "(home && (ep.left[l.member] || ep.removedOf[l.member]))) {\n            revert IPqChat", "(home && ep.left[l.member])) {\n            revert IPqChat")]),
+    ("A-14 row 7: PqVaultLeft with the epoch named", [(V, "emit PqVaultLeft(l.vaultId, at, l.member);", "emit PqVaultLeft(l.vaultId, l.epochId, l.member);")], "pqvault"),
+    ("A-14 row 8: PqVaultRemoved with the epoch named", [(V, "emit PqVaultRemoved(r.vaultId, at, r.admin, r.members);", "emit PqVaultRemoved(r.vaultId, r.epochId, r.admin, r.members);")], "pqvault"),
+    ("A-14 row 9: removeVaultMembers without the replica's Incomplete check", [(V, "        if (ep.landed != ep.wraps) revert PqVaultIncomplete(r.epochId); // a replica's epoch named\n", "")], "pqvault"),
+    ("A-14 row 10: PqVault, a UA removed at the head may leave", [(V, "(home && (ep.left[l.member] || ep.removedOf[l.member]))) {\n            revert PqVault", "(home && ep.left[l.member])) {\n            revert PqVault")], "pqvault"),
+    # A-15: an empty addWraps / addVaultWraps refused in the entries
+    ("A-15: an empty addWraps accepted", [(P, "        if (wraps.length == 0) revert PqChatShape(); // A-15 (as C40): both modes, before the tree's forward\n", "")]),
+    ("A-15: an empty addVaultWraps accepted", [(V, "        if (wraps.length == 0) revert PqVaultShape(); // A-15 (as C40)\n", "")], "pqvault"),
+    # G-7, G-9, G-10 (the re-review of 2026-11-25)
+    ("G-7: a keyed cancel for a target with no code", [(R, "        if (target.code.length == 0) revert TargetHasNoCode(target);\n        bool outer = _enter();\n        (MtxPipelineLib.Out memory o, address r) = _pre(\n            GovernanceRouterTypes.UA_CANCEL_NONCE_FOR", "        bool outer = _enter();\n        (MtxPipelineLib.Out memory o, address r) = _pre(\n            GovernanceRouterTypes.UA_CANCEL_NONCE_FOR")], "governance"),
+    ("G-9: a token indexed after its initializer", [(O, "        _index(token, creatorId, CLASS_TOKEN, uint16(kind), version); // G-1: indexed before its code runs\n        IFactoryToken(token).initialize(creatorId, version, initArgs);\n", "        IFactoryToken(token).initialize(creatorId, version, initArgs);\n        _index(token, creatorId, CLASS_TOKEN, uint16(kind), version);\n")], "v2"),
+    ("G-9: a DEX indexed after its initializer", [(O, "        _index(dex, creatorId, CLASS_DEX, 0, version); // G-1: indexed before its code runs\n        ISCaaSDex(dex).initialize(creatorId, version, initArgs);\n", "        ISCaaSDex(dex).initialize(creatorId, version, initArgs);\n        _index(dex, creatorId, CLASS_DEX, 0, version);\n")], "governance"),
+    ("G-9: an instance indexed after its initializer", [(O, "        _index(instance, creatorId, id.contractClass, id.kind, id.version); // G-1: indexed before its code runs\n        _initInstance(instance, creatorId, initCall);\n", "        _initInstance(instance, creatorId, initCall);\n        _index(instance, creatorId, id.contractClass, id.kind, id.version);\n")], "governance"),
+    ("G-10: the book's open_factory_lib another address", [(DB, 'vm.serializeAddress("deploy", "open_factory_lib", address(OpenFactoryLib));', 'vm.serializeAddress("deploy", "open_factory_lib", address(uint160(1)));')], "governance"),
 ]
 
 if sys.argv[1:] == ["check"]:
@@ -170,6 +219,6 @@ for n, (name, reps, *rest) in enumerate(M[lo - 1:hi], lo):
     bad += survived
     verdict = guard.outcome(r, "SURVIVED" if r.returncode == 0 else "NO-LOAD " if not loaded else "killed  ")
     where = ", ".join(sorted({f.split("/")[-1] for f in files}))
-    print(f"{verdict} | M{n} {name} | {where} | rc={r.returncode} | {len(failed)} failed: {', '.join(failed)[:200]}", flush=True)
+    print(f"{verdict} | M{n} {name} | {where} | rc={r.returncode} | {len(failed)} failed: {', '.join(failed)}", flush=True)
 print(f"mutants M{lo}-M{hi} of {len(M)}, survived or not loaded: {bad}")
 raise SystemExit(1 if bad else 0)

@@ -755,10 +755,11 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
 
         return f
 
-    def router_op(op, typ, args, ts, what, send=True):
-        n = nonce(router, E.pad(sd.addr))
+    def router_op(op, typ, args, ts, what, send=True, via=None):
+        rt = via or router  # G-8: factory 2's tokens through factory 2's router
+        n = nonce(rt, E.pad(sd.addr))
         env = [E.pad(sd.addr), 0, n, int(time.time()) + 3600, 0, 0, 0, 0]
-        d = named(router, typ, args, env)
+        d = named(rt, typ, args, env)
         data = E.cd(
             f"{op}({E.UEVL_S},{','.join(ts)},{E.UASIG_S})",
             [E.EVL_T] + ["w"] * len(ts) + [E.UASIG_T],
@@ -766,7 +767,7 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
             *args,
             [b"", E.ecdsa(sd.key, d), []],
         )
-        return sr.send(router, data, what) if send else data
+        return sr.send(rt, data, what) if send else data
 
     T_SET = "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     T_CANCEL = "UAPqzCancelVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
@@ -872,9 +873,15 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     # 3. TRANSFERABLE on a factory with a 30 s notice: kind 4's release there, a token, the router change
     N = 30
     fac2 = D.deploy("OpenFactory", E.encs(["w"], [sd.addr]), label="OpenFactory#notice")
+    # G-8 (the re-review of 2026-11-25): configureChain refuses a router whose factory() is another factory (G-3, CTR-GOV-33),
+    # so factory 2 takes a router of its own naming it (chain_uid, e2e's registry, no SmartKeyAccount, Hedera false, fac2);
+    # its tokens' router ops go through it
+    router2 = D.deploy(
+        "GovernanceRouter", E.encs(["w"] * 5, [E.CTX[1], reg, 0, 0, fac2]), label="GovernanceRouter#notice"
+    )
     ref_b = int(_rpc0("eth_blockNumber", []), 16) - 1
     ref_h = E.hb(_rpc0("eth_getBlockByNumber", [hex(ref_b), False])["hash"])
-    router_h = E.keccak256(E.hb(_rpc0("eth_getCode", [router, "latest"])))  # spec §13.3: the router's code hash
+    router_h = E.keccak256(E.hb(_rpc0("eth_getCode", [router2, "latest"])))  # spec §13.3: the router's code hash
     sd.send(
         fac2,
         E.cd(
@@ -882,7 +889,7 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
             ["w"] * 6,
             E.CTX[1],
             N,
-            router,
+            router2,
             router_h,
             ref_b,
             ref_h,
@@ -944,11 +951,20 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         [tt, nxt, E.CTX[1]],
         ["address", "bytes32", "bytes32"],
         "pqOT mtxPqzSetVerifier(key 3): the proposal",
+        via=router2,
     )
     neg(
         sr.addr,
-        router,
-        router_op("mtxPqzSetVerifier", T_SET, [tt, nxt, E.CTX[1]], ["address", "bytes32", "bytes32"], "", send=False),
+        router2,
+        router_op(
+            "mtxPqzSetVerifier",
+            T_SET,
+            [tt, nxt, E.CTX[1]],
+            ["address", "bytes32", "bytes32"],
+            "",
+            send=False,
+            via=router2,
+        ),
         sel_hex("PqzVerifierNotReady(uint64)"),
         "pqOT the confirm before the notice ends",
     )
@@ -959,6 +975,7 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         [tt, nxt, E.CTX[1]],
         ["address", "bytes32", "bytes32"],
         "pqOT mtxPqzSetVerifier(key 3): the confirm after 30 s",
+        via=router2,
     )
     E.check(E.words(E.call(tt, E.cd("pqzVerifyConfig()", [])), 4)[1] == nxt, "pqOT verifier = key 3, epoch + 1")
     E.VERIFIER[0] = s3
@@ -976,6 +993,7 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         [tt, E.pad(sd.addr), E.CTX[1]],
         ["address", "bytes32", "bytes32"],
         "pqOT propose the deployer again",
+        via=router2,
     )
     router_op(
         "mtxPqzCancelVerifier",
@@ -983,6 +1001,7 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         [tt, E.CTX[1]],
         ["address", "bytes32"],
         "pqOT mtxPqzCancelVerifier: the proposal dropped",
+        via=router2,
     )
     sd.send(
         tt,
@@ -991,7 +1010,12 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     )
     sd.send(tt, E.cd("pqzCancelVerifier(bytes32)", ["w"], E.CTX[1]), "pqOT pqzCancelVerifier(), direct")
     router_op(
-        "mtxPqzRevokeVerifier", T_REVOKE, [tt, E.CTX[1]], ["address", "bytes32"], "pqOT mtxPqzRevokeVerifier: frozen"
+        "mtxPqzRevokeVerifier",
+        T_REVOKE,
+        [tt, E.CTX[1]],
+        ["address", "bytes32"],
+        "pqOT mtxPqzRevokeVerifier: frozen",
+        via=router2,
     )
     neg(
         sd.addr,
@@ -1006,6 +1030,7 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         [tt, E.pad(sd.addr), E.CTX[1]],
         ["address", "bytes32", "bytes32"],
         "pqOT re-assign the deployer: proposal",
+        via=router2,
     )
     wait_eta(r, N)
     router_op(
@@ -1014,6 +1039,7 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         [tt, E.pad(sd.addr), E.CTX[1]],
         ["address", "bytes32", "bytes32"],
         "pqOT re-assign the deployer: confirm",
+        via=router2,
     )
     E.VERIFIER[0] = sd
     E.transfer(pq, sd, CT, alice, bob, E.ZERO32, 3, True, "pqOT op 1 alice→bob 3 after the re-assignment")

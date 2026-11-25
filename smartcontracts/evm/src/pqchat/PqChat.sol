@@ -237,6 +237,7 @@ contract PqChat is IPqChat, PqChatCore {
     }
 
     function addWraps(bytes32 epochId, uint32 first, Wrap[] calldata wraps) external {
+        if (wraps.length == 0) revert PqChatShape(); // A-15 (as C40): both modes, before the tree's forward
         (, uint256 limit,) = _env();
         Epoch storage ep = _known(epochId);
         if (_isTree(ep.sessionId)) _forward(TREE); // CTR-CHAT-26: the leaves land with the wraps

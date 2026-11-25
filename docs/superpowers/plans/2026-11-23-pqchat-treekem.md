@@ -399,6 +399,14 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
 - [ ] Gates: `scripts/capped cargo test`, clippy `-D warnings`; the node rebuilds the vector rows' calldata byte for byte.
 - [ ] Mutants: a missing bound on `ctTargets`; a bound one above the contract's; an unsigned entry relayed with the option off;
       one selector missing on either side.
+- [ ] **A reverted exit is not `dead` within the lag (D2-5 of the re-review of 2026-11-25; `docs/node/job-api.md`'s operator
+      note on exit jobs, SPECIFIED):** an exit job (`treeLeave`, `treeRemove`, mode 0's `leave` / `remove`, `leaveVault`,
+      `removeVaultMembers`) whose simulation reverts with a refusal that may clear at a later head (`PqChatTreeBacklog`,
+      `PqChatIncomplete`, `PqVaultIncomplete`) stays queued and is retried while the head is within `EXIT_LAG_MAX` = 16 of
+      the epoch it names; it is `dead` only on a refusal that cannot clear (`PqChatExitLag` / `PqVaultExitLag`, a bad
+      signature, `PqChatNotMember`) or once the lag has passed (AGENTS.md: never `dead` while a transaction may still land).
+      Test: a `treeLeave` refused `PqChatTreeBacklog` is requeued, lands after the honouring commit, and one past the lag is
+      `dead`; mutant: a backlog refusal reported `dead`. Then the note in `job-api.md` to BUILT.
 
 ### T5. SDK: thin calls (`clients/scaas-sdk`)
 
@@ -501,25 +509,28 @@ Spec §2 C9, C21, C25, C26, C38, C39, C40, §8, §9, §10, §14, §17; CTR-CHAT-
 contract part runs on `review-fix-contract`; the client parts belong to T1b, T2 and T6b of the clients' round, which
 read the rows below. Every test has its positive control; every new check its mutant (`scripts/mutant_guard.py`).
 
-- [ ] **C9, tree (contract):** an exit naming the head, the parent and epoch 0 after two commits lands and is kept under
+- [x] **C9, tree (contract):** an exit naming the head, the parent and epoch 0 after two commits lands and is kept under
       the head; `goneOf`'s number, `leave*`, `removal*`, `leftIn`, `removedIn` and the events name the head; a staged, a
       losing and a foreign epoch are `PqChatIncomplete` / `PqChatUnknown`; the front-run (a commit of M with 7 own Adds
       completes, then the removal of M lands): all 8 leaves owed, the next commit without them refused; a staged commit
       of M void after it; `PqChatTreeBacklog` counted at the head of application; **the lag:** an exit at exactly
       `EXIT_LAG_MAX` below the head lands, one more is `PqChatExitLag`; the same nonce twice is `PqChatNonceUsed`; a
       removal naming its own signer (a keyless admin) lands; remove-then-leave by one admin on one head both land.
-- [ ] **C9, mode 0 and PqVault (contract):** `PqChatEpochs.t.sol`'s removal attack turned round (a plain rekey first, the
+- [x] **C9, mode 0 and PqVault (contract):** `PqChatEpochs.t.sol`'s removal attack turned round (a plain rekey first, the
       removal still lands at the new head and the next rekey must drop M); a leave naming an ancestor lets a plain rekey
       of the head drop the leaver; a leave on a staged child is `PqChatIncomplete`; a removal by an admin that is live at
       the named epoch and not at the head is `PqChatNotAdmin`; the lag at its limit and one over (`PqChatExitLag`,
       `PqVaultExitLag`); a removed vault member's item write at the head is `PqVaultNotMember`; **the replica (sc-E-4):**
       the home's chain M-keeps-F, removal named at E applied at F, G drops M, copied to a replica in both orders (the
-      removal before and after F): every epoch is stored; a flag 17 epochs above is not used.
-- [ ] **A-4, all three settings:** an exit that would newly flag nobody at the epoch it applies to is refused whole
+      removal before and after F): every epoch is stored; a flag 17 epochs above is not used. BUILT on `review-fix-contract`
+      (`7f8439265`) and `review-fix2-contract` (the walk's bound in both copying orders, A-13; E-2 and A-16: a replica
+      copies every exit the home took).
+- [x] **A-4, all three settings:** an exit that would newly flag nobody at the epoch it applies to is refused whole
       (`PqChatNotMember` / `PqVaultNotMember`): a repeated leave, a removal of a removed UA, a removal after one named UA's
       own leave ran first; the control with a new UA lands.
-- [ ] **C39:** the two Add orders of A-1's scenario both accepted; the leaf-mark mutant (`st != 1`) red.
-- [ ] **C40:** an empty `addPath` is `PqChatShape`, a one-ciphertext one lands; at the node, the empty one refused.
+- [x] **C39:** the two Add orders of A-1's scenario both accepted; the leaf-mark mutant (`st != 1`) red.
+- [x] **C40:** an empty `addPath` is `PqChatShape`, a one-ciphertext one lands; at the node, the empty one refused. With
+      A-15 of the re-review: an empty `addWraps` / `addVaultWraps` refused too.
 - [x] **C25 / C26 (vectors, both readers; T1b, T2, T6b):** BUILT in clientkeys and `ua-rs` on `review-fix-client`
       (2026-11-25; `tree-secrets.json` worlds `exits`, `small-order`, `small`, `pin-exit`, `returned`, `lag`, its `pins` and its
       28 `lies`; T6b's part waits for `pqchat-core`). A keyless admin, an `msig` or WebAuthn UA, holds no leaf and so signs
@@ -533,15 +544,16 @@ read the rows below. Every test has its positive control; every new check its mu
       two epochs below, and one naming an epoch 17 below or a losing epoch (a lying read); evidence under the wrong epoch,
       by a non-admin of `h`, with another `treeId`: each a lying read; **a restart between an exit and its honouring
       commit, then an epoch signed by the exited UA (sc-F-3): refused from the pin's exits**; a record with `leaves` above
-      256 or a list above its cap refused before allocation (sc-F-7); a joiner at 5 with a head of 9 reads the session
+      512 or a list above its cap refused before allocation (sc-F-7); a joiner at 5 with a head of 9 reads the session
       record and records 1 to 9 with their exit lists and opens nothing before 5 (the read list compared, C22); a
       non-zero unbound value wherever a digest is reproduced.
 - [ ] **Mutants, one per walk check:** the id at its number, `treeId`, the signature per kind, `parentEpochId`,
       `parentTreeHash`, the author's leaf, `gone`, the right, `treeHash`, `leaves`, the bounds before allocation, the
       pin's exits ignored; in the contracts: "the head" replaced by "the epoch named" in each of the three apply steps,
       the completeness test dropped, the session test dropped, the lag test dropped, the repeat refusal dropped, the
-      replica's ancestor walk dropped.
-- [ ] **G-1, G-3 (contract):** `G1Window.t.sol` red before the reorder and green after; `configureChain` with a router
+      replica's ancestor walk dropped. The contract part is BUILT: `runs/2026-11-24-review-fix-contract-mutants.py`
+      (M1-M107, no gas or size row counted, the killing tests named); the walk checks are the clients' round.
+- [x] **G-1, G-3 (contract):** `G1Window.t.sol` red before the reorder and green after; `configureChain` with a router
       naming factory 0 or another factory refused (`RouterFactoryMismatch`), the fixtures' routers naming their factory.
 
 ### T7. Bindings

@@ -34,7 +34,8 @@
       {"label": "UARegistryRegLib", "artifact": "UARegistryRegLib.sol/UARegistryRegLib", "via": ["UARegistry"]}
     ],
     "factory": [
-      {"label": "OpenFactory", "artifact": "OpenFactory.sol/OpenFactory"}
+      {"label": "OpenFactory", "artifact": "OpenFactory.sol/OpenFactory"},
+      {"label": "OpenFactoryLib", "artifact": "OpenFactoryLib.sol/OpenFactoryLib", "via": ["OpenFactory"]}
     ],
     "accounts": [
       {"label": "SmartKeyAccountFactory", "artifact": "SmartKeyAccountFactory.sol/SmartKeyAccountFactory"},

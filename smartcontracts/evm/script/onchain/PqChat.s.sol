@@ -156,13 +156,16 @@ contract PqChatOnchain is OnchainBase {
     /// @dev A body module of the release (`code` with the factory as its argument) through the CREATE2 deployer at the salt
     ///      `what`, with an explicit gas limit (A-11): forge's estimate x 1.3 of a module near 33 KB asks about 73 M, over a
     ///      60 M block, where the module itself needs about 53 M (`PqChatGas.t.sol` `test_gas_deployModule`). The address
-    ///      is the one `new {salt}` gave (forge sends that through the same deployer).
+    ///      is the one `new {salt}` gave (forge sends that through the same deployer). Code already at it is reused, as
+    ///      `DeployBase._module` (G-11 of the re-review): a rerun after a run that sent the modules and then failed resumes.
     function _module(bytes memory code, string memory what) internal returns (address at) {
         bytes memory init = bytes.concat(code, abi.encode(address(f)));
         bytes32 s = _salt(what);
         at = vm.computeCreate2Address(s, keccak256(init), CREATE2_FACTORY);
-        (bool ok,) = CREATE2_FACTORY.call{gas: RELEASE_GAS}(bytes.concat(s, init));
-        require(ok && at.code.length != 0, string.concat(what, ": the CREATE2 of the module failed"));
+        if (at.code.length == 0) {
+            (bool ok,) = CREATE2_FACTORY.call{gas: RELEASE_GAS}(bytes.concat(s, init));
+            require(ok && at.code.length != 0, string.concat(what, ": the CREATE2 of the module failed"));
+        }
     }
 
     /// @dev The deploy's release and instance (`deploy.sh evm` with DEPLOY_PQCHAT=1, plan T92); on a chain deployed before T92

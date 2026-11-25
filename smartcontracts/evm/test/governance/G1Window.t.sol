@@ -138,6 +138,32 @@ contract WindowThing is GovernanceBase, IThing {
     }
 }
 
+/// A stand-in DEX release (G-9): it records, from inside its initializer, whether the factory's index holds it.
+contract WindowDex {
+    address internal immutable F;
+    bool public sawItselfIndexed;
+
+    constructor(address f_, bytes memory) {
+        F = f_;
+    }
+
+    function factory() external view returns (address) {
+        return F;
+    }
+
+    function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
+
+    function modules() external pure returns (address[] memory) {}
+
+    function chainUid() external view returns (bytes32) {
+        return ChainEnvCode.chainUid();
+    }
+
+    function initialize(bytes32, uint64, bytes calldata) external {
+        sawItselfIndexed = IOpenFactory(F).infoOf(address(this)).addr == address(this);
+    }
+}
+
 contract G1WindowTest is RouterG1Test {
     bytes public cd;
 
@@ -176,5 +202,21 @@ contract G1WindowTest is RouterG1Test {
         assertEq(router.mtxNonceFor(p, pq, 0), 1, "spent in the keyed map");
         (bool ok,) = address(router).call(cd);
         assertFalse(ok, "the same signature does not run again");
+    }
+
+    /// G-9 (the re-review of 2026-11-25): G-1 on the DEX path (`createDex`): a stand-in release finds itself in the
+    /// factory's index from inside its initializer. The control: the address is in no record before the creation.
+    function test_g9_dexIndexedBeforeItsInitializer() public {
+        uint16 ev = f.latestDexEnvVersion() + 1;
+        uint64 v = f.latestDexVersion() + 1;
+        vm.startPrank(REGISTRAR);
+        f.publishDexEnv(ev, u, plainEnv(address(f), _fixtureSka(), chainUidA, GEN2, false));
+        f.deployDexImplementation(v, ev, type(WindowDex).creationCode, "", u);
+        vm.stopPrank();
+        address p = f.predictAddress(nid(address(this)), 2, 0, "g9");
+        assertEq(f.infoOf(p).addr, address(0), "not indexed before its creation");
+        address d = f.createDex(v, "", "g9");
+        assertEq(d, p);
+        assertTrue(WindowDex(d).sawItselfIndexed(), "indexed when its initializer ran (CTR-GOV-33 G-1)");
     }
 }

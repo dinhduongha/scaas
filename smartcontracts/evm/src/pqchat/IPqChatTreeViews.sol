@@ -59,7 +59,7 @@ interface IPqChatTreeViews {
     function pathKeys(bytes32 epochId) external view returns (bytes[] memory);
     /// @notice A commit's landed ciphertext `i`; all empty before it lands.
     function pathCtAt(bytes32 epochId, uint256 i) external view returns (IPqChat.PathCt memory);
-    /// @notice 0 a member or never one, 1 left, 2 removed; `epoch` the head it named (C28).
+    /// @notice 0 a member or never one, 1 left, 2 removed; `epoch` the number of the head the exit was applied at (C9, C28).
     function goneOf(bytes32 sessionId, bytes32 ua) external view returns (uint8 kind, uint64 epoch);
     /// @notice The session-wide set: the period of a key taken out of a UA that went (C28).
     function goneKeyOf(bytes32 sessionId, bytes32 kemHash)

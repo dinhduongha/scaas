@@ -454,10 +454,14 @@ contract PqVaultEpochsTest is PqVaultBase {
     /// At home exits naming epoch 0 after an admin rekey took its slot land at the head; the lag refuses at 17 above.
     function test_e3_exitsApplyAtTheHeadWithinTheLag() public {
         bytes32 e1 = _plain(vault, 1, 1, vid, _members(3)); // the front-running admin rekey
+        vm.expectEmit(address(vault));
+        emit IPqVault.PqVaultLeft(vid, e1, ids[1]); // A-14: the head's id
         _leave(vault, vid, ids[1], 1);
         assertTrue(vault.leftIn(e1, ids[1]), "at the head");
         assertFalse(vault.leftIn(vid, ids[1]));
         IPqVault.PqVaultRemove memory r = _rm(vid, 1, _list(ids[2]), ids[0], 50);
+        vm.expectEmit(address(vault));
+        emit IPqVault.PqVaultRemoved(vid, e1, ids[0], _list(ids[2])); // A-14: the head's id
         _remove(vault, r);
         assertTrue(vault.removedIn(e1, ids[2]), "at the head");
         assertFalse(vault.removedIn(vid, ids[2]));
@@ -489,5 +493,119 @@ contract PqVaultEpochsTest is PqVaultBase {
         vault.rekeyVault(e, w, es); // at home
         bytes32 eid = vaultB.rekeyVault(e, w, es);
         assertTrue(vaultB.epochComplete(eid), "a replica stores it");
+    }
+
+    // ----- E-2, A-16 (controller call 2026-11-25): a replica copies every exit the home took -----
+
+    /// The replica of `vid` in `vaultB`, and e1 (by the admin: `ids[1]` made an admin, `ids[3]` added) at home and there.
+    function _replicaE1Grows() internal returns (bytes32 e1) {
+        (IPqVault.PqVaultCreate memory v0, IPqChat.Wrap[] memory vw) = _vault(3, 1, 0, address(vault));
+        vaultB.createVault(v0, vw, _createSig(v0, address(vault)));
+        (IPqVault.PqVaultEpoch memory a, IPqChat.Wrap[] memory aw) =
+            _epoch(vid, ids[0], 1, 1, vid, _list(ids[0], ids[1]), _members(4));
+        e1 = _rekey(vault, a, aw, 0);
+        assertEq(_rekey(vaultB, a, aw, 0), e1);
+    }
+
+    /// E-2: a leave naming epoch 0 by `ids[3]` (added at e1), a removal naming epoch 0 by `ids[1]` (an admin of e1 only) and
+    /// one naming `ids[3]` are refused at home, as a replica would refuse them. The controls name e1 and land in both.
+    function test_e2_exitsNameAnEpochTheirUAsAreIn() public {
+        bytes32 e1 = _replicaE1Grows();
+        IPqVault.PqVaultLeave memory l = IPqVault.PqVaultLeave(vid, vid, ids[3], 1);
+        IUARegistry.UASig memory ls = _sig(ids[3], h.leave(l, PqVaultTypes.DS_V));
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultNotMember.selector, ids[3]));
+        vault.leaveVault(l, ls);
+        _refusedRemove(
+            _rm(vid, 1, _list(ids[2]), ids[1], 1),
+            ids[1],
+            abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[1])
+        );
+        _refusedRemove(
+            _rm(vid, 1, _list(ids[3]), ids[0], 5),
+            ids[0],
+            abi.encodeWithSelector(IPqVault.PqVaultNotMember.selector, ids[3])
+        );
+        l.epochId = e1; // the controls
+        ls = _sig(ids[3], h.leave(l, PqVaultTypes.DS_V));
+        vault.leaveVault(l, ls);
+        vaultB.leaveVault(l, ls);
+        IPqVault.PqVaultRemove memory r = _rm(e1, 2, _list(ids[2]), ids[1], 1);
+        _remove(vault, r);
+        _remove(vaultB, r);
+        assertTrue(vaultB.leftIn(e1, ids[3]) && vaultB.removedIn(e1, ids[2]));
+    }
+
+    /// A-16: a second leave of `ids[2]` naming epoch 0 (applied at the head e1, which kept the leaver) and a second removal of
+    /// `ids[1]` naming epoch 0 (after e1 dropped it and e2 added it again) are taken in a replica too, which flags nobody new.
+    function test_a16_replicaTakesRepeatsNamingOneEpoch() public {
+        (IPqVault.PqVaultCreate memory v0, IPqChat.Wrap[] memory vw) = _vault(3, 1, 0, address(vault));
+        vaultB.createVault(v0, vw, _createSig(v0, address(vault)));
+        IPqVault.PqVaultLeave memory l1 = IPqVault.PqVaultLeave(vid, vid, ids[2], 1);
+        IUARegistry.UASig memory s1 = _sig(ids[2], h.leave(l1, PqVaultTypes.DS_V));
+        vault.leaveVault(l1, s1);
+        IPqVault.PqVaultRemove memory r1 = _rm(vid, 1, _list(ids[1]), ids[0], 10);
+        _remove(vault, r1);
+        (IPqVault.PqVaultEpoch memory a, IPqChat.Wrap[] memory aw) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _without(_members(3), ids[1]));
+        bytes32 e1 = _rekey(vault, a, aw, 0); // drops the removed UA, keeps the leaver
+        (IPqVault.PqVaultEpoch memory b, IPqChat.Wrap[] memory bw) =
+            _epoch(vid, ids[0], 2, 2, e1, _admins(), _members(3));
+        bytes32 e2 = _rekey(vault, b, bw, 0); // adds it again
+        IPqVault.PqVaultLeave memory l2 = IPqVault.PqVaultLeave(vid, vid, ids[2], 2);
+        IUARegistry.UASig memory s2 = _sig(ids[2], h.leave(l2, PqVaultTypes.DS_V));
+        vault.leaveVault(l2, s2);
+        IPqVault.PqVaultRemove memory r2 = _rm(vid, 1, _list(ids[1]), ids[0], 11);
+        _remove(vault, r2);
+        assertTrue(vault.leftIn(e2, ids[2]) && vault.removedIn(e2, ids[1]));
+        vaultB.leaveVault(l1, s1);
+        _remove(vaultB, r1);
+        assertEq(_rekey(vaultB, a, aw, 0), e1);
+        assertEq(_rekey(vaultB, b, bw, 0), e2);
+        vaultB.leaveVault(l2, s2);
+        _remove(vaultB, r2);
+        assertEq(vaultB.removalCount(vid), 2, "both records, under the epoch named");
+    }
+
+    // ----- A-14 (the re-review of 2026-11-25): the flags read at home, a replica's named epoch complete -----
+
+    /// A member removed at the head leaves no more; another member's leave of the same head lands (the control).
+    function test_a14_removedAtTheHeadLeavesNoMore() public {
+        _remove(vault, _rm(vid, 1, _list(ids[2]), ids[0], 7));
+        IPqVault.PqVaultLeave memory l = IPqVault.PqVaultLeave(vid, vid, ids[2], 1);
+        IUARegistry.UASig memory ls = _sig(ids[2], h.leave(l, PqVaultTypes.DS_V));
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultNotMember.selector, ids[2]));
+        vault.leaveVault(l, ls);
+        _leave(vault, vid, ids[1], 1);
+        assertTrue(vault.leftIn(vid, ids[1]));
+    }
+
+    /// In a replica a removal naming a staged epoch is `PqVaultIncomplete`; naming its complete parent it lands.
+    function test_a14_replicaRemovalNamingAStagedEpoch() public {
+        (IPqVault.PqVaultCreate memory v0, IPqChat.Wrap[] memory vw) = _vault(3, 1, 0, address(vault));
+        vaultB.createVault(v0, vw, _createSig(v0, address(vault)));
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _members(3));
+        bytes32 staged = vaultB.rekeyVault(e, _slice(w, 0, 1), _sig(e.author, h.epoch(e, PqVaultTypes.DS_V)));
+        assertFalse(vaultB.epochComplete(staged));
+        IPqVault.PqVaultRemove memory r = _rm(staged, 2, _list(ids[2]), ids[0], 7);
+        IUARegistry.UASig memory rs = _sig(ids[0], h.remove(r, PqVaultTypes.DS_V));
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultIncomplete.selector, staged));
+        vaultB.removeVaultMembers(r, rs);
+        _remove(vaultB, _rm(vid, 1, _list(ids[2]), ids[0], 7)); // the control
+        assertTrue(vaultB.removedIn(vid, ids[2]));
+    }
+
+    /// A-15 (controller call 2026-11-25, as C40): an empty `addVaultWraps` on a staged epoch or on the complete vault epoch
+    /// is `PqVaultShape`; the control lands the staged epoch's remaining wraps.
+    function test_a15_emptyAddVaultWrapsRefused() public {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _members(3));
+        bytes32 staged = vault.rekeyVault(e, _slice(w, 0, 1), _sig(e.author, h.epoch(e, PqVaultTypes.DS_V)));
+        vm.expectRevert(IPqVault.PqVaultShape.selector);
+        vault.addVaultWraps(staged, 1, new IPqChat.Wrap[](0));
+        vm.expectRevert(IPqVault.PqVaultShape.selector);
+        vault.addVaultWraps(vid, 0, new IPqChat.Wrap[](0));
+        vault.addVaultWraps(staged, 1, _slice(w, 1, 3)); // the control
+        assertTrue(vault.epochComplete(staged));
     }
 }

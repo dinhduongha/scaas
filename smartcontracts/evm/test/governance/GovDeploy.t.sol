@@ -542,6 +542,27 @@ contract GovDeployTest is Test {
     /// whatever the admin and router; JSON `compliance_registry`, `compliance_registry_codehash`. The
     /// admin's `ELIGIBLE_CONTRACT` rows for a DEX venue (`createDex`) and its `DexPuller` let a `KYC` token (round 3s) reach the
     /// venue, which it refuses before them.
+    /// G-10 (the re-review of 2026-11-25): the book's `open_factory_lib` is the library the factory links: code there, and
+    /// its 20 bytes in the factory's runtime (a linked library's address is a PUSH20 of the caller's code); the control: an
+    /// address the factory does not link is not found there.
+    function test_openFactoryLibBooked() public {
+        DeployHarness h = new DeployHarness();
+        (OpenFactory f, string memory json) = h.deploy(ZUID, false, ska);
+        address lib = vm.parseJsonAddress(json, ".open_factory_lib");
+        assertTrue(lib.code.length != 0, "the library's code");
+        assertTrue(_holds(address(f).code, abi.encodePacked(lib)), "its address in the factory's runtime");
+        assertFalse(_holds(address(f).code, abi.encodePacked(address(h))), "the control: another address is not");
+    }
+
+    function _holds(bytes memory code, bytes memory x) internal pure returns (bool) {
+        for (uint256 i; i + x.length <= code.length; ++i) {
+            uint256 j;
+            while (j < x.length && code[i + j] == x[j]) ++j;
+            if (j == x.length) return true;
+        }
+        return false;
+    }
+
     function test_registryDeployedAndDexAttested() public {
         DeployHarness h = new DeployHarness();
         h.setRegulated(true);
@@ -1084,8 +1105,9 @@ contract GovDeployTest is Test {
         // 0x49Df7BEb6eb1073e98A9E9A9a1acdD23C088BFe2; router-g1 G1 (CTR-GOV-33: the `factory` constructor argument, 0 here,
         // `registryFor`, `mtxNonceFor`, the keyed nonces): 0xc9c9D1fCB3143fE165F8a6DcE2A0fB29e157ea1d; router-g1 (the keyed path
         // asks the registry itself): 0xC38E54fEf338e3428525939040Ddb14BE976F5bb; router-cancel (CTR-GOV-33 Change: the keyed
-        // cancel `mtxCancelNonceFor`, the shared `_pre`) -> this
-        assertEq(router, 0xe59e41aa13dc0658B7B252106563EbeF931f0501, "GovernanceRouter");
+        // cancel `mtxCancelNonceFor`, the shared `_pre`): 0xe59e41aa13dc0658B7B252106563EbeF931f0501; G-7 of the re-review of
+        // 2026-11-25 (`TargetHasNoCode` at the head of `mtxCancelNonceFor`) -> this
+        assertEq(router, 0x7e3FbA18C2E807206A33b61176c87a5314625F87, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

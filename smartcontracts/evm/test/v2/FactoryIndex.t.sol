@@ -41,6 +41,7 @@ contract IndexImpl {
     bytes32 public adminClaim;
     bool public adminReverts;
     address public nestedImpl; // when set, `initialize` creates one unregistered token of it first
+    bool public sawItselfIndexed; // in the clone: the factory's index held it when `initialize` ran (G-9)
 
     constructor(address f_, bytes32 u_) {
         (F, U) = (f_, u_);
@@ -80,6 +81,7 @@ contract IndexImpl {
     }
 
     function initialize(bytes32, uint64, bytes calldata) external {
+        sawItselfIndexed = IOpenFactory(F).infoOf(address(this)).addr == address(this);
         address n = IndexImpl(_impl()).nestedImpl();
         if (n != address(0)) IOpenFactory(F).createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, n, "", "nested");
     }
@@ -419,6 +421,18 @@ contract FactoryIndexTest is IndexAsserts {
         assertEq(p[0].creatorId, nid(relayer));
         assertEq(f.creatorOf(nested), t);
         assertEq(f.creatorOf(t), relayer);
+    }
+
+    /// G-9 (the re-review of 2026-11-25): G-1 on the token path (`_create`): the clone finds itself in the factory's index
+    /// from inside its initializer, so `registryFor` answers the same for the whole creation. The control: the address is in
+    /// no record before the creation.
+    function test_g9_tokenIndexedBeforeItsInitializer() public {
+        IndexImpl impl = _impl();
+        address p = f.predictAddress(nid(address(this)), TOKEN, 0, "g9");
+        assertEq(f.infoOf(p).addr, address(0), "not indexed before its creation");
+        address t = f.createTokenUnregistered(NORMAL, address(impl), "", "g9");
+        assertEq(t, p);
+        assertTrue(IndexImpl(t).sawItselfIndexed(), "indexed when its initializer ran (CTR-GOV-33 G-1)");
     }
 
     /// The factory reads no admin of what it creates (3r R1, M6): an implementation whose `admin()` reverts is still

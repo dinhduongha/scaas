@@ -1414,7 +1414,7 @@ def release_rows():
     each regulated release's `implArgs` the `ComplianceRegistry` runtime's code hash, the pin of test/as/Registry.t.sol."""
     check([k for k, _ in RELEASES] == [0, 4, 5, 12, 13], f"releases: kinds {[k for k, _ in RELEASES]}")
     pin = re.search(
-        r"COMPLIANCE_REGISTRY_CODEHASH = (0x[0-9a-f]{64});", open(os.path.join(EVM, "test/as/Registry.t.sol")).read()
+        r"COMPLIANCE_REGISTRY_CODEHASH =\s*(0x[0-9a-f]{64});", open(os.path.join(EVM, "test/as/Registry.t.sol")).read()
     )
     check(
         pin is not None and compliance_registry_codehash() == hb(pin.group(1)),

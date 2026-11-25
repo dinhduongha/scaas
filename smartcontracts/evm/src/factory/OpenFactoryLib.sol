@@ -4,8 +4,9 @@ pragma solidity ^0.8.24;
 import {IOpenFactory} from "./IOpenFactory.sol";
 import {IAdmin} from "../governance/IAdmin.sol";
 
-/// @title `OpenFactoryLib`: `OpenFactory`'s router checks at `configureChain`, out of its runtime (owner 2026-11-25: the
-///        pre-approved split when the code review's G-3 took the factory over its size line; size lever 1,
+/// @title `OpenFactoryLib`: `OpenFactory`'s router checks at `configureChain`, out of its runtime (the owner's split,
+///        pre-approved 2026-11-24 and recorded 2026-11-25 in `decisions.md`'s CTR-GOV-33 Change, used when the code review's
+///        G-3 took the factory over its size line; size lever 1,
 ///        `docs/research/evm-size-levers.md` §4).
 /// @notice An external library: no storage, no `msg.sender`, no state change (`view`), so the call's context is the
 ///         factory's only for its errors, which pass back verbatim. The factory names itself (`self`) rather than the

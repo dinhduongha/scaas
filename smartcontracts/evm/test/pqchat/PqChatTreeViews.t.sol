@@ -288,9 +288,12 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
         assertTrue(ok, "the view itself");
     }
 
-    /// The selectors of `out/<file>/<name>.json` (`methodIdentifiers`).
+    /// The selectors of `<out>/<file>/<name>.json` (`methodIdentifiers`; `FOUNDRY_OUT` as `PqChatLayout.t.sol` reads it, so a
+    /// run with its own output directory, the mutant runner's, reads its own build).
     function _sels(string memory art) internal view returns (bytes4[] memory s) {
-        string[] memory k = vm.parseJsonKeys(vm.readFile(string.concat("out/", art, ".json")), ".methodIdentifiers");
+        string memory out = vm.envOr("FOUNDRY_OUT", string("out"));
+        string[] memory k =
+            vm.parseJsonKeys(vm.readFile(string.concat("./", out, "/", art, ".json")), ".methodIdentifiers");
         s = new bytes4[](k.length);
         for (uint256 i; i < k.length; ++i) {
             s[i] = bytes4(keccak256(bytes(k[i])));

@@ -165,6 +165,27 @@ abstract contract PqGroupBase {
         if (ep.epoch > named + EXIT_LAG_MAX) _fail(F_EXIT_LAG, named, ep.epoch);
     }
 
+    /// @dev E-2 (controller call 2026-11-25): at home an exit's admin and each UA it names are in the lists of the epoch named
+    ///      too (as well as the head's), where a replica checks them, so a replica can copy every exit the home took.
+    function _namedLists(bytes32 epochId, bytes32 admin, bytes32[] calldata uas) internal view {
+        (bytes32[] memory admins, IPqChat.MemberKey[] memory m,) = _lists(_known(epochId));
+        if (!_has(admins, admin)) _fail(F_NOT_ADMIN, uint256(admin), 0);
+        for (uint256 i; i < uas.length; ++i) {
+            if (!_removable(m, admins, uas[i])) _fail(F_NOT_MEMBER, uint256(uas[i]), 0);
+        }
+    }
+
+    /// @dev Flags `uas` removed from `ep`; returns how many were not flagged yet (all at home, A-4; a replica takes a repeat,
+    ///      A-16).
+    function _flagRemoved(Epoch storage ep, bytes32[] calldata uas) internal returns (uint16 fresh) {
+        for (uint256 i; i < uas.length; ++i) {
+            if (!ep.removedOf[uas[i]]) {
+                ep.removedOf[uas[i]] = true;
+                ++fresh;
+            }
+        }
+    }
+
     /// @notice P9, P10: the parent `parentEpochId` stored and complete in this instance, of `sessionId`, `epoch == parent + 1`, the
     ///         home slot free.
     function _parentOf(bytes32 parentEpochId, bytes32 sessionId, uint64 epoch)
