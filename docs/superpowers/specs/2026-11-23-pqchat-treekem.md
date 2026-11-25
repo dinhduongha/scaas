@@ -1159,7 +1159,11 @@ enforced by forge, so each row is asserted against it; the verify's regular gas 
   256, 16.57 M (scratch measurements of 2026-11-25, not pinned). The lever is C10's `TREE_CHANGES_MAX` (the controller's,
   24 the planned fallback); nothing is changed here: **an ML-DSA-87 author cannot send that commit in one transaction while
   the bound is 32 (open, the controller decides)**. No kind is disabled: ML-DSA-65 fits, and ML-DSA-87 fits every other row.
-- On Nethermind, with 2^24 enforced: see the summary file of the round (`smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`).
+- **On Nethermind, with 2^24 enforced [F]** (a local copy, image `scaas/nethermind-pqz:2.2.0-pqz11`, the SCaaS testnet's Amsterdam
+  transitions; each row sent as one `burnFill` transaction with the row's forge regular and state gas, not the row's own calls):
+  the completion at its bounds, the record at its bounds (ML-DSA-87 and -65), the lighter last leaf and A-8 with ML-DSA-65 are
+  included; **A-8 with ML-DSA-87 is refused** (out of gas at 2^24); the controls at 16.70 M regular included, 16.85 M refused.
+  The figures: `smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`.
 
 | Piece | Regular | State | Asked | At a 60 M block |
 |---|---:|---:|---:|---|

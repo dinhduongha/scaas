@@ -58,6 +58,23 @@ matrix: format.sh --check (every part) | ccd58b7f8 | 0 | rust (20 crates), sol, 
 gas pins (A-8, first) | step 6 | 0 | the last live leaf at the spec's bound, regular with the verify / state: ML-DSA-87 15,588,376 / 31,716,900 (1,188,840 under 2^24; 49.7 M asked), ML-DSA-65 12,637,463 / 29,709,540 (44.5 M)
 gas pins (A-11, first) | step 6 | 0 | module CREATE2, runtime / regular x 64/63 / state / asked: PqChatTree 32,812 / 2,166,743 / 50,385,960 / 55.2 M; PqChatTreeViews 9,640 / 660,455 / 14,932,800 / 16.4 M; PqChatTreeMembers 13,506 / 910,116 / 20,847,780 / 22.8 M (PqChatTopics unchanged)
 
+--- 2026-11-25, after the merge 7159883b1: R8 512, node items, groupMode 2 / 3 (tasks 0-3) ---
+node guard / pqchat rows (task 0, merged tree) | 7159883b1 | 0 | guard 56 passed; pqchat_rows_equal_the_contract_both_directions 1 passed
+node D-2 / D-4 / D-7 | 8e5849a83 | 0 | cargo test 910 passed, 0 failed, 75 ignored; clippy --all-targets -D warnings clean
+client mutants M86-M90 (node D-4 x 4, D-7) | 8e5849a83 | 0 | 5/5 killed
+C-5 row, D-8 tags, gen_abi (A-6) | 554c09e7f | 0 | forge test/pqchat 262 passed, 1 skipped; clientkeys 661 passed, 0 failed, 5 skipped; pqchat-core all ok; gen_abi --check equal
+groupMode 2 / 3 reserved (decisions, pqchat.md) | 5fce701c3 | 0 | docs_check check 0 errors (7 budget warnings), paths 0
+R8 512: forge test/pqchat | 889d4e731 | 1 | 261 passed, 1 failed (test_lastLiveLeafAtTheSpecBound, ML-DSA-87 row 18,088,053 >= 2^24: the open finding), 1 skipped
+R8 512: forge test/pqvault | 889d4e731 | 0 | 99 passed
+R8 512: size gate | 889d4e731 | 0 | 184 contracts, 0 errors; PqChat 32,891 B, PqChatTree 32,812 B runtime (unchanged)
+R8 512: node / ua-rs / clientkeys | 889d4e731 | 0 | node 910 / 0 / 75 ignored, clippy clean; ua-rs --test tree 12 passed; clientkeys pqchat-tree + treekem 76 passed
+R8 512: format.sh --check, docs_check | 889d4e731 | 0 | every language ok; 0 errors
+R8 512: path buffer back to 9 (M74 equivalent at 10) | dd7748a8c | 1 | forge test/pqchat 261 passed, 1 failed (the same finding), 2 skipped
+contract mutants M74-M77 (R8) | dd7748a8c | 0 | M74 first form (10 -> 9) SURVIVED, equivalent (fixed in dd7748a8c); M74 (9 -> 8) killed; M75, M76, M77 killed
+client mutants M91-M94 (R8: ua-rs, clientkeys, node cap, node depth) | dd7748a8c | 0 | 4/4 killed
+gas pins at 512 (forge, verify added) | dd7748a8c | - | completion at its bounds 11,623,478 / 40,405,770, 384 + 1 slots, 54.6 M asked (was 10,657,386 / 37,272,330 / 352); record at its bounds ML-DSA-87 15,880,406 / 26,918,820 (896,810 under 2^24), ML-DSA-65 12,930,622 / 24,911,460; last live leaf (4 UAs) 14,834,795 / 11,878,224; A-8 last live leaf (tree of 512) ML-DSA-87 18,087,866 / 31,521,060 OVER 2^24 by 1.31 M, ML-DSA-65 15,130,972 / 29,513,700; cold list 511 targets 32.2 M asked; node keys depth 9 24.9 M; A-8 layout on a tree of 256: 17,322,116 (over); A-8 at 512 with 24 changes 16,483,444 (scratch)
+Nethermind copy, 2^24 enforced (scaas/nethermind-pqz:2.2.0-pqz11, mldsa_on_copy.sh, chain 1337, Amsterdam incl. EIP-7825 / EIP-8037; burnFill replicas of the forge pairs; runs/2026-11-25-treekem512-nethermind.py) | dd7748a8c | 0 | completion at its bounds: estimate 52,380,022, INCLUDED status 1, gasUsed 51,966,423; record at its bounds ML-DSA-87: 43,050,556, INCLUDED, 42,710,417; record ML-DSA-65: 38,103,454, INCLUDED, 37,802,269; last live leaf (4 UAs) ML-DSA-87: 39,331,836, INCLUDED, 39,020,978; A-8 last live leaf ML-DSA-87: REFUSED at estimate (gas required exceeds allowance), sent with a 55 M limit: included as status 0, gasUsed 16,777,216 (out of gas at 2^24); A-8 ML-DSA-65: 44,960,048, INCLUDED, 44,604,874; controls: 16.70 M regular INCLUDED (17,679,142), 16.85 M regular REFUSED at estimate. Container stopped and removed.
+
 ## Done (committed)
 - G-1: index before the initializer (red: "mid-creation: indexed, the env registry: ...07 != ...08").
 - A-1 / C39: `st == 0` in _walkAdds (red: PqChatTreeKeyLive in test_c39_addOrderIndependent).

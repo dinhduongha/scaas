@@ -36,7 +36,12 @@ ENV = dict(
     FOUNDRY_CACHE_PATH="cache/rfc-mutants",
     PATH=os.path.expanduser("~/.foundry/bin") + os.pathsep + os.environ.get("PATH", ""),
 )
-FORGE = ([CAPPED, "forge", "test", "-j", "1", "--no-match-test", "test_gas_deployImplementation|test_gas_deployModule"], E)
+# test_lastLiveLeafAtTheSpecBound left out since R8's 512 (2026-11-25): its ML-DSA-87 row is the open finding (red at HEAD)
+FORGE = (
+    [CAPPED, "forge", "test", "-j", "1", "--no-match-test",
+     "test_gas_deployImplementation|test_gas_deployModule|test_lastLiveLeafAtTheSpecBound"],
+    E,
+)
 M = [
     # the split
     ("treeLeave forwarded to the tree module", [(P, "    function treeLeave(PqChatTreeLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(MEMBERS);", "    function treeLeave(PqChatTreeLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(TREE);")]),
@@ -124,6 +129,12 @@ M = [
     ("A-9: Staged's list and keys swapped", [(G, "        address list;\n        address keys;", "        address keys;\n        address list;")]),
     # G-3 (test/v2)
     ("G-3: configureChain without the router's factory() check", [(F, "        if (!okF || fw != uint256(uint160(self))) revert IOpenFactory.RouterFactoryMismatch(address(uint160(fw)));\n", "")], "v2"),
+    # R8 256 -> 512 (owner 2026-11-25). M74's first form (the buffer 10 -> 9) survived, equivalent: a direct path of depth 9
+    # has 9 parents, so 9 slots hold it; the buffer is 9 again (dd7748a8c) and M74 takes it to 8
+    ("R8: the walk's path buffer one short of depth 9", [(G, "uint256[] memory path = new uint256[](9);", "uint256[] memory path = new uint256[](8);")]),
+    ("R8: the base's limit back at 256", [(G, "uint256 internal constant TREE_LEAVES_LIMIT = 512;", "uint256 internal constant TREE_LEAVES_LIMIT = 256;")]),
+    ("R8: PqChat's cap back at 256", [(C, "uint256 internal constant TREE_LEAVES_MAX = 512;", "uint256 internal constant TREE_LEAVES_MAX = 256;")]),
+    ("R8: PqChat's cap at 513", [(C, "uint256 internal constant TREE_LEAVES_MAX = 512;", "uint256 internal constant TREE_LEAVES_MAX = 513;"), (G, "uint256 internal constant TREE_LEAVES_LIMIT = 512;", "uint256 internal constant TREE_LEAVES_LIMIT = 513;")]),
 ]
 
 if sys.argv[1:] == ["check"]:

@@ -3,7 +3,8 @@
 """The 2026-11-24 review fixes, client phase (branch review-fix-client): each check the round adds is caught by a test. The
 forward walk (C25, C26), the exits of §10 step 5, the rights of §9 (F-2), the signer kinds (F-3), the builder's checks (F-4,
 D-5, B-2, B-5, B-8), C-2, C-7, C-8: in clientkeys (`js`: node --test test/treekem.test.js test/pqchat-tree.test.js) and in
-ua-rs (`rs`: cargo test --test tree, features app-core and vectors). One mutant per run, every file restored byte for byte
+ua-rs (`rs`: cargo test --test tree, features app-core and vectors); the node's tree bounds of D-4, D-7 and R8 (`node`: cargo
+test --lib pqchat_tree_bounds_are_the_contract in scaas-node). One mutant per run, every file restored byte for byte
 after it; a Rust mutant that does not compile kills nothing; a mutant that passes is a finding (exit 1).
   python3 -I clients/runs/2026-11-25-review-fix-client-mutants.py [first last]   (from the worktree root)
   python3 -I clients/runs/2026-11-25-review-fix-client-mutants.py check           (every replacement found once)
@@ -24,12 +25,19 @@ R = "clients/ua-rs/src/wallet/tree.rs"
 RP = "clients/ua-rs/src/wallet/tree_public.rs"
 RQ = "clients/ua-rs/src/wallet/pqchat.rs"
 RA = "clients/ua-rs/src/wallet/appkey.rs"
+N = "scaas-node/src/typed.rs"
 CAPPED = os.path.abspath("scripts/capped")
 SUITES = {
     "js": ([CAPPED, "node", "--test", "test/treekem.test.js", "test/pqchat-tree.test.js"], "clients/clientkeys", {}),
     "rs": (
         [CAPPED, "cargo", "test", "--locked", "--features", "app-core,vectors", "-j", "2", "--test", "tree"],
         "clients/ua-rs",
+        {"CARGO_INCREMENTAL": "0"},
+    ),
+    # the node's tree bounds (review D-4, D-7, R8; 2026-11-25, after the client phase)
+    "node": (
+        [CAPPED, "cargo", "test", "--locked", "-j", "2", "--lib", "pqchat_tree_bounds_are_the_contract"],
+        "scaas-node",
         {"CARGO_INCREMENTAL": "0"},
     ),
 }
@@ -128,6 +136,17 @@ M = [
     ("rs", "B-2: another struct under a tree record's name", [(RQ, "    if !TREE_RECORDS.contains(&td.primary_type()) || !own {", "    if !TREE_RECORDS.contains(&td.primary_type()) {")]),
     ("rs", "B-5: a tree's shape from JSON unbounded", [(RP, "        if !(leaves == 0 || leaves.is_power_of_two() && leaves <= TREE_LEAVES_MAX)\n            || used > leaves\n            || width != Some(node_width(leaves) as usize)\n", "        if false\n")]),
     ("rs", "B-8: a tree epoch key wrapped", [(RA, "        if matches!(key.origin, Origin::Tree) {\n            return Err(Error::Argument);\n        }\n", "")]),
+    # ---- scaas-node: createSession's tree bounds (D-4) and the empty addPath (D-7)
+    ("node", "D-4: a tree session's members unbounded", [(N, "                if len(sv(\"members\")) as u64 > TREE_LEAVES_MAX {", "                if false {")]),
+    ("node", "D-4: a tree session's admins unbounded", [(N, "                if len(sv(\"admins\")) > TREE_ADMINS_MAX {", "                if false {")]),
+    ("node", "D-4: a tree session's sealedInfo unbounded", [(N, "                    > TREE_INFO_MAX\n                {", "                    > usize::MAX\n                {")]),
+    ("node", "D-4: the bounds on mode 0 too", [(N, "            if num(sv(\"groupMode\")) == 1 {", "            if num(sv(\"groupMode\")) <= 1 {")]),
+    ("node", "D-7: an empty addPath", [(N, "            if len(at(\"cts\")) == 0 {", "            if false {")]),
+    # ---- R8 256 -> 512 (owner 2026-11-25): each reader's bound
+    ("rs", "R8: ua-rs's cap back at 256", [(RP, "pub const TREE_LEAVES_MAX: u32 = 512;", "pub const TREE_LEAVES_MAX: u32 = 256;")]),
+    ("js", "R8: clientkeys' cap back at 256", [(PT, "export const TREE_LEAVES_MAX = 512;", "export const TREE_LEAVES_MAX = 256;")]),
+    ("node", "R8: the node's cap back at 256", [(N, "const TREE_LEAVES_MAX: u64 = 512;", "const TREE_LEAVES_MAX: u64 = 256;")]),
+    ("node", "R8: the node's depth back at 8", [(N, "const TREE_DEPTH_MAX: usize = 9;", "const TREE_DEPTH_MAX: usize = 8;")]),
 ]
 
 if sys.argv[1:] == ["check"]:
