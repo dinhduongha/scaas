@@ -13,7 +13,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { dir } from "./ua-vectors-dir.js";
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode } from "../src/bytes.js";
 import * as ua from "../src/ua.js";
-import { verify as kindVerify, clientDataOk } from "../src/ua-verify.js";
+import { verify as kindVerify, clientDataOk, decodeMemberSigs } from "../src/ua-verify.js";
 import { PQ_KINDS } from "../src/pq.js";
 import * as seedjs from "../src/seed.js";
 import * as evm from "../src/evm.js";
@@ -586,6 +586,31 @@ test("msig rows: minimal sets signed at both levels, non-minimal and unsorted se
     if (m.refused) assert.throws(call, (e) => e.code === m.refused, m.case);
     else assert.equal(hex(call()), m.memberSigs, m.case);
   }
+  // CTR-UA-74: an msig member slot's sig is that member's version tag (versionOf); every other byte as without it
+  const m = S.msig.find((x) => !x.refused && x.slots.some((s) => s.members));
+  const out = U.msigMemberSigs({
+    ua: B(m.ua),
+    keyData: B(m.keyData),
+    purposeTag: B(m.purposeTag),
+    digest: B(m.digest),
+    slots: m.slots.map((s) => ({
+      index: s.index,
+      key: s.key && keyOf(s.key),
+      members: s.members?.map((i) => ({ index: i.index, key: keyOf(i.key) })),
+    })),
+    inner: (id) => m.inner?.[id],
+    versionOf: () => 3n,
+  });
+  const got = decodeMemberSigs(out);
+  const want = decodeMemberSigs(m.memberSigs);
+  assert.deepEqual(
+    got.map((x) => (x.members.length ? hex(x.sig) : null)).filter(Boolean),
+    want.filter((x) => x.members.length).map(() => "0x0000000000000003"),
+  );
+  assert.deepEqual(
+    got.map((x) => ({ ...x, sig: x.members.length ? "" : hex(x.sig) })),
+    want.map((x) => ({ ...x, sig: x.members.length ? "" : hex(x.sig) })),
+  );
 });
 
 test("Q3 (owner 2026-11-19): a third party's webauthn-p256 member cannot bypass the cap in msigMemberSigs", () => {

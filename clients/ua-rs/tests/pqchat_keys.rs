@@ -559,11 +559,11 @@ fn v1_verifies_the_record_rows() {
             .find(|s| a32(&s["ua"]) == id)
             .map(|s| (s["kind"].as_u64().unwrap() as u16, unhex(&s["publicKey"])))
     };
-    let current = |_: [u8; 32]| None;
+    let current = |_: [u8; 32], _: Option<u64>| None;
     let accepted = |_: [u8; 32], _: u16| false;
     let state = AppRecordState {
         members: &reg,
-        current: &current,
+        msig_at: &current,
         accepted: &accepted,
         domain: None,
     };
@@ -650,11 +650,11 @@ fn cards_reproduce_the_rows() {
             .find(|s| a32(&s["ua"]) == id)
             .map(|s| (s["kind"].as_u64().unwrap() as u16, unhex(&s["publicKey"])))
     };
-    let current = |_: [u8; 32]| None;
+    let current = |_: [u8; 32], _: Option<u64>| None;
     let accepted = |_: [u8; 32], _: u16| false;
     let state = AppRecordState {
         members: &reg,
-        current: &current,
+        msig_at: &current,
         accepted: &accepted,
         domain: None,
     };

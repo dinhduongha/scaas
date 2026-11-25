@@ -761,12 +761,20 @@ Uint8List encodeInnerSigs(List<(int, Uint8List)> members) {
 }
 
 /// The slot a copy sends to `acceptMembership` from the bytes of its `UAMemberSig` alone, which hash to `memberSigHashOf(ua, index)` (CTR-UA-37): an msig slot's stored bytes are
-/// `abi.encode(InnerSig[])`, canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise.
+/// `abi.encode(InnerSig[])`, canonical, at most 16, followed by that member's version tag (CTR-UA-74: 8 bytes big-endian, >= 1, when the length
+/// is 8 mod 32), which comes back as its sig; a signing slot's its sig. UAUnauthorized otherwise.
 MemberSig replayedMemberSig(Object? keyData, int index, Uint8List stored) {
   final slots = msigStructure(keyData)['members'] as List;
   final refused = UAError('UAUnauthorized', 'slot $index');
   if (index < 0 || index >= slots.length) throw refused;
   if ((slots[index] as Map)['kind'] != 0x0120) return (index, const [], stored);
+  // CTR-UA-74: the list followed by the member's version tag (8 bytes big-endian, >= 1) when the length is 8 mod 32
+  var tag = Uint8List(0);
+  if (stored.length % 32 == 8) {
+    tag = stored.sublist(stored.length - 8);
+    stored = stored.sublist(0, stored.length - 8);
+    if (tag.every((x) => x == 0)) throw refused;
+  }
   // no offset, length or index reaches 2^28, so the sums below stay exact on the VM and in JS
   int w(int o) {
     if (o + 32 > stored.length || stored.sublist(o, o + 28).any((x) => x != 0) || stored[o + 28] > 0x0f) throw refused;
@@ -782,7 +790,7 @@ MemberSig replayedMemberSig(Object? keyData, int index, Uint8List stored) {
     members.add((i, stored.sublist(o + 32, o + 32 + l)));
   }
   if (!_same(encodeInnerSigs(members), stored)) throw refused;
-  return (index, members, Uint8List(0));
+  return (index, members, tag);
 }
 
 /// `UASig{keyData, signature, members}` (TS-D12) of `requireAuthorized` / `setKemKey` / `setPqzKey`: native — [signature]; a derived

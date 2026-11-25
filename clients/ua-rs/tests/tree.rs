@@ -450,6 +450,9 @@ struct Epoch {
     removals: Vec<Value>,
 }
 
+/// `msigAt(ua, version)` answers: `(ua, version)` → `(structure, enabled)` (CTR-UA-74).
+type MsigVersions = BTreeMap<([u8; 32], u64), (Vec<u8>, [u8; 32])>;
+
 struct Home {
     tree_id: [u8; 32],
     tree: Tree,
@@ -462,8 +465,8 @@ struct Home {
     /// the registry's KEM records (`kemKeyAt` serves `{kemPk, sig}` of each, C-1)
     kems: BTreeMap<([u8; 32], u64), KemRecord>,
     ua_keys: BTreeMap<[u8; 32], (u16, Vec<u8>)>,
-    /// an updated `msig`'s current structure and enabled word (CTR-UA-44, F-1)
-    current: BTreeMap<[u8; 32], (Vec<u8>, [u8; 32])>,
+    /// an updated `msig`'s structures by version, `msigAt` (CTR-UA-74)
+    msig: MsigVersions,
     log: Vec<String>,
 }
 
@@ -625,8 +628,8 @@ impl TreeReader for Home {
     fn accepted(&self, _: &[u8; 32], _: u16) -> bool {
         true
     }
-    fn current(&self, ua: &[u8; 32]) -> Option<(Vec<u8>, [u8; 32])> {
-        self.current.get(ua).cloned()
+    fn msig_at(&self, ua: &[u8; 32], version: u64) -> Option<(Vec<u8>, [u8; 32])> {
+        self.msig.get(&(*ua, version)).cloned()
     }
     fn registration(&self, _: &[u8; 32]) -> Option<(scaas_ua::ua_portable::UAAttrs, Vec<u8>)> {
         None
@@ -676,7 +679,7 @@ fn new_home(
         periods: BTreeMap::new(),
         kems,
         ua_keys,
-        current: BTreeMap::new(),
+        msig: BTreeMap::new(),
         log: vec![],
     }
 }
@@ -945,14 +948,26 @@ const EXPLICIT_INFO: &[&str] = &[
     "admin-gap/epoch-4",
 ];
 
-/// The updated `msig`s of `tree-secrets.json`'s signers (F-1, CTR-UA-44): the current structure and its enabled word.
-fn currents(v: &Value) -> BTreeMap<[u8; 32], (Vec<u8>, [u8; 32])> {
+/// The updated `msig`s of `tree-secrets.json`'s signers (F-1, CTR-UA-74): `msigAt` of each version they hold, its structure and
+/// enabled word.
+fn currents(v: &Value) -> MsigVersions {
     v["signers"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|r| !r["current"].is_null())
-        .map(|r| (a32(&r["ua"]), (unhex(&r["current"]), a32(&r["enabled"]))))
+        .flat_map(|r| {
+            let ua = a32(&r["ua"]);
+            r["versions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(move |x| {
+                    (
+                        (ua, u(&x["version"])),
+                        (unhex(&x["msig"]), a32(&x["enabled"])),
+                    )
+                })
+        })
         .collect()
 }
 
@@ -1013,7 +1028,7 @@ fn scenario(
         world.records.clone(),
         ua_keys,
     );
-    home.current = currents(v);
+    home.msig = currents(v);
     let roster = |h: &Home| -> Value {
         json!((0..h.tree.leaves)
             .map(|i| h
@@ -1266,8 +1281,8 @@ impl TreeReader for Tamper<'_> {
     fn accepted(&self, ua: &[u8; 32], i: u16) -> bool {
         self.home.accepted(ua, i)
     }
-    fn current(&self, ua: &[u8; 32]) -> Option<(Vec<u8>, [u8; 32])> {
-        self.home.current(ua)
+    fn msig_at(&self, ua: &[u8; 32], version: u64) -> Option<(Vec<u8>, [u8; 32])> {
+        self.home.msig_at(ua, version)
     }
     fn registration(&self, ua: &[u8; 32]) -> Option<(scaas_ua::ua_portable::UAAttrs, Vec<u8>)> {
         self.home.registration(ua)
@@ -1977,8 +1992,9 @@ fn tree_signing_ops() {
             n += 1;
         }
     }
-    // the keyless admins' exits: M's, W's two, N's (the msig updated on its registry, F-1)
-    assert_eq!((n, keyless), (6, 4));
+    // the keyless admins' exits: M's, W's two, N's (the msig updated on its registry, F-1), N's two of msig-history (F-1b: one at
+    // version 0, one at version 1)
+    assert_eq!((n, keyless), (6, 6));
     // a treeLeave (no row carries its signature): signed by its member, the signature verifies over the row's signedDigest
     let a = &world.people["A"];
     let l = TreeLeave {
@@ -2280,8 +2296,8 @@ impl TreeReader for Lying<'_> {
     fn accepted(&self, ua: &[u8; 32], i: u16) -> bool {
         self.home.accepted(ua, i)
     }
-    fn current(&self, ua: &[u8; 32]) -> Option<(Vec<u8>, [u8; 32])> {
-        self.home.current(ua)
+    fn msig_at(&self, ua: &[u8; 32], version: u64) -> Option<(Vec<u8>, [u8; 32])> {
+        self.home.msig_at(ua, version)
     }
     fn registration(&self, ua: &[u8; 32]) -> Option<(scaas_ua::ua_portable::UAAttrs, Vec<u8>)> {
         self.home.registration(ua)

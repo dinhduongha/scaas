@@ -1276,6 +1276,7 @@ fn msig_group_members() {
             &ua,
             &purpose,
             &digest,
+            &[],
             &slots,
             &msig_domain(&a),
             &lookup,

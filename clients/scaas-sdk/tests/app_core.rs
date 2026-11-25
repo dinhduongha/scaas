@@ -890,18 +890,20 @@ async fn verify_app_record_reads_the_registry() {
         .try_into()
         .unwrap();
     let ptd = scaas_ua::wallet::TypedData::from_json(pa.as_bytes()).unwrap();
-    let ma =
-        scaas_ua::wallet::msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &ptd, &slots).unwrap();
+    let ma = scaas_ua::wallet::msig_sig_app(&kd, &|_, _| None, &|_| None, &app_id, &ptd, &slots)
+        .unwrap();
     assert!(verify(ms, AppPath::Portable, pa.clone(), app_sig(&ma)).await);
     state_answer(&chain, &ms, 0b11, 1 << i1);
     assert!(
         !verify(ms, AppPath::Portable, pa.clone(), app_sig(&ma)).await,
         "a slot not accepted"
     );
+    // CTR-UA-74: at version 0 every slot is enabled (the registration's structure), whatever the enabled word says; a slot
+    // disabled at a later version is refused there (below)
     state_answer(&chain, &ms, 1 << i1, 0b11);
     assert!(
-        !verify(ms, AppPath::Portable, pa.clone(), app_sig(&ma)).await,
-        "a slot not enabled"
+        verify(ms, AppPath::Portable, pa.clone(), app_sig(&ma)).await,
+        "version 0 reads no enabled word"
     );
     state_answer(&chain, &ms, 0b11, 0b11);
     reg_answer(&chain, &id1, 0, &[]);
@@ -963,6 +965,71 @@ async fn verify_app_record_reads_the_registry() {
         !verify(ms, b(), cb.clone(), one).await,
         "below the threshold"
     );
+
+    // CTR-UA-74 (F-1b): ms updated twice on its registry, version 1 the same slots at threshold 1, version 2 (current) the native
+    // slot disabled. A record kept at version 0 (no tag, both slots) verifies by the first structure; one at version 1 (k1 alone,
+    // its tag) by `msigAt(ms, 1)`, read beside the records; a tag naming version 3 is refused
+    let structure = |t: u64| {
+        let items: String = m
+            .iter()
+            .map(|(k, id, wt)| format!("{}{}{}", w(u64::from(*k)), hexs(id), w(u64::from(*wt))))
+            .collect();
+        format!("{}{}{}{}", w(t), w(0x40), w(m.len() as u64), items)
+    };
+    answer(
+        &chain,
+        REGISTRY,
+        "msigOf(bytes32)",
+        &ms,
+        format!("{}{}", w(0x20), structure(1)),
+    );
+    answer(
+        &chain,
+        REGISTRY,
+        "msigStateOf(bytes32)",
+        &ms,
+        format!("{}{}{}", w(2), w(1 << i1), w(0b11)),
+    );
+    answer(
+        &chain,
+        REGISTRY,
+        "msigAt(bytes32,uint64)",
+        &[&ms[..], &word32(1)].concat(),
+        format!("{}{}{}", w(0x40), w(0b11), structure(1)),
+    );
+    assert!(
+        verify(ms, AppPath::Portable, pa.clone(), app_sig(&ma)).await,
+        "kept at version 0: the first structure, the native slot disabled since"
+    );
+    let v1 = scaas_ua::encode_msig(1, &m);
+    let at1 = |id: [u8; 32], _: Option<u64>| (id == ms).then(|| (v1.clone(), [0xff; 32], 1));
+    let k1_slot = [scaas_ua::wallet::Slot::Member {
+        index: i1,
+        key: &k1,
+    }];
+    let m1 = scaas_ua::wallet::msig_sig_app(&kd, &at1, &|_| None, &app_id, &ptd, &k1_slot).unwrap();
+    assert_eq!(m1.signature, 1u64.to_be_bytes(), "the tag of version 1");
+    assert!(
+        verify(ms, AppPath::Portable, pa.clone(), app_sig(&m1)).await,
+        "kept at version 1: msigAt(ms, 1)"
+    );
+    let mut m3 = app_sig(&m1);
+    m3.signature = 3u64.to_be_bytes().to_vec();
+    assert!(
+        !verify(ms, AppPath::Portable, pa.clone(), m3).await,
+        "a version never stored"
+    );
+    // the native slot alone: enabled at version 1, disabled at version 2 (the current one)
+    let mut native_only = app_sig(&ma);
+    native_only.members.retain(|x| x.index == i_n);
+    for (v, ok) in [(1u64, true), (2, false)] {
+        native_only.signature = v.to_be_bytes().to_vec();
+        assert_eq!(
+            verify(ms, AppPath::Portable, pa.clone(), native_only.clone()).await,
+            ok,
+            "the native slot at version {v}"
+        );
+    }
 }
 
 /// Spec §12.4: a chain-bound domain's `verifyingContract` made by the profile's factory is refused unless of the scope's class

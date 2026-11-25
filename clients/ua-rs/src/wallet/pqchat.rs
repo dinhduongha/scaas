@@ -310,7 +310,7 @@ fn verify_typed(ua: &[u8; 32], td: &TypedData, sig: &UASig, state: &super::AppRe
         &digest,
         sig,
         state.members,
-        state.current,
+        state.msig_at,
         Some(state.accepted),
     )
     .is_ok()

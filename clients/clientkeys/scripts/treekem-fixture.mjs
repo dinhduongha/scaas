@@ -113,7 +113,8 @@ export function keylessOf(name) {
       );
     };
     // `N` (F-1): a 2-of-2 `msig` over the seed's indexes 10 and 11, then updated on its registry (CTR-UA-44): slot 2 (index
-    // 12) appended, the threshold lowered to 1, slot 0 disabled. Its id is its first structure's; it signs by slot 2 alone.
+    // 12) appended, the threshold lowered to 1, slot 0 disabled (version 1). Its id is its first structure's; it signs by slot 2
+    // alone, its tag version 1 (CTR-UA-74); `signV0` signs as it did before the update (version 0, both first slots, no tag: F-1b).
     const nFirst = [10, 11]
       .map((i) => ({ i, ...pqKeygen(SEED, "mldsa65", 0, i) }))
       .map((k) => ({ kind: MLDSA65, id: hex(k.ua), weight: 1, k }))
@@ -122,25 +123,27 @@ export function keylessOf(name) {
     const nSlots = [...nFirst, { kind: MLDSA65, id: hex(n2.ua), weight: 1, k: n2 }];
     const nKey = ua.encodeMsig(2, nFirst);
     const nUa = hex(ua.deriveUA(0x0120, nKey));
-    const nSign = (slots) => (purpose, digest) => {
-      const md = ua.memberDigest(nUa, ua.uaMessage(0x0120, purpose, digest));
-      const list = slots.map((index) => ({
-        index,
-        members: [],
-        sig: pqSign(nSlots[index].k.secretKey, ua.purposeTag("member"), md),
-      }));
-      return { signature: "0x", members: hex(encodeMemberSigs(list)) };
-    };
+    const nSign =
+      (slots, version = 1) =>
+      (purpose, digest) => {
+        const md = ua.memberDigest(nUa, ua.uaMessage(0x0120, purpose, digest));
+        const list = slots.map((index) => ({
+          index,
+          members: [],
+          sig: pqSign(nSlots[index].k.secretKey, ua.purposeTag("member"), md),
+        }));
+        return { signature: hex(ua.versionTag(version)), members: hex(encodeMemberSigs(list)) };
+      };
     keyless = {
       N: {
         ua: nUa,
         kind: 0x0120,
         keyData: hex(nKey),
-        current: hex(ua.encodeMsig(1, nSlots)),
-        enabled: hex(word(6n)),
+        versions: [{ version: 1, msig: hex(ua.encodeMsig(1, nSlots)), enabled: hex(word(6n)) }],
         subs: nSlots.map((m) => ({ ua: m.id, kind: MLDSA65, keyData: hex(m.k.publicKey) })),
         sign: nSign([2]),
         signBy: nSign,
+        signV0: nSign([0, 1], 0),
       },
       M: {
         ua: mUa,
@@ -174,7 +177,7 @@ export const sign = (who, struct, record) =>
   KEYLESS.includes(who)
     ? keylessOf(who).sign(sc.purpose, sc.typed(struct, record))
     : hex(pqSign(personOf(who).secretKey, sc.purpose, sc.typed(struct, record)));
-/** The registry records of every signer: `ua` → `{ kind, keyData }`, an updated `msig`'s with `current` and `enabled`. */
+/** The registry records of every signer: `ua` → `{ kind, keyData }`, an updated `msig`'s with `versions` (`msigAt`, CTR-UA-74). */
 export const uaRecords = () =>
   new Map([
     ...PEOPLE.map((n) => [personOf(n).ua, { kind: MLDSA65, keyData: personOf(n).publicKey }]),
@@ -183,7 +186,7 @@ export const uaRecords = () =>
       const top = {
         kind: k.kind,
         keyData: k.keyData,
-        ...(k.current ? { current: k.current, enabled: k.enabled } : {}),
+        ...(k.versions ? { versions: k.versions } : {}),
       };
       return [[k.ua, top], ...k.subs.map((x) => [x.ua, { kind: x.kind, keyData: x.keyData }])];
     }),
@@ -296,7 +299,7 @@ export function commit(w, name, o = {}) {
 
 /** A landed `treeLeave` by `name` or `treeRemove` by admin `name` of `members` (names), naming the head or, with `named`, the
  *  ancestor at that number (C9: applied at the head either way). */
-export function gone(w, kind, name, members, nonce, named = null) {
+export function gone(w, kind, name, members, nonce, named = null, signBy = null) {
   const h = w.home;
   const at = named ?? h.epochs.length - 1;
   const base = { sessionId: h.sessionId, treeId: h.treeId, epochId: h.epochs[at].id };
@@ -313,7 +316,7 @@ export function gone(w, kind, name, members, nonce, named = null) {
             nonce,
           },
         ];
-  const sig = sign(name, struct, record);
+  const sig = signBy ? signBy(sc.purpose, sc.typed(struct, record)) : sign(name, struct, record);
   tk.landGone(h, kind, struct, record, sig);
   w.steps.push({ name: `${w.tag}/${struct}`, gone: { kind, struct, record, sig } });
   return { struct, record, sig };
@@ -576,6 +579,25 @@ export function msigUpdatedScenario() {
   gone(w, 2, "N", ["D"], 1);
   commit(w, "B", { removes: ["D"] }); // 2
   commit(w, "C"); // 3
+  return w;
+}
+/** F-1b (CTR-UA-74): the keyless admin N removes C at version 0, by both first slots, before the update that disables slot 0
+ *  (applied at 1); B honours it (2); N, at version 1, removes D by slot 2 (applied at 2); B honours it (3). Every device follows:
+ *  each removal verified at the version its tag names, the first one by a slot now disabled. */
+export function msigHistoryScenario() {
+  const w = createSession({
+    tag: "msig-history",
+    creator: "A",
+    nonce: 19,
+    admins: ["A", "N"],
+    members: ["A", "B", "C", "D"],
+    info: INFO.I1,
+  });
+  commit(w, "B"); // 1
+  gone(w, 2, "N", ["C"], 1, null, keylessOf("N").signV0);
+  commit(w, "B", { removes: ["C"] }); // 2
+  gone(w, 2, "N", ["D"], 2);
+  commit(w, "B", { removes: ["D"] }); // 3
   return w;
 }
 /** C-1: an epoch-0 head (A the admin, B, C): every target of the first commit a key the registry record authenticates. */
@@ -1164,6 +1186,52 @@ export function lies(worlds) {
         "removalAt(3,0)": by([0, 1], 9),
       },
       lie,
+    );
+    // CTR-UA-74 step 6: a true version-0 record of N served after its version-1 one: a decrease, a lying read
+    add(
+      "a removal at version 0 after one at version 1 (CTR-UA-74 step 6)",
+      "msig-updated",
+      "A",
+      {
+        "removalCount(3)": 1,
+        "removalAt(3,0)": keptRemoval(w, "N", ["C"], 3, 10, w.home.treeId, { signBy: N.signV0 }),
+      },
+      lie,
+    );
+  }
+  {
+    // CTR-UA-74 (F-1b): the tags of N's kept removals in msig-history: removalAt(1,0) at version 0 by slots 0 and 1, removalAt(2,0)
+    // at version 1 by slot 2. Any other tag than the one each was accepted under: a lying read (the tag is not signed)
+    const w = W("msig-history");
+    const r = (n) => tk.reader(w.home).removalAt(n, 0);
+    const tagged = (n, tag) => ({ [`removalAt(${n},0)`]: { ...r(n), sig: { ...r(n).sig, signature: tag } } });
+    const v = (x) => hex(ua.versionTag(x));
+    add("a version-0 record tagged with a later version (CTR-UA-74)", "msig-history", "A", tagged(1, v(1)), lie);
+    add("a version-1 record tagged with an earlier version (CTR-UA-74)", "msig-history", "A", tagged(2, "0x"), lie);
+    add("a tag naming a version never stored (CTR-UA-74)", "msig-history", "A", tagged(2, v(2)), lie);
+    add("a tag of 8 zero bytes (CTR-UA-74)", "msig-history", "A", tagged(1, `0x${"00".repeat(8)}`), lie);
+    add("a tag of 7 bytes (CTR-UA-74)", "msig-history", "A", tagged(2, `0x${"00".repeat(6)}01`), lie);
+    add("a tag of 9 bytes (CTR-UA-74)", "msig-history", "A", tagged(2, `0x${"00".repeat(8)}01`), lie);
+    // step 6 against the pin: A's pin of the head holds N at version 1; a true version-0 removal of B kept under the head names a
+    // version below it
+    const pin = replayOf(w, "A").pin;
+    const below = keptRemoval(w, "N", ["B"], 3, 3, w.home.treeId, { signBy: keylessOf("N").signV0 });
+    add(
+      "a version-0 record after the pin saw version 1 (CTR-UA-74 step 6)",
+      "msig-history",
+      "A",
+      { "removalCount(3)": 1, "removalAt(3,0)": below },
+      lie,
+      pin,
+    );
+    // a pin whose versions differ from the walk's (as its gone register, C-5): a walk from the cold tree refuses it
+    add(
+      "a pin whose msig versions differ (CTR-UA-74 step 6)",
+      "msig-history",
+      "A",
+      {},
+      { replay: "TreeReadCorrupted", prepare: null },
+      { ...pin, msigVersions: pin.msigVersions.map(([u, v]) => [u, v + 1]) },
     );
   }
   {

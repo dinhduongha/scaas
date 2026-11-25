@@ -854,6 +854,10 @@ class NestedRows(unittest.TestCase):
                 wide = bytearray(stored)
                 wide[64 + 32 + 29] = 1  # a leaf index over uint16
                 self.refused("UAUnauthorized", ua.replayed_member_sig, key, m["index"], bytes(wide))
+                # CTR-UA-74: the list followed by the member's version tag gives the tag back; 8 zero bytes refused
+                tag = bytes(7) + b"\x02"
+                self.assertEqual(ua.replayed_member_sig(key, m["index"], stored + tag)[1:], (slot[1], tag), m["name"])
+                self.refused("UAUnauthorized", ua.replayed_member_sig, key, m["index"], stored + bytes(8))
         self.assertEqual(replays, 1)
 
     def test_nested_authorizations(self):

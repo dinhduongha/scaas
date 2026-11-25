@@ -408,7 +408,7 @@ const keptExit = ({ treeId, ...r }) => r;
 /** A model of one home's state for a tree session (spec §6, §7): the records with their signatures, the pieces, the exits kept
  *  under each epoch, the leaves' `joinEpoch` and wrap index, the node keys, `gone` and the key periods. `kems`: `"<ua>/<keyId>"`
  *  → `{ kemPk, sig }` (the registry's `kemKeyAt`), `uaRecords`: ua → its registry record `{ kind, keyData }`, an updated
- *  `msig`'s with `current` and `enabled` (CTR-UA-44; an `msig`'s members by their own). The
+ *  `msig`'s with `versions` (its `msigAt` answers, CTR-UA-74; an `msig`'s members by their own). The
  *  contract's checks are pqchat-tree.js's `applyCommit` and the pieces' hashes; the model lands what it is given, as an
  *  endpoint that lies would serve it. */
 export function newHome({ genesis, sig, kems, uaRecords }) {
@@ -576,22 +576,31 @@ const notVerifiable = (e) => {
   if (e?.code === "UANotVerifiable") refuse("UANotVerifiable");
 };
 /** A record's signature for its signer's kind, as the contract's `requirePortable` judges it (F-3): a single key of each holder
- *  kind, an `msig` by its kept members over its current structure and enabled slots (the reader's `uaRecordOf` gives them,
- *  CTR-UA-44, F-1), WebAuthn. */
+ *  kind, an `msig` by its kept members over its structure at the version its `signature` (the tag) names (CTR-UA-74, the reader
+ *  rule: the reader's `uaRecordOf` gives its `versions`; never another version), WebAuthn. Returns that version (0 for a single
+ *  key), for the walk's order check (step 6). */
 function verified(sc, rd, struct, record, signer, sig, read) {
-  let ok = true;
+  let v = 0;
   try {
     uv.verifyPortable(
       { ua: hex(signer), purpose: sc.purpose, digest: sc.typed(struct, record), sig },
       rd.uaRecordOf,
       rd.accepted,
     );
+    if (rd.uaRecordOf(hex(signer))?.kind === 0x0120) v = Number(uv.tagVersion(sig.signature));
   } catch (e) {
     notVerifiable(e);
-    ok = false;
+    v = null;
   }
-  if (!ok) corrupt(read);
+  if (v === null) corrupt(read);
+  return v;
 }
+/** CTR-UA-74 step 6: `v`, the version `ua`'s record names, against `floor` (the versions before its slot), raised into `slot`
+ *  (versions ≥ 1 only); below: a lying read. */
+const versionUp = (floor, slot, ua, v, read) => {
+  if (v < (floor.get(ua) ?? 0)) corrupt(read);
+  if (v > 0) slot.set(ua, Math.max(slot.get(ua) ?? 0, v));
+};
 /** The key of `(ua, keyId)` a cold tree's leaf takes (§8 steps 3 and 5, C-1): the registry's `kemKeyAt` `{ kemPk, sig }`,
  *  authenticated by its record: `setKemKey`'s signature over `kemRecordDigest` for a version above 0. Version 0 is the
  *  registration's key, authenticated by its proof of possession (ua-rs `kem_record_key`); this reference has no registration
@@ -648,7 +657,7 @@ function walk(sc, rd, pin = null, keep = []) {
       b(r.sealedInfo).length <= TREE_INFO_MAX,
     "sessionOf()",
   );
-  verified(sc, rd, "PqChatSession", S0, S0.creator, s.sig, "sessionOf()");
+  const v0 = verified(sc, rd, "PqChatSession", S0, S0.creator, s.sig, "sessionOf()");
   if (S0.groupMode !== 1) refuse("PqChatModeEntry");
   const sid = hex(pc.sessionId(S0.creator, S0.nonce));
   const treeId = hex(tr.treeId(S0));
@@ -673,19 +682,24 @@ function walk(sc, rd, pin = null, keep = []) {
     admins: [],
     goneAt: [],
     exits: [],
+    versionsAt: [],
     targets: [],
     below: new Map(),
   };
   const kept = (n) => keep === "all" || n === a.n0 || n === head || keep.includes(n);
   let tree;
   let gone = new Map();
+  // CTR-UA-74 step 6: per `msig` the highest version its records named so far (never below the pin's)
+  let versions = new Map();
   if (pin) {
     if (pin.treeId !== treeId || head < pin.epoch) refuse("TreeCheckpoint");
-    if (a.n0 > 0) a.recs[a.n0] = commitAt(sc, rd, a, a.n0);
+    if (a.n0 > 0) a.recs[a.n0] = commitAt(sc, rd, a, a.n0).c;
     if (recordHash(a, a.n0) !== pin.hash) refuse("TreeConflict");
     tree = tr.treeFromJson(pin.tree);
     gone = new Map(pin.gone.map(([ua, kind, epoch]) => [ua, { kind, epoch }]));
+    versions = new Map(pin.msigVersions);
   } else {
+    versionUp(new Map(), versions, hex(S0.creator), v0, "sessionOf()");
     const cold = S0.members.map((m) => ({ ...m, kemHash: kemHashOf(kemAt(rd, m.ua, m.keyId)) }));
     try {
       tree = tr.coldTree(cold);
@@ -697,8 +711,10 @@ function walk(sc, rd, pin = null, keep = []) {
   }
   for (let n = a.n0; ; n++) {
     if (n > a.n0) {
-      const c = (a.recs[n] = commitAt(sc, rd, a, n));
+      const { c, v } = commitAt(sc, rd, a, n);
+      a.recs[n] = c;
       const where = `commitOf(${n})`;
+      versionUp(new Map(versions), versions, hex(c.author), v, where);
       if (c.parentEpochId !== ids[n - 1] || c.parentTreeHash !== tr.treeHash(tree)) corrupt(where);
       let applied;
       try {
@@ -720,8 +736,8 @@ function walk(sc, rd, pin = null, keep = []) {
       a.targets[n] = applied.ctTargets;
     }
     a.admins[n] = (n === 0 ? S0 : a.recs[n]).admins.map(hex);
-    if (kept(n)) [a.trees[n], a.goneAt[n]] = [tree, new Map(gone)];
-    const ex = exitsAt(sc, rd, a, n, tree, gone);
+    if (kept(n)) [a.trees[n], a.goneAt[n], a.versionsAt[n]] = [tree, new Map(gone), new Map(versions)];
+    const ex = exitsAt(sc, rd, a, n, tree, gone, versions);
     if (pin && n === a.n0 && !pin.exits.every(([ua, kind]) => ex.some((x) => x.ua === ua && x.kind === kind)))
       corrupt(`leaveCount(${n})`);
     for (const x of ex) if (!gone.has(x.ua)) gone.set(x.ua, { kind: x.kind, epoch: n });
@@ -777,7 +793,7 @@ function idAt(sc, rd, a, m) {
 }
 
 /** Commit `n`'s record: its id at its number, `sessionId`, `treeId`, the bounds of C10 and C24 before anything is allocated
- *  (sc-F-7), then its author's signature. */
+ *  (sc-F-7), then its author's signature: `{ c, v }`, `v` the structure version it names (`verified`). */
 function commitAt(sc, rd, a, n) {
   const where = `commitOf(${n})`;
   const { record: c, sig } = served(rd.commitOf(n), (x) => isObj(x) && isObj(x.record), where);
@@ -804,8 +820,8 @@ function commitAt(sc, rd, a, n) {
       [...r.removes, ...r.adds].every((x) => isObj(x) && Number.isInteger(x.leaf) && x.leaf < r.leaves),
     where,
   );
-  verified(sc, rd, "PqChatCommit", ok, ok.author, sig, where);
-  return c;
+  const v = verified(sc, rd, "PqChatCommit", ok, ok.author, sig, where);
+  return { c, v };
 }
 
 /** §10 step 5: the exits kept under epoch `h`, each one an exit applied at `h` exactly when the contract could have accepted
@@ -813,9 +829,11 @@ function commitAt(sc, rd, a, n) {
  *  its signature for its signer's kind and the pinned `treeId`; an epoch named `h` or an ancestor within the lag, numbered
  *  from verified data (C-3); a leave by a UA live at `h`; a removal by an admin of `h`, of UAs live at `h` or in its admins;
  *  nobody gone before `h`. Together (B2-6): no UA exits twice under one head (A-4), the leaves they owe fit one commit (C21),
- *  and the last admin with a leaf goes by a removal only when no member keeps a leaf (C24 read with C38). */
-function exitsAt(sc, rd, a, h, tree, gone) {
+ *  and the last admin with a leaf goes by a removal only when no member keeps a leaf (C24 read with C38). Each signer's structure
+ *  version at or above `versions` before them (CTR-UA-74 step 6), which they raise. */
+function exitsAt(sc, rd, a, h, tree, gone, versions) {
   const out = [];
+  const floor = new Map(versions);
   const before = (ua) => gone.has(ua) && gone.get(ua).epoch < h;
   const named = (r, read) => {
     if (r.sessionId !== a.sid) corrupt(read);
@@ -841,7 +859,7 @@ function exitsAt(sc, rd, a, h, tree, gone) {
     };
     named(r, read);
     if (!holds(tree, r.member) || before(r.member)) corrupt(read);
-    verified(sc, rd, "PqChatTreeLeave", r, r.member, sig, read);
+    versionUp(floor, versions, r.member, verified(sc, rd, "PqChatTreeLeave", r, r.member, sig, read), read);
     out.push({ ua: r.member, kind: 1 });
   }
   for (let i = 0, k = count(rd.removalCount(h), `removalCount(${h})`); i < k; i++) {
@@ -875,7 +893,7 @@ function exitsAt(sc, rd, a, h, tree, gone) {
       !before(r.admin) &&
       r.members.every((m) => (holds(tree, m) || a.admins[h].includes(m)) && !before(m));
     if (!ok) corrupt(read);
-    verified(sc, rd, "PqChatTreeRemove", r, r.admin, sig, read);
+    versionUp(floor, versions, r.admin, verified(sc, rd, "PqChatTreeRemove", r, r.admin, sig, read), read);
     for (const m of r.members) out.push({ ua: m, kind: 2 });
   }
   const goes = new Set(out.map((x) => x.ua));
@@ -897,8 +915,9 @@ function exitsAt(sc, rd, a, h, tree, gone) {
 const recordHash = (a, n) =>
   hex(n === 0 ? pc.structHash("PqChatSession", a.S0) : tr.treeStructHash("PqChatCommit", a.recs[n]));
 /** The checkpoint at epoch `n` of a walk (C26, the spec check sc-F-3): the treeId, the number, the hash of the record that won
- *  there, the public tree after its commit with its no-return sets, the `gone` register before its exits (`[ua, kind, epoch]`)
- *  and the exits applied at it (`[ua, kind]`), each list sorted. `n` an epoch the walk kept. */
+ *  there, the public tree after its commit with its no-return sets, the `gone` register before its exits (`[ua, kind, epoch]`),
+ *  the exits applied at it (`[ua, kind]`) and, before its exits, each `msig`'s highest structure version its records named
+ *  (`[ua, version]`, versions ≥ 1 only; CTR-UA-74 step 6), each list sorted. `n` an epoch the walk kept. */
 export function pinAt(a, n) {
   const byUa = (x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : x[1] - y[1]);
   return {
@@ -908,6 +927,7 @@ export function pinAt(a, n) {
     tree: tr.treeJson(a.trees[n]),
     gone: [...a.goneAt[n]].map(([ua, g]) => [ua, g.kind, g.epoch]).sort(byUa),
     exits: a.exits[n].map((x) => [x.ua, x.kind]).sort(byUa),
+    msigVersions: [...a.versionsAt[n]].sort(byUa),
   };
 }
 /** The epochs whose public tree the walk from `pin` (or the cold tree) holds when it is done: its start and the head (E-3: no
@@ -930,6 +950,7 @@ function checkPin(a, store) {
   if (
     JSON.stringify(p.tree) !== JSON.stringify(store.tree) ||
     JSON.stringify(p.gone) !== JSON.stringify(store.gone) ||
+    JSON.stringify(p.msigVersions) !== JSON.stringify(store.msigVersions) ||
     !store.exits.every(([ua, kind]) => p.exits.some((x) => x[0] === ua && x[1] === kind))
   )
     corrupt(`pin(${store.epoch})`);

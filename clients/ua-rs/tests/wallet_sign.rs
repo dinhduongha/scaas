@@ -759,7 +759,7 @@ fn portable_app_rows() {
             key: &native,
         }];
         let record = td(&n["typedData"]);
-        let s = msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &record, &slots).unwrap();
+        let s = msig_sig_app(&kd, &|_, _| None, &|_| None, &app_id, &record, &slots).unwrap();
         assert!(s.key_data.is_empty() && s.signature.is_empty() && s.members.len() == 1);
         assert_eq!(
             hex::encode(&s.members[0].sig),
@@ -772,14 +772,14 @@ fn portable_app_rows() {
         let mut v = n["typedData"].clone();
         v["domain"]["salt"] = Value::String(format!("0x{}", hex::encode(other(&n["appId"]))));
         assert_eq!(
-            msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &td(&v), &slots).err(),
+            msig_sig_app(&kd, &|_, _| None, &|_| None, &app_id, &td(&v), &slots).err(),
             Some(Error::Argument)
         );
         let mut v = n["typedData"].clone();
         v["domain"].as_object_mut().unwrap().remove("salt");
         v["types"]["EIP712Domain"].as_array_mut().unwrap().pop();
         assert_eq!(
-            msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &td(&v), &slots).err(),
+            msig_sig_app(&kd, &|_, _| None, &|_| None, &app_id, &td(&v), &slots).err(),
             Some(Error::Argument)
         );
         let mut v = n["typedData"].clone();
@@ -789,7 +789,7 @@ fn portable_app_rows() {
             .unwrap()
             .insert(2, serde_json::json!({"name": "chainId", "type": "uint256"}));
         assert_eq!(
-            msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &td(&v), &slots).err(),
+            msig_sig_app(&kd, &|_, _| None, &|_| None, &app_id, &td(&v), &slots).err(),
             Some(Error::Argument)
         );
     }

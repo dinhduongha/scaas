@@ -562,7 +562,11 @@ async fn slot_sig(
     record: Option<&TypedData>,
 ) -> Result<MemberSig, SdkError> {
     let keys = open(sdk, std::slice::from_ref(s)).await?;
-    let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
+    let current = |id: [u8; 32], _: Option<u64>| {
+        views
+            .get(&id)
+            .map(|v| (v.current.clone(), v.enabled, v.version))
+    }; // CTR-UA-74: the current version's tag
     let inner = |id: [u8; 32]| views.get(&id).map(|v| v.first.clone());
     if let (MsigSlot::Member { index, .. }, Some(Key::External(row, _))) = (s, keys.first()) {
         let asked = AtomicBool::new(false);
@@ -626,7 +630,11 @@ async fn uasig(
         true => Some(domain(sdk, chain, &line, v)?),
         false => None,
     };
-    let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
+    let current = |id: [u8; 32], _: Option<u64>| {
+        views
+            .get(&id)
+            .map(|v| (v.current.clone(), v.enabled, v.version))
+    }; // CTR-UA-74: the current version's tag
     let inner = |id: [u8; 32]| views.get(&id).map(|v| v.first.clone());
     let apart = slots.iter().any(|s| matches!(s, MsigSlot::Signed { .. }))
         || keys.iter().any(|k| matches!(k, Key::External(..)));
@@ -684,7 +692,7 @@ pub(crate) async fn app_msig(
     slots: &[MsigSlot],
     sign: impl FnOnce(
         &[u8],
-        &scaas_ua::ua_portable::Current,
+        &scaas_ua::ua_portable::MsigAt,
         &scaas_ua::ua_portable::Inner,
         Option<&scaas_ua::Domain>,
         &[Slot],
@@ -704,7 +712,11 @@ pub(crate) async fn app_msig(
         true => Some(domain(sdk, chain, &line, v)?),
         false => None,
     };
-    let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
+    let current = |id: [u8; 32], _: Option<u64>| {
+        views
+            .get(&id)
+            .map(|v| (v.current.clone(), v.enabled, v.version))
+    }; // CTR-UA-74: the current version's tag
     let inner = |id: [u8; 32]| views.get(&id).map(|v| v.first.clone());
     Ok(sign(
         &v.first,
@@ -943,7 +955,7 @@ impl Account {
                         let hp = scaas_ua::holder_pop_message(MSIG, &ua, &kd, None, None, None, None)
                             .map_err(|_| SdkError::Argument)?;
                         let keys = open(&sdk, &req.slots).await?;
-                        let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
+                        let current = |id: [u8; 32], _: Option<u64>| views.get(&id).map(|v| (v.current.clone(), v.enabled, v.version)); // CTR-UA-74: the current version's tag
                         let inner = |id: [u8; 32]| views.get(&id).map(|v| v.first.clone());
                         // a native member signs the registration's typed data itself (M1)
                         let record = registration_typed_data(&ua, MSIG, &hp.pqz_key_hash, &hp.pqz_pop_hash)?;
@@ -1006,7 +1018,11 @@ impl Account {
                         .map_or(u16::MAX, |m| slot_signer(m.kind))],
                 };
                 let keys = open(&sdk, &slots).await?;
-                let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
+                let current = |id: [u8; 32], _: Option<u64>| {
+                    views
+                        .get(&id)
+                        .map(|v| (v.current.clone(), v.enabled, v.version))
+                }; // CTR-UA-74: the current version's tag
                 let inner = |id: [u8; 32]| views.get(&id).map(|v| v.first.clone());
                 let s = ua_slots(&slots, &keys)?;
                 let m = membership_sig_current(
@@ -1094,7 +1110,7 @@ impl Account {
                 )
                 .map_err(ua_err)?;
                 let keys = open(&sdk, &req.slots).await?;
-                let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
+                let current = |id: [u8; 32], _: Option<u64>| views.get(&id).map(|v| (v.current.clone(), v.enabled, v.version)); // CTR-UA-74: the current version's tag
                 let inner = |id: [u8; 32]| views.get(&id).map(|v| v.first.clone());
                 let record = msig_update_typed_data(&u)?;
                 let sig = msig_sig_current(

@@ -275,6 +275,23 @@ test("CTR-UA-37: the stored acceptance replays with no new signature, an msig sl
   const { keyData } = records(m.ua);
   assert.equal(hex(encodeInnerSigs(m.members.map((x) => ({ index: x.index, sig: B(x.sig) })))), m.stored);
   assert.throws(() => replayedMemberSig(keyData, m.index, `${m.stored}00`), code("UAUnauthorized"), "not canonical");
+  // CTR-UA-74: the list followed by the member's version tag (8 bytes, >= 1) gives the tag back as `sig`; 8 zero bytes or 9 bytes refused
+  const tagged = replayedMemberSig(keyData, m.index, `${m.stored}0000000000000002`);
+  assert.equal(hex(tagged.sig), "0x0000000000000002");
+  assert.deepEqual(
+    tagged.members.map((x) => ({ index: x.index, sig: hex(x.sig) })),
+    m.members,
+  );
+  assert.throws(
+    () => replayedMemberSig(keyData, m.index, `${m.stored}${"00".repeat(8)}`),
+    code("UAUnauthorized"),
+    "tag 0",
+  );
+  assert.throws(
+    () => replayedMemberSig(keyData, m.index, `${m.stored}${"00".repeat(8)}02`),
+    code("UAUnauthorized"),
+    "9 bytes",
+  );
   assert.throws(() => replayedMemberSig(keyData, m.index, "0x"), code("UAUnauthorized"), "an msig slot has a list");
   assert.throws(() => replayedMemberSig(keyData, 16, "0x"), code("UAUnauthorized"), "past the members");
   for (const r of N.afterAcceptance) verifyRegistration(r, records, afterMemberships);

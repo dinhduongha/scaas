@@ -1047,6 +1047,7 @@ test("the lies of plan T11 (E-1, F-1, sc-F-3, sc-F-7, E-4, the lag): replay and 
     ["msig-updated", f.msigUpdatedScenario()],
     ["genesis", f.genesisScenario()],
     ["backlog", f.backlogScenario()],
+    ["msig-history", f.msigHistoryScenario()],
   ]);
   const code = (fn) => {
     try {

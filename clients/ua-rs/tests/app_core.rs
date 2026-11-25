@@ -702,7 +702,7 @@ impl St {
             sig,
             &AppRecordState {
                 members: &members,
-                current: &|_| None,
+                msig_at: &|_, _| None,
                 accepted: &accepted,
                 domain: d,
             },
@@ -779,10 +779,11 @@ fn msig_vector_sets_through_the_authorization_check() {
             &ua,
             &scaas_ua::purpose_tag(s["purpose"].as_str().unwrap()).unwrap(),
             &a32(&s["digest"]),
+            &[],
             &slots,
             &d,
             &members,
-            &|_| None,
+            &|_, _| None,
             Some(&|_, _| true),
         );
         assert_eq!(got.is_ok(), s["valid"].as_bool().unwrap(), "{}", s["name"]);
@@ -932,7 +933,7 @@ fn verify_app_record_signers() {
             },
         ),
     ]);
-    let ma = msig_sig_app(&kd, &|_| None, &inner_of, &APP, &pa, &slots).unwrap();
+    let ma = msig_sig_app(&kd, &|_, _| None, &inner_of, &APP, &pa, &slots).unwrap();
     assert!(st.check(&ua, &a, &pa, &ma, None));
     let refused = |id, i| St {
         recs: st.recs.clone(),
@@ -978,7 +979,7 @@ fn verify_app_record_signers() {
             },
         ),
     ]);
-    let na = msig_sig_app(&kd, &|_| None, &inner_of, &APP, &pa, &two).unwrap();
+    let na = msig_sig_app(&kd, &|_, _| None, &inner_of, &APP, &pa, &two).unwrap();
     assert!(st.check(&ua, &a, &pa, &na, None));
     // three slots where two reach the threshold: not minimal
     let mut extra = na.clone();
@@ -1357,7 +1358,7 @@ fn pqvault_records_reproduce_the_vectors() {
                     sig,
                     &AppRecordState {
                         members: &members,
-                        current: &|_| None,
+                        msig_at: &|_, _| None,
                         accepted: &|_, _| true,
                         domain: None,
                     },
@@ -1397,7 +1398,7 @@ fn pqvault_sign_refusals() {
     let members = |id: [u8; 32]| (id == ua).then(|| (kind, kd.clone()));
     let state = AppRecordState {
         members: &members,
-        current: &|_| None,
+        msig_at: &|_, _| None,
         accepted: &|_, _| true,
         domain: None,
     };
@@ -1709,7 +1710,7 @@ fn pqvault_msig_signs_both_paths() {
             s,
             &AppRecordState {
                 members: &members,
-                current: &|_| None,
+                msig_at: &|_, _| None,
                 accepted: &|_, _| true,
                 domain: dom,
             },
@@ -1750,8 +1751,8 @@ fn pqvault_msig_signs_both_paths() {
         enabled(&[at(id1), at(nid)]),
         enabled(&[at(id1)]),
     );
-    let cur_all = |id: [u8; 32]| (id == ua).then(|| (kd2.clone(), all));
-    let cur_off = |id: [u8; 32]| (id == ua).then(|| (kd2.clone(), one_off));
+    let cur_all = |id: [u8; 32], _: Option<u64>| (id == ua).then(|| (kd2.clone(), all, 1));
+    let cur_off = |id: [u8; 32], _: Option<u64>| (id == ua).then(|| (kd2.clone(), one_off, 1));
     assert!(
         pqvault::sign_msig(&kd, &cur_all, &none, None, &pa, &tv, &slots).is_ok(),
         "every slot enabled"
@@ -1793,7 +1794,7 @@ fn pqvault_msig_signs_both_paths() {
     );
 }
 
-fn none_cur(_: [u8; 32]) -> Option<(Vec<u8>, [u8; 32])> {
+fn none_cur(_: [u8; 32], _: Option<u64>) -> Option<(Vec<u8>, [u8; 32], u64)> {
     None
 }
 

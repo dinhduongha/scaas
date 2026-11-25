@@ -266,7 +266,8 @@ impl AppPrepared {
                         .await?;
                         Ok(AppSigned {
                             key_data: vec![],
-                            signature: vec![],
+                            // CTR-UA-74: the `msig`'s version tag
+                            signature: sig.signature.clone(),
                             members: sig.members.iter().map(AppMemberSig::from).collect(),
                             digest,
                             review,
@@ -357,12 +358,16 @@ pub struct AppCall {
 }
 
 /// One registry record as [`AppCore::verify_app_record`] reads it: `(kind, keyData)` of `registrationOf`, an `msig`'s current
-/// structure with its `enabled` word (`None`: never updated) and its accepted-and-enabled bits.
+/// structure with its `enabled` word (`None`: never updated) and `version`, the structures of the versions the record's tags
+/// name (`msigAt`, CTR-UA-74: [`tagged_versions`]) and its accepted bits (`msigStateOf.accepted`: acceptance is per slot and
+/// permanent, CTR-UA-37; each check masks them by the `enabled` word of the version it reads, the reader rule's step 4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Rec {
     kind: u16,
     key_data: Vec<u8>,
     current: Option<(Vec<u8>, [u8; 32])>,
+    version: u64,
+    at: BTreeMap<u64, (Vec<u8>, [u8; 32])>,
     active: [u8; 32],
 }
 
@@ -459,6 +464,8 @@ async fn records(
             kind,
             key_data,
             current: None,
+            version: 0,
+            at: BTreeMap::new(),
             active: [0; 32],
         };
         if kind == MSIG {
@@ -474,13 +481,13 @@ async fn records(
                     continue;
                 };
                 rec.current = Some((c.clone(), enabled));
+                rec.version = version as u64;
                 c
             } else {
                 rec.key_data.clone()
             };
-            for (i, b) in rec.active.iter_mut().enumerate() {
-                *b = enabled.get(i).copied().unwrap_or(0) & accepted.get(i).copied().unwrap_or(0);
-            }
+            // CTR-UA-74 step 4: the accepted bits as they are; the version a record names gives its `enabled` word
+            rec.active = accepted;
             if depth < 2 {
                 if let Ok(m) = scaas_ua::ua_portable::MsigStructure::from_key_data(&structure) {
                     todo.extend(m.members.iter().map(|x| (x.id, depth + 1)));
@@ -490,6 +497,55 @@ async fn records(
         out.insert(id, rec);
     }
     Ok(out)
+}
+
+/// CTR-UA-74 (the reader rule): `msigAt` of each version the tags of `sig` name, the signer `id`'s (`signature`) and each signing
+/// `msig` member slot's (`MemberSig.sig`, at most 16), into `recs`: a kept record is judged at the version it names, never the
+/// current one. A tag that does not decode or names version 0 reads nothing (version 0 is the registration's structure); an
+/// answer that does not decode is unread (the verdict false).
+async fn tagged_versions(
+    pool: &EvmPool,
+    at: &ReadAt<alloy::primitives::B256>,
+    line: &crate::line::Line,
+    id: [u8; 32],
+    sig: &UASig,
+    recs: &mut BTreeMap<[u8; 32], Rec>,
+) -> Result<(), ReadError> {
+    use scaas_ua::ua_portable::{tag_version, MsigStructure};
+    let Some(r) = recs.get(&id).filter(|r| r.kind == MSIG) else {
+        return Ok(());
+    };
+    let mut want = vec![(id, tag_version(&sig.signature))];
+    if let Ok(s) = MsigStructure::from_key_data(r.current.as_ref().map_or(&r.key_data, |c| &c.0)) {
+        for m in &sig.members {
+            if let Some(x) = s
+                .members
+                .get(usize::from(m.index))
+                .filter(|x| x.kind == MSIG)
+            {
+                want.push((x.id, tag_version(&m.sig)));
+            }
+        }
+    }
+    for (x, v) in want {
+        let Some(v) = v.filter(|v| *v > 0) else {
+            continue;
+        };
+        let Some(registry) = line.holder(pool, at, x).await? else {
+            continue;
+        };
+        let mut w = [0u8; 32];
+        w[24..].copy_from_slice(&v.to_be_bytes());
+        let out = call_at(pool, at, registry, "msigAt(bytes32,uint64)", &[x, w]).await?;
+        if let (Some(d), Some(en), Some(r)) = (
+            crate::account::msig::decode_structure(&out),
+            word(&out, 32),
+            recs.get_mut(&x),
+        ) {
+            r.at.insert(v, (d, en));
+        }
+    }
+    Ok(())
 }
 
 /// A named argument of an app entry as an ABI value of the parameter `(ty, components)`: a tuple from an object of exactly its
@@ -1551,20 +1607,23 @@ impl AppCore {
             }
         };
         let chain_bound = matches!(p, UaPath::ChainBound { .. });
-        self.with_records(&chain, id, chain_bound, |state| {
-            f(&id, &p, &typed, &UASig::from(&sig), state)
+        let sig = UASig::from(&sig);
+        self.with_records(&chain, id, chain_bound, &sig, |state| {
+            f(&id, &p, &typed, &sig, state)
         })
         .await
     }
 
     /// `f` over the registry state of `id` on `chain` (its records, its members' and theirs, two levels), read at the
     /// profile's final block as a read that feeds a decryption; with `chain_bound`, the registry's domain too when `id` is a
-    /// native id or an `msig` (a native member signs `UAAuth` in it).
+    /// native id or an `msig` (a native member signs `UAAuth` in it); the `msig` structures of the versions `sig`'s tags name
+    /// (CTR-UA-74).
     pub(crate) async fn with_records<R>(
         &self,
         chain: &str,
         id: [u8; 32],
         chain_bound: bool,
+        sig: &UASig,
         f: impl FnOnce(&AppRecordState) -> R,
     ) -> Result<R, SdkError> {
         let (profile, chain_id, _) = crate::op::evm(&self.sdk, chain)?;
@@ -1575,7 +1634,8 @@ impl AppCore {
             final_block(&profile),
             Purpose::FeedsDecryption,
             |pool, at, line| async move {
-                let recs = records(&pool, &at, &line, id).await?;
+                let mut recs = records(&pool, &at, &line, id).await?;
+                tagged_versions(&pool, &at, &line, id, sig, &mut recs).await?;
                 Ok((recs, line.holder(&pool, &at, id).await?))
             },
         )
@@ -1589,11 +1649,18 @@ impl AppCore {
             })
             .transpose()?;
         let members = |x: [u8; 32]| recs.get(&x).map(|r| (r.kind, r.key_data.clone()));
-        let current = |x: [u8; 32]| recs.get(&x).and_then(|r| r.current.clone());
+        // CTR-UA-74: `msigAt` of the versions read (`None`: the current one; version 0 the first structure, every slot)
+        let msig_at = |x: [u8; 32], v: Option<u64>| {
+            let r = recs.get(&x)?;
+            match v {
+                Some(v) if v != r.version => r.at.get(&v).map(|(d, en)| (d.clone(), *en, v)),
+                _ => r.current.clone().map(|(d, en)| (d, en, r.version)),
+            }
+        };
         let accepted = |x: [u8; 32], i: u16| recs.get(&x).is_some_and(|r| bit(&r.active, i));
         Ok(f(&AppRecordState {
             members: &members,
-            current: &current,
+            msig_at: &msig_at,
             accepted: &accepted,
             domain: domain.as_ref(),
         }))

@@ -1118,13 +1118,17 @@ def encode_inner_sigs(members):
 
 def replayed_member_sig(key_data, index, stored):
     """The (index, inner, sig) slot a copy sends to ``acceptMembership`` from the bytes of its ``UAMemberSig`` alone, which hash to ``memberSigHashOf(ua, index)`` (CTR-UA-37): an msig slot's
-    stored bytes are ``abi.encode(InnerSig[])``, canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise."""
+    stored bytes are ``abi.encode(InnerSig[])``, canonical, at most 16, followed by that member's version tag (CTR-UA-74: 8 bytes
+    big-endian, >= 1, when the length is 8 mod 32), which comes back as sig; a signing slot's its sig. UAUnauthorized otherwise."""
     members, b = msig_structure(key_data)["members"], bytes(stored)
     refused = UAError("UAUnauthorized", f"slot {index}")
     if not 0 <= index < len(members):
         raise refused
     if members[index]["kind"] != 0x0120:
         return index, [], b
+    b, tag = (b[:-8], b[-8:]) if len(b) % 32 == 8 else (b, b"")
+    if tag and not any(tag):
+        raise refused
     w = lambda o: int.from_bytes(b[o : o + 32], "big")
     if len(b) < 64 or w(0) != 32 or w(32) > 16:
         raise refused
@@ -1135,7 +1139,7 @@ def replayed_member_sig(key_data, index, stored):
         inner.append((w(u), b[o : o + w(o - 32)]))
     if any(i > 0xFFFF for i, _ in inner) or encode_inner_sigs(inner) != b:
         raise refused
-    return index, inner, b""
+    return index, inner, tag
 
 
 def set_kem_key_args(ua, version, kem_pk, sig):

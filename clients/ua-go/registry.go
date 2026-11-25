@@ -202,7 +202,8 @@ func EncodeInnerSigs(members []InnerSig) []byte {
 }
 
 // ReplayedMemberSig is the MemberSig a copy sends to acceptMembership from the bytes of its UAMemberSig alone, which hash to memberSigHashOf(ua, index) (CTR-UA-37): an msig slot's
-// stored bytes are abi.encode(InnerSig[]), canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise.
+// stored bytes are abi.encode(InnerSig[]), canonical, at most 16, followed by that member's version tag (CTR-UA-74: 8 bytes big-endian, >= 1,
+// when the length is 8 mod 32), which comes back as Sig; a signing slot's its sig. UAUnauthorized otherwise.
 func ReplayedMemberSig(keyData []byte, index uint16, stored []byte) (*MemberSig, error) {
 	s, err := MsigStructureOf(keyData)
 	if err != nil {
@@ -214,6 +215,13 @@ func ReplayedMemberSig(keyData []byte, index uint16, stored []byte) (*MemberSig,
 	}
 	if s.Members[index].Kind != 0x0120 {
 		return &MemberSig{index, []InnerSig{}, stored}, nil
+	}
+	tag := Hex{}
+	if len(stored)%32 == 8 {
+		stored, tag = stored[:len(stored)-8], append(Hex{}, stored[len(stored)-8:]...)
+		if binary.BigEndian.Uint64(tag) == 0 {
+			return nil, refused
+		}
 	}
 	// no offset, length or index reaches 2^28, so the sums below cannot overflow
 	w := func(o int) int {
@@ -254,7 +262,7 @@ func ReplayedMemberSig(keyData []byte, index uint16, stored []byte) (*MemberSig,
 	if string(EncodeInnerSigs(members)) != string(stored) {
 		return nil, refused
 	}
-	return &MemberSig{index, members, Hex{}}, nil
+	return &MemberSig{index, members, tag}, nil
 }
 
 // UASig is the signature of requireAuthorized / setKemKey / setPqzKey (TS-D12): native — Signature; a derived single key —

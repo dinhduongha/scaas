@@ -32,6 +32,8 @@ import {
   decodeMemberSigs,
   encodeMemberSigs,
   kindVerify,
+  tagVersion,
+  splitStoredTag,
 } from "./ua-verify.js";
 
 import { dir } from "./ua-vectors-dir.js";
@@ -1405,15 +1407,15 @@ test("verifyRegistration accepts every row and refuses every negative", () => {
   assert.deepEqual([refused, stateful, otherEntry], [64, 4, 1]); // + msig-kem-record (T66a)
 });
 
-test("CTR-UA-44: every record check reads the current structure of an updated msig (ua-rs check_*_current rows)", () => {
+test("CTR-UA-44, CTR-UA-74: every record check of an updated msig reads the structure its tag names (ua-rs check_*_current rows)", () => {
   const U = P.msigUpdated;
-  const now = (id) =>
-    id === U.ua ? { kind: 0x0120, keyData: U.keyData, current: U.current, enabled: U.enabled } : keysOf(id);
+  const versions = [{ version: U.version, msig: U.current, enabled: U.enabled }];
+  const now = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData, versions } : keysOf(id));
   const first = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData } : keysOf(id));
   const slots = ua.msigStructure(U.current).members.length;
   const accepted = (id, i) => id !== U.ua || ((BigInt(U.enabled) >> BigInt(i)) & 1n) === 1n; // every slot accepted; counts iff enabled
   const domain = { generation: 1, ...JSON.parse(readFileSync(new URL("structures.json", dir), "utf8")).contexts.A };
-  assert.equal(U.rows.length, 7);
+  assert.equal(U.rows.length, 9);
   for (const r of U.rows) {
     const row = { ...r, ua: r.ua ?? U.ua };
     const run = (members) => {
@@ -1436,7 +1438,7 @@ test("CTR-UA-44: every record check reads the current structure of an updated ms
     if (!r.valid && r.entry === "requireAuthorized") {
       assert.throws(() => verifyAuthorization(row, now, domain, () => true), { code: "UAUnauthorized" }, r.name);
     }
-    // the first structure is never the authority once the registry was updated: each valid row fails against it
+    // a reader that does not hold the version a valid row's tag names refuses it (never another version)
     if (r.valid)
       assert.throws(
         () => run(first),
@@ -1447,10 +1449,10 @@ test("CTR-UA-44: every record check reads the current structure of an updated ms
   assert.ok(slots > ua.msigStructure(U.keyData).members.length, "an appended slot");
 });
 
-test("K3-3 with CTR-UA-44: a scoped key record of an updated msig reads its current structure (ua-rs scoped_key_records_read_the_current_structure)", () => {
+test("K3-3 with CTR-UA-44, CTR-UA-74: a scoped key record of an updated msig reads the structure its tag names (ua-rs scoped_key_records_read_the_current_structure)", () => {
   const U = P.msigScopedKeyRecords;
-  const now = (id) =>
-    id === U.ua ? { kind: 0x0120, keyData: U.keyData, current: U.current, enabled: U.enabled } : keysOf(id);
+  const versions = [{ version: P.msigUpdated.version, msig: U.current, enabled: U.enabled }];
+  const now = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData, versions } : keysOf(id));
   const first = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData } : keysOf(id));
   const accepted = (id, i) => id !== U.ua || ((BigInt(U.enabled) >> BigInt(i)) & 1n) === 1n;
   assert.equal(U.rows.length, 4);
@@ -1477,6 +1479,39 @@ test("K3-3 with CTR-UA-44: a scoped key record of an updated msig reads its curr
       );
     }
   }
+});
+
+test("CTR-UA-74: the reader rule's edges (ua-rs msig_tags_and_versions): the tag's forms, a stored tag, version 0 never read, threshold 0, no fallback", () => {
+  assert.equal(tagVersion("0x"), 0n);
+  assert.equal(tagVersion("0x0000000000000001"), 1n);
+  for (const t of ["0x0000000000000000", "0x00000000000001", "0x000000000000000001"])
+    assert.equal(tagVersion(t), null, t);
+  assert.equal(hex(ua.versionTag(258)), "0x0000000000000102");
+  assert.equal(ua.versionTag(0).length, 0);
+  const body = new Uint8Array(64).fill(7);
+  const [b, t] = splitStoredTag(concatBytes(body, ua.versionTag(2)));
+  assert.deepEqual([hex(b), hex(t)], [hex(body), "0x0000000000000002"]);
+  assert.equal(splitStoredTag(body)[1].length, 0);
+  const U = P.msigUpdated;
+  const rec = (versions) => (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData, versions } : keysOf(id));
+  const at = (version, msig = U.current) => rec([{ version, msig, enabled: U.enabled }]);
+  const row = (n) => ({ ...U.rows.find((r) => r.name === n), ua: U.ua });
+  // the appended slot's acceptance: a slot at version 1; an answer claiming version 0 is never read (the first structure has no slot 3)
+  verifyMembership(row("appended-slot-accepts"), at(1), () => true);
+  assert.throws(() => verifyMembership(row("appended-slot-accepts"), at(0), () => true), { code: "UAUnauthorized" });
+  // threshold 0 at version 1: the empty set would authorize
+  const domain = { generation: 1, ...JSON.parse(readFileSync(new URL("structures.json", dir), "utf8")).contexts.A };
+  const zero = hex(ua.encodeMsig(0, ua.msigStructure(U.current).members));
+  const empty = hex(concatBytes(word(32), word(0)));
+  const a = row("authorized-by-current-quorum");
+  assert.throws(() => verifyAuthorization({ ...a, sig: empty }, at(1, zero), domain, () => true), {
+    code: "UAUnauthorized",
+  });
+  verifyAuthorization(a, at(1), domain, () => true);
+  // no fallback: a tag naming version 2, never stored
+  assert.throws(() => verifyAuthorization({ ...a, signature: hex(ua.versionTag(2)) }, at(1), domain, () => true), {
+    code: "UAUnauthorized",
+  });
 });
 
 test("verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)", () => {

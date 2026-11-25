@@ -155,13 +155,21 @@ public static partial class UA
     }
 
     /// <summary>The MemberSig a copy sends to acceptMembership from the bytes of its UAMemberSig alone, which hash to memberSigHashOf(ua, index) (CTR-UA-37): an msig slot's stored bytes are
-    /// <c>abi.encode(InnerSig[])</c>, canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise.</summary>
+    /// <c>abi.encode(InnerSig[])</c>, canonical, at most 16, followed by that member's version tag (CTR-UA-74: 8 bytes big-endian, &gt;= 1, when
+    /// the length is 8 mod 32), which comes back as its sig; a signing slot's its sig. UAUnauthorized otherwise.</summary>
     public static MemberSig ReplayedMemberSig(byte[] keyData, ushort index, byte[] stored)
     {
         var slots = MsigStructureOf(keyData).Members;
         var refused = new UAException("UAUnauthorized", $"slot {index}");
         if (index >= slots.Length) throw refused;
         if (slots[index].Kind != 0x0120) return new(index, [], stored);
+        // CTR-UA-74: the list followed by the member's version tag (8 bytes big-endian, >= 1) when the length is 8 mod 32
+        byte[] tag = [];
+        if (stored.Length % 32 == 8)
+        {
+            (stored, tag) = (stored[..^8], stored[^8..]);
+            if (BinaryPrimitives.ReadUInt64BigEndian(tag) == 0) throw refused;
+        }
         // no offset, length or index reaches 2^28, so the sums below cannot overflow
         int W(int o)
         {
@@ -181,7 +189,7 @@ public static partial class UA
             if (i > 0xFFFF || o + 32 + l > stored.Length) throw refused;
             members[j] = new((ushort)i, stored[(o + 32)..(o + 32 + l)]);
         }
-        return EncodeInnerSigs(members).SequenceEqual(stored) ? new(index, members, []) : throw refused;
+        return EncodeInnerSigs(members).SequenceEqual(stored) ? new(index, members, tag) : throw refused;
     }
 
     /// <summary><c>setKemKey(ua, version, kem, sig)</c>; <paramref name="sig"/> empty for the version-0 hash-commit fill; no key is no call.</summary>

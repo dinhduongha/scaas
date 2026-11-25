@@ -308,10 +308,11 @@ async fn msig_minimal_sets() {
             &ua,
             &purpose,
             &digest,
+            &s.signature,
             &s.members,
             &domain(),
             &lookup,
-            &|_| None,
+            &|_, _| None,
             Some(&all),
         )
     };
@@ -507,10 +508,11 @@ async fn update_msig_current() {
         &ua,
         &tag,
         &b32(&row["digest"]),
+        &[],
         &sigs,
         &domain(),
         &lookup,
-        &|_| None,
+        &|_, _| None,
         Some(&all),
     );
     assert_eq!(
@@ -549,12 +551,17 @@ async fn update_msig_current() {
         .await
         .unwrap();
     let en: [u8; 32] = U256::from(0b1011).to_be_bytes();
-    let current = |id: [u8; 32]| (id == ua).then(|| (now.clone(), en));
+    // CTR-UA-74: `msigAt` of version 1, the one the signature's tag names
+    assert_eq!(s.signature, 1u64.to_be_bytes(), "the tag of version 1");
+    let current = |id: [u8; 32], v: Option<u64>| {
+        (id == ua && v.is_none_or(|v| v == 1)).then(|| (now.clone(), en, 1))
+    };
     let ok = check_authorization_current(
         &first,
         &ua,
         &purpose,
         &digest,
+        &s.signature,
         &s.members,
         &domain(),
         &lookup,
@@ -719,7 +726,7 @@ async fn msig_writes_landed_by_record() {
     let m: &MemberSig = &ms[0];
     assert_eq!(m.index, i2);
     assert_eq!(
-        check_membership_current(&kd, &ua, m, &lookup, &|_| None, Some(&all)),
+        check_membership_current(&kd, &ua, m, &lookup, &|_, _| None, Some(&all)),
         Ok(())
     );
     let q = acc.quote_registry_write(a.clone()).await.unwrap();
@@ -940,10 +947,11 @@ async fn msig_members_apart() {
         &ua,
         &purpose,
         &digest,
+        &s.signature,
         &s.members,
         &domain(),
         &lookup,
-        &|_| None,
+        &|_, _| None,
         Some(&all),
     );
     assert_eq!(ok, Ok(()), "the combined set verifies");
@@ -1134,10 +1142,11 @@ async fn msig_auditor_pqz_consent() {
             &ua32,
             &scaas_ua::purpose_tag(purpose).unwrap(),
             &digest,
+            &[],
             &members,
             &domain(),
             &lookup,
-            &|_| None,
+            &|_, _| None,
             Some(&all),
         )
     };

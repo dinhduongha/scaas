@@ -129,7 +129,7 @@ pub fn sign(
 /// disabled slot or a set not minimal at either level refused before anything is signed.
 pub fn sign_msig(
     first: &[u8],
-    current: &crate::ua_portable::Current,
+    current: &crate::ua_portable::MsigAt,
     inner: &crate::ua_portable::Inner,
     registry: Option<&Domain>,
     path: &AppPath,

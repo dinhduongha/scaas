@@ -1019,15 +1019,17 @@ impl core::fmt::Display for View<'_> {
 
 /// The home's views (JSON in the contract views' shape, as clientkeys' `reader`; `kemKeyAt` the registry's `{kemPk, sig}`), and
 /// the registry's records of the signers (signature checks, never session reads): a UA's `(kind, key data)` (the first
-/// structure of an `msig`, its id), whether slot `index` of an `msig` is accepted and enabled on the registry
-/// (`memberAccepted`), an `msig`'s current structure and enabled word, and a UA's registration for its version-0 KEM key.
+/// structure of an `msig`, its id), whether slot `index` of an `msig` is accepted on the registry (`msigStateOf(ua).accepted`,
+/// permanent; CTR-UA-74 step 4: the version a record names gives the enabled word), an `msig`'s structure by version, and a UA's
+/// registration for its version-0 KEM key.
 pub trait TreeReader {
     fn read(&mut self, v: View) -> Result<Value>;
     fn ua_key_of(&self, ua: &[u8; 32]) -> Option<(u16, Vec<u8>)>;
     fn accepted(&self, ua: &[u8; 32], index: u16) -> bool;
-    /// An `msig`'s current structure on the registry (`msigOf`: every slot, disabled ones included) and its `msigStateOf`
-    /// enabled word (big-endian, bit i = slot i); `None` for one never updated (CTR-UA-44, F-1): what verifies its records.
-    fn current(&self, ua: &[u8; 32]) -> Option<(Vec<u8>, [u8; 32])>;
+    /// The registry's `msigAt(ua, version)` (CTR-UA-74): that version's structure (every slot, disabled ones included) and its
+    /// `enabled` word (big-endian, bit i = slot i); `None` for the empty answer (a version never stored, another id). What a kept
+    /// record of an `msig` is verified by: the version its tag names, never another (the reader rule).
+    fn msig_at(&self, ua: &[u8; 32], version: u64) -> Option<(Vec<u8>, [u8; 32])>;
     /// A UA's registration (`registrationOf`: its attributes and `pop`), the record of its version-0 KEM key (§8 step 5);
     /// `None` when the reader has none (that key is then `TreeKemRecord`).
     fn registration(&self, ua: &[u8; 32]) -> Option<(crate::ua_portable::UAAttrs, Vec<u8>)>;
@@ -1035,7 +1037,9 @@ pub trait TreeReader {
 
 /// A record's signature for its signer's kind, as the contract's `requirePortable` judges it (F-3): a single key of each
 /// holder kind and WebAuthn by its `signature`, an `msig` by its kept `members` (`abi.encode(MemberSig[])`), minimal, each slot
-/// accepted. `sig`: hex (a single key's signature) or `{signature, members}`. Anything else: `TreeReadCorrupted`.
+/// accepted, over its structure at the version its `signature` (the tag) names (CTR-UA-74, the reader rule; never another
+/// version, never the current one). `sig`: hex (a single key's signature) or `{signature, members}`. Anything else:
+/// `TreeReadCorrupted`. Returns the version the record names (0 for a single key), for [`Walk`]'s order check (step 6).
 fn verified(
     sc: &TreeScope,
     rd: &dyn TreeReader,
@@ -1043,7 +1047,7 @@ fn verified(
     rec: &Value,
     signer: &[u8; 32],
     sig: &Value,
-) -> Result<()> {
+) -> Result<u64> {
     let ok = (|| {
         let (kind, key_data) = rd.ua_key_of(signer)?;
         let digest = (sc.typed)(name, rec.clone()).ok()?.digest().ok()?;
@@ -1066,23 +1070,33 @@ fn verified(
             }
         };
         let members = |id: [u8; 32]| rd.ua_key_of(&id);
-        // F-1, CTR-UA-44: an `msig` by its current structure and enabled slots, as mode 0's records and the contract
-        let current = |id: [u8; 32]| rd.current(&id);
+        // CTR-UA-74: an `msig` by the version its tag names (`msigAt`), as mode 0's records; no current structure is read
+        let at = |id: [u8; 32], v: Option<u64>| {
+            v.and_then(|v| rd.msig_at(&id, v).map(|(d, en)| (d, en, v)))
+        };
         let accepted = |id: [u8; 32], i: u16| rd.accepted(&id, i);
-        Some(crate::ua_portable::check_portable_current(
-            kind,
-            &key_data,
-            signer,
-            &(sc.purpose)(),
-            &digest,
-            &s,
-            &members,
-            &current,
-            Some(&accepted),
-        ))
+        let version = if kind == 0x0120 {
+            crate::ua_portable::tag_version(&s.signature)?
+        } else {
+            0
+        };
+        Some(
+            crate::ua_portable::check_portable_current(
+                kind,
+                &key_data,
+                signer,
+                &(sc.purpose)(),
+                &digest,
+                &s,
+                &members,
+                &at,
+                Some(&accepted),
+            )
+            .map(|()| version),
+        )
     })();
     match ok {
-        Some(Ok(())) => Ok(()),
+        Some(Ok(v)) => Ok(v),
         // spec §10 step 5 (C-7): a signer kind the contract accepts that this reader cannot verify is a defect of the reader
         Some(Err(crate::UAError::NotVerifiable)) => Err(Error::Ua(crate::UAError::NotVerifiable)),
         _ => corrupt(),
@@ -1133,10 +1147,25 @@ const EXITS_MAX: u64 = TREE_LEAVES_MAX as u64 + TREE_ADMINS_MAX as u64;
 
 /// The `gone` register of a walk: per UA its kind (1 left, 2 removed) and the epoch it was applied at.
 type Gone = BTreeMap<[u8; 32], (u8, u64)>;
+/// CTR-UA-74 step 6: per `msig` the highest structure version its records named so far along the walk (only versions ≥ 1 are
+/// kept: 0 is every floor's). A record names a version at or above it; the records kept under one head are judged order-free.
+type Versions = BTreeMap<[u8; 32], u64>;
+/// `v`, the version `ua`'s record names, against `floor` (the versions before its slot), raised into `slot`; below: a lying read.
+fn version_up(floor: &Versions, slot: &mut Versions, ua: &[u8; 32], v: u64) -> Result<()> {
+    if v < floor.get(ua).copied().unwrap_or(0) {
+        return corrupt();
+    }
+    if v > 0 {
+        let e = slot.entry(*ua).or_insert(v);
+        *e = (*e).max(v);
+    }
+    Ok(())
+}
 
 /// The checkpoint (C26, the spec check sc-F-3): the session's `treeId`, the pinned epoch, the hash of the record that won
 /// there, the public tree after its commit (its no-return sets included), the `gone` register before its exits
-/// (`(ua, kind, epoch)`, by UA) and the exits applied at it (`(ua, kind)`, sorted). A walk can start from it.
+/// (`(ua, kind, epoch)`, by UA), the exits applied at it (`(ua, kind)`, sorted) and, before its exits, each `msig`'s highest
+/// structure version its records named (`(ua, version)`, by UA, versions ≥ 1 only; CTR-UA-74 step 6). A walk can start from it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pin {
     pub tree_id: [u8; 32],
@@ -1145,6 +1174,7 @@ pub struct Pin {
     pub tree: Tree,
     pub gone: Vec<([u8; 32], u8, u64)>,
     pub exits: Vec<([u8; 32], u8)>,
+    pub msig_versions: Vec<([u8; 32], u64)>,
 }
 
 impl Pin {
@@ -1154,6 +1184,7 @@ impl Pin {
             "treeId": hx(&self.tree_id), "epoch": self.epoch, "hash": hx(&self.hash), "tree": self.tree.to_json(),
             "gone": self.gone.iter().map(|(u, k, e)| json!([hx(u), k, e])).collect::<Vec<_>>(),
             "exits": self.exits.iter().map(|(u, k)| json!([hx(u), k])).collect::<Vec<_>>(),
+            "msigVersions": self.msig_versions.iter().map(|(u, v)| json!([hx(u), v])).collect::<Vec<_>>(),
         })
     }
     /// [`Pin::to_json`]'s form back (`Argument` for anything else).
@@ -1177,6 +1208,9 @@ impl Pin {
                 ))
             })?,
             exits: list(v, "exits", |x| Ok((b32(&at(x, 0)?)?, kind(&at(x, 1)?)?)))?,
+            msig_versions: list(v, "msigVersions", |x| {
+                Ok((b32(&at(x, 0)?)?, at(x, 1)?.as_u64().ok_or(Error::Argument)?))
+            })?,
         })
     }
 }
@@ -1204,6 +1238,8 @@ struct Walk {
     admins: BTreeMap<u64, Vec<[u8; 32]>>,
     gone_at: BTreeMap<u64, Gone>,
     exits: BTreeMap<u64, Vec<([u8; 32], u8)>>,
+    /// per kept epoch the `msig` versions before its exits (CTR-UA-74 step 6)
+    versions_at: BTreeMap<u64, Versions>,
     targets: BTreeMap<u64, Vec<u32>>,
     /// the tree at the head after its exits
     tree: Tree,
@@ -1256,7 +1292,7 @@ impl Walk {
         if bounded != Some(true) {
             return corrupt();
         }
-        verified(
+        let v0 = verified(
             sc,
             &*rd,
             "PqChatSession",
@@ -1295,30 +1331,38 @@ impl Walk {
             admins: BTreeMap::new(),
             gone_at: BTreeMap::new(),
             exits: BTreeMap::new(),
+            versions_at: BTreeMap::new(),
             targets: BTreeMap::new(),
             tree: Tree::default(),
         };
-        let (n0, mut tree, mut gone) = match pin {
+        let (n0, mut tree, mut gone, mut versions) = match pin {
             Some(p) => {
                 if p.tree_id != w.tree_id || head < p.epoch {
                     return refuse(TreeError::Checkpoint);
                 }
                 if p.epoch > 0 {
-                    let c = w.commit_at(sc, rd, p.epoch)?;
+                    let (c, _) = w.commit_at(sc, rd, p.epoch)?;
                     w.recs.insert(p.epoch, c);
                 }
                 if w.record_hash(sc, p.epoch)? != p.hash {
                     return refuse(TreeError::Conflict);
                 }
                 let g: Gone = p.gone.iter().map(|(u, k, e)| (*u, (*k, *e))).collect();
-                (p.epoch, p.tree.clone(), g)
+                // CTR-UA-74 step 6: never below the versions the pin saw
+                let v: Versions = p.msig_versions.iter().copied().collect();
+                (p.epoch, p.tree.clone(), g, v)
             }
-            None => (0, w.cold(rd)?, Gone::new()),
+            None => {
+                let mut v = Versions::new();
+                version_up(&Versions::new(), &mut v, &creator, v0)?;
+                (0, w.cold(rd)?, Gone::new(), v)
+            }
         };
         let mut n = n0;
         loop {
             if n > n0 {
-                let c = w.commit_at(sc, rd, n)?;
+                let (c, v) = w.commit_at(sc, rd, n)?;
+                version_up(&versions.clone(), &mut versions, &b32j(&c, "author")?, v)?;
                 let (next, targets) = w.apply(sc, &tree, &c, n)?;
                 tree = next;
                 for ua in &tree.gone_ua {
@@ -1332,9 +1376,10 @@ impl Walk {
             if kept {
                 w.trees.insert(n, tree.clone());
                 w.gone_at.insert(n, gone.clone());
+                w.versions_at.insert(n, versions.clone());
             }
             w.admins.insert(n, admins);
-            let ex = w.exits_at(sc, rd, n, &tree, &gone)?;
+            let ex = w.exits_at(sc, rd, n, &tree, &gone, &mut versions)?;
             if pin.is_some_and(|p| n == n0 && !p.exits.iter().all(|e| ex.contains(e))) {
                 return corrupt();
             }
@@ -1471,8 +1516,8 @@ impl Walk {
     }
 
     /// Commit `n`'s record: its id at its number, `sessionId`, `treeId`, the bounds of C10 and C24 before anything is
-    /// allocated (sc-F-7, B-5), then its author's signature.
-    fn commit_at(&self, sc: &TreeScope, rd: &mut dyn TreeReader, n: u64) -> Result<Value> {
+    /// allocated (sc-F-7, B-5), then its author's signature; and the structure version it names ([`verified`]).
+    fn commit_at(&self, sc: &TreeScope, rd: &mut dyn TreeReader, n: u64) -> Result<(Value, u64)> {
         let v = rd.read(View::CommitOf(n))?;
         let c = served(v.get("record").cloned())?;
         let ok = (|| -> Option<bool> {
@@ -1504,8 +1549,8 @@ impl Walk {
             return corrupt();
         }
         let author = b32j(&c, "author")?;
-        verified(sc, &*rd, "PqChatCommit", &c, &author, served(v.get("sig"))?)?;
-        Ok(c)
+        let version = verified(sc, &*rd, "PqChatCommit", &c, &author, served(v.get("sig"))?)?;
+        Ok((c, version))
     }
 
     /// Commit `n` on the tree built so far: its parent's id and tree, then every acceptance check of §8 on the record and the
@@ -1545,7 +1590,8 @@ impl Walk {
     /// [`EXIT_LAG_MAX`], numbered from verified data ([`Walk::named`], C-3); a leave by a UA live at `h`; a removal by an admin
     /// of `h`, of UAs live at `h` or in its admins, strictly sorted, `nextEpoch` the named number plus one; nobody gone before
     /// `h`. Together (B2-6): no UA exits twice under one head (A-4), the leaves they owe fit one commit (C21), and the last
-    /// admin with a leaf goes by a removal only when no member keeps a leaf (C24 read with C38).
+    /// admin with a leaf goes by a removal only when no member keeps a leaf (C24 read with C38). Each signer's structure version
+    /// at or above `versions` before them (CTR-UA-74 step 6), which they raise.
     fn exits_at(
         &self,
         sc: &TreeScope,
@@ -1553,7 +1599,9 @@ impl Walk {
         h: u64,
         tree: &Tree,
         gone: &Gone,
+        versions: &mut Versions,
     ) -> Result<Vec<([u8; 32], u8)>> {
+        let floor = versions.clone();
         let before = |ua: &[u8; 32]| gone.get(ua).is_some_and(|g| g.1 < h);
         let admins = self.admins.get(&h).ok_or(Error::Argument)?;
         let count = |v: Value| served(v.as_u64().filter(|k| *k <= EXITS_MAX));
@@ -1571,7 +1619,7 @@ impl Walk {
             if !holds(tree, &member) || before(&member) {
                 return corrupt();
             }
-            verified(
+            let ver = verified(
                 sc,
                 &*rd,
                 "PqChatTreeLeave",
@@ -1579,6 +1627,7 @@ impl Walk {
                 &member,
                 served(v.get("sig"))?,
             )?;
+            version_up(&floor, versions, &member, ver)?;
             out.push((member, 1));
         }
         for i in 0..count(rd.read(View::RemovalCount(h))?)? {
@@ -1606,7 +1655,7 @@ impl Walk {
             if !ok {
                 return corrupt();
             }
-            verified(
+            let ver = verified(
                 sc,
                 &*rd,
                 "PqChatTreeRemove",
@@ -1614,6 +1663,7 @@ impl Walk {
                 &admin,
                 served(v.get("sig"))?,
             )?;
+            version_up(&floor, versions, &admin, ver)?;
             out.extend(members.into_iter().map(|m| (m, 2)));
         }
         let goes: BTreeSet<[u8; 32]> = out.iter().map(|x| x.0).collect();
@@ -1694,6 +1744,13 @@ impl Walk {
                 .map(|(u, (k, e))| (*u, *k, *e))
                 .collect(),
             exits,
+            msig_versions: self
+                .versions_at
+                .get(&n)
+                .ok_or(Error::Argument)?
+                .iter()
+                .map(|(u, v)| (*u, *v))
+                .collect(),
         })
     }
     /// A walk from the cold tree against the device's checkpoint: never below it, the record that won there the pinned one
@@ -1708,7 +1765,11 @@ impl Walk {
         if p.hash != s.hash {
             return refuse(TreeError::Conflict);
         }
-        if p.tree != s.tree || p.gone != s.gone || !s.exits.iter().all(|e| p.exits.contains(e)) {
+        if p.tree != s.tree
+            || p.gone != s.gone
+            || p.msig_versions != s.msig_versions
+            || !s.exits.iter().all(|e| p.exits.contains(e))
+        {
             return corrupt();
         }
         Ok(())

@@ -246,8 +246,9 @@ pub fn msig_update_message(u: &MsigUpdate) -> Result<([u8; 32], [u8; 32], [u8; 3
     Ok((digest, message, member_digest(&u.ua, &message)))
 }
 
-/// `UARegistryCoreLib.MSIG_UPDATE_GAS` / `MSIG_UPDATE_SLOT_GAS` (row 13): the projected cost of an update beyond its authorization.
-pub const MSIG_UPDATE_GAS: u64 = 400_000;
+/// `UARegistryCoreLib.MSIG_UPDATE_GAS` / `MSIG_UPDATE_SLOT_GAS` (row 13): the projected cost of an update beyond its authorization
+/// (CTR-UA-74: 400,000 -> 450,000, the blob's `prev`).
+pub const MSIG_UPDATE_GAS: u64 = 450_000;
 pub const MSIG_UPDATE_SLOT_GAS: u64 = 62_000;
 
 /// What the signer reads before it signs an update on one registry: `msigOf` (`current`), `msigStateOf` (`version`, `enabled`,
@@ -1504,7 +1505,9 @@ pub fn encode_inner_sigs(members: &[InnerSig]) -> Vec<u8> {
     .concat()
 }
 /// The `MemberSig` a copy sends to `acceptMembership` from the bytes of its `UAMemberSig` alone, which hash to `memberSigHashOf(ua, index)` (CTR-UA-37, owner 2026-11-03): an `msig` slot's
-/// stored bytes are `abi.encode(InnerSig[])`, canonical, at most 16; a signing slot's its `sig`. `Unauthorized` otherwise.
+/// stored bytes are `abi.encode(InnerSig[])`, canonical, at most 16, followed by that member's version tag (CTR-UA-74: 8 bytes when the
+/// length is ≡ 8 mod 32, ≥ 1), which comes back as `sig`; a copy to a registry where the member is at another version sets `sig` to
+/// that version's tag ([`version_tag`]). A signing slot's its `sig`. `Unauthorized` otherwise.
 pub fn replayed_member_sig(key_data: &[u8], index: u16, stored: &[u8]) -> Result<MemberSig> {
     use crate::verify::word_usize as w;
     let m = *MsigStructure::from_key_data(key_data)?
@@ -1517,6 +1520,10 @@ pub fn replayed_member_sig(key_data: &[u8], index: u16, stored: &[u8]) -> Result
             members: vec![],
             sig: stored.to_vec(),
         });
+    }
+    let (stored, tag) = split_stored_tag(stored);
+    if tag_version(tag).is_none() {
+        return Err(UAError::Unauthorized);
     }
     let read = || -> Option<Vec<InnerSig>> {
         let n = w(stored, 32).filter(|n| *n <= 16 && w(stored, 0) == Some(32))?;
@@ -1538,7 +1545,7 @@ pub fn replayed_member_sig(key_data: &[u8], index: u16, stored: &[u8]) -> Result
     Ok(MemberSig {
         index,
         members: read().ok_or(UAError::Unauthorized)?,
-        sig: vec![],
+        sig: tag.to_vec(),
     })
 }
 /// `abi.decode(blob, (MemberSig[]))`, canonical only (re-encoded and compared), at most 16 slots at each level: the type's depth of 2 is the
@@ -1575,14 +1582,14 @@ pub fn decode_member_sigs(blob: &[u8]) -> Option<Vec<MemberSig>> {
 }
 
 /// EVM `_memberOk` before the signature: each derived member's key by its id, in member order (native members: empty), an `msig` member's
-/// its structure, which holds no `msig` (two levels only, as the registry refused it).
-/// CTR-UA-44: an `msig` member's key is its **current** structure ([`Cx::current`]), its id checked against its first one.
-fn member_keys(d: &[u8], cx: &Cx) -> Result<Vec<Vec<u8>>> {
+/// its first structure, which holds no `msig` (two levels only, as the registry refused it). CTR-UA-74: the structure an `msig` member
+/// signs by is the version its slot's tag names ([`Cx::tagged`]), read where the slot is judged.
+fn member_keys(d: &[u8], members: &Members) -> Result<Vec<Vec<u8>>> {
     let key = |m: &MsigMember| {
         if is_native(m.kind) {
             return Ok(vec![]);
         }
-        match (cx.members)(m.id) {
+        match members(m.id) {
             Some((k, key)) if k == m.kind && derive_ua(k, &key, false) == Ok(m.id) => {
                 if k == 0x0120
                     && MsigStructure::from_key_data(&key)?
@@ -1592,11 +1599,7 @@ fn member_keys(d: &[u8], cx: &Cx) -> Result<Vec<Vec<u8>>> {
                 {
                     return Err(UAError::MemberUnknown);
                 }
-                Ok(if k == 0x0120 {
-                    (cx.current)(m.id).map_or(key, |(c, _)| c)
-                } else {
-                    key
-                })
+                Ok(key)
             }
             _ => Err(UAError::MemberUnknown),
         }
@@ -1607,17 +1610,27 @@ fn member_keys(d: &[u8], cx: &Cx) -> Result<Vec<Vec<u8>>> {
         .map(key)
         .collect()
 }
-/// [`member_keys`] for a check outside this module (the sealed container's `msig` sender, MD-10, `wallet::seal`), with `current` as
-/// the record checks take it (`&|_| None`: the first structures, never updated).
+/// [`member_keys`] for the sealed container's `msig` sender (MD-10, `wallet::seal`), which carries no version tag: an `msig` member's
+/// key its current structure (`current`; `&|_| None`: the first structures, never updated).
 #[cfg(feature = "wallet")]
 pub(crate) fn member_keys_current(
     d: &[u8],
     members: &Members,
     current: &Current,
 ) -> Result<Vec<Vec<u8>>> {
-    member_keys(d, &Cx { members, current })
+    let s = MsigStructure::from_key_data(d)?;
+    Ok(member_keys(d, members)?
+        .into_iter()
+        .zip(&s.members)
+        .map(|(k, m)| match current(m.id) {
+            Some((c, _)) if m.kind == 0x0120 => c,
+            _ => k,
+        })
+        .collect())
 }
-/// `(id, index)` → `memberAccepted(id, index)` of the target registry (CTR-UA-37): has slot `index` of `id` agreed?
+/// `(id, index)` → has slot `index` of `id` agreed on the target registry (CTR-UA-37): `msigStateOf(id).accepted` bit `index`, an
+/// acceptance being per slot and permanent; each check masks it by the `enabled` word of the version it reads (CTR-UA-74 step 4),
+/// so `memberAccepted` (enabled now) serves only a check of the current version.
 pub type Accepted<'a> = dyn Fn([u8; 32], u16) -> bool + 'a;
 /// The accepted bits a verdict reads. `slot`: a bit the registry always reads (an inner `msig`'s, a `pop` exempting only its own record's;
 /// every bit of `requireAuthorized`); with no `accepted` it is marked unchecked, and [`Bits::verdict`] turns a pass into `NotVerifiable`,
@@ -1654,17 +1667,40 @@ impl<'a> Bits<'a> {
         }
     }
 }
-/// What the record checks read (CTR-UA-44): `members` the first structures and keys by id (identities), `current` the structures that
-/// authorize now with their `enabled` words.
+/// What the record checks read: `members` the first structures and keys by id (identities), `at` an `msig`'s structure by version
+/// (CTR-UA-74, [`MsigAt`]).
 pub(crate) struct Cx<'a> {
     members: &'a Members<'a>,
-    current: &'a Current<'a>,
+    at: &'a MsigAt<'a>,
 }
+/// Every slot enabled: version 0, the registration's structure (CTR-UA-74).
+const ALL_ENABLED: [u8; 32] = [0xff; 32];
 impl Cx<'_> {
-    /// Slot `index` of the `msig` `id` is enabled on the target registry (CTR-UA-44; never updated: every slot), whatever `accepted`
-    /// answers: the contract masks by `accepted & enabled` itself (Fable P2-4).
-    fn on(&self, id: &[u8; 32], index: u16) -> bool {
-        (self.current)(*id).is_none_or(|(_, en)| slot_enabled(&en, index))
+    /// `(structure, enabled, version)` of the `msig` `id` whose first structure is `first` (CTR-UA-74 reader rule, step 3): version
+    /// `v`, or the current one for `None`. Version 0 is `first` with every slot, whatever is answered for it: the id commits to it
+    /// (`uaOf(0x0120, s) == ua` by construction), so no answer for version 0 is read. No answer for a version ≥ 1, an answer of
+    /// another version, or threshold 0: `Unauthorized`.
+    fn at(&self, id: &[u8; 32], first: &[u8], v: Option<u64>) -> Result<(Vec<u8>, [u8; 32], u64)> {
+        let zero = || Ok((first.to_vec(), ALL_ENABLED, 0));
+        if v == Some(0) {
+            return zero();
+        }
+        match (self.at)(*id, v) {
+            None | Some((_, _, 0)) if v.is_none() => zero(),
+            Some((s, en, got))
+                if got != 0
+                    && v.is_none_or(|v| v == got)
+                    && MsigStructure::from_key_data(&s).is_ok_and(|x| x.threshold != 0) =>
+            {
+                Ok((s, en, got))
+            }
+            _ => Err(UAError::Unauthorized),
+        }
+    }
+    /// [`Cx::at`] of the version the tag `tag` names (steps 2 and 3; [`tag_version`]): `(structure, enabled)`.
+    fn tagged(&self, id: &[u8; 32], first: &[u8], tag: &[u8]) -> Result<(Vec<u8>, [u8; 32])> {
+        let v = tag_version(tag).ok_or(UAError::Unauthorized)?;
+        self.at(id, first, Some(v)).map(|(s, en, _)| (s, en))
     }
 }
 /// Bit `index` of an `msigStateOf` `enabled` word (big-endian uint256, bit i = slot i; CTR-UA-44): slot `index` signs.
@@ -1684,37 +1720,42 @@ pub fn enabled_only(d: &[u8], enabled: &[u8; 32]) -> Result<Vec<u8>> {
         .collect::<Vec<_>>();
     Ok(encode_msig(s.threshold, &members))
 }
-/// `(structure, eligible)` of the `msig` `ua` whose first structure is `first`: its current structure (every slot: the indexes signatures
-/// name) and its enabled slots only.
-fn now_of(ua: &[u8; 32], first: &[u8], current: &Current) -> Result<(Vec<u8>, Vec<u8>)> {
-    match current(*ua) {
-        Some((c, en)) => {
-            let e = enabled_only(&c, &en)?;
-            Ok((c, e))
-        }
-        None => Ok((first.to_vec(), first.to_vec())),
-    }
+/// `(structure, eligible, enabled)` of the `msig` `ua` whose first structure is `first` at the version its stored signature's tag
+/// names (CTR-UA-74): the structure (every slot: the indexes signatures name), its enabled slots only, its `enabled` word.
+fn tagged_of(
+    cx: &Cx,
+    ua: &[u8; 32],
+    first: &[u8],
+    tag: &[u8],
+) -> Result<(Vec<u8>, Vec<u8>, [u8; 32])> {
+    let (s, en) = cx.tagged(ua, first, tag)?;
+    let e = enabled_only(&s, &en)?;
+    Ok((s, e, en))
 }
-/// An `msig` member's key data for eligibility: its enabled slots now.
+/// An `msig` member's key data for eligibility: its enabled slots now (its current structure; a member that does not sign names no
+/// version).
 fn inner_of<'a>(cx: &'a Cx<'a>) -> impl Fn([u8; 32]) -> Option<Vec<u8>> + 'a {
     move |id| {
         let (k, key) = (cx.members)(id)?;
         if k != 0x0120 {
             return Some(key);
         }
-        now_of(&id, &key, cx.current).ok().map(|(_, e)| e)
+        let (s, en, _) = cx.at(&id, &key, None).ok()?;
+        enabled_only(&s, &en).ok()
     }
 }
 
 /// EVM `_sigOk` + `_msig(portable = true)` over `ua_message(kind, purpose, digest)`, `Err` for a part nothing here can check.
 /// An `msig`: no slots unless PQ-eligible (U8S-D2), then the canonical minimal `MemberSig[]` (U8S-D1, both levels), each slot accepted
 /// ([`Bits::record`], outside the `pop`) and by [`slot_ok`].
-/// `d` the record's key data, an `msig`'s current structure ([`now_of`]), `eligible` its enabled slots.
+/// `d` the record's key data, an `msig`'s structure at its tag's version ([`tagged_of`]), `eligible` its enabled slots, `en` its
+/// `enabled` word; `sig` without the tag (an `msig`'s `MemberSig[]`).
 #[allow(clippy::too_many_arguments)]
 fn signature_ok(
     kind: u16,
     d: &[u8],
     eligible: &[u8],
+    en: &[u8; 32],
     ua: &[u8; 32],
     purpose: &[u8; 32],
     digest: &[u8; 32],
@@ -1731,7 +1772,7 @@ fn signature_ok(
     if kind != 0x0120 {
         return Ok(crate::verify::verify(kind, d, &message, sig, true, false));
     }
-    let keys = member_keys(d, cx)?;
+    let keys = member_keys(d, cx.members)?;
     if !msig_pqz_eligible_with(eligible, &inner_of(cx))? {
         return Ok(sig.is_empty());
     }
@@ -1739,14 +1780,16 @@ fn signature_ok(
         return Ok(false);
     };
     let pop = *purpose == pop_v2_tag();
-    msig_record_ok(d, &keys, ua, &message, digest, &slots, pop, cx, bits)
+    msig_record_ok(d, en, &keys, ua, &message, digest, &slots, pop, cx, bits)
 }
 
 /// The slots of a portable record's `msig` signature over `message` (`uaMessage(msig, purpose, digest)`): the canonical minimal set
-/// (both levels), each slot accepted outside the `pop` and enabled, each by [`slot_ok`]. `keys`: [`member_keys`] of `d`.
+/// (both levels), each slot accepted outside the `pop` and enabled in `en` (the `enabled` word of `d`'s version), each by
+/// [`slot_ok`]. `keys`: [`member_keys`] of `d`.
 #[allow(clippy::too_many_arguments)]
 fn msig_record_ok(
     d: &[u8],
+    en: &[u8; 32],
     keys: &[Vec<u8>],
     ua: &[u8; 32],
     message: &[u8; 32],
@@ -1763,7 +1806,7 @@ fn msig_record_ok(
     let md = member_digest(ua, message);
     for s in slots {
         if !(pop || bits.record(ua, s.index))
-            || !cx.on(ua, s.index)
+            || !slot_enabled(en, s.index)
             || !slot_ok(
                 &structure.members[s.index as usize],
                 &keys[s.index as usize],
@@ -1781,8 +1824,9 @@ fn msig_record_ok(
 }
 
 /// One member's slot: a derived member under `member` over `md`, an `evm-eoa` member over `digest` itself, no list on either; another
-/// native member is a part nothing here can check. An `msig` member by its own list, minimal, no `sig`, each leaf one level down an accepted
-/// slot of it ([`Bits::slot`]) over [`inner_digest`], `digest` the same.
+/// native member is a part nothing here can check. An `msig` member (`key` its first structure) by its own list over its structure at
+/// the version its `sig` names (CTR-UA-74, step 5), minimal, each leaf one level down an accepted and enabled slot of it
+/// ([`Bits::slot`]) over [`inner_digest`], `digest` the same.
 fn slot_ok(
     m: &MsigMember,
     key: &[u8],
@@ -1793,17 +1837,20 @@ fn slot_ok(
     bits: &Bits,
 ) -> Result<bool> {
     if m.kind == 0x0120 {
+        let Ok((sd, sen)) = cx.tagged(&m.id, key, &s.sig) else {
+            return Ok(false);
+        };
         let indexes: Vec<u16> = s.members.iter().map(|x| x.index).collect();
-        if !s.sig.is_empty() || !msig_slots_minimal(key, &indexes)? {
+        if !msig_slots_minimal(&sd, &indexes)? {
             return Ok(false);
         }
-        let leaves = MsigStructure::from_key_data(key)?.members;
-        let keys = member_keys(key, cx)?;
+        let leaves = MsigStructure::from_key_data(&sd)?.members;
+        let keys = member_keys(&sd, cx.members)?;
         let inner = inner_digest(&m.id, md)?;
         for x in &s.members {
             let i = x.index as usize;
             if !bits.slot(&m.id, x.index)
-                || !cx.on(&m.id, x.index)
+                || !slot_enabled(&sen, x.index)
                 || !leaf_ok(&leaves[i], &keys[i], digest, &inner, &x.sig, true)?
             {
                 return Ok(false);
@@ -1935,12 +1982,13 @@ pub fn check_registration_with(
         pop,
         pqz_pop,
         members,
-        &|_| None,
+        &|_, _| None,
         accepted,
     )
 }
-/// [`check_registration_with`] on the target registry's current structures of the record's `msig` members (CTR-UA-44, [`Current`]):
-/// what its `register` reads for them. The record itself registers its first structure.
+/// [`check_registration_with`] on the target registry's structures of the record's `msig` members ([`MsigAt`]): each signing `msig`
+/// member's slot by the version its tag names (CTR-UA-74), eligibility by the current ones. The record itself registers its first
+/// structure (version 0, no tag).
 #[allow(clippy::too_many_arguments)]
 pub fn check_registration_current(
     kind: u16,
@@ -1949,10 +1997,10 @@ pub fn check_registration_current(
     pop: &[u8],
     pqz_pop: &[u8],
     members: &Members,
-    current: &Current,
+    at: &MsigAt,
     accepted: Option<&Accepted>,
 ) -> Result<()> {
-    let cx = Cx { members, current };
+    let cx = Cx { members, at };
     let ua = derive_ua(kind, key_data, false)?;
     let digest = registration_attrs(kind, &ua, key_data, attrs, pqz_pop, &inner_of(&cx))?;
     let bits = Bits::new(accepted);
@@ -1961,6 +2009,7 @@ pub fn check_registration_current(
             kind,
             key_data,
             key_data,
+            &ALL_ENABLED,
             &ua,
             &pop_v2_tag(),
             &digest,
@@ -2003,18 +2052,20 @@ pub fn check_kem_record_with(
     if !is_kem_holder(kind) {
         return Err(UAError::KemHolder(kind));
     }
-    // CTR-UA-44: no current structure to read here: an `msig` holds no KEM key (refused just above)
+    // CTR-UA-44, CTR-UA-74: no structure version to read here: an `msig` holds no KEM key (refused just above), so its
+    // signature never carries a tag
     let digest = kem_record_digest(ua, version, kem_pk)?;
     let bits = Bits::new(accepted);
     let cx = Cx {
         members,
-        current: &|_| None,
+        at: &|_, _| None,
     };
     bits.verdict(
         signature_ok(
             kind,
             key_data,
             key_data,
+            &ALL_ENABLED,
             ua,
             &purpose_tag("kem")?,
             &digest,
@@ -2024,6 +2075,25 @@ pub fn check_kem_record_with(
         )?,
         UAError::Unauthorized,
     )
+}
+
+/// A registry record's stored signature `stored` of `(kind, key_data)` split for [`signature_ok`] (CTR-UA-74): an `msig`'s
+/// `(structure, eligible, enabled)` at the version its trailing tag names and its `MemberSig[]`; a single key's bytes whole, its
+/// key data every slot.
+#[allow(clippy::type_complexity)]
+fn stored_of<'s>(
+    cx: &Cx,
+    kind: u16,
+    key_data: &[u8],
+    ua: &[u8; 32],
+    stored: &'s [u8],
+) -> Result<(Vec<u8>, Vec<u8>, [u8; 32], &'s [u8])> {
+    if kind != 0x0120 {
+        return Ok((key_data.to_vec(), key_data.to_vec(), ALL_ENABLED, stored));
+    }
+    let (body, tag) = split_stored_tag(stored);
+    let (d, e, en) = tagged_of(cx, ua, key_data, tag)?;
+    Ok((d, e, en, body))
 }
 
 /// A PQZ key record as `setPqzKey` checks it, without its state (a key already set is the chain's `PqzKeySet`): `ua` the id of
@@ -2068,12 +2138,13 @@ pub fn check_pqz_key_record_with(
         pqz_pop_hash,
         sig,
         members,
-        &|_| None,
+        &|_, _| None,
         accepted,
     )
 }
-/// [`check_pqz_key_record_with`] on the target registry's current structures (CTR-UA-44, [`Current`]): `key_data` the first structure (the
-/// id), the record and its `msig` members signed and judged by their structures now; `accepted` that registry's `memberAccepted`.
+/// [`check_pqz_key_record_with`] on the target registry's structures by version ([`MsigAt`], CTR-UA-74): `key_data` the first structure
+/// (the id); `sig` as `pqzKeySigOf` keeps it, an `msig`'s `MemberSig[]` followed by its tag ([`split_stored_tag`]), the record and its
+/// signing `msig` members judged by the versions their tags name; `accepted` that registry's `memberAccepted`.
 #[allow(clippy::too_many_arguments)]
 pub fn check_pqz_key_record_current(
     kind: u16,
@@ -2083,18 +2154,14 @@ pub fn check_pqz_key_record_current(
     pqz_pop_hash: &[u8; 32],
     sig: &[u8],
     members: &Members,
-    current: &Current,
+    at: &MsigAt,
     accepted: Option<&Accepted>,
 ) -> Result<()> {
     if !is_record_of(kind, key_data, ua)? {
         return Err(UAError::Unauthorized);
     }
-    let cx = Cx { members, current };
-    let (d, e) = if kind == 0x0120 {
-        now_of(ua, key_data, current)?
-    } else {
-        (key_data.to_vec(), key_data.to_vec())
-    };
+    let cx = Cx { members, at };
+    let (d, e, en, sig) = stored_of(&cx, kind, key_data, ua, sig)?;
     let r = pqz_key_record_message_with(
         kind,
         ua,
@@ -2111,6 +2178,7 @@ pub fn check_pqz_key_record_current(
             kind,
             &d,
             &e,
+            &en,
             ua,
             &purpose_tag("pqz-key")?,
             &r.record_digest,
@@ -2144,11 +2212,11 @@ pub fn check_pqz_key_version_record(
         pqz_pop_hash,
         sig,
         members,
-        &|_| None,
+        &|_, _| None,
         None,
     )
 }
-/// [`check_pqz_key_version_record`] on the target registry's current structures and accepted bits, as
+/// [`check_pqz_key_version_record`] on the target registry's structures by version and accepted bits, as
 /// [`check_pqz_key_record_current`].
 #[allow(clippy::too_many_arguments)]
 pub fn check_pqz_key_version_record_current(
@@ -2160,18 +2228,14 @@ pub fn check_pqz_key_version_record_current(
     pqz_pop_hash: &[u8; 32],
     sig: &[u8],
     members: &Members,
-    current: &Current,
+    at: &MsigAt,
     accepted: Option<&Accepted>,
 ) -> Result<()> {
     if !is_record_of(kind, key_data, ua)? {
         return Err(UAError::Unauthorized);
     }
-    let cx = Cx { members, current };
-    let (d, e) = if kind == 0x0120 {
-        now_of(ua, key_data, current)?
-    } else {
-        (key_data.to_vec(), key_data.to_vec())
-    };
+    let cx = Cx { members, at };
+    let (d, e, en, sig) = stored_of(&cx, kind, key_data, ua, sig)?;
     if !holds(kind, &e, &inner_of(&cx))? {
         return Err(UAError::PqzHolder(kind));
     }
@@ -2192,6 +2256,7 @@ pub fn check_pqz_key_version_record_current(
             kind,
             &d,
             &e,
+            &en,
             ua,
             &purpose_tag("pqz-key")?,
             &r.record_digest,
@@ -2217,7 +2282,7 @@ pub struct ScopedKeyRecord<'a> {
 /// A scoped PQZ key record as `setPqzScopedKey` checks it, without its state (the expiry against the block, the sequence,
 /// `pqzKeyUsed`, the scope's `pqzOpening` and the opening key's form are the chain's): `ua` the id of `key_data`, a holder, no `msig`
 /// at scope 0 (ruling 9), the proof hash, `sig` over [`crate::pqz3k::scoped_key_record_digest`] under `PURPOSE_PQZ_SCOPED_KEY`. An `msig`
-/// is judged and signed by its current structure on the target registry (CTR-UA-44, [`Current`]), as [`check_pqz_key_record_current`].
+/// is judged by the structure version its stored signature's tag names (CTR-UA-74, [`MsigAt`]), as [`check_pqz_key_record_current`].
 #[allow(clippy::too_many_arguments)]
 pub fn check_pqz_scoped_key_record_current(
     kind: u16,
@@ -2226,18 +2291,14 @@ pub fn check_pqz_scoped_key_record_current(
     r: &ScopedKeyRecord,
     sig: &[u8],
     members: &Members,
-    current: &Current,
+    at: &MsigAt,
     accepted: Option<&Accepted>,
 ) -> Result<()> {
     if !is_record_of(kind, key_data, ua)? {
         return Err(UAError::Unauthorized);
     }
-    let cx = Cx { members, current };
-    let (d, e) = if kind == 0x0120 {
-        now_of(ua, key_data, current)?
-    } else {
-        (key_data.to_vec(), key_data.to_vec())
-    };
+    let cx = Cx { members, at };
+    let (d, e, en, sig) = stored_of(&cx, kind, key_data, ua, sig)?;
     let shared = r.scope == [0; 20];
     if !holds(kind, &e, &inner_of(&cx))? || (shared && kind == 0x0120) {
         return Err(UAError::PqzHolder(kind));
@@ -2268,6 +2329,7 @@ pub fn check_pqz_scoped_key_record_current(
             kind,
             &d,
             &e,
+            &en,
             ua,
             &crate::pqz3k::purpose_pqz_scoped_key(),
             &rd,
@@ -2298,27 +2360,28 @@ pub fn check_membership_with(
     members: &Members,
     accepted: Option<&Accepted>,
 ) -> Result<()> {
-    check_membership_current(key_data, ua, slot, members, &|_| None, accepted)
+    check_membership_current(key_data, ua, slot, members, &|_, _| None, accepted)
 }
-/// [`check_membership_with`] on the target registry's current structures (CTR-UA-44, [`Current`]): `slot.index` a slot of the current
-/// structure, enabled or not (an appended slot accepts here), an `msig` member's list over its own current structure.
+/// [`check_membership_with`] on the target registry's structures ([`MsigAt`]): `slot.index` a slot of the current structure, enabled
+/// or not (an appended slot accepts here; a stored slot never changes, CTR-UA-44), an `msig` member's list over its structure at the
+/// version its `slot.sig` names (CTR-UA-74; [`replayed_member_sig`] gives it from the stored bytes).
 pub fn check_membership_current(
     key_data: &[u8],
     ua: &[u8; 32],
     slot: &MemberSig,
     members: &Members,
-    current: &Current,
+    at: &MsigAt,
     accepted: Option<&Accepted>,
 ) -> Result<()> {
     if !is_record_of(0x0120, key_data, ua)? {
         return Err(UAError::Unauthorized);
     }
-    let cx = Cx { members, current };
-    let (d, _) = now_of(ua, key_data, current)?;
+    let cx = Cx { members, at };
+    let (d, _, _) = cx.at(ua, key_data, None)?;
     let structure = MsigStructure::from_key_data(&d)?;
     let i = slot.index as usize;
     let m = structure.members.get(i).ok_or(UAError::Unauthorized)?;
-    let keys = member_keys(&d, &cx)?;
+    let keys = member_keys(&d, members)?;
     let digest = membership_digest(ua, &m.id);
     let md = member_digest(
         ua,
@@ -2331,16 +2394,18 @@ pub fn check_membership_current(
     )
 }
 
-/// `requireAuthorized(ua, purpose, digest, UASig{"", "", slots})` of the `msig` `key_data`, without its state (UARegistry `_msig`, clientkeys
-/// `verifyAuthorization`): at both levels strictly increasing accepted slots that stop at the threshold, no minimal rule, no eligibility; an
-/// `msig` slot by its list one level down over [`inner_digest`], no `sig`; a derived leaf under `member` over its level's member digest, an
-/// `evm-eoa` leaf over `UAAuth(id, member, that digest)` in `domain`. Every bit is read: no `accepted` is `NotVerifiable`.
+/// `requireAuthorized(ua, purpose, digest, UASig{"", tag, slots})` of the `msig` `key_data`, without its state (UARegistry `_msig`,
+/// clientkeys `verifyAuthorization`): at both levels strictly increasing accepted slots that stop at the threshold, no minimal rule, no
+/// eligibility; an `msig` slot by its list one level down over [`inner_digest`], its `sig` that member's tag; a derived leaf under
+/// `member` over its level's member digest, an `evm-eoa` leaf over `UAAuth(id, member, that digest)` in `domain`. Every bit is read: no
+/// `accepted` is `NotVerifiable`. `tag` the `msig`'s version tag (CTR-UA-74; empty: version 0).
 #[allow(clippy::too_many_arguments)]
 pub fn check_authorization(
     key_data: &[u8],
     ua: &[u8; 32],
     purpose: &[u8; 32],
     digest: &[u8; 32],
+    tag: &[u8],
     slots: &[MemberSig],
     domain: &Domain,
     members: &Members,
@@ -2351,30 +2416,68 @@ pub fn check_authorization(
         ua,
         purpose,
         digest,
+        tag,
         slots,
         domain,
         members,
-        &|_| None,
+        &|_, _| None,
         accepted,
     )
 }
 /// `id` → the CTR-UA-09 bytes of `msigOf(id)` on the target registry (every slot, disabled ones included) and its `msigStateOf` `enabled`
-/// word (big-endian, bit i = slot i), `None` for an `msig` never updated there (CTR-UA-44): what authorizes. The id is the first structure's,
-/// `members` gives it.
+/// word (big-endian, bit i = slot i), `None` for an `msig` never updated there (CTR-UA-44). What the sealed container's `msig` sender is
+/// judged on (`wallet::seal`, no version tag); every record check reads [`MsigAt`].
 pub type Current<'a> = dyn Fn([u8; 32]) -> Option<(Vec<u8>, [u8; 32])> + 'a;
-/// [`check_authorization`] with two inputs (CTR-UA-44): `key_data` the first structure (`registrationOf`: the id, `pop`, `popSlotsOf`;
-/// [`is_record_of`] applies to it only) and `current` the structures that authorize now, for the record and its `msig` members;
-/// `accepted` that registry's `memberAccepted` (enabled and accepted). The first structure never authorizes once `current` answers.
+/// CTR-UA-74 (`msigAt`, CTR-UA-44 `msigOf` + `msigStateOf`): `(id, Some(v))` → `(structure, enabled, v)` of version `v` of the `msig`
+/// `id` on the target registry (the CTR-UA-09 bytes, every slot, and its `enabled` word, big-endian, bit i = slot i); `(id, None)` →
+/// the current one and its version. `None`: no answer (the registry's empty structure, or a version the reader does not hold).
+/// Version 0 is always the first structure, every slot (the id commits to it; an answer for it is never read); a version ≥ 1 with
+/// no answer is refused. A reader holding only the
+/// current state answers `None` for every other version; `&|_, _| None` reads an `msig` never updated. A kept record is judged by the
+/// version its tag names and no other (the reader rule, `docs/contracts/accounts.md#msig-reader-rule`); a signer reads `None`.
+pub type MsigAt<'a> = dyn Fn([u8; 32], Option<u64>) -> Option<(Vec<u8>, [u8; 32], u64)> + 'a;
+/// CTR-UA-74 step 2: the version a tag names: empty → 0, exactly 8 bytes → that big-endian `uint64`, which must be ≥ 1; any other length
+/// or 8 zero bytes: `None` (a lying read, refused).
+pub fn tag_version(tag: &[u8]) -> Option<u64> {
+    if tag.is_empty() {
+        return Some(0);
+    }
+    <[u8; 8]>::try_from(tag)
+        .ok()
+        .map(u64::from_be_bytes)
+        .filter(|v| *v != 0)
+}
+/// The tag a new signature carries for an `msig` at `version` (CTR-UA-74): empty at 0, else 8 bytes big-endian.
+pub fn version_tag(version: u64) -> Vec<u8> {
+    if version == 0 {
+        vec![]
+    } else {
+        version.to_be_bytes().to_vec()
+    }
+}
+/// A stored portable `msig` signature (`pqzKeySigOf`, the scoped key's, `kemKeyAt`'s, an event's `sig`; an `msig` member's slot object)
+/// as `(body, tag)` (CTR-UA-74): the tag the trailing 8 bytes when the length is ≡ 8 mod 32, else empty (version 0).
+pub fn split_stored_tag(stored: &[u8]) -> (&[u8], &[u8]) {
+    if stored.len() % 32 == 8 {
+        stored.split_at(stored.len() - 8)
+    } else {
+        (stored, &[])
+    }
+}
+/// [`check_authorization`] on the target registry's structures by version ([`MsigAt`]): `key_data` the first structure
+/// (`registrationOf`: the id, `pop`, `popSlotsOf`; [`is_record_of`] applies to it only), the record and its `msig` members judged by the
+/// versions their tags name (CTR-UA-74); `accepted` that registry's `memberAccepted` (enabled and accepted).
 #[allow(clippy::too_many_arguments)]
 pub fn check_authorization_current(
     key_data: &[u8],
     ua: &[u8; 32],
     purpose: &[u8; 32],
     digest: &[u8; 32],
+    tag: &[u8],
     slots: &[MemberSig],
     domain: &Domain,
     members: &Members,
-    current: &Current,
+    at: &MsigAt,
     accepted: Option<&Accepted>,
 ) -> Result<()> {
     if !is_record_of(0x0120, key_data, ua)? {
@@ -2382,18 +2485,19 @@ pub fn check_authorization_current(
     }
     let md = member_digest(ua, &ua_message(0x0120, purpose, digest)?);
     let bits = Bits::new(accepted);
-    let (d, _) = now_of(ua, key_data, current)?;
-    let cx = Cx { members, current };
+    let cx = Cx { members, at };
+    let (d, en) = cx.tagged(ua, key_data, tag)?;
     bits.verdict(
-        auth_ok(ua, &d, &md, slots, domain, &cx, &bits)?,
+        auth_ok(ua, &d, &en, &md, slots, domain, &cx, &bits)?,
         UAError::Unauthorized,
     )
 }
 /// `requirePortable(ua, purpose, digest, sig)` / `requirePortableApp` of the record `(kind, key_data)` (UARegistryCoreLib
 /// `_portable`; scaas-sdk spec §12.2, review r2 R7), on the target registry's state: never the registration's `pop`; a single key
-/// `signature` only (its kind's check, a surplus-form kind's minimal form); an `msig` `members` only, over its current structure, the
-/// canonical minimal set at both levels whatever its PQ weight, each slot accepted and enabled, an `evm-eoa` member over `digest`
-/// itself. `key_data` the first structure (the id). An `msig` with no `accepted`: `NotVerifiable`, as [`check_authorization`].
+/// `signature` only (its kind's check, a surplus-form kind's minimal form); an `msig` `members` over its structure at the version its
+/// `signature` (the tag) names (CTR-UA-74, the reader rule), the canonical minimal set at both levels whatever its PQ weight, each slot
+/// accepted and enabled there, an `evm-eoa` member over `digest` itself. `key_data` the first structure (the id). An `msig` with no
+/// `accepted`: `NotVerifiable`, as [`check_authorization`].
 #[allow(clippy::too_many_arguments)]
 pub fn check_portable_current(
     kind: u16,
@@ -2403,33 +2507,33 @@ pub fn check_portable_current(
     digest: &[u8; 32],
     sig: &UASig,
     members: &Members,
-    current: &Current,
+    at: &MsigAt,
     accepted: Option<&Accepted>,
 ) -> Result<()> {
     if !is_record_of(kind, key_data, ua)? || *purpose == pop_v2_tag() || !sig.key_data.is_empty() {
         return Err(UAError::Unauthorized);
     }
-    let cx = Cx { members, current };
+    let cx = Cx { members, at };
     let bits = Bits::new(accepted);
     let ok = if kind == 0x0120 {
         if accepted.is_none() {
             return Err(UAError::NotVerifiable);
         }
-        let (d, _) = now_of(ua, key_data, current)?;
-        let keys = member_keys(&d, &cx)?;
+        let (d, en) = cx.tagged(ua, key_data, &sig.signature)?;
+        let keys = member_keys(&d, members)?;
         let message = ua_message(kind, purpose, digest)?;
-        sig.signature.is_empty()
-            && msig_record_ok(
-                &d,
-                &keys,
-                ua,
-                &message,
-                digest,
-                &sig.members,
-                false,
-                &cx,
-                &bits,
-            )?
+        msig_record_ok(
+            &d,
+            &en,
+            &keys,
+            ua,
+            &message,
+            digest,
+            &sig.members,
+            false,
+            &cx,
+            &bits,
+        )?
     } else {
         // a single key reads no bits
         sig.members.is_empty()
@@ -2437,6 +2541,7 @@ pub fn check_portable_current(
                 kind,
                 key_data,
                 key_data,
+                &ALL_ENABLED,
                 ua,
                 purpose,
                 digest,
@@ -2449,9 +2554,11 @@ pub fn check_portable_current(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// `d` the structure at the version the `msig` `id`'s tag names, `en` its `enabled` word.
 fn auth_ok(
     id: &[u8; 32],
     d: &[u8],
+    en: &[u8; 32],
     md: &[u8; 32],
     slots: &[MemberSig],
     domain: &Domain,
@@ -2459,7 +2566,7 @@ fn auth_ok(
     bits: &Bits,
 ) -> Result<bool> {
     let structure = MsigStructure::from_key_data(d)?;
-    let keys = member_keys(d, cx)?;
+    let keys = member_keys(d, cx.members)?;
     let (mut acc, mut next) = (0u32, 0u16);
     for s in slots {
         let i = s.index as usize;
@@ -2469,7 +2576,7 @@ fn auth_ok(
         if acc >= structure.threshold.into()
             || s.index < next
             || !bits.slot(id, s.index)
-            || !cx.on(id, s.index)
+            || !slot_enabled(en, s.index)
         {
             return Ok(false);
         }
@@ -2485,16 +2592,20 @@ fn auth_ok(
                     sig: x.sig.clone(),
                 })
                 .collect();
-            s.sig.is_empty()
-                && auth_ok(
-                    &m.id,
-                    &keys[i],
-                    &inner_digest(&m.id, md)?,
-                    &lifted,
-                    domain,
-                    cx,
-                    bits,
-                )?
+            // CTR-UA-74: `sig` the member's tag, its structure that version's
+            let Ok((sd, sen)) = cx.tagged(&m.id, &keys[i], &s.sig) else {
+                return Ok(false);
+            };
+            auth_ok(
+                &m.id,
+                &sd,
+                &sen,
+                &inner_digest(&m.id, md)?,
+                &lifted,
+                domain,
+                cx,
+                bits,
+            )?
         } else {
             s.members.is_empty()
                 && leaf_ok(
