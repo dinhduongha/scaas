@@ -60,9 +60,8 @@ pub fn keeps<'a>(
     for p in parent {
         if child.get(j) == Some(&p) {
             j += 1;
-        } else if child.get(j).is_some_and(|c| *c < p) {
-            return false;
-        } else if !flagged(p) {
+        } else if child.get(j).is_some_and(|c| *c < p) || !flagged(p) {
+            // a UA added, or one dropped that neither left nor was removed
             return false;
         }
     }

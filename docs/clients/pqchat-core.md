@@ -240,13 +240,21 @@ by [CTR-CHAT-23](../contracts/pqchat.md#CTR-CHAT-23); the default off a controll
 - **On an `sstore2` instance** the session and epoch records (`sessionSig`, `epochSig`), the parent's leaves and removals (from
   the kept `leaveAt` / `removalAt` records, each with its signer's signature, kept under the parent and naming it or,
   at home since the change of 2026-11-24 to [CTR-CHAT-20](../contracts/pqchat.md#CTR-CHAT-20) and
-  [CTR-CHAT-10](../contracts/pqchat.md#CTR-CHAT-10) (SPECIFIED), an ancestor of it on the home's chain at most
-  `EXIT_LAG_MAX` = 16 epochs above; each is judged order-free among the exits kept under the parent, exactly as the
+  [CTR-CHAT-10](../contracts/pqchat.md#CTR-CHAT-10) (BUILT), an ancestor of it on the home's chain at most
+  `EXIT_LAG_MAX` = 16 epochs above, each ancestor the record its id names (the id recomputed, of the session, its number one
+  below, fable re-review D2-1); each is judged order-free among the exits kept under the parent, exactly as the
   contract could have accepted it there (a remover in the parent's admins, whose own leave or removal
-  kept under the same parent does not void it, in either order; the UAs it names members or admins of the parent; a
-  leaver a member of the parent), so no chain the home took
-  is refused; the `leftIn` and `removedIn`
-  flags are not read there) and a posted message (`messageSig`) each count only when their signer's `UASig` verifies over the
+  kept under the same parent does not void it, in either order; 1 to 16 UAs strictly sorted, each a member or an admin of
+  the parent, `nextEpoch` the named number plus one; a leaver a member of the parent; at most as many records as the
+  parent has UAs), so no chain the home took is refused; the `leftIn` and `removedIn`
+  flags are not read there). A child is plain exactly as the contract's `_keeps` judges it: the parent's lists less some
+  UAs that left or were removed there, a flagged UA dropped or kept (E-1). Every record is the one its id names, and an
+  epoch counts only through its chain down to the signed session record: each link judged against its parent with the
+  parent's exits, the verified epochs remembered per instance so each is walked once (U-1, `reads.rs` `walk`, BUILT
+  2026-11-25, UNAUDITED). A replica's record counts only when it equals the home's, which was judged at home, so no exit
+  is read at a replica (E-5). Left to the read trust (CLI-PQC-13): a genuine leave of a UA that is still a member, shown
+  again under a later head within the lag (the contract refuses the replay by its spent nonce, which a reader cannot
+  see), makes a non-admin's drop of that UA look plain and a posted message (`messageSig`) each count only when their signer's `UASig` verifies over the
   typed digest the SDK rebuilds from the record's fields (V1, the signer's registry record a trusted read along F2's registry
   line: `holderOf` on the bound registry names the generation whose record is read, every call of it by one endpoint at one
   block; the SDK's `tests/pqchat_keys.rs` `v1_follows_the_registry_line`, TODO 8b-8 (4)), `sealedInfo` included;
