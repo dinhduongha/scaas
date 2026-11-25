@@ -750,9 +750,12 @@ class Sender:
         head = rpc("eth_getBlockByNumber", ["latest", False])
         if gas is None:
             # Amsterdam (EIP-8037): the estimate is regular + state gas and may pass 2^24 (the chain caps the regular
-            # part); the limit is bounded by the chain's block gas limit, read here, never assumed
+            # part); the limit is bounded by the chain's block gas limit, read here, never assumed. The estimate runs
+            # on `latest`: a shield estimated in the block of the previous one merges into its pending entry
+            # (PqzCore._trivial, D18), while the sent one lands a block later and appends a new pending slot (about
+            # 98 k state + 17 k regular gas more: 346,717 estimated, 437,320 used). Hence x 1.5 + 300 k, as pq.py asks.
             try:
-                gas = min(int(head["gasLimit"], 16), int(int(rpc("eth_estimateGas", [tx]), 16) * 1.15) + 50_000)
+                gas = min(int(head["gasLimit"], 16), int(int(rpc("eth_estimateGas", [tx]), 16) * 1.5) + 300_000)
             except RuntimeError as e:
                 check(False, f"{what}: estimateGas {e}")
                 raise
