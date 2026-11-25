@@ -131,7 +131,10 @@ seed-derived vault key exists; epochs, wraps in chunks, the home-instance slot, 
   complete, and the exit is checked and applied at the head; an exit that would newly flag nobody there is
   `PqVaultNotMember` (A-4, one rule in the three settings); there is no withdrawal, the lag ends an exit that has left the
   device; in a replica the exit flags the epoch it names and a flag only allows a plain drop, at its parent or an
-  ancestor at most 16 epochs above, never refuses a child (the spec check, sc-E-2, sc-E-4, sc-E-5). The exposure was the same though only admins rekey ([CTR-PQV-13](#CTR-PQV-13)): an admin about to be
+  ancestor at most 16 epochs above, never refuses a child (the spec check, sc-E-2, sc-E-4, sc-E-5). **Change 2026-11-25
+  (E-2 and A-16 of the Fable re-review; controller call, owner: no; BUILT on branch `review-fix2-contract`):** at home the
+  signer and every UA named are in the epoch named's lists as well as the head's (`PqVaultNotAdmin`, `PqVaultNotMember`),
+  and a replica takes an exit that newly flags nobody, so a replica copies every exit the home took. The exposure was the same though only admins rekey ([CTR-PQV-13](#CTR-PQV-13)): an admin about to be
   removed by another landed an admin rekey first and the removal was `PqVaultEpochTaken`, and any admin's rekey that kept a
   leaver left its leave on an epoch with a child. Item writes already name the head at home
   ([CTR-PQV-07](#CTR-PQV-07)), so a member removed or left at the head writes no item under it ([CTR-PQV-14](#CTR-PQV-14)),

@@ -45,7 +45,10 @@ contract PqChatTreeExitsTest is PqChatTreeModel {
         M memory m0 = _abe();
         M memory m1 = _next(m0); // the front-running commit
         IPqChat.PqChatTreeLeave memory l = _leaveAt(m1, m0.head, B);
-        vchat.treeLeave(l, _sig(B, th2.treeLeave(l)));
+        IUARegistry.UASig memory ls = _sig(B, th2.treeLeave(l));
+        vm.expectEmit(address(vchat));
+        emit IPqChat.PqChatLeft(m1.sid, m1.head, B); // A-14: the head's id
+        vchat.treeLeave(l, ls);
         (uint8 kind, uint64 at) = _v().goneOf(m1.sid, B);
         assertEq(kind, 1);
         assertEq(at, 1, "gone from the head's number, not the named one");
@@ -60,7 +63,10 @@ contract PqChatTreeExitsTest is PqChatTreeModel {
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatEpochNumber.selector, uint64(1), uint64(2)));
         vchat.treeRemove(r, rs);
         r.nextEpoch = 1;
-        vchat.treeRemove(r, _sig(A, th2.treeRemove(r)));
+        rs = _sig(A, th2.treeRemove(r));
+        vm.expectEmit(address(vchat));
+        emit IPqChat.PqChatRemoved(m1.sid, m1.head, A, _list(E)); // A-14: the head's id
+        vchat.treeRemove(r, rs);
         (kind, at) = _v().goneOf(m1.sid, E);
         assertEq(kind, 2);
         assertEq(at, 1);

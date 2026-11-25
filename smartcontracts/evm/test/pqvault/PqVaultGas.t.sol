@@ -123,7 +123,8 @@ contract PqVaultGasTest is PqVaultBase {
         vm.prank(STRANGER);
         vault.removeVaultMembers(r, sig);
         // E-3 (the head read from `epochsOf`, A-4): regular 176,568 -> 178,182
-        _row("removeVaultMembers 1 of 3", 178_182, 1_410_660);
+        // E-2, A-16 (controller call 2026-11-25: the home flag read once more, the newly flagged count): 178,182 -> 178,950
+        _row("removeVaultMembers 1 of 3", 178_950, 1_410_660);
         IPqVault.PqVaultLeave memory l = IPqVault.PqVaultLeave(vid, vid, ids[1], 2);
         sig = _sig(ids[1], h.leave(l, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
@@ -273,9 +274,11 @@ contract PqVaultGasTest is PqVaultBase {
             // E-3 (Change 2026-11-24: `leaveVault` / `removeVaultMembers` at the head with the lag, A-4; the replica rule in
             // `PqGroupBase`): 31,826 -> 32,131 B; regular 2,154,260 -> 2,172,984; state 49,269,060 -> 49,735,710
             // (+305 x 1,530)
-            assertEq(r.code.length, 32_131, "the PqVault runtime (size-baseline.json row)");
-            assertApproxEqAbs(regular, 2_172_984, SLACK, "deployImplementation regular");
-            assertEq(state, 49_735_710, "deployImplementation state");
+            // E-2, A-16 (controller call 2026-11-25): 32,131 -> 32,619 B; regular 2,172,984 -> 2,204,192; state
+            // 49,735,710 -> 50,482,350 (+488 x 1,530)
+            assertEq(r.code.length, 32_619, "the PqVault runtime (size-baseline.json row)");
+            assertApproxEqAbs(regular, 2_204_192, SLACK, "deployImplementation regular");
+            assertEq(state, 50_482_350, "deployImplementation state");
         }
     }
 

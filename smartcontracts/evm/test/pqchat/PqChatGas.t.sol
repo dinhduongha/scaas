@@ -112,9 +112,11 @@ contract PqChatGasTest is PqTopicsBase {
     uint256 internal constant VIEWS_STATE = 14_932_800; // asked x 1.05 16,372,917
     // C10 32 -> 20 (owner 2026-11-25; the compiler's output for the new constant in C21's check):
     // runtime 13,506 -> 13,507 B; state 20,847,780 -> 20,849,310 (+1 x 1,530); regular 910,116 unchanged
-    uint256 internal constant MEMBERS_RUNTIME = 13_507;
-    uint256 internal constant MEMBERS_REGULAR = 910_116;
-    uint256 internal constant MEMBERS_STATE = 20_849_310; // asked x 1.05 22,847,397
+    // E-2, A-16 (controller call 2026-11-25: at home an exit's UAs in the named epoch's lists too; a replica takes a repeat):
+    // runtime 13,507 -> 13,981 B; regular 910,116 -> 941,324; state 20,849,310 -> 21,574,530 (+474 x 1,530)
+    uint256 internal constant MEMBERS_RUNTIME = 13_981;
+    uint256 internal constant MEMBERS_REGULAR = 941_324;
+    uint256 internal constant MEMBERS_STATE = 21_574_530; // asked x 1.05 23,641,646
 
     function _row(string memory what, uint256 regular, uint256 state) internal {
         Vm.Gas memory g = vm.lastCallGas();
@@ -336,7 +338,8 @@ contract PqChatGasTest is PqTopicsBase {
         // CTR-CHAT-23: 173,112 / 1,067,940 -> 176,666 / 1,459,620
         // E-3 in mode 0 (owner 2026-11-25: forwarded to `PqChatTreeMembers`; the head read from `epochsOf`, A-4):
         // regular 179,122 -> 184,160
-        _row("remove 1 of 3 members", 184_160, 1_459_620);
+        // E-2, A-16 (controller call 2026-11-25: the home flag read once more, the newly flagged count): 184,160 -> 184,888
+        _row("remove 1 of 3 members", 184_888, 1_459_620);
         IPqChat.MemberKey[] memory m = new IPqChat.MemberKey[](2);
         (m[0], m[1]) = (s.members[0], s.members[1]);
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[0], 1, 1, sid, s.admins, m);

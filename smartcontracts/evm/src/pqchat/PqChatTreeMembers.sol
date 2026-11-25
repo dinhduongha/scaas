@@ -96,15 +96,22 @@ contract PqChatTreeMembers is PqChatCore {
     uint256 internal constant REMOVE_MAX = 16;
 
     /// @notice P12, CTR-CHAT-10: a member leaves; the next epoch may drop it as a plain rekey (3C-D8). At home it names the
-    ///         head or a complete ancestor within `EXIT_LAG_MAX` and applies at the head (C9, E-3); in a replica it flags the
-    ///         epoch it names. A member already flagged there is refused (sc-E-5).
+    ///         head or a complete ancestor within `EXIT_LAG_MAX` of which it is a member too (E-2) and applies at the head (C9,
+    ///         E-3); a member already flagged at the head is refused (sc-E-5). In a replica it flags the epoch it names, a
+    ///         repeat included (A-16: a flag only allows there).
     function leave(IPqChat.PqChatLeave calldata l, IUARegistry.UASig calldata sig) external {
         if (_isTree(l.sessionId)) revert IPqChat.PqChatModeEntry(1); // C30: `treeLeave`
         (IUARegistry reg, uint256 limit,) = _env();
         (bytes32 at, Epoch storage ep,) = _exitAt(l.sessionId, l.epochId);
         (, IPqChat.MemberKey[] memory m,) = _lists(ep);
-        if (_memberAt(m, l.member) == type(uint256).max || ep.left[l.member] || ep.removedOf[l.member]) {
+        bool home = _s().epochs[l.sessionId].home;
+        if (_memberAt(m, l.member) == type(uint256).max || (home && (ep.left[l.member] || ep.removedOf[l.member]))) {
             revert IPqChat.PqChatNotMember(l.member);
+        }
+        if (at != l.epochId) {
+            // E-2 (controller call 2026-11-25): a member of the epoch named too, where a replica checks it
+            (, m,) = _lists(_known(l.epochId));
+            if (_memberAt(m, l.member) == type(uint256).max) revert IPqChat.PqChatNotMember(l.member);
         }
         _auth(reg, l.member, PqChatTypes.hashLeave(l), sig);
         _useNonce(PqChatTypes.scopeEpoch(l.sessionId, l.member), l.nonce);
@@ -114,8 +121,9 @@ contract PqChatTreeMembers is PqChatCore {
     }
 
     /// @notice P48 (owner 2026-11-10), CTR-CHAT-20: an admin removes 1..REMOVE_MAX members, strictly sorted. At home it names
-    ///         the head or a complete ancestor within `EXIT_LAG_MAX` and is checked and applied at the head (C9, E-3); in a
-    ///         replica it flags the complete epoch it names. A UA already removed there is refused (A-4). The record and its
+    ///         the head or a complete ancestor within `EXIT_LAG_MAX` and is checked and applied at the head (C9, E-3), the
+    ///         admin and each UA named also in the epoch named's lists (E-2); a UA already removed at the head is refused
+    ///         (A-4). In a replica it flags the complete epoch it names, a repeat included (A-16). The record and its
     ///         `sigHash` in state.
     function remove(IPqChat.PqChatRemove calldata r, IUARegistry.UASig calldata sig) external {
         if (_isTree(r.sessionId)) revert IPqChat.PqChatModeEntry(1); // C30: `treeRemove`
@@ -127,18 +135,17 @@ contract PqChatTreeMembers is PqChatCore {
         if (n == 0 || n > REMOVE_MAX) revert IPqChat.PqChatShape();
         (bytes32[] memory admins, IPqChat.MemberKey[] memory m,) = _lists(ep);
         if (!_liveAdmin(ep, admins, r.admin)) revert IPqChat.PqChatNotAdmin(r.admin); // F2, F7 (controller call 2026-11-21)
+        bool home = _s().epochs[r.sessionId].home;
         for (uint256 i; i < n; ++i) {
             if (i > 0 && r.members[i] <= r.members[i - 1]) revert IPqChat.PqChatShape();
-            if (!_removable(m, admins, r.members[i]) || ep.removedOf[r.members[i]]) {
+            if (!_removable(m, admins, r.members[i]) || (home && ep.removedOf[r.members[i]])) {
                 revert IPqChat.PqChatNotMember(r.members[i]);
             }
         }
+        if (at != r.epochId) _namedLists(r.epochId, r.admin, r.members); // E-2 (controller call 2026-11-25)
         _auth(reg, r.admin, PqChatTypes.hashRemove(r), sig);
         _useNonce(PqChatTypes.scopeEpoch(r.sessionId, r.admin), r.nonce);
-        for (uint256 i; i < n; ++i) {
-            ep.removedOf[r.members[i]] = true;
-        }
-        ep.removed += uint16(n);
+        ep.removed += _flagRemoved(ep, r.members);
         _s().removals[at].push(_put(_blob(abi.encode(r), sig), limit));
         emit IPqChat.PqChatRemoved(r.sessionId, at, r.admin, r.members);
     }

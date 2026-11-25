@@ -590,6 +590,8 @@ contract PqChatEpochsTest is PqChatBase {
         _leave(chat, sid, ids[2], 1);
         assertTrue(chat.leftIn(e1, ids[2]), "at the head");
         assertFalse(chat.leftIn(sid, ids[2]));
+        assertEq(chat.leaveCount(e1), 1, "A-14: the kept record under the head"); // pqchat-core reads it under the parent
+        assertEq(chat.leaveCount(sid), 0);
         IPqChat.PqChatLeave memory l = IPqChat.PqChatLeave(sid, sid, ids[2], 2);
         IUARegistry.UASig memory sg = _sig(ids[2], h.leave(l));
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNotMember.selector, ids[2]));
@@ -614,6 +616,8 @@ contract PqChatEpochsTest is PqChatBase {
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatExitLag.selector, uint64(0), uint64(17)));
         chat.leave(l, sg);
         (r.epochId, r.nextEpoch) = (e1, 2); // the control: one epoch younger
+        vm.expectEmit(address(chat));
+        emit IPqChat.PqChatRemoved(sid, p, ids[0], _list(ids[2])); // A-14: the head's id
         _remove(chat, r);
         assertTrue(chat.removedIn(p, ids[2]), "at the head");
         assertFalse(chat.removedIn(e1, ids[2]));
@@ -724,5 +728,184 @@ contract PqChatEpochsTest is PqChatBase {
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNotMember.selector, ids[2]));
         chat.rekey(e, w, es);
         assertTrue(chatB.epochComplete(chatB.rekey(e, w, es)), "a replica stores it");
+    }
+
+    // ----- E-2, A-16 (controller call 2026-11-25): a replica copies every exit the home took -----
+
+    /// The replica of `sid` in `chatB`.
+    function _replicaOfSid() internal {
+        (IPqChat.PqChatSession memory s0, IPqChat.Wrap[] memory sw) = _session(3, 1, address(chat));
+        chatB.createSession(s0, sw, _sig(s0.creator, h.session(s0)));
+    }
+
+    /// e1 of `sid`, by the admin: `ids[1]` made an admin and `ids[3]` added; at home and in the replica.
+    function _e1Grows() internal returns (bytes32 e1) {
+        (IPqChat.PqChatEpoch memory a, IPqChat.Wrap[] memory aw) =
+            _epoch(sid, ids[0], 1, 1, sid, _list(ids[0], ids[1]), _members(4));
+        e1 = _rekey(chat, a, aw);
+        assertEq(_rekey(chatB, a, aw), e1);
+    }
+
+    /// E-2: `ids[3]`, added at e1, signs a leave naming epoch 0, where it is no member: at home it is refused, as a replica
+    /// (which checks on the epoch named) would refuse it, so no replica is stopped by it. The control names e1: it lands at
+    /// home and in the replica, and the plain drop of the leaver by a member that is no admin is stored in both.
+    function test_e2_leaveNamesAnEpochTheLeaverIsIn() public {
+        _replicaOfSid();
+        bytes32 e1 = _e1Grows();
+        IPqChat.PqChatLeave memory l = IPqChat.PqChatLeave(sid, sid, ids[3], 1);
+        IUARegistry.UASig memory ls = _sig(ids[3], h.leave(l));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNotMember.selector, ids[3]));
+        chat.leave(l, ls);
+        l.epochId = e1; // the control
+        ls = _sig(ids[3], h.leave(l));
+        chat.leave(l, ls);
+        chatB.leave(l, ls);
+        (IPqChat.PqChatEpoch memory b, IPqChat.Wrap[] memory bw) =
+            _epoch(sid, ids[2], 1, 2, e1, _list(ids[0], ids[1]), _members(3));
+        IUARegistry.UASig memory bs = _sig(b.author, h.epoch(b));
+        bytes32 e2 = chat.rekey(b, bw, bs);
+        assertEq(chatB.rekey(b, bw, bs), e2);
+        assertTrue(chatB.epochComplete(e2), "the replica copies the home's chain");
+    }
+
+    /// E-2: a removal naming epoch 0 by `ids[1]`, an admin of e1 only, and one naming `ids[3]`, added at e1, are refused at
+    /// home. The control names e1 and lands at home and in the replica; the plain drop after it is stored in both.
+    function test_e2_removalNamesAnEpochItsUAsAreIn() public {
+        _replicaOfSid();
+        bytes32 e1 = _e1Grows();
+        _refusedRemove(
+            _rm(sid, 1, _list(ids[2]), ids[1], 1),
+            ids[1],
+            abi.encodeWithSelector(IPqChat.PqChatNotAdmin.selector, ids[1])
+        );
+        _refusedRemove(
+            _rm(sid, 1, _list(ids[3]), ids[0], 5),
+            ids[0],
+            abi.encodeWithSelector(IPqChat.PqChatNotMember.selector, ids[3])
+        );
+        IPqChat.PqChatRemove memory r = _rm(e1, 2, _list(ids[3]), ids[1], 1); // the control
+        IUARegistry.UASig memory rs = _sig(ids[1], h.remove(r));
+        chat.remove(r, rs);
+        chatB.remove(r, rs);
+        (IPqChat.PqChatEpoch memory b, IPqChat.Wrap[] memory bw) =
+            _epoch(sid, ids[2], 1, 2, e1, _list(ids[0], ids[1]), _members(3));
+        IUARegistry.UASig memory bs = _sig(b.author, h.epoch(b));
+        bytes32 e2 = chat.rekey(b, bw, bs);
+        assertEq(chatB.rekey(b, bw, bs), e2);
+    }
+
+    /// A-16: the home takes a second leave of `ids[2]` naming epoch 0 (the first was applied at epoch 0, the second at the
+    /// head e1, which kept the leaver); a replica takes it too, though it flags nobody new there, and holds both records. The
+    /// plain drop after it is stored in both.
+    function test_a16_replicaTakesASecondLeaveNamingOneEpoch() public {
+        _replicaOfSid();
+        IPqChat.PqChatLeave memory l1 = IPqChat.PqChatLeave(sid, sid, ids[2], 1);
+        IUARegistry.UASig memory s1 = _sig(ids[2], h.leave(l1));
+        chat.leave(l1, s1);
+        (IPqChat.PqChatEpoch memory a, IPqChat.Wrap[] memory aw) =
+            _epoch(sid, ids[0], 1, 1, sid, _admins(), _members(3));
+        bytes32 e1 = _rekey(chat, a, aw); // keeps the leaver
+        IPqChat.PqChatLeave memory l2 = IPqChat.PqChatLeave(sid, sid, ids[2], 2);
+        IUARegistry.UASig memory s2 = _sig(ids[2], h.leave(l2));
+        chat.leave(l2, s2);
+        assertTrue(chat.leftIn(e1, ids[2]));
+        chatB.leave(l1, s1);
+        assertEq(_rekey(chatB, a, aw), e1);
+        chatB.leave(l2, s2);
+        assertEq(chatB.leaveCount(sid), 2, "both records, under the epoch named");
+        (IPqChat.PqChatEpoch memory b, IPqChat.Wrap[] memory bw) =
+            _epoch(sid, ids[1], 1, 2, e1, _admins(), _without(_members(3), ids[2]));
+        IUARegistry.UASig memory bs = _sig(b.author, h.epoch(b));
+        bytes32 e2 = chat.rekey(b, bw, bs);
+        assertEq(chatB.rekey(b, bw, bs), e2);
+    }
+
+    /// A-16, the removal form: `ids[2]` removed naming epoch 0, dropped at e1, added again at e2, removed naming epoch 0 again
+    /// (inside the lag) at the head e2. A replica takes the second record too and holds both under epoch 0.
+    function test_a16_replicaTakesASecondRemovalNamingOneEpoch() public {
+        _replicaOfSid();
+        IPqChat.PqChatRemove memory r1 = _rm(sid, 1, _list(ids[2]), ids[0], 10);
+        IUARegistry.UASig memory s1 = _sig(ids[0], h.remove(r1));
+        chat.remove(r1, s1);
+        (IPqChat.PqChatEpoch memory a, IPqChat.Wrap[] memory aw) =
+            _epoch(sid, ids[1], 1, 1, sid, _admins(), _without(_members(3), ids[2]));
+        bytes32 e1 = _rekey(chat, a, aw); // the plain drop
+        (IPqChat.PqChatEpoch memory b, IPqChat.Wrap[] memory bw) = _epoch(sid, ids[0], 1, 2, e1, _admins(), _members(3));
+        bytes32 e2 = _rekey(chat, b, bw); // added again
+        IPqChat.PqChatRemove memory r2 = _rm(sid, 1, _list(ids[2]), ids[0], 11);
+        IUARegistry.UASig memory s2 = _sig(ids[0], h.remove(r2));
+        chat.remove(r2, s2);
+        assertTrue(chat.removedIn(e2, ids[2]));
+        chatB.remove(r1, s1);
+        assertEq(_rekey(chatB, a, aw), e1);
+        assertEq(_rekey(chatB, b, bw), e2);
+        chatB.remove(r2, s2);
+        assertEq(chatB.removalCount(sid), 2, "both records, under the epoch named");
+    }
+
+    // ----- A-13, A-14 (the re-review of 2026-11-25): the replica walk's bound, the flags read at home -----
+
+    /// A-14: a member removed at the head leaves no more (`removedOf` at the head, CTR-CHAT-10); another member's leave of the
+    /// same head lands (the control).
+    function test_a14_removedAtTheHeadLeavesNoMore() public {
+        _remove(chat, _rm(sid, 1, _list(ids[2]), ids[0], 7));
+        IPqChat.PqChatLeave memory l = IPqChat.PqChatLeave(sid, sid, ids[2], 1);
+        IUARegistry.UASig memory ls = _sig(ids[2], h.leave(l));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNotMember.selector, ids[2]));
+        chat.leave(l, ls);
+        _leave(chat, sid, ids[1], 1);
+        assertTrue(chat.leftIn(sid, ids[1]));
+    }
+
+    /// A-14: in a replica a removal naming a staged epoch is `PqChatIncomplete`; naming its complete parent it lands.
+    function test_a14_replicaRemovalNamingAStagedEpoch() public {
+        _replicaOfSid();
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) = _epoch(sid, ids[0], 1, 1, sid, _admins(), _members(3));
+        bytes32 staged = chatB.rekey(e, _slice(w, 0, 1), _sig(e.author, h.epoch(e)));
+        assertFalse(chatB.epochComplete(staged));
+        _refusedRemoveAt(
+            chatB,
+            _rm(staged, 2, _list(ids[2]), ids[0], 7),
+            abi.encodeWithSelector(IPqChat.PqChatIncomplete.selector, staged)
+        );
+        _remove(chatB, _rm(sid, 1, _list(ids[2]), ids[0], 7)); // the control
+        assertTrue(chatB.removedIn(sid, ids[2]));
+    }
+
+    function _refusedRemoveAt(PqChat c, IPqChat.PqChatRemove memory r, bytes memory err) internal {
+        IUARegistry.UASig memory sig = _sig(r.admin, h.remove(r));
+        vm.expectRevert(err);
+        c.remove(r, sig);
+    }
+
+    /// A-13 (plan T11; CTR-CHAT-20's replica rule): a replica chain e1..e17 of plain rekeys that keep `ids[2]`, with a
+    /// removal's flag on epoch 0 (copied before the chain or after it, `first`). A drop of `ids[2]` by a member that is no
+    /// admin from e16 (the flag 16 epochs above) is stored as a plain rekey; from e17 (17 above) it is `PqChatNotAdmin`.
+    function _replicaWalkBound(bool first) internal {
+        _replicaOfSid();
+        IPqChat.PqChatRemove memory r = _rm(sid, 1, _list(ids[2]), ids[0], 100);
+        if (first) _remove(chatB, r);
+        bytes32 p = sid;
+        bytes32 e16;
+        for (uint64 i = 1; i <= 17; ++i) {
+            p = _plain(chatB, ids[0], i, i, p);
+            if (i == 16) e16 = p;
+        }
+        if (!first) _remove(chatB, r);
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(sid, ids[1], 1, 18, p, _admins(), _without(_members(3), ids[2]));
+        IUARegistry.UASig memory es = _sig(e.author, h.epoch(e));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNotAdmin.selector, ids[1]));
+        chatB.rekey(e, w, es); // a flag 17 above is not used
+        (e, w) = _epoch(sid, ids[1], 1, 17, e16, _admins(), _without(_members(3), ids[2]));
+        assertTrue(chatB.epochComplete(_rekey(chatB, e, w)), "a flag 16 above allows the plain drop");
+    }
+
+    function test_a13_replicaWalkBoundRemovalFirst() public {
+        _replicaWalkBound(true);
+    }
+
+    function test_a13_replicaWalkBoundRemovalLast() public {
+        _replicaWalkBound(false);
     }
 }
