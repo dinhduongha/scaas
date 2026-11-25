@@ -13,6 +13,7 @@ import { kemEncapsVector, kemKeyFromSeed } from "./kem.js";
 import * as pc from "./pqchat.js";
 import * as tr from "./pqchat-tree.js";
 import * as uv from "./ua-verify.js";
+import { deriveUA } from "./ua.js";
 
 const b = (v) => (v instanceof Uint8Array ? v : fromHex(v));
 const hex = (v) => (typeof v === "string" ? v.toLowerCase() : hexOf(v));
@@ -542,6 +543,9 @@ export function reader(h, tamper = (_, v) => v) {
     /** The registry's record of a UA `{ kind, keyData }` and an `msig` slot's acceptance, not logged: signature checks,
      *  never session reads. */
     uaRecordOf: (ua) => h.uaRecords.get(ua) ?? null,
+    /** The registry's `registrationOf(ua)` `{ attrs, pop }`, the record of a UA's version-0 KEM key (ua-rs
+     *  `TreeReader::registration`, C-7); none: that key is `TreeKemRecord`. */
+    registrationOf: (ua) => h.registrations?.get(ua) ?? null,
     accepted: () => true,
   };
 }
@@ -577,17 +581,18 @@ const notVerifiable = (e) => {
 };
 /** A record's signature for its signer's kind, as the contract's `requirePortable` judges it (F-3): a single key of each holder
  *  kind, an `msig` by its kept members over its structure at the version its `signature` (the tag) names (CTR-UA-74, the reader
- *  rule: the reader's `uaRecordOf` gives its `versions`; never another version), WebAuthn. Returns that version (0 for a single
- *  key), for the walk's order check (step 6). */
+ *  rule: the reader's `uaRecordOf` gives its `versions`; never another version), WebAuthn. Returns every `[msig, version]` the
+ *  signature names (C-4, R-1: the signer's tag and each signing `msig` member slot's, `uv.namedVersions`; none for a single key),
+ *  for the walk's order check (step 6). */
 function verified(sc, rd, struct, record, signer, sig, read) {
-  let v = 0;
+  let v = null;
   try {
     uv.verifyPortable(
       { ua: hex(signer), purpose: sc.purpose, digest: sc.typed(struct, record), sig },
       rd.uaRecordOf,
       rd.accepted,
     );
-    if (rd.uaRecordOf(hex(signer))?.kind === 0x0120) v = Number(uv.tagVersion(sig.signature));
+    v = uv.namedVersions(hex(signer), sig, rd.uaRecordOf).map(([u, x]) => [u, Number(x)]);
   } catch (e) {
     notVerifiable(e);
     v = null;
@@ -595,30 +600,49 @@ function verified(sc, rd, struct, record, signer, sig, read) {
   if (v === null) corrupt(read);
   return v;
 }
-/** CTR-UA-74 step 6: `v`, the version `ua`'s record names, against `floor` (the versions before its slot), raised into `slot`
- *  (versions ≥ 1 only); below: a lying read. */
-const versionUp = (floor, slot, ua, v, read) => {
-  if (v < (floor.get(ua) ?? 0)) corrupt(read);
-  if (v > 0) slot.set(ua, Math.max(slot.get(ua) ?? 0, v));
+/** CTR-UA-74 step 6: each `[msig, v]` a record names (`verified`: its signer's and each signing `msig` member's) against `floor`
+ *  (the versions before its slot), raised into `slot` (versions ≥ 1 only); one below: a lying read. */
+const versionUp = (floor, slot, named, read) => {
+  for (const [ua, v] of named) {
+    if (v < (floor.get(ua) ?? 0)) corrupt(read);
+    if (v > 0) slot.set(ua, Math.max(slot.get(ua) ?? 0, v));
+  }
 };
 /** The key of `(ua, keyId)` a cold tree's leaf takes (§8 steps 3 and 5, C-1): the registry's `kemKeyAt` `{ kemPk, sig }`,
- *  authenticated by its record: `setKemKey`'s signature over `kemRecordDigest` for a version above 0. Version 0 is the
- *  registration's key, authenticated by its proof of possession (ua-rs `kem_record_key`); this reference has no registration
- *  read and refuses it. A key that fails: `TreeKemRecord`. */
+ *  authenticated by its record (`recordKey`): `setKemKey`'s signature over `kemRecordDigest` for a version above 0; version 0
+ *  the registration's key, by the registration's proof of possession the reader's `registrationOf(ua)` gives (`{ attrs, pop }`,
+ *  C-7, ua-rs `kem_at`). A key that fails: `TreeKemRecord`. */
 function kemAt(rd, ua, keyId) {
   const read = `kemKeyAt(${ua},${keyId})`;
   const v = served(rd.kemKeyAt(ua, keyId), (x) => isObj(x) && isHex(x.kemPk) && isHex(x.sig), read);
-  return recordKey(ua, keyId, v, rd.uaRecordOf, rd.accepted);
+  const rec = keyId === 0 ? { kemPk: v.kemPk, ...(rd.registrationOf?.(ua) ?? {}) } : v;
+  return recordKey(ua, keyId, rec, rd.uaRecordOf, rd.accepted);
 }
+const ZERO_HASH = `0x${"00".repeat(32)}`;
 /** A key of `(ua, keyId)` no signed tree hash covers yet (§8 step 5, codex-1, C-1: a cold tree's leaf, an Add's key, a member's
- *  key at creation), authenticated by its registry record `rec` `{ kemPk, sig }` before it is used: `setKemKey`'s signature
- *  over `kemRecordDigest(ua, version, kemPk)` (`uaRecordOf`, `accepted`: the signers' registry records). Version 0 (the
- *  registration's key, ua-rs `KemRecord::Registration`) has no read here: refused. A key that fails: `TreeKemRecord`. */
+ *  key at creation), authenticated by its registry record `rec` before it is used (ua-rs `kem_record_key`; `uaRecordOf`,
+ *  `accepted`: the signers' registry records): a version above 0 as `{ kemPk, sig }`, `setKemKey`'s signature over
+ *  `kemRecordDigest(ua, version, kemPk)`; version 0 (C-7, ua-rs `KemRecord::Registration`) as `{ kemPk, attrs, pop }`, the
+ *  registration's attributes committing to `kemPk` (in full, or by `kemPkHash`) and its proof of possession over them (the
+ *  registration of a single key: no `msig` members are read, as ua-rs). A key that fails: `TreeKemRecord`. */
 export function recordKey(ua, keyId, rec, uaRecordOf, accepted) {
-  if (!(keyId > 0) || !isObj(rec) || !isHex(rec.kemPk) || !isHex(rec.sig) || b(rec.kemPk).length === 0)
+  if (!Number.isSafeInteger(keyId) || keyId < 0 || !isObj(rec) || !isHex(rec.kemPk) || b(rec.kemPk).length === 0)
     refuse("TreeKemRecord");
   try {
-    uv.verifyKemRecord({ ua: hex(ua), version: keyId, kemPk: rec.kemPk, sig: rec.sig }, uaRecordOf, accepted);
+    if (keyId === 0) {
+      const r = uaRecordOf(hex(ua));
+      const at = rec.attrs;
+      if (!r || !isObj(at) || !isHex(rec.pop) || hex(deriveUA(r.kind, r.keyData)) !== hex(ua)) refuse("TreeKemRecord");
+      const committed =
+        at.kemPkHash === undefined || hex(at.kemPkHash) === ZERO_HASH
+          ? hex(at.kemPk ?? "0x") === hex(rec.kemPk)
+          : hex(keccak_256(b(rec.kemPk))) === hex(at.kemPkHash);
+      if (!committed) refuse("TreeKemRecord");
+      uv.verifyRegistration({ kind: r.kind, keyData: r.keyData, attrs: at, pop: rec.pop, pqzPop: "0x" }, () => null);
+    } else {
+      if (!isHex(rec.sig)) refuse("TreeKemRecord");
+      uv.verifyKemRecord({ ua: hex(ua), version: keyId, kemPk: rec.kemPk, sig: rec.sig }, uaRecordOf, accepted);
+    }
   } catch (e) {
     notVerifiable(e);
     refuse("TreeKemRecord");
@@ -699,7 +723,7 @@ function walk(sc, rd, pin = null, keep = []) {
     gone = new Map(pin.gone.map(([ua, kind, epoch]) => [ua, { kind, epoch }]));
     versions = new Map(pin.msigVersions);
   } else {
-    versionUp(new Map(), versions, hex(S0.creator), v0, "sessionOf()");
+    versionUp(new Map(), versions, v0, "sessionOf()");
     const cold = S0.members.map((m) => ({ ...m, kemHash: kemHashOf(kemAt(rd, m.ua, m.keyId)) }));
     try {
       tree = tr.coldTree(cold);
@@ -714,7 +738,7 @@ function walk(sc, rd, pin = null, keep = []) {
       const { c, v } = commitAt(sc, rd, a, n);
       a.recs[n] = c;
       const where = `commitOf(${n})`;
-      versionUp(new Map(versions), versions, hex(c.author), v, where);
+      versionUp(new Map(versions), versions, v, where);
       if (c.parentEpochId !== ids[n - 1] || c.parentTreeHash !== tr.treeHash(tree)) corrupt(where);
       let applied;
       try {
@@ -793,7 +817,7 @@ function idAt(sc, rd, a, m) {
 }
 
 /** Commit `n`'s record: its id at its number, `sessionId`, `treeId`, the bounds of C10 and C24 before anything is allocated
- *  (sc-F-7), then its author's signature: `{ c, v }`, `v` the structure version it names (`verified`). */
+ *  (sc-F-7), then its author's signature: `{ c, v }`, `v` the `[msig, version]`s it names (`verified`). */
 function commitAt(sc, rd, a, n) {
   const where = `commitOf(${n})`;
   const { record: c, sig } = served(rd.commitOf(n), (x) => isObj(x) && isObj(x.record), where);
@@ -859,7 +883,7 @@ function exitsAt(sc, rd, a, h, tree, gone, versions) {
     };
     named(r, read);
     if (!holds(tree, r.member) || before(r.member)) corrupt(read);
-    versionUp(floor, versions, r.member, verified(sc, rd, "PqChatTreeLeave", r, r.member, sig, read), read);
+    versionUp(floor, versions, verified(sc, rd, "PqChatTreeLeave", r, r.member, sig, read), read);
     out.push({ ua: r.member, kind: 1 });
   }
   for (let i = 0, k = count(rd.removalCount(h), `removalCount(${h})`); i < k; i++) {
@@ -893,7 +917,7 @@ function exitsAt(sc, rd, a, h, tree, gone, versions) {
       !before(r.admin) &&
       r.members.every((m) => (holds(tree, m) || a.admins[h].includes(m)) && !before(m));
     if (!ok) corrupt(read);
-    versionUp(floor, versions, r.admin, verified(sc, rd, "PqChatTreeRemove", r, r.admin, sig, read), read);
+    versionUp(floor, versions, verified(sc, rd, "PqChatTreeRemove", r, r.admin, sig, read), read);
     for (const m of r.members) out.push({ ua: m, kind: 2 });
   }
   const goes = new Set(out.map((x) => x.ua));

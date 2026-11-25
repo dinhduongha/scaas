@@ -1993,8 +1993,8 @@ fn tree_signing_ops() {
         }
     }
     // the keyless admins' exits: M's, W's two, N's (the msig updated on its registry, F-1), N's two of msig-history (F-1b: one at
-    // version 0, one at version 1)
-    assert_eq!((n, keyless), (6, 6));
+    // version 0, one at version 1), X's of msig-nested (C-4: through its msig member N at N's version 1); 6 -> 7 with msig-nested
+    assert_eq!((n, keyless), (6, 7));
     // a treeLeave (no row carries its signature): signed by its member, the signature verifies over the row's signedDigest
     let a = &world.people["A"];
     let l = TreeLeave {
@@ -2680,16 +2680,34 @@ fn tree_replay_resumed_from_the_pin() {
     for n in 1..=4usize {
         o.commit(&mut h, n % 2, &[0], INFO_A, &[], honest);
     }
-    let r4 = o.replay(&mut h, 2);
+    let mut r4 = o.replay(&mut h, 2);
     o.commit(&mut h, 0, &[0], INFO_A, &[3], honest); // 5: the admin adds D
     for n in 6..=8usize {
         o.commit(&mut h, n % 2, &[0], INFO_A, &[], honest);
     }
     let full = o.replay(&mut h, 2);
+    // C-6: a lying read during a resume is refused and leaves the previous replay as it was (its node keys and pin), so the
+    // device resumes from it again instead of replaying the whole history
+    let (held, pin) = (r4.held.keys().copied().collect::<Vec<_>>(), r4.pin.clone());
+    assert!(!held.is_empty(), "control: the device holds node keys at 4");
+    let mut lying = Tamper {
+        home: &mut h,
+        read: "commitOf(6)".into(),
+        f: |v| flip(&mut v["record"]["treeHash"]),
+    };
+    let e = o
+        .keys
+        .tree_resume(OWN, &mut lying, &o.dev(2), &mut r4, 0)
+        .map(|_| ());
+    assert_eq!(code(e), "TreeReadCorrupted");
+    assert_eq!(
+        (r4.held.keys().copied().collect::<Vec<_>>(), &r4.pin),
+        (held, &pin)
+    );
     h.log.clear();
     let more = o
         .keys
-        .tree_resume(OWN, &mut h, &o.dev(2), r4, 0)
+        .tree_resume(OWN, &mut h, &o.dev(2), &mut r4, 0)
         .unwrap()
         .unwrap();
     assert_eq!(

@@ -438,7 +438,7 @@ function leafOk(m, key, md, sig, native, minimal) {
 /** A registration row `{ kind, keyData, attrs, pop, pqzPop }` as `register` checks it, on bytes and the accepted bits (ua-rs `check_registration`):
  *  the id from canonical key data, the attributes, the `pop`; the PQZ proof is not checked. Throws `UAError`; returns nothing.
  *  `attrs`: `{ pqzKey, pqzPopHash, kemPk }` or the typed `{ pqzKey, pqzPopHash, kem, kemPkHash }` (the hash commit). `accepted(id, index)`:
- *  the target registry's `memberAccepted`; the pop accepts its own record's slots, never an inner `msig`'s, so without it a pop with an inner
+ *  the target registry's `msigStateOf(id).accepted` bit `index` (`acceptance`); the pop accepts its own record's slots, never an inner `msig`'s, so without it a pop with an inner
  *  list is `UANotVerifiable`. The same `accepted` in every verifier below. */
 export function verifyRegistration({ kind, keyData, attrs, pop, pqzPop }, members, accepted) {
   const id = ua.deriveUA(kind, keyData);
@@ -483,6 +483,28 @@ export function verifyPortable(row, members, accepted) {
     "UAUnauthorized",
     row.ua,
   );
+}
+/** CTR-UA-74 step 6 (ua-rs `named_versions`): every `[msig, version]` a portable record's signature `sig` of `id` names: the signer's own
+ *  tag (`signature`) and each signing `msig` member slot's (`sig`, the slot read in the signer's structure at that version), `version` a
+ *  `BigInt`; none for a single key. Throws `UAUnauthorized` for a tag or a slot that names nothing the reader holds (a record a check
+ *  refuses). What a reader holds along a chain of records: no version below one seen before. */
+export function namedVersions(id, sig, members) {
+  const r = members(id);
+  if (r?.kind !== 0x0120) return [];
+  const s = typeof sig === "string" ? { signature: sig, members: "0x" } : sig;
+  const v = tagVersion(s.signature);
+  const t = tagged(members, id, s.signature);
+  if (v === null || !t) refuse("UAUnauthorized", id);
+  const all = ua.msigStructure(t.d).members;
+  const out = [[id, v]];
+  for (const m of decodeMemberSigs(s.members) ?? refuse("UAUnauthorized", id)) {
+    const x = all[m.index] ?? refuse("UAUnauthorized", id);
+    if (x.kind !== 0x0120) continue;
+    const w = tagVersion(m.sig);
+    if (w === null) refuse("UAUnauthorized", id);
+    out.push([hex(toBytes(x.id)), w]);
+  }
+  return out;
 }
 /** An acceptance `{ ua, index, sig, members }` as `acceptMembership` checks it, without its state (ua-rs `check_membership`, CTR-UA-37): what
  *  a client runs on the bytes of a slot a relayer attested (Soroban `membership_sig_of`, CTR-UA-34 rule 4). `members`: an `msig` member's list. */

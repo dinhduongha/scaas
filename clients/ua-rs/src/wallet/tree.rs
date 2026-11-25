@@ -1039,7 +1039,8 @@ pub trait TreeReader {
 /// holder kind and WebAuthn by its `signature`, an `msig` by its kept `members` (`abi.encode(MemberSig[])`), minimal, each slot
 /// accepted, over its structure at the version its `signature` (the tag) names (CTR-UA-74, the reader rule; never another
 /// version, never the current one). `sig`: hex (a single key's signature) or `{signature, members}`. Anything else:
-/// `TreeReadCorrupted`. Returns the version the record names (0 for a single key), for [`Walk`]'s order check (step 6).
+/// `TreeReadCorrupted`. Returns every `(msig, version)` the signature names (C-4, R-1: the signer's tag and each signing `msig`
+/// member slot's; none for a single key), for [`Walk`]'s order check (step 6).
 fn verified(
     sc: &TreeScope,
     rd: &dyn TreeReader,
@@ -1047,7 +1048,7 @@ fn verified(
     rec: &Value,
     signer: &[u8; 32],
     sig: &Value,
-) -> Result<u64> {
+) -> Result<Named> {
     let ok = (|| {
         let (kind, key_data) = rd.ua_key_of(signer)?;
         let digest = (sc.typed)(name, rec.clone()).ok()?.digest().ok()?;
@@ -1075,11 +1076,7 @@ fn verified(
             v.and_then(|v| rd.msig_at(&id, v).map(|(d, en)| (d, en, v)))
         };
         let accepted = |id: [u8; 32], i: u16| rd.accepted(&id, i);
-        let version = if kind == 0x0120 {
-            crate::ua_portable::tag_version(&s.signature)?
-        } else {
-            0
-        };
+        let named = crate::ua_portable::named_versions(kind, &key_data, signer, &s, &members, &at)?;
         Some(
             crate::ua_portable::check_portable_current(
                 kind,
@@ -1092,7 +1089,7 @@ fn verified(
                 &at,
                 Some(&accepted),
             )
-            .map(|()| version),
+            .map(|()| named),
         )
     })();
     match ok {
@@ -1147,17 +1144,22 @@ const EXITS_MAX: u64 = TREE_LEAVES_MAX as u64 + TREE_ADMINS_MAX as u64;
 
 /// The `gone` register of a walk: per UA its kind (1 left, 2 removed) and the epoch it was applied at.
 type Gone = BTreeMap<[u8; 32], (u8, u64)>;
-/// CTR-UA-74 step 6: per `msig` the highest structure version its records named so far along the walk (only versions ≥ 1 are
-/// kept: 0 is every floor's). A record names a version at or above it; the records kept under one head are judged order-free.
+/// CTR-UA-74 step 6: per `msig` (a signer, or an `msig` member a signature names: C-4, R-1) the highest structure version the
+/// records named so far along the walk (only versions ≥ 1 are kept: 0 is every floor's). A record names a version at or above it; the records kept under one head are judged order-free.
 type Versions = BTreeMap<[u8; 32], u64>;
-/// `v`, the version `ua`'s record names, against `floor` (the versions before its slot), raised into `slot`; below: a lying read.
-fn version_up(floor: &Versions, slot: &mut Versions, ua: &[u8; 32], v: u64) -> Result<()> {
-    if v < floor.get(ua).copied().unwrap_or(0) {
-        return corrupt();
-    }
-    if v > 0 {
-        let e = slot.entry(*ua).or_insert(v);
-        *e = (*e).max(v);
+/// The `(msig, version)`s one record names ([`verified`]).
+type Named = Vec<([u8; 32], u64)>;
+/// Each `(msig, v)` a record names ([`verified`]: its signer's and each signing `msig` member's) against `floor` (the versions
+/// before its slot), raised into `slot`; one below: a lying read.
+fn version_up(floor: &Versions, slot: &mut Versions, named: &[([u8; 32], u64)]) -> Result<()> {
+    for (ua, v) in named {
+        if *v < floor.get(ua).copied().unwrap_or(0) {
+            return corrupt();
+        }
+        if *v > 0 {
+            let e = slot.entry(*ua).or_insert(*v);
+            *e = (*e).max(*v);
+        }
     }
     Ok(())
 }
@@ -1165,7 +1167,7 @@ fn version_up(floor: &Versions, slot: &mut Versions, ua: &[u8; 32], v: u64) -> R
 /// The checkpoint (C26, the spec check sc-F-3): the session's `treeId`, the pinned epoch, the hash of the record that won
 /// there, the public tree after its commit (its no-return sets included), the `gone` register before its exits
 /// (`(ua, kind, epoch)`, by UA), the exits applied at it (`(ua, kind)`, sorted) and, before its exits, each `msig`'s highest
-/// structure version its records named (`(ua, version)`, by UA, versions ≥ 1 only; CTR-UA-74 step 6). A walk can start from it.
+/// structure version the records named, a signing `msig` member's too (`(ua, version)`, by UA, versions ≥ 1 only; CTR-UA-74 step 6). A walk can start from it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pin {
     pub tree_id: [u8; 32],
@@ -1354,7 +1356,7 @@ impl Walk {
             }
             None => {
                 let mut v = Versions::new();
-                version_up(&Versions::new(), &mut v, &creator, v0)?;
+                version_up(&Versions::new(), &mut v, &v0)?;
                 (0, w.cold(rd)?, Gone::new(), v)
             }
         };
@@ -1362,7 +1364,7 @@ impl Walk {
         loop {
             if n > n0 {
                 let (c, v) = w.commit_at(sc, rd, n)?;
-                version_up(&versions.clone(), &mut versions, &b32j(&c, "author")?, v)?;
+                version_up(&versions.clone(), &mut versions, &v)?;
                 let (next, targets) = w.apply(sc, &tree, &c, n)?;
                 tree = next;
                 for ua in &tree.gone_ua {
@@ -1516,8 +1518,8 @@ impl Walk {
     }
 
     /// Commit `n`'s record: its id at its number, `sessionId`, `treeId`, the bounds of C10 and C24 before anything is
-    /// allocated (sc-F-7, B-5), then its author's signature; and the structure version it names ([`verified`]).
-    fn commit_at(&self, sc: &TreeScope, rd: &mut dyn TreeReader, n: u64) -> Result<(Value, u64)> {
+    /// allocated (sc-F-7, B-5), then its author's signature; and the `(msig, version)`s it names ([`verified`]).
+    fn commit_at(&self, sc: &TreeScope, rd: &mut dyn TreeReader, n: u64) -> Result<(Value, Named)> {
         let v = rd.read(View::CommitOf(n))?;
         let c = served(v.get("record").cloned())?;
         let ok = (|| -> Option<bool> {
@@ -1627,7 +1629,7 @@ impl Walk {
                 &member,
                 served(v.get("sig"))?,
             )?;
-            version_up(&floor, versions, &member, ver)?;
+            version_up(&floor, versions, &ver)?;
             out.push((member, 1));
         }
         for i in 0..count(rd.read(View::RemovalCount(h))?)? {
@@ -1663,7 +1665,7 @@ impl Walk {
                 &admin,
                 served(v.get("sig"))?,
             )?;
-            version_up(&floor, versions, &admin, ver)?;
+            version_up(&floor, versions, &ver)?;
             out.extend(members.into_iter().map(|m| (m, 2)));
         }
         let goes: BTreeSet<[u8; 32]> = out.iter().map(|x| x.0).collect();
@@ -2001,13 +2003,15 @@ impl AppKeys {
 
     /// [`AppKeys::tree_replay`] resumed from the device's previous replay `from` (spec §10 step 3, E-3, B2-2): the walk starts at
     /// its pin, and only the epochs after it are read and opened, with the node keys it held and the info in force there, so
-    /// the device pays the history once. `from` a replay whose key is still in the tree (`TreePeriod` else).
+    /// the device pays the history once. `from` a replay whose key is still in the tree (`TreePeriod` else). C-6: every read
+    /// comes before the secrets (C22), so a refusal, a failed or a lying read leaves `from` as it was (its node keys and pin);
+    /// on success its node keys move into the new replay, which replaces it.
     pub fn tree_resume(
         &self,
         sc: &TreeScope,
         rd: &mut dyn TreeReader,
         dev: &TreeDevice,
-        from: Replay,
+        from: &mut Replay,
         keys_from: u64,
     ) -> Result<Option<Replay>> {
         self.replay(sc, rd, dev, None, Some(from), keys_from)
@@ -2019,7 +2023,7 @@ impl AppKeys {
         rd: &mut dyn TreeReader,
         dev: &TreeDevice,
         store: Option<&Pin>,
-        from: Option<Replay>,
+        from: Option<&mut Replay>,
         keys_from: u64,
     ) -> Result<Option<Replay>> {
         let kem_hash = keccak256(&dev.kem.kem_pk());
@@ -2171,7 +2175,7 @@ impl AppKeys {
                     .epochs
                     .last()
                     .map_or((None, false), |e| (e.in_force.clone(), e.flagged));
-                (f.held, i, fl)
+                (std::mem::take(&mut f.held), i, fl)
             }
             None => (BTreeMap::new(), None, false),
         };
