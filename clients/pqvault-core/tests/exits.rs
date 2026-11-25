@@ -26,10 +26,23 @@ impl Net for Accepting {
     async fn read(&self, _: &str, _: Addr, _: &str, _: Value) -> Result<Value, SdkError> {
         Err(SdkError::Argument)
     }
-    async fn sign(&self, _: &str, _: &KeyRef, _: AppPath, _: String) -> Result<AppSigned, SdkError> {
+    async fn sign(
+        &self,
+        _: &str,
+        _: &KeyRef,
+        _: AppPath,
+        _: String,
+    ) -> Result<AppSigned, SdkError> {
         Err(SdkError::Argument)
     }
-    async fn verify(&self, _: &str, _: B32, _: AppPath, _: String, _: UaSig) -> Result<bool, SdkError> {
+    async fn verify(
+        &self,
+        _: &str,
+        _: B32,
+        _: AppPath,
+        _: String,
+        _: UaSig,
+    ) -> Result<bool, SdkError> {
         Ok(true)
     }
     async fn kem_wrap(
@@ -43,7 +56,14 @@ impl Net for Accepting {
     ) -> Result<AppWrap, SdkError> {
         Err(SdkError::Argument)
     }
-    async fn call(&self, _: &str, _: Addr, _: &str, _: Value, _: KeyRef) -> Result<AppCall, SdkError> {
+    async fn call(
+        &self,
+        _: &str,
+        _: Addr,
+        _: &str,
+        _: Value,
+        _: KeyRef,
+    ) -> Result<AppCall, SdkError> {
         Err(SdkError::Argument)
     }
 }
@@ -157,10 +177,22 @@ async fn a_removal_names_the_head_or_an_ancestor_within_16() {
     assert!(s.epochs[17].removed().contains(&BOB));
     assert!(ok(with_removal(1, 2, ME)).await.unwrap());
     // 17 above the head: refused
-    assert!(matches!(ok(with_removal(0, 1, ME)).await, Err(Error::ChainUnverified)));
+    assert!(matches!(
+        ok(with_removal(0, 1, ME)).await,
+        Err(Error::ChainUnverified)
+    ));
     // the named epoch's nextEpoch not its number plus one: the head's plus one, or the named number itself
-    assert!(matches!(ok(with_removal(1, 18, ME)).await, Err(Error::ChainUnverified)));
-    assert!(matches!(ok(with_removal(1, 1, ME)).await, Err(Error::ChainUnverified)));
+    assert!(matches!(
+        ok(with_removal(1, 18, ME)).await,
+        Err(Error::ChainUnverified)
+    ));
+    assert!(matches!(
+        ok(with_removal(1, 1, ME)).await,
+        Err(Error::ChainUnverified)
+    ));
     // a remover outside the head's admins: refused; its twin, the admin, above
-    assert!(matches!(ok(with_removal(1, 2, BOB)).await, Err(Error::ChainUnverified)));
+    assert!(matches!(
+        ok(with_removal(1, 2, BOB)).await,
+        Err(Error::ChainUnverified)
+    ));
 }

@@ -2712,7 +2712,7 @@ fn tree_replay_resumed_from_the_pin() {
         .log
         .iter()
         .any(|x| x.starts_with("kemKeyAt(") || x.starts_with("wrapAt(0,")));
-    // the rosters of the secret range only
+    // the rosters of the secret range only: a member since 0 holds every epoch's
     assert_eq!(
         full.rosters.keys().copied().collect::<Vec<_>>(),
         (0..=8).collect::<Vec<_>>()
@@ -2721,6 +2721,14 @@ fn tree_replay_resumed_from_the_pin() {
         more.rosters.keys().copied().collect::<Vec<_>>(),
         vec![5, 6, 7, 8]
     );
+    // a member added at 5 (D) holds the rosters of its own range only (M141)
+    let late = o.replay(&mut h, 3);
+    assert_eq!(late.join_epoch, 5);
+    assert_eq!(
+        late.rosters.keys().copied().collect::<Vec<_>>(),
+        vec![5, 6, 7, 8]
+    );
+    assert_eq!(late.rosters[&5], full.rosters[&5]);
     // the memory: the trees at the start and the head
     assert_eq!(
         scaas_ua::wallet::tree::tree_walk_trees(OWN, &mut h, None).unwrap(),
