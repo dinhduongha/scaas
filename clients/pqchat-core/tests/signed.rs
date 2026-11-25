@@ -1136,17 +1136,7 @@ async fn a_replica_record_is_compared_with_the_homes() {
         )
         .await;
     assert!(ok.is_ok(), "{:?}", ok.err());
-    let mut other = w
-        .net
-        .answer_of(REPLICA, "IPqChat.epochOf", json!({"epochId": g.epoch.id}));
-    other["sigHash"] = json!(hex_of(&[0x77; 32]));
-    w.net.answer(
-        REPLICA,
-        "IPqChat.epochOf",
-        json!({"epochId": g.epoch.id}),
-        other,
-    );
-    let r =
+    let open = || {
         w.pq.open_epoch(
             &s,
             &g.epoch.id,
@@ -1154,6 +1144,510 @@ async fn a_replica_record_is_compared_with_the_homes() {
             &w.alice.ua,
             Some(REPLICA.into()),
         )
+    };
+    // A-1: both instances keep signatures, so the replica's `sigHash` alone may differ (a copy's `msig` tag); the record and the
+    // signature without tags decide
+    let id = json!({"epochId": g.epoch.id});
+    let mut other = w.net.answer_of(REPLICA, "IPqChat.epochOf", id.clone());
+    other["sigHash"] = json!(hex_of(&[0x77; 32]));
+    w.net.answer(REPLICA, "IPqChat.epochOf", id.clone(), other);
+    assert!(open().await.is_ok(), "another sigHash alone");
+    // twin: bob's other record under the same id (the same nonce, carol kept), validly signed, at the replica
+    let (home_e, home_sig) = (
+        w.net.answer_of(HOME, "IPqChat.epochOf", id.clone()),
+        w.net.answer_of(HOME, "IPqChat.epochSig", id.clone()),
+    );
+    let o = rekey_on(
+        &w,
+        &s,
+        &e1,
+        &w.bob,
+        13,
+        &[&w.alice, &w.bob, &w.carol],
+        &[&w.alice],
+        &[],
+    )
+    .await;
+    assert_eq!(o.epoch.id, g.epoch.id, "same id");
+    for (item, home) in [("IPqChat.epochOf", home_e), ("IPqChat.epochSig", home_sig)] {
+        let theirs = w.net.answer_of(HOME, item, id.clone());
+        w.net.answer(REPLICA, item, id.clone(), theirs);
+        w.net.answer(HOME, item, id.clone(), home);
+    }
+    assert_eq!(open().await.err(), Some(DropReason::Replica));
+}
+
+/// C-1 (fable-C poc1, red before the fix: the victim followed the substitute's child, `Ok(epoch 2, admins [bob])`): bob, a
+/// member, authors the true epoch 1 (nonce 2) and carol's device verifies it, so its id is remembered; the endpoint then serves,
+/// under the same id, bob's second record with that nonce (bob its only admin, alice dropped) and bob's child of it. A device
+/// with an empty store refuses the child (`control`, the control); carol's refuses it too, since the remembered id binds the
+/// record's hash, and reopening epoch 1's id now finds another record there (`control`).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_remembered_id_binds_its_record() {
+    let _one = ONE.lock().await;
+    let (w, s, s0) = signed_session().await;
+    let t1 = rekey_on(
+        &w,
+        &s,
+        &s0,
+        &w.bob,
+        2,
+        &[&w.alice, &w.bob, &w.carol],
+        &[&w.alice],
+        &[],
+    )
+    .await;
+    let fresh = required(&w, false);
+    let ok =
+        w.pq.open_epoch(&s, &t1.epoch.id, &w.carol.key, &w.carol.ua, None)
+            .await;
+    assert!(ok.is_ok(), "the true epoch 1: {:?}", ok.err());
+    let mut fake0 = s0.clone();
+    fake0.epoch.admins = vec![w.bob.ua.clone()];
+    let f1 = rekey_on(
+        &w,
+        &s,
+        &fake0,
+        &w.bob,
+        2,
+        &[&w.bob, &w.carol],
+        &[&w.bob],
+        &[],
+    )
+    .await;
+    assert_eq!(f1.epoch.id, t1.epoch.id, "same id");
+    let c = rekey_on(&w, &s, &f1, &w.bob, 3, &[&w.bob, &w.carol], &[&w.bob], &[]).await;
+    let ctl = fresh
+        .open_epoch(&s, &c.epoch.id, &w.carol.key, &w.carol.ua, None)
         .await;
-    assert_eq!(r.err(), Some(DropReason::Replica));
+    assert_eq!(
+        ctl.err(),
+        Some(DropReason::Control),
+        "control: an empty store"
+    );
+    let got =
+        w.pq.open_epoch(&s, &c.epoch.id, &w.carol.key, &w.carol.ua, None)
+            .await;
+    assert_eq!(
+        got.err(),
+        Some(DropReason::Control),
+        "the substitute's child followed past the remembered id"
+    );
+    let again =
+        w.pq.open_epoch(&s, &t1.epoch.id, &w.carol.key, &w.carol.ua, None)
+            .await;
+    assert_eq!(
+        again.err(),
+        Some(DropReason::Control),
+        "another record under epoch 1's id"
+    );
+}
+
+/// C-2 (fable-C poc2, red before the fix: `open_epoch` never returned, `epochOf` read for ever): bob signs a record whose
+/// `parentEpochId` is its own id (the parent is not in the id). The walk reads each parent one number below its child, so it
+/// ends at once, by name (`control`), within the time bound.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_record_that_is_its_own_parent_ends_the_walk() {
+    let _one = ONE.lock().await;
+    let (w, s, s0) = signed_session().await;
+    let id = w
+        .app
+        .pqchat_epoch_id(s.session_id.clone(), w.bob.ua.clone(), 5)
+        .unwrap();
+    let mut fp = s0.clone();
+    fp.epoch.id = id.clone();
+    fp.epoch.epoch = 4;
+    let r = rekey_on(
+        &w,
+        &s,
+        &fp,
+        &w.bob,
+        5,
+        &[&w.alice, &w.bob, &w.carol],
+        &[&w.alice],
+        &[],
+    )
+    .await;
+    assert_eq!(
+        (r.epoch.id.clone(), r.epoch.parent.clone()),
+        (id.clone(), id.clone())
+    );
+    let before = w.net.reads_of("IPqChat.epochOf");
+    let got = tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        w.pq.open_epoch(&s, &id, &w.carol.key, &w.carol.ua, None),
+    )
+    .await
+    .expect("the walk ends");
+    assert_eq!(got.err(), Some(DropReason::Control));
+    assert!(
+        w.net.reads_of("IPqChat.epochOf") - before <= 2,
+        "read once more at most"
+    );
+}
+
+/// An `msig` M = 1-of-2 {alice, bob} on the SDK's registry (the fake chain): its first structure registered, version 1 current
+/// (the same slots, bob's enabled, alice's as `alice_on`), both slots accepted; `(id, alice's slot, bob's slot)`.
+fn msig_m(w: &World, alice_on: bool) -> ([u8; 32], u16, u16) {
+    let mut m = vec![(KIND, w.alice.id, 1u16), (KIND, w.bob.id, 1)];
+    m.sort_by_key(|x| x.1);
+    let kd = scaas_ua::encode_msig(1, &m);
+    let id = scaas_ua::derive_ua(0x0120, &kd, false).unwrap();
+    reg(&w.chain, &id, 0x0120, &kd);
+    let items: String = m
+        .iter()
+        .map(|(k, x, wt)| {
+            format!(
+                "{}{}{}",
+                w_(u64::from(*k)),
+                &hex_of(x)[2..],
+                w_(u64::from(*wt))
+            )
+        })
+        .collect();
+    let structure = format!("{}{}{}{}", w_(1), w_(0x40), w_(2), items);
+    let ia = u16::from(m[0].1 != w.alice.id);
+    let enabled = (1u64 << (1 - ia)) | if alice_on { 1 << ia } else { 0 };
+    answer(
+        &w.chain,
+        REGISTRY,
+        "msigOf(bytes32)",
+        &id,
+        format!("{}{}", w_(0x20), structure),
+    );
+    answer(
+        &w.chain,
+        REGISTRY,
+        "msigStateOf(bytes32)",
+        &id,
+        format!("{}{}{}", w_(1), w_(enabled), w_(0b11)),
+    );
+    (id, ia, 1 - ia)
+}
+
+fn w_(n: u64) -> String {
+    common::sdk::w(n)
+}
+
+/// M's `UASig` of the PqChat record `name` holding `rec`: one slot (`index`, signed by alice or bob) and the tag of `version`.
+fn msig_sig(
+    w: &World,
+    m: &[u8; 32],
+    name: &str,
+    rec: &Value,
+    index: u16,
+    alice: bool,
+    version: u64,
+) -> scaas_sdk::app_core::AppUaSig {
+    let wl = scaas_ua::wallet::Wallet::from_mnemonic(REPO, "").unwrap();
+    let k = wl.ua_key(KIND, if alice { 0 } else { 1 }, 0).unwrap();
+    let _ = w;
+    let td = scaas_ua::wallet::pqchat::typed(name, rec.clone()).unwrap();
+    let message = scaas_ua::ua_message(
+        0x0120,
+        &scaas_ua::wallet::pqchat::purpose(),
+        &td.digest().unwrap(),
+    )
+    .unwrap();
+    let md = scaas_ua::member_digest(m, &message);
+    let tag = scaas_ua::purpose_tag("member").unwrap();
+    scaas_sdk::app_core::AppUaSig {
+        key_data: vec![],
+        signature: scaas_ua::ua_portable::version_tag(version),
+        members: vec![scaas_sdk::app_core::AppMemberSig {
+            index,
+            members: vec![],
+            sig: scaas_ua::wallet::ua_sig(&k, None, &tag, &md)
+                .unwrap()
+                .signature,
+        }],
+    }
+}
+
+/// alice's plain rekey of `parent` (built by the crate; `admins` the parent's, `members` with `left` flagged at the parent for
+/// the builder) rewritten as M's record (author M, `nonce`, the
+/// admins `out`: not plain, so M's right as an admin of the parent counts), signed by M's slot `index` at `version`, served as
+/// the home keeps it under its id. Its wraps stay alice's, bound to her record's id, so a reader that follows it opens no own
+/// wrap there (`envelope`, after the walk).
+#[allow(clippy::too_many_arguments)]
+async fn by_msig(
+    w: &World,
+    s: &pqchat_core::reads::SessionRef,
+    parent: &OpenEpoch,
+    m: &[u8; 32],
+    nonce: u64,
+    index: u16,
+    alice: bool,
+    version: u64,
+    admins: &[&Acc],
+    out: &[&Acc],
+    (members, left): (&[&Acc], &[&Acc]),
+) -> OpenEpoch {
+    let b = rekey_on(w, s, parent, &w.alice, nonce + 1000, members, admins, left).await;
+    let mut args = w.net.writes_of("IPqChat.rekey").last().unwrap().clone();
+    let mua = hex_of(m);
+    args["e"]["author"] = json!(mua);
+    args["e"]["nonce"] = json!(nonce.to_string());
+    let out: Vec<String> = out.iter().map(|a| a.ua.clone()).collect();
+    args["e"]["admins"] = json!(out);
+    let id = w
+        .app
+        .pqchat_epoch_id(s.session_id.clone(), mua.clone(), nonce)
+        .unwrap();
+    let sig = msig_sig(w, m, "PqChatEpoch", &args["e"], index, alice, version);
+    args["sig"] = sig_json(&sig);
+    serve_written(&w.net, "IPqChat.rekey", &args, &id);
+    let mut e = b.epoch.clone();
+    e.id = id;
+    e.author = mua;
+    e.nonce = nonce;
+    e.admins = out;
+    OpenEpoch { epoch: e, ..b }
+}
+
+/// C-3, R-2 (CTR-UA-74 step 6 in mode 0): M, an admin of e1, signs e2 (M the only admin) at version 1 (bob's slot, its tag)
+/// after an `updateMsig` that disabled alice's slot; a holder of the old quorum (alice's slot, enabled at version 0) signs e3
+/// (alice an admin again) under an empty tag. Each
+/// record verifies alone, but along the session M's version may not go back: a fresh device walking e3 down to the session
+/// record refuses it (`control`), and so does a device that verified e2 before (the version kept with the walk's memory).
+/// Twin: e3 at version 1 is followed by the walk (`envelope`: its wraps are alice's, after the walk; never `control`).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_mode0_msig_version_never_goes_back() {
+    let _one = ONE.lock().await;
+    let (w, s, s0) = signed_session().await;
+    let (m, ia, ib) = msig_m(&w, false);
+    let ma = Acc {
+        ua: hex_of(&m),
+        id: m,
+        key: w.alice.key.clone(),
+        kem_pk: vec![],
+    };
+    let mut admins = vec![&w.alice, &ma];
+    admins.sort_by(|x, y| x.ua.cmp(&y.ua));
+    let e1 = rekey_on(
+        &w,
+        &s,
+        &s0,
+        &w.alice,
+        2,
+        &[&w.alice, &w.bob, &w.carol],
+        &admins,
+        &[],
+    )
+    .await;
+    let e2 = by_msig(
+        &w,
+        &s,
+        &e1,
+        &m,
+        3,
+        ib,
+        false,
+        1,
+        &admins,
+        &[&ma],
+        (&[&w.alice, &w.bob, &w.carol], &[]),
+    )
+    .await;
+    let e3 = by_msig(
+        &w,
+        &s,
+        &e2,
+        &m,
+        4,
+        ia,
+        true,
+        0,
+        &[&ma],
+        &admins,
+        (&[&w.alice, &w.bob, &w.carol], &[]),
+    )
+    .await;
+    let fresh = required(&w, false);
+    let got = fresh
+        .open_epoch(&s, &e3.epoch.id, &w.carol.key, &w.carol.ua, None)
+        .await;
+    assert_eq!(
+        got.err(),
+        Some(DropReason::Control),
+        "a fresh device: e3 after e2"
+    );
+    let seen =
+        w.pq.open_epoch(&s, &e2.epoch.id, &w.carol.key, &w.carol.ua, None)
+            .await;
+    assert_eq!(
+        seen.err(),
+        Some(DropReason::Envelope),
+        "e2 followed by the walk"
+    );
+    let got =
+        w.pq.open_epoch(&s, &e3.epoch.id, &w.carol.key, &w.carol.ua, None)
+            .await;
+    assert_eq!(
+        got.err(),
+        Some(DropReason::Control),
+        "below the version remembered"
+    );
+    let twin = by_msig(
+        &w,
+        &s,
+        &e2,
+        &m,
+        5,
+        ib,
+        false,
+        1,
+        &[&ma],
+        &admins,
+        (&[&w.alice, &w.bob, &w.carol], &[]),
+    )
+    .await;
+    let ok = required(&w, false)
+        .open_epoch(&s, &twin.epoch.id, &w.carol.key, &w.carol.ua, None)
+        .await;
+    assert_eq!(
+        ok.err(),
+        Some(DropReason::Envelope),
+        "twin: version 1 followed"
+    );
+    // the exits kept under an epoch, judged against the versions after it: M's removal of carol kept under e2 under an empty tag
+    // is `control` for e2's child that drops her; at version 1 it counts
+    let rem = |index: u16, alice: bool, version: u64, nonce: u64| {
+        let r = json!({"sessionId": s.session_id, "epochId": e2.epoch.id, "nextEpoch": (e2.epoch.epoch + 1).to_string(),
+            "members": [w.carol.ua], "admin": hex_of(&m), "nonce": nonce.to_string()});
+        let sig = msig_sig(&w, &m, "PqChatRemove", &r, index, alice, version);
+        json!({"r": r, "sig": sig_json(&sig)})
+    };
+    let drop = by_msig(
+        &w,
+        &s,
+        &e2,
+        &m,
+        6,
+        ib,
+        false,
+        1,
+        &[&ma],
+        &admins,
+        (&[&w.alice, &w.bob], &[&w.carol]),
+    )
+    .await;
+    keep(&w.net, &e2.epoch, &[], &[rem(ia, true, 0, 9)]);
+    let got = required(&w, false)
+        .open_epoch(&s, &drop.epoch.id, &w.bob.key, &w.bob.ua, None)
+        .await;
+    assert_eq!(
+        got.err(),
+        Some(DropReason::Control),
+        "an exit at version 0 after e2 at 1"
+    );
+    keep(&w.net, &e2.epoch, &[], &[rem(ib, false, 1, 10)]);
+    let ok = required(&w, false)
+        .open_epoch(&s, &drop.epoch.id, &w.bob.key, &w.bob.ua, None)
+        .await;
+    assert_eq!(
+        ok.err(),
+        Some(DropReason::Envelope),
+        "twin: the exit at version 1"
+    );
+}
+
+/// A-1 (CTR-UA-74, CTR-CHAT-20): M signs e2 before an `updateMsig` (no tag) and the home keeps it so; a replica copies it after,
+/// with the tag of its registry's current version (1), so its `sigHash` differs. The copy counts: equal to the home's with the
+/// tags stripped. Twin: a copy whose signature differs in more than the tag (bob's slot at version 1, a valid signature of the
+/// same record) is `replica`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_replica_copy_after_an_msig_update_counts_without_its_tag() {
+    let _one = ONE.lock().await;
+    let (w, s, s0) = signed_session().await;
+    let (m, ia, ib) = msig_m(&w, true);
+    let ma = Acc {
+        ua: hex_of(&m),
+        id: m,
+        key: w.alice.key.clone(),
+        kem_pk: vec![],
+    };
+    let mut admins = vec![&w.alice, &ma];
+    admins.sort_by(|x, y| x.ua.cmp(&y.ua));
+    let e1 = rekey_on(
+        &w,
+        &s,
+        &s0,
+        &w.alice,
+        2,
+        &[&w.alice, &w.bob, &w.carol],
+        &admins,
+        &[],
+    )
+    .await;
+    let e2 = by_msig(
+        &w,
+        &s,
+        &e1,
+        &m,
+        3,
+        ia,
+        true,
+        0,
+        &admins,
+        &[&ma],
+        (&[&w.alice, &w.bob, &w.carol], &[]),
+    )
+    .await;
+    list(&w.net, REPLICA, 3, 1);
+    w.net.mirror(HOME, REPLICA);
+    let id = json!({"epochId": e2.epoch.id});
+    let rec = w.net.answer_of(HOME, "IPqChat.epochOf", id.clone())["e"].clone();
+    let copy = |sig: Value| {
+        w.net.answer(
+            REPLICA,
+            "IPqChat.epochSig",
+            id.clone(),
+            json!({ "sig": sig }),
+        );
+        w.net.answer(
+            REPLICA,
+            "IPqChat.epochOf",
+            id.clone(),
+            json!({"e": rec, "sigHash": hex_of(&[0x55; 32])}),
+        );
+    };
+    // the home's kept signature, its tag the replica registry's current version
+    let mut tagged = w.net.answer_of(HOME, "IPqChat.epochSig", id.clone())["sig"].clone();
+    assert_eq!(
+        tagged["signature"],
+        json!("0x"),
+        "kept at home before the update"
+    );
+    tagged["signature"] = json!(hex_of(&1u64.to_be_bytes()));
+    copy(tagged);
+    let open = || {
+        w.pq.open_epoch(
+            &s,
+            &e2.epoch.id,
+            &w.carol.key,
+            &w.carol.ua,
+            Some(REPLICA.into()),
+        )
+    };
+    // the walk at home passes; carol's own wrap is alice's (bound to her record's id), so the replica's verdict comes first
+    assert_eq!(
+        open().await.err(),
+        Some(DropReason::Envelope),
+        "the copy with the replica's tag counts"
+    );
+    copy(sig_json(&msig_sig(
+        &w,
+        &m,
+        "PqChatEpoch",
+        &rec,
+        ib,
+        false,
+        1,
+    )));
+    assert_eq!(
+        open().await.err(),
+        Some(DropReason::Replica),
+        "another signature than the home's"
+    );
 }

@@ -6,7 +6,7 @@
 //! the record counts on the contract's check as before, or is refused under `require_signed_records`.
 use crate::model::{self, at, Epoch};
 use crate::{DropReason, Items, PqChat};
-use scaas_sdk::app_core::{AppInnerSig, AppMemberSig, AppUaSig};
+use scaas_sdk::app_core::{AppInnerSig, AppMemberSig, AppUaSig, MsigVersion};
 use serde_json::{json, Value};
 
 /// `IPqChat.sigStore()`'s values (PQZ's numbering): `none` keeps each record's `sigHash` only.
@@ -48,6 +48,14 @@ pub fn ua_sig(v: &Value) -> Result<AppUaSig, DropReason> {
         signature: model::bytes(at(v, "signature")).map_err(d)?,
         members,
     })
+}
+
+/// A record's kept signature as read, verified, and every `(msig, version)` it names (CTR-UA-74 step 6: what the walk holds a
+/// session's order by).
+#[derive(Debug, Clone)]
+pub(crate) struct Kept {
+    pub sig: AppUaSig,
+    pub versions: Vec<MsigVersion>,
 }
 
 /// A view's one output: by its name `sig`, else unnamed (`"0"`).
@@ -101,24 +109,43 @@ impl PqChat {
         ua: &str,
         name: &str,
         rec: &Value,
-        (item, args): (&'static str, Value),
+        read: (&'static str, Value),
     ) -> Result<(), DropReason> {
+        self.kept_sig(chain, contract, ua, name, rec, read)
+            .await
+            .map(|_| ())
+    }
+
+    /// [`Self::verify_kept`] with the signature read and the versions it names ([`Kept`]).
+    pub(crate) async fn kept_sig(
+        &self,
+        chain: &str,
+        contract: &str,
+        ua: &str,
+        name: &str,
+        rec: &Value,
+        (item, args): (&'static str, Value),
+    ) -> Result<Kept, DropReason> {
         let v = self
             .net
             .read(chain, contract, item, args)
             .await
             .map_err(|_| DropReason::Signature)?;
         let sig = ua_sig(sig_out(&v))?;
-        let ok = self
+        let versions = self
             .app
-            .verify_pqchat_record(chain.into(), ua.into(), name.into(), rec.to_string(), sig)
+            .verify_pqchat_record_versions(
+                chain.into(),
+                ua.into(),
+                name.into(),
+                rec.to_string(),
+                sig.clone(),
+            )
             .await
-            .unwrap_or(false);
-        if ok {
-            Ok(())
-        } else {
-            Err(DropReason::Signature)
-        }
+            .ok()
+            .flatten()
+            .ok_or(DropReason::Signature)?;
+        Ok(Kept { sig, versions })
     }
 
     /// The session or epoch record `epoch_id` at `contract` with its signature verified and its id recomputed from its fields (an
@@ -131,6 +158,20 @@ impl PqChat {
         session_id: &str,
         epoch_id: &str,
     ) -> Result<Option<Epoch>, DropReason> {
+        Ok(self
+            .record_kept_at(chain, contract, session_id, epoch_id)
+            .await?
+            .map(|x| x.0))
+    }
+
+    /// [`Self::signed_record_at`] with its kept signature ([`Kept`]; `None` on a `none` instance).
+    pub(crate) async fn record_kept_at(
+        &self,
+        chain: &str,
+        contract: &str,
+        session_id: &str,
+        epoch_id: &str,
+    ) -> Result<Option<(Epoch, Option<Kept>)>, DropReason> {
         let verify = self.verifies(chain, contract).await?;
         let session = epoch_id.eq_ignore_ascii_case(session_id);
         let (item, args) = if session {
@@ -169,10 +210,12 @@ impl PqChat {
             } else {
                 ("PqChatEpoch", at(&v, "e"), "IPqChat.epochSig")
             };
-            self.verify_kept(chain, contract, &e.author, name, rec, (sig_item, args))
+            let k = self
+                .kept_sig(chain, contract, &e.author, name, rec, (sig_item, args))
                 .await?;
+            return Ok(Some((e, Some(k))));
         }
-        Ok(Some(e))
+        Ok(Some((e, None)))
     }
 
     /// `p`'s id and those of its ancestors at most [`EXIT_LAG_MAX`] above it, each by [`Self::signed_record_at`] (its id
@@ -213,18 +256,20 @@ impl PqChat {
         contract: &str,
         p: &Epoch,
     ) -> Result<(Vec<String>, Vec<String>), DropReason> {
-        self.exits_of(chain, contract, p, None).await
+        let (left, removed, _) = self.exits_of(chain, contract, p, None).await?;
+        Ok((left, removed))
     }
 
-    /// [`Self::left_and_removed`] with `p`'s [`Self::ancestors`] when the caller holds them (the walk, `reads.rs`).
+    /// [`Self::left_and_removed`] with `p`'s [`Self::ancestors`] when the caller holds them (the walk, `reads.rs`), and per exit
+    /// counted the `(msig, version)`s its signature names (CTR-UA-74 step 6; none on a `none` instance).
     pub(crate) async fn exits_of(
         &self,
         chain: &str,
         contract: &str,
         p: &Epoch,
         names: Option<Vec<String>>,
-    ) -> Result<(Vec<String>, Vec<String>), DropReason> {
-        let (mut left, mut removed) = (vec![], vec![]);
+    ) -> Result<(Vec<String>, Vec<String>, Vec<Vec<MsigVersion>>), DropReason> {
+        let (mut left, mut removed, mut versions) = (vec![], vec![], vec![]);
         let d = |_| DropReason::Decode;
         if !self.verifies(chain, contract).await? {
             for m in p
@@ -251,7 +296,7 @@ impl PqChat {
                     removed.push(m);
                 }
             }
-            return Ok((left, removed));
+            return Ok((left, removed, versions));
         }
         // B2-4: each record newly flags a UA of `p` (the contract refuses a repeat), so no more than its UAs
         let most = (crate::check::distinct(p).len() + p.admins.len()) as u64;
@@ -286,7 +331,9 @@ impl PqChat {
             let k = names
                 .as_ref()
                 .and_then(|n| n.iter().position(|x| *x == eid));
-            Ok(k.map(|k| p.epoch - k as u64))
+            // C-2: a name below epoch 0 is no epoch of the session
+            k.map(|k| p.epoch.checked_sub(k as u64).ok_or(DropReason::Control))
+                .transpose()
         };
         for i in 0..count("IPqChat.leaveCount").await? {
             let a = json!({ "epochId": p.id, "index": i.to_string() });
@@ -298,15 +345,17 @@ impl PqChat {
             let l = at(&v, "l");
             let member = model::h(at(l, "member")).map_err(d)?;
             if named(l).await?.is_some() && p.has_member(&member) {
-                self.verify_kept(
-                    chain,
-                    contract,
-                    &member,
-                    "PqChatLeave",
-                    l,
-                    ("IPqChat.leaveSig", a),
-                )
-                .await?;
+                let k = self
+                    .kept_sig(
+                        chain,
+                        contract,
+                        &member,
+                        "PqChatLeave",
+                        l,
+                        ("IPqChat.leaveSig", a),
+                    )
+                    .await?;
+                versions.push(k.versions);
                 left.push(member);
             }
         }
@@ -327,19 +376,25 @@ impl PqChat {
                 && members
                     .iter()
                     .all(|m| p.has_member(m) || p.admins.contains(m));
-            if ok && named(r).await?.is_some_and(|n| next == n + 1) {
-                self.verify_kept(
-                    chain,
-                    contract,
-                    &admin,
-                    "PqChatRemove",
-                    r,
-                    ("IPqChat.removalSig", a),
-                )
-                .await?;
+            if ok
+                && named(r)
+                    .await?
+                    .is_some_and(|n| n.checked_add(1) == Some(next))
+            {
+                let k = self
+                    .kept_sig(
+                        chain,
+                        contract,
+                        &admin,
+                        "PqChatRemove",
+                        r,
+                        ("IPqChat.removalSig", a),
+                    )
+                    .await?;
+                versions.push(k.versions);
                 removed.extend(members);
             }
         }
-        Ok((left, removed))
+        Ok((left, removed, versions))
     }
 }
