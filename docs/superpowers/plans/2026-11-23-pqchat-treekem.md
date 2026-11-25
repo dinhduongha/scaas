@@ -402,10 +402,18 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
 
 ### T5. SDK: thin calls (`clients/scaas-sdk`)
 
-- [ ] **A large session is built small and grown by Adds (owner 2026-11-25), the client default:** the creation names the
-      creator and a few members; the rest come by commits of at most `TREE_CHANGES_MAX` = 32 Adds each, each Add with its
-      Welcome wrap; the chunk planning below plans those commits, and T6a's creation asks for them. No client entry creates a
-      tree session yet (T5 and T6a are not built), so nothing follows the rule today; the first one built follows it.
+- [ ] **The creation in one transaction (owner 2026-11-25: "khi init session TreeKEM: tối đa 16 thành viên + 16 wraps …
+      số thành viên bằng số wraps"):** the SDK's tree-session creation sends the session record **with all its wraps in the
+      same transaction**, one wrap per member key (`wraps.length == members.length`, the contract's rule), so the session is
+      complete at once and no `addWraps` follows. The number of member keys is capped by the planner, per chain: the largest
+      `k` with `record(k) + k × wrap` within the chain's block limit read by RPC (EIP-8037: regular + state) and regular under
+      2^24, with a margin, from the per-chain gas rows of the release data (no figure in code), confirmed by
+      `eth_estimateGas` before signing. About 16 on a 60 M block (spec §13: 15 typical wraps fit with margin, 16 ask 60.0 M
+      with none, fewer where wraps open subtrees: the planner sums the actual wraps). More members come afterwards by commits
+      of at most `TREE_CHANGES_MAX` Adds, each with its Welcome wrap ("create small, add over time" is how users act, the
+      creator pays the creation; owner 2026-11-25). A list over the cap is refused by name with the figures; a multi-
+      transaction creation through `addWraps` is a later, explicit option, not the default. The contract keeps accepting
+      larger records (up to about 192 keys) and `addWraps`: this is an SDK rule, not a contract rule.
 
 - [ ] Named ABI rows for `commit`, `addPathList`, `addPathKeys`, `addPath`, `treeLeave`, `treeRemove` and the views; the `app_core` calls that pass
       `ua-rs`'s tree handles and the signing operation through; the registry read that returns the KEM key **with** its kept
