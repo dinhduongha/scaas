@@ -758,7 +758,11 @@ library UARegistryRegLib {
 
     /// The bytes of the largest `MemberSig[]` a quorum of `d` signs (spec 2026-11-02-msig-nested §2): a signing slot `head + ⌈sig / 32⌉ × 32`,
     /// `head` 192, 128 for a leaf of an inner list; an `msig` slot 192 and its own largest list. CTR-UA-44: the slots that can sign
-    /// (`_signs`; an inner list's own `msig` slots never, MM-14).
+    /// (`_signs`; an inner list's own `msig` slots never, MM-14). Not counted (R-6 of the Fable fix check, 2026-11-26): the
+    /// signing `msig`'s own version tag in `UASig.signature` (CTR-UA-74: one 32-byte word at version >= 1; `updateMsig` and a
+    /// registration's `pop` carry none), at most 32 x 64 = 2,048 gas at the EIP-7976 floor, below each margin it meets: the
+    /// consumer reserve 350,000 against 310,144 measured (+39,856), the `setPqzKey` row 2,600,000 against 2,591,640 (+8,360,
+    /// its signatures' bytes counted again by `_calldata`), the debit bound one holder signature counted twice (`_pqzHolder`).
     function _authBytes(bytes memory d, uint256 head) internal view returns (uint256 n) {
         uint256 count = UAStore.u16(d, 2);
         uint256[] memory weights = new uint256[](count);
