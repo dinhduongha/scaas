@@ -8,6 +8,8 @@ import {IPqGroupTree} from "../../src/pqgroup/IPqGroupTree.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChatBase} from "./PqChatBase.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {UACall} from "../ua/UACall.sol";
 
 /// The tree records' typed hashes, as the contract signs them.
 contract TreeHasher {
@@ -63,6 +65,8 @@ abstract contract PqChatTreeWorld is PqChatBase {
     /// The vectors' JSON in this call's memory (1.5 MB: in storage it would not fit a block), opened by `_open`.
     uint256 internal sjAt;
     mapping(string => bytes32) internal person;
+    /// The kind of a keyless admin registered by `_keyless` (0: an ML-DSA-65 person or member).
+    mapping(bytes32 => uint16) internal kindOf;
 
     function setUp() public virtual override {
         super.setUp();
@@ -263,20 +267,106 @@ abstract contract PqChatTreeWorld is PqChatBase {
         string memory g = string.concat(_stepKey(si, k), ".gone");
         string memory r = string.concat(g, ".record");
         bytes32 sid = _j().readBytes32(string.concat(r, ".sessionId"));
-        bytes32 tid = _j().readBytes32(string.concat(r, ".treeId"));
-        bytes32 eid = _j().readBytes32(string.concat(r, ".epochId"));
-        uint64 nonce = uint64(_j().readUint(string.concat(r, ".nonce")));
+        bytes32 head = _head(c, sid);
         if (keccak256(bytes(_j().readString(string.concat(g, ".struct")))) == keccak256("PqChatTreeLeave")) {
-            IPqChat.PqChatTreeLeave memory l =
-                IPqChat.PqChatTreeLeave(sid, tid, eid, _j().readBytes32(string.concat(r, ".member")), nonce);
-            c.treeLeave(l, _sig(l.member, th2.treeLeave(l)));
+            IPqChat.PqChatTreeLeave memory l = _leaveRec(r);
+            uint256 n0 = c.leaveCount(head);
+            c.treeLeave(l, _sigBy(l.member, th2.treeLeave(l)));
+            (uint256 kind,) = _gone(c, sid, l.member);
+            assertEq(kind, 1, string.concat(_stepKey(si, k), ": the leaver gone"));
+            assertEq(c.leaveCount(head), n0 + 1, "the record under the head");
         } else {
-            IPqChat.PqChatTreeRemove memory x;
-            (x.sessionId, x.treeId, x.epochId, x.nonce) = (sid, tid, eid, nonce);
-            x.nextEpoch = uint64(_j().readUint(string.concat(r, ".nextEpoch")));
-            x.members = _j().readBytes32Array(string.concat(r, ".members"));
-            x.admin = _j().readBytes32(string.concat(r, ".admin"));
-            c.treeRemove(x, _sig(x.admin, th2.treeRemove(x)));
+            IPqChat.PqChatTreeRemove memory x = _removeRec(r);
+            uint256 n0 = c.removalCount(head);
+            c.treeRemove(x, _sigBy(x.admin, th2.treeRemove(x)));
+            for (uint256 i; i < x.members.length; ++i) {
+                (uint256 kind,) = _gone(c, sid, x.members[i]);
+                assertEq(kind, 2, string.concat(_stepKey(si, k), ": a removed UA gone"));
+            }
+            assertEq(c.removalCount(head), n0 + 1, "the record under the head");
+        }
+    }
+
+    function _leaveRec(string memory r) internal view returns (IPqChat.PqChatTreeLeave memory l) {
+        (l.sessionId, l.treeId, l.epochId) = (_b32(r, ".sessionId"), _b32(r, ".treeId"), _b32(r, ".epochId"));
+        (l.member, l.nonce) = (_b32(r, ".member"), uint64(_u(r, ".nonce")));
+    }
+
+    function _removeRec(string memory r) internal view returns (IPqChat.PqChatTreeRemove memory x) {
+        (x.sessionId, x.treeId, x.epochId) = (_b32(r, ".sessionId"), _b32(r, ".treeId"), _b32(r, ".epochId"));
+        (x.nonce, x.nextEpoch, x.admin) = (uint64(_u(r, ".nonce")), uint64(_u(r, ".nextEpoch")), _b32(r, ".admin"));
+        x.members = _j().readBytes32Array(string.concat(r, ".members"));
+    }
+
+    /// `ua`'s signature over `digest` in the mock verifier's form by its kind: an ML-DSA-65 person or member, the WebAuthn
+    /// admin, or the `msig` admin by every slot of its structure.
+    function _sigBy(bytes32 ua, bytes32 digest) internal view returns (IUARegistry.UASig memory s) {
+        uint16 kind = kindOf[ua];
+        if (kind == 0) return _sig(ua, digest);
+        if (kind != UAKinds.MSIG) {
+            s.signature = _sig(keyOf_[ua], UAKinds.uaMessage(kind, UAKinds.PURPOSE_PQCHAT, digest));
+            return s;
+        }
+        s.members = _slots(ua, keyOf_[ua], UAKinds.PURPOSE_PQCHAT, digest);
+    }
+
+    /// Every slot's member signature of the `msig` `ua` (structure `d`, ML-DSA-65 members) over `purpose` and `digest`.
+    function _slots(bytes32 ua, bytes memory d, bytes32 purpose, bytes32 digest)
+        internal
+        view
+        returns (IUARegistry.MemberSig[] memory sigs)
+    {
+        bytes32 md = _memberDigest(ua, purpose, digest);
+        uint256 m = uint16(bytes2(abi.encodePacked(d[2], d[3])));
+        sigs = new IUARegistry.MemberSig[](m);
+        for (uint256 i; i < m; ++i) {
+            sigs[i] = IUARegistry.MemberSig(
+                uint16(i),
+                new IUARegistry.InnerSig[](0),
+                _sig(keyOf_[_slotId(d, i)], UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md))
+            );
+        }
+    }
+
+    // ----- C-4 of the re-review of 2026-11-25 (the contract part): the worlds of this round's rules, on the contract -----
+
+    /// The keyless admins of `tree-secrets.json` (`signers`, kinds 0x0120 and 0x0100, beside their two ML-DSA-65 members):
+    /// registered here under their vector key data, so their UA ids are the vectors'; each signs by the mock verifier's form
+    /// (`_sigBy`).
+    function _keyless() internal {
+        uint256 n = _len(".signers");
+        for (uint256 i; i < n; ++i) {
+            string memory k = _ix(".signers", i);
+            bytes32 ua = _b32(k, ".ua");
+            uint16 kind = uint16(_u(k, ".kind"));
+            bytes memory d = _j().readBytes(string.concat(k, ".keyData"));
+            if (kind == ML && keyOf_[ua].length == 0) {
+                IUARegistry.UAAttrs memory a;
+                assertEq(_register(p, ML, d, a, _pop(p, ML, d, a), ""), ua, "a member of the msig");
+                keyOf_[ua] = d;
+            } else if (kind == UAKinds.WEBAUTHN_P256) {
+                IUARegistry.UAAttrs memory a;
+                assertEq(_register(p, kind, d, a, _pop(p, kind, d, a), ""), ua, "the WebAuthn admin");
+                (keyOf_[ua], kindOf[ua]) = (d, kind);
+            }
+        }
+        for (uint256 i; i < n; ++i) {
+            string memory k = _ix(".signers", i);
+            if (uint16(_u(k, ".kind")) != UAKinds.MSIG) continue;
+            bytes32 ua = _b32(k, ".ua");
+            bytes memory d = _j().readBytes(string.concat(k, ".keyData"));
+            // PQ-eligible (two ML-DSA-65 members): registered by its members' PoP over the registration digest
+            IUARegistry.MemberSig[] memory pop = _slots(ua, d, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG));
+            assertEq(UACall.register(p, UAKinds.MSIG, d, _none(), abi.encode(pop), ""), ua, "the msig admin");
+            (keyOf_[ua], kindOf[ua]) = (d, UAKinds.MSIG);
+        }
+    }
+
+    /// Slot `s`'s member id of an `msig` structure (`_msigKey`: threshold, count, then per slot kind, id, weight).
+    function _slotId(bytes memory d, uint256 s) internal pure returns (bytes32 id) {
+        uint256 o = 4 + s * 36 + 2;
+        assembly ("memory-safe") {
+            id := mload(add(add(d, 32), o))
         }
     }
 
@@ -489,5 +579,50 @@ contract PqChatTreeScenarioTest is PqChatTreeWorld {
 
     function test_scenario_adminGap() public {
         _run(10, false);
+    }
+
+    // C-4 of the re-review of 2026-11-25 (the contract part): worlds 11 to 16, this round's rules, played whole; each exit
+    // step's UAs gone with its kind and its record under the head (`_landGone`)
+
+    /// The keyless admins' exits (an `msig`'s and a WebAuthn admin's `treeRemove`, an ancestor two below the head, a
+    /// removal of a keyless admin and of its own signer, a removal and its signer's leave on one head).
+    function test_scenario_exits() public {
+        _open();
+        _keyless();
+        _run(11, false);
+    }
+
+    function test_scenario_smallOrder() public {
+        _run(12, false);
+    }
+
+    function test_scenario_small() public {
+        _run(13, true);
+    }
+
+    function test_scenario_pinExit() public {
+        _run(14, false);
+    }
+
+    function test_scenario_returned() public {
+        _run(15, false);
+    }
+
+    /// The lag world (17 commits), then C9's lag on its head: a leave naming epoch 0, 17 below the head, is
+    /// `PqChatExitLag(0, 17)`; naming epoch 1 (the first commit) it lands at the head (the control).
+    function test_scenario_lag() public {
+        _run(16, false);
+        string memory r = string.concat(_sc(16), ".genesis.record");
+        bytes32 sid = PqChatTypes.sessionId(_b32(r, ".creator"), uint64(_u(r, ".nonce")));
+        bytes32 tid = _b32(_stepKey(16, 0), ".record.treeId");
+        bytes32 c = person["C"];
+        IPqChat.PqChatTreeLeave memory l = IPqChat.PqChatTreeLeave(sid, tid, sid, c, 9_000);
+        IUARegistry.UASig memory ls = _sig(c, th2.treeLeave(l));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatExitLag.selector, uint64(0), uint64(17)));
+        vchat.treeLeave(l, ls);
+        l.epochId = _b32(_stepKey(16, 0), ".epochId");
+        vchat.treeLeave(l, _sig(c, th2.treeLeave(l)));
+        (uint256 kind,) = _gone(vchat, sid, c);
+        assertEq(kind, 1, "the control lands");
     }
 }
