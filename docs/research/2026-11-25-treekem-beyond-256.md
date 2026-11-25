@@ -636,3 +636,9 @@ bounds over 2^24, then 24 (C10, the controller's). "Build small, grow by Adds" i
 Owner clarification the same day: "build small, grow by Adds" is not a mechanism to build but how users act — a group is
 created by one user, who pays the creation, and members are added over time; the SDK and pqchat-core (T5 / T6) only offer
 create-with-a-few and add-in-batches, perhaps with a fee estimate before sending.
+
+**Correction (owner, 2026-11-25): "Tôi chưa hề đề cập build ledger service".** No off-chain "ledger service" is decided
+or scheduled; the name was the controller's label for the owner's research direction of 2026-11-24 (an API between SCaaS
+and a backend such as immudb, Supabase, S3 or Arweave). Read every "ledger service", "after the freeze, with the ledger
+service's spec" and "the ledger" in this note as "a possible off-chain deployment, if one is ever decided". `groupMode = 2`
+and `3` are only reserved values; the questions here wait until such a build is decided.

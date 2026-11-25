@@ -459,3 +459,9 @@ render); any MLS plan; the exact Snapchain mainnet date; whether the erasure cod
 wording of FIP #266 (90-day cap, "0 = no expiry"); the operators behind the validator keys "moria" and "isengard"; the terms and
 completion of the Network School deal and the "social smart contract"; the IMC 2026 paper's figures on node economics; OP gas per
 registry write; the rules of storage lending.
+
+**Correction (owner, 2026-11-25): "Tôi chưa hề đề cập build ledger service".** No off-chain "ledger service" is decided
+or scheduled; the name was the controller's label for the owner's research direction of 2026-11-24 (an API between SCaaS
+and a backend such as immudb, Supabase, S3 or Arweave). Read every "ledger service", "after the freeze, with the ledger
+service's spec" and "the ledger" in this note as "a possible off-chain deployment, if one is ever decided". `groupMode = 2`
+and `3` are only reserved values; the questions here wait until such a build is decided.
