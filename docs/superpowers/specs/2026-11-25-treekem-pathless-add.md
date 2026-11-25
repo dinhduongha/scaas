@@ -53,6 +53,7 @@ sections; quoted here verbatim, then the rulings as stated.
 |---|---|
 | R17 | Path-less Adds are built in **mode 1 only**, with **§9's rights** (an admin adds anyone; a member adds keys of its own UA, at most `KEYS_PER_UA_MAX`), as **their own round after PR #30**, before the freeze. Mode 0 and PqVault: no. |
 | R18 | The forced path commit is a **session option at creation**, a field `pathRefreshBound` in the signed session record: 0 = never forced by the contract; N > 0 = the contract refuses the (N + 1)-th path-less leaf since the last path commit. With 0, **the client warns the admins after 24 path-less leaves**; with N, it warns as N comes near. |
+| R18′ | **Change (owner 2026-11-25, after R18):** "bound mặc định 24 => 20 chứ?" and "Cũng 20": the client default `pathRefreshBound` is 20 and, with 0, the client warns the admins after **20** path-less leaves (was 24). | matches `TREE_CHANGES_MAX` = 20 |
 | R19 | Removals, leaves (exits), admin changes and periodic updates keep a path: they stay path commits on the commit secret alone, as today. |
 | R20 | The key schedule: R9 / C23 are reopened **narrowly**: a chain only across path-less Adds, reset by every path commit; path commits keep using their own commit secret only, as R9 decided. The two-input trade-off and "who loses what" are the research's ("The two inputs of the key schedule", "Who loses what, by way"), followed here. |
 
@@ -107,8 +108,8 @@ PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatCon
   of 511 or 512 could never refuse: it would mean the same as 0. 510 is the largest value that can bind. One meaning per
   value.
 - **The client default (C46; decided in §15.1).** `scaas-sdk` and `pqchat-core` put **20** there when the caller names no
-  value; 0 is allowed only when named, and then the client warns after 24 (§6.4). The `createSession` review shows it: "key
-  refresh forced after N added keys" or, for 0, "key refresh never forced; the admins are warned after 24 added keys"; the
+  value; 0 is allowed only when named, and then the client warns after 20 (§6.4). The `createSession` review shows it: "key
+  refresh forced after N added keys" or, for 0, "key refresh never forced; the admins are warned after 20 added keys"; the
   session's details show the same line to every member.
 - **`confirmTag` (T1 at epoch 0, C43; F-7).** In mode 1, `H(S_0, …/confirm ‖ genesisCtx)` (§4.1); in mode 0 it must be
   `bytes32(0)`, else `PqChatShape()`. The contract cannot check a mode-1 value (no secret) and does not.
@@ -443,11 +444,11 @@ author. Its states:
 The client computes `sincePath` by the walk and warns **the admins** (the devices of UAs in the head's `admins`). The
 threshold `W(N)` is defined for every N (C46, controller; §15.1):
 
-- **`pathRefreshBound` = 0:** `W(0)` = 24 (`PATHLESS_WARN_LEAVES`, a client constant, the owner's figure): from
-  `sincePath ≥ 24`, "a path commit is due: n leaves added without a key refresh since epoch p".
+- **`pathRefreshBound` = 0:** `W(0)` = 20 (`PATHLESS_WARN_LEAVES`, a client constant, the owner's figure: 24, then 20 on
+  2026-11-25, "Cũng 20"): from `sincePath ≥ 20`, "a path commit is due: n leaves added without a key refresh since epoch p".
 - **`pathRefreshBound` = N > 0:** `W(N) = max(1, N − ⌈N/4⌉)`, the last quarter of the room (the controller's reading of "as
   N comes near"): N = 1 → 1, 2 → 1, 4 → 3, 24 → 18, 100 → 75, 510 → 382. From `sincePath ≥ W(N)`: "n of N; at N the next Add
-  carries a key refresh". A creator who picks N above 24 is shown, in the `createSession` review, that the warning comes at
+  carries a key refresh". A creator who picks N above 20 is shown, in the `createSession` review, that the warning comes at
   `W(N)`, later than a session with 0.
 - **The deferred cost (D-10):** every warning and every path-less Add's quote also shows "the next refresh carries about m
   ciphertexts, about m × 2.9 M asked" (m = the leaves owed a ciphertext, `sincePath` plus the blanked warm nodes, [E] until
@@ -637,7 +638,7 @@ part is tagged owner or controller.
 - **CTR-CHAT-26** (owner: yes): "Change (owner 2026-11-25, relayed by the controller; status: SPECIFIED): path-less Adds in
   mode 1 only (R17): a commit of Adds only may carry no path, with §9's rights; a session option `pathRefreshBound` at
   creation, 0 never forced, N > 0 the (N + 1)-th path-less leaf since the last path commit refused, every path-less leaf
-  counted, the admins warned after 24 with 0 and as N comes near otherwise (R18); removals, exits, admin changes and
+  counted, the admins warned after 20 with 0 and as N comes near otherwise (R18, as amended 2026-11-25); removals, exits, admin changes and
   refreshes keep a path (R19); the joiner of a path-less Add derives from the parent's `next` secret, a chain reset by every
   path commit; path commits as R9 (R20). Mode 0's behaviour and PqVault unchanged; mode 0's session record gains the two
   fields at 0. Source: owner 2026-11-25, verbatim: 'Có lẽ sẽ chọn Add không path, …' and 'Ok, theo §9, chỉ mode 1, làm sau
@@ -795,9 +796,9 @@ stays UNAUDITED until an AI audit round covers it at its commit. Merge and push 
 3. **The signal: an explicit `bool pathless` field (C42; D-11, "explicit parameters")**; the contract requires the
    path-less shape exactly when it is true (§3.2, §5.1).
 4. **The client default `pathRefreshBound` = 20 (C41, C46; D-2; owner 2026-11-25: "bound mặc định 24 => 20 chứ?", to match `TREE_CHANGES_MAX` = 20)**, shown in the `createSession` review; 0 allowed when named,
-   with the client warning after 24.
+   with the client warning after 20.
 5. **The contract cap 510 (C41; claude-6, superseding 511):** the largest value that can bind (§3.1).
-6. **The warning threshold for every N (C46; D-12):** `W(0)` = 24, `W(N) = max(1, N − ⌈N/4⌉)` (§6.4).
+6. **The warning threshold for every N (C46; D-12):** `W(0)` = 20 (owner 2026-11-25, "Cũng 20"), `W(N) = max(1, N − ⌈N/4⌉)` (§6.4).
 7. **Own-commit detection by a seed-derived nonce (C47; F-2, claude-1)** for path-less commits, like R4's seed-derived
    secrets, checked by the victim's device with or without the epoch state (§4.1, §6.5). No new field.
 8. **R10's rewording (D-5)** as in §11, a controller call under the grant.
