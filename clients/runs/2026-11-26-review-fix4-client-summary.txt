@@ -1,0 +1,24 @@
+# The Fable fix check of 2026-11-26, client rows (branch review-fix4-client from 02e665589). PARTIAL: the round was stopped
+# for a machine shutdown (controller 2026-11-26); the gates and mutants not run are listed as such. Full logs were local and
+# git-ignored. UNAUDITED.
+
+step | commit | rc | counts
+red first C-1 (poc1, old pqchat-core src) | 02e665589 | 101 | a_remembered_id_binds_its_record: left None right Some(Control)
+red first C-2 (poc2) | 02e665589 | 101 | a_record_that_is_its_own_parent_ends_the_walk: Elapsed after 20 s ("the walk ends")
+red first C-3 mode 0 | 02e665589 | 101 | a_mode0_msig_version_never_goes_back: left Some(Envelope) right Some(Control)
+red first A-1 | 02e665589 | 101 | a_replica_copy_after_an_msig_update_counts_without_its_tag: left Some(Replica) right Some(Envelope); a_replica_record_is_compared_with_the_homes (twin moved)
+red first C-5 | 02e665589 | 101 | exits_below_the_head_are_checked_in_the_named_lists: left "Ok" right "NotMember"
+vectors pqchat-vectors.mjs (tree-secrets.json) | 4e3f35aa8 | 0 | signers 16 -> 18, worlds 22 -> 23 (msig-nested), lies 80 -> 83 appended; old rows byte-identical; the other six files unchanged
+clientkeys node --test test/*.test.js | before the last regeneration (row names, lie order) | 0 | 668 passed, 0 failed; treekem + pqchat-tree + pqchat after it: 103 passed
+ua-rs --features app-core,vectors --test tree | before the last regeneration | 0 | 16 passed (C-6 resume test, nested lie rows, keyless exits 6 -> 7)
+ua-rs --features app-core,vectors (every target) | 4e3f35aa8 | stopped | 22 targets passed, 0 failed, then stopped for the shutdown: NOT complete
+pqchat-core --test signed --test session | b9b028610 | 0 | 17 + 19 passed (before the commit; the msig tests again after a rebuild: ok)
+pqvault-core --features vectors --test exits --test core --test devices | 11d220e3f | 0 | 3 + 8 + 3 passed
+scaas-sdk --features app-core,pqchat-records(,vectors) --test app_core app_core_vault_records pqchat_keys | b567e4e58 | 0 | 13 + 6 + 18 passed
+clippy -D warnings --all-targets: ua-rs (app-core,vectors), pqchat-core (default, vectors), pqvault-core (default, vectors), scaas-sdk (app-core,pqchat-records,vectors), scaas-cli (dev-profiles) | before 4e3f35aa8 (one rustfmt-only change after) | 0 | clean
+format.sh --check rust js py | 0cf93aa8c tree | 0 | ok (the whole --check: rust failed only on tree.rs, fixed by rustfmt; the other parts not re-run)
+docs_check check / paths; test_docs_check | 0cf93aa8c tree | 0 | 0 errors, 7 warnings, 16 notes; 0 paths; ok
+mutants 2026-11-26-review-fix4-client-mutants.py M22 (js, C-4 member tag) | 4e3f35aa8 | 1 | killed (4 red: the lie rows, vectors byte check)
+mutants M1-M21, M23-M34 | - | - | NOT RUN (M24-M30 started, stopped before a result; files restored)
+old runner 2026-11-25-review-fix-client-mutants.py | - | - | 10 rows retargeted to the moved code, check ok; NOT re-run
+Not run: pqchat-core / pqvault-core every target, scaas-cli cargo test (CLI parity of the two new commands), scaas-sdk gas/generate.py --check, pqchat-vectors.mjs --check, format.sh --check every part, the forge player on the new world (the contract branch's).

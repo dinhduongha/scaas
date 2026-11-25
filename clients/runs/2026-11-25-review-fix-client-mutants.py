@@ -14,7 +14,9 @@ after it; a Rust mutant that does not compile kills nothing; a mutant that passe
   python3 -I clients/runs/2026-11-25-review-fix-client-mutants.py check           (every replacement found once)
 A hung run: past its deadline (3 x the unmutated baseline, at least 10 min, or `--timeout N`) its process group is killed and
 the row reads `killed (timeout N s)`; a target file that differs from HEAD refuses the run; the restore holds on SIGINT /
-SIGTERM (scripts/mutant_guard.py, ARCH-POS-23)."""
+SIGTERM (scripts/mutant_guard.py, ARCH-POS-23). 2026-11-26 (branch review-fix4-client): M19, M24, M97, M110, M131, M136, M154,
+M161, M162, M192 read the code the fix check moved (the same mutants on the new text); that round's own rows are in
+2026-11-26-review-fix4-client-mutants.py."""
 import os
 import re
 import sys
@@ -107,7 +109,7 @@ M = [
     ("js", "the id at its number", [(J, "      hex(pc.epochId(a.sid, r.author, r.nonce)) === a.ids[n] &&\n", "")]),
     ("js", "the record's treeId", [(J, "      r.treeId === a.treeId &&\n", "")]),
     ("js", "the record's sessionId", [(J, "      r.epoch === n &&\n      r.sessionId === a.sid &&\n", "      r.epoch === n &&\n")]),
-    ("js", "the commit's signature", [(J, '  const v = verified(sc, rd, "PqChatCommit", ok, ok.author, sig, where);\n', "  const v = 0;\n")]),
+    ("js", "the commit's signature", [(J, '  const v = verified(sc, rd, "PqChatCommit", ok, ok.author, sig, where);\n', "  const v = [];\n")]),
     ("js", "parentEpochId", [(J, "if (c.parentEpochId !== ids[n - 1] || c.parentTreeHash !== tr.treeHash(tree)) corrupt(where);", "if (c.parentTreeHash !== tr.treeHash(tree)) corrupt(where);")]),
     ("js", "parentTreeHash", [(J, "if (c.parentEpochId !== ids[n - 1] || c.parentTreeHash !== tr.treeHash(tree)) corrupt(where);", "if (c.parentEpochId !== ids[n - 1]) corrupt(where);")]),
     ("js", "the rights and admins not judged", [(J, "        tr.judgeCommit(tree, applied.tree, c, a.admins[n - 1]);\n", "")]),
@@ -123,12 +125,12 @@ M = [
     ("js", "the lag off by one", [(J, "m >= 0 && m >= h - EXIT_LAG_MAX; m--", "m >= 0 && m > h - EXIT_LAG_MAX; m--")]),
     ("js", "an unknown epoch named", [(J, "    return corrupt(read);\n  };\n  const count", "    return h;\n  };\n  const count")]),
     ("js", "a leaver with no leaf", [(J, "    if (!holds(tree, r.member) || before(r.member)) corrupt(read);\n", "    if (before(r.member)) corrupt(read);\n")]),
-    ("js", "a leave's signature", [(J, 'versionUp(floor, versions, r.member, verified(sc, rd, "PqChatTreeLeave", r, r.member, sig, read), read);', "versionUp(floor, versions, r.member, 0, read);")]),
+    ("js", "a leave's signature", [(J, 'versionUp(floor, versions, verified(sc, rd, "PqChatTreeLeave", r, r.member, sig, read), read);', "versionUp(floor, versions, [], read);")]),
     ("js", "a remover outside the head's admins", [(J, "      a.admins[h].includes(r.admin) &&\n", "")]),
     ("js", "a removed UA that is no member", [(J, "(holds(tree, m) || a.admins[h].includes(m)) && !before(m)", "!before(m)")]),
     ("js", "a removal's nextEpoch", [(J, "      r.nextEpoch === n + 1 &&\n", "")]),
     ("js", "a removal's order", [(J, "      r.members.every((m, j) => j === 0 || m > r.members[j - 1]) &&\n", "")]),
-    ("js", "a removal's signature", [(J, 'versionUp(floor, versions, r.admin, verified(sc, rd, "PqChatTreeRemove", r, r.admin, sig, read), read);', "versionUp(floor, versions, r.admin, 0, read);")]),
+    ("js", "a removal's signature", [(J, 'versionUp(floor, versions, verified(sc, rd, "PqChatTreeRemove", r, r.admin, sig, read), read);', "versionUp(floor, versions, [], read);")]),
     # the pin (sc-F-3), the snapshot, the list
     ("js", "a walk from the pin ignores its exits", [(J, "    if (pin && n === a.n0 && !pin.exits.every(", "    if (false && !pin.exits.every(")]),
     ("js", "the replay's pin check ignores its exits", [(J, "    !store.exits.every(([ua, kind]) => p.exits.some((x) => x[0] === ua && x[1] === kind))\n", "    false\n")]),
@@ -153,7 +155,7 @@ M = [
     # ---- ua-rs: the walk's record checks (commit_at, apply)
     ("rs", "the id at its number", [(R, "                    && sc.epoch_id(&self.sid, &author, u64j(&c, \"nonce\").ok()?)\n                        == at(&self.ids, n).ok()?\n", "")]),
     ("rs", "the record's treeId", [(R, "                    && b32j(&c, \"treeId\").ok()? == self.tree_id\n", "")]),
-    ("rs", "the commit's signature", [(R, "        let version = verified(sc, &*rd, \"PqChatCommit\", &c, &author, served(v.get(\"sig\"))?)?;\n", "        let (_, version) = (&author, 0);\n")]),
+    ("rs", "the commit's signature", [(R, "        let version = verified(sc, &*rd, \"PqChatCommit\", &c, &author, served(v.get(\"sig\"))?)?;\n", "        let (_, version) = (&author, vec![]);\n")]),
     ("rs", "parentEpochId", [(R, "        if b32j(c, \"parentEpochId\")? != at(&self.ids, n - 1)?\n            || ", "        if ")]),
     ("rs", "parentTreeHash", [(R, "        if b32j(c, \"parentEpochId\")? != at(&self.ids, n - 1)?\n            || b32j(c, \"parentTreeHash\")? != tree.tree_hash()\n", "        if b32j(c, \"parentEpochId\")? != at(&self.ids, n - 1)?\n")]),
     ("rs", "the rights and admins not judged", [(R, "        tree.judge_commit(&applied.tree, &ch, &admins, head_admins)\n            .map_err(lie)?;\n", "")]),
@@ -168,12 +170,12 @@ M = [
     ("rs", "the lag off by one", [(R, "        for m in (h.saturating_sub(EXIT_LAG_MAX)..=h).rev() {", "        for m in (h.saturating_sub(EXIT_LAG_MAX - 1)..=h).rev() {")]),
     ("rs", "an unknown epoch named", [(R, "                return Ok(m);\n            }\n        }\n        corrupt()\n", "                return Ok(m);\n            }\n        }\n        Ok(h)\n")]),
     ("rs", "a leaver with no leaf", [(R, "            if !holds(tree, &member) || before(&member) {", "            if before(&member) {")]),
-    ("rs", "a leave's signature", [(R, "                \"PqChatTreeLeave\",\n                &r,\n                &member,\n                served(v.get(\"sig\"))?,\n            )?;", "                \"PqChatTreeLeave\",\n                &r,\n                &member,\n                served(v.get(\"sig\"))?,\n            )\n            .ok();")]),
+    ("rs", "a leave's signature", [(R, "                \"PqChatTreeLeave\",\n                &r,\n                &member,\n                served(v.get(\"sig\"))?,\n            )?;", "                \"PqChatTreeLeave\",\n                &r,\n                &member,\n                served(v.get(\"sig\"))?,\n            )\n            .unwrap_or_default();")]),
     ("rs", "a remover outside the head's admins", [(R, "                && admins.contains(&admin)\n", "")]),
     ("rs", "a removed UA that is no member", [(R, ".all(|m| (holds(tree, m) || admins.contains(m)) && !before(m));", ".all(|m| !before(m));")]),
     ("rs", "a removal's nextEpoch", [(R, "            let ok = next == n + 1\n                && ", "            let ok = ")]),
     ("rs", "a removal's order", [(R, "                && members.windows(2).all(|x| x.first() < x.get(1))\n", "")]),
-    ("rs", "a removal's signature", [(R, "                \"PqChatTreeRemove\",\n                &r,\n                &admin,\n                served(v.get(\"sig\"))?,\n            )?;", "                \"PqChatTreeRemove\",\n                &r,\n                &admin,\n                served(v.get(\"sig\"))?,\n            )\n            .ok();")]),
+    ("rs", "a removal's signature", [(R, "                \"PqChatTreeRemove\",\n                &r,\n                &admin,\n                served(v.get(\"sig\"))?,\n            )?;", "                \"PqChatTreeRemove\",\n                &r,\n                &admin,\n                served(v.get(\"sig\"))?,\n            )\n            .unwrap_or_default();")]),
     # the pin, the snapshot, the list, the period
     ("rs", "a walk from the pin ignores its exits", [(R, "            if pin.is_some_and(|p| n == n0 && !p.exits.iter().all(|e| ex.contains(e))) {", "            if pin.is_some_and(|_| false) {")]),
     ("rs", "the replay's pin check ignores its exits", [(R, " || !s.exits.iter().all(|e| p.exits.contains(e))", "")]),
@@ -213,7 +215,7 @@ M = [
     ("node", "C10: the node at 21 changes", [(N, "const TREE_CHANGES_MAX: usize = 20;", "const TREE_CHANGES_MAX: usize = 21;")]),
     # ==== the re-review of 2026-11-25 (branch review-fix2-client) ====
     # ---- clientkeys
-    ("js", "C-1: a cold tree's key unauthenticated", [(J, "  return recordKey(ua, keyId, v, rd.uaRecordOf, rd.accepted);\n", "  return v.kemPk;\n")]),
+    ("js", "C-1: a cold tree's key unauthenticated", [(J, "  return recordKey(ua, keyId, rec, rd.uaRecordOf, rd.accepted);\n", "  return v.kemPk;\n")]),
     ("js", "C-1: a KEM record's signature not verified", [(J, "    uv.verifyKemRecord({ ua: hex(ua), version: keyId, kemPk: rec.kemPk, sig: rec.sig }, uaRecordOf, accepted);\n", "")]),
     ("js", "C-1: an Add's key unauthenticated", [(J, "    const k = recordKey(x.ua, x.keyId, x, a.uaRecordOf, a.accepted);\n", "    const k = x.kemPk;\n")]),
     ("js", "C-1: a member's key unauthenticated at creation", [(J, "  const kemPks = session.members.map((m, i) => recordKey(m.ua, m.keyId, kems[i], uaRecordOf, accepted));", "  const kemPks = kems.map((k) => k.kemPk);")]),
@@ -272,15 +274,15 @@ M = [
     ("pqc", "E-1, D2-8: a removed UA not flagged", [(CC, "    let flagged = |u: &String| left.contains(u) || removed.contains(u);", "    let flagged = |u: &String| left.contains(u);")]),
     ("pqc", "E-1: an admin that left changes membership", [(CC, "        parent.admins.contains(a) && !left.contains(a) && !removed.contains(a)", "        parent.admins.contains(a)")]),
     ("pqc", "E-1: the builder's plain ignores removals", [(CB, "        let plain = crate::check::plain(&uas, &admins, p, &left, &removed);", "        let plain = crate::check::plain(&uas, &admins, p, &left, &[]);")]),
-    ("pqc", "U-1: one link checked", [(CR, "        if self.verifies(&s.chain, contract).await? {\n            return self.walk(s, contract, e).await;\n        }\n", "")]),
+    ("pqc", "U-1: one link checked", [(CR, "        if let Some(k) = k {\n            return self.walk(s, contract, e, k).await;\n        }\n", "")]),
     ("pqc", "D2-1: an ancestor's id not recomputed", [(CS, "            if !id.is_ok_and(|x| x.eq_ignore_ascii_case(epoch_id)) {", "            if id.is_err() {")]),
     ("pqc", "E-4: a remover outside the parent's admins", [(CS, "                && p.admins.contains(&admin)\n", "")]),
     ("pqc", "E-4: a removed UA outside the parent", [(CS, "                    .all(|m| p.has_member(m) || p.admins.contains(m));", "                    .all(|_| true);")]),
     ("pqc", "E-4: a leaver outside the parent", [(CS, "            if named(l).await?.is_some() && p.has_member(&member) {", "            if named(l).await?.is_some() {")]),
     ("pqc", "B2-4: the exit counts unbounded", [(CS, "            if n > most {", "            if false {")]),
     ("pqc", "B2-3: no lag on the ancestors", [(CS, "        while cur.epoch > 0 && (out.len() as u64) <= EXIT_LAG_MAX {", "        while cur.epoch > 0 {")]),
-    ("pqc", "B2-3: a removal's nextEpoch", [(CS, "            if ok && named(r).await?.is_some_and(|n| next == n + 1) {", "            if ok && named(r).await?.is_some() {")]),
-    ("pqc", "E-5: a replica judged", [(CR, "            let r = self.checked_at(s, rep, epoch_id, false).await?;", "            let r = self.checked_at(s, rep, epoch_id, true).await?;")]),
+    ("pqc", "B2-3: a removal's nextEpoch", [(CS, "            if ok && named(r).await?.is_some_and(|n| n.checked_add(1) == Some(next)) {", "            if ok && named(r).await?.is_some() {")]),
+    ("pqc", "E-5: a replica judged", [(CR, "            let (r, rep_kept) = self.checked_at(s, rep, epoch_id, false).await?;", "            let (r, rep_kept) = self.checked_at(s, rep, epoch_id, true).await?;")]),
     ("pqc", "D2-4: no lag before signing", [(CB, "        if h.epoch < e.epoch || h.epoch > e.epoch + crate::signed::EXIT_LAG_MAX {", "        if h.epoch < e.epoch {")]),
     ("pqc", "D2-4: a removal pre-checked at the epoch named", [(CB, '            if self.flag(s, &h, "IPqChat.removedIn", u).await? {', '            if self.flag(s, e, "IPqChat.removedIn", u).await? {')]),
     # ---- pqvault-core
@@ -314,7 +316,7 @@ M = [
     ("rsv", "CTR-UA-74: a stored signature's tag not split", [(RU, "    let (body, tag) = split_stored_tag(stored);", "    let (body, tag) = (stored, &[][..]);")]),
     ("rsv", "CTR-UA-74: a replayed slot's zero tag accepted", [(RU, "    if tag_version(tag).is_none() {", "    if false {")]),
     ("rsv", "CTR-UA-74: the signer's tag dropped", [(RS, "        |(c, en, v)| (c, Some(en), version_tag(v)),", "        |(c, en, _)| (c, Some(en), vec![]),")]),
-    ("rs", "CTR-UA-74 step 6: a decrease accepted", [(R, "    if v < floor.get(ua).copied().unwrap_or(0) {\n        return corrupt();\n    }\n", "")]),
+    ("rs", "CTR-UA-74 step 6: a decrease accepted", [(R, "        if *v < floor.get(ua).copied().unwrap_or(0) {\n            return corrupt();\n        }\n", "")]),
     ("rs", "CTR-UA-74 step 6: the pin's versions not the floor", [(R, "                let v: Versions = p.msig_versions.iter().copied().collect();", "                let v = Versions::new();")]),
     ("rs", "CTR-UA-74 step 6: the pin's versions not compared", [(R, "            || p.msig_versions != s.msig_versions\n", "")]),
     # the SDK reads msigAt of the tags' versions (tests/app_core.rs verify_app_record_reads_the_registry)
