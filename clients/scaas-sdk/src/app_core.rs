@@ -527,7 +527,10 @@ async fn tagged_versions(
             }
         }
     }
-    for (x, v) in want {
+    // a quorum names at most 16 slots (CTR-UA-09): one read for each version named, at most 17
+    want.sort_unstable();
+    want.dedup();
+    for (x, v) in want.into_iter().take(17) {
         let Some(v) = v.filter(|v| *v > 0) else {
             continue;
         };

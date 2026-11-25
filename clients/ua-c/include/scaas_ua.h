@@ -1498,8 +1498,9 @@ ScaasUaStatus scaas_ua_key_witness_program(const ScaasUaKey *k,
  * The `UASig` builder as one JSON call: `request_json` (64 KiB, depth 6) names its signing keys by position in `keys[0..n_keys]`:
  * `{purpose, digest, domain?, key}` (one key) or `{purpose, digest, domain?, msig: {keyData, inner?, current?, slots: [{index, key} |
  * {index, members: [{index, key}]}]}}`, `domain` `{generation, chainId, registry, chainUid}` (bytes "0x..." hex). An updated
- * `msig` (CTR-UA-44): `keyData` its first structure (the id), `current` `[{ua, keyData, enabled}]` the structures that authorize
- * now (`msigOf`, `msigStateOf`) for it and its `msig` members; a disabled slot: SCAAS_UA_ERR_ARGUMENT, nothing signed. Out: the
+ * `msig` (CTR-UA-44): `keyData` its first structure (the id), `current` `[{ua, keyData, enabled, version}]` the structures that
+ * authorize now (`msigOf`, `msigStateOf`) for it and its `msig` members, whose versions the signature's tags name (CTR-UA-74); a
+ * disabled slot: SCAAS_UA_ERR_ARGUMENT, nothing signed. Out: the
  * `UASig` `{keyData, signature, members: [{index, members: [{index, sig}], sig}]}`, the `sig` of the `_args` calls. An `msig` set
  * not minimal at both levels: SCAAS_UA_ERR_POP, nothing signed.
  */
