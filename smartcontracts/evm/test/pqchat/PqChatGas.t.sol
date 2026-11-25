@@ -10,6 +10,9 @@ import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
+import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
+import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
+import {PqChatTreeMembers} from "../../src/pqchat/PqChatTreeMembers.sol";
 import {PqTopicsBase} from "./PqTopicsBase.sol";
 
 /// A CREATE2 in its own call, so `vm.lastCallGas` is that deployment's transaction (`isolate = true`).
@@ -100,6 +103,16 @@ contract PqChatGasTest is PqTopicsBase {
     uint256 internal constant MODULE_RUNTIME = 16_408;
     uint256 internal constant MODULE_REGULAR = 1_099_442;
     uint256 internal constant MODULE_STATE = 25_287_840;
+    // A-11 (the code review of 2026-11-24): the tree's three modules, first pins (2026-11-25), each under 60 M asked
+    uint256 internal constant TREE_RUNTIME = 32_812;
+    uint256 internal constant TREE_REGULAR = 2_166_743;
+    uint256 internal constant TREE_STATE = 50_385_960; // asked x 1.05 55,180,338
+    uint256 internal constant VIEWS_RUNTIME = 9_640;
+    uint256 internal constant VIEWS_REGULAR = 660_455;
+    uint256 internal constant VIEWS_STATE = 14_932_800; // asked x 1.05 16,372,917
+    uint256 internal constant MEMBERS_RUNTIME = 13_506;
+    uint256 internal constant MEMBERS_REGULAR = 910_116;
+    uint256 internal constant MEMBERS_STATE = 20_847_780; // asked x 1.05 22,845,790
 
     function _row(string memory what, uint256 regular, uint256 state) internal {
         Vm.Gas memory g = vm.lastCallGas();
@@ -430,25 +443,35 @@ contract PqChatGasTest is PqTopicsBase {
         }
     }
 
-    /// The body module's deployment (CTR-TOK-30, 3C-D2): its own CREATE2 transaction, the same rule.
+    /// The body modules' deployments (CTR-TOK-30, 3C-D2; the tree's three, A-11): each its own CREATE2 transaction, the
+    /// same rule; the onchain script sends them so, with an explicit limit (`PqChat.s.sol` `_module`).
     function test_gas_deployModule() public {
+        _deployModule("PqChatTopics", type(PqChatTopics).creationCode, MODULE_RUNTIME, MODULE_REGULAR, MODULE_STATE);
+        _deployModule("PqChatTree", type(PqChatTree).creationCode, TREE_RUNTIME, TREE_REGULAR, TREE_STATE);
+        _deployModule("PqChatTreeViews", type(PqChatTreeViews).creationCode, VIEWS_RUNTIME, VIEWS_REGULAR, VIEWS_STATE);
+        _deployModule(
+            "PqChatTreeMembers", type(PqChatTreeMembers).creationCode, MEMBERS_RUNTIME, MEMBERS_REGULAR, MEMBERS_STATE
+        );
+    }
+
+    function _deployModule(string memory name, bytes memory creation, uint256 rt, uint256 pr, uint256 ps) internal {
         Create2Once probe = new Create2Once();
-        bytes memory code = abi.encodePacked(type(PqChatTopics).creationCode, abi.encode(address(f)));
-        address m = probe.deploy(code, keccak256("topics"));
+        bytes memory code = abi.encodePacked(creation, abi.encode(address(f)));
+        address m = probe.deploy(code, keccak256(bytes(name)));
         Vm.Gas memory g = vm.lastCallGas();
         (uint256 regular, uint256 state) = (uint256(g.gasTotalUsed) * 64 / 63, uint256(int256(g.gasStateUsed)));
         uint256 asked = (regular + state) * 105 / 100;
-        emit log_named_uint("SIZE PqChatTopics runtime", m.code.length);
-        emit log_named_uint("SIZE PqChatTopics init", code.length);
-        emit log_named_uint("GAS deploy PqChatTopics regular x 64/63", regular);
-        emit log_named_uint("GAS deploy PqChatTopics state", state);
-        emit log_named_uint("GAS deploy PqChatTopics asked x 1.05", asked);
-        assertLt(regular * 105 / 100, 1 << 24, "regular gas x 1.05 under 2^24 (EIP-7825)");
-        assertLe(asked, 60_000_000, "the module transaction asks at most 60 M");
+        emit log_named_uint(string.concat("SIZE ", name, " runtime"), m.code.length);
+        emit log_named_uint(string.concat("SIZE ", name, " init"), code.length);
+        emit log_named_uint(string.concat("GAS deploy ", name, " regular x 64/63"), regular);
+        emit log_named_uint(string.concat("GAS deploy ", name, " state"), state);
+        emit log_named_uint(string.concat("GAS deploy ", name, " asked x 1.05"), asked);
+        assertLt(regular * 105 / 100, 1 << 24, string.concat(name, ": regular gas x 1.05 under 2^24 (EIP-7825)"));
+        assertLe(asked, 60_000_000, string.concat(name, ": the module transaction asks at most 60 M"));
         if (!vm.envOr("GAS_MEASURE", false)) {
-            assertEq(m.code.length, MODULE_RUNTIME, "the PqChatTopics runtime (size-baseline.json row)");
-            assertApproxEqAbs(regular, MODULE_REGULAR, SLACK, "deploy PqChatTopics regular");
-            assertEq(state, MODULE_STATE, "deploy PqChatTopics state");
+            assertEq(m.code.length, rt, string.concat("the ", name, " runtime (size-baseline.json row)"));
+            assertApproxEqAbs(regular, pr, SLACK, string.concat("deploy ", name, " regular"));
+            assertEq(state, ps, string.concat("deploy ", name, " state"));
         }
     }
 

@@ -30,6 +30,14 @@ contract PqChatLayoutTest is PqTopicsBase {
         string memory tree =
             vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/PqChatTree.sol/PqChatTree.json"));
         assertFalse(vm.keyExistsJson(tree, ".storageLayout.storage[0]"), "the tree module: no plain slot (CTR-CHAT-26)");
+        string memory views = vm.readFile(
+            string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/PqChatTreeViews.sol/PqChatTreeViews.json")
+        );
+        assertFalse(vm.keyExistsJson(views, ".storageLayout.storage[0]"), "the views module: no plain slot (A-9)");
+        string memory members = vm.readFile(
+            string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/PqChatTreeMembers.sol/PqChatTreeMembers.json")
+        );
+        assertFalse(vm.keyExistsJson(members, ".storageLayout.storage[0]"), "the members module: no plain slot");
         assertEq(_root(), 0xc7b36804b17476e9a19a6ebc690cd7b9326d322c515fd7dc91373f9bc6dc3000);
     }
 

@@ -65,6 +65,11 @@ contract PqChatTreeGasTest is PqChatTreeModel {
     uint256 internal constant FIXTURE_STATE = 25_032_330; // the spec's 25,030,800 + 1 B
     uint256 internal constant BOUND_REGULAR = 10_657_386;
     uint256 internal constant BOUND_STATE = 37_272_330; // the spec's 37,270,800 + 1 B
+    /// A-8: the last live leaf at the spec's bound, the verify's regular gas included (measured 2026-11-25, first pin).
+    uint256 internal constant LAST87_REGULAR = 15_588_376; // 1,188,840 under 2^24
+    uint256 internal constant LAST65_REGULAR = 12_637_463;
+    uint256 internal constant LAST87_STATE = 31_716_900; // asked x 1.05 49.7 M with the verify
+    uint256 internal constant LAST65_STATE = 29_709_540; // 44.5 M
 
     function _pin(uint256 r, uint256 s, uint256 pr, uint256 ps, string memory what) internal {
         if (vm.envOr("GAS_MEASURE", false)) return;
@@ -424,6 +429,51 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         _fits("the commit of the last live leaf at its bounds, ML-DSA-65, one transaction", VERIFY65);
         assertTrue(vchat.epochComplete(st.epochId), "complete in the one transaction");
         return n;
+    }
+
+    /// A-8 (spec §13's row): the commit of the last live leaf at its bounds, one transaction: 32 Removes that evict 32 UAs
+    /// of one key each by the commit alone (32 `gone` and 32 `goneKey` slots), the admins 1 -> 32 (the author and 31
+    /// registered UAs with no leaf), 4,124 B of info, no piece; ML-DSA-87 and ML-DSA-65, pinned.
+    function test_lastLiveLeafAtTheSpecBound() public {
+        _open(); // the vectors in this call's memory
+        bytes32[] memory p = _people(33, 1);
+        M memory m = _session(_keysOf(p, 1), _list(p[0]), true);
+        uint32 at;
+        while (m.ua[at] != p[0]) ++at;
+        Ch[] memory c = new Ch[](32);
+        uint256 k;
+        for (uint256 i; i < 33; ++i) {
+            if (i != at) c[k++] = Ch(false, uint32(i), m.ua[i], 1);
+        }
+        bytes32[] memory q = _people(31, 0);
+        bytes32[] memory admins = new bytes32[](32);
+        admins[0] = p[0];
+        for (uint256 i = 1; i < 32; ++i) {
+            admins[i] = q[i - 1];
+        }
+        for (uint256 i = 1; i < 32; ++i) {
+            for (uint256 j = i; j > 0 && admins[j - 1] > admins[j]; --j) {
+                (admins[j - 1], admins[j]) = (admins[j], admins[j - 1]);
+            }
+        }
+        (Step memory st,) = _build(m, at, c, admins);
+        st.c.sealedInfo = new bytes(4124);
+        assertEq(st.c.ctCount + st.nodeKeys.length, 0, "no piece");
+        ++nonceN;
+        uint256 snap = vm.snapshotState();
+        _record(st, SIG87);
+        (uint256 r87, uint256 s87) =
+            _fits("the last live leaf at the spec's bound, ML-DSA-87, one transaction", VERIFY87);
+        _pin(r87, s87, LAST87_REGULAR, LAST87_STATE, "the last live leaf at the spec's bound, ML-DSA-87");
+        assertTrue(vchat.epochComplete(st.epochId), "complete in the one transaction");
+        (uint256 kind,) = _gone(vchat, m.sid, c[31].ua);
+        assertEq(kind, 2, "evicted by the commit alone");
+        vm.revertToState(snap);
+        _record(st, SIG65);
+        (uint256 r65, uint256 s65) =
+            _fits("the last live leaf at the spec's bound, ML-DSA-65, one transaction", VERIFY65);
+        _pin(r65, s65, LAST65_REGULAR, LAST65_STATE, "the last live leaf at the spec's bound, ML-DSA-65");
+        emit log_named_uint("GAS the last live leaf at the spec's bound, ML-DSA-87: under 2^24 by", CAP - r87);
     }
 
     /// The bound: 32 Adds of UAs with no session in 32 subtrees of 8 of the tree of 256 with one live leaf, the admins

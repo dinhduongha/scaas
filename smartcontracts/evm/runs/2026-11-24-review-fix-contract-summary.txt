@@ -36,6 +36,8 @@ forge-pqz (G-3) | step 3 tree | 0 | 694 passed, 4 skipped
 size (A-6, F-5) | step 4 tree | 0 after the row | PqChatTree 32,758 -> 32,812 (+54: the 256-position limit, the one-leaf root)
 forge-pqchat (steps 4-6 tree) | step 4-6 tree | 0 | 260 passed, 1 skipped (first run: the moved struct name in two test helpers; the new pins)
 forge-pqvault (steps 4-6 tree) | step 4-6 tree | 0 | 99 passed (+1: test_e3_removedAtTheHeadWritesNothing)
+gas pins (A-8, first) | step 6 | 0 | the last live leaf at the spec's bound, regular with the verify / state: ML-DSA-87 15,588,376 / 31,716,900 (1,188,840 under 2^24; 49.7 M asked), ML-DSA-65 12,637,463 / 29,709,540 (44.5 M)
+gas pins (A-11, first) | step 6 | 0 | module CREATE2, runtime / regular x 64/63 / state / asked: PqChatTree 32,812 / 2,166,743 / 50,385,960 / 55.2 M; PqChatTreeViews 9,640 / 660,455 / 14,932,800 / 16.4 M; PqChatTreeMembers 13,506 / 910,116 / 20,847,780 / 22.8 M (PqChatTopics unchanged)
 
 ## Done (committed)
 - G-1: index before the initializer (red: "mid-creation: indexed, the env registry: ...07 != ...08").
@@ -91,6 +93,14 @@ forge-pqvault (steps 4-6 tree) | step 4-6 tree | 0 | 99 passed (+1: test_e3_remo
   epoch only: PqChatNotAdmin, PqChatEpochs) and PqVault row (a member removed at the head writes no item,
   PqVaultItems). The other T11 contract rows were steps 1-2's tests. Mutants M42-M73 (A-7 rows, A-6, F-5, D-4, A-9,
   G-3) in the round's runner.
+
+- Step 6: A-8 test_lastLiveLeafAtTheSpecBound (32 Removes evicting 32 one-key UAs by the commit alone, admins 1 -> 32,
+  4,124 B, no piece, one transaction; pinned); A-9 the layout pin's four `staged[E]` rows (namespaces.json,
+  test_treeNamespaceIsPinned) and the views and members modules' no-plain-slot check (PqChatLayout); A-10 pqchat.md §2
+  (four modules, `implArgs`), §10 (the tree entries, `modules()`, the `fallback`, the mode errors), §12 (the sizes and
+  asks, mode 0's record bounded by the block), §16 (the A-8 figures, the stale estimates out), §17 (BUILT, five hooks,
+  four bounds, fourteen codes, `staged`); A-11 PqChat.s.sol sends each module through the CREATE2 deployer with the
+  explicit 59 M limit (same addresses as `new {salt}`), and test_gas_deployModule measures and pins all four modules.
 
 ## Left, in order
 0. Done (ccf6c43db). On resume: rerun the G-1 gates (governance, factory, v2, gas), the size gate and the SDK's

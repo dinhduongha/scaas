@@ -105,7 +105,9 @@ contract PqChatOnchain is OnchainBase {
     /// @dev A UA registration (ML-DSA-65 PoP through the cached key) and each part of `cacheExpandedKey`: a fixed 56 M (under
     ///      60 M), as Tokens.s.sol: the estimate undershoots regular + state gas (EIP-8037).
     uint256 internal constant REGISTER_GAS = 56_000_000;
-    /// @dev The release transaction (`deployImplementation`), when this run makes it: at most 60 M asked (NET-EVM-11).
+    /// @dev The release transaction (`deployImplementation`) and each body module's CREATE2, when this run makes them: an
+    ///      explicit limit of at most 60 M asked (NET-EVM-11), above every one's need (`PqChatGas.t.sol`: the release
+    ///      55.9 M asked, the largest module, `PqChatTree`, in `test_gas_deployModule`).
     uint256 internal constant RELEASE_GAS = 59_000_000;
 
     IUARegistry reg;
@@ -151,6 +153,18 @@ contract PqChatOnchain is OnchainBase {
 
     // ------------------------------------------------------------------ setup
 
+    /// @dev A body module of the release (`code` with the factory as its argument) through the CREATE2 deployer at the salt
+    ///      `what`, with an explicit gas limit (A-11): forge's estimate x 1.3 of a module near 33 KB asks about 73 M, over a
+    ///      60 M block, where the module itself needs about 53 M (`PqChatGas.t.sol` `test_gas_deployModule`). The address
+    ///      is the one `new {salt}` gave (forge sends that through the same deployer).
+    function _module(bytes memory code, string memory what) internal returns (address at) {
+        bytes memory init = bytes.concat(code, abi.encode(address(f)));
+        bytes32 s = _salt(what);
+        at = vm.computeCreate2Address(s, keccak256(init), CREATE2_FACTORY);
+        (bool ok,) = CREATE2_FACTORY.call{gas: RELEASE_GAS}(bytes.concat(s, init));
+        require(ok && at.code.length != 0, string.concat(what, ": the CREATE2 of the module failed"));
+    }
+
     /// @dev The deploy's release and instance (`deploy.sh evm` with DEPLOY_PQCHAT=1, plan T92); on a chain deployed before T92
     ///      (the SCaaS testnet's Step 5 deploy) the same steps as `DeployBase._deployPqChat`, sent by the factory's registrar
     ///      (PRIVATE_KEY, the deployer): the class env 1 of `(3, 0)`, release 1 with an explicit gas limit (at most 60 M
@@ -165,10 +179,10 @@ contract PqChatOnchain is OnchainBase {
             impl = f.classReleaseOf(id).implementation;
             if (impl == address(0)) {
                 vm.startBroadcast(dk);
-                address topics = address(new PqChatTopics{salt: _salt("pqchat-topics")}(address(f)));
-                address tree = address(new PqChatTree{salt: _salt("pqchat-tree")}(address(f)));
-                address views = address(new PqChatTreeViews{salt: _salt("pqchat-tree-views")}(address(f)));
-                address members = address(new PqChatTreeMembers{salt: _salt("pqchat-tree-members")}(address(f)));
+                address topics = _module(type(PqChatTopics).creationCode, "pqchat-topics");
+                address tree = _module(type(PqChatTree).creationCode, "pqchat-tree");
+                address views = _module(type(PqChatTreeViews).creationCode, "pqchat-tree-views");
+                address members = _module(type(PqChatTreeMembers).creationCode, "pqchat-tree-members");
                 IFactoryToken.Env memory e;
                 e.registry = address(reg);
                 e.params = new bytes32[](1);

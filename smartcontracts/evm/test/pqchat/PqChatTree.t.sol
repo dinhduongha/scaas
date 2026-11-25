@@ -70,6 +70,13 @@ contract TreeHarness is PqChatCore {
         t.goneOwnKey[ua][kemHash] = GoneKey(3, 7, true);
         t.goneKey[kemHash] = GoneKey(4, 8, true);
     }
+
+    /// A staged commit's four fields (A-9): `targetsHash`, `list`, `keys`, `ctAt[2]`.
+    function stage(bytes32 eid) external {
+        Staged storage g = _staged(eid);
+        (g.targetsHash, g.list, g.keys) = (bytes32(uint256(0x65)), address(0x66), address(0x67));
+        g.ctAt[2] = 0x68;
+    }
 }
 
 /// CTR-CHAT-26, CTR-CHAT-27 (plan 2026-11-23-pqchat-treekem T3a): a tree session (`groupMode = 1`) in the body module
@@ -592,8 +599,26 @@ contract PqChatTreeTest is PqChatBase {
         th.open(sid, 2, s.admins);
         th.setLeaf(IUARegistry(address(p)), sid, 0, m[0].ua, 0);
         th.poke(sid, m[0].ua, kh);
+        th.stage(keccak256("epoch E"));
         (bytes32 hs,) = h.structHashes(s, _anyMessage());
         _checkRows(pin, sid, uint256(root), m[0].ua, kh, hs);
+        _checkStaged(pin, uint256(root));
+    }
+
+    /// A-9: the rows of `staged[E]` (`stagedSlot`, after `trees`): the four fields of `Staged`, `ctAt` by index.
+    function _checkStaged(string memory pin, uint256 root) internal view {
+        string[] memory labels = pin.readStringArray(".pqchatTree.labels");
+        uint256[] memory slots = pin.readUintArray(".pqchatTree.slots");
+        uint256[] memory inner = pin.readUintArray(".pqchatTree.inner");
+        assertEq(labels.length, 18, "rows");
+        assertEq(pin.readUint(".pqchatTree.stagedSlot"), 1, "staged after trees");
+        uint256 base = uint256(keccak256(abi.encode(keccak256("epoch E"), root + 1)));
+        uint256[4] memory want = [uint256(0x65), 0x66, 0x67, 0x68];
+        for (uint256 i; i < 4; ++i) {
+            uint256 slot = base + slots[14 + i];
+            if (i == 3) slot = _m(bytes32(uint256(2)), slot); // ctAt[2]
+            assertEq(_at(address(th), slot + inner[14 + i]), want[i], labels[14 + i]);
+        }
     }
 
     /// Each row of the pin: the value written, where (the clone for `treeId`, else the harness) and the mapping key.
@@ -622,7 +647,7 @@ contract PqChatTreeTest is PqChatBase {
         ];
         bytes32[14] memory key =
             [bytes32(0), 0, 0, 0, 0, 0, bytes32(uint256(3)), bytes32(uint256(3)), ua, kh, ua, 0, kh, 0];
-        assertEq(labels.length, 14, "rows");
+        assertEq(labels.length, 18, "rows: 14 of trees[G], 4 of staged[E]");
         for (uint256 i; i < 14; ++i) {
             uint256 base = uint256(keccak256(abi.encode(sid, root))) + slots[i];
             uint256 slot = key[i] == 0 ? base : _m(key[i], base);
