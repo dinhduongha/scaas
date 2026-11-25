@@ -1350,21 +1350,21 @@ fn tree_refusals_beside_twins() {
     let node = (0..prep.tree().nodes.len() as u32)
         .find(|x| matches!(prep.tree().node(*x), Node::Parent(_)))
         .unwrap();
-    assert!(key_of(&mut home, &prep.tree(), node).is_ok());
-    assert!(key_of(&mut home, &prep.tree(), 0).is_ok());
+    assert!(key_of(&mut home, prep.tree(), node).is_ok());
+    assert!(key_of(&mut home, prep.tree(), 0).is_ok());
     let mut t = Tamper {
         home: &mut home,
         read: format!("treeNodeKey({node})"),
         f: flip,
     };
-    assert_eq!(code(key_of(&mut t, &prep.tree(), node)), "TreeKeyHash");
+    assert_eq!(code(key_of(&mut t, prep.tree(), node)), "TreeKeyHash");
     let a = home.tree.leaf(0).unwrap().clone();
     let mut t = Tamper {
         home: &mut home,
         read: format!("kemKeyAt({},{})", hx(&a.ua), a.key_id),
         f: flip_kem,
     };
-    assert_eq!(code(key_of(&mut t, &prep.tree(), 0)), "TreeKeyHash");
+    assert_eq!(code(key_of(&mut t, prep.tree(), 0)), "TreeKeyHash");
     // the checkpoint: below the pinned epoch, another session
     let pin = r.pin.clone();
     let high = Pin {
@@ -2469,7 +2469,7 @@ fn tree_judge_commit() {
         kem_hash: id(&format!("kem/{n}/{k}")),
     };
     let mut ks = vec![key("A", 1), key("B", 1), key("C", 1), key("E", 1)];
-    ks.sort_by(|x, y| x.ua.cmp(&y.ua));
+    ks.sort_by_key(|x| x.ua);
     let t = Tree::cold(&ks).unwrap();
     let ua = |n: &str| id(&format!("ua/{n}"));
     let leaf = |n: &str| {
@@ -2591,7 +2591,7 @@ fn tree_period_bounds() {
         .tree_replay(SC, &mut home, &d, None, 0)
         .unwrap()
         .is_some());
-    let cases: [(String, fn(&mut Value)); 3] = [
+    let cases: [Lie; 3] = [
         (gone.clone(), |x| x["endEpoch"] = json!(0)),
         (gone, |x| x["endEpoch"] = json!(99)),
         ("treeLeaves()".into(), |x| x[3]["joinEpoch"] = json!(99)),

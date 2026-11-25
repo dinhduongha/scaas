@@ -1216,6 +1216,24 @@ export function lies(worlds) {
       },
       lie,
     );
+    // M17 of the round's runner: a leave (no nextEpoch to catch it) naming an epoch that is not the home's
+    const far = {
+      sessionId: w.home.sessionId,
+      treeId: w.home.treeId,
+      epochId: hex(rnd("tree-secrets/lies/losing-epoch")),
+    };
+    const farLeave = { ...far, member: uaOf("C"), nonce: 5 };
+    const { treeId: _f, ...farKept } = farLeave;
+    add(
+      "a leave naming an epoch that is not the home's",
+      "small",
+      "A",
+      {
+        "leaveCount(1)": 1,
+        "leaveAt(1,0)": { record: farKept, sig: sign("C", "PqChatTreeLeave", farLeave) },
+      },
+      lie,
+    );
     // C-5: the exit's sessionId, a removal of no UA
     add(
       "a removal of another sessionId (C-5)",
