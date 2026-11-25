@@ -2324,17 +2324,17 @@
       "entry": "mtxCancelNonceFor",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 250000,
-      "measured": 249650,
+      "gas": 253000,
+      "measured": 252550,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelNonceFor_fresh_router",
       "ua_extra": {
         "gas": 1000,
-        "measured": 518,
+        "measured": 538,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelNonceFor_ua_router-gov_router_mtxCancelNonceFor_fresh_router-verify_0x0108_delta"
       },
       "regular": {
-        "gas": 54000,
-        "measured": 53810,
+        "gas": 57000,
+        "measured": 56710,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelNonceFor_fresh_router_regular"
       }
     },
@@ -2342,17 +2342,17 @@
       "entry": "mtxCancelNonceFor",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 152000,
-      "measured": 151730,
+      "gas": 155000,
+      "measured": 154630,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelNonceFor_used_router",
       "ua_extra": {
         "gas": 1000,
-        "measured": 518,
+        "measured": 538,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelNonceFor_ua_router-gov_router_mtxCancelNonceFor_fresh_router-verify_0x0108_delta"
       },
       "regular": {
-        "gas": 54000,
-        "measured": 53810,
+        "gas": 57000,
+        "measured": 56710,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelNonceFor_used_router_regular"
       }
     },
