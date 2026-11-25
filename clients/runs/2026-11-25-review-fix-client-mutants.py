@@ -37,35 +37,44 @@ V = "clients/pqvault-core/src/vault.rs"
 SL = "clients/scaas-sdk/src/pqchat_records.rs"
 SA = "clients/scaas-sdk/src/app_core.rs"
 CAPPED = os.path.abspath("scripts/capped")
+# inside a capped scope (the whole run as one capped job: scripts/capped exports CAPPED_SCOPE) each suite runs directly
+CAP = [] if os.environ.get("CAPPED_SCOPE") else [CAPPED]
 SUITES = {
-    "js": ([CAPPED, "node", "--test", "test/treekem.test.js", "test/pqchat-tree.test.js"], "clients/clientkeys", {}),
+    # node is not one of AGENTS.md's heavy commands: a memory-capped scope of its own, no capped slot (2026-11-25: the slots were
+    # held by another worktree's forge mutants for hours)
+    "js": (
+        ["systemd-run", "--user", "--scope", "--quiet", "-p", "MemoryMax=3G", "-p", "MemorySwapMax=1G", "--", "node", "--test",
+         "test/treekem.test.js", "test/pqchat-tree.test.js"],
+        "clients/clientkeys",
+        {},
+    ),
     "rs": (
-        [CAPPED, "cargo", "test", "--locked", "--features", "app-core,vectors", "-j", "2", "--test", "tree"],
+        [*CAP, "cargo", "test", "--locked", "--features", "app-core,vectors", "-j", "2", "--test", "tree"],
         "clients/ua-rs",
         {"CARGO_INCREMENTAL": "0"},
     ),
     # pqchat-core's mode-0 reader and builders (the re-review of 2026-11-25: E-1, U-1, E-4, D2-1, E-5, D2-4)
     "pqc": (
-        [CAPPED, "cargo", "test", "--locked", "-j", "2", "--test", "check", "--test", "signed", "--test", "session"],
+        [*CAP, "cargo", "test", "--locked", "-j", "2", "--test", "check", "--test", "signed", "--test", "session"],
         "clients/pqchat-core",
         {"CARGO_INCREMENTAL": "0"},
     ),
     # pqvault-core's exits (B2-3)
     "pqv": (
-        [CAPPED, "cargo", "test", "--locked", "-j", "2", "--features", "vectors", "--test", "core", "--test", "exits"],
+        [*CAP, "cargo", "test", "--locked", "-j", "2", "--features", "vectors", "--test", "core", "--test", "exits"],
         "clients/pqvault-core",
         {"CARGO_INCREMENTAL": "0"},
     ),
     # the SDK's exit reviews (F-4, D2-3)
     "sdk": (
-        [CAPPED, "cargo", "test", "--locked", "-j", "2", "--features", "app-core,pqchat-records", "--test", "pqchat_records",
+        [*CAP, "cargo", "test", "--locked", "-j", "2", "--features", "app-core,pqchat-records", "--test", "pqchat_records",
          "--test", "app_core_vault_records"],
         "clients/scaas-sdk",
         {"CARGO_INCREMENTAL": "0"},
     ),
     # the node's tree bounds (review D-4, D-7, R8; 2026-11-25, after the client phase)
     "node": (
-        [CAPPED, "cargo", "test", "--locked", "-j", "2", "--lib", "pqchat_tree_bounds_are_the_contract"],
+        [*CAP, "cargo", "test", "--locked", "-j", "2", "--lib", "pqchat_tree_bounds_are_the_contract"],
         "scaas-node",
         {"CARGO_INCREMENTAL": "0"},
     ),

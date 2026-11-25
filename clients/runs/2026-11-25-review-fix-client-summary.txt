@@ -23,3 +23,32 @@ ua-rs --test tree tree_period_bounds | 70d174680 | 0 | 1 passed
 format.sh --check (every language) | 70d174680 | 0 | ok (hadolint's warnings on pqz-core Dockerfiles, not of this round)
 docs_check check / paths / test_docs_check | 70d174680 | 0 | 0 errors, 7 warnings (line budgets); 0 machine paths; ok
 mutants rs M69, M70 again | 70d174680 | 0 | 2/2 killed by tree_period_bounds. Round total: 85 mutants, 84 killed, 1 equivalent (js M8)
+
+# The re-review of 2026-11-25 (fable B to F; scratchpad STATUS rows of branch `client`), branch review-fix2-client from
+# 08f68484a. Full logs git-ignored (*.log beside this file). UNAUDITED.
+red first E-1 (tests/check.rs plain_is_the_contracts_keeps) | 08f68484a + test | 101 | Err(Control) for a non-admin's child keeping the leaver (check.rs:454); session.rs a_non_admin_drops_a_removed_member: NotAdmin (session.rs:358)
+red first U-1 (tests/signed.rs a_forged_parent_and_child_are_not_followed) | 9f855923a + test | 101 | a parent signed by a registered UA outside the session and its child were followed (open_epoch Ok, want Control)
+red first E-5 (tests/signed.rs a_replica_record_is_compared_with_the_homes) | 7f0c19cd8, the replica judged | 101 | Control (signed.rs:864)
+red first C-1 / C-2 / C-3 / C-6 (fable-C poc.mjs; b-verify review_*) | 08f68484a | - | recorded in fable-C.md and fable-B.md (accepted / leaves_left emptied / TypeError); on 838768a04 poc 1: TreeKemRecord
+pqchat-core cargo test --test check --test session | 9f855923a | 0 | 13 + 17 passed
+pqchat-core cargo test --test signed --test session --test errors --test check | 7f0c19cd8 | 0 | 13 + 18 + 3 + 13 passed
+pqchat-core clippy --all-targets -D warnings | 7f0c19cd8 | 0 | clean
+scaas-sdk --features pqchat-records --test pqchat_records; --features app-core --test app_core_vault_records typed_digests | 838768a04 | 0 | 2 + 1 passed (the exit reviews, F-4)
+vectors pqchat-vectors.mjs | 838768a04 | 0 | regenerated: the 17 worlds and 35 lie rows of 70d174680 byte-identical; worlds msig-updated, genesis, backlog, flag-clear; lie rows 35 -> 70; devices with kemSig; signer N (an msig updated); tree.json a commit at depth 9 (9 node keys); --check ok
+clientkeys node --test test/*.test.js | 838768a04 | 0 | 671 tests, 666 passed, 5 skipped
+clientkeys treekem + pqchat-tree + pqchat | 838768a04 | 0 | 102 passed
+pqchat-core cargo test (every target) | 838768a04 | 0 | 21 targets: 127 passed, 0 failed, 5 ignored (chain / e2e gates)
+pqvault-core cargo test --features vectors | 838768a04 | 0 | 8 + 8 + 3 + 1 (exits, B2-3) + 4 passed, 5 ignored (e2e)
+scaas-sdk --features app-core,pqchat-records --test pqchat_records --test app_core_vault_records | 838768a04 | 0 | 2 + 6 passed
+ua-rs cargo test --features app-core,vectors --test tree | 838768a04 | 0 | 16 passed (tree_lies_and_pins: 70 rows, every world's pins; resumed replay; B2-8; C-2; B-5)
+clippy -D warnings --all-targets: pqchat-core; pqvault-core --features vectors; scaas-sdk --features app-core,pqchat-records | 838768a04 | 0 | clean
+clippy -D warnings --all-targets ua-rs --features app-core,vectors | 838768a04 | 101 | 6 in tests/tree.rs (4 needless borrows of B2-9's accessors; sort_by, a complex type, both older than this round) -> fixed in 90024807a
+clippy ua-rs (the same) + ua-rs --test tree | 90024807a (tests/tree.rs) | 0 | clean; 16 passed
+mutants js M1-M42, M91, M95, M97-M131 (node in a memory-capped scope of its own) | 838768a04 | 1 | 79 run: 77 killed; M8 equivalent (as on 70d174680); M17 (an unknown epoch named) survived: every foreign-epoch row was a removal, refused first by its nextEpoch
+mutants js M17 again | 90024807a (lie row 71: a leave naming an epoch that is not the home's) | 0 | killed
+vectors pqchat-vectors.mjs --check | 90024807a | 0 | ok (seven files); 71 lie rows
+mutants rs M132-M149, pqc M150-M164, pqv M165-M168, sdk M169-M170, rs M90, M94, M43-M84 (one capped job; suites run directly inside it, CAPPED_SCOPE) | 90024807a | 1 | 81 run: 80 killed; M141 (E-3: rosters of every epoch) survived: both replays of the resume test start their range at the walk's first epoch
+mutants rs M141 again | 27ebad614 (a member added at 5 holds the rosters of 5 to 8) | 0 | killed
+ua-rs cargo test --features app-core,vectors (every target); clippy --all-targets -D warnings; pqvault-core clippy | 27ebad614 | 0 | 75 targets: 801 passed, 0 failed, 6 ignored; clean; clean
+format.sh --check (every language); docs_check check / paths | 27ebad614 | 0 | ok (hadolint's warnings on pqz-core Dockerfiles, not of this round); 0 errors, 7 warnings (line budgets), 0 machine paths
+Round total (the re-review): 74 new mutants (js 35, rs 18, pqc 15, pqv 4, sdk 2) and every older js / rs row run again on the new code (js 44, rs 44): 162 run, 161 killed, 1 equivalent (js M8, as on 70d174680); the node rows M85-M89, M92, M93, M96 not re-run (scaas-node untouched here). Not done here: the forge player of the new worlds and of the depth-9 commit (contract branch), F-1b (owner)
