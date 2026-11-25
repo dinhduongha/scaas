@@ -12957,6 +12957,8 @@ Change (owner 2026-11-23, CLI-PQC-15; status: BUILT on branch `pqchat-sigs`, UNA
 **Cost if wrong.** One word per session (+48,960 state gas); or, without it, a new struct and typehash when TreeKEM lands.
 **Source.** owner 2026-11-23 (relayed by the controller), verbatim "thêm field ngay trong pqchat-sigs"; the field's place after the TreeKEM note (controller, relayed).
 
+Change (owner: yes, 2026-11-25, relayed by the controller; status: SPECIFIED, nothing built; normative [pqchat.md](contracts/pqchat.md#CTR-CHAT-25)): two values of the range "2–255 later variants" are reserved. **`groupMode = 2`** is the off-chain ledger's large tree mode: a TreeKEM tree of depth up to 18 that the ledger service keeps. **`groupMode = 3`** is off-chain immutable: the membership on chain, the KEM bytes off chain. Both are built after the freeze, with the ledger service's spec. No contract change: contracts already refuse 2–255 with `PqChatModeUnsupported` (mode 1 is [CTR-CHAT-26](#ctr-chat-26--pqchats-treekem-mode-groupmode--1-is-built-now-in-minimal-scope-in-a-body-module)); the PqChat records vectors carry a signed `groupMode = 2` row with that error (review C-5). **Why:** a group past the on-chain tree's leaf bound (C10) needs its own mode, and the ids are fixed before any client ships one. **Cost if wrong:** a reserved id with no use, or a later mode that needs another id. **Source:** owner 2026-11-25 (relayed by the controller), on the TreeKEM scale research of that day.
+
 ### CTR-CHAT-24 — A member may hold several KEM keys in an epoch: members sorted by `(ua, keyId)`, at most 8 per UA
 - old: — · status: current · owner: yes · date: 2026-11-23 · normative: contracts/pqchat.md#CTR-CHAT-24 · superseded-by: —
 

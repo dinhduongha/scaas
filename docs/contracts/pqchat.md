@@ -304,6 +304,10 @@ its place last, after the TreeKEM research note, a controller call). Status: **B
 - **What it names** (owner 2026-11-23): a protocol id. 0 = flat; 1 = RFC 9420 tree rules over KEM scheme 1; 2–255 later
   variants. Flat (0) is this page: every epoch key wrapped to each member key. Mode 1 comes with a later catalogued release
   that widens the one check below, with the same struct and typehash, so clients and vectors stay stable across releases.
+- **Reserved (owner 2026-11-25; PLANNED, after the freeze, with the off-chain ledger service's spec):** `groupMode = 2`, the
+  ledger's large tree mode (a TreeKEM tree of depth up to 18, kept by the ledger); `groupMode = 3`, off-chain immutable
+  (membership on chain, the KEM bytes off chain). No contract change: this release refuses both, with 4-255,
+  `PqChatModeUnsupported` (the vector row `sessionMode2`); a later catalogued release defines them.
 - **Fixed at creation:** only the session record names it; no epoch, leave or removal record carries it, so no child can
   change it (there is no field to change). `sessionOf` returns it with the record.
 - **Checked first** in `createSession`, before the lists, the KEM keys and the signature: a record of another mode costs no
