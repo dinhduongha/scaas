@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {IPqVault} from "../../src/pqvault/IPqVault.sol";
 import {PqVault} from "../../src/pqvault/PqVault.sol";
@@ -439,6 +440,68 @@ contract PqVaultEpochsTest is PqVaultBase {
         vault.rekeyVault(e, ew, bad);
         vault.rekeyVault(e, ew, _nativeMsigSig(ms, h.epoch(e, PqVaultTypes.DS_V), 0));
         assertTrue(vault.epochComplete(PqVaultTypes.epochId(vid2, ms, 1)));
+    }
+
+    /// `updateMsig` of the 1-of-1 native `msig` to its own structure, the next version (the EOA signs the update digest).
+    function _bump(bytes32 ms) internal {
+        (uint64 v, uint256 en,) = p.msigStateOf(ms);
+        IUARegistry.MsigStructure memory st = p.msigOf(ms);
+        IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](1);
+        bytes32 typed = UAKinds.msigUpdateDigest(ms, chainUidA, address(p), v + 1, st, en, uint64(block.number + 100));
+        s[0] = IUARegistry.MemberSig(0, new IUARegistry.InnerSig[](0), _ecdsa(EOA_SK, typed));
+        _send(ms, v + 1, st, en, s);
+    }
+
+    function _send(
+        bytes32 ms,
+        uint64 v,
+        IUARegistry.MsigStructure memory st,
+        uint256 en,
+        IUARegistry.MemberSig[] memory q
+    ) internal {
+        p.updateMsig(ms, v, st, en, uint64(block.number + 100), q, chainUidA);
+    }
+
+    /// A-1 of the Fable fix check (CTR-UA-74, CTR-PQV-14; controller call 2026-11-26): PqChat's replica copy of an `msig` admin's
+    /// mode-0 epoch after `updateMsig` (one registry under both instances): the home's bytes `UAUnauthorized` in the replica, the
+    /// replica's tag lands and is kept; A-2: a new record names version 1, the empty tag refused.
+    function test_a1_replicaCopyCarriesTheReplicaTag() public {
+        bytes32 ms = _nativeMsig();
+        (IPqVault.PqVaultCreate memory v, IPqChat.Wrap[] memory w) = _vault(3, 4, 0, address(vault));
+        v.admins = _list(ms, ids[0]);
+        bytes32 vid2 = _create(vault, v, w);
+        vaultB.createVault(v, w, _createSig(v, address(vault)));
+        _a2Next(ms, vid2, _a1Copy(ms, vid2, v.admins), v.admins);
+    }
+
+    function _a2Next(bytes32 ms, bytes32 vid2, bytes32 e1, bytes32[] memory admins) internal {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory ew) =
+            _epoch(vid2, ms, 2, 2, e1, admins, _without(_members(3), ids[2]));
+        IUARegistry.UASig memory n = _nativeMsigSig(ms, h.epoch(e, PqVaultTypes.DS_V), 0);
+        vm.expectRevert(_unauthorized(ms));
+        vault.rekeyVault(e, ew, n);
+        n.signature = abi.encodePacked(uint64(1));
+        vault.rekeyVault(e, ew, n);
+        assertTrue(vault.epochComplete(PqVaultTypes.epochId(vid2, ms, 2)));
+    }
+
+    function _a1Copy(bytes32 ms, bytes32 vid2, bytes32[] memory admins) internal returns (bytes32 e1) {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory ew) =
+            _epoch(vid2, ms, 1, 1, vid2, admins, _without(_members(3), ids[2]));
+        IUARegistry.UASig memory v0 = _nativeMsigSig(ms, h.epoch(e, PqVaultTypes.DS_V), 0);
+        e1 = vault.rekeyVault(e, ew, v0);
+        _bump(ms);
+        vm.expectRevert(_unauthorized(ms));
+        vaultB.rekeyVault(e, ew, v0); // the home's bytes: the tag of version 0
+        IUARegistry.UASig memory v1 = _nativeMsigSig(ms, h.epoch(e, PqVaultTypes.DS_V), 0);
+        v1.signature = abi.encodePacked(uint64(1));
+        assertEq(vaultB.rekeyVault(e, ew, v1), e1);
+        assertEq(_raw(address(vault), abi.encodeCall(IPqVault.epochOf, (e1))), abi.encode(e, v0));
+        assertEq(
+            _raw(address(vaultB), abi.encodeCall(IPqVault.epochOf, (e1))),
+            abi.encode(e, v1),
+            "the replica keeps its own tag"
+        );
     }
 
     // ----- E-3 (CTR-PQV-06 with CTR-CHAT-10 / -20; Change 2026-11-24; owner: "Yes, both modes") -----

@@ -466,6 +466,85 @@ contract PqChatEpochsTest is PqChatBase {
         assertTrue(chat.epochComplete(PqChatTypes.epochId(sid2, ms, 1)));
     }
 
+    /// `updateMsig` of `ms` to its own structure, every slot enabled, the next version, signed by both slots.
+    function _bump(bytes32 ms, uint16 lo, uint16 hi) internal {
+        (uint64 v, uint256 en,) = p.msigStateOf(ms);
+        IUARegistry.MsigStructure memory st = p.msigOf(ms);
+        bytes32 typed = UAKinds.msigUpdateDigest(ms, chainUidA, address(p), v + 1, st, en, uint64(block.number + 100));
+        _send(ms, v + 1, st, en, _updSigs(ms, lo, hi, typed));
+    }
+
+    /// Both slots of the 2-of-2 `msig` over the update digest `typed` (each under `member`, CTR-UA-44).
+    function _updSigs(bytes32 ms, uint16 lo, uint16 hi, bytes32 typed)
+        internal
+        view
+        returns (IUARegistry.MemberSig[] memory q)
+    {
+        bytes32 md = _memberDigest(ms, UAKinds.PURPOSE_MSIG_UPDATE, typed);
+        q = new IUARegistry.MemberSig[](2);
+        q[0] = IUARegistry.MemberSig(
+            0, new IUARegistry.InnerSig[](0), _sig(_key(lo), UAKinds.uaMessage(lo, UAKinds.PURPOSE_MEMBER, md))
+        );
+        q[1] = IUARegistry.MemberSig(
+            1, new IUARegistry.InnerSig[](0), _sig(_key(hi), UAKinds.uaMessage(hi, UAKinds.PURPOSE_MEMBER, md))
+        );
+    }
+
+    function _send(
+        bytes32 ms,
+        uint64 v,
+        IUARegistry.MsigStructure memory st,
+        uint256 en,
+        IUARegistry.MemberSig[] memory q
+    ) internal {
+        p.updateMsig(ms, v, st, en, uint64(block.number + 100), q, chainUidA);
+    }
+
+    /// A-1 of the Fable fix check (CTR-UA-74 "What a consumer keeps", controller call 2026-11-26): an `msig` admin's mode-0
+    /// epoch record signed at version 0 lands at home; after `updateMsig` the home's bytes copied verbatim to the replica are
+    /// `UAUnauthorized`, the copy with the replica registry's current tag lands there under another `sigHash`. The fixture's
+    /// two instances share one registry, so one update is the home's and the replica's. A-2: a new record after the update is
+    /// refused with the empty tag and lands with the 8-byte one.
+    function test_a1_replicaCopyCarriesTheReplicaTag() public {
+        (bytes32 ms, uint16 lo, uint16 hi) = _msig2();
+        (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(3, 4, address(chat));
+        s.admins = ms < ids[0] ? _list(ms, ids[0]) : _list(ids[0], ms);
+        bytes32 sid2 = _create(chat, s, w);
+        _create(chatB, s, w);
+        bytes32 e1 = _a1Copy(ms, lo, hi, sid2, s.admins);
+        // A-2: a record signed after the update names version 1
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) =
+            _epoch(sid2, ms, 2, 2, e1, s.admins, _without(_without(_members(3), ids[2]), ids[1]));
+        IUARegistry.UASig memory n = _quorum(ms, lo, hi, h.epoch(e), 2);
+        vm.expectRevert(_unauthorized(ms));
+        chat.rekey(e, ew, n);
+        n.signature = abi.encodePacked(uint64(1));
+        chat.rekey(e, ew, n);
+        assertTrue(chat.epochComplete(PqChatTypes.epochId(sid2, ms, 2)));
+    }
+
+    function _a1Copy(bytes32 ms, uint16 lo, uint16 hi, bytes32 sid2, bytes32[] memory admins)
+        internal
+        returns (bytes32 e1)
+    {
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) =
+            _epoch(sid2, ms, 1, 1, sid2, admins, _without(_members(3), ids[2]));
+        IUARegistry.UASig memory v0 = _quorum(ms, lo, hi, h.epoch(e), 2);
+        e1 = chat.rekey(e, ew, v0);
+        _bump(ms, lo, hi);
+        vm.expectRevert(_unauthorized(ms));
+        chatB.rekey(e, ew, v0); // the home's bytes: the tag of version 0
+        IUARegistry.UASig memory v1 = _quorum(ms, lo, hi, h.epoch(e), 2);
+        v1.signature = abi.encodePacked(uint64(1));
+        assertEq(chatB.rekey(e, ew, v1), e1);
+        assertEq(_kept(chat, e1), keccak256(abi.encode(v0)));
+        assertEq(_kept(chatB, e1), keccak256(abi.encode(v1)), "the replica keeps its own tag");
+    }
+
+    function _kept(PqChat c, bytes32 epochId) internal view returns (bytes32 sigHash) {
+        (, sigHash) = c.epochOf(epochId);
+    }
+
     // ----- leave (P12) -----
 
     function test_leave_rules() public {

@@ -1752,6 +1752,17 @@ UNAUDITED. **EVM: BUILT** (contract side; the client readers are a follow-up, li
   (`memberSigHashOf`, `UAMemberSig`: its `pop` slot or its acceptance) is `abi.encode(InnerSig[])` followed by that member's tag, the
   same way; a copy to another registry replays the list with the tag of the member's version **there**. The registration bound counts 32 more bytes for an
   `msig` slot (`_slotBytes`).
+- <a id="msig-replica-copy"></a>**A replica's copy** (Change 2026-11-26, A-1 of the Fable fix check; controller call under the owner's
+  auto-run grant of 2026-11-25, the owner may veto; EVM BUILT, UNAUDITED). A consumer's replica (another instance of a portable record,
+  on this chain or another: a PqChat session's or a mode-0 vault's records, [CTR-CHAT-14](pqchat.md#CTR-CHAT-14),
+  [CTR-PQV-14](pqvault.md#CTR-PQV-14)) checks an `msig`'s record on **its** registry, so the copy carries the tag of that `msig`'s
+  current version on the replica's registry (and each `msig` member's own tag there), not the home's: after any `updateMsig` the
+  home's bytes are `UAUnauthorized` in the replica, and the copy's `UASig`, and so its `sigHash`, differ from the home's. A reader
+  compares a replica's record with the home's with the version tags stripped (the signer's `UASig.signature` and each `msig` member
+  slot's `MemberSig.sig` set empty, every other byte equal; on a `none` instance each side's `UASig` is first checked against its own
+  `sigHash`), and judges each kept signature by the [reader rule](#msig-reader-rule) on its own instance's registry. When the update
+  disabled a slot the record needs, the copy cannot be stored in the replica at all, as before this rule; nothing else here changed
+  (`test_a1_replicaCopyCarriesTheReplicaTag` in `PqChatEpochs` and `PqVaultEpochs`).
 - <a id="msig-reader-rule"></a>**The reader rule** (ua-rs, clientkeys, every `ua-*` reader; mechanical; BUILT in ua-rs, clientkeys and
   scaas-sdk, step 6 on the tree walk's pin `msigVersions`, UNAUDITED):
   1. Read the kept signature of the record (the `UASig`; on a `none` instance the bytes from any source, compared with the `sigHash`

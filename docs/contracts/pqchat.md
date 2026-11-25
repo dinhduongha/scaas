@@ -244,7 +244,8 @@ owner may override). Status: **BUILT on branch `pqchat-sigs` (EVM), UNAUDITED** 
 - **An `msig` signer.** The kept `UASig` (and so its `sigHash`) carries the structure version the registry accepted it under, for the
   signer and for each `msig` member of it ([CTR-UA-74](accounts.md#CTR-UA-74)); a reader verifies the record against `msigAt` of
   that version by the [reader rule](accounts.md#msig-reader-rule), never against the current structure. Nothing here changed: the
-  contract passes the `UASig` on and keeps it whole.
+  contract passes the `UASig` on and keeps it whole. A replica's copy carries the tag of the replica registry's current version, so
+  its `sigHash` may differ from the home's ([A replica's copy](accounts.md#msig-replica-copy), Change 2026-11-26).
 - **The setting.** `initialize(bytes32 ownerUA, uint8 sigStore)`: 0 `none`, 2 `sstore2`, PQZ's numbering of its proof-storage
   setting (`NONE` 0, `LOG` 1, `SSTORE2` 2); 1 (no log mode: recovery is from state alone, [CTR-CHAT-14](#CTR-CHAT-14)) and every
   other value refuse `PqChatSigStore(sigStore)`. No setter: the setting holds for the instance's life. `sigStore()` reads it,
@@ -470,7 +471,8 @@ review's P1-2 fix (b); **BUILT** on `ua-mtx-merge`, plan 3c, UNAUDITED; UA-7 spe
   - **and in the lists of the epoch named (Change 2026-11-25, E-2 of the Fable re-review; controller call, owner: no;
     BUILT on branch `review-fix2-contract`):** when `epochId` is not the head, `admin` is in `epochId`'s admins too and
     each UA a member or an admin of `epochId` (`PqChatNotAdmin`, `PqChatNotMember`; its flags are not read), since a
-    replica checks them there: so a replica can copy every removal the home took. Those lists are read only when
+    replica checks them there: so a replica can copy every removal the home took (an `msig` admin's under the replica
+    registry's tag, [A replica's copy](accounts.md#msig-replica-copy)). Those lists are read only when
     `epochId` is not the head;
   - it is applied **at the head**: `removedIn(head, ua)`, the record under the head (`removalCount(head)`,
     `removalAt(head, i)`), `PqChatRemoved(sessionId, head, admin, members)`; the head's child completes only without them
@@ -587,7 +589,9 @@ finds its sessions, their epochs and their messages through views alone; spam is
 - **Which instances** (Fable P2-1): `sessionsOf` is per instance, so a client pages the factory's index for class 3
   (`contractsPage(3, …)`, version ≠ 0) on each chain it serves and reads `sessionCount(ua)` on each listed instance.
 - **Replicas** (Fable P2-2): a replica's record counts only when it equals the home's (same record and `sigHash` under
-  the id); membership is read from the home instance.
+  the id; for a record an `msig` signed, the same record and the same `UASig` with the version tags stripped, since a replica's copy
+  carries its own registry's tag: [A replica's copy](accounts.md#msig-replica-copy), Change 2026-11-26); membership is read
+  from the home instance.
 - **Epochs of a session.** `epochCount(sessionId)` and `epochsOf(sessionId, offset, limit)`: epoch 0 (the `sessionId`)
   first once complete here, then each epoch ≥ 1 as it completes here. At home a child completes only by taking its
   parent's slot, so the list is the winning chain 0..n; in a replica it is every complete epoch in completion order,

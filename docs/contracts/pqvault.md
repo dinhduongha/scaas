@@ -179,7 +179,8 @@ limit (EIP-8037) and regular under 2^24 where EIP-7825 applies.
 <a id="CTR-PQV-14"></a>**CTR-PQV-14** — **A member removed from an epoch writes no item under it; every ciphertext is 32 to
 16,416 bytes; items and versions are read at the home instance, and a replica's version counts only when the home holds the
 same record and `sigHash` at the same `(itemId, version)`** (controller calls, owner may override; the replica rule as
-PqChat's, [CTR-CHAT-14](pqchat.md#CTR-CHAT-14)). Refusals `PqVaultNotMember`, `PqVaultShape`. The upper bound (the 16,384 B
+PqChat's, [CTR-CHAT-14](pqchat.md#CTR-CHAT-14); a record an `msig` signed compares with the version tags stripped, since a
+replica's copy carries its own registry's tag: [A replica's copy](accounts.md#msig-replica-copy), Change 2026-11-26). Refusals `PqVaultNotMember`, `PqVaultShape`. The upper bound (the 16,384 B
 padding bucket plus salt and tag) makes `latestRange`'s page bound hold on every chain. A replica takes writes under any
 complete epoch it holds, in its own order; it orders nothing. A member that left an epoch writes no item under it either
 (owner 2026-11-17, the spec's O3 (b); `PqVaultNotMember`). A chain-bound vault has no replica
