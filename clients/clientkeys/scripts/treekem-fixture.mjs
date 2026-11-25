@@ -719,6 +719,56 @@ export function lies(worlds) {
     forged("a non-admin's Remove of a live UA's leaf", { removes: ["C"] }, "A");
     forged("a non-admin's Add of another UA", { adds: [["D", 3]] }, "A");
     forged("a commit whose leaves is not its tree's", { edit: (r) => ({ ...r, leaves: 8 }) });
+    forged("a commit of another sessionId", { edit: (r) => ({ ...r, sessionId: hex(rnd("tree-secrets/lies/sid")) }) });
+    forged("a commit whose parentEpochId is not its parent's", {
+      edit: (r) => ({ ...r, parentEpochId: hex(rnd("tree-secrets/lies/parent")) }),
+    });
+    forged("a commit whose parentTreeHash is not its parent's tree", {
+      edit: (r) => ({ ...r, parentTreeHash: hex(rnd("tree-secrets/lies/parent-tree")) }),
+    });
+    {
+      // a signed treeHash that is not the tree's, the snapshot served under it
+      const f = forgedCommit(w, "B", w.home.tree, {
+        edit: (r) => ({ ...r, treeHash: hex(rnd("tree-secrets/lies/tree")) }),
+      });
+      const o = served(w, f.built, f.sig);
+      o["treeOf()"] = { ...o["treeOf()"], treeHash: f.built.record.treeHash };
+      add("a commit whose treeHash is not its tree's", "small", "C", o, lie);
+    }
+    {
+      // a record that is not the epoch epochsOf holds at its number: B's twin of epoch 1 under another nonce
+      const w0 = createSession({
+        tag: "small",
+        creator: "A",
+        nonce: 12,
+        admins: ["A"],
+        members: ["A", "B", "C"],
+        info: INFO.I1,
+      });
+      const t = forgedCommit(w0, "B", w0.home.tree);
+      add(
+        "a record that is not the one epochsOf holds at its number",
+        "small",
+        "A",
+        {
+          "commitOf(1)": { record: t.built.record, sig: t.sig },
+        },
+        lie,
+      );
+    }
+    const lose0 = keptRemoval(w, "A", ["C"], hex(rnd("tree-secrets/lies/losing-epoch")), 5, w.home.treeId, {
+      nextEpoch: 0,
+    });
+    add(
+      "a removal naming an epoch that is not the home's, nextEpoch 0",
+      "small",
+      "A",
+      {
+        "removalCount(1)": 1,
+        "removalAt(1,0)": lose0,
+      },
+      lie,
+    );
     forged("a commit whose ctCount is not its path's", { edit: (r) => ({ ...r, ctCount: r.ctCount - 1 }) });
     const stranger = keptRemoval(w, "A", ["H"], 1, 5);
     add("a removal of a UA that is no member", "small", "A", { "removalCount(1)": 1, "removalAt(1,0)": stranger }, lie);
@@ -747,6 +797,7 @@ export function lies(worlds) {
       {
         ...served(w, g2.built, revSig),
         "pathListOf(2)": { ctTargets: rev, ctHashes: revH },
+        ...Object.fromEntries([...g2.built.cts].reverse().map((c, j) => [`pathCtAt(2,${j})`, c.ct])),
       },
       { replay: "TreeReadCorrupted", prepare: null },
     );
