@@ -1152,7 +1152,9 @@ pieces. Every row is for the cap of 256; the cap of 512 is measured below ("Meas
 | The node keys as the last piece at the bound (C37's counter-case) | 8.81 M | 40.83 M | 52.1 M | fits (68.3 M, over, at 32 changes); C37's order kept |
 | Acceptance and completion in one transaction, ML-DSA-65 / -87 | 18.65 M / 21.60 M | | | over 2^24: the record goes alone |
 | The commit of the last live leaf, five UAs of 4 keys evicted (tree of 512), ML-DSA-65 / ML-DSA-87 | 10.19 M / 13.14 M | 19.38 M / 21.39 M | 31.0 M / 36.3 M | fits |
-| **A-8's last live leaf: 20 UAs of one key evicted by the commit alone, admins 1 → 32, 4,124 B (tree of 512, 21 live leaves), ML-DSA-65 / ML-DSA-87** | 12.83 M / **15.78 M** | 25.40 M / 27.41 M | 40.1 M / 45.4 M | fits; **ML-DSA-87 0.99 M under 2^24** |
+| **A-8's last live leaf: 20 UAs of one key evicted by the commit alone, admins 1 → 32, 4,124 B (tree of 512, 21 live leaves), ML-DSA-65 / ML-DSA-87** | 12.83 M / **15.78 M** | 25.40 M / 27.41 M | 40.1 M / 45.4 M | fits; ML-DSA-87 0.99 M under 2^24 on this head |
+| **A-8's row on the worst head (A-17 of the re-review): the head's 32 admins replaced by 32, the 21 live leaves at positions 12 to 499 of 512, ML-DSA-65 / ML-DSA-87** | 13.21 M / **16.16 M** | 22.37 M / 24.37 M | 37.4 M / 42.6 M | fits; **ML-DSA-87 0.62 M under 2^24**, the worst measured; on the local Nethermind copy with 2^24 enforced, included (gasUsed 35.53 M / 40.44 M) |
+| The `treeRemove` that closes a session of 512 positions (`_treeHasMember` scans all), by a keyless ML-DSA-87 admin | 10.52 M | 8.66 M | 20.1 M | fits; included on the copy (gasUsed 19.14 M) |
 | `treeLeaves`, eight pages of 64 | 1.62 M each | 0 | | under 4 M each |
 
 - **Why 20 (owner 2026-11-25, on the A-8 finding).** A-8's first pin (15.59 M with ML-DSA-87, 1.19 M under 2^24) was

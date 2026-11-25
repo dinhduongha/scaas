@@ -18,6 +18,10 @@ import sys
 KEY = "0x" + "00" * 31 + "01"
 # (row, n, k): PqChatTreeGasReplicaTest's output for the forge figures (regular within 0.1 %, state within one slot)
 ROWS = [
+    # A-17 (the re-review of 2026-11-25): A-8 on the worst head and the closing treeRemove (PqChatTreeGasReplicaTest)
+    ("last live leaf A-17 worst head ML-DSA-87 (20 changes)", 128089, 248),
+    ("last live leaf A-17 worst head ML-DSA-65 (20 changes)", 101574, 228),
+    ("closing treeRemove A-17 ML-DSA-87 (512 positions)", 92262, 88),
     # at 20 changes (C10, owner 2026-11-25): PqChatTreeGasReplicaTest's output for the pins of that commit
     ("completion at its bounds (20 changes)", 42362, 292),
     ("last live leaf A-8 ML-DSA-87 (20 changes)", 120632, 279),

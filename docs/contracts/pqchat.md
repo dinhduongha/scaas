@@ -1038,7 +1038,11 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   145 + 1 (pinned); the record at its bounds on a tree of 512 10.69 M / 13.64 M regular with the verify (ML-DSA-65 / -87),
   33.7 M / 38.9 M asked; the last live leaf's commit at the spec's bounds (20 Removes evicting 20 UAs by the commit alone,
   the admins 1 -> 32, 4,124 B of info; the code review's A-8, `test_lastLiveLeafAtTheSpecBound`, on a tree of 512, pinned),
-  one transaction, 12.83 M / 15.78 M regular with the verify, 0.99 M under 2^24 with ML-DSA-87 (at 32 changes it was over:
+  one transaction, 12.83 M / 15.78 M regular with the verify, 0.99 M under 2^24 with ML-DSA-87 on that test's head; **on the
+  worst head (A-17 of the re-review, `test_lastLiveLeafOnTheWorstHead`, pinned: the head's 32 admins replaced, the live
+  leaves at positions 12 to 499 of 512) 13.21 M / 16.16 M, 0.62 M under 2^24 with ML-DSA-87, the margin to quote**; the
+  closing `treeRemove` of a session of 512 positions by a keyless ML-DSA-87 admin 10.52 M; all three included on the local
+  Nethermind copy with 2^24 enforced (at 32 changes it was over:
   18.09 M at 512 and 17.32 M on a tree of 256; the first pin, 15.59 M, was on a tree of 64); the lighter last leaf, five UAs
   of 4 keys evicted and one admin, 10.19 M / 13.14 M; acceptance and completion in one transaction over 2^24, so the
   record goes alone; the list of 511 targets 32.2 M asked, the node keys of depth 9 24.9 M; the node keys as the last

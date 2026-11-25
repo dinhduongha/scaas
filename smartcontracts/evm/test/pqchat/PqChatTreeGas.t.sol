@@ -99,6 +99,16 @@ contract PqChatTreeGasTest is PqChatTreeModel {
     uint256 internal constant LAST65_REGULAR = 12_829_777;
     uint256 internal constant LAST87_STATE = 27_408_420;
     uint256 internal constant LAST65_STATE = 25_401_060;
+    /// A-17 (the re-review of 2026-11-25), new pins: A-8's row on the worst head (32 admins replaced, the live leaves at
+    /// positions 12 to 499 of 512), the verify included: ML-DSA-87 16,158,289 (618,927 under 2^24; the light head's
+    /// 15,782,531 + 375,758) / 24,372,900, ML-DSA-65 13,205,502 / 22,365,540; the closing `treeRemove` (an ML-DSA-87
+    /// keyless admin, 512 positions scanned) 10,518,373 / 8,656,740.
+    uint256 internal constant WORST87_REGULAR = 16_158_289;
+    uint256 internal constant WORST65_REGULAR = 13_205_502;
+    uint256 internal constant WORST87_STATE = 24_372_900;
+    uint256 internal constant WORST65_STATE = 22_365_540;
+    uint256 internal constant CLOSE87_REGULAR = 10_518_373;
+    uint256 internal constant CLOSE87_STATE = 8_656_740;
 
     /// Gas metering off for calls that are no row (the test's own gas stays under the suite's 2^33), nested.
     uint256 internal pauses;
@@ -552,6 +562,114 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         emit log_named_uint("GAS the last live leaf at the spec's bound, ML-DSA-87: under 2^24 by", CAP - r87);
     }
 
+    /// A-17 (the re-review of 2026-11-25): A-8's row on the worst head. The head holds 32 admins (the author and 31
+    /// registered UAs with no leaf) and the commit replaces the 31 by 31 others (`_keepsAdmins` reads the head's 32, the
+    /// commit rewrites 32 non-zero slots); the 21 one-key UAs sit spread over all 512 leaf positions (512 keys at creation:
+    /// 21 + 3 one-key fillers and 122 fillers of 4, in id order), so the 20 blanked paths share the fewest parents; 4,124 B
+    /// of info, no piece; ML-DSA-65 and ML-DSA-87, pinned, each under 2^24. Then the `treeRemove` that closes the session:
+    /// a keyless admin's ML-DSA-87 removal of the author, the last UA with a leaf, whose C24 test scans all 512 positions
+    /// (`_treeHasMember`) after `_treeLeafyAdmin` read the 32 admins.
+    function test_lastLiveLeafOnTheWorstHead() public {
+        _open(); // the vectors in this call's memory
+        (M memory m, uint32 at, bytes32 author, bytes32[] memory q2) = _worstHead();
+        Step memory st = _worstCommit(m, at, _withAuthor(author, q2));
+        // the closing removal: a keyless admin removes the author, the last UA with a leaf
+        IPqChat.PqChatTreeRemove memory r =
+            IPqChat.PqChatTreeRemove(m.sid, m.treeId, st.epochId, m.epoch + 2, _one(author), q2[0], ++nonceN);
+        vchat.treeRemove(r, _sized(SIG87));
+        (uint256 rr, uint256 rs) = _fits("the closing treeRemove, 512 positions scanned, ML-DSA-87", VERIFY87);
+        _pin(rr, rs, CLOSE87_REGULAR, CLOSE87_STATE, "the closing treeRemove, ML-DSA-87");
+        (uint256 kind,) = _gone(vchat, m.sid, author);
+        assertEq(kind, 2, "the session closed");
+    }
+
+    /// The worst head of A-17: 512 keys (21 + 3 one-key UAs and 122 of 4), the fillers removed (no row) by commits that set
+    /// the admins to the author and 31 keyless UAs; returns the model, the author's leaf, the author and 31 other keyless UAs.
+    function _worstHead() internal returns (M memory m, uint32 at, bytes32 author, bytes32[] memory q2) {
+        bytes32[] memory p = _people(CHANGES + 1, 1);
+        bytes32[] memory g = _people(3, 1);
+        bytes32[] memory f = _people(122, 4);
+        IPqChat.MemberKey[] memory mk = _merged(_sortedCat(p, g), f, 4);
+        assertEq(mk.length, 512, "512 keys");
+        bytes32[] memory head = _withAuthor(p[0], _people(31, 0));
+        q2 = _people(31, 0);
+        author = p[0];
+        // the creator, an admin at creation beside the author and 30 of the 31 when it is not the author
+        bytes32[] memory admins0 =
+            mk[0].ua == author ? head : _sortedCat(_withAuthor(author, _firstOf(head, author, 30)), _one(mk[0].ua));
+        m = _session(mk, admins0, false);
+        assertEq(m.leaves, 512, "depth 9");
+        assertEq(m.used, 512, "every leaf position used");
+        while (m.ua[at] != author) ++at;
+        _pause(); // the fillers' removals: no row
+        for (uint256 i; i < 122; i += 5) {
+            m = _removeAll(m, at, _removesOf(m, f, i, i + 5 < 122 ? i + 5 : 122), head);
+        }
+        m = _removeAll(m, at, _removesOf(m, g, 0, 3), head);
+        _resume();
+    }
+
+    function _removeAll(M memory m, uint32 at, Ch[] memory c, bytes32[] memory admins) internal returns (M memory) {
+        (Step memory st, M memory n) = _build(m, at, c, admins);
+        return _landPieces(st, n, m);
+    }
+
+    /// A-8's commit on the worst head, `admins` the new list: ML-DSA-65 and ML-DSA-87, pinned; the state after the -87 one.
+    function _worstCommit(M memory m, uint32 at, bytes32[] memory admins) internal returns (Step memory st) {
+        Ch[] memory c = new Ch[](CHANGES);
+        uint256 k;
+        (uint256 lo, uint256 hi) = (m.used, 0);
+        for (uint256 i; i < m.used; ++i) {
+            if (i != at && m.live[i]) c[k++] = Ch(false, uint32(i), m.ua[i], 1);
+            if (m.live[i]) (lo, hi) = (i < lo ? i : lo, i > hi ? i : hi);
+        }
+        assertEq(k, CHANGES, "20 one-key UAs left beside the author");
+        emit log_named_uint("A-17 the live leaves from position", lo);
+        emit log_named_uint("A-17 the live leaves to position", hi);
+        (st,) = _build(m, at, c, admins);
+        st.c.sealedInfo = new bytes(4124);
+        assertEq(st.c.ctCount + st.nodeKeys.length, 0, "no piece");
+        ++nonceN;
+        uint256 snap = vm.snapshotState();
+        _record(st, SIG65);
+        (uint256 r65, uint256 s65) = _fits("the last live leaf on the worst head, ML-DSA-65, one transaction", VERIFY65);
+        _pin(r65, s65, WORST65_REGULAR, WORST65_STATE, "the last live leaf on the worst head, ML-DSA-65");
+        vm.revertToState(snap);
+        _record(st, SIG87);
+        (uint256 r87, uint256 s87) = _fits("the last live leaf on the worst head, ML-DSA-87, one transaction", VERIFY87);
+        _pin(r87, s87, WORST87_REGULAR, WORST87_STATE, "the last live leaf on the worst head, ML-DSA-87");
+        emit log_named_uint("GAS the last live leaf on the worst head, ML-DSA-87: under 2^24 by", CAP - r87);
+        assertTrue(vchat.epochComplete(st.epochId), "complete in the one transaction");
+    }
+
+    function _one(bytes32 a) internal pure returns (bytes32[] memory l) {
+        l = new bytes32[](1);
+        l[0] = a;
+    }
+
+    /// The first `n` entries of `a` other than `x`.
+    function _firstOf(bytes32[] memory a, bytes32 x, uint256 n) internal pure returns (bytes32[] memory r) {
+        r = new bytes32[](n);
+        uint256 k;
+        for (uint256 i; k < n; ++i) {
+            if (a[i] != x) r[k++] = a[i];
+        }
+    }
+
+    /// `a` and `b` (each sorted) as one sorted list.
+    function _sortedCat(bytes32[] memory a, bytes32[] memory b) internal pure returns (bytes32[] memory r) {
+        r = new bytes32[](a.length + b.length);
+        (uint256 i, uint256 j) = (0, 0);
+        for (uint256 k; k < r.length; ++k) {
+            r[k] = j == b.length || (i < a.length && a[i] < b[j]) ? a[i++] : b[j++];
+        }
+    }
+
+    /// The author and `others` (sorted) as one sorted list.
+    function _withAuthor(bytes32 author, bytes32[] memory others) internal pure returns (bytes32[] memory) {
+        return _sortedCat(_one(author), others);
+    }
+
     /// The member keys of `one` (key 1 each) and of `many` (keys 1..`keys` each), both sorted, merged in `(ua, keyId)` order.
     function _merged(bytes32[] memory one, bytes32[] memory many, uint64 keys)
         internal
@@ -708,6 +826,10 @@ contract PqChatTreeGasReplicaTest is Test {
         _row(b, "completion at its bounds", 7_960_311, 28_655_370, 1e6);
         _row(b, "last live leaf A-8 ML-DSA-87", 15_782_531, 27_408_420, 5e6);
         _row(b, "last live leaf A-8 ML-DSA-65", 12_829_777, 25_401_060, 6e6);
+        // A-17 (the re-review of 2026-11-25): the worst head and the closing removal
+        _row(b, "last live leaf A-17 worst head ML-DSA-87", 16_158_289, 24_372_900, 9e6);
+        _row(b, "last live leaf A-17 worst head ML-DSA-65", 13_205_502, 22_365_540, 10e6);
+        _row(b, "closing treeRemove A-17 ML-DSA-87", 10_518_373, 8_656_740, 11e6);
         _row(b, "control under 2^24", 16_700_000, 1_000_000, 7e6);
         _row(b, "control over 2^24", 16_850_000, 1_000_000, 8e6);
     }
