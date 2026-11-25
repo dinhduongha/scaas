@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """The 2026-11-24 review fixes, client phase (branch review-fix-client), and the re-review of 2026-11-25 (branch
 review-fix2-client: mode 0's reader and builders in pqchat-core, `pqc`; PqVault's exits, `pqv`; the SDK's exit reviews, `sdk`;
-the key records, the msig's current structure, the replay from the pin, B2-6, C-3, C-5, C-6 in both clients): each check the
-round adds is caught by a test. The
+the key records, the msig's current structure, the replay from the pin, B2-6, C-3, C-5, C-6 in both clients), and the client
+follow-up of CTR-UA-74 (branch review-fix3-client, 2026-11-26: the msig version tag, `jsv` and `rsv` the portable record checks,
+the replays and the signer; M171 on): each check the round adds is caught by a test. The
 forward walk (C25, C26), the exits of §10 step 5, the rights of §9 (F-2), the signer kinds (F-3), the builder's checks (F-4,
 D-5, B-2, B-5, B-8), C-2, C-7, C-8: in clientkeys (`js`: node --test test/treekem.test.js test/pqchat-tree.test.js) and in
 ua-rs (`rs`: cargo test --test tree, features app-core and vectors); the node's tree bounds of D-4, D-7 and R8 (`node`: cargo
@@ -28,6 +29,9 @@ R = "clients/ua-rs/src/wallet/tree.rs"
 RP = "clients/ua-rs/src/wallet/tree_public.rs"
 RQ = "clients/ua-rs/src/wallet/pqchat.rs"
 RA = "clients/ua-rs/src/wallet/appkey.rs"
+RU = "clients/ua-rs/src/ua_portable.rs"
+RS = "clients/ua-rs/src/wallet/uasig.rs"
+UK = "clients/clientkeys/src/uakey.js"
 N = "scaas-node/src/typed.rs"
 CC = "clients/pqchat-core/src/check.rs"
 CS = "clients/pqchat-core/src/signed.rs"
@@ -53,6 +57,19 @@ SUITES = {
         "clients/ua-rs",
         {"CARGO_INCREMENTAL": "0"},
     ),
+    # CTR-UA-74 (2026-11-26): the portable record checks, the replays of a member's slot object and the signer
+    "jsv": (
+        ["systemd-run", "--user", "--scope", "--quiet", "-p", "MemoryMax=3G", "-p", "MemorySwapMax=1G", "--", "node", "--test",
+         "test/ua-portable.test.js", "test/ua-nested.test.js", "test/ua-wallet.test.js"],
+        "clients/clientkeys",
+        {},
+    ),
+    "rsv": (
+        [*CAP, "cargo", "test", "--locked", "--features", "app-core,vectors", "-j", "2", "--test", "ua_portable", "--test", "json",
+         "--test", "wallet_uasig"],
+        "clients/ua-rs",
+        {"CARGO_INCREMENTAL": "0"},
+    ),
     # pqchat-core's mode-0 reader and builders (the re-review of 2026-11-25: E-1, U-1, E-4, D2-1, E-5, D2-4)
     "pqc": (
         [*CAP, "cargo", "test", "--locked", "-j", "2", "--test", "check", "--test", "signed", "--test", "session"],
@@ -72,6 +89,12 @@ SUITES = {
         "clients/scaas-sdk",
         {"CARGO_INCREMENTAL": "0"},
     ),
+    "sdkv": (
+        [*CAP, "cargo", "test", "--locked", "-j", "2", "--features", "app-core,pqchat-records", "--test", "app_core",
+         "verify_app_record_reads_the_registry"],
+        "clients/scaas-sdk",
+        {"CARGO_INCREMENTAL": "0"},
+    ),
     # the node's tree bounds (review D-4, D-7, R8; 2026-11-25, after the client phase)
     "node": (
         [*CAP, "cargo", "test", "--locked", "-j", "2", "--lib", "pqchat_tree_bounds_are_the_contract"],
@@ -84,7 +107,7 @@ M = [
     ("js", "the id at its number", [(J, "      hex(pc.epochId(a.sid, r.author, r.nonce)) === a.ids[n] &&\n", "")]),
     ("js", "the record's treeId", [(J, "      r.treeId === a.treeId &&\n", "")]),
     ("js", "the record's sessionId", [(J, "      r.epoch === n &&\n      r.sessionId === a.sid &&\n", "      r.epoch === n &&\n")]),
-    ("js", "the commit's signature", [(J, '  verified(sc, rd, "PqChatCommit", ok, ok.author, sig, where);\n', "")]),
+    ("js", "the commit's signature", [(J, '  const v = verified(sc, rd, "PqChatCommit", ok, ok.author, sig, where);\n', "  const v = 0;\n")]),
     ("js", "parentEpochId", [(J, "if (c.parentEpochId !== ids[n - 1] || c.parentTreeHash !== tr.treeHash(tree)) corrupt(where);", "if (c.parentTreeHash !== tr.treeHash(tree)) corrupt(where);")]),
     ("js", "parentTreeHash", [(J, "if (c.parentEpochId !== ids[n - 1] || c.parentTreeHash !== tr.treeHash(tree)) corrupt(where);", "if (c.parentEpochId !== ids[n - 1]) corrupt(where);")]),
     ("js", "the rights and admins not judged", [(J, "        tr.judgeCommit(tree, applied.tree, c, a.admins[n - 1]);\n", "")]),
@@ -100,12 +123,12 @@ M = [
     ("js", "the lag off by one", [(J, "m >= 0 && m >= h - EXIT_LAG_MAX; m--", "m >= 0 && m > h - EXIT_LAG_MAX; m--")]),
     ("js", "an unknown epoch named", [(J, "    return corrupt(read);\n  };\n  const count", "    return h;\n  };\n  const count")]),
     ("js", "a leaver with no leaf", [(J, "    if (!holds(tree, r.member) || before(r.member)) corrupt(read);\n", "    if (before(r.member)) corrupt(read);\n")]),
-    ("js", "a leave's signature", [(J, '    verified(sc, rd, "PqChatTreeLeave", r, r.member, sig, read);\n', "")]),
+    ("js", "a leave's signature", [(J, 'versionUp(floor, versions, r.member, verified(sc, rd, "PqChatTreeLeave", r, r.member, sig, read), read);', "versionUp(floor, versions, r.member, 0, read);")]),
     ("js", "a remover outside the head's admins", [(J, "      a.admins[h].includes(r.admin) &&\n", "")]),
     ("js", "a removed UA that is no member", [(J, "(holds(tree, m) || a.admins[h].includes(m)) && !before(m)", "!before(m)")]),
     ("js", "a removal's nextEpoch", [(J, "      r.nextEpoch === n + 1 &&\n", "")]),
     ("js", "a removal's order", [(J, "      r.members.every((m, j) => j === 0 || m > r.members[j - 1]) &&\n", "")]),
-    ("js", "a removal's signature", [(J, '    verified(sc, rd, "PqChatTreeRemove", r, r.admin, sig, read);\n', "")]),
+    ("js", "a removal's signature", [(J, 'versionUp(floor, versions, r.admin, verified(sc, rd, "PqChatTreeRemove", r, r.admin, sig, read), read);', "versionUp(floor, versions, r.admin, 0, read);")]),
     # the pin (sc-F-3), the snapshot, the list
     ("js", "a walk from the pin ignores its exits", [(J, "    if (pin && n === a.n0 && !pin.exits.every(", "    if (false && !pin.exits.every(")]),
     ("js", "the replay's pin check ignores its exits", [(J, "    !store.exits.every(([ua, kind]) => p.exits.some((x) => x[0] === ua && x[1] === kind))\n", "    false\n")]),
@@ -123,14 +146,14 @@ M = [
     # D-5, F-3, C-2, C-7, C-8
     ("js", "D-5: more than TREE_CHANGES_MAX changes", [(PT, '  if (removes.length + adds.length > TREE_CHANGES_MAX) refuse("PqChatShape");\n', "")]),
     ("js", "D-5: more than KEYS_PER_UA_MAX keys of one UA", [(PT, '  if (adds.some((a) => live(t).filter((n) => n.ua === hex(a.ua)).length > KEYS_PER_UA_MAX)) refuse("PqChatShape");\n', "")]),
-    ("js", "F-3: an msig verified as a single key", [(UV, "kind === 0x0120 ? [s.members, s.signature] : [s.signature, s.members]", "[s.signature, s.members]")]),
+    ("js", "F-3: an msig verified as a single key", [(UV, "const raw = kind === 0x0120 ? s.members : s.signature;", "const raw = s.signature;")]),
     ("js", "C-2: decaps outside the try", [(J, "  try {\n    const ss = key.decaps(b(c.ct.mlkemCt), b(c.ct.x25519Eph));", "  const ss = key.decaps(b(c.ct.mlkemCt), b(c.ct.x25519Eph));\n  try {")]),
     ("js", "C-8: a non-canonical info opens", [(J, "    return pc.canonicalJson(JSON.parse(json)) === json ? { json } : null;", "    return { json };")]),
     ("js", "C-7: a node outside the tree", [(PT, '  if (!(Number.isInteger(x) && x >= 0 && x < nodeWidth(n))) refuse("PqChatShape");\n', "")]),
     # ---- ua-rs: the walk's record checks (commit_at, apply)
     ("rs", "the id at its number", [(R, "                    && sc.epoch_id(&self.sid, &author, u64j(&c, \"nonce\").ok()?)\n                        == at(&self.ids, n).ok()?\n", "")]),
     ("rs", "the record's treeId", [(R, "                    && b32j(&c, \"treeId\").ok()? == self.tree_id\n", "")]),
-    ("rs", "the commit's signature", [(R, "        verified(sc, &*rd, \"PqChatCommit\", &c, &author, served(v.get(\"sig\"))?)?;\n", "        let _ = (&author, served(v.get(\"sig\"))?);\n")]),
+    ("rs", "the commit's signature", [(R, "        let version = verified(sc, &*rd, \"PqChatCommit\", &c, &author, served(v.get(\"sig\"))?)?;\n", "        let (_, version) = (&author, 0);\n")]),
     ("rs", "parentEpochId", [(R, "        if b32j(c, \"parentEpochId\")? != at(&self.ids, n - 1)?\n            || ", "        if ")]),
     ("rs", "parentTreeHash", [(R, "        if b32j(c, \"parentEpochId\")? != at(&self.ids, n - 1)?\n            || b32j(c, \"parentTreeHash\")? != tree.tree_hash()\n", "        if b32j(c, \"parentEpochId\")? != at(&self.ids, n - 1)?\n")]),
     ("rs", "the rights and admins not judged", [(R, "        tree.judge_commit(&applied.tree, &ch, &admins, head_admins)\n            .map_err(lie)?;\n", "")]),
@@ -195,7 +218,7 @@ M = [
     ("js", "C-1: an Add's key unauthenticated", [(J, "    const k = recordKey(x.ua, x.keyId, x, a.uaRecordOf, a.accepted);\n", "    const k = x.kemPk;\n")]),
     ("js", "C-1: a member's key unauthenticated at creation", [(J, "  const kemPks = session.members.map((m, i) => recordKey(m.ua, m.keyId, kems[i], uaRecordOf, accepted));", "  const kemPks = kems.map((k) => k.kemPk);")]),
     ("js", "C-7: UANotVerifiable read as a lying read", [(J, '  if (e?.code === "UANotVerifiable") refuse("UANotVerifiable");\n', "")]),
-    ("js", "F-1: an msig judged on its first structure", [(UV, "const structureOf = (r) => (r.current ? toBytes(r.current) : r.keyData);", "const structureOf = (r) => r.keyData;")]),
+    ("js", "F-1: an msig judged on its first structure", [(UV, "return v === null || !r || r.kind !== 0x0120 ? null : msigAt(r, v);", "return v === null || !r || r.kind !== 0x0120 ? null : msigAt(r, 0n);")]),
     ("js", "C-3: ids below the pin taken as served", [(J, "  if (m >= a.n0 || m === 0) return m === 0 ? a.sid : a.ids[m];\n", "  return m === 0 ? a.sid : a.ids[m];\n")]),
     ("js", "B2-6: a UA exiting twice under one head", [(J, "    goes.size !== out.length ||\n", "")]),
     ("js", "B2-6, C21: the owed leaves unbounded", [(J, "    out.reduce((sum, x) => sum + leavesOf(tree, x.ua), 0) > tr.TREE_CHANGES_MAX ||\n", "")]),
@@ -227,7 +250,7 @@ M = [
     ("js", "D2-9: 33 admins", [(PT, "  if (admins.length > TREE_ADMINS_MAX || ", "  if (admins.length > TREE_ADMINS_MAX + 1 || ")]),
     # ---- ua-rs
     ("rs", "C-1: a cold tree's key unauthenticated", [(R, "    kem_record_key(ua, key_id, &rec)\n}", "    Ok(rec.kem_pk().to_vec())\n}")]),
-    ("rs", "F-1: an msig judged on its first structure", [(R, "        let current = |id: [u8; 32]| rd.current(&id);", "        let current = |_: [u8; 32]| None;")]),
+    ("rs", "F-1: an msig judged on its first structure", [(R, "            v.and_then(|v| rd.msig_at(&id, v).map(|(d, en)| (d, en, v)))", "            v.and_then(|_| rd.msig_at(&id, 0).map(|(d, en)| (d, en, 0)))")]),
     ("rs", "C-3: ids below the pin taken as served", [(R, "        if m >= self.n0 {\n            return at(&self.ids, m);", "        if true {\n            return at(&self.ids, m);")]),
     ("rs", "B2-6: a UA exiting twice under one head", [(R, "        if goes.len() != out.len()\n            || owed", "        if owed")]),
     ("rs", "B2-6, C21: the owed leaves unbounded", [(R, "            || owed > TREE_CHANGES_MAX\n", "")]),
@@ -268,6 +291,35 @@ M = [
     # ---- scaas-sdk: the exit reviews (F-4, D2-3)
     ("sdk", "F-4: a mode-0 exit's review says nothing of the lag", [(SL, "        p.review.push(applies_within(&named));\n        Ok(p)\n    }\n\n    /// `PqChatRemove`", "        let _ = named;\n        Ok(p)\n    }\n\n    /// `PqChatRemove`")]),
     ("sdk", "F-4: a PqVault exit's review says nothing of the lag", [(SA, "        p.review.extend(within);\n", "        let _ = within;\n")]),
+    # ---- CTR-UA-74 (2026-11-26): the msig version tag; clientkeys
+    ("js", "CTR-UA-74: 8 zero bytes read as version 0", [(UV, "  return v === 0n ? null : v;\n", "  return v;\n")]),
+    ("js", "CTR-UA-74: a tag of another length read as its value", [(UV, "const v = b.length === 8 ? BigInt(hex(b)) : 0n;", "const v = b.length ? BigInt(hex(b)) : 0n;")]),
+    ("jsv", "CTR-UA-74: an answer for version 0 read", [(UV, "const vs = (r.versions ?? []).filter((x) => BigInt(x.version) > 0n);", "const vs = r.versions ?? [];")]),
+    ("jsv", "CTR-UA-74: threshold 0 accepted", [(UV, "return x && attempt(() => ua.msigStructure(x.msig).threshold !== 0) ? pick(x) : null;", "return x ? pick(x) : null;")]),
+    ("js", "CTR-UA-74: a version not held falls back to the current one", [(UV, "return x && attempt(() => ua.msigStructure(x.msig).threshold !== 0) ? pick(x) : null;", "return x && attempt(() => ua.msigStructure(x.msig).threshold !== 0) ? pick(x) : msigAt(r, null);")]),
+    ("js", "CTR-UA-74: every record judged on the current structure (F-1's pass current)", [(UV, "return v === null || !r || r.kind !== 0x0120 ? null : msigAt(r, v);", "return v === null || !r || r.kind !== 0x0120 ? null : msigAt(r, null);")]),
+    ("jsv", "CTR-UA-74: a stored signature's tag not split", [(UV, "  const [raw, tag] = splitStoredTag(row.sig);\n", "  const [raw, tag] = [toBytes(row.sig), new Uint8Array(0)];\n")]),
+    ("jsv", "CTR-UA-74: a replayed slot's zero tag accepted", [(UV, '  if (tagVersion(tag) === null) refuse("UAUnauthorized", `slot ${index}`);\n', "")]),
+    ("jsv", "CTR-UA-74: the signer's member tag dropped", [(UK, "      sig: ua.versionTag(versionOf?.(m.id)),", "      sig: new Uint8Array(0),")]),
+    ("js", "CTR-UA-74 step 6: a decrease accepted", [(J, "  if (v < (floor.get(ua) ?? 0)) corrupt(read);\n", "")]),
+    ("js", "CTR-UA-74 step 6: the pin's versions not the floor", [(J, "    versions = new Map(pin.msigVersions);\n", "")]),
+    ("js", "CTR-UA-74 step 6: the pin's versions not compared", [(J, "    JSON.stringify(p.msigVersions) !== JSON.stringify(store.msigVersions) ||\n", "")]),
+    # ua-rs
+    ("rs", "CTR-UA-74: 8 zero bytes read as version 0", [(RU, "        .filter(|v| *v != 0)\n", "")]),
+    ("rs", "CTR-UA-74: a tag of another length read as its last bytes", [(RU, "    <[u8; 8]>::try_from(tag)\n", "    <[u8; 8]>::try_from(&tag[tag.len().saturating_sub(8)..])\n")]),
+    ("rsv", "CTR-UA-74: an answer for version 0 read", [(RU, "            None | Some((_, _, 0)) if v.is_none() => zero(),", "            None if v.is_none() => zero(),"), (RU, "                if got != 0\n                    && v.is_none_or", "                if v.is_none_or")]),
+    ("rsv", "CTR-UA-74: threshold 0 accepted", [(RU, "                    && MsigStructure::from_key_data(&s).is_ok_and(|x| x.threshold != 0) =>", "                    && MsigStructure::from_key_data(&s).is_ok() =>")]),
+    ("rsv", "CTR-UA-74: an answer of another version accepted", [(RU, "                    && v.is_none_or(|v| v == got)\n", "")]),
+    ("rs", "CTR-UA-74: the tag ignored, the first structure", [(RU, "        let (d, en) = cx.tagged(ua, key_data, &sig.signature)?;", "        let (d, en) = cx.tagged(ua, key_data, &[])?;")]),
+    ("rsv", "CTR-UA-74: a stored signature's tag not split", [(RU, "    let (body, tag) = split_stored_tag(stored);", "    let (body, tag) = (stored, &[][..]);")]),
+    ("rsv", "CTR-UA-74: a replayed slot's zero tag accepted", [(RU, "    if tag_version(tag).is_none() {", "    if false {")]),
+    ("rsv", "CTR-UA-74: the signer's tag dropped", [(RS, "        |(c, en, v)| (c, Some(en), version_tag(v)),", "        |(c, en, _)| (c, Some(en), vec![]),")]),
+    ("rs", "CTR-UA-74 step 6: a decrease accepted", [(R, "    if v < floor.get(ua).copied().unwrap_or(0) {\n        return corrupt();\n    }\n", "")]),
+    ("rs", "CTR-UA-74 step 6: the pin's versions not the floor", [(R, "                let v: Versions = p.msig_versions.iter().copied().collect();", "                let v = Versions::new();")]),
+    ("rs", "CTR-UA-74 step 6: the pin's versions not compared", [(R, "            || p.msig_versions != s.msig_versions\n", "")]),
+    # the SDK reads msigAt of the tags' versions (tests/app_core.rs verify_app_record_reads_the_registry)
+    ("sdkv", "CTR-UA-74: the tags' versions not read", [(SA, "                tagged_versions(&pool, &at, &line, id, sig, &mut recs).await?;\n", "")]),
+    ("sdkv", "CTR-UA-74: the accepted bits masked by the current enabled word", [(SA, "            rec.active = accepted;\n", "            rec.active = std::array::from_fn(|i| accepted[i] & enabled[i]);\n")]),
 ]
 
 if sys.argv[1:] == ["check"]:
