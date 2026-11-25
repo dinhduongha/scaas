@@ -307,6 +307,60 @@
           "message": "0xf87f4fcd0297319bea684a250c5b9c79a89016671a0eb3f2cdff8786ee6b1379",
           "sig": "0xf62f05b31096aec7003d34f9ac17a3822b1e2f29c9cee5c966e05338fe4a6bf9fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
           "comment": "s replaced by the group order"
+        },
+        {
+          "name": "wrong-key",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+          "message": "0xf87f4fcd0297319bea684a250c5b9c79a89016671a0eb3f2cdff8786ee6b1379",
+          "sig": "0xf62f05b31096aec7003d34f9ac17a3822b1e2f29c9cee5c966e05338fe4a6bf9a0fd2fe865774e99ccab44c14fa879e3297ea511a03414167011a0e0cb548f4e",
+          "comment": "vk replaced by the generator G"
+        },
+        {
+          "name": "wrong-kind",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x03690ab1422f9ee0975b1a10b619ae04a6887c06ed0517312909278519791b9038",
+          "message": "0x05397a98a9c908cb4bf9f5d5558b3790c78bd76a97a690651b9db704015a91e2",
+          "sig": "0xf62f05b31096aec7003d34f9ac17a3822b1e2f29c9cee5c966e05338fe4a6bf9a0fd2fe865774e99ccab44c14fa879e3297ea511a03414167011a0e0cb548f4e",
+          "comment": "the metatx signature offered for the other group kind of the curve's message"
+        },
+        {
+          "name": "sig-trailing-byte",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x03690ab1422f9ee0975b1a10b619ae04a6887c06ed0517312909278519791b9038",
+          "message": "0xf87f4fcd0297319bea684a250c5b9c79a89016671a0eb3f2cdff8786ee6b1379",
+          "sig": "0xf62f05b31096aec7003d34f9ac17a3822b1e2f29c9cee5c966e05338fe4a6bf9a0fd2fe865774e99ccab44c14fa879e3297ea511a03414167011a0e0cb548f4e00",
+          "comment": "metatx signature with one byte appended"
+        },
+        {
+          "name": "sig-truncated",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x03690ab1422f9ee0975b1a10b619ae04a6887c06ed0517312909278519791b9038",
+          "message": "0xf87f4fcd0297319bea684a250c5b9c79a89016671a0eb3f2cdff8786ee6b1379",
+          "sig": "0xf62f05b31096aec7003d34f9ac17a3822b1e2f29c9cee5c966e05338fe4a6bf9a0fd2fe865774e99ccab44c14fa879e3297ea511a03414167011a0e0cb548f",
+          "comment": "metatx signature without its last byte"
+        },
+        {
+          "name": "r-off-curve",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x03690ab1422f9ee0975b1a10b619ae04a6887c06ed0517312909278519791b9038",
+          "message": "0xf87f4fcd0297319bea684a250c5b9c79a89016671a0eb3f2cdff8786ee6b1379",
+          "sig": "0x0000000000000000000000000000000000000000000000000000000000000005a0fd2fe865774e99ccab44c14fa879e3297ea511a03414167011a0e0cb548f4e",
+          "comment": "R replaced by a point off the curve (secp256k1 x = 5, bn254 (1, 3))"
+        },
+        {
+          "name": "vk-prefix-04",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x04690ab1422f9ee0975b1a10b619ae04a6887c06ed0517312909278519791b9038",
+          "message": "0xf87f4fcd0297319bea684a250c5b9c79a89016671a0eb3f2cdff8786ee6b1379",
+          "sig": "0xf62f05b31096aec7003d34f9ac17a3822b1e2f29c9cee5c966e05338fe4a6bf9a0fd2fe865774e99ccab44c14fa879e3297ea511a03414167011a0e0cb548f4e",
+          "comment": "vk with prefix 0x04 (x unchanged)"
         }
       ]
     },
@@ -845,6 +899,60 @@
           "message": "0x05397a98a9c908cb4bf9f5d5558b3790c78bd76a97a690651b9db704015a91e2",
           "sig": "0x04ae5e9188b2937e1bcbfc246c922524035ec0d23ff7a78b05db597216f86f3d95a98d239cf7f7b20899faa72436e0772e2a229e1151c9bc087ad6b8f2d18d31cd",
           "comment": "R with prefix 0x04"
+        },
+        {
+          "name": "wrong-key",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+          "message": "0x05397a98a9c908cb4bf9f5d5558b3790c78bd76a97a690651b9db704015a91e2",
+          "sig": "0x02ae5e9188b2937e1bcbfc246c922524035ec0d23ff7a78b05db597216f86f3d95a98d239cf7f7b20899faa72436e0772e2a229e1151c9bc087ad6b8f2d18d31cd",
+          "comment": "vk replaced by the generator G"
+        },
+        {
+          "name": "wrong-kind",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x033e049048114c98bf7a5b60dfd4c0364f861af6f1c0f556f678170c796b4c52df",
+          "message": "0xf87f4fcd0297319bea684a250c5b9c79a89016671a0eb3f2cdff8786ee6b1379",
+          "sig": "0x02ae5e9188b2937e1bcbfc246c922524035ec0d23ff7a78b05db597216f86f3d95a98d239cf7f7b20899faa72436e0772e2a229e1151c9bc087ad6b8f2d18d31cd",
+          "comment": "the metatx signature offered for the other group kind of the curve's message"
+        },
+        {
+          "name": "sig-trailing-byte",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x033e049048114c98bf7a5b60dfd4c0364f861af6f1c0f556f678170c796b4c52df",
+          "message": "0x05397a98a9c908cb4bf9f5d5558b3790c78bd76a97a690651b9db704015a91e2",
+          "sig": "0x02ae5e9188b2937e1bcbfc246c922524035ec0d23ff7a78b05db597216f86f3d95a98d239cf7f7b20899faa72436e0772e2a229e1151c9bc087ad6b8f2d18d31cd00",
+          "comment": "metatx signature with one byte appended"
+        },
+        {
+          "name": "sig-truncated",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x033e049048114c98bf7a5b60dfd4c0364f861af6f1c0f556f678170c796b4c52df",
+          "message": "0x05397a98a9c908cb4bf9f5d5558b3790c78bd76a97a690651b9db704015a91e2",
+          "sig": "0x02ae5e9188b2937e1bcbfc246c922524035ec0d23ff7a78b05db597216f86f3d95a98d239cf7f7b20899faa72436e0772e2a229e1151c9bc087ad6b8f2d18d31",
+          "comment": "metatx signature without its last byte"
+        },
+        {
+          "name": "r-off-curve",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x033e049048114c98bf7a5b60dfd4c0364f861af6f1c0f556f678170c796b4c52df",
+          "message": "0x05397a98a9c908cb4bf9f5d5558b3790c78bd76a97a690651b9db704015a91e2",
+          "sig": "0x020000000000000000000000000000000000000000000000000000000000000005a98d239cf7f7b20899faa72436e0772e2a229e1151c9bc087ad6b8f2d18d31cd",
+          "comment": "R replaced by a point off the curve (secp256k1 x = 5, bn254 (1, 3))"
+        },
+        {
+          "name": "vk-prefix-04",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x043e049048114c98bf7a5b60dfd4c0364f861af6f1c0f556f678170c796b4c52df",
+          "message": "0x05397a98a9c908cb4bf9f5d5558b3790c78bd76a97a690651b9db704015a91e2",
+          "sig": "0x02ae5e9188b2937e1bcbfc246c922524035ec0d23ff7a78b05db597216f86f3d95a98d239cf7f7b20899faa72436e0772e2a229e1151c9bc087ad6b8f2d18d31cd",
+          "comment": "vk with prefix 0x04 (x unchanged)"
         }
       ]
     },
@@ -2128,6 +2236,78 @@
           "message": "0x5c5e61985bca0dce75e88ad6b2e41c8be5d5809c39bff9ad8f983534ea3a6ae9",
           "sig": "0x10f7032d7884be88e1173af3651d8897dfec9ad9c210e037a01cb0b308e7406f108c3a8884810cac0b1399ef978ac6e82794d1fc72ce3e63f3100ca15070d9c030644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001",
           "comment": "s replaced by the group order"
+        },
+        {
+          "name": "wrong-key",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002",
+          "message": "0x5c5e61985bca0dce75e88ad6b2e41c8be5d5809c39bff9ad8f983534ea3a6ae9",
+          "sig": "0x10f7032d7884be88e1173af3651d8897dfec9ad9c210e037a01cb0b308e7406f108c3a8884810cac0b1399ef978ac6e82794d1fc72ce3e63f3100ca15070d9c027699baecd3e42cc936c00cc277e82034ba28dc6beef7458bc9c67c154e655e3",
+          "comment": "vk replaced by the generator G"
+        },
+        {
+          "name": "wrong-kind",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x001571e6c68f6660df2d814c9e908298ed119260c8075325a1dccc169d0353552e6eb208250e0ca1de611e55dde5e04870b88e021c0f6077b1f07b4c087f11f9",
+          "message": "0x6150ca6003cd91129ca85f2e16277b4ab89add8762e781c9c8c8bffd6d253a5d",
+          "sig": "0x10f7032d7884be88e1173af3651d8897dfec9ad9c210e037a01cb0b308e7406f108c3a8884810cac0b1399ef978ac6e82794d1fc72ce3e63f3100ca15070d9c027699baecd3e42cc936c00cc277e82034ba28dc6beef7458bc9c67c154e655e3",
+          "comment": "the metatx signature offered for the other group kind of the curve's message"
+        },
+        {
+          "name": "sig-trailing-byte",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x001571e6c68f6660df2d814c9e908298ed119260c8075325a1dccc169d0353552e6eb208250e0ca1de611e55dde5e04870b88e021c0f6077b1f07b4c087f11f9",
+          "message": "0x5c5e61985bca0dce75e88ad6b2e41c8be5d5809c39bff9ad8f983534ea3a6ae9",
+          "sig": "0x10f7032d7884be88e1173af3651d8897dfec9ad9c210e037a01cb0b308e7406f108c3a8884810cac0b1399ef978ac6e82794d1fc72ce3e63f3100ca15070d9c027699baecd3e42cc936c00cc277e82034ba28dc6beef7458bc9c67c154e655e300",
+          "comment": "metatx signature with one byte appended"
+        },
+        {
+          "name": "sig-truncated",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x001571e6c68f6660df2d814c9e908298ed119260c8075325a1dccc169d0353552e6eb208250e0ca1de611e55dde5e04870b88e021c0f6077b1f07b4c087f11f9",
+          "message": "0x5c5e61985bca0dce75e88ad6b2e41c8be5d5809c39bff9ad8f983534ea3a6ae9",
+          "sig": "0x10f7032d7884be88e1173af3651d8897dfec9ad9c210e037a01cb0b308e7406f108c3a8884810cac0b1399ef978ac6e82794d1fc72ce3e63f3100ca15070d9c027699baecd3e42cc936c00cc277e82034ba28dc6beef7458bc9c67c154e655",
+          "comment": "metatx signature without its last byte"
+        },
+        {
+          "name": "r-off-curve",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x001571e6c68f6660df2d814c9e908298ed119260c8075325a1dccc169d0353552e6eb208250e0ca1de611e55dde5e04870b88e021c0f6077b1f07b4c087f11f9",
+          "message": "0x5c5e61985bca0dce75e88ad6b2e41c8be5d5809c39bff9ad8f983534ea3a6ae9",
+          "sig": "0x0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000327699baecd3e42cc936c00cc277e82034ba28dc6beef7458bc9c67c154e655e3",
+          "comment": "R replaced by a point off the curve (secp256k1 x = 5, bn254 (1, 3))"
+        },
+        {
+          "name": "z-plus-order",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x001571e6c68f6660df2d814c9e908298ed119260c8075325a1dccc169d0353552e6eb208250e0ca1de611e55dde5e04870b88e021c0f6077b1f07b4c087f11f9",
+          "message": "0x5c5e61985bca0dce75e88ad6b2e41c8be5d5809c39bff9ad8f983534ea3a6ae9",
+          "sig": "0x10f7032d7884be88e1173af3651d8897dfec9ad9c210e037a01cb0b308e7406f108c3a8884810cac0b1399ef978ac6e82794d1fc72ce3e63f3100ca15070d9c057cdea21ae6fe2f64bbc4682a8ffda6073d6760f38a8e4ea007e5d5544e655e4",
+          "comment": "z + r: the same scalar mod r, non-canonical"
+        },
+        {
+          "name": "r-x-plus-p",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x001571e6c68f6660df2d814c9e908298ed119260c8075325a1dccc169d0353552e6eb208250e0ca1de611e55dde5e04870b88e021c0f6077b1f07b4c087f11f9",
+          "message": "0x5c5e61985bca0dce75e88ad6b2e41c8be5d5809c39bff9ad8f983534ea3a6ae9",
+          "sig": "0x415b51a059b65eb2996780a9e69ee0f5776e056b2a82aac4dc3d3cc9e1643db6108c3a8884810cac0b1399ef978ac6e82794d1fc72ce3e63f3100ca15070d9c027699baecd3e42cc936c00cc277e82034ba28dc6beef7458bc9c67c154e655e3",
+          "comment": "x(R) + p: the same point mod p, non-canonical"
+        },
+        {
+          "name": "vk-off-curve",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000003",
+          "message": "0x5c5e61985bca0dce75e88ad6b2e41c8be5d5809c39bff9ad8f983534ea3a6ae9",
+          "sig": "0x10f7032d7884be88e1173af3651d8897dfec9ad9c210e037a01cb0b308e7406f108c3a8884810cac0b1399ef978ac6e82794d1fc72ce3e63f3100ca15070d9c027699baecd3e42cc936c00cc277e82034ba28dc6beef7458bc9c67c154e655e3",
+          "comment": "vk (1, 3), off the curve"
         }
       ]
     },
@@ -2580,6 +2760,78 @@
           "message": "0x6150ca6003cd91129ca85f2e16277b4ab89add8762e781c9c8c8bffd6d253a5d",
           "sig": "0x0921ac08564f33f5ab3708c1bdf379df817d057fe57472bd9a4255a326658236103a3bcaec21368a8f01c6b7a2cd0f17645743117155f996bcdc60165dbebedd30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001",
           "comment": "z replaced by the group order"
+        },
+        {
+          "name": "wrong-key",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002",
+          "message": "0x6150ca6003cd91129ca85f2e16277b4ab89add8762e781c9c8c8bffd6d253a5d",
+          "sig": "0x0921ac08564f33f5ab3708c1bdf379df817d057fe57472bd9a4255a326658236103a3bcaec21368a8f01c6b7a2cd0f17645743117155f996bcdc60165dbebedd1ba35477ff4eaec82c5dad55577097f14d73d84c4f44e3e83257e83c4c3738d1",
+          "comment": "vk replaced by the generator G"
+        },
+        {
+          "name": "wrong-kind",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x15619f1c3cc209cf07f07e945ba8db70e4540ad1c7e07ba56e1ec1ed77a5f03b23f9fcf080bce6d9c15eb33f98287b305e4ecbb54fe9ad57ec1c5de657d0836b",
+          "message": "0x5c5e61985bca0dce75e88ad6b2e41c8be5d5809c39bff9ad8f983534ea3a6ae9",
+          "sig": "0x0921ac08564f33f5ab3708c1bdf379df817d057fe57472bd9a4255a326658236103a3bcaec21368a8f01c6b7a2cd0f17645743117155f996bcdc60165dbebedd1ba35477ff4eaec82c5dad55577097f14d73d84c4f44e3e83257e83c4c3738d1",
+          "comment": "the metatx signature offered for the other group kind of the curve's message"
+        },
+        {
+          "name": "sig-trailing-byte",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x15619f1c3cc209cf07f07e945ba8db70e4540ad1c7e07ba56e1ec1ed77a5f03b23f9fcf080bce6d9c15eb33f98287b305e4ecbb54fe9ad57ec1c5de657d0836b",
+          "message": "0x6150ca6003cd91129ca85f2e16277b4ab89add8762e781c9c8c8bffd6d253a5d",
+          "sig": "0x0921ac08564f33f5ab3708c1bdf379df817d057fe57472bd9a4255a326658236103a3bcaec21368a8f01c6b7a2cd0f17645743117155f996bcdc60165dbebedd1ba35477ff4eaec82c5dad55577097f14d73d84c4f44e3e83257e83c4c3738d100",
+          "comment": "metatx signature with one byte appended"
+        },
+        {
+          "name": "sig-truncated",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x15619f1c3cc209cf07f07e945ba8db70e4540ad1c7e07ba56e1ec1ed77a5f03b23f9fcf080bce6d9c15eb33f98287b305e4ecbb54fe9ad57ec1c5de657d0836b",
+          "message": "0x6150ca6003cd91129ca85f2e16277b4ab89add8762e781c9c8c8bffd6d253a5d",
+          "sig": "0x0921ac08564f33f5ab3708c1bdf379df817d057fe57472bd9a4255a326658236103a3bcaec21368a8f01c6b7a2cd0f17645743117155f996bcdc60165dbebedd1ba35477ff4eaec82c5dad55577097f14d73d84c4f44e3e83257e83c4c3738",
+          "comment": "metatx signature without its last byte"
+        },
+        {
+          "name": "r-off-curve",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x15619f1c3cc209cf07f07e945ba8db70e4540ad1c7e07ba56e1ec1ed77a5f03b23f9fcf080bce6d9c15eb33f98287b305e4ecbb54fe9ad57ec1c5de657d0836b",
+          "message": "0x6150ca6003cd91129ca85f2e16277b4ab89add8762e781c9c8c8bffd6d253a5d",
+          "sig": "0x000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000031ba35477ff4eaec82c5dad55577097f14d73d84c4f44e3e83257e83c4c3738d1",
+          "comment": "R replaced by a point off the curve (secp256k1 x = 5, bn254 (1, 3))"
+        },
+        {
+          "name": "z-plus-order",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x15619f1c3cc209cf07f07e945ba8db70e4540ad1c7e07ba56e1ec1ed77a5f03b23f9fcf080bce6d9c15eb33f98287b305e4ecbb54fe9ad57ec1c5de657d0836b",
+          "message": "0x6150ca6003cd91129ca85f2e16277b4ab89add8762e781c9c8c8bffd6d253a5d",
+          "sig": "0x0921ac08564f33f5ab3708c1bdf379df817d057fe57472bd9a4255a326658236103a3bcaec21368a8f01c6b7a2cd0f17645743117155f996bcdc60165dbebedd4c07a2eae0804ef1e4adf30bd8f1f04e75a7c094c8fe54797639ddd03c3738d2",
+          "comment": "z + r: the same scalar mod r, non-canonical"
+        },
+        {
+          "name": "r-x-plus-p",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x15619f1c3cc209cf07f07e945ba8db70e4540ad1c7e07ba56e1ec1ed77a5f03b23f9fcf080bce6d9c15eb33f98287b305e4ecbb54fe9ad57ec1c5de657d0836b",
+          "message": "0x6150ca6003cd91129ca85f2e16277b4ab89add8762e781c9c8c8bffd6d253a5d",
+          "sig": "0x3985fa7b3780d41f63874e783f74d23d18fe70114de63d4ad662e1b9fee27f7d103a3bcaec21368a8f01c6b7a2cd0f17645743117155f996bcdc60165dbebedd1ba35477ff4eaec82c5dad55577097f14d73d84c4f44e3e83257e83c4c3738d1",
+          "comment": "x(R) + p: the same point mod p, non-canonical"
+        },
+        {
+          "name": "vk-off-curve",
+          "entry": "verify",
+          "error": "false",
+          "vk": "0x00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000003",
+          "message": "0x6150ca6003cd91129ca85f2e16277b4ab89add8762e781c9c8c8bffd6d253a5d",
+          "sig": "0x0921ac08564f33f5ab3708c1bdf379df817d057fe57472bd9a4255a326658236103a3bcaec21368a8f01c6b7a2cd0f17645743117155f996bcdc60165dbebedd1ba35477ff4eaec82c5dad55577097f14d73d84c4f44e3e83257e83c4c3738d1",
+          "comment": "vk (1, 3), off the curve"
         }
       ]
     },

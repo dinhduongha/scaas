@@ -161,7 +161,7 @@ fn group_negatives_refused() {
             n += 1;
         }
     }
-    assert_eq!(n, 70);
+    assert_eq!(n, 98); // 70 + the 28 `verify` rows of 2026-11-26 (tests/groups.rs `verify_more`)
     println!("{n} group negatives refused");
 }
 
