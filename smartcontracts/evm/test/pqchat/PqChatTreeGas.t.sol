@@ -29,6 +29,20 @@ contract TreeGasBurner {
             m[i] = 1;
         }
     }
+
+    /// One transaction of `n` hash rounds and `k` new slots under `salt`: a row's (regular, state) pair, for the 2^24
+    /// measurement on a Nethermind copy (`runs/2026-11-25-treekem512-nethermind.py`).
+    function burnFill(uint256 n, uint256 k, uint256 salt) external returns (uint256 y) {
+        assembly ("memory-safe") {
+            for { let i := 0 } lt(i, n) { i := add(i, 1) } {
+                mstore(0, y)
+                y := keccak256(0, 32)
+            }
+        }
+        for (uint256 i; i < k; ++i) {
+            m[uint256(keccak256(abi.encode(salt, i)))] = 1;
+        }
+    }
 }
 
 /// Spec 2026-11-23-pqchat-treekem §13 measured (plan T3c/T3d): each piece of a tree session and of its commits as its own
@@ -620,6 +634,46 @@ contract PqChatTreeGasTest is PqChatTreeModel {
                 _fits("15 genesis wraps in one transaction", 0);
             }
         }
+    }
+}
+
+/// The rows near the limits at 512 as `burnFill` arguments (with `TREE_REPLICA=1`): for each row's forge figures (the verify
+/// included in regular), the hash rounds and new slots whose one transaction has the same regular gas (within 0.1 %) and
+/// state gas (within one slot), printed for the Nethermind run. **UNAUDITED.**
+contract PqChatTreeGasReplicaTest is Test {
+    function _gas(TreeGasBurner b, uint256 n, uint256 k, uint256 salt) internal returns (uint256 r, uint256 s) {
+        b.burnFill(n, k, salt);
+        Vm.Gas memory g = vm.lastCallGas();
+        (r, s) = (g.gasTotalUsed, uint256(int256(g.gasStateUsed)));
+    }
+
+    function _row(TreeGasBurner b, string memory what, uint256 rr, uint256 ss, uint256 salt) internal {
+        (, uint256 s1) = _gas(b, 0, 1, salt);
+        (, uint256 s2) = _gas(b, 0, 2, salt + 1);
+        uint256 perSlot = s2 - s1;
+        uint256 k = ss / perSlot;
+        (uint256 rk,) = _gas(b, 0, k, salt + 2);
+        (uint256 rn,) = _gas(b, 100_000, k, salt + 3);
+        uint256 n = (rr - rk) * 100_000 / (rn - rk);
+        (uint256 r, uint256 s) = _gas(b, n, k, salt + 4);
+        emit log_named_string("REPLICA", string.concat(what, " n=", vm.toString(n), " k=", vm.toString(k)));
+        emit log_named_uint(string.concat("REPLICA ", what, " regular"), r);
+        emit log_named_uint(string.concat("REPLICA ", what, " state"), s);
+        assertApproxEqRel(r, rr, 0.001e18, "regular");
+        assertApproxEqAbs(s, ss, perSlot, "state");
+    }
+
+    function test_replicaArguments() public {
+        vm.skip(!vm.envOr("TREE_REPLICA", false));
+        TreeGasBurner b = new TreeGasBurner();
+        _row(b, "completion at its bounds", 11_623_478, 40_405_770, 1e6);
+        _row(b, "record at its bounds ML-DSA-87", 15_880_406, 26_918_820, 2e6);
+        _row(b, "record at its bounds ML-DSA-65", 12_930_622, 24_911_460, 3e6);
+        _row(b, "last live leaf 4 UAs ML-DSA-87", 14_834_795, 24_226_020, 4e6);
+        _row(b, "last live leaf A-8 ML-DSA-87", 18_088_053, 31_521_060, 5e6);
+        _row(b, "last live leaf A-8 ML-DSA-65", 15_130_972, 29_513_700, 6e6);
+        _row(b, "control under 2^24", 16_700_000, 1_000_000, 7e6);
+        _row(b, "control over 2^24", 16_850_000, 1_000_000, 8e6);
     }
 }
 

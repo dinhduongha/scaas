@@ -35,8 +35,8 @@ abstract contract PqGroupTree {
 
     uint256 internal constant KEM_PK = 1601; // 0x01 ‖ ek (1,568) ‖ pk_X (32)
     /// @dev The base's own bound on leaf positions, whatever `_treeBounds()` says (review A-6; owner R8 2026-11-25: 256 ->
-    ///      512): a direct path is at most 9 parents (`_walkPath`'s array of 10) and a path key's offset in its blob fits
-    ///      16 bits (`keyAt`: 9 x 1,601 B).
+    ///      512): a direct path is at most 9 parents (`_walkPath`'s array of 9, mutant M74: one more slot was spare) and a
+    ///      path key's offset in its blob fits 16 bits (`keyAt`: 9 x 1,601 B).
     uint256 internal constant TREE_LEAVES_LIMIT = 512;
     uint256 internal constant P25519 = 2 ** 255 - 19;
 
@@ -492,7 +492,7 @@ abstract contract PqGroupTree {
         uint256 x = 2 * uint256(d.leaf);
         uint256 root = w.leaves - 1;
         uint32[] memory tg = new uint32[](w.leaves);
-        uint256[] memory path = new uint256[](10);
+        uint256[] memory path = new uint256[](9);
         (uint256 n, uint256 k) = (0, 0);
         while (x != root) {
             uint256 p = _parentOf(x);

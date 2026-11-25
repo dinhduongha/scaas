@@ -223,7 +223,7 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
     function _path(M memory n, Step memory st) internal view {
         IPqChat.PqChatCommit memory c = st.c;
         uint32[] memory tg = new uint32[](MODEL_LEAVES);
-        bytes32[] memory nk = new bytes32[](10);
+        bytes32[] memory nk = new bytes32[](9);
         (uint256 t, uint256 k, uint256 x) = (0, 0, 2 * uint256(c.leaf));
         while (x != n.leaves - 1) {
             uint256 q = _par(x);
