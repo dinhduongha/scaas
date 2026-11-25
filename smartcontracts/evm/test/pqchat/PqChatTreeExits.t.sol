@@ -51,6 +51,8 @@ contract PqChatTreeExitsTest is PqChatTreeModel {
         assertEq(at, 1, "gone from the head's number, not the named one");
         assertEq(vchat.leaveCount(m1.head), 1, "the record under the head");
         assertEq(vchat.leaveCount(m0.head), 0);
+        assertTrue(vchat.leftIn(m1.head, B), "the flag on the head");
+        assertFalse(vchat.leftIn(m0.head, B));
         // a removal naming the parent: `nextEpoch` is the named number plus one, not the head's
         IPqChat.PqChatTreeRemove memory r =
             IPqChat.PqChatTreeRemove(m1.sid, m1.treeId, m0.head, 2, _list(E), A, ++nonceN);
@@ -64,6 +66,26 @@ contract PqChatTreeExitsTest is PqChatTreeModel {
         assertEq(at, 1);
         assertEq(vchat.removalCount(m1.head), 1, "the record under the head");
         assertEq(vchat.removalCount(m0.head), 0);
+        assertTrue(vchat.removedIn(m1.head, E), "the flag on the head");
+        assertFalse(vchat.removedIn(m0.head, E));
+    }
+
+    /// C9: a staged epoch (its record accepted, its pieces not landed) is `PqChatIncomplete`; its parent, the head, is
+    /// accepted (the control).
+    function test_e3_exitNamingAStagedEpoch() public {
+        _open(); // the vectors in this call's memory
+        M memory m = _abe();
+        (Step memory st,) = _build(m, 0, _noCh(), _list(A));
+        assertGt(st.c.ctCount, 0, "a commit with pieces");
+        bytes32 staged = _commitAlone(vchat, st);
+        assertFalse(vchat.epochComplete(staged));
+        IPqChat.PqChatTreeLeave memory l = _leaveAt(m, staged, B);
+        IUARegistry.UASig memory sg = _sig(B, th2.treeLeave(l));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatIncomplete.selector, staged));
+        vchat.treeLeave(l, sg);
+        l.epochId = m.head;
+        vchat.treeLeave(l, _sig(B, th2.treeLeave(l)));
+        assertEq(vchat.leaveCount(m.head), 1);
     }
 
     /// The lag bound at its edge: head 17 refuses an exit naming epoch 0 and accepts one naming epoch 1 (17 <= 1 + 16).
