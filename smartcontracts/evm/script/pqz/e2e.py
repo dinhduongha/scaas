@@ -1732,7 +1732,12 @@ def run(kd, kr, ke):
     # before every release, each env naming it as govRouter. By CREATE2 as DeployBase (governance spec §3.1); on this run's
     # own registry (it carries the pqz-mlwe kind, the deploy JSON's has none), so it is not the deploy JSON's router: the
     # node lists both in `governance_routers` (RUNBOOK); JSON key `governance_router` of deployments/<key>-pqz.json
-    router = D.deploy2("GovernanceRouter", encs(["w", "w", "w", "w"], [uid, reg, 0, 0]), label="governance_router")
+    # G1 / G-3 (CTR-GOV-33): the factory first, the router naming it (its fifth argument), then configureChain, which
+    # refuses a router whose factory() is not this factory
+    fac = D.deploy("OpenFactory", encs(["w"], [sd.addr]))
+    router = D.deploy2(
+        "GovernanceRouter", encs(["w", "w", "w", "w", "w"], [uid, reg, 0, 0, fac]), label="governance_router"
+    )
     # plan 5g-Z2: the factory (notice period 0 here) deploys every release itself: env version 1 of each kind
     # (factory, chain_uid, registry, SmartKeyAccount implementation 0, Hedera false, deps, the linked libraries with
     # their code hashes, the GovernanceRouter above (the PQZ kinds link the four PqzStateLib / PqzTransferLib / PqzBurnLib / PqzViewLib, plan 5h D14,
@@ -1741,7 +1746,6 @@ def run(kd, kr, ke):
     # envVersion, env, implArgs)
     # chain-neutral releases (plan T71): the registrar the only constructor argument, then this chain's values once
     # (configureChain: chain_uid, notice period 0, the router above, a reference block of this chain, Fable P1-1)
-    fac = D.deploy("OpenFactory", encs(["w"], [sd.addr]))
     ref = int(rpc("eth_blockNumber", []), 16) - 1
     ref_hash = bytes.fromhex(rpc("eth_getBlockByNumber", [hex(ref), False])["hash"][2:])
     router_h = keccak256(
