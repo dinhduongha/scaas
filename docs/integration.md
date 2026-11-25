@@ -909,6 +909,9 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr
    the node relays sends the missing parts first on its own lane and waits `queued` under `UA_KEY_NOT_CACHED` until they landed;
    a subject that sends its own transactions builds them with `clientkeys` `cacheThenRegister` (parts, then the registration) or
    `ua-rs` `mldsa_cache::cache_then_register`. A UA id can receive no tokens before it is registered (`UANotRegistered`), so the order costs no funds.
+   An `msig` signs every record and job with its structure version tag in `UASig.signature` (empty at version 0, else 8 bytes
+   big-endian), read from `msigStateOf(ua).version` at signing; after its first `updateMsig` an empty tag is `UAUnauthorized`
+   ([the node's note](node/job-api.md#msig-version-tag), [CTR-UA-74](contracts/accounts.md#CTR-UA-74)).
 4. On the finalized `UARegistered` event the client reads `registrationOf(ua)` (the stored arguments equal what it sent; an `msig`'s `pop`
    there is `keccak256(pop)`, [CTR-UA-33](contracts/accounts.md#CTR-UA-33) A),
    `pqzKeyOf(ua).proven` and `checkedOf(ua)`, and only then marks the account usable on that chain.

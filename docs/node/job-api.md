@@ -295,6 +295,17 @@ A job in the old shape is refused `BAD_PAYLOAD: …keyData: unknown field`. Ever
 16 slots at each level, `BAD_PAYLOAD: …: more than 16 slots`, checked before an element is read. The node builds the calldata from these fields, so overlapping offsets, which make the registry copy far more than the calldata holds before its first index check, cannot leave
 it from a named job. Soroban jobs keep `{index, key_data, sig}` until that family's round.
 
+<a id="msig-version-tag"></a>**An `msig`'s version tag (operators and integrators: the job shape is unchanged, its content is not; EVM BUILT,
+UNAUDITED; [CTR-UA-74](../contracts/accounts.md#CTR-UA-74), Change 2026-11-26, A-4 of the Fable fix check).** Wherever a job carries an
+`msig`'s `UASig` (`auth`, `sig`, `payerSig`, …), its `signature` is that `msig`'s structure version tag: `"0x"` at version 0, and from
+its first `updateMsig` on the version as exactly 8 bytes big-endian (`"0x0000000000000001"` at version 1); an `msig` member slot's
+`sig` carries that member's own tag the same way. The signer reads `msigStateOf(ua).version` at signing time (each `msig` member's
+too); a `ua-rs` `UaSigRequest` names it in every `current` row, `{ua, keyData, enabled, version}`, and a row without `version` no longer
+parses. The registry accepts the current version's tag only, so a consumer that keeps sending `signature: "0x"` for an `msig` works
+until its first `updateMsig` and is `UAUnauthorized` at simulation from then on (refused, nothing sent), and a job signed before an
+update is refused after it: re-sign it with the new tag. The node passes the bytes on and does not read the version; a replica copy of
+a PqChat or PqVault record carries the replica registry's tag ([A replica's copy](../contracts/accounts.md#msig-replica-copy)).
+
 <a id="bls-multi-sig-shape"></a>**A `bls12381-multi` (`0x0121`) `UASig` (operators: a new job shape, BUILT `d02f07d32`;
 [CTR-UA-50](../contracts/accounts.md#CTR-UA-50)).** Wherever a job carries a `UASig` (`auth`, `sig`, `payerSig`, …), a group's is
 `{"signature": "0x" + σ (128 bytes, G1, EIP-2537), "signers": [i, …]}`, nothing else: the node checks `signers` first (1 to 64 JSON
@@ -979,7 +990,8 @@ none changed. **Not built yet (plan T4, after the merge):** the whole-set guard 
 relays a commit's set. **BUILT (Change 2026-11-24, the code review's D-4 and D-7; `typed.rs` `tree_shape`):**
 `createSession` with `groupMode = 1` is bounded by the tree's bounds at creation (`members` 512, `admins` 32,
 `sealedInfo` 4,124 B; mode 0 has none of these), and an `addPath` with no ciphertext is refused (`cts: 1 or more`), as the
-contract refuses both (C40). **For operators
+contract refuses both (C40); an `addWraps` or PqVault's `addVaultWraps` with no wrap the same (`wraps: 1 or more`, both modes;
+Change 2026-11-26, A-5 of the Fable fix check). **For operators
 (the contract's side BUILT on branch `review-fix-contract`, the spec check's change of 2026-11-24 to C9, CTR-CHAT-20,
 CTR-CHAT-10, CTR-PQV-06; the node's reporting rule below SPECIFIED, plan T4, D2-5 of the re-review of 2026-11-25):** an exit (`treeLeave`,
 `treeRemove`, mode 0's `leave` and `remove`, PqVault's `leaveVault` and `removeVaultMembers`) applies at the head when it

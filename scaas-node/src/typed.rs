@@ -1932,6 +1932,13 @@ pub fn assemble(
     if row.contracts == PC {
         tree_shape(row.entry, &row.fields, &vals)?;
     }
+    // A-5 of the Fable fix check (the contracts' A-15, as C40): an empty wraps list writes nothing; both contracts refuse it
+    // first (`PqChatShape`, `PqVaultShape`)
+    if matches!(row.entry, "addWraps" | "addVaultWraps")
+        && pos(&row.fields, "wraps").is_none_or(|i| arr_len(&vals[i]) == 0)
+    {
+        bail!("BAD_PAYLOAD: args.wraps: 1 or more (the contract's shape)");
+    }
     if row.typed {
         normalize(&row.fields, &mut vals, fee_recipient)?;
     }
@@ -5969,6 +5976,32 @@ mod tests {
                 rec["sealedInfo"].as_str().unwrap().into()
             )
         );
+    }
+
+    /// A-5 of the Fable fix check (2026-11-26; the contracts' A-15, as C40): an empty `addWraps` / `addVaultWraps` is refused by
+    /// name, as both contracts refuse it first (`PqChatShape`, `PqVaultShape`); the sample with its wraps parses.
+    #[test]
+    fn empty_wraps_refused() {
+        let at = Address::repeat_byte(0xc3);
+        for o in [
+            testkit::pqchat_op("addWraps", at),
+            testkit::pqvault_op("addVaultWraps", at),
+        ] {
+            let entry = o["entry"].clone();
+            assert_ne!(
+                o["args"]["wraps"],
+                json!([]),
+                "{entry}: the control has wraps"
+            );
+            Op::parse(&o, FEE).unwrap_or_else(|e| panic!("{entry}: the control: {e:#}"));
+            let mut no = o.clone();
+            no["args"]["wraps"] = json!([]);
+            let e = Op::parse(&no, FEE).unwrap_err().to_string();
+            assert!(
+                e.starts_with("BAD_PAYLOAD: args.wraps: 1 or more"),
+                "{entry}: {e}"
+            );
+        }
     }
 
     /// CTR-CHAT-27 (spec §2 C10, C14, C21, C24, §13; plan T4, codex-20): each tree bound refused one over by name, beside its
