@@ -459,17 +459,26 @@ async fn plain_is_the_contracts_keeps() {
     assert_eq!(check::child(&drops, &p, &[], carol), Ok(()));
     assert_eq!(check::child(&drops, &p, &[], &[]), Err(DropReason::Control));
     // a removed carol kept: refused (`_noneRemoved`)
-    assert_eq!(check::child(&keeps, &p, &[], carol), Err(DropReason::Control));
+    assert_eq!(
+        check::child(&keeps, &p, &[], carol),
+        Err(DropReason::Control)
+    );
     // a UA added is no plain rekey, even with carol flagged
     let mut more = p.clone();
     more.members.retain(|m| m.ua != w.carol.ua);
     let add = child_of(&more, &w.bob.ua, all.clone(), more.admins.clone());
-    assert_eq!(check::child(&add, &more, &[], &[]), Err(DropReason::Control));
+    assert_eq!(
+        check::child(&add, &more, &[], &[]),
+        Err(DropReason::Control)
+    );
     // an admin who left (or was removed) is no live admin: its membership change is refused; twin: the live admin's
     let change = child_of(&p, &w.alice.ua, without_carol.clone(), p.admins.clone());
     assert_eq!(check::child(&change, &p, &[], &[]), Ok(()));
     let alice = std::slice::from_ref(&w.alice.ua);
-    assert_eq!(check::child(&change, &p, alice, &[]), Err(DropReason::Control));
+    assert_eq!(
+        check::child(&change, &p, alice, &[]),
+        Err(DropReason::Control)
+    );
     // a dropped admin that left: plain for a member
     let mut two = p.clone();
     two.admins = {
@@ -479,5 +488,8 @@ async fn plain_is_the_contracts_keeps() {
     };
     let drop_alice_admin = child_of(&two, &w.carol.ua, all.clone(), vec![w.bob.ua.clone()]);
     assert_eq!(check::child(&drop_alice_admin, &two, alice, &[]), Ok(()));
-    assert_eq!(check::child(&drop_alice_admin, &two, &[], &[]), Err(DropReason::Control));
+    assert_eq!(
+        check::child(&drop_alice_admin, &two, &[], &[]),
+        Err(DropReason::Control)
+    );
 }

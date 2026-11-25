@@ -317,7 +317,10 @@ test("the main scenario: every member with a leaf derives the same K at every ep
       assert.equal(e.state, "followed", `${n} ${e.epoch}`);
       assert.equal(e.K, e.epoch === 0 ? hex(MAIN.genesis.K) : Ks[e.epoch - 1], `${n} ${e.epoch}`);
     }
-    for (let e = 0; e <= head; e++) assert.deepEqual(r.rosters[e], MAIN.rosters[e], `${n}'s roster at ${e}`);
+    // the rosters of the secret range only (E-3): from its join to its last epoch
+    const last = r.endEpoch === null ? head : r.endEpoch - 1;
+    assert.equal(Object.keys(r.rosters).length, last - r.joinEpoch + 1, `${n}'s rosters`);
+    for (let e = r.joinEpoch; e <= last; e++) assert.deepEqual(r.rosters[e], MAIN.rosters[e], `${n}'s roster at ${e}`);
   }
   // the periods: B gone (removed at 5), C2 taken out of a UA that stays (6): the pair
   assert.deepEqual([replays.B.joinEpoch, replays.B.endEpoch], [0, 5]);
@@ -713,7 +716,7 @@ test("the info after a gap (codex-r3-7): the only admin behind seals markers onl
 
 // ------------------------------------------------------------------ replay's reads (codex-r3-1)
 
-test("the retired key (codex-r3-1): D joins at 2 and goes at 5, the head is 9: records of 1 to 9, ciphertexts of 2 to 4, nothing at 5; the rosters of 2 to 4 by undo; C, a genesis key taken out at 7, the same", () => {
+test("the retired key (codex-r3-1): D joins at 2 and goes at 5, the head is 9: records of 1 to 9, ciphertexts of 2 to 4, nothing at 5; the rosters of 2 to 4 (its range, E-3); C, a genesis key taken out at 7, the same", () => {
   const d = f.replayOf(RETIRED, "D");
   assert.deepEqual([d.joinEpoch, d.endEpoch], [2, 5]);
   const reads = (r, name) => r.reads.filter((x) => x.startsWith(`${name}(`)).map((x) => x.slice(name.length));
@@ -729,7 +732,10 @@ test("the retired key (codex-r3-1): D joins at 2 and goes at 5, the head is 9: r
     d.epochs.map((e) => e.epoch),
     [2, 3, 4],
   );
-  for (let n = 1; n <= 9; n++) assert.deepEqual(d.rosters[n], RETIRED.rosters[n], `D's roster at ${n}`);
+  assert.deepEqual(Object.keys(d.rosters).map(Number), [2, 3, 4]);
+  for (let n = 2; n <= 4; n++) assert.deepEqual(d.rosters[n], RETIRED.rosters[n], `D's roster at ${n}`);
+  // C-5: a device whose period ended seals no info of its own (its last epoch is not the head)
+  assert.equal(tk.infoToSeal(d), null);
   const c = f.replayOf(RETIRED, "C");
   assert.deepEqual([c.joinEpoch, c.endEpoch], [0, 7]);
   assert.deepEqual(reads(c, "wrapAt"), ["(0,2)"]);
@@ -738,7 +744,8 @@ test("the retired key (codex-r3-1): D joins at 2 and goes at 5, the head is 9: r
     range(1, 6).filter((x) => x !== "(4)"),
   );
   assert.deepEqual(reads(c, "pathListOf"), range(1, 6));
-  for (let n = 0; n <= 9; n++) assert.deepEqual(c.rosters[n], RETIRED.rosters[n], `C's roster at ${n}`);
+  assert.deepEqual(Object.keys(c.rosters).map(Number), [0, 1, 2, 3, 4, 5, 6]);
+  for (let n = 0; n <= 6; n++) assert.deepEqual(c.rosters[n], RETIRED.rosters[n], `C's roster at ${n}`);
   assert.deepEqual(
     c.epochs.map((e) => e.state),
     Array(7).fill("followed"),
@@ -800,11 +807,18 @@ test("before a client encrypts (codex-r2-1, codex-1, codex-13): an epoch-0 head 
     return v;
   };
   refused("TreeGenesisLeaves", () => tk.prepareCommit(sc, tk.reader(w.home, outsider)));
-  const swapLeaf = (read, v) => (read.startsWith(`kemKeyAt(${f.deviceOf("C").ua}`) ? f.deviceOf("C3").kemPk : v);
-  refused("TreeGenesisLeaves", () => tk.prepareCommit(sc, tk.reader(w.home, swapLeaf)));
+  // C-1: another key served under C's signed record: the registry record does not authenticate it (the consistent liar,
+  // treeLeaves and treeOf with it, is the lie row "an epoch-0 head with a consistent substituted member key")
+  const swapLeaf = (read, v) =>
+    read.startsWith(`kemKeyAt(${f.deviceOf("C").ua}`) ? { ...v, kemPk: f.deviceOf("C3").kemPk } : v;
+  refused("TreeKemRecord", () => tk.prepareCommit(sc, tk.reader(w.home, swapLeaf)));
+  refused("TreeKemRecord", () => f.replayOf(w, "A", swapLeaf));
+  // C's own record of version 3 served as version 1: the record names its version
+  const other = (read, v) => (read.startsWith(`kemKeyAt(${f.deviceOf("C").ua}`) ? f.kemRecOf("C3") : v);
+  refused("TreeKemRecord", () => tk.prepareCommit(sc, tk.reader(w.home, other)));
   f.commit(w, "A");
-  // the same key served for the cold tree above epoch 0: epoch 1's signed parentTreeHash does not hold, a lying read
-  refused("TreeReadCorrupted", () => tk.prepareCommit(sc, tk.reader(w.home, swapLeaf)));
+  // the same key served for the cold tree above epoch 0: refused by its record before the walk reaches epoch 1
+  refused("TreeKemRecord", () => tk.prepareCommit(sc, tk.reader(w.home, swapLeaf)));
   // a valid substituted leaf key with the tree unchanged (codex-1), the walk from the pin: the key against the kemHash that
   // entered the root
   const pin = tk.prepareCommit(sc, tk.reader(w.home)).pin;
@@ -1030,6 +1044,9 @@ test("the lies of plan T11 (E-1, F-1, sc-F-3, sc-F-7, E-4, the lag): replay and 
     ["returned", f.returnedScenario()],
     ["lag", f.lagScenario()],
     ["empty-path", f.emptyPathScenario(null)],
+    ["msig-updated", f.msigUpdatedScenario()],
+    ["genesis", f.genesisScenario()],
+    ["backlog", f.backlogScenario()],
   ]);
   const code = (fn) => {
     try {
@@ -1125,8 +1142,8 @@ test("tree-secrets.json scenario rows: every step's record, pieces and tree hash
         wraps: sRow.genesis.wraps.map((wrap) => ({ wrap })),
       },
       sig: sRow.genesis.sig,
-      kems: new Map(Object.values(V.devices).map((d) => [`${d.ua}/${d.keyId}`, d.kemPk])),
-      uaRecords: new Map(V.signers.map((r) => [r.ua, { kind: r.kind, keyData: r.keyData }])),
+      kems: new Map(Object.values(V.devices).map((d) => [`${d.ua}/${d.keyId}`, { kemPk: d.kemPk, sig: d.kemSig }])),
+      uaRecords: new Map(V.signers.map(({ ua, ...r }) => [ua, r])),
     });
     for (const step of sRow.steps) {
       if (step.gone) tk.landGone(h, step.gone.kind, step.gone.struct, step.gone.record, step.gone.sig);
@@ -1153,7 +1170,174 @@ test("tree-secrets.json scenario rows: every step's record, pieces and tree hash
       );
       assert.deepEqual(r.reads, want.reads, `${sRow.name} ${name}`);
       assert.deepEqual(r.pin, want.pin, `${sRow.name} ${name}`);
+      // the info in force and the warnings of the file too (C-5: an admin's same full info clears the flag; C-2)
+      assert.deepEqual(
+        r.epochs.map((e) => [e.info, e.inForce, e.flagged]),
+        want.info,
+        `${sRow.name} ${name} info`,
+      );
+      assert.deepEqual(r.warnings, want.warnings, `${sRow.name} ${name} warnings`);
     }
     assert.deepEqual(tk.pinsOf(sc, tk.reader(h)), sRow.pins, sRow.name);
+  }
+});
+
+test("C-2, B2-7: the compromise warning's leaves left come from the walk's head tree; a served joinEpoch moved off the Add changes nothing", () => {
+  const w = f.createSession({
+    tag: "foreign",
+    creator: "A",
+    nonce: 6,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+  });
+  f.commit(w, "B", { seedOf: "H", adds: [["B2", 3]], info: null });
+  const moved = (read, v) => (read === "treeLeaves()" ? v.map((l, i) => (i === 3 ? { ...l, joinEpoch: 2 } : l)) : v);
+  assert.deepEqual(f.replayOf(w, "B", moved).warnings[0].leavesLeft, [3]);
+  assert.deepEqual(f.replayOf(w, "B").warnings[0].leavesLeft, [3]);
+});
+
+test("C-7: a signer kind the reader has no verifier for is UANotVerifiable by name, never a lying read; another refusal is", () => {
+  const w = f.smallScenario("small");
+  const A = f.uaOf("A");
+  const lacking = (code) => {
+    const rd = tk.reader(w.home);
+    const of = rd.uaRecordOf;
+    rd.uaRecordOf = (ua) => {
+      if (ua === A) throw new Error(code);
+      return of(ua);
+    };
+    return rd;
+  };
+  const unverifiable = (rd) => {
+    const of = rd.uaRecordOf;
+    rd.uaRecordOf = (ua) => {
+      if (ua !== A) return of(ua);
+      const e = new Error("UANotVerifiable");
+      e.code = "UANotVerifiable";
+      throw e;
+    };
+    return rd;
+  };
+  refused("UANotVerifiable", () => tk.replay(sc, unverifiable(tk.reader(w.home)), f.deviceOf("B")));
+  refused("UANotVerifiable", () => tk.prepareCommit(sc, unverifiable(tk.reader(w.home))));
+  refused("TreeReadCorrupted", () => tk.prepareCommit(sc, lacking("other")));
+  assert.ok(tk.replay(sc, tk.reader(w.home), f.deviceOf("B")).inSession);
+});
+
+test("E-3, B2-2: a replay resumed from the device's previous one walks from its pin and opens only the epochs after it, with the same K and info; the walk keeps the trees at its start and head only", () => {
+  const w = f.createSession({
+    tag: "t/resume",
+    creator: "A",
+    nonce: 70,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+  });
+  for (let n = 1; n <= 6; n++) f.commit(w, n % 2 ? "B" : "C");
+  const B = f.deviceOf("B");
+  const r6 = tk.replay(sc, tk.reader(w.home), B);
+  f.commit(w, "A", { adds: [["D", 3]] }); // 7
+  for (let n = 8; n <= 12; n++) f.commit(w, n % 2 ? "B" : "C");
+  const full = tk.replay(sc, tk.reader(w.home), B);
+  const rd = tk.reader(w.home);
+  const more = tk.replay(sc, rd, B, null, r6);
+  assert.deepEqual(
+    more.epochs.map((e) => e.epoch),
+    [7, 8, 9, 10, 11, 12],
+  );
+  for (const e of more.epochs) {
+    const g = at(full, e.epoch);
+    assert.deepEqual([e.state, e.K, e.inForce, e.flagged], [g.state, g.K, g.inForce, g.flagged], `epoch ${e.epoch}`);
+    assert.deepEqual(more.rosters[e.epoch], full.rosters[e.epoch]);
+  }
+  assert.deepEqual(more.pin, full.pin);
+  // the work: no record below the pin, no key of the cold tree, no wrap of the join
+  const commits = rd.log.filter((x) => x.startsWith("commitOf(")).map((x) => Number(x.slice(9, -1)));
+  assert.deepEqual(commits, [6, 7, 8, 9, 10, 11, 12]);
+  assert.ok(!rd.log.some((x) => x.startsWith("kemKeyAt(") || x.startsWith("wrapAt(0,")));
+  // the memory: the walk holds the tree at its start and at the head, never one per epoch
+  assert.deepEqual(tk.walkTrees(sc, tk.reader(w.home)), [0, 12]);
+  assert.deepEqual(tk.walkTrees(sc, tk.reader(w.home), r6.pin), [6, 12]);
+  // a previous replay whose pin is not the record that won there is refused
+  refused("TreeConflict", () => tk.replay(sc, tk.reader(w.home), B, null, { ...r6, pin: { ...r6.pin, hash: Z32 } }));
+});
+
+test("C-1: a key no signed tree hash covers is authenticated by its registry record before it is used: an Add's, a member's at creation", () => {
+  const w = f.createSession({
+    tag: "t/auth",
+    creator: "A",
+    nonce: 71,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+  });
+  const prep = tk.prepareCommit(sc, tk.reader(w.home));
+  const A = f.deviceOf("A");
+  const D = f.deviceOf("D");
+  const add = (rec) => ({
+    leaf: 3,
+    ua: D.ua,
+    keyId: 1,
+    via: Z32,
+    kemHash: hex(keccak_256(fromHex(D.kemPk))),
+    ...rec,
+  });
+  const build = (rec) =>
+    tk.buildCommit(sc, {
+      tree: prep.tree,
+      parent: prep.parent,
+      sessionId: w.home.sessionId,
+      treeId: w.home.treeId,
+      author: A.ua,
+      leaf: 0,
+      keyId: 1,
+      kemSeed: A.kemSeed,
+      nonce: 9,
+      admins: prep.admins,
+      info: null,
+      adds: [add(rec)],
+      uaRecordOf: (u) => f.uaRecords().get(u) ?? null,
+      accepted: () => true,
+      keyOf: prep.keyOf,
+      rand: (x, n) => rnd(`t/auth/${x}`, n),
+    });
+  assert.equal(build(f.kemRecOf("D")).record.adds[0].ua, D.ua);
+  // another key under D's signature (the record does not authenticate it), D's signature of another version
+  refused("TreeKemRecord", () => build({ kemPk: f.deviceOf("H").kemPk, sig: f.kemRecOf("D").sig }));
+  refused("TreeKemRecord", () => build({ kemPk: D.kemPk, sig: f.kemRecOf("D2").sig }));
+  // creation: a member's key authenticated the same way
+  const session = { ...w.genesis.record };
+  delete session.wrapHashes;
+  delete session.sealedInfo;
+  const make = (kems) =>
+    tk.createGenesis(sc, {
+      session,
+      kems,
+      uaRecordOf: (u) => f.uaRecords().get(u) ?? null,
+      accepted: () => true,
+      info: f.INFO.I1,
+      rand: (x, n) => rnd(`tree-secrets/t/auth/genesis/${x}`, n),
+    });
+  const good = ["A", "B", "C"].map(f.kemRecOf);
+  assert.equal(make(good).sessionId, w.home.sessionId);
+  refused("TreeKemRecord", () => make([good[0], good[1], { ...good[2], kemPk: f.deviceOf("H").kemPk }]));
+});
+
+test("C-6: an exit count above EXITS_MAX is refused before any record is read (ua-rs's bound, 544)", () => {
+  const w = f.smallScenario("small");
+  for (const [n, want] of [
+    [tk.EXITS_MAX + 1, "TreeReadCorrupted"],
+    [0, null],
+  ]) {
+    const rd = f.lyingReader(w, { "leaveCount(1)": n });
+    let got = null;
+    try {
+      tk.prepareCommit(sc, rd);
+    } catch (e) {
+      got = e.code;
+    }
+    assert.equal(got, want, `count ${n}`);
+    assert.ok(!rd.log.some((x) => x.startsWith("leaveAt(1,")), `count ${n}: no record read`);
   }
 });

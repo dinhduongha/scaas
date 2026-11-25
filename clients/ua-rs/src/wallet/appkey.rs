@@ -397,6 +397,10 @@ impl AppKeys {
         if key.rooted {
             return Err(Error::AppKeyRooted);
         }
+        // a tree epoch key `K_e` is a handle and never leaves sealed either (spec §15, B-8, B2-8), as `wrap_with` refuses
+        if matches!(key.origin, Origin::Tree) {
+            return Err(Error::Argument);
+        }
         let mut n = [0u8; 12];
         rng(&mut n)?;
         let ct = aead_seal(

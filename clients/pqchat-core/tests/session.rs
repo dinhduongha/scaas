@@ -358,15 +358,23 @@ async fn a_non_admin_drops_a_removed_member() {
     child(&w.net, HOME, &o.e.id, ZERO32);
     let two = [&w.alice, &w.bob];
     let e =
-        w.pq.rekey(&sref(&o), &open(&w, &o), rk(&w, &w.bob, 2, &two, &[&w.alice]))
-            .await;
+        w.pq.rekey(
+            &sref(&o),
+            &open(&w, &o),
+            rk(&w, &w.bob, 2, &two, &[&w.alice]),
+        )
+        .await;
     assert_eq!(code(e), "NotAdmin");
     flag(&w, &o, "IPqChat.removedIn", &w.carol);
     let all = [&w.alice, &w.bob, &w.carol];
     let b =
-        w.pq.rekey(&sref(&o), &open(&w, &o), rk(&w, &w.bob, 3, &all, &[&w.alice]))
-            .await
-            .unwrap();
+        w.pq.rekey(
+            &sref(&o),
+            &open(&w, &o),
+            rk(&w, &w.bob, 3, &all, &[&w.alice]),
+        )
+        .await
+        .unwrap();
     assert_eq!(uas(&b.epoch), sorted(&two));
 }
 
@@ -391,13 +399,21 @@ async fn exits_are_checked_at_the_head() {
     );
     macro_rules! leave {
         () => {
-            w.pq.leave(&sref(&o), &o.e, &me(&w.bob), 1, &payer(&w)).await
+            w.pq.leave(&sref(&o), &o.e, &me(&w.bob), 1, &payer(&w))
+                .await
         };
     }
     macro_rules! remove {
         () => {
-            w.pq.remove(&sref(&o), &o.e, &me(&w.alice), 2, std::slice::from_ref(&w.bob.ua), &payer(&w))
-                .await
+            w.pq.remove(
+                &sref(&o),
+                &o.e,
+                &me(&w.alice),
+                2,
+                std::slice::from_ref(&w.bob.ua),
+                &payer(&w),
+            )
+            .await
         };
     }
     assert_eq!(code(leave!()), "ExitLag");
@@ -414,7 +430,12 @@ async fn exits_are_checked_at_the_head() {
     );
     assert_eq!(code(remove!()), "Ok");
     // bob removed at the head (not at the epoch named): refused at the head as the contract does
-    w.net.answer(HOME, "IPqChat.removedIn", json!({"epochId": h.id, "member": w.bob.ua}), json!({"0": true}));
+    w.net.answer(
+        HOME,
+        "IPqChat.removedIn",
+        json!({"epochId": h.id, "member": w.bob.ua}),
+        json!({"0": true}),
+    );
     assert_eq!(code(leave!()), "NotMember");
     assert_eq!(code(remove!()), "NotMember");
 }

@@ -734,10 +734,21 @@ impl PqChat {
     }
 
     /// Whether `ua` is flagged by `item` (`leftIn` or `removedIn`, a trusted read at home) at `e`.
-    async fn flag(&self, s: &SessionRef, e: &Epoch, item: &'static str, ua: &str) -> Result<bool, PqChatError> {
+    async fn flag(
+        &self,
+        s: &SessionRef,
+        e: &Epoch,
+        item: &'static str,
+        ua: &str,
+    ) -> Result<bool, PqChatError> {
         let v = self
             .net
-            .read(&s.chain, &s.home, item, json!({"epochId": e.id, "member": ua}))
+            .read(
+                &s.chain,
+                &s.home,
+                item,
+                json!({"epochId": e.id, "member": ua}),
+            )
             .await?;
         Ok(at(&v, "0") == true)
     }

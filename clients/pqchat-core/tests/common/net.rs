@@ -87,7 +87,12 @@ impl FakeNet {
     }
     /// The answer `answer` set for `(contract, item, args)`.
     pub fn answer_of(&self, contract: &str, item: &str, args: Value) -> Value {
-        self.answers.lock().unwrap()[&(contract.to_ascii_lowercase(), item.to_string(), args.to_string())].clone()
+        self.answers.lock().unwrap()[&(
+            contract.to_ascii_lowercase(),
+            item.to_string(),
+            args.to_string(),
+        )]
+            .clone()
     }
     pub fn reads_of(&self, item: &str) -> usize {
         self.reads

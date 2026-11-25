@@ -317,6 +317,36 @@ async fn typed_digests_in_both_domains() {
         modes[usize::try_from(*mode).unwrap()] += 1;
     }
     assert_eq!(modes, [13, 10]);
+    // F-4 / D2-3: a leave's and a removal's review say that they apply within the lag of the epoch they name; other records none
+    let mut exits = 0;
+    for (mode, r) in &all {
+        let (p, dom) = by_mode(&d, *mode);
+        let st = r["struct"].as_str().unwrap();
+        let t = typed(&d, st, &r["record"], &dom);
+        let prep = a
+            .prepare_pqvault_record(key.clone(), p, None, t)
+            .await
+            .unwrap();
+        let line = prep
+            .review
+            .iter()
+            .find(|f| f.name == "appliesWithin")
+            .map(|f| f.value.clone());
+        let want = match st {
+            "PqVaultRemove" => Some(format!(
+                "applies if it lands within 16 epochs of epoch {}; it cannot be withdrawn",
+                r["record"]["nextEpoch"].as_u64().unwrap() - 1
+            )),
+            "PqVaultLeave" => Some(format!(
+                "applies if it lands within 16 epochs of the epoch it names ({}); it cannot be withdrawn",
+                s(&r["record"]["epochId"])
+            )),
+            _ => None,
+        };
+        exits += usize::from(want.is_some());
+        assert_eq!(line, want, "{}", r["name"]);
+    }
+    assert!(exits >= 2, "a leave and a removal row");
     // CTR-PQV-18: `createTreeKem`, a create record of groupMode 1 (refused by the contract and pqvault-core), hashes as signed
     let tk = &d["createTreeKem"];
     assert_eq!(tk["record"]["groupMode"], 1);

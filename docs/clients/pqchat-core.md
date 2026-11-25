@@ -312,8 +312,13 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
   **and the exits verified up to it**, so a restart cannot follow a removed UA's next epoch; a device with no verified tree
   writes its first pin only from a strict-majority read over at least 3 named endpoints, else it shows the head as
   "unconfirmed"; Change 2026-11-24, the code review's E-1, C-1, B-1, F-1, C-3, and the spec check), compares each target key with its hash in the tree, and has `ua-rs` verify against the
-  registry record every key no signed tree hash covers yet (an added key, a member at creation), in every tree session; reads
-  follow [CLI-PQC-13](#CLI-PQC-13). What a candidate seals counts as disclosed to every key of the tree it was built on.
+  registry record every key no signed tree hash covers yet (an added key, a member at creation, every leaf of the cold
+  tree a walk rebuilds: `kemKeyAt` with its kept signature, the re-review's C-1, BUILT in `ua-rs` and clientkeys 2026-11-25,
+  UNAUDITED), in every tree session; an `msig` signer is verified on its current structure and enabled slots (CTR-UA-44,
+  F-1; a record signed before an update that disabled its slot is the owner's open question F-1b); reads
+  follow [CLI-PQC-13](#CLI-PQC-13). A replay resumes from the device's previous one (`tree_resume`: its pin, the node keys
+  it held, the info in force there) and reads and opens only the epochs after it, and a walk holds the public tree at its
+  start and its head only, so a device pays the history once (spec §10 step 3; the re-review's E-3, BUILT 2026-11-25). What a candidate seals counts as disclosed to every key of the tree it was built on.
 - **Session info.** A commit seals the full info only when the device holds the one in force at the parent; otherwise the
   marker "unchanged" (empty content). A device that did not follow an epoch has no info in force from that epoch on: it
   seals the marker until a commit it follows carries a full info, taken under the joiner rule and never sealed while

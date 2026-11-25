@@ -417,6 +417,39 @@ async fn entries_reproduce_the_vectors() {
         .review
         .iter()
         .any(|f| f.name == "record" && f.value == "PqChatLeave"));
+    // F-4 / D2-3: an exit's review says that it applies within the lag, and of which epoch
+    let within = |r: &[scaas_sdk::op::ReviewField]| {
+        r.iter()
+            .find(|f| f.name == "appliesWithin")
+            .map(|f| f.value.clone())
+            .unwrap_or_default()
+    };
+    assert_eq!(
+        within(&p.review),
+        format!("applies if it lands within 16 epochs of the epoch it names ({}); it cannot be withdrawn", l.epoch_id)
+    );
+    let x = r(&rec, "remove");
+    let rm = a
+        .prepare_pqchat_remove(
+            key.clone(),
+            PqChatRemove {
+                session_id: s(&x["sessionId"]),
+                epoch_id: s(&x["epochId"]),
+                next_epoch: n(&x["nextEpoch"]),
+                members: strs(&x["members"]),
+                admin: s(&x["admin"]),
+                nonce: n(&x["nonce"]),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        within(&rm.review),
+        format!(
+            "applies if it lands within 16 epochs of epoch {}; it cannot be withdrawn",
+            n(&x["nextEpoch"]) - 1
+        )
+    );
     assert_eq!(
         p.sign().await.map_or_else(|e| e.code(), |_| "Ok"),
         "Argument"

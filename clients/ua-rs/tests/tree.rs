@@ -213,7 +213,7 @@ fn tree_json_every_row() {
     }
     // resolution, the filtered path, ctTargets, the cover
     for r in v["resolution"].as_array().unwrap() {
-        let t = Tree::from_json(&r["tree"]).unwrap();
+        let t = Tree::vectors_from_json(&r["tree"]).unwrap();
         assert_eq!(tree_json(&t), r["tree"], "{}", r["name"]);
         for (x, want) in r["resolution"].as_array().unwrap().iter().enumerate() {
             assert_eq!(json!(t.resolution(x as u32)), *want);
@@ -262,7 +262,18 @@ fn tree_json_every_row() {
             .map(a32)
             .collect::<Vec<_>>()
     };
+    // the resolution rows' trees are before trees too (the commit at depth 9, F-5)
+    for r in v["resolution"].as_array().unwrap() {
+        trees.insert(
+            r["name"].as_str().unwrap().into(),
+            Tree::vectors_from_json(&r["tree"]).unwrap(),
+        );
+    }
+    let mut deep = false;
     for r in v["treeHash"]["commits"].as_array().unwrap() {
+        deep |= r["name"] == "a commit at depth 9 (F-5)"
+            && r["after"]["leaves"] == 512
+            && r["commit"]["nodeKeyHashes"].as_array().unwrap().len() == 9;
         let before = trees[r["before"].as_str().unwrap()].clone();
         let a = before
             .apply_commit(
@@ -275,6 +286,7 @@ fn tree_json_every_row() {
         assert_eq!(tree_json(&a.tree), r["after"], "{}", r["name"]);
         trees.insert(r["name"].as_str().unwrap().into(), a.tree);
     }
+    assert!(deep, "the commit at depth 9");
     for r in v["treeHash"]["refused"].as_array().unwrap() {
         let before = &trees[r["before"].as_str().unwrap()];
         let got = code(before.apply_commit(
@@ -447,8 +459,11 @@ struct Home {
     node_key: BTreeMap<u32, (Vec<u8>, u64)>,
     gone: BTreeMap<[u8; 32], (u64, u64)>,
     periods: BTreeMap<String, (u64, u64)>,
-    kems: BTreeMap<([u8; 32], u64), Vec<u8>>,
+    /// the registry's KEM records (`kemKeyAt` serves `{kemPk, sig}` of each, C-1)
+    kems: BTreeMap<([u8; 32], u64), KemRecord>,
     ua_keys: BTreeMap<[u8; 32], (u16, Vec<u8>)>,
+    /// an updated `msig`'s current structure and enabled word (CTR-UA-44, F-1)
+    current: BTreeMap<[u8; 32], (Vec<u8>, [u8; 32])>,
     log: Vec<String>,
 }
 
@@ -598,7 +613,10 @@ impl TreeReader for Home {
             View::RemovalAt(n, i) => ep(n)?.removals.get(i).cloned().ok_or(Error::Argument)?,
             View::GoneOwnKeyOf(ua, k) => self.period(&format!("pair/{}/{}", hx(ua), hx(k))),
             View::GoneKeyOf(k) => self.period(&format!("wide/{}", hx(k))),
-            View::KemKeyAt(ua, k) => json!(self.kems.get(&(*ua, k)).map_or("0x".into(), |p| hx(p))),
+            View::KemKeyAt(ua, k) => match self.kems.get(&(*ua, k)) {
+                Some(KemRecord::Version { kem_pk, sig, .. }) => json!({"kemPk": hx(kem_pk), "sig": hx(sig)}),
+                _ => json!({"kemPk": "0x", "sig": "0x"}),
+            },
         })
     }
     fn ua_key_of(&self, ua: &[u8; 32]) -> Option<(u16, Vec<u8>)> {
@@ -606,6 +624,12 @@ impl TreeReader for Home {
     }
     fn accepted(&self, _: &[u8; 32], _: u16) -> bool {
         true
+    }
+    fn current(&self, ua: &[u8; 32]) -> Option<(Vec<u8>, [u8; 32])> {
+        self.current.get(ua).cloned()
+    }
+    fn registration(&self, _: &[u8; 32]) -> Option<(scaas_ua::ua_portable::UAAttrs, Vec<u8>)> {
+        None
     }
 }
 
@@ -616,7 +640,7 @@ fn new_home(
     wraps: Vec<Value>,
     sid: [u8; 32],
     tree_id: [u8; 32],
-    kems: BTreeMap<([u8; 32], u64), Vec<u8>>,
+    kems: BTreeMap<([u8; 32], u64), KemRecord>,
     ua_keys: BTreeMap<[u8; 32], (u16, Vec<u8>)>,
 ) -> Home {
     let members = rec["members"].as_array().unwrap();
@@ -625,7 +649,7 @@ fn new_home(
         .map(|m| Leaf {
             ua: a32(&m["ua"]),
             key_id: u(&m["keyId"]),
-            kem_hash: keccak256(&kems[&(a32(&m["ua"]), u(&m["keyId"]))]),
+            kem_hash: keccak256(kems[&(a32(&m["ua"]), u(&m["keyId"]))].kem_pk()),
         })
         .collect();
     let tree = Tree::cold(&cold).unwrap();
@@ -652,6 +676,7 @@ fn new_home(
         periods: BTreeMap::new(),
         kems,
         ua_keys,
+        current: BTreeMap::new(),
         log: vec![],
     }
 }
@@ -735,10 +760,12 @@ impl World {
             let k = KemKeyPair::vectors_ephemeral(&seed).unwrap();
             assert_eq!(hx(&k.kem_pk()), d["kemPk"], "device {name}");
             let p = &people[&name[..1]];
-            records.insert(
-                (p.ua, u(&d["keyId"])),
-                p.record(u(&d["keyId"]), &k.kem_pk()),
-            );
+            let r = p.record(u(&d["keyId"]), &k.kem_pk());
+            // the registry's signature of the key, clientkeys' byte for byte (deterministic ML-DSA-65; C-1)
+            if let KemRecord::Version { sig, .. } = &r {
+                assert_eq!(json!(hx(sig)), d["kemSig"], "device {name} kemSig");
+            }
+            records.insert((p.ua, u(&d["keyId"])), r);
             devices.insert(name.clone(), (d.clone(), k));
         }
         World {
@@ -893,7 +920,8 @@ fn tree_secrets_every_row() {
 }
 
 /// Steps clientkeys scripts/treekem-fixture.mjs builds with `commitBadFor` (a validly signed bad ciphertext: heal 1, 2;
-/// behind 1, 2; gap 1; admin-gap 1) or a foreign `seedOf` (foreign 1, empty-path-foreign 2): not the author's honest build.
+/// behind 1, 2; gap 1; admin-gap 1; flag-clear 1) or a foreign `seedOf` (foreign 1, empty-path-foreign 2), or with a
+/// small-order key (small-order 1, 2): not the author's honest build.
 const KNOWN_FAULTS: &[&str] = &[
     "heal/epoch-1",
     "heal/epoch-2",
@@ -905,6 +933,7 @@ const KNOWN_FAULTS: &[&str] = &[
     "admin-gap/epoch-1",
     "small-order/epoch-1",
     "small-order/epoch-2",
+    "flag-clear/epoch-1",
 ];
 
 /// Steps whose author chose the info (the fixture's `info:`); every other step seals what its author's replay of the head
@@ -916,7 +945,19 @@ const EXPLICIT_INFO: &[&str] = &[
     "admin-gap/epoch-4",
 ];
 
-/// Every signer's registry record of `tree-secrets.json` (F-3): the people, the keyless admins M (msig) and W (WebAuthn).
+/// The updated `msig`s of `tree-secrets.json`'s signers (F-1, CTR-UA-44): the current structure and its enabled word.
+fn currents(v: &Value) -> BTreeMap<[u8; 32], (Vec<u8>, [u8; 32])> {
+    v["signers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| !r["current"].is_null())
+        .map(|r| (a32(&r["ua"]), (unhex(&r["current"]), a32(&r["enabled"]))))
+        .collect()
+}
+
+/// Every signer's registry record of `tree-secrets.json` (F-3): the people, the keyless admins M (msig), W (WebAuthn) and
+/// N (an msig updated on its registry, F-1).
 fn signers(v: &Value) -> BTreeMap<[u8; 32], (u16, Vec<u8>)> {
     v["signers"]
         .as_array()
@@ -962,10 +1003,6 @@ fn scenario(
     assert_eq!(json!(gen.wraps), g["wraps"]);
     assert_eq!(hx(&keys.vectors_reveal(&gen.k).unwrap()), g["K"]);
     // the home
-    let mut kems = BTreeMap::new();
-    for (d, _) in world.devices.values() {
-        kems.insert((a32(&d["ua"]), u(&d["keyId"])), unhex(&d["kemPk"]));
-    }
     let ua_keys = signers(v);
     let mut home = new_home(
         rec,
@@ -973,9 +1010,10 @@ fn scenario(
         g["wraps"].as_array().unwrap().clone(),
         sid,
         gen.tree_id,
-        kems,
+        world.records.clone(),
         ua_keys,
     );
+    home.current = currents(v);
     let roster = |h: &Home| -> Value {
         json!((0..h.tree.leaves)
             .map(|i| h
@@ -1050,15 +1088,11 @@ fn rebuild(keys: &AppKeys, world: &World, home: &mut Home, st: &Value) -> bool {
             "{name}: the info to seal"
         );
     }
-    let tree = prep.tree.clone();
+    let tree = prep.tree().clone();
     let rec = |ua: &[u8; 32], k: u64| world.record(ua, k);
-    let mut key_fn = |x: u32| target_of(home, &tree, prep.parent_epoch, x, &rec);
+    let mut key_fn = |x: u32| target_of(home, &tree, prep.parent_epoch(), x, &rec);
     let input = CommitInput {
-        tree: &prep.tree,
-        parent_epoch_id: prep.parent_epoch_id,
-        parent_epoch: prep.parent_epoch,
-        parent_tree_hash: prep.parent_tree_hash,
-        parent_admins: prep.parent_admins.clone(),
+        parent: &prep,
         session_id: a32(&c["sessionId"]),
         tree_id: a32(&c["treeId"]),
         author: a32(&c["author"]),
@@ -1232,9 +1266,19 @@ impl TreeReader for Tamper<'_> {
     fn accepted(&self, ua: &[u8; 32], i: u16) -> bool {
         self.home.accepted(ua, i)
     }
+    fn current(&self, ua: &[u8; 32]) -> Option<(Vec<u8>, [u8; 32])> {
+        self.home.current(ua)
+    }
+    fn registration(&self, ua: &[u8; 32]) -> Option<(scaas_ua::ua_portable::UAAttrs, Vec<u8>)> {
+        self.home.registration(ua)
+    }
 }
 /// A view to lie about and how.
 type Lie = (String, fn(&mut Value));
+/// The last byte of the key `kemKeyAt` serves flipped (its signature kept).
+fn flip_kem(v: &mut Value) {
+    flip(&mut v["kemPk"]);
+}
 /// The last byte of the hex string at `v` flipped.
 fn flip(v: &mut Value) {
     let mut b = unhex(v);
@@ -1303,24 +1347,24 @@ fn tree_refusals_beside_twins() {
     );
     // a fetched key against the hash that entered the root (codex-1): a node key and a leaf key
     let prep = tree_prepare(SC, &mut home, None).unwrap();
-    let node = (0..prep.tree.nodes.len() as u32)
-        .find(|x| matches!(prep.tree.node(*x), Node::Parent(_)))
+    let node = (0..prep.tree().nodes.len() as u32)
+        .find(|x| matches!(prep.tree().node(*x), Node::Parent(_)))
         .unwrap();
-    assert!(key_of(&mut home, &prep.tree, node).is_ok());
-    assert!(key_of(&mut home, &prep.tree, 0).is_ok());
+    assert!(key_of(&mut home, &prep.tree(), node).is_ok());
+    assert!(key_of(&mut home, &prep.tree(), 0).is_ok());
     let mut t = Tamper {
         home: &mut home,
         read: format!("treeNodeKey({node})"),
         f: flip,
     };
-    assert_eq!(code(key_of(&mut t, &prep.tree, node)), "TreeKeyHash");
+    assert_eq!(code(key_of(&mut t, &prep.tree(), node)), "TreeKeyHash");
     let a = home.tree.leaf(0).unwrap().clone();
     let mut t = Tamper {
         home: &mut home,
         read: format!("kemKeyAt({},{})", hx(&a.ua), a.key_id),
-        f: flip,
+        f: flip_kem,
     };
-    assert_eq!(code(key_of(&mut t, &prep.tree, 0)), "TreeKeyHash");
+    assert_eq!(code(key_of(&mut t, &prep.tree(), 0)), "TreeKeyHash");
     // the checkpoint: below the pinned epoch, another session
     let pin = r.pin.clone();
     let high = Pin {
@@ -1379,16 +1423,12 @@ fn tree_refusals_beside_twins() {
     let rec = &main["genesis"]["record"];
     let records = |ua: &[u8; 32], k: u64| world.record(ua, k);
     let build = |keys: &AppKeys, h0: &mut Home, adds: Vec<(Add, KemRecord)>| {
-        let tree = prep0.tree.clone();
+        let tree = prep0.tree().clone();
         let mut kf = |x: u32| target_of(h0, &tree, 0, x, &records);
         keys.tree_build_commit(
             SC,
             CommitInput {
-                tree: &prep0.tree,
-                parent_epoch_id: prep0.parent_epoch_id,
-                parent_epoch: 0,
-                parent_tree_hash: prep0.parent_tree_hash,
-                parent_admins: prep0.parent_admins.clone(),
+                parent: &prep0,
                 session_id: a32(&main["genesis"]["sessionId"]),
                 tree_id: a32(&main["genesis"]["treeId"]),
                 author: dev_a.ua,
@@ -1413,7 +1453,7 @@ fn tree_refusals_beside_twins() {
         .is_ok());
     let (dd, kd) = &world.devices["D"];
     let add = Add {
-        leaf: prep0.tree.used,
+        leaf: prep0.tree().used,
         ua: a32(&dd["ua"]),
         key_id: u(&dd["keyId"]),
         via: ZERO,
@@ -1467,7 +1507,7 @@ fn tree_refusals_beside_twins() {
     );
     // an epoch-0 head's leaf target: its record is the check (no signed tree hash covers the cold tree yet); its bytes alone,
     // or a record whose signature fails, are refused
-    let tree = prep0.tree.clone();
+    let tree = prep0.tree().clone();
     let target = |rd: &mut Home, x: u32, how: u8| match (tree.node(x), how) {
         (Node::Leaf(_), 1) => Ok(TargetKey::Key(key_of(rd, &tree, x)?)),
         (Node::Leaf(l), 2) => Ok(TargetKey::Record(Box::new(flipped(
@@ -1480,11 +1520,7 @@ fn tree_refusals_beside_twins() {
         let r = keys.tree_build_commit(
             SC,
             CommitInput {
-                tree: &prep0.tree,
-                parent_epoch_id: prep0.parent_epoch_id,
-                parent_epoch: 0,
-                parent_tree_hash: prep0.parent_tree_hash,
-                parent_admins: prep0.parent_admins.clone(),
+                parent: &prep0,
                 session_id: a32(&main["genesis"]["sessionId"]),
                 tree_id: a32(&main["genesis"]["treeId"]),
                 author: dev_a.ua,
@@ -1493,7 +1529,7 @@ fn tree_refusals_beside_twins() {
                 kem: ka,
                 removes: vec![],
                 adds: vec![],
-                admins: prep0.parent_admins.clone(),
+                admins: prep0.parent_admins().to_vec(),
                 info: None,
                 key_of: &mut kf,
             },
@@ -1638,9 +1674,7 @@ impl Own {
             .tree_create_genesis(OWN, &session, &kems, INFO_A.as_bytes())
             .unwrap();
         let sig = self.sign(0, "PqChatSession", &g.record);
-        let kems = (0..4)
-            .map(|i| ((self.ua(i), 1), self.kems[i].kem_pk()))
-            .collect();
+        let kems = (0..4).map(|i| ((self.ua(i), 1), self.record(i))).collect();
         let ua_keys = (0..4)
             .map(|i| (self.ua(i), (MLDSA65, self.uas[i].key_data())))
             .collect();
@@ -1665,7 +1699,7 @@ impl Own {
         adds: &[usize],
     ) -> scaas_ua::wallet::Result<(PreparedCommit, Tree)> {
         let prep = tree_prepare(OWN, h, None).unwrap();
-        let tree = prep.tree.clone();
+        let tree = prep.tree().clone();
         let adds: Vec<(Add, KemRecord)> = adds
             .iter()
             .enumerate()
@@ -1685,15 +1719,11 @@ impl Own {
             .unwrap();
         let (sid, tid) = (h.epochs[0].id, h.tree_id);
         let rec = |ua: &[u8; 32], _: u64| self.record_of(ua);
-        let mut kf = |x: u32| target_of(h, &tree, prep.parent_epoch, x, &rec);
+        let mut kf = |x: u32| target_of(h, &tree, prep.parent_epoch(), x, &rec);
         let p = self.keys.tree_prepare_commit(
             OWN,
             CommitInput {
-                tree: &prep.tree,
-                parent_epoch_id: prep.parent_epoch_id,
-                parent_epoch: prep.parent_epoch,
-                parent_tree_hash: prep.parent_tree_hash,
-                parent_admins: prep.parent_admins.clone(),
+                parent: &prep,
                 session_id: sid,
                 tree_id: tid,
                 author: self.ua(i),
@@ -1711,7 +1741,7 @@ impl Own {
                 key_of: &mut kf,
             },
         )?;
-        Ok((p, prep.tree))
+        Ok((p, prep.tree().clone()))
     }
     /// [`Own::prepare`], then `fault` changes the record (and the pieces) and `i` signs it as a signer outside `ua-rs` would;
     /// an unchanged record carries the operation's own signature. Landed.
@@ -1906,6 +1936,22 @@ fn tree_signing_ops() {
         assert_eq!(hx(&m), r["signedDigest"], "{}", r["struct"]);
         assert!(p.review().contains(&line("treeId", &r["record"]["treeId"])));
         assert!(p.review().iter().any(|(n, _)| n == "cannotComeBack"));
+        // F-4 / B2-10: the review says that the exit applies if it lands within the lag of the epoch it names
+        let named = if r["struct"] == "PqChatTreeRemove" {
+            format!("epoch {}", u(&r["record"]["nextEpoch"]) - 1)
+        } else {
+            format!(
+                "the epoch it names ({})",
+                r["record"]["epochId"].as_str().unwrap()
+            )
+        };
+        let want =
+            format!("applies if it lands within 16 epochs of {named}; it cannot be withdrawn");
+        assert!(
+            p.review().contains(&("appliesWithin".to_string(), want)),
+            "{}",
+            r["struct"]
+        );
     }
     // every landed treeRemove and treeLeave of a person: its signature from the named fields, byte for byte (the keyless
     // admins' msig and WebAuthn signatures are verified by every replay of their world)
@@ -1931,7 +1977,8 @@ fn tree_signing_ops() {
             n += 1;
         }
     }
-    assert_eq!((n, keyless), (6, 3));
+    // the keyless admins' exits: M's, W's two, N's (the msig updated on its registry, F-1)
+    assert_eq!((n, keyless), (6, 4));
     // a treeLeave (no row carries its signature): signed by its member, the signature verifies over the row's signedDigest
     let a = &world.people["A"];
     let l = TreeLeave {
@@ -2233,6 +2280,12 @@ impl TreeReader for Lying<'_> {
     fn accepted(&self, ua: &[u8; 32], i: u16) -> bool {
         self.home.accepted(ua, i)
     }
+    fn current(&self, ua: &[u8; 32]) -> Option<(Vec<u8>, [u8; 32])> {
+        self.home.current(ua)
+    }
+    fn registration(&self, ua: &[u8; 32]) -> Option<(scaas_ua::ua_portable::UAAttrs, Vec<u8>)> {
+        self.home.registration(ua)
+    }
 }
 
 /// The pin of every epoch is clientkeys' byte for byte, and the walk from any of them reaches the tree, admins and pin of the
@@ -2258,13 +2311,13 @@ fn tree_lies_and_pins() {
         for p in &pins {
             let q = tree_prepare(SC, &mut h, Some(p)).unwrap();
             assert_eq!(
-                (&q.tree, &q.pin, &q.parent_admins),
-                (&cold.tree, &cold.pin, &cold.parent_admins),
+                (&q.tree(), &q.pin(), &q.parent_admins()),
+                (&cold.tree(), &cold.pin(), &cold.parent_admins()),
                 "{name} from {}",
                 p.epoch
             );
         }
-        let head = cold.pin.clone();
+        let head = cold.pin().clone();
         let above = Pin {
             epoch: head.epoch + 1,
             ..head.clone()
@@ -2320,67 +2373,43 @@ fn tree_builder_bounds() {
     assert!(o.prepare(&mut h, 0, &[0], INFO_A, &[3]).is_ok());
     let prep = tree_prepare(OWN, &mut h, None).unwrap();
     let (sid, tid) = (h.epochs[0].id, h.tree_id);
-    let tree = prep.tree.clone();
+    let tree = prep.tree().clone();
     let rec = |ua: &[u8; 32], _: u64| o.record_of(ua);
-    let build =
-        |h: &mut Home, kem: &KemKeyPair, parent_tree_hash: [u8; 32], admins: Vec<[u8; 32]>| {
-            let mut kf = |x: u32| target_of(h, &tree, 0, x, &rec);
-            o.keys
-                .tree_build_commit(
-                    OWN,
-                    CommitInput {
-                        tree: &prep.tree,
-                        parent_epoch_id: prep.parent_epoch_id,
-                        parent_epoch: 0,
-                        parent_tree_hash,
-                        parent_admins: prep.parent_admins.clone(),
-                        session_id: sid,
-                        tree_id: tid,
-                        author: o.ua(0),
-                        leaf: 0,
-                        key_id: 1,
-                        kem,
-                        removes: vec![],
-                        adds: vec![],
-                        admins,
-                        info: None,
-                        key_of: &mut kf,
-                    },
-                )
-                .map(|_| ())
-        };
-    let admins = prep.parent_admins.clone();
+    let build = |h: &mut Home, kem: &KemKeyPair, admins: Vec<[u8; 32]>| {
+        let mut kf = |x: u32| target_of(h, &tree, 0, x, &rec);
+        o.keys
+            .tree_build_commit(
+                OWN,
+                CommitInput {
+                    parent: &prep,
+                    session_id: sid,
+                    tree_id: tid,
+                    author: o.ua(0),
+                    leaf: 0,
+                    key_id: 1,
+                    kem,
+                    removes: vec![],
+                    adds: vec![],
+                    admins,
+                    info: None,
+                    key_of: &mut kf,
+                },
+            )
+            .map(|_| ())
+    };
+    let admins = prep.parent_admins().to_vec();
+    assert_eq!(code(build(&mut h, &o.kems[0], admins.clone())), "accepted");
+    // a tree the parent's hash does not cover cannot be handed in since B2-9: `CommitInput` takes the walk's `Prepared`
     assert_eq!(
-        code(build(
-            &mut h,
-            &o.kems[0],
-            prep.parent_tree_hash,
-            admins.clone()
-        )),
-        "accepted"
-    );
-    assert_eq!(
-        code(build(&mut h, &o.kems[0], [5; 32], admins.clone())),
-        "PqChatTreeParent"
-    );
-    assert_eq!(
-        code(build(
-            &mut h,
-            &o.kems[1],
-            prep.parent_tree_hash,
-            admins.clone()
-        )),
+        code(build(&mut h, &o.kems[1], admins.clone())),
         "TreeKeyHash"
     );
     let many: Vec<[u8; 32]> = (0..33u8).map(|i| [i; 32]).collect();
-    assert_eq!(
-        code(build(&mut h, &o.kems[0], prep.parent_tree_hash, many)),
-        "PqChatShape"
-    );
+    assert_eq!(code(build(&mut h, &o.kems[0], many)), "PqChatShape");
     // the change and key bounds on the public tree (the contract's PqChatShape)
-    let me = prep.tree.leaf(0).unwrap().clone();
+    let me = prep.tree().leaf(0).unwrap().clone();
     let add = |i: u32, ua: [u8; 32]| Add {
-        leaf: prep.tree.used + i,
+        leaf: prep.tree().used + i,
         ua,
         key_id: 10 + u64::from(i),
         via: ZERO,
@@ -2394,29 +2423,29 @@ fn tree_builder_bounds() {
         adds: (0..n).map(|i| add(i, ua(i))).collect(),
     };
     // the author's own UA: 1 leaf + 7 Adds = KEYS_PER_UA_MAX, one more is refused
-    assert!(prep.tree.filtered_path_after(&ch(7, &|_| me.ua)).is_ok());
+    assert!(prep.tree().filtered_path_after(&ch(7, &|_| me.ua)).is_ok());
     assert_eq!(
-        code(prep.tree.filtered_path_after(&ch(8, &|_| me.ua))),
+        code(prep.tree().filtered_path_after(&ch(8, &|_| me.ua))),
         "PqChatShape"
     );
     // 20 changes of distinct UAs, then 21 (TREE_CHANGES_MAX, owner 2026-11-25)
     let distinct = |i: u32| [i as u8 + 0x80; 32];
-    assert!(prep.tree.filtered_path_after(&ch(20, &distinct)).is_ok());
+    assert!(prep.tree().filtered_path_after(&ch(20, &distinct)).is_ok());
     assert_eq!(
-        code(prep.tree.filtered_path_after(&ch(21, &distinct))),
+        code(prep.tree().filtered_path_after(&ch(21, &distinct))),
         "PqChatShape"
     );
     // a tree's JSON out of bounds (B-5): 2^31 leaves, used above leaves, a node list of another width
-    let mut j = prep.tree.to_json();
-    assert!(Tree::from_json(&j).is_ok());
+    let mut j = prep.tree().to_json();
+    assert!(Tree::vectors_from_json(&j).is_ok());
     j["leaves"] = json!(2_147_483_648u64);
-    assert_eq!(code(Tree::from_json(&j)), "PqChatShape");
-    let mut j = prep.tree.to_json();
-    j["used"] = json!(prep.tree.leaves + 1);
-    assert_eq!(code(Tree::from_json(&j)), "PqChatShape");
-    let mut j = prep.tree.to_json();
+    assert_eq!(code(Tree::vectors_from_json(&j)), "PqChatShape");
+    let mut j = prep.tree().to_json();
+    j["used"] = json!(prep.tree().leaves + 1);
+    assert_eq!(code(Tree::vectors_from_json(&j)), "PqChatShape");
+    let mut j = prep.tree().to_json();
     j["nodes"].as_array_mut().unwrap().push(Value::Null);
-    assert_eq!(code(Tree::from_json(&j)), "PqChatShape");
+    assert_eq!(code(Tree::vectors_from_json(&j)), "PqChatShape");
     // B-8: a tree epoch key is a handle and never wrapped; an epoch key of mode 0 is (the twin)
     let r = o.replay(&mut h, 1);
     let k = r.epochs.last().unwrap().k.as_ref().unwrap();
@@ -2584,4 +2613,135 @@ fn tree_period_bounds() {
         .tree_replay(SC, &mut home, &e, None, 0)
         .unwrap()
         .is_some());
+}
+
+/// C-2, B2-7 (fable-B reproduced it red on 08f68484a): the compromise warning's leaves left come from the walk's head tree;
+/// a served `joinEpoch` moved off the Add changes nothing.
+#[test]
+fn tree_warning_leaves_left_from_the_walk() {
+    let o = Own::new();
+    let mut h = o.home();
+    o.commit(&mut h, 0, &[0], INFO_A, &[3], other_node_keys);
+    let r = o.replay(&mut h, 0);
+    assert_eq!(r.epochs.last().unwrap().state, State::Compromise);
+    assert_eq!(r.warnings[0].leaves_left, vec![3]);
+    fn lie(v: &mut Value) {
+        v[3]["joinEpoch"] = json!(0);
+    }
+    let mut t = Tamper {
+        home: &mut h,
+        read: "treeLeaves()".into(),
+        f: lie,
+    };
+    let r = o
+        .keys
+        .tree_replay(OWN, &mut t, &o.dev(0), None, 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(r.warnings[0].leaves_left, vec![3]);
+}
+
+/// B2-8 (fable-B reproduced it red): a tree epoch key is a handle and never leaves sealed (`seal_key`), as it never leaves
+/// wrapped; its twin, a drawn key, seals.
+#[test]
+fn tree_key_never_sealed() {
+    let o = Own::new();
+    let mut h = o.home();
+    let r = o.replay(&mut h, 1);
+    let k = r.epochs.last().unwrap().k.as_ref().unwrap();
+    let under = o.keys.random_key(KeyUsage::KeyWrap).unwrap();
+    assert_eq!(code(o.keys.seal_key(&under, k, b"")), "Argument");
+    let drawn = o.keys.random_key(KeyUsage::Data).unwrap();
+    assert_eq!(o.keys.seal_key(&under, &drawn, b"").unwrap().len(), 60);
+}
+
+/// E-3, B2-2: a replay resumed from the device's previous one walks from its pin and opens only the epochs after it, with the
+/// same K and info as a full replay; the walk keeps the trees at its start and at the head only (never one per epoch).
+#[test]
+fn tree_replay_resumed_from_the_pin() {
+    let o = Own::new();
+    let mut h = o.home();
+    for n in 1..=4usize {
+        o.commit(&mut h, n % 2, &[0], INFO_A, &[], honest);
+    }
+    let r4 = o.replay(&mut h, 2);
+    o.commit(&mut h, 0, &[0], INFO_A, &[3], honest); // 5: the admin adds D
+    for n in 6..=8usize {
+        o.commit(&mut h, n % 2, &[0], INFO_A, &[], honest);
+    }
+    let full = o.replay(&mut h, 2);
+    h.log.clear();
+    let more = o
+        .keys
+        .tree_resume(OWN, &mut h, &o.dev(2), r4, 0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        more.epochs.iter().map(|e| e.epoch).collect::<Vec<_>>(),
+        vec![5, 6, 7, 8]
+    );
+    let reveal = |k: &Option<scaas_ua::wallet::KeyHandle>| {
+        k.as_ref().map(|k| o.keys.vectors_reveal(k).unwrap())
+    };
+    for e in &more.epochs {
+        let g = full.epochs.iter().find(|x| x.epoch == e.epoch).unwrap();
+        assert_eq!(
+            (e.state, e.in_force.clone(), e.flagged),
+            (g.state, g.in_force.clone(), g.flagged)
+        );
+        assert_eq!(reveal(&e.k), reveal(&g.k), "epoch {}", e.epoch);
+        assert_eq!(more.rosters[&e.epoch], full.rosters[&e.epoch]);
+    }
+    assert_eq!(more.pin, full.pin);
+    let commits: Vec<&String> = h
+        .log
+        .iter()
+        .filter(|x| x.starts_with("commitOf("))
+        .collect();
+    assert_eq!(
+        commits,
+        [
+            "commitOf(4)",
+            "commitOf(5)",
+            "commitOf(6)",
+            "commitOf(7)",
+            "commitOf(8)"
+        ]
+    );
+    assert!(!h
+        .log
+        .iter()
+        .any(|x| x.starts_with("kemKeyAt(") || x.starts_with("wrapAt(0,")));
+    // the rosters of the secret range only
+    assert_eq!(
+        full.rosters.keys().copied().collect::<Vec<_>>(),
+        (0..=8).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        more.rosters.keys().copied().collect::<Vec<_>>(),
+        vec![5, 6, 7, 8]
+    );
+    // the memory: the trees at the start and the head
+    assert_eq!(
+        scaas_ua::wallet::tree::tree_walk_trees(OWN, &mut h, None).unwrap(),
+        vec![0, 8]
+    );
+    let pin4 = full.pin.clone();
+    assert_eq!(
+        scaas_ua::wallet::tree::tree_walk_trees(OWN, &mut h, Some(&pin4)).unwrap(),
+        vec![8]
+    );
+}
+
+/// B-5: a caller's leaf outside the tree has no path, never an overflow of `2 * leaf`.
+#[test]
+fn tree_path_of_a_leaf_outside() {
+    assert_eq!(
+        scaas_ua::wallet::tree::path_from_list(u32::MAX, &[2], 4),
+        None
+    );
+    assert_eq!(scaas_ua::wallet::tree::path_from_list(4, &[2], 4), None);
+    assert!(scaas_ua::wallet::tree::path_from_list(0, &[2], 4).is_some());
+    let t = Tree::cold(&[]).unwrap_or_default();
+    assert!(t.filtered_path(u32::MAX).is_empty());
 }

@@ -283,7 +283,9 @@ impl PqChat {
             if names.is_none() {
                 names = Some(self.ancestors(chain, contract, p).await?);
             }
-            let k = names.as_ref().and_then(|n| n.iter().position(|x| *x == eid));
+            let k = names
+                .as_ref()
+                .and_then(|n| n.iter().position(|x| *x == eid));
             Ok(k.map(|k| p.epoch - k as u64))
         };
         for i in 0..count("IPqChat.leaveCount").await? {
