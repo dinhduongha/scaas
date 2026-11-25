@@ -41,6 +41,20 @@ sdk-gas measure (G-4) | G-4 commit | 0 | generate.py --measure, 65/65 runs (FOUN
 sdk op::gas (G-4) | G-4 commit | 0 | 32 passed
 forge-gas (G-4) | G-4 commit | 0 | 406 passed, 1 skipped
 mutants M42-M73 (A-7 rows, A-6, F-5, D-4, A-9, G-3) | 8daa69910 | 0 | 32/32 killed, each by a behavioural test (the A-7 row's own, the harness's, test_d4_createSessionBounds, test_treeNamespaceIsPinned, test_configureChain_routerNamesThisFactory); 31 also red on the new module size pin, which the runner now leaves out with the release's; row 5 not run (equivalent since A-4)
+matrix: forge, every directory at the default set (gates.sh, tag matrix) | ccd58b7f8 | 0 | account 103; as 568; confidential 5; factory 2; fork 0/1 skipped; gas 406/1; governance 1009; hedera 20; liquidity 93/1; merge 350; metatx 550/1; modules 35; p6f 4; pqchat 260/1; pqvault 99; pqz 694/4; pqzh 42; research 360/7; ua 1044; uagas 29; v2 757; wallet 185; wrap 324; zether 478/4; top 29 (passed/skipped), no failure
+matrix: size, forkcheck, chatstore-cancun, testnet-build, deploy-py, docs, docs-test | ccd58b7f8 | 0 | size gate 0 errors, 184 contracts (OpenFactory 35,047, PqChatTree 32,812 under their lines); the rest green
+matrix: ci-guards (the runner's own form) | ccd58b7f8 | 1 | its `/[t]mp/` grep matches npm's package `tmp` in clients/clientkeys/xcheck/arbundles/package-lock.json (a URL segment, not a path); CI's form (the docs job, URL segments excluded) is clean: no temp path
+matrix: ci-guards (CI's form, gates.sh aligned) | ccd58b7f8 + gates.sh | 0 | the lock file is on origin/ua-rs-sign since 0c45d753a; the runner now greps CI's `(^|[^[:alnum:]_.-])/[t]mp/` (a path, not a URL segment); clean
+matrix: sets sensitive, first run | ccd58b7f8 | 1 | every lane `Failed to find executable forge`: at-set.sh / lanes.sh call forge by name, and the run was started without ~/.foundry/bin on PATH (gates.sh adds it); rerun with it
+matrix: sets sensitive (at-set.sh --clean others sensitive, lanes, the work tree's PqzSet.sol untouched) | ccd58b7f8 | 0 | each of n2048-kmax1024 / n2560-kmax16384 / n2816-kmax65536: pqz 520/3, 516/7, 511/12 (passed/skipped); pqzh 42; as 106; gas 18; governance 238; metatx 185; research 89, 87/2, 80/9; ua 338; v2 37; wrap 24; no failure
+matrix: sets modules, first runs | ccd58b7f8 | 1 | `others modules` waited for 10 GB free (9 available), stopped; then each set alone: legacy_artifacts.py `No module named 'eth'` (a lane copies no pqz-core/nethermind/chain; lanes.sh now copies its eth.py)
+matrix: sets modules (at-set.sh <set> modules, one set at a time) | ccd58b7f8 + lanes.sh | 0 | n2048-kmax1024, n2560-kmax16384, n2816-kmax65536: 35 passed each; the work tree's PqzSet.sol untouched
+matrix: node cargo test, first run | ccd58b7f8 | 101 | 897/1: guard::tests::pqchat_rows_equal_the_contract_both_directions, whose reader of IPqChat.sol did not know A-6's `IPqGroupTree` structs (commit's signature); the reader now takes IPqGroupTree.sol too (a test helper; no row moved)
+matrix: node cargo test | guard.rs fix | 0 | 910 passed, 0 failed, 75 ignored (19 test binaries)
+matrix: node clippy --all-targets -D warnings | guard.rs fix | 0 | clean
+matrix: node e2e --ignored (6 GB, alone; the deploy through DeployBase with OpenFactoryLib) | ccd58b7f8 | 0 | 27 passed
+matrix: docs_check check / facts check / paths / consumer | ccd58b7f8 | 0 | 0 errors, 7 warnings (the budgets, as before); 8852 facts, 0 misses; 0 machine paths; 0 consumer names
+matrix: format.sh --check (every part) | ccd58b7f8 | 0 | rust (20 crates), sol, js, yaml, py, go, cs (2), dart, c, move, tact, sh, toml, actionlint, hadolint all ok
 gas pins (A-8, first) | step 6 | 0 | the last live leaf at the spec's bound, regular with the verify / state: ML-DSA-87 15,588,376 / 31,716,900 (1,188,840 under 2^24; 49.7 M asked), ML-DSA-65 12,637,463 / 29,709,540 (44.5 M)
 gas pins (A-11, first) | step 6 | 0 | module CREATE2, runtime / regular x 64/63 / state / asked: PqChatTree 32,812 / 2,166,743 / 50,385,960 / 55.2 M; PqChatTreeViews 9,640 / 660,455 / 14,932,800 / 16.4 M; PqChatTreeMembers 13,506 / 910,116 / 20,847,780 / 22.8 M (PqChatTopics unchanged)
 
@@ -112,7 +126,8 @@ Steps 0-2 done (above); steps 3-6 done (2a35404af, 0027287a0, d038fa094, 93a0bfc
 mutants M42-M73, both below; then step 7.
 3b. G-4: done in its own commit (rows above).
 5b. Mutants M42-M73: done, 32/32 killed (row above).
-7. The round's matrix once on the final tree: every forge directory at the default set; the set-sensitive tests at the
-   three other sets one set at a time (at-set.sh others sensitive, then others modules); size; layout / typehash /
-   selector pins; forge fmt --check; format.sh --check over all languages; docs_check check and paths; node cargo test,
-   clippy, e2e (6 GB, alone); the grep of scaas-node/ and clients/ for the old exit behaviour.
+7. Done: the matrix rows above (every forge directory at the default set, the three other sets, size, format, docs, node
+   test / clippy / e2e). The grep of scaas-node/ and clients/ for the old exit behaviour (PqChatEpochTaken /
+   PqVaultEpochTaken on an exit, NonceUsed on a replayed exit) finds none: pqchat-core's e2e expects PqChatEpochTaken
+   for a postMessage under a taken epoch, unchanged. Left to the client phase: clients/pqchat-core/runs/gen_abi.py reads
+   IPqChat.sol and will need IPqGroupTree.sol's structs when it next generates the tree ABI.

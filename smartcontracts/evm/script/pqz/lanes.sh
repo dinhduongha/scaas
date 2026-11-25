@@ -3,9 +3,9 @@
 # Fixed lanes for the PQZ per-set runs (TODO 8g (4), ARCH-POS-20); at-set.sh calls this. UNAUDITED tooling.
 #   smartcontracts/evm/script/pqz/lanes.sh [--clean] <set|others> [sensitive|list|modules|forge args ...]
 #   smartcontracts/evm/script/pqz/lanes.sh [--clean] mutants <command ...>
-# A lane is scratchpad/lanes/<set>/ (LANES_DIR overrides): smartcontracts/evm, smartcontracts/vectors and
-# pqz-core/params/sets copied from this work tree by `rsync --delete --copy-links` (real files, no hardlink, no symlink
-# back), its own out/ and cache/ kept (incremental). <set>'s PqzSet.sol is installed in the lane only: the work tree's
+# A lane is scratchpad/lanes/<set>/ (LANES_DIR overrides): smartcontracts/evm, smartcontracts/vectors, pqz-core/params/sets
+# and pqz-core/nethermind/chain/eth.py copied from this work tree by `rsync --delete --copy-links` (real files, no hardlink,
+# no symlink back), its own out/ and cache/ kept (incremental). <set>'s PqzSet.sol is installed in the lane only: the work tree's
 # src/pqz/PqzSet.sol is never written, so several sets run at once from one work tree. One writer per lane: a run on a
 # busy lane is refused (flock on scratchpad/lanes/<set>.lock). --clean wipes the lane's out/ and cache/ first: the
 # round's final matrix and every pre-merge gate use it. forge runs through scripts/capped (directly inside one).
@@ -211,6 +211,9 @@ X=
 rsync -a --delete --copy-links --exclude=/out/ --exclude=/cache/ --exclude=target/ ${X:+"$X"} "$EVM/" "$LE/"
 rsync -a --delete --copy-links "$ROOT/smartcontracts/vectors/" "$L/smartcontracts/vectors/"
 rsync -a --delete --copy-links "$SETS/" "$L/pqz-core/params/sets/"
+# `modules` builds the pre-split side with script/modules/legacy_artifacts.py, which imports the chain tools' keccak
+mkdir -p "$L/pqz-core/nethermind/chain"
+cp -p "$ROOT/pqz-core/nethermind/chain/eth.py" "$L/pqz-core/nethermind/chain/eth.py"
 if [ "$S" != mutants ]; then
     # cp only on a change: an unchanged mtime keeps the lane's cache valid
     cmp -s "$L/pqz-core/params/sets/$S/PqzSet.sol" "$LE/src/pqz/PqzSet.sol" ||

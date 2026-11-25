@@ -5644,7 +5644,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
 
     /// The writes an interface under `smartcontracts/evm/src` declares (`IPqChat.sol`, `IPqVault.sol`, `IPqChatStore.sol`), read
     /// from the source, not copied: every `external` function that is neither `view` nor `pure`, as its canonical signature; its
-    /// structs and `IPqChat.`'s / `IUARegistry.`'s (for `UASig`) resolved from their sources.
+    /// structs and `IPqChat.`'s / `IUARegistry.`'s (for `UASig`) resolved from their sources, `IPqGroupTree`'s with them.
     fn iface_writes(file: &str) -> Vec<String> {
         let src = |f: &str| {
             std::fs::read_to_string(format!(
@@ -5657,13 +5657,23 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .collect::<Vec<_>>()
             .join(" ")
         };
-        let (chat, pc, reg) = (
+        let (chat, pc, reg, tree) = (
             src(file),
             src("pqchat/IPqChat.sol"),
             src("ua/IUARegistry.sol"),
+            src("pqgroup/IPqGroupTree.sol"),
         );
         let mut structs: HashMap<String, Vec<String>> = HashMap::new();
-        for (scope, s) in [("", &chat), ("IPqChat.", &pc), ("IUARegistry.", &reg)] {
+        // `IPqChat` inherits `IPqGroupTree`'s `TreeAdd` / `TreeRemove` (A-6): named bare inside it, `IPqChat.` or
+        // `IPqGroupTree.` outside
+        for (scope, s) in [
+            ("", &tree),
+            ("IPqChat.", &tree),
+            ("IPqGroupTree.", &tree),
+            ("", &chat),
+            ("IPqChat.", &pc),
+            ("IUARegistry.", &reg),
+        ] {
             for part in s.split(" struct ").skip(1) {
                 let (name, body) = part.split_once('{').unwrap();
                 let fields = body

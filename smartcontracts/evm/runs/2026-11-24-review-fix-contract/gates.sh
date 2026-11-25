@@ -133,7 +133,7 @@ step() {
         docs) python3 scripts/docs_check.py check ;;
         docs-test) python3 scripts/test_docs_check.py ;;
         format) PATH="$(git rev-parse --path-format=absolute --git-common-dir)/../scratchpad/tools/bin:$PATH" scripts/format.sh --check ${FORMAT_PARTS:-} ;;
-        ci-guards) ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' ;;
+        ci-guards) ! git grep -nE '(^|[^[:alnum:]_.-])/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' ;; # CI's docs-job form
         *)
             echo "unknown step $1"
             return 2
