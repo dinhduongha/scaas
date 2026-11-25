@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""TODO 3ze (CTR-UA-44, spec section 8): every mutant of `updateMsig` and the current-structure readers alone on a clean tree,
+"""TODO 3ze (CTR-UA-44, spec section 8; anchors repaired 2026-11-26 after the registry split and CTR-UA-74): every mutant of `updateMsig` and the current-structure readers alone on a clean tree,
 `forge test` of test/ua/UARegistryMsigUpdate.t.sol through `scripts/capped`, the file restored byte-equal (sha256 checked) after each.
 One line per mutant: `mutant | red tests | rc` (rc 1 = killed). Resumes: a mutant already in `<runs>/mutants.txt` is skipped. Full
 output in git-ignored `.log` files under `<runs>/mutants/`. The runner is script/wraplimit/mutants.py's.
@@ -16,6 +16,7 @@ REG = "src/ua/UARegistry.sol"
 CORE = "src/ua/UARegistryCoreLib.sol"
 AUX = "src/ua/UARegistryAuxLib.sol"
 STORE = "src/ua/UAStore.sol"
+REGLIB = "src/ua/UARegistryRegLib.sol"
 T = "test/ua/UARegistryMsigUpdate.t.sol"
 D = "test/ua"
 
@@ -86,17 +87,18 @@ M = [
         "if (i >= sn || (en && se >> i & 1 == 0)) u.fresh |= 1 << i;",
         "if (i >= sn) u.fresh |= 1 << i;",
     ),
+    # 2026-11-26: rows 11 to 13 live in UARegistryRegLib (`msigBound`, `_signs`, `_hard`) since the registry split; anchors moved
     (
         "no-row-11",
-        CORE,
-        "        uint256 w = _membersWorst(t, _nativeCap(), true);\n        if (_pqEligible(t, false))",
-        "        uint256 w = 0;\n        if (_pqEligible(t, false))",
+        REGLIB,
+        "(uint256 w, bool vo) = _membersWorst(t, nc, true);",
+        "(uint256 w, bool vo) = (0, false);",
     ),
-    ("bound-counts-disabled", CORE, "return UAStore.enabledOf(d) >> i & 1 != 0\n", "return true\n"),
+    ("bound-counts-disabled", REGLIB, "return UAStore.enabledOf(d) >> i & 1 != 0\n", "return true\n"),
     (
         "bound-follows-inner-msig",
-        CORE,
-        "&& (mode != INNER | LENIENT || UAStore.u16(d, 4 + 36 * i) != UAKinds.MSIG);",
+        REGLIB,
+        "\n            && (mode & (INNER | LENIENT) != INNER | LENIENT || UAStore.u16(d, 4 + 36 * i) != UAKinds.MSIG);",
         ";",
     ),
     (
@@ -107,15 +109,15 @@ M = [
     ),
     (
         "no-stays-pq-eligible",
-        CORE,
-        "        else if (_pqEligible(stored, false)) revert IUARegistry.UAPqzHolder(ua);\n",
+        REGLIB,
+        "        else if (UARegistryCoreLib._pqEligible(stored, false)) revert IUARegistry.UAPqzHolder(ua);\n",
         "",
     ),
     (
         "no-row-13",
-        CORE,
-        "(regular > floor ? regular : floor) + MSIG_UPDATE_GAS + n * MSIG_UPDATE_SLOT_GAS > TX_GAS_CAP",
-        "false",
+        REGLIB,
+        "uint256 wr = MSIG_UPDATE_GAS + n * MSIG_UPDATE_SLOT_GAS;",
+        "uint256 wr = 0;",
     ),
     (
         "registration-reads-msig-keyPtr",
@@ -133,12 +135,12 @@ M = [
         "host-reads-registrationOf",
         AUX,
         "if (kind == UAKinds.MSIG) d = UARegistryCoreLib._msigBytes(ua);",
-        "if (kind == UAKinds.MSIG && !host) d = UARegistryCoreLib._msigBytes(ua);",
+        "if (kind == UAKinds.MSIG && host == address(0)) d = UARegistryCoreLib._msigBytes(ua);",
     ),
     (
         "gen2-msigState-not-forwarded",
         AUX,
-        "if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).msigStateOf(ua);",
+        "if (h != address(0)) return IUARegistry(h).msigStateOf(ua);",
         "",
     ),
     (
@@ -154,20 +156,20 @@ M = [
         'keccak256("scaas.ua.purpose.msig-update.v2")',
     ),
     # Fable review (P2-1, P3-3)
-    ("row-13-without-calldata", CORE, "uint256 regular = w + 16 * a;", "uint256 regular = w;"),
-    ("row-13-without-inner-term", CORE, "w += MSIG_UPDATE_INNER_GAS;", "w;"),
-    ("gen2-msigOf-not-forwarded", REG, "        if (_elsewhere(ua)) return IUARegistry(predecessor).msigOf(ua);\n", ""),
+    ("row-13-without-calldata", REGLIB, "wr += _calldata(ww, a);", "wr += ww;"),
+    ("row-13-without-inner-term", REGLIB, "wr += MSIG_UPDATE_INNER_GAS;", "wr;"),
+    ("gen2-msigOf-not-forwarded", REG, "        if (h != address(0)) return IUARegistry(h).msigOf(ua);\n", ""),
     (
         "gen2-memberAccepted-not-forwarded",
         REG,
-        "        if (_elsewhere(ua)) return IUARegistry(predecessor).memberAccepted(ua, index);\n",
+        "        if (h != address(0)) return IUARegistry(h).memberAccepted(ua, index);\n",
         "",
     ),
     (
         "chain-inner-reads-first-structure",
         REG,
-        "return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.msig(id, _s.records[id].keyPtr), inner);",
-        "return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.keyRest(id), inner);",
+        "bytes memory di = UAStore.msig(id, _s.records[id].keyPtr);",
+        "bytes memory di = UAStore.keyRest(id);",
     ),
     (
         "typehash-field-order",
