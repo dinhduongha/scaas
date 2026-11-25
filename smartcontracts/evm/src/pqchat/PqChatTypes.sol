@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IPqChat} from "./IPqChat.sol";
+import {IPqGroupTree} from "../pqgroup/IPqGroupTree.sol";
 
 /// @title The typed records of `PqChat` (spec §4, topics spec §2): the portable domain `DS_C`, the typehashes, `hashStruct`,
 ///        the ids and the nonce scopes. Pinned against `smartcontracts/vectors/pqchat/` (`*TypehashIsPinned`). **UNAUDITED.**
@@ -189,7 +190,7 @@ library PqChatTypes {
         return keccak256(bytes.concat(a, b));
     }
 
-    function _hashRemoves(IPqChat.TreeRemove[] calldata r) private pure returns (bytes32) {
+    function _hashRemoves(IPqGroupTree.TreeRemove[] calldata r) private pure returns (bytes32) {
         bytes32[] memory h = new bytes32[](r.length);
         for (uint256 i; i < r.length; ++i) {
             h[i] = keccak256(abi.encode(TREE_REMOVE_TYPEHASH, r[i].leaf, r[i].ua, r[i].keyId));
@@ -197,7 +198,7 @@ library PqChatTypes {
         return keccak256(abi.encodePacked(h));
     }
 
-    function _hashAdds(IPqChat.TreeAdd[] calldata a) private pure returns (bytes32) {
+    function _hashAdds(IPqGroupTree.TreeAdd[] calldata a) private pure returns (bytes32) {
         bytes32[] memory h = new bytes32[](a.length);
         for (uint256 i; i < a.length; ++i) {
             h[i] = keccak256(abi.encode(TREE_ADD_TYPEHASH, a[i].leaf, a[i].ua, a[i].keyId, a[i].via, a[i].kemHash));

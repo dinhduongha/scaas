@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IPqChat} from "../pqchat/IPqChat.sol";
+import {IPqGroupTree} from "./IPqGroupTree.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 
@@ -34,6 +34,9 @@ abstract contract PqGroupTree {
     uint8 internal constant T_NOT_ADMIN = 13; // (ua): not a live admin of the head
 
     uint256 internal constant KEM_PK = 1601; // 0x01 ‖ ek (1,568) ‖ pk_X (32)
+    /// @dev The base's own bound on leaf positions, whatever `_treeBounds()` says (review A-6): a direct path is at most 8
+    ///      parents (`_walkPath`'s array of 9) and a path key's offset in its blob fits 16 bits (`keyAt`).
+    uint256 internal constant TREE_LEAVES_LIMIT = 256;
     uint256 internal constant P25519 = 2 ** 255 - 19;
 
     /// @dev A leaf, two slots: `ua`; `keyId`, `joinEpoch`, `wrapIndex` (the wrap that brought it), `live`.
@@ -110,8 +113,8 @@ abstract contract PqGroupTree {
         uint32 leaves; // the tree's size after the commit
         uint64 epoch; // the commit's epoch number
         bytes32[] admins; // the new epoch's, sorted
-        IPqChat.TreeRemove[] removes;
-        IPqChat.TreeAdd[] adds;
+        IPqGroupTree.TreeRemove[] removes;
+        IPqGroupTree.TreeAdd[] adds;
         bytes32[] nodeKeyHashes;
         uint32 ctCount;
         bytes32 treeHash;
@@ -143,7 +146,7 @@ abstract contract PqGroupTree {
     ///      (`bytes32 keyHash, bytes32 left, bytes32 right`): the inheritor's type strings are the tree hash's label.
     function _treeTypehashes() internal pure virtual returns (bytes32 leaf, bytes32 parent);
     /// @dev The most leaf positions and admins a group may have, changes per commit (also leaves owed at a head, C21) and
-    ///      live leaves per UA.
+    ///      live leaves per UA. Leaf positions stop at `TREE_LEAVES_LIMIT` (256) whatever this returns.
     function _treeBounds()
         internal
         pure
@@ -193,7 +196,9 @@ abstract contract PqGroupTree {
     ///      blank, the admin list. Leaves come by `_treeSetLeaf`.
     function _treeOpen(bytes32 gid, bytes32 treeId, uint256 used, bytes32[] calldata admins) internal {
         (uint256 leavesMax, uint256 adminsMax,,) = _treeBounds();
-        if (used == 0 || used > leavesMax || admins.length > adminsMax) _treeFail(T_SHAPE, 0, 0);
+        if (used == 0 || used > leavesMax || used > TREE_LEAVES_LIMIT || admins.length > adminsMax) {
+            _treeFail(T_SHAPE, 0, 0);
+        }
         uint256 leaves = 1;
         while (leaves < used) leaves <<= 1;
         Tree storage t = _tree(gid);
@@ -329,7 +334,7 @@ abstract contract PqGroupTree {
         uint256 used = t.used;
         for (uint256 i; i < d.adds.length; ++i) {
             uint256 l = d.adds[i].leaf;
-            if (l > used || l >= leavesMax) _treeFail(T_LEAF, l, 0);
+            if (l > used || l >= leavesMax || l >= TREE_LEAVES_LIMIT) _treeFail(T_LEAF, l, 0);
             if (l == used) ++used;
         }
         uint256 leaves = t.leaves;
@@ -349,7 +354,7 @@ abstract contract PqGroupTree {
 
     function _walkRemoves(IUARegistry reg, Tree storage t, Delta memory d, Walk memory w) private view {
         for (uint256 i; i < d.removes.length; ++i) {
-            IPqChat.TreeRemove memory r = d.removes[i];
+            IPqGroupTree.TreeRemove memory r = d.removes[i];
             Leaf storage l = t.leafAt[r.leaf];
             if (
                 r.leaf >= t.used || r.leaf == d.leaf || !l.live || l.ua != r.ua || l.keyId != r.keyId
@@ -364,7 +369,7 @@ abstract contract PqGroupTree {
 
     function _walkAdds(IUARegistry reg, Tree storage t, Delta memory d, Walk memory w) private view {
         for (uint256 i; i < d.adds.length; ++i) {
-            IPqChat.TreeAdd memory a = d.adds[i];
+            IPqGroupTree.TreeAdd memory a = d.adds[i];
             uint256 x = 2 * a.leaf;
             if (w.st[x] == 2 || (w.st[x] == 0 && t.leafAt[a.leaf].live)) _treeFail(T_LEAF, a.leaf, 0);
             if (t.gone[a.ua].kind != 0) _treeFail(T_RETURN, uint256(a.ua), 0);
@@ -396,7 +401,7 @@ abstract contract PqGroupTree {
         uint256 owed;
         bool plain = true;
         for (uint256 j; j < d.removes.length; ++j) {
-            IPqChat.TreeRemove memory r = d.removes[j];
+            IPqGroupTree.TreeRemove memory r = d.removes[j];
             bool gone = t.gone[r.ua].kind != 0;
             if (gone) ++owed;
             else if (r.ua != d.author) plain = false;
@@ -542,7 +547,7 @@ abstract contract PqGroupTree {
                 w.th[x] = _thParent(w.kh[x], _thOf(reg, t, w, x - h), _thOf(reg, t, w, x + h));
             }
         }
-        w.root = w.th[w.leaves - 1];
+        w.root = w.leaves == 1 ? _thOf(reg, t, w, 0) : w.th[w.leaves - 1]; // one leaf: its own th (F-5), as `_treeHash`
     }
 
     function _thOf(IUARegistry reg, Tree storage t, Walk memory w, uint256 x) private view returns (bytes32) {
@@ -558,7 +563,7 @@ abstract contract PqGroupTree {
     function _treeApply(bytes32 gid, Delta memory d, Walk memory w, bytes32 head, address keys) internal {
         Tree storage t = _tree(gid);
         for (uint256 i; i < d.removes.length; ++i) {
-            IPqChat.TreeRemove memory r = d.removes[i];
+            IPqGroupTree.TreeRemove memory r = d.removes[i];
             bytes32 k = w.rmKem[i];
             GoneKey memory g = GoneKey(t.leafAt[r.leaf].joinEpoch, d.epoch, true);
             delete t.leafAt[r.leaf];
@@ -572,7 +577,7 @@ abstract contract PqGroupTree {
             }
         }
         for (uint256 i; i < d.adds.length; ++i) {
-            IPqChat.TreeAdd memory a = d.adds[i];
+            IPqGroupTree.TreeAdd memory a = d.adds[i];
             t.leafAt[a.leaf] = Leaf(a.ua, a.keyId, d.epoch, uint32(i), true);
             t.liveKey[a.kemHash] = a.leaf + 1;
             Keys storage ks = t.keysOf[a.ua];

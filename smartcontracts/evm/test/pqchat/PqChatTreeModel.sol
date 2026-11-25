@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
+import {IPqGroupTree} from "../../src/pqgroup/IPqGroupTree.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {stdJson} from "forge-std/StdJson.sol";
@@ -167,12 +168,12 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
         for (uint256 i; i < changes.length; ++i) {
             if (changes[i].add) ++na;
         }
-        (c.removes, c.adds) = (new IPqChat.TreeRemove[](changes.length - na), new IPqChat.TreeAdd[](na));
+        (c.removes, c.adds) = (new IPqGroupTree.TreeRemove[](changes.length - na), new IPqGroupTree.TreeAdd[](na));
         (uint256 ir, uint256 ia) = (0, 0);
         for (uint256 i; i < changes.length; ++i) {
             Ch memory x = changes[i];
             if (!x.add) {
-                c.removes[ir++] = IPqChat.TreeRemove(x.leaf, x.ua, x.keyId);
+                c.removes[ir++] = IPqGroupTree.TreeRemove(x.leaf, x.ua, x.keyId);
                 n.live[x.leaf] = false;
                 _blank(n, 2 * x.leaf);
             }
@@ -181,7 +182,7 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
             Ch memory x = changes[i];
             if (!x.add) continue;
             bytes32 k = _kemHash(x.ua, x.keyId);
-            c.adds[ia++] = IPqChat.TreeAdd(x.leaf, x.ua, x.keyId, bytes32(0), k);
+            c.adds[ia++] = IPqGroupTree.TreeAdd(x.leaf, x.ua, x.keyId, bytes32(0), k);
             if (x.leaf >= n.used) n.used = x.leaf + 1;
             while (n.leaves < n.used) n.leaves <<= 1;
             (n.ua[x.leaf], n.kid[x.leaf], n.kem[x.leaf], n.live[x.leaf]) = (x.ua, x.keyId, k, true);

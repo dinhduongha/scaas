@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IUARegistry} from "../ua/IUARegistry.sol";
+import {IPqGroupTree} from "../pqgroup/IPqGroupTree.sol";
 
 /// @title `PqChat` (UA-7, CTR-CHAT-01): post-quantum chat sessions and public topics, a factory kind (class 3, kind 0, D22).
 /// @notice Spec `docs/superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md` version 2 (P1-P32) and
@@ -10,7 +11,7 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 ///         checked by the registry's `requirePortable`; anyone submits it, no record carries a fee (a payer pays a relayer
 ///         through `RelayFeeRouter`). Each instance has its own state; its owner UA names it and has no power (Q2).
 ///         **UNAUDITED.**
-interface IPqChat {
+interface IPqChat is IPqGroupTree {
     // ------------------------------------------------------------------ session records (spec §4.1)
 
     struct MemberKey {
@@ -155,22 +156,9 @@ interface IPqChat {
         uint32 versionCount;
     }
 
-    /// @notice CTR-CHAT-27 (spec 2026-11-23-pqchat-treekem §6): a key added to a tree session's leaf `leaf`; `via` as in
-    ///         `MemberKey` (not read by the contract); `kemHash = keccak256(kemPk)` of the registry key (C18).
-    struct TreeAdd {
-        uint32 leaf;
-        bytes32 ua;
-        uint64 keyId;
-        bytes32 via;
-        bytes32 kemHash;
-    }
-
-    /// @notice A live leaf a commit blanks, named by its `(ua, keyId)`.
-    struct TreeRemove {
-        uint32 leaf;
-        bytes32 ua;
-        uint64 keyId;
-    }
+    // CTR-CHAT-27 (spec 2026-11-23-pqchat-treekem §6): a tree epoch's changes are `IPqGroupTree.TreeAdd` (a key added to
+    // leaf `leaf`, `via` as in `MemberKey`) and `IPqGroupTree.TreeRemove`, inherited (A-6): the records below name them
+    // `TreeAdd`, `TreeRemove`; outside this interface they are `IPqGroupTree`'s.
 
     /// @notice A tree epoch (§6): `author` commits from its leaf `leaf` with key `keyId`; `leaves` the tree's size after it,
     ///         `admins` the new epoch's sorted list; `wrapHashes[i]` the Welcome wrap of `adds[i]`; `nodeKeyHashes[k]` the

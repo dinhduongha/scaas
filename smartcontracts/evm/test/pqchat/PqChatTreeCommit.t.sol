@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {stdJson} from "forge-std/StdJson.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
+import {IPqGroupTree} from "../../src/pqgroup/IPqGroupTree.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChatBase} from "./PqChatBase.sol";
@@ -237,15 +238,15 @@ abstract contract PqChatTreeWorld is PqChatBase {
         c.keyId = uint64(_j().readUint(string.concat(r, ".keyId")));
         c.leaves = uint32(_j().readUint(string.concat(r, ".leaves")));
         c.admins = _j().readBytes32Array(string.concat(r, ".admins"));
-        c.removes = new IPqChat.TreeRemove[](_len(string.concat(r, ".removes")));
+        c.removes = new IPqGroupTree.TreeRemove[](_len(string.concat(r, ".removes")));
         for (uint256 i; i < c.removes.length; ++i) {
             string memory k = _ix(string.concat(r, ".removes"), i);
-            c.removes[i] = IPqChat.TreeRemove(uint32(_u(k, ".leaf")), _b32(k, ".ua"), uint64(_u(k, ".keyId")));
+            c.removes[i] = IPqGroupTree.TreeRemove(uint32(_u(k, ".leaf")), _b32(k, ".ua"), uint64(_u(k, ".keyId")));
         }
-        c.adds = new IPqChat.TreeAdd[](_len(string.concat(r, ".adds")));
+        c.adds = new IPqGroupTree.TreeAdd[](_len(string.concat(r, ".adds")));
         for (uint256 i; i < c.adds.length; ++i) {
             string memory k = _ix(string.concat(r, ".adds"), i);
-            c.adds[i] = IPqChat.TreeAdd(
+            c.adds[i] = IPqGroupTree.TreeAdd(
                 uint32(_u(k, ".leaf")), _b32(k, ".ua"), uint64(_u(k, ".keyId")), _b32(k, ".via"), _b32(k, ".kemHash")
             );
         }

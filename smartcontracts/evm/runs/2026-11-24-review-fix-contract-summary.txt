@@ -33,6 +33,9 @@ forge-v2 (G-3) | step 3 tree | 0 | 757 passed (+1: test_configureChain_routerNam
 forge-factory (G-3) | step 3 tree | 0 | 2 passed
 forge-merge (G-3) | step 3 tree | 0 | 350 passed
 forge-pqz (G-3) | step 3 tree | 0 | 694 passed, 4 skipped
+size (A-6, F-5) | step 4 tree | 0 after the row | PqChatTree 32,758 -> 32,812 (+54: the 256-position limit, the one-leaf root)
+forge-pqchat (steps 4-6 tree) | step 4-6 tree | 0 | 260 passed, 1 skipped (first run: the moved struct name in two test helpers; the new pins)
+forge-pqvault (steps 4-6 tree) | step 4-6 tree | 0 | 99 passed (+1: test_e3_removedAtTheHeadWritesNothing)
 
 ## Done (committed)
 - G-1: index before the initializer (red: "mid-creation: indexed, the env registry: ...07 != ...08").
@@ -72,6 +75,13 @@ forge-pqz (G-3) | step 3 tree | 0 | 694 passed, 4 skipped
   test's state diff skips forge's own CREATE2 of the linked library (isolate). G-5: CTR-GOV-33's cost line, the
   inventory table (PqChat's four body modules) and CTR-GOV-32's tag. Test: test_configureChain_routerNamesThisFactory
   (0, another factory, no answer, the control). G-4 (the SDK rows) follows in its own commit.
+
+- Step 4 (A-6, F-5): `TreeAdd` / `TreeRemove` in the neutral src/pqgroup/IPqGroupTree.sol, which IPqChat inherits (no
+  type string or ABI moves; code outside the interface names them `IPqGroupTree.*`); the base's TREE_LEAVES_LIMIT = 256
+  whatever `_treeBounds()` says (`_treeOpen` T_SHAPE above it, an Add at 256 or above T_LEAF); a one-leaf tree's
+  commit root is its leaf's th (mutant M68 restores the old root 0). Harness test/pqchat/PqGroupTreeBase.t.sol
+  (bounds of 512). D-4's contract tests are in step 5's file (test_d4_createSessionBounds: 257 keys, 33 admins,
+  4,125 B refused; 256, 32, 4,124 B created).
 
 ## Left, in order
 0. Done (ccf6c43db). On resume: rerun the G-1 gates (governance, factory, v2, gas), the size gate and the SDK's
