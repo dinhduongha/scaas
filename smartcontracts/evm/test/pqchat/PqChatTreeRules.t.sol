@@ -93,7 +93,7 @@ contract PqChatTreeRulesTest is PqChatTreeModel {
         (st,) = _build(m, leaf, _noCh(), _list(A));
     }
 
-    /// A zero-target commit: its list hash the empty list's (codex-r2-14); `ctCount` at `leaves` refused (C24).
+    /// A zero-target commit: its list hash the empty list's (codex-r2-14); `ctCount` at `leaves` is `test_a7_ctCountAtLeavesRefused`'s.
     function test_zeroTargetCommit() public {
         _open(); // the vectors in this call\'s memory
         IPqChat.MemberKey[] memory mk = new IPqChat.MemberKey[](2);

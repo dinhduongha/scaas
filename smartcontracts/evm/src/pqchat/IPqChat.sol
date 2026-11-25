@@ -37,9 +37,10 @@ interface IPqChat is IPqGroupTree {
         MemberKey[] members;
         bytes32[] wrapHashes;
         bytes sealedInfo;
-        /// @notice CTR-CHAT-25 (owner 2026-11-23): the group protocol, 0 flat wraps (1 TreeKEM in a later release); fixed at
-        ///         creation (no epoch record names it); last, so every other field keeps its place; 0 only here
-        ///         (`PqChatModeUnsupported`)
+        /// @notice CTR-CHAT-25 (owner 2026-11-23): the group protocol, 0 flat wraps, 1 TreeKEM (CTR-CHAT-26, in `PqChatTree`);
+        ///         2 and 3 reserved for off-chain modes (owner 2026-11-25), refused like any other value
+        ///         (`PqChatModeUnsupported`); fixed at creation (no epoch record names it); last, so every other field keeps its
+        ///         place
         uint8 groupMode;
     }
 
@@ -349,10 +350,12 @@ interface IPqChat is IPqGroupTree {
     function rekey(PqChatEpoch calldata e, Wrap[] calldata wraps, IUARegistry.UASig calldata sig)
         external
         returns (bytes32 epochId);
-    /// @notice Anyone, no signature: `wraps[j]` must hash to `wrapHashes[first + j]` (P11).
+    /// @notice Anyone, no signature: `wraps[j]` must hash to `wrapHashes[first + j]` (P11); at least one (A-15).
     function addWraps(bytes32 epochId, uint32 first, Wrap[] calldata wraps) external;
     function leave(PqChatLeave calldata l, IUARegistry.UASig calldata sig) external;
-    /// @notice P48: an admin of `r.epochId` removes `r.members` from it; any child completes only without them.
+    /// @notice P48, C9 (E-3, E-2): an admin removes `r.members`; at home `r.epochId` is the head or a complete ancestor
+    ///         within `EXIT_LAG_MAX`, the admin and the UAs in its lists and in the head's, applied at the head, whose child
+    ///         then completes only without them; in a replica it flags the epoch named.
     function remove(PqChatRemove calldata r, IUARegistry.UASig calldata sig) external;
     /// @notice CTR-CHAT-27 (spec §6, §8): a tree epoch; the list and `nodeKeys` each whole or absent, `cts` and `wraps` a
     ///         first chunk or none, `cts` only with the list. Completes in this call when it carries every piece.
@@ -371,9 +374,11 @@ interface IPqChat is IPqGroupTree {
     function addPathKeys(bytes32 epochId, bytes[] calldata nodeKeys) external;
     /// @notice A staged commit's ciphertexts `firstCt..`, each against its hash in the landed list.
     function addPath(bytes32 epochId, uint32 firstCt, PathCt[] calldata cts) external;
-    /// @notice C9, C21, C28: the leaver names the head; it is `gone` and its live leaves are owed by the next commit.
+    /// @notice C9, C21, C28: the leaver names the head or a complete ancestor within `EXIT_LAG_MAX`, applied at the head; it is
+    ///         `gone` and its live leaves are owed by the next commit.
     function treeLeave(PqChatTreeLeave calldata l, IUARegistry.UASig calldata sig) external;
-    /// @notice C9, C21, C24, C28: an admin of the head removes UAs; they are `gone` and their leaves owed.
+    /// @notice C9, C21, C24, C28: an admin of the head removes UAs, naming the head or a complete ancestor within
+    ///         `EXIT_LAG_MAX`; they are `gone` from the head and their leaves owed.
     function treeRemove(PqChatTreeRemove calldata r, IUARegistry.UASig calldata sig) external;
     function postMessage(PqChatMessage calldata m, IUARegistry.UASig calldata sig) external returns (uint256 index);
     /// @notice Anyone, no signature, membership or nonce (P29): `v == 1` and the blob fits; appends `abi.encode(v, hint,
