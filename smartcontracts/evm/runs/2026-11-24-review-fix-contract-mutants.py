@@ -45,7 +45,8 @@ ENV = dict(
 # A-14 of the re-review (2026-11-25): no gas or size row kills a mutant. The contracts named `*Gas*`, and elsewhere the gas
 # rows (`test_gas_*`, `test_gasA_` to `test_gasP_` style rows, `test_gasPerEntry`, `test_gasCalldata`, `test_gasBatch*`, the
 # `*_gas` rows) and the size pin `test_sizes`; behavioural tests whose names hold "gas" (`test_gasBurning*`, `*Gasless*`) stay.
-NO_GAS = r"^test_gas_|^test_gas[A-Z]_|^test_gasPerEntry$|^test_gasCalldata$|^test_gasBatch|_gas$|^test_sizes$"
+# forge matches the pattern against `name(` (a `$` after the name matches nothing): each row ends at the parenthesis
+NO_GAS = r"^test_gas_|^test_gas[A-Z]_|^test_gas\(|^test_gasPerEntry\(|^test_gasCalldata\(|^test_gasBatch|_gas\(|^test_sizes\("
 FORGE = ([CAPPED, "forge", "test", "-j", "1", "--no-match-contract", "Gas", "--no-match-test", NO_GAS], E)
 M = [
     # the split

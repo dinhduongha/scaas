@@ -592,4 +592,33 @@ contract PqChatTreeGuardsTest is PqChatTreeModel {
         vchat.addWraps(eid, 0, st.wraps); // the control
         assertTrue(vchat.epochComplete(eid));
     }
+
+    /// R8 at depth 9, outside the gas contracts (the re-review's runner leaves those out; mutant M74, the walk's path buffer
+    /// one short of depth 9, was killed by `PqChatTreeGasTest` alone): a session of 260 keys (65 UAs x 4, so 512 leaf
+    /// positions, depth 9) whose first member's plain commit walks a direct path of 9 parents; it lands, its stored root the
+    /// model's.
+    function test_r8_commitAtDepth9() public {
+        _open(); // the vectors in this call's memory
+        bytes32[] memory u = new bytes32[](65);
+        for (uint256 i; i < 65; ++i) {
+            u[i] = _member(uint8(10 + i));
+            for (uint64 v = 1; v <= 4; ++v) {
+                _setKem(u[i], v, _variant("A", uint256(u[i]) + v));
+            }
+        }
+        for (uint256 i = 1; i < 65; ++i) {
+            for (uint256 j = i; j > 0 && u[j - 1] > u[j]; --j) {
+                (u[j - 1], u[j]) = (u[j], u[j - 1]);
+            }
+        }
+        IPqChat.MemberKey[] memory mk = new IPqChat.MemberKey[](260);
+        for (uint256 i; i < 260; ++i) {
+            mk[i] = _mk(u[i / 4], uint64(i % 4 + 1));
+        }
+        M memory m = _open(mk, _list(u[0]));
+        assertEq(m.leaves, 512, "depth 9");
+        (Step memory st, M memory n) = _build(m, 0, _noCh(), _list(u[0]));
+        assertEq(st.nodeKeys.length, 9, "a direct path of 9 parents");
+        _land(st, n, m);
+    }
 }
