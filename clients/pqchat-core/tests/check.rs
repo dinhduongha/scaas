@@ -437,3 +437,47 @@ async fn posted_message_from_a_listed_instance() {
     );
     assert_eq!(w.net.reads_of("IPqChat.messageAt"), 2);
 }
+
+/// E-1 (P1, fable re-review 2026-11-25) and D2-8: "plain" is the contract's `_keeps` (PqGroupBase.sol): the child is the
+/// parent's lists less some of the UAs flagged there, left or removed; a flagged UA may be dropped or kept (a removed one is
+/// then refused as kept); nothing added. Each case beside its twin, one change at a time.
+#[tokio::test(flavor = "multi_thread")]
+async fn plain_is_the_contracts_keeps() {
+    let _one = ONE.lock().await;
+    let w = world().await;
+    let p = session(&w.alice, &[&w.alice, &w.bob, &w.carol]);
+    let all = p.members.clone();
+    let without_carol: Vec<_> = all.iter().filter(|m| m.ua != w.carol.ua).cloned().collect();
+    let carol = std::slice::from_ref(&w.carol.ua);
+    // (a) bob (no admin) keeps carol who left: plain at home (`PqChatEpochs.t.sol`'s control of the leaver rule)
+    let keeps = child_of(&p, &w.bob.ua, all.clone(), p.admins.clone());
+    assert_eq!(check::child(&keeps, &p, carol, &[]), Ok(()));
+    // bob drops carol who left: plain
+    let drops = child_of(&p, &w.bob.ua, without_carol.clone(), p.admins.clone());
+    assert_eq!(check::child(&drops, &p, carol, &[]), Ok(()));
+    // (b) bob drops carol who was removed: plain (CTR-CHAT-20); twin: carol not flagged, a membership change by a non-admin
+    assert_eq!(check::child(&drops, &p, &[], carol), Ok(()));
+    assert_eq!(check::child(&drops, &p, &[], &[]), Err(DropReason::Control));
+    // a removed carol kept: refused (`_noneRemoved`)
+    assert_eq!(check::child(&keeps, &p, &[], carol), Err(DropReason::Control));
+    // a UA added is no plain rekey, even with carol flagged
+    let mut more = p.clone();
+    more.members.retain(|m| m.ua != w.carol.ua);
+    let add = child_of(&more, &w.bob.ua, all.clone(), more.admins.clone());
+    assert_eq!(check::child(&add, &more, &[], &[]), Err(DropReason::Control));
+    // an admin who left (or was removed) is no live admin: its membership change is refused; twin: the live admin's
+    let change = child_of(&p, &w.alice.ua, without_carol.clone(), p.admins.clone());
+    assert_eq!(check::child(&change, &p, &[], &[]), Ok(()));
+    let alice = std::slice::from_ref(&w.alice.ua);
+    assert_eq!(check::child(&change, &p, alice, &[]), Err(DropReason::Control));
+    // a dropped admin that left: plain for a member
+    let mut two = p.clone();
+    two.admins = {
+        let mut a = vec![w.alice.ua.clone(), w.bob.ua.clone()];
+        a.sort();
+        a
+    };
+    let drop_alice_admin = child_of(&two, &w.carol.ua, all.clone(), vec![w.bob.ua.clone()]);
+    assert_eq!(check::child(&drop_alice_admin, &two, alice, &[]), Ok(()));
+    assert_eq!(check::child(&drop_alice_admin, &two, &[], &[]), Err(DropReason::Control));
+}

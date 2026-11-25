@@ -337,6 +337,28 @@ async fn removed_member_dropped_and_authors_nothing() {
     );
 }
 
+/// E-1 / D2-8 (the builder): dropping a removed member is a plain rekey (CTR-CHAT-20), so a member who is no admin rekeys after
+/// a removal; twin: dropping carol unflagged is a membership change (`NotAdmin`).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_non_admin_drops_a_removed_member() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let o = opened(&w, &[&w.alice, &w.bob, &w.carol]).await;
+    child(&w.net, HOME, &o.e.id, ZERO32);
+    let two = [&w.alice, &w.bob];
+    let e =
+        w.pq.rekey(&sref(&o), &open(&w, &o), rk(&w, &w.bob, 2, &two, &[&w.alice]))
+            .await;
+    assert_eq!(code(e), "NotAdmin");
+    flag(&w, &o, "IPqChat.removedIn", &w.carol);
+    let all = [&w.alice, &w.bob, &w.carol];
+    let b =
+        w.pq.rekey(&sref(&o), &open(&w, &o), rk(&w, &w.bob, 3, &all, &[&w.alice]))
+            .await
+            .unwrap();
+    assert_eq!(uas(&b.epoch), sorted(&two));
+}
+
 /// A member who left authors no plain rekey (`NotMember`); the others' plain rekey drops them.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_member_who_left_authors_nothing() {

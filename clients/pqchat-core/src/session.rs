@@ -484,7 +484,8 @@ impl PqChat {
 
     /// A new epoch of `s` after the open `parent` (S2): `epoch = parent + 1`, a fresh `K`, the members expanded and wrapped
     /// at their highest versions, those who left or were removed dropped. A plain rekey (the parent's members and admins
-    /// minus those who left) by a member of the parent; anything else by an admin of it (`NotAdmin`). The author must not
+    /// less UAs that left or were removed, [`crate::check::plain`]) by a member of the parent; anything else by an admin of it
+    /// (`NotAdmin`). The author must not
     /// have left nor been removed (`NotMember`); the home's slot must be free (`EpochTaken`: rebuild on the winner,
     /// [`PqChat::child_of`]).
     pub async fn rekey(
@@ -524,13 +525,10 @@ impl PqChat {
         if w.keys.is_empty() {
             return Err(PqChatError::MembersInvalid);
         }
-        let kept = |u: &&String| !left.contains(u);
-        let plain = w
-            .keys
-            .iter()
-            .map(|m| &m.ua)
-            .eq(crate::check::distinct(p).into_iter().filter(kept))
-            && admins.iter().eq(p.admins.iter().filter(kept));
+        // E-1: plain as the contract's `_keeps` (the flagged UAs dropped here, left or removed)
+        let mut uas: Vec<&String> = w.keys.iter().map(|m| &m.ua).collect();
+        uas.dedup();
+        let plain = crate::check::plain(&uas, &admins, p, &left, &removed);
         if plain && !p.has_member(&ua) {
             return Err(PqChatError::NotMember);
         }
