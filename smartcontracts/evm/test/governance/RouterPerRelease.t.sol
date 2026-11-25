@@ -1171,6 +1171,25 @@ contract RouterG1Test is RegistryLineFixture {
         return bytes.concat(_slice(cd, 0, 4 + 256), abi.encode(t), _slice(cd, 4 + 288, cd.length));
     }
 
+    /// G-7 (the re-review of 2026-11-25; CTR-GOV-33 Replay): a keyed cancel naming an address with no code (a target not
+    /// created yet) is `TargetHasNoCode`, before anything moves, so one signature cannot run in the router's own map now and
+    /// again in the keyed map once the factory creates the target. The control: the same signer's cancel after the creation
+    /// runs once, in generation 2's map, and the router's own map is untouched.
+    function test_g7_cancelForACodeLessTargetRefused() public {
+        address p = f.predictAddress(nid(address(this)), 1, 0, "a");
+        assertEq(p.code.length, 0);
+        bytes memory cd = _cancelFor(_envFor(pq, p, 1), p, 0);
+        vm.expectRevert(abi.encodeWithSelector(GovernanceRouterBase.TargetHasNoCode.selector, p));
+        _run(cd);
+        assertEq(router.mtxNonce(pq, 0), 0, "own map: nothing cancelled");
+        assertEq(router.mtxNonce(pq, 1), 0, "own map: the cancel's nonce unspent");
+        address t2 = _ftoken(GEN2, pq, "a");
+        assertEq(t2, p, "the predicted address");
+        _run(_cancelFor(_envFor(pq, t2, 1), t2, 0)); // the control
+        assertEq(router.mtxNonceFor(t2, pq, 0), 1, "keyed map: lane 0 cancelled once");
+        assertEq(router.mtxNonce(pq, 0), 0, "own map: untouched");
+    }
+
     /// The twin of the next test: a gen-2 holder's op, signed at its keyed nonce and held back, lands later when nothing cancels it.
     function test_cancelFor_twin_heldOpLands() public {
         address t2 = _ftoken(GEN2, pq65, "a");
@@ -1280,7 +1299,8 @@ contract RouterG1Test is RegistryLineFixture {
     }
 
     /// Controller call (2026-11-24): where the router checks an op on its own map (a native id on any target; a derived id on a
-    /// target of the router's own registry, the factory itself, an address with no code), `mtxCancelNonceFor` is `mtxCancelNonce`:
+    /// target of the router's own registry, the factory itself, a contract the factory did not create), `mtxCancelNonceFor` is
+    /// `mtxCancelNonce`:
     /// the cancel's nonce and `lane` in the one map, `UANonceCancelled`; no keyed map moves.
     function test_cancelFor_nativeAndOwnRegistry_asMtxCancelNonce() public {
         address t2 = _ftoken(GEN2, eoa, "a");
@@ -1289,7 +1309,9 @@ contract RouterG1Test is RegistryLineFixture {
         _run(_cancelFor(_envFor(eoa, t2, 0), t2, 0));
         assertEq(router.mtxNonce(eoa, 0), 2, "a native id: the one map");
         assertEq(router.mtxNonceFor(t2, eoa, 0), 2);
-        address[3] memory on = [_ftoken(PREG, pq, "b"), address(f), BOB];
+        // G-7 (the re-review of 2026-11-25): an address with no code is refused (`test_g7_cancelForACodeLessTargetRefused`);
+        // the router itself stands for a target with code outside the factory's index
+        address[3] memory on = [_ftoken(PREG, pq, "b"), address(f), address(router)];
         for (uint256 i; i < 3; ++i) {
             bytes memory cd = _cancelFor(_envFor(pq, on[i], 0), on[i], 5);
             vm.expectEmit(address(router));
@@ -1368,7 +1390,9 @@ contract RouterG1Test is RegistryLineFixture {
             )
         );
         string[4] memory n = ["keyed, gen2 env, pq65", "own, gen1 env, pq", "own, native", "mtxCancelNonce, pq"];
-        uint256[4] memory pin = [uint256(94_086), 92_199, 72_445, 88_894];
+        // G-7 (the re-review of 2026-11-25: `TargetHasNoCode` at the head, the target's code read first): 94,086 -> 94,326,
+        // 92,199 -> 92,439, 72,445 -> 75,585 (a native signer's target was not read before: its cold account), 88,894 unchanged
+        uint256[4] memory pin = [uint256(94_326), 92_439, 75_585, 88_894];
         for (uint256 i; i < 4; ++i) {
             emit log_named_uint(n[i], g[i]);
         }

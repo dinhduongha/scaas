@@ -305,7 +305,8 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     bytes32 private constant _NONCE_STORAGE = 0x3b7181b4a1cb09fc268151c43768a834fdadbe3ebbd3b129e4bbaea7d311e100;
 
     /// @notice The chain's `OpenFactory` (0 = none: every target gets the router's own registry). Deployed before the
-    ///         router; `configureChain`'s code-hash pin covers this immutable.
+    ///         router; `configureChain`'s code-hash pin covers this immutable, and since G-3 `configureChain` also reads
+    ///         `factory()` and refuses a router that names another factory (`OpenFactoryLib.checkRouter`).
     address private immutable _FACTORY;
 
     constructor(
@@ -538,12 +539,16 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     ///         names; the router calls nothing. Where that is the router's own map (a native id, or a target of the router's
     ///         registry) it does what `mtxCancelNonce` does (`UANonceCancelled`); else the cancel's own nonce is spent and `lane`
     ///         bumped by one in `(registryFor(target), from)`'s map (`_preAt`, `UANonceCancelledAt`). Fee mode `NONE`, as every op.
+    ///         A target with no code is `TargetHasNoCode`, as for an op (G-7 of the re-review, 2026-11-25): a cancel signed for
+    ///         an address the factory has not created yet would run in the router's own map now and again in the keyed map once
+    ///         the factory creates it there.
     function mtxCancelNonceFor(
         MetaTxLib.UAEnvelope calldata e,
         address target,
         uint256 lane,
         IUARegistry.UASig calldata auth
     ) external {
+        if (target.code.length == 0) revert TargetHasNoCode(target);
         bool outer = _enter();
         (MtxPipelineLib.Out memory o, address r) = _pre(
             GovernanceRouterTypes.UA_CANCEL_NONCE_FOR,

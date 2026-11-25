@@ -182,11 +182,12 @@ contract SdkGasRouterTest is SdkGasRouterFix {
         _both("gov_router", "mtxCancelNonceFor", "router", address(router), _sgFrom(), _cancelFor);
     }
 
+    /// The target is the router itself (G-7 of the re-review, 2026-11-25: a target with no code is `TargetHasNoCode`; was
+    /// `SG_PAYEE`, an address with no code): a contract outside the factory's index, so the router's own map, as before.
     function _cancelFor(address c, uint256 nonce) internal view returns (bytes memory) {
         uint256 lane = SG_LANE + 1;
-        bytes32 d = _sgNamed(
-            c, "UACancelNonceFor(bytes32 from,address target,uint256 lane,", abi.encode(SG_PAYEE, lane), nonce
-        );
-        return abi.encodeCall(GovernanceRouterBase.mtxCancelNonceFor, (_sgE(nonce), SG_PAYEE, lane, _sgUaSig(d)));
+        bytes32 d =
+            _sgNamed(c, "UACancelNonceFor(bytes32 from,address target,uint256 lane,", abi.encode(c, lane), nonce);
+        return abi.encodeCall(GovernanceRouterBase.mtxCancelNonceFor, (_sgE(nonce), c, lane, _sgUaSig(d)));
     }
 }

@@ -1003,6 +1003,10 @@ every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `t
   SDK `admin_ua_cancel_nonce_for` ([CLI-SDK-18](../clients/scaas-sdk.md#CLI-SDK-18)).
 - **Replay.** One router, one EIP-712 domain. The signature names `target`, and `target` fixes the registry for the
   target's whole life, its creation transaction included (above), so a signature spent in one map is valid in no other.
+  The keyed cancel `mtxCancelNonceFor` names a target that has code, as every op (`TargetHasNoCode`; Change 2026-11-25,
+  G-7 of the Fable re-review, controller call, BUILT on branch `review-fix2-contract`): a cancel signed for an address
+  the factory has not created yet would otherwise run in the router's own map now and in the keyed map once the target
+  exists (`test_g7_cancelForACodeLessTargetRefused`).
 - **Deploy order.** The factory, then the router naming it (`GovernanceRouter(chainUid, registry, smartKeyAccountImpl,
   hedera, factory)`; `factory()` reads it back), then `configureChain`, whose code-hash pin covers the immutable. A router
   with factory 0 gives every target its own registry. **`configureChain` refuses a router whose `factory()` is not this
@@ -1013,10 +1017,14 @@ every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `t
   UNAUDITED); the deploy script's check stays as a second line. Every test fixture builds its router naming its factory.
 - **Cost** (`test_g1_gas`, `mtxMint`): a derived signer on a factory-made target of another generation pays the code copy and
   one `infoOf` call, +809 gas against the same op on a router of that generation; on a target of the router's own generation
-  the code copy only, +482; a native signer +0 against a router of the same build with no factory (`test_g1_gas`).
+  the code copy only, +482; a native signer +0 against a router of the same build with no factory (`test_g1_gas`). The
+  SDK table's derived (`ua_extra`) rows are measured on targets of the router's own generation (+482), so a target of
+  another generation adds 327 more (G-12 of the re-review of 2026-11-25; `inputs.json`'s `gov_router` assumption).
   Against the router before G1 every op pays for the larger router: a native `mtxMint` +377 (`plus_zero_gas.json`
-  105,145 → 105,522, commit `e421dde78`), `mtxCancelNonce` +12. The keyed cancel (`test_cancelFor_gas`): 94,086 gas on a gen-2 target,
-  92,199 on the router's own map (a gen-1 holder), against 88,894 for `mtxCancelNonce`.
+  105,145 → 105,522, commit `e421dde78`), `mtxCancelNonce` +12. The keyed cancel (`test_cancelFor_gas`): 94,326 gas on a gen-2 target,
+  92,439 on the router's own map (a gen-1 holder), 75,585 by a native signer, against 88,894 for `mtxCancelNonce`; a
+  target with no code is `TargetHasNoCode` (Change 2026-11-25, G-7 of the re-review: was 94,086 / 92,199 / 72,445 before
+  the check).
 
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `initArgs`.
 
