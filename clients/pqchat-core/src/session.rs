@@ -716,7 +716,8 @@ impl PqChat {
         best.ok_or(refused.unwrap_or(PqChatError::Internal))
     }
 
-    /// An admin's `remove` of `members` from `e` before its next epoch (P48, S3): signed, prepared.
+    /// An admin's `remove` of `members` from `e` before its next epoch (P48, S3): signed, prepared. `e` is the head or an ancestor
+    /// within 16 epochs (the contract applies it at the head, C9); a UA already out at `e` is `NotMember`.
     pub async fn remove(
         &self,
         s: &SessionRef,
@@ -734,6 +735,12 @@ impl PqChat {
         let m = sorted(members, None)?;
         if m.is_empty() || m.iter().any(|u| !(e.has_member(u) || e.admins.contains(u))) {
             return Err(PqChatError::MembersInvalid);
+        }
+        // a UA already out at `e` is the contract's PqChatNotMember (A-4: a repeat newly flags nobody)
+        let left = self.flags(s, e, "IPqChat.leftIn").await?;
+        let removed = self.flags(s, e, "IPqChat.removedIn").await?;
+        if m.iter().any(|u| left.contains(u) || removed.contains(u)) {
+            return Err(PqChatError::NotMember);
         }
         let r = PqChatRemove {
             session_id: s.session_id.clone(),
@@ -756,7 +763,7 @@ impl PqChat {
             .await
     }
 
-    /// The account's `leave` of `e` (CTR-CHAT-10, S3): signed, prepared.
+    /// The account's `leave` of `e` (CTR-CHAT-10, S3): signed, prepared, applied at the head (C9); a repeat is `NotMember`.
     pub async fn leave(
         &self,
         s: &SessionRef,
@@ -768,6 +775,12 @@ impl PqChat {
         seed_of(&me.key)?;
         let ua = me.ua.to_ascii_lowercase();
         if !e.has_member(&ua) {
+            return Err(PqChatError::NotMember);
+        }
+        // a repeated leave, or one after a removal, is the contract's PqChatNotMember (A-4)
+        let left = self.flags(s, e, "IPqChat.leftIn").await?;
+        let removed = self.flags(s, e, "IPqChat.removedIn").await?;
+        if left.contains(&ua) || removed.contains(&ua) {
             return Err(PqChatError::NotMember);
         }
         let l = PqChatLeave {

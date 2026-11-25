@@ -10,6 +10,11 @@ import { PqChatError, TYPE_STRINGS, DS_C, PURPOSE_PQCHAT, structHash, checkKemPk
 
 /** `used ≤ TREE_LEAVES_MAX` (owner, R-ruling of 2026-11-23). */
 export const TREE_LEAVES_MAX = 256;
+/** The contract's other bounds of a commit (C10, C24; `PqGroupBase`, `PqGroupTree._treeBounds`): Adds plus Removes, the admin
+ *  list, the live leaves of one UA after the commit (D-5). */
+export const TREE_CHANGES_MAX = 32;
+export const TREE_ADMINS_MAX = 32;
+export const KEYS_PER_UA_MAX = 8;
 /** 0x-hex, lower case, of bytes or of a hex string. */
 const hex = (v) => (typeof v === "string" ? v.toLowerCase() : hexOf(v));
 const ZERO = hex(new Uint8Array(32));
@@ -49,6 +54,7 @@ export const sibling = (x, n) => {
 };
 /** The ancestors of `x` up to the root, the root included. */
 export const directPath = (x, n) => {
+  if (!(Number.isInteger(x) && x >= 0 && x < nodeWidth(n))) refuse("PqChatShape");
   const out = [];
   for (let r = root(n); x !== r; ) out.push((x = parent(x, n)));
   return out;
@@ -225,6 +231,7 @@ const grow = (t) => {
 
 /** The Removes and Adds of a commit, with the refusals of §8; the tree after them, its path not yet set. */
 function applyChanges(tree, { author, leaf, keyId, removes = [], adds = [] }) {
+  if (removes.length + adds.length > TREE_CHANGES_MAX) refuse("PqChatShape");
   const t = clone(tree);
   const me = t.nodes[2 * leaf];
   if (leaf >= t.leaves || !me || me.ua !== hex(author) || me.keyId !== Number(keyId)) refuse("PqChatTreeLeaf");
@@ -257,6 +264,7 @@ function applyChanges(tree, { author, leaf, keyId, removes = [], adds = [] }) {
   for (const n of out) if (t.goneUa.has(n.ua)) t.goneKey.add(n.kemHash);
   for (const n of out) if (!t.goneUa.has(n.ua)) pairOut(t, n.ua, n.kemHash);
   if (live(t).some((n) => t.goneUa.has(n.ua))) refuse("PqChatRemovedKept");
+  if (adds.some((a) => live(t).filter((n) => n.ua === hex(a.ua)).length > KEYS_PER_UA_MAX)) refuse("PqChatShape");
   for (const a of adds) {
     if (t.goneKey.has(hex(a.kemHash))) refuse("PqChatTreeKeyReturn");
     if (t.goneOwnKey.get(hex(a.ua))?.has(hex(a.kemHash))) refuse("PqChatTreeOwnKeyReturn");
@@ -281,6 +289,28 @@ export function applyCommit(tree, c) {
   p.forEach((q, k) => (t.nodes[q.node] = { keyHash: hex(c.nodeKeyHashes[k]) }));
   rehashPaths(t, touched);
   return { tree: t, ctTargets: p.flatMap((q) => q.targets), treeHash: t.hash[root(t.leaves)] };
+}
+
+/** The admin list and the rights of a commit (§8, §9; `PqGroupTree._walkJudge`, `_keepsAdmins`) on the tree before it (`tree`, its
+ *  `goneUa` the UAs gone at the head) and after it (`after`, `applyCommit`'s): `admins` strictly sorted, at most
+ *  `TREE_ADMINS_MAX` (`PqChatShape`), none of them gone or left with no leaf by the commit (`PqChatRemovedKept`); a list other
+ *  than the head's less those UAs keeps one admin with a live leaf (`PqChatTreeAdmins`); and the commit is plain (it keeps the
+ *  admins in that sense, adds only its author's UA, removes only its author's leaves or a gone UA's) or its author is in the
+ *  head's `admins` (`PqChatNotAdmin`, C8). Dropping a gone admin is plain (F-2, E-2). */
+export function judgeCommit(tree, after, c, headAdmins) {
+  const admins = c.admins.map(hex);
+  const head = headAdmins.map(hex);
+  if (admins.length > TREE_ADMINS_MAX || admins.some((x, i) => i > 0 && x <= admins[i - 1])) refuse("PqChatShape");
+  const out = (ua) => after.goneUa.has(ua);
+  if (admins.some(out)) refuse("PqChatRemovedKept");
+  const keeps = JSON.stringify(admins) === JSON.stringify(head.filter((x) => !out(x)));
+  if (!keeps && !admins.some((x) => live(after).some((n) => n.ua === x))) refuse("PqChatTreeAdmins");
+  const author = hex(c.author);
+  const plain =
+    keeps &&
+    c.adds.every((x) => hex(x.ua) === author) &&
+    c.removes.every((x) => hex(x.ua) === author || tree.goneUa.has(hex(x.ua)));
+  if (!plain && !head.includes(author)) refuse("PqChatNotAdmin");
 }
 
 // ------------------------------------------------------------------ records (§6), treeId and genesisCtx (§5)

@@ -3,11 +3,12 @@
 // node keys, ps[0] over its context, the path ciphertext, the schedule without init, K, the tree wrap, the info and the marker,
 // creation in order, replay, the joiner, healing, the compromise warning, the checkpoint, the info in force, and the refusals
 // each with its positive twin; the rows of smartcontracts/vectors/pqchat/tree-secrets.json. UNAUDITED.
-import { test } from "node:test";
+import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
+import { gcmsiv } from "@noble/ciphers/aes.js";
 import * as f from "../scripts/treekem-fixture.mjs";
 import * as tk from "../src/treekem.js";
 import * as tr from "../src/pqchat-tree.js";
@@ -26,17 +27,20 @@ const kAt = (r, n) => r.epochs.find((e) => e.epoch === n)?.K;
 const at = (r, n) => r.epochs.find((e) => e.epoch === n);
 const rnd = f.rnd;
 
-// the worlds, built once
-const MAIN = f.mainScenario();
-const JOINER = f.joinerScenario();
-const HEAL = f.healScenario();
-const GAP = f.gapScenario(false);
-const GAP_CONTROL = f.gapScenario(true);
-const RETIRED = f.retiredScenario();
-const EMPTY = f.emptyPathScenario(null);
-const EMPTY_FOREIGN = f.emptyPathScenario("H");
-const ADMIN_GAP = f.adminGapScenario();
-const BEHIND = f.behindScenario();
+// the worlds, built once before the tests (inside the runner, so a fault while building fails named tests; C-6)
+let MAIN, JOINER, HEAL, GAP, GAP_CONTROL, RETIRED, EMPTY, EMPTY_FOREIGN, ADMIN_GAP, BEHIND;
+before(() => {
+  MAIN = f.mainScenario();
+  JOINER = f.joinerScenario();
+  HEAL = f.healScenario();
+  GAP = f.gapScenario(false);
+  GAP_CONTROL = f.gapScenario(true);
+  RETIRED = f.retiredScenario();
+  EMPTY = f.emptyPathScenario(null);
+  EMPTY_FOREIGN = f.emptyPathScenario("H");
+  ADMIN_GAP = f.adminGapScenario();
+  BEHIND = f.behindScenario();
+});
 
 // ------------------------------------------------------------------ derivations by hand
 
@@ -226,6 +230,17 @@ test("the info: a full info, the marker 'unchanged' (284 B), at most 4,124 B at 
   refused("TreeInfoSize", () => f.commit(w, "A", { info: fill(4093) }));
 });
 
+test("C-8: an info that is not canonical JSON does not open, so the info in force is re-sealed byte for byte; its canonical twin opens", () => {
+  const K = rnd("t/c8/K");
+  const [sid, eid] = [hex(rnd("t/c8/sid")), hex(rnd("t/c8/eid"))];
+  const n = rnd("t/c8/nonce", 12);
+  const raw = (text) => hex(concatBytes(n, gcmsiv(sc.infoKey(K, sid, eid), n).encrypt(pc.pad(utf8ToBytes(text)))));
+  assert.deepEqual(tk.openTreeInfo(sc, K, sid, eid, raw('{"a":1,"b":2}')), { json: '{"a":1,"b":2}' });
+  assert.equal(tk.openTreeInfo(sc, K, sid, eid, raw('{"b":2,"a":1}')), null);
+  assert.equal(tk.openTreeInfo(sc, K, sid, eid, raw('{"a": 1}')), null);
+  assert.equal(tk.openTreeInfo(sc, K, sid, eid, raw("not json")), null);
+});
+
 test("a tree wrap opens under no flat processing, a flat wrap under no tree processing (fable-13)", () => {
   const A = f.deviceOf("A");
   const g = MAIN.genesis;
@@ -293,7 +308,7 @@ test("creation in order (codex-r2-4): genesisCtx, K_0, the wraps and sealedInfo,
   }
 });
 
-test("the main scenario: every member with a leaf derives the same K at every epoch; the rosters by undo equal the leaves; a non-zero via is bound", () => {
+test("the main scenario: every member with a leaf derives the same K at every epoch; the rosters of the forward walk equal the leaves; a non-zero via is bound", () => {
   const head = MAIN.home.epochs.length - 1;
   const Ks = MAIN.steps.filter((s) => s.built).map((s) => hex(s.built.K));
   const replays = Object.fromEntries(["A", "B", "C", "C2", "D"].map((n) => [n, f.replayOf(MAIN, n)]));
@@ -302,8 +317,7 @@ test("the main scenario: every member with a leaf derives the same K at every ep
       assert.equal(e.state, "followed", `${n} ${e.epoch}`);
       assert.equal(e.K, e.epoch === 0 ? hex(MAIN.genesis.K) : Ks[e.epoch - 1], `${n} ${e.epoch}`);
     }
-    for (let e = Math.max(0, r.joinEpoch - 1); e <= head; e++)
-      assert.deepEqual(r.rosters[e], MAIN.rosters[e], `${n}'s roster at ${e}`);
+    for (let e = 0; e <= head; e++) assert.deepEqual(r.rosters[e], MAIN.rosters[e], `${n}'s roster at ${e}`);
   }
   // the periods: B gone (removed at 5), C2 taken out of a UA that stays (6): the pair
   assert.deepEqual([replays.B.joinEpoch, replays.B.endEpoch], [0, 5]);
@@ -314,8 +328,13 @@ test("the main scenario: every member with a leaf derives the same K at every ep
       `goneOwnKeyOf(${f.deviceOf("C2").ua},${hex(keccak_256(fromHex(f.deviceOf("C2").kemPk)))})`,
     ),
   );
-  // C's commit 5 drops B (gone) without admin right: the evidence, B's PqChatTreeRemove, was read and verified
-  assert.ok(replays.D.reads.includes(`goneRecord(${f.deviceOf("B").ua})`));
+  // C's commit 5 drops B (gone) without admin right: the evidence, B's PqChatTreeRemove kept under 4, was read and verified,
+  // and every device, D (a commit joiner) included, reads every record and the exits of every epoch from the session record
+  for (const r of Object.values(replays)) {
+    assert.ok(r.reads.includes("removalAt(4,0)"));
+    for (let e = 1; e <= head; e++)
+      assert.ok(r.reads.includes(`commitOf(${e})`) && r.reads.includes(`leaveCount(${e})`));
+  }
   // the via of D's Add is non-zero and bound (no tree digest canonicalises a field)
   const add = MAIN.steps[1].built.record.adds[0];
   assert.notEqual(add.via, Z32);
@@ -726,8 +745,8 @@ test("the retired key (codex-r3-1): D joins at 2 and goes at 5, the head is 9: r
   );
 });
 
-test("the reads are fixed by public data (C22): a member that follows every epoch and one that follows none read the same list", () => {
-  const good = f.replayOf(BEHIND, "C");
+test("the reads are fixed by public data (C22): one device that follows every epoch and the same device that follows none read the same list", () => {
+  // BEHIND: C2 misses 1 and 2 (validly signed bad ciphertexts); its control: the same session with honest commits
   const w = f.createSession({
     tag: "behind",
     creator: "A",
@@ -736,18 +755,18 @@ test("the reads are fixed by public data (C22): a member that follows every epoc
     members: ["A", "B", "C", "C2"],
     info: f.INFO.I1,
   });
-  for (const s of BEHIND.steps) tk.landCommit(w.home, s.built, s.sig);
-  // C2 misses 1 and 2, C follows all: same shape of reads (their own ciphertext indices aside)
-  const shape = (r) => r.reads.map((x) => x.replace(/,\d+\)$/, ",j)").replace(/\(0x[0-9a-f]+/, "(ua"));
-  assert.deepEqual(
-    shape(f.replayOf(w, "C2")).filter((x) => !x.startsWith("pathCtAt")).length,
-    shape(good).filter((x) => !x.startsWith("pathCtAt")).length,
-  );
-  assert.equal(
-    f.replayOf(w, "C2").reads.filter((x) => x.startsWith("pathCtAt")).length,
-    2,
-    "one ciphertext per commit of another, followed or not",
-  );
+  f.commit(w, "A");
+  f.commit(w, "B");
+  f.commit(w, "C2");
+  const bad = f.replayOf(BEHIND, "C2");
+  const good = f.replayOf(w, "C2");
+  assert.deepEqual(states(bad).slice(1, 3), [
+    [1, "not followed", "opening failed"],
+    [2, "not followed", "opening failed"],
+  ]);
+  assert.ok(good.epochs.every((e) => e.state === "followed"));
+  assert.deepEqual(bad.reads, good.reads);
+  assert.equal(bad.reads.filter((x) => x.startsWith("pathCtAt")).length, 2, "one ciphertext per commit of another");
 });
 
 // ------------------------------------------------------------------ refusals, each with its twin
@@ -784,8 +803,12 @@ test("before a client encrypts (codex-r2-1, codex-1, codex-13): an epoch-0 head 
   const swapLeaf = (read, v) => (read.startsWith(`kemKeyAt(${f.deviceOf("C").ua}`) ? f.deviceOf("C3").kemPk : v);
   refused("TreeGenesisLeaves", () => tk.prepareCommit(sc, tk.reader(w.home, swapLeaf)));
   f.commit(w, "A");
-  // a valid substituted leaf key with the tree unchanged (codex-1): the key against the kemHash that entered the root
-  refused("TreeKeyHash", () => tk.prepareCommit(sc, tk.reader(w.home, swapLeaf)).keyOf(4));
+  // the same key served for the cold tree above epoch 0: epoch 1's signed parentTreeHash does not hold, a lying read
+  refused("TreeReadCorrupted", () => tk.prepareCommit(sc, tk.reader(w.home, swapLeaf)));
+  // a valid substituted leaf key with the tree unchanged (codex-1), the walk from the pin: the key against the kemHash that
+  // entered the root
+  const pin = tk.prepareCommit(sc, tk.reader(w.home)).pin;
+  refused("TreeKeyHash", () => tk.prepareCommit(sc, tk.reader(w.home, swapLeaf), pin).keyOf(4));
   assert.equal(tk.prepareCommit(sc, tk.reader(w.home)).keyOf(4), f.deviceOf("C").kemPk);
   const node = tk.prepareCommit(sc, tk.reader(w.home)).tree.nodes.findIndex((n, x) => x % 2 === 1 && n);
   const swapNode = (read, v) => (read === `treeNodeKey(${node})` ? f.deviceOf("H").kemPk : v);
@@ -921,37 +944,139 @@ test("PqChatTreeLeave and PqChatTreeRemove of a twin session at another home hav
   }
 });
 
-test("rights (§9): a non-admin's commit that drops another UA needs that UA's signed leave or removal; without it, it is not followed", () => {
+test("rights (§9, C25): a non-admin's commit that drops another UA needs that UA's signed exit; without it, or with its signature changed, the commit cannot be the home's: a lying read", () => {
   const replays = ["A", "C", "D"].map((n) => at(f.replayOf(MAIN, n), 5));
   for (const e of replays) assert.equal(e.state, "followed");
-  const noEvidence = (read, v) => (read.startsWith("goneRecord(") ? { ...v, sig: v.sig.slice(0, -2) + "00" } : v);
+  const noEvidence = (read, v) => (read === "removalAt(4,0)" ? { ...v, sig: v.sig.slice(0, -2) + "00" } : v);
   assert.throws(
     () => f.replayOf(MAIN, "D", noEvidence),
-    (e) => e.code === "TreeReadCorrupted" && e.read.startsWith("goneRecord("),
+    (e) => e.code === "TreeReadCorrupted" && e.read === "removalAt(4,0)",
   );
+  const hidden = (read, v) => (read === "removalCount(4)" ? 0 : v);
+  assert.throws(
+    () => f.replayOf(MAIN, "D", hidden),
+    (e) => e.code === "TreeReadCorrupted" && e.read === "commitOf(5)",
+  );
+  // goneOf is compared with nothing the walk decides: an endpoint that lies about it changes nothing
   const notGone = (read, v) => (read.startsWith("goneOf(") ? { kind: 0, epoch: 0 } : v);
-  assert.deepEqual(
-    states(f.replayOf(MAIN, "D", notGone)).find((x) => x[0] === 5),
-    [5, "not followed", "rights"],
-  );
+  assert.deepEqual(states(f.replayOf(MAIN, "D", notGone)), states(f.replayOf(MAIN, "D")));
 });
 
-test("the key's period (C28, codex-r2-10): a wrong join or end from an endpoint is refused; a non-admin's Add of another UA is not followed (rights)", () => {
+test("the key's period (C28, codex-r2-10): a wrong join or end from an endpoint is refused; a non-admin's Add of another UA is a lying read (C25)", () => {
   const D = f.deviceOf("D");
   const kh = hex(keccak_256(fromHex(D.kemPk)));
   const period = (join, end) => (read, v) =>
     read === `goneKeyOf(${kh})` ? { ...v, joinEpoch: join, endEpoch: end } : v;
   refused("TreePeriod", () => f.replayOf(RETIRED, "D", period(3, 5)));
   refused("TreePeriod", () => f.replayOf(RETIRED, "D", period(2, 6)));
+  refused("TreePeriod", () => f.replayOf(RETIRED, "D", period(2, 0)));
+  refused("TreePeriod", () => f.replayOf(RETIRED, "D", period(2, 99)));
   assert.deepEqual(f.replayOf(RETIRED, "D", period(2, 5)).epochs.length, 3, "the twin: the true period");
+  const joinPast = (read, v) =>
+    read === "treeLeaves()" ? v.map((l, i) => (i === 3 ? { ...l, joinEpoch: 99 } : l)) : v;
+  refused("TreePeriod", () => f.replayOf(RETIRED, "E", joinPast));
   const mk = (tag) =>
     f.createSession({ tag, creator: "A", nonce: 71, admins: ["A"], members: ["A", "B", "C"], info: f.INFO.I1 });
   const w = mk("t/rights");
   f.commit(w, "B", { adds: [["D", 3]] });
-  for (const n of ["A", "C", "D"]) assert.deepEqual(states(f.replayOf(w, n)).at(-1), [1, "not followed", "rights"], n);
+  for (const n of ["A", "C", "D"]) refused("TreeReadCorrupted", () => f.replayOf(w, n));
+  refused("TreeReadCorrupted", () => tk.prepareCommit(sc, tk.reader(w.home)));
   const v = mk("t/rights-twin");
   f.commit(v, "A", { adds: [["D", 3]] });
   for (const n of ["B", "C", "D"]) assert.equal(at(f.replayOf(v, n), 1).state, "followed", n);
+});
+
+test("the exits (C9, F-2, F-3, sc-F-1, sc-F-2): an msig's removal naming an ancestor, a WebAuthn admin's removal of a keyless admin and of itself, a removal and its signer's leave on one head, each honoured by a non-admin: every device follows every epoch", () => {
+  const w = f.exitsScenario();
+  for (const n of ["A", "B", "C", "D", "E"]) {
+    const r = f.replayOf(w, n);
+    assert.ok(r.epochs.length > 0 && r.epochs.every((e) => e.state === "followed"), n);
+  }
+  const r = f.replayOf(w, "B");
+  // M's removal of D names epoch 0 and is kept under 2; W's of M under 3; W's of itself, A's of E and A's leave under 4
+  assert.deepEqual(
+    r.pin.gone,
+    [
+      [f.uaOf("A"), 1, 4],
+      [f.uaOf("D"), 2, 2],
+      [f.uaOf("E"), 2, 4],
+      [f.uaOf("M"), 2, 3],
+      [f.uaOf("W"), 2, 4],
+    ].sort((x, y) => (x[0] < y[0] ? -1 : 1)),
+  );
+  // the twins: W's WebAuthn signature changed, one member's signature of M's msig changed: each a lying read
+  // (the assertion's r: the third word of abi.encode(authData, clientDataJSON, r, s))
+  const flipAt = (h, i) => h.slice(0, i) + (h[i] === "0" ? "1" : "0") + h.slice(i + 1);
+  const sigFlip = (read, v) => (read === "removalAt(3,0)" ? { ...v, sig: flipAt(v.sig, 2 + 64 * 2 + 10) } : v);
+  refused("TreeReadCorrupted", () => f.replayOf(w, "B", sigFlip));
+  const msigFlip = (read, v) =>
+    read === "removalAt(2,0)"
+      ? { ...v, sig: { ...v.sig, members: flipAt(v.sig.members, v.sig.members.length - 300) } }
+      : v;
+  refused("TreeReadCorrupted", () => f.replayOf(w, "B", msigFlip));
+});
+
+test("C-2: a validly signed ciphertext or Welcome with a small-order x25519Eph is 'opening failed' / 'welcome disagrees', never an abort", () => {
+  const w = f.smallOrderScenario();
+  assert.deepEqual(at(f.replayOf(w, "A"), 1).reason, "opening failed");
+  assert.deepEqual(states(f.replayOf(w, "D")), [[2, "not followed", "welcome disagrees"]]);
+  assert.equal(at(f.replayOf(w, "C"), 1).state, "followed");
+});
+
+test("the lies of plan T11 (E-1, F-1, sc-F-3, sc-F-7, E-4, the lag): replay and prepare give the row's result", () => {
+  const worlds = new Map([
+    ["small", f.smallScenario("small")],
+    ["pin-exit", f.smallScenario("pin-exit", true)],
+    ["returned", f.returnedScenario()],
+    ["lag", f.lagScenario()],
+    ["empty-path", f.emptyPathScenario(null)],
+  ]);
+  const code = (fn) => {
+    try {
+      fn();
+      return null;
+    } catch (e) {
+      return e.code;
+    }
+  };
+  const rows = f.lies(worlds);
+  assert.ok(rows.length >= 13);
+  for (const r of rows) {
+    const w = worlds.get(r.world);
+    const d = f.deviceOf(r.device);
+    assert.equal(
+      code(() => tk.replay(sc, f.lyingReader(w, r.overrides), d, r.pin)),
+      r.expect.replay,
+      r.name,
+    );
+    assert.equal(
+      code(() => tk.prepareCommit(sc, f.lyingReader(w, r.overrides), r.pin)),
+      r.expect.prepare,
+      r.name,
+    );
+    // the honest views: accepted, and with the device's own pin too
+    const honest = tk.replay(sc, tk.reader(w.home), d);
+    assert.ok(honest.inSession, r.name);
+    tk.prepareCommit(sc, tk.reader(w.home), honest.pin);
+  }
+});
+
+test("the forward walk from any checkpoint reaches the tree of the walk from the cold tree (C25, C26); a pin of another session or above the head is refused", () => {
+  for (const w of [MAIN, RETIRED, HEAL, f.exitsScenario()]) {
+    const cold = tk.prepareCommit(sc, tk.reader(w.home));
+    const pins = tk.pinsOf(sc, tk.reader(w.home));
+    assert.equal(pins.length, w.home.epochs.length);
+    for (const pin of pins) {
+      const p = tk.prepareCommit(sc, tk.reader(w.home), pin);
+      assert.deepEqual(tr.treeJson(p.tree), tr.treeJson(cold.tree), `${w.tag} from ${pin.epoch}`);
+      assert.deepEqual(p.pin, cold.pin);
+      assert.deepEqual(p.admins, cold.admins);
+    }
+    const head = pins.at(-1);
+    refused("TreeCheckpoint", () => tk.prepareCommit(sc, tk.reader(w.home), { ...head, epoch: head.epoch + 1 }));
+    refused("TreeCheckpoint", () => tk.prepareCommit(sc, tk.reader(w.home), { ...head, treeId: Z32 }));
+    refused("TreeConflict", () => tk.prepareCommit(sc, tk.reader(w.home), { ...head, hash: Z32 }));
+  }
 });
 
 test("receipts (R11): a tree session sends none automatically, whatever the store list says; mode 0 keeps its default", () => {
@@ -1001,7 +1126,7 @@ test("tree-secrets.json scenario rows: every step's record, pieces and tree hash
       },
       sig: sRow.genesis.sig,
       kems: new Map(Object.values(V.devices).map((d) => [`${d.ua}/${d.keyId}`, d.kemPk])),
-      uaKeys: new Map(Object.values(V.people).map((p) => [p.ua, p.publicKey])),
+      uaRecords: new Map(V.signers.map((r) => [r.ua, { kind: r.kind, keyData: r.keyData }])),
     });
     for (const step of sRow.steps) {
       if (step.gone) tk.landGone(h, step.gone.kind, step.gone.struct, step.gone.record, step.gone.sig);
@@ -1026,6 +1151,9 @@ test("tree-secrets.json scenario rows: every step's record, pieces and tree hash
         want.K,
         `${sRow.name} ${name}`,
       );
+      assert.deepEqual(r.reads, want.reads, `${sRow.name} ${name}`);
+      assert.deepEqual(r.pin, want.pin, `${sRow.name} ${name}`);
     }
+    assert.deepEqual(tk.pinsOf(sc, tk.reader(h)), sRow.pins, sRow.name);
   }
 });

@@ -235,8 +235,19 @@ async fn leaves_and_removals_count_by_their_signatures() {
         w.pq.left_and_removed(CHAIN, HOME, &e).await.unwrap_err(),
         DropReason::Signature
     );
-    // a leave of another epoch served under this one: not counted
+    // a leave of an epoch that is neither this one nor an ancestor of it, served under this one: not counted
     let mut other = r["leave"]["record"].clone();
+    other["epochId"] = json!(format!("0x{}", "ab".repeat(32)));
+    w.net.answer(
+        HOME,
+        "IPqChat.leaveAt",
+        i0.clone(),
+        json!({"l": other, "sigHash": r["leave"]["sigHash"]}),
+    );
+    let (left, _) = w.pq.left_and_removed(CHAIN, HOME, &e).await.unwrap();
+    assert!(left.is_empty());
+    // a leave naming an ancestor (the session's epoch 0) is kept under the head it was applied at (C9, Change 2026-11-24):
+    // it is a candidate, so its signature is checked (here the record changed under it: refused)
     other["epochId"] = json!(sid);
     w.net.answer(
         HOME,
@@ -244,8 +255,10 @@ async fn leaves_and_removals_count_by_their_signatures() {
         i0,
         json!({"l": other, "sigHash": r["leave"]["sigHash"]}),
     );
-    let (left, _) = w.pq.left_and_removed(CHAIN, HOME, &e).await.unwrap();
-    assert!(left.is_empty());
+    assert_eq!(
+        w.pq.left_and_removed(CHAIN, HOME, &e).await.unwrap_err(),
+        DropReason::Signature
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

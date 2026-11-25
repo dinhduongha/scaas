@@ -402,6 +402,19 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
 
 ### T5. SDK: thin calls (`clients/scaas-sdk`)
 
+- [ ] **The creation in one transaction (owner 2026-11-25: "khi init session TreeKEM: tối đa 16 thành viên + 16 wraps …
+      số thành viên bằng số wraps"):** the SDK's tree-session creation sends the session record **with all its wraps in the
+      same transaction**, one wrap per member key (`wraps.length == members.length`, the contract's rule), so the session is
+      complete at once and no `addWraps` follows. The number of member keys is capped by the planner, per chain: the largest
+      `k` with `record(k) + k × wrap` within the chain's block limit read by RPC (EIP-8037: regular + state) and regular under
+      2^24, with a margin, from the per-chain gas rows of the release data (no figure in code), confirmed by
+      `eth_estimateGas` before signing. About 16 on a 60 M block (spec §13: 15 typical wraps fit with margin, 16 ask 60.0 M
+      with none, fewer where wraps open subtrees: the planner sums the actual wraps). More members come afterwards by commits
+      of at most `TREE_CHANGES_MAX` Adds, each with its Welcome wrap ("create small, add over time" is how users act, the
+      creator pays the creation; owner 2026-11-25). A list over the cap is refused by name with the figures; a multi-
+      transaction creation through `addWraps` is a later, explicit option, not the default. The contract keeps accepting
+      larger records (up to about 192 keys) and `addWraps`: this is an SDK rule, not a contract rule.
+
 - [ ] Named ABI rows for `commit`, `addPathList`, `addPathKeys`, `addPath`, `treeLeave`, `treeRemove` and the views; the `app_core` calls that pass
       `ua-rs`'s tree handles and the signing operation through; the registry read that returns the KEM key **with** its kept
       signature and the registration (codex-1); chunk planning from the chain's limits as for wraps, **per operation (codex-r2-9):** the
@@ -422,6 +435,9 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
       drops the signature again.
 
 ### T6a. `pqchat-core`: the public tree and building a commit (`clients/pqchat-core`)
+
+- [ ] **The creation default of T5 (owner 2026-11-25):** a tree session is created with the creator and a few members and
+      grown by commits of at most 32 Adds with their Welcome wraps; a test creates a large group that way and replays it.
 
 - [ ] The mode branch at "obtain `K`"; state, consent and pins keyed by `treeId` (C16); the home's setting from pinned data or a
       majority read (C27); the tree from `treeOf`, `treeLeaves`, `treeNodes`, `treeNodeKey` under the read rules (ARCH-POS-15);
@@ -504,7 +520,11 @@ read the rows below. Every test has its positive control; every new check its mu
       own leave ran first; the control with a new UA lands.
 - [ ] **C39:** the two Add orders of A-1's scenario both accepted; the leaf-mark mutant (`st != 1`) red.
 - [ ] **C40:** an empty `addPath` is `PqChatShape`, a one-ciphertext one lands; at the node, the empty one refused.
-- [ ] **C25 / C26 (vectors, both readers; T1b, T2, T6b):** the walk from the cold tree and from a pin give the same tree
+- [x] **C25 / C26 (vectors, both readers; T1b, T2, T6b):** BUILT in clientkeys and `ua-rs` on `review-fix-client`
+      (2026-11-25; `tree-secrets.json` worlds `exits`, `small-order`, `small`, `pin-exit`, `returned`, `lag`, its `pins` and its
+      28 `lies`; T6b's part waits for `pqchat-core`). A keyless admin, an `msig` or WebAuthn UA, holds no leaf and so signs
+      a `treeRemove` only, never a commit; a removal and its signer's leave on one head are one state whatever their order
+      (two lists). The walk from the cold tree and from a pin give the same tree
       and roster at every epoch of the scenario rows; E-1's reproducers as rows (a head signed by a UA with no leaf; a leaf
       planted in a blank position): each "read corrupted", no pin moves, `prepare` refuses; a non-admin's commit that
       drops a `gone` admin followed, one that drops a live admin a lying read; a commit and a `treeRemove` signed by an

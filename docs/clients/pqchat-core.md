@@ -271,7 +271,8 @@ commits since its Welcome; every tree secret stays in `ua-rs`; a committer's pat
 that cannot follow an epoch shows it and sends nothing by itself** (owner 2026-11-23: our own TreeKEM in `ua-rs` after RFC
 9420's algorithms, no MLS library; seed-derived committer secrets, no self-wrap; spec
 [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md), revision 3, §5, §8, §10, §11, §15; the contract
-side is [CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **SPECIFIED**, nothing built, UNAUDITED. The bullets below
+side is [CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **SPECIFIED** for the crate (plan T6a, T6b), UNAUDITED;
+its `ua-rs` side (the tree secrets, the forward walk, replay, the signing operations; plan T2, T11) is **BUILT**, UNAUDITED. The bullets below
 other than the owner's rulings are controller calls, the owner may override. **Owner rulings of 2026-11-23 on the second
 review:** the joiner without RFC 9420's `init` chain and its cost; the compromise warning; no automatic receipts in a tree
 session; freshness before a changed session info; no return, the way back being a new UA. **After the third review:** the
