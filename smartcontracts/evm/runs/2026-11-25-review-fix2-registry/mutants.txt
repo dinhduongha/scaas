@@ -1,0 +1,23 @@
+mutant | red tests | rc
+chain-path-any-tag | test_gen2ForwardsCurrent, test_history_innerHeldByGen1, test_history_tagIsTheCurrentVersion | 1
+portable-path-any-tag | test_history_tagIsTheCurrentVersion | 1
+stored-path-any-tag | test_setPqzKeyAfterUpdate | 1
+chain-inner-any-tag | test_history_innerTag | 1
+portable-inner-any-tag | test_history_innerTag | 1
+held-elsewhere-inner-tag-dropped | test_history_innerHeldByGen1 | 1
+tag-any-eight-bytes | test_history_innerTag, test_history_tagIsTheCurrentVersion | 1
+tag-any-at-version-0 | test_history_tagIsTheCurrentVersion | 1
+tag-empty-at-any-version | test_gen2ForwardsCurrent, test_history_innerHeldByGen1, test_history_innerTag, test_history_tagIsTheCurrentVersion, test_setPqzKeyAfterUpdate | 1
+tag-at-least-eight-bytes | test_history_tagIsTheCurrentVersion | 1
+tag-not-greater | test_history_tagIsTheCurrentVersion | 1
+msigAt-serves-the-current | test_history_msigAtEveryVersion, test_history_recordBeforeUpdateVerifiesAfter | 1
+msigAt-answers-a-later-version | test_gen2ForwardsCurrent, test_history_msigAtEveryVersion | 1
+msigAt-one-version-off | test_history_msigAtEveryVersion, test_history_recordBeforeUpdateVerifiesAfter | 1
+blob-forgets-the-one-before | test_history_msigAtEveryVersion | 1
+prev-read-off-by-one | test_gen2ForwardsCurrent, test_history_msigAtEveryVersion, test_history_recordBeforeUpdateVerifiesAfter | 1
+trailer-read-at-the-old-place | test_256Slots, test_gas_requireAuthorized, test_gas_updateOverWideInners, test_gas_updateRowModel, test_gas_wideBlobsAtBound, test_gen2ForwardsCurrent, test_gen2HostCurrentStructure, test_history_innerHeldByGen1, test_history_innerTag, test_history_memberObjectKeepsTheTag, test_history_msigAtEveryVersion, test_history_recordBeforeUpdateVerifiesAfter, test_nestedInnerUpdated, test_nestedThirdLevel, test_reEnable, test_refusedBound, test_refusedKeyData, test_refusedSigners, test_refusedThreshold, test_refusedVersion, test_setPqzKeyAfterUpdate, test_updateDisableAppend, test_weightThenThreshold | 1
+stored-signature-drops-the-tag | test_setPqzKeyAfterUpdate | 1
+gen2-msigAt-not-forwarded | test_gen2ForwardsCurrent | 1
+bound-without-the-tag-word | test_history_boundCountsTheTag | 1
+accept-object-drops-the-tag | test_history_memberObjectKeepsTheTag | 1
+pop-object-drops-the-tag | test_history_memberObjectKeepsTheTag | 1
