@@ -389,6 +389,7 @@ impl Chain {
             .event_signature(executed_events(m))
             .topic1(m.from)
             .topic3(B256::from(m.batch));
+        let mut found = Vec::new();
         for log in self.logs_back(filter, lookback).await? {
             let e =
                 match log.topic0() == Some(&IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH) {
@@ -413,11 +414,9 @@ impl Chain {
                             )
                         }),
                 };
-            if let Some((_, digest, relayer)) = e.filter(|e| e.0 == m.nonce) {
-                return Ok(Some((digest, relayer)));
-            }
+            found.extend(e);
         }
-        Ok(None)
+        Ok(pick_executed(m, found))
     }
 
     /// The byte length of `a`'s code (a PQZ key's SSTORE2 pointer: its key length plus the STOP byte).
@@ -524,9 +523,75 @@ pub fn executed_events(m: &MetaRef) -> Vec<B256> {
     }
 }
 
+/// E-6 (the re-review of 2026-11-25): of the executed logs `(nonce, digest, relayer)` of `(from, batch)`, the one with `m`'s
+/// nonce and `m`'s digest when `m` has one, else the first with its nonce. On a G1 router one `(from, batch, nonce)` can run
+/// in two maps (the router's own and a keyed one), each with its own digest: the first log with the nonce may be another op's.
+fn pick_executed(
+    m: &MetaRef,
+    logs: impl IntoIterator<Item = (U256, B256, Address)>,
+) -> Option<(B256, Address)> {
+    let mut first = None;
+    for (nonce, digest, relayer) in logs {
+        if nonce != m.nonce {
+            continue;
+        }
+        if m.digest.is_none_or(|d| d == digest) {
+            return Some((digest, relayer));
+        }
+        first.get_or_insert((digest, relayer));
+    }
+    first
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    /// E-6: the executed log of `m` is the one with its digest, not the first with its nonce (a G1 router's two maps); none
+    /// with the digest: the first with the nonce (`classify` says "superseded"); no digest yet: the first with the nonce.
+    #[test]
+    fn pick_executed_matches_the_digest() {
+        let (a, b, c) = (
+            B256::repeat_byte(0xaa),
+            B256::repeat_byte(0xbb),
+            B256::repeat_byte(0xcc),
+        );
+        let (r1, r2) = (Address::repeat_byte(1), Address::repeat_byte(2));
+        let mut m = MetaRef {
+            token: Address::ZERO,
+            from: B256::ZERO,
+            batch: U256::ZERO,
+            nonce: U256::from(7),
+            digest: Some(b),
+            ua: true,
+            addr_nonce: false,
+            gov_target: None,
+        };
+        let logs = vec![
+            (U256::from(6), b, r2),
+            (U256::from(7), a, r1),
+            (U256::from(7), b, r2),
+        ];
+        assert_eq!(
+            pick_executed(&m, logs.clone()),
+            Some((b, r2)),
+            "the digest's log"
+        );
+        m.digest = Some(c);
+        assert_eq!(
+            pick_executed(&m, logs.clone()),
+            Some((a, r1)),
+            "none with the digest: the first with the nonce"
+        );
+        m.digest = None;
+        assert_eq!(
+            pick_executed(&m, logs.clone()),
+            Some((a, r1)),
+            "no digest: the first with the nonce"
+        );
+        m.nonce = U256::from(9);
+        assert_eq!(pick_executed(&m, logs), None);
+    }
     use serde_json::{json, Value};
 
     /// An RPC whose block 0 is the recorded Hedera testnet block (any block will do: only its hash is read).
