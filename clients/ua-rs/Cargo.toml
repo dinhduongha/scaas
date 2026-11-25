@@ -210,6 +210,10 @@ hex = "0.4"
 # ua-rs-native: the tests' independent sr25519 verify of the wallet's signatures (the same pin)
 schnorrkel = { version = "=0.11.5", default-features = false, features = ["getrandom"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+# owner 2026-11-26: the wasm32 Falcon verifier's gate (tests/fndsa_vrfy.rs): every FN-DSA row through fn-dsa-vrfy (Thomas
+# Pornin, Unlicense) beside PQClean; fn-dsa-comm (its own dependency, same pin) for the round-3 message representative
+fn-dsa-vrfy = "=0.4.0"
+fn-dsa-comm = "=0.4.0"
 
 # ua-rs-sign T10: tests/wallet_memory.rs lowers RLIMIT_MEMLOCK (libc was in the lock)
 [target.'cfg(unix)'.dev-dependencies]
@@ -505,3 +509,8 @@ required-features = ["app-core", "fam-arweave", "vectors"]
 [[test]]
 name = "file_seal"
 required-features = ["app-core"]
+
+# owner 2026-11-26: the wasm32 Falcon verifier's gate, every FN-DSA row through fn-dsa-vrfy 0.4.0 beside PQClean
+[[test]]
+name = "fndsa_vrfy"
+required-features = ["pq"]
