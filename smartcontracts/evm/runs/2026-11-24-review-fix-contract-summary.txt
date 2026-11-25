@@ -40,6 +40,7 @@ forge-gas (G-3, before G-4) | 2a35404af | 1 | 11 red, every one a derived signer
 sdk-gas measure (G-4) | G-4 commit | 0 | generate.py --measure, 65/65 runs (FOUNDRY_TEST=test/gas); 204 keys moved, all `_ua`: +482 x 117, +412 x 41, +432 x 22, +392 x 15, +3312 x 2 (mtxCancelNonceFor on a code-less target), the fitted lines +40, +5, -20, +19, +393 (setCompliance); no native row moved; reference.json regenerated, --check ok, test_generate ok
 sdk op::gas (G-4) | G-4 commit | 0 | 32 passed
 forge-gas (G-4) | G-4 commit | 0 | 406 passed, 1 skipped
+mutants M42-M73 (A-7 rows, A-6, F-5, D-4, A-9, G-3) | 8daa69910 | 0 | 32/32 killed, each by a behavioural test (the A-7 row's own, the harness's, test_d4_createSessionBounds, test_treeNamespaceIsPinned, test_configureChain_routerNamesThisFactory); 31 also red on the new module size pin, which the runner now leaves out with the release's; row 5 not run (equivalent since A-4)
 gas pins (A-8, first) | step 6 | 0 | the last live leaf at the spec's bound, regular with the verify / state: ML-DSA-87 15,588,376 / 31,716,900 (1,188,840 under 2^24; 49.7 M asked), ML-DSA-65 12,637,463 / 29,709,540 (44.5 M)
 gas pins (A-11, first) | step 6 | 0 | module CREATE2, runtime / regular x 64/63 / state / asked: PqChatTree 32,812 / 2,166,743 / 50,385,960 / 55.2 M; PqChatTreeViews 9,640 / 660,455 / 14,932,800 / 16.4 M; PqChatTreeMembers 13,506 / 910,116 / 20,847,780 / 22.8 M (PqChatTopics unchanged)
 
@@ -110,7 +111,7 @@ gas pins (A-11, first) | step 6 | 0 | module CREATE2, runtime / regular x 64/63 
 Steps 0-2 done (above); steps 3-6 done (2a35404af, 0027287a0, d038fa094, 93a0bfc09) but for G-4's commit and the
 mutants M42-M73, both below; then step 7.
 3b. G-4: done in its own commit (rows above).
-5b. Mutants M42-M73 on the committed tree (runs/2026-11-24-review-fix-contract-mutants.py 42 73).
+5b. Mutants M42-M73: done, 32/32 killed (row above).
 7. The round's matrix once on the final tree: every forge directory at the default set; the set-sensitive tests at the
    three other sets one set at a time (at-set.sh others sensitive, then others modules); size; layout / typehash /
    selector pins; forge fmt --check; format.sh --check over all languages; docs_check check and paths; node cargo test,

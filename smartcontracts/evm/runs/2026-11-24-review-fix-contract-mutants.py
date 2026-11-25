@@ -3,8 +3,9 @@
 """The 2026-11-24 review fixes, contract phase (branch review-fix-contract): each check the round adds is caught by a test.
 So far: the PqChatTreeMembers split (owner 2026-11-24), E-3's exits at the head with the lag (C9), A-4, D-7 / C40, A-3;
 E-3 in mode 0 and PqVault with the replica rule (M21-); A-7's table, A-6, F-5, D-4, A-9 and G-3 (M42-). One mutant per run, `forge test` over test/pqchat alone, or
-test/pqvault for a mutant marked so (FOUNDRY_TEST) without the release-size row (a size pin alone kills
-every mutant of PqChat.sol, so it is left out), every file restored byte for byte after it; a mutant that does not compile
+test/pqvault for a mutant marked so (FOUNDRY_TEST) without the release-size and module-size rows (a size pin alone kills
+every mutant of PqChat.sol or of a module, so both are left out; M42-M73 ran with the module rows in and each was
+killed by a behavioural test besides them), every file restored byte for byte after it; a mutant that does not compile
 kills nothing; a mutant that passes is a finding (exit 1).
   python3 -I smartcontracts/evm/runs/2026-11-24-review-fix-contract-mutants.py [first last]   (from the worktree root)
   python3 -I smartcontracts/evm/runs/2026-11-24-review-fix-contract-mutants.py check           (every replacement found once)
@@ -35,7 +36,7 @@ ENV = dict(
     FOUNDRY_CACHE_PATH="cache/rfc-mutants",
     PATH=os.path.expanduser("~/.foundry/bin") + os.pathsep + os.environ.get("PATH", ""),
 )
-FORGE = ([CAPPED, "forge", "test", "-j", "1", "--no-match-test", "test_gas_deployImplementation"], E)
+FORGE = ([CAPPED, "forge", "test", "-j", "1", "--no-match-test", "test_gas_deployImplementation|test_gas_deployModule"], E)
 M = [
     # the split
     ("treeLeave forwarded to the tree module", [(P, "    function treeLeave(PqChatTreeLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(MEMBERS);", "    function treeLeave(PqChatTreeLeave calldata, IUARegistry.UASig calldata) external {\n        _forward(TREE);")]),

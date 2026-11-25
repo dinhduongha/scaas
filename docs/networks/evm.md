@@ -485,7 +485,9 @@ Integration tests use `anvil --hardfork amsterdam --gas-limit 200000000 --code-s
 BUILT on branch `ua-mtx-merge`, UNAUDITED).
 
 - **Deploy order.** The registry trio first: `UARegistryCoreLib`, then `UARegistryAuxLib` (it links the core), then
-  `UARegistry` (it names both). Then per release: its libraries, its body modules, each its own CREATE2 transaction through
+  `UARegistry` (it names both). `OpenFactory` links `OpenFactoryLib` (its `configureChain` router checks, CTR-GOV-33
+  G-3's size split; the book's `open_factory_lib`), sent first by forge as the registry's libraries are, and the router
+  is built after the factory, naming it. Then per release: its libraries, its body modules, each its own CREATE2 transaction through
   the deterministic deployer with `DEPLOY_SALT` and its own gate (a module already at its address is reused), the env with
   the modules pinned after the libraries, then the implementation through `deployTokenImplementation`; the DEX the same, its
   admin module D first, then `deployDexImplementation`. `DeployBase`, `deploy.sh evm` and `script/pqz/e2e.py` follow it.

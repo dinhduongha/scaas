@@ -729,9 +729,9 @@ the size gate's row `PqChat` in `smartcontracts/evm/size-baseline.json`).
 **Size and deployment.** Every deployed piece fits one transaction of 60 M asked (`(regular + state) × 1.05`, regular ×
 1.05 < 2^24; [CTR-TOK-30](token-wrappers.md#CTR-TOK-30)), pinned in `PqChatGas.t.sol` (`test_gas_deployImplementation`,
 `test_gas_deployModule`; 2026-11-25, after the code review's fixes): `PqChat` 32,891 B runtime, its `deployImplementation`
-2,293,654 regular + 50,898,510 state = 55.9 M asked; its body modules each by its own CREATE2, `PqChatTopics` 16,408 B
-(1,099,442 + 25,287,840 = 27.7 M asked), `PqChatTree` 32,812 B (2,166,743 + 50,385,960 = 55.2 M), `PqChatTreeViews`
-9,640 B (660,455 + 14,932,800 = 16.4 M), `PqChatTreeMembers` 13,506 B (910,116 + 20,847,780 = 22.8 M); `createInstance`
+2,293,654 regular + 50,898,510 state, 55.9 M asked; its body modules each by its own CREATE2, `PqChatTopics` 16,408 B
+(1,099,442 + 25,287,840, 27.7 M asked), `PqChatTree` 32,812 B (2,166,743 + 50,385,960, 55.2 M), `PqChatTreeViews`
+9,640 B (660,455 + 14,932,800, 16.4 M), `PqChatTreeMembers` 13,506 B (910,116 + 20,847,780, 22.8 M); `createInstance`
 189,995 + 1,328,040. Each was measured on its own transaction. Both deployers send the modules through the CREATE2 deployer: the deploy's
 `DeployBase._module` (its gate, forge's estimate × 1.05 within 60 M) and the onchain script's `PqChat.s.sol` `_module`,
 with an explicit limit of 59 M (that script runs at × 1.3, which for a 33 KB module would ask about 73 M; the code
