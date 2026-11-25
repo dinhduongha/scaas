@@ -83,6 +83,15 @@ forge-pqvault (steps 4-6 tree) | step 4-6 tree | 0 | 99 passed (+1: test_e3_remo
   (bounds of 512). D-4's contract tests are in step 5's file (test_d4_createSessionBounds: 257 keys, 33 admins,
   4,125 B refused; 256, 32, 4,124 B created).
 
+- Step 5 (A-7, T11): test/pqchat/PqChatTreeGuards.t.sol, one negative test with its control per row of fable-A's
+  table (row 5, `_treeGo`'s early return, unreachable since A-4 refuses a gone UA in both exits: equivalent, not run;
+  rows 23, 24 tested for their own error, so their mutants are no longer equivalent), D-4's creation bounds, and T11's
+  tree rows (an exit naming epoch 0 two below the head, the front-run of 7 own Adds then the removal with 8 leaves
+  owed, a keyless admin removing itself, remove-then-leave by one admin); T11's mode 0 row (an admin of the named
+  epoch only: PqChatNotAdmin, PqChatEpochs) and PqVault row (a member removed at the head writes no item,
+  PqVaultItems). The other T11 contract rows were steps 1-2's tests. Mutants M42-M73 (A-7 rows, A-6, F-5, D-4, A-9,
+  G-3) in the round's runner.
+
 ## Left, in order
 0. Done (ccf6c43db). On resume: rerun the G-1 gates (governance, factory, v2, gas), the size gate and the SDK's
    `cargo test --lib op::gas`; then cherry-pick review-fix-contract-d7a3-wip's commit as the work tree for step 1.

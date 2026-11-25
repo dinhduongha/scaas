@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """The 2026-11-24 review fixes, contract phase (branch review-fix-contract): each check the round adds is caught by a test.
 So far: the PqChatTreeMembers split (owner 2026-11-24), E-3's exits at the head with the lag (C9), A-4, D-7 / C40, A-3;
-E-3 in mode 0 and PqVault with the replica rule (M21-). One mutant per run, `forge test` over test/pqchat alone, or
+E-3 in mode 0 and PqVault with the replica rule (M21-); A-7's table, A-6, F-5, D-4, A-9 and G-3 (M42-). One mutant per run, `forge test` over test/pqchat alone, or
 test/pqvault for a mutant marked so (FOUNDRY_TEST) without the release-size row (a size pin alone kills
 every mutant of PqChat.sol, so it is left out), every file restored byte for byte after it; a mutant that does not compile
 kills nothing; a mutant that passes is a finding (exit 1).
@@ -25,6 +25,8 @@ S = E + "src/pqchat/PqChatTreeMembers.sol"
 B = E + "src/pqgroup/PqGroupBase.sol"
 C = E + "src/pqchat/PqChatCore.sol"
 V = E + "src/pqvault/PqVault.sol"
+G = E + "src/pqgroup/PqGroupTree.sol"
+F = E + "src/factory/OpenFactoryLib.sol"
 CAPPED = os.path.abspath("scripts/capped")
 ENV = dict(
     os.environ,
@@ -86,6 +88,41 @@ M = [
     ("PqVault: A-4, a removed UA accepted", [(V, "            if (!_removable(m, admins, r.members[i]) || ep.removedOf[r.members[i]]) {", "            if (!_removable(m, admins, r.members[i])) {")], "pqvault"),
     ("PqVault: the removal record under the named epoch", [(V, "        _v().removals[at].push(", "        _v().removals[r.epochId].push(")], "pqvault"),
     ("PqVault: nextEpoch from the head", [(V, "        if (r.nextEpoch != named + 1) revert PqVaultEpochNumber", "        if (r.nextEpoch != ep.epoch + 1) revert PqVaultEpochNumber")], "pqvault"),
+    # A-7 (fable-A's table, by row; row 5, `_treeGo`'s early return, unreachable since A-4: equivalent, not run)
+    ("A-7 row 1: treeLeave without its treeId check", [(S, "        if (l.treeId != t.treeId) revert IPqChat.PqChatTreeHome();\n", "")]),
+    ("A-7 row 1: treeRemove without its treeId check", [(S, "        if (r.treeId != t.treeId) revert IPqChat.PqChatTreeHome();\n", "")]),
+    ("A-7 row 2: _head without the session check", [(T, "        if (ep.sessionId != sid) revert IPqChat.PqChatUnknown(epochId);\n        if (ep.landed != ep.wraps) revert IPqChat.PqChatIncomplete(epochId);\n        bytes32 child", "        if (ep.landed != ep.wraps) revert IPqChat.PqChatIncomplete(epochId);\n        bytes32 child")]),
+    ("A-7 row 3: _head without the child check", [(T, "        if (child != 0) revert IPqChat.PqChatEpochTaken(epochId, child);\n", "        child;\n")]),
+    ("A-7 row 4: a gone admin is an admin", [(G, "        return t.gone[ua].kind == 0 && _in(t.admins, ua);", "        return _in(t.admins, ua);")]),
+    ("A-7 row 6: an Add's kemHash not the registry's", [(G, "            if (k != a.kemHash) _treeFail(T_KEM_KEY, uint256(a.ua), a.keyId);\n", "")]),
+    ("A-7 row 7: a key added twice in one commit", [(G, "                if (d.adds[j].kemHash == k) _treeFail(T_KEY_LIVE, uint256(k), 0);\n", "                k;\n")]),
+    ("A-7 row 8: the author removes its own leaf", [(G, "r.leaf >= t.used || r.leaf == d.leaf || !l.live", "r.leaf >= t.used || !l.live")]),
+    ("A-7 row 9: treeLeave of a non-member", [(S, "        if (!_treeMember(t, l.member)) revert IPqChat.PqChatNotMember(l.member); // A-4: a gone UA too\n", "")]),
+    ("A-7 row 10: treeRemove of a UA that is no member and no admin", [(S, "            if ((t.keysOf[u].live == 0 && !_in(t.admins, u)) || t.gone[u].kind != 0) {", "            if (t.gone[u].kind != 0) {")]),
+    ("A-7 row 11: changes unbounded", [(G, "        if (nr + d.adds.length > changesMax) _treeFail(T_SHAPE, 0, 0);\n", "        changesMax;\n")]),
+    ("A-7 row 12: keys per UA unbounded in a commit", [(G, "            if (w.live[i] > keysMax) _treeFail(T_SHAPE, 0, 0);\n", "            keysMax;\n")]),
+    ("A-7 row 13: admins unbounded in a commit", [(G, "        if (a.length > adminsMax) _treeFail(T_SHAPE, 0, 0);\n", "        adminsMax;\n")]),
+    ("A-7 row 14: an Add above used", [(G, "            if (l > used || l >= leavesMax || l >= TREE_LEAVES_LIMIT) _treeFail(T_LEAF, l, 0);", "            if (l >= leavesMax || l >= TREE_LEAVES_LIMIT) _treeFail(T_LEAF, l, 0);")]),
+    ("A-7 row 15: a ciphertext's sizes unchecked", [(T, "ct.mlkemCt.length != MLKEM_CT || ct.sealedSecret.length != SEALED_KEY\n                    || PqChatTypes", "PqChatTypes")]),
+    ("A-7 row 16: commit without its nonce", [(T, "        _useNonce(PqChatTypes.scopeEpoch(c.sessionId, c.author), c.nonce);\n", "")]),
+    ("A-7 row 17: treeRemove without its nonce", [(S, "        _auth(reg, r.admin, PqChatTypes.hashTreeRemove(r), sig);\n        _useNonce(PqChatTypes.scopeEpoch(r.sessionId, r.admin), r.nonce);\n", "        _auth(reg, r.admin, PqChatTypes.hashTreeRemove(r), sig);\n")]),
+    ("A-7 row 18: treeLeave without its nonce", [(S, "        _auth(reg, l.member, PqChatTypes.hashTreeLeave(l), sig);\n        _useNonce(PqChatTypes.scopeEpoch(l.sessionId, l.member), l.nonce);\n", "        _auth(reg, l.member, PqChatTypes.hashTreeLeave(l), sig);\n")]),
+    ("A-7 row 19: treeRemove without the nextEpoch check", [(S, "        if (r.nextEpoch != named + 1) revert IPqChat.PqChatEpochNumber(named + 1, r.nextEpoch);\n        if (!_treeAdmin(t, r.admin))", "        if (!_treeAdmin(t, r.admin))")]),
+    ("A-7 row 20: treeRemove members unsorted", [(S, "            if (i > 0 && u <= r.members[i - 1]) revert IPqChat.PqChatShape();\n", "")]),
+    ("A-7 row 21: an empty treeRemove", [(S, "        uint256 n = r.members.length;\n        if (n == 0) revert IPqChat.PqChatShape();\n", "        uint256 n = r.members.length;\n")]),
+    ("A-7 row 22: wrapHashes against adds unchecked", [(T, "c.wrapHashes.length != c.adds.length || c.sealedInfo.length == 0", "c.sealedInfo.length == 0")]),
+    ("A-7 row 23: ctCount at leaves accepted", [(G, "d.nodeKeyHashes.length > depth || d.ctCount >= d.leaves ||", "d.nodeKeyHashes.length > depth ||")]),
+    ("A-7 row 24: ciphertexts past the list", [(T, "        if (n == 0 || first + n > (list.code.length - 1) / 36)", "        if (n == 0)")]),
+    # A-6, F-5, D-4, A-9
+    ("A-6: the base's 256 positions at opening", [(G, "used > leavesMax || used > TREE_LEAVES_LIMIT || admins", "used > leavesMax || admins")]),
+    ("A-6: the base's 256 positions for an Add", [(G, "l >= leavesMax || l >= TREE_LEAVES_LIMIT)", "l >= leavesMax)")]),
+    ("F-5: a one-leaf root 0", [(G, "w.root = w.leaves == 1 ? _thOf(reg, t, w, 0) : w.th[w.leaves - 1];", "w.root = w.th[w.leaves - 1];")]),
+    ("D-4: 257 member keys at creation", [(G, "if (used == 0 || used > leavesMax || used > TREE_LEAVES_LIMIT ||", "if (used == 0 ||")]),
+    ("D-4: 33 admins at creation", [(G, "|| admins.length > adminsMax) {", ") {")]),
+    ("D-4: sealedInfo unbounded at creation", [(T, "        if (s.sealedInfo.length > TREE_INFO_MAX) revert IPqChat.PqChatShape();\n", "")]),
+    ("A-9: Staged's list and keys swapped", [(G, "        address list;\n        address keys;", "        address keys;\n        address list;")]),
+    # G-3 (test/v2)
+    ("G-3: configureChain without the router's factory() check", [(F, "        if (!okF || fw != uint256(uint160(self))) revert IOpenFactory.RouterFactoryMismatch(address(uint160(fw)));\n", "")], "v2"),
 ]
 
 if sys.argv[1:] == ["check"]:

@@ -164,6 +164,18 @@ contract PqVaultItemsTest is PqVaultBase {
         vault.createItems(b, _sig(b.author, h.batch(b, PqVaultTypes.DS_V)));
     }
 
+    /// T11 (C9, CTR-PQV-06, E-3): a removal naming the parent of the head applies at the head, so the removed member's item
+    /// write under the head is `PqVaultNotMember`; a kept member's lands there.
+    function test_e3_removedAtTheHeadWritesNothing() public {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _list(ids[0]), _members(3));
+        bytes32 e1 = _rekey(vault, e, w, 0); // the head
+        IPqVault.PqVaultRemove memory r = IPqVault.PqVaultRemove(vid, vid, 1, _list(ids[2]), ids[0], 2);
+        vault.removeVaultMembers(r, _sig(ids[0], h.remove(r, PqVaultTypes.DS_V))); // names the parent
+        _createRefused(_it(e1, ids[2], 1, 288), _notMember(ids[2]));
+        _create(vault, _it(e1, ids[1], 1, 288)); // the control
+    }
+
     /// O3 (b): a member that left writes nothing under the epoch it left, in each of the three writes.
     function test_leaverRefusedInEachWrite() public {
         bytes32 iid = _create(vault, _it(vid, ids[1], 7, 288));

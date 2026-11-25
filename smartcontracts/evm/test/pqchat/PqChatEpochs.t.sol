@@ -635,6 +635,20 @@ contract PqChatEpochsTest is PqChatBase {
         assertTrue(chat.leftIn(sid, ids[2]));
     }
 
+    /// T11 (C9, mode 0): a removal by a UA that is an admin of the epoch it names and not of the head is `PqChatNotAdmin`
+    /// (checked at the head); the head's admin's removal naming the same epoch lands at the head.
+    function test_e3_removalByAnAdminOfTheNamedEpochOnly() public {
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(sid, ids[0], 1, 1, sid, _list(ids[0], ids[1]), _members(3));
+        bytes32 e1 = _rekey(chat, e, w); // ids[1] an admin of e1
+        (e, w) = _epoch(sid, ids[0], 2, 2, e1, _admins(), _members(3));
+        bytes32 e2 = _rekey(chat, e, w); // and not of the head e2
+        IPqChat.PqChatRemove memory r = _rm(e1, 2, _list(ids[2]), ids[1], 100);
+        _refusedRemove(r, ids[1], abi.encodeWithSelector(IPqChat.PqChatNotAdmin.selector, ids[1]));
+        _remove(chat, _rm(e1, 2, _list(ids[2]), ids[0], 100)); // control
+        assertTrue(chat.removedIn(e2, ids[2]), "at the head");
+    }
+
     /// The replica rule (sc-E-4): the home applied a leave naming epoch 0 at its head e1; the replica flags epoch 0 and still
     /// stores the home's child of e1 that drops the leaver (a flag one epoch above the parent), copied in either order. A drop
     /// nobody flagged is a membership change there as at home.
