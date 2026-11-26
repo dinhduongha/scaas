@@ -2787,3 +2787,64 @@ fn tree_path_of_a_leaf_outside() {
     let t = Tree::cold(&[]).unwrap_or_default();
     assert!(t.filtered_path(u32::MAX).is_empty());
 }
+
+/// C-4 = D-6 (+ B-16) of the TreeKEM T4-T9 review: a resume that finds no new epoch keeps the info in force and the node keys
+/// (its replay seals the full info as the previous one did), and a device that resumes from it after more commits follows
+/// them as a full replay does: each resume chains, none drops what the device held.
+#[test]
+fn tree_resume_twice_keeps_the_keys_and_the_info() {
+    let o = Own::new();
+    let mut h = o.home();
+    for n in 1..=4usize {
+        o.commit(&mut h, n % 2, &[0], INFO_A, &[], honest);
+    }
+    let mut r4 = o.replay(&mut h, 2);
+    let seal = r4.info_to_seal().map(str::to_string);
+    assert!(
+        seal.is_some(),
+        "control: the device holds the info in force at 4"
+    );
+    let held = r4.held.keys().copied().collect::<Vec<_>>();
+    let mut idle = o
+        .keys
+        .tree_resume(OWN, &mut h, &o.dev(2), &mut r4, 0)
+        .unwrap()
+        .unwrap();
+    assert!(idle.epochs.is_empty(), "no new epoch");
+    assert_eq!(
+        idle.info_to_seal().map(str::to_string),
+        seal,
+        "the info in force kept"
+    );
+    assert_eq!(
+        idle.held.keys().copied().collect::<Vec<_>>(),
+        held,
+        "the node keys kept"
+    );
+    for n in 5..=7usize {
+        o.commit(&mut h, n % 2, &[0], INFO_A, &[], honest);
+    }
+    let full = o.replay(&mut h, 2);
+    let more = o
+        .keys
+        .tree_resume(OWN, &mut h, &o.dev(2), &mut idle, 0)
+        .unwrap()
+        .unwrap();
+    let reveal = |k: &Option<scaas_ua::wallet::KeyHandle>| {
+        k.as_ref().map(|k| o.keys.vectors_reveal(k).unwrap())
+    };
+    assert_eq!(
+        more.epochs.iter().map(|e| e.epoch).collect::<Vec<_>>(),
+        vec![5, 6, 7]
+    );
+    for e in &more.epochs {
+        let g = full.epochs.iter().find(|x| x.epoch == e.epoch).unwrap();
+        assert_eq!(
+            (e.state, reveal(&e.k)),
+            (g.state, reveal(&g.k)),
+            "epoch {}",
+            e.epoch
+        );
+    }
+    assert_eq!(more.info_to_seal(), full.info_to_seal());
+}

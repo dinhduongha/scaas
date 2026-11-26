@@ -1940,15 +1940,19 @@ pub struct Replay {
     /// the node keys the device holds after the range (its leaf's key is its own, not here)
     pub held: BTreeMap<u32, KemKeyPair>,
     pub pin: Pin,
+    /// the info in force after the range and its flag (C33), and whether the device followed the head: kept by a resume
+    /// that finds no new epoch (C-4 of the T4-T9 review)
+    pub in_force: Option<String>,
+    pub flagged: bool,
+    pub head_followed: bool,
 }
 
 impl Replay {
     /// The info a device seals in a commit of its own (C33): the full info in force only when it followed the head and
     /// holds one not flagged; otherwise the marker (`None`). A changed info is the admin's own action, never this.
     pub fn info_to_seal(&self) -> Option<&str> {
-        let e = self.epochs.last()?;
-        (e.epoch == self.pin.epoch && e.state == State::Followed && !e.flagged)
-            .then_some(e.in_force.as_deref())
+        (self.head_followed && !self.flagged)
+            .then_some(self.in_force.as_deref())
             .flatten()
     }
 }
@@ -2168,17 +2172,17 @@ impl AppKeys {
             }
             plan.push(p);
         }
-        // the secrets, from those bytes only (resumed: the node keys held and the info in force at the pin)
-        let (mut held, mut in_force, mut flagged) = match from {
-            Some(f) => {
-                let (i, fl) = f
-                    .epochs
-                    .last()
-                    .map_or((None, false), |e| (e.in_force.clone(), e.flagged));
-                (std::mem::take(&mut f.held), i, fl)
-            }
-            None => (BTreeMap::new(), None, false),
-        };
+        // the secrets, from those bytes only (resumed: the node keys held and the info in force at the pin). C-4, D-6 of the
+        // T4-T9 review: `from`'s node keys are only looked up here (`base`, less the nodes a later commit replaced), the new
+        // ones kept apart (`own`); they move out of `from` after the last step that can fail, so a refusal leaves it whole
+        let empty = BTreeMap::new();
+        let base = from.as_ref().map_or(&empty, |f| &f.held);
+        let (mut in_force, mut flagged, mut head_followed) =
+            from.as_ref().map_or((None, false, false), |f| {
+                (f.in_force.clone(), f.flagged, f.head_followed)
+            });
+        let mut own: BTreeMap<u32, KemKeyPair> = BTreeMap::new();
+        let mut gone_nodes: std::collections::BTreeSet<u32> = Default::default();
         let mut epochs = Vec::new();
         let mut warnings = Vec::new();
         for p in plan {
@@ -2189,6 +2193,10 @@ impl AppKeys {
             } else if p.own {
                 self.own_commit(sc, &a, dev, &p, &c)?
             } else {
+                let held = |x: u32| {
+                    own.get(&x)
+                        .or_else(|| base.get(&x).filter(|_| !gone_nodes.contains(&x)))
+                };
                 self.others_commit(sc, &a, dev, &p, &c, leaf, &held)?
             };
             if n > 0 {
@@ -2198,7 +2206,8 @@ impl AppKeys {
                 xs.extend(list(&c, "adds", |v| u32j(v, "leaf"))?);
                 for x in xs {
                     for y in direct_path(2 * x, leaves_n) {
-                        held.remove(&y);
+                        own.remove(&y);
+                        gone_nodes.insert(y);
                     }
                 }
             }
@@ -2208,7 +2217,7 @@ impl AppKeys {
                 info: opened,
                 derived,
             } = res;
-            held.extend(derived);
+            own.extend(derived);
             let mut info = None;
             if state == State::Followed {
                 let author = if n == 0 { ZERO } else { b32j(&c, "author")? };
@@ -2261,6 +2270,7 @@ impl AppKeys {
                     leaves_left: adds.iter().filter(|x| live(x)).map(|x| x.leaf).collect(),
                 });
             }
+            head_followed = n == head && state == State::Followed;
             epochs.push(EpochRow {
                 epoch: n,
                 epoch_id: at(&a.ids, n)?,
@@ -2274,6 +2284,15 @@ impl AppKeys {
                 flagged,
             });
         }
+        if last < head {
+            // the key's period ended before the head: the device does not follow it
+            head_followed = false;
+        }
+        let pin = a.pin_at(sc, head)?;
+        // every step that can fail is behind: the node keys move out of `from` now
+        let mut held = from.map_or_else(BTreeMap::new, |f| std::mem::take(&mut f.held));
+        held.retain(|x, _| !gone_nodes.contains(x));
+        held.extend(own);
         Ok(Some(Replay {
             leaf,
             join_epoch,
@@ -2282,7 +2301,10 @@ impl AppKeys {
             epochs,
             warnings,
             held,
-            pin: a.pin_at(sc, head)?,
+            pin,
+            in_force,
+            flagged,
+            head_followed,
         }))
     }
 
@@ -2430,7 +2452,8 @@ impl AppKeys {
 
     /// Another member's commit: the one ciphertext over its leaf, upward with the key comparison (§10).
     #[allow(clippy::too_many_arguments)]
-    fn others_commit(
+    #[allow(clippy::too_many_arguments)]
+    fn others_commit<'k>(
         &self,
         sc: &TreeScope,
         a: &Walk,
@@ -2438,7 +2461,7 @@ impl AppKeys {
         p: &Piece,
         c: &Value,
         leaf: u32,
-        held: &BTreeMap<u32, KemKeyPair>,
+        held: &dyn Fn(u32) -> Option<&'k KemKeyPair>,
     ) -> Result<Opened> {
         let leaves = u32j(c, "leaves")?;
         let nkh = list(c, "nodeKeyHashes", b32)?;
@@ -2457,7 +2480,7 @@ impl AppKeys {
         let key = if t == 2 * leaf {
             Some(dev.kem)
         } else {
-            held.get(&t)
+            held(t)
         };
         let Some(key) = key else {
             return Ok(not("target not held"));
