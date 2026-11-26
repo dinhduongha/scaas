@@ -110,7 +110,7 @@ another chain with the same chain id; the UA registration PoP is portable and ca
 The node binds registry, `chainUid()` and the RPC genesis hash per chain profile and refuses a mismatch.
 `OpenFactory.tokenKindEnabled(NORMAL_PQZ / WRAPPED_PQZ)` starts `false` (`setTokenKindEnabled`, plan 5g-Z2; was `pqzEnabled`). NatSpec and docs: **UNAUDITED**. The SCaaS testnet is
 the owner's named target and runs our client. The owner moved the private chain off its former id 9000 because 9000
-is also Evmos Testnet, a public chain; 7622 is not assumed unique either, hence `chain_uid`. The self-test is what
+is also Evmos Testnet, a public chain; 22779 is not assumed unique either, hence `chain_uid`. The self-test is what
 keeps `PRECOMPILE` tokens off chains whose client is not ours. **Public chains** (owner, 2026-10-08; 2026-11-06, O1): PQZ is
 meant for public chains too, and the route there is a lattice-verification precompile **on that chain**, which SCaaS waits
 for, **or `OFFCHAIN` mode** with [CTR-PQZ-27](#CTR-PQZ-27)'s trust model — no
@@ -257,7 +257,7 @@ PQZ parameters.
 | Client | Nethermind 1.39.0, Clique, one signer, 5 s, base fee 0 (chainspec 2026-08-31) | gas is free in money, but still meters block capacity |
 | Forks live | through Fusaka + BPO2, incl. EIP-2537, EIP-7951 (secp256r1 at `0x100`), **EIP-7825**, **EIP-7623**, **EIP-7934** | — |
 | [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825) tx gas cap | 16,777,216 per transaction, independent of block limit | rules out a Solidity lattice verifier ([verifier](#verifier)) |
-| Chain id | **7622** (owner, 2026-10-07; formerly 9000, which is **also Evmos Testnet**, a public chain: [chainlist](https://chainlist.org/chain/9000), [Sequence chainlist](https://docs.sequence.xyz/solutions/chainlist/non-integrated/evmos-testnet)). Chain ids are a registry convention, so 7622 is not assumed unique either | `chainid == 7622` does not prove "our chain"; the precompile self-test, the registry's `chain_uid` (genesis hash) in every statement and the node's genesis-hash binding do |
+| Chain id | **22779** (owner 2026-11-26, [NET-EVM-02](../networks/evm.md#NET-EVM-02); an earlier id, 9000, is **also Evmos Testnet**, a public chain: [chainlist](https://chainlist.org/chain/9000), [Sequence chainlist](https://docs.sequence.xyz/solutions/chainlist/non-integrated/evmos-testnet)). Chain ids are a registry convention, so 22779 is not assumed unique either | `chainid == 22779` does not prove "our chain"; the precompile self-test, the registry's `chain_uid` (genesis hash) in every statement and the node's genesis-hash binding do |
 | Block gas limit | 200,000,000 since the reset of 2026-10-22 (genesis `gasLimit` `0xbebc200`, `TargetBlockGasLimit` 200,000,000); 16,777,216 at the time of this table, then an 80 M target (P6f) | gas meters block capacity ([CTR-PQZ-11](#CTR-PQZ-11)) |
 | [EIP-7623](https://eips.ethereum.org/EIPS/eip-7623) calldata floor | `10 × tokens`, token = zero byte 1 / non-zero byte 4 ⇒ 40 gas per non-zero byte | dominates PQZ cost once verification is native |
 | [EIP-7934](https://eips.ethereum.org/EIPS/eip-7934) | RLP block ≤ 8,388,608 B | a block can carry at most `gasLimit / 10` calldata bytes (all-zero calldata at the floor); the former 80 M target kept that ≤ 8.0 MB; at today's 200 M limit the gas limit alone no longer bounds a block under 8,388,608 B, so the block producer's own EIP-7934 check is what holds it |
@@ -841,7 +841,7 @@ plan 5h part A.) The account can debit, roll over, decrypt and disclose from sta
 strand funds. Layout: one SSTORE2 op blob per debit (stored packed at `PACK_BITS`, [stored form](#stored-form): an op 1 blob with
 the auditor is 11,052 / 13,572 / 16,348 / 19,380 B at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` /
 `n2816-kmax65536`; under EIP-8037 a whole op 1 with the auditor costs 17.58 / 21.44 / 25.69 / 30.33 M of state gas, an op 7 M = 8 with the
-auditor 70.45 / 65.66 / 54.02 / 63.44 M, measured in plan 5h Task 8d part 2b, [§9.3](#93-gas-model) (a 60 M block holds an op 7 M = 8 only at `n2560-kmax16384` with the auditor: the client rule is `M ≤ 4` where the block gas limit is 60 M, review C0-10, controller proposal, owner may override; no cutoff in code); the test chains allow 64 KiB of code, so mainnet 22776 must keep
+auditor 70.45 / 65.66 / 54.02 / 63.44 M, measured in plan 5h Task 8d part 2b, [§9.3](#93-gas-model) (a 60 M block holds an op 7 M = 8 only at `n2560-kmax16384` with the auditor: the client rule is `M ≤ 4` where the block gas limit is 60 M, review C0-10, controller proposal, owner may override; no cutoff in code); the test chains allow 64 KiB of code, so mainnet 22777 must keep
 `maxCodeSize ≥ 64 KiB` or split op 7 blobs per group); one slot per pending entry; `acc` a reference to the last debit's
 blob until a rollover materialises it in `ACC_WORDS` packed slots ([stored form](#stored-form); 516 unpacked words before
 plan 5h Task 8d part 2). A debit **reads** `acc` and its inline window from state (`EXTCODECOPY` ≈ 4 k gas per 16 KB; a
@@ -2115,7 +2115,7 @@ estimate ≈ 102,000); the roll-out to the SCaaS testnet is the owner's step). T
 scripts in plan 5h Task 8d part 1, the contracts in part 2); they replace P6f D3's `0x5caa500000000000000000000000000000000f01` / `…0012` /
 `…0013`, which the SCaaS testnet served until image `2.2.0-pqz4` replaced `2.2.0-pqz3` on 2026-10-25 (with provisional schedule rows until plan 5h Task 9). The addresses lie above `0xffff`
 (outside EIP-1352), outside RIP-7587's `0x100`–`0x1ff` and the OP / Taiko / Arbitrum system ranges; the same addresses
-on 22776 (P6f D3, controller proposal, owner may override). They come from a Nethermind **plugin** `Nethermind.Pqz`
+on the SCaaS mainnet, 22777 (P6f D3, controller proposal, owner may override). They come from a Nethermind **plugin** `Nethermind.Pqz`
 (no Nethermind patch: P6f D1) in the image `scaas/nethermind-pqz:1.39.0-pqz<n>` (built locally, never pushed: D13).
 **Status mapping (D4):** `pqz-ffi` status 0 ⇒ the 32 bytes; 1 ⇒ a failed call (all gas, the §9.1 revert); 3 ⇒ `…00`
 plus a `PQZ-INPUT-PANIC keccak(input)` warning (a panic in either verifier, PQZL or PQZH: review 3w u3-2); 2, 4 or any
@@ -2364,7 +2364,7 @@ Every `t_row` ≤ 60 ms (largest 15.05 ms, PQZL transfer under an adversarial st
 input at `MAX_PROOF` fits a direct transaction under 16,777,216 (largest honest: PQZH transfer 11.67 M, bound by the
 EIP-7623 floor). `selftestGas` = **2,567,000**; `OP_SELFTEST` cold p50 / p99 = 96.8 / 108.6 ms over 200 fresh
 processes. ML-DSA p99 0.135 ms (44) / 0.189 ms (65) ⇒ `mldsa44Gas` **49,000**, `mldsa65Gas` **68,000** (EIP-8355 BASE
-6,500 / 9,000 is lower). Re-calibrate before chain 22776 or when a later measurement differs by more than 15 %. The
+6,500 / 9,000 is lower). Re-calibrate before chain 22777 (the SCaaS mainnet) or when a later measurement differs by more than 15 %. The
 estimates below predate this table.
 
 **Measured, `MLDSA87` (TODO 3zd, 2026-11-15, two passes, owner):** the same tool and method in the calib image of the
@@ -2845,7 +2845,7 @@ build** (owner 2026-11-13; spec K3-4, K3-4b). SPECIFIED.
   takes its next label (`…/v6`, controller naming); T-35 (one-byte role tags between Merkle nodes and transcript absorbs in PQZH's
   Ligero code) moves `PQZH_ID` at every set that has PQZH. Retired labels join `gen_set.py`'s `RETIRED`. Tokens without the
   opening run on the new `PQZL_ID`, and the precompile is rebuilt for it.
-- **Roll-out of ids** (owner 2026-11-13): until mainnet 22776 a `proofSystemId` is switched by chain reset only; no token,
+- **Roll-out of ids** (owner 2026-11-13): until mainnet 22777 a `proofSystemId` is switched by chain reset only; no token,
   registry or precompile serves an old and a new id side by side, and no migration path is built.
 - Burn, refresh, unshield, unwrap: unchanged statements under the new id; fresh randomness, no opening. Shield unchanged. Every
   op 1 leg carries an opening, the migration to oneself ([CTR-PQZ-31](#CTR-PQZ-31)) included.
@@ -3068,7 +3068,7 @@ split, never a silent acceptance (fail closed).
 1. Build the image; start a throwaway copy of the SCaaS testnet (the same chainspec parameters + `engine.Pqz` with a future
    first timestamp — path A — or from genesis — path B); runbook `pqz-core/nethermind/chain/RUNBOOK.md`.
 2. Probe: `eth_getBlockByNumber(0).hash` equals the profile's genesis hash and the registry's `chainUid()` (chain id
-   7622 alone is not assumed unique); `eth_call` to `PQZ` with `OP_SELFTEST` returns the KAT hash; `eth_estimateGas`
+   22779 alone is not assumed unique); `eth_call` to `PQZ` with `OP_SELFTEST` returns the KAT hash; `eth_estimateGas`
    matches the gas formula; a valid and a one-bit-flipped transfer vector give 1 / 0; same for `MLDSA44` / `MLDSA65`. Compare with
    the formula, not with "it answered" (the `eip1108` lesson).
 3. Roll the signer and every follower to the image before the timestamp (or reset the testnet with `engine.Pqz` from
@@ -3083,7 +3083,7 @@ split, never a silent acceptance (fail closed).
    concurrency and gas-cap keys to be confirmed); public RPC is authenticated where the deployment allows it.
    Rehearsed on the copy (P6f Task 8): nginx `limit_req` 10 r/s, burst 20, `limit_conn` 8 in front of the follower;
    a burst of 200 PQZH-transfer `eth_call`s from 4 clients got 22 answers (all `…01`) and 178 × 429, and the signer kept
-   its 5 s interval. **Chainspec for a follower:** with chain 7622's parameters as they are no follower can sync (P6f
+   its 5 s interval. **Chainspec for a follower:** with the SCaaS testnet's parameters as they were no follower can sync (P6f
    copy, 2026-10-15): `eip4844` from 0 without `eip4895` makes a syncing peer reject every block
    (`InvalidWithdrawalsRoot`), and without `maximumExtraDataSize` (default 32 B) it rejects every Clique header (97 B
    `extraData`); a follower needs `eip4895TransitionTimestamp` and `maximumExtraDataSize` `0xffff` in the chainspec.
@@ -3225,7 +3225,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T13 | Precompile bug ⇒ consensus split or false accept | single C core shared with prover tests; continuous ASan/UBSan fuzzing of `pqz_verify`; fail-closed returndata check; deterministic integer code |
 | T13a | Precompile **crash** (abort, OOB, stack overflow) on crafted input ⇒ the single signer dies ⇒ chain halt | never-crash requirement: Rust bounds-checked decoder, error returns instead of `abort`, fixed arena and stack, bounded loops, no timeouts ([CTR-PQZ-10](#CTR-PQZ-10)); follower-only public RPC and pre-simulation |
 | T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`" (DDGR20 worst case β 463.9); for `R_TXM` per `(r_g, e1_g)` see T21; fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
-| T13c | Chain-id collision (former id 9000 = Evmos Testnet; 7622 not assumed unique) | owner move to the SCaaS testnet; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and `UAAuth`; node binds genesis hash, registry `chainUid()` and token |
+| T13c | Chain-id collision (former id 9000 = Evmos Testnet; 22779 not assumed unique) | owner move to the SCaaS testnet; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and `UAAuth`; node binds genesis hash, registry `chainUid()` and token |
 | T14 | Rogue / stolen public key registration; claiming a victim's PQ signer for one's own PQZ key | `R_REG` PoP over the portable digest of the signer's UA and its attributes, beside the signer's own PoP over the `registrationDigest` that covers the proof's hash ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`, held only by proven keys, so listing a victim's key without a proof blocks nobody; front-running yields the identical record |
 | T15 | Leaked PQZ key | read-only breach (auth key separate, [CTR-PQZ-12](#CTR-PQZ-12)); move funds to a new UA |
 | T16 | Leaked ML-DSA key | cannot spend without the PQZ key's proof; since 3g the PQZ key rotates by versions ([CTR-PQZ-31](#CTR-PQZ-31)): add a version and migrate, or move funds to a new UA |

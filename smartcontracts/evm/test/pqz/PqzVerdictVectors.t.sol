@@ -30,7 +30,7 @@ contract PqzVerdictVectorsTest is Test {
     }
     address internal constant TOKEN = 0x7A7a7A7a7a7a7a7A7a7a7a7A7a7A7A7A7A7A7a7A;
     address internal constant REGISTRY = 0x5ca5000000000000000000000000000000000001;
-    uint256 internal constant CHAIN_ID = 7622;
+    uint256 internal constant CHAIN_ID = 22779;
     bytes32 internal constant CHAIN_UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     uint256 internal constant VKEY = 0xA77E57;
     bytes32 internal constant DOMAIN_TYPEHASH =

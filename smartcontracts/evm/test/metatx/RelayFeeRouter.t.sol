@@ -105,7 +105,7 @@ contract RelayFeeRouterTest is PqzRegistryBase {
     bytes32 internal ml; // the mldsa65 payer UA
 
     function setUp() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         (bytes memory valid, bytes memory invalid) = _mockMlDsa();
         mlv = new MldsaVerifier(UAKinds.MLDSA65, ML65, valid, invalid);
@@ -244,10 +244,10 @@ contract RelayFeeRouterTest is PqzRegistryBase {
             }
             string memory j = string.concat(
                 "[\n",
-                _refRow("cancel_nonce_7", 7622, address(0xC0FFEE), abi.encodeCall(IMetaTx.cancelNonce, (7))),
+                _refRow("cancel_nonce_7", 22779, address(0xC0FFEE), abi.encodeCall(IMetaTx.cancelNonce, (7))),
                 ",\n"
             );
-            j = string.concat(j, _refRow("empty_call", 22776, address(0x5CAA5), ""), ",\n");
+            j = string.concat(j, _refRow("empty_call", 22777, address(0x5CAA5), ""), ",\n");
             vm.writeFile(file, string.concat(j, _refRow("long_call_anvil", 31337, address(0xBEEFCAFE), long), "\n]\n"));
         }
         string memory f = vm.readFile(file);
@@ -308,7 +308,7 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         _send(t, cd, address(tok), s); // another chain
-        vm.chainId(7622);
+        vm.chainId(22779);
         _relay(cd, t);
         assertEq(tok.balanceOf(REL), FEE);
     }

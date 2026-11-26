@@ -1093,14 +1093,14 @@ contract UARegistryTest is UARegistryBase {
 
     // ----- T-CHAIN, T-MEMBER -----
 
-    /// Contexts B and C of structures.json: chain 7622 twice, same registry address, different chainUid. UA-8 (P1):
+    /// Contexts B and C of structures.json: chain 22779 twice, same registry address, different chainUid. UA-8 (P1):
     /// the PoP made for C registers on B (no chain context); the native UAAuth signature of C stays refused on B
     /// (writes stay chain-bound, P6).
     function test_T_CHAIN() public {
         string memory s = _structures();
         bytes32 uidB = vm.parseJsonBytes32(s, ".contexts.B.chainUid");
         bytes32 uidC = vm.parseJsonBytes32(s, ".contexts.C.chainUid");
-        vm.chainId(7622);
+        vm.chainId(22779);
         bytes memory k = _key(0x0104);
         UARegistry rC = _deploy(REG_A, uidC, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
         bytes memory popC = _pop(rC, 0x0104, k);

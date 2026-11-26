@@ -12,7 +12,7 @@ import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 /// @notice T66b Step 5b, the base of every `script/onchain/<Group>.s.sol`: broadcastable (no cheatcode reaches the chain:
 ///         `vm.broadcast` / `vm.startBroadcast` with a key, `vm.sign` off chain, reads of the deploy JSON). Each group
 ///         writes its book `deployments/onchain-<net>-<group>.json` (address -> contract label of groups.json) for
-///         `coverage.py`. Keys from the environment, never printed: ONCHAIN_K1..K3 (default the 7622 genesis test keys
+///         `coverage.py`. Keys from the environment, never printed: ONCHAIN_K1..K3 (default the SCaaS testnet genesis test keys
 ///         0x…01-0x…03). ONCHAIN_NET (the target: local | scaas-testnet | <name>) names the book. The deploy's book:
 ///         DEPLOY_JSON, default this chain's `deployments/<key>.json` (NET-EVM-13), its header checked. Test chains
 ///         only. UNAUDITED.

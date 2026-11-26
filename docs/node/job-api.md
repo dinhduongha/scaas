@@ -117,7 +117,7 @@ means "the node holds a job under this key", never "dead".
 ```json
 {"jobs": [{
   "origin": {"scope": "6f1c…:1", "producer": "payment.request", "key": "0x8d…", "generation": 0},
-  "client_ref": "erp:1234", "chain_key": "evm:7622", "kind": "metatx",
+  "client_ref": "erp:1234", "chain_key": "evm:22779", "kind": "metatx",
   "payload": {"op": {"entry": "mtxUnwrap", "contract": "token", "token": "0x…",
                      "envelope": {"from": "0x…", "batch": "7", "nonce": "0", "validUntil": "1790000300", "mode": 1,
                                   "relayer": "0x…", "fee": "0", "feeRecipient": "0x0000000000000000000000000000000000000000"},
@@ -600,7 +600,7 @@ Response `200` for a well-formed batch; each accepted item carries its **current
 ```json
 {"results": [{"client_ref": "erp:1234", "uid": 17, "created": false, "state": "signed", "tx_hash": "0x…",
               "outer_nonce": 42, "signer": "0x…", "last_seq": 902},
-             {"client_ref": "erp:1235", "error": "UNKNOWN_TOKEN", "detail": "0x… is not registered on evm:7622"}]}
+             {"client_ref": "erp:1235", "error": "UNKNOWN_TOKEN", "detail": "0x… is not registered on evm:22779"}]}
 ```
 
 A fresh accept answers `{"client_ref": "erp:1234", "uid": 17, "created": true, "state": "queued", "last_seq": 902}`.

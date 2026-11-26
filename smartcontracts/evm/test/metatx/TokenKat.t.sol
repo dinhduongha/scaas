@@ -21,7 +21,7 @@ import {nid} from "../helpers/Ids.sol";
 /// T2: the UA structs, signed by an EOA with its own key, ids padded): `metatx_kat.json` (`UAMetaTransaction`,
 /// `cancelNonce(42)`, through the merged `mtxExecute`) and `metatransfer_kat.json` (`UAMetaTransfer`, a payment on its pay
 /// lane with a bound FIXED fee, through the merged `mtxExecuteTransfer`), both in the token domain "SCaaS MetaToken" of a
-/// `NormalToken` clone on chain 7622 with its real `chain_uid`, each with the relayed `calldata` that scaas-node and
+/// `NormalToken` clone on chain 22779 with its real `chain_uid`, each with the relayed `calldata` that scaas-node and
 /// clientkeys must encode byte for byte (`auth` = `UASig{signature}`). The address `MetaTransaction` / `MetaTransfer`
 /// vectors these replaced are in `test/vectors/legacy/ua-mtx-merge/`. `WRITE_KAT=true forge test --match-contract
 /// TokenKatTest` rewrites them.
@@ -39,7 +39,7 @@ contract TokenKatTest is Test {
     NormalToken internal tok;
 
     function setUp() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         tok = NormalToken(
             EnvKit.clone(
@@ -61,7 +61,7 @@ contract TokenKatTest is Test {
                 ),
                 keccak256("SCaaS MetaToken"),
                 keccak256("1"),
-                uint256(7622),
+                uint256(22779),
                 address(tok),
                 UID
             )
@@ -77,7 +77,7 @@ contract TokenKatTest is Test {
     function _common(string memory k, bytes32 domainSep) internal {
         vm.serializeString(k, "domain_name", "SCaaS MetaToken");
         vm.serializeString(k, "domain_version", "1");
-        vm.serializeString(k, "chain_id", "7622");
+        vm.serializeString(k, "chain_id", "22779");
         vm.serializeString(k, "verifying_contract", vm.toString(address(tok)));
         vm.serializeString(k, "salt", vm.toString(UID));
         vm.serializeString(k, "domain_separator", vm.toString(domainSep));

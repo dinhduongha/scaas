@@ -66,7 +66,7 @@ Status: SPECIFIED.
 
 | # | Chain (testnet in the same row) | Contract | Relay | Index | Signing | rpc read | rpc write | SDK | Zether | PQ | PQZ | Self-relay | Native |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | **scaas-testnet** (7622; tier 1) | B | B | B | B | B | B | B | B | B | B | B T41.evm | B |
+| 1 | **scaas-testnet** (22779; tier 1) | B | B | B | B | B | B | B | B | B | B | B T41.evm | B |
 | 2 | Ethereum L1: Ethereum mainnet (1; tier 2); **Sepolia** (tier 1); *Hoodi* (tier 3, not measured); Holesky unreachable | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
 | 3 | BNB Smart Chain (56; tier 2); *testnet 97* (tier 3, not measured) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
 | 4 | Polygon PoS (137; tier 2); *Amoy 80002* (tier 3, not measured) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |

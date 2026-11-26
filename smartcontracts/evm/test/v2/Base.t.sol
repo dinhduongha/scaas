@@ -55,12 +55,12 @@ contract BaseTest is V2Fixture {
     // ------------------------------------------------------------------ domain, init
 
     function test_domainIsSaltedV1AndTheClone() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         (bytes1 f, string memory n, string memory v, uint256 cid, address vc, bytes32 salt,) = t.eip712Domain();
         assertEq(f, hex"1f");
         assertEq(n, "SCaaS MetaToken");
         assertEq(v, "1");
-        assertEq(cid, 7622);
+        assertEq(cid, 22779);
         assertEq(vc, address(t));
         assertEq(salt, UID_);
         assertEq(t.name(), "Harness");

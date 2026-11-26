@@ -35,7 +35,7 @@ contract PqzKeyVerifierTest is PqzRegistryBase {
         vm.clearMockedCalls();
         vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
         new PqzKeyVerifier(PQZ, PQZL_ID, pk, m, regProof);
-        vm.chainId(22776);
+        vm.chainId(22777);
         vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
         new PqzKeyVerifier(PQZ, PQZL_ID, pk, m, regProof);
         assertFalse(v.isSupportedOnThisChain(), "no precompile");
@@ -43,7 +43,7 @@ contract PqzKeyVerifierTest is PqzRegistryBase {
 
     /// Owner ruling 2026-10-31: the verifier deploys and answers at any chain id where the self-test passes.
     function test_anyChainId() public {
-        uint256[2] memory ids = [uint256(22776), 987654321];
+        uint256[2] memory ids = [uint256(22777), 987654321];
         for (uint256 i; i < ids.length; ++i) {
             vm.chainId(ids[i]);
             PqzKeyVerifier v = _newPqzVerifier(PQZL_ID);

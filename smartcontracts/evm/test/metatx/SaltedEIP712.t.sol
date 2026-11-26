@@ -24,7 +24,7 @@ contract SaltedEIP712Test is Test {
     SaltedHarness internal h;
 
     function setUp() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         h = new SaltedHarness("SCaaS TestRegistry", UID);
     }
 
@@ -55,7 +55,7 @@ contract SaltedEIP712Test is Test {
         assertEq(f, bytes1(0x1f));
         assertEq(n, "SCaaS TestRegistry");
         assertEq(v, "1");
-        assertEq(cid, 7622);
+        assertEq(cid, 22779);
         assertEq(vc, address(h));
         assertEq(salt, UID);
         assertEq(ext.length, 0);

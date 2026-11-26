@@ -7,8 +7,8 @@ chạy private trước).
 
 | | |
 |---|---|
-| chainId | **7622** (`0x1dc6`); formerly 9000 (`0x2328`), moved 2026-10-07 because 9000 is also Evmos Testnet. Genesis was reset: state started empty, every contract redeployed |
-| genesis hash | `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` (`chain_uid`, UA R330) |
+| chainId | **22779** (`0x58fb`) from the reset before the pre-freeze tag (owner 2026-11-26, [NET-EVM-02](../../../../../docs/networks/evm.md#NET-EVM-02); the SCaaS mainnet is 22777); before it 7622 (`0x1dc6`, 2026-10-07 to that reset) and 9000 (`0x2328`), which is also Evmos Testnet. Genesis was reset: state started empty, every contract redeployed |
+| genesis hash | `0x9693692c…5be86` from that reset (`chain_uid`, computed, [NET-EVM-02](../../../../../docs/networks/evm.md#NET-EVM-02)); the first one, `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` (UA R330), stays the client vectors' fixed constant |
 | client | Nethermind 1.39.0 |
 | consensus | Clique, period 5s, **một** signer `0xdE36845C…` |
 | gasLimit | `0x1000000` = 16.777.216 |

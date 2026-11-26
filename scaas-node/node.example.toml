@@ -26,7 +26,7 @@ bind = "127.0.0.1:8548" # default; never the port of gateway_bind or admin_bind 
 # Tenants (R90). Imported once; afterwards managed in the store.
 # [[namespaces]]
 # name = "external-pull-prod"
-# chains = ["evm:7622"]
+# chains = ["evm:22779"]
 # allow_call = true                              # mandates / subject accounts need call jobs (R103)
 
 # Mesh partners and acceptance policy (MESH §3.2), imported once like namespaces. The bus itself comes later.
@@ -35,9 +35,9 @@ bind = "127.0.0.1:8548" # default; never the port of gateway_bind or admin_bind 
 # url = "https://a.example.net:8550"
 # spki_sha256 = "<64 lowercase hex>"
 # class = "private"                              # open | private (private: chains required)
-# chains = ["evm:7622"]
+# chains = ["evm:22779"]
 # [[mesh.policy]]
-# chain = "evm:7622"
+# chain = "evm:22779"
 # contract = "0x..."                             # or "*" (never with submit = true)
 # selector = "*"
 # support = "full"                               # none | forward_only | full
@@ -94,13 +94,13 @@ refuse_shield_when_unserved = false # true: refuse shields into an OFFCHAIN toke
 
 [[chains]]
 family = "evm"
-evm_chain_number = 7622
+evm_chain_number = 22779
 rpc_urls = ["http://nethermind:8545"] # >= finality.quorum independent endpoints
 lanes = [0, 1, 2, 3]                  # 4 relayer accounts: hold gas only, never user funds
-# private_key = { env = "SCAAS_RELAYER_KEY_7622" }   # alternative: one raw key = one lane
+# private_key = { env = "SCAAS_RELAYER_KEY_SCAAS_TESTNET" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
 # dex = "0x..."                                  # SCaaSDex ("scaas_dex" in smartcontracts/evm/deployments/scaas-testnet.json)
-chain_uid = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13" # block 0 (evm/chain-uids.json):
+chain_uid = "0x9693692c4ffc3bdca7d4181dbaab179ade3fe010975f8dd0b51ff7c3dff5be86" # block 0 (evm/chain-uids.json):
 # a lane whose RPC block 0 differs never starts (NODE-GW-07)
 # account_factory = "0x..."                      # SmartKeyAccountFactory: the only `deploy` call target (unset: refused)
 # token_factory = "0x..."                        # the token factory (OpenFactory): never a call target; its infoOf
@@ -116,7 +116,7 @@ chain_uid = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"
 # is refused UA_REGISTER_SPLIT
 # governance_routers = ["0x..."]                # GovernanceRouter ("governance_router" in deployments/<key>.json): the only
 # targets of gov_router jobs, direct or relayed (empty: refused). Every entry is a router of the current release (with
-# `mtxNonceFor`, CTR-GOV-33; NODE-JOB-19): a router deployed before it, such as reset 2's on 7622, has no such view, so
+# `mtxNonceFor`, CTR-GOV-33; NODE-JOB-19): a router deployed before it, such as reset 2's on the SCaaS testnet, has no such view, so
 # a derived subject's job on it is requeued without end. Set it from the deploy JSON of the chain's current release;
 # a PQZ e2e run adds its own book's router here
 # compliance_registry = "0x..."                  # ComplianceRegistry ("compliance_registry" in deployments/<key>.json,
@@ -178,7 +178,7 @@ breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_re
 # entries = [{ entry = "deposit", op_type = "Deposit(bytes32 payer,uint256 amount,uint64 releaseAfter,bytes32 salt)" }]
 
 # ---- Public EVM profiles, `draft` (SDK plan T40; smartcontracts/evm/src/chains/<key>/): uncomment one [[chains]] table
-# per chain, with the keys of the 7622 table above (lanes, keys, contracts, breaker). rpc_urls from the environment's
+# per chain, with the keys of the scaas-testnet table above (lanes, keys, contracts, breaker). rpc_urls from the environment's
 # providers (two independent ones at least, NET-EVM-19); finality is each profile's: `tag` (the `finalized` block) where the chain serves it.
 # Ethereum Classic is dropped (owner 2026-11-22, decisions CLI-SDK-32: no finalized block): no rows. On OP, Arbitrum, Base mainnet and Celo the owner
 # disabled mldsa44, mldsa65, mldsa87 and PQZ (their largest transactions are above the chain's limit; each profile's README).

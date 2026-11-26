@@ -25,12 +25,12 @@ maxCodeSize 0x20000 (131,072 B) and removes eip7954TransitionTimestamp from para
 without it maxCodeSize carries the code and the init code limit is 2 x maxCodeSize (pqz-core/nethermind/runs/
 2026-11-03-code-size-probe.txt, arms C and D). Neither changes the genesis header. A
 genesis that already has engine.Pqz (the live chainspec) gets it replaced, on a reset only. --testnet-reset refuses any
-chain but the SCaaS testnet (params.chainId 0x1dc6 = 7622; never 22776, the future mainnet).
+chain but the SCaaS testnet (params.chainId 0x58fb = 22779; never 22777, the future mainnet).
 
 --rescue-vault-alloc <alloc.json> (NET-EVM-14, owner 2026-11-14; with --testnet-reset only) adds one genesis account, the
 RescueVault at RescueLib.SCAAS_DEV_RESCUE with its runtime code and test-key storage, from
 smartcontracts/vectors/governance/rescue_vault_testnet_alloc.json (made by test_testnetGenesisAlloc). Only test networks
-get it: a genesis with chain id 22776 (scaas-mainnet) or an alloc file whose chain key ends in -mainnet is refused with
+get it: a genesis with chain id 22777 (scaas-mainnet) or an alloc file whose chain key ends in -mainnet is refused with
 RESCUE_VAULT_ALLOC_MAINNET_REFUSED before any other check; on every mainnet the vault comes through the public CREATE2
 deployer with the real dev admin, never an alloc. The alloc changes the genesis state root, so the genesis hash (=
 chainUid) moves. patch-chainspec.py --check runs the self-check. Run with python3 -I."""
@@ -57,11 +57,11 @@ RESET = {
 RESET_REMOVE = (
     "eip7954TransitionTimestamp"  # the one key a reset removes (CTR-GOV-19): EIP-7954 caps the code at 65,536 B
 )
-TESTNET = 7622  # the only chain --testnet-reset may touch (owner 2026-10-15; 22776 is the future mainnet)
+TESTNET = 22779  # the only chain --testnet-reset may touch (owner 2026-10-15; 22777 is the future mainnet)
 RESET_GAS_LIMIT = "0xbebc200"  # 200,000,000 = config.json Blocks.TargetBlockGasLimit: no ramp after the reset
 # The Amsterdam keys of the SCaaS testnet (runs/2026-10-21-testnet-reset-2.2.0.sh); the self-check's chainspec carries them
 AMSTERDAM = [2780, 7708, 7778, 7928, 7954, 7976, 7981, 8024, 8037, 8038, 8246]
-MAINNET = 22776  # scaas-mainnet, the owner's only: never a RescueVault alloc (NET-EVM-14)
+MAINNET = 22777  # scaas-mainnet, the owner's only: never a RescueVault alloc (NET-EVM-14)
 RESCUE_VAULT = "d33d17991f57befb4ccbb3e57c477c10bde5b465"  # RescueLib.SCAAS_DEV_RESCUE
 RESCUE_ALLOC = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -104,7 +104,7 @@ def main(src, eng, ts, out, *flags):
     t = int(ts, 0)
     g0 = int(str(g["genesis"]["timestamp"]), 0)
     if reset and int(str(g["params"].get("chainId", "0")), 0) != TESTNET:
-        sys.exit(f"--testnet-reset: chainId {g['params'].get('chainId')} is not the SCaaS testnet's {TESTNET} (0x1dc6)")
+        sys.exit(f"--testnet-reset: chainId {g['params'].get('chainId')} is not the SCaaS testnet's {TESTNET} (0x58fb)")
     if reset and t != g0:
         sys.exit(f"--testnet-reset: timestamp {t} is not the genesis timestamp {g0}")
     if not reset and t < time.time() + 300:
@@ -162,7 +162,7 @@ def check():
         for f, g0 in ((src, "0x0"), (src2, hex(now + 3600))):
             json.dump(
                 {
-                    "params": {"networkID": 1, "chainId": "0x1dc6"},
+                    "params": {"networkID": 1, "chainId": "0x58fb"},
                     "engine": {"clique": {}},
                     "genesis": {"timestamp": g0},
                     "accounts": {"0x1": {}},
@@ -188,14 +188,14 @@ def check():
         main(src2, eng, str(now + 3600), out, "--testnet-reset")
         other = os.path.join(d, "g22776.json")  # review amsterdam-node L2: a reset of any other chain is refused
         g = json.load(open(src))
-        g["params"]["chainId"] = hex(22776)
+        g["params"]["chainId"] = hex(22777)
         json.dump(g, open(other, "w"))
         try:
             main(other, eng, "0", out, "--testnet-reset")
-            raise AssertionError("reset of chain 22776")
+            raise AssertionError("reset of chain 22777")
         except SystemExit as e:
-            assert "not the SCaaS testnet's 7622" in str(e.code), e.code
-            print(f"  refused (chainId 22776, --testnet-reset): {e.code}")
+            assert "not the SCaaS testnet's 22779" in str(e.code), e.code
+            print(f"  refused (chainId 22777, --testnet-reset): {e.code}")
         main(src2, eng, str(now + 3601), out)
         # CTR-GOV-19: a reset of an Amsterdam chainspec sets maxCodeSize 0x20000 and removes eip7954TransitionTimestamp, and
         # nothing else of the Amsterdam keys; without --testnet-reset both stay as they are
@@ -215,16 +215,16 @@ def check():
             "no removal, no code size without --testnet-reset"
         )
         print(f"  no --testnet-reset: {RESET_REMOVE} and maxCodeSize unchanged")
-        g["params"]["chainId"] = hex(22776)
+        g["params"]["chainId"] = hex(22777)
         json.dump(g, open(other, "w"))
         try:
             main(other, eng, "0", out, "--testnet-reset")
-            raise AssertionError("reset of chain 22776")
+            raise AssertionError("reset of chain 22777")
         except SystemExit as e:
-            assert "not the SCaaS testnet's 7622" in str(e.code), e.code
-            print(f"  refused (chainId 22776, Amsterdam chainspec, --testnet-reset): {e.code}")
+            assert "not the SCaaS testnet's 22779" in str(e.code), e.code
+            print(f"  refused (chainId 22777, Amsterdam chainspec, --testnet-reset): {e.code}")
         # NET-EVM-14: the RescueVault alloc on the SCaaS testnet adds exactly that account; a mainnet is refused by name,
-        # first (chain id 22776 would otherwise meet --testnet-reset's chain refusal; a -mainnet key would otherwise pass)
+        # first (chain id 22777 would otherwise meet --testnet-reset's chain refusal; a -mainnet key would otherwise pass)
         main(src, eng, "0", out, "--testnet-reset", "--rescue-vault-alloc", RESCUE_ALLOC)
         acc = json.load(open(out))["accounts"]
         va = json.load(open(RESCUE_ALLOC))

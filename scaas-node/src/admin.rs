@@ -304,7 +304,7 @@ mod tests {
 
     fn ok_reading() -> Reading {
         Reading {
-            key: "evm:7622".into(),
+            key: "evm:22779".into(),
             head: Ok(120),
             stats: Ok(Stats {
                 indexed_block: 100,
@@ -346,31 +346,31 @@ mod tests {
         let want = "\
 # HELP scaas_relay_jobs Relay jobs by chain state.
 # TYPE scaas_relay_jobs gauge
-scaas_relay_jobs{chain=\"evm:7622\",state=\"dead\"} 2
-scaas_relay_jobs{chain=\"evm:7622\",state=\"queued\"} 5
+scaas_relay_jobs{chain=\"evm:22779\",state=\"dead\"} 2
+scaas_relay_jobs{chain=\"evm:22779\",state=\"queued\"} 5
 # HELP scaas_payment_requests_attention Payment requests needing attention.
 # TYPE scaas_payment_requests_attention gauge
-scaas_payment_requests_attention{chain=\"evm:7622\"} 1
+scaas_payment_requests_attention{chain=\"evm:22779\"} 1
 # HELP scaas_indexer_lag_blocks Final head minus the indexed block.
 # TYPE scaas_indexer_lag_blocks gauge
-scaas_indexer_lag_blocks{chain=\"evm:7622\"} 20
+scaas_indexer_lag_blocks{chain=\"evm:22779\"} 20
 # HELP scaas_relayer_balance Relayer lane balance in the smallest gas-coin unit.
 # TYPE scaas_relayer_balance gauge
-scaas_relayer_balance{chain=\"evm:7622\",lane=\"0xaa\"} 10
+scaas_relayer_balance{chain=\"evm:22779\",lane=\"0xaa\"} 10
 # HELP scaas_breaker_open Gas circuit breaker open (1) per lane.
 # TYPE scaas_breaker_open gauge
-scaas_breaker_open{chain=\"evm:7622\",lane=\"0xaa\",breaker=\"base_fee_spike\"} 0
-scaas_breaker_open{chain=\"evm:7622\",lane=\"0xaa\",breaker=\"gas_budget\"} 1
-scaas_breaker_open{chain=\"evm:7622\",lane=\"0xaa\",breaker=\"balance_floor\"} 0
+scaas_breaker_open{chain=\"evm:22779\",lane=\"0xaa\",breaker=\"base_fee_spike\"} 0
+scaas_breaker_open{chain=\"evm:22779\",lane=\"0xaa\",breaker=\"gas_budget\"} 1
+scaas_breaker_open{chain=\"evm:22779\",lane=\"0xaa\",breaker=\"balance_floor\"} 0
 # HELP scaas_fee_unread_total Landed transactions whose fee could not be read, so the gas budget missed it.
 # TYPE scaas_fee_unread_total counter
-scaas_fee_unread_total{chain=\"evm:7622\",lane=\"0xaa\"} 2
+scaas_fee_unread_total{chain=\"evm:22779\",lane=\"0xaa\"} 2
 # HELP scaas_drift_alerts Unmatched inbound transfers plus balance mismatches.
 # TYPE scaas_drift_alerts gauge
-scaas_drift_alerts{chain=\"evm:7622\"} 3
+scaas_drift_alerts{chain=\"evm:22779\"} 3
 # HELP scaas_rpc_failover_answers_total Chain reads answered by an rpc_urls endpoint other than the first (no job dead on them).
 # TYPE scaas_rpc_failover_answers_total counter
-scaas_rpc_failover_answers_total{chain=\"evm:7622\"} 4
+scaas_rpc_failover_answers_total{chain=\"evm:22779\"} 4
 ";
         assert_eq!(render(&[ok_reading()]).metrics, want);
         assert_eq!(esc("a\"b\\c\nd"), "a\\\"b\\\\c\\nd");

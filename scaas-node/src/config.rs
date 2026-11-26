@@ -1290,7 +1290,7 @@ impl ChainCfg {
         self.family != "evm"
     }
 
-    /// `evm:7622`, `hedera:296`, `sui:localnet`… — khoá chung với ExternalPull `blockchain.chain.chain_key`
+    /// `evm:22779`, `hedera:296`, `sui:localnet`… — khoá chung với ExternalPull `blockchain.chain.chain_key`
     /// (EVM/Hedera: luôn theo `evm_chain_number`, `network` bị bỏ qua như ở ExternalPull).
     /// The store's `chain` row of this chain (R95 bootstrap), `state` `active`.
     pub fn chain_row(&self) -> store::ChainRow {
@@ -1542,7 +1542,7 @@ indexer_api_key_env = "I"
 [store]
 url = "sqlite:///var/lib/scaas/node.db"
 [[chains]]
-evm_chain_number = 7622
+evm_chain_number = 22779
 rpc_urls = ["http://a"]
 signer_key_env = "K"
 finality = { mode = "depth", depth = 1, quorum = 1 }
@@ -1554,7 +1554,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     #[test]
     fn chain_pair_and_private_genesis_at_start() {
         const AVAX: &str = "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b";
-        const SCAAS: &str = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13";
+        const SCAAS: &str = "0x9693692c4ffc3bdca7d4181dbaab179ade3fe010975f8dd0b51ff7c3dff5be86";
         let (u, v) = (
             format!("{:#x}", B256::repeat_byte(0x77)),
             format!("{:#x}", B256::repeat_byte(0x78)),
@@ -1577,9 +1577,9 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
                                                              // the private chain's genesis under another chain id, with or without its own profile beside it
         let e = err(two(("evm", 7623, SCAAS), ("evm", 43114, AVAX)));
         assert!(e.contains(CHAIN_UID_PRIVATE), "{e}");
-        let e = err(two(("evm", 7622, SCAAS), ("evm", 7623, SCAAS)));
+        let e = err(two(("evm", 22779, SCAAS), ("evm", 7623, SCAAS)));
         assert!(e.contains(CHAIN_UID_PRIVATE), "{e}");
-        two(("evm", 7622, SCAAS), ("evm", 7623, &u)).unwrap(); // twin: the private chain itself, a new chain its own genesis
+        two(("evm", 22779, SCAAS), ("evm", 7623, &u)).unwrap(); // twin: the private chain itself, a new chain its own genesis
     }
 
     /// Review P2-4: the pair as resolved at lane start: a second chain key on a pair another resolved is refused, the same key
@@ -1594,7 +1594,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
             .to_string();
         assert!(e.contains(CHAIN_PAIR_TAKEN), "{e}");
         check_resolved_pair("hedera:4242", 4242, B256::repeat_byte(0xa8)).unwrap(); // twin: another genesis
-        let scaas: B256 = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"
+        let scaas: B256 = "0x9693692c4ffc3bdca7d4181dbaab179ade3fe010975f8dd0b51ff7c3dff5be86"
             .parse()
             .unwrap();
         let e = check_resolved_pair("evm:7623", 7623, scaas)
@@ -1833,7 +1833,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         let c: Config = toml::from_str(&raw).unwrap();
         c.validate().unwrap();
         assert_eq!(c.chains[1].chain_key(), "sui:localnet");
-        assert_eq!(c.chains[0].chain_key(), "evm:7622");
+        assert_eq!(c.chains[0].chain_key(), "evm:22779");
         assert_eq!(c.chains[1].params["package"].as_str(), Some("0x2"));
         std::env::set_var("SCAAS_TEST_MNEMONIC", "abandon abandon abandon abandon abandon abandon abandon abandon \
             abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
@@ -1856,7 +1856,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert!(c.validate().is_err());
         let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"\n", "")).unwrap();
         assert!(c.validate().is_err(), "no key at all");
-        let c: Config = toml::from_str(&OK.replace("evm_chain_number = 7622\n", "")).unwrap();
+        let c: Config = toml::from_str(&OK.replace("evm_chain_number = 22779\n", "")).unwrap();
         assert!(c.validate().is_err(), "evm needs a chain id");
     }
 
@@ -2092,7 +2092,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     fn bootstrap_lists_are_validated() {
         let ns = |t: &str| format!("{OK}\n[[namespaces]]\n{t}\n");
         toml::from_str::<Config>(&ns(
-            "name = \"external-pull-prod\"\nchains = [\"evm:7622\"]\nallow_call = true",
+            "name = \"external-pull-prod\"\nchains = [\"evm:22779\"]\nallow_call = true",
         ))
         .unwrap()
         .validate()
@@ -2122,7 +2122,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
             .unwrap()
             .validate()
             .unwrap();
-        toml::from_str::<Config>(&peer("class = \"private\"\nchains = [\"evm:7622\"]"))
+        toml::from_str::<Config>(&peer("class = \"private\"\nchains = [\"evm:22779\"]"))
             .unwrap()
             .validate()
             .unwrap();
@@ -2136,7 +2136,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         ));
         let pol = |t: &str| {
             format!(
-                "{OK}\n[[mesh.policy]]\nchain = \"evm:7622\"\nsupport = \"full\"\n\
+                "{OK}\n[[mesh.policy]]\nchain = \"evm:22779\"\nsupport = \"full\"\n\
                                      pool_visibility = \"open\"\n{t}\n"
             )
         };
@@ -2205,11 +2205,11 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     fn boot_set_maps_toml_to_store_rows() {
         let raw = OK.replace("finality =", "tokens = [{ address = \"0xCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCD\", decimals = 6 }]\n\
             breaker = { gas_budget_per_hour = \"100000000000000000000\" }\nfinality =")
-            + "\n[[namespaces]]\nname = \"external-pull\"\nchains = [\"evm:7622\", \"evm:7622\"]\n";
+            + "\n[[namespaces]]\nname = \"external-pull\"\nchains = [\"evm:22779\", \"evm:22779\"]\n";
         let c: Config = toml::from_str(&raw).unwrap();
         c.validate().unwrap();
         let set = c.boot_set(&[vec!["0xAA".into()]]);
-        assert_eq!(set.chains[0].chain_key, "evm:7622");
+        assert_eq!(set.chains[0].chain_key, "evm:22779");
         assert_eq!(set.chains[0].state, "active");
         assert_eq!(
             set.tokens[0].address, "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
@@ -2218,13 +2218,13 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert_eq!(
             set.lanes,
             [store::LaneRow {
-                chain_key: "evm:7622".into(),
+                chain_key: "evm:22779".into(),
                 label: "0xAA".into(),
                 account_index: 0,
                 journal_max: None
             }]
         );
-        assert_eq!(set.namespaces[0].chains, ["evm:7622"]);
+        assert_eq!(set.namespaces[0].chains, ["evm:22779"]);
         let b: serde_json::Value = serde_json::from_str(&set.chains[0].breaker).unwrap();
         assert_eq!(
             b["gas_budget_per_hour"], "100000000000000000000",
@@ -2244,9 +2244,9 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
                       tokens = [{ address = \"0.0.1234\", decimals = 6 }]\n";
         let raw = OK.replace("finality =", &format!("tokens = [{{ address = \"{ck}\", decimals = 6 }}]\nfinality ="))
             + hedera
-            + &format!("[[mesh.policy]]\nchain = \"evm:7622\"\ncontract = \"{ck}\"\nselector = \"0xA9059CBB\"\n\
+            + &format!("[[mesh.policy]]\nchain = \"evm:22779\"\ncontract = \"{ck}\"\nselector = \"0xA9059CBB\"\n\
                         support = \"none\"\npool_visibility = \"none\"\n\
-                        [[mesh.policy]]\nchain = \"evm:7622\"\ncontract = \"*\"\nselector = \"*\"\n\
+                        [[mesh.policy]]\nchain = \"evm:22779\"\ncontract = \"*\"\nselector = \"*\"\n\
                         support = \"full\"\npool_visibility = \"open\"\n");
         let c: Config = toml::from_str(&raw).unwrap();
         c.validate().unwrap();
@@ -2265,7 +2265,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         );
         let rows: Vec<crate::mesh::accept::PolicyRow> =
             serde_json::from_value(serde_json::to_value(&set.policy).unwrap()).unwrap();
-        let hit = crate::mesh::accept::lookup(&rows, "evm:7622", low, "0xa9059cbb");
+        let hit = crate::mesh::accept::lookup(&rows, "evm:22779", low, "0xa9059cbb");
         assert_eq!(
             hit.map(|r| r.support),
             Some(crate::mesh::accept::Support::None),

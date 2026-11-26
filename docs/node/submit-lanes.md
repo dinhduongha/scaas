@@ -37,7 +37,7 @@ trait in `scaas-node/src/adapter.rs` is the reference:
 #[async_trait]
 pub trait ChainAdapter: Send + Sync {
     fn family(&self) -> Family;                        // the eight families of the family taxonomy
-    fn chain_key(&self) -> &str;                       // "evm:7622", "sui:localnet", "cosmos:wasmd-1"…
+    fn chain_key(&self) -> &str;                       // "evm:22779", "sui:localnet", "cosmos:wasmd-1"…
     // chain_key alone does not identify a chain (a chain id is not assumed unique): chain = (chain_key, chain_uid),
     // chain_uid = genesis hash reported by the RPC (NET-ALL-22); the adapter compares it at start.
     fn lanes(&self) -> &[Lane];                        // relayer address per lane
@@ -453,7 +453,7 @@ payment across windows, a limit of that path ([NODE-JOB-10](job-api.md#NODE-JOB-
 Non-EVM families use budget + balance floor (no EIP-1559 base fee). A job a lane puts back to the queue, for any reason, backs
 the lane off (1 s doubling to 60 s): the queue is oldest first, so without it the lane would loop on that job at RPC speed. A
 refusal for good is not put back (Soroban `txSOROBAN_INVALID`, `dead` on one claim): the queue is per chain, so that job would
-hold every lane and every job behind it. The SCaaS testnet (chain id 7622, formerly 9000) is a
+hold every lane and every job behind it. The SCaaS testnet (chain id 22779) is a
 Clique chain with EIP-1559 from genesis (`eip1559Transition` 0, genesis `baseFeePerGas` 0; the base fee stays at 0 or
 a few wei while blocks stay under their target, and Nethermind's minimum gas price is 1 wei), so `base_fee_spike`
 applies but rarely trips; the node never assumes a zero gas price there (fees from `eth_feeHistory`, ≥ 1 wei). Metric `scaas_breaker_open{chain,lane,breaker}`;

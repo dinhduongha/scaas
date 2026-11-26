@@ -373,7 +373,7 @@ contract NamedMandateEntriesTest is MandateFixture {
         vm.chainId(7623);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         w.mtxExecute(e, stranger, 0, "", sig);
-        vm.chainId(7622);
+        vm.chainId(22779);
 
         e.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
         e.relayer = relayer;
@@ -558,7 +558,7 @@ contract NamedAccountTest is WebAuthnSoft {
     SmartKeyAccount internal acct;
 
     function setUp() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         fac = new SmartKeyAccountFactory(UID_);
         acct = SmartKeyAccount(payable(fac.deploy(_seedKey(SEED), GUARDIAN)));
@@ -901,7 +901,7 @@ contract NamedAccountTest is WebAuthnSoft {
         vm.chainId(7623);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         acct.mtxExecute(e, GUARDIAN, 0, "", s);
-        vm.chainId(7622);
+        vm.chainId(22779);
 
         e.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
         e.relayer = relayer;

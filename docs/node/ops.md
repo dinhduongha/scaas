@@ -756,7 +756,7 @@ Below it the node refuses the job before it sends anything: `LIQUIDITY_TOO_LARGE
   missing one (owner O1, 2026-11-06); BUILT: the node never reads the precompile for an `OFFCHAIN` job
   (`offchain_job_not_refused_without_precompile`). The node checks RPC genesis hash
   `==` profile `genesis_hash` `==` `registry.chainUid()` `==` each token's `chainUid` and refuses a mismatch (the node
-  chain binding, [gateway.md#chain-binding](gateway.md#chain-binding)): the chain id 7622 (formerly 9000) alone does not identify our
+  chain binding, [gateway.md#chain-binding](gateway.md#chain-binding)): the chain id 22779 alone does not identify our
   chain.
 - Job kinds ([job-api.md#post-v1jobs](job-api.md#post-v1jobs)): envelope ops use the **existing** `metatx` (v1) and
   `ua_metatx` (v3) jobs, with the node-computed digest over the token's domain, idempotency and lanes unchanged; the

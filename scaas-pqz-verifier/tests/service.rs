@@ -47,7 +47,7 @@ const ROGUE: Address = address!("BADBAD0000000000000000000000000000000001");
 /// What a lying RPC or a rogue registry answers for `uaAuthDigest`.
 const FORGED: B256 = B256::repeat_byte(0x66);
 const RELEASE: Address = address!("5CA5000000000000000000000000000000000002");
-const CHAIN_ID: u64 = 7622;
+const CHAIN_ID: u64 = 22779;
 const CHAIN_UID: B256 = b256!("24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464");
 /// The fixed test scalar of `verdict.json`'s writer (`PqzVerdictVectors.t.sol`, `VKEY = 0xA77E57`): a vector key.
 const TEST_KEY: B256 = b256!("0000000000000000000000000000000000000000000000000000000000a77e57");
@@ -63,7 +63,7 @@ const TAG: B256 = B256::repeat_byte(0x7a);
 const CONFIG: &str = r#"
 bind = "127.0.0.1:0"
 rpc_urls = ["http://127.0.0.1:1"]
-chain_id = 7622
+chain_id = 22779
 chain_uid = "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"
 registry = "0x5CA5000000000000000000000000000000000001"
 registry_generation = 1
@@ -1416,7 +1416,7 @@ async fn start_pins_chain_id() {
         .expect("another chain");
     assert!(
         e.to_string()
-            .contains("rpc_urls[1] answers chain 1, the config pins 7622"),
+            .contains("rpc_urls[1] answers chain 1, the config pins 22779"),
         "{e}"
     );
     assert!(
@@ -1426,7 +1426,7 @@ async fn start_pins_chain_id() {
         "an endpoint that does not answer"
     );
     assert!(
-        Config::parse(&CONFIG.replace("chain_id = 7622\n", "")).is_err(),
+        Config::parse(&CONFIG.replace("chain_id = 22779\n", "")).is_err(),
         "chain_id is required"
     );
 }

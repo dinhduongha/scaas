@@ -159,7 +159,7 @@ services:
       COIN: "MBA"
       COIN_NAME: "MNB"
       NETWORK_NAME: "MBANetwork"
-      CHAIN_ID: "7622"
+      CHAIN_ID: "22779"
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:?set in .env}
       # SCaaS testnet only: the per-IP API limit (default 500 / 15 min) locked the UI out during contract
       # verification runs (HTTP 429 on every /api/v2 call) — off on this private chain (owner 2026-10-31)
@@ -177,7 +177,7 @@ services:
   # Blockscout smart-contract-verifier (owner 2026-10-31): Solidity only (Vyper, Sourcify, zkSync off), solc from
   # binaries.soliditylang.org (the only outbound traffic), HTTP 8050 on mba-net only (no published port, gRPC off).
   # Compilers run natively in this container: the docker executor would need the host Docker socket here. Verify all
-  # deployed contracts: smartcontracts/evm/script/verify-blockscout.sh (after every 7622 reset or deploy).
+  # deployed contracts: smartcontracts/evm/script/verify-blockscout.sh (after every SCaaS testnet reset or deploy).
   sc-verifier:
     container_name: mba_sc_verifier
     restart: unless-stopped
@@ -222,7 +222,7 @@ services:
       NEXT_PUBLIC_APP_PROTOCOL: "http"
       NEXT_PUBLIC_NETWORK_NAME: "MBANetwork"
       NEXT_PUBLIC_NETWORK_SHORT_NAME: "MBA"
-      NEXT_PUBLIC_NETWORK_ID: "7622"
+      NEXT_PUBLIC_NETWORK_ID: "22779"
       NEXT_PUBLIC_NETWORK_CURRENCY_NAME: "MNB"
       NEXT_PUBLIC_NETWORK_CURRENCY_SYMBOL: "MBA"
       NEXT_PUBLIC_NETWORK_CURRENCY_DECIMALS: "18"

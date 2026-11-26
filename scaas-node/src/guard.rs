@@ -3230,7 +3230,7 @@ mod tests {
             fields: alloy::primitives::FixedBytes([0x1f]),
             name: "SCaaS MetaToken".into(),
             version: "1".into(),
-            chainId: alloy::primitives::U256::from(7622),
+            chainId: alloy::primitives::U256::from(22779),
             verifyingContract: tok,
             salt: uid,
             extensions: vec![],
@@ -3240,7 +3240,7 @@ mod tests {
             axum::routing::post(move |axum::Json(q): axum::Json<serde_json::Value>| {
                 let (entries, sdom, tdom) = (entries.clone(), sdom.clone(), tdom.clone());
                 async move {
-                    if let Some(b) = block0_of(&q, uid, 7622) {
+                    if let Some(b) = block0_of(&q, uid, 22779) {
                         return axum::Json(
                             serde_json::json!({"jsonrpc": "2.0", "id": q["id"], "result": b}),
                         );
@@ -3318,7 +3318,7 @@ mod tests {
         let mut params = toml::Table::new();
         params.insert("relay_fee".into(), toml::Value::Table(rf));
         ChainCfg {
-            evm_chain_number: 7622,
+            evm_chain_number: 22779,
             rpc_urls: vec![url],
             chain_uid: Some(uid),
             services: vec![cfg],

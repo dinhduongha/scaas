@@ -17,7 +17,7 @@ rpc_policy = "failover"
 # The one chain this process serves, pinned (Fable C-1): the RPC must answer `chain_id` at start, or the service does not
 # start; every served token's code must name `chain_uid` and `registry`, else NOT served (FOREIGN_CHAIN_UID,
 # FOREIGN_REGISTRY). The digest signed is built from these four values, never read from the chain.
-chain_id = 7622
+chain_id = 22779
 chain_uid = "0x0000000000000000000000000000000000000000000000000000000000000000"
 registry = "0x0000000000000000000000000000000000000000"
 # the registry's generation (1 or 2): the version of its EIP-712 domain

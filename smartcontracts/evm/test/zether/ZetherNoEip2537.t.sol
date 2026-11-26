@@ -10,10 +10,10 @@ import {ZetherInnerProductVerifierBls12381} from "../../src/zether/ZetherVerifie
 import {ZetherSchnorrBls12381Verifier} from "../../src/ua/verifiers/PairingVerifiers.sol";
 
 /// CTR-ZTH-52 (owner ruling 2026-10-31): with no chain-id gate, EIP-2537 is classical Zether's only chain requirement.
-/// At the mainnet id 22776, an absent precompile (0x0b–0x11 answer "success, empty") must fail closed on every path.
+/// At the mainnet id 22777, an absent precompile (0x0b–0x11 answer "success, empty") must fail closed on every path.
 contract ZetherNoEip2537Test is ZetherFixture {
     function setUp() public {
-        vm.chainId(22776);
+        vm.chainId(22777);
         _deploy(false);
     }
 

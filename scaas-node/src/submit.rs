@@ -2962,7 +2962,7 @@ pub(crate) mod tests {
                     } else if sel == IToken::eip712DomainCall::SELECTOR {
                         let name = e.domain.unwrap_or("SCaaS MetaToken");
                         Ok(json!(format!("0x{}", alloy::hex::encode(IToken::eip712DomainCall::abi_encode_returns(&IToken::eip712DomainReturn {
-                            fields: alloy::primitives::FixedBytes([0x1f]), name: name.into(), version: "1".into(), chainId: U256::from(7622),
+                            fields: alloy::primitives::FixedBytes([0x1f]), name: name.into(), version: "1".into(), chainId: U256::from(22779),
                             verifyingContract: TOKEN, salt: B256::ZERO, extensions: vec![] })))))
                     } else if sel == crate::abi::IOpenFactory::classReleaseOfCall::SELECTOR {
                         use crate::abi::IOpenFactory as F;

@@ -43,7 +43,7 @@ contract MetaTxBaseTest is MtxFixture {
                 ),
                 keccak256("SCaaS TestRegistry"),
                 keccak256("1"),
-                uint256(7622),
+                uint256(22779),
                 address(reg),
                 UID
             )

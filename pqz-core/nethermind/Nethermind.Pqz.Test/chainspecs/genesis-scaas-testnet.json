@@ -11,8 +11,8 @@
  "params": {
   "gasLimitBoundDivisor": "0x400",
   "minimumGasLimit": "0x1388",
-  "chainId": "0x1dc6",
-  "networkID": "0x1dc6",
+  "chainId": "0x58fb",
+  "networkID": "0x58fb",
   "clique": {
    "period": 5,
    "epoch": 30000

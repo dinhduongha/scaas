@@ -1275,3 +1275,5 @@ params = {rest, prefix, denom, gas_price, zero_fee?}	renamed	owner 2026-11-18 (s
 vaultV1	renamed	owner 2026-11-19 (CLI-SGN-17 is vault v3, dd2c570ef): the device layer seals the v2 vault, `sealDevice(vaultV2, key)`: clients/signers-clientkeys.md#CLI-SGN-17
 sealPqKey({account, index})	renamed	P6h (3), 2026-11-22: the key version is an argument, `sealPqKey({account, index, version})`: clients/signers-clientkeys.md#CLI-SGN-55
 openPqKey({account, index})	renamed	P6h (3), 2026-11-22: the key version is an argument, `openPqKey({account, index, version})`: clients/signers-clientkeys.md#CLI-SGN-55
+evm:7622	renamed	owner 2026-11-26 (NET-EVM-21): the SCaaS testnet is chain id 22779, `evm:22779`: networks/evm.md#NET-EVM-02
+chainid == 7622	renamed	owner 2026-11-26 (NET-EVM-21): `chainid == 22779` does not prove "our chain": contracts/pq-zero-knowledge.md#chain-integration

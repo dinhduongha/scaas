@@ -182,7 +182,7 @@ test("the token's address TradeOrder is refused by name; DexOrder stays for an o
     () =>
       tradeOrderTypedData({
         token: k.verifying_contract,
-        chainId: 7622,
+        chainId: 22779,
         chainUid: k.salt,
         order: decodeOrder(k.order_abi),
       }),
@@ -193,10 +193,16 @@ test("the token's address TradeOrder is refused by name; DexOrder stays for an o
 test("DexOrder (nested TradeOrder) and the DEX cancels in the DEX domain = forge KAT (DexKat.t.sol, dex_order_kat.json)", () => {
   const k = read("dex_order_kat.json");
   const o = decodeOrder(k.maker_order_abi);
-  const td = tradeOrderTypedData({ dex: k.dex, sellToken: k.outside_token, chainId: 7622, chainUid: k.salt, order: o });
+  const td = tradeOrderTypedData({
+    dex: k.dex,
+    sellToken: k.outside_token,
+    chainId: 22779,
+    chainUid: k.salt,
+    order: o,
+  });
   assert.equal(hex(hashStruct(td.types, "DexOrder", td.message)), k.dex_order_struct_hash);
   assert.equal(hex(hashTypedData(td)), k.dex_order_hash);
-  const at = { name: "SCaaS Dex", contract: k.dex, chainId: 7622, chainUid: k.salt };
+  const at = { name: "SCaaS Dex", contract: k.dex, chainId: 22779, chainUid: k.salt };
   assert.equal(
     hex(
       hashTypedData(cancelDexOrderTypedData({ ...at, message: { order: { sellToken: k.outside_token, order: o } } })),
@@ -211,7 +217,7 @@ test("DexOrder (nested TradeOrder) and the DEX cancels in the DEX domain = forge
   const t = decodeOrder(k.taker_order_abi);
   const ut = { ...t, from: padId(t.from), destination: padId(t.destination) };
   assert.equal(
-    hex(hashTypedData(uaTradeOrderTypedData({ token: k.token, chainId: 7622, chainUid: k.salt, order: ut }))),
+    hex(hashTypedData(uaTradeOrderTypedData({ token: k.token, chainId: 22779, chainUid: k.salt, order: ut }))),
     k.taker_order_hash,
   );
 });
@@ -233,7 +239,7 @@ test("SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_accoun
       hashTypedData(
         ownerCallTypedData({
           account: k.verifying_contract,
-          chainId: 7622,
+          chainId: 22779,
           chainUid: k.salt,
           data: addKeyCall(secpSubjectKey("0x" + "77".repeat(20))),
           nonce: k.nonce,
@@ -495,7 +501,9 @@ test("metaTxTypedData keeps chainId exact (number, decimal or hex string, BigInt
         feeRecipient: k.fee_recipient,
       },
     });
-  for (const id of [7622, "7622", "0x1dc6", 7622n]) assert.equal(hex(hashTypedData(td(id))), k.digest, String(id));
+  const c = Number(k.chain_id); // the legacy KAT's own chain id, in every form
+  for (const id of [c, String(c), "0x" + c.toString(16), BigInt(c)])
+    assert.equal(hex(hashTypedData(td(id))), k.digest, String(id));
   assert.equal(hex(hashTypedData(td(k.chain_id, fromHex(k.salt)))), k.digest);
   const big = (1n << 60n) + 1n;
   assert.equal(td(big).domain.chainId, "1152921504606846977");
@@ -510,7 +518,7 @@ test("metaTxTypedData keeps chainId exact (number, decimal or hex string, BigInt
     "11".repeat(32),
     new Uint8Array(31),
   ]) {
-    assert.throws(() => td(7622, bad), /Refusing to sign: the chain_uid is not 32 bytes/, String(bad));
+    assert.throws(() => td(22779, bad), /Refusing to sign: the chain_uid is not 32 bytes/, String(bad));
   }
 });
 
@@ -597,12 +605,12 @@ const ACCOUNT = "0x" + "ac".repeat(20);
 const NOW = 1_800_000_000;
 const NEW_KEY = secpSubjectKey("0x" + "77".repeat(20));
 
-const UID = "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"; // chain 7622 (chain-uids.json)
+const UID = "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"; // the SCaaS testnet's first genesis hash, the vectors' fixed constant (chain-uids.json's note)
 
 /** The account's owner call as a server issues it: an `AddKey` in the salted `SCaaS SmartKeyAccount` domain. */
 function serverOwnerCall(
   key,
-  { account = ACCOUNT, chainId = 7622, salt = UID, nonce = "2", validUntil = String(NOW + 600), ...over } = {},
+  { account = ACCOUNT, chainId = 22779, salt = UID, nonce = "2", validUntil = String(NOW + 600), ...over } = {},
 ) {
   const [kind, x, y, rpIdHash, originHash] = key;
   const td = addKeyTypedData({
@@ -616,7 +624,7 @@ function serverOwnerCall(
 }
 
 test("owner call: the client signs only AddKey(the key it just made) as its own account, on its chain", () => {
-  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, newKey: NEW_KEY, now: NOW };
+  const want = { account: ACCOUNT, chainId: 22779, chainUid: UID, newKey: NEW_KEY, now: NOW };
   const td = serverOwnerCall(NEW_KEY);
   assert.equal(td.primaryType, "AddKey");
   assert.equal(hex(checkOwnerCall(td, want)), hex(hashTypedData(td)));
@@ -627,7 +635,7 @@ test("owner call: the client signs only AddKey(the key it just made) as its own 
   );
   const drain = executeTypedData({
     contract: ACCOUNT,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     name: "SCaaS SmartKeyAccount",
     message: { from: ACCOUNT, target: ATK, value: 1, validUntil: String(NOW + 600) },
@@ -728,7 +736,7 @@ const ATK_ID = padId(ATK);
 function serverPayment(over = {}, dom = {}, tok = TOKEN) {
   const td = uaMetaTransferTypedData({
     contract: tok,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     message: {
       from: ACCOUNT_ID,
@@ -753,7 +761,7 @@ test("payment lane = payLane(entryRef) of the forge KAT; the KAT payment passes 
   const td = kTransfer(k);
   const want = {
     account: k.from,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: k.salt,
     amount: "100",
     decimals: 6,
@@ -777,7 +785,7 @@ test("payment lane = payLane(entryRef) of the forge KAT; the KAT payment passes 
 test("payment: only the payment the user was shown (payee, token, reference, amount, lane, fee), CLI-SGN-05/08", () => {
   const intent = {
     account: ACCOUNT_ID,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     amount: 125000.5,
     decimals: 6,
@@ -848,7 +856,7 @@ test("self-call: exactly the call the client built, on its contract, with the fe
   const allowlist = [{ selector: "0xcfdd7aea", name: "cancelNonce", feeClass: 1 }];
   const want = {
     account: k.from,
-    chainId: 7622,
+    chainId: Number(k.chain_id),
     chainUid: k.salt,
     allowlist,
     call: { contract: k.verifying_contract, data: k.data },
@@ -858,7 +866,7 @@ test("self-call: exactly the call the client built, on its contract, with the fe
     metaTxTypedData({
       name: k.domain_name,
       contract,
-      chainId: 7622,
+      chainId: Number(k.chain_id),
       chainUid: k.salt,
       message: {
         from: k.from,
@@ -966,14 +974,14 @@ test("trade order: exactly the order the client built, on a pinned DEX or wrappe
       ...o,
     };
     const td = outside
-      ? tradeOrderTypedData({ dex: order.dex, sellToken: sellToken || OUT, chainId: 7622, chainUid: UID, order })
-      : uaTradeOrderTypedData({ token: sellToken || TOKEN, chainId: 7622, chainUid: UID, order });
+      ? tradeOrderTypedData({ dex: order.dex, sellToken: sellToken || OUT, chainId: 22779, chainUid: UID, order })
+      : uaTradeOrderTypedData({ token: sellToken || TOKEN, chainId: 22779, chainUid: UID, order });
     td.domain = { ...td.domain, ...dom };
     return td;
   };
   const want = {
     account: ACCOUNT_ID,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     order: mine,
     sellToken: TOKEN,
@@ -1077,7 +1085,7 @@ test("cancel: only the order the user holds or the lane the user chose, from the
   const order = cancelUAOrderTypedData({
     name: "SCaaS MetaToken",
     contract: TOKEN,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     message: {
       order: {
@@ -1091,8 +1099,8 @@ test("cancel: only the order the user holds or the lane the user chose, from the
       },
     },
   }).message.order;
-  const want = { account: ACCOUNT_ID, chainId: 7622, chainUid: UID, contract: TOKEN, order, ua: true };
-  const at = { name: "SCaaS MetaToken", contract: TOKEN, chainId: 7622, chainUid: UID };
+  const want = { account: ACCOUNT_ID, chainId: 22779, chainUid: UID, contract: TOKEN, order, ua: true };
+  const at = { name: "SCaaS MetaToken", contract: TOKEN, chainId: 22779, chainUid: UID };
   const td = cancelUAOrderTypedData({ ...at, message: { order } });
   assert.equal(hex(checkCancel(td, want)), hex(hashTypedData(td)));
   const inv = { batch: 7, minNonce: 43 };
@@ -1129,11 +1137,11 @@ test("cancel: only the order the user holds or the lane the user chose, from the
     /not the cancel you asked for/,
   );
   // the DEX's own lanes (an outside token's orders) keep the address `InvalidateNonces`
-  const dex = { name: "SCaaS Dex", contract: "0x" + "de".repeat(20), chainId: 7622, chainUid: UID };
+  const dex = { name: "SCaaS Dex", contract: "0x" + "de".repeat(20), chainId: 22779, chainUid: UID };
   const dexInv = invalidateNoncesTypedData({ ...dex, ...inv, from: ACCOUNT });
   assert.equal(
     hex(
-      checkCancel(dexInv, { account: ACCOUNT, chainId: 7622, chainUid: UID, contract: dex.contract, invalidate: inv }),
+      checkCancel(dexInv, { account: ACCOUNT, chainId: 22779, chainUid: UID, contract: dex.contract, invalidate: inv }),
     ),
     hex(hashTypedData(dexInv)),
   );
@@ -1142,7 +1150,7 @@ test("cancel: only the order the user holds or the lane the user chose, from the
 test("checkCancel: the UA invalidation resolves its builder", () => {
   const id = "0x" + "ac".repeat(32);
   const inv = { batch: 7, minNonce: 43 };
-  const at = { contract: TOKEN, chainId: 7622, chainUid: UID };
+  const at = { contract: TOKEN, chainId: 22779, chainUid: UID };
   const td = uaInvalidateNoncesTypedData({ ...at, ...inv, from: id });
   assert.equal(hex(checkCancel(td, { account: id, ...at, invalidate: inv, ua: true })), hex(hashTypedData(td)));
 });
@@ -1163,7 +1171,7 @@ test("UA-5a: UAPayeeFee typed data and the receivers' calldata (`cast calldata`,
   const td = uaPayeeFeeTypedData({
     name: "SCaaS MetaToken",
     contract,
-    chainId: 7622,
+    chainId: 22779,
     chainUid,
     message: {
       payment: {
@@ -1250,7 +1258,7 @@ test("UA-5a: UAPayeeFee typed data and the receivers' calldata (`cast calldata`,
     const t = metaTxTypedData({
       name: k.domain_name,
       contract: k.verifying_contract,
-      chainId: 7622,
+      chainId: 22779,
       chainUid: k.salt,
       message: {
         from: k.from,
@@ -1265,7 +1273,7 @@ test("UA-5a: UAPayeeFee typed data and the receivers' calldata (`cast calldata`,
     });
     return checkCall(t, {
       account: k.from,
-      chainId: 7622,
+      chainId: 22779,
       chainUid: k.salt,
       allowlist,
       maxFee: 10000,
@@ -1291,7 +1299,7 @@ test("payee fee: the payee co-signs UAPayeeFee nesting only the payment it expec
     const t = uaPayeeFeeTypedData({
       name: "SCaaS MetaToken",
       contract: TOKEN,
-      chainId: 7622,
+      chainId: 22779,
       chainUid: UID,
       message: {
         payment: { ...payment.message, ...pay },
@@ -1306,7 +1314,7 @@ test("payee fee: the payee co-signs UAPayeeFee nesting only the payment it expec
   };
   const want = {
     payee: PAYEE_ID,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     amount: "125000.5",
     decimals: 6,

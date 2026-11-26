@@ -16,7 +16,7 @@ import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 
-/// KAT of the DEX side (CTR-DEX-16, -18, -02) on a real `SCaaSDex` clone on chain 7622 with its real `chain_uid`:
+/// KAT of the DEX side (CTR-DEX-16, -18, -02) on a real `SCaaSDex` clone on chain 22779 with its real `chain_uid`:
 /// `dex_order_kat.json` holds an outside-token maker order as a `DexOrder` in the DEX domain "SCaaS Dex", a SCaaS taker
 /// order in its token's domain (ua-mtx-merge T6, R12: a `UATradeOrder`, shape 1, the signer's address zero-padded and its
 /// signature in `auth`; `taker_order_abi` is its 13 words, the same bytes as the address-shaped order), the `mtxSettle` calldata of one settlement between them, and the DEX-side
@@ -46,7 +46,7 @@ contract DexKatTest is Test {
     SCaaSDex dex;
 
     function setUp() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         OpenFactory f = EnvKit.factory(address(this), UID_, 0);
         Catalogue.plain(
@@ -91,7 +91,7 @@ contract DexKatTest is Test {
                 ),
                 keccak256("SCaaS Dex"),
                 keccak256("1"),
-                uint256(7622),
+                uint256(22779),
                 address(dex),
                 UID_
             )
@@ -364,7 +364,7 @@ contract DexKatTest is Test {
         assertEq(hm, dex.dexOrderDigest(address(usdc), m));
 
         string memory k = "dex";
-        vm.serializeString(k, "chain_id", "7622");
+        vm.serializeString(k, "chain_id", "22779");
         vm.serializeString(k, "salt", vm.toString(UID_));
         vm.serializeString(k, "dex", vm.toString(address(dex)));
         vm.serializeString(k, "dex_domain_separator", vm.toString(domainSep));

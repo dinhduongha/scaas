@@ -1274,7 +1274,7 @@ did not move in this sample. The full v3 tables (both cores, wasm32, the special
 **Not done in this round:** the package's `expected-results.json` (Task 6) and the fuzz campaign on v3 (Task 7; three
 small `corpus/precompile` inputs still carry the v2 id and now reject on it); the gate and reviews A / B (Tasks 9–11);
 the merge (Task 12); the roll-out on the SCaaS testnet with a new image and gas re-calibration (Task 13). The external
-cryptographic audit before mainnet 22776 remains open.
+cryptographic audit before mainnet 22777 remains open.
 
 ## Transcript B-1 / A-2 (5h Task 8a, branch `pqz-16k`, 2026-10-21)
 

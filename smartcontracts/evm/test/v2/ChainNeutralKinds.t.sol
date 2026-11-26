@@ -37,7 +37,7 @@ contract ChainNeutralKindsTest is Test {
     NormalToken tok;
 
     function setUp() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         ureg = new StubUARegistry(UID_);
         // the router and its registry name one SmartKeyAccount implementation, 0xBEEF, the DEX env's (spec §13.4)

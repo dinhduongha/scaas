@@ -3,7 +3,7 @@
 This folder holds the code that lets a blockchain node check PQZ proofs. It is a **plugin** for the Nethermind 2.2.0
 Ethereum client (no change to Nethermind itself) that adds three **precompiles**: built-in contracts at fixed
 addresses that run native code instead of EVM bytecode. One of them, `PQZ`, hands each proof to the PQZ library
-`libpqz_ffi.so`; the other two check ML-DSA signatures. It runs today on the SCaaS testnet (chain id 7622), which runs
+`libpqz_ffi.so`; the other two check ML-DSA signatures. It runs today on the SCaaS testnet (chain id 22779), which runs
 Amsterdam (Glamsterdam) since its reset on 2026-10-21. The SCaaS testnet is a test chain whose data may be reset; the
 code is unaudited. What PQZ is and how the library works: the parent [pqz-core README](../README.md), §3
 ["Two proof systems, one precompile"](../README.md#3-two-proof-systems-one-precompile).
@@ -341,7 +341,7 @@ ML-DSA-44 / -65: 49,000 / 68,000 + 6 per message word (unchanged).
   provisional rows. Executed on 2026-10-26, log `runs/2026-10-26-pqz5-live.txt`.
 - **Image `2.2.0-pqz6`** (fs3 Task 13 + plan 5h Task 9): reset (path B, backed up) with the calibrated rows, the CREATE2
   deployer in the genesis alloc and EIP-7702 off; the contracts redeployed; the node hardened; Blockscout on. Executed on
-  2026-10-31, log `runs/2026-10-31-pqz6-live.txt`; layout and access in RUNBOOK § 7622 node layout and access.
+  2026-10-31, log `runs/2026-10-31-pqz6-live.txt`; layout and access in RUNBOOK § SCaaS testnet node layout and access.
 
 ## Results (2026-10-15 to 2026-10-31)
 

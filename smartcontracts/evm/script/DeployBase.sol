@@ -164,8 +164,8 @@ abstract contract DeployBase is DeployBook {
     address internal complianceRegistry;
     address internal zetherStatements;
     /// @notice `OpenFactory.noticePeriod` (plan 5g-Z2; owner ruling 2026-10-20): `NOTICE_PERIOD` env. Safe by default:
-    ///         every chain not in `_isTestChain` is a mainnet (22776, Hedera 295, Ethereum, BSC, an unknown chain), with
-    ///         default and floor 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0. At most 30 days
+    ///         every chain not in `_isTestChain` is a mainnet (22777, Hedera 295, Ethereum, BSC, an unknown chain), with
+    ///         default and floor 3 days; 22779 defaults to 10 minutes, the other test / dev chains to 0. At most 30 days
     ///         (`MAX_NOTICE_PERIOD`, the factory's).
     uint64 internal noticePeriod;
     /// @notice The chain's per-transaction gas cap (owner X1, spec 2026-11-19-registry-verify-only-kinds §9): `TX_GAS_CAP`
@@ -496,7 +496,7 @@ abstract contract DeployBase is DeployBook {
     }
 
     function _defaultNotice(uint256 c) internal pure returns (uint256) {
-        return !_isTestChain(c) ? 3 days : c == 7622 ? 10 minutes : 0;
+        return !_isTestChain(c) ? 3 days : c == 22779 ? 10 minutes : 0;
     }
 
     /// @dev The period is immutable: a mainnet never gets a factory with a short notice (review 5g-Z2 P2-4, owner
@@ -510,11 +510,11 @@ abstract contract DeployBase is DeployBook {
     }
 
     /// @notice The test / dev chains (owner ruling 2026-10-20), a fixed list: local dev (31337, 1337), the node e2e's
-    ///         anvils (31900–31999), 7622, Hedera 296–298 and the public testnets of chain-uids.json (Ethereum Sepolia,
+    ///         anvils (31900–31999), 22779, Hedera 296–298 and the public testnets of chain-uids.json (Ethereum Sepolia,
     ///         Hoodi, Holesky; ETC Mordor; BSC, Gnosis Chiado, Polygon Amoy, Base, Celo Sepolia and Alfajores, OP,
     ///         Arbitrum, Avalanche Fuji, Linea). Every other chain is a mainnet.
     function _isTestChain(uint256 c) internal pure returns (bool) {
-        if (c == 31337 || c == 1337 || (c >= 31900 && c <= 31999) || c == 7622 || (c >= 296 && c <= 298)) return true;
+        if (c == 31337 || c == 1337 || (c >= 31900 && c <= 31999) || c == 22779 || (c >= 296 && c <= 298)) return true;
         uint32[14] memory t = [
             uint32(11155111),
             560048,

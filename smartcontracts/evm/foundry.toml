@@ -70,7 +70,7 @@ runs = 64
 depth = 32
 fail_on_revert = true
 
-# Chain 7622, formerly 9000 (private, Clique một signer): Nethermind 2.2.0 with Amsterdam from block 1 (was 1.39.0 with Fusaka + BPO2).
+# The SCaaS testnet, chain id 22779 (private, Clique một signer): Nethermind 2.2.0 with Amsterdam from block 1 (was 1.39.0 with Fusaka + BPO2).
 # [2026-08-31] Trước đây profile này phải là "berlin": genesis khai fork kiểu Geth mà
 # Nethermind bỏ qua im lặng, nên chain chạy pre-London — không PUSH0, không TSTORE,
 # không EIP-2537. Đã sửa chainspec và đo lại: PUSH0/TLOAD/MCOPY/BASEFEE/CLZ đều sống,

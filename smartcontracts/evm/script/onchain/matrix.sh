@@ -11,7 +11,7 @@
 #                             every group, stopped after; the PQ groups on a fresh local Nethermind copy with the PQZ and
 #                             ML-DSA precompiles: COPY=<git-ignored dir> (copy.sh init, genesis0, copygen.py, up; down
 #                             after), or one already up at LOCAL_PQ_RPC; neither: listed as not run. Needs no other chain.
-#   matrix.sh scaas-testnet   the SCaaS testnet RPC (RPC_7622), its Step 5 deploy deployments/scaas-testnet.json and
+#   matrix.sh scaas-testnet   the SCaaS testnet RPC (RPC_SCAAS_TESTNET), its Step 5 deploy deployments/scaas-testnet.json and
 #                             scaas-testnet-t66b-releases.json
 #   matrix.sh <name>          another testnet ([a-z0-9-]): ONCHAIN_RPC_<NAME> (upper case, - as _; ONCHAIN_RPC when it
 #                             is the only named target); PRIVATE_KEY_<NAME> (its deployer) and ONCHAIN_K1_<NAME>..K3 (the
@@ -208,7 +208,7 @@ case $tgt in
         MATRIX_DEPLOY=1
         ;;
     scaas-testnet)
-        RPC=${RPC_7622:?the scaas-testnet target needs RPC_7622, named explicitly (no default)}
+        RPC=${RPC_SCAAS_TESTNET:?the scaas-testnet target needs RPC_SCAAS_TESTNET, named explicitly (no default)}
         # the genesis-funded test keys 0x…01-0x…03 (the PQ group's e2e takes them by number)
         ONCHAIN_K1=$(printf '0x%064x' 1) ONCHAIN_K2=$(printf '0x%064x' 2) ONCHAIN_K3=$(printf '0x%064x' 3)
         export ONCHAIN_K1 ONCHAIN_K2 ONCHAIN_K3 PRIVATE_KEY=$ONCHAIN_K1

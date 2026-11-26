@@ -33,7 +33,7 @@ const NOW = 1_800_000_000;
 // ua-mtx-merge T11 (R21): the payment is `UARelayFee` between ids, the router's `relay(…, bytes32 from, bytes32 payee, …, UASig)`
 const base = {
   token: TOKEN,
-  chainId: 7622,
+  chainId: 22779,
   chainUid: UID,
   router: ROUTER,
   executor: EXECUTOR,
@@ -49,7 +49,7 @@ const inner = (mode, relayer) =>
   metaTxTypedData({
     name: "SCaaS TestRegistry",
     contract: TARGET,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     message: { from: SIGNER, data: "0x12345678", nonce: 4, validUntil: NOW + 300, mode, relayer },
   });
@@ -78,7 +78,7 @@ test("buildRelayFee: open mode by default, one prompt with both intents, the rou
   assert.deepEqual(plan.prompt.payment, { token: TOKEN, amount: 25n, payee: null, open: true });
   const callData = "0xdeadbeef";
   const p = plan.payment(callData);
-  assert.equal(p.ref, relayRef(7622, TARGET, callData));
+  assert.equal(p.ref, relayRef(22779, TARGET, callData));
   assert.equal(p.lane, 7n, "the payer's lane, not payLane(ref)");
   assert.equal(p.nonce, 2n);
   const m = p.typedData.message;
@@ -131,7 +131,7 @@ test("buildRelayFee: an open inner envelope stays open; a bound payee; a derived
 test("mtxExecuteCalldata on a token: the UAMetaTransaction and a UASig (spec §2.3: one name, the struct by kind)", () => {
   const td = uaMetaTxTypedData({
     contract: TARGET,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     message: { from: padId(SIGNER), data: "0x12345678", nonce: 4, validUntil: NOW + 300, mode: 1, relayer: EXECUTOR },
   });
@@ -165,14 +165,14 @@ test("mtxExecuteCalldata: the signed call the payment commits to", () => {
   assert.deepEqual([w(11), hex(cd.subarray(4 + 32 * 12, 4 + 32 * 12 + 4))], [4n, "0x12345678"]);
   assert.equal(w(13), 65n, "signature length");
   assert.equal(cd.length, 4 + 32 * 17);
-  assert.equal(plan.payment(cd).ref, relayRef(7622, TARGET, cd));
+  assert.equal(plan.payment(cd).ref, relayRef(22779, TARGET, cd));
 });
 
 test("a named entry as the relayed call: fee 0, relayer bound to the executor; the payment commits to its calldata", () => {
   const td = uaUnwrapTypedData({
     name: "SCaaS MetaToken",
     contract: TARGET,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     message: { from: padId(SIGNER), wrapped: 7, recipient: SIGNER, validUntil: NOW + 300, mode: 1 },
   });
@@ -184,7 +184,7 @@ test("a named entry as the relayed call: fee 0, relayer bound to the executor; t
   assert.ok(TYPED_OPS.UAUnwrap.call(plan.call, new Uint8Array(65)).abi.startsWith("mtxUnwrap("));
   const p = plan.payment(cd);
   assert.equal(p.typedData.message.callDataHash, hex(keccak_256(cd)));
-  assert.equal(p.ref, relayRef(7622, TARGET, cd));
+  assert.equal(p.ref, relayRef(22779, TARGET, cd));
 });
 
 test("buildRelayFee refuses to pay the executor, an inner envelope bound elsewhere or on another contract", () => {

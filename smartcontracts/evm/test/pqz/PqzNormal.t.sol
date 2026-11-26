@@ -578,10 +578,10 @@ contract PqzNormalTest is PqzFixture {
     }
 
     /// Owner ruling 2026-10-31 (no chain lock; capability only): with the kind enabled, `createToken` works at any chain
-    /// id where the precompile's self-test passes (22776, the mainnet; an arbitrary id) and is refused where it fails.
+    /// id where the precompile's self-test passes (22777, the mainnet; an arbitrary id) and is refused where it fails.
     function test_createToken_anyChainId_selfTestDecides() public {
         assertTrue(factory.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ));
-        uint256[2] memory ids = [uint256(22776), 987654321];
+        uint256[2] memory ids = [uint256(22777), 987654321];
         for (uint256 i; i < ids.length; ++i) {
             vm.chainId(ids[i]);
             _mockSelfTest();

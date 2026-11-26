@@ -59,7 +59,7 @@ python3 ../../scripts/size_gate.py "$T"/sizes.json size-baseline.json
 
 Limits: token implementations 20,480 B, other contracts 24,576 B (EIP-170), init code 49,152 B (EIP-3860).
 `size-baseline.json` lists the contracts allowed over their limit at a recorded size that may only shrink (owner
-2026-10-11: size work waits for Glamsterdam; test chains such as 7622 allow 65,536 / 131,072 B). Logic in `public` /
+2026-10-11: size work waits for Glamsterdam; test chains such as the SCaaS testnet allow 65,536 / 131,072 B). Logic in `public` /
 `external` library functions (the four PQZ libraries, `ZetherLib`, `WrappedLib`, `GovernanceLib`, …) is a separately deployed contract
 reached by DELEGATECALL and does not count towards a token's size; `internal` library functions are copied into it.
 
