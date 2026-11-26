@@ -2692,6 +2692,9 @@ pub(crate) mod tests {
         sent: Vec<(String, usize)>,
         /// the stored record's `treeHash` and `ctListHash` (the job's, A-7)
         signed: (B256, B256),
+        /// A-1: another sender lands the list just before the node's own `addPathList` is estimated (that estimate reverts
+        /// `PqChatPathList`, as the contract answers a second list)
+        race_list: bool,
     }
 
     /// A `PqChat` write's entry and named args, as the node's rows read the calldata.
@@ -2849,6 +2852,17 @@ pub(crate) mod tests {
                 // Nethermind 2.2.0's estimate-stage answer for a call over 2^24 regular gas (at its 100 M RPC gas cap)
                 "eth_estimateGas" if e.sim == Some("estimate_oog") => Err(err(-32000, "gas required exceeds allowance (100000000)", None)),
                 "eth_estimateGas" if e.sim == Some("estimate_down") => Err(err(-32000, "upstream timeout", None)),
+                "eth_estimateGas" if e.tree.as_ref().is_some_and(|t| t.race_list && !t.list) && {
+                    let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
+                    tree_args(&alloy::hex::decode(&input[2..]).unwrap()).is_some_and(|(en, _)| en == "addPathList")
+                } => {
+                    use alloy::sol_types::SolError;
+                    if let Some(t) = e.tree.as_mut() {
+                        t.list = true;
+                    }
+                    let data = crate::abi::IPqChatErrors::PqChatPathList { epochId: B256::ZERO }.abi_encode();
+                    Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                }
                 "eth_estimateGas" if e.tree.as_ref().is_some_and(|t| t.whole_over) && {
                     let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
                     tree_args(&alloy::hex::decode(&input[2..]).unwrap())
@@ -3375,6 +3389,73 @@ pub(crate) mod tests {
             let t = t.tree.as_ref().unwrap();
             assert!(t.record && t.list && t.keys && t.cts.iter().chain(&t.wraps).all(|x| *x));
         }
+    }
+
+    /// A-1 of the TreeKEM T4-T9 review: another sender lands the list first, so the node's own `addPathList` simulation
+    /// reverts `PqChatPathList`: no verdict (the job waits under `TREE_SET_SENDING`), the next pass reads the list in state and
+    /// goes on; the set completes and is `consumed`, never `dead`.
+    #[tokio::test]
+    async fn a_part_another_sender_landed_first_is_no_verdict() {
+        let set = crate::tree_set::tests::sets()
+            .into_iter()
+            .find(|a| {
+                let n = |k: &str| a[k].as_array().map_or(0, Vec::len);
+                n("cts") > 2 && n("nodeKeys") > 0 && n("wraps") > 0
+            })
+            .map(|mut a| {
+                a.as_object_mut().unwrap().remove("epochId");
+                a
+            })
+            .unwrap();
+        let (cts, adds) = (
+            set["cts"].as_array().unwrap().len(),
+            set["wraps"].as_array().unwrap().len(),
+        );
+        let (url, rpc) = fake_evm(Evm {
+            tree: Some(FakeTree {
+                whole_over: true,
+                race_list: true,
+                cts: vec![false; cts],
+                wraps: vec![false; adds],
+                signed: (
+                    set["c"]["treeHash"].as_str().unwrap().parse().unwrap(),
+                    set["c"]["ctListHash"].as_str().unwrap().parse().unwrap(),
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await;
+        let (external_pull, o) = fake_external_pull(Fake {
+            tokens: toks(),
+            ..Default::default()
+        })
+        .await;
+        let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
+        let op = json!({"entry": "commit", "contract": "pqchat", "token": format!("{TOKEN:#x}"),
+            "validUntil": (now() + 300).to_string(), "args": set});
+        let (w, _) = work_of_op(Some(9), &op, None).unwrap();
+        for _ in 0..12 {
+            if states(&o).iter().any(|x| x == "consumed") {
+                break;
+            }
+            s.tree(w.clone(), None, "commit").await;
+            let hashes: Vec<B256> = rpc.lock().unwrap().sent.iter().map(|x| x.0).collect();
+            hashes.into_iter().for_each(|h| {
+                rpc.lock().unwrap().receipts.insert(h, true);
+            });
+            s.track().await;
+        }
+        let st = states(&o);
+        assert!(
+            st.iter().any(|x| x == "consumed") && !st.iter().any(|x| x == "dead"),
+            "{st:?}"
+        );
+        let sent = rpc.lock().unwrap().tree.as_ref().unwrap().sent.clone();
+        assert!(
+            !sent.iter().any(|x| x.0 == "addPathList"),
+            "the node never sent the list: {sent:?}"
+        );
     }
 
     fn states(o: &Shared) -> Vec<String> {
