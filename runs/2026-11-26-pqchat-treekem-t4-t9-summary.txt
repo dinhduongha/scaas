@@ -6,10 +6,22 @@ t4 mutants (runs/2026-11-26-pqchat-treekem-t4b-mutants.py) | 2de961ec8 | 0 | 10 
 t4 docs_check check / paths | 2de961ec8 | 0 | 0 errors, 7 budget warnings as before; 0 machine paths
 t5 sdk: capped cargo test --features pqchat-records --lib pqchat_tree | 728bdf514 | 0 | 4 passed
 t5 sdk: clippy --features pqchat-records --lib --tests -D warnings | 728bdf514 | 0 | clean
-t5 mutants (clients/scaas-sdk/runs/2026-11-26-pqchat-treekem-t5-mutants.py) | 728bdf514 | - | 5 load (check), not run: no free capped slot during the round's matrix
 t6 pqchat-core: clippy --all-targets -D warnings | 1fd3912b9 | 0 | clean (tests/chain_tree.rs compiled)
 t6 pqchat-core: check_reads.py / gen_abi.py --check | 1fd3912b9 | 0 | 56 reads (42 trusted), 19 writes, 0 refused; abi.json equal
-t6 pqchat-core: cargo test (non-ignored) | 1fd3912b9 | - | not run: waited about 70 min for a capped slot, stopped (the matrix's three slots busy)
-t7 bind (runs/2026-11-17-pqchat-core-bind.sh) | 1fd3912b9 | - | not run; the tree module is frb-ignored (Rust-only this round), four error codes appended
-t8 pqc-chain chain_tree_session (anvil, forge script) | 1fd3912b9 | - | not run (no slot); the Nethermind rows: T3d's replica run (runs/2026-11-25-treekem512-nethermind.py), not repeated
-t9 docs_check check / paths, test_docs_check | 1fd3912b9 | 0 | 0 errors, 7 budget warnings as before; 0 machine paths; ok
+t5 mutants (clients/scaas-sdk/runs/2026-11-26-pqchat-treekem-t5-mutants.py) | 728bdf514 | 0 | 5 mutants, 5 killed
+t6 pqchat-core: cargo test --features vectors (all targets) | 4a62ed2d0 | 0 | green; tests/tree_scenarios.rs 7 passed; tests/errors.rs count 29 -> 36
+t6 pqchat-core: tests/chain_tree.rs (anvil, the deploy script's release) | 4a62ed2d0 | 0 | 1 passed: creation one tx (8.73 M gas), Adds commit, non-admin commit, leave + removal, fresh device to head 3, creation resumed
+t6 mutants (clients/pqchat-core/runs/2026-11-26-pqchat-treekem-t6-mutants.py) | f977de424 | 0 | 7 mutants, 7 killed (one survived at 4a62ed2d0, the model home ignoring the session id: fixed f977de424)
+t7 bind (clients/pqchat-core/runs/2026-11-17-pqchat-core-bind.sh) | 1fd3912b9 | 1 | red: the library build, E0425 AppUaSig (11), E0277 str (17): five public helpers of earlier rounds
+t7 bind | d63d35c6d | 0 | 99 Dart classes; surface 6 holding types, 6 calls, 3 send entries, 0 refused; 82 symbols, the three copy calls exported, no vectors entry
+t8 forge PqChatTreeGasTest -vv | 614972a98 | 0 | 5 passed, 148 GAS lines
+t8 gas/pqchat_tree_rows.py --check | 614972a98 | 0 | equal (pqchat-tree.json from the measured rows; the linear fit gone)
+t8 sdk: cargo test --features pqchat-records --lib pqchat_tree | 614972a98 | 0 | 4 passed; creation cap at 60 M: 13..=17 -> 12; small chain of the plain-commit test 20 M -> 24 M (the plain record asks 20.15 M)
+t8 sdk: clippy --features pqchat-records,vectors --lib --tests -D warnings | 614972a98 | 0 | clean
+t8 forge PqChatTreeGasReplicaTest (TREE_REPLICA=1) | 614972a98 | 0 | 1 passed, 20 REPLICA rows (12 SDK points added)
+t8 Nethermind copy (scaas/nethermind-pqz:2.2.0-pqz11, --memory 1700m) runs/2026-11-26-pqchat-treekem-t8-nethermind.py | 614972a98 | 0 | 20 rows, 0 unexpected: 19 included (list 511 32.12 M, 15 genesis wraps 52.64 M, completion at bounds 36.55 M), control over 2^24 refused at estimate; container removed
+t8 pqchat-core cargo test --features vectors after the rows | be963ffe6 | 0 | green
+t8 node: a_tree_commit_job_lands_in_c37_order_on_a_fake_chain | 091ad32e9 | 0 | 1 passed (over: record alone, list, keys, rest, held ct last alone, consumed; control: whole, one tx); clippy --all-targets clean
+t8 mutants (runs/2026-11-26-pqchat-treekem-t8-mutants.py) | 091ad32e9 | 0 | 4 mutants, 4 killed
+t8 node lib: capped cargo test --lib (after the dev merge d2a997038) | 091ad32e9 | 0 | 907 passed (906 + the fake-chain C37 test)
+t9 docs_check check / paths, test_docs_check | 091ad32e9 | 0 | 0 errors, 7 budget warnings as before; 0 machine paths; ok

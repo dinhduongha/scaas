@@ -596,8 +596,9 @@ script's release, `--enable-tx-gas-limit`): creation in one transaction, an Adds
 commit, a leave and the removal commit, a fresh device replaying to the same head, the creation resumed after a restart. The
 SDK's gas rows are measured (`gas/pqchat_tree_rows.py` over `PqChatTreeGas.t.sol`) and every point replicated and included
 on the local Nethermind copy with 2^24 enforced (`smartcontracts/evm/runs/2026-11-26-pqchat-treekem-t8-nethermind.py`).
-Left: the node's relay of a set by a third party on a chain (the node's C37 is tested pure, `tree_set.rs`), the node's
-fake-RPC submit-level test of C37, and the real session record at 192 keys on Nethermind (its replica row at 64 and 128).
+The node's C37 at the submit level runs on a fake chain (`submit.rs`
+`a_tree_commit_job_lands_in_c37_order_on_a_fake_chain`, with its mutants). Left: the node's relay of a set by a third
+party on a real chain, and the real session record at 192 keys on Nethermind (its replica rows at 64 and 128).
 
 - [ ] Local only. On anvil, deployed through the deploy script (the release with `TREE`): a tree session of 8 keys, a commit by
       a non-admin, an Add, a commit by a third member, a `treeRemove` and the commit after it, a `treeLeave`, a Remove of one device key, the removed UA refused
