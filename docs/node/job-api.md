@@ -998,10 +998,20 @@ else in C37's order, as the lane's own parts while the job waits `queued` under 
 other ciphertexts (`addPath` runs) and the Welcome wraps (`addWraps` runs), a part over the cap split in halves, and last, once
 every other piece is final, the held piece alone (the last ciphertext, else the last Welcome wrap) as the job's own transaction,
 estimated on the state at send time so it carries the completion's gas (fable-r2-9). A part in flight is never sent twice; a
-set another sender completed is `consumed` (`TREE_SET_COMPLETE`). A piece job on its own (`addPathList`, `addPathKeys`,
+set another sender completed is `consumed` (`TREE_SET_COMPLETE`) once the final block shows it complete. **The T4-T9 review's
+fixes (2026-11-26, UNAUDITED):** a revert that another sender's landing explains (`PqChatNonceUsed` on the whole commit,
+`PqChatPathList`, `PqChatPathStored`, `PqChatWrapStored`), by simulation or by a reverted receipt, is no verdict: the job waits
+under `TREE_SET_SENDING` and the next pass reads the state (A-1); a tree `commit` job tracked across a restart is followed by
+its transaction's hash and never re-signed from its payload (its transaction may be a part), and goes back to the queue when
+that settles (A-2); a single piece over the lane's own `max_gas_per_tx` waits, over the RPC's gas cap waits
+`PART_CAP_WAITS` passes, as NODE-JOB-29's parts, and only the chain's limit refuses (A-3); an epoch id that holds another
+record (an author's two commits with one nonce) is `dead` `TREE_SET_SUPERSEDED` (A-7); before the record goes alone the record
+with its list is simulated, so a list whose targets the contract refuses is refused with zero sends (when the two do not fit
+one simulation, the contract checks the list when it lands), and a Welcome wrap must name its Add's member and `keyId` (D-12). A piece job on its own (`addPathList`, `addPathKeys`,
 `addPath`, or `addWraps` on a tree commit's epoch, read by `commitOf`) is relayed only when, with it, nothing the stored record
-signs is missing from state, each of its pieces checked the same way; otherwise it waits under `TREE_SET_WAITING` (another
-sender may land the rest) or is refused `TREE_SET_REFUSED`. The parts of a relayed set are paid with its signed `commit`
+signs is missing from state, each of its pieces checked the same way (its own hashes before any state read); otherwise it waits
+under `TREE_SET_WAITING` (another sender may land the rest; also a ciphertext before its list and a piece before its record,
+A-4) or is refused `TREE_SET_REFUSED` (also node keys short of the signed count, A-5). The parts of a relayed set are paid with its signed `commit`
 whatever `relay_unsigned_pqchat` says (controller call, plan T4: they are bound to the signed record by its hashes); a piece
 job on its own stays under that option. **BUILT (Change 2026-11-24, the code review's D-4 and D-7; `typed.rs` `tree_shape`):**
 `createSession` with `groupMode = 1` is bounded by the tree's bounds at creation (`members` 512, `admins` 32,
@@ -1286,7 +1296,9 @@ chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQ
 ([NODE-JOB-29](#NODE-JOB-29)), `UA_VERIFY_GAS` (a starved registry check, [CTR-UA-65](../contracts/accounts.md#CTR-UA-65)), `FAILOVER_ANSWER: <refusal>` (the
 refusal was read while a failover `rpc_urls` endpoint answered: no verdict until the first endpoint answers; the gateway and DEX
 intake answer it 503, [submit-lanes.md](submit-lanes.md#rpc-failover)); a lane stopped by
-`SERVICE_ENTRIES_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)); job `dead` before sending with `UA_VERIFY_ONLY` or
+`SERVICE_ENTRIES_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)); a tree commit's set: job `queued` with `TREE_SET_SENDING`,
+`TREE_SET_WAITING` or `EXIT_WAITING`, `consumed` with `TREE_SET_COMPLETE`, `dead` with `TREE_SET_REFUSED` or
+`TREE_SET_SUPERSEDED` ([the whole-set guard](#tree-set-guard)); job `dead` before sending with `UA_VERIFY_ONLY` or
 `UA_WRONG_GENERATION` (a registry write sent to the wrong generation of the line, its target named), and after a part's
 revert with `UA_KEY_NOT_CACHEABLE` ([CTR-UA-65](../contracts/accounts.md#CTR-UA-65)); chain `halted` with reason `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)).
 
