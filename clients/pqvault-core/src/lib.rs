@@ -2,7 +2,7 @@
 //! `pqvault-core`: PqVault's app core above `scaas-sdk` (CLI-PQV-01; spec docs/superpowers/specs/2026-11-17-pqvault.md §7).
 //! It builds, encrypts, verifies, opens and merges vault records; every signature, verification, KEM, HKDF, Argon2id, AEAD
 //! and random key runs in `scaas-ua` through the SDK's app-core surface on key handles (C1, CLI-PQV-12), every record is
-//! signed by the SDK's PqVault call `sign_pqvault_record` (C2, CLI-PQV-13), every chain read is the SDK's `read_app` as a
+//! signed by the SDK's PqVault calls `prepare_pqvault_record` and `AppPrepared::sign` (C2, CLI-PQV-13), every chain read is the SDK's `read_app` as a
 //! read that feeds a decryption (ARCH-POS-15), and every write is a call of the contract the SDK prepares and quotes for the
 //! user to review (`AppCore::prepare_app_call`, sent by `Wallet::submit_native_send`). It opens no connection and holds no
 //! key byte. **UNAUDITED: test data only (CLI-PQV-08).**
@@ -24,7 +24,9 @@ pub use records::{Addr, Signed, B32};
 pub use vault::*;
 
 use records::UaSig;
-use scaas_sdk::app_core::{AppCall, AppCore, AppDesc, AppKey, AppPath, AppSigned, AppWrap};
+use scaas_sdk::app_core::{
+    AppCall, AppCore, AppDesc, AppKey, AppPath, AppSigned, AppWrap, MsigVersion,
+};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::{Sdk, SdkError};
 use serde_json::Value;
@@ -106,7 +108,8 @@ pub trait Net: Send + Sync {
         sig: &str,
         args: Value,
     ) -> Result<Value, SdkError>;
-    /// `AppCore::sign_pqvault_record`; `chain` the instance's profile (where an `msig` signer's records are read on the
+    /// `AppCore::prepare_pqvault_record`, then `AppPrepared::sign` (pqvault-core builds the typed data from its own named fields);
+    /// `chain` the instance's profile (where an `msig` signer's records are read on the
     /// portable path: the SDK's explicit `records`).
     async fn sign(
         &self,
@@ -115,7 +118,8 @@ pub trait Net: Send + Sync {
         path: AppPath,
         typed: String,
     ) -> Result<AppSigned, SdkError>;
-    /// `AppCore::verify_pqvault_record`.
+    /// `AppCore::verify_pqvault_record_versions`: on a pass every `(msig, version)` the signature names (CTR-UA-74 step 6), `None`
+    /// on a refusal.
     async fn verify(
         &self,
         chain: &str,
@@ -123,7 +127,7 @@ pub trait Net: Send + Sync {
         path: AppPath,
         typed: String,
         sig: UaSig,
-    ) -> Result<bool, SdkError>;
+    ) -> Result<Option<Vec<MsigVersion>>, SdkError>;
     /// `AppCore::kem_wrap`: `key` wrapped to `recipient`'s KEM key at `version`, read from `chain`'s registry.
     async fn kem_wrap(
         &self,
@@ -260,7 +264,6 @@ impl Net for SdkNet {
                 records::hex(&contract.0),
                 entry(sig)?,
                 args.to_string(),
-                true,
             )
             .await?;
         serde_json::from_str(&out).map_err(|_| SdkError::Argument)
@@ -275,7 +278,9 @@ impl Net for SdkNet {
         let records = (matches!(account, KeyRef::Msig { .. }) && matches!(path, AppPath::Portable))
             .then(|| chain.to_string());
         self.0
-            .sign_pqvault_record(account.clone(), path, records, typed)
+            .prepare_pqvault_record(account.clone(), path, records, typed)
+            .await?
+            .sign()
             .await
     }
     async fn verify(
@@ -285,9 +290,9 @@ impl Net for SdkNet {
         path: AppPath,
         typed: String,
         sig: UaSig,
-    ) -> Result<bool, SdkError> {
+    ) -> Result<Option<Vec<MsigVersion>>, SdkError> {
         self.0
-            .verify_pqvault_record(chain.into(), records::hex(&ua.0), path, typed, sig)
+            .verify_pqvault_record_versions(chain.into(), records::hex(&ua.0), path, typed, sig)
             .await
     }
     async fn kem_wrap(

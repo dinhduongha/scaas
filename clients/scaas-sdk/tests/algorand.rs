@@ -49,6 +49,10 @@ struct Node {
     boxes: HashMap<(u64, Vec<u8>), Vec<u8>>,
     /// every answer after the first of a set names one round more (the chain moved between two reads), this many times
     moves: u32,
+    /// the apps algod holds (`/v2/applications/{id}`); another is 404 `application does not exist`
+    apps: Vec<u64>,
+    /// a box's 404 with this message instead of algod's `box not found` (a proxy's, T26 B2-6)
+    box_404: Option<&'static str>,
 }
 
 type Fake = Arc<Mutex<Node>>;
@@ -72,6 +76,8 @@ fn node() -> Fake {
         native: HashMap::new(),
         boxes: HashMap::new(),
         moves: 0,
+        apps: vec![USDC, VND],
+        box_404: None,
     };
     n.native.insert(ALICE.into(), json!(2_500_000u64));
     n.boxes.insert((USDC, name(b'b', [7; 32])), word(5_000_000));
@@ -133,9 +139,16 @@ fn answer(n: &mut Node, path: &str) -> (u16, Vec<u8>) {
                     json!({"name": nm.strip_prefix("b64:").unwrap(), "round": round,
                                        "value": B64.encode(v)}),
                 ),
-                None => not_found(),
+                None => match n.box_404 {
+                    Some(m) => (404, format!(r#"{{"message":"{m}"}}"#).into_bytes()),
+                    None => not_found(),
+                },
             }
         }
+        ["v2", "applications", app] => match n.apps.contains(&app.parse().unwrap()) {
+            true => ok(json!({"id": app.parse::<u64>().unwrap(), "params": {}})),
+            false => (404, br#"{"message":"application does not exist"}"#.to_vec()),
+        },
         _ => (404, br#"{"message":"no route"}"#.to_vec()),
     }
 }
@@ -275,6 +288,34 @@ async fn algorand_ua_id_reads_the_u_box() {
     );
 }
 
+/// T26 B2-6: a box 404 is a zero balance only with algod's `box not found` of an app algod holds; a proxy's 404 or a listed
+/// app the network does not have is the endpoint's malformed answer (alone `EndpointAllFailed`), never a silent 0. Control:
+/// the absent box of a held app is 0.
+#[tokio::test(flavor = "multi_thread")]
+async fn algorand_a_404_is_zero_only_for_an_absent_box() {
+    let f = node();
+    let (u, _) = up(&f).await;
+    assert_eq!(
+        amounts(&balances(&[&u], BOB).await.unwrap()),
+        ["0", "0"],
+        "control"
+    );
+    f.lock().unwrap().box_404 = Some("no route");
+    assert_eq!(
+        code(balances(&[&u], BOB).await),
+        "EndpointAllFailed",
+        "a proxy's 404"
+    );
+    let f = node();
+    f.lock().unwrap().apps = vec![USDC];
+    let (u, _) = up(&f).await;
+    assert_eq!(
+        code(balances(&[&u], BOB).await),
+        "EndpointAllFailed",
+        "an app the network lacks"
+    );
+}
+
 /// A holder that is not an Algorand address (a bad checksum, lower case, 57 characters) nor a `0x` 32-byte id, and a listed
 /// token that is not an app id in decimal (a leading zero, 0, a name, above u64) are `Argument` before any read; the controls
 /// are read.
@@ -396,7 +437,8 @@ async fn algorand_endpoint_of_another_genesis_is_dropped() {
 }
 
 /// `strict_majority`: the others' sets must name the answering endpoint's round and agree; one liar of three is outvoted, two
-/// disagreeing are `EndpointNoMajority`, an endpoint of another genesis does not count, nor one a round ahead.
+/// disagreeing are `EndpointNoMajority`, an endpoint of another genesis does not count, nor one a round behind; one a round
+/// ahead whose values agree counts (algod serves its current round only, T26 B2-6).
 #[tokio::test(flavor = "multi_thread")]
 async fn algorand_strict_majority_agrees_at_one_round() {
     let (a, b, liar, liar2, other, ahead) = (node(), node(), node(), node(), node(), node());
@@ -408,8 +450,10 @@ async fn algorand_strict_majority_agrees_at_one_round() {
         .insert((VND, name(b'b', [7; 32])), word(1));
     other.lock().unwrap().genesis = OTHER;
     ahead.lock().unwrap().round = ROUND + 1;
+    let behind = node();
+    behind.lock().unwrap().round = ROUND - 1;
     let mut u = vec![];
-    for f in [&a, &b, &liar, &liar2, &other, &ahead] {
+    for f in [&a, &b, &liar, &liar2, &other, &ahead, &behind] {
         u.push(up(f).await.0);
     }
     let maj = |l: Vec<&String>| {
@@ -426,9 +470,15 @@ async fn algorand_strict_majority_agrees_at_one_round() {
         code(maj(vec![&u[0], &u[4], &u[2]]).await),
         "EndpointNoMajority"
     );
+    let r = maj(vec![&u[0], &u[5], &u[2]]).await.unwrap();
     assert_eq!(
-        code(maj(vec![&u[0], &u[5], &u[2]]).await),
-        "EndpointNoMajority"
+        r.block, ROUND,
+        "a round ahead agreeing counts; the set stands at the first's round"
+    );
+    assert_eq!(
+        code(maj(vec![&u[0], &u[6], &u[2]]).await),
+        "EndpointNoMajority",
+        "a round behind does not count"
     );
     assert_eq!(code(maj(vec![&u[0], &u[4], &u[1]]).await), "Ok", "control");
 }

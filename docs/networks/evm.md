@@ -16,22 +16,60 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
 
 <a id="chains"></a>
 
+<a id="tiers"></a><a id="NET-EVM-20"></a>**NET-EVM-20** — **Every EVM chain is in one of three tiers** (owner 2026-11-26;
+the classification of the chains the owner did not name is a controller call under the owner's criterion, and the owner may move
+a chain; status: SPECIFIED, a classification of the facts below, no code reads it). The tier says only whether the SCaaS contract
+set can deploy; it changes no rule (one rule on every chain), and a profile still needs the probes of [NET-EVM-19](#NET-EVM-19)
+before `enabled`. **Convention:** wherever the tiers appear, a tier-1 chain is written in **bold**, a tier-2 chain plain, a tier-3
+chain in *italics*.
+
+1. **Tier 1: supports Glamsterdam.** The chain runs the Amsterdam fork with its code size (EIP-7954), so the contract set deploys
+   today ([NET-EVM-06](#NET-EVM-06)).
+2. Tier 2: a block gas limit large enough for every kind; deployable once the chain raises its code size (its Glamsterdam fork,
+   EIP-7954). No kind is disabled for block gas; only the code size is missing.
+3. *Tier 3: not yet eligible.* Anything else: kinds disabled for block gas, a per-transaction limit below EIP-7825's
+   2^24 = 16,777,216, a hard runtime cap with no plan to raise it, or facts not measured.
+
+| Tier | Chain (chain id) | Reason (repo facts; the profile READMEs in `smartcontracts/evm/src/chains/<key>/`) |
+|---|---|---|
+| 1 | **SCaaS testnet** (7622) | Amsterdam from block 1, runtime ceiling 131,072 B ([§2](#2-private-scaas-testnet), [NET-EVM-06](#NET-EVM-06)); owner-named |
+| 1 | **Sepolia** (11155111) | Amsterdam since its fork: runtime 65,536 B, init 131,072 B measured; block 199.8 M; owner-named |
+| 2 | Ethereum mainnet (1) | block 59.9 M, every kind fits; `osaka` today, runtime 24,576 B; owner-named |
+| 2 | Polygon PoS (137) | Osaka opcode set, 32,768-B contracts, a 2^25 per-transaction cap; owner-named |
+| 2 | BNB Smart Chain (56) | Mendel = Osaka; runtime 24,576 B; owner-named |
+| 2 | Avalanche C-Chain (43114) | block 80 M, every kind fits; Cancun, runtime 24,576 B ([NET-EVM-16](#NET-EVM-16)); owner-named |
+| 2 | Base Sepolia (84532) | block 120 M, every kind fits; `osaka`, runtime 24,576 B |
+| 2 | Linea (59144), Linea Sepolia (59141) | block 2,000 M, every kind fits; `osaka`, runtime 24,576 B |
+| 2 | Moonbeam (1284), Moonbase Alpha (1287) | block 60 M, a transaction at most 52 M, every kind fits; `osaka`, runtime 24,576 B (its pinned reads are not trusted, [NET-EVM-17](#NET-EVM-17): a probe matter, not the tier's) |
+| 3 | *Hedera* (295, 296) | a transaction at most 15 M gas (below 2^24), at least 80 % of the gas limit charged (HIP-185), runtime 24,576 B on the public testnet; Zether and PQZ refuse it ([hedera.md](hedera.md)); owner-named |
+| 3 | *Celo* (42220), *Celo Sepolia* (11142220) | block 30 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled (decisions CLI-SDK-32) |
+| 3 | *Base* (8453) | block 40 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled |
+| 3 | *OP Mainnet* (10), *OP Sepolia* (11155420) | block 40 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled |
+| 3 | *Arbitrum One* (42161), *Arbitrum Sepolia* (421614) | a transaction at most 32 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled |
+| 3 | *Avalanche Fuji* (43113) | block 32 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled |
+| 3 | *Polkadot Hub* (420420419), *Paseo* (420420417) | REVM's hard 24,576-B runtime cap with no plan to raise it; its gas is no Ethereum gas ([NET-EVM-17](#NET-EVM-17)) |
+| 3 | *Gnosis* (100), *Chiado* (10200) | block gas limit not measured |
+| 3 | *BNB Smart Chain testnet* (97), *Polygon Amoy* (80002), *Hoodi* | not measured (no `profile.json`) |
+| 3 | *TRON* | PLANNED; not measured |
+
+Anvil (31337) is a test tool, not a tier. A chain moves tier when its facts change (a fork, a new block gas limit, a measurement).
+
 | Chain | Chain id | Profile | Gas | Finality gate | Status |
 |---|---|---|---|---|---|
-| SCaaS testnet (private reference chain) | 7622 | `scaas-testnet` (Solidity `amsterdam`, [NET-EVM-06](#NET-EVM-06)) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
+| **SCaaS testnet** (private reference chain; tier 1) | 7622 | `scaas-testnet` (Solidity `amsterdam`, [NET-EVM-06](#NET-EVM-06)) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
 | Anvil (tests) | 31337 (also 1337) | — | — | depth | BUILT (dev only) |
-| Gnosis Chain | 100 | `gnosis` (`amsterdam`; Pectra since 2025-04-30, then Fusaka; deploy after its Glamsterdam fork) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
-| Celo | 42220 | `celo` (`amsterdam`; `prague` by the probe of 2026-11-22, runtime 65,536 B, block 30 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled, owner 2026-11-22, decisions CLI-SDK-32; deploy after its Glamsterdam fork) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
-| BNB Smart Chain | 56 | `bsc` (`amsterdam`; Mendel = Osaka since 2026-04-28; deploy after its Glamsterdam fork) | BNB (~0.05 gwei) | `tag finalized` (BEP-126 fast finality, ~1 s), quorum ≥ 2 | seeded `draft` |
-| Polygon PoS | 137 | `polygon` (`amsterdam`; runs the Osaka opcode set today; deploy after its Glamsterdam fork) | POL (~250–300 gwei) | `tag finalized` (milestones, ~3–6 s); `safe` unsupported | seeded `draft` |
-| Base | 8453 | `base` (`amsterdam`; Azul since 2026-05-28; block 40 M on mainnet: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled there, none on Base Sepolia (120 M), owner 2026-11-22, decisions CLI-SDK-32; deploy after its Glamsterdam fork) | ETH (~0.005 gwei) + L1 data fee | `l1_batch`: `safe` ~90 s, `finalized` ~16 min | seeded `draft` |
-| Avalanche C-Chain, Fuji | 43114, 43113 | `avalanche-mainnet`, `avalanche-testnet` (`amsterdam`; Cancun today, no Amsterdam; a single contract earlier under [NET-EVM-18](#NET-EVM-18)) | AVAX; a transaction pays at least half its gas limit | `tag finalized` (= `safe`, the settled block, ~5 s) | seeded `draft`, [NET-EVM-16](#NET-EVM-16) |
-| Polkadot Hub; Paseo | 420420419; 420420417 | `polkadot-hub-mainnet`, `polkadot-hub-testnet` (`amsterdam`; REVM, 24,576-B runtime cap; Westend Hub dropped by the owner 2026-11-22, [ARCH-POS-20](../decisions.md#ARCH-POS-20)) | DOT; gas folds weight and the storage deposit | `tag finalized` (GRANDPA) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes and the measurement, [NET-EVM-17](#NET-EVM-17) |
-| Moonbeam; Moonbase Alpha | 1284; 1287 | `moonbeam-mainnet`, `moonbeam-testnet` (second, after Polkadot Hub; pinned reads not trusted, `pinnedReads: false`, [ARCH-POS-20](../decisions.md#ARCH-POS-20)) | GLMR; storage-growth gas | `tag finalized` (relay-finalized) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes, [NET-EVM-17](#NET-EVM-17) |
-| Ethereum; Sepolia | 1; 11155111 | `ethereum-mainnet`, `ethereum-testnet` (`amsterdam`; mainnet `osaka` today, Sepolia at Amsterdam since its fork: runtime 65,536 B created and 65,537 B refused, init 131,072 B accepted and 131,073 B refused; no contract in `src/` above them, the size study `docs/research/2026-11-22-evm-size-64k.md`, decisions CLI-SDK-32 (3)) | ETH, type 2 | `tag finalized` (gap 61–95 blocks, ~13–19 min, one sample) | seeded `draft` (SDK plan T40; probes H1–H8 first sample 2026-11-22) |
-| OP Mainnet; OP Sepolia | 10; 11155420 | `op-mainnet`, `op-testnet` (`amsterdam`; `osaka` today, block 40 M; `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled, owner 2026-11-22) | ETH, type 2 + L1 data fee (`l1_fee = "op-stack"`) | `tag finalized` (gap 523–654 blocks, ~19–22 min) | seeded `draft` |
-| Arbitrum One; Arbitrum Sepolia | 42161; 421614 | `arbitrum-mainnet`, `arbitrum-testnet` (`amsterdam`; `osaka` today; a transaction at most 32,000,000 gas, ArbGasInfo; the header's 2^50 is no block cap; `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled, owner 2026-11-22) | ETH, type 2; the L1 component inside `eth_estimateGas` | `tag finalized` (gap ~3,200 blocks, ~15–18 min) | seeded `draft` |
-| Linea; Linea Sepolia | 59144; 59141 | `linea-mainnet`, `linea-testnet` (`amsterdam`; `osaka` today, block 2,000 M) | ETH, type 2; `linea_estimateGas` prices the L1 part | `tag finalized` from a provider that serves L1 finality (the chain's own RPC: gap ~400 blocks mainnet, ~5,700 Sepolia); other providers answered `finalized` = head (H5 FAIL) | seeded `draft` |
+| *Gnosis Chain* (tier 3) | 100 | `gnosis` (`amsterdam`; Pectra since 2025-04-30, then Fusaka; deploy after its Glamsterdam fork) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
+| *Celo* (tier 3) | 42220 | `celo` (`amsterdam`; `prague` by the probe of 2026-11-22, runtime 65,536 B, block 30 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled, owner 2026-11-22, decisions CLI-SDK-32; deploy after its Glamsterdam fork) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
+| BNB Smart Chain (tier 2) | 56 | `bsc` (`amsterdam`; Mendel = Osaka since 2026-04-28; deploy after its Glamsterdam fork) | BNB (~0.05 gwei) | `tag finalized` (BEP-126 fast finality, ~1 s), quorum ≥ 2 | seeded `draft` |
+| Polygon PoS (tier 2) | 137 | `polygon` (`amsterdam`; runs the Osaka opcode set today; deploy after its Glamsterdam fork) | POL (~250–300 gwei) | `tag finalized` (milestones, ~3–6 s); `safe` unsupported | seeded `draft` |
+| *Base* (tier 3); Base Sepolia (tier 2) | 8453; 84532 | `base` (`amsterdam`; Azul since 2026-05-28; block 40 M on mainnet: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled there, none on Base Sepolia (120 M), owner 2026-11-22, decisions CLI-SDK-32; deploy after its Glamsterdam fork) | ETH (~0.005 gwei) + L1 data fee | `l1_batch`: `safe` ~90 s, `finalized` ~16 min | seeded `draft` |
+| Avalanche C-Chain (tier 2); *Fuji* (tier 3) | 43114, 43113 | `avalanche-mainnet`, `avalanche-testnet` (`amsterdam`; Cancun today, no Amsterdam; a single contract earlier under [NET-EVM-18](#NET-EVM-18)) | AVAX; a transaction pays at least half its gas limit | `tag finalized` (= `safe`, the settled block, ~5 s) | seeded `draft`, [NET-EVM-16](#NET-EVM-16) |
+| *Polkadot Hub*; *Paseo* (tier 3) | 420420419; 420420417 | `polkadot-hub-mainnet`, `polkadot-hub-testnet` (`amsterdam`; REVM, 24,576-B runtime cap; Westend Hub dropped by the owner 2026-11-22, [ARCH-POS-20](../decisions.md#ARCH-POS-20)) | DOT; gas folds weight and the storage deposit | `tag finalized` (GRANDPA) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes and the measurement, [NET-EVM-17](#NET-EVM-17) |
+| Moonbeam; Moonbase Alpha (tier 2) | 1284; 1287 | `moonbeam-mainnet`, `moonbeam-testnet` (second, after Polkadot Hub; pinned reads not trusted, `pinnedReads: false`, [ARCH-POS-20](../decisions.md#ARCH-POS-20)) | GLMR; storage-growth gas | `tag finalized` (relay-finalized) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes, [NET-EVM-17](#NET-EVM-17) |
+| Ethereum mainnet (tier 2); **Sepolia** (tier 1) | 1; 11155111 | `ethereum-mainnet`, `ethereum-testnet` (`amsterdam`; mainnet `osaka` today, Sepolia at Amsterdam since its fork: runtime 65,536 B created and 65,537 B refused, init 131,072 B accepted and 131,073 B refused; no contract in `src/` above them, the size study `docs/research/2026-11-22-evm-size-64k.md`, decisions CLI-SDK-32 (3)) | ETH, type 2 | `tag finalized` (gap 61–95 blocks, ~13–19 min, one sample) | seeded `draft` (SDK plan T40; probes H1–H8 first sample 2026-11-22) |
+| *OP Mainnet*; *OP Sepolia* (tier 3) | 10; 11155420 | `op-mainnet`, `op-testnet` (`amsterdam`; `osaka` today, block 40 M; `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled, owner 2026-11-22) | ETH, type 2 + L1 data fee (`l1_fee = "op-stack"`) | `tag finalized` (gap 523–654 blocks, ~19–22 min) | seeded `draft` |
+| *Arbitrum One*; *Arbitrum Sepolia* (tier 3) | 42161; 421614 | `arbitrum-mainnet`, `arbitrum-testnet` (`amsterdam`; `osaka` today; a transaction at most 32,000,000 gas, ArbGasInfo; the header's 2^50 is no block cap; `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled, owner 2026-11-22) | ETH, type 2; the L1 component inside `eth_estimateGas` | `tag finalized` (gap ~3,200 blocks, ~15–18 min) | seeded `draft` |
+| Linea; Linea Sepolia (tier 2) | 59144; 59141 | `linea-mainnet`, `linea-testnet` (`amsterdam`; `osaka` today, block 2,000 M) | ETH, type 2; `linea_estimateGas` prices the L1 part | `tag finalized` from a provider that serves L1 finality (the chain's own RPC: gap ~400 blocks mainnet, ~5,700 Sepolia); other providers answered `finalized` = head (H5 FAIL) | seeded `draft` |
 
 - **Gnosis Chain (100)** is the recommended public chain for B2B: native gas is xDAI, a stable-value coin, so gas
   costs are predictable in unit, though their size still follows the gas price (the often-quoted < $0.001/tx is not a
@@ -88,7 +126,7 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
   Hub's gas folds `ref_time`, `proof_size` and the storage deposit into one figure with no Ethereum equivalent, so every line
   priced in Ethereum gas is measured again on Paseo, and the profile's `max_tx_gas` (Hub gas units) is the gas cap
   [CLI-RPC-05](../clients/scaas-rpc.md#CLI-RPC-05) and the node use there; an op that does not fit goes to the owner with
-  numbers ([ARCH-POS-18](../decisions.md#ARCH-POS-18)). The storage deposit is part of the fee: nothing SCaaS writes there is
+  numbers ([ARCH-POS-18](../decisions.md#ARCH-POS-18)). The storage deposit is part of the gas fee: nothing SCaaS writes there is
   ever cleared, so it is never refunded, and a lane's balance alert adds the existential deposit. Moonbeam (Frontier, Ethereum
   gas, EIP-2537 and P-256 present) follows with the same probes and a Moonbase check.
 - <a id="NET-EVM-19"></a>**NET-EVM-19** — **Every EVM profile passes one probe set before `enabled`: block 0, reads by hash,
@@ -485,7 +523,9 @@ Integration tests use `anvil --hardfork amsterdam --gas-limit 200000000 --code-s
 BUILT on branch `ua-mtx-merge`, UNAUDITED).
 
 - **Deploy order.** The registry trio first: `UARegistryCoreLib`, then `UARegistryAuxLib` (it links the core), then
-  `UARegistry` (it names both). Then per release: its libraries, its body modules, each its own CREATE2 transaction through
+  `UARegistry` (it names both). `OpenFactory` links `OpenFactoryLib` (its `configureChain` router checks, CTR-GOV-33
+  G-3's size split; the book's `open_factory_lib`), sent first by forge as the registry's libraries are, and the router
+  is built after the factory, naming it. Then per release: its libraries, its body modules, each its own CREATE2 transaction through
   the deterministic deployer with `DEPLOY_SALT` and its own gate (a module already at its address is reused), the env with
   the modules pinned after the libraries, then the implementation through `deployTokenImplementation`; the DEX the same, its
   admin module D first, then `deployDexImplementation`. `DeployBase`, `deploy.sh evm` and `script/pqz/e2e.py` follow it.
@@ -543,8 +583,8 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   receipt (`script/deploy_batch.py check`): one short line per transaction (its address and tx hash) and `batch k/n ok`; the
   next batch starts only when every transaction forge sent maps to a plan row of the batch and has a receipt with status 1,
   else a named stop at the first failure (`FAIL <phase> tx <i>/<N> … tx <hash>`); between the lines a 30 s heartbeat counts
-  the sender's nonce. The release-done check stays (a release already there: a `skip` line, nothing sent). **Mainnet fee
-  gate**: before every batch (and before the verifiers step) the fee forge signs is read (`script/onchain/fee.sh`: tip
+  the sender's nonce. The release-done check stays (a release already there: a `skip` line, nothing sent). **Mainnet gas-fee
+  gate**: before every batch (and before the verifiers step) the gas fee forge signs is read (`script/onchain/fee.sh`: tip
   `ONCHAIN_TIP`, default 1 gwei; max fee `ONCHAIN_MAXFEE`, default 2 × base fee + tip) and compared with `MAX_FEE_GWEI`,
   default 0.1 gwei on a mainnet (a chain key ending `-mainnet`, NET-EVM-13), none on a testnet unless set; above it a named
   stop before the batch (`FEE_OVER_MAX`, nothing of that batch sent); a re-run skips the releases already there. Evidence
@@ -688,7 +728,7 @@ plus a voluntary migration.
 An EOA that delegated its code through EIP-7702 is still an EOA for SCaaS, on every path
 ([CTR-UA-24](../contracts/accounts.md#CTR-UA-24), owner rulings D1–D5 of 2026-10-30, which supersede the 2026-10-28 ruling):
 it signs by ECDSA with its own key only, never through the delegate's ERC-1271; it cannot call SCaaS contracts directly
-while delegated (`CallerDelegated`; it uses relayed `mtx*` signed by its key, fee may be 0, or clears its delegation); and
+while delegated (`CallerDelegated`; it uses relayed `mtx*` signed by its key, token fee may be 0, or clears its delegation); and
 SCaaS never calls into it as a relay target or a native-coin unwrap recipient.
 
 <a id="NET-EVM-07"></a>**NET-EVM-07** — **EIP-7702 is off on SCaaS's own chains** (owner ruling 2026-10-30): EIP-7702 is **off** on the SCaaS testnet 7622 from its next reset (fs3 Task 13;

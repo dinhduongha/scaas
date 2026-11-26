@@ -166,6 +166,30 @@ async fn anchor_detects_rollback() {
     assert!(f.load().await.unwrap().rollback);
 }
 
+/// Review A-6 (spec §6.3): while a rollback holds, a write is `KeystoreRollback` and changes nothing (the anchor keeps the
+/// evidence); after `accept_rollback` the anchor names the stored copy and writes resume; control: a current container writes.
+#[tokio::test]
+async fn rollback_blocks_writes_until_accepted() {
+    let m = Arc::new(Mem::default());
+    let f = KeystoreFile::new(m.clone());
+    f.update(add(1)).await.unwrap();
+    let old = m.items.lock().unwrap()[KEYSTORE].clone();
+    f.update(add(2)).await.unwrap();
+    m.items.lock().unwrap().insert(KEYSTORE.into(), old.clone());
+    let head = m.items.lock().unwrap()[HEAD].clone();
+    assert_eq!(
+        f.update(add(3)).await.unwrap_err().code(),
+        "KeystoreRollback"
+    );
+    assert_eq!(m.items.lock().unwrap()[KEYSTORE], old, "nothing written");
+    assert_eq!(m.items.lock().unwrap()[HEAD], head, "the anchor kept");
+    assert!(f.load().await.unwrap().rollback, "still flagged");
+    f.accept_rollback().await.unwrap();
+    assert!(!f.load().await.unwrap().rollback, "accepted");
+    let ks = f.update(add(3)).await.unwrap();
+    assert_eq!(ks.seeds.len(), 2, "the accepted copy and the new seed");
+}
+
 #[tokio::test]
 async fn size_contract() {
     assert_eq!(anchor(999_999_999_999, b"x").unwrap().len(), 64);
@@ -601,5 +625,53 @@ async fn import_key_failed_write_leaves_no_ghost_import() {
         v.import_key(key(0x22)).await.unwrap().index,
         0,
         "control: the number is free"
+    );
+}
+
+/// Review T26 A-4 (CLI-SDK-06): `unlock` of a seed already open keeps its one session: no second wallet replaces the first,
+/// so `lock` locks the wallet every call in flight holds. The twin: a locked seed unlocks into a new session.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unlock_of_an_open_seed_keeps_its_session() {
+    let s = crate::Sdk::open(crate::SdkConfig {
+        profiles: vec![],
+        store: MemoryStore::new(),
+        authenticator: None,
+        rp_id: None,
+        runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: crate::Limits::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let v = s.vault();
+    let id = v
+        .import_words(ImportWords {
+            label: "Main".into(),
+            words: secret(REPO),
+            vault_passphrase: secret(PASS),
+        })
+        .await
+        .unwrap()
+        .id;
+    let held = s.open_seed(&id).unwrap();
+    v.unlock(id.clone(), Unlock::Passphrase(secret(PASS)))
+        .await
+        .unwrap();
+    assert!(
+        Arc::ptr_eq(&held, &s.open_seed(&id).unwrap()),
+        "one session"
+    );
+    v.lock(id.clone()).await;
+    assert!(
+        !held.wallet.label_open("manifest"),
+        "the lock reached the wallet a call holds"
+    );
+    v.unlock(id.clone(), Unlock::Passphrase(secret(PASS)))
+        .await
+        .unwrap();
+    assert!(
+        !Arc::ptr_eq(&held, &s.open_seed(&id).unwrap()),
+        "control: a new session after a lock"
     );
 }

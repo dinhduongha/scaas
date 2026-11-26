@@ -1,0 +1,48 @@
+mutant | tests that went red | rc
+M1 pathContext without parentTreeHash | 2 red: `tree_refusals_beside_twins`, `tree_secrets_every_row` | 101
+M2 pathContext without treeId | 2 red: `tree_refusals_beside_twins`, `tree_secrets_every_row` | 101
+M3 pathContext without ctTargets | 2 red: `tree_refusals_beside_twins`, `tree_secrets_every_row` | 101
+M4 K from joiner directly | 2 red: `tree_refusals_beside_twins`, `tree_secrets_every_row` | 101
+M5 the ciphertext aad without the target | 2 red: `tree_refusals_beside_twins`, `tree_secrets_every_row` | 101
+M6 ctx without parentTreeHash | 2 red: `tree_refusals_beside_twins`, `tree_secrets_every_row` | 101
+M7 epoch 0 under treeId | 3 red: `tree_refusals_beside_twins`, `tree_secrets_every_row`, `tree_states_of_signed_faults` | 101
+M8 a refresh that re-seals the last info read | 1 red: `tree_secrets_every_row` | 101
+M9 the gap ignored | 1 red: `tree_secrets_every_row` | 101
+M10 the compromise warning folded into "not followed" | 1 red: `tree_secrets_every_row` | 101
+M11 a tree wrap under the flat label | 2 red: `tree_refusals_beside_twins`, `tree_secrets_every_row` | 101
+M12 a processed commit that skips the derived-key comparison | 1 red: `tree_states_of_signed_faults` | 101
+M13 the Welcome not compared with the path | 1 red: `tree_states_of_signed_faults` | 101
+M14 a ciphertext index chosen from the leaf alone | 2 red: `tree_refusals_beside_twins`, `tree_secrets_every_row` | 101
+M15 the undo stopped at the key's endEpoch | 2 red: `tree_refusals_beside_twins`, `tree_secrets_every_row` | 101
+M16 the own-commit test on node keys only | 1 red: `tree_secrets_every_row` | 101
+M17 a ciphertext opened at endEpoch | 2 red: `tree_refusals_beside_twins`, `tree_secrets_every_row` | 101
+M18 a held node kept after a Remove blanked it | 2 red: `tree_refusals_beside_twins`, `tree_secrets_every_row` | 101
+M19 the admission skipped for a target key | 1 red: `tree_refusals_beside_twins` | 101
+M20 a nonce reused for a rebuilt commit | 1 red: `tree_refusals_beside_twins` | 101
+M21 K refused by the mode-0 entries | 1 red: `tree_refusals_beside_twins` | 101
+M22 a non-admin taken as an admin for rights | 3 red: `tree_refusals_beside_twins`, `tree_secrets_every_row`, `tree_states_of_signed_faults` | 101
+M23 a non-admin taken as an admin for the info | 2 red: `tree_secrets_every_row`, `tree_states_of_signed_faults` | 101
+M24 the path ciphertext not held to its list hash | 1 red: `tree_refusals_beside_twins` | 101
+M25 a signature not checked | 1 red: `tree_refusals_beside_twins` | 101
+M26 a fetched key not held to its hash | 1 red: `tree_refusals_beside_twins` | 101
+M27 the checkpoint below the pin passed | 1 red: `tree_refusals_beside_twins` | 101
+M28 the epoch-0 leaves not compared with the signed members | 1 red: `tree_refusals_beside_twins` | 101
+M29 the snapshot not compared with the head's tree hash | 1 red: `tree_refusals_beside_twins` | 101
+M30 the next info bucket admitted | 1 red: `tree_refusals_beside_twins` | 101
+M31 an added key not authenticated by its record | 1 red: `tree_refusals_beside_twins` | 101
+M32 an added key not named by the Add's kemHash | 1 red: `tree_refusals_beside_twins` | 101
+M33 a genesis member's key not authenticated | 1 red: `tree_refusals_beside_twins` | 101
+M34 an epoch-0 leaf target taken as bare bytes | 1 red: `tree_refusals_beside_twins` | 101
+M35 a leaf target's record not authenticated | 1 red: `tree_refusals_beside_twins` | 101
+M36 a version record's signature not checked | 2 red: `tree_kem_record_check`, `tree_refusals_beside_twins` | 101
+M37 a version record not bound to its UA | 2 red: `tree_kem_record_check`, `tree_refusals_beside_twins` | 101
+M38 version 0's hash commit not compared | 1 red: `tree_kem_record_check` | 101
+M39 version 0's full key not compared | 1 red: `tree_kem_record_check` | 101
+M40 version 0 not bound to its UA | 1 red: `tree_kem_record_check` | 101
+M41 version 0's proof of possession not checked | 1 red: `tree_kem_record_check` | 101
+M42 a registration taken for a version above 0 | 1 red: `tree_kem_record_check` | 101
+M43 the generic record path takes a tree record | 1 red: `tree_signing_ops` | 101
+M44 the tree's path takes any record | 1 red: `tree_signing_ops` | 101
+M45 a leave's review without "cannot come back" | 1 red: `tree_signing_ops` | 101
+M46 the review's admin change against the new list | 1 red: `tree_commit_review` | 101
+killed | 46 of 46

@@ -10,6 +10,7 @@ public interface AdminInterface {
     public java.util.concurrent.CompletableFuture<Prepared> adminUaApproveTokenRelease(UaApproveTokenRelease req) ;
     public java.util.concurrent.CompletableFuture<Prepared> adminUaCancelGrant(UaCancelGrant req) ;
     public java.util.concurrent.CompletableFuture<Prepared> adminUaCancelNonce(UaCancelNonce req) ;
+    public java.util.concurrent.CompletableFuture<Prepared> adminUaCancelNonceFor(UaCancelNonceFor req) ;
     public java.util.concurrent.CompletableFuture<Prepared> adminUaCancelRate(UaCancelRate req) ;
     public java.util.concurrent.CompletableFuture<Prepared> adminUaCreateDex(UaCreateDex req) ;
     public java.util.concurrent.CompletableFuture<Prepared> adminUaCreateInstance(UaCreateInstance req) ;

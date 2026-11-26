@@ -51,6 +51,13 @@ library EnvKit {
         require(c != address(0) && c.code.length != 0, "EnvKit: clone not created");
     }
 
+    /// @dev The address of the caller's `k`-th CREATE from now (1: the next one). `configureChain` requires the router's
+    ///      `factory()` to be the factory (CTR-GOV-33, G-3), so a router built before its factory names this prediction:
+    ///      `new GovernanceRouter(..., EnvKit.nextCreate(2))` then `EnvKit.factory(...)`, with no CREATE in between.
+    function nextCreate(uint256 k) internal view returns (address) {
+        return vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + k - 1);
+    }
+
     function factory(address registrar, bytes32 uid, uint64 notice) internal returns (OpenFactory f) {
         return factory(registrar, uid, notice, address(0));
     }

@@ -449,8 +449,8 @@ batch    = any lane of the payer                      # convention for one payme
 A third party paying 1 unit with someone else's `entryRef` is not counted (`from` is not the request's payer), so it can neither complete a request nor push it into needs attention; it is just money received. Reconciliation matches on (chain, token contract, payer, receiving address,
 `entryRef`) — never on the amount alone.
 
-<a id="payment-terms"></a><a id="INT-ERP-06"></a>**INT-ERP-06** — **Self-service payment terms use fee `NONE` and
-`MODE_RESTRICT_RELAYER` to the company relayer, `fee = 0`, and a server-chosen validity (default 300 s).** This trades
+<a id="payment-terms"></a><a id="INT-ERP-06"></a>**INT-ERP-06** — **Self-service payment terms use token-fee mode `NONE` and
+`MODE_RESTRICT_RELAYER` to the company relayer, `fee = 0` (the company relayer pays the gas fee), and a server-chosen validity (default 300 s).** This trades
 payer self-submission for front-run safety; payee self-relay stays available ([inbound](#inbound)). With bus scope
 `open` the relayer is left unbound instead ([INT-ERP-15](#INT-ERP-15)).
 
@@ -460,8 +460,8 @@ connector has no quote model).
 
 <a id="payment-modes"></a><a id="INT-ERP-27"></a>**INT-ERP-27** — **The payment mode is configuration, not code.** A
 deployment chooses per company and channel among: sponsored (company relayer, `MODE_FEE_NONE` +
-`MODE_RESTRICT_RELAYER`, gas as OPEX); fee in token (`MODE_FEE_PERCENT`/`FIXED`, fee ≤ 1 % to `feeRecipient`); payee
-self-relay ([inbound](#inbound)); the payee pays the fee; a node gas-sponsorship policy; the enterprise inbound gateway.
+`MODE_RESTRICT_RELAYER`, the gas fee as OPEX); a token fee (`MODE_FEE_PERCENT`/`FIXED`, at most 1 % of an amount, to
+`feeRecipient`); payee self-relay ([inbound](#inbound)); the payee pays the token fee; a node gas-sponsorship policy; the enterprise inbound gateway.
 
 <a id="bus-scope"></a><a id="INT-ERP-15"></a>**INT-ERP-15** — **Bus scope is a per-tenant client setting delivered per
 job.** `restricted` (default) keeps [INT-ERP-06](#INT-ERP-06): terms pin `MODE_RESTRICT_RELAYER` to the company relayer
@@ -725,7 +725,7 @@ sequenceDiagram
 | 2 | Payment request | Buyer ERP | `entryRef` random; request row (token, supplier's approved receiving wallet, amount in base units, payer wallet); typed data with `pay(entryRef)` | **BUILT** (example connector, inbound direction); outbound treasury payouts **PLANNED** |
 | 3 | Sign | Buyer signer | Human approver signs on device (passkey/seed), or the delegated/custodial path signs under `SigningPolicyService` limits (`validUntil − now ≤ 300 s`) or `MandateWallet.payUnderMandate` | **BUILT** (device, mandate); policy service **PLANNED** |
 | 4 | Outbox + push | Buyer ERP → node | Outbox row in the same transaction as `request → pending`; push `POST /v1/jobs` (`kind = metatx`, or `call` for mandates) | outbox **BUILT**; push **SPECIFIED** |
-| 5 | Submit | Node | Lease, simulate, journal, broadcast; `MODE_RESTRICT_RELAYER` pins the company lane; fee 0 | **BUILT** |
+| 5 | Submit | Node | Lease, simulate, journal, broadcast; `MODE_RESTRICT_RELAYER` pins the company lane; token fee 0 (the lane pays the gas fee) | **BUILT** |
 | 6 | Finalize | Node indexer | Range with `PaymentSettled(buyer → supplier, amount, entryRef)` after the finality gate + RPC quorum | **BUILT** |
 | 7 | Reconcile both sides | Buyer and supplier ERPs | Buyer: job final, bill paid (outbound payment entry in the token's journal). Supplier: its node/feed (or a watch on its receiving wallet) delivers the same event; it matches the `entryRef` the buyer communicated with the remittance advice (or a `Transfer` to its watched wallet) and posts the receipt | buyer **SPECIFIED**; supplier matching by `entryRef` **BUILT** for requests it issued itself |
 
@@ -764,9 +764,9 @@ that several jobs share one `tx_hash`.
 | Door A intake rules | `value == 0` transfer/pay ⇒ `422 ZERO_VALUE`; the `~gateway` `min_fee` floor applies unless a sponsor policy matches (which also caps the spend); `profile = private` keeps fee 0, `profile = public` refuses fee-0 intents without a matching sponsor policy; per-`from` bucket (default 60 per hour); signature checked before simulation ([NODE-GW-01](node/gateway.md#NODE-GW-01)) | **SPECIFIED** |
 | Gateway discovery and other families | `GET /v1/gateway` lists served chains (with `chain_uid` where a UA registry is configured; target: on every EVM and Hedera chain, with the DEX list, [NET-ALL-24](networks/README.md#NET-ALL-24)), tokens, fee recipient and DEX policy; Hedera intents use `POST /v1/metatx` (64-byte HIP-632 signatures allowed); the six non-EVM families use `POST /v1/ops {chain, op}`; UA intents `POST /v1/ua-metatx`; errors follow the stable contract `{error, code, detail, revert_data?}` ([NODE-GW-06](node/gateway.md#NODE-GW-06)) | **SPECIFIED** |
 | Non-EVM inbound | The client builds the `MetaOp`, the payer signs, the client pushes `signed_op` jobs | **BUILT** (via the example outbox); job API **SPECIFIED** |
-| Payee self-relay ("e-cheque") | Payer signs offline with fee 0 and relayer unbound or bound to the payee's address; the payee (or its node) submits; the ERP books from `PaymentSettled` exactly as usual | contract **BUILT**; QR (EIP-681-style payload) tooling **PLANNED** |
-| Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y"; the client books gas from the job's receipt data. A policy caps a tenant's own spend only with `on_exhausted = reject`; with `unsponsored` an exhausted policy books the job to the namespace and marks it `sponsor_fallback` (the admin must set `fallback_to_namespace`, audited) ([NODE-SPN-01](node/sponsorship.md#NODE-SPN-01)) | **SPECIFIED** |
-| Payee fee | Two signatures (payer's `pay`, payee's fee authorization); booked as payment N and fee F | **SPECIFIED** ([CTR-MTX-05](contracts/metatx.md#CTR-MTX-05); job field `payee_fee`, event `PayeeFeePaid`) |
+| Payee self-relay ("e-cheque") | Payer signs offline with token fee 0 and relayer unbound or bound to the payee's address; the payee (or its node) submits and pays the gas fee; the ERP books from `PaymentSettled` exactly as usual | contract **BUILT**; QR (EIP-681-style payload) tooling **PLANNED** |
+| Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y" (the fee is the token fee; the gas fee goes to account Y); the client books the gas fee from the job's receipt data. A policy caps a tenant's own spend only with `on_exhausted = reject`; with `unsponsored` an exhausted policy books the job to the namespace and marks it `sponsor_fallback` (the admin must set `fallback_to_namespace`, audited) ([NODE-SPN-01](node/sponsorship.md#NODE-SPN-01)) | **SPECIFIED** |
+| Payee fee | Two signatures (payer's `pay`, payee's token-fee authorization); booked as payment N and token fee F | **SPECIFIED** ([CTR-MTX-05](contracts/metatx.md#CTR-MTX-05); job field `payee_fee`, event `PayeeFeePaid`) |
 
 Payee fee, client side: the **payee ERP** sets `fee_paid_by_payee` and `payee_fee_amount` (base units) on the
 request it issues; the payer's terms stay fee `NONE`; once the payer's address is known (portal: wallet connect), the
@@ -909,6 +909,9 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr
    the node relays sends the missing parts first on its own lane and waits `queued` under `UA_KEY_NOT_CACHED` until they landed;
    a subject that sends its own transactions builds them with `clientkeys` `cacheThenRegister` (parts, then the registration) or
    `ua-rs` `mldsa_cache::cache_then_register`. A UA id can receive no tokens before it is registered (`UANotRegistered`), so the order costs no funds.
+   An `msig` signs every record and job with its structure version tag in `UASig.signature` (empty at version 0, else 8 bytes
+   big-endian), read from `msigStateOf(ua).version` at signing; after its first `updateMsig` an empty tag is `UAUnauthorized`
+   ([the node's note](node/job-api.md#msig-version-tag), [CTR-UA-74](contracts/accounts.md#CTR-UA-74)).
 4. On the finalized `UARegistered` event the client reads `registrationOf(ua)` (the stored arguments equal what it sent; an `msig`'s `pop`
    there is `keccak256(pop)`, [CTR-UA-33](contracts/accounts.md#CTR-UA-33) A),
    `pqzKeyOf(ua).proven` and `checkedOf(ua)`, and only then marks the account usable on that chain.
@@ -1143,7 +1146,7 @@ commitment computationally unlinkable (2^256 preimage space); the on-chain value
 | `PQZ_VERDICT_NOT_EXPECTED` | refusal per item | The token is `PRECOMPILE`: drop `args.pqz_verdict` and re-push |
 | `PQZ_VERIFIER_UNREACHABLE` | refusal of a shield or wrap-shield job | The operator refuses shields into an `OFFCHAIN` token whose verifier is revoked or unreachable (opt-in); do not shield until it is served again |
 | Superseded intent | `consumed`, no event by `valid_until + grace + 1 h` | Mark dead; the subject spent that lane nonce on another intent — investigate if unexpected |
-| Stuck transaction | `signed`/`broadcast` for a long time | Nothing to do client-side; the node replaces at ×1.25 up to its fee cap; operator may raise the cap |
+| Stuck transaction | `signed`/`broadcast` for a long time | Nothing to do client-side; the node replaces at ×1.25 up to its gas-fee cap; operator may raise the cap |
 | Reverted on chain | `reverted` (rare: state changed between simulation and inclusion) | Re-push with `generation + 1` after operator requeue if still wanted; the subject nonce was not consumed |
 | Chain paused | Jobs accepted and held `queued`; events continue | None; resumes automatically |
 | Chain halted | `409 CHAIN_HALTED`; no new ranges | Wait for the operator; do not re-route to another node for the same (company, chain) |

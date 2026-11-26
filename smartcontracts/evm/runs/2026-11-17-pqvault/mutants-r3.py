@@ -14,6 +14,9 @@ import importlib.util
 import os
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "scripts"))
+import mutant_guard as guard  # noqa: E402
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("m3c", os.path.join(HERE, "..", "2026-11-10-ua-mtx-merge-3c", "mutants.py"))
 m3c = importlib.util.module_from_spec(spec)
@@ -59,23 +62,24 @@ def run(mid):
     committed)."""
     path, old, new, match = m3c.MUTANTS[mid]
     full = os.path.join(m3c.EVM, path)
+    guard.refuse_dirty([full], m3c.EVM)
     src = open(full).read()
     if src.count(old) != 1:
         raise SystemExit(f"{mid}: the mutated text occurs {src.count(old)} times in {path}")
     logp = os.path.join(OUT, f"mut-{mid}.log")
+    env = {**os.environ, "FOUNDRY_TEST": "test/pqchat", "FOUNDRY_OUT": "out/mutants-pv3", "FOUNDRY_CACHE_PATH": "cache/mutants-pv3"}
+    cmd = [m3c.CAPPED, m3c.FORGE, "test", "-j", "2", "--match-path", f"test/pqchat/{match}"]
+    lim, saved = guard.limit(cmd, cwd=m3c.EVM, env=env), {full: open(full, "rb").read()}
     try:
         open(full, "w").write(src.replace(old, new))
-        env = {**os.environ, "FOUNDRY_TEST": "test/pqchat", "FOUNDRY_OUT": "out/mutants-pv3", "FOUNDRY_CACHE_PATH": "cache/mutants-pv3"}
-        cmd = [m3c.CAPPED, m3c.FORGE, "test", "-j", "2", "--match-path", f"test/pqchat/{match}"]
         with open(logp, "w") as log:
-            rc = m3c.subprocess.call(cmd, cwd=m3c.EVM, env=env, stdout=log, stderr=m3c.subprocess.STDOUT)
+            r = guard.run(cmd, lim, cwd=m3c.EVM, env=env, stdout=log, stderr=m3c.subprocess.STDOUT)
     finally:
-        open(full, "w").write(src)
-    if open(full).read() != src:
-        raise SystemExit(f"{mid}: {path} not restored")
+        guard.restore(saved)
+    rc = r.returncode
     out = open(logp).read()
     red = m3c.red_tests(out)
-    note = ", ".join(red) if red else ("compile error" if "Compiler run failed" in out else "none")
+    note = guard.outcome(r, ", ".join(red) if red else ("compile error" if "Compiler run failed" in out else "none"))
     line = f"{mid} | {note} | {rc}"
     print(line, flush=True)
     with open(os.path.join(OUT, "mutants.txt"), "a") as f:

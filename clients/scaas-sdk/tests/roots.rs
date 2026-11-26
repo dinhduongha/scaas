@@ -101,9 +101,14 @@ async fn root_c_words_class_and_inheritance() {
         .vault()
         .signature_from_compact(sec(&unhex(&e["rows"][3]["signature"])))
         .unwrap();
+    // two requests' answers, two handles (A2-5: one handle for both is no second signature)
+    let compact2 = s
+        .vault()
+        .signature_from_compact(sec(&unhex(&e["rows"][3]["signature"])))
+        .unwrap();
     let again = DeriveFromSignature {
-        signature1: compact.clone(),
-        signature2: compact,
+        signature1: compact,
+        signature2: compact2,
         ..by_sig(e, "C2", vec![], vec![], pass)
     };
     assert_eq!(
@@ -237,10 +242,21 @@ async fn one_secret_for_two_parameters_does_not_hang() {
     let e = &v["eoaSig"];
     let sig = sec(&unhex(&e["rows"][0]["signature"]));
     let mut req = by_sig(e, "C", vec![], vec![], e["passphrase"].as_str().unwrap());
+    // review A2-5: one signature object for both is no second request (CLI-SDK-05: signed twice), refused at once, never a hang;
+    // control: the same bytes in two objects (two requests that agree) make the seed
     (req.signature1, req.signature2) = (sig.clone(), sig);
+    let r = tokio::time::timeout(within, s.vault().derive_from_signature(req))
+        .await
+        .expect("root (c) with one signature object for both hangs");
+    assert_eq!(r.err().map(|e| e.code()), Some("Argument"));
+    let mut req = by_sig(e, "C", vec![], vec![], e["passphrase"].as_str().unwrap());
+    (req.signature1, req.signature2) = (
+        sec(&unhex(&e["rows"][0]["signature"])),
+        sec(&unhex(&e["rows"][0]["signature"])),
+    );
     let n = tokio::time::timeout(within, s.vault().derive_from_signature(req))
         .await
-        .expect("root (c) with one signature object for both hangs")
+        .expect("root (c) hangs")
         .unwrap();
     assert_eq!(words(&n), e["rows"][0]["words"].as_str().unwrap());
     // a 32-byte key that is also a valid derivation passphrase, given once for both

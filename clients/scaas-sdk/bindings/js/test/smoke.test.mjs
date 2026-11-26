@@ -230,6 +230,8 @@ test("store, authenticator, PRF, events, copy calls", async () => {
   const h = secret(PASS);
   assert.ok(sdk.release(h));
   assert.equal(await failure(s.vault().unlock(id, { Passphrase: h })), "Argument");
+  // review T26 C-12: a refusal whose text names OpaqueCallRefused is still Argument; only the marker's own is that code
+  assert.equal(await failure(s.vault().unlock(id, { OpaqueCallRefused: h })), "Argument");
 });
 
 test("an EVM profile opens: the bindings build the SDK's `evm` (decisions CLI-SDK-33 (100))", async () => {
@@ -267,4 +269,45 @@ test("an EVM profile opens: the bindings build the SDK's `evm` (decisions CLI-SD
   assert.equal(await failure(open(profile({ disabled_kinds: ["no-such-kind"] }))), "Argument");
   // Moonbeam's pinnedReads false (owner 2026-11-22, ARCH-POS-20 (2)): the profile opens; absent, the field is true
   assert.equal(await failure(open(profile({ pinned_reads: false }))), "Ok");
+  // review T26 C-3: a key the record does not have is refused, never dropped (a misspelt field would take its default)
+  assert.equal(await failure(open(profile({ pinnedReads: false }))), "Argument", "a key in another spelling");
+  const rpc = [{ url: "http://127.0.0.1:9", class: "Named", label: null, auth: null, weight: 1 }];
+  assert.equal(await failure(open(profile({ rpc }))), "Argument", "an endpoint's unknown key");
+  assert.equal(await failure(sdk.open({ ...config(), extra: 1 }, new MemStore())), "Argument", "the configuration's");
+});
+
+test("a value nested beyond 128 levels is refused before it is lifted, and the instance lives on (review T26 C-6)", async () => {
+  const s = await sdk.open(config(), new MemStore());
+  let deep = 0;
+  for (let i = 0; i < 100000; i++) deep = [deep];
+  const blob = (extra) => ({
+    v: 1,
+    chain_uid: "0x" + "60".repeat(32),
+    family: "evm",
+    contract: "0x" + "11".repeat(20),
+    entry: "mtxCancelNonce",
+    struct: "UACancelNonce",
+    kind: "token",
+    message: {},
+    extra,
+    signature: "0x",
+    signer: "0x" + "22".repeat(32),
+    signer_kind: 0,
+    ids: false,
+  });
+  const expect = { chain: "nowhere", payee: [], payer: { Native: { seed: "none", network: "evm", index: 0 } } };
+  assert.equal(await failure(s.op().import_signed(blob(deep), expect)), "Argument");
+  // the twin pair on an entry whose first step after the lift is the chain lookup (`request_verdict`'s `op` is a free
+  // value): `import_signed` re-bounds the blob at depth 8 (review A2-7) before its chain, so its `Argument` would not tell the
+  // binding's refusal from the SDK's; here the deep value is `Argument` only by the binding's bound, and 100 levels lift
+  let ok = 0;
+  for (let i = 0; i < 100; i++) ok = [ok];
+  const verdict = (op) => ({ chain: "nowhere", token: "0x" + "11".repeat(20), op, statement: "0x", proof: "0x" });
+  assert.equal(await failure(s.confidential().request_verdict(verdict(deep))), "Argument", "refused before the lift");
+  assert.equal(
+    await failure(s.confidential().request_verdict(verdict(ok))),
+    "ChainUnknown",
+    "the twin: 100 levels lift",
+  );
+  assert.deepEqual(await s.vault().seeds(), [], "the instance lives on");
 });

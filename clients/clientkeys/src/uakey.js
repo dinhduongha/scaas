@@ -375,10 +375,14 @@ export function webauthnAssertion({ keyData, expectedChallenge, authData: ad, cl
  *  `msig` (CTR-UA-44, T21 L01, as ua-rs `msig_sig_current`): `ua` stays the id (the first structure's), `keyData` and `inner(id)`
  *  give the structures that authorize now (`msigOf`), `enabledOf(id)` the `msigStateOf` `enabled` word of the record or of an
  *  `msig` member (a bigint or a decimal / `0x` string; undefined: never updated, every slot); a disabled slot, at either level, is
- *  `Argument` before anything is signed. */
-export const msigMemberSigs = ({ ua: id, keyData, purposeTag, digest, slots, inner, enabledOf }) =>
+ *  `Argument` before anything is signed. CTR-UA-74: `versionOf(id)` the `msigStateOf` `version` of an `msig` member (undefined: 0), whose
+ *  slot's `sig` is then that version's tag (`ua.versionTag`); the record's own tag goes in `UASig.signature` (`ua.versionTag(version)`). */
+export const msigMemberSigs = ({ ua: id, keyData, purposeTag, digest, slots, inner, enabledOf, versionOf }) =>
   encodeMemberSigs(
-    memberSlots({ ua: id, keyData, slots, inner, enabledOf }, ua.uaMessage(0x0120, purposeOf(purposeTag), digest)),
+    memberSlots(
+      { ua: id, keyData, slots, inner, enabledOf, versionOf },
+      ua.uaMessage(0x0120, purposeOf(purposeTag), digest),
+    ),
   );
 
 /** Slot `index` of the `msig` `id` is enabled (`enabledOf(id)`, bit i = slot i; none: every slot). */
@@ -388,7 +392,7 @@ const slotOn = (enabledOf, id, index) => {
 };
 
 /** The `MemberSig[]` of an `msig` over its `ua_msg` `md` (`msigMemberSigs`, `signContainer`): minimal at both levels, else `UAPoP`. */
-function memberSlots({ ua: id, keyData, slots, inner, enabledOf }, md) {
+function memberSlots({ ua: id, keyData, slots, inner, enabledOf, versionOf }, md) {
   for (const s of slots) {
     if (!slotOn(enabledOf, id, s.index)) fail("Argument", `slot ${s.index} is disabled`);
     const m = ua.msigStructure(keyData).members[s.index];
@@ -411,7 +415,7 @@ function memberSlots({ ua: id, keyData, slots, inner, enabledOf }, md) {
     const msg = ua.uaMessage(0x0120, MEMBER, ua.memberDigest(id, md));
     return {
       index: s.index,
-      sig: new Uint8Array(0),
+      sig: ua.versionTag(versionOf?.(m.id)),
       members: s.members.map((x) => ({ index: x.index, sig: own(x.key, innerMembers[x.index], fromHex(m.id), msg) })),
     };
   });

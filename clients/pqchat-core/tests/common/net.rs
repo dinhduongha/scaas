@@ -74,6 +74,26 @@ impl FakeNet {
             out,
         );
     }
+    /// Every answer of `from` given by `to` too (a replica holding the home's records).
+    pub fn mirror(&self, from: &str, to: &str) {
+        let (from, to) = (from.to_ascii_lowercase(), to.to_ascii_lowercase());
+        let mut a = self.answers.lock().unwrap();
+        let copies: Vec<_> = a
+            .iter()
+            .filter(|(k, _)| k.0 == from)
+            .map(|(k, v)| ((to.clone(), k.1.clone(), k.2.clone()), v.clone()))
+            .collect();
+        a.extend(copies);
+    }
+    /// The answer `answer` set for `(contract, item, args)`.
+    pub fn answer_of(&self, contract: &str, item: &str, args: Value) -> Value {
+        self.answers.lock().unwrap()[&(
+            contract.to_ascii_lowercase(),
+            item.to_string(),
+            args.to_string(),
+        )]
+            .clone()
+    }
     pub fn reads_of(&self, item: &str) -> usize {
         self.reads
             .lock()

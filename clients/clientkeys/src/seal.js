@@ -242,26 +242,42 @@ function acceptedOk(id, d, slots, accepted) {
   if (w < threshold) fail("ContainerSender", `msig ${id}: the accepted weight of its signers is below the threshold`);
 }
 
-/** An `msig` sender's `members` over its `ua_msg` `m0` (owner 2026-11-05): the minimal set at both levels (`msigSigMinimal`), each
- *  level's signers accepted (`acceptedOk`); a derived member over `memberDigest(senderUa, m0)`; an `msig` member with no `sig` of
- *  its own and its own non-empty list one level down over `innerDigest(member, memberDigest(senderUa, m0))`. Member key data from
- *  `members(id)`, never trusted (`memberKeys`). */
-function msigOk(id, d, m0, slots, members, accepted) {
-  const keys = memberKeys(d, members);
-  if (!ua.msigSigMinimal(d, slots, (x) => members(x)?.keyData)) return false;
+/** CTR-UA-44 (T26 A2-1): `msigCurrent(id)` (hex id) → `{ msig, enabled }` of the target registry: `msig` the `msigOf` bytes (every slot),
+ *  `enabled` the `msigStateOf` bitmap; null for an `msig` never updated. What authorizes is the current structure, never the first. */
+const nowOf = (cur, id, first) => {
+  const c = cur(id);
+  return c ? (typeof c.msig === "string" ? fromHex(c.msig) : c.msig) : first;
+};
+const enabledAt = (cur, id, i) => {
+  const c = cur(id);
+  return !c || ((BigInt(c.enabled) >> BigInt(i)) & 1n) === 1n;
+};
+
+/** An `msig` sender's `members` over its `ua_msg` `m0` (owner 2026-11-05), judged on the current structures (`msigCurrent`, CTR-UA-44)
+ *  at both levels: the minimal set (`msigSigMinimal`), each level's signers accepted and enabled (`acceptedOk`); a derived member over
+ *  `memberDigest(senderUa, m0)`; an `msig` member with no `sig` of its own and its own non-empty list one level down over
+ *  `innerDigest(member, memberDigest(senderUa, m0))`. Member key data from `members(id)`, never trusted (`memberKeys`). */
+function msigOk(id, first, m0, slots, members, accepted, cur) {
+  const d = nowOf(cur, hex(id), first);
   const all = ua.msigStructure(d).members;
-  acceptedOk(hex(id), d, slots, accepted);
-  for (const s of slots)
-    if (all[s.index].kind === 0x0120) acceptedOk(all[s.index].id, keys[s.index], s.members, accepted);
+  const keys = memberKeys(d, members).map((k, i) => (all[i].kind === 0x0120 ? nowOf(cur, all[i].id, k) : k));
+  const inner = (x) => {
+    const k = members(x)?.keyData;
+    return k && nowOf(cur, x, k);
+  };
+  if (!ua.msigSigMinimal(d, slots, inner)) return false;
+  const on = (x, i) => accepted(x, i) === true && enabledAt(cur, x, i);
+  acceptedOk(hex(id), d, slots, on);
+  for (const s of slots) if (all[s.index].kind === 0x0120) acceptedOk(all[s.index].id, keys[s.index], s.members, on);
   const md = ua.memberDigest(id, m0);
   return slots.every((s) => {
     const m = all[s.index];
     if (m.kind !== 0x0120) return leafOk(m, keys[s.index], md, s);
     if (s.sig.length !== 0 || s.members.length === 0) return false;
     const leaves = ua.msigStructure(keys[s.index]).members;
-    const inner = memberKeys(keys[s.index], members);
+    const innerKeys = memberKeys(keys[s.index], members);
     const imd = ua.innerDigest(fromHex(m.id), md);
-    return s.members.every((x) => leafOk(leaves[x.index], inner[x.index], imd, x));
+    return s.members.every((x) => leafOk(leaves[x.index], innerKeys[x.index], imd, x));
   });
 }
 
@@ -281,9 +297,10 @@ const decode = (f) => {
  *  signature, member set or tag: `SealOpen`. `members(id)` → `{ kind, keyData }`: an `msig` sender's member keys (re-derived;
  *  an unknown member: `ContainerSender`). `accepted(id, index)` → `memberAccepted(id, index)` of the chain's registry or an
  *  indexer (CTR-UA-37): an `msig` sender needs it (missing: `ContainerSender`) and opens only with its signers accepted at both
- *  levels (`acceptedOk`); a single key needs none. `shortCode`: a link container's. No replay protection here (openLink,
+ *  levels (`acceptedOk`); a single key needs none. `msigCurrent(id)` → `{ msig, enabled }`: an updated `msig`'s current structure
+ *  (CTR-UA-44, `nowOf`), null = never updated. `shortCode`: a link container's. No replay protection here (openLink,
  *  restoreBackup). */
-export async function openContainer(kemKey, c, expect, members, accepted, { shortCode } = {}) {
+export async function openContainer(kemKey, c, expect, members, accepted, { shortCode, msigCurrent } = {}) {
   if (c?.v !== 1) fail("SealVersion", "container v 1 only");
   const no = (why) => fail("ContainerSender", why);
   if (c.purpose !== expect?.purpose) no("purpose not the expected one");
@@ -326,7 +343,15 @@ export async function openContainer(kemKey, c, expect, members, accepted, { shor
     try {
       ok =
         auth.signature.length === 0 &&
-        msigOk(senderUa, auth.keyData, m0, auth.members, members ?? (() => null), accepted);
+        msigOk(
+          senderUa,
+          auth.keyData,
+          m0,
+          auth.members,
+          members ?? (() => null),
+          accepted,
+          msigCurrent ?? (() => null),
+        );
     } catch (e) {
       no(e?.code === "ContainerSender" ? e.reason : "msig member keys");
     }
@@ -362,7 +387,14 @@ const newSession = (kemKey, shortCode, start) => ({
 /** The plaintext of a link container to `session`: the opener's clock `now` (seconds; default this device's) at most
  *  `session.end`, `created` in [start - LINK_SKEW, end + LINK_SKEW] (else `ContainerReplay`), the acceptance of
  *  `openContainer`; on success the session is used up and its key wiped (a second call: `ContainerReplay`). */
-export async function openLink(session, c, expect, members, accepted, { now = Math.floor(Date.now() / 1000) } = {}) {
+export async function openLink(
+  session,
+  c,
+  expect,
+  members,
+  accepted,
+  { now = Math.floor(Date.now() / 1000), msigCurrent } = {},
+) {
   if (session.used) fail("ContainerReplay", "the session is used up");
   if (expect?.purpose !== PURPOSE.link) fail("Argument", "a link session opens scaas/link/v1 only");
   if (!Number.isSafeInteger(now) || now > session.end) fail("ContainerReplay", "the session is older than its window");
@@ -373,7 +405,10 @@ export async function openLink(session, c, expect, members, accepted, { now = Ma
   ) {
     fail("ContainerReplay", "created outside the session window");
   }
-  const pt = await openContainer(session.kemKey, c, expect, members, accepted, { shortCode: session.shortCode });
+  const pt = await openContainer(session.kemKey, c, expect, members, accepted, {
+    shortCode: session.shortCode,
+    msigCurrent,
+  });
   session.used = true;
   session.kemKey.wipe();
   return pt;
@@ -461,10 +496,10 @@ export async function restoreBackup(
   expect,
   members,
   accepted,
-  { current = null, allowRollback = false, bip39Passphrase = "" } = {},
+  { current = null, allowRollback = false, bip39Passphrase = "", msigCurrent } = {},
 ) {
   if (expect?.purpose !== PURPOSE.backup) fail("Argument", "restore opens scaas/backup/v1 only");
-  const pt = await openContainer(kemKey, c, expect, members, accepted);
+  const pt = await openContainer(kemKey, c, expect, members, accepted, { msigCurrent });
   const payload = decodeBackup(pt);
   wipe(pt);
   const senderUa = hex(fromB64url(c.sender.ua));

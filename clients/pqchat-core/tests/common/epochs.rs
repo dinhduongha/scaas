@@ -152,7 +152,7 @@ pub async fn signed(
     let signed = match parent {
         None => w
             .app
-            .pqchat_sign_session(
+            .pqchat_prepare_session(
                 by.key.clone(),
                 k.clone(),
                 PqSessionNew {
@@ -166,10 +166,13 @@ pub async fn signed(
                 },
             )
             .await
+            .unwrap()
+            .sign()
+            .await
             .unwrap(),
         Some(p) => w
             .app
-            .pqchat_sign_epoch(
+            .pqchat_prepare_epoch(
                 by.key.clone(),
                 k.clone(),
                 PqEpochNew {
@@ -183,6 +186,9 @@ pub async fn signed(
                     info_json,
                 },
             )
+            .await
+            .unwrap()
+            .sign()
             .await
             .unwrap(),
     };

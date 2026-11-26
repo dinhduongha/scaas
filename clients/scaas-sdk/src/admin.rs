@@ -6,7 +6,8 @@
 //! struct or a list of structs (`GrantTerms`, `Env`, `WrapLegLimits[]`, `ChainEntries`, a creation's `TokenConfig` /
 //! `DexConfig`, the consent `UASig`) is its named-field JSON text, the node's form, parsed strictly by `scaas-ua`'s typed
 //! builders (every field named, no other); a creation's `initHash` is the keccak of the config or initializer call `scaas-ua`
-//! encodes. Also: the router's `UACancelNonce`, the CREATE3 preview ([`Admin::create3_address`]), the rescue vault
+//! encodes. Also: the router's `UACancelNonce` and its keyed `UACancelNonceFor` (CTR-GOV-33: a lane in the map the router checks
+//! for an op on `target`, read as `mtxNonceFor`), the CREATE3 preview ([`Admin::create3_address`]), the rescue vault
 //! ([`Admin::sign_rescue_vault`]) and the set-auditor consent ([`Admin::sign_auditor_consent`]). Off by default. UNAUDITED.
 use crate::op::{addr20, evm, hex, key_opened, unhex, KeyRef, Op, Prepared};
 use crate::wallet::ops::{draft, from_of, id32, ids, kind_of, put_envelope, Envelope};
@@ -251,6 +252,7 @@ UaGrantRole, admin_ua_grant_role, "UAGrantRole" { target: s => "target", bit: n 
     UaApproveRelease, admin_ua_approve_release, "UAApproveRelease" { target: s => "target", contract_class: n => "contractClass", kind: n => "kind", version: s => "version", env_version: n => "envVersion", init_selector: s => "initSelector", interface_id: s => "interfaceId", initcode_hash: s => "initcodeHash", impl_args_hash: s => "implArgsHash", factory: s => "factory", admin_generation: n => "adminGeneration", until: s => "until" }
     UaRevokeApproval, admin_ua_revoke_approval, "UARevokeApproval" { target: s => "target", key: s => "key" }
     UaCancelNonce, admin_ua_cancel_nonce, "UACancelNonce" { lane: s => "lane" }
+    UaCancelNonceFor, admin_ua_cancel_nonce_for, "UACancelNonceFor" { target: s => "target", lane: s => "lane" }
 }
 
 /// A rescue vault's admin operation (CTR-GOV-25): `seq` the vault's shared order, from 1.

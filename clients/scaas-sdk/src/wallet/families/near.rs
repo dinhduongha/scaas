@@ -172,6 +172,7 @@ pub(crate) async fn balances(c: &Chain, id: &str) -> Result<Balances, SdkError> 
                 display: t.symbol.clone(),
                 decimals: t.decimals,
                 amount,
+                unknown: None,
             })
             .collect(),
     })

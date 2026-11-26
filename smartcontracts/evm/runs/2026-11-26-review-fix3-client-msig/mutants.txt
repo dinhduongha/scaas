@@ -1,0 +1,34 @@
+mutant | red tests | rc
+chain-path-no-enabled-mask | test_gen2ForwardsCurrent, test_nestedInnerUpdated, test_reEnable, test_updateDisableAppend | 1
+portable-path-no-enabled-mask | test_gen2ForwardsCurrent, test_history_recordBeforeUpdateVerifiesAfter, test_nestedInnerUpdated, test_reEnable, test_refusedSigners, test_setPqzKeyAfterUpdate, test_updateDisableAppend | 1
+portable-count-mask-restored | test_256Slots, test_gas_updateRowModel, test_gen2ForwardsCurrent, test_history_recordBeforeUpdateVerifiesAfter, test_nestedInnerUpdated, test_reEnable, test_refusedSigners, test_setPqzKeyAfterUpdate, test_updateDisableAppend | 1
+memberAccepted-no-enabled | test_acceptAppendedSlot, test_updateDisableAppend, test_verifierShapeMoves | 1
+version-gt-not-eq | test_refusedVersion | 1
+no-chain-check | test_refusedChainUid | 1
+no-expiry-check | test_validUntilBlock | 1
+sigs-over-target | test_gen2HostCurrentStructure, test_history_msigAtEveryVersion, test_nestedInnerUpdated, test_nestedThirdLevelIsClassical, test_refusedBound, test_refusedDebitBound, test_refusedThreshold, test_weightThenThreshold | 1
+no-slot-changed-check | test_refusedSlotChanged | 1
+no-duplicate-check | test_refusedKeyData | 1
+duplicate-by-kind-and-id | test_refusedKeyData | 1
+no-self-slot-check | test_refusedKeyData | 1
+threshold-counts-unaccepted | test_refusedThreshold | 1
+no-row-10 | test_nestedThirdLevel, test_refusedMemberUnknown | 1
+row-10-not-on-reenabled | test_nestedThirdLevel | 1
+no-row-11 | test_history_boundCountsTheTag, test_refusedBound, test_refusedDebitBound, test_refusedNextUpdate, test_refusedNextUpdateInner | 1
+bound-counts-disabled | test_256Slots, test_gas_updateOverWideInners, test_gas_updateRowModel, test_refusedBound | 1
+bound-follows-inner-msig | test_nestedThirdLevel, test_nestedThirdLevelIsClassical | 1
+eligibility-follows-inner-msig | test_nestedThirdLevelIsClassical | 1
+no-stays-pq-eligible | test_nestedThirdLevelIsClassical, test_refusedPqzHolder | 1
+no-row-13 | test_history_boundCountsTheTag, test_msigBound_readsTxGasCap, test_refusedNextUpdate, test_refusedNextUpdateInner | 1
+registration-reads-msig-keyPtr | test_updateDisableAppend | 1
+accept-reads-first-structure | test_acceptAppendedSlot, test_gen2ForwardsCurrent, test_gen2HostCurrentStructure, test_history_msigAtEveryVersion, test_nestedInnerUpdated, test_nestedThirdLevel, test_refusedSigners, test_refusedThreshold, test_setPqzKeyAfterUpdate, test_updateDisableAppend | 1
+gen2-msigState-not-forwarded | test_gen2ForwardsCurrent, test_gen2HostCurrentStructure, test_history_innerHeldByGen1 | 1
+registry-not-in-digest | test_256Slots, test_acceptAppendedSlot, test_gas_requireAuthorized, test_gas_updateOverWideInners, test_gas_updateRowModel, test_gen2ForwardsCurrent, test_gen2HostCurrentStructure, test_history_boundCountsTheTag, test_history_innerHeldByGen1, test_history_innerTag, test_history_memberObjectKeepsTheTag, test_history_msigAtEveryVersion, test_history_recordBeforeUpdateVerifiesAfter, test_history_tagIsTheCurrentVersion, test_libraryDirectCallReverts, test_msigBound_readsTxGasCap, test_nestedInnerUpdated, test_nestedThirdLevel, test_nestedThirdLevelIsClassical, test_reEnable, test_refusedBound, test_refusedChainUid, test_refusedDebitBound, test_refusedKeyData, test_refusedMemberUnknown, test_refusedNextUpdate, test_refusedNextUpdateInner, test_refusedOtherRegistry, test_refusedPqzHolder, test_refusedSigners, test_refusedSlotChanged, test_refusedSlots, test_refusedThreshold, test_refusedVersion, test_setPqzKeyAfterUpdate, test_updateDisableAppend, test_validUntilBlock, test_verifierShapeMoves, test_weightThenThreshold | 1
+purpose-tag | test_msigUpdateTypehashesPinned | 1
+row-13-without-calldata | test_history_boundCountsTheTag, test_refusedNextUpdate, test_refusedNextUpdateInner | 1
+row-13-without-inner-term | test_history_boundCountsTheTag, test_refusedNextUpdateInner | 1
+gen2-msigOf-not-forwarded | test_gen2ForwardsCurrent, test_gen2HostCurrentStructure, test_history_innerHeldByGen1 | 1
+gen2-memberAccepted-not-forwarded | test_gen2ForwardsCurrent | 1
+chain-inner-reads-first-structure | test_gas_wideBlobsAtBound, test_history_innerTag, test_nestedInnerUpdated, test_nestedThirdLevel | 1
+typehash-field-order | test_msigUpdateTypehashesPinned | 1
+host-reads-registrationOf | test_gen2HostCurrentStructure | 1

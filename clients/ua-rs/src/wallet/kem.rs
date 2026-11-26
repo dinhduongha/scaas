@@ -188,7 +188,7 @@ impl KemKeyPair {
         KemKeyPair::ephemeral(&s)
     }
 
-    fn ephemeral(s: &[u8]) -> Result<KemKeyPair> {
+    pub(super) fn ephemeral(s: &[u8]) -> Result<KemKeyPair> {
         let kem_pk = kem_pk_of(s)?;
         self_test(s)?; // its store's only key, checked once
         let recipient = RecipientId::KemPkHash(crate::keccak256(&kem_pk));
@@ -227,6 +227,14 @@ impl KemKeyPair {
     /// Wipes the key's store and revokes every handle of it: a link session's own store (spec §6.3), never a wallet's.
     pub(super) fn wipe_own_store(&self) {
         self.secret.revoke_store();
+    }
+
+    /// `HKDF-SHA-256(ikm = the key's 96-byte seed, salt empty, info, len)` (a TreeKEM committer's `ps[0]`, spec §5): computed
+    /// inside the store; the bytes go to `tree.rs` only, which keeps them `Zeroizing` and hands out handles (B-11).
+    #[cfg(feature = "app-core")]
+    pub(super) fn seed_hkdf(&self, info: &[u8], len: usize) -> Result<Zeroizing<Vec<u8>>> {
+        self.secret
+            .with(|s| super::aead::hkdf_sha256(s, &[], info, len))?
     }
 
     /// `ss` of `(mlkem_ct, x25519_eph)`: `KemCheck` for an `mlkem_ct` of other than 1,568 bytes or a small-order `E`;

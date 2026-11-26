@@ -283,6 +283,7 @@ function shared(mode) {
     nonce,
     mode,
     ...home,
+    groupMode: 0,
     admins: [alice.ua, bob.ua].sort(),
     members: members0,
     wrapHashes: wraps(e0, k0.Ke, vid, vid, members0),
@@ -460,6 +461,7 @@ function personalVault(tag, who, mode, pass, items) {
     nonce,
     mode,
     ...home,
+    groupMode: 0,
     admins: [who.ua],
     members,
     wrapHashes: wraps(e0, k0.Ke, vid, vid, members),
@@ -584,6 +586,22 @@ const modes = {
   ],
 };
 must(modes.sameCreatorNonce[0].vaultId !== modes.sameCreatorNonce[1].vaultId, "the mode is in vaultId");
+// CTR-PQV-18 (as PqChat's CTR-CHAT-25): shared0's create record with groupMode 1 (TreeKEM) under a nonce of its own, signed by
+// its creator, refused by this release (PqVaultModeUnsupported(1)) before anything else; the struct and typehash stay
+const treeKem = (() => {
+  const r = rec("shared0.create");
+  const record = { ...r.record, nonce: nonce53("treekem/nonce"), groupMode: 1 };
+  const id = hex(pv.vaultId(record.creator, record.nonce, record.mode, record.homeChain, record.homeVaultContract));
+  const row = recordRow("createTreeKem", "PqVaultCreate", record, alice, pv.domainOf(0, B), {
+    id,
+    scope: hex(pv.scopeVault(alice.ua)),
+  });
+  must(
+    row.typed !== hex(pv.typed("PqVaultCreate", { ...record, groupMode: 0 }, pv.DS_V)),
+    "groupMode is in the digest",
+  );
+  return { mode: 0, ...row, error: "PqVaultModeUnsupported(1)" };
+})();
 must(refused(() => pv.domainOf(2)) === "PqVaultShape", "mode 2");
 
 // a native EVM key as an msig member: mode 0 signs the typed digest itself, mode 1 UAAuth(member, PURPOSE_MEMBER, memberDigest)
@@ -811,7 +829,8 @@ write("records.json", {
     "uaAuthDigest(registryDomain, its native id, purposeTag(member), memberDigest(msig, uaMessage(0x0120, P_V, typed))); each " +
     "signature presented in the other mode recovers another address. extra (Fable code review F9): bigNonce, a creation nonce " +
     "above 2^63 as a decimal string (a double would lose its low bits) and its vaultId; msigBlob, the shared0 remove record " +
-    "stored with an msig UASig (members, one nested) and its sigHash.",
+    "stored with an msig UASig (members, one nested) and its sigHash. createTreeKem (CTR-PQV-18): shared0's create record " +
+    "with groupMode 1 under its own nonce, signed by its creator in mode 0 (DS_V), refused by this release by name (error).",
   version: 1,
   domains: {
     V: {
@@ -861,6 +880,7 @@ write("records.json", {
   vaults,
   modes,
   nativeMember,
+  createTreeKem: treeKem,
   extra,
 });
 

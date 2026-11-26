@@ -144,7 +144,7 @@ MUTANTS = [
         [
             (
                 V,
-                "                if e.wrap_hashes.get(j) != Some(&wrap_hash(w))\n                    || w.member != s.me",
+                "                if e.wrap_hashes.get(*j) != Some(&wrap_hash(w))\n                    || w.member != s.me",
                 "                if w.member != s.me",
             )
         ],

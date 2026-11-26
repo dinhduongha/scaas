@@ -1,0 +1,45 @@
+# CTR-UA-74 (owner 2026-11-25, finding F-1b): msigAt and the msig version tag, branch review-fix2-registry from 08f68484a: step | commit | rc | counts
+# Logs: git-ignored .log files of the run (not committed); the mutant table runs/2026-11-25-review-fix2-registry/mutants.txt.
+# Default set n2304-kmax4096. The registry is shared: every forge directory at the default set, one forge a directory (a whole-tree
+# compile is over the 4 GB cap: two such runs were killed by the scope's OOM killer, rc 143); the set-sensitive tests and test/modules
+# at the other three sets by script/pqz/at-set.sh (lanes; src/pqz/PqzSet.sol of the work tree never written).
+# Not run: scaas-node (no mtx selector, typehash or typed row moved: msigAt is a view, the UASig type is unchanged); clients/ (another branch).
+# Left red for the client follow-up: clients/scaas-sdk/gas/generate.py --check (reference.json against the 30 re-measured sdk_gas.json keys).
+red | forge test/ua, first run on the uncommitted change | uncommitted, before 38e0ce864 | 1 | 922 passed 23 failed, 64 suites: the fakes without msigAt, the updated-msig tests without a tag, the pins 38e0ce864 moves (forge)
+size | forge build src --sizes; scripts/size_gate.py | 38e0ce864 | 0 | 0 errors, 184 contracts; UARegistry 35,166 -> 35,069 B, UARegistryAuxLib 33,858 -> 35,099 B, UARegistryCoreLib 23,465 -> 23,790 B, UARegistryRegLib 31,683 -> 31,739 B
+mutants | script/ua/msig-history-mutants.py, first run (20) | 38e0ce864 | - | 19 of 20 killed; bound-without-the-tag-word survived (no test at the bound's edge), two object lines had no mutant
+mutants | script/ua/msig-history-mutants.py (22, test/ua/UARegistryMsigUpdate.t.sol) | 289e7a7a4 | 0 | 22 of 22 killed, each by a behavioural test
+forge | test/ua | 289e7a7a4 | 0 | 952 passed 0 failed 0 skipped, 64 suites (forge)
+forge | test/governance | 289e7a7a4 | 0 | 694 passed 0 failed 0 skipped, 69 suites (forge)
+forge | test/v2 | 289e7a7a4 | 0 | 643 passed 0 failed 0 skipped, 47 suites (forge)
+forge | test/metatx | 289e7a7a4 | 0 | 402 passed 0 failed 0 skipped, 36 suites (forge)
+forge | test/pqchat | 289e7a7a4 | 0 | 262 passed 0 failed 2 skipped, 25 suites (forge)
+forge | test/pqvault | 289e7a7a4 | 0 | 99 passed 0 failed 0 skipped, 12 suites (forge)
+forge | test/gas | 289e7a7a4 | 0 | 67 passed 0 failed 0 skipped, 26 suites (forge)
+forge | test/account | 289e7a7a4 | 0 | 58 passed 0 failed 0 skipped, 4 suites (forge)
+forge | test/as | 289e7a7a4 | 0 | 361 passed 0 failed 0 skipped, 73 suites (forge)
+forge | test/confidential | 289e7a7a4 | 0 | 5 passed 0 failed 0 skipped, 1 suites (forge)
+forge | test/factory | 289e7a7a4 | 0 | 2 passed 0 failed 0 skipped, 1 suites (forge)
+forge | test/fork | 289e7a7a4 | 0 | 0 passed 0 failed 1 skipped, 1 suites (forge)
+forge | test/hedera | 289e7a7a4 | 0 | 20 passed 0 failed 0 skipped, 2 suites (forge)
+forge | test/liquidity | 289e7a7a4 | 0 | 82 passed 0 failed 1 skipped, 8 suites (forge)
+forge | test/merge | 289e7a7a4 | 0 | 119 passed 0 failed 0 skipped, 11 suites (forge)
+forge | test/p6f | 289e7a7a4 | 0 | 4 passed 0 failed 0 skipped, 1 suites (forge)
+forge | test/pqz | 289e7a7a4 | 0 | 519 passed 0 failed 4 skipped, 49 suites (forge)
+forge | test/pqzh | 289e7a7a4 | 0 | 42 passed 0 failed 0 skipped, 3 suites (forge)
+forge | test/research | 289e7a7a4 | 0 | 93 passed 0 failed 6 skipped, 6 suites (forge)
+forge | test/wallet | 289e7a7a4 | 0 | 100 passed 0 failed 0 skipped, 6 suites (forge)
+forge | test/wrap | 289e7a7a4 | 0 | 117 passed 0 failed 0 skipped, 18 suites (forge)
+forge | test/zether | 289e7a7a4 | 0 | 370 passed 0 failed 4 skipped, 28 suites (forge)
+forge | test/*.t.sol (BlsKat, ExpectRevertLint, FeePolicy, HashToCurve, MultiSig) | 289e7a7a4 | 0 | 29 passed 0 failed 0 skipped, 5 suites (forge)
+forge | the 23 rows above, summed | 289e7a7a4 | 0 | 5040 passed 0 failed 18 skipped, 496 suites (forge)
+forge | --isolate test/ua/{UAGas,UARegistryGroups}.t.sol | 289e7a7a4 | 0 | 29 passed 0 failed, 3 suites (forge)
+forge | at-set.sh n2304-kmax4096 modules (test/modules) | 289e7a7a4 | 0 | 35 passed 0 failed, 12 suites (forge)
+per-set | at-set.sh others sensitive: n2048-kmax1024 | 38e0ce864 | 0 | 1602 passed 0 failed 3 skipped, 179 suites (forge)
+per-set | at-set.sh others sensitive: n2560-kmax16384 | 38e0ce864 | 0 | 1596 passed 0 failed 9 skipped, 179 suites (forge)
+per-set | at-set.sh others sensitive: n2816-kmax65536 | 38e0ce864 | 0 | 1584 passed 0 failed 21 skipped, 179 suites (forge)
+per-set | at-set.sh others test --match-path test/ua/UARegistryMsigUpdate.t.sol (the one set-sensitive file 289e7a7a4 changed) | 289e7a7a4 | 0 | 45 passed 0 failed at each of n2048-kmax1024, n2560-kmax16384, n2816-kmax65536 (forge)
+per-set | at-set.sh others modules | 289e7a7a4 | 0 | 35 passed 0 failed, 12 suites at each of n2048-kmax1024, n2560-kmax16384, n2816-kmax65536 (forge)
+sdk-gas | SDK_GAS_WRITE, test/gas/SdkGasRegistry.t.sol, one test a forge run (--threads 1) | 38e0ce864 | 0 | 30 keys moved (msig_registerMsig_*, msig_updateMsig_*, kem_setKemKey_fresh_commit, ua-0x0130 / ua-0x0131 cacheExpandedKey); all three tests in one run wrote a regular figure 2 gas off, so they are written one a run
+format | scripts/format.sh --check (every language) | 289e7a7a4 | 0 | every part ok
+docs | scripts/docs_check.py check, paths; scripts/test_docs_check.py | 289e7a7a4 | 0 | 0 errors, 7 warnings (line budgets), 16 notes; 0 machine paths; ok

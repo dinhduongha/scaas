@@ -20,8 +20,10 @@ MUTANTS = [
                                       "                    .map_err(|_| SdkError::RegistrationPopInvalid)?;", "")],
      T + "sponsored_registration_checks"),
     ("prepare the payment before the registration lands (no receiver check)",
+     # re-anchored 2026-11-23 (T26 B2-9: the check is `crate::line::receiver_registered`, called by every payment prepare):
+     # the same mutation on `prepare_pay`'s call, the one the test drives
      [("clients/scaas-sdk/src/wallet/ops.rs",
-       "                crate::account::receiver_registered(&sdk, &req.chain, &id32(&req.to)?).await?;\n", "")],
+       "R16)\n                crate::line::receiver_registered(&sdk, &req.chain, &id32(&req.to)?).await?;\n", "R16)\n")],
      T + "pay_to_unregistered_derived_ua"),
     ("skip the setKemKey when kemPkHash is set", [(R, "    if let Some(fill) = kem_fill {", "    if let Some(fill) = kem_fill.filter(|_| false) {")],
      T + "sponsored_registration_checks"),

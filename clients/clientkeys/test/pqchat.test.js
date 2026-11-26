@@ -27,7 +27,7 @@ const SPEC = {
   MemberKey: "MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
   Wrap: "Wrap(bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey)",
   PqChatSession:
-    "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
+    "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
   PqChatEpoch:
     "PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
   PqChatLeave: "PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)",
@@ -48,7 +48,10 @@ const SPEC = {
 };
 const STRUCT_OF = {
   session: "PqChatSession",
+  sessionTreeKem: "PqChatSession",
+  sessionMode2: "PqChatSession",
   epoch: "PqChatEpoch",
+  epochDevices: "PqChatEpoch",
   leave: "PqChatLeave",
   remove: "PqChatRemove",
   message: "PqChatMessage",
@@ -110,7 +113,7 @@ test("signers: pq.js keys from the seed, ua.js and pq.js agree on uaMessage", ()
 });
 
 /** Every row: hashStruct, typed, uaMessage, and its id, scope, signature, sigHash and blob where it has them. */
-function checkRow(name, row) {
+function checkRow(name, row, kept = false) {
   const struct = STRUCT_OF[name];
   assert.equal(h(pc.structHash(struct, row.record)), row.hashStruct, name);
   assert.equal(h(pc.typed(struct, row.record)), row.typed, name);
@@ -133,12 +136,41 @@ function checkRow(name, row) {
     );
     assert.equal(h(pc.sigHash(row.uaSig)), row.sigHash, name);
     assert.equal(h(pc.recordBlob(struct, row.record, row.uaSig)), row.blob, name);
+    // CTR-CHAT-23: an `sstore2` instance keeps abi.encode(record, sigHash, UASig) of a session record; a `none` one the blob
+    // above (topic records are outside the setting)
+    if (!kept) return assert.equal(row.blobSigned, undefined, name);
+    assert.equal(h(pc.recordBlob(struct, row.record, row.uaSig, pc.SIG_STORE.sstore2)), row.blobSigned, name);
+    assert.equal(
+      row.blobSigned,
+      h(
+        abiEncode(
+          [pc.recordAbi(struct, row.record).type, "bytes32", pc.UASIG_ABI],
+          [
+            pc.recordAbi(struct, row.record).value,
+            fromHex(row.sigHash),
+            [fromHex(row.uaSig.keyData), fromHex(row.uaSig.signature), []],
+          ],
+        ),
+      ),
+      name,
+    );
   }
 }
 
 test("session records: digests, ids, scopes, the message signature and blob", () => {
   const { session: S, epoch: E, leave: L, message: Mg } = R;
-  for (const n of ["session", "epoch", "leave", "message"]) checkRow(n, R[n]);
+  for (const n of ["session", "epoch", "epochDevices", "leave", "remove", "message"]) checkRow(n, R[n], true);
+  // owner (M) 2026-11-23 (CTR-CHAT-24): a member with two keys, (ua, keyId) strictly ascending, one wrap hash per entry, the
+  // MemberKey typehash unchanged
+  const D = R.epochDevices.record;
+  const keys = D.members.map((m) => [m.ua, m.keyId]);
+  assert.ok(
+    keys.every((k, i) => i === 0 || keys[i - 1][0] < k[0] || (keys[i - 1][0] === k[0] && keys[i - 1][1] < k[1])),
+  );
+  assert.ok(new Set(D.members.map((m) => m.ua)).size < D.members.length, "a UA twice");
+  assert.equal(D.wrapHashes.length, D.members.length);
+  assert.equal(h(pc.TYPEHASH.MemberKey), h(keccak_256(utf8ToBytes("MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"))));
+  assert.deepEqual(R.sigStore, { none: 0, sstore2: 2 }, "CTR-CHAT-23's modes, PQZ's numbering");
   assert.equal(S.id, h(pc.sessionId(S.record.creator, S.record.nonce)));
   assert.equal(S.scope, h(pc.scopeSession(S.record.creator)));
   assert.equal(E.id, h(pc.epochId(E.record.sessionId, E.record.author, E.record.nonce)));
@@ -149,7 +181,8 @@ test("session records: digests, ids, scopes, the message signature and blob", ()
   assert.equal(L.scope, h(pc.scopeEpoch(L.record.sessionId, L.record.member)));
   assert.equal(Mg.id, Mg.typed);
   assert.equal(Mg.scope, h(pc.scopeMessage(Mg.record.epochId, Mg.record.sender, Mg.record.device)));
-  assert.ok(Mg.uaSig && !S.uaSig && !E.uaSig && !L.uaSig);
+  // CTR-CHAT-23: every control-plane record is signed in the vectors, as a client verifies it from an `sstore2` home
+  assert.ok(Mg.uaSig && S.uaSig && E.uaSig && L.uaSig && R.remove.uaSig);
   // shapes: members and admins strictly sorted, the creator in both, one non-zero via, two sorted parents, non-zero fields
   for (const rec of [S.record, E.record]) {
     const uas = rec.members.map((m) => m.ua);
@@ -165,12 +198,22 @@ test("session records: digests, ids, scopes, the message signature and blob", ()
   assert.ok(S.record.members.some((m) => m.via !== Z32));
   assert.equal(Mg.record.parents.length, 2);
   assert.deepEqual(Mg.record.parents, [...Mg.record.parents].sort());
+  // CTR-CHAT-25, CTR-CHAT-26: groupMode is 0 in every flat row; the sessionTreeKem row's is 1, no longer refused
+  assert.equal(S.record.groupMode, 0);
+  assert.equal(R.sessionTreeKem.record.groupMode, 1);
+  assert.equal(R.sessionTreeKem.error, undefined);
+  checkRow("sessionTreeKem", R.sessionTreeKem);
+  // review C-5: the reserved mode 2 (with 3, after the freeze) is a signed record refused by name
+  assert.equal(R.sessionMode2.record.groupMode, 2);
+  assert.equal(R.sessionMode2.error, "PqChatModeUnsupported");
+  checkRow("sessionMode2", R.sessionMode2);
   for (const rec of [S.record, E.record, L.record, Mg.record]) {
     for (const [f, v] of Object.entries(rec))
-      assert.ok(
-        v !== 0 && v !== Z32 && v !== "0x" && v !== hex(new Uint8Array(20)) && !(Array.isArray(v) && !v.length),
-        f,
-      );
+      if (f !== "groupMode")
+        assert.ok(
+          v !== 0 && v !== Z32 && v !== "0x" && v !== hex(new Uint8Array(20)) && !(Array.isArray(v) && !v.length),
+          f,
+        );
   }
   // the session signs the keys.json wraps and the messages.json sealedInfo
   const wrapsOf = (e) => KEYS.wraps.filter((w) => w.name.startsWith(`${e}/`));
@@ -199,7 +242,7 @@ test("remove (P48): the typehash, the row by hand, its scope and shape; member o
   const r = X.record;
   assert.equal(h(pc.TYPEHASH.PqChatRemove), "0x8f4939ececad5be22f7917c0c8087d80d372be36af3b0afb30046be9db0b6c56");
   assert.equal(R.typehashes.PqChatRemove.hash, h(pc.TYPEHASH.PqChatRemove));
-  checkRow("remove", X);
+  checkRow("remove", X, true);
   // hashStruct as P48 writes it: keccak256(abi.encode(TYPEHASH, sessionId, epochId, nextEpoch, keccak256(abi.encodePacked(members)),
   // admin, nonce)), beside the generic EIP-712 encoder
   const membersHash = keccak_256(concatBytes(...r.members.map(fromHex)));
@@ -217,7 +260,7 @@ test("remove (P48): the typehash, the row by hand, its scope and shape; member o
   // the admin's epoch scope, shared with her epoch; no id, no signature
   assert.equal(X.scope, h(pc.scopeEpoch(r.sessionId, r.admin)));
   assert.equal(X.scope, R.epoch.scope);
-  assert.ok(!("id" in X) && !X.uaSig);
+  assert.ok(!("id" in X) && X.uaSig, "no id; signed (CTR-CHAT-23: a client verifies it from an sstore2 home)");
   // shape: epoch 1, one of its admins, 2 of its members strictly sorted, nextEpoch = its number + 1, a fresh nonce
   assert.equal(r.epochId, R.epoch.id);
   assert.equal(r.nextEpoch, R.epoch.record.epoch + 1);
@@ -371,7 +414,8 @@ test("KEM keys and P14: valid keys encapsulate, each refusal throws its named er
 });
 
 test("wraps: the combiner, kek and sealedKey recomputed; each member reopens K", () => {
-  assert.equal(KEYS.wraps.length, 5);
+  // owner (M) 2026-11-23: epoch 2's three wraps (bob's device key among them), 5 -> 8
+  assert.equal(KEYS.wraps.length, 8);
   for (const w of KEYS.wraps) {
     const k = kemKey[w.kemKey];
     const got = pc.wrapTo({
@@ -548,7 +592,7 @@ test("envelope, payload, Matrix event: they open to the signed message of record
 test("sealedInfo rows recompute and reopen to their store list", () => {
   assert.deepEqual(
     M.sealedInfo.map((s) => s.name),
-    ["session", "epoch-1"],
+    ["session", "epoch-1", "epoch-2"], // owner (M) 2026-11-23: epoch 2's row added
   );
   for (const s of M.sealedInfo) {
     const got = pc.sealInfo(s.K, s.sessionId, s.epochId, s.info, s.nonce);

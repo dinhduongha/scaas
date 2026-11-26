@@ -20,6 +20,11 @@ abstract class ArcSeedBackup implements RustOpaqueInterface {}
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Vault>>
 abstract class Vault implements RustOpaqueInterface {
+  /// Accepts the stored keystore as it is after a `KeystoreRollback` (spec §6.3, review A-6): the user chose the older copy
+  /// deliberately; the anchor is rewritten over it and writes resume. While a rollback holds, every write of the keystore is
+  /// `KeystoreRollback` and changes nothing.
+  Future<void> acceptRollback();
+
   /// A new vault passphrase for every vault of the seed: the pin envelope re-wrapped, the data key kept (CLI-UAL-19), so the PRF
   /// envelope still opens. `VaultOpen` for a wrong old one, `VaultPassphraseWeak` for a new one under vault v1's rule.
   Future<void> changePassphrase({
@@ -41,7 +46,8 @@ abstract class Vault implements RustOpaqueInterface {
   /// [1, n)), `DerivationPassphraseShort`, `VaultPassphraseWeak`, `SeedExists`, `LabelTaken`.
   Future<NewSeed> deriveFromKey({required DeriveFromKey req});
 
-  /// Root (c)'s new seed set (spec §6.6). `OriginSignature` (the signatures differ, a wrong length, `r` / `s` / `v` out of
+  /// Root (c)'s new seed set (spec §6.6): the two signatures come from two requests to the wallet (one handle given for both is
+  /// `Argument`). `OriginSignature` (the signatures differ, a wrong length, `r` / `s` / `v` out of
   /// range, recovering to another address), `DerivationPassphraseShort`, `VaultPassphraseWeak`, `SeedExists`, `LabelTaken`.
   Future<NewSeed> deriveFromSignature({required DeriveFromSignature req});
 
@@ -51,15 +57,15 @@ abstract class Vault implements RustOpaqueInterface {
   Future<void> disablePrfUnlock({required String seed});
 
   /// Adds a passkey PRF envelope to every vault of the seed (one credential, one fresh per-seed salt, one assertion),
-  /// opened by the vault passphrase once. `AuthenticatorRefused` for no authenticator, no RP ID or an answer without a PRF
-  /// output (nothing written).
+  /// opened by the vault passphrase once. `AuthenticatorRefused` for no authenticator, no RP ID, an answer without a PRF
+  /// output or an output the app never wrote (nothing written to the keystore).
   Future<void> enablePasskeyUnlock({
     required String seed,
     required ArcSecretBytes vaultPassphrase,
   });
 
   /// Adds a platform-secret envelope (a Keychain / Android Keystore key under `policy`, research decision 8) to every vault of
-  /// the seed, opened by the vault passphrase once.
+  /// the seed, opened by the vault passphrase once. `AuthenticatorRefused` for a refusal or a secret the app never wrote.
   Future<void> enablePlatformUnlock({
     required String seed,
     required ArcSecretBytes vaultPassphrase,
@@ -134,7 +140,8 @@ abstract class Vault implements RustOpaqueInterface {
   /// Unlocks the seed by its vault passphrase (every vault opened now, the passphrase not kept) or by its passkey / platform
   /// PRF envelope (the seed and manifest vaults opened, the PRF key kept for the others' first use; spec §6.10, owner
   /// 2026-11-18): `VaultOpen` for a wrong secret, `AuthenticatorRefused` (no authenticator, no envelope, no PRF output),
-  /// `KeystoreMismatch` when the index MAC does not verify (the seed stays locked, the event says so), `SeedUnknown`.
+  /// `KeystoreMismatch` when the index MAC does not verify (the seed stays locked, the event says so), `SeedUnknown`. A seed
+  /// already open stays as it is (`Ok`, nothing asked): one session per seed.
   Future<void> unlock({required String seed, required Unlock unlock});
 
   /// Whether `word` (one word, as a secret) is on the BIP-39 English list; the list never leaves `scaas-ua` (R17).

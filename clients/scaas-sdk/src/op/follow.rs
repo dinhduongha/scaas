@@ -11,7 +11,7 @@ use crate::SdkError;
 use alloy::primitives::{Address, B256, U256};
 use alloy::rpc::types::Filter;
 use scaas_rpc::evm::{TxState, LOG_RANGE_MAX};
-use scaas_rpc::pool::ReadError;
+use scaas_rpc::pool::{BlockChoice, ReadError};
 use scaas_rpc::{Class, Policy, Purpose};
 
 fn detail_of(s: &str) -> InFlight {
@@ -39,8 +39,12 @@ fn stored(row: &Row) -> OpState {
             block: *block,
             hash: hash.clone(),
         },
-        ("consumed", _) => OpState::Consumed,
-        ("expired", _) => OpState::Expired,
+        ("consumed", _) => OpState::Consumed {
+            basis: crate::events::Basis::parse(row.basis.as_deref()),
+        },
+        ("expired", _) => OpState::Expired {
+            basis: crate::events::Basis::parse(row.basis.as_deref()),
+        },
         _ => OpState::InFlight {
             detail: detail_of(&row.detail),
         },
@@ -101,11 +105,21 @@ impl Op {
                         None => (contract, executed_topic(&row.kind), None),
                     };
                     let filter = Filter::new().address(contract).event_signature(topic);
-                    let (kind, from_block) = (row.kind.clone(), row.from_block);
+                    let scanned = sdk
+                        .scanned
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .get(&row.op)
+                        .copied()
+                        .unwrap_or(0);
+                    let (kind, from_block) = (row.kind.clone(), row.from_block.max(scanned));
+                    // a router op of a derived id reads the map the router checks it on, as prepare and submit did (G1,
+                    // CTR-GOV-33; review D-1: `mtxNonce` there read another map, a spent nonce of it `consumed` while in flight)
+                    let target = super::gov_target(&row.message);
                     let (lane, filter, kind) = (&lane, &filter, kind.as_str());
                     let pool = &pool;
-                    let a = pool
-                        .read_at_block(choice, Purpose::Plain, |at| async move {
+                    let read = |choice| {
+                        pool.read_at_block(choice, Purpose::Plain, move |at| async move {
                             let mut landed = None;
                             let mut lo = from_block.min(at.number);
                             while lo <= at.number && landed.is_none() {
@@ -127,7 +141,11 @@ impl Op {
                             let spent = match lane {
                                 Some((from, batch, nonce)) => {
                                     let w = pool
-                                        .call_at(&at, contract, nonce_call(kind, from, *batch))
+                                        .call_at(
+                                            &at,
+                                            contract,
+                                            nonce_call(kind, from, *batch, target),
+                                        )
                                         .await?;
                                     if w.len() != 32 {
                                         return Err(ReadError::Failure(
@@ -142,17 +160,50 @@ impl Op {
                                 }
                                 None => false,
                             };
-                            Ok::<Facts, ReadError>((landed, spent, pool.timestamp_at(&at).await?))
+                            Ok::<(Facts, u64), ReadError>((
+                                (landed, spent, pool.timestamp_at(&at).await?),
+                                at.number,
+                            ))
                         })
-                        .await?;
+                    };
+                    let a = read(choice).await?;
                     let strict = pool.pool().policy() == Policy::StrictMajority;
                     let decisive =
                         strict || (a.members == [0] && pool.pool().class(0) != Class::Discovered);
-                    let (landed, spent, ts) = a.value;
+                    let ((landed, spent, ts), at) = a.value;
+                    // a decisive read at the final block without the event: the blocks up to it need no second look
+                    if decisive && landed.is_none() {
+                        sdk.scanned
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .insert(row.op.clone(), at.saturating_add(1));
+                    }
+                    let failed =
+                        |spent: bool, ts: u64| lane.is_some() && (spent || row.valid_until < ts);
                     match landed {
                         Some((block, hash)) if decisive => OpState::Landed { block, hash },
-                        _ if decisive && lane.is_some() && spent => OpState::Consumed,
-                        _ if decisive && lane.is_some() && row.valid_until < ts => OpState::Expired,
+                        _ if decisive && failed(spent, ts) => {
+                            // review T26 B-11 (CLI-RPC-09, owner 2026-11-17, T13 S7): under strict_majority a failed-for-good
+                            // rests on the agreed read at `finalized`; a read at another depth that shows one reads it again
+                            let (landed, spent, ts) = if strict && choice != BlockChoice::Finalized
+                            {
+                                read(BlockChoice::Finalized).await?.value.0
+                            } else {
+                                (None, spent, ts)
+                            };
+                            match landed {
+                                Some((block, hash)) => OpState::Landed { block, hash },
+                                None if failed(spent, ts) && spent => OpState::Consumed {
+                                    basis: crate::events::Basis::of(strict),
+                                },
+                                None if failed(spent, ts) => OpState::Expired {
+                                    basis: crate::events::Basis::of(strict),
+                                },
+                                None => OpState::InFlight {
+                                    detail: tx_detail(pool, &row, choice).await,
+                                },
+                            }
+                        }
                         _ => OpState::InFlight {
                             detail: tx_detail(pool, &row, choice).await,
                         },
@@ -171,8 +222,14 @@ impl Op {
                             row.state = "reverted".into();
                             row.landed = Some((*block, hash.clone()));
                         }
-                        OpState::Consumed => row.state = "consumed".into(),
-                        OpState::Expired => row.state = "expired".into(),
+                        OpState::Consumed { basis } => {
+                            row.state = "consumed".into();
+                            row.basis = Some(basis.stored());
+                        }
+                        OpState::Expired { basis } => {
+                            row.state = "expired".into();
+                            row.basis = Some(basis.stored());
+                        }
                         OpState::InFlight { detail } => row.detail = format!("{detail:?}"),
                     }
                     state::put(&sdk, &row).await?;
@@ -219,7 +276,12 @@ async fn native_state(
             block: number,
             hash: format!("{hash:#x}"),
         },
-        Ok(TxState::Replaced { .. }) => OpState::Consumed,
+        Ok(TxState::Replaced { basis, .. }) => OpState::Consumed {
+            basis: match basis {
+                scaas_rpc::evm::Basis::Majority => crate::events::Basis::Majority,
+                scaas_rpc::evm::Basis::OneEndpoint => crate::events::Basis::OneEndpoint,
+            },
+        },
         Ok(TxState::Included { .. }) => OpState::InFlight {
             detail: InFlight::TxIncluded,
         },

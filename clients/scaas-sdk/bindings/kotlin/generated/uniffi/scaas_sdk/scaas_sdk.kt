@@ -887,6 +887,8 @@ external fun uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_grant(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce(
 ): Short
+external fun uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for(
+): Short
 external fun uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_admin_admin_ua_create_dex(
@@ -1167,6 +1169,8 @@ external fun uniffi_scaas_sdk_checksum_method_sdk_watch(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_subscription_next(
 ): Short
+external fun uniffi_scaas_sdk_checksum_method_vault_accept_rollback(
+): Short
 external fun uniffi_scaas_sdk_checksum_method_vault_change_passphrase(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_vault_confirm_backup(
@@ -1424,6 +1428,8 @@ external fun uniffi_scaas_sdk_fn_method_admin_admin_ua_approve_token_release(`pt
 external fun uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_grant(`ptr`: Long,`req`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(`ptr`: Long,`req`: RustBuffer.ByValue,
+): Long
+external fun uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(`ptr`: Long,`req`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate(`ptr`: Long,`req`: RustBuffer.ByValue,
 ): Long
@@ -1745,6 +1751,8 @@ external fun uniffi_scaas_sdk_fn_clone_vault(`handle`: Long,uniffi_out_err: Unif
 ): Long
 external fun uniffi_scaas_sdk_fn_free_vault(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_scaas_sdk_fn_method_vault_accept_rollback(`ptr`: Long,
+): Long
 external fun uniffi_scaas_sdk_fn_method_vault_change_passphrase(`ptr`: Long,`seed`: RustBuffer.ByValue,`old`: Long,`new`: Long,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_vault_confirm_backup(`ptr`: Long,`seed`: RustBuffer.ByValue,
@@ -2290,6 +2298,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce() != 48105.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for() != 20110.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate() != 38309.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -2708,6 +2719,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_subscription_next() != 46941.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback() != 51021.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != 63580.toShort()) {
@@ -4615,6 +4629,8 @@ public interface AdminInterface {
     
     suspend fun `adminUaCancelNonce`(`req`: UaCancelNonce): Prepared
     
+    suspend fun `adminUaCancelNonceFor`(`req`: UaCancelNonceFor): Prepared
+    
     suspend fun `adminUaCancelRate`(`req`: UaCancelRate): Prepared
     
     suspend fun `adminUaCreateDex`(`req`: UaCreateDex): Prepared
@@ -4956,6 +4972,27 @@ open class Admin: Disposable, AutoCloseable, AdminInterface
             UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(
                 uniffiHandle,
                 FfiConverterTypeUaCancelNonce.lower(`req`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypePrepared.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `adminUaCancelNonceFor`(`req`: UaCancelNonceFor) : Prepared {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(
+                uniffiHandle,
+                FfiConverterTypeUaCancelNonceFor.lower(`req`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_u64(future, callback, continuation) },
@@ -11918,6 +11955,8 @@ public object FfiConverterTypeSubscription: FfiConverter<Subscription, Long> {
  */
 public interface VaultInterface {
     
+    suspend fun `acceptRollback`()
+    
     suspend fun `changePassphrase`(`seed`: kotlin.String, `old`: SecretBytes, `new`: SecretBytes)
     
     suspend fun `confirmBackup`(`seed`: kotlin.String)
@@ -12085,6 +12124,28 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
         return uniffiRustCall() { status ->
             UniffiLib.uniffi_scaas_sdk_fn_clone_vault(handle, status)
         }
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `acceptRollback`() {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_vault_accept_rollback(
+                uniffiHandle,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
     }
 
     
@@ -14608,8 +14669,9 @@ data class ChainProfile (
     var `familyParams`: FamilyParams?
     , 
     /**
-     * the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-     * and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+     * the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+     * (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+     * Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
      * `Sdk::open` on another family)
      */
     var `l1Fee`: L1Fee?
@@ -15603,7 +15665,8 @@ public object FfiConverterTypeGasLine: FfiConverterRustBuffer<GasLine> {
 
 /**
  * A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
- * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+ * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded), `data` (`mtxExecute`'s call data) or
+ * `calldata` (the transaction row's, entry `transaction` kind `evm`: the price of a byte of the transaction's calldata).
  */
 data class GasPerByte (
     var `input`: kotlin.String
@@ -17968,7 +18031,8 @@ public object FfiConverterTypePay: FfiConverterRustBuffer<Pay> {
  */
 data class PayMeta (
     /**
-     * `0x` + 64 hex; `None`: 32 random bytes
+     * `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+     * the same pay lane, however its ids and amounts are spelt)
      */
     var `salt`: kotlin.String?
     , 
@@ -18822,8 +18886,9 @@ public object FfiConverterTypePqzTransfer: FfiConverterRustBuffer<PqzTransfer> {
 
 
 /**
- * `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
- * fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+ * `UAPqzTransfer` / `UAPqzTransferCompact`: the real `legs` and `decoys` legs of amount 0 the SDK draws from the registry
+ * line's `0x0142` lists, every leg's position shuffled (CTR-UA-29; their count one the set builds, 1, 2, 4 or 8),
+ * `decoy_fee` the per-leg fee (decimal; at least the token's `minDecoyFee`, the contract's check).
  */
 data class PqzTransferMulti (
     var `signer`: KeyRef
@@ -18837,6 +18902,8 @@ data class PqzTransferMulti (
     var `keyVersion`: kotlin.ULong
     , 
     var `legs`: List<PqzLeg>
+    , 
+    var `decoys`: kotlin.UInt
     , 
     var `decoyFee`: kotlin.String
     , 
@@ -18865,6 +18932,7 @@ public object FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer<PqzTransf
             FfiConverterString.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterSequenceTypePqzLeg.read(buf),
+            FfiConverterUInt.read(buf),
             FfiConverterString.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterTypeEnvelope.read(buf),
@@ -18878,6 +18946,7 @@ public object FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer<PqzTransf
             FfiConverterString.allocationSize(value.`batch`) +
             FfiConverterULong.allocationSize(value.`keyVersion`) +
             FfiConverterSequenceTypePqzLeg.allocationSize(value.`legs`) +
+            FfiConverterUInt.allocationSize(value.`decoys`) +
             FfiConverterString.allocationSize(value.`decoyFee`) +
             FfiConverterULong.allocationSize(value.`validUntilBlock`) +
             FfiConverterTypeEnvelope.allocationSize(value.`envelope`)
@@ -18890,6 +18959,7 @@ public object FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer<PqzTransf
             FfiConverterString.write(value.`batch`, buf)
             FfiConverterULong.write(value.`keyVersion`, buf)
             FfiConverterSequenceTypePqzLeg.write(value.`legs`, buf)
+            FfiConverterUInt.write(value.`decoys`, buf)
             FfiConverterString.write(value.`decoyFee`, buf)
             FfiConverterULong.write(value.`validUntilBlock`, buf)
             FfiConverterTypeEnvelope.write(value.`envelope`, buf)
@@ -20823,9 +20893,15 @@ data class TokenBalance (
     var `decimals`: kotlin.UByte
     , 
     /**
-     * the smallest unit, decimal
+     * the smallest unit, decimal; empty when `unknown` is set
      */
     var `amount`: kotlin.String
+    , 
+    /**
+     * set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+     * `frozen`): the amount is unknown, never a false 0
+     */
+    var `unknown`: kotlin.String?
     
 ){
     
@@ -20846,6 +20922,7 @@ public object FfiConverterTypeTokenBalance: FfiConverterRustBuffer<TokenBalance>
             FfiConverterString.read(buf),
             FfiConverterUByte.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -20853,7 +20930,8 @@ public object FfiConverterTypeTokenBalance: FfiConverterRustBuffer<TokenBalance>
             FfiConverterString.allocationSize(value.`address`) +
             FfiConverterString.allocationSize(value.`display`) +
             FfiConverterUByte.allocationSize(value.`decimals`) +
-            FfiConverterString.allocationSize(value.`amount`)
+            FfiConverterString.allocationSize(value.`amount`) +
+            FfiConverterOptionalString.allocationSize(value.`unknown`)
     )
 
     override fun write(value: TokenBalance, buf: ByteBuffer) {
@@ -20861,6 +20939,7 @@ public object FfiConverterTypeTokenBalance: FfiConverterRustBuffer<TokenBalance>
             FfiConverterString.write(value.`display`, buf)
             FfiConverterUByte.write(value.`decimals`, buf)
             FfiConverterString.write(value.`amount`, buf)
+            FfiConverterOptionalString.write(value.`unknown`, buf)
     }
 }
 
@@ -21678,6 +21757,79 @@ public object FfiConverterTypeUaCancelNonce: FfiConverterRustBuffer<UaCancelNonc
             FfiConverterTypeKeyRef.write(value.`signer`, buf)
             FfiConverterString.write(value.`chain`, buf)
             FfiConverterString.write(value.`batch`, buf)
+            FfiConverterString.write(value.`lane`, buf)
+            FfiConverterOptionalString.write(value.`chainUid`, buf)
+            FfiConverterTypeEnvelope.write(value.`envelope`, buf)
+    }
+}
+
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UACancelNonceFor
+ */
+data class UaCancelNonceFor (
+    var `signer`: KeyRef
+    , 
+    var `chain`: kotlin.String
+    , 
+    /**
+     * the lane, decimal
+     */
+    var `batch`: kotlin.String
+    , 
+    var `target`: kotlin.String
+    , 
+    var `lane`: kotlin.String
+    , 
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    var `chainUid`: kotlin.String?
+    , 
+    var `envelope`: Envelope
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUaCancelNonceFor: FfiConverterRustBuffer<UaCancelNonceFor> {
+    override fun read(buf: ByteBuffer): UaCancelNonceFor {
+        return UaCancelNonceFor(
+            FfiConverterTypeKeyRef.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterTypeEnvelope.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: UaCancelNonceFor) = (
+            FfiConverterTypeKeyRef.allocationSize(value.`signer`) +
+            FfiConverterString.allocationSize(value.`chain`) +
+            FfiConverterString.allocationSize(value.`batch`) +
+            FfiConverterString.allocationSize(value.`target`) +
+            FfiConverterString.allocationSize(value.`lane`) +
+            FfiConverterOptionalString.allocationSize(value.`chainUid`) +
+            FfiConverterTypeEnvelope.allocationSize(value.`envelope`)
+    )
+
+    override fun write(value: UaCancelNonceFor, buf: ByteBuffer) {
+            FfiConverterTypeKeyRef.write(value.`signer`, buf)
+            FfiConverterString.write(value.`chain`, buf)
+            FfiConverterString.write(value.`batch`, buf)
+            FfiConverterString.write(value.`target`, buf)
             FfiConverterString.write(value.`lane`, buf)
             FfiConverterOptionalString.write(value.`chainUid`, buf)
             FfiConverterTypeEnvelope.write(value.`envelope`, buf)
@@ -28193,6 +28345,44 @@ public object FfiConverterTypeAuthError : FfiConverterRustBuffer<AuthException> 
 
 
 
+/**
+ * What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+ * read at the `finalized` block, or endpoint 0's alone under `failover`.
+ */
+
+enum class Basis {
+    
+    MAJORITY,
+    ONE_ENDPOINT;
+
+    
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBasis: FfiConverterRustBuffer<Basis> {
+    override fun read(buf: ByteBuffer) = try {
+        Basis.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: Basis) = 4UL
+
+    override fun write(value: Basis, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 
 enum class Class {
     
@@ -29336,7 +29526,7 @@ sealed class GasFrom {
     
     
     /**
-     * a native send's own estimate (or 21,000 for a plain transfer to an account without code)
+     * a native send's own estimate (`eth_estimateGas`, a plain transfer's too)
      */
     object Estimate : GasFrom()
     
@@ -29841,7 +30031,17 @@ enum class L1Fee {
     /**
      * OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
      */
-    OP_STACK;
+    OP_STACK,
+    /**
+     * the L1 cost charged as gas (Arbitrum, the profile's `in-estimate`): a table-quoted transaction's gas limit adds
+     * `NodeInterface.gasEstimateL1Component` (`0x…C8`) over its calldata, with the margin; an estimate holds it already
+     */
+    IN_ESTIMATE,
+    /**
+     * the L1 cost carried by the priority fee (Linea, the profile's `linea`): the fees are `linea_estimateGas`'s over the
+     * transaction, never below the chain's own
+     */
+    LINEA;
 
     
 
@@ -30024,8 +30224,14 @@ sealed class OpState {
     /**
      * the lane's nonce spent at the final block without that event; a replaced native send
      */
-    object Consumed : OpState()
-    
+    data class Consumed(
+        val `basis`: uniffi.scaas_sdk.Basis) : OpState()
+        
+    {
+        
+
+        companion object
+    }
     
     /**
      * an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
@@ -30043,8 +30249,14 @@ sealed class OpState {
     /**
      * `validUntil` below the final block's timestamp while the nonce is unspent
      */
-    object Expired : OpState()
-    
+    data class Expired(
+        val `basis`: uniffi.scaas_sdk.Basis) : OpState()
+        
+    {
+        
+
+        companion object
+    }
     
     /**
      * anything else, with what is known (never an end)
@@ -30078,12 +30290,16 @@ public object FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                 FfiConverterULong.read(buf),
                 FfiConverterString.read(buf),
                 )
-            2 -> OpState.Consumed
+            2 -> OpState.Consumed(
+                FfiConverterTypeBasis.read(buf),
+                )
             3 -> OpState.Reverted(
                 FfiConverterULong.read(buf),
                 FfiConverterString.read(buf),
                 )
-            4 -> OpState.Expired
+            4 -> OpState.Expired(
+                FfiConverterTypeBasis.read(buf),
+                )
             5 -> OpState.InFlight(
                 FfiConverterTypeInFlight.read(buf),
                 )
@@ -30104,6 +30320,7 @@ public object FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeBasis.allocationSize(value.`basis`)
             )
         }
         is OpState.Reverted -> {
@@ -30118,6 +30335,7 @@ public object FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeBasis.allocationSize(value.`basis`)
             )
         }
         is OpState.InFlight -> {
@@ -30139,6 +30357,7 @@ public object FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
             }
             is OpState.Consumed -> {
                 buf.putInt(2)
+                FfiConverterTypeBasis.write(value.`basis`, buf)
                 Unit
             }
             is OpState.Reverted -> {
@@ -30149,6 +30368,7 @@ public object FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
             }
             is OpState.Expired -> {
                 buf.putInt(4)
+                FfiConverterTypeBasis.write(value.`basis`, buf)
                 Unit
             }
             is OpState.InFlight -> {

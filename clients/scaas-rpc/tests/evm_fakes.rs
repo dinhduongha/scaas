@@ -485,7 +485,8 @@ fn capped_logs(r: &Value, cap: u64) -> Value {
             if to - from + 1 > cap {
                 return json!({"error": {"code": -32005, "message": format!("query exceeds max block range {cap}")}});
             }
-            json!({"result": [{"address": format!("{:#x}", Address::ZERO), "topics": [], "data": "0x",
+            // T26 B2-4 (fixture correction): the log the filter names (its topic 0), as a real node answers
+            json!({"result": [{"address": format!("{:#x}", Address::ZERO), "topics": [format!("{:#x}", B256::ZERO)], "data": "0x",
                 "blockNumber": format!("{from:#x}"), "blockHash": format!("{:#x}", B256::repeat_byte(9)),
                 "transactionHash": format!("{:#x}", B256::repeat_byte(8)), "transactionIndex": "0x0",
                 "logIndex": format!("{:#x}", to - from + 1), "removed": false}]})
@@ -922,6 +923,59 @@ async fn pinned_reads_name_the_block_by_hash() {
         !seen.is_empty() && seen.iter().all(|b| *b == want),
         "EIP-1898: {seen:?}"
     );
+}
+
+/// A chain like [`pinned_rpc`]'s whose storage word is 7: an endpoint that lies about state.
+fn lying_rpc(r: &Value) -> Value {
+    match r["method"].as_str() {
+        Some("eth_getStorageAt") => json!({"result": format!("0x{:064x}", 7)}),
+        _ => pinned_rpc(r),
+    }
+}
+
+/// CTR-CHAT-23 option d (owner 2026-11-23): `read_at_block_agreed` is the agreed read on a failover list. Under failover the
+/// first endpoint's lie is the answer (the control); asked agreed, the two honest endpoints outvote it; one endpoint is
+/// `Argument`, as a strict-majority list of one.
+#[tokio::test]
+async fn an_agreed_read_on_a_failover_list_outvotes_one_liar() {
+    let (liar, _) = fake_rpc(lying_rpc).await;
+    let (a, _) = fake_rpc(pinned_rpc).await;
+    let (b, _) = fake_rpc(pinned_rpc).await;
+    let p = sdk_pool(&[&liar, &a, &b], 5_000);
+    let c = scaas_rpc::pool::BlockChoice::Depth(1);
+    let first = p
+        .read_at_block(c, Purpose::FeedsDecryption, |at| {
+            let p = &p;
+            async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        first.value,
+        U256::from(7),
+        "failover: the first endpoint's answer"
+    );
+    let r = p
+        .read_at_block_agreed(c, Purpose::FeedsDecryption, |at| {
+            let p = &p;
+            async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        (r.value, r.members.len()),
+        (U256::from(5), 2),
+        "agreed: the honest two"
+    );
+    let one = sdk_pool(&[&a], 5_000);
+    let e = one
+        .read_at_block_agreed(c, Purpose::FeedsDecryption, |at| {
+            let p = &one;
+            async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "Argument");
 }
 
 /// Under failover, endpoint 0's header at the read's block moves between the read and its re-check: its answer is not used

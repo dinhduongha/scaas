@@ -616,6 +616,7 @@ mod verdicts {
                 &ua,
                 &b32(&a["purposeTag"]),
                 &b32(&a["digest"]),
+                &bytes(&a["uaSig"]["signature"]),
                 &typed(&a["uaSig"]["members"]),
                 &domain(g),
                 &keys,

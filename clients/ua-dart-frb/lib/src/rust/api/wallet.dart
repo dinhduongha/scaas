@@ -106,13 +106,15 @@ Future<void> walletOpenLabelVault({
   prf32: prf32,
 );
 
-/// The wallet of a backup container (`None`: an equal generation installed nothing). `members_json` / `accepted_json` null = none.
+/// The wallet of a backup container (`None`: an equal generation installed nothing). `members_json` / `accepted_json` /
+/// `current_json` (`{"<msig id>": {msig, enabled}}`, an updated `msig`'s current structure, CTR-UA-44) null = none.
 Future<UaWallet?> walletRestoreBackup({
   required UaKemKey kk,
   required String containerJson,
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
+  String? currentJson,
   required SecretBytes bip39Passphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletRestoreBackup(
   kk: kk,
@@ -120,6 +122,7 @@ Future<UaWallet?> walletRestoreBackup({
   expectJson: expectJson,
   membersJson: membersJson,
   acceptedJson: acceptedJson,
+  currentJson: currentJson,
   bip39Passphrase: bip39Passphrase,
 );
 
@@ -131,6 +134,7 @@ Future<UaWallet?> walletRestoreBackupOver({
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
+  String? currentJson,
   required SecretBytes bip39Passphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletRestoreBackupOver(
   current: current,
@@ -139,6 +143,7 @@ Future<UaWallet?> walletRestoreBackupOver({
   expectJson: expectJson,
   membersJson: membersJson,
   acceptedJson: acceptedJson,
+  currentJson: currentJson,
   bip39Passphrase: bip39Passphrase,
 );
 
@@ -150,6 +155,7 @@ Future<UaWallet?> walletRestoreBackupRollback({
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
+  String? currentJson,
   required SecretBytes bip39Passphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletRestoreBackupRollback(
   current: current,
@@ -158,6 +164,7 @@ Future<UaWallet?> walletRestoreBackupRollback({
   expectJson: expectJson,
   membersJson: membersJson,
   acceptedJson: acceptedJson,
+  currentJson: currentJson,
   bip39Passphrase: bip39Passphrase,
 );
 
@@ -167,6 +174,7 @@ Future<UaWallet> walletFromLink({
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
+  String? currentJson,
   required SecretBytes bip39Passphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletFromLink(
   session: session,
@@ -174,6 +182,7 @@ Future<UaWallet> walletFromLink({
   expectJson: expectJson,
   membersJson: membersJson,
   acceptedJson: acceptedJson,
+  currentJson: currentJson,
   bip39Passphrase: bip39Passphrase,
 );
 
@@ -458,12 +467,14 @@ abstract class UaKemKey implements RustOpaqueInterface {
     required UaSealed sealed,
   });
 
-  /// A container's plaintext, accepted as `expect_json` says (spec §6.3); `members_json` / `accepted_json` null = none.
+  /// A container's plaintext, accepted as `expect_json` says (spec §6.3); `members_json` / `accepted_json` / `current_json`
+  /// null = none.
   Future<SecretBytes> openContainer({
     required String containerJson,
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
   });
 }
 

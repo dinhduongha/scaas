@@ -580,7 +580,10 @@ impl EvmPool {
                             .await
                         {
                             Ok(l) => {
-                                out.extend(l);
+                                out.extend(
+                                    asked(&filter, from, to, l)
+                                        .map_err(|m| SimError::Transport(m.into()))?,
+                                );
                                 from = to + 1;
                                 span = span.saturating_mul(2).min(refused / 2).max(span);
                             }
@@ -917,6 +920,10 @@ pub struct TxAt {
     pub nonce: u64,
 }
 
+/// The tries of a sticky read ([`EvmPool::read_sticky`]) before `HeadMoving` (owner 2026-11-23: a small N; 3 covers a head
+/// that moves once or twice during one read at a block time of seconds).
+pub const STICKY_TRIES: usize = 3;
+
 /// Every request of a pinned read names its block by hash (EIP-1898, `requireCanonical`).
 pub fn pinned(at: &ReadAt<B256>) -> alloy::eips::BlockId {
     alloy::eips::BlockId::Hash(alloy::eips::RpcBlockHash {
@@ -979,6 +986,93 @@ impl EvmPool {
         })
     }
 
+    /// [`EvmPool::read_at_block`] under strict majority whatever the list's policy (CLI-RPC-05 as a read's own option: an app
+    /// core asks it for the reads it chooses, never forced on the list; CTR-CHAT-23 option d). The agreed read's own checks
+    /// hold: two endpoints or more and a pinned `chain_uid` (`Argument`), CLI-RPC-06 for a read that feeds a decryption.
+    pub async fn read_at_block_agreed<T, F, Fut>(
+        &self,
+        choice: BlockChoice,
+        purpose: Purpose,
+        f: F,
+    ) -> Result<Agreed<T, B256>, RpcError>
+    where
+        T: Clone + PartialEq,
+        F: Fn(ReadAt<B256>) -> Fut,
+        Fut: Future<Output = Result<T, ReadError>>,
+    {
+        if !self.pinned_reads {
+            return Err(RpcError::PinnedReadsUntrusted);
+        }
+        self.pool.agree(self, choice, purpose, f).await
+    }
+
+    /// Whether this pool's pinned reads are trusted (the profile's `pinnedReads`).
+    pub fn pinned_reads(&self) -> bool {
+        self.pinned_reads
+    }
+
+    /// The block a request of read `at` names: its hash ([`pinned`]); `latest` on a pool without pinned reads, whose only
+    /// reads are [`EvmPool::read_sticky`]'s.
+    fn block_of(&self, at: &ReadAt<B256>) -> alloy::eips::BlockId {
+        if self.pinned_reads {
+            pinned(at)
+        } else {
+            alloy::eips::BlockId::latest()
+        }
+    }
+
+    /// The sticky read (owner 2026-11-23, "Sticky endpoint"; a chain whose pinned reads are not trusted, the profile's
+    /// `pinnedReads` false): every call of `f` goes to one endpoint at its latest block (on such a pool each request names
+    /// `latest`), that endpoint's head (number and hash) read before and after; a moved head retries the whole read, at most
+    /// [`STICKY_TRIES`] times, then `HeadMoving`. It never mixes nodes: each try is one endpoint, failing over as a plain read.
+    /// A read that feeds a decryption, and `strict_majority` (no agreement without a pin), are `PinnedReadsUntrusted`.
+    pub async fn read_sticky<T, F, Fut>(
+        &self,
+        purpose: Purpose,
+        f: F,
+    ) -> Result<Agreed<T, B256>, RpcError>
+    where
+        F: Fn(ReadAt<B256>) -> Fut,
+        Fut: Future<Output = Result<T, ReadError>>,
+    {
+        if purpose == Purpose::FeedsDecryption
+            || self.pool.policy() == crate::Policy::StrictMajority
+        {
+            return Err(RpcError::PinnedReadsUntrusted);
+        }
+        let f = &f;
+        for _ in 0..STICKY_TRIES {
+            let a = self
+                .pool
+                .failover(self, purpose, |i| async move {
+                    let head = || async move {
+                        let n = self.named(i, BlockChoice::Latest, None).await?;
+                        Ok::<_, EndpointFailure>((n, self.header(i, n, None).await?))
+                    };
+                    let (number, hash) = head().await?;
+                    let v = f(ReadAt {
+                        endpoint: i,
+                        number,
+                        hash,
+                        deadline: None,
+                    })
+                    .await?;
+                    Ok((head().await? == (number, hash)).then_some((v, number, hash)))
+                })
+                .await?;
+            if let Some((value, number, hash)) = a.value {
+                return Ok(Agreed {
+                    value,
+                    number,
+                    hash,
+                    members: vec![a.endpoint],
+                    highest_named: number,
+                });
+            }
+        }
+        Err(RpcError::HeadMoving)
+    }
+
     /// `eth_call` at the read's block (by hash).
     pub async fn call_at(
         &self,
@@ -989,7 +1083,7 @@ impl EvmPool {
         let tx = TransactionRequest::default().with_to(to).with_input(data);
         self.at(at.endpoint, at.deadline)
             .call(tx)
-            .block(pinned(at))
+            .block(self.block_of(at))
             .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
@@ -1002,7 +1096,7 @@ impl EvmPool {
     ) -> Result<alloy::primitives::U256, ReadError> {
         self.at(at.endpoint, at.deadline)
             .get_storage_at(who, slot)
-            .block_id(pinned(at))
+            .block_id(self.block_of(at))
             .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
@@ -1010,7 +1104,7 @@ impl EvmPool {
     pub async fn code_at(&self, at: &ReadAt<B256>, who: Address) -> Result<Bytes, ReadError> {
         self.at(at.endpoint, at.deadline)
             .get_code_at(who)
-            .block_id(pinned(at))
+            .block_id(self.block_of(at))
             .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
@@ -1022,7 +1116,7 @@ impl EvmPool {
     ) -> Result<alloy::primitives::U256, ReadError> {
         self.at(at.endpoint, at.deadline)
             .get_balance(who)
-            .block_id(pinned(at))
+            .block_id(self.block_of(at))
             .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
@@ -1061,17 +1155,25 @@ impl EvmPool {
                 ),
             )));
         }
-        self.at(at.endpoint, at.deadline)
+        let logs = self
+            .at(at.endpoint, at.deadline)
             .get_logs(&filter.clone().from_block(from).to_block(to))
             .await
-            .map(|l| l.iter().map(LogAt::from).collect())
-            .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))
+            .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?;
+        let logs = asked(filter, from, to, logs).map_err(|m| {
+            ReadError::Failure(EndpointFailure::new(
+                at.endpoint,
+                FailureKind::AnswerMalformed,
+                m,
+            ))
+        })?;
+        Ok(logs.iter().map(LogAt::from).collect())
     }
     /// The committed nonce of `who` at the read's block.
     pub async fn nonce_at_block(&self, at: &ReadAt<B256>, who: Address) -> Result<u64, ReadError> {
         self.at(at.endpoint, at.deadline)
             .get_transaction_count(who)
-            .block_id(pinned(at))
+            .block_id(self.block_of(at))
             .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
@@ -1165,6 +1267,13 @@ impl EvmPool {
                 .get_logs(&filter.clone().from_block(from).to_block(to))
                 .await
                 .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?;
+            let logs = asked(filter, from, to, logs).map_err(|m| {
+                ReadError::Failure(EndpointFailure::new(
+                    at.endpoint,
+                    FailureKind::AnswerMalformed,
+                    m,
+                ))
+            })?;
             Ok(logs.iter().map(LogAt::from).collect())
         })
         .await
@@ -1281,6 +1390,66 @@ impl EvmPool {
             });
         }
         Ok(agreed_fees(max, prio, need))
+    }
+}
+
+impl EvmPool {
+    /// Linea's fees of one transaction (T26 B2-1, controller call (140)): `linea_estimateGas` over `from`, `to`, `value`,
+    /// `data`, whose priority fee carries the transaction's L1 data cost; failed over. The max fee is twice the answered base
+    /// fee plus that priority fee. An answer without both hex quantities is the endpoint's `AnswerMalformed`.
+    pub async fn linea_fees(
+        &self,
+        from: Address,
+        to: Address,
+        value: U256,
+        data: Bytes,
+        purpose: Purpose,
+    ) -> Result<Fees, RpcError> {
+        let call = serde_json::json!({"from": from, "to": to, "value": value, "data": data});
+        let d = self.decode;
+        self.pool
+            .failover(self, purpose, |i| {
+                let (p, call) = (self.providers[i].clone(), call.clone());
+                async move {
+                    let v: serde_json::Value = p
+                        .raw_request("linea_estimateGas".into(), (call,))
+                        .await
+                        .map_err(|e| read_error(i, &e, d))?;
+                    let q = |k: &str| {
+                        v.get(k)
+                            .and_then(serde_json::Value::as_str)
+                            .and_then(|s| s.strip_prefix("0x"))
+                            .and_then(|h| u128::from_str_radix(h, 16).ok())
+                    };
+                    let (Some(base), Some(prio)) = (q("baseFeePerGas"), q("priorityFeePerGas"))
+                    else {
+                        return Err(ReadError::Failure(EndpointFailure::new(
+                            i,
+                            FailureKind::AnswerMalformed,
+                            "linea_estimateGas answered no fees",
+                        )));
+                    };
+                    Ok(Fees {
+                        max_fee_per_gas: base.saturating_mul(2).saturating_add(prio).max(1),
+                        max_priority_fee_per_gas: prio,
+                    })
+                }
+            })
+            .await
+            .map(|a| a.value)
+    }
+}
+
+/// The logs an endpoint answered to `filter` over `[from, to]`, each held to what was asked (T26 B2-4, CLI-RPC-07): its block,
+/// where named, in the range, its address and topics the filter's; an answer with another log is malformed (`Err`), the
+/// endpoint's failure.
+fn asked(filter: &Filter, from: u64, to: u64, logs: Vec<Log>) -> Result<Vec<Log>, &'static str> {
+    let fits = |l: &Log| {
+        l.block_number.is_none_or(|b| (from..=to).contains(&b)) && filter.matches(&l.inner)
+    };
+    match logs.iter().all(fits) {
+        true => Ok(logs),
+        false => Err("a log outside the filter or the range asked"),
     }
 }
 
@@ -1674,7 +1843,7 @@ impl EvmPool {
     ) -> Result<Agreed<(bool, bool, u64), B256>, RpcError> {
         self.read_at_block(choice, Purpose::Plain, |at| async move {
             let p = self.at(at.endpoint, at.deadline);
-            let executed = !p
+            let logs = p
                 .get_logs(
                     &q.executed
                         .clone()
@@ -1682,7 +1851,16 @@ impl EvmPool {
                         .to_block(at.number),
                 )
                 .await
-                .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?
+                .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?;
+            // a log outside the filter is no evidence of execution (T26 B2-4): the endpoint's malformed answer
+            let executed = !asked(&q.executed, q.from_block, at.number, logs)
+                .map_err(|m| {
+                    ReadError::Failure(EndpointFailure::new(
+                        at.endpoint,
+                        FailureKind::AnswerMalformed,
+                        m,
+                    ))
+                })?
                 .is_empty();
             let word = self.call_at(&at, q.contract, q.nonce_call.clone()).await?;
             // T13 S10: one 32-byte word (an empty answer, an address without code, is no nonce 0)

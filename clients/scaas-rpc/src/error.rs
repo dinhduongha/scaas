@@ -108,6 +108,8 @@ pub enum RpcError {
     AgreementNeedsThree,
     /// a pinned read on a chain whose pinned reads are not trusted (the profile's `pinnedReads` false)
     PinnedReadsUntrusted,
+    /// a sticky read (the profile's `pinnedReads` false) whose endpoint's head moved during each of its tries
+    HeadMoving,
     /// the first endpoint's revert (failover) or the agreed revert (strict majority), its data as bytes
     Revert {
         endpoint: usize,
@@ -140,6 +142,7 @@ impl RpcError {
             RpcError::NoTrustedEndpoint => "NoTrustedEndpoint",
             RpcError::AgreementNeedsThree => "AgreementNeedsThree",
             RpcError::PinnedReadsUntrusted => "PinnedReadsUntrusted",
+            RpcError::HeadMoving => "HeadMoving",
             RpcError::Revert { .. } => "Revert",
             RpcError::NodeRefused { .. } => "NodeRefused",
             RpcError::NodeApiVersion { .. } => "NodeApiVersion",
@@ -230,6 +233,7 @@ mod tests {
             "PinnedReadsUntrusted"
         );
         assert_eq!(RpcError::AgreementNeedsThree.code(), "AgreementNeedsThree");
+        assert_eq!(RpcError::HeadMoving.code(), "HeadMoving");
         assert!(RpcError::argument("x")
             .to_string()
             .starts_with("Argument: "));

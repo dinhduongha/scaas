@@ -2883,8 +2883,10 @@ fn scoped_key_records_read_the_current_structure() {
             .to_be_bytes(),
     );
     let members = keys(&p);
-    let now: &Current = &|id| (id == ua).then(|| (cur.clone(), en));
-    let none: &Current = &|_| None;
+    // CTR-UA-74: the registry's `msigAt` of version 1 (the rows' tag)
+    let now: &MsigAt =
+        &|id, v| (id == ua && v.is_none_or(|v| v == 1)).then(|| (cur.clone(), en, 1));
+    let none: &MsigAt = &|_, _| None;
     let accepted: &Accepted =
         &|id, i| id != ua || (i < 256 && en[31 - i as usize / 8] >> (i % 8) & 1 == 1);
     let raw: &Accepted = &|_, _| true;
@@ -2902,7 +2904,7 @@ fn scoped_key_records_read_the_current_structure() {
             valid_until_block: num(&r["validUntilBlock"]),
         };
         let sig = bytes(&r["sig"]);
-        let run = |current: &Current, acc: &Accepted| {
+        let run = |current: &MsigAt, acc: &Accepted| {
             check_pqz_scoped_key_record_current(
                 0x0120,
                 &first,
@@ -2919,11 +2921,11 @@ fn scoped_key_records_read_the_current_structure() {
                 assert_eq!(run(now, accepted), Ok(()), "{}", r["name"]);
                 assert!(
                     run(none, accepted).is_err(),
-                    "{}: the first structure alone",
+                    "{}: a reader that does not hold the tag's version",
                     r["name"]
                 );
                 let mut flip = sig.clone();
-                *flip.last_mut().unwrap() ^= 1;
+                *flip.last_mut().unwrap() ^= 2; // the tag names version 3, never stored
                 assert!(check_pqz_scoped_key_record_current(
                     0x0120,
                     &first,
@@ -2972,8 +2974,11 @@ fn record_checks_read_the_current_structure() {
             .to_be_bytes(),
     );
     let members = keys(&p);
-    let now: &Current = &|id| (id == ua).then(|| (cur.clone(), en));
-    let none: &Current = &|_| None;
+    // CTR-UA-74: the registry's `msigAt` of the update's version
+    let ver = num(&u["version"]);
+    let now: &MsigAt =
+        &|id, v| (id == ua && v.is_none_or(|v| v == ver)).then(|| (cur.clone(), en, ver));
+    let none: &MsigAt = &|_, _| None;
     let accepted: &Accepted =
         &|id, i| id != ua || (i < 256 && en[31 - i as usize / 8] >> (i % 8) & 1 == 1);
     let s: Value = load("structures.json");
@@ -2985,10 +2990,11 @@ fn record_checks_read_the_current_structure() {
         chain_uid: b32(&c["chainUid"]),
     };
     let rows = arr(u, "rows");
-    assert_eq!(rows.len(), 7);
+    assert_eq!(rows.len(), 9);
     for r in rows {
         let sig = bytes(r.get("sig").unwrap_or(&r["pop"]));
-        let run = |current: &Current| -> Result<()> {
+        let tag = r.get("signature").map(bytes).unwrap_or_default();
+        let run = |current: &MsigAt| -> Result<()> {
             match r["entry"].as_str().unwrap() {
                 "setPqzKey" if num(&r["version"]) == 0 => check_pqz_key_record_current(
                     0x0120,
@@ -3030,6 +3036,7 @@ fn record_checks_read_the_current_structure() {
                     &ua,
                     &b32(&r["purposeTag"]),
                     &b32(&r["digest"]),
+                    &tag,
                     &decode_member_sigs(&sig).unwrap(),
                     &domain,
                     &members,
@@ -3086,6 +3093,7 @@ fn record_checks_read_the_current_structure() {
                     &ua,
                     &b32(&r["purposeTag"]),
                     &b32(&r["digest"]),
+                    &tag,
                     &decode_member_sigs(&sig).unwrap(),
                     &domain,
                     &members,
@@ -3100,10 +3108,130 @@ fn record_checks_read_the_current_structure() {
         if valid {
             assert!(
                 run(none).is_err(),
-                "{}: the first structure alone",
+                "{}: a reader that does not hold the tag's version",
                 r["name"]
             );
         }
+    }
+}
+
+/// CTR-UA-74, the reader rule's edges on portable.json `msigUpdated` (version 1): the tag's forms (step 2), a stored signature's
+/// trailing tag, version 0 always the first structure whatever an endpoint answers for it (step 3: the id commits to it), a
+/// threshold-0 answer refused (an empty set would meet it), and no fallback to the current structure for a version not held.
+#[cfg(feature = "pq")]
+#[test]
+fn msig_tags_and_versions() {
+    assert_eq!(tag_version(&[]), Some(0));
+    assert_eq!(tag_version(&1u64.to_be_bytes()), Some(1));
+    assert_eq!(tag_version(&[0; 8]), None, "8 zero bytes");
+    assert_eq!(tag_version(&[0, 0, 0, 0, 0, 0, 1]), None, "7 bytes");
+    assert_eq!(tag_version(&[0, 0, 0, 0, 0, 0, 0, 0, 1]), None, "9 bytes");
+    assert_eq!(version_tag(0), Vec::<u8>::new());
+    assert_eq!(version_tag(258), vec![0, 0, 0, 0, 0, 0, 1, 2]);
+    let body = [7u8; 64];
+    let tagged = [&body[..], &2u64.to_be_bytes()].concat();
+    assert_eq!(
+        split_stored_tag(&tagged),
+        (&body[..], &2u64.to_be_bytes()[..])
+    );
+    assert_eq!(split_stored_tag(&body), (&body[..], &[][..]));
+    let p = load("portable.json");
+    let u = &p["msigUpdated"];
+    let (ua, first, cur) = (b32(&u["ua"]), bytes(&u["keyData"]), bytes(&u["current"]));
+    let mut en = [0u8; 32];
+    en[16..].copy_from_slice(
+        &u["enabled"]
+            .as_str()
+            .unwrap()
+            .parse::<u128>()
+            .unwrap()
+            .to_be_bytes(),
+    );
+    let members = keys(&p);
+    let all: &Accepted = &|_, _| true;
+    let row = |n: &str| {
+        arr(u, "rows")
+            .iter()
+            .find(|r| r["name"] == n)
+            .unwrap()
+            .clone()
+    };
+    // the appended slot's acceptance: at the current version 1 it is a slot; an endpoint claiming the current version is 0 with
+    // that structure is not read (version 0 is the first structure, which has no slot 3)
+    let r = row("appended-slot-accepts");
+    let slot = MemberSig {
+        index: num(&r["index"]) as u16,
+        members: vec![],
+        sig: bytes(&r["sig"]),
+    };
+    let claims = |v: u64| {
+        let cur = cur.clone();
+        move |id: [u8; 32], _: Option<u64>| (id == ua).then(|| (cur.clone(), en, v))
+    };
+    assert_eq!(
+        check_membership_current(&first, &ua, &slot, &members, &claims(1), Some(all)),
+        Ok(())
+    );
+    assert!(check_membership_current(&first, &ua, &slot, &members, &claims(0), Some(all)).is_err());
+    // threshold 0 at version 1: the empty set would authorize
+    let zero = encode_msig(
+        0,
+        &MsigStructure::from_key_data(&cur)
+            .unwrap()
+            .members
+            .iter()
+            .map(|m| (m.kind, m.id, m.weight))
+            .collect::<Vec<_>>(),
+    );
+    let s: Value = load("structures.json");
+    let c = &s["contexts"]["A"];
+    let domain = Domain {
+        generation: 1,
+        chain_id: num(&c["chainId"]),
+        registry: bytes(&c["registry"]).try_into().unwrap(),
+        chain_uid: b32(&c["chainUid"]),
+    };
+    let a = row("authorized-by-current-quorum");
+    let at0 = |id: [u8; 32], _: Option<u64>| (id == ua).then(|| (zero.clone(), en, 1));
+    let tag = version_tag(1);
+    let auth = |at: &MsigAt, slots: &[MemberSig]| {
+        check_authorization_current(
+            &first,
+            &ua,
+            &b32(&a["purposeTag"]),
+            &b32(&a["digest"]),
+            &tag,
+            slots,
+            &domain,
+            &members,
+            at,
+            Some(all),
+        )
+    };
+    assert!(auth(&at0, &[]).is_err(), "threshold 0 refused");
+    let slots = decode_member_sigs(&bytes(&a["sig"])).unwrap();
+    let now = |id: [u8; 32], v: Option<u64>| {
+        (id == ua && v.is_none_or(|v| v == 1)).then(|| (cur.clone(), en, 1))
+    };
+    assert_eq!(auth(&now, &slots), Ok(()));
+    // no fallback: a tag naming version 2, never stored, is refused although the current structure would verify, also from an
+    // endpoint that answers the current structure for any version asked
+    let tag2 = version_tag(2);
+    let any = |id: [u8; 32], _: Option<u64>| (id == ua).then(|| (cur.clone(), en, 1));
+    for at in [&now as &MsigAt, &any] {
+        assert!(check_authorization_current(
+            &first,
+            &ua,
+            &b32(&a["purposeTag"]),
+            &b32(&a["digest"]),
+            &tag2,
+            &slots,
+            &domain,
+            &members,
+            at,
+            Some(all)
+        )
+        .is_err());
     }
 }
 

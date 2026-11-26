@@ -31,6 +31,7 @@ pub struct SeedInfo {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct Generate {
     pub label: String,
     #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
@@ -41,6 +42,7 @@ pub struct Generate {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct NewSeed {
     pub info: SeedInfo,
     #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
@@ -118,7 +120,7 @@ pub(crate) fn passphrases<R>(
     })
 }
 
-pub(crate) fn info(e: &SeedEntry, unlocked: bool) -> SeedInfo {
+pub(crate) fn info(e: &SeedEntry, unlocked: bool, verified: bool) -> SeedInfo {
     SeedInfo {
         id: e.id.clone(),
         label: e.label.clone(),
@@ -128,7 +130,7 @@ pub(crate) fn info(e: &SeedEntry, unlocked: bool) -> SeedInfo {
         warnings: e.warnings.clone(),
         backup: e.backup.clone(),
         unlocked,
-        verified: unlocked,
+        verified,
     }
 }
 
@@ -139,6 +141,16 @@ impl Vault {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move { Ok(sdk.load_keystore().await?.rollback) })
+            .await
+    }
+
+    /// Accepts the stored keystore as it is after a `KeystoreRollback` (spec §6.3, review A-6): the user chose the older copy
+    /// deliberately; the anchor is rewritten over it and writes resume. While a rollback holds, every write of the keystore is
+    /// `KeystoreRollback` and changes nothing.
+    pub async fn accept_rollback(&self) -> Result<(), SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move { sdk.keystore.accept_rollback().await })
             .await
     }
 
@@ -157,11 +169,13 @@ impl Vault {
         self.sdk
             .spawn(async move {
                 let ks = sdk.load_keystore().await?.keystore;
-                let open = sdk.open.lock().unwrap_or_else(PoisonError::into_inner);
                 Ok(ks
                     .seeds
                     .iter()
-                    .map(|e| info(e, open.contains_key(&e.id)))
+                    .map(|e| {
+                        let unlocked = sdk.open_seed(&e.id).is_ok();
+                        info(e, unlocked, unlocked && rows_verified(&sdk, e))
+                    })
                     .collect())
             })
             .await
@@ -212,6 +226,42 @@ pub(crate) fn mac(w: &Wallet, e: &SeedEntry) -> Result<String, SdkError> {
         .collect())
 }
 
+/// Review T26 A-1 (spec §6.2): `e` as stored verifies under `w` before anything changes it and its MAC is written again
+/// (`KeystoreMismatch` otherwise): a writer never re-signs an entry changed behind the SDK.
+pub(crate) fn stored_ok(w: &Wallet, e: &SeedEntry) -> Result<(), SdkError> {
+    if mac_ok(w, e)? {
+        Ok(())
+    } else {
+        Err(SdkError::KeystoreMismatch)
+    }
+}
+
+/// Review T26 A-1: a writer's `KeystoreMismatch` emits the event and locks the seed, as at unlock.
+pub(crate) async fn on_mismatch<T>(
+    sdk: &Sdk,
+    seed: &str,
+    r: Result<T, SdkError>,
+) -> Result<T, SdkError> {
+    if let Err(SdkError::KeystoreMismatch) = &r {
+        sdk.emit(Event::KeystoreMismatch { seed: seed.into() });
+        sdk.lock_seed(seed).await;
+    }
+    r
+}
+
+/// Review T26 A-2 (spec §6.2): whether the rows of `e`, as just read, may be trusted: its seed is open and `e` verifies under
+/// its wallet. A mismatch emits `KeystoreMismatch` and the rows read unverified.
+pub(crate) fn rows_verified(sdk: &Sdk, e: &SeedEntry) -> bool {
+    let Ok(open) = sdk.open_seed(&e.id) else {
+        return false;
+    };
+    let ok = mac_ok(&open.wallet, e).unwrap_or(false);
+    if !ok {
+        sdk.emit(Event::KeystoreMismatch { seed: e.id.clone() });
+    }
+    ok
+}
+
 /// Whether `e`'s stored index MAC verifies under the open wallet, compared in constant time by `scaas-ua` (closing review P3);
 /// a stored MAC that is not 64 hex digits does not.
 pub(crate) fn mac_ok(w: &Wallet, e: &SeedEntry) -> Result<bool, SdkError> {
@@ -249,6 +299,7 @@ fn fields_of<'a>(e: &'a SeedEntry, accounts: &'a str) -> IndexFields<'a> {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct ImportWords {
     pub label: String,
     #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))]
@@ -261,6 +312,7 @@ pub struct ImportWords {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct DeriveChild {
     pub parent: String,
     pub label: String,
@@ -273,6 +325,7 @@ pub struct DeriveChild {
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct ImportKey {
     pub seed: String,
     /// `ua-rs`'s network name (`evm`, `cosmos`, `hedera_ecdsa`, `hedera_ed25519`, `sui`, `stellar`, `ton`, `aptos`, `solana`)
@@ -302,15 +355,18 @@ fn seed_passphrase(seed_vault: &scaas_ua::wallet::Vault, p: &str) -> Result<(), 
 /// The first marker of `remove`.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[serde(deny_unknown_fields)]
 pub struct ConfirmRemove {}
 /// The second marker of `remove`, for a seed whose backup is `pending`.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[serde(deny_unknown_fields)]
 pub struct ConfirmRemoveUnbacked {}
 
 /// `vault.remove`'s request.
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub struct Remove {
     pub seed: String,
     pub confirm: ConfirmRemove,
@@ -363,6 +419,7 @@ impl Vault {
                             .iter_mut()
                             .find(|s| s.id == req.parent)
                             .ok_or(SdkError::SeedUnknown)?;
+                        stored_ok(&parent.wallet, p)?;
                         p.vaults.insert("manifest".into(), manifest.clone());
                         // the MAC covers the vault texts (T13b ruling 3)
                         p.index_mac = mac(&parent.wallet, p)?;
@@ -371,7 +428,8 @@ impl Vault {
                         }
                         Ok(())
                     })
-                    .await?;
+                    .await;
+                let ks = on_mismatch(&sdk, &req.parent, ks).await?;
                 if held {
                     wallet.lock();
                     sdk.emit(Event::KeystoreChanged { rev: ks.rev });
@@ -383,7 +441,7 @@ impl Vault {
                     .insert(entry.id.clone(), Arc::new(OpenSeed { wallet }));
                 sdk.emit(Event::KeystoreChanged { rev: ks.rev });
                 Ok(NewSeed {
-                    info: info(&entry, true),
+                    info: info(&entry, true, true),
                     backup: Arc::new(SeedBackup(Mutex::new(backup))),
                 })
             })
@@ -504,6 +562,7 @@ impl Vault {
                                 .position(|s| s.id == req.seed)
                                 .ok_or(SdkError::SeedUnknown)?;
                             let mut e = ks.seeds.get(i).cloned().ok_or(SdkError::SeedUnknown)?;
+                            stored_ok(&open.wallet, &e)?;
                             // the seed as read: its label free, its manifest the one the open wallet re-sealed
                             if e.vaults.contains_key(&label)
                                 || e.vaults.get("manifest") != manifest_read.as_ref()
@@ -531,7 +590,7 @@ impl Vault {
                             drop(open);
                             sdk.lock_seed(&req.seed).await;
                         }
-                        return Err(e);
+                        return on_mismatch(&sdk, &req.seed, Err(e)).await;
                     }
                 };
                 sdk.emit(Event::KeystoreChanged { rev: ks.rev });
@@ -678,7 +737,7 @@ pub(crate) async fn store_new(
         .unwrap_or_else(PoisonError::into_inner)
         .insert(entry.id.clone(), Arc::new(OpenSeed { wallet }));
     sdk.emit(Event::KeystoreChanged { rev: ks.rev });
-    Ok(info(&entry, true))
+    Ok(info(&entry, true, true))
 }
 
 /// An index change of seed `seed` (spec §6.2): the seed must be unlocked (`WalletLocked`), the MAC is rewritten under its
@@ -698,6 +757,7 @@ pub(crate) async fn change_entry(
                 .position(|s| s.id == seed)
                 .ok_or(SdkError::SeedUnknown)?;
             let mut e = ks.seeds.get(i).cloned().ok_or(SdkError::SeedUnknown)?;
+            stored_ok(&open.wallet, &e)?;
             f(&mut e)?;
             if ks
                 .seeds
@@ -713,7 +773,9 @@ pub(crate) async fn change_entry(
             }
             Ok(())
         })
-        .await?;
+        .await;
+    drop(open);
+    let ks = on_mismatch(sdk, seed, ks).await?;
     sdk.emit(Event::KeystoreChanged { rev: ks.rev });
     Ok(())
 }

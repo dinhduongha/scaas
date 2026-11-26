@@ -199,6 +199,12 @@ func smoke() async throws {
     var text = CopyCall.read(secretId(s: words), cap: Int(secretLen(s: words))) ?? []
     check(String(decoding: text, as: UTF8.self).split(separator: " ").count == 24, "the revealed words, read by the copy call")
     for i in text.indices { text[i] = 0 }
+    // review T26 C-5: the read's own buffer is zeroed once the copy is out
+    var via = [UInt8](repeating: 0, count: Int(secretLen(s: words)))
+    var again = CopyCall.read(secretId(s: words), via: &via) ?? []
+    check(String(decoding: again, as: UTF8.self).split(separator: " ").count == 24, "read through a buffer")
+    for i in again.indices { again[i] = 0 }
+    check(via.allSatisfy { $0 == 0 }, "the copy call zeroes its read buffer")
     check(CopyCall.dispose(secretId(s: words)), "dispose")
     check(CopyCall.read(secretId(s: words), cap: 1) == nil, "a disposed secret is refused")
     print("ok copy calls: write zeroes the buffer, a backup revealed and read, disposed")

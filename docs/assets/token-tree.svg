@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="740" viewBox="0 0 960 740" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="930" viewBox="0 0 960 930" role="img" aria-labelledby="t d">
   <title id="t">EVM token tree</title>
-  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code: NORMAL (NormalToken) and WRAPPED (WrappedToken, 1 to 8 legs, the native coin allowed), built in phase P1; NORMAL_ZETHER and WRAPPED_ZETHER, built in phase P3 (unaudited); NORMAL_PQZ and WRAPPED_PQZ, the post-quantum confidential kinds, built in phase P6g (unaudited, chain 7622). External libraries: GovernanceLib, WrappedLib, HederaLib, TradeLib (P2), ZetherLib (P3) and the four PQZ libraries PqzStateLib, PqzTransferLib, PqzBurnLib and PqzViewLib (P6g, plan 5h; PqzCore is internal), all built. Features are flags chosen at creation. The combined kinds 6 and 7 (both confidential layers in one token) were dropped on 2026-10-20; their ids are not reused.</desc>
+  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code: NORMAL (NormalToken) and WRAPPED (WrappedToken, 1 to 8 legs, the native coin allowed), built; NORMAL_ZETHER and WRAPPED_ZETHER, built (unaudited); NORMAL_PQZ and WRAPPED_PQZ, the post-quantum confidential kinds, built (unaudited, SCaaS testnet). Each of the six has a regulated form, kinds 8 to 13 (NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken): its base kind's source with the hooks overridden, on RegulatedBase over MetaTokenBase, the controls in RegulatedLib and receiver checks in ComplianceRegistry, built on EVM (unaudited). External libraries: GovernanceLib, WrappedLib, HederaLib, TradeLib, ZetherLib and the four PQZ libraries PqzStateLib, PqzTransferLib, PqzBurnLib and PqzViewLib (PqzCore is internal), all built. Features are flags chosen at creation; freeze, force, pause, allowlist, denylist, record, moderate and operator transfer exist on the regulated kinds only. The combined kinds 6 and 7 (both confidential layers in one token) were dropped on 2026-10-20; their ids are not reused.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -22,7 +22,7 @@
     </style>
   </defs>
 
-  <rect x="0.5" y="0.5" width="959" height="739" rx="16" fill="#f8fafc" stroke="#d0d7de"/>
+  <rect x="0.5" y="0.5" width="959" height="929" rx="16" fill="#f8fafc" stroke="#d0d7de"/>
   <text class="h" x="24" y="40">EVM token tree</text>
   <text class="sub" x="24" y="61">One base tree for every token: the kind is code, the features are flags chosen at creation (CTR-TOK-21, CTR-TOK-24)</text>
 
@@ -41,7 +41,7 @@
 
   <rect class="built" x="190" y="260" width="320" height="64" rx="8"/>
   <text class="b" x="350" y="282" text-anchor="middle">MetaTokenBase</text>
-  <text class="s" x="350" y="300" text-anchor="middle">features + owner + roles, trade (P2), pay behind</text>
+  <text class="s" x="350" y="300" text-anchor="middle">features + owner + roles, trade, pay behind</text>
   <text class="s" x="350" y="315" text-anchor="middle">PAYABLE (inline), init, provenance, IS_HEDERA</text>
 
   <!-- bus to kinds -->
@@ -57,28 +57,28 @@
   <text class="m" x="102" y="420" text-anchor="middle">NormalToken</text>
   <text class="s" x="102" y="438" text-anchor="middle">standalone: loyalty,</text>
   <text class="s" x="102" y="453" text-anchor="middle">internal units</text>
-  <text class="okc" x="102" y="469" text-anchor="middle">built (P1)</text>
+  <text class="okc" x="102" y="469" text-anchor="middle">built</text>
 
   <rect class="built" x="190" y="380" width="156" height="96" rx="8"/>
   <text class="k" x="268" y="401" text-anchor="middle">WRAPPED</text>
   <text class="m" x="268" y="420" text-anchor="middle">WrappedToken</text>
   <text class="s" x="268" y="438" text-anchor="middle">wrapper of 1–8 legs,</text>
   <text class="s" x="268" y="453" text-anchor="middle">ERC-20s or native coin</text>
-  <text class="okc" x="268" y="469" text-anchor="middle">built (P1)</text>
+  <text class="okc" x="268" y="469" text-anchor="middle">built</text>
 
   <rect class="built" x="356" y="380" width="156" height="96" rx="8"/>
   <text class="k" x="434" y="401" text-anchor="middle">NORMAL_ZETHER</text>
   <text class="m" x="434" y="420" text-anchor="middle" font-size="10.5">NormalZetherToken</text>
   <text class="s" x="434" y="438" text-anchor="middle">standalone +</text>
   <text class="s" x="434" y="453" text-anchor="middle">Zether layer</text>
-  <text class="okc" x="434" y="469" text-anchor="middle">built (P3)</text>
+  <text class="okc" x="434" y="469" text-anchor="middle">built (unaudited)</text>
 
   <rect class="built" x="522" y="380" width="156" height="96" rx="8"/>
   <text class="k" x="600" y="401" text-anchor="middle">WRAPPED_ZETHER</text>
   <text class="m" x="600" y="420" text-anchor="middle" font-size="10.5">WrappedZetherToken</text>
   <text class="s" x="600" y="438" text-anchor="middle">wrapper + Zether layer,</text>
   <text class="s" x="600" y="453" text-anchor="middle">wrap-shield from a leg</text>
-  <text class="okc" x="600" y="469" text-anchor="middle">built (P3)</text>
+  <text class="okc" x="600" y="469" text-anchor="middle">built (unaudited)</text>
 
   <!-- second bus: the post-quantum kinds -->
   <path class="flow" d="M102 350 H14 V488 H600 M434 488 V498 M600 488 V498"/>
@@ -90,19 +90,20 @@
   <text class="m" x="434" y="540" text-anchor="middle" font-size="10.5">NormalPqzToken</text>
   <text class="s" x="434" y="558" text-anchor="middle">standalone +</text>
   <text class="s" x="434" y="573" text-anchor="middle">PQZ layer (lattice)</text>
-  <text class="okc" x="434" y="589" text-anchor="middle">built (P6g)</text>
+  <text class="okc" x="434" y="589" text-anchor="middle">built (unaudited)</text>
 
   <rect class="built" x="522" y="500" width="156" height="96" rx="8"/>
   <text class="k" x="600" y="521" text-anchor="middle">WRAPPED_PQZ</text>
   <text class="m" x="600" y="540" text-anchor="middle" font-size="10.5">WrappedPqzToken</text>
   <text class="s" x="600" y="558" text-anchor="middle">wrapper + PQZ layer,</text>
   <text class="s" x="600" y="573" text-anchor="middle">wrap-shield from a leg</text>
-  <text class="okc" x="600" y="589" text-anchor="middle">built (P6g)</text>
+  <text class="okc" x="600" y="589" text-anchor="middle">built (unaudited)</text>
 
   <text class="s" x="24" y="532">Post-quantum confidential</text>
   <text class="s" x="24" y="548">kinds: amounts hidden by</text>
   <text class="s" x="24" y="564">lattice encryption, proofs</text>
   <text class="s" x="24" y="580">checked by the PQZ precompile</text>
+  <text class="s" x="24" y="596">or a signed verdict (OFFCHAIN)</text>
 
   <text class="s" x="24" y="620">Kinds 6 and 7 (both layers in one token) were dropped on 2026-10-20; the ids are not reused.</text>
 
@@ -146,15 +147,61 @@
   <text class="s" x="716" y="546">(PqzCore: internal code, no library)</text>
   <text class="s" x="716" y="566">PQZ statements, ciphertexts · *_PQZ</text>
 
+  <!-- regulated kinds 8-13 -->
+  <rect x="24" y="636" width="912" height="168" rx="10" fill="#ffffff" stroke="#d0d7de"/>
+  <text class="sec" x="40" y="657">Regulated kinds 8–13 (asset suite): one per base kind, its source with the hooks overridden</text>
+  <text class="s" x="40" y="674">on RegulatedBase (over MetaTokenBase); the controls' bodies in RegulatedLib, receivers checked in ComplianceRegistry</text>
+
+  <rect class="built" x="40" y="684" width="214" height="52" rx="8"/>
+  <text class="k" x="147" y="701" text-anchor="middle">8 · NORMAL_REGULATED</text>
+  <text class="m" x="147" y="716" text-anchor="middle" font-size="10.5">NormalRegulatedToken</text>
+  <text class="okc" x="147" y="730" text-anchor="middle">built (unaudited)</text>
+
+  <rect class="built" x="40" y="744" width="214" height="52" rx="8"/>
+  <text class="k" x="147" y="761" text-anchor="middle">9 · WRAPPED_REGULATED</text>
+  <text class="m" x="147" y="776" text-anchor="middle" font-size="10.5">WrappedRegulatedToken</text>
+  <text class="okc" x="147" y="790" text-anchor="middle">built (unaudited)</text>
+
+  <rect class="built" x="262" y="684" width="214" height="52" rx="8"/>
+  <text class="k" x="369" y="701" text-anchor="middle" style="font-size:10.5px">10 · NORMAL_ZETHER_REGULATED</text>
+  <text class="m" x="369" y="716" text-anchor="middle" font-size="10.5">NormalZetherRegulatedToken</text>
+  <text class="okc" x="369" y="730" text-anchor="middle">built (unaudited)</text>
+
+  <rect class="built" x="262" y="744" width="214" height="52" rx="8"/>
+  <text class="k" x="369" y="761" text-anchor="middle" style="font-size:10.5px">11 · WRAPPED_ZETHER_REGULATED</text>
+  <text class="m" x="369" y="776" text-anchor="middle" font-size="10.5">WrappedZetherRegulatedToken</text>
+  <text class="okc" x="369" y="790" text-anchor="middle">built (unaudited)</text>
+
+  <rect class="built" x="484" y="684" width="214" height="52" rx="8"/>
+  <text class="k" x="591" y="701" text-anchor="middle">12 · NORMAL_PQZ_REGULATED</text>
+  <text class="m" x="591" y="716" text-anchor="middle" font-size="10.5">NormalPqzRegulatedToken</text>
+  <text class="okc" x="591" y="730" text-anchor="middle">built (unaudited)</text>
+
+  <rect class="built" x="484" y="744" width="214" height="52" rx="8"/>
+  <text class="k" x="591" y="761" text-anchor="middle">13 · WRAPPED_PQZ_REGULATED</text>
+  <text class="m" x="591" y="776" text-anchor="middle" font-size="10.5">WrappedPqzRegulatedToken</text>
+  <text class="okc" x="591" y="790" text-anchor="middle">built (unaudited)</text>
+
+  <rect class="built" x="706" y="684" width="214" height="52" rx="8"/>
+  <text class="b" x="720" y="704">RegulatedLib</text>
+  <text class="okc" x="906" y="704" text-anchor="end">built</text>
+  <text class="s" x="720" y="724">freeze, force, pause, lists · 8–13</text>
+
+  <rect class="built" x="706" y="744" width="214" height="52" rx="8"/>
+  <text class="b" x="720" y="764">ComplianceRegistry</text>
+  <text class="okc" x="906" y="764" text-anchor="end">built</text>
+  <text class="s" x="720" y="784">receiver flags, validUntil · 8–13</text>
+
   <!-- features strip -->
-  <rect x="24" y="642" width="912" height="62" rx="10" fill="#eef2f6" stroke="#d0d7de"/>
-  <text class="sec" x="40" y="665">Features: flags chosen at creation, never set later</text>
-  <text class="m" x="40" y="687">PAYABLE · MINTABLE · BURNABLE · RATE_ADJUSTABLE · WRAP_DISABLEABLE · regulated: FREEZE · FORCE · PAUSE · ALLOWLIST</text>
+  <rect x="24" y="816" width="912" height="78" rx="10" fill="#eef2f6" stroke="#d0d7de"/>
+  <text class="sec" x="40" y="839">Features: flags chosen at creation, never set later</text>
+  <text class="m" x="40" y="860">PAYABLE · MINTABLE · BURNABLE · RATE_ADJUSTABLE · WRAP_DISABLEABLE</text>
+  <text class="m" x="40" y="880">regulated kinds only: FREEZE · FORCE · PAUSE · ALLOWLIST (8, 9) · DENYLIST · RECORD · MODERATE · OPERATOR_TRANSFER</text>
 
   <!-- legend -->
-  <rect class="built" x="24" y="716" width="22" height="12" rx="3"/>
-  <text class="s" x="52" y="727">built (as of P6g)</text>
-  <rect class="target" x="160" y="716" width="22" height="12" rx="3"/>
-  <text class="s" x="188" y="727">target, not built yet (phase)</text>
-  <text class="s" x="936" y="727" text-anchor="end">every kind is over EIP-170 (24 KiB); test chains allow 64 KiB until Glamsterdam</text>
+  <rect class="built" x="24" y="904" width="22" height="12" rx="3"/>
+  <text class="s" x="52" y="915">built</text>
+  <rect class="target" x="110" y="904" width="22" height="12" rx="3"/>
+  <text class="s" x="138" y="915">target, not built yet</text>
+  <text class="s" x="936" y="915" text-anchor="end">no contract above 64 KiB since the body-module split (CTR-TOK-30)</text>
 </svg>

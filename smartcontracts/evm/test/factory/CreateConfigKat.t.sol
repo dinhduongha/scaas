@@ -72,12 +72,14 @@ contract CreateConfigKatTest is Test {
     }
 
     /// Owner 2026-11-12 (`mtxCreateInstance`, both forms): the `instance` row is a generic creation of `PqChat` by `creator`; its
-    /// `initCall` is the class's catalogued initializer of the named `config` (`IPqChat.initialize(owner)`), the bytes a job sends
-    /// as `init_call` or the node builds from `config`; `initHash` its keccak.
+    /// `initCall` is the class's catalogued initializer of the named `config` (`IPqChat.initialize(owner, sigStore)`, the
+    /// default `sigStore` 2 `sstore2`, CTR-CHAT-23), the bytes a job sends as `init_call` or the node builds from `config`;
+    /// `initHash` its keccak.
     function test_instanceInitCallKat() public {
         bytes32 creator = _w(0xc1);
-        bytes memory c = abi.encodeCall(IPqChat.initialize, (creator));
+        bytes memory c = abi.encodeCall(IPqChat.initialize, (creator, 2));
         if (vm.envOr("WRITE_CREATE_CONFIG_KAT", false)) {
+            vm.writeJson(string.concat('{"owner":"', vm.toString(creator), '","sigStore":2}'), KAT, ".instance.config");
             vm.writeJson(string.concat('"', vm.toString(c), '"'), KAT, ".instance.initCall");
             vm.writeJson(string.concat('"', vm.toString(keccak256(c)), '"'), KAT, ".instance.initHash");
         }
@@ -86,7 +88,8 @@ contract CreateConfigKatTest is Test {
         assertEq(vm.parseJsonUint(j, ".instance.kind"), 0, "kind");
         assertEq(vm.parseJsonBytes32(j, ".instance.creator"), creator, "creator");
         assertEq(vm.parseJsonBytes32(j, ".instance.config.owner"), creator, "config.owner");
-        assertEq(vm.parseJsonKeys(j, ".instance.config").length, 1, "config: owner only");
+        assertEq(vm.parseJsonUint(j, ".instance.config.sigStore"), 2, "config.sigStore: sstore2 (CTR-CHAT-23)");
+        assertEq(vm.parseJsonKeys(j, ".instance.config").length, 2, "config: owner and sigStore");
         assertEq(vm.parseJsonBytes(j, ".instance.initCall"), c, "initCall");
         assertEq(vm.parseJsonBytes32(j, ".instance.initHash"), keccak256(c), "initHash");
     }

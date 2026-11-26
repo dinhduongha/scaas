@@ -6,6 +6,11 @@
 //! `Landed` by the token's executed event. Local only; nothing leaves the machine.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+#[cfg(feature = "app-core")]
+#[path = "common/prepared.rs"]
+mod prepared;
+#[cfg(feature = "app-core")]
+use prepared::SignPrepared as _;
 use scaas_sdk::op::{BlsMultiPart, KeyRef, OpState, SubmitPath};
 use scaas_sdk::vault::{ImportWords, MemoryStore};
 use scaas_sdk::wallet::{Envelope, Pay, PayBody, PayMeta, Transfer};
@@ -120,7 +125,7 @@ async fn e2e_pay_on_anvil() {
             decimals: 0,
         }],
         // a measured figure for this chain (ruling B: the table has no native-key `mtxPay` row yet), rounded up
-        gas: GasRows {
+        gas: with_tx(GasRows {
             base: vec![GasBase {
                 entry: "mtxPay".into(),
                 kind: "token".into(),
@@ -141,7 +146,7 @@ async fn e2e_pay_on_anvil() {
                 margin: 0,
                 per_item: None,
             }],
-        },
+        }),
         max_valid_secs: None,
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
@@ -619,7 +624,7 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
             symbol: "DEMO".into(),
             decimals: 0,
         }],
-        gas: GasRows {
+        gas: with_tx(GasRows {
             base: vec![GasBase {
                 entry: "mtxPay".into(),
                 kind: "token".into(),
@@ -640,7 +645,7 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
                 margin: 0,
                 per_item: None,
             }],
-        },
+        }),
         max_valid_secs: None,
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
@@ -761,7 +766,7 @@ fn account_profile(rpc: &str) -> ChainProfile {
         finality: Finality::Depth(0),
         tx_gas_cap: Some(1 << 24),
         tokens: vec![],
-        gas: GasRows {
+        gas: with_tx(GasRows {
             base: [true, false]
                 .iter()
                 .flat_map(|&f| [row("mtxAddKey", f), row("mtxExecute", f)])
@@ -774,7 +779,7 @@ fn account_profile(rpc: &str) -> ChainProfile {
                 margin: 0,
                 per_item: None,
             }],
-        },
+        }),
         max_valid_secs: None,
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
@@ -1117,7 +1122,7 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
         per_item: None,
         regular: None,
     };
-    profile.gas = GasRows {
+    profile.gas = with_tx(GasRows {
         base: [true, false]
             .iter()
             .flat_map(|&f| [base("mtxPay", f), base("mtxExecuteTransfer", f)])
@@ -1140,7 +1145,7 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
                 per_item: None,
             },
         ],
-    };
+    });
     let (sdk, seed) = sdk_on(profile).await;
     let mut uas = vec![];
     for account in 20..23 {
@@ -1626,7 +1631,7 @@ async fn e2e_dex_cancel_order_on_anvil() {
         tx_gas_cap: Some(1 << 24),
         tokens: vec![],
         // a figure for this chain (no table row for a native key's order cancel), rounded up
-        gas: GasRows {
+        gas: with_tx(GasRows {
             base: vec![row("mtxCancelOrder", true), row("mtxCancelOrder", false)],
             verify: vec![GasVerify {
                 line: Default::default(),
@@ -1636,7 +1641,7 @@ async fn e2e_dex_cancel_order_on_anvil() {
                 margin: 0,
                 per_item: None,
             }],
-        },
+        }),
         max_valid_secs: None,
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
@@ -1791,10 +1796,10 @@ async fn e2e_bls_multi_on_anvil() {
             decimals: 0,
         }],
         // the reference table's rows: the registration, the native pay, the transfer and signer 289's verify row
-        gas: GasRows {
+        gas: with_tx(GasRows {
             base: vec![],
             verify: vec![],
-        },
+        }),
         max_valid_secs: None,
         gas_opt_in: vec!["reference".into()],
         verifiers: vec![],
@@ -2042,10 +2047,10 @@ async fn e2e_bls_multi_group_limit_on_a_node() {
         finality: Finality::Depth(1),
         tx_gas_cap: Some(1 << 24),
         tokens: vec![],
-        gas: GasRows {
+        gas: with_tx(GasRows {
             base: vec![],
             verify: vec![],
-        },
+        }),
         max_valid_secs: None,
         gas_opt_in: vec!["reference".into()],
         verifiers: vec![],
@@ -2706,7 +2711,7 @@ async fn e2e_hand_off_on_anvil() {
             symbol: "DEMO".into(),
             decimals: 0,
         }],
-        gas: GasRows {
+        gas: with_tx(GasRows {
             base: vec![row(true), row(false)],
             verify: vec![GasVerify {
                 line: Default::default(),
@@ -2716,7 +2721,7 @@ async fn e2e_hand_off_on_anvil() {
                 margin: 0,
                 per_item: None,
             }],
-        },
+        }),
         max_valid_secs: None,
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
@@ -2816,4 +2821,24 @@ async fn e2e_hand_off_on_anvil() {
         matches!(follow(&sa, op).await, OpState::Landed { .. }),
         "A's own self-relay"
     );
+}
+
+/// `rows` with the transaction row at Ethereum's figures (T26 B2-1: the SDK carries no gas figure; a test's table does).
+fn with_tx(mut rows: scaas_sdk::GasRows) -> scaas_sdk::GasRows {
+    rows.base.push(scaas_sdk::GasBase {
+        entry: "transaction".into(),
+        kind: "evm".into(),
+        fresh: false,
+        gas: 21_000,
+        per_byte: Some(scaas_sdk::GasPerByte {
+            input: "calldata".into(),
+            gas: 64,
+        }),
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
+        regular: None,
+    });
+    rows
 }

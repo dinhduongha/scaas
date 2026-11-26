@@ -638,7 +638,7 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
     // ------------------------------------------------------------------ the router op (§7.2) and its binding (B1)
 
     function _router() internal returns (GovernanceRouter router, NormalPqzToken t) {
-        router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false);
+        router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false, EnvKit.nextCreate(2)); // G-3: names the factory built next
         OpenFactory f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(router));
         Catalogue.release(

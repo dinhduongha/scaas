@@ -100,11 +100,25 @@ fn receipt(id: u64, n: u64) -> Value {
 }
 
 const HEAD: u64 = 1_000;
+/// The block parameters a fake node's `eth_getBalance` saw.
+type Seen = Arc<Mutex<Vec<Value>>>;
 const FINAL: u64 = 900;
 
 /// A node of chain `id` whose block 0 is `uid`: head 1,000, `finalized` 900; every `eth_getBalance` block parameter is kept
 /// in `seen` and answered 42 (the endpoint's own number when `own` is set, to tell which endpoint answered).
 async fn node(id: u64, uid: B256, own: u64, seen: Arc<Mutex<Vec<Value>>>) -> String {
+    moving_node(id, uid, own, 0, seen).await
+}
+
+/// [`node`] whose head moves: the `k`-th `eth_blockNumber` (from 0) answers `HEAD + min(k, moves)`.
+async fn moving_node(
+    id: u64,
+    uid: B256,
+    own: u64,
+    moves: u64,
+    seen: Arc<Mutex<Vec<Value>>>,
+) -> String {
+    let asked = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let app = axum::Router::new().route(
         "/",
         axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
@@ -117,7 +131,10 @@ async fn node(id: u64, uid: B256, own: u64, seen: Arc<Mutex<Vec<Value>>>) -> Str
             };
             let mut a = match r["method"].as_str() {
                 Some("eth_chainId") => json!({"result": format!("{id:#x}")}),
-                Some("eth_blockNumber") => json!({"result": format!("{HEAD:#x}")}),
+                Some("eth_blockNumber") => {
+                    let k = asked.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    json!({"result": format!("{:#x}", HEAD + k.min(moves))})
+                }
                 Some("eth_getBlockByNumber") => {
                     let k = n(&p[0]);
                     json!({"result": block(id, k, if k == 0 { uid } else { hash(id, k) })})
@@ -327,4 +344,97 @@ async fn a_pinned_read_is_refused_where_pinned_reads_are_not_trusted() {
         }
         assert_eq!(pool.head().await.unwrap(), HEAD, "{}: a plain read", p.key);
     }
+}
+
+/// Owner 2026-11-23 ("Sticky endpoint"): on a profile without pinned reads, a read of several calls goes to one endpoint at
+/// its latest block (each call names `latest`, never a hash), the head read before and after; a moved head retries the whole
+/// read, at most `STICKY_TRIES` times, then `HeadMoving`. A read feeding a decryption stays refused. Twins: a steady head
+/// answers at once; a head that moves once answers on the retry.
+#[tokio::test]
+async fn a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head() {
+    use scaas_rpc::evm::STICKY_TRIES;
+    let p = profiles()
+        .into_iter()
+        .find(|p| p.key == "moonbeam-mainnet")
+        .unwrap();
+    for (moves, want) in [
+        (0u64, Ok(1usize)),
+        (2, Ok(2)),
+        (u64::MAX, Err("HeadMoving")),
+    ] {
+        let (s0, s1) = (Seen::default(), Seen::default());
+        let e0 = moving_node(p.id, p.uid, 1, moves, s0.clone()).await;
+        let e1 = moving_node(p.id, p.uid, 2, moves, s1.clone()).await;
+        let pool = pool(&[&e0, &e1], &p).with_pinned_reads(false);
+        let r = pool
+            .read_sticky(Purpose::Plain, |at| {
+                let pool = &pool;
+                async move {
+                    let a = pool.balance_at(&at, WHO).await?;
+                    let b = pool.balance_at(&at, WHO).await?;
+                    Ok((a, b, at.endpoint))
+                }
+            })
+            .await;
+        let (n0, n1) = (s0.lock().unwrap().clone(), s1.lock().unwrap().clone());
+        match want {
+            Ok(passes) => {
+                let v = r.unwrap_or_else(|e| panic!("moves {moves}: {e}")).value;
+                assert_eq!(
+                    v,
+                    (U256::from(1), U256::from(1), 0),
+                    "moves {moves}: one endpoint"
+                );
+                assert_eq!(n0.len(), 2 * passes, "moves {moves}: the passes");
+            }
+            Err(code) => {
+                assert_eq!(r.unwrap_err().code(), code);
+                assert_eq!(
+                    n0.len() + n1.len(),
+                    2 * STICKY_TRIES,
+                    "every try, then the refusal"
+                );
+            }
+        }
+        assert!(
+            n0.iter().chain(&n1).all(|b| b == "latest"),
+            "moves {moves}: at latest, never a hash: {n0:?}"
+        );
+        let asked = n0.len() + n1.len();
+        let r = pool.read_sticky(Purpose::FeedsDecryption, |at| {
+            let pool = &pool;
+            async move { pool.balance_at(&at, WHO).await }
+        });
+        assert_eq!(r.await.unwrap_err().code(), "PinnedReadsUntrusted");
+        assert_eq!(
+            s0.lock().unwrap().len() + s1.lock().unwrap().len(),
+            asked,
+            "refused before any request"
+        );
+    }
+    // strict majority: no agreement without a pin
+    let seen: Arc<Mutex<Vec<Value>>> = Default::default();
+    let urls = [
+        node(p.id, p.uid, 1, seen.clone()).await,
+        node(p.id, p.uid, 1, seen.clone()).await,
+        node(p.id, p.uid, 1, seen.clone()).await,
+    ];
+    let e = urls.iter().map(|u| Endpoint::named(u).unwrap()).collect();
+    let pool = EvmPool::connect(
+        NodeList::new(e, Policy::StrictMajority, 2_000, 2_000, 60_000).unwrap(),
+        p.id,
+        Some(p.uid),
+    )
+    .unwrap()
+    .with_pinned_reads(false);
+    let r = pool.read_sticky(Purpose::Plain, |at| {
+        let pool = &pool;
+        async move { pool.balance_at(&at, WHO).await }
+    });
+    assert_eq!(
+        r.await.unwrap_err().code(),
+        "PinnedReadsUntrusted",
+        "strict majority"
+    );
+    assert!(seen.lock().unwrap().is_empty());
 }

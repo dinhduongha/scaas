@@ -279,8 +279,9 @@ test("the table covers every allowlisted entry of every contract, one row per op
   // round 3s: + the router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`: 107, 97; round 3t: + `UASetVerifierFee`: 108, 98;
   // the three-key model: + the raw `PqzRollOver`: 109, 98; round 3zc: + `UASetMaxSupply`, `UASetMaxWrapSupply`: 111, 100
   // set-auditor (CTR-GOV-31): + the router's `UASetAuditorKey`, `UASetAuditorUA` and the raw `AuditorConsent`: 114, 102
-  assert.equal(Object.keys(TYPED_OPS).length, 114);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 102);
+  // CTR-GOV-33 Change (owner 2026-11-24): + the router's keyed cancel `UACancelNonceFor`: 115, 103
+  assert.equal(Object.keys(TYPED_OPS).length, 115);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 103);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith("mtx"), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, "bytes32", o.primary);
@@ -455,9 +456,9 @@ test("GovernanceRouter: 53 rows equal GovRouterTypehash.t.sol, target the first 
   // group 3h T61: + `UASetProofStore` (bit 24); group 3l: + `UASetWrapLimits`, `UASetWrapMember` and the two struct pins;
   // round 3s: + `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: + `UASetVerifierFee`
   // CTR-GOV-27: + the `ChainEntries` struct pin; round 3zc: + `UASetMaxSupply`, `UASetMaxWrapSupply`; set-auditor: + the two
-  // bit-32 ops
-  assert.equal(pins.length - pqzPinned, 63);
-  assert.equal(rows.length - pqzPinned, 58);
+  // bit-32 ops; CTR-GOV-33 Change: + `UACancelNonceFor`
+  assert.equal(pins.length - pqzPinned, 64);
+  assert.equal(rows.length - pqzPinned, 59);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf("("));
     const op = TYPED_OPS[name];
@@ -482,7 +483,7 @@ test("GovernanceRouter: 53 rows equal GovRouterTypehash.t.sol, target the first 
     ].includes(name);
     assert.deepEqual([r.message.mode, r.message.fee], [open ? 0 : 1, "0"], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes("GovernanceRouter")).length, 62); // 3h T61: + UASetProofStore; 3l: + 2; 3r: + 15; 3s: + 3; 3t: + 1; 3zc: + 2; set-auditor: + 2
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes("GovernanceRouter")).length, 63); // 3h T61: + UASetProofStore; 3l: + 2; 3r: + 15; 3s: + 3; 3t: + 1; 3zc: + 2; set-auditor: + 2; CTR-GOV-33 Change: + UACancelNonceFor
   assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, "SCaaS GovernanceRouter");
   assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
 });
@@ -567,11 +568,19 @@ const CHAIN_WORD_OPS = [
 test("CTR-GOV-28: the forty-two ops sign the chain word last", () => {
   const ops = CHAIN_WORD_OPS;
   assert.equal(ops.length, 42); // set-auditor: + the two bit-32 ops
-  // the only router ops without the word: the nonce cancel, the admin's accept (CTR-GOV-28's reading) and the three creations
+  // the only router ops without the word: the two nonce cancels (the router calls no target), the admin's accept (CTR-GOV-28's
+  // reading) and the three creations
   const without = Object.entries(TYPED_OPS)
     .filter(([, o]) => o.on.includes("GovernanceRouter") && !o.fields.some((f) => f.name === "chainUid"))
     .map(([n]) => n);
-  assert.deepEqual(without, ["UACancelNonce", "UAAcceptAdmin", "UACreateToken", "UACreateDex", "UACreateInstance"]);
+  assert.deepEqual(without, [
+    "UACancelNonce",
+    "UACancelNonceFor",
+    "UAAcceptAdmin",
+    "UACreateToken",
+    "UACreateDex",
+    "UACreateInstance",
+  ]);
   for (const name of ops) {
     const f = TYPED_OPS[name].fields;
     assert.deepEqual([f.at(-8).name, f.at(-8).type], ["chainUid", "bytes32"], name);
@@ -1610,8 +1619,18 @@ test("the router creations: the instance row, named config and initCall", () => 
   assert.throws(() => op.call(td, d.signature, { initCall: d.extra.initCall }), /not the signed initHash/);
   assert.throws(() => instanceInitCall(7, 0, config), /class 7 kind 0: no named config/);
   assert.throws(() => instanceInitCall(3, 0, { ...config, admin: 1 }), /no field admin/);
-  // PqVault plan V8 (CTR-PQV-02): class 4, kind 0 names the same `initialize(bytes32 owner)`; kind 1 of it has no named config
-  assert.equal(instanceInitCall(4, 0, config), initCall);
-  assert.throws(() => instanceInitCall(4, 1, config), /class 4 kind 1: no named config/);
-  assert.throws(() => instanceInitCall(4, 0, { ...config, admin: 1 }), /no field admin/);
+  // CTR-CHAT-23 (owner 2026-11-23): PqChat's `initialize(bytes32 owner, uint8 sigStore)`, sigStore absent = 2 (sstore2), 0 or 2 only
+  assert.equal(config.sigStore, 2);
+  const { sigStore: _, ...ownerOnly } = config;
+  assert.equal(instanceInitCall(3, 0, ownerOnly), initCall, "the default is sstore2");
+  const none = instanceInitCall(3, 0, { ...config, sigStore: 0 });
+  assert.equal(none, initCall.slice(0, -2) + "00", "none: the last word 0");
+  for (const v of [1, 3, 255])
+    assert.throws(() => instanceInitCall(3, 0, { ...config, sigStore: v }), /sigStore: 0 or 2/);
+  // PqVault plan V8 (CTR-PQV-02): class 4, kind 0 names `initialize(bytes32 owner)`, no setting; kind 1 of it has no named config
+  const v4 = hex(concatBytes(keccak_256(utf8ToBytes("initialize(bytes32)")).subarray(0, 4), fromHex(config.owner)));
+  assert.equal(instanceInitCall(4, 0, ownerOnly), v4);
+  assert.throws(() => instanceInitCall(4, 0, config), /no field sigStore/);
+  assert.throws(() => instanceInitCall(4, 1, ownerOnly), /class 4 kind 1: no named config/);
+  assert.throws(() => instanceInitCall(4, 0, { ...ownerOnly, admin: 1 }), /no field admin/);
 });

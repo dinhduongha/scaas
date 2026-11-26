@@ -85,6 +85,15 @@ transaction status, whether an operation was consumed, the lane's nonce or seque
 the first endpoint only and never fail over; what fails over is the building of a transaction (simulations and views), under the
 rules above.
 
+**The sticky read** (owner 2026-11-23, "Sticky endpoint", decisions CLI-SDK-33 (160); BUILT:
+`EvmPool::read_sticky`, test `a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head` in `tests/evm_profiles.rs`,
+UNAUDITED). On a pool built `with_pinned_reads(false)` (the profile's `"pinnedReads": false`: Moonbeam, Moonbase) a logical read
+of several calls cannot be pinned by hash, so every call of it goes to the **same** endpoint at its latest block (each request
+names `latest`, never a hash). The endpoint's head (number and header hash) is read before the calls and again after them; if it
+moved, the whole read is retried, at most `STICKY_TRIES` = 3 times, then refused, `HeadMoving`. Each try is one endpoint and fails
+over as a plain read; answers of two endpoints are never mixed. A read that feeds a decryption, and a read under `strict_majority`
+(no agreement without a pin), stay `PinnedReadsUntrusted`.
+
 <a id="CLI-RPC-05"></a>**CLI-RPC-05** — **Strict majority: the same complete answer at the same block from ⌊n/2⌋ + 1 of the list**
 (ARCH-POS-15, the agreement option; SPECIFIED). `n` is the length of the list, at least 2, with a pinned `chain_uid`. (1) Every
 endpoint passes CLI-RPC-03 and names its block for the read (`head − depth`, by default depth 1; `latest`; or `finalized`).
@@ -106,7 +115,9 @@ endpoint; in the node every family has its caps (Soroban `max_resource_fee_per_j
 `max_priority_lamports`, Sui `max_gas_budget`, Cosmos `max_gas_per_tx`, Aptos `max_gas_unit_price`, Algorand `max_min_fee` and
 `max_fee_per_byte`, NEAR `max_deposit_per_job`; owner 2026-11-18, plan T24.4), and a figure above its cap is no verdict. BUILT for EVM, plan T3, T6, T13 S1, S2: `three_honest_agree`, `one_altered_storage_slot_is_outvoted`,
 `two_altered_differently_is_no_majority` against three anvils, EIP-1898 verified against anvil and a local Nethermind 2.2.0
-(plan T0; Hedera's relay not verified); on another family PLANNED.
+(plan T0; Hedera's relay not verified); on another family PLANNED. A caller may ask the agreed read of one read on a `failover`
+list, `EvmPool::read_at_block_agreed` (the same checks; one endpoint or no pinned `chain_uid` `Argument`; owner 2026-11-23, an app
+core's option, never forced on the list; BUILT on `pqchat-sigs`: `an_agreed_read_on_a_failover_list_outvotes_one_liar`).
 
 <a id="CLI-RPC-06"></a>**CLI-RPC-06** — **A read that feeds a decryption never rests on a discovered endpoint alone** (ARCH-POS-15,
 ARCH-POS-13, as stated; BUILT, plan T3: `discovered_is_skipped_under_failover`, `only_discovered_is_no_trusted_endpoint`,
@@ -154,11 +165,16 @@ no): the SDK's bounded re-post of the same bytes of an unsettled Arweave item, [
 report `dead` while a transaction may still land"; BUILT for EVM, plan T7, T13 S7: `final_from_an_agreed_read_is_terminal`,
 `final_from_a_discovered_first_endpoint_is_not_terminal`, `replaced_needs_the_transaction_unknown`,
 `replaced_from_a_later_endpoint_is_pending`, `replaced_under_strict_majority_rests_on_the_finalized_block`,
-`failed_for_good_under_strict_majority_rests_on_the_finalized_block`; the merged node states, T11). A read is decisive when it is agreed under `strict_majority`, or under
+`failed_for_good_under_strict_majority_rests_on_the_finalized_block`; the merged node states, T11; Soroban's reads of it,
+review T26 B-2: `getTransaction`'s ledger window (`TxWindow`: its latest ledger, that ledger's close time, the oldest ledger it
+keeps) and a ledger's close time (`close_time_at`), so a deadline is compared with the chain's time, `soroban_send.rs`). A read is decisive when it is agreed under `strict_majority`, or under
 `failover` answered whole by the first endpoint of the list when that endpoint is not `discovered`. A transaction is `Final` when a
 decisive read finds its receipt in a block at or below the final block, the receipt's block hash equal to that endpoint's header
 hash at its number. It is `Replaced` only when one decisive read finds, all at the final block, the sender's nonce (pinned by
-hash) above the transaction's nonce, the transaction by hash unknown and its receipt unknown. Under `strict_majority`, `Replaced`
+hash) above the transaction's nonce, the transaction by hash unknown and its receipt unknown. "Unknown" is only a fact on an
+endpoint that keeps the whole transaction index: a decisive endpoint (endpoint 0 under `failover`, every member under
+`strict_majority`) must be an archive node or one whose transaction index is not pruned (geth `--history.transactions=0`),
+since a pruned index answers "unknown" for an old landed transaction too (review T26 B-12). Under `strict_majority`, `Replaced`
 and a relayed operation's failed-for-good need the majority's agreed read at the `finalized` block (a read at another depth that
 shows them reads the finalized block again); under `failover` they are endpoint 0's alone and their text says they rest on one
 endpoint (owner 2026-11-17). The same facts from any other
@@ -180,7 +196,9 @@ keeps its reader's depth bound). Every answer, those of the EVM reader's provide
 transport under alloy), is read in chunks up to its call's byte cap (default 16 MiB, lower per call where the answer is small; an
 announced length above the cap stops before reading), then its JSON nesting depth is checked by a flat scan (at most 64), and only
 then parsed, once. Family binary decoders keep their own caps (XDR depth 64, msgpack depth 64, BOC 4096 cells). Too large, too deep
-or malformed is that endpoint's failure ([CLI-RPC-04](#CLI-RPC-04)), never a panic. The requests of one read are bounded too: a log
+or malformed is that endpoint's failure ([CLI-RPC-04](#CLI-RPC-04)), never a panic; an answer without the member it is read for
+(a CometBFT answer without `result`, an Indexer API answer without `data`) is malformed, never a null value (review T26 B-9, B-10;
+Aptos's indexer also names its network before its first query, `ledger_infos`' `chain_id`, CLI-RPC-03). The requests of one read are bounded too: a log
 range is read in spans, at most about 25 requests per window.
 
 <a id="CLI-RPC-11"></a>**CLI-RPC-11** — **No URL, credential or request body in a log line or an error** (follows the node's
@@ -238,7 +256,8 @@ Named, stable codes; the names shared with the app's endpoint lists are the same
 | `EndpointNoMajority` | strict majority: no ⌊n/2⌋ + 1 equal complete answers at one block after the fallback round (`n`, `need`, the largest group's size) |
 | `NoTrustedEndpoint` | a read that feeds a decryption with no `named` or `default` endpoint in the list (failover: only discovered endpoints; strict majority: Q6 (b)) |
 | `AgreementNeedsThree` | the same under strict majority with a discovered endpoint and `n < 3` |
-| `PinnedReadsUntrusted` | a pinned read (CLI-RPC-05; a read feeding a decryption included) on a pool built `with_pinned_reads(false)`: the chain's profile states `"pinnedReads": false` (Moonbeam, Moonbase: a read pinned by a made-up hash is answered; owner 2026-11-22, [ARCH-POS-20](../decisions.md#ARCH-POS-20)); refused before any request, plain reads still work; BUILT, the SDK's wiring PLANNED (T41 family) |
+| `PinnedReadsUntrusted` | a pinned read (CLI-RPC-05; a read feeding a decryption included) on a pool built `with_pinned_reads(false)`: the chain's profile states `"pinnedReads": false` (Moonbeam, Moonbase: a read pinned by a made-up hash is answered; owner 2026-11-22, [ARCH-POS-20](../decisions.md#ARCH-POS-20)); refused before any request, plain reads and the sticky read ([CLI-RPC-04](#CLI-RPC-04)) still work; BUILT, the SDK reads the line by the sticky read there (decisions CLI-SDK-33 (160)) |
+| `HeadMoving` | a sticky read ([CLI-RPC-04](#CLI-RPC-04)) whose endpoint's head moved during each of its `STICKY_TRIES` = 3 tries; BUILT |
 | `Revert` | the first endpoint's revert (failover), or the agreed revert (strict majority), with its data as bytes |
 | `NodeRefused` | a scaas-node's error contract: `code`, `detail`, `revert_data` |
 | `NodeApiVersion` | a node's `api` this client does not speak |

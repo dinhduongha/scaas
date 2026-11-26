@@ -7,10 +7,14 @@ dsb-no-verifying-contract is killed by the vector tests alone); a
 mutant is killed when the run fails. One line per mutant on stdout and in runs/2026-11-21-pqvault/mutants/<name>.log
 (git-ignored). Usage, from smartcontracts/evm:
   python3 runs/2026-11-21-pqvault/mutants.py [name ...]      (no name: every mutant)
+A hung run: the run past its deadline (3 x the unmutated baseline, at least 10 min, or `--timeout N`) has its process group killed and reads `killed (timeout N s)`; a target file that differs from HEAD refuses the run; the restore holds on SIGINT / SIGTERM (scripts/mutant_guard.py, owner 2026-11-24).
 """
 import os
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "scripts"))
+import mutant_guard as guard  # noqa: E402
 
 V = "src/pqvault/PqVault.sol"
 T = "src/pqvault/PqVaultTypes.sol"
@@ -97,28 +101,36 @@ M = [
 
 
 def run(name, path, old, new, dirs="test/pqvault"):
+    guard.refuse_dirty([path], ".")
     src = open(path).read()
     if src.count(old) != 1:
         return f"{name} | {path} | NOT APPLIED ({src.count(old)} matches)"
     os.makedirs("runs/2026-11-21-pqvault/mutants", exist_ok=True)
     log = f"runs/2026-11-21-pqvault/mutants/{name}.log"
+    runs = []
+    for d in dirs.split(","):
+        env = dict(os.environ, FOUNDRY_TEST=d, FOUNDRY_OUT="out/pv-mut-" + d.split("/")[-1],
+                   FOUNDRY_CACHE_PATH="cache/pv-mut-" + d.split("/")[-1])
+        gas = d + "/" + ("PqVaultGas" if d.endswith("pqvault") else "PqChatGas") + ".t.sol"
+        cmd = ["../../scripts/capped", "forge", "test", "-j", "1", "--no-match-path", gas]
+        runs.append((cmd, env, guard.limit(cmd, env=env)))
+    saved, hung = {path: open(path, "rb").read()}, None
     try:
         open(path, "w").write(src.replace(old, new))
         rc = 0
         with open(log, "w") as f:
-            for d in dirs.split(","):
-                env = dict(os.environ, FOUNDRY_TEST=d, FOUNDRY_OUT="out/pv-mut-" + d.split("/")[-1],
-                           FOUNDRY_CACHE_PATH="cache/pv-mut-" + d.split("/")[-1])
-                gas = d + "/" + ("PqVaultGas" if d.endswith("pqvault") else "PqChatGas") + ".t.sol"
-                rc |= subprocess.run(["../../scripts/capped", "forge", "test", "-j", "1", "--no-match-path", gas],
-                                     env=env, stdout=f, stderr=subprocess.STDOUT).returncode
+            for cmd, env, lim in runs:
+                r = guard.run(cmd, lim, env=env, stdout=f, stderr=subprocess.STDOUT)
+                rc |= r.returncode
+                hung = hung or (r.timeout and r)
     finally:
-        open(path, "w").write(src)
+        guard.restore(saved)
     t = open(log, errors="replace").read()
     fails = sorted({l.split("] ")[1].split("(")[0] for l in t.splitlines() if l.startswith("[FAIL") and "] " in l})
     if rc != 0 and not fails:
         fails = ["(build)"]
-    return f"{name} | {path} | {'KILLED' if rc != 0 else 'SURVIVED'} | {', '.join(fails[:6])}"
+    verdict = guard.outcome(hung, "") if hung else "KILLED" if rc != 0 else "SURVIVED"
+    return f"{name} | {path} | {verdict} | {', '.join(fails[:6])}"
 
 
 if __name__ == "__main__":

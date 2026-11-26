@@ -32,11 +32,9 @@ struct Release(u64, Arc<dyn Fn(u64) -> Fut<()> + Send + Sync>);
 
 impl Drop for Release {
     fn drop(&mut self) {
-        // the release runs on the runtime that dropped the lock (every SDK call runs on one)
-        let fut = (self.1)(self.0);
-        if let Ok(h) = tokio::runtime::Handle::try_current() {
-            h.spawn(fut);
-        }
+        // review T26 C-7: the release runs to its end on a thread of its own: never a task a runtime's shutdown drops, and
+        // where no runtime runs too
+        crate::vault::store::release_on_own_thread((self.1)(self.0));
     }
 }
 

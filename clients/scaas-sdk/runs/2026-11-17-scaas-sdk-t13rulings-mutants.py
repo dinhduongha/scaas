@@ -19,8 +19,9 @@ MUTANTS = [
                                                        "#[serde(rename_all = \"camelCase\")]\n"
                                                        "#[cfg_attr(feature = \"uniffi\", derive(uniffi::Record))]\npub struct AttrsArgs")],
      T + "sponsored_registration_checks"),
-    ("R3: no registry skips the receiver check", [(R, "    let Some(registry) = profile.registry.as_deref() else {\n        return Err(SdkError::ReceiverUnregistered);",
-                                                  "    let Some(registry) = profile.registry.as_deref() else {\n        return Ok(());")],
+    # re-anchored 2026-11-23 (T26 B2-9 moved the check to line.rs `receiver_registered`): the same mutation on the current text
+    ("R3: no registry skips the receiver check", [("clients/scaas-sdk/src/line.rs", "    if profile.registry.is_none() {\n        return Err(SdkError::ReceiverUnregistered);",
+                                                  "    if profile.registry.is_none() {\n        return Ok(());")],
      T + "pay_to_unregistered_derived_ua"),
     ("R4: a write not put back on a signing failure", [(R, "                    Err(e) => {\n                        sdk.registry_writes",
                                                        "                    Err(e) if false => {\n                        sdk.registry_writes"),

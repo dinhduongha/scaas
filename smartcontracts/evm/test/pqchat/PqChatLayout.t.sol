@@ -27,6 +27,17 @@ contract PqChatLayoutTest is PqTopicsBase {
         assertFalse(
             vm.keyExistsJson(mod, ".storageLayout.storage[0]"), "the body module: no plain slot either (CTR-TOK-30)"
         );
+        string memory tree =
+            vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/PqChatTree.sol/PqChatTree.json"));
+        assertFalse(vm.keyExistsJson(tree, ".storageLayout.storage[0]"), "the tree module: no plain slot (CTR-CHAT-26)");
+        string memory views = vm.readFile(
+            string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/PqChatTreeViews.sol/PqChatTreeViews.json")
+        );
+        assertFalse(vm.keyExistsJson(views, ".storageLayout.storage[0]"), "the views module: no plain slot (A-9)");
+        string memory members = vm.readFile(
+            string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/PqChatTreeMembers.sol/PqChatTreeMembers.json")
+        );
+        assertFalse(vm.keyExistsJson(members, ".storageLayout.storage[0]"), "the members module: no plain slot");
         assertEq(_root(), 0xc7b36804b17476e9a19a6ebc690cd7b9326d322c515fd7dc91373f9bc6dc3000);
     }
 
@@ -38,12 +49,12 @@ contract PqChatLayoutTest is PqTopicsBase {
         return uint256(keccak256(abi.encode(key, slot)));
     }
 
-    /// The namespace's fields: owner +0, initialized +1, epochs +2 (sessionId; record | epoch << 160 | wraps << 224;
+    /// The namespace's fields: owner +0, initialized +1 (byte 0) with sigStore (byte 1, CTR-CHAT-23), epochs +2 (sessionId; record | epoch << 160 | wraps << 224;
     /// landed | home << 32; parent; wrapAt; left), childOf +3, nonces +4, messages +5, stored +6.
     function test_namespaceFieldsArePinned() public {
         uint256 r = _root();
         assertEq(bytes32(_at(r)), OWNER_UA);
-        assertEq(_at(r + 1), 1);
+        assertEq(_at(r + 1), 1 | 2 << 8, "initialized, sigStore sstore2");
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(3, 5, address(chat));
         bytes32 sid = _create(chat, s, _slice(w, 0, 2));
         uint256 e = _map(sid, r + 2);
@@ -73,6 +84,16 @@ contract PqChatLayoutTest is PqTopicsBase {
         assertEq(_at(e + 2), 3 | 1 << 32 | 1 << 40, "landed 3, home, removed 1");
         assertEq(_at(_map(ids[2], e + 6)), 1, "removedOf");
         assertEq(_at(_map(sid, r + 21)), 1, "removals: one record");
+    }
+
+    /// CTR-CHAT-23: an `sstore2` instance's `leaves` list at +22, after `removals` (+21); the fields above keep their slots.
+    function test_leaveRecordsArePinned() public {
+        uint256 r = _root();
+        (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(2, 5, address(chat));
+        bytes32 sid = _create(chat, s, w);
+        IPqChat.PqChatLeave memory l = IPqChat.PqChatLeave(sid, sid, ids[1], 3);
+        chat.leave(l, _sig(ids[1], h.leave(l)));
+        assertEq(_at(_map(sid, r + 22)), 1, "leaves: one record");
     }
 
     /// Round 3r R3 (spec 2026-11-10-admin-not-owner.md §4.4): the topic's `admin` at +0 of `topics[tid]` (+7) and the

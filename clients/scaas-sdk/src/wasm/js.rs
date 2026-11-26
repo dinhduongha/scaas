@@ -47,13 +47,74 @@ fn to_js<T: Serialize + ?Sized>(v: &T) -> Result<JsValue, JsValue> {
     v.serialize(&s).map_err(|_| err(SdkError::Internal))
 }
 
-/// A JS value as `T`; a refused opaque-call marker is `OpaqueCallRefused` (as on every binding), any other refusal `Argument`.
+/// The deepest a JS value nests (arrays, maps, plain objects) before it is lifted: serde_json's own limit, which the native
+/// bindings' JSON text has (review T26 C-6; `serde_wasm_bindgen` recurses without one, and a stack overflow kills the
+/// instance).
+const JS_DEPTH: usize = 128;
+
+/// Whether `v` nests at most `left` levels; a typed array, a string, a number or a big integer is a leaf.
+fn shallow(v: &JsValue, left: usize) -> bool {
+    let within = |items: js_sys::Array| left > 0 && items.iter().all(|x| shallow(&x, left - 1));
+    if let Some(a) = v.dyn_ref::<js_sys::Array>() {
+        within(a.clone())
+    } else if let Some(m) = v.dyn_ref::<js_sys::Map>() {
+        within(js_sys::Array::from(m.values().as_ref()))
+    } else if v.is_object() && !js_sys::ArrayBuffer::is_view(v) && !v.is_function() {
+        within(js_sys::Object::values(v.unchecked_ref()))
+    } else {
+        true
+    }
+}
+
+/// Whether every key of the JS object `got` is in `known` (the lifted value serialized back) at every depth, `left` levels
+/// at most; a key whose value is null or undefined may be absent there (a skipped `None`); only plain objects and arrays are
+/// compared (review T26 C-3).
+fn keys_known(got: &JsValue, known: &JsValue, left: usize) -> bool {
+    let plain = |v: &JsValue| {
+        v.is_object()
+            && !v.is_function()
+            && !js_sys::ArrayBuffer::is_view(v)
+            && v.dyn_ref::<js_sys::Map>().is_none()
+    };
+    if left == 0 || !plain(got) || !plain(known) {
+        return true;
+    }
+    if let (Some(a), Some(b)) = (
+        got.dyn_ref::<js_sys::Array>(),
+        known.dyn_ref::<js_sys::Array>(),
+    ) {
+        return a
+            .iter()
+            .zip(b.iter())
+            .all(|(x, y)| keys_known(&x, &y, left - 1));
+    }
+    js_sys::Object::keys(got.unchecked_ref::<js_sys::Object>())
+        .iter()
+        .all(|k| {
+            let v = Reflect::get(got, &k).unwrap_or(JsValue::UNDEFINED);
+            if v.is_null() || v.is_undefined() {
+                return true;
+            }
+            match Reflect::get(known, &k) {
+                Ok(kv) if !kv.is_undefined() => keys_known(&v, &kv, left - 1),
+                _ => false,
+            }
+        })
+}
+
+/// A JS value as `T`: nested beyond [`JS_DEPTH`] `Argument`, before any lift; a refused opaque-call marker is
+/// `OpaqueCallRefused` (as on every binding), by the marker's own flag (review T26 C-12: never by the error's text), any
+/// other refusal `Argument`.
 fn from_js<T: DeserializeOwned>(v: JsValue) -> Result<T, SdkError> {
-    serde_wasm_bindgen::from_value(v).map_err(|e| {
-        match e.to_string().contains("OpaqueCallRefused") {
-            true => SdkError::OpaqueCallRefused,
-            false => SdkError::Argument,
-        }
+    if !shallow(&v, JS_DEPTH) {
+        return Err(SdkError::Argument);
+    }
+    super::OPAQUE_REFUSED.with(|r| r.set(false));
+    let out = serde_wasm_bindgen::from_value(v);
+    let refused = super::OPAQUE_REFUSED.with(|r| r.replace(false));
+    out.map_err(|_| match refused {
+        true => SdkError::OpaqueCallRefused,
+        false => SdkError::Argument,
     })
 }
 
@@ -723,7 +784,8 @@ impl Authenticator for JsAuth {
 
 /// A binding's configuration (spec §4), as `binding.rs`'s: the load check's `expect_api` and `need_features` (spec §16.3), the
 /// profiles, the passkey RP ID, the limits, the module gas tables.
-#[derive(serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct BindingConfig {
     expect_api: u32,
     need_features: u64,
@@ -737,7 +799,13 @@ struct BindingConfig {
 #[wasm_bindgen]
 pub fn open(config: JsValue, store: JsValue, authenticator: JsValue) -> Promise {
     future_to_promise(async move {
-        let c: BindingConfig = from_js(config).map_err(err)?;
+        let c: BindingConfig = from_js(config.clone()).map_err(err)?;
+        // review T26 C-3: `serde_wasm_bindgen` reads a record's own fields by name and never sees another key, so
+        // `deny_unknown_fields` cannot refuse one: the configuration (no handle in it) is serialized back and every key of
+        // the app's object must be in it, at every depth (a misspelt `pinnedReads` would take its default)
+        if !keys_known(&config, &to_js(&c)?, JS_DEPTH) {
+            return Err(err(SdkError::Argument));
+        }
         crate::load_check(c.expect_api, c.need_features).map_err(err)?;
         let authenticator = (!authenticator.is_undefined() && !authenticator.is_null())
             .then(|| Arc::new(JsAuth(JsObj(authenticator))) as Arc<dyn Authenticator>);

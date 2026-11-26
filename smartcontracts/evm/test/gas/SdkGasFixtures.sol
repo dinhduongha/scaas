@@ -81,6 +81,12 @@ abstract contract SdkGasRouterFix is SdkGasOps, GovRouterFixture {
     function _fixtureSka() internal view override returns (address) {
         return sgSka;
     }
+
+    /// G-4: the router names a factory, as every deployed router does (the test is the factory of the fixture's clones), so
+    /// a derived signer's row pays G1's code copy (`test_g1_gas`: +482 on the router's own generation).
+    function _routerFactory() internal view override returns (address) {
+        return address(this);
+    }
 }
 
 /// The PQZ fixtures' own kinds: ML-DSA-65 `mlv` at the precompile cap 200,000 and `pqz-mlwe` `pqv` at `DeployBase`'s

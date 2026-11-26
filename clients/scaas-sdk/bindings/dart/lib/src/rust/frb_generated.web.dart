@@ -633,6 +633,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Balances dco_decode_balances(dynamic raw);
 
   @protected
+  Basis dco_decode_basis(dynamic raw);
+
+  @protected
   BlsMultiPart dco_decode_bls_multi_part(dynamic raw);
 
   @protected
@@ -922,6 +925,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   UaCancelNonce dco_decode_box_autoadd_ua_cancel_nonce(dynamic raw);
+
+  @protected
+  UaCancelNonceFor dco_decode_box_autoadd_ua_cancel_nonce_for(dynamic raw);
 
   @protected
   UaCancelRate dco_decode_box_autoadd_ua_cancel_rate(dynamic raw);
@@ -1823,6 +1829,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   UaCancelNonce dco_decode_ua_cancel_nonce(dynamic raw);
 
   @protected
+  UaCancelNonceFor dco_decode_ua_cancel_nonce_for(dynamic raw);
+
+  @protected
   UaCancelRate dco_decode_ua_cancel_rate(dynamic raw);
 
   @protected
@@ -2531,6 +2540,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Balances sse_decode_balances(SseDeserializer deserializer);
 
   @protected
+  Basis sse_decode_basis(SseDeserializer deserializer);
+
+  @protected
   BlsMultiPart sse_decode_bls_multi_part(SseDeserializer deserializer);
 
   @protected
@@ -2876,6 +2888,11 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   UaCancelNonce sse_decode_box_autoadd_ua_cancel_nonce(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaCancelNonceFor sse_decode_box_autoadd_ua_cancel_nonce_for(
     SseDeserializer deserializer,
   );
 
@@ -3943,6 +3960,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   UaCancelNonce sse_decode_ua_cancel_nonce(SseDeserializer deserializer);
 
   @protected
+  UaCancelNonceFor sse_decode_ua_cancel_nonce_for(SseDeserializer deserializer);
+
+  @protected
   UaCancelRate sse_decode_ua_cancel_rate(SseDeserializer deserializer);
 
   @protected
@@ -4831,6 +4851,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_balances(Balances self, SseSerializer serializer);
 
   @protected
+  void sse_encode_basis(Basis self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bls_multi_part(BlsMultiPart self, SseSerializer serializer);
 
   @protected
@@ -5316,6 +5339,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   @protected
   void sse_encode_box_autoadd_ua_cancel_nonce(
     UaCancelNonce self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_cancel_nonce_for(
+    UaCancelNonceFor self,
     SseSerializer serializer,
   );
 
@@ -6627,6 +6656,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void sse_encode_ua_cancel_nonce(UaCancelNonce self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_cancel_nonce_for(
+    UaCancelNonceFor self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_ua_cancel_rate(UaCancelRate self, SseSerializer serializer);

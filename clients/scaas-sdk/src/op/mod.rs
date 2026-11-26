@@ -227,24 +227,24 @@ pub(crate) async fn key_opened(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             .await?;
     }
     if let KeyRef::Key { seed, id } = r {
-        drop(sdk.open_seed(seed)?); // a row is trusted once its seed's MAC verified (unlocked)
-        let row = sdk
-            .entry(seed)
-            .await?
-            .accounts
-            .into_iter()
-            .find_map(|a| match a {
-                crate::vault::AccountRow::Key {
-                    id: i,
-                    kind,
-                    key_data,
-                    credential_id,
-                    handle,
-                    ua,
-                    ..
-                } if i == *id => Some((kind, key_data, credential_id, handle, ua)),
-                _ => None,
-            });
+        drop(sdk.open_seed(seed)?);
+        // review T26 A-2: the row signs only from the entry as read now, checked under the open wallet (KeystoreMismatch)
+        let e = sdk.entry(seed).await?;
+        if !crate::vault::seeds::rows_verified(sdk, &e) {
+            return Err(SdkError::KeystoreMismatch);
+        }
+        let row = e.accounts.into_iter().find_map(|a| match a {
+            crate::vault::AccountRow::Key {
+                id: i,
+                kind,
+                key_data,
+                credential_id,
+                handle,
+                ua,
+                ..
+            } if i == *id => Some((kind, key_data, credential_id, handle, ua)),
+            _ => None,
+        });
         let (kind, key_data, credential_id, handle, ua) = row.ok_or(SdkError::Argument)?;
         let row = external::ExternalRow {
             kind: u16::try_from(kind).map_err(|_| SdkError::Argument)?,
@@ -266,12 +266,15 @@ pub(crate) fn evm(sdk: &Sdk, chain: &str) -> Result<(ChainProfile, u64, Arc<EvmP
     sdk.evm(chain)
 }
 
+/// A simulation's error: a revert keeps the endpoint's text (capped and cleaned by `scaas-rpc`, CLI-RPC-11: the decoded reason,
+/// or the data's hex), so a write the chain refuses names its error (decision (161): a refused `updateMsig` was an empty
+/// `Revert`).
 pub(crate) fn sim(e: SimError) -> SdkError {
     match e {
-        SimError::Revert(_) => SdkError::Rpc(scaas_rpc::RpcError::Revert {
+        SimError::Revert(reason) => SdkError::Rpc(scaas_rpc::RpcError::Revert {
             endpoint: 0,
             data: vec![],
-            reason: String::new(),
+            reason,
         }),
         SimError::Transport(_) => SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
             last: None,
@@ -294,10 +297,16 @@ pub(crate) fn addr20(s: &str) -> Result<[u8; 20], SdkError> {
     unhex(s)?.try_into().map_err(|_| SdkError::Argument)
 }
 
-/// The lane view's calldata: `mtxNonce(address,uint256)` on `SmartKeyAccount`, `mtxNonce(bytes32,uint256)` elsewhere.
-pub(crate) fn nonce_call(kind: &str, from: &[u8], batch: U256) -> Bytes {
+/// The lane view's calldata: `mtxNonce(address,uint256)` on `SmartKeyAccount`, `mtxNonce(bytes32,uint256)` elsewhere; a
+/// router op of a derived id (G1, CTR-GOV-33) `mtxNonceFor(address,bytes32,uint256)` with its `target`, the map of the
+/// registry the router checks it on.
+pub(crate) fn nonce_call(kind: &str, from: &[u8], batch: U256, target: Option<[u8; 20]>) -> Bytes {
+    let derived = from.len() == 32 && from.get(..12).is_some_and(|h| h.iter().any(|b| *b != 0));
+    let router_target = target.filter(|_| kind == "gov_router" && derived);
     let sig: &[u8] = if kind == "account" {
         b"mtxNonce(address,uint256)"
+    } else if router_target.is_some() {
+        b"mtxNonceFor(address,bytes32,uint256)"
     } else {
         b"mtxNonce(bytes32,uint256)"
     };
@@ -305,6 +314,10 @@ pub(crate) fn nonce_call(kind: &str, from: &[u8], batch: U256) -> Bytes {
         .get(..4)
         .unwrap_or_default()
         .to_vec();
+    if let Some(t) = router_target {
+        d.extend_from_slice(&[0u8; 12]);
+        d.extend_from_slice(&t);
+    }
     let mut w = [0u8; 32];
     let at = 32usize.saturating_sub(from.len());
     if let Some(t) = w.get_mut(at..) {
@@ -315,6 +328,14 @@ pub(crate) fn nonce_call(kind: &str, from: &[u8], batch: U256) -> Bytes {
     Bytes::from(d)
 }
 
+/// A router op's signed `target` (G1, CTR-GOV-33): the message's `target` word, read for its nonce map.
+pub(crate) fn gov_target(message: &serde_json::Value) -> Option<[u8; 20]> {
+    message
+        .get("target")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|t| addr20(t).ok())
+}
+
 /// The lane's next nonce now (failed over).
 pub(crate) async fn lane_nonce(
     pool: &EvmPool,
@@ -322,11 +343,12 @@ pub(crate) async fn lane_nonce(
     kind: &str,
     from: &[u8],
     batch: U256,
+    target: Option<[u8; 20]>,
 ) -> Result<U256, SdkError> {
     use alloy::network::TransactionBuilder;
     let tx = alloy::rpc::types::TransactionRequest::default()
         .with_to(contract)
-        .with_input(nonce_call(kind, from, batch));
+        .with_input(nonce_call(kind, from, batch, target));
     let w = pool.call_tx(tx).await.map_err(sim)?;
     if w.len() != 32 {
         return Err(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {

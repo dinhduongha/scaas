@@ -134,6 +134,8 @@ pub struct VaultCreate {
     pub pass_kdf: Num,
     pub pass_salt: B32,
     pub sealed_info: Bytes,
+    /// owner 2026-11-23 (controller call for PqVault, CTR-PQV-18): 0 flat wraps, the only mode this release accepts; last
+    pub group_mode: Num,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -244,7 +246,7 @@ const FIELDS: [(&str, &str); 9] = [
     (
         "PqVaultCreate",
         "bytes32 creator,uint64 nonce,uint8 mode,bytes32 homeChain,address homeVaultContract,bytes32[] admins,\
-         MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo",
+         MemberKey[] members,bytes32[] wrapHashes,uint16 passKdf,bytes32 passSalt,bytes sealedInfo,uint8 groupMode",
     ),
     (
         "PqVaultEpoch",

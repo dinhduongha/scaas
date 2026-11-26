@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Passkey and platform unlock (spec §6.10, CLI-SDK-06): vault v1's PRF envelope on every vault of a seed, one credential and
 //! one per-seed salt, so one assertion (or one platform secret) opens them all. The output is written by the app's
-//! `Authenticator` into a `SecretBytes` the SDK passes in, and only reaches `scaas-ua`. An answer without a PRF output is
-//! `AuthenticatorRefused`; the passphrase still opens. Changes keep the data key (CLI-UAL-19): a passphrase change re-wraps the
+//! `Authenticator` into a `SecretBytes` the SDK passes in, and only reaches `scaas-ua`. An answer without a PRF output, or an
+//! output the app never wrote (still the 32 zero bytes lent), is `AuthenticatorRefused`; the passphrase still opens. Changes keep the data key (CLI-UAL-19): a passphrase change re-wraps the
 //! pin envelope, removing the PRF unlock drops the envelope; neither revokes an earlier copy.
 
 use super::keystore::SeedEntry;
@@ -26,6 +26,18 @@ pub(crate) fn unhex(s: &str) -> Option<Vec<u8>> {
         .step_by(2)
         .map(|i| s.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok()))
         .collect()
+}
+
+/// Review T26 C-1: the authenticator's output in `out`, refused (`AuthenticatorRefused`) when the app never wrote it. The SDK
+/// lends a fresh secret of 32 zero bytes; a PRF or platform secret of all zeros is one no write reached (a forgotten write, a
+/// copy call's refused write whose status was dropped, in any language), and sealing or opening under it would be a key of
+/// zeros. Read without an early exit.
+fn written(out: &SecretBytes) -> Result<(), SdkError> {
+    if out.with(|b| b.len() == 32 && b.iter().fold(0u8, |a, x| a | x) != 0) {
+        Ok(())
+    } else {
+        Err(SdkError::AuthenticatorRefused)
+    }
 }
 
 fn random32() -> Result<Vec<u8>, SdkError> {
@@ -98,6 +110,7 @@ impl Sdk {
                 .await
                 .map_err(|_| SdkError::AuthenticatorRefused)?;
         }
+        written(&out)?;
         Ok(Key::Prf(out))
     }
 
@@ -139,13 +152,13 @@ impl Sdk {
         f: impl Fn(&V1) -> Result<V1, SdkError> + Send + Sync + 'static,
     ) -> Result<(), SdkError> {
         let e = self.entry(seed).await?;
-        let old = e.vaults.clone();
+        let old = e.clone();
         let open = self.open_seed(seed).ok();
         if open.is_none() && pass.is_none() {
             return Err(SdkError::Ua(scaas_ua::wallet::Error::WalletLocked));
         }
         let f = Arc::new(f);
-        let (new, index_mac) = self
+        let heavy = self
             .heavy({
                 let f = f.clone();
                 move || {
@@ -155,8 +168,12 @@ impl Sdk {
                         .collect::<Result<BTreeMap<_, _>, SdkError>>()?;
                     let mut ne = e.clone();
                     ne.vaults = new.clone();
+                    // review T26 A-1: the entry as read verifies under the wallet that signs it again
                     let index_mac = match (&open, &pass) {
-                        (Some(o), _) => super::seeds::mac(&o.wallet, &ne)?,
+                        (Some(o), _) => {
+                            super::seeds::stored_ok(&o.wallet, &e)?;
+                            super::seeds::mac(&o.wallet, &ne)?
+                        }
                         (None, Some(p)) => {
                             let seed_vault = super::unlock::vault_of(&e, "seed")?;
                             let w = passphrase(p, |p| {
@@ -166,7 +183,8 @@ impl Sdk {
                                     "",
                                 )?)
                             })?;
-                            let m = super::seeds::mac(&w, &ne);
+                            let m = super::seeds::stored_ok(&w, &e)
+                                .and_then(|()| super::seeds::mac(&w, &ne));
                             w.lock();
                             m?
                         }
@@ -175,7 +193,9 @@ impl Sdk {
                     Ok((new, index_mac))
                 }
             })
-            .await?;
+            .await;
+        // review T26 A-1: an entry that does not verify is never signed again; the seed locks, the event says so
+        let (new, index_mac) = super::seeds::on_mismatch(self, seed, heavy).await?;
         let ks = self
             .keystore
             .update(|ks| {
@@ -184,14 +204,16 @@ impl Sdk {
                     .iter_mut()
                     .find(|s| s.id == seed)
                     .ok_or(SdkError::SeedUnknown)?;
-                if e.vaults != old {
+                // the stored entry is the one checked and signed again, every field (review T26 A-1)
+                if *e != old {
                     return Err(SdkError::StoreConflict);
                 }
                 e.vaults = new.clone();
                 e.index_mac = index_mac.clone();
                 Ok(())
             })
-            .await?;
+            .await;
+        let ks = super::seeds::on_mismatch(self, seed, ks).await?;
         self.emit(Event::KeystoreChanged { rev: ks.rev });
         Ok(())
     }
@@ -199,8 +221,8 @@ impl Sdk {
 
 impl Vault {
     /// Adds a passkey PRF envelope to every vault of the seed (one credential, one fresh per-seed salt, one assertion),
-    /// opened by the vault passphrase once. `AuthenticatorRefused` for no authenticator, no RP ID or an answer without a PRF
-    /// output (nothing written).
+    /// opened by the vault passphrase once. `AuthenticatorRefused` for no authenticator, no RP ID, an answer without a PRF
+    /// output or an output the app never wrote (nothing written to the keystore).
     pub async fn enable_passkey_unlock(
         &self,
         seed: String,
@@ -242,7 +264,7 @@ impl Vault {
     }
 
     /// Adds a platform-secret envelope (a Keychain / Android Keystore key under `policy`, research decision 8) to every vault of
-    /// the seed, opened by the vault passphrase once.
+    /// the seed, opened by the vault passphrase once. `AuthenticatorRefused` for a refusal or a secret the app never wrote.
     pub async fn enable_platform_unlock(
         &self,
         seed: String,
@@ -320,6 +342,7 @@ async fn enable(
     salt: Vec<u8>,
     pass: Arc<SecretBytes>,
 ) -> Result<(), SdkError> {
+    written(&out)?;
     let p2 = pass.clone();
     sdk.rewrite_vaults(seed, Some(pass.clone()), move |v| {
         out.with(|b| {

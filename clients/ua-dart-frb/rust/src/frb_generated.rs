@@ -330,6 +330,7 @@ fn wire__crate__api__wallet__UaKemKey_open_container_impl(
             let api_expect_json = <String>::sse_decode(&mut deserializer);
             let api_members_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_accepted_json = <Option<String>>::sse_decode(&mut deserializer);
+            let api_current_json = <Option<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -353,6 +354,7 @@ fn wire__crate__api__wallet__UaKemKey_open_container_impl(
                         api_expect_json,
                         api_members_json,
                         api_accepted_json,
+                        api_current_json,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -5962,6 +5964,7 @@ fn wire__crate__api__wallet__wallet_from_link_impl(
             let api_expect_json = <String>::sse_decode(&mut deserializer);
             let api_members_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_accepted_json = <Option<String>>::sse_decode(&mut deserializer);
+            let api_current_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_bip39_passphrase = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
             >>::sse_decode(&mut deserializer);
@@ -6001,6 +6004,7 @@ fn wire__crate__api__wallet__wallet_from_link_impl(
                         api_expect_json,
                         api_members_json,
                         api_accepted_json,
+                        api_current_json,
                         &*api_bip39_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
@@ -6382,6 +6386,7 @@ fn wire__crate__api__wallet__wallet_restore_backup_impl(
             let api_expect_json = <String>::sse_decode(&mut deserializer);
             let api_members_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_accepted_json = <Option<String>>::sse_decode(&mut deserializer);
+            let api_current_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_bip39_passphrase = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
             >>::sse_decode(&mut deserializer);
@@ -6419,6 +6424,7 @@ fn wire__crate__api__wallet__wallet_restore_backup_impl(
                         api_expect_json,
                         api_members_json,
                         api_accepted_json,
+                        api_current_json,
                         &*api_bip39_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
@@ -6459,6 +6465,7 @@ fn wire__crate__api__wallet__wallet_restore_backup_over_impl(
             let api_expect_json = <String>::sse_decode(&mut deserializer);
             let api_members_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_accepted_json = <Option<String>>::sse_decode(&mut deserializer);
+            let api_current_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_bip39_passphrase = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
             >>::sse_decode(&mut deserializer);
@@ -6505,6 +6512,7 @@ fn wire__crate__api__wallet__wallet_restore_backup_over_impl(
                         api_expect_json,
                         api_members_json,
                         api_accepted_json,
+                        api_current_json,
                         &*api_bip39_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
@@ -6545,6 +6553,7 @@ fn wire__crate__api__wallet__wallet_restore_backup_rollback_impl(
             let api_expect_json = <String>::sse_decode(&mut deserializer);
             let api_members_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_accepted_json = <Option<String>>::sse_decode(&mut deserializer);
+            let api_current_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_bip39_passphrase = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
             >>::sse_decode(&mut deserializer);
@@ -6591,6 +6600,7 @@ fn wire__crate__api__wallet__wallet_restore_backup_rollback_impl(
                         api_expect_json,
                         api_members_json,
                         api_accepted_json,
+                        api_current_json,
                         &*api_bip39_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)

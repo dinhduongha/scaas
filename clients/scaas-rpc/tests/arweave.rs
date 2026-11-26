@@ -275,6 +275,52 @@ async fn an_announced_length_other_than_len_is_refused_unread() {
     );
 }
 
+/// T26 B-21: a strict-majority read asks one gateway at a time and stops once a group has its majority, keeping one copy:
+/// the third gateway is never asked when the first two agree; a first answer outvoted is replaced by the majority's bytes,
+/// read again from a member. Control: the agreed object either way.
+#[tokio::test]
+async fn strict_majority_keeps_one_copy() {
+    let o = obj(6);
+    let raw = |s: &Seen| {
+        s.lock()
+            .unwrap()
+            .iter()
+            .filter(|r| r.0.contains("/raw/") || r.1.contains("/raw/"))
+            .count()
+    };
+    let (a, sa) = gateway(NET, 100, o.clone(), None).await;
+    let (b, sb) = gateway(NET, 100, o.clone(), None).await;
+    let (c, sc) = gateway(NET, 100, obj(7), None).await;
+    let g = gws(
+        &[named(&a), named(&b), named(&c)],
+        Policy::StrictMajority,
+        &["a", "b", "c"],
+    );
+    assert_eq!(
+        g.data(ID, o.len() as u64, Purpose::Plain, &|_| true)
+            .await
+            .unwrap(),
+        o
+    );
+    assert_eq!(
+        (raw(&sa), raw(&sb), raw(&sc)),
+        (1, 1, 0),
+        "the third never asked"
+    );
+    let g = gws(
+        &[named(&c), named(&a), named(&b)],
+        Policy::StrictMajority,
+        &["c", "a", "b"],
+    );
+    assert_eq!(
+        g.data(ID, o.len() as u64, Purpose::Plain, &|_| true)
+            .await
+            .unwrap(),
+        o,
+        "control: the first outvoted, the majority's bytes"
+    );
+}
+
 #[tokio::test]
 async fn strict_majority_by_sha256() {
     let o = obj(6);

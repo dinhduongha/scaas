@@ -150,8 +150,15 @@ impl<'de> serde::Deserialize<'de> for crate::wallet::AllowOpaqueCall {
             return Ok(crate::wallet::AllowOpaqueCall::new());
         }
         let _ = b;
+        OPAQUE_REFUSED.with(|r| r.set(true));
         Err(serde::de::Error::custom("OpaqueCallRefused"))
     }
+}
+
+thread_local! {
+    /// The opaque-call marker refused its lift (review T26 C-12): `from_js` names the refusal by this flag, never by text.
+    #[allow(dead_code)] // read by the wasm32 exports only
+    pub(crate) static OPAQUE_REFUSED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 #[cfg(target_arch = "wasm32")]

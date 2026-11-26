@@ -1252,7 +1252,10 @@ const updList = (md, nativeOver, who) =>
 const updNow = [updSlots.find((m) => m.kind === 0x0001), updSlots[updSlots.length - 1]]; // native + the appended fndsa512
 const updOld = [updSlots[slotOf(updMsig, ml1)], updSlots[slotOf(updMsig, ml2)]].sort((x, y) => x.index - y.index); // ml2 disabled
 const sortSlots = (l) => [...l].sort((x, y) => x.index - y.index);
-const updRecord = (name, who, version) => {
+// CTR-UA-74: the update is version 1; a stored msig signature is `abi.encode(MemberSig[])` followed by that tag, a `UASig.signature` and
+// an msig member slot's `sig` are the tag itself
+const updTag = ua.versionTag(1);
+const updRecord = (name, who, version, tag = updTag) => {
   const pqzKey = pqzKeyOf(SETS[0], ` msig-update${version ? ` v${version}` : ""}`);
   const common = { ua: updMsig.ua, keyData: updEligible, pqzKey, pqzPop: pqzPopOf(SETS[0]) };
   const m = version ? ua.pqzKeyVersionRecordOf(0x0120, { ...common, version }) : ua.pqzKeyRecordMessage(0x0120, common);
@@ -1265,8 +1268,8 @@ const updRecord = (name, who, version) => {
     pqzPopHash: hex(m.pqzPopHash),
     recordDigest: hex(m.recordDigest),
     memberDigest: hex(m.memberDigest),
-    sig: hex(encodeMemberSigs(list)),
-    valid: who === updNow,
+    sig: hex(concatBytes(encodeMemberSigs(list), tag)),
+    valid: who === updNow && tag === updTag,
   };
 };
 const updAccept = (() => {
@@ -1282,13 +1285,14 @@ const updAccept = (() => {
   };
 })();
 const updAuthMd = ua.memberDigest(updMsig.ua, ua.uaMessage(0x0120, ua.purposeTag("metatx"), DIGEST));
-const updAuth = (name, who) => ({
+const updAuth = (name, who, tag = updTag) => ({
   name,
   entry: "requireAuthorized",
   purposeTag: hex(ua.purposeTag("metatx")),
   digest: hex(DIGEST),
+  signature: hex(tag),
   sig: hex(encodeMemberSigs(updList(updAuthMd, uaAuthMd(updAuthMd), sortSlots(who)))),
-  valid: who === updNow,
+  valid: who === updNow && tag === updTag,
 });
 // a registration whose `pop` names the updated msig as a member: its slot signs by the inner's CURRENT quorum
 const updOuter = msig("msig-update-outer", 2, [
@@ -1309,7 +1313,7 @@ const updOuterRow = (() => {
               index,
               sig,
             })),
-            sig: NONE,
+            sig: updTag,
           }
         : { index: x.index, members: [], sig: x.sign(ua.uaMessage(x.kind, MEMBER, md)) },
     ),
@@ -1338,6 +1342,9 @@ const msigUpdated = {
     updAuth("authorized-by-current-quorum", updNow),
     updAuth("refused-with-disabled-slot", updOld),
     updOuterRow,
+    // CTR-UA-74: the current quorum under the tag of version 0 (none): the first structure, where the appended signer is no slot
+    updRecord("pqz-key-by-current-quorum-without-tag", updNow, 0, new Uint8Array(0)),
+    updAuth("authorized-by-current-quorum-without-tag", updNow, new Uint8Array(0)),
   ],
 };
 
@@ -1373,7 +1380,7 @@ const updScoped = (name, who, scope, error, openKem = new Uint8Array(0)) => {
     validUntilBlock: 1000,
     recordDigest: hex(recordDigest),
     memberDigest: hex(md),
-    sig: hex(encodeMemberSigs(updList(md, recordDigest, sortSlots(who)))),
+    sig: hex(concatBytes(encodeMemberSigs(updList(md, recordDigest, sortSlots(who))), updTag)),
     ...(error ? { error } : {}),
   };
 };
@@ -1471,7 +1478,10 @@ const note = [
     "msigUpdated (CTR-UA-44): the msig-update record after disable-append, every slot accepted: keyData its first structure (the id), current " +
     "msigOf's bytes, enabled msigStateOf's; each row a record check that reads the current structure (setPqzKey v0 / v1, acceptMembership of " +
     "the appended slot, requireAuthorized in context A, the registration of an outer whose pop names the msig), valid or refused UAUnauthorized; " +
-    "a member is accepted iff enabled. msigScopedKeyRecords (K3-3, CTR-UA-43 with CTR-UA-44): setPqzScopedKey(ua, scope, version, pqzKey, pqzPopHash, " +
+    "a member is accepted iff enabled. CTR-UA-74: the msig is at version 1 (version), so a stored signature (setPqzKey, setPqzScopedKey sig) " +
+    "is abi.encode(MemberSig[]) followed by the 8-byte big-endian tag, a requireAuthorized row's signature (UASig.signature) is the tag and " +
+    "an msig member slot's sig (the outer's pop) its member's tag; a reader judges each row at the version its tag names (msigAt), and the " +
+    "rows without-tag name version 0, the first structure, refused. msigScopedKeyRecords (K3-3, CTR-UA-43 with CTR-UA-44): setPqzScopedKey(ua, scope, version, pqzKey, pqzPopHash, " +
     "openKem, validUntilBlock, sig) of the same updated msig on the registry of context A: recordDigest = typed(UAPqzScopedKeyRecord{ua, keyClass " +
     "(2 at scope 0, else 3), chainUid, token = scope, version, pqzKeyHash, pqzPopHash, openKemHash = keccak256(openKem) (0: openKem empty), validUntilBlock}), sig by the " +
     "current slots over ua_msg(0x0120, pqz-scoped-key, recordDigest) as msigUpdated's; valid without error, else refused with error (scope 0: " +

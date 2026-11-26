@@ -10,6 +10,9 @@
     clippy::expect_used,
     clippy::panic
 )]
+#[path = "common/prepared.rs"]
+mod prepared;
+use prepared::SignPrepared as _;
 use scaas_sdk::app_core::{AppCore, AppDesc, AppKeyUsage, AppNonce, AppPath};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::vault::{ImportWords, MemoryStore};
@@ -294,6 +297,80 @@ fn record(domain: serde_json::Value) -> String {
         "message": {"id": format!("0x{}", "11".repeat(32)), "body": "hello"},
     })
     .to_string()
+}
+
+/// T26 B-17: `read_app` is a read that feeds a decryption by default (a list of discovered nodes only: `NoTrustedEndpoint`,
+/// nothing asked); `read_app_plain` the plain read (the control: answered from that list).
+#[tokio::test(flavor = "multi_thread")]
+async fn read_app_feeds_decryption_by_default() {
+    let (s, _seed, chain) = on_fake(None, scaas_rpc::Class::Discovered).await;
+    let a = AppCore::new(s, desc(Some(APP_ID), &["scaas/rdap/v1/"])).unwrap();
+    let entry =
+        json!({"type": "function", "name": "generation", "stateMutability": "view", "inputs": [],
+        "outputs": [{"name": "g", "type": "uint256"}]})
+        .to_string();
+    let read = |plain: bool| {
+        let (a, entry) = (a.clone(), entry.clone());
+        async move {
+            let (c, k) = ("local".to_string(), APP_CONTRACT.to_string());
+            if plain {
+                a.read_app_plain(c, k, entry, "{}".into()).await
+            } else {
+                a.read_app(c, k, entry, "{}".into()).await
+            }
+        }
+    };
+    assert_eq!(code(read(false).await), "NoTrustedEndpoint");
+    assert!(!chain
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .any(|r| r.contains(&sel("generation()")[2..]) && r.contains("eth_call")));
+    assert_eq!(read(true).await.unwrap(), r#"{"g":"1"}"#);
+}
+
+/// T26 A-5: an app record is prepared (its review and digest, nothing signed) and signed apart; the review is the SDK's from
+/// the parsed typed data, so a typed-data text holding `message` twice shows the value that is signed.
+#[tokio::test(flavor = "multi_thread")]
+async fn app_record_reviewed_before_signed() {
+    let (s, seed) = sdk().await;
+    let a = AppCore::new(s.clone(), desc(Some(APP_ID), &["scaas/appr/v1/"])).unwrap();
+    let key = ua(&seed, 0x0108);
+    let pa = record(json!({"name": "My App", "version": "1", "salt": APP_ID}));
+    // control: the review before the signature, the signature over the reviewed digest
+    let p = a
+        .prepare_app_record(key.clone(), AppPath::Portable, pa.clone())
+        .await
+        .unwrap();
+    let body = |r: &[scaas_sdk::op::ReviewField]| {
+        r.iter()
+            .find(|f| f.name == "message.body")
+            .map(|f| f.value.clone())
+    };
+    assert_eq!(body(&p.review).as_deref(), Some("hello"));
+    let digest = p.digest.clone();
+    let signed = p.sign().await.unwrap();
+    assert_eq!(signed.digest, digest);
+    // a second `message` key before the real one: the review shows the one signed, never the first text
+    let dup = pa.replacen(
+        "\"message\":",
+        "\"message\":{\"id\":\"0x2222222222222222222222222222222222222222222222222222222222222222\",\"body\":\"shown?\"},\"message\":",
+        1,
+    );
+    assert_ne!(dup, pa);
+    if let Ok(q) = a
+        .prepare_app_record(key.clone(), AppPath::Portable, dup)
+        .await
+    {
+        let shown = body(&q.review);
+        let d = q.digest.clone();
+        let s2 = q.sign().await.unwrap();
+        assert_eq!(s2.digest, d);
+        // the parsed record is the one reviewed and the one signed
+        assert_eq!(shown.as_deref(), Some("hello"));
+        assert_eq!(d, digest);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -762,15 +839,24 @@ async fn verify_app_record_reads_the_registry() {
         !verify(nid, AppPath::Portable, pa.clone(), sn.clone()).await,
         "no portable record"
     );
+    // F2 (owner 2026-11-23): the domain comes from the line; a generation 1 naming a predecessor is no line (the read
+    // fails, never a guessed domain); a generation 2 the registry's own at generation 2, which the signature (made at
+    // generation 1) does not verify in
     answer(&chain, REGISTRY, "predecessor()", &[], w(1));
     assert_eq!(
         code(
-            a.verify_app_record("local".into(), hx(&nid), b(), cb.clone(), sn)
+            a.verify_app_record("local".into(), hx(&nid), b(), cb.clone(), sn.clone())
                 .await
         ),
-        "Argument",
-        "a registry of another generation"
+        "EndpointAllFailed",
+        "a line that is not consecutive"
     );
+    answer(&chain, REGISTRY, "generation()", &[], w(2));
+    assert!(
+        !verify(nid, b(), cb.clone(), sn).await,
+        "generation 2's domain, not generation 1's"
+    );
+    answer(&chain, REGISTRY, "generation()", &[], w(1));
     answer(&chain, REGISTRY, "predecessor()", &[], w(0));
 
     // an msig {k1, native}, threshold 2, both slots accepted
@@ -804,18 +890,20 @@ async fn verify_app_record_reads_the_registry() {
         .try_into()
         .unwrap();
     let ptd = scaas_ua::wallet::TypedData::from_json(pa.as_bytes()).unwrap();
-    let ma =
-        scaas_ua::wallet::msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &ptd, &slots).unwrap();
+    let ma = scaas_ua::wallet::msig_sig_app(&kd, &|_, _| None, &|_| None, &app_id, &ptd, &slots)
+        .unwrap();
     assert!(verify(ms, AppPath::Portable, pa.clone(), app_sig(&ma)).await);
     state_answer(&chain, &ms, 0b11, 1 << i1);
     assert!(
         !verify(ms, AppPath::Portable, pa.clone(), app_sig(&ma)).await,
         "a slot not accepted"
     );
+    // CTR-UA-74: at version 0 every slot is enabled (the registration's structure), whatever the enabled word says; a slot
+    // disabled at a later version is refused there (below)
     state_answer(&chain, &ms, 1 << i1, 0b11);
     assert!(
-        !verify(ms, AppPath::Portable, pa.clone(), app_sig(&ma)).await,
-        "a slot not enabled"
+        verify(ms, AppPath::Portable, pa.clone(), app_sig(&ma)).await,
+        "version 0 reads no enabled word"
     );
     state_answer(&chain, &ms, 0b11, 0b11);
     reg_answer(&chain, &id1, 0, &[]);
@@ -877,6 +965,93 @@ async fn verify_app_record_reads_the_registry() {
         !verify(ms, b(), cb.clone(), one).await,
         "below the threshold"
     );
+
+    // CTR-UA-74 (F-1b): ms updated twice on its registry, version 1 the same slots at threshold 1, version 2 (current) the native
+    // slot disabled. A record kept at version 0 (no tag, both slots) verifies by the first structure; one at version 1 (k1 alone,
+    // its tag) by `msigAt(ms, 1)`, read beside the records; a tag naming version 3 is refused
+    let structure = |t: u64| {
+        let items: String = m
+            .iter()
+            .map(|(k, id, wt)| format!("{}{}{}", w(u64::from(*k)), hexs(id), w(u64::from(*wt))))
+            .collect();
+        format!("{}{}{}{}", w(t), w(0x40), w(m.len() as u64), items)
+    };
+    answer(
+        &chain,
+        REGISTRY,
+        "msigOf(bytes32)",
+        &ms,
+        format!("{}{}", w(0x20), structure(1)),
+    );
+    answer(
+        &chain,
+        REGISTRY,
+        "msigStateOf(bytes32)",
+        &ms,
+        format!("{}{}{}", w(2), w(1 << i1), w(0b11)),
+    );
+    answer(
+        &chain,
+        REGISTRY,
+        "msigAt(bytes32,uint64)",
+        &[&ms[..], &word32(1)].concat(),
+        format!("{}{}{}", w(0x40), w(0b11), structure(1)),
+    );
+    assert!(
+        verify(ms, AppPath::Portable, pa.clone(), app_sig(&ma)).await,
+        "a single record alone (no chain) kept at version 0: the first structure, the native slot disabled since"
+    );
+    let v1 = scaas_ua::encode_msig(1, &m);
+    let at1 = |id: [u8; 32], _: Option<u64>| (id == ms).then(|| (v1.clone(), [0xff; 32], 1));
+    let k1_slot = [scaas_ua::wallet::Slot::Member {
+        index: i1,
+        key: &k1,
+    }];
+    let m1 = scaas_ua::wallet::msig_sig_app(&kd, &at1, &|_| None, &app_id, &ptd, &k1_slot).unwrap();
+    assert_eq!(m1.signature, 1u64.to_be_bytes(), "the tag of version 1");
+    assert!(
+        verify(ms, AppPath::Portable, pa.clone(), app_sig(&m1)).await,
+        "kept at version 1: msigAt(ms, 1)"
+    );
+    // C-3, R-2 (CTR-UA-74 step 6): along one chain the record at version 0 after the one at version 1 is refused, though each
+    // verifies alone; the versions as the tags name them, the order kept by `msig_versions_up` (pqchat-core's walk, pqvault-core)
+    let named = |s: &scaas_ua::ua_portable::UASig| {
+        vec![scaas_sdk::app_core::MsigVersion {
+            msig: hx(&ms),
+            version: scaas_ua::ua_portable::tag_version(&s.signature).unwrap(),
+        }]
+    };
+    let mut seen = std::collections::BTreeMap::new();
+    assert!(scaas_sdk::app_core::msig_versions_up(
+        &mut seen,
+        &named(&ma)
+    ));
+    assert!(scaas_sdk::app_core::msig_versions_up(
+        &mut seen,
+        &named(&m1)
+    ));
+    assert!(
+        !scaas_sdk::app_core::msig_versions_up(&mut seen, &named(&ma)),
+        "along a chain: version 0 after version 1 refused"
+    );
+    assert_eq!(seen[&hx(&ms)], 1, "a refusal leaves the versions seen");
+    let mut m3 = app_sig(&m1);
+    m3.signature = 3u64.to_be_bytes().to_vec();
+    assert!(
+        !verify(ms, AppPath::Portable, pa.clone(), m3).await,
+        "a version never stored"
+    );
+    // the native slot alone: enabled at version 1, disabled at version 2 (the current one)
+    let mut native_only = app_sig(&ma);
+    native_only.members.retain(|x| x.index == i_n);
+    for (v, ok) in [(1u64, true), (2, false)] {
+        native_only.signature = v.to_be_bytes().to_vec();
+        assert_eq!(
+            verify(ms, AppPath::Portable, pa.clone(), native_only.clone()).await,
+            ok,
+            "the native slot at version {v}"
+        );
+    }
 }
 
 /// Spec §12.4: a chain-bound domain's `verifyingContract` made by the profile's factory is refused unless of the scope's class
@@ -923,6 +1098,16 @@ async fn factory_instance_of_another_class_refused() {
     answer(&chain, FACTORY, "infoOf(address)", &c, info(0));
     assert_eq!(sign(&a).await, "Ok");
     assert_eq!(sign(&none).await, "Ok");
+    // T26 A-10: the class is read at the profile's final block, never the head: a head answering another class is not read
+    answer(&chain, FACTORY, "infoOf(address)", &c, info(7));
+    {
+        let mut ch = chain.lock().unwrap();
+        ch.head = ch.finalized + 4;
+        let prefix = format!("{}{}", sel("infoOf(address)"), hexs(&c));
+        ch.head_answers
+            .push((FACTORY.into(), prefix, format!("0x{}", info(3))));
+    }
+    assert_eq!(sign(&a).await, "Ok");
 }
 
 alloy::sol! {
@@ -1156,4 +1341,40 @@ async fn scope_after_lock_and_unlock() {
         code(a.mac_derive(k, vec![1], AppKeyUsage::Derive)),
         "KeyRevoked" | "AppHandleForeign"
     ));
+}
+
+/// Owner ruling A-3 (2026-11-23), review T26 A-3 (b): the app root and its derivations never leave, by any path: neither
+/// `seal_key` nor a KEM wrap to a key the caller chose (`AppKeyRooted`), the root and a key derived from it alike. The twin
+/// the ruling keeps: a drawn key (an epoch, vault or file key) wraps to a caller's KEM key for an offline recipient.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_app_root_never_leaves_by_a_kem_wrap() {
+    let (s, seed) = sdk().await;
+    let a = AppCore::new(s.clone(), desc(Some(APP_ID), &["scaas/appc/v1/"])).unwrap();
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let kem_pk = w.ua_key(0x0131, 0, 0).unwrap().kem_key(0).unwrap().kem_pk();
+    let label = b"scaas/appc/v1/wrap".to_vec();
+    let root = a.app_root_key(ua(&seed, 0x0108)).unwrap();
+    let child = a
+        .derive(
+            vec![root.clone()],
+            vec![],
+            label.clone(),
+            b"c".to_vec(),
+            AppKeyUsage::Derive,
+            false,
+        )
+        .unwrap();
+    for (what, k) in [("root", root), ("derived", child)] {
+        assert_eq!(
+            code(a.kem_wrap_to_key(kem_pk.clone(), k, label.clone(), b"ctx".to_vec())),
+            "AppKeyRooted",
+            "{what}"
+        );
+    }
+    let epoch = a.random_key(&seed, AppKeyUsage::Derive).unwrap();
+    assert!(
+        a.kem_wrap_to_key(kem_pk, epoch, label, b"ctx".to_vec())
+            .is_ok(),
+        "a drawn key wraps to a caller's KEM key"
+    );
 }

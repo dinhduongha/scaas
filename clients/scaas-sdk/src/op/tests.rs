@@ -228,7 +228,7 @@ fn gas_rows(g: u64) -> crate::GasRows {
             per_item: None,
         })
         .to_vec();
-    crate::GasRows { base, verify }
+    crate::op::gas::with_tx(crate::GasRows { base, verify })
 }
 
 fn ua() -> String {
@@ -537,6 +537,77 @@ async fn fee_zero_is_kept() {
             || row.op_json.to_string().contains("\"fee\":0"),
         "{}",
         row.op_json
+    );
+}
+
+/// T26 B2-1: on an `InEstimate` chain (Arbitrum) a table-quoted self-relay's gas limit is its figure (`gas`) plus
+/// `NodeInterface.gasEstimateL1Component` over its calldata, with the margin, and `max_cost` counts it; without the model no
+/// read and the gas limit is the figure (the control).
+#[tokio::test(flavor = "multi_thread")]
+async fn in_estimate_adds_the_l1_component() {
+    for model in [None, Some(crate::L1Fee::InEstimate)] {
+        let t = setup(0, |pr, _| pr.l1_fee = model).await;
+        t.chain.lock().unwrap().answers.push((
+            "0x00000000000000000000000000000000000000c8".into(),
+            "0x77d488a2".into(),
+            format!("0x{:064x}{:064x}{:064x}", 7_000, 1, 1),
+        ));
+        let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+        let path = SubmitPath::SelfRelay { payer: payer(&t) };
+        let q = t.sdk.op().quote(p.clone(), path).await.unwrap();
+        let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+        let own = gas::with_margin(100_000 + 21_000 + 64 * len);
+        assert_eq!(q.gas, Some(own), "{model:?}");
+        let l1 = model.map_or(0, |_| gas::with_margin(7_000));
+        assert_eq!(q.gas_limit, own + l1, "{model:?}");
+        let fee: u128 = q.max_fee_per_gas.parse().unwrap();
+        assert_eq!(q.max_cost, (u128::from(q.gas_limit) * fee).to_string());
+        let reads = t
+            .chain
+            .lock()
+            .unwrap()
+            .requests
+            .iter()
+            .filter(|r| r.contains("0x77d488a2"))
+            .count();
+        assert_eq!(reads > 0, model.is_some(), "{model:?}");
+    }
+}
+
+/// T26 B2-1: the transaction's own gas is table data: a profile whose tables carry no transaction row quotes nothing
+/// (`GasUnquoted`; a gateway quote `gas: None`), the control with it quotes.
+#[tokio::test(flavor = "multi_thread")]
+async fn no_transaction_row_no_figure() {
+    let t = setup(0, |pr, _| pr.gas.base.retain(|b| b.entry != gas::TX_ENTRY)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t) };
+    assert_eq!(code(t.sdk.op().quote(p, path.clone()).await), "GasUnquoted");
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t) };
+    assert!(t.sdk.op().quote(p, path).await.is_ok(), "control");
+    // an app's own figure (an operation with no row of its own) without the transaction row: no figure either, never one on a
+    // made-up transaction cost; the control with the row
+    let key = ("mtxPay", "token", 0x0101, false);
+    let plain = &gas::OpGas::PLAIN;
+    let none = crate::GasRows::default();
+    assert_eq!(
+        gas::quoted(&none, &[], &[], Some(9), key, 10, plain).unwrap(),
+        None
+    );
+    let with = gas::with_tx(crate::GasRows::default());
+    assert!(gas::quoted(&with, &[], &[], Some(9), key, 10, plain)
+        .unwrap()
+        .is_some());
+    // a gateway quote too: the operation's row alone gives no figure (`gas: None`), never one on a made-up transaction cost
+    let t = setup(1, |pr, _| pr.gas.base.retain(|b| b.entry != gas::TX_ENTRY)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert_eq!(gateway_quote(&t, &p).await.gas, None, "no transaction row");
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert!(
+        gateway_quote(&t, &p).await.gas.is_some(),
+        "control: with it"
     );
 }
 
@@ -1009,7 +1080,9 @@ async fn all_gateways_dead_is_in_flight() {
     t.chain.lock().unwrap().nonces.insert(TOKEN.into(), 1);
     assert_eq!(
         t.sdk.op().state(spent).await.unwrap(),
-        OpState::Consumed,
+        OpState::Consumed {
+            basis: crate::events::Basis::OneEndpoint
+        },
         "the nonce spent without the event"
     );
     t.chain.lock().unwrap().nonces.insert(TOKEN.into(), 0);
@@ -1017,7 +1090,9 @@ async fn all_gateways_dead_is_in_flight() {
     t.chain.lock().unwrap().timestamp += 7200;
     assert_eq!(
         t.sdk.op().state(late).await.unwrap(),
-        OpState::Expired,
+        OpState::Expired {
+            basis: crate::events::Basis::OneEndpoint
+        },
         "validUntil passed, the nonce unspent"
     );
     {
@@ -1128,7 +1203,10 @@ async fn cancel_nonce_ends_it() {
     let q = gateway_quote(&t, &p).await;
     t.sdk.op().submit(p, q).await.unwrap();
     bodies(&t, 2).await;
-    assert_eq!(t.sdk.op().state(first).await.unwrap(), OpState::Consumed);
+    assert!(matches!(
+        t.sdk.op().state(first).await.unwrap(),
+        OpState::Consumed { .. }
+    ));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1241,7 +1319,8 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
     let only = |signer: u16, fresh: bool| {
         move |p: &mut ChainProfile, _: &mut Limits| {
             let mut g = gas_rows(100_000);
-            g.base.retain(|r| r.fresh == fresh);
+            g.base
+                .retain(|r| r.fresh == fresh || r.entry == gas::TX_ENTRY);
             g.verify.retain(|r| r.signer == signer);
             p.gas = g;
         }
@@ -1489,7 +1568,8 @@ async fn quote_names_its_gas_source_in_order() {
     let src = |opt: &'static [&'static str], chain: bool| {
         move |p: &mut ChainProfile, _: &mut Limits| {
             if !chain {
-                p.gas = Default::default();
+                // the chain's transaction row only (T26 B2-1: the transaction's own gas is data, the app's figure its execution)
+                p.gas = gas::with_tx(Default::default());
             }
             p.gas_opt_in = opt.iter().map(|s| s.to_string()).collect();
         }
@@ -1706,6 +1786,67 @@ async fn from_block_is_the_final_block_at_submit() {
     }
     let s = t.sdk.op().state(op).await.unwrap();
     assert!(matches!(s, OpState::Landed { block: 0x1c, .. }), "{s:?}");
+}
+
+/// T26 B-13: a poll scans only the blocks after the last decisive read at the final block that found no event; the event
+/// in a later block still lands the operation. Control: the first poll scans from the row's `from_block`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_poll_scans_only_the_blocks_after_the_last() {
+    let t = setup(1, |_, _| {}).await;
+    t.chain.lock().unwrap().finalized = 0x18;
+    let (op, digest) = submitted(&t, "token", TOKEN, "5").await;
+    let from = |c: &Fake| -> Vec<String> {
+        c.lock()
+            .unwrap()
+            .requests
+            .iter()
+            .filter_map(|r| serde_json::from_str::<Value>(r).ok())
+            .filter(|r| r["method"] == "eth_getLogs")
+            .map(|r| {
+                r["params"][0]["fromBlock"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string()
+            })
+            .collect()
+    };
+    t.chain.lock().unwrap().finalized = 0x20;
+    t.chain.lock().unwrap().requests.clear();
+    let s = t.sdk.op().state(op.clone()).await.unwrap();
+    assert!(!s.is_terminal(), "{s:?}");
+    assert_eq!(
+        from(&t.chain),
+        ["0x18"],
+        "control: the first poll from the row's from_block"
+    );
+    {
+        let mut c = t.chain.lock().unwrap();
+        c.requests.clear();
+        c.logs.push(executed_log(TOKEN, &digest, 0x1c, false));
+        c.head = 0x30;
+        c.finalized = 0x28;
+    }
+    let s = t.sdk.op().state(op.clone()).await.unwrap();
+    assert_eq!(
+        from(&t.chain),
+        ["0x21"],
+        "the second poll after the blocks already read"
+    );
+    assert!(
+        !s.is_terminal(),
+        "an event in a block already read is not looked for again: {s:?}"
+    );
+    {
+        let mut c = t.chain.lock().unwrap();
+        c.logs.push(executed_log(TOKEN, &digest, 0x2c, false));
+        c.nonces.insert(TOKEN.into(), 1);
+        c.finalized = 0x30;
+    }
+    let s = t.sdk.op().state(op).await.unwrap();
+    assert!(
+        matches!(s, OpState::Landed { block: 0x2c, .. }),
+        "a later block's event: {s:?}"
+    );
 }
 
 /// P3: one `Prepared`, two concurrent `submit`s: one signs and writes, the other is `PreparedUnknown`.
@@ -2042,7 +2183,10 @@ async fn retry_on_a_lane_waits_for_expired() {
     let q = gateway_quote(&t, &p).await;
     let second = t.sdk.op().submit(p, q).await.unwrap();
     assert_ne!(second, first);
-    assert_eq!(t.sdk.op().state(first).await.unwrap(), OpState::Expired);
+    assert!(matches!(
+        t.sdk.op().state(first).await.unwrap(),
+        OpState::Expired { .. }
+    ));
     assert_eq!(signs(&t), 2);
 }
 
@@ -3170,10 +3314,57 @@ async fn bls_multi_register_quote_by_n() {
         .collect();
     big.sdk
         .op()
-        .register_bls_multi("local".into(), d64, parts, q)
+        .register_bls_multi("local".into(), d64.clone(), parts, q)
         .await
         .unwrap();
     sent_txs(&big, 1).await;
+    // T26 B2-3: a chain without a per-transaction cap holds the registration to half its block gas limit, at the quote and at
+    // `register_bls_multi`, before anything is signed; the control above (200 M, a cap of 2^24) sent it
+    let uncapped = setup(0, |p, l| {
+        p.registry = Some(REGISTRY.into());
+        p.gas_opt_in = vec![gas::REFERENCE.into()];
+        p.tx_gas_cap = None;
+        l.max_gas = 1 << 26;
+    })
+    .await;
+    uncapped.chain.lock().unwrap().block_gas_limit = 200_000_000;
+    let q = uncapped
+        .sdk
+        .op()
+        .quote_register_bls_multi("local".into(), d64.clone(), payer(&uncapped))
+        .await
+        .unwrap();
+    let half = q.gas_limit * 2 - 2;
+    uncapped.chain.lock().unwrap().block_gas_limit = half;
+    assert_eq!(
+        code(
+            uncapped
+                .sdk
+                .op()
+                .quote_register_bls_multi("local".into(), d64.clone(), payer(&uncapped))
+                .await
+        ),
+        "GasAboveBlockShare"
+    );
+    let parts: Vec<_> = (0..64)
+        .map(|a| {
+            uncapped
+                .sdk
+                .op()
+                .bls_multi_pop_part(bls_member(&uncapped, &d64, a))
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(
+        code(
+            uncapped
+                .sdk
+                .op()
+                .register_bls_multi("local".into(), d64.clone(), parts, q)
+                .await
+        ),
+        "GasAboveBlockShare"
+    );
     let (d, _) = bls_group(&[0, 1], 2);
     let none = setup(0, |p, _| p.gas_opt_in = vec![gas::REFERENCE.into()]).await;
     assert_eq!(
@@ -3335,4 +3526,308 @@ async fn bls_multi_register_sends_the_pop() {
         assert_eq!(c.pop.to_vec(), h(&a["pop"]));
         assert!(c.pqzPop.is_empty() && c.attrs.pqzKey.is_empty() && c.attrs.kem.mlkemEk.is_empty());
     }
+}
+
+/// A URL nothing listens on (connection refused).
+fn closed_url() -> String {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = l.local_addr().unwrap().port();
+    drop(l);
+    format!("http://127.0.0.1:{port}")
+}
+
+/// Waits (≤ 5 s) until row `op` has the state `want`.
+async fn row_state(sdk: &Arc<Sdk>, op: &str, want: &str) -> state::Row {
+    for _ in 0..100 {
+        let r = state::row(sdk, op).await.unwrap();
+        if r.state == want && !r.detail.is_empty() {
+            return r;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    state::row(sdk, op).await.unwrap()
+}
+
+/// Review T26 B-5 (spec §13.3): `resend` of a self-relayed operation on the gateway path posts its operation to the gateways;
+/// it never broadcasts the old transaction again. The twin: `resend` on its own path sends the same transaction
+/// (`write_ahead_then_send`).
+#[tokio::test(flavor = "multi_thread")]
+async fn resend_of_a_self_relay_to_the_gateways_posts_to_them() {
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    let g = gateway_quote(&t, &p).await;
+    let op = t.sdk.op().submit(p, q).await.unwrap();
+    sent_txs(&t, 1).await;
+    row_state(&t.sdk, &op, "sent").await;
+    t.sdk.op().resend(op.clone(), g).await.unwrap();
+    assert_eq!(bodies(&t, 1).await.len(), 1, "posted to the gateway");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(t.chain.lock().unwrap().sent.len(), 1, "no second broadcast");
+    assert_eq!(state::row(&t.sdk, &op).await.unwrap().path, "gateway");
+}
+
+/// Review T26 B-6 (CLI-RPC-09, spec §13.4): a send nothing accepted is not `sent`. Every gateway unreachable keeps the row
+/// `signed`, so `resume` posts it again; every gateway refusing is `sent` with `GivenUpByEveryNode` (the twin,
+/// `submit_returns_after_the_row_write`).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_post_no_gateway_took_stays_signed() {
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = gateway_quote(&t, &p).await;
+    t.chain.lock().unwrap().gw = Gw::Down;
+    let op = t.sdk.op().submit(p, q).await.unwrap();
+    bodies(&t, 1).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let row = state::row(&t.sdk, &op).await.unwrap();
+    assert_eq!(row.state, "signed", "nothing accepted: {}", row.detail);
+    t.chain.lock().unwrap().gw = Gw::Queue;
+    assert_eq!(t.sdk.op().resume().await.unwrap(), 1);
+    assert_eq!(bodies(&t, 2).await.len(), 2, "the same body again");
+    assert_eq!(state::row(&t.sdk, &op).await.unwrap().state, "sent");
+}
+
+/// Review T26 B-6: a simulation that fails in transport is no `SimRefused` (which only the user's `resend` sends again): the
+/// row stays `signed` and the next `resume` sends it. A revert stays `SimRefused` (the twin, `sim_refused_is_written_and_followed`).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_simulation_down_in_transport_is_sent_at_the_next_resume() {
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    t.store.fail_sent.store(true, SeqCst);
+    let op = t.sdk.op().submit(p, q).await.unwrap();
+    sent_txs(&t, 1).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    t.store.fail_sent.store(false, SeqCst);
+    t.chain.lock().unwrap().sim_down = true;
+    let again = open(t.store.clone(), t.profile.clone(), Limits::default()).await;
+    assert_eq!(again.op().resume().await.unwrap(), 1);
+    let row = state::row(&again, &op).await.unwrap();
+    assert_eq!(
+        (row.state.as_str(), row.detail != "SimRefused"),
+        ("signed", true),
+        "{}",
+        row.detail
+    );
+    t.chain.lock().unwrap().sim_down = false;
+    assert_eq!(
+        again.op().resume().await.unwrap(),
+        1,
+        "sent at the next resume"
+    );
+    assert_eq!(sent_txs(&t, 2).await.len(), 2);
+    assert_eq!(state::row(&again, &op).await.unwrap().state, "sent");
+}
+
+/// Review T26 B-8 (spec §13.4): `Op::resume` sends only rows of an EVM profile; a row of another family (a Soroban row cut
+/// between its write-ahead and its send) is left as it is, never marked `sent`. The twin: an EVM row is sent
+/// (`write_ahead_then_send`).
+#[tokio::test(flavor = "multi_thread")]
+async fn resume_leaves_another_familys_row() {
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    t.store.fail_sent.store(true, SeqCst);
+    let op = t.sdk.op().submit(p, q).await.unwrap();
+    sent_txs(&t, 1).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    t.store.fail_sent.store(false, SeqCst);
+    let mut other = state::row(&t.sdk, &op).await.unwrap();
+    other.op = "sor-0001".into();
+    other.chain = "soroban-local".into();
+    other.name = "soroban".into();
+    state::put(&t.sdk, &other).await.unwrap();
+    let again = open(t.store.clone(), t.profile.clone(), Limits::default()).await;
+    assert_eq!(again.op().resume().await.unwrap(), 1, "the EVM row only");
+    let r = state::row(&again, "sor-0001").await.unwrap();
+    assert_eq!(
+        (r.state.as_str(), r.detail.as_str()),
+        ("signed", other.detail.as_str())
+    );
+}
+
+/// Review T26 B-7 (ARCH-POS-15, spec §4: a source that differs is not used): a gateway that cannot be read, or announces
+/// another `chain_uid`, is left out; the quote names the others and the operation is posted to them only. None left:
+/// refused. The twin: two good gateways both take it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_gateway_down_or_of_another_chain_is_left_out() {
+    let wrong = fake();
+    wrong.lock().unwrap().gw_info["chains"][0]["chain_uid"] =
+        format!("0x{}", "61".repeat(32)).into();
+    let wrong_url = serve(wrong.clone()).await;
+    let down = closed_url();
+    let (w2, d2) = (wrong_url.clone(), down.clone());
+    let t = setup(1, move |p, _| {
+        p.gateways.push(endpoint(&d2));
+        p.gateways.push(endpoint(&w2));
+    })
+    .await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = gateway_quote(&t, &p).await;
+    assert_eq!(q.gateways, vec![0], "the good one only");
+    t.sdk.op().submit(p, q).await.unwrap();
+    assert_eq!(bodies(&t, 1).await.len(), 1);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        wrong.lock().unwrap().bodies.is_empty(),
+        "nothing to another chain's gateway"
+    );
+    // none left: refused, by the last reason
+    let (w3, d3) = (wrong_url, down);
+    let t = setup(0, move |p, _| {
+        p.gateways.push(endpoint(&d3));
+        p.gateways.push(endpoint(&w3));
+    })
+    .await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert_eq!(
+        code(t.sdk.op().quote(p, SubmitPath::Gateway).await),
+        "ProfileMismatch"
+    );
+    // the twin: two good gateways
+    let t = setup(2, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert_eq!(gateway_quote(&t, &p).await.gateways, vec![0, 1]);
+}
+
+/// Review T26 B-11 (CLI-RPC-09, owner 2026-11-17, T13 S7): under `strict_majority` a relayed operation's failed-for-good
+/// (`Consumed`, `Expired`) rests on the agreed read at the `finalized` block; a profile whose final block is a depth reads the
+/// finalized block again when its own read shows one. The nonce spent at the depth's block but not at `finalized`: in
+/// flight; spent at `finalized` too: `Consumed`. The twin under `failover` ends at the depth (one endpoint's basis).
+#[tokio::test(flavor = "multi_thread")]
+async fn strict_majority_ends_a_failed_operation_at_the_finalized_block() {
+    for (policy, spent_from, want) in [
+        (scaas_rpc::Policy::StrictMajority, 0x25, None),
+        (
+            scaas_rpc::Policy::StrictMajority,
+            0x10,
+            Some(OpState::Consumed {
+                basis: crate::events::Basis::Majority,
+            }),
+        ),
+        (
+            scaas_rpc::Policy::Failover,
+            0x25,
+            Some(OpState::Consumed {
+                basis: crate::events::Basis::OneEndpoint,
+            }),
+        ),
+    ] {
+        let t = setup(1, move |p, _| {
+            p.finality = Finality::Depth(1);
+            if policy == scaas_rpc::Policy::StrictMajority {
+                p.rpc.push(p.rpc[0].clone());
+                p.rpc[1].url.push_str("/second");
+            }
+            p.rpc_policy = policy;
+        })
+        .await;
+        {
+            let mut c = t.chain.lock().unwrap();
+            c.head = 0x30;
+            c.finalized = 0x20;
+        }
+        let (op, _) = submitted(&t, "token", TOKEN, "5").await;
+        {
+            let mut c = t.chain.lock().unwrap();
+            c.nonces.insert(TOKEN.into(), 1);
+            c.nonces_from = spent_from;
+        }
+        let s = t.sdk.op().state(op).await.unwrap();
+        match want {
+            Some(w) => assert_eq!(s, w, "{policy:?} {spent_from:#x}"),
+            None => assert!(matches!(s, OpState::InFlight { .. }), "{policy:?}: {s:?}"),
+        }
+    }
+}
+
+/// Review D-1 (G1, CTR-GOV-33): a router op of a derived id is followed on the map the router checks it on, `mtxNonceFor`, as
+/// prepare and submit read it. A UA administering targets of two generations: the router's one map (`mtxNonce`) at 5, the
+/// target's keyed map at 0. The op signed at keyed nonce 0 stays in flight while the keyed map is at 0, whatever the one map
+/// says, and is `Consumed` once the keyed map passes it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_router_ops_follow_reads_the_target_keyed_nonce() {
+    let t = setup(0, |_, _| {}).await;
+    let (router, target) = (OTHER, "0x5ca00000000000000000000000000000000000f6");
+    t.chain.lock().unwrap().nonces.insert(router.into(), 5);
+    let until = t.chain.lock().unwrap().timestamp + 3600;
+    let mut d = cancel(&t, "gov_router", router, "5", "0");
+    d.name = "UACancelNonceFor";
+    d.message = json!({"from": ua(), "target": target, "lane": "5", "batch": "7", "validUntil": until.to_string(),
+        "mode": 0, "relayer": ZERO, "fee": "0", "feeRecipient": ZERO});
+    let p = prepare(&t, d).await;
+    assert_eq!(
+        p.t.message["nonce"],
+        json!("0"),
+        "prepare read the keyed map"
+    );
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    let op = t.sdk.op().submit(p, q).await.unwrap();
+    assert!(
+        matches!(
+            t.sdk.op().state(op.clone()).await.unwrap(),
+            OpState::InFlight { .. }
+        ),
+        "the keyed map still at the op's nonce: in flight, the one map's 5 is another map's"
+    );
+    t.chain.lock().unwrap().nonces_for.insert(router.into(), 1);
+    assert_eq!(
+        t.sdk.op().state(op).await.unwrap(),
+        OpState::Consumed {
+            basis: crate::events::Basis::OneEndpoint
+        },
+        "the keyed map past it"
+    );
+}
+
+/// G1 (CTR-GOV-33): a router op of a derived id reads `mtxNonceFor(target, from, lane)`; a native id, another kind or no target
+/// `mtxNonce(bytes32,uint256)`.
+#[test]
+fn a_router_ops_derived_lane_reads_the_target_keyed_nonce() {
+    let sel = |s: &[u8]| scaas_ua::keccak256(s)[..4].to_vec();
+    let (derived, native, t) = (
+        [0xd1u8; 32],
+        [[0u8; 12].as_slice(), &[0xa1u8; 20]].concat(),
+        [0x70u8; 20],
+    );
+    let d = super::nonce_call("gov_router", &derived, U256::from(3), Some(t));
+    assert_eq!(d[..4], sel(b"mtxNonceFor(address,bytes32,uint256)"));
+    assert_eq!(
+        (&d[16..36], &d[36..68], d[68..100][31]),
+        (&t[..], &derived[..], 3)
+    );
+    assert_eq!(d.len(), 100);
+    let plain = sel(b"mtxNonce(bytes32,uint256)");
+    assert_eq!(
+        super::nonce_call("gov_router", &native, U256::ZERO, Some(t))[..4],
+        plain
+    );
+    assert_eq!(
+        super::nonce_call("token", &derived, U256::ZERO, Some(t))[..4],
+        plain
+    );
+    assert_eq!(
+        super::nonce_call("gov_router", &derived, U256::ZERO, None)[..4],
+        plain
+    );
 }

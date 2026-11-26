@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {GovernanceRouterBase} from "../../src/governance/GovernanceRouterBase.sol";
 import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
 import {SdkGasRouterFix} from "./SdkGasFixtures.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
@@ -167,14 +168,32 @@ contract SdkGasWalletTest is SdkGasLedger {
     }
 }
 
-/// The `gov_router` domain kind's `mtxCancelNonce` (variant `router`): the ordered cancel on the router, by a native key.
+/// The `gov_router` domain kind's `mtxCancelNonce` (variant `router`): the ordered cancel on the router, by a native key; and
+/// the keyed cancel `mtxCancelNonceFor` (CTR-GOV-33 Change) by the same key, on the router's own map (a native id: one map
+/// for every target).
 contract SdkGasRouterTest is SdkGasRouterFix {
+    /// The keyed cancel's target (A-3 of the Fable fix check, 2026-11-26): a contract nothing else in the row touches, so its
+    /// code read is cold, as on a real target; outside the factory's index, so the router's own map.
+    address internal constant SG_COLD_TARGET = address(0x5C01D7A26E7);
+
     function setUp() public override {
         super.setUp();
         sgPk = 0xA11CE;
+        vm.etch(SG_COLD_TARGET, hex"00");
     }
 
     function test_sdkGas_router() public {
         _both("gov_router", "mtxCancelNonce", "router", address(router), _sgFrom(), _cancel);
+        _both("gov_router", "mtxCancelNonceFor", "router", address(router), _sgFrom(), _cancelFor);
+    }
+
+    /// The target is `SG_COLD_TARGET` (G-7 of the re-review, 2026-11-25: a target with no code is `TargetHasNoCode`; was
+    /// `SG_PAYEE`, an address with no code, then the router itself, warm as the transaction's `to`: A-3 of the fix check).
+    function _cancelFor(address c, uint256 nonce) internal view returns (bytes memory) {
+        uint256 lane = SG_LANE + 1;
+        address t = SG_COLD_TARGET;
+        bytes32 d =
+            _sgNamed(c, "UACancelNonceFor(bytes32 from,address target,uint256 lane,", abi.encode(t, lane), nonce);
+        return abi.encodeCall(GovernanceRouterBase.mtxCancelNonceFor, (_sgE(nonce), t, lane, _sgUaSig(d)));
     }
 }

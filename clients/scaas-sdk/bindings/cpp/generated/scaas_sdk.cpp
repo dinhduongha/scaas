@@ -243,6 +243,9 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_blocking() != 62016) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for_blocking() != 28234) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate_blocking() != 41744) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
@@ -631,6 +634,9 @@ void ensure_initialized() {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_subscription_next_blocking() != 19717) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
+    if (uniffi_scaas_sdk_checksum_method_vault_accept_rollback_blocking() != 30181) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_vault_change_passphrase_blocking() != 7889) {
@@ -1528,6 +1534,12 @@ std::shared_ptr<Prepared> Admin::admin_ua_cancel_nonce_blocking(const UaCancelNo
         uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_blocking,
         uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterTypeUaCancelNonce::lower(req), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
+std::shared_ptr<Prepared> Admin::admin_ua_cancel_nonce_for_blocking(const UaCancelNonceFor &req, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterPrepared::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterTypeUaCancelNonceFor::lower(req), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
 }
 std::shared_ptr<Prepared> Admin::admin_ua_cancel_rate_blocking(const UaCancelRate &req, std::shared_ptr<CancelToken> cancel) {
     return uniffi::FfiConverterPrepared::lift(uniffi::rust_call(
@@ -3241,6 +3253,12 @@ Vault::Vault(const Vault &other) : instance(0) {
 
 
 
+void Vault::accept_rollback_blocking(std::shared_ptr<CancelToken> cancel) {
+    uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_vault_accept_rollback_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterOptionalCancelToken::lower(cancel));
+}
 void Vault::change_passphrase_blocking(const std::string &seed, const std::shared_ptr<SecretBytes> &old, const std::shared_ptr<SecretBytes> &new_, std::shared_ptr<CancelToken> cancel) {
     uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_vault_change_passphrase_blocking,
@@ -3592,6 +3610,12 @@ uint64_t Wallet::_uniffi_internal_clone_handle() const {
         this->instance
     );
 }
+
+
+
+
+
+
 
 
 
@@ -9053,6 +9077,7 @@ PqzTransferMulti FfiConverterTypePqzTransferMulti::read(RustStream &stream) {
         FfiConverterString::read(stream),
         FfiConverterUInt64::read(stream),
         FfiConverterSequenceTypePqzLeg::read(stream),
+        FfiConverterUInt32::read(stream),
         FfiConverterString::read(stream),
         FfiConverterUInt64::read(stream),
         FfiConverterTypeEnvelope::read(stream)
@@ -9066,6 +9091,7 @@ void FfiConverterTypePqzTransferMulti::write(RustStream &stream, const PqzTransf
     FfiConverterString::write(stream, val.batch);
     FfiConverterUInt64::write(stream, val.key_version);
     FfiConverterSequenceTypePqzLeg::write(stream, val.legs);
+    FfiConverterUInt32::write(stream, val.decoys);
     FfiConverterString::write(stream, val.decoy_fee);
     FfiConverterUInt64::write(stream, val.valid_until_block);
     FfiConverterTypeEnvelope::write(stream, val.envelope);
@@ -9080,6 +9106,7 @@ uint64_t FfiConverterTypePqzTransferMulti::allocation_size(const PqzTransferMult
         FfiConverterString::allocation_size(val.batch) +
         FfiConverterUInt64::allocation_size(val.key_version) +
         FfiConverterSequenceTypePqzLeg::allocation_size(val.legs) +
+        FfiConverterUInt32::allocation_size(val.decoys) +
         FfiConverterString::allocation_size(val.decoy_fee) +
         FfiConverterUInt64::allocation_size(val.valid_until_block) +
         FfiConverterTypeEnvelope::allocation_size(val.envelope);
@@ -10610,7 +10637,8 @@ TokenBalance FfiConverterTypeTokenBalance::read(RustStream &stream) {
         FfiConverterString::read(stream),
         FfiConverterString::read(stream),
         FfiConverterUInt8::read(stream),
-        FfiConverterString::read(stream)
+        FfiConverterString::read(stream),
+        FfiConverterOptionalString::read(stream)
     };
 }
 
@@ -10619,6 +10647,7 @@ void FfiConverterTypeTokenBalance::write(RustStream &stream, const TokenBalance 
     FfiConverterString::write(stream, val.display);
     FfiConverterUInt8::write(stream, val.decimals);
     FfiConverterString::write(stream, val.amount);
+    FfiConverterOptionalString::write(stream, val.unknown);
 }
 
 uint64_t FfiConverterTypeTokenBalance::allocation_size(const TokenBalance &val) {
@@ -10627,7 +10656,8 @@ uint64_t FfiConverterTypeTokenBalance::allocation_size(const TokenBalance &val) 
         FfiConverterString::allocation_size(val.address) +
         FfiConverterString::allocation_size(val.display) +
         FfiConverterUInt8::allocation_size(val.decimals) +
-        FfiConverterString::allocation_size(val.amount);
+        FfiConverterString::allocation_size(val.amount) +
+        FfiConverterOptionalString::allocation_size(val.unknown);
     
 }
 
@@ -11198,6 +11228,60 @@ uint64_t FfiConverterTypeUaCancelNonce::allocation_size(const UaCancelNonce &val
         FfiConverterKeyRef::allocation_size(val.signer) +
         FfiConverterString::allocation_size(val.chain) +
         FfiConverterString::allocation_size(val.batch) +
+        FfiConverterString::allocation_size(val.lane) +
+        FfiConverterOptionalString::allocation_size(val.chain_uid) +
+        FfiConverterTypeEnvelope::allocation_size(val.envelope);
+    
+}
+
+
+UaCancelNonceFor FfiConverterTypeUaCancelNonceFor::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterTypeUaCancelNonceFor::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterTypeUaCancelNonceFor::lower(const UaCancelNonceFor &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterTypeUaCancelNonceFor::write(stream, val);
+
+    return std::move(buf);
+}
+
+UaCancelNonceFor FfiConverterTypeUaCancelNonceFor::read(RustStream &stream) {
+    return {
+        FfiConverterKeyRef::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterString::read(stream),
+        FfiConverterOptionalString::read(stream),
+        FfiConverterTypeEnvelope::read(stream)
+    };
+}
+
+void FfiConverterTypeUaCancelNonceFor::write(RustStream &stream, const UaCancelNonceFor &val) {
+    FfiConverterKeyRef::write(stream, val.signer);
+    FfiConverterString::write(stream, val.chain);
+    FfiConverterString::write(stream, val.batch);
+    FfiConverterString::write(stream, val.target);
+    FfiConverterString::write(stream, val.lane);
+    FfiConverterOptionalString::write(stream, val.chain_uid);
+    FfiConverterTypeEnvelope::write(stream, val.envelope);
+}
+
+uint64_t FfiConverterTypeUaCancelNonceFor::allocation_size(const UaCancelNonceFor &val) {
+    
+    return 
+        FfiConverterKeyRef::allocation_size(val.signer) +
+        FfiConverterString::allocation_size(val.chain) +
+        FfiConverterString::allocation_size(val.batch) +
+        FfiConverterString::allocation_size(val.target) +
         FfiConverterString::allocation_size(val.lane) +
         FfiConverterOptionalString::allocation_size(val.chain_uid) +
         FfiConverterTypeEnvelope::allocation_size(val.envelope);
@@ -16074,6 +16158,62 @@ uint64_t FfiConverterAuthError::allocation_size(const AuthError &val) {
 }
 
 
+Basis FfiConverterBasis::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterBasis::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterBasis::lower(const Basis &val) {
+    auto buf = rustbuffer_alloc(FfiConverterBasis::allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterBasis::write(stream, val);
+
+    return std::move(buf);
+}
+
+Basis FfiConverterBasis::read(RustStream &stream) {
+    int32_t variant;
+    stream >> variant;
+
+    switch (variant) {
+        
+    case 1:
+        return Basis::kMajority;
+        
+    case 2:
+        return Basis::kOneEndpoint;
+        
+    default:
+        throw std::runtime_error("No matching Basis variant");
+    }
+}
+
+void FfiConverterBasis::write(RustStream &stream, const Basis &val) {
+    switch (val) {
+        
+    case Basis::kMajority:
+        stream << static_cast<int32_t>(1);
+        break;
+        
+    case Basis::kOneEndpoint:
+        stream << static_cast<int32_t>(2);
+        break;
+        
+    default:
+        throw std::runtime_error("No matching Basis variant");
+    }
+}
+
+uint64_t FfiConverterBasis::allocation_size(const Basis &) {
+    return static_cast<uint64_t>(sizeof(int32_t));
+}
+
+
 Class FfiConverterClass::lift(RustBuffer buf) {
     auto stream = RustStream(&buf);
     auto ret = FfiConverterClass::read(stream);
@@ -17497,6 +17637,12 @@ L1Fee FfiConverterL1Fee::read(RustStream &stream) {
     case 1:
         return L1Fee::kOpStack;
         
+    case 2:
+        return L1Fee::kInEstimate;
+        
+    case 3:
+        return L1Fee::kLinea;
+        
     default:
         throw std::runtime_error("No matching L1Fee variant");
     }
@@ -17507,6 +17653,14 @@ void FfiConverterL1Fee::write(RustStream &stream, const L1Fee &val) {
         
     case L1Fee::kOpStack:
         stream << static_cast<int32_t>(1);
+        break;
+        
+    case L1Fee::kInEstimate:
+        stream << static_cast<int32_t>(2);
+        break;
+        
+    case L1Fee::kLinea:
+        stream << static_cast<int32_t>(3);
         break;
         
     default:
@@ -17655,6 +17809,7 @@ OpState FfiConverterOpState::read(RustStream &stream) {
         
     case 2:
         return OpState::kConsumed {
+            .basis = FfiConverterBasis::read(stream),
         };
         
     case 3:
@@ -17665,6 +17820,7 @@ OpState FfiConverterOpState::read(RustStream &stream) {
         
     case 4:
         return OpState::kExpired {
+            .basis = FfiConverterBasis::read(stream),
         };
         
     case 5:
@@ -17689,12 +17845,14 @@ void FfiConverterOpState::write(RustStream &stream, const OpState &val) {
             FfiConverterString::write(stream, arg.hash);
         }
         else if constexpr (std::is_same_v<T, OpState::kConsumed>) {
+            FfiConverterBasis::write(stream, arg.basis);
         }
         else if constexpr (std::is_same_v<T, OpState::kReverted>) {
             FfiConverterUInt64::write(stream, arg.block);
             FfiConverterString::write(stream, arg.hash);
         }
         else if constexpr (std::is_same_v<T, OpState::kExpired>) {
+            FfiConverterBasis::write(stream, arg.basis);
         }
         else if constexpr (std::is_same_v<T, OpState::kInFlight>) {
             FfiConverterInFlight::write(stream, arg.detail);
@@ -17718,6 +17876,7 @@ uint64_t FfiConverterOpState::allocation_size(const OpState &val) {
         }
         else if constexpr (std::is_same_v<T, OpState::kConsumed>) {
             uint64_t size = 0;
+            size += FfiConverterBasis::allocation_size(arg.basis);
             return size;
         }
         else if constexpr (std::is_same_v<T, OpState::kReverted>) {
@@ -17728,6 +17887,7 @@ uint64_t FfiConverterOpState::allocation_size(const OpState &val) {
         }
         else if constexpr (std::is_same_v<T, OpState::kExpired>) {
             uint64_t size = 0;
+            size += FfiConverterBasis::allocation_size(arg.basis);
             return size;
         }
         else if constexpr (std::is_same_v<T, OpState::kInFlight>) {

@@ -225,7 +225,7 @@ async fn room_joined_before_not_used() {
         MatrixIn::Ignored
     );
     let rep =
-        w.pq.send(&sref(&s.e), &me(&w.alice), &txt("x"), None, &opts(&w))
+        w.pq.send_content(&sref(&s.e), &me(&w.alice), &txt("x"), None, &opts(&w))
             .await
             .unwrap();
     assert_eq!(rep.stores[0].1, Delivery::Failed("MatrixRoom"));
@@ -477,7 +477,7 @@ async fn room_id_in_no_chain_write() {
     let mut o = opts(&w);
     o.post = true;
     let rep =
-        w.pq.send(&s, &me(&w.alice), &txt("x"), None, &o)
+        w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &o)
             .await
             .unwrap();
     assert!(
@@ -592,7 +592,7 @@ async fn transport_failure_for_that_store_only() {
     w.pq.join_room(&ep).await.unwrap();
     c.fail_send.store(true, Ordering::SeqCst);
     let rep =
-        w.pq.send(&sref(&s.e), &me(&w.alice), &txt("x"), None, &opts(&w))
+        w.pq.send_content(&sref(&s.e), &me(&w.alice), &txt("x"), None, &opts(&w))
             .await
             .unwrap();
     assert_eq!(rep.stores[0].1, Delivery::Failed("MatrixRoom"));
@@ -601,7 +601,7 @@ async fn transport_failure_for_that_store_only() {
     // the control: the transport back, both stores take the next one
     c.fail_send.store(false, Ordering::SeqCst);
     let rep =
-        w.pq.send(&sref(&s.e), &me(&w.alice), &txt("y"), None, &opts(&w))
+        w.pq.send_content(&sref(&s.e), &me(&w.alice), &txt("y"), None, &opts(&w))
             .await
             .unwrap();
     assert!(rep
@@ -643,7 +643,7 @@ async fn chain_store_read_while_detached() {
     assert_eq!(w.pq.read_chain_store(&ep, &st).await.unwrap(), 1);
     assert_eq!(
         code(
-            w.pq.send(&sref(&s.e), &me(&w.alice), &txt("x"), None, &opts(&w))
+            w.pq.send_content(&sref(&s.e), &me(&w.alice), &txt("x"), None, &opts(&w))
                 .await
         ),
         "MatrixDetached"
@@ -657,7 +657,10 @@ async fn card_binds_its_matrix_id() {
     let _one = ONE.lock().await;
     let w = ready().await;
     let (server, _) = attach(&w);
-    let card = |a: &Acc, id: &str| w.app.sign_pqchat_card(a.key.clone(), 1, id.into());
+    let card = |a: &Acc, id: &str| {
+        let (app, key, id) = (w.app.clone(), a.key.clone(), id.to_string());
+        async move { app.prepare_pqchat_card(key, 1, id).await?.sign().await }
+    };
     let b = card(&w.bob, BOB).await.unwrap();
     assert!(w.pq.add_card(CHAIN, &b.card, &b.sig).await.unwrap());
     assert_eq!(w.pq.matrix_ids_of(&w.bob.ua).unwrap(), [BOB]);
@@ -702,7 +705,10 @@ async fn card_binds_only_its_own_matrix_id() {
     let (server, _) = attach(&w);
     let c = w
         .app
-        .sign_pqchat_card(w.carol.key.clone(), 1, CAROL.into())
+        .prepare_pqchat_card(w.carol.key.clone(), 1, CAROL.into())
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap();
     assert!(w.pq.add_card(CHAIN, &c.card, &c.sig).await.unwrap());

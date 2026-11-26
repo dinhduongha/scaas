@@ -5,7 +5,7 @@ use zether_prover::api::call;
 
 /// Rows of the vector the Zether prover does not build, each with its reason: another contract kind's domain (the row has no
 /// `zether` domain), so a Zether key never signs it. Any other row without a `zether` domain fails the test.
-const NOT_ZETHER: [&str; 85] = [
+const NOT_ZETHER: [&str; 86] = [
     // the token kind's own (non-Zether) accounts: UA prepare is a NormalToken / WrappedToken entry
     "UAPrepareAcc",
     // SmartKeyAccount: signed by its owner's keys, not by a Zether key
@@ -37,7 +37,8 @@ const NOT_ZETHER: [&str; 85] = [
     // the DEX's domain
     "CancelDexOrder",
     // the GovernanceRouter's domain (governance spec §3.2): the closed table on its merged entries; signed by an admin's or
-    // holder's key through the router, never by a Zether key
+    // holder's key through the router, never by a Zether key (CTR-GOV-33's Change: + the keyed cancel)
+    "UACancelNonceFor",
     "UAGrantRole",
     "UARevokeRole",
     "UASetGrant",

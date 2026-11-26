@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-// P6h (3): sealPqKey / openPqKey (CTR-PQZ-13 seed custody, CLI-SGN-10, CLI-SGN-52): the registry-class PQZ leaf seed32 sealed in
+// P6h (3): sealPqKey / openPqKey (CTR-PQZ-13 seed custody, CLI-SGN-10, CLI-SGN-55): the registry-class PQZ leaf seed32 sealed in
 // vault v2 under label `pqz:registry:<account>:<index>:<version>`, opened alone (never the BIP-39 seed). Every refusal of
 // openPqKey is one class, VaultOpen, each beside a positive control. Rows: smartcontracts/vectors/ua/pqz_leaf.json
 // (scripts/pqz-leaf-vectors.mjs). UNAUDITED.

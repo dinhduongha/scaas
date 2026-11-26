@@ -3,6 +3,8 @@
 Public EVM testnet. Row `ethereum-testnet` of [`chain-uids.json`](../../../chain-uids.json): chain id **11155111**, chain_uid
 `0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9`, network `testnet`. A chain is (chainId, chain_uid) (NET-ALL-22).
 
+**EVM tier** ([NET-EVM-20](../../../../../docs/networks/evm.md#NET-EVM-20), owner 2026-11-26): **Tier 1: supports Glamsterdam.** Amsterdam since its fork: runtime 65,536 B and init 131,072 B measured, block 199.8 M; the contract set deploys today.
+
 Profile [`profile.json`](profile.json) (`draft`, SDK plan T40), from the probes of 2026-11-22
 (`clients/scaas-rpc/runs/2026-11-22-evm-probes.py`; summary `2026-11-22-evm-probes-summary.txt` beside it; one sample each, the
 24-h and 7-day windows of NET-EVM-19 still to run):

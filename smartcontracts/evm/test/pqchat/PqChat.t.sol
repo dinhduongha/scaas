@@ -11,6 +11,10 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
+import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
+import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
+import {PqChatTreeMembers} from "../../src/pqchat/PqChatTreeMembers.sol";
+import {IPqChatTreeViews} from "../../src/pqchat/IPqChatTreeViews.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChatBase} from "./PqChatBase.sol";
 
@@ -33,6 +37,7 @@ contract PqChatTest is PqChatBase {
         assertEq(chatB.owner(), bytes32(0), "owner 0 allowed");
         assertTrue(chat.supportsInterface(0x01ffc9a7));
         assertTrue(chat.supportsInterface(type(IPqChat).interfaceId));
+        assertTrue(chat.supportsInterface(type(IPqChatTreeViews).interfaceId));
         assertFalse(chat.supportsInterface(0xffffffff));
         // the implementation: locked, chain-neutral
         IOpenFactory.FactoryInfo memory r = PqChat(impl).factoryInfo();
@@ -47,33 +52,35 @@ contract PqChatTest is PqChatBase {
 
     function test_initialize_onceAndOnlyByTheFactory() public {
         vm.expectRevert(IPqChat.PqChatNotFactory.selector);
-        chat.initialize(bytes32(uint256(7)));
+        chat.initialize(bytes32(uint256(7)), 2);
         vm.prank(address(f));
         vm.expectRevert(IPqChat.PqChatInitialized.selector);
-        chat.initialize(bytes32(uint256(7)));
+        chat.initialize(bytes32(uint256(7)), 2);
         vm.prank(address(f));
         vm.expectRevert(IPqChat.PqChatInitialized.selector);
-        PqChat(impl).initialize(bytes32(uint256(7)));
+        PqChat(impl).initialize(bytes32(uint256(7)), 2);
         assertEq(chat.owner(), OWNER_UA);
     }
 
     /// Fable D P3-1: the owner is 0 or the creator (`creating()`): a creator naming another UA is refused; the controls, its
     /// own id and 0, pass.
     function test_initialize_ownerIsTheCreator() public {
-        bytes memory other = abi.encodeCall(IPqChat.initialize, (OWNER_UA));
+        bytes memory other = abi.encodeCall(IPqChat.initialize, (OWNER_UA, 2));
         vm.prank(address(0xB0B));
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatOwnerNotCreator.selector, OWNER_UA));
         f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "forged", other);
         vm.prank(address(0xB0B));
         PqChat own = PqChat(
             f.createInstance(
-                IOpenFactory.ReleaseId(3, 0, 1), "own", abi.encodeCall(IPqChat.initialize, (bytes32(uint256(0xB0B))))
+                IOpenFactory.ReleaseId(3, 0, 1), "own", abi.encodeCall(IPqChat.initialize, (bytes32(uint256(0xB0B)), 2))
             )
         );
         assertEq(own.owner(), bytes32(uint256(0xB0B)));
         vm.prank(address(0xB0B));
         PqChat none = PqChat(
-            f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "none", abi.encodeCall(IPqChat.initialize, (bytes32(0))))
+            f.createInstance(
+                IOpenFactory.ReleaseId(3, 0, 1), "none", abi.encodeCall(IPqChat.initialize, (bytes32(0), 2))
+            )
         );
         assertEq(none.owner(), bytes32(0));
     }
@@ -224,8 +231,9 @@ contract PqChatTest is PqChatBase {
     /// CTR-TOK-30 (owner 2026-11-10): the factory reads `modules()` once, at the release, so the answer is fixed by code
     /// (immutables): an initialized clone answers the release's set, and still after a write to its state.
     function test_modules_fixedByCode() public {
-        address[] memory want = new address[](1);
-        want[0] = address(topics);
+        address[] memory want = new address[](4);
+        (want[0], want[1], want[2], want[3]) =
+        (address(topics), address(treeModule), address(viewsModule), address(membersModule));
         bytes32 m = keccak256(abi.encode(PqChat(impl).modules()));
         assertEq(m, keccak256(abi.encode(want)), "the release");
         assertEq(keccak256(abi.encode(chat.modules())), m, "the initialized clone");
@@ -238,13 +246,66 @@ contract PqChatTest is PqChatBase {
     /// refused. The module called directly has no env; through an instance it runs in the instance's state.
     function test_constructor_refusesAnotherModule() public {
         vm.expectRevert(IPqChat.PqChatEnv.selector);
-        new PqChat(IOpenFactory.ReleaseId(3, 0, 1), address(f), abi.encode(address(0xBEEF)));
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(0xBEEF), address(treeModule), address(viewsModule), address(membersModule))
+        );
         PqChatTopics other = new PqChatTopics(address(0xFAC7));
         vm.expectRevert(IPqChat.PqChatEnv.selector);
-        new PqChat(IOpenFactory.ReleaseId(3, 0, 1), address(f), abi.encode(address(other)));
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(other), address(treeModule), address(viewsModule), address(membersModule))
+        );
+        // CTR-CHAT-26: the tree module likewise
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(topics), address(0xBEEF), address(viewsModule), address(membersModule))
+        );
+        PqChatTree otherTree = new PqChatTree(address(0xFAC7));
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(topics), address(otherTree), address(viewsModule), address(membersModule))
+        );
+        // the tree views module likewise (owner 2026-11-24)
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(topics), address(treeModule), address(0xBEEF), address(membersModule))
+        );
+        PqChatTreeViews otherViews = new PqChatTreeViews(address(0xFAC7));
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(topics), address(treeModule), address(otherViews), address(membersModule))
+        );
+        // the tree exits module likewise (owner 2026-11-24)
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(topics), address(treeModule), address(viewsModule), address(0xBEEF))
+        );
+        PqChatTreeMembers otherMembers = new PqChatTreeMembers(address(0xFAC7));
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(
+            IOpenFactory.ReleaseId(3, 0, 1),
+            address(f),
+            abi.encode(address(topics), address(treeModule), address(viewsModule), address(otherMembers))
+        );
         address[] memory m = PqChat(impl).modules();
-        assertEq(m.length, 1);
-        assertEq(m[0], address(topics), "the release names its module");
+        assertEq(m.length, 4);
+        assertEq(m[0], address(topics), "the release names its modules");
+        assertEq(m[1], address(treeModule));
+        assertEq(m[2], address(viewsModule));
+        assertEq(m[3], address(membersModule));
         IPqChat.PqTopic memory t;
         (t.admin, t.homeChain, t.homeChatContract, t.name) = (ids[0], bytes32(uint256(1)), address(chat), "t");
         IUARegistry.UASig memory sig;
@@ -330,7 +391,7 @@ contract PqChatTest is PqChatBase {
             EnvKit.uidOf(address(f))
         );
         PqChat small =
-            PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 2), "s", abi.encodeCall(IPqChat.initialize, (0))));
+            PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 2), "s", abi.encodeCall(IPqChat.initialize, (0, 2))));
         for (uint8 i = 6; i <= 16; ++i) {
             _member(i); // 16 members
         }

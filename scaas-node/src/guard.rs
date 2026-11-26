@@ -2858,9 +2858,10 @@ mod tests {
         // the three-key model (CTR-PQZ-41): -> (133, 3, 133), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
         // round 3zc (CTR-GOV-30): -> (135, 3, 135), the router's `UASetMaxSupply`, `UASetMaxWrapSupply`
         // set-auditor (CTR-GOV-31): -> (137, 3, 137), the router's `UASetAuditorKey`, `UASetAuditorUA`
+        // CTR-GOV-33 Change: -> (138, 3, 138), the router's `UACancelNonceFor`
         assert_eq!(
             (sent, relayed, refused),
-            (137, 3, 137),
+            (138, 3, 138),
             "the walk reached every row with an entry; the relay fees: submit.rs"
         );
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
@@ -2876,11 +2877,12 @@ mod tests {
         // NODE-JOB-29 (TODO 3zh MD-14): -> 145, the registry's `cacheExpandedKey`; set-auditor (CTR-GOV-31): -> 147, the router's
         // `mtxSetAuditorKey`, `mtxSetAuditorUA`; bls-multi Task 10: -> 148, the registry's `registerBlsMulti`
         // PqVault plan V8 (CTR-PQV-11): -> 156, `PqVault`'s eight plain rows; chains-arweave T9: -> 157, `PqChatStore`'s
-        // `storeMessage` (contract kind `pqchatstore`)
+        // `storeMessage` (contract kind `pqchatstore`); PqChat TreeKEM T4 (CTR-CHAT-27): 157 -> 163, `PqChat`'s six tree writes
+        // CTR-GOV-33 Change: 163 -> 164, the router's `UACancelNonceFor`
         assert_eq!(
             typed::rows().iter().filter(|r| !r.entry.is_empty()).count(),
-            157,
-            "table rows: 111 typed with an entry, 46 plain"
+            164,
+            "table rows: 112 typed with an entry, 52 plain"
         );
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
@@ -4012,8 +4014,8 @@ mod tests {
         // round 3s (CTR-GOV-24): -> 50, `mtxSetAllowed`, `mtxSetDenied`, `mtxEnableFeature`; round 3t: -> 51, `mtxSetVerifierFee`
         // owner 2026-11-12: -> 53, `mtxCreateToken`, `mtxCreateDex`; -> 54, `mtxCreateInstance`; round 3zc (CTR-GOV-30): -> 56,
         // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` (the 25 ops of the Change of CTR-GOV-28 moved selector in place); set-auditor
-        // (CTR-GOV-31): -> 58, `mtxSetAuditorKey`, `mtxSetAuditorUA`
-        assert_eq!(router.len(), 58, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the three creations (a token, a DEX, an instance), bit 32's two ops; the four release approvals (3r) in NOT_ROWS");
+        // (CTR-GOV-31): -> 58, `mtxSetAuditorKey`, `mtxSetAuditorUA`; CTR-GOV-33 Change: -> 59, `mtxCancelNonceFor`
+        assert_eq!(router.len(), 59, "19 ops, the eight regulated controls (plan T32), the ordered cancel and the keyed one, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the three creations (a token, a DEX, an instance), bit 32's two ops; the four release approvals (3r) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows()
             .iter()
             .filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router"))
@@ -4799,8 +4801,9 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // NODE-JOB-29 (TODO 3zh MD-14): -> 307, the registry's `cacheExpandedKey` (PERMISSIONLESS)
     // set-auditor (CTR-GOV-31): -> 309, the router's `mtxSetAuditorKey`, `mtxSetAuditorUA`; GOVERNED 309 -> 317, `setAuditorKey`
     // BIT(32) on the Zether kinds 2, 3, 10, 11 and `setAuditorUA` BIT(32) on the PQZ kinds 4, 5, 12, 13
-    // bls-multi Task 10: -> 310, the registry's `registerBlsMulti` (SIGNED)
-    const ROWED: usize = 310;
+    // bls-multi Task 10: -> 310, the registry's `registerBlsMulti` (SIGNED); CTR-GOV-33 Change: -> 311, the router's
+    // `mtxCancelNonceFor` (SIGNED)
+    const ROWED: usize = 311;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 206;
     const GOVERNED: usize = 317;
@@ -5622,6 +5625,18 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         ));
     }
 
+    /// CTR-CHAT-27: `PqChatTree.treeCreate`, the module's creation step that `PqChat.createSession` calls; no row of any kind.
+    const TREE_CREATE: &str = "treeCreate((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes,uint8),\
+        (bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
+    /// `PqChat`'s unsigned writes (UA-7 P17; CTR-CHAT-27: the tree commit's three pieces), under `params.relay_unsigned_pqchat`.
+    const UNSIGNED_PQCHAT: [&str; 5] = [
+        "storeMessage",
+        "addWraps",
+        "addPathList",
+        "addPathKeys",
+        "addPath",
+    ];
+
     /// The `PqChat` writes as `IPqChat.sol` declares them ([`iface_writes`]).
     fn pqchat_writes() -> Vec<String> {
         iface_writes("pqchat/IPqChat.sol")
@@ -5629,7 +5644,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
 
     /// The writes an interface under `smartcontracts/evm/src` declares (`IPqChat.sol`, `IPqVault.sol`, `IPqChatStore.sol`), read
     /// from the source, not copied: every `external` function that is neither `view` nor `pure`, as its canonical signature; its
-    /// structs and `IPqChat.`'s / `IUARegistry.`'s (for `UASig`) resolved from their sources.
+    /// structs and `IPqChat.`'s / `IUARegistry.`'s (for `UASig`) resolved from their sources, `IPqGroupTree`'s with them.
     fn iface_writes(file: &str) -> Vec<String> {
         let src = |f: &str| {
             std::fs::read_to_string(format!(
@@ -5642,13 +5657,23 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .collect::<Vec<_>>()
             .join(" ")
         };
-        let (chat, pc, reg) = (
+        let (chat, pc, reg, tree) = (
             src(file),
             src("pqchat/IPqChat.sol"),
             src("ua/IUARegistry.sol"),
+            src("pqgroup/IPqGroupTree.sol"),
         );
         let mut structs: HashMap<String, Vec<String>> = HashMap::new();
-        for (scope, s) in [("", &chat), ("IPqChat.", &pc), ("IUARegistry.", &reg)] {
+        // `IPqChat` inherits `IPqGroupTree`'s `TreeAdd` / `TreeRemove` (A-6): named bare inside it, `IPqChat.` or
+        // `IPqGroupTree.` outside
+        for (scope, s) in [
+            ("", &tree),
+            ("IPqChat.", &tree),
+            ("IPqGroupTree.", &tree),
+            ("", &chat),
+            ("IPqChat.", &pc),
+            ("IUARegistry.", &reg),
+        ] {
             for part in s.split(" struct ").skip(1) {
                 let (name, body) = part.split_once('{').unwrap();
                 let fields = body
@@ -5798,7 +5823,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
 
     /// `forge inspect IPqVault methodIdentifiers`, its eight writes.
     const FORGE_PQVAULT_WRITES: [&str; 8] = [
-        "0a25edc3", "87e8fed1", "c487e92a", "5270d5c2", "6b7f9e2e", "1b5d7365", "344e5e37",
+        "8f02bc96", "87e8fed1", "c487e92a", "5270d5c2", "6b7f9e2e", "1b5d7365", "344e5e37",
         "1d4c2131",
     ];
 
@@ -5985,7 +6010,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .iter()
             .filter(|s| !s.starts_with("initialize("))
             .collect();
-        assert_eq!((all.len(), writes.len()), (14, 13), "{all:?}");
+        assert_eq!((all.len(), writes.len()), (20, 19), "{all:?}"); // CTR-CHAT-27: + the six tree writes
         let theirs: HashSet<[u8; 4]> = writes.iter().map(|s| sel(s)).collect();
         let ours: HashSet<[u8; 4]> = typed::rows()
             .iter()
@@ -5994,8 +6019,10 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .collect();
         assert_eq!(ours, theirs, "the PqChat allow-list, both directions");
         let forge: HashSet<[u8; 4]> = [
-            "21829f04", "1222a945", "2b9ab93a", "3c289881", "6035115c", "a52f4d6d", "95660a78",
+            "821d41ae", "1222a945", "2b9ab93a", "3c289881", "6035115c", "a52f4d6d", "95660a78",
             "47bee6d5", "c8de3d2d", "04857ea8", "1fd5aeac", "f3ee47ee", "5aee92d5",
+            // CTR-CHAT-27: commit, addPathList, addPathKeys, addPath, treeLeave, treeRemove
+            "9575f9cb", "0b9b356b", "de142cf8", "44889230", "12a4e9ac", "eb3f5236",
         ]
         .iter()
         .map(|h| alloy::hex::decode(h).unwrap().try_into().unwrap())
@@ -6033,12 +6060,18 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 );
             }
         }
+        // CTR-CHAT-27: `treeCreate` is the module's step under `createSession`, the tree views `PqChatTreeViews`' (read-only)
         for s in [
-            "initialize(bytes32)",
+            "initialize(bytes32,uint8)",
             "owner()",
             "sessionOf(bytes32)",
             "storedRange(bytes8,uint256,uint256)",
             "topicOf(bytes32)",
+            TREE_CREATE,
+            "treeOf(bytes32)",
+            "treeLeaves(bytes32,uint256,uint256)",
+            "commitOf(bytes32)",
+            "pathListOf(bytes32)",
         ] {
             for k in kinds {
                 assert!(row(sel(s), k).is_none(), "{s} on {k}");
@@ -6202,9 +6235,9 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         }
         assert_eq!(
             (entries.len(), *reads.lock().unwrap()),
-            (13, 1),
+            (19, 1),
             "infoOf read once, then cached"
-        ); // P48: + remove
+        ); // P48: + remove; CTR-CHAT-27: + the six tree writes
         for (to, c, what) in [
             (v0, cfg.clone(), "version 0"),
             (c4, cfg.clone(), "class 4"),
@@ -6230,10 +6263,13 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         }
         let cast = |s: &str| -> Bytes { alloy::primitives::keccak256(s)[..4].to_vec().into() };
         for s in [
-            "initialize(bytes32)",
+            "initialize(bytes32,uint8)",
             "sessionOf(bytes32)",
             "storedRange(bytes8,uint256,uint256)",
             "transfer(address,uint256)",
+            TREE_CREATE,
+            "treeOf(bytes32)",
+            "commitOf(bytes32)",
         ] {
             let mut w = work("postMessage", chat);
             w.data = cast(s);
@@ -6344,7 +6380,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             Default::default(),
         )
         .unwrap();
-        for entry in ["storeMessage", "addWraps"] {
+        for entry in UNSIGNED_PQCHAT {
             unpaid(shut.check(&chain, &work(entry)).await, entry);
             unpaid(off.check(&chain, &work(entry)).await, entry);
         }
@@ -6354,7 +6390,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             Default::default(),
         )
         .unwrap();
-        for entry in ["storeMessage", "addWraps"] {
+        for entry in UNSIGNED_PQCHAT {
             open.check(&chain, &work(entry))
                 .await
                 .unwrap_or_else(|e| panic!("{entry} under the lane policy: {e:?}"));
@@ -6426,7 +6462,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 typed: Some(t),
             }
         };
-        for entry in ["storeMessage", "addWraps", "postMessage"] {
+        for entry in
+            UNSIGNED_PQCHAT
+                .iter()
+                .chain(&["postMessage", "commit", "treeLeave", "treeRemove"])
+        {
             paid.check(&chain, &relayed(chat, work(entry).data))
                 .await
                 .unwrap_or_else(|e| panic!("{entry} as a relay fee's call: {e:?}"));

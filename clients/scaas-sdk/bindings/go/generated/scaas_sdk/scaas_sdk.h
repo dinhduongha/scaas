@@ -811,6 +811,11 @@ uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_grant(uint64_t ptr, Ru
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(uint64_t ptr, RustBuffer req
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ADMIN_ADMIN_UA_CANCEL_NONCE_FOR
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ADMIN_ADMIN_UA_CANCEL_NONCE_FOR
+uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(uint64_t ptr, RustBuffer req
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ADMIN_ADMIN_UA_CANCEL_RATE
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_ADMIN_ADMIN_UA_CANCEL_RATE
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate(uint64_t ptr, RustBuffer req
@@ -1609,6 +1614,11 @@ uint64_t uniffi_scaas_sdk_fn_clone_vault(uint64_t handle, RustCallStatus *out_st
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FREE_VAULT
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_FREE_VAULT
 void uniffi_scaas_sdk_fn_free_vault(uint64_t handle, RustCallStatus *out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_VAULT_ACCEPT_ROLLBACK
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_VAULT_ACCEPT_ROLLBACK
+uint64_t uniffi_scaas_sdk_fn_method_vault_accept_rollback(uint64_t ptr
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_VAULT_CHANGE_PASSPHRASE
@@ -2828,6 +2838,12 @@ uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ADMIN_ADMIN_UA_CANCEL_NONCE_FOR
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ADMIN_ADMIN_UA_CANCEL_NONCE_FOR
+uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ADMIN_ADMIN_UA_CANCEL_RATE
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_ADMIN_ADMIN_UA_CANCEL_RATE
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate(void
@@ -3665,6 +3681,12 @@ uint16_t uniffi_scaas_sdk_checksum_method_sdk_watch(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_SUBSCRIPTION_NEXT
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_SUBSCRIPTION_NEXT
 uint16_t uniffi_scaas_sdk_checksum_method_subscription_next(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_VAULT_ACCEPT_ROLLBACK
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_VAULT_ACCEPT_ROLLBACK
+uint16_t uniffi_scaas_sdk_checksum_method_vault_accept_rollback(void
     
 );
 #endif

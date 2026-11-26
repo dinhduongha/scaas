@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IPqChat} from "./IPqChat.sol";
+import {IPqGroupTree} from "../pqgroup/IPqGroupTree.sol";
 
 /// @title The typed records of `PqChat` (spec §4, topics spec §2): the portable domain `DS_C`, the typehashes, `hashStruct`,
 ///        the ids and the nonce scopes. Pinned against `smartcontracts/vectors/pqchat/` (`*TypehashIsPinned`). **UNAUDITED.**
@@ -17,7 +18,7 @@ library PqChatTypes {
         keccak256("Wrap(bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey)");
     bytes32 internal constant SESSION_TYPEHASH = keccak256(
         "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,"
-        "MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"
+        "MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"
     );
     bytes32 internal constant EPOCH_TYPEHASH = keccak256(
         "PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,"
@@ -50,6 +51,37 @@ library PqChatTypes {
     );
     bytes32 internal constant TOPIC_VOTE_TYPEHASH =
         keccak256("PqTopicVote(bytes32 entryId,bytes32 voter,int8 value,uint64 seq)");
+
+    /// @notice The TreeKEM mode's tree hash (CTR-CHAT-26, spec §4): `PqGroupTree`'s leaf and parent typehashes for PqChat,
+    ///         hashed, never signed.
+    bytes32 internal constant TREE_LEAF_TYPEHASH =
+        keccak256("TreeLeaf(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 kemHash)");
+    bytes32 internal constant TREE_PARENT_TYPEHASH =
+        keccak256("TreeParent(bytes32 keyHash,bytes32 left,bytes32 right)");
+    /// @dev The tree records (spec 2026-11-23-pqchat-treekem §6, CTR-CHAT-27); `TREE_GENESIS_TYPEHASH` is hashed by clients
+    ///      (`genesisCtx`, C29), never signed.
+    bytes32 internal constant TREE_ADD_TYPEHASH =
+        keccak256("TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)");
+    bytes32 internal constant TREE_REMOVE_TYPEHASH = keccak256("TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)");
+    bytes32 internal constant COMMIT_TYPEHASH = keccak256(
+        "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,"
+        "bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,"
+        "bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo)"
+        "TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)"
+    );
+    bytes32 internal constant PATH_LIST_TYPEHASH = keccak256("PathList(uint32[] ctTargets,bytes32[] ctHashes)");
+    bytes32 internal constant PATH_CT_TYPEHASH =
+        keccak256("PathCt(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSecret)");
+    bytes32 internal constant TREE_LEAVE_RECORD_TYPEHASH =
+        keccak256("PqChatTreeLeave(bytes32 sessionId,bytes32 treeId,bytes32 epochId,bytes32 member,uint64 nonce)");
+    bytes32 internal constant TREE_REMOVE_RECORD_TYPEHASH = keccak256(
+        "PqChatTreeRemove(bytes32 sessionId,bytes32 treeId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,"
+        "bytes32 admin,uint64 nonce)"
+    );
+    bytes32 internal constant TREE_GENESIS_TYPEHASH = keccak256(
+        "TreeGenesis(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,"
+        "MemberKey[] members,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"
+    );
 
     /// @notice Id tags (spec §4.3, topics P36) and nonce-scope tags (3C-D5).
     bytes32 internal constant TAG_SESSION = keccak256("scaas/pqchat/v1/session");
@@ -93,7 +125,8 @@ library PqChatTypes {
                 keccak256(abi.encodePacked(s.admins)),
                 hashMembers(s.members),
                 keccak256(abi.encodePacked(s.wrapHashes)),
-                keccak256(s.sealedInfo)
+                keccak256(s.sealedInfo),
+                s.groupMode
             )
         );
     }
@@ -120,6 +153,81 @@ library PqChatTypes {
             abi.encode(
                 REMOVE_TYPEHASH,
                 r.sessionId,
+                r.epochId,
+                r.nextEpoch,
+                keccak256(abi.encodePacked(r.members)),
+                r.admin,
+                r.nonce
+            )
+        );
+    }
+
+    function hashCommit(IPqChat.PqChatCommit calldata c) internal pure returns (bytes32) {
+        bytes memory a = abi.encode(
+            COMMIT_TYPEHASH,
+            c.sessionId,
+            c.author,
+            c.nonce,
+            c.epoch,
+            c.parentEpochId,
+            c.treeId,
+            c.parentTreeHash,
+            c.leaf,
+            c.keyId,
+            c.leaves
+        );
+        bytes memory b = abi.encode(
+            keccak256(abi.encodePacked(c.admins)),
+            _hashRemoves(c.removes),
+            _hashAdds(c.adds),
+            keccak256(abi.encodePacked(c.wrapHashes)),
+            keccak256(abi.encodePacked(c.nodeKeyHashes)),
+            c.ctCount,
+            c.ctListHash,
+            c.treeHash,
+            keccak256(c.sealedInfo)
+        );
+        return keccak256(bytes.concat(a, b));
+    }
+
+    function _hashRemoves(IPqGroupTree.TreeRemove[] calldata r) private pure returns (bytes32) {
+        bytes32[] memory h = new bytes32[](r.length);
+        for (uint256 i; i < r.length; ++i) {
+            h[i] = keccak256(abi.encode(TREE_REMOVE_TYPEHASH, r[i].leaf, r[i].ua, r[i].keyId));
+        }
+        return keccak256(abi.encodePacked(h));
+    }
+
+    function _hashAdds(IPqGroupTree.TreeAdd[] calldata a) private pure returns (bytes32) {
+        bytes32[] memory h = new bytes32[](a.length);
+        for (uint256 i; i < a.length; ++i) {
+            h[i] = keccak256(abi.encode(TREE_ADD_TYPEHASH, a[i].leaf, a[i].ua, a[i].keyId, a[i].via, a[i].kemHash));
+        }
+        return keccak256(abi.encodePacked(h));
+    }
+
+    function hashPathList(uint32[] calldata ctTargets, bytes32[] calldata ctHashes) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                PATH_LIST_TYPEHASH, keccak256(abi.encodePacked(ctTargets)), keccak256(abi.encodePacked(ctHashes))
+            )
+        );
+    }
+
+    function hashPathCt(IPqChat.PathCt calldata c) internal pure returns (bytes32) {
+        return keccak256(abi.encode(PATH_CT_TYPEHASH, keccak256(c.mlkemCt), c.x25519Eph, keccak256(c.sealedSecret)));
+    }
+
+    function hashTreeLeave(IPqChat.PqChatTreeLeave calldata l) internal pure returns (bytes32) {
+        return keccak256(abi.encode(TREE_LEAVE_RECORD_TYPEHASH, l.sessionId, l.treeId, l.epochId, l.member, l.nonce));
+    }
+
+    function hashTreeRemove(IPqChat.PqChatTreeRemove calldata r) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                TREE_REMOVE_RECORD_TYPEHASH,
+                r.sessionId,
+                r.treeId,
                 r.epochId,
                 r.nextEpoch,
                 keccak256(abi.encodePacked(r.members)),

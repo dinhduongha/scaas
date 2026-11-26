@@ -8,13 +8,11 @@
 //! namespace). The only bytes that leave are the plaintexts the app core asks to decrypt ([`AppCore::open`], a
 //! `SecretBytes`). UNAUDITED.
 use crate::error::SdkError;
-use crate::op::{addr20, final_block, sim, KeyRef};
+use crate::op::{addr20, final_block, KeyRef};
 use crate::op::{ReviewField, Source};
 use crate::vault::OpenSeed;
 use crate::Sdk;
-use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, Bytes};
-use alloy::rpc::types::TransactionRequest;
 use scaas_rpc::evm::EvmPool;
 use scaas_rpc::pool::{ReadAt, ReadError};
 use scaas_rpc::Purpose;
@@ -175,6 +173,112 @@ pub struct AppSigned {
     pub review: Vec<ReviewField>,
 }
 
+/// The `scaas-ua` signing call of a prepared single-key record.
+type SignFn = fn(
+    &dyn Signer,
+    Option<&scaas_ua::Domain>,
+    &UaPath,
+    &TypedData,
+) -> scaas_ua::wallet::Result<UASig>;
+
+/// How a prepared record is signed.
+enum How {
+    /// a UA key or a native EVM key (`registry`: the bound registry's domain a native key signs `UAAuth` under)
+    Key {
+        account: KeyRef,
+        registry: Option<scaas_ua::Domain>,
+        sign: SignFn,
+    },
+    /// PqVault's `msig` signer, its records read on `chain`'s registry at the signature
+    Msig {
+        chain: String,
+        ua: [u8; 32],
+        slots: Vec<crate::op::MsigSlot>,
+    },
+}
+
+/// An app record prepared for its signature (T26 A-5, decision (125)): the review to show and the typed digest, built from the
+/// parsed typed data after every refusal; [`Self::sign`] signs exactly that typed data, once (it consumes the value).
+pub struct AppPrepared {
+    /// the review shown before the signature (the path, the primary type, every domain and message field)
+    pub review: Vec<ReviewField>,
+    /// the typed digest the signature covers
+    pub digest: String,
+    sdk: Arc<Sdk>,
+    ua_path: UaPath,
+    typed: TypedData,
+    how: How,
+}
+
+impl AppPrepared {
+    /// Signs the prepared record after its review: the key opened now (`Argument` for a stored key; an `msig` as
+    /// [`AppCore::prepare_pqvault_record`] states), the `UASig` over [`Self::digest`]'s typed data.
+    pub async fn sign(self) -> Result<AppSigned, SdkError> {
+        let sdk = self.sdk.clone();
+        sdk.clone()
+            .spawn(async move {
+                let Self {
+                    review,
+                    digest,
+                    ua_path,
+                    typed,
+                    how,
+                    ..
+                } = self;
+                match how {
+                    How::Key {
+                        account,
+                        registry,
+                        sign,
+                    } => {
+                        let key = crate::op::key(&sdk, &account)?;
+                        let signer: &dyn Signer = match &key {
+                            crate::op::Key::Ua(_, k) => k,
+                            crate::op::Key::Native(_, k) => k,
+                            #[allow(unreachable_patterns)]
+                            _ => return Err(SdkError::Argument),
+                        };
+                        let sig = sign(signer, registry.as_ref(), &ua_path, &typed).map_err(ua)?;
+                        Ok(AppSigned {
+                            key_data: sig.key_data,
+                            signature: sig.signature,
+                            members: vec![],
+                            digest,
+                            review,
+                        })
+                    }
+                    How::Msig {
+                        chain,
+                        ua: m,
+                        slots,
+                    } => {
+                        let sig = crate::account::msig::app_msig(
+                            &sdk,
+                            &chain,
+                            &m,
+                            &slots,
+                            |first, current, inner, domain, s| {
+                                scaas_ua::wallet::pqvault::sign_msig(
+                                    first, current, inner, domain, &ua_path, &typed, s,
+                                )
+                            },
+                        )
+                        .await?;
+                        Ok(AppSigned {
+                            key_data: vec![],
+                            // CTR-UA-74: the `msig`'s version tag
+                            signature: sig.signature.clone(),
+                            members: sig.members.iter().map(AppMemberSig::from).collect(),
+                            digest,
+                            review,
+                        })
+                    }
+                }
+            })
+            .await
+    }
+}
+
 /// A `UASig` as an app record carries it (TS-D12): a single key `key_data` (empty for a stored kind and on path A) and
 /// `signature`; an `msig` `members` only.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -200,6 +304,60 @@ pub struct AppMemberSig {
 pub struct AppInnerSig {
     pub index: u16,
     pub sig: Vec<u8>,
+}
+
+/// CTR-UA-74 step 6: an `msig` (lower-case hex) and the structure version a verified record's signature names for it: the signer's
+/// tag, or a signing `msig` member slot's ([`AppCore::verify_pqvault_record_versions`], `verify_pqchat_record_versions`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MsigVersion {
+    pub msig: String,
+    pub version: u64,
+}
+
+/// CTR-UA-74 step 6 along one chain of records read in order (a session's epochs, a vault's epochs): `named`, a record's
+/// [`MsigVersion`]s, against `seen`, the highest version per `msig` the chain named before it. One lower: `false` (the record is
+/// refused, `seen` unchanged); else each raised into `seen`.
+pub fn msig_versions_up(seen: &mut BTreeMap<String, u64>, named: &[MsigVersion]) -> bool {
+    if named
+        .iter()
+        .any(|x| x.version < seen.get(&x.msig).copied().unwrap_or(0))
+    {
+        return false;
+    }
+    for x in named {
+        let e = seen.entry(x.msig.clone()).or_insert(0);
+        *e = (*e).max(x.version);
+    }
+    true
+}
+
+impl AppUaSig {
+    /// A-1 (CTR-UA-74): this kept signature with its `msig` version tags emptied, the signer's `signature` when it signs by
+    /// `members` (an `msig`) and each slot's `sig` that signs by its own leaves (an `msig` member): what a replica's copy of a
+    /// record is compared by with the home's, since a copy carries the tag of the replica registry's current version and
+    /// everything else the home kept. For a signature verified first: a verified one's shape gives its kinds (a single key signs
+    /// with no `members`, a single-key slot with no leaves).
+    pub fn without_tags(&self) -> AppUaSig {
+        if self.members.is_empty() {
+            return self.clone();
+        }
+        AppUaSig {
+            key_data: self.key_data.clone(),
+            signature: vec![],
+            members: self
+                .members
+                .iter()
+                .map(|m| AppMemberSig {
+                    sig: if m.members.is_empty() {
+                        m.sig.clone()
+                    } else {
+                        vec![]
+                    },
+                    ..m.clone()
+                })
+                .collect(),
+        }
+    }
 }
 
 impl From<&MemberSig> for AppMemberSig {
@@ -254,12 +412,16 @@ pub struct AppCall {
 }
 
 /// One registry record as [`AppCore::verify_app_record`] reads it: `(kind, keyData)` of `registrationOf`, an `msig`'s current
-/// structure with its `enabled` word (`None`: never updated) and its accepted-and-enabled bits.
+/// structure with its `enabled` word (`None`: never updated) and `version`, the structures of the versions the record's tags
+/// name (`msigAt`, CTR-UA-74: [`tagged_versions`]) and its accepted bits (`msigStateOf.accepted`: acceptance is per slot and
+/// permanent, CTR-UA-37; each check masks them by the `enabled` word of the version it reads, the reader rule's step 4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Rec {
     kind: u16,
     key_data: Vec<u8>,
     current: Option<(Vec<u8>, [u8; 32])>,
+    version: u64,
+    at: BTreeMap<u64, (Vec<u8>, [u8; 32])>,
     active: [u8; 32],
 }
 
@@ -316,31 +478,20 @@ fn sel(sig: &str) -> Vec<u8> {
         .to_vec()
 }
 
-/// `eth_call` of `sig(args…)` on `to` at the read's block.
-async fn call_at(
-    pool: &EvmPool,
-    at: &ReadAt<alloy::primitives::B256>,
-    to: Address,
-    sig: &str,
-    args: &[[u8; 32]],
-) -> Result<Vec<u8>, ReadError> {
-    let d = [sel(sig), args.concat()].concat();
-    pool.call_at(at, to, Bytes::from(d))
-        .await
-        .map(|b| b.to_vec())
-}
+use crate::line::call_at;
 
 fn bit(w: &[u8; 32], i: u16) -> bool {
     let i = usize::from(i);
     i < 256 && w.get(31 - i / 8).is_some_and(|b| b >> (i % 8) & 1 == 1)
 }
 
-/// The records of `ua`, its members and theirs (two levels, at most [`RECORDS_MAX`]) at the read's block: an unregistered
-/// id has none, a malformed answer is unread (the verdict false, never another endpoint's answer: R7 of spec §9.4).
+/// The records of `ua`, its members and theirs (two levels, at most [`RECORDS_MAX`]) at the read's block, each read at the
+/// generation that holds it (F2, [`crate::line::Line`]): an unregistered id has none, a malformed answer is unread (the
+/// verdict false, never another endpoint's answer: R7 of spec §9.4).
 async fn records(
     pool: &EvmPool,
     at: &ReadAt<alloy::primitives::B256>,
-    registry: Address,
+    line: &crate::line::Line,
     ua: [u8; 32],
 ) -> Result<BTreeMap<[u8; 32], Rec>, ReadError> {
     let mut out = BTreeMap::new();
@@ -349,6 +500,9 @@ async fn records(
         if out.len() >= RECORDS_MAX || out.contains_key(&id) || scaas_ua::in_native_space(&id) {
             continue;
         }
+        let Some(registry) = line.holder(pool, at, id).await? else {
+            continue;
+        };
         let r = call_at(pool, at, registry, "registrationOf(bytes32)", &[id]).await?;
         let Some(kind) = small(&r, 0, u64::from(u16::MAX)).and_then(|k| u16::try_from(k).ok())
         else {
@@ -364,6 +518,8 @@ async fn records(
             kind,
             key_data,
             current: None,
+            version: 0,
+            at: BTreeMap::new(),
             active: [0; 32],
         };
         if kind == MSIG {
@@ -379,13 +535,13 @@ async fn records(
                     continue;
                 };
                 rec.current = Some((c.clone(), enabled));
+                rec.version = version as u64;
                 c
             } else {
                 rec.key_data.clone()
             };
-            for (i, b) in rec.active.iter_mut().enumerate() {
-                *b = enabled.get(i).copied().unwrap_or(0) & accepted.get(i).copied().unwrap_or(0);
-            }
+            // CTR-UA-74 step 4: the accepted bits as they are; the version a record names gives its `enabled` word
+            rec.active = accepted;
             if depth < 2 {
                 if let Ok(m) = scaas_ua::ua_portable::MsigStructure::from_key_data(&structure) {
                     todo.extend(m.members.iter().map(|x| (x.id, depth + 1)));
@@ -395,6 +551,86 @@ async fn records(
         out.insert(id, rec);
     }
     Ok(out)
+}
+
+/// CTR-UA-74 (the reader rule): `msigAt` of each version the tags of `sig` name, the signer `id`'s (`signature`) and each signing
+/// `msig` member slot's (`MemberSig.sig`, at most 16), into `recs`: a kept record is judged at the version it names, never the
+/// current one. A tag that does not decode or names version 0 reads nothing (version 0 is the registration's structure); an
+/// answer that does not decode is unread (the verdict false).
+async fn tagged_versions(
+    pool: &EvmPool,
+    at: &ReadAt<alloy::primitives::B256>,
+    line: &crate::line::Line,
+    id: [u8; 32],
+    sig: &UASig,
+    recs: &mut BTreeMap<[u8; 32], Rec>,
+) -> Result<(), ReadError> {
+    use scaas_ua::ua_portable::{tag_version, MsigStructure};
+    let Some(r) = recs.get(&id).filter(|r| r.kind == MSIG) else {
+        return Ok(());
+    };
+    let mut want = vec![(id, tag_version(&sig.signature))];
+    if let Ok(s) = MsigStructure::from_key_data(r.current.as_ref().map_or(&r.key_data, |c| &c.0)) {
+        for m in &sig.members {
+            if let Some(x) = s
+                .members
+                .get(usize::from(m.index))
+                .filter(|x| x.kind == MSIG)
+            {
+                want.push((x.id, tag_version(&m.sig)));
+            }
+        }
+    }
+    // a quorum names at most 16 slots (CTR-UA-09): one read for each version named, at most 17
+    want.sort_unstable();
+    want.dedup();
+    for (x, v) in want.into_iter().take(17) {
+        let Some(v) = v.filter(|v| *v > 0) else {
+            continue;
+        };
+        let Some(registry) = line.holder(pool, at, x).await? else {
+            continue;
+        };
+        let mut w = [0u8; 32];
+        w[24..].copy_from_slice(&v.to_be_bytes());
+        let out = call_at(pool, at, registry, "msigAt(bytes32,uint64)", &[x, w]).await?;
+        if let (Some(d), Some(en), Some(r)) = (
+            crate::account::msig::decode_structure(&out),
+            word(&out, 32),
+            recs.get_mut(&x),
+        ) {
+            r.at.insert(v, (d, en));
+        }
+    }
+    Ok(())
+}
+
+/// CTR-UA-74 step 6: the `(msig, version)`s `sig` of `id` names on `state` ([`scaas_ua::ua_portable::named_versions`]); none for
+/// a native id (no record); `None` when one does not decode.
+pub(crate) fn named_versions(
+    id: &[u8; 32],
+    sig: &UASig,
+    state: &AppRecordState,
+) -> Option<Vec<MsigVersion>> {
+    let Some((kind, key_data)) = (state.members)(*id) else {
+        return Some(vec![]);
+    };
+    let v = scaas_ua::ua_portable::named_versions(
+        kind,
+        &key_data,
+        id,
+        sig,
+        state.members,
+        state.msig_at,
+    )?;
+    Some(
+        v.into_iter()
+            .map(|(m, version)| MsigVersion {
+                msig: hex(&m),
+                version,
+            })
+            .collect(),
+    )
 }
 
 /// A named argument of an app entry as an ABI value of the parameter `(ty, components)`: a tuple from an object of exactly its
@@ -1071,43 +1307,60 @@ impl AppCore {
         out
     }
 
-    /// Signs the app record `typed_json` (EIP-712 JSON: types, primary type, domain, message; never a digest) on `path` by
-    /// `account` (a UA key or a native EVM key; an `msig` or a stored key: `Argument` here). Refused by name (§12.4): a SCaaS
-    /// purpose, a SCaaS domain name, path A's field set or salt (`scaas-ua`); on path B a `chainId` other than the profile's or
-    /// a `verifyingContract` that is the profile's registry, factory or router, a listed token or DEX
-    /// (`AppDomainRefused`). A scope without `app_id` signs nothing under an app purpose (`Argument`).
-    pub async fn sign_app_record(
+    /// Prepares the app record `typed_json` (EIP-712 JSON: types, primary type, domain, message; never a digest) on `path` for
+    /// `account` (a UA key or a native EVM key; an `msig` or a stored key: `Argument` here) and returns its review and typed
+    /// digest; nothing is signed until [`AppPrepared::sign`] (T26 A-5, decision (125): the review is shown before the
+    /// signature, from the parsed typed data, never the caller's text). Refused by name (§12.4): a SCaaS purpose, a SCaaS domain
+    /// name, path A's field set or salt (`scaas-ua`); on path B a `chainId` other than the profile's or a `verifyingContract`
+    /// that is the profile's registry, factory or router, a listed token or DEX (`AppDomainRefused`). A scope without `app_id`
+    /// signs nothing under an app purpose (`Argument`).
+    pub async fn prepare_app_record(
         self: &Arc<Self>,
         account: KeyRef,
         path: AppPath,
         typed_json: String,
-    ) -> Result<AppSigned, SdkError> {
-        self.sign_with(
+    ) -> Result<AppPrepared, SdkError> {
+        self.prepare_with(
             account,
             path,
             typed_json,
             scaas_ua::wallet::app_record_digest,
             scaas_ua::wallet::sign_app_record,
-            false,
         )
         .await
     }
 
-    /// Signs the PqVault record `typed_json` (EIP-712 JSON, never a digest) on `path` by `account`, PqVault's dedicated path
-    /// (owner 2026-11-22, CLI-PQV-12; `scaas-ua` `wallet::pqvault`): a scope of PqVault's `app_id`, a primary type and
-    /// `encodeType` of PqVault's records (`Argument`), the domain `DS_V` on the portable path or `DS_B` on the chain-bound one
-    /// under `P_V` (`purpose` none or `P_V`; `AppDomainRefused`), the profile's checks of a chain-bound domain as
-    /// [`Self::sign_app_record`]'s. The generic call refuses every PqVault record. `records`: the profile whose registry holds
-    /// an `msig` signer's records on the portable path (controller call 2026-11-22, explicit parameters: required there,
-    /// `Argument` without); on the chain-bound path the path's chain (`records` none or that chain); for a single key on the
-    /// portable path none (`Argument` when given: nothing reads it).
-    pub async fn sign_pqvault_record(
+    /// Prepares the PqVault record `typed_json` (EIP-712 JSON, never a digest) on `path` for `account`, PqVault's dedicated path
+    /// (owner 2026-11-22, CLI-PQV-12; `scaas-ua` `wallet::pqvault`), signed by [`AppPrepared::sign`] after its review (A-5): a
+    /// scope of PqVault's `app_id`, a primary type and `encodeType` of PqVault's records (`Argument`), the domain `DS_V` on the
+    /// portable path or `DS_B` on the chain-bound one under `P_V` (`purpose` none or `P_V`; `AppDomainRefused`), the profile's
+    /// checks of a chain-bound domain as [`Self::prepare_app_record`]'s. The generic call refuses every PqVault record.
+    /// `records`: the profile whose registry holds an `msig` signer's records on the portable path (controller call
+    /// 2026-11-22, explicit parameters: required there, `Argument` without); on the chain-bound path the path's chain (`records`
+    /// none or that chain); for a single key on the portable path none (`Argument` when given: nothing reads it). A leave or a
+    /// removal's review also says that it applies if it lands within 16 epochs of the epoch it names (spec §9, F-4 / D2-3).
+    pub async fn prepare_pqvault_record(
         self: &Arc<Self>,
         account: KeyRef,
         path: AppPath,
         records: Option<String>,
         typed_json: String,
-    ) -> Result<AppSigned, SdkError> {
+    ) -> Result<AppPrepared, SdkError> {
+        let within = vault_exit_line(&typed_json);
+        let mut p = self
+            .prepare_pqvault_inner(account, path, records, typed_json)
+            .await?;
+        p.review.extend(within);
+        Ok(p)
+    }
+
+    async fn prepare_pqvault_inner(
+        self: &Arc<Self>,
+        account: KeyRef,
+        path: AppPath,
+        records: Option<String>,
+        typed_json: String,
+    ) -> Result<AppPrepared, SdkError> {
         let chain = match (&path, &account, records) {
             (AppPath::ChainBound { chain, .. }, _, r) if r.as_ref().is_none_or(|r| r == chain) => {
                 Some(chain.clone())
@@ -1117,111 +1370,78 @@ impl AppCore {
             (AppPath::Portable, _, None) => None,
             _ => return Err(SdkError::Argument),
         };
-        if let (KeyRef::Msig { ua, slots }, Some(chain)) = (&account, chain) {
+        if let (KeyRef::Msig { ua: msig_ua, slots }, Some(chain)) = (&account, chain) {
+            // the `msig` `ua`: the chain-bound domain's profile checks here; at the signature its records read as the generic
+            // `msig` path reads them (its structures, its `msig` members', their enabled and accepted bits: `MsigSlotInactive`)
+            // on `chain`'s registry, the slots' keys opened (local keys only: a slot signed elsewhere or a stored key row
+            // `Argument`), the registry generation's domain for a native member, then `scaas-ua`'s `pqvault::sign_msig` (its
+            // refusals: the record, the path, a set not minimal, a disabled slot)
+            let me = self.clone();
+            let (ua_hex, slots) = (msig_ua.clone(), slots.clone());
             return self
-                .sign_pqvault_msig(chain, ua.clone(), slots.clone(), path, typed_json)
+                .sdk
+                .clone()
+                .spawn(async move {
+                    let typed = TypedData::from_json(typed_json.as_bytes()).map_err(ua)?;
+                    let (ua_path, _) = me.ua_path(&path, &typed, &account).await?;
+                    let digest = scaas_ua::wallet::pqvault::digest(&ua_path, &typed).map_err(ua)?;
+                    Ok(AppPrepared {
+                        review: Self::review(&path, &typed),
+                        digest: hex(&digest),
+                        sdk: me.sdk.clone(),
+                        ua_path,
+                        typed,
+                        how: How::Msig {
+                            chain,
+                            ua: hex32(&ua_hex)?,
+                            slots,
+                        },
+                    })
+                })
                 .await;
         }
-        self.sign_with(
+        self.prepare_with(
             account,
             path,
             typed_json,
             scaas_ua::wallet::pqvault::digest,
             scaas_ua::wallet::pqvault::sign,
-            true,
         )
         .await
     }
 
-    /// [`Self::sign_pqvault_record`] by the `msig` `ua` (owner 2026-11-22): the chain-bound domain's profile checks first, then
-    /// the `msig`'s records read as the generic `msig` path reads them (its structures, its `msig` members', their enabled and
-    /// accepted bits: `MsigSlotInactive`), the slots' keys opened (local keys only: a slot signed elsewhere or a stored key row
-    /// `Argument`), the registry generation's domain for a native member, then `scaas-ua`'s `pqvault::sign_msig` (its refusals:
-    /// the record, the path, a set not minimal, a disabled slot). The records are read on `chain`'s registry.
-    async fn sign_pqvault_msig(
-        self: &Arc<Self>,
-        chain: String,
-        ua_hex: String,
-        slots: Vec<crate::op::MsigSlot>,
-        path: AppPath,
-        typed_json: String,
-    ) -> Result<AppSigned, SdkError> {
-        let me = self.clone();
-        let sdk = self.sdk.clone();
-        sdk.clone()
-            .spawn(async move {
-                let typed = TypedData::from_json(typed_json.as_bytes()).map_err(ua)?;
-                let account = KeyRef::Msig {
-                    ua: ua_hex.clone(),
-                    slots: slots.clone(),
-                };
-                let (ua_path, _) = me.ua_path(&path, &typed, &account, true).await?;
-                let digest = scaas_ua::wallet::pqvault::digest(&ua_path, &typed).map_err(ua)?;
-                let sig = crate::account::msig::app_msig(
-                    &sdk,
-                    &chain,
-                    &hex32(&ua_hex)?,
-                    &slots,
-                    |first, current, inner, domain, s| {
-                        scaas_ua::wallet::pqvault::sign_msig(
-                            first, current, inner, domain, &ua_path, &typed, s,
-                        )
-                    },
-                )
-                .await?;
-                Ok(AppSigned {
-                    key_data: vec![],
-                    signature: vec![],
-                    members: sig.members.iter().map(AppMemberSig::from).collect(),
-                    digest: hex(&digest),
-                    review: Self::review(&path, &typed),
-                })
-            })
-            .await
-    }
-
-    /// The entry under both signing calls: `digest` states the record's typed digest after its refusals, `sign` signs it.
-    async fn sign_with(
+    /// The entry under both prepare calls: `digest` states the record's typed digest after its refusals, `sign` signs it at
+    /// [`AppPrepared::sign`].
+    async fn prepare_with(
         self: &Arc<Self>,
         account: KeyRef,
         path: AppPath,
         typed_json: String,
         digest: fn(&UaPath, &TypedData) -> scaas_ua::wallet::Result<[u8; 32]>,
-        sign: fn(
-            &dyn Signer,
-            Option<&scaas_ua::Domain>,
-            &UaPath,
-            &TypedData,
-        ) -> scaas_ua::wallet::Result<UASig>,
-        line: bool,
-    ) -> Result<AppSigned, SdkError> {
+        sign: SignFn,
+    ) -> Result<AppPrepared, SdkError> {
         let me = self.clone();
-        let sdk = self.sdk.clone();
-        sdk.clone()
+        self.sdk
+            .clone()
             .spawn(async move {
                 let typed = TypedData::from_json(typed_json.as_bytes()).map_err(ua)?;
-                let (ua_path, registry) = me.ua_path(&path, &typed, &account, line).await?;
-                let digest = digest(&ua_path, &typed).map_err(ua)?;
-                let review = Self::review(&path, &typed);
-                let key = crate::op::key(&sdk, &account)?;
-                let signer: &dyn Signer = match &key {
-                    crate::op::Key::Ua(_, k) => k,
-                    crate::op::Key::Native(_, k) => k,
-                    #[allow(unreachable_patterns)]
-                    _ => return Err(SdkError::Argument),
-                };
-                let sig = sign(signer, registry.as_ref(), &ua_path, &typed).map_err(ua)?;
-                Ok(AppSigned {
-                    key_data: sig.key_data,
-                    signature: sig.signature,
-                    members: vec![],
-                    digest: hex(&digest),
-                    review,
+                let (ua_path, registry) = me.ua_path(&path, &typed, &account).await?;
+                let d = digest(&ua_path, &typed).map_err(ua)?;
+                Ok(AppPrepared {
+                    review: Self::review(&path, &typed),
+                    digest: hex(&d),
+                    sdk: me.sdk.clone(),
+                    ua_path,
+                    typed,
+                    how: How::Key {
+                        account,
+                        registry,
+                        sign,
+                    },
                 })
             })
             .await
     }
-
     /// The `scaas-ua` path of `path`, after the profile's checks of a chain-bound domain, and the registry's domain a native
     /// key signs `UAAuth` under.
     async fn ua_path(
@@ -1229,7 +1449,6 @@ impl AppCore {
         path: &AppPath,
         typed: &TypedData,
         account: &KeyRef,
-        line: bool,
     ) -> Result<(UaPath, Option<scaas_ua::Domain>), SdkError> {
         let app_id = self.app_id.ok_or(SdkError::Argument)?;
         let (chain, purpose) = match path {
@@ -1262,17 +1481,17 @@ impl AppCore {
             .unwrap_or_default();
         self.refuse_contract(&profile, &pool, vc).await?;
         let registry = match account {
+            // F2: a native signer's `UAAuth` is the bound registry's own, at its generation on the line
             KeyRef::Native { .. } => {
-                let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
-                let addr = r.parse().map_err(|_| SdkError::Argument)?;
-                // F2 (PqVault's dedicated path, `line`): the registry's own domain at its generation
-                Some(match line {
-                    true => {
-                        crate::account::msig::line_domain(&self.sdk, chain, &pool, addr, None)
-                            .await?
-                    }
-                    false => crate::account::msig::domain(&self.sdk, chain, &pool, addr).await?,
-                })
+                let (_, line) = crate::line::read_line(
+                    &self.sdk,
+                    chain,
+                    scaas_rpc::pool::BlockChoice::Latest,
+                    Purpose::Plain,
+                    |_, _, _| async { Ok(()) },
+                )
+                .await?;
+                Some(line.domain(None, chain_id, hex32(&profile.chain_uid)?))
             }
             _ => None,
         };
@@ -1281,7 +1500,9 @@ impl AppCore {
 
     /// `AppDomainRefused` for a contract an app record or call may not name (spec §12.4): the profile's registry, factory or
     /// router, a listed token or DEX, or a contract the profile's factory made of a class other than `AppDesc.class` (its
-    /// `infoOf` record, a plain read; any class when the scope declares none). `Argument` for a malformed address.
+    /// `infoOf` record read at the profile's final block; any class when the scope declares none). `Argument` for a malformed
+    /// address. Depth only (T26 A-10): the guard is the purpose refusal below the SDK; a contract the factory did not make
+    /// (class 0) or a profile without a factory passes this layer.
     async fn refuse_contract(
         &self,
         profile: &crate::ChainProfile,
@@ -1309,10 +1530,15 @@ impl AppCore {
         let f = Address::from(addr20(&f.to_ascii_lowercase())?);
         let mut arg = [0u8; 32];
         arg[12..].copy_from_slice(&c);
-        let tx = TransactionRequest::default()
-            .with_to(f)
-            .with_input(Bytes::from([sel("infoOf(address)"), arg.to_vec()].concat()));
-        let out = pool.call_tx(tx).await.map_err(sim)?;
+        // T26 A-10: at the profile's final block, as every other read of this layer
+        let data = Bytes::from([sel("infoOf(address)"), arg.to_vec()].concat());
+        let out = pool
+            .read_at_block(final_block(profile), Purpose::Plain, |at| {
+                let d = data.clone();
+                async move { pool.call_at(&at, f, d).await.map(|b| b.to_vec()) }
+            })
+            .await?
+            .value;
         // `Created(address addr, bytes32 creatorId, uint16 contractClass, …)`: a static tuple, the class in word 2
         let class = small(&out, 64, u64::from(u16::MAX)).ok_or(SdkError::Argument)?;
         if class != 0 && Some(class) != self.class.map(usize::from) {
@@ -1349,22 +1575,21 @@ impl AppCore {
         ua: [u8; 32],
         version: u64,
     ) -> Result<Vec<u8>, SdkError> {
-        let (profile, _, pool) = crate::op::evm(&self.sdk, chain)?;
-        let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
-        let registry = Address::from(addr20(&r.to_ascii_lowercase())?);
+        let (profile, _, _) = crate::op::evm(&self.sdk, chain)?;
         let mut v = [0u8; 32];
         v[24..].copy_from_slice(&version.to_be_bytes());
-        let pool = &pool;
-        let out = pool
-            .read_at_block(
-                final_block(&profile),
-                Purpose::FeedsDecryption,
-                |at| async move {
-                    call_at(pool, &at, registry, "kemKeyAt(bytes32,uint64)", &[ua, v]).await
-                },
-            )
-            .await?
-            .value;
+        // F2: read at the generation that holds `ua` (an unregistered one at the bound registry, which answers none)
+        let (out, _) = crate::line::read_line(
+            &self.sdk,
+            chain,
+            final_block(&profile),
+            Purpose::FeedsDecryption,
+            |pool, at, line| async move {
+                let to = line.holder(&pool, &at, ua).await?.unwrap_or(line.bound());
+                call_at(&pool, &at, to, "kemKeyAt(bytes32,uint64)", &[ua, v]).await
+            },
+        )
+        .await?;
         kem_pk_of(&out)
     }
 
@@ -1408,9 +1633,9 @@ impl AppCore {
             typed_json,
             sig,
             scaas_ua::wallet::verify_app_record,
-            false,
         )
         .await
+        .map(|v| v.is_some())
     }
 
     /// Whether `sig` is `ua`'s signature of the PqVault record `typed_json` on `path`, PqVault's dedicated path (owner
@@ -1424,6 +1649,22 @@ impl AppCore {
         typed_json: String,
         sig: AppUaSig,
     ) -> Result<bool, SdkError> {
+        self.verify_pqvault_record_versions(chain, ua, path, typed_json, sig)
+            .await
+            .map(|v| v.is_some())
+    }
+
+    /// [`Self::verify_pqvault_record`] with what CTR-UA-74 step 6 holds along a vault's chain: on a pass every `(msig, version)`
+    /// the signature names ([`MsigVersion`]: an `msig` signer's tag and each signing `msig` member slot's; none for a single key
+    /// or a native id); `None` on a refusal.
+    pub async fn verify_pqvault_record_versions(
+        self: &Arc<Self>,
+        chain: String,
+        ua: String,
+        path: AppPath,
+        typed_json: String,
+        sig: AppUaSig,
+    ) -> Result<Option<Vec<MsigVersion>>, SdkError> {
         self.verify_with(
             chain,
             ua,
@@ -1431,7 +1672,6 @@ impl AppCore {
             typed_json,
             sig,
             scaas_ua::wallet::pqvault::verify,
-            true,
         )
         .await
     }
@@ -1446,8 +1686,7 @@ impl AppCore {
         typed_json: String,
         sig: AppUaSig,
         f: fn(&[u8; 32], &UaPath, &TypedData, &UASig, &AppRecordState) -> bool,
-        line: bool,
-    ) -> Result<bool, SdkError> {
+    ) -> Result<Option<Vec<MsigVersion>>, SdkError> {
         let id = hex32(&ua)?;
         let typed = TypedData::from_json(typed_json.as_bytes()).map_err(SdkError::Ua)?;
         let p = match &path {
@@ -1470,55 +1709,62 @@ impl AppCore {
             }
         };
         let chain_bound = matches!(p, UaPath::ChainBound { .. });
-        self.with_records(&chain, id, chain_bound, line, |state| {
-            f(&id, &p, &typed, &UASig::from(&sig), state)
+        let sig = UASig::from(&sig);
+        self.with_records(&chain, id, chain_bound, &sig, |state| {
+            f(&id, &p, &typed, &sig, state)
+                .then(|| named_versions(&id, &sig, state))
+                .flatten()
         })
         .await
     }
 
     /// `f` over the registry state of `id` on `chain` (its records, its members' and theirs, two levels), read at the
     /// profile's final block as a read that feeds a decryption; with `chain_bound`, the registry's domain too when `id` is a
-    /// native id or an `msig` (a native member signs `UAAuth` in it).
+    /// native id or an `msig` (a native member signs `UAAuth` in it); the `msig` structures of the versions `sig`'s tags name
+    /// (CTR-UA-74).
     pub(crate) async fn with_records<R>(
         &self,
         chain: &str,
         id: [u8; 32],
         chain_bound: bool,
-        line: bool,
+        sig: &UASig,
         f: impl FnOnce(&AppRecordState) -> R,
     ) -> Result<R, SdkError> {
-        let (profile, _, pool) = crate::op::evm(&self.sdk, chain)?;
-        let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
-        let registry = Address::from(addr20(&r.to_ascii_lowercase())?);
-        let poolr = &pool;
-        let recs = pool
-            .read_at_block(
-                final_block(&profile),
-                Purpose::FeedsDecryption,
-                |at| async move { records(poolr, &at, registry, id).await },
-            )
-            .await?
-            .value;
+        let (profile, chain_id, _) = crate::op::evm(&self.sdk, chain)?;
+        // F2: the records and the domain from one line, one endpoint, one block
+        let ((recs, holder), line) = crate::line::read_line(
+            &self.sdk,
+            chain,
+            final_block(&profile),
+            Purpose::FeedsDecryption,
+            |pool, at, line| async move {
+                let mut recs = records(&pool, &at, &line, id).await?;
+                tagged_versions(&pool, &at, &line, id, sig, &mut recs).await?;
+                Ok((recs, line.holder(&pool, &at, id).await?))
+            },
+        )
+        .await?;
         let needs_domain = chain_bound
             && (scaas_ua::in_native_space(&id) || recs.get(&id).is_some_and(|r| r.kind == MSIG));
-        let domain = if needs_domain {
-            // F2 (`line`, PqVault's dedicated path): the domain of the generation that holds `id`, at its generation
-            Some(match line {
-                true => {
-                    crate::account::msig::line_domain(&self.sdk, chain, &pool, registry, Some(id))
-                        .await?
-                }
-                false => crate::account::msig::domain(&self.sdk, chain, &pool, registry).await?,
+        // a native id's key signs in the bound registry's domain, an `msig`'s native members in its holder's
+        let domain = needs_domain
+            .then(|| -> Result<_, SdkError> {
+                Ok(line.domain(holder, chain_id, hex32(&profile.chain_uid)?))
             })
-        } else {
-            None
-        };
+            .transpose()?;
         let members = |x: [u8; 32]| recs.get(&x).map(|r| (r.kind, r.key_data.clone()));
-        let current = |x: [u8; 32]| recs.get(&x).and_then(|r| r.current.clone());
+        // CTR-UA-74: `msigAt` of the versions read (`None`: the current one; version 0 the first structure, every slot)
+        let msig_at = |x: [u8; 32], v: Option<u64>| {
+            let r = recs.get(&x)?;
+            match v {
+                Some(v) if v != r.version => r.at.get(&v).map(|(d, en)| (d.clone(), *en, v)),
+                _ => r.current.clone().map(|(d, en)| (d, en, r.version)),
+            }
+        };
         let accepted = |x: [u8; 32], i: u16| recs.get(&x).is_some_and(|r| bit(&r.active, i));
         Ok(f(&AppRecordState {
             members: &members,
-            current: &current,
+            msig_at: &msig_at,
             accepted: &accepted,
             domain: domain.as_ref(),
         }))
@@ -1595,6 +1841,28 @@ impl AppCore {
     }
 }
 
+/// A PqVault exit's review line (CTR-PQV-06, spec §9: applied at the head whenever it lands within 16 epochs of the epoch it
+/// names; it cannot be withdrawn): a `PqVaultRemove` names epoch `nextEpoch - 1`, a `PqVaultLeave` its `epochId`. Other records:
+/// none. The typed JSON is parsed again by the call; a shape it refuses gives no line here.
+fn vault_exit_line(typed_json: &str) -> Option<ReviewField> {
+    let v: serde_json::Value = serde_json::from_str(typed_json).ok()?;
+    let m = v.get("message")?;
+    let named = match v.get("primaryType")?.as_str()? {
+        "PqVaultRemove" => {
+            let n = m.get("nextEpoch")?;
+            let n = n.as_u64().or_else(|| n.as_str()?.parse().ok())?;
+            format!("epoch {}", n.saturating_sub(1))
+        }
+        "PqVaultLeave" => format!("the epoch it names ({})", m.get("epochId")?.as_str()?),
+        _ => return None,
+    };
+    Some(field(
+        "appliesWithin",
+        format!("applies if it lands within 16 epochs of {named}; it cannot be withdrawn"),
+        Source::Derived,
+    ))
+}
+
 pub(crate) fn field(name: &str, value: String, source: Source) -> ReviewField {
     ReviewField {
         name: name.to_string(),
@@ -1635,9 +1903,10 @@ impl AppCore {
     /// A view of an app's contract (or a SCaaS view an app reads, a registry's `kemKeyOf`, a factory listing): `entry` the
     /// function's JSON ABI item (`view` or `pure`, its parameters named; `Argument` otherwise), `args` a JSON object of exactly
     /// its parameter names (as [`AppCore::prepare_app_call`]), read at the profile's final block. Bounded: the entry 64 KiB,
-    /// the arguments 128 KiB, the answer 1 MiB, an output type nesting at most 16 levels (`Argument`). `trusted`: the read
+    /// the arguments 128 KiB, the answer 1 MiB, an output type nesting at most 16 levels (`Argument`). Always a read that
     /// feeds a decryption (`Purpose::FeedsDecryption`, ARCH-POS-15: a discovered node only under the majority option with at
-    /// least three nodes). The answer: a JSON object of the outputs by name (an unnamed one by its index), tuples by their
+    /// least three nodes; T26 B-17: the fail-closed default, never a caller's flag); [`Self::read_app_plain`] for a read
+    /// that never feeds one. The answer: a JSON object of the outputs by name (an unnamed one by its index), tuples by their
     /// components' names, integers as decimal strings, bytes, addresses and fixed bytes as `0x` hex.
     pub async fn read_app(
         self: &Arc<Self>,
@@ -1645,7 +1914,44 @@ impl AppCore {
         contract: String,
         entry: String,
         args: String,
-        trusted: bool,
+    ) -> Result<String, SdkError> {
+        self.read_app_as(chain, contract, entry, args, Purpose::FeedsDecryption)
+            .await
+    }
+
+    /// [`Self::read_app`] as a plain read (`Purpose::Plain`): its answer never feeds a decryption (T26 B-17).
+    pub async fn read_app_plain(
+        self: &Arc<Self>,
+        chain: String,
+        contract: String,
+        entry: String,
+        args: String,
+    ) -> Result<String, SdkError> {
+        self.read_app_as(chain, contract, entry, args, Purpose::Plain)
+            .await
+    }
+
+    async fn read_app_as(
+        self: &Arc<Self>,
+        chain: String,
+        contract: String,
+        entry: String,
+        args: String,
+        purpose: Purpose,
+    ) -> Result<String, SdkError> {
+        self.read_app_by(chain, contract, entry, args, purpose, false)
+            .await
+    }
+
+    /// [`AppCore::read_app`] at `purpose`, under strict majority when `agreed` ([`AppCore::read_app_agreed`]).
+    async fn read_app_by(
+        self: &Arc<Self>,
+        chain: String,
+        contract: String,
+        entry: String,
+        args: String,
+        purpose: Purpose,
+        agreed: bool,
     ) -> Result<String, SdkError> {
         use alloy::dyn_abi::FunctionExt;
         use alloy::json_abi::StateMutability;
@@ -1662,19 +1968,19 @@ impl AppCore {
         }
         let to = Address::from(addr20(&contract.to_ascii_lowercase())?);
         let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
-        let purpose = if trusted {
-            Purpose::FeedsDecryption
-        } else {
-            Purpose::Plain
-        };
+
         let (pool, data) = (&pool, Bytes::from(data));
-        let out = pool
-            .read_at_block(final_block(&profile), purpose, |at| {
-                let d = data.clone();
-                async move { pool.call_at(&at, to, d).await.map(|b| b.to_vec()) }
-            })
-            .await?
-            .value;
+        let call = |at| {
+            let d = data.clone();
+            async move { pool.call_at(&at, to, d).await.map(|b| b.to_vec()) }
+        };
+        let choice = final_block(&profile);
+        let out = if agreed {
+            pool.read_at_block_agreed(choice, purpose, call).await?
+        } else {
+            pool.read_at_block(choice, purpose, call).await?
+        }
+        .value;
         if out.len() > READ_MAX {
             return Err(SdkError::Argument);
         }
@@ -1691,6 +1997,8 @@ impl AppCore {
         Ok(serde_json::Value::Object(o).to_string())
     }
 }
+
+mod agreed;
 
 /// Test-only entry points (feature `vectors`, never in a release build nor a binding): key bytes in and out and fixed
 /// randomness, for the vectors.

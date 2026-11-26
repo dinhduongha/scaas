@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! The hostile harness's e2e writes (plan T11): records an honest client refuses to build or to send, made from the SDK's
-//! generic entries and sent as prepared or raw calldata, never by `pqchat-core`'s write paths.
+//! generic entries and sent as prepared or raw calldata, never by `pqchat-core`'s write paths; envelopes an honest client never
+//! seals, through the SDK's vectors build (a record signed by a UA other than its sender, a non-zero fill, a `sealedInfo` not
+//! in canonical form).
 use crate::common::chain::CHAIN;
 use crate::harness::World;
 use pqchat_core::model::hex;
 use pqchat_core::net::Net;
 use pqchat_core::session::{Info, Me};
 use pqchat_core::PqChat;
-use scaas_sdk::app_core::{AppCall, AppUaSig};
-use scaas_sdk::pqchat_keys::PqSessionNew;
-use scaas_sdk::pqchat_records::{PqMemberKey, PqWrap};
+use scaas_sdk::app_core::{AppCall, AppKey, AppUaSig};
+use scaas_sdk::pqchat_keys::{PqMessageHeader, PqSealedMessage, PqSessionNew};
+use scaas_sdk::pqchat_records::{PqChatMessage, PqMemberKey, PqWrap};
 use serde_json::{json, Value};
+use std::sync::Arc;
 
 fn sig_json(s: &AppUaSig) -> Value {
     json!({"keyData": hex(&s.key_data), "signature": hex(&s.signature),
@@ -78,7 +81,7 @@ pub async fn session_at(
     .unwrap();
     let signed = w
         .app
-        .pqchat_sign_session(
+        .pqchat_prepare_session(
             by.key.clone(),
             k,
             PqSessionNew {
@@ -92,6 +95,9 @@ pub async fn session_at(
             },
         )
         .await
+        .unwrap()
+        .sign()
+        .await
         .unwrap();
     let sealed = signed
         .review
@@ -101,7 +107,7 @@ pub async fn session_at(
         .value
         .clone();
     let s = json!({"creator": me, "nonce": nonce.to_string(), "homeChain": w.l.uid,
-        "homeChatContract": home.to_ascii_lowercase(), "admins": [me],
+        "homeChatContract": home.to_ascii_lowercase(), "groupMode": "0", "admins": [me],
         "members": keys.iter().map(|k| json!({"ua": k.ua, "keyId": k.key_id.to_string(), "via": k.via})).collect::<Vec<_>>(),
         "wrapHashes": signed.wrap_hashes, "sealedInfo": sealed});
     let a = json!({"s": s, "wraps": wraps.iter().map(wrap_json).collect::<Vec<_>>(), "sig": sig_json(&signed.sig)});
@@ -109,5 +115,123 @@ pub async fn session_at(
         .inner
         .prepare(CHAIN, at, "IPqChat.createSession", a, &w.l.payer)
         .await
+        .unwrap()
+}
+
+/// `by`'s position on its chain `(sid, eid, device)` under `k` at `counter`, and the header of a message there.
+fn at_counter(
+    w: &World,
+    by: &Me,
+    k: &Arc<AppKey>,
+    (sid, eid): (&str, &str),
+    device: &str,
+    counter: u64,
+) -> (Arc<AppKey>, PqMessageHeader) {
+    let p0 = w
+        .app
+        .pqchat_chain(
+            k.clone(),
+            sid.into(),
+            eid.into(),
+            by.ua.clone(),
+            device.into(),
+        )
+        .unwrap();
+    let pos = if counter == 0 {
+        p0
+    } else {
+        w.app.pqchat_advance(p0, counter).unwrap()
+    };
+    let h = PqMessageHeader {
+        session_id: sid.into(),
+        epoch_id: eid.into(),
+        device: device.into(),
+        counter,
+        parents: vec![],
+    };
+    (pos, h)
+}
+
+/// A message of `by` sealed through the SDK's S5 under `k` of `(sid, eid)` (no client counter spent, nothing shown).
+pub async fn sealed(
+    w: &World,
+    by: &Me,
+    k: &Arc<AppKey>,
+    ids: (&str, &str),
+    device: &str,
+    counter: u64,
+    content: &str,
+) -> PqSealedMessage {
+    let (pos, h) = at_counter(w, by, k, ids, device, counter);
+    w.app
+        .pqchat_seal_message(by.key.clone(), k.clone(), pos, h, content.into())
+        .await
+        .unwrap()
+}
+
+/// A record of `(sid, eid)` naming `sender` and signed by `signer` (the generic `prepare_pqchat_message`), its envelope under
+/// `k`: what V1 refuses.
+pub async fn signed_by_another(
+    w: &World,
+    signer: &Me,
+    sender: &str,
+    k: &Arc<AppKey>,
+    (sid, eid): (&str, &str),
+) -> Vec<u8> {
+    let r = PqChatMessage {
+        session_id: sid.into(),
+        epoch_id: eid.into(),
+        sender: sender.into(),
+        device: format!("0x{}", "b3".repeat(16)),
+        counter: 0,
+        parents: vec![],
+        ciphertext: vec![0x5a; 1040],
+    };
+    let sig = w
+        .app
+        .prepare_pqchat_message(signer.key.clone(), r.clone())
+        .await
+        .unwrap()
+        .sign()
+        .await
+        .unwrap()
+        .sig;
+    w.app
+        .pqchat_vectors_envelope(k.clone(), r, sig, [3; 12])
+        .unwrap()
+}
+
+/// A message of `by` whose padded plaintext has one non-zero fill byte (its last), sealed under `mk` at its position.
+pub async fn with_fill(
+    w: &World,
+    by: &Me,
+    k: &Arc<AppKey>,
+    ids: (&str, &str),
+    device: &str,
+    counter: u64,
+    content: &str,
+) -> PqSealedMessage {
+    let (pos, h) = at_counter(w, by, k, ids, device, counter);
+    let mut pt = scaas_ua::wallet::pqchat_keys::pad(content.as_bytes()).unwrap();
+    *pt.last_mut().unwrap() = 1;
+    w.app
+        .pqchat_vectors_seal_padded(by.key.clone(), k.clone(), pos, h, pt, [12; 12])
+        .await
+        .unwrap()
+}
+
+/// A `sealedInfo` of `(sid, eid)` under `k` whose plaintext is `canonical` with one space after its first brace: padded as a
+/// sealer pads, but not the canonical form K5 requires.
+pub fn info_spaced(
+    w: &World,
+    k: &Arc<AppKey>,
+    (sid, eid): (&str, &str),
+    canonical: &[u8],
+) -> Vec<u8> {
+    let mut t = b"{ ".to_vec();
+    t.extend_from_slice(&canonical[1..]);
+    let pt = scaas_ua::wallet::pqchat_keys::pad(&t).unwrap();
+    w.app
+        .pqchat_vectors_seal_info_raw(k.clone(), sid.into(), eid.into(), pt, [11; 12])
         .unwrap()
 }

@@ -1059,13 +1059,13 @@ return inFlight(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( BigInt block,  String hash)?  landed,TResult Function()?  consumed,TResult Function( BigInt block,  String hash)?  reverted,TResult Function()?  expired,TResult Function( InFlight detail)?  inFlight,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( BigInt block,  String hash)?  landed,TResult Function( Basis basis)?  consumed,TResult Function( BigInt block,  String hash)?  reverted,TResult Function( Basis basis)?  expired,TResult Function( InFlight detail)?  inFlight,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case OpState_Landed() when landed != null:
 return landed(_that.block,_that.hash);case OpState_Consumed() when consumed != null:
-return consumed();case OpState_Reverted() when reverted != null:
+return consumed(_that.basis);case OpState_Reverted() when reverted != null:
 return reverted(_that.block,_that.hash);case OpState_Expired() when expired != null:
-return expired();case OpState_InFlight() when inFlight != null:
+return expired(_that.basis);case OpState_InFlight() when inFlight != null:
 return inFlight(_that.detail);case _:
   return orElse();
 
@@ -1084,13 +1084,13 @@ return inFlight(_that.detail);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( BigInt block,  String hash)  landed,required TResult Function()  consumed,required TResult Function( BigInt block,  String hash)  reverted,required TResult Function()  expired,required TResult Function( InFlight detail)  inFlight,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( BigInt block,  String hash)  landed,required TResult Function( Basis basis)  consumed,required TResult Function( BigInt block,  String hash)  reverted,required TResult Function( Basis basis)  expired,required TResult Function( InFlight detail)  inFlight,}) {final _that = this;
 switch (_that) {
 case OpState_Landed():
 return landed(_that.block,_that.hash);case OpState_Consumed():
-return consumed();case OpState_Reverted():
+return consumed(_that.basis);case OpState_Reverted():
 return reverted(_that.block,_that.hash);case OpState_Expired():
-return expired();case OpState_InFlight():
+return expired(_that.basis);case OpState_InFlight():
 return inFlight(_that.detail);}
 }
 /// A variant of `when` that fallback to returning `null`
@@ -1105,13 +1105,13 @@ return inFlight(_that.detail);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( BigInt block,  String hash)?  landed,TResult? Function()?  consumed,TResult? Function( BigInt block,  String hash)?  reverted,TResult? Function()?  expired,TResult? Function( InFlight detail)?  inFlight,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( BigInt block,  String hash)?  landed,TResult? Function( Basis basis)?  consumed,TResult? Function( BigInt block,  String hash)?  reverted,TResult? Function( Basis basis)?  expired,TResult? Function( InFlight detail)?  inFlight,}) {final _that = this;
 switch (_that) {
 case OpState_Landed() when landed != null:
 return landed(_that.block,_that.hash);case OpState_Consumed() when consumed != null:
-return consumed();case OpState_Reverted() when reverted != null:
+return consumed(_that.basis);case OpState_Reverted() when reverted != null:
 return reverted(_that.block,_that.hash);case OpState_Expired() when expired != null:
-return expired();case OpState_InFlight() when inFlight != null:
+return expired(_that.basis);case OpState_InFlight() when inFlight != null:
 return inFlight(_that.detail);case _:
   return null;
 
@@ -1192,33 +1192,67 @@ as String,
 
 
 class OpState_Consumed extends OpState {
-  const OpState_Consumed(): super._();
+  const OpState_Consumed({required this.basis}): super._();
   
 
+ final  Basis basis;
 
-
+/// Create a copy of OpState
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$OpState_ConsumedCopyWith<OpState_Consumed> get copyWith => _$OpState_ConsumedCopyWithImpl<OpState_Consumed>(this, _$identity);
 
 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is OpState_Consumed);
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is OpState_Consumed&&(identical(other.basis, basis) || other.basis == basis));
 }
 
 
 @override
-int get hashCode => runtimeType.hashCode;
+int get hashCode => Object.hash(runtimeType,basis);
 
 @override
 String toString() {
-  return 'OpState.consumed()';
+  return 'OpState.consumed(basis: $basis)';
 }
 
 
 }
 
+/// @nodoc
+abstract mixin class $OpState_ConsumedCopyWith<$Res> implements $OpStateCopyWith<$Res> {
+  factory $OpState_ConsumedCopyWith(OpState_Consumed value, $Res Function(OpState_Consumed) _then) = _$OpState_ConsumedCopyWithImpl;
+@useResult
+$Res call({
+ Basis basis
+});
 
 
+
+
+}
+/// @nodoc
+class _$OpState_ConsumedCopyWithImpl<$Res>
+    implements $OpState_ConsumedCopyWith<$Res> {
+  _$OpState_ConsumedCopyWithImpl(this._self, this._then);
+
+  final OpState_Consumed _self;
+  final $Res Function(OpState_Consumed) _then;
+
+/// Create a copy of OpState
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? basis = null,}) {
+  return _then(OpState_Consumed(
+basis: null == basis ? _self.basis : basis // ignore: cast_nullable_to_non_nullable
+as Basis,
+  ));
+}
+
+
+}
 
 /// @nodoc
 
@@ -1292,33 +1326,67 @@ as String,
 
 
 class OpState_Expired extends OpState {
-  const OpState_Expired(): super._();
+  const OpState_Expired({required this.basis}): super._();
   
 
+ final  Basis basis;
 
-
+/// Create a copy of OpState
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$OpState_ExpiredCopyWith<OpState_Expired> get copyWith => _$OpState_ExpiredCopyWithImpl<OpState_Expired>(this, _$identity);
 
 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is OpState_Expired);
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is OpState_Expired&&(identical(other.basis, basis) || other.basis == basis));
 }
 
 
 @override
-int get hashCode => runtimeType.hashCode;
+int get hashCode => Object.hash(runtimeType,basis);
 
 @override
 String toString() {
-  return 'OpState.expired()';
+  return 'OpState.expired(basis: $basis)';
 }
 
 
 }
 
+/// @nodoc
+abstract mixin class $OpState_ExpiredCopyWith<$Res> implements $OpStateCopyWith<$Res> {
+  factory $OpState_ExpiredCopyWith(OpState_Expired value, $Res Function(OpState_Expired) _then) = _$OpState_ExpiredCopyWithImpl;
+@useResult
+$Res call({
+ Basis basis
+});
 
 
+
+
+}
+/// @nodoc
+class _$OpState_ExpiredCopyWithImpl<$Res>
+    implements $OpState_ExpiredCopyWith<$Res> {
+  _$OpState_ExpiredCopyWithImpl(this._self, this._then);
+
+  final OpState_Expired _self;
+  final $Res Function(OpState_Expired) _then;
+
+/// Create a copy of OpState
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? basis = null,}) {
+  return _then(OpState_Expired(
+basis: null == basis ? _self.basis : basis // ignore: cast_nullable_to_non_nullable
+as Basis,
+  ));
+}
+
+
+}
 
 /// @nodoc
 

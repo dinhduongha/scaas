@@ -34,7 +34,7 @@ AREAS = {
     "contracts": (["contracts/"], ["CTR-"]),
     "netcli": (["networks/", "clients/", "integration.md", "integration-odoo-example.md"], ["NET-", "CLI-", "INT-"]),
 }
-NOT_CURRENT = ("history/", "research/", "reviews/", "superpowers/")
+NOT_CURRENT = ("history/", "research/", "reviews/", "superpowers/", "audit/prompts/")
 REORG = ("history", "reorg")  # reorg ledgers: id-map.tsv, section-map.tsv, facts/ (were docs/_work/ until Phase 2)
 CONTENTS = re.compile(r"^\*\*Contents\*\*\n(?:.*\n)*?(?=^## )", re.M)  # generated table of contents
 BUDGET = {

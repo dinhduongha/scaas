@@ -15,9 +15,9 @@ rules: `docs/contracts/` (start at `docs/contracts/README.md`); reasons and old 
 | Universal Accounts | `ua/UARegistry.sol` (views, `requireAuthorized`) with its linked `ua/UARegistryCoreLib.sol` and `ua/UARegistryAuxLib.sol` (the writes, the reads off the hot path), `ua/UAKinds.sol`, `ua/verifiers/`, the PQ verifiers (`MlDsa`, `FnDsa`, `SlhDsa`) | built; admin-free registry, kinds `0x0100`–`0x0108`, groups, `msig`, Zether / PQZ kinds, per-kind list ([accounts.md](../../docs/contracts/accounts.md)) |
 | DEX | `dex/SCaaSDex.sol` (`DexPuller`), `trade/` | built; clone per DEX, `mtxSettle` one taker / many makers ([dex.md](../../docs/contracts/dex.md)) |
 | Accounts and wallets | `account/SmartKeyAccount.sol` (+ factory), `wallet/MandateWallet.sol` | built |
-| Hedera | `hedera/` | built; HIP-632 / long-zero helpers for the Hedera profile ([networks/hedera.md](../../docs/networks/hedera.md)) |
+| Hedera | `hedera/` | built and kept unchanged (owner 2026-11-26): HIP-632 / long-zero helpers and the HTS calls (`0x167`) behind `IS_HEDERA`; Hedera is a tier-3 chain, not yet eligible, nothing deployed there ([networks/hedera.md](../../docs/networks/hedera.md)) |
 | Shared | `common/` (`MetaTxLib`, `FeePolicy`, `SigCheck`, `SaltedEIP712`, `SSTORE2`, curves and hashes) | built |
-| Chain notes | `chains/{scaas-testnet,gnosis,celo}/` | notes |
+| Chain profiles | `chains/<key>/` (`profile.json`, `README.md`) | one per EVM chain; each README states the chain's tier ([NET-EVM-20](../../docs/networks/evm.md#NET-EVM-20): **tier 1 bold**, tier 2 plain, *tier 3 italic*) |
 
 `legacy/` keeps superseded lines for reference (`legacy/README.md`): not compiled, not tested, never deployed.
 
@@ -102,4 +102,5 @@ The generic `mtxExecute` / `uaExecute` stay for a mixed batch or an op without a
 - **No `isEOA`.** `extcodesize == 0` is true for undeployed wallets, contracts in their constructor and (EIP-7702)
   delegated EOAs; contracts accept both kinds of signer through ERC-1271 (`SigCheck`). Allowances are only between
   contracts (`ERC20MetaTx`: `approve` refuses a non-contract spender, `transferFrom` a non-contract caller).
-- **Fees in ppm** (1e6), hard cap 1 % = 10,000 ppm.
+- **Token fees in ppm** (1e6), hard cap 1 % = 10,000 ppm of an amount; an absolute `FIXED` token fee on a call that moves no
+  amount is uncapped ([CTR-MTX-20](../../docs/contracts/metatx.md#CTR-MTX-20)). The gas fee is the submitter's, never in an intent.

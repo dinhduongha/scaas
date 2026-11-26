@@ -148,8 +148,8 @@ MUTANTS = [
         [
             (
                 Q,
-                "                        return Ok(gateway());",
-                "                        if figure.is_none() {\n                            return Err(SdkError::GasUnquoted);\n                        }\n                        return Ok(gateway());",
+                "                        return Ok(SubmitQuote {\n                            gateways: kept,",
+                "                        if figure.is_none() {\n                            return Err(SdkError::GasUnquoted);\n                        }\n                        return Ok(SubmitQuote {\n                            gateways: kept,",
             )
         ],
         U + "gateway_quote_carries_gas_or_reports_it_unquoted",

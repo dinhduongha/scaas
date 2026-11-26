@@ -27,6 +27,11 @@ contract SubjectRouter {
         (chainUid, registry) = (uid, registry_);
     }
 
+    /// G-3: `configureChain` asks the router's `factory()`; a stand-in answers the factory that asks.
+    function factory() external view returns (address) {
+        return msg.sender;
+    }
+
     function smartKeyCloneHash() external view returns (bytes32) {
         return IUARegistry(registry).smartKeyCloneHash();
     }
@@ -75,6 +80,7 @@ contract GovRouterCreateTest is GovRouterFixture {
 
     function setUp() public override {
         super.setUp();
+        _routerNaming(EnvKit.nextCreate(2)); // G-3: the router names the factory built next
         f = EnvKit.factory(REGISTRAR, chainUidA, 0, address(router));
         // T66b: the releases' body modules (the token's, the DEX's D), pinned in their envs
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
@@ -258,7 +264,8 @@ contract GovRouterCreateTest is GovRouterFixture {
         assertEq(NoteKind(inner).seenCreator(), nid(outer));
         assertEq(f.creating(), bytes32(0), "restored");
         (IOpenFactory.Created[] memory p,) = f.contractsPage(4, 0, 10);
-        assertEq(p[0].addr, inner, "the nested record first");
-        assertEq(p[1].addr, outer);
+        // CTR-GOV-33 G-1 (2026-11-24): an instance is indexed before its initializer runs, so the outer record comes first
+        assertEq(p[0].addr, outer, "the outer record first");
+        assertEq(p[1].addr, inner);
     }
 }

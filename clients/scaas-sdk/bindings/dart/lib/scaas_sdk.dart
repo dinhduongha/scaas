@@ -71,7 +71,8 @@ Future<void> loadScaasSdk(String path,
   checkAbi(expectApi: expectApi, needFeatures: needFeatures);
 }
 
-/// The load check: refuses a library of another `api_version` or without a needed feature.
+/// The load check: refuses a library of another `api_version` or without a needed feature (the early message; the Rust
+/// opening runs the full check again, the `vectors` build included).
 void checkAbi({int expectApi = generatedApiVersion, int needFeatures = requiredFeatures}) {
   if (apiVersion() != expectApi) throw AbiMismatch('api_version ${apiVersion()}, generated against $expectApi');
   final f = features().toInt();
@@ -161,10 +162,18 @@ StoreAnswer _failed(StoreError e) => StoreAnswer(token: BigInt.zero, error: e);
 AuthError _authError(Object e) => e is AuthException ? e.error : AuthError.unexpected;
 final _none = Uint8List(0);
 
-/// Opens the SDK over [store] and [auth] (the records of closures the SDK wraps into its traits).
+/// Opens the SDK over [store] and [auth] (the records of closures the SDK wraps into its traits). The Rust side runs the load
+/// check first ([expectApi], [needFeatures], and a test-only `vectors` build refused): `AbiMismatch` (review T26 C-2).
 Future<SdkHandle> openSdk(SecureStore store, Authenticator auth,
-        {List<ChainProfile> profiles = const [], String? rpId, Limits? limits, List<GasTable> gasTables = const []}) =>
+        {List<ChainProfile> profiles = const [],
+        String? rpId,
+        Limits? limits,
+        List<GasTable> gasTables = const [],
+        int expectApi = generatedApiVersion,
+        int needFeatures = requiredFeatures}) =>
     sdkOpen(
+      expectApi: expectApi,
+      needFeatures: BigInt.from(needFeatures),
       profiles: profiles,
       rpId: rpId,
       limits: limits ?? limitsDefault(),

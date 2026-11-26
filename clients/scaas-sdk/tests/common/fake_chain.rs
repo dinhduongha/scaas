@@ -29,6 +29,8 @@ pub type VerdictFn = fn(&Value) -> (u16, Value);
 pub enum Gw {
     Queue,
     Refuse,
+    /// a 503 on every write route (unreachable: the bytes may or may not have reached it); `GET /v1/gateway` still answers
+    Down,
 }
 
 pub struct Chain {
@@ -44,6 +46,11 @@ pub struct Chain {
     pub base_fee: u64,
     /// lane nonce by contract (lower-case `0x` hex): `mtxNonce` answers it for any `from` and lane
     pub nonces: HashMap<String, u64>,
+    /// a router's keyed nonce by contract (G1, CTR-GOV-33): `mtxNonceFor` answers it for any target, `from` and lane, a map of
+    /// its own (review D-1: one number for both views hid a follow that read the wrong one)
+    pub nonces_for: HashMap<String, u64>,
+    /// the first block whose state holds `nonces` (below it `mtxNonce` answers 0; review T26 B-11)
+    pub nonces_from: u64,
     pub code: HashMap<String, String>,
     pub logs: Vec<Value>,
     /// tx id -> status
@@ -67,6 +74,8 @@ pub struct Chain {
     pub requests: Vec<String>,
     /// `eth_call` and `eth_estimateGas` of a contract revert (an unsigned form the contract refuses)
     pub call_revert: bool,
+    /// `eth_call` and `eth_estimateGas` fail as the node's own timeout (a transport failure, no revert; review T26 B-6)
+    pub sim_down: bool,
     /// the blocks carry no `baseFeePerGas` (a chain without EIP-1559)
     pub no_base_fee: bool,
     /// ERC-5267 `eip712Domain()` by contract: `(name, salt)`, version "1", the fake's chain id, the contract
@@ -84,6 +93,14 @@ pub struct Chain {
     pub storage: HashMap<(String, String), String>,
     /// `eth_call` answers by `(to, calldata prefix)`, read first (plan T13: the registry's views)
     pub answers: Vec<(String, String, String)>,
+    /// `eth_call` answers above the finalized block only, read before `answers` (T26 A-10: a read at the head, not the final block)
+    pub head_answers: Vec<(String, String, String)>,
+    /// `linea_estimateGas`'s answer (T26 B2-1); `None`: the chain's own `gas`, base fee and priority fee
+    pub linea: Option<Value>,
+    /// `eth_getLogs` answers every log, whatever the filter and the range asked (T26 B2-4)
+    pub logs_unfiltered: bool,
+    /// `eth_getLogs` filters by address and topics but answers every block (a range ignored; T26 B2-4)
+    pub logs_unranged: bool,
     /// `eth_estimateGas` by the call's input (plan T13: a registration's size); `None`: `gas`
     pub gas_of: Option<fn(&str) -> u64>,
     /// the regular gas a transaction's input executes, held to `tx_cap` at the send; `None`: its estimate (`gas_of` / `gas`)
@@ -112,6 +129,8 @@ impl Default for Chain {
             prio: 1,
             base_fee: 7,
             nonces: HashMap::new(),
+            nonces_from: 0,
+            nonces_for: HashMap::new(),
             code: HashMap::new(),
             logs: vec![],
             receipts: HashMap::new(),
@@ -127,6 +146,7 @@ impl Default for Chain {
             index: vec![],
             requests: vec![],
             call_revert: false,
+            sim_down: false,
             no_base_fee: false,
             domains: HashMap::new(),
             gw_paths: vec![],
@@ -135,6 +155,10 @@ impl Default for Chain {
             kind_home: HashMap::new(),
             storage: HashMap::new(),
             answers: vec![],
+            head_answers: vec![],
+            linea: None,
+            logs_unfiltered: false,
+            logs_unranged: false,
             gas_of: None,
             regular_of: None,
             tx_cap: 1 << 24,
@@ -304,9 +328,16 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
     };
     let sends_value = p[0]["value"].as_str().is_some_and(|v| v != "0x0");
     match r["method"].as_str().unwrap_or_default() {
+        "eth_call" | "eth_estimateGas" if c.sim_down => {
+            err("eth_call request was canceled due to enabled timeout.")
+        }
         "eth_call" | "eth_estimateGas" if c.value_reverts && sends_value => {
             err("execution reverted")
         }
+        "linea_estimateGas" => ok(c.linea.clone().unwrap_or_else(|| {
+            json!({"gasLimit": format!("{:#x}", c.gas), "baseFeePerGas": format!("{:#x}", c.base_fee),
+                "priorityFeePerGas": format!("{:#x}", c.prio)})
+        })),
         "eth_chainId" => ok(json!(format!("{:#x}", c.chain_id))),
         "eth_blockNumber" => ok(json!(format!("{:#x}", c.head))),
         "eth_getBlockByNumber" => {
@@ -337,23 +368,49 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 t => named(c, t),
             };
             let meta = c.tokens.get(&to).cloned();
-            if let Some((_, _, out)) = c
-                .answers
+            let head = if at > c.finalized {
+                &c.head_answers[..]
+            } else {
+                &[]
+            };
+            if let Some((_, _, out)) = head
                 .iter()
+                .chain(&c.answers)
                 .find(|(t, d, _)| *t == to && data.starts_with(d.as_str()))
             {
                 ok(json!(out))
             } else if data.starts_with(&sel("mtxNonce(bytes32,uint256)"))
                 || data.starts_with(&sel("mtxNonce(address,uint256)"))
+                || data.starts_with(&sel("mtxNonceFor(address,bytes32,uint256)"))
             {
-                ok(json!(format!(
-                    "0x{:064x}",
-                    c.nonces.get(&to).copied().unwrap_or(0)
-                )))
+                let map = if data.starts_with(&sel("mtxNonceFor(address,bytes32,uint256)")) {
+                    &c.nonces_for
+                } else {
+                    &c.nonces
+                };
+                let n = if at >= c.nonces_from {
+                    map.get(&to).copied().unwrap_or(0)
+                } else {
+                    0
+                };
+                ok(json!(format!("0x{n:064x}")))
             } else if let (Some((name, salt)), true) =
                 (c.domains.get(&to), data == sel("eip712Domain()"))
             {
                 ok(json!(eip712_domain(name, &to, salt)))
+            } else if !c.call_revert && data == sel("generation()") {
+                // the line (F2): a registry not answered otherwise is a generation 1
+                ok(json!(format!("0x{:064x}", 1)))
+            } else if !c.call_revert && data == sel("predecessor()") {
+                ok(json!(format!("0x{:064x}", 0)))
+            } else if !c.call_revert && data.starts_with(&sel("holderOf(bytes32)")) {
+                // a generation 1 holds what it is asked about (kind 0 and no PQZ home: read as its own records say)
+                ok(json!(format!(
+                    "0x{:0>64}{:064x}{:064x}",
+                    to.trim_start_matches("0x"),
+                    0,
+                    0
+                )))
             } else if data.starts_with(&sel("kindHome(uint16)")) {
                 let home = c.kind_home.get(&to).unwrap_or(&to);
                 ok(json!(format!("0x{:0>64}", home.trim_start_matches("0x"))))
@@ -497,9 +554,9 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 .iter()
                 .filter(|l| {
                     let n = named(c, &l["blockNumber"]);
-                    n >= lo
-                        && n <= hi
-                        && addr.as_ref().is_none_or(|a| a.contains(&l["address"]))
+                    c.logs_unfiltered
+                        || (c.logs_unranged || n >= lo && n <= hi)
+                            && addr.as_ref().is_none_or(|a| a.contains(&l["address"]))
                         && ts
                             .iter()
                             .enumerate()
@@ -595,6 +652,7 @@ pub async fn serve(c: Fake) -> String {
                                 Gw::Refuse => {
                                     (422, json!({"code": "DEX_NOT_LISTED", "detail": "dex"}))
                                 }
+                                Gw::Down => (503, json!({"error": "BUSY"})),
                                 Gw::Queue if body.is_empty() => (200, json!({"route": path})),
                                 Gw::Queue => (201, json!({"status": "resting", "fills": []})),
                             }
@@ -609,6 +667,7 @@ pub async fn serve(c: Fake) -> String {
                             }
                             match c.gw {
                                 Gw::Queue => (202, json!({"status": "queued", "intent_id": "i1"})),
+                                Gw::Down => (503, json!({"error": "BUSY"})),
                                 Gw::Refuse => {
                                     (409, json!({"code": "NONCE_USED", "detail": "dead"}))
                                 }

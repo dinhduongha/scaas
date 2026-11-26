@@ -88,7 +88,7 @@ fn restore(c: &SealedContainer, sender: [u8; 32]) -> Result<Option<Wallet>, Erro
         sender: ExpectedSender::Set(&s),
         recipient: kk.recipient(),
     };
-    Wallet::restore_backup(&kk, c, &x, &none, None, None, None, "")
+    Wallet::restore_backup(&kk, c, &x, &none, &|_| None, None, None, None, "")
 }
 
 /// keys.json `imported`: per network, the imported key's UA equals the row (kind, key data, keccak256(TAG(kind) ‖ key data)),
@@ -457,7 +457,7 @@ fn backup_and_link_keep_the_imported_ua() {
         sender: ExpectedSender::Set(&s),
         recipient: session.recipient(),
     };
-    let linked = Wallet::from_link(session, &l, &x, &none, None, "").unwrap();
+    let linked = Wallet::from_link(session, &l, &x, &none, &|_| None, None, "").unwrap();
     assert_eq!(linked.manifest().imported_uas, w.manifest().imported_uas);
     assert_eq!(
         linked

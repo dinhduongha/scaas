@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Feature `pq`: the PQ kinds' verifiers for the off-chain check (`ua_portable::check_*`, UA8-D24, C14), independent of the JS
-//! generator (noble): `ml-dsa`, `slh-dsa`, PQClean `falcon-padded-512` / `-1024` (vendored, `src/falcon.rs`; none on wasm32,
-//! where a Falcon signature never verifies). ML-DSA and SLH-DSA verify `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the empty
+//! generator (noble): `ml-dsa`, `slh-dsa`, PQClean `falcon-padded-512` / `-1024` (vendored, `src/falcon.rs`; on wasm32
+//! falcon-rs's round-3 module, CLI-UAL-66). ML-DSA and SLH-DSA verify `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the empty
 //! context, Falcon `ua_msg` itself (CTR-UA-23). A kind whose crate disagrees with a KAT row loses its arm in [`verify_raw`], so
 //! it is refused (C14). Signatures and keys are untrusted: anything malformed is `false`, never a panic. UNAUDITED.
 use crate::{keccak, tag};

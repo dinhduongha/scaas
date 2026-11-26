@@ -429,14 +429,16 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         bytes memory ds = _msigKey(2, m);
         bytes32 mu = UARegistry(at).registerMsig(UACall.structure(ds), _none(), new IUARegistry.MemberSig[](0), "");
         uint256 used = vm.lastCallGas().gasTotalUsed;
-        emit log_string(string.concat("GAS|registerMsig regular|167694|", vm.toString(used)));
+        emit log_string(string.concat("GAS|registerMsig regular|168197|", vm.toString(used)));
         // pqz-three-keys step 3 (K3-3): 143,284 -> 143,464 (+180, the registry face dispatches eleven more selectors)
         // CTR-UA-44 (TODO 3ze): 143,464 -> 145,524 (+2,060: the bound walks the enabled slots, `_signs` per slot, packed arrays)
         // bls-multi (owner 2026-11-19, the registry library split): 145,524 -> 153,387 (+7,863: the step-6 check by one nested
         // DELEGATECALL to `UARegistryCoreLib.portableOk`, which answers an empty `pop` of a classical `msig`)
         // multi-gen-verify Task 7 (the hard bound's reads at registration, `_hard` / `_modes`): 153,387 -> 167,694 (+14,307; measured in
         // Task 15, the test stopped at the first row before)
-        assertLe(used, 167694 + SLACK, "registerMsig");
+        // CTR-UA-74 (owner 2026-11-25): 167,694 -> 168,197 (+503: the version tag's check on the step-6 path, `UAStore.verOk`, and the
+        // libraries' moved dispatch)
+        assertLe(used, 168197 + SLACK, "registerMsig");
         UARegistry(at).acceptMembership(mu, _acceptEoaSig(ds, ALICE));
         UARegistry(at).acceptMembership(mu, _acceptKeySig(ds, 0x0101, _key(0x0101)));
         bytes32 md = _memberDigest(mu, UAKinds.PURPOSE_METATX, DIGEST);
@@ -447,7 +449,9 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         sm.members[_indexOf(ds, p)] =
             _member(ds, p, _sig(_key(0x0101), UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
         // CTR-UA-44 (TODO 3ze): 52,185 -> 52,968 (+783: the current structure's pointer and enabled word, once per level)
-        _meter(at, mu, sm, "requireAuthorized msig 2-of-2", 53275, SLACK + 2 * MEMBER_LIST_GAS);
+        // CTR-UA-74 (owner 2026-11-25): 53,275 -> 53,915 (+640: the signature's version tag copied and compared with the
+        // structure's version, `UAStore.verOk`, and the moved dispatch)
+        _meter(at, mu, sm, "requireAuthorized msig 2-of-2", 53915, SLACK + 2 * MEMBER_LIST_GAS);
     }
 
     /// `requireAuthorized`, every kind and native, stays within +64 of the recorded figures (a code layout's change of JUMPDEST order); an

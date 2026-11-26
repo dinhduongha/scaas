@@ -27,7 +27,7 @@ MUTANTS = [
      [(O + "quote.rs", "if gateways > 0 && door_a(&prepared) =>", "if gateways > 0 =>")],
      SDK + "submit_path_none"),
     ("re-send a sent row at restart",
-     [(O + "submit.rs", "if row.state == \"signed\" && row.detail != \"SimRefused\" {", "if (row.state == \"signed\" || row.state == \"sent\") && row.detail != \"SimRefused\" {")],
+     [(O + "submit.rs", "                    if row.state == \"signed\"\n                        && row.detail != \"SimRefused\"", "                    if (row.state == \"signed\" || row.state == \"sent\")\n                        && row.detail != \"SimRefused\"")],
      SDK + "write_ahead_then_send"),
     # each check of the task
     ("no stale check on a moved nonce", [(O + "submit.rs", "if at != *nonce {", "if false && at != *nonce {")], SDK + "prepared_stale_on_nonce_move"),
@@ -35,7 +35,7 @@ MUTANTS = [
        "let sig: &[u8] = if kind != \"token\" {\n        b\"MetaTransactionExecuted")], SDK + "executed_event_per_contract"),
     ("any log of the event lands it", [(O + "follow.rs", "None => l.data.get(32..64) == Some(digest.as_slice()),", "None => !l.data.is_empty(),")],
      SDK + "executed_event_per_contract"),
-    ("Expired without the timestamp check", [(O + "follow.rs", "&& row.valid_until < ts =>", "&& row.valid_until > ts =>")], SDK + "all_gateways_dead_is_in_flight"),
+    ("Expired without the timestamp check", [(O + "follow.rs", "(spent || row.valid_until < ts)", "(spent || row.valid_until > ts)")], SDK + "all_gateways_dead_is_in_flight"),
     ("a designator not seen", [(O + "quote.rs", "code.len() == 23 && code.starts_with", "code.len() == 22 && code.starts_with")], SDK + "payer_delegated"),
     ("the chain's per-transaction cap not applied", [(O + "quote.rs", "profile.tx_gas_cap.is_some_and(|c| regular > c)", "profile.tx_gas_cap.is_some_and(|_| false)")],
      SDK + "gas_above_tx_cap"),

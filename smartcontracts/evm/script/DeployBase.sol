@@ -5,6 +5,7 @@ import {console} from "forge-std/Script.sol";
 import {DeployBook} from "./DeployBook.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {OpenFactory} from "../src/factory/OpenFactory.sol";
+import {OpenFactoryLib} from "../src/factory/OpenFactoryLib.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
 import {ChainEnvCode} from "../src/factory/ChainEnvCode.sol";
@@ -536,12 +537,12 @@ abstract contract DeployBase is DeployBook {
         return false;
     }
 
-    /// @notice The token factory (`noticePeriod`) and the UA registry (`_deployUARegistry`, with its libraries `UARegistryCoreLib`, `UARegistryAuxLib` and `UARegistryRegLib`) by CREATE2; when the deployer
+    /// @notice The token factory (`noticePeriod`; its library `OpenFactoryLib`, G-3's size split) and the UA registry (`_deployUARegistry`, with its libraries `UARegistryCoreLib`, `UARegistryAuxLib` and `UARegistryRegLib`) by CREATE2; when the deployer
     ///         is the registrar (plan 5g-Z2: only the factory deploys releases), env version 1 of `NORMAL` and of the DEX
     ///         (`_env`: the factory, `chain_uid`, the registry, the `SmartKeyAccount` implementation, Hedera, the linked
     ///         libraries with their code hashes), then the `NORMAL` release (on that registry: the UA ledger, CTR-UA-18)
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
-    ///         the same init code. Writes `token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`,
+    ///         the same init code. Writes `token_factory`, `open_factory_lib`, `implementation_normal`, `dex_implementation`, `ua_registry`,
     ///         `ua_registry_core_lib`, `ua_registry_aux_lib`,
     ///         `relay_fee_router`, `relay_fee_executor`, `governance_router`, `chain_uid` into the JSON object `"deploy"`; with
     ///         `DEPLOY_WRAPPED` also the `WRAPPED` release (`_deployWrapped`, GD-12), with `DEPLOY_ZETHER` the Zether stack
@@ -558,16 +559,17 @@ abstract contract DeployBase is DeployBook {
             (bool bls,) = _precompiles(); // fail before deploying anything (CTR-ZTH-52: the only chain requirement)
             require(bls, "DEPLOY_ZETHER: the chain has no EIP-2537 (BLS12-381 precompiles)");
         }
-        // round 3r (spec §6, §13.10): the relay pair under RELAY_SALT (reused when there), the UA registry, the router, the
-        // compliance registry and ZetherStatements, then the factory: the registrar's native id is its only constructor
-        // argument, its first admin, and its address depends on none of them; this chain's values are its one-time
-        // `configureChain`, then the directory (`setChainEntries`). The admin deploys the releases itself: its own deploy is
-        // its own approval (spec §5.6).
-        UARegistry reg = _deployShared(smartKeyAccountImpl, isHedera);
+        // round 3r (spec §6, §13.10) and G1 (CTR-GOV-33): the factory first (the registrar's native id is its only constructor
+        // argument, its first admin, and its address depends on nothing else), then the relay pair under RELAY_SALT (reused
+        // when there), the UA registry, the router naming the factory, the compliance registry and ZetherStatements; this
+        // chain's values are the factory's one-time `configureChain`, then the directory (`setChainEntries`). The admin
+        // deploys the releases itself: its own deploy is its own approval (spec §5.6).
         f = new OpenFactory{salt: salt}(MetaTxLib.pad(registrar));
+        UARegistry reg = _deployShared(address(f), smartKeyAccountImpl, isHedera);
         if (register) _configureChain(f, registrar);
         if (register && !configureOnly) _writeDirectory(f, reg);
         vm.serializeAddress("deploy", "token_factory", address(f));
+        vm.serializeAddress("deploy", "open_factory_lib", address(OpenFactoryLib)); // linked: in the factory's init code
         if (register && !configureOnly) {
             // the link closure of NormalToken's release (task 6; T66b §4.5: its body modules' link references): MtxPipelineLib,
             // which links HederaLib, and GovernanceLib (TradeLib's code is compiled into the module T)
@@ -638,13 +640,17 @@ abstract contract DeployBase is DeployBook {
         );
     }
 
-    /// @notice The shared contracts before the factory (spec §13.10): the relay pair under `RELAY_SALT` (reused when there),
-    ///         the UA registry, the router (before every release: its address is in the env), the `ComplianceRegistry` with
+    /// @notice The shared contracts after the factory, before `configureChain` (spec §13.10; G1, CTR-GOV-33): the relay pair under
+    ///         `RELAY_SALT` (reused when there), the UA registry, the router naming `factory` (before every release: its
+    ///         address is in the env), the `ComplianceRegistry` with
     ///         `DEPLOY_REGULATED`, `ZetherStatements` with `DEPLOY_ZETHER`.
-    function _deployShared(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
+    function _deployShared(address factory, address smartKeyAccountImpl, bool isHedera)
+        internal
+        returns (UARegistry reg)
+    {
         (relayFeeRouter, relayFeeExecutor) = _deployRelayFeeRouter();
         reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
-        _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera);
+        _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera, factory);
         if (deployRegulated) complianceRegistry = _deployComplianceRegistry();
         if (deployZether) zetherStatements = address(new ZetherStatements{salt: salt}());
     }
@@ -698,19 +704,25 @@ abstract contract DeployBase is DeployBook {
     ///         the module pinned in `libs`), release 1 from the chain-neutral init code with `implArgs` naming the module,
     ///         the `(3, 0)` switch on, and one instance owned by no UA when the notice period lets it be created now (JSON
     ///         `pqchat_instance`; else created after the notice period by anyone, `createInstance`). JSON
-    ///         `pqchat_implementation`, `pqchat_topics`. **UNAUDITED.**
+    ///         `pqchat_implementation`, `pqchat_topics`, `pqchat_tree` (CTR-CHAT-26), `pqchat_tree_views`, `pqchat_tree_members` (owner 2026-11-24). **UNAUDITED.**
     function _deployPqChat(OpenFactory f, address reg) internal {
         _requireKindHere("PqChat", uid); // NET-ALL-25 (C18), where PqChat is created (review P3-1)
         address topics = _module("PqChatTopics.sol:PqChatTopics", abi.encode(address(f)), 3, 0);
-        f.publishClassEnv(3, 0, 1, f.chainUid(), _pqchatEnv(reg, topics));
-        address impl = _pqchatRelease(f, abi.encode(topics));
+        address tree = _module("PqChatTree.sol:PqChatTree", abi.encode(address(f)), 3, 0); // CTR-CHAT-26
+        address views = _module("PqChatTreeViews.sol:PqChatTreeViews", abi.encode(address(f)), 3, 0); // owner 2026-11-24
+        address members = _module("PqChatTreeMembers.sol:PqChatTreeMembers", abi.encode(address(f)), 3, 0); // owner 2026-11-24
+        f.publishClassEnv(3, 0, 1, f.chainUid(), _pqchatEnv(reg, topics, tree, views, members));
+        address impl = _pqchatRelease(f, abi.encode(topics, tree, views, members));
         f.setClassKindEnabled(3, 0, true, f.chainUid());
         vm.serializeAddress("deploy", "pqchat_topics", topics);
+        vm.serializeAddress("deploy", "pqchat_tree", tree);
+        vm.serializeAddress("deploy", "pqchat_tree_views", views);
+        vm.serializeAddress("deploy", "pqchat_tree_members", members);
         vm.serializeAddress("deploy", "pqchat_implementation", impl);
         IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
         if (f.classReleaseOf(id).usableFrom <= block.timestamp) {
             address inst = f.createInstance(
-                id, keccak256("scaas.pqchat.instance.1"), abi.encodeCall(IPqChat.initialize, (bytes32(0)))
+                id, keccak256("scaas.pqchat.instance.1"), abi.encodeCall(IPqChat.initialize, (bytes32(0), 2))
             );
             vm.serializeAddress("deploy", "pqchat_instance", inst);
         }
@@ -758,14 +770,19 @@ abstract contract DeployBase is DeployBook {
     }
 
     /// @notice The class env 1 of `(3, 0)`: the registry, `params[0]` the declared code-size limit, the module in `libs`.
-    function _pqchatEnv(address reg, address topics) internal view returns (IFactoryToken.Env memory e) {
+    function _pqchatEnv(address reg, address topics, address tree, address views, address members)
+        internal
+        view
+        returns (IFactoryToken.Env memory e)
+    {
         e.registry = reg;
         e.params = new bytes32[](1);
         e.params[0] = bytes32(_chainCodeLimit());
-        e.libs = new address[](1);
-        e.libs[0] = topics;
-        e.libCodeHashes = new bytes32[](1);
-        e.libCodeHashes[0] = topics.codehash;
+        e.libs = new address[](4);
+        (e.libs[0], e.libs[1], e.libs[2], e.libs[3]) = (topics, tree, views, members);
+        e.libCodeHashes = new bytes32[](4);
+        (e.libCodeHashes[0], e.libCodeHashes[1], e.libCodeHashes[2], e.libCodeHashes[3]) =
+        (topics.codehash, tree.codehash, views.codehash, members.codehash);
     }
 
     /// @notice DEX release 1 on env 1 after its gate, with the factory's chain word (Fable recheck-2 P3-1); its release row.
@@ -917,13 +934,16 @@ abstract contract DeployBase is DeployBook {
     /// @notice The chain's `GovernanceRouter` (CTR-GOV-15 Change, owner 2026-11-04; plan T11) by CREATE2: no owner, no
     ///         state, `chain_uid` and the UA registry in its constructor, so one predictable address per chain. Deployed
     ///         before the releases, whose `Env.govRouter` names it. JSON `governance_router`. **UNAUDITED.**
-    function _deployGovRouter(address reg, address smartKeyAccountImpl, bool isHedera) internal {
-        GovernanceRouter r = new GovernanceRouter{salt: salt}(uid, reg, smartKeyAccountImpl, isHedera);
+    function _deployGovRouter(address reg, address smartKeyAccountImpl, bool isHedera, address factory) internal {
+        GovernanceRouter r = new GovernanceRouter{salt: salt}(uid, reg, smartKeyAccountImpl, isHedera, factory);
         _gate(address(r));
+        require(r.factory() == factory && factory.code.length != 0, "router: names this run's factory (CTR-GOV-33)");
         govRouter = address(r);
         govRouterCodeHash = _builtHash(
             govRouter,
-            abi.encodePacked(type(GovernanceRouter).creationCode, abi.encode(uid, reg, smartKeyAccountImpl, isHedera)),
+            abi.encodePacked(
+                type(GovernanceRouter).creationCode, abi.encode(uid, reg, smartKeyAccountImpl, isHedera, factory)
+            ),
             salt
         );
         vm.serializeAddress("deploy", "governance_router", govRouter);

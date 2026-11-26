@@ -7,9 +7,16 @@ use) gives `old` as a list of (old, new) pairs and `new` None. A mutant whose su
 syntax or compile error, a missing export) kills nothing and is counted as not loaded.
   python3 -I <harness> [first last]     run (slices for long lists)
   python3 -I <harness> check            every replacement found exactly once at this commit, no run
+A hung run is `killed (timeout N s)` (counted as killed): each (cmd, cwd) first runs once unmutated, and a mutant's run past
+3 x that baseline (at least 10 min, or `--timeout N`) has its whole process group killed. A target file that differs from
+HEAD refuses the run (rc 2: a leftover mutation); the file is restored and checked in a `finally`, on SIGINT / SIGTERM too
+(scripts/mutant_guard.py, owner 2026-11-24).
 The last line of a full run: "N mutants, K killed, S survived, L not loaded"."""
-import subprocess
+import os
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "scripts"))
+import mutant_guard as G  # noqa: E402
 
 NO_LOAD = ("SyntaxError", "ERR_MODULE_NOT_FOUND", "does not provide an export", "error[E", "error: could not compile")
 
@@ -29,17 +36,25 @@ def main(M):
         return 0
     lo, hi = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) == 3 else (1, len(M))
     killed = survived = noload = 0
+    G.refuse_dirty([m[1] for m in M[lo - 1:hi]], ".")
+    base = {}
+    for m in M[lo - 1:hi]:
+        key = (tuple(m[4]), m[5])
+        if key not in base:
+            b = G.run(m[4], G.TIMEOUT, capture_output=True, text=True, cwd=m[5])
+            assert b.returncode == 0, f"baseline red (rc={b.returncode}): {m[4]} in {m[5]}"
+            base[key] = b.seconds
     for n, (name, f, a, b, cmd, cwd, expect) in enumerate(M[lo - 1:hi], lo):
         src = mut = open(f, encoding="utf-8").read()
         for x, y in edits(a, b):
             assert mut.count(x) == 1, (name, x, mut.count(x))
             mut = mut.replace(x, y)
-        open(f, "w", encoding="utf-8").write(mut)
+        saved = {f: open(f, "rb").read()}
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+            open(f, "w", encoding="utf-8").write(mut)
+            r = G.run(cmd, G.deadline(base[(tuple(cmd), cwd)]), capture_output=True, text=True, cwd=cwd)
         finally:
-            open(f, "w", encoding="utf-8").write(src)
-        assert open(f, encoding="utf-8").read() == src
+            G.restore(saved)
         out = r.stdout + r.stderr
         loaded = not any(x in out for x in NO_LOAD)
         failed = sorted({x[2:].split(" (")[0] for x in out.splitlines() if x.startswith("✖ ") and "failing tests" not in x} |
@@ -51,7 +66,9 @@ def main(M):
                         {x.split(": ", 1)[1].rsplit(" [E]", 1)[0] for x in out.splitlines() if x.rstrip().endswith("[E]") and ": " in x})
         if not failed:  # no test names (a generator, a compile): the first error line
             failed = [x.strip() for x in out.splitlines() if x.lstrip().startswith(("Error", "error", "UAError", "thread "))][:1]
-        if r.returncode == 0:
+        if r.timeout:
+            verdict, killed = G.outcome(r, ""), killed + 1
+        elif r.returncode == 0:
             verdict, survived = "SURVIVED", survived + 1
         elif not loaded:
             verdict, noload = "NO-LOAD ", noload + 1

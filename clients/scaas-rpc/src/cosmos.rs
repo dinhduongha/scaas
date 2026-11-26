@@ -34,7 +34,7 @@ impl Cosmos {
     }
 
     /// CometBFT RPC `path` (with its query) on endpoint `i`: its `result`; a status other than 200 or an `error` member is
-    /// `FamilyError::Rpc` (the error, else the answer, whole).
+    /// `FamilyError::Rpc` (the error, else the answer, whole); neither `result` nor `error` is the endpoint's `AnswerMalformed`.
     pub async fn rpc_at(&self, i: usize, path: &str) -> Result<Value, FamilyError> {
         crate::family::admit_first(&self.rpc, self, i).await?;
         self.comet(i, path).await
@@ -49,7 +49,15 @@ impl Cosmos {
                 error: v.get("error").cloned().unwrap_or(v),
             });
         }
-        Ok(v["result"].clone())
+        // review T26 B-10 (CLI-RPC-07): an answer without its `result` is the endpoint's malformed answer, never a null result
+        match v.get("result").filter(|r| !r.is_null()) {
+            Some(r) => Ok(r.clone()),
+            None => Err(FamilyError::Failure(EndpointFailure::new(
+                i,
+                FailureKind::AnswerMalformed,
+                "a CometBFT answer without result",
+            ))),
+        }
     }
 }
 

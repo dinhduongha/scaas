@@ -14,7 +14,7 @@ import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 /// entries' selectors), the verifier getters, the hold constants, and each view's Solidity type (a typed function pointer per
 /// entry: a changed argument or return type does not compile). A change moves the pin with old -> new and needs the owner.
 contract RegistryWalkInterfaceIsPinned is Test {
-    string[54] internal SIGS = [
+    string[55] internal SIGS = [
         "predecessor()(address)",
         "generation()(uint8)",
         "chainUid()(bytes32)",
@@ -43,6 +43,7 @@ contract RegistryWalkInterfaceIsPinned is Test {
         "checkedOf(bytes32)(uint8,uint8,uint8)",
         "msigOf(bytes32)((uint16,(uint16,bytes32,uint16)[]))",
         "msigStateOf(bytes32)(uint64,uint256,uint256)",
+        "msigAt(bytes32,uint64)((uint16,(uint16,bytes32,uint16)[]),uint256)",
         "memberAccepted(bytes32,uint256)(bool)",
         "memberSigHashOf(bytes32,uint256)(bytes32)",
         "kemKeyOf(bytes32)(uint64,(uint8,bytes,bytes32),bytes)",
@@ -71,10 +72,10 @@ contract RegistryWalkInterfaceIsPinned is Test {
         "lineReaches(address)(bool)"
     ];
 
-    bytes32 internal constant LIST_HASH = 0x3b34c54d64d7c8c3a5984af50db132f9aa744fff8d92a9d299dc118469272ebf; // Task 21 P3-5 (lineReaches): 0x9b671c72… -> 0x3b34c54d…
+    bytes32 internal constant LIST_HASH = 0xaee91dbf4ed9aca8fba7135130c99b8d80674711be3ee21ed0baacf6f8d0ec7c; // Task 21 P3-5 (lineReaches): 0x9b671c72… -> 0x3b34c54d…; CTR-UA-74 (msigAt, owner 2026-11-25): 0x3b34c54d… -> 0xaee91dbf…
 
     function test_walkInterface_signaturesSelectorsAndHash() public view {
-        bytes4[54] memory sel = [
+        bytes4[55] memory sel = [
             IUARegistry.predecessor.selector,
             IUARegistry.generation.selector,
             IUARegistry.chainUid.selector,
@@ -103,6 +104,7 @@ contract RegistryWalkInterfaceIsPinned is Test {
             IUARegistry.checkedOf.selector,
             IUARegistry.msigOf.selector,
             IUARegistry.msigStateOf.selector,
+            IUARegistry.msigAt.selector, // CTR-UA-74 (owner 2026-11-25)
             IUARegistry.memberAccepted.selector,
             IUARegistry.memberSigHashOf.selector,
             IUARegistry.kemKeyOf.selector,
@@ -289,6 +291,10 @@ contract RegistryWalkInterfaceIsPinned is Test {
         {
             function(bytes32) external view returns (uint64, uint256, uint256) f27 = r.msigStateOf;
             f27;
+        }
+        {
+            function(bytes32, uint64) external view returns (IUARegistry.MsigStructure memory, uint256) f27b = r.msigAt;
+            f27b;
         }
         {
             function(bytes32, uint256) external view returns (bool) f28 = r.memberAccepted;

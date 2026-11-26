@@ -1462,6 +1462,10 @@ static class _UniFFILib {
     
     
     
+    
+    
+    
+    
 
     static _UniFFILib() {
         _UniFFILib.uniffiCheckContractApiVersion();
@@ -2074,6 +2078,17 @@ static class _UniFFILib {
     public static extern
 #endif
      ulong uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(ulong @ptr,RustBuffer @req
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ulong uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(ulong @ptr,RustBuffer @req
     );
 
     #if NET8_0_OR_GREATER
@@ -3834,6 +3849,17 @@ static class _UniFFILib {
     public static extern
 #endif
      void uniffi_scaas_sdk_fn_free_vault(ulong @handle,ref UniffiRustCallStatus _uniffi_out_err
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ulong uniffi_scaas_sdk_fn_method_vault_accept_rollback(ulong @ptr
     );
 
     #if NET8_0_OR_GREATER
@@ -6341,6 +6367,17 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ushort uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ushort uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate(
     );
 
@@ -7881,6 +7918,17 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ushort uniffi_scaas_sdk_checksum_method_vault_accept_rollback(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ushort uniffi_scaas_sdk_checksum_method_vault_change_passphrase(
     );
 
@@ -9054,6 +9102,12 @@ static class _UniFFILib {
             }
         }
         {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for();
+            if (checksum != 20110) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for` checksum `20110`, library returned `{checksum}`");
+            }
+        }
+        {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate();
             if (checksum != 38309) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate` checksum `38309`, library returned `{checksum}`");
@@ -9891,6 +9945,12 @@ static class _UniFFILib {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_subscription_next();
             if (checksum != 46941) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_subscription_next` checksum `46941`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback();
+            if (checksum != 51021) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_vault_accept_rollback` checksum `51021`, library returned `{checksum}`");
             }
         }
         {
@@ -11529,6 +11589,8 @@ internal interface IAdmin {
     /// <exception cref="SdkException"></exception>
     Task<Prepared> AdminUaCancelNonce(UaCancelNonce @req);
     /// <exception cref="SdkException"></exception>
+    Task<Prepared> AdminUaCancelNonceFor(UaCancelNonceFor @req);
+    /// <exception cref="SdkException"></exception>
     Task<Prepared> AdminUaCancelRate(UaCancelRate @req);
     /// <exception cref="SdkException"></exception>
     Task<Prepared> AdminUaCreateDex(UaCreateDex @req);
@@ -11862,6 +11924,28 @@ internal class Admin : IAdmin, IDisposable {
         // Get rust future
         CallWithPointer(thisPtr => {
             return _UniFFILib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(thisPtr, FfiConverterTypeUaCancelNonce.INSTANCE.Lower(@req));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_u64(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_u64(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_u64(future),
+        // Lift
+        (result) => FfiConverterTypePrepared.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
+    
+    /// <exception cref="SdkException"></exception>
+    public async Task<Prepared> AdminUaCancelNonceFor(UaCancelNonceFor @req) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(thisPtr, FfiConverterTypeUaCancelNonceFor.INSTANCE.Lower(@req));
         }),
         // Poll
         (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_u64(future, continuation, data),
@@ -17697,6 +17781,8 @@ class FfiConverterTypeSubscription: FfiConverter<Subscription, ulong> {
 /// </summary>
 internal interface IVault {
     /// <exception cref="SdkException"></exception>
+    Task AcceptRollback();
+    /// <exception cref="SdkException"></exception>
     Task ChangePassphrase(string @seed, SecretBytes @old, SecretBytes @new);
     /// <exception cref="SdkException"></exception>
     Task ConfirmBackup(string @seed);
@@ -17854,6 +17940,24 @@ internal class Vault : IVault, IDisposable {
         }
     }
 
+    
+    /// <exception cref="SdkException"></exception>
+    public async Task AcceptRollback() {await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_vault_accept_rollback(thisPtr);
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_void(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {_UniFFILib.ffi_scaas_sdk_rust_future_complete_void(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_void(future),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
     
     /// <exception cref="SdkException"></exception>
     public async Task ChangePassphrase(string @seed, SecretBytes @old, SecretBytes @new) {await _UniFFIAsync.UniffiRustCallAsync(
@@ -20045,8 +20149,9 @@ class FfiConverterTypeCancelWrapOrder: FfiConverterRustBuffer<CancelWrapOrder> {
 /// `Sdk::open`
 /// </param>
 /// <param name="L1Fee">
-/// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-/// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+/// the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+/// (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+/// Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
 /// `Sdk::open` on another family)
 /// </param>
 /// <param name="DisabledKinds">
@@ -20134,8 +20239,9 @@ internal record ChainProfile (
     /// </summary>
     FamilyParams? FamilyParams, 
     /// <summary>
-    /// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-    /// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+    /// the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+    /// (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+    /// Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
     /// `Sdk::open` on another family)
     /// </summary>
     L1Fee? L1Fee, 
@@ -21010,7 +21116,8 @@ class FfiConverterTypeGasLine: FfiConverterRustBuffer<GasLine> {
 
 /// <summary>
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
-/// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+/// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded), `data` (`mtxExecute`'s call data) or
+/// `calldata` (the transaction row's, entry `transaction` kind `evm`: the price of a byte of the transaction's calldata).
 /// </summary>
 internal record GasPerByte (
     string Input, 
@@ -23108,7 +23215,8 @@ class FfiConverterTypePay: FfiConverterRustBuffer<Pay> {
 /// A pay's `PayMeta` v3 (CTR-MTX-26): committed to by the signed `entryRef` (`metaPayId`).
 /// </summary>
 /// <param name="Salt">
-/// `0x` + 64 hex; `None`: 32 random bytes
+/// `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+/// the same pay lane, however its ids and amounts are spelt)
 /// </param>
 /// <param name="PayNo">
 /// a UUIDv7 in its text form, or `0x` + 64 hex; `None`: no number
@@ -23118,7 +23226,8 @@ class FfiConverterTypePay: FfiConverterRustBuffer<Pay> {
 /// </param>
 internal record PayMeta (
     /// <summary>
-    /// `0x` + 64 hex; `None`: 32 random bytes
+    /// `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+    /// the same pay lane, however its ids and amounts are spelt)
     /// </summary>
     string? Salt, 
     /// <summary>
@@ -23835,8 +23944,9 @@ class FfiConverterTypePqzTransfer: FfiConverterRustBuffer<PqzTransfer> {
 
 
 /// <summary>
-/// `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
-/// fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+/// `UAPqzTransfer` / `UAPqzTransferCompact`: the real `legs` and `decoys` legs of amount 0 the SDK draws from the registry
+/// line's `0x0142` lists, every leg's position shuffled (CTR-UA-29; their count one the set builds, 1, 2, 4 or 8),
+/// `decoy_fee` the per-leg fee (decimal; at least the token's `minDecoyFee`, the contract's check).
 /// </summary>
 internal record PqzTransferMulti (
     KeyRef Signer, 
@@ -23845,6 +23955,7 @@ internal record PqzTransferMulti (
     string Batch, 
     ulong KeyVersion, 
     PqzLeg[] Legs, 
+    uint Decoys, 
     string DecoyFee, 
     ulong ValidUntilBlock, 
     Envelope Envelope
@@ -23862,6 +23973,7 @@ class FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer<PqzTransferMulti>
             Batch: FfiConverterString.INSTANCE.Read(stream),
             KeyVersion: FfiConverterUInt64.INSTANCE.Read(stream),
             Legs: FfiConverterSequenceTypePqzLeg.INSTANCE.Read(stream),
+            Decoys: FfiConverterUInt32.INSTANCE.Read(stream),
             DecoyFee: FfiConverterString.INSTANCE.Read(stream),
             ValidUntilBlock: FfiConverterUInt64.INSTANCE.Read(stream),
             Envelope: FfiConverterTypeEnvelope.INSTANCE.Read(stream)
@@ -23876,6 +23988,7 @@ class FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer<PqzTransferMulti>
             + FfiConverterString.INSTANCE.AllocationSize(value.Batch)
             + FfiConverterUInt64.INSTANCE.AllocationSize(value.KeyVersion)
             + FfiConverterSequenceTypePqzLeg.INSTANCE.AllocationSize(value.Legs)
+            + FfiConverterUInt32.INSTANCE.AllocationSize(value.Decoys)
             + FfiConverterString.INSTANCE.AllocationSize(value.DecoyFee)
             + FfiConverterUInt64.INSTANCE.AllocationSize(value.ValidUntilBlock)
             + FfiConverterTypeEnvelope.INSTANCE.AllocationSize(value.Envelope);
@@ -23888,6 +24001,7 @@ class FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer<PqzTransferMulti>
             FfiConverterString.INSTANCE.Write(value.Batch, stream);
             FfiConverterUInt64.INSTANCE.Write(value.KeyVersion, stream);
             FfiConverterSequenceTypePqzLeg.INSTANCE.Write(value.Legs, stream);
+            FfiConverterUInt32.INSTANCE.Write(value.Decoys, stream);
             FfiConverterString.INSTANCE.Write(value.DecoyFee, stream);
             FfiConverterUInt64.INSTANCE.Write(value.ValidUntilBlock, stream);
             FfiConverterTypeEnvelope.INSTANCE.Write(value.Envelope, stream);
@@ -25594,16 +25708,25 @@ class FfiConverterTypeSubmitQuote: FfiConverterRustBuffer<SubmitQuote> {
 /// One token's balance.
 /// </summary>
 /// <param name="Amount">
-/// the smallest unit, decimal
+/// the smallest unit, decimal; empty when `unknown` is set
+/// </param>
+/// <param name="Unknown">
+/// set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+/// `frozen`): the amount is unknown, never a false 0
 /// </param>
 internal record TokenBalance (
     string Address, 
     string Display, 
     byte Decimals, 
     /// <summary>
-    /// the smallest unit, decimal
+    /// the smallest unit, decimal; empty when `unknown` is set
     /// </summary>
-    string Amount
+    string Amount, 
+    /// <summary>
+    /// set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+    /// `frozen`): the amount is unknown, never a false 0
+    /// </summary>
+    string? Unknown
 ) {
 }
 
@@ -25615,7 +25738,8 @@ class FfiConverterTypeTokenBalance: FfiConverterRustBuffer<TokenBalance> {
             Address: FfiConverterString.INSTANCE.Read(stream),
             Display: FfiConverterString.INSTANCE.Read(stream),
             Decimals: FfiConverterUInt8.INSTANCE.Read(stream),
-            Amount: FfiConverterString.INSTANCE.Read(stream)
+            Amount: FfiConverterString.INSTANCE.Read(stream),
+            Unknown: FfiConverterOptionalString.INSTANCE.Read(stream)
         );
     }
 
@@ -25624,7 +25748,8 @@ class FfiConverterTypeTokenBalance: FfiConverterRustBuffer<TokenBalance> {
             + FfiConverterString.INSTANCE.AllocationSize(value.Address)
             + FfiConverterString.INSTANCE.AllocationSize(value.Display)
             + FfiConverterUInt8.INSTANCE.AllocationSize(value.Decimals)
-            + FfiConverterString.INSTANCE.AllocationSize(value.Amount);
+            + FfiConverterString.INSTANCE.AllocationSize(value.Amount)
+            + FfiConverterOptionalString.INSTANCE.AllocationSize(value.Unknown);
     }
 
     public override void Write(TokenBalance value, BigEndianStream stream) {
@@ -25632,6 +25757,7 @@ class FfiConverterTypeTokenBalance: FfiConverterRustBuffer<TokenBalance> {
             FfiConverterString.INSTANCE.Write(value.Display, stream);
             FfiConverterUInt8.INSTANCE.Write(value.Decimals, stream);
             FfiConverterString.INSTANCE.Write(value.Amount, stream);
+            FfiConverterOptionalString.INSTANCE.Write(value.Unknown, stream);
     }
 }
 
@@ -26375,6 +26501,72 @@ class FfiConverterTypeUaCancelNonce: FfiConverterRustBuffer<UaCancelNonce> {
             FfiConverterTypeKeyRef.INSTANCE.Write(value.Signer, stream);
             FfiConverterString.INSTANCE.Write(value.Chain, stream);
             FfiConverterString.INSTANCE.Write(value.Batch, stream);
+            FfiConverterString.INSTANCE.Write(value.Lane, stream);
+            FfiConverterOptionalString.INSTANCE.Write(value.ChainUid, stream);
+            FfiConverterTypeEnvelope.INSTANCE.Write(value.Envelope, stream);
+    }
+}
+
+
+
+/// <summary>
+/// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+/// UACancelNonceFor
+/// </summary>
+/// <param name="Batch">
+/// the lane, decimal
+/// </param>
+/// <param name="ChainUid">
+/// the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+/// </param>
+internal record UaCancelNonceFor (
+    KeyRef Signer, 
+    string Chain, 
+    /// <summary>
+    /// the lane, decimal
+    /// </summary>
+    string Batch, 
+    string Target, 
+    string Lane, 
+    /// <summary>
+    /// the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+    /// </summary>
+    string? ChainUid, 
+    Envelope Envelope
+) {
+}
+
+class FfiConverterTypeUaCancelNonceFor: FfiConverterRustBuffer<UaCancelNonceFor> {
+    public static FfiConverterTypeUaCancelNonceFor INSTANCE = new FfiConverterTypeUaCancelNonceFor();
+
+    public override UaCancelNonceFor Read(BigEndianStream stream) {
+        return new UaCancelNonceFor(
+            Signer: FfiConverterTypeKeyRef.INSTANCE.Read(stream),
+            Chain: FfiConverterString.INSTANCE.Read(stream),
+            Batch: FfiConverterString.INSTANCE.Read(stream),
+            Target: FfiConverterString.INSTANCE.Read(stream),
+            Lane: FfiConverterString.INSTANCE.Read(stream),
+            ChainUid: FfiConverterOptionalString.INSTANCE.Read(stream),
+            Envelope: FfiConverterTypeEnvelope.INSTANCE.Read(stream)
+        );
+    }
+
+    public override int AllocationSize(UaCancelNonceFor value) {
+        return 0
+            + FfiConverterTypeKeyRef.INSTANCE.AllocationSize(value.Signer)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Chain)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Batch)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Target)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Lane)
+            + FfiConverterOptionalString.INSTANCE.AllocationSize(value.ChainUid)
+            + FfiConverterTypeEnvelope.INSTANCE.AllocationSize(value.Envelope);
+    }
+
+    public override void Write(UaCancelNonceFor value, BigEndianStream stream) {
+            FfiConverterTypeKeyRef.INSTANCE.Write(value.Signer, stream);
+            FfiConverterString.INSTANCE.Write(value.Chain, stream);
+            FfiConverterString.INSTANCE.Write(value.Batch, stream);
+            FfiConverterString.INSTANCE.Write(value.Target, stream);
             FfiConverterString.INSTANCE.Write(value.Lane, stream);
             FfiConverterOptionalString.INSTANCE.Write(value.ChainUid, stream);
             FfiConverterTypeEnvelope.INSTANCE.Write(value.Envelope, stream);
@@ -32141,6 +32333,46 @@ class FfiConverterTypeAuthError : FfiConverterRustBuffer<AuthException>, CallSta
 
 
 
+/// <summary>
+/// What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+/// read at the `finalized` block, or endpoint 0's alone under `failover`.
+/// </summary>
+internal enum Basis: int {
+    Majority,
+    OneEndpoint
+}
+
+class FfiConverterTypeBasis: FfiConverterRustBuffer<Basis> {
+    public static FfiConverterTypeBasis INSTANCE = new FfiConverterTypeBasis();
+
+    public override Basis Read(BigEndianStream stream) {
+        var value = stream.ReadInt();
+        switch (value) {
+            case 1: return Basis.Majority;
+            case 2: return Basis.OneEndpoint;
+            default: throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeBasis.Read()", value));
+        }
+    }
+
+    public override int AllocationSize(Basis value) {
+        return 4;
+    }
+
+    public override void Write(Basis value, BigEndianStream stream) {
+        switch (value) {
+            case Basis.Majority: stream.WriteInt(1); break;
+            case Basis.OneEndpoint: stream.WriteInt(2); break;
+            default: throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeBasis.Write()", value));
+        }
+    }
+}
+
+
+
+
+
+
+
 internal enum Class: int {
     Named,
     Default,
@@ -33089,7 +33321,7 @@ internal record GasFrom {
     
     
     /// <summary>
-    /// a native send's own estimate (or 21,000 for a plain transfer to an account without code)
+    /// a native send's own estimate (`eth_estimateGas`, a plain transfer's too)
     /// </summary>
     public record Estimate: GasFrom {}
     
@@ -33536,7 +33768,17 @@ internal enum L1Fee: int {
     /// <summary>
     /// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
     /// </summary>
-    OpStack
+    OpStack,
+    /// <summary>
+    /// the L1 cost charged as gas (Arbitrum, the profile's `in-estimate`): a table-quoted transaction's gas limit adds
+    /// `NodeInterface.gasEstimateL1Component` (`0x…C8`) over its calldata, with the margin; an estimate holds it already
+    /// </summary>
+    InEstimate,
+    /// <summary>
+    /// the L1 cost carried by the priority fee (Linea, the profile's `linea`): the fees are `linea_estimateGas`'s over the
+    /// transaction, never below the chain's own
+    /// </summary>
+    Linea
 }
 
 class FfiConverterTypeL1Fee: FfiConverterRustBuffer<L1Fee> {
@@ -33546,6 +33788,8 @@ class FfiConverterTypeL1Fee: FfiConverterRustBuffer<L1Fee> {
         var value = stream.ReadInt();
         switch (value) {
             case 1: return L1Fee.OpStack;
+            case 2: return L1Fee.InEstimate;
+            case 3: return L1Fee.Linea;
             default: throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeL1Fee.Read()", value));
         }
     }
@@ -33557,6 +33801,8 @@ class FfiConverterTypeL1Fee: FfiConverterRustBuffer<L1Fee> {
     public override void Write(L1Fee value, BigEndianStream stream) {
         switch (value) {
             case L1Fee.OpStack: stream.WriteInt(1); break;
+            case L1Fee.InEstimate: stream.WriteInt(2); break;
+            case L1Fee.Linea: stream.WriteInt(3); break;
             default: throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeL1Fee.Write()", value));
         }
     }
@@ -33692,8 +33938,9 @@ internal record OpState {
     /// <summary>
     /// the lane's nonce spent at the final block without that event; a replaced native send
     /// </summary>
-    public record Consumed: OpState {}
-    
+    public record Consumed (
+        Basis Basis
+    ) : OpState {}
     
     /// <summary>
     /// an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
@@ -33706,8 +33953,9 @@ internal record OpState {
     /// <summary>
     /// `validUntil` below the final block's timestamp while the nonce is unspent
     /// </summary>
-    public record Expired: OpState {}
-    
+    public record Expired (
+        Basis Basis
+    ) : OpState {}
     
     /// <summary>
     /// anything else, with what is known (never an end)
@@ -33733,6 +33981,7 @@ class FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                 );
             case 2:
                 return new OpState.Consumed(
+                    FfiConverterTypeBasis.INSTANCE.Read(stream)
                 );
             case 3:
                 return new OpState.Reverted(
@@ -33741,6 +33990,7 @@ class FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                 );
             case 4:
                 return new OpState.Expired(
+                    FfiConverterTypeBasis.INSTANCE.Read(stream)
                 );
             case 5:
                 return new OpState.InFlight(
@@ -33758,13 +34008,15 @@ class FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                     + FfiConverterUInt64.INSTANCE.AllocationSize(variant_value.Block)
                     + FfiConverterString.INSTANCE.AllocationSize(variant_value.Hash);
             case OpState.Consumed variant_value:
-                return 4;
+                return 4
+                    + FfiConverterTypeBasis.INSTANCE.AllocationSize(variant_value.Basis);
             case OpState.Reverted variant_value:
                 return 4
                     + FfiConverterUInt64.INSTANCE.AllocationSize(variant_value.Block)
                     + FfiConverterString.INSTANCE.AllocationSize(variant_value.Hash);
             case OpState.Expired variant_value:
-                return 4;
+                return 4
+                    + FfiConverterTypeBasis.INSTANCE.AllocationSize(variant_value.Basis);
             case OpState.InFlight variant_value:
                 return 4
                     + FfiConverterTypeInFlight.INSTANCE.AllocationSize(variant_value.Detail);
@@ -33782,6 +34034,7 @@ class FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                 break;
             case OpState.Consumed variant_value:
                 stream.WriteInt(2);
+                FfiConverterTypeBasis.INSTANCE.Write(variant_value.Basis, stream);
                 break;
             case OpState.Reverted variant_value:
                 stream.WriteInt(3);
@@ -33790,6 +34043,7 @@ class FfiConverterTypeOpState : FfiConverterRustBuffer<OpState>{
                 break;
             case OpState.Expired variant_value:
                 stream.WriteInt(4);
+                FfiConverterTypeBasis.INSTANCE.Write(variant_value.Basis, stream);
                 break;
             case OpState.InFlight variant_value:
                 stream.WriteInt(5);

@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+// Superseded by the built G1 (CTR-GOV-33, branch router-g1): the test-only prototype `LineRouter` and its `RouterG1Test`,
+// as they stood at 229d1453e in test/governance/RouterPerRelease.t.sol. Not built.
+/// Option G1 (research note 2026-11-24-nft-multi-token §7.2): one router for every registry generation. For a target the factory
+/// made (`infoOf(target).addr == target`), the router checks a derived signer on the registry in that target's code
+/// (`ChainEnvCode` offset 77, written by the factory, its line checked when the env was published, CTR-UA-67); for any other
+/// target its own registry. Never a registry the target answers. Prototype only: the target is read from the op's calldata
+/// (word 9, after the static `UAEnvelope`), where the proposed change passes `_uaCall`'s `target`. `trustCode` is the mutant
+/// that reads the code without asking the factory. Test-only. **UNAUDITED.**
+contract LineRouter is GovernanceRouter {
+    address public immutable FACTORY;
+    bool internal immutable TRUST_CODE;
+
+    constructor(address factory_, bytes32 uid, address registry_, address ska, bool trustCode)
+        GovernanceRouter(uid, registry_, ska, false, address(0))
+    {
+        (FACTORY, TRUST_CODE) = (factory_, trustCode);
+    }
+
+    function _mtxCtx() internal view override returns (MtxPipelineLib.Ctx memory c) {
+        c = super._mtxCtx();
+        if (msg.data.length < 292) return c;
+        address t = address(uint160(uint256(bytes32(msg.data[260:292]))));
+        if (!TRUST_CODE && IOpenFactory(FACTORY).infoOf(t).addr != t) return c;
+        address r = envRegistryOf(t);
+        if (r != address(0)) c.registry = r;
+    }
+
+    /// The registry in `t`'s code when it is a clone (the EIP-1167 prefix and suffix), else 0.
+    function envRegistryOf(address t) public view returns (address r) {
+        assembly ("memory-safe") {
+            let m := mload(0x40)
+            extcodecopy(t, m, 0, 97)
+            if and(
+                eq(shr(176, mload(m)), 0x363d3d373d3d3d363d73),
+                eq(shr(136, mload(add(m, 30))), 0x5af43d82803e903d91602b57fd5bf3)
+            ) { r := shr(96, mload(add(m, 77))) }
+        }
+    }
+}
+
+/// G1 against today's router on the same tokens. The fixture stands in for the factory (`infoOf`), as it already is the
+/// clones' `FACTORY`. **UNAUDITED.**
+contract RouterG1Test is RegistryLineFixture {
+    mapping(address => bool) internal made;
+    LineRouter lr; // G1: one router, its own registry generation 1
+    LineRouter trusting; // the mutant: the target's code without the factory's word
+
+    function setUp() public override {
+        super.setUp();
+        lr = new LineRouter(address(this), chainUidA, PREG, _fixtureSka(), false);
+        trusting = new LineRouter(address(this), chainUidA, PREG, _fixtureSka(), true);
+    }
+
+    function infoOf(address c) external view returns (IOpenFactory.Created memory x) {
+        if (made[c]) (x.addr, x.contractClass) = (c, 1);
+    }
+
+    /// A NormalToken clone on env `(reg, r)`, minter `minter`; `listed`: in the factory's index.
+    function _token(address reg, address r, bytes32 minter, bool listed) internal returns (NormalToken t) {
+        if (normalImpl == address(0)) _normal(eoa, eoa, 0);
+        t = NormalToken(EnvKit.clone(normalImpl, EnvKit.env(chainUidA, reg, _fixtureSka(), false, r)));
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.features, c.admin) = ("G", "G", 6, 1 | (uint256(1) << MINT), eoa);
+        c.roles.minter = minter;
+        t.initialize(nid(address(this)), 1, abi.encode(c));
+        made[address(t)] = listed;
+    }
+
+    function _mintCd(GovernanceRouter r, NormalToken t, bytes32 from) internal view returns (bytes memory) {
+        bytes memory a = abi.encode(BOB, uint256(5));
+        return _signed(r, OP_MINT, from, 0, address(t), a, a);
+    }
+
+    /// A gen-2 env instance (CTR-UA-67): today's router refuses its gen-2 holder (the gap); G1 serves both generations.
+    function test_g1_gen2Instance_oneRouterServesBothGenerations() public {
+        NormalToken today = _token(GEN2, address(router), pq65, true);
+        bytes memory cd = _mintCd(router, today, pq65);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq65));
+        _run(cd);
+        assertEq(lr.envRegistryOf(address(today)), GEN2);
+        bytes32[4] memory who = [pq65, msig2, pq, msig];
+        for (uint256 i; i < 4; ++i) {
+            NormalToken t = _token(GEN2, address(lr), who[i], true);
+            _runOn(lr, _mintCd(lr, t, who[i]));
+            assertEq(t.balanceOf(BOB), 5);
+        }
+    }
+
+    /// A gen-1 env instance stays on generation 1 under G1: its gen-2 holder is refused, as on the token's own path (parity).
+    function test_g1_gen1Instance_staysOnGen1() public {
+        NormalToken t = _token(PREG, address(lr), pq65, true);
+        bytes memory cd = _mintCd(lr, t, pq65);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq65));
+        _runOn(lr, cd);
+        NormalToken c = _token(PREG, address(lr), pq, true);
+        _runOn(lr, _mintCd(lr, c, pq));
+        assertEq(c.balanceOf(BOB), 5, "the control: a gen-1 holder");
+    }
+
+    /// A target the factory did not make: its code naming generation 2 is not believed (own registry, nonce untouched). The
+    /// mutant that believes the code accepts it: the factory's word is the guard.
+    function test_g1_notFactoryMade_ownRegistry_mutantAccepts() public {
+        NormalToken t = _token(GEN2, address(lr), pq65, false);
+        bytes memory cd = _mintCd(lr, t, pq65);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq65));
+        _runOn(lr, cd);
+        assertEq(lr.mtxNonce(pq65, 0), 0, "no nonce spent");
+        NormalToken m = _token(GEN2, address(trusting), pq65, false);
+        _runOn(trusting, _mintCd(trusting, m, pq65));
+        assertEq(m.balanceOf(BOB), 5, "the mutant took the target's own word");
+    }
+}

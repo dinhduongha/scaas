@@ -389,6 +389,11 @@ impl PqChat {
         let admins = sorted(&r.admins, Some(&me))?;
         check_stores(&r.info)?;
         self.require_listed(&r.chain, &r.home).await?;
+        if self.conf.require_signed_records
+            && self.sig_store(&r.chain, &r.home).await != Ok(crate::signed::SIG_SSTORE2)
+        {
+            return Err(PqChatError::HomeUnsigned);
+        }
         let c = self.conf(&r.chain)?.clone();
         let sid = self.app.pqchat_session_id(me.clone(), r.nonce)?;
         // only a room this client created for the session, bound to it before anything is signed (CLI-PQC-05)
@@ -421,7 +426,7 @@ impl PqChat {
         let info_json = serde_json::to_string(&r.info).map_err(|_| PqChatError::Internal)?;
         let signed = self
             .app
-            .pqchat_sign_session(
+            .pqchat_prepare_session(
                 r.me.key.clone(),
                 k.clone(),
                 PqSessionNew {
@@ -434,13 +439,15 @@ impl PqChat {
                     info_json,
                 },
             )
+            .await?
+            .sign()
             .await?;
         if field(&signed, "message.creator")? != me || signed.id.as_deref() != Some(sid.as_str()) {
             return Err(PqChatError::Internal);
         }
         let sealed = model::unhex(field(&signed, "message.sealedInfo")?)?;
         let s = json!({"creator": me, "nonce": r.nonce.to_string(), "homeChain": c.chain_uid,
-            "homeChatContract": r.home.to_ascii_lowercase(), "admins": admins, "members": members_json(&w.keys),
+            "homeChatContract": r.home.to_ascii_lowercase(), "groupMode": "0", "admins": admins, "members": members_json(&w.keys),
             "wrapHashes": signed.wrap_hashes, "sealedInfo": model::hex(&sealed)});
         let epoch = Epoch {
             id: sid.clone(),
@@ -477,7 +484,8 @@ impl PqChat {
 
     /// A new epoch of `s` after the open `parent` (S2): `epoch = parent + 1`, a fresh `K`, the members expanded and wrapped
     /// at their highest versions, those who left or were removed dropped. A plain rekey (the parent's members and admins
-    /// minus those who left) by a member of the parent; anything else by an admin of it (`NotAdmin`). The author must not
+    /// less UAs that left or were removed, [`crate::check::plain`]) by a member of the parent; anything else by an admin of it
+    /// (`NotAdmin`). The author must not
     /// have left nor been removed (`NotMember`); the home's slot must be free (`EpochTaken`: rebuild on the winner,
     /// [`PqChat::child_of`]).
     pub async fn rekey(
@@ -517,13 +525,10 @@ impl PqChat {
         if w.keys.is_empty() {
             return Err(PqChatError::MembersInvalid);
         }
-        let kept = |u: &&String| !left.contains(u);
-        let plain = w
-            .keys
-            .iter()
-            .map(|m| &m.ua)
-            .eq(p.members.iter().map(|m| &m.ua).filter(kept))
-            && admins.iter().eq(p.admins.iter().filter(kept));
+        // E-1: plain as the contract's `_keeps` (the flagged UAs dropped here, left or removed)
+        let mut uas: Vec<&String> = w.keys.iter().map(|m| &m.ua).collect();
+        uas.dedup();
+        let plain = crate::check::plain(&uas, &admins, p, &left, &removed);
         if plain && !p.has_member(&ua) {
             return Err(PqChatError::NotMember);
         }
@@ -534,7 +539,7 @@ impl PqChat {
         let info_json = serde_json::to_string(&r.info).map_err(|_| PqChatError::Internal)?;
         let signed = self
             .app
-            .pqchat_sign_epoch(
+            .pqchat_prepare_epoch(
                 r.me.key.clone(),
                 k.clone(),
                 PqEpochNew {
@@ -548,6 +553,8 @@ impl PqChat {
                     info_json,
                 },
             )
+            .await?
+            .sign()
             .await?;
         if field(&signed, "message.author")? != ua || signed.id.as_deref() != Some(eid.as_str()) {
             return Err(PqChatError::Internal);
@@ -707,7 +714,50 @@ impl PqChat {
         best.ok_or(refused.unwrap_or(PqChatError::Internal))
     }
 
-    /// An admin's `remove` of `members` from `e` before its next epoch (P48, S3): signed, prepared.
+    /// The home's head for an exit naming `e` (D2-4): the contract checks and applies a leave or removal at the head (C9,
+    /// CTR-CHAT-10, CTR-CHAT-20), so the builder judges it there: `latestEpoch` (a trusted read) and its record, `e` the head
+    /// or an ancestor at most [`crate::signed::EXIT_LAG_MAX`] below it (`ExitLag`, the contract's `PqChatExitLag`).
+    async fn exit_head(&self, s: &SessionRef, e: &Epoch) -> Result<Epoch, PqChatError> {
+        let id = self.latest_epoch(s).await?;
+        let h = if id == e.id {
+            e.clone()
+        } else {
+            self.signed_record_at(&s.chain, &s.home, &s.session_id, &id)
+                .await
+                .map_err(|_| PqChatError::Internal)?
+                .ok_or(PqChatError::Internal)?
+        };
+        if h.epoch < e.epoch || h.epoch > e.epoch + crate::signed::EXIT_LAG_MAX {
+            return Err(PqChatError::ExitLag);
+        }
+        Ok(h)
+    }
+
+    /// Whether `ua` is flagged by `item` (`leftIn` or `removedIn`, a trusted read at home) at `e`.
+    async fn flag(
+        &self,
+        s: &SessionRef,
+        e: &Epoch,
+        item: &'static str,
+        ua: &str,
+    ) -> Result<bool, PqChatError> {
+        let v = self
+            .net
+            .read(
+                &s.chain,
+                &s.home,
+                item,
+                json!({"epochId": e.id, "member": ua}),
+            )
+            .await?;
+        Ok(at(&v, "0") == true)
+    }
+
+    /// An admin's `remove` of `members` naming `e` (P48, S3): signed, prepared. `e` is the head or an ancestor within 16 epochs,
+    /// and the contract checks and applies it at the head (C9), so the builder does (D2-4, [`Self::exit_head`]): the signer a
+    /// live admin of the head (`NotAdmin`), each UA a member or an admin of it (`MembersInvalid`) not already removed there
+    /// (`NotMember`, A-4); only those UAs' flags are read. When `e` is not the head, E-2 (C-5): the signer an admin of `e` too
+    /// (`NotAdmin`) and each UA a member or an admin of `e` (`NotMember`), as the contract's `_namedLists`.
     pub async fn remove(
         &self,
         s: &SessionRef,
@@ -719,12 +769,32 @@ impl PqChat {
     ) -> Result<AppCall, PqChatError> {
         seed_of(&me.key)?;
         let ua = me.ua.to_ascii_lowercase();
-        if !e.admins.contains(&ua) {
+        let m = sorted(members, None)?;
+        if m.is_empty() || m.len() > crate::signed::REMOVE_MAX {
+            return Err(PqChatError::MembersInvalid);
+        }
+        let h = self.exit_head(s, e).await?;
+        if !h.admins.contains(&ua)
+            || self.flag(s, &h, "IPqChat.leftIn", &ua).await?
+            || self.flag(s, &h, "IPqChat.removedIn", &ua).await?
+        {
             return Err(PqChatError::NotAdmin);
         }
-        let m = sorted(members, None)?;
-        if m.is_empty() || m.iter().any(|u| !(e.has_member(u) || e.admins.contains(u))) {
+        if m.iter().any(|u| !(h.has_member(u) || h.admins.contains(u))) {
             return Err(PqChatError::MembersInvalid);
+        }
+        for u in &m {
+            if self.flag(s, &h, "IPqChat.removedIn", u).await? {
+                return Err(PqChatError::NotMember);
+            }
+        }
+        if h.id != e.id {
+            if !e.admins.contains(&ua) {
+                return Err(PqChatError::NotAdmin);
+            }
+            if m.iter().any(|u| !(e.has_member(u) || e.admins.contains(u))) {
+                return Err(PqChatError::NotMember);
+            }
         }
         let r = PqChatRemove {
             session_id: s.session_id.clone(),
@@ -734,7 +804,12 @@ impl PqChat {
             admin: ua.clone(),
             nonce,
         };
-        let signed = self.app.sign_pqchat_remove(me.key.clone(), r).await?;
+        let signed = self
+            .app
+            .prepare_pqchat_remove(me.key.clone(), r)
+            .await?
+            .sign()
+            .await?;
         let a = json!({"r": {"sessionId": s.session_id, "epochId": e.id, "nextEpoch": (e.epoch + 1).to_string(),
             "members": m, "admin": ua, "nonce": nonce.to_string()}, "sig": sig_json(&signed.sig)});
         self.net
@@ -742,7 +817,9 @@ impl PqChat {
             .await
     }
 
-    /// The account's `leave` of `e` (CTR-CHAT-10, S3): signed, prepared.
+    /// The account's `leave` naming `e` (CTR-CHAT-10, S3): signed, prepared, checked and applied at the head (C9, D2-4,
+    /// [`Self::exit_head`]): a member of the head that neither left nor was removed there (`NotMember`, A-4), and of `e` too
+    /// when `e` is not the head (E-2, C-5: `NotMember`).
     pub async fn leave(
         &self,
         s: &SessionRef,
@@ -753,7 +830,12 @@ impl PqChat {
     ) -> Result<AppCall, PqChatError> {
         seed_of(&me.key)?;
         let ua = me.ua.to_ascii_lowercase();
-        if !e.has_member(&ua) {
+        let h = self.exit_head(s, e).await?;
+        if !h.has_member(&ua)
+            || self.flag(s, &h, "IPqChat.leftIn", &ua).await?
+            || self.flag(s, &h, "IPqChat.removedIn", &ua).await?
+            || (h.id != e.id && !e.has_member(&ua))
+        {
             return Err(PqChatError::NotMember);
         }
         let l = PqChatLeave {
@@ -762,7 +844,12 @@ impl PqChat {
             member: ua.clone(),
             nonce,
         };
-        let signed = self.app.sign_pqchat_leave(me.key.clone(), l).await?;
+        let signed = self
+            .app
+            .prepare_pqchat_leave(me.key.clone(), l)
+            .await?
+            .sign()
+            .await?;
         let a = json!({"l": {"sessionId": s.session_id, "epochId": e.id, "member": ua, "nonce": nonce.to_string()},
             "sig": sig_json(&signed.sig)});
         self.net

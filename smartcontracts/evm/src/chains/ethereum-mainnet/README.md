@@ -3,6 +3,8 @@
 Public EVM mainnet. Row `ethereum-mainnet` of [`chain-uids.json`](../../../chain-uids.json): chain id **1**, chain_uid
 `0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3`, network `mainnet`. A chain is (chainId, chain_uid) (NET-ALL-22). **Ethereum (1) and Ethereum Classic (61) share block 0**: the chain id separates them (NET-ALL-25).
 
+**EVM tier** ([NET-EVM-20](../../../../../docs/networks/evm.md#NET-EVM-20), owner 2026-11-26): Tier 2: deployable once the chain raises its code size. Block 59.9 M, every kind fits; `osaka`, runtime 24,576 B until its Glamsterdam fork.
+
 Profile [`profile.json`](profile.json) (`draft`, SDK plan T40), from the probes of 2026-11-22
 (`clients/scaas-rpc/runs/2026-11-22-evm-probes.py`; summary `2026-11-22-evm-probes-summary.txt` beside it; one sample each, the
 24-h and 7-day windows of NET-EVM-19 still to run):

@@ -95,6 +95,11 @@ contract TestRouter {
         (chainUid, registry) = (uid, registry_);
     }
 
+    /// G-3: `configureChain` asks the router's `factory()`; a stand-in answers the factory that asks.
+    function factory() external view returns (address) {
+        return msg.sender;
+    }
+
     function smartKeyCloneHash() external view returns (bytes32) {
         return IUARegistry(registry).smartKeyCloneHash();
     }
@@ -205,7 +210,7 @@ contract FactoryAdminTest is UARegistryBase {
         c[0] = UARegistry.KindConfig(K1, address(mock), 50_000, false, 0);
         c[1] = UARegistry.KindConfig(ML44, address(mock), CAP, false, 0);
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, address(0), true, c);
-        router = new GovernanceRouter(chainUidA, PREG, address(0), false);
+        router = new GovernanceRouter(chainUidA, PREG, address(0), false, address(0));
         trouter = new TestRouter(chainUidA, PREG);
         Vm.Wallet memory w = vm.createWallet("k1 signer");
         k1Key = abi.encodePacked(w.publicKeyX, w.publicKeyY);
@@ -285,6 +290,10 @@ contract FactoryAdminTest is UARegistryBase {
     }
 
     function _configure(OpenFactory f, address router_) internal {
+        // G-3: `configureChain` requires the router to name `f`: the fixture's router is rebuilt for it
+        if (router_ != address(0) && router_ == address(router)) {
+            router_ = address(router = new GovernanceRouter(chainUidA, PREG, address(0), false, address(f)));
+        }
         EnvKit.genesis(chainUidA);
         vm.prank(deployer);
         f.configureChain(chainUidA, 0, router_, EnvKit.codeHashOf(router_), 0, bytes32(0));

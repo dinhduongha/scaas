@@ -913,6 +913,119 @@ chains T74; `test/v2/ChainNeutral.t.sol`, `ChainNeutralFactory.t.sol`, `test/gov
   every kind's runtime +0.8 to +1.2 KB.
 - One `IOpenFactory` and one `IFactoryToken` (the v1 and v2 interfaces are in `legacy/`).
 
+<a id="CTR-GOV-32"></a>**CTR-GOV-32** — **Router versions: registrar-approved catalogue rows by default; user routers only in a
+marked opt-in class** (owner 2026-11-24, "R-b + opt-in user routers"). **SPECIFIED** (nothing in `src/` but the two
+`virtual` `_govRouter` hooks below; the path is shown on
+today's factory by `test/governance/RouterPerRelease.t.sol`, UNAUDITED).
+- **The router of a governed contract** is the one its `_govRouter()` returns: the chain's router (`ChainEnv.govRouter`, set
+  once by `configureChain`, [CTR-TOK-29](#CTR-TOK-29)) for today's kinds, or a router version that a release reads from its own
+  env (`deps`, or a `params` word where its deps are full). `GOV_ROUTER()` names it. An instance never changes routers.
+- **Default: a catalogued router version.** A router version is a release of a router class in the generic catalogue
+  ([CTR-TOK-28](#CTR-TOK-28)): `deployImplementation` under the registrar's approval, used at its catalogue address, never
+  cloned (its kind stays disabled). It is a child of `GovernanceRouterBase` and inherits every admin and holder op. A release
+  that names a router version checks in `validateEnv` that the env's router is `classReleaseOf(class, kind,
+  version).implementation` and not deprecated; a twin of the same code at another address is refused. The router class
+  number is assigned when the first router version is specified.
+- **Opt-in: a user router.** A router that a creator supplies (in `initArgs` or `initCall`) is allowed only in releases of a
+  class marked for it; no other SCaaS release takes one. Its reach is that creator's instances. Wallets, SDKs and indexers
+  flag such an instance's router as **"not the chain's router"**: a `GOV_ROUTER()` that is neither `directory().govRouter`
+  nor a catalogued router row is a user router.
+- **Separation.** Each router has its own EIP-712 domain (`verifyingContract`, chain id, chain word), so routers never take
+  each other's signatures; each speaks only to contracts that name it (`_govSubject()`).
+- **Node and SDK.** A node relays a router's ops only when the router is in its `governance_routers` list ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)); a
+  client signs for the instance's `GOV_ROUTER()`.
+- **Later ERC-20 and DEX versions.** `MetaTokenBase._govRouter` and `SCaaSDexAdmin._govRouter` are `virtual` (owner
+  2026-11-24; BUILT, no bytecode change), so their next release versions can read a router from their env.
+- **Registry generations** (owner 2026-11-24: each generation goes with a router, not necessarily a new one): the chain's
+  router follows each target's env registry, [CTR-GOV-33](#CTR-GOV-33) (G1).
+
+<a id="CTR-GOV-33"></a>**CTR-GOV-33** — **G1: one router for every registry generation; a derived signer is checked on the
+registry of the op's target, its nonce keyed by that registry** (owner 2026-11-24, "G1 before the freeze"; the check covers
+every governed contract, not only tokens). **BUILT** (`GovernanceRouterBase`; `test/governance/RouterPerRelease.t.sol`
+`RouterRegistryLineTest`, `RouterG1Test`), UNAUDITED.
+- **Which registry.** For an op `mtx<Op>(e, target, …)` of a derived signer (not in the native space) the router uses
+  `registryFor(target)`: when `target`'s code has the EIP-1167 clone form, its env registry (code offset 77,
+  `ChainEnvCode.OFF_REGISTRY`) is not 0 and not the router's own, and the factory's index names it
+  (`IOpenFactory(factory()).infoOf(target).addr == target`), that env registry; otherwise the router's own `registry()`.
+  The router never asks the target. A native signer uses no registry (its own key) and is unchanged. So the router follows
+  [CTR-UA-73](accounts.md#CTR-UA-73): a target serves its env's generation and the older ones; factory operations stay on
+  the router's own generation.
+- **One reader for every factory-made form.** The factory writes every instance it makes through one path (`_instance`:
+  `ChainEnvCode.encode` behind the 45-byte proxy, CTR-TOK-29) and indexes it through one (`_index`), for tokens
+  (`createToken`, `createTokenUnregistered`), the DEX (`createDex`) and generic catalogue instances (`createInstance`). No
+  factory view returns an instance's registry (`infoOf`'s `Created` holds no env version), so the router reads the env
+  the factory wrote once the index names the address. **Indexed before it runs (Change 2026-11-24, the code review's
+  G-1; SPECIFIED, the code follows on branch `review-fix-contract`):** in every creation path the factory indexes the
+  instance (`_index`) **before** it calls the instance's initializer, so `registryFor(target)` gives one answer from the
+  first moment the instance's code exists, for the whole creation transaction; a revert of the initializer unwinds the
+  index with it. Before, the initializer ran unindexed, a router op it relayed was checked on the router's own registry
+  and map, and the same signature ran again on the env registry's map after creation.
+
+  | Contract | The router targets it | Factory-made, path | Env registry | G1 uses |
+  |---|---|---|---|---|
+  | Token kinds 0-13 | yes (`ChainEnv.govRouter`) | yes: `createToken`, `createTokenUnregistered` | clone code, offset 77 | the env registry |
+  | `SCaaSDex` (its body modules run by `DELEGATECALL` in the clone) | yes | yes: `createDex` | clone code, offset 77 | the env registry |
+  | A generic class instance (class ≥ 3) governed by `ChainEnv.govRouter` | yes | yes: `createInstance` | clone code, offset 77 | the env registry |
+  | A generic instance naming its own router in `deps` (P3, R-b) | no: its router is another | yes: `createInstance` | clone code, offset 77 | that router's choice |
+  | PqChat, PqVault | no: not governed (no `_govSubject`) | yes: `createInstance` | clone code, offset 77 | the env registry, never asked |
+  | Releases: token, DEX and generic implementations, body modules (PqChat's `PqChatTopics`, `PqChatTree`, `PqChatTreeViews`, `PqChatTreeMembers` among them), catalogued router versions | no (an all-zero env; modules `onlyDelegated`) | `deploy*Implementation` (`CREATE2`), not indexed | none | the router's own |
+  | `OpenFactory` (registrar ops, `mtxCreate*`) | yes (`UAAdmin`) | no | none | the router's own |
+  | `ComplianceRegistry` (its admin, KYC providers) | yes (`UAAdmin`) | no | none | the router's own |
+  | `SmartKeyAccount` | no: not governed | an EIP-1167 clone of `SmartKeyAccountFactory`, no env, not indexed | none | the router's own |
+  | `RelayFeeRouter`, `RelayFeeExecutor`, `RescueVault`, `MandateWallet` | no: no router admin | no | none | the router's own |
+
+- **The gap, shared with G3.** A contract the factory did not make keeps the router's own generation: a UA only a later
+  generation knows cannot hold the factory's admin or registrar role, a compliance registry's admin or KYC seat, or create
+  an instance through the router (`mtxCreate*` targets the factory); a native or router-generation account does that.
+- **Nonces keyed by `(registry, id)`.** A derived signer's nonce on a registry other than the router's own lives in the
+  router's ERC-7201 namespace `scaas.govrouter.nonce` (`mapping(registry => mapping(id => mapping(lane => nonce)))`); the
+  router's own registry and every native id keep the one map of `scaas.metatx` (`mtxNonce`). So a bad env registry an admin
+  published (one that passes any id) can spend only its own map's nonces, never an id's nonce at the router's registry.
+  `mtxNonceFor(target, from, lane)` returns the nonce the router checks for an op on `target`; a client signs it and the node
+  reads it ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)). The checks on that map run in `preNamedUA`'s order with its
+  errors (`_preAt`). It answers for `target` as it is when read: for an address not created yet it is the router's own map,
+  so a client reads it for an op on a new instance only once the instance exists (an op signed ahead at the wrong map's
+  nonce is refused `MetaTxBadNonce`, fail closed; review G-6, controller call 2026-11-24).
+- **`UACancelNonce` is unchanged**: `mtxCancelNonce(e, lane, auth)` authenticates on the router's own registry and bumps
+  the one map, so it cancels a native id's lanes everywhere and a derived id's at the router's registry; it does not reach
+  an env registry's map.
+- **The keyed cancel** (owner 2026-11-24; BUILT on branch `router-cancel`, UNAUDITED): `mtxCancelNonceFor(e, target, lane,
+  auth)` over `UACancelNonceFor(bytes32 from,address target,uint256 lane,<envelope>)` (typehash `0xf95871f9…f41f0c4e`, the
+  router's domain, no chain word: it calls nothing) cancels `lane` in the map the router checks for an op on `target`. The
+  registry is `registryFor(target)`, as for the op, never one the caller names. Its checks are the op's (`_pre`): the
+  relayer binding, expiry, mode, its own envelope nonce spent in that map (so it is replay-safe, and its signature names
+  `target`, so the registry), the signature on that registry, fee mode `NONE` (relayable at fee 0, a paid mode refused as on
+  every router op). Then `lane` is bumped by one: in the keyed map `(registry, from, lane)` (`UANonceCancelledAt(ua,
+  registry, batch, newNonce)`), or, for a native id or a target on the router's own registry, exactly as `mtxCancelNonce`
+  (the one map, `UANonceCancelled`; controller call 2026-11-24: identical, not a refusal, so a client may use
+  `mtxNonceFor` and `mtxCancelNonceFor` for every target). A bad env registry can bump only its own map's lanes. Tests:
+  `RouterG1Test` `test_cancelFor_*`; the node row `UACancelNonceFor` ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)); the
+  SDK `admin_ua_cancel_nonce_for` ([CLI-SDK-18](../clients/scaas-sdk.md#CLI-SDK-18)).
+- **Replay.** One router, one EIP-712 domain. The signature names `target`, and `target` fixes the registry for the
+  target's whole life, its creation transaction included (above), so a signature spent in one map is valid in no other.
+  The keyed cancel `mtxCancelNonceFor` names a target that has code, as every op (`TargetHasNoCode`; Change 2026-11-25,
+  G-7 of the Fable re-review, controller call, BUILT on branch `review-fix2-contract`): a cancel signed for an address
+  the factory has not created yet would otherwise run in the router's own map now and in the keyed map once the target
+  exists (`test_g7_cancelForACodeLessTargetRefused`).
+- **Deploy order.** The factory, then the router naming it (`GovernanceRouter(chainUid, registry, smartKeyAccountImpl,
+  hedera, factory)`; `factory()` reads it back), then `configureChain`, whose code-hash pin covers the immutable. A router
+  with factory 0 gives every target its own registry. **`configureChain` refuses a router whose `factory()` is not this
+  factory** (`RouterFactoryMismatch(named)`; a router that answers no word fails closed), so G1 cannot be switched off by
+  configuring a router built with factory 0 or another factory (Change 2026-11-24, the code review's G-3; BUILT on
+  `review-fix-contract`: the router checks of `configureChain` moved to the external library `OpenFactoryLib.checkRouter`,
+  the factory's size split pre-approved by the owner; `FactoryDirectoryTest.test_configureChain_routerNamesThisFactory`;
+  UNAUDITED); the deploy script's check stays as a second line. Every test fixture builds its router naming its factory.
+- **Cost** (`test_g1_gas`, `mtxMint`): a derived signer on a factory-made target of another generation pays the code copy and
+  one `infoOf` call, +809 gas against the same op on a router of that generation; on a target of the router's own generation
+  the code copy only, +482; a native signer +0 against a router of the same build with no factory (`test_g1_gas`). The
+  SDK table's derived (`ua_extra`) rows are measured on targets of the router's own generation (+482), so a target of
+  another generation adds 327 more (G-12 of the re-review of 2026-11-25; `inputs.json`'s `gov_router` assumption).
+  Against the router before G1 every op pays for the larger router: a native `mtxMint` +377 (`plus_zero_gas.json`
+  105,145 → 105,522, commit `e421dde78`), `mtxCancelNonce` +12. The keyed cancel (`test_cancelFor_gas`): 94,326 gas on a gen-2 target,
+  92,439 on the router's own map (a gen-1 holder), 75,585 by a native signer, against 88,894 for `mtxCancelNonce`; a
+  target with no code is `TargetHasNoCode` (Change 2026-11-25, G-7 of the re-review: was 94,086 / 92,199 / 72,445 before
+  the check).
+
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `initArgs`.
 
 ### 6.2 Transitional (BUILT)

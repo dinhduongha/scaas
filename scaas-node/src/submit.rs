@@ -87,6 +87,9 @@ pub struct MetaRef {
     /// The subject's nonce is `mtxNonce(address, batch)` (`SmartKeyAccount`, `IMetaTxAddress`); else `mtxNonce(bytes32, batch)`
     /// (tokens, the router, the mandate wallets: one nonce map on ids, ua-mtx-merge plan T14).
     pub addr_nonce: bool,
+    /// A router op's `target` (G1, CTR-GOV-33): a derived subject's nonce is `mtxNonceFor(target, from, batch)` on the router,
+    /// keyed by the registry the router checks it on; `None` elsewhere and for a router's `UACancelNonce` (no target).
+    pub gov_target: Option<Address>,
 }
 
 impl MetaRef {
@@ -99,6 +102,7 @@ impl MetaRef {
             digest,
             ua: false,
             addr_nonce: false,
+            gov_target: None,
         }
     }
 
@@ -111,6 +115,7 @@ impl MetaRef {
             digest,
             ua: true,
             addr_nonce: false,
+            gov_target: None,
         }
     }
 }
@@ -439,6 +444,7 @@ fn work_of_op_with(
         digest: None,
         ua,
         addr_nonce,
+        gov_target: p.gov_target,
     });
     Ok((
         Work {
@@ -2100,6 +2106,7 @@ pub(crate) mod tests {
             digest: None,
             ua: true,
             addr_nonce: false,
+            gov_target: None,
         };
         assert!(ours(&m, svc, svc, lane), "the service relayed it");
         assert!(ours(&m, svc, lane, lane));
@@ -2280,10 +2287,11 @@ pub(crate) mod tests {
                 // the rotation filter asks `UAPqzKeyCurrent` and `UAPqzScopedKeyCurrent` (one topic-0 list); a log of the first
                 "eth_getLogs" if e.pqz_rotated && p[0]["topics"][0].as_array().is_some_and(|t| t.contains(&json!(format!("{:#x}",
                     <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH)))) => Ok(json!([{
+                    // T26 B2-4 (fixture correction): a log the filter names, in the range asked, as a real node answers
                     "address": p[0]["address"].clone(), "topics": [format!("{:#x}",
-                        <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH), format!("{:#x}", B256::repeat_byte(1)),
-                        format!("{:#x}", B256::from(U256::from(1)))],
-                    "data": "0x", "blockNumber": "0x9", "blockHash": format!("{:#x}", B256::repeat_byte(9)),
+                        <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH),
+                        topic_of(&p[0]["topics"][1], B256::repeat_byte(1)), topic_of(&p[0]["topics"][2], B256::from(U256::from(1)))],
+                    "data": "0x", "blockNumber": p[0]["fromBlock"].clone(), "blockHash": format!("{:#x}", B256::repeat_byte(9)),
                     "transactionHash": format!("{:#x}", B256::repeat_byte(8)), "transactionIndex": "0x0", "logIndex": "0x0",
                     "removed": false}])),
                 "eth_getLogs" if e.fee_set && p[0]["topics"][0] == json!(format!("{:#x}",
@@ -4344,8 +4352,9 @@ pub(crate) mod tests {
         // round 3t: -> 131, the router's `UASetVerifierFee`; owner 2026-11-12: -> 132, the router's `UACreateInstance`
         // the three-key model (CTR-PQZ-41): -> 133, `PqzRollOver`; round 3zc (CTR-GOV-30): -> 135, the router's
         // `UASetMaxSupply`, `UASetMaxWrapSupply`; set-auditor (CTR-GOV-31): -> 137, the router's `UASetAuditorKey`, `UASetAuditorUA`
+        // CTR-GOV-33 Change: -> 138, the router's `UACancelNonceFor`
         assert_eq!(
-            n, 137,
+            n, 138,
             "every row with an entry, but the relay fees (relay_fee_call_object)"
         );
     }
@@ -7395,6 +7404,15 @@ pub(crate) mod tests {
         );
     }
 
+    /// A topic a log filter position names (its first, a list or one word), else `or`.
+    fn topic_of(t: &serde_json::Value, or: B256) -> String {
+        t.as_array()
+            .and_then(|a| a.first())
+            .or(Some(t).filter(|t| t.is_string()))
+            .and_then(serde_json::Value::as_str)
+            .map_or_else(|| format!("{or:#x}"), str::to_string)
+    }
+
     /// Group 3g (spec §7.3): `ProofRejected` after an indexed `UAPqzKeyCurrent` of a party is `PQZ_KEY_ROTATED`, the simulation
     /// error carried, back in the queue, never `dead`; without the event it is the plain revert.
     #[tokio::test]
@@ -7881,7 +7899,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
                 nonce: U256::ZERO,
                 digest: None,
                 ua: true,
-                addr_nonce: false
+                addr_nonce: false,
+                gov_target: None
             })
         );
         assert_eq!(w.valid_until, m.valid_until().saturating_to::<u64>());

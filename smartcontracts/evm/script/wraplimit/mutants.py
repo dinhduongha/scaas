@@ -1,15 +1,19 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """Group 3l, plan T99 (wrap limits spec 2026-11-10-wrap-limits.md §11): every mutant alone on a clean tree, `forge test` of the
 wrap-limit tests through `scripts/capped`, the file restored byte-equal (sha256 checked) after each. One line per mutant:
-`mutant | red tests | rc` (rc 1 = killed). Full output in git-ignored `.log` files under `<runs>/mutants/`.
+`mutant | red tests | rc` (rc 1 = killed; a run past its deadline, 3 x the unmutated baseline of its test file, at least
+10 min, or `--timeout N`, has its process group killed and reads `killed (timeout N s)` in the red column; a target file that
+differs from HEAD refuses the run; the restore holds on SIGINT / SIGTERM too: scripts/mutant_guard.py, owner 2026-11-24). Full output in git-ignored `.log` files under `<runs>/mutants/`.
 
 usage (from smartcontracts/evm): python3 script/wraplimit/mutants.py <runs dir> [name ...]   UNAUDITED tooling."""
 
-import hashlib
 import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "scripts"))
+import mutant_guard as guard  # noqa: E402
 
 LIB = "src/metatx/WrappedLib.sol"
 CORE = "src/metatx/WrappedTokenCore.sol"
@@ -380,30 +384,26 @@ M = [
 FORGE = os.path.expanduser("~/.foundry/bin/forge")
 
 
-def sha(p):
-    return hashlib.sha256(open(p, "rb").read()).hexdigest()
-
-
 def run(runs, name, f, old, new, tdir, tfile):
     src = open(f).read()
+    guard.refuse_dirty([f], ".")
     assert src.count(old) == 1, (name, f)
-    h = sha(f)
     log = os.path.join(runs, "mutants", f"{name}.log")
+    env = dict(
+        os.environ, FOUNDRY_TEST=tdir, CAPPED_SLOTS=os.environ.get("CAPPED_SLOTS", "3")
+    )  # owner 2026-11-10: three slots
+    cmd = ["../../scripts/capped", FORGE, "test", "--match-path", tfile]
+    lim = guard.limit(cmd, env=env)
+    saved = {f: open(f, "rb").read()}
     try:
         open(f, "w").write(src.replace(old, new))
-        env = dict(
-            os.environ, FOUNDRY_TEST=tdir, CAPPED_SLOTS=os.environ.get("CAPPED_SLOTS", "3")
-        )  # owner 2026-11-10: three slots
         with open(log, "w") as out:
-            rc = subprocess.call(
-                ["../../scripts/capped", FORGE, "test", "--match-path", tfile],
-                stdout=out,
-                stderr=subprocess.STDOUT,
-                env=env,
-            )
+            r = guard.run(cmd, lim, stdout=out, stderr=subprocess.STDOUT, env=env)
     finally:
-        open(f, "w").write(src)
-    assert sha(f) == h, f"{f} not restored byte-equal"
+        guard.restore(saved)
+    rc = r.returncode
+    if r.timeout:
+        return rc, [guard.outcome(r, "")]
     text = open(log).read()
     # a fuzz failure's `[FAIL; counterexample: ... args=[...]]` nests brackets: the line's last `] name(` names the test
     red = sorted(set(re.findall(r"^\[FAIL.*\] (\w+)\(", text, re.M)))

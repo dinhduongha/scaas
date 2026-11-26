@@ -156,11 +156,11 @@ library UARegistryCoreLib {
         if (r.kind != 0) return UAStore.msig(id, r.keyPtr);
         IUARegistry self = IUARegistry(address(this));
         (uint64 v, uint256 en,) = self.msigStateOf(id);
-        return UAStore.blob(self.msigOf(id), en, v);
+        return UAStore.blob(self.msigOf(id), en, v, address(0));
     }
 
-    /// The signature object `b` of the `msig` `ua`'s slot `index` (owner 2026-11-03): its hash kept, written once with the slot's bit, its
-    /// bytes in `UAMemberSig`, under `purpose` (`PURPOSE_POP_V2` or `PURPOSE_MEMBERSHIP`). `d`: the `msig`'s key data.
+    /// The signature object `b` of the `msig` `ua`'s slot `index` (owner 2026-11-03; an `msig` member's: `abi.encode(InnerSig[])` followed
+    /// by its version tag, CTR-UA-74): its hash kept, written once with the slot's bit, its bytes in `UAMemberSig`, under `purpose` (`PURPOSE_POP_V2` or `PURPOSE_MEMBERSHIP`). `d`: the `msig`'s key data.
     function _memberSig(bytes32 ua, bytes memory d, uint16 index, bytes32 purpose, bytes memory b) internal {
         UAStore.layout().memberSigHash[ua][index] = keccak256(b);
         emit IUARegistry.UAMemberSig(ua, bytes32(UAStore.word(d, 4 + 36 * uint256(index) + 2)), index, purpose, b);
@@ -273,9 +273,10 @@ library UARegistryCoreLib {
                 && _single(_cfgKind(), r.kind, d, ua, purposeTag, typedDigest, auth.signature);
         } else {
             bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purposeTag, typedDigest));
-            // CTR-UA-44: the current structure (MM-9)
-            ok = auth.keyData.length == 0 && auth.signature.length == 0
-                && _msig(ua, md, typedDigest, false, UAStore.msig(ua, r.keyPtr), auth.members, false);
+            // CTR-UA-44: the current structure (MM-9); CTR-UA-74: `signature` its version tag
+            bytes memory d = UAStore.msig(ua, r.keyPtr);
+            ok = auth.keyData.length == 0 && UAStore.verOk(auth.signature, d)
+                && _msig(ua, md, typedDigest, false, d, auth.members, false);
         }
         // No UAKeyNotCached here (3zh, 2026-11-15): a record of this registry exists only after `register`, which needs the
         // complete ML-DSA cache without a precompile (`_consent`), and SSTORE2 parts are never removed; a gen-1 record has no
@@ -392,7 +393,8 @@ library UARegistryCoreLib {
             d,
             index,
             UAKinds.PURPOSE_MEMBERSHIP,
-            memberSig.members.length == 0 ? memberSig.sig : abi.encode(memberSig.members)
+            // CTR-UA-74: an `msig` member's list, then its version tag (nothing at version 0)
+            memberSig.members.length == 0 ? memberSig.sig : bytes.concat(abi.encode(memberSig.members), memberSig.sig)
         );
         emit IUARegistry.UAMembershipAccepted(ua, index, member);
     }
@@ -417,7 +419,7 @@ library UARegistryCoreLib {
     ) internal view returns (bool) {
         _portablePurpose(ua, purpose);
         if (kind == UAKinds.MSIG) {
-            if (sig.length != 0) return false;
+            if (!UAStore.verOk(sig, d)) return false; // CTR-UA-74: `sig` the version tag of `d`
             if (!_pqEligible(d, false)) return members.length == 0;
             bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purpose, digest));
             return members.length != 0 && _msig(ua, md, digest, purpose == UAKinds.PURPOSE_POP_V2, d, members, write);
@@ -574,15 +576,10 @@ library UARegistryCoreLib {
             bytes32 inner = UAKinds.memberDigest(id, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBER, md));
             // R6 (spec 2026-11-19-registry-verify-only-kinds §4): an inner `msig` held elsewhere keeps its holding generation's
             // verifiers on every path: its members are checked by their holder, as on a write
-            return s.sig.length == 0
+            bytes memory di = _msigBytes(id);
+            return UAStore.verOk(s.sig, di) // CTR-UA-74: `sig` its version tag
                 && _msig(
-                id,
-                inner,
-                typed,
-                false,
-                _msigBytes(id),
-                UAStore.lift(s.members),
-                write || UAStore.layout().records[id].kind == 0
+                id, inner, typed, false, di, UAStore.lift(s.members), write || UAStore.layout().records[id].kind == 0
             );
         }
         if (s.members.length != 0) return false;

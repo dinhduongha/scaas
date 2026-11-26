@@ -195,6 +195,27 @@ where
     G: Fn(usize, u64) -> Gut,
     Gut: Future<Output = Result<V, ReadError>>,
 {
+    read_set_from(client, probe, first, at)
+        .await
+        .map(|(height, value, _)| (height, value))
+}
+
+/// [`read_set_pinned`] with the index of the endpoint whose answer stands (review T26 B-2: a status is decisive under
+/// `failover` only when endpoint 0 gave it and is not `discovered`, CLI-RPC-09).
+pub(crate) async fn read_set_from<V, P, F, Fut, G, Gut>(
+    client: &Client,
+    probe: &P,
+    first: F,
+    at: G,
+) -> Result<(u64, V, usize), SdkError>
+where
+    V: PartialEq,
+    P: Probe,
+    F: Fn(usize) -> Fut,
+    Fut: Future<Output = Result<(u64, u64, V), ReadError>>,
+    G: Fn(usize, u64) -> Gut,
+    Gut: Future<Output = Result<V, ReadError>>,
+{
     let a = client.failover(probe, first).await?;
     let (head, height, value) = a.value;
     if a.endpoint == 0 {
@@ -230,7 +251,7 @@ where
             .into());
         }
     }
-    Ok((height, value))
+    Ok((height, value, a.endpoint))
 }
 
 #[cfg(all(test, feature = "near"))]
@@ -257,4 +278,85 @@ mod tests {
             assert_eq!(u256_dec(bad), None, "{bad:?}");
         }
     }
+}
+
+/// The gateways of `chain` that announce the profile's chain for its `chain_uid` (`GET /v1/gateway`, NODE-GW-05), by their
+/// index in the profile's list: on EVM its `chain` is the profile's chain id, on another family its `family` the profile's.
+/// One that cannot be read, or announces another chain or none, is left out (spec §4: a source that differs is not used;
+/// review T26 B-7, and its sibling on Soroban's `/v1/ops`); none left: `ProfileMismatch` when one announced another, else
+/// the last failure. `SubmitPathNone` without gateways (an EVM profile without a chain id too).
+pub(crate) async fn check_gateways(sdk: &crate::Sdk, chain: &str) -> Result<Vec<u32>, SdkError> {
+    let c = sdk
+        .chains
+        .iter()
+        .find(|c| c.profile.key == chain)
+        .ok_or(SdkError::ChainUnknown)?;
+    let list = c.gateways.clone().ok_or(SdkError::SubmitPathNone)?;
+    let evm = c.profile.family == crate::Family::Evm;
+    let id = c.profile.chain_id;
+    if evm && id.is_none() {
+        return Err(SdkError::SubmitPathNone);
+    }
+    let family = format!("{:?}", c.profile.family).to_ascii_lowercase();
+    let announces = |x: &serde_json::Value| {
+        let same = if evm {
+            x.get("chain").and_then(|n| n.as_u64()) == id
+        } else {
+            x.get("family").and_then(|f| f.as_str()) == Some(family.as_str())
+        };
+        same && x
+            .get("chain_uid")
+            .and_then(|u| u.as_str())
+            .is_some_and(|u| u.eq_ignore_ascii_case(&c.profile.chain_uid))
+    };
+    let client = scaas_rpc::node::NodeClient::new(list)?;
+    let (mut kept, mut mismatch, mut last) = (vec![], false, None);
+    for i in 0..client.list().len() {
+        match client.gateway_at(i).await {
+            Ok(v) => {
+                let ok = v
+                    .get("chains")
+                    .and_then(|c| c.as_array())
+                    .is_some_and(|cs| cs.iter().any(announces));
+                if ok {
+                    kept.push(u32::try_from(i).map_err(|_| SdkError::Argument)?);
+                } else {
+                    mismatch = true;
+                }
+            }
+            Err(e) => last = Some(e),
+        }
+    }
+    match last {
+        _ if !kept.is_empty() => Ok(kept),
+        Some(e) if !mismatch => Err(e.into()),
+        _ => Err(SdkError::ProfileMismatch),
+    }
+}
+
+/// The client of the gateways [`check_gateways`] keeps: an operation is posted to them only.
+pub(crate) async fn kept_gateways(
+    sdk: &crate::Sdk,
+    chain: &str,
+) -> Result<scaas_rpc::node::NodeClient, SdkError> {
+    let kept = check_gateways(sdk, chain).await?;
+    let list = sdk
+        .chains
+        .iter()
+        .find(|c| c.profile.key == chain)
+        .and_then(|c| c.gateways.clone())
+        .ok_or(SdkError::SubmitPathNone)?;
+    let endpoints = kept
+        .iter()
+        .filter_map(|&i| list.endpoints().get(i as usize).cloned())
+        .collect();
+    let kept = scaas_rpc::endpoint::NodeList::new(
+        endpoints,
+        list.policy,
+        list.timeout_ms,
+        list.slow_timeout_ms,
+        list.read_timeout_ms,
+    )?
+    .with_max_lag(list.max_lag);
+    Ok(scaas_rpc::node::NodeClient::new(kept)?)
 }

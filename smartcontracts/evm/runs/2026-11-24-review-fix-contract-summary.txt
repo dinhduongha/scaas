@@ -1,0 +1,181 @@
+# The 2026-11-24 review fixes, contract phase (branch review-fix-contract), against the spec at dfa5744cc.
+# Runner: runs/2026-11-24-review-fix-contract/gates.sh (logs git-ignored under runs/2026-11-24-review-fix-contract/<tag>/).
+
+step | commit | rc | counts
+forge-governance (G-1) | G-1 commit | 0 | 980 passed (first run 979/1: the nested index order, pin moved)
+forge-factory (G-1) | G-1 commit | 0 | 2 passed
+forge-v2 (G-1) | G-1 commit | 0 | 756 passed (first run 3 red: two nested-order pins, OpenFactory size pin; moved)
+forge-gas (G-1) | G-1 commit | 0 | SdkGasRouterAdmin 4 passed after 39 sdk_gas rows moved (+17 to +25); the full dir ran 404/2 before the move
+forge-pqchat (A-1, A-5, with D-7 and A-3 in the tree) | A-1 commit | 0 | 214 passed, 1 skipped
+forge-pqvault | A-1 commit | 0 | 96 passed
+size (A-1 + A-5) | A-5 commit | 0 | 182 contracts; PqChatTree 35,267 -> 35,265
+size (with D-7 + A-3) | uncommitted | 1 | PqChatTree 35,329 > 35,286 (the plain T-1 line)
+sdk-gas measure (merge) | ccf6c43db | 0 | the 4 SdkGasRouterAdmin.t.sol runs, 1 passed each; generate.py --check ok; test_generate ok; 39 rows +17/+24/+25 vs ua-rs-sign
+docs (merge) | ccf6c43db | 0 | docs_check check: 0 errors, 7 warnings
+forge-pqchat (split + E-3 tree + D-7 + A-3) | 3e0facc43 | 0 | 218 passed, 1 skipped (4 new: E-3 at the head, the lag, unknown epoch, A-4)
+size (split) | 3e0facc43 | 0 | 183 contracts; PqChatTree 35,329 -> 32,702; PqChatTreeMembers 8,544; PqChat 34,912 -> 34,978 (baseline moved)
+pqchat release pins (split) | 3e0facc43 | 0 | regular 2,410,162 -> 2,430,967; state 53,990,640 -> 54,091,620; asked x 1.05 59,348,716 of 60 M
+mutants M1-M20 (split, E-3 tree, A-4, D-7, A-3) | test commit after 3e0facc43 | 0 | 20/20 killed (first run: M6 staged epoch, M15 / M16 head flags survived; test_e3_exitNamingAStagedEpoch and the leftIn / removedIn asserts added)
+forge-factory (post-merge) | 25066a1fa | 0 | 2 passed
+forge-gas (post-merge) | 25066a1fa | 0 | 406 passed, 1 skipped
+forge-governance (post-merge) | 25066a1fa + GovDeploy fix | 0 | 1009 passed (first run 1008/1: test_deployPqChatPath read 3 modules; the fourth added, in a block for the stack)
+forge-v2 (post-merge) | 25066a1fa | 0 | 756 passed
+sdk op::gas (post-merge) | 25066a1fa | 0 | 32 passed
+forge-pqchat (E-3 mode 0 + replica) | 7f8439265 | 0 | 226 passed, 1 skipped
+forge-pqvault (E-3 + replica) | 7f8439265 | 0 | 98 passed
+size (E-3 mode 0; owner: leave / remove to PqChatTreeMembers) | 7f8439265 | 0 | 183 contracts; PqChat 35,534 before the move -> 32,891; PqChatTreeMembers 13,506; PqChatTree 32,758; PqVault 32,131 (baseline moved)
+mutants M21-M41 (E-3 mode 0, PqVault, the replica rule) | 7f8439265 | 0 | 21/21 killed (runner: per-mutant test dir)
+forge-v2 (G-3, first run) | step 3 tree | 1 | 1 red: test_sizes, OpenFactory 35,355 > 35,239 (G-3 took it over the 35,286 line) -> OpenFactoryLib split
+size (G-3 + the split) | step 3 tree | 0 for OpenFactory | OpenFactory 35,239 -> 35,047 (35,355 unsplit), OpenFactoryLib 1,088 (a library, no row)
+forge-governance (G-3) | step 3 tree | 0 | 1009 passed (first run 994/15: GovRouterAdmin's binding matrix built two stacks on one router; g first)
+forge-as (G-3) | step 3 tree | 0 | 568 passed
+forge-v2 (G-3) | step 3 tree | 0 | 757 passed (+1: test_configureChain_routerNamesThisFactory)
+forge-factory (G-3) | step 3 tree | 0 | 2 passed
+forge-merge (G-3) | step 3 tree | 0 | 350 passed
+forge-pqz (G-3) | step 3 tree | 0 | 694 passed, 4 skipped
+size (A-6, F-5) | step 4 tree | 0 after the row | PqChatTree 32,758 -> 32,812 (+54: the 256-position limit, the one-leaf root)
+forge-pqchat (steps 4-6 tree) | step 4-6 tree | 0 | 260 passed, 1 skipped (first run: the moved struct name in two test helpers; the new pins)
+forge-pqvault (steps 4-6 tree) | step 4-6 tree | 0 | 99 passed (+1: test_e3_removedAtTheHeadWritesNothing)
+forge-gas (G-3, before G-4) | 2a35404af | 1 | 11 red, every one a derived signer's router row (first key: +482, +432, +3312)
+sdk-gas measure (G-4) | G-4 commit | 0 | generate.py --measure, 65/65 runs (FOUNDRY_TEST=test/gas); 204 keys moved, all `_ua`: +482 x 117, +412 x 41, +432 x 22, +392 x 15, +3312 x 2 (mtxCancelNonceFor on a code-less target), the fitted lines +40, +5, -20, +19, +393 (setCompliance); no native row moved; reference.json regenerated, --check ok, test_generate ok
+sdk op::gas (G-4) | G-4 commit | 0 | 32 passed
+forge-gas (G-4) | G-4 commit | 0 | 406 passed, 1 skipped
+mutants M42-M73 (A-7 rows, A-6, F-5, D-4, A-9, G-3) | 8daa69910 | 0 | 32/32 killed, each by a behavioural test (the A-7 row's own, the harness's, test_d4_createSessionBounds, test_treeNamespaceIsPinned, test_configureChain_routerNamesThisFactory); 31 also red on the new module size pin, which the runner now leaves out with the release's; row 5 not run (equivalent since A-4)
+matrix: forge, every directory at the default set (gates.sh, tag matrix) | ccd58b7f8 | 0 | account 103; as 568; confidential 5; factory 2; fork 0/1 skipped; gas 406/1; governance 1009; hedera 20; liquidity 93/1; merge 350; metatx 550/1; modules 35; p6f 4; pqchat 260/1; pqvault 99; pqz 694/4; pqzh 42; research 360/7; ua 1044; uagas 29; v2 757; wallet 185; wrap 324; zether 478/4; top 29 (passed/skipped), no failure
+matrix: size, forkcheck, chatstore-cancun, testnet-build, deploy-py, docs, docs-test | ccd58b7f8 | 0 | size gate 0 errors, 184 contracts (OpenFactory 35,047, PqChatTree 32,812 under their lines); the rest green
+matrix: ci-guards (the runner's own form) | ccd58b7f8 | 1 | its `/[t]mp/` grep matches npm's package `tmp` in clients/clientkeys/xcheck/arbundles/package-lock.json (a URL segment, not a path); CI's form (the docs job, URL segments excluded) is clean: no temp path
+matrix: ci-guards (CI's form, gates.sh aligned) | ccd58b7f8 + gates.sh | 0 | the lock file is on origin/ua-rs-sign since 0c45d753a; the runner now greps CI's `(^|[^[:alnum:]_.-])/[t]mp/` (a path, not a URL segment); clean
+matrix: sets sensitive, first run | ccd58b7f8 | 1 | every lane `Failed to find executable forge`: at-set.sh / lanes.sh call forge by name, and the run was started without ~/.foundry/bin on PATH (gates.sh adds it); rerun with it
+matrix: sets sensitive (at-set.sh --clean others sensitive, lanes, the work tree's PqzSet.sol untouched) | ccd58b7f8 | 0 | each of n2048-kmax1024 / n2560-kmax16384 / n2816-kmax65536: pqz 520/3, 516/7, 511/12 (passed/skipped); pqzh 42; as 106; gas 18; governance 238; metatx 185; research 89, 87/2, 80/9; ua 338; v2 37; wrap 24; no failure
+matrix: sets modules, first runs | ccd58b7f8 | 1 | `others modules` waited for 10 GB free (9 available), stopped; then each set alone: legacy_artifacts.py `No module named 'eth'` (a lane copies no pqz-core/nethermind/chain; lanes.sh now copies its eth.py)
+matrix: sets modules (at-set.sh <set> modules, one set at a time) | ccd58b7f8 + lanes.sh | 0 | n2048-kmax1024, n2560-kmax16384, n2816-kmax65536: 35 passed each; the work tree's PqzSet.sol untouched
+matrix: node cargo test, first run | ccd58b7f8 | 101 | 897/1: guard::tests::pqchat_rows_equal_the_contract_both_directions, whose reader of IPqChat.sol did not know A-6's `IPqGroupTree` structs (commit's signature); the reader now takes IPqGroupTree.sol too (a test helper; no row moved)
+matrix: node cargo test | guard.rs fix | 0 | 910 passed, 0 failed, 75 ignored (19 test binaries)
+matrix: node clippy --all-targets -D warnings | guard.rs fix | 0 | clean
+matrix: node e2e --ignored (6 GB, alone; the deploy through DeployBase with OpenFactoryLib) | ccd58b7f8 | 0 | 27 passed
+matrix: docs_check check / facts check / paths / consumer | ccd58b7f8 | 0 | 0 errors, 7 warnings (the budgets, as before); 8852 facts, 0 misses; 0 machine paths; 0 consumer names
+matrix: format.sh --check (every part) | ccd58b7f8 | 0 | rust (20 crates), sol, js, yaml, py, go, cs (2), dart, c, move, tact, sh, toml, actionlint, hadolint all ok
+gas pins (A-8, first) | step 6 | 0 | the last live leaf at the spec's bound, regular with the verify / state: ML-DSA-87 15,588,376 / 31,716,900 (1,188,840 under 2^24; 49.7 M asked), ML-DSA-65 12,637,463 / 29,709,540 (44.5 M)
+gas pins (A-11, first) | step 6 | 0 | module CREATE2, runtime / regular x 64/63 / state / asked: PqChatTree 32,812 / 2,166,743 / 50,385,960 / 55.2 M; PqChatTreeViews 9,640 / 660,455 / 14,932,800 / 16.4 M; PqChatTreeMembers 13,506 / 910,116 / 20,847,780 / 22.8 M (PqChatTopics unchanged)
+
+--- 2026-11-25, after the merge 7159883b1: R8 512, node items, groupMode 2 / 3 (tasks 0-3) ---
+node guard / pqchat rows (task 0, merged tree) | 7159883b1 | 0 | guard 56 passed; pqchat_rows_equal_the_contract_both_directions 1 passed
+node D-2 / D-4 / D-7 | 8e5849a83 | 0 | cargo test 910 passed, 0 failed, 75 ignored; clippy --all-targets -D warnings clean
+client mutants M86-M90 (node D-4 x 4, D-7) | 8e5849a83 | 0 | 5/5 killed
+C-5 row, D-8 tags, gen_abi (A-6) | 554c09e7f | 0 | forge test/pqchat 262 passed, 1 skipped; clientkeys 661 passed, 0 failed, 5 skipped; pqchat-core all ok; gen_abi --check equal
+groupMode 2 / 3 reserved (decisions, pqchat.md) | 5fce701c3 | 0 | docs_check check 0 errors (7 budget warnings), paths 0
+R8 512: forge test/pqchat | 889d4e731 | 1 | 261 passed, 1 failed (test_lastLiveLeafAtTheSpecBound, ML-DSA-87 row 18,088,053 >= 2^24: the open finding), 1 skipped
+R8 512: forge test/pqvault | 889d4e731 | 0 | 99 passed
+R8 512: size gate | 889d4e731 | 0 | 184 contracts, 0 errors; PqChat 32,891 B, PqChatTree 32,812 B runtime (unchanged)
+R8 512: node / ua-rs / clientkeys | 889d4e731 | 0 | node 910 / 0 / 75 ignored, clippy clean; ua-rs --test tree 12 passed; clientkeys pqchat-tree + treekem 76 passed
+R8 512: format.sh --check, docs_check | 889d4e731 | 0 | every language ok; 0 errors
+R8 512: path buffer back to 9 (M74 equivalent at 10) | dd7748a8c | 1 | forge test/pqchat 261 passed, 1 failed (the same finding), 2 skipped
+contract mutants M74-M77 (R8) | dd7748a8c | 0 | M74 first form (10 -> 9) SURVIVED, equivalent (fixed in dd7748a8c); M74 (9 -> 8) killed; M75, M76, M77 killed
+client mutants M91-M94 (R8: ua-rs, clientkeys, node cap, node depth) | dd7748a8c | 0 | 4/4 killed
+gas pins at 512 (forge, verify added) | dd7748a8c | - | completion at its bounds 11,623,478 / 40,405,770, 384 + 1 slots, 54.6 M asked (was 10,657,386 / 37,272,330 / 352); record at its bounds ML-DSA-87 15,880,406 / 26,918,820 (896,810 under 2^24), ML-DSA-65 12,930,622 / 24,911,460; last live leaf (4 UAs) 14,834,795 / 11,878,224; A-8 last live leaf (tree of 512) ML-DSA-87 18,087,866 / 31,521,060 OVER 2^24 by 1.31 M, ML-DSA-65 15,130,972 / 29,513,700; cold list 511 targets 32.2 M asked; node keys depth 9 24.9 M; A-8 layout on a tree of 256: 17,322,116 (over); A-8 at 512 with 24 changes 16,483,444 (scratch)
+Nethermind copy, 2^24 enforced (scaas/nethermind-pqz:2.2.0-pqz11, mldsa_on_copy.sh, chain 1337, Amsterdam incl. EIP-7825 / EIP-8037; burnFill replicas of the forge pairs; runs/2026-11-25-treekem512-nethermind.py) | dd7748a8c | 0 | completion at its bounds: estimate 52,380,022, INCLUDED status 1, gasUsed 51,966,423; record at its bounds ML-DSA-87: 43,050,556, INCLUDED, 42,710,417; record ML-DSA-65: 38,103,454, INCLUDED, 37,802,269; last live leaf (4 UAs) ML-DSA-87: 39,331,836, INCLUDED, 39,020,978; A-8 last live leaf ML-DSA-87: REFUSED at estimate (gas required exceeds allowance), sent with a 55 M limit: included as status 0, gasUsed 16,777,216 (out of gas at 2^24); A-8 ML-DSA-65: 44,960,048, INCLUDED, 44,604,874; controls: 16.70 M regular INCLUDED (17,679,142), 16.85 M regular REFUSED at estimate. Container stopped and removed.
+
+--- 2026-11-25, C10 32 -> 20 (owner "Choose 20"), on the A-8 finding ---
+C10 20: forge test/pqchat | 97fc00ec1 | 0 | 262 passed, 0 failed, 2 skipped (test_lastLiveLeafAtTheSpecBound green with both signers)
+C10 20: forge test/pqvault | 97fc00ec1 | 0 | 99 passed
+mutants C10: contract M78-M79 (21, 19 changes; the runner no longer leaves out test_lastLiveLeafAtTheSpecBound), client M95-M97 (ua-rs, clientkeys, node at 21) | 97fc00ec1 | 0 | 5/5 killed
+gas pins at 512 and 20 changes (forge, verify added) | 97fc00ec1 | - | A-8 last live leaf ML-DSA-87 15,782,531 / 27,408,420 (994,685 under 2^24; was 18,087,866 over), ML-DSA-65 12,829,777 / 25,401,060; completion at its bounds 7,960,311 / 28,655,370, 264 + 1 slots, 38.4 M asked; record at its bounds ML-DSA-87 13,635,438 / 23,393,700 (3.14 M under), ML-DSA-65 10,688,618 / 21,386,340; fixture (20 Adds) 5,285,585 / 17,002,890, 145 + 1 slots; node keys as the last piece 52.1 M asked (fits now); acceptance + completion 18.65 M / 21.60 M regular (over 2^24: the record alone); PqChatTreeMembers runtime 13,506 -> 13,507 B, deploy state 20,847,780 -> 20,849,310
+Nethermind copy, 2^24 enforced, 20 changes (same copy, image, runner) | 97fc00ec1 | 0 | completion at its bounds: estimate 36,844,211, INCLUDED status 1, gasUsed 36,552,941; A-8 last live leaf ML-DSA-87: 43,445,398, INCLUDED, 43,102,150 (regular 0.99 M under 2^24); A-8 ML-DSA-65: 38,495,323, INCLUDED, 38,191,052; the 32-change rows and controls rerun, as before (A-8 ML-DSA-87 at 32 refused at estimate; 16.70 M control included, 16.85 M refused). Container stopped and removed.
+
+--- 2026-11-25, the Fable re-review's contract rows (branch review-fix2-contract, cut from 08f68484a) ---
+E-2 / A-16 red (mode 0, PqVault) | 08f68484a | 1 | test_e2_leaveNamesAnEpochTheLeaverIsIn, test_e2_removalNamesAnEpochItsUAsAreIn, PqVault test_e2_exitsNameAnEpochTheirUAsAreIn: "next call did not revert"; test_a16_* (3): PqChatNotMember / PqVaultNotMember in the replica
+E-2 / A-16 + A-13 / A-14 tests: forge test/pqchat | 469f76fa4 | 0 | 270 passed, 2 skipped
+E-2 / A-16 + A-13 / A-14 tests: forge test/pqvault | 469f76fa4 | 0 | 103 passed
+pins (E-2 / A-16) | 469f76fa4 | 0 | PqChatTreeMembers 13,507 -> 13,981 B, regular 910,116 -> 941,324, state 20,849,310 -> 21,574,530; remove row 184,160 -> 184,888; PqVault 32,131 -> 32,619 B, regular 2,172,984 -> 2,204,192, state 49,735,710 -> 50,482,350; removeVaultMembers row 178,182 -> 178,950
+size gate (E-2 / A-16) | 469f76fa4 | 0 | 184 contracts, 0 errors; PqChat 32,891, PqChatTree 32,812, PqChatTreeMembers 13,981, PqVault 32,619
+A-15 red | 469f76fa4 | 1 | test_a15_emptyAddWrapsRefusedFlat, test_a15_emptyAddWrapsRefusedTree, test_a15_emptyAddVaultWrapsRefused: "next call did not revert"
+A-15: forge test/pqchat, test/pqvault | 6348763b5 | 0 | 272 passed, 2 skipped; 104 passed
+pins (A-15) | 6348763b5 | 0 | PqChat 32,891 -> 32,924 B, regular 2,293,654 -> 2,295,734, state 50,898,510 -> 50,949,000; PqVault 32,619 -> 32,652 B, regular 2,204,192 -> 2,208,353, state 50,482,350 -> 50,532,840; size gate 0 errors
+A-17 forge rows (verify included; GAS_MEASURE then pinned) | A-17 commit | 0 | the last live leaf on the worst head (32 admins replaced, live leaves at positions 12-499 of 512): ML-DSA-87 16,158,289 / 24,372,900 (618,927 under 2^24; the light head 15,782,531), ML-DSA-65 13,205,502 / 22,365,540; the closing treeRemove (512 positions, keyless ML-DSA-87 admin) 10,518,373 / 8,656,740
+A-17 Nethermind copy, 2^24 enforced (scaas/nethermind-pqz:2.2.0-pqz11, mldsa_on_copy.sh init / up, chain 1337, container rf2-a17-signer on 127.0.0.1:18575; runs/2026-11-25-treekem512-nethermind.py, burnFill replicas) | A-17 commit | 0 | worst head ML-DSA-87 (n=128089 k=248): estimate 40,764,558, INCLUDED status 1, gasUsed 40,442,419; worst head ML-DSA-65: 35,814,402, INCLUDED, 35,531,241; closing treeRemove ML-DSA-87: 19,288,305, INCLUDED, 19,135,271; the earlier rows rerun as before (A-8 ML-DSA-87 at 20 changes INCLUDED 43,102,150; at 32 refused at estimate; control 16.70 M included, 16.85 M refused). Container stopped and removed
+G-8 pq.py --offchain on the local PQZ copy (scaas/nethermind-pqz:2.2.0-pqz11, mldsa_on_copy.sh, chain 7622 copy, 127.0.0.1:18576, --memory 1700m; container removed) | 60e1ee8ea | 0 | 235 records, 0 failed; e2e rc 0 (factory 2's configureChain with router2, every pqOT router op through it)
+G-8 e2e.py on the same copy (two runs) | 60e1ee8ea | 1 | 324 checks ok, then section 5b's ML-DSA-65 mtxShield(alice, 7) out of gas both times: limit 448,724 (estimate x 1.15 + 50k), gasUsed 437,320 / 437,264; estimate 346,717 at the block after the previous shield, 456,756 one block later: the harness's margin, not changed (reported)
+e2e.py --self-test (COMPLIANCE_REGISTRY_CODEHASH read across the formatter's line break) | 60e1ee8ea | 0 | 0 failures (1 before)
+forge player, worlds 11-16 (C-4 contract part) | 467665c26 | 0 | PqChatTreeScenarioTest 20 passed (exits with the msig and WebAuthn admins registered from the vectors; lag with PqChatExitLag(0, 17) and its control)
+E-6 node pick_executed | dbebe1f9c | 0 | cargo test --lib pick_executed 1 passed; red / mutant (the old first-log selection) killed: "the digest's log"; clippy --all-targets -D warnings clean; the whole node suite (6 GB, alone) not run
+deploy_pqchatstore IPqChat id | dbebe1f9c | 0 | 869305e0 -> 7b7acc12; test_deploy_pqchatstore.py 17/17
+G-7 / G-9 / G-10 / G-11 / G-12 | dae40d1fc | 0 | forge test/governance 1012 passed + the router address pin moved (GovDeploy 24 passed after), test/v2 758, test/gas 406 / 1 skipped; size gate 0 errors (GovernanceRouter 31,306 -> 31,358)
+SDK gas measure (G-7) | dae40d1fc | 0 | generate.py --measure 65/65 (1,292 s): gov_router mtxCancelNonceFor fresh 249,410 -> 249,650, used 151,490 -> 151,730, ua 267,353 -> 264,693; --check ok, test_generate ok
+docs (A-12, D2-7, F-7, C-8, E-6 tags, D-8) | d4201d2d9 | 0 | docs_check check 0 errors (7 budget warnings), paths 0, test_docs_check ok; format.sh --check every part ok
+mutants M1-M107 (the runner without gas or size rows, killing tests named; tree e0cc30592) | e0cc30592 | 1 | 106 killed, each by a behavioural test; final suites at this commit: forge test/pqchat 280 passed, 2 skipped, test/pqvault 104 passed; 1 SURVIVED: M74 (R8, the walk's path buffer 9 -> 8), killed before only by PqChatTreeGasTest; a depth-9 commit test outside the gas contracts added (test_r8_commitAtDepth9). The run's `$`-anchored exclusions matched nothing (forge matches `name(`), so the few gas / pin tests outside the Gas contracts ran; each kill line was checked: none is killed by a pin alone (test_cancelFor_gas, test_g1_gas, test_gas, test_sizes, the router address pin); the anchors are now `\(`
+mutant M74 again (test_r8_commitAtDepth9 added; the runner with `\(` anchors) | this commit | 0 | killed by test_r8_commitAtDepth9 alone
+mutants M108-M112 (G-7, G-9 x 3, G-10) | d4201d2d9 | 0 | 5/5 killed by behavioural tests (test_g7_cancelForACodeLessTargetRefused; test_g9_token / dex; test_g1_window_indexedBeforeInit_noReplay; test_openFactoryLibBooked)
+
+## Done (committed)
+- G-1: index before the initializer (red: "mid-creation: indexed, the env registry: ...07 != ...08").
+- A-1 / C39: `st == 0` in _walkAdds (red: PqChatTreeKeyLive in test_c39_addOrderIndependent).
+- A-5: PqChatTreeTargets(count).
+
+## Stopped 2026-11-24 (owner: machine shutdown), after step 0 (the merge)
+- HEAD ccf6c43db: merge of origin/ua-rs-sign (d34fcf566). One conflict, test/vectors/sdk_gas.json, re-measured (above)
+  and reference.json regenerated; size-baseline.json and decisions.md merged without conflict.
+- Not run after the merge yet: the G-1 gates (forge governance, factory, v2, gas), the size gate, and the SDK's
+  `cargo test --lib op::gas`. Run them first on resume.
+- D-7 / A-3 WIP: local branch review-fix-contract-d7a3-wip (0b9128e26, one commit on ccf6c43db) and
+  scratchpad/review-fix-contract/d7-a3-wip.git.patch (main checkout, git-ignored; the older d7-a3-wip.patch beside it is
+  rtk's summary output, not a patch). The work tree of review-fix-contract is clean.
+
+## Built and tested, not committed: blocked on PqChatTree's size
+- D-7 / C40 (empty addPath -> PqChatShape) and A-3 (tree epoch-0 pieces -> PqChatUnknown): green in
+  test_piecesByAThirdParty (red first: "next call did not revert as expected", then "reverted ... without data"),
+  but PqChatTree grows to 35,329 B, over the 35,286 line. The work is in the work tree and in
+  scratchpad/review-fix-contract/d7-a3-wip.patch (main checkout, git-ignored).
+- Next step: the owner's pre-approved split (treeLeave / treeRemove and their helpers into PqChatTreeMembers), done
+  together with E-3's tree part, which adds code to the same two entries.
+
+## Done 2026-11-25
+- Step 1: the PqChatTreeMembers split + E-3 tree (C9 ancestor check, EXIT_LAG_MAX = 16, PqChatExitLag, applied at the
+  head) + A-4 + D-7 + A-3 (3e0facc43); its tests and mutants (runs/2026-11-24-review-fix-contract-mutants.py, M1-M20).
+- Step 2: E-3 in mode 0 and PqVault plus the replica rule (7f8439265); the owner moved mode 0's leave / remove into
+  PqChatTreeMembers (2026-11-25) when E-3 took PqChat to 35,534 B; mutants M21-M41.
+- Step 0's post-merge gates: governance, factory, v2, gas, size, SDK op::gas, all green (rows above).
+
+- Step 3 (G-3, G-5): `configureChain` refuses a router whose `factory()` is not this factory (RouterFactoryMismatch;
+  no word fails closed). It took OpenFactory to 35,355 B, over the 35,286 line (an assembly form of the check saved
+  14 B only), so the router checks moved to the external library OpenFactoryLib.checkRouter (the owner's pre-approved
+  split; `self` passed, no storage, view; the factory 35,047 B, the library 1,088 B; the deploy books
+  `open_factory_lib`). Every fixture's router names its factory (EnvKit.nextCreate; GovRouterFixture._routerNaming;
+  rebuilt where a test configures another factory); the stand-in routers answer `factory()` with the caller. A view
+  test's state diff skips forge's own CREATE2 of the linked library (isolate). G-5: CTR-GOV-33's cost line, the
+  inventory table (PqChat's four body modules) and CTR-GOV-32's tag. Test: test_configureChain_routerNamesThisFactory
+  (0, another factory, no answer, the control). G-4 (the SDK rows) follows in its own commit.
+
+- Step 4 (A-6, F-5): `TreeAdd` / `TreeRemove` in the neutral src/pqgroup/IPqGroupTree.sol, which IPqChat inherits (no
+  type string or ABI moves; code outside the interface names them `IPqGroupTree.*`); the base's TREE_LEAVES_LIMIT = 256
+  whatever `_treeBounds()` says (`_treeOpen` T_SHAPE above it, an Add at 256 or above T_LEAF); a one-leaf tree's
+  commit root is its leaf's th (mutant M68 restores the old root 0). Harness test/pqchat/PqGroupTreeBase.t.sol
+  (bounds of 512). D-4's contract tests are in step 5's file (test_d4_createSessionBounds: 257 keys, 33 admins,
+  4,125 B refused; 256, 32, 4,124 B created).
+
+- Step 5 (A-7, T11): test/pqchat/PqChatTreeGuards.t.sol, one negative test with its control per row of fable-A's
+  table (row 5, `_treeGo`'s early return, unreachable since A-4 refuses a gone UA in both exits: equivalent, not run;
+  rows 23, 24 tested for their own error, so their mutants are no longer equivalent), D-4's creation bounds, and T11's
+  tree rows (an exit naming epoch 0 two below the head, the front-run of 7 own Adds then the removal with 8 leaves
+  owed, a keyless admin removing itself, remove-then-leave by one admin); T11's mode 0 row (an admin of the named
+  epoch only: PqChatNotAdmin, PqChatEpochs) and PqVault row (a member removed at the head writes no item,
+  PqVaultItems). The other T11 contract rows were steps 1-2's tests. Mutants M42-M73 (A-7 rows, A-6, F-5, D-4, A-9,
+  G-3) in the round's runner.
+
+- Step 6: A-8 test_lastLiveLeafAtTheSpecBound (32 Removes evicting 32 one-key UAs by the commit alone, admins 1 -> 32,
+  4,124 B, no piece, one transaction; pinned); A-9 the layout pin's four `staged[E]` rows (namespaces.json,
+  test_treeNamespaceIsPinned) and the views and members modules' no-plain-slot check (PqChatLayout); A-10 pqchat.md §2
+  (four modules, `implArgs`), §10 (the tree entries, `modules()`, the `fallback`, the mode errors), §12 (the sizes and
+  asks, mode 0's record bounded by the block), §16 (the A-8 figures, the stale estimates out), §17 (BUILT, five hooks,
+  four bounds, fourteen codes, `staged`); A-11 PqChat.s.sol sends each module through the CREATE2 deployer with the
+  explicit 59 M limit (same addresses as `new {salt}`), and test_gas_deployModule measures and pins all four modules.
+
+## Left, in order
+Steps 0-2 done (above); steps 3-6 done (2a35404af, 0027287a0, d038fa094, 93a0bfc09) but for G-4's commit and the
+mutants M42-M73, both below; then step 7.
+3b. G-4: done in its own commit (rows above).
+5b. Mutants M42-M73: done, 32/32 killed (row above).
+7. Done: the matrix rows above (every forge directory at the default set, the three other sets, size, format, docs, node
+   test / clippy / e2e). The grep of scaas-node/ and clients/ for the old exit behaviour (PqChatEpochTaken /
+   PqVaultEpochTaken on an exit, NonceUsed on a replayed exit) finds none: pqchat-core's e2e expects PqChatEpochTaken
+   for a postMessage under a taken epoch, unchanged. Left to the client phase: clients/pqchat-core/runs/gen_abi.py reads
+   IPqChat.sol and will need IPqGroupTree.sol's structs when it next generates the tree ABI.

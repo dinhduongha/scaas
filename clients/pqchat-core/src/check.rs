@@ -11,11 +11,33 @@ pub fn strictly_sorted<'a>(v: impl IntoIterator<Item = &'a str>) -> bool {
     v.windows(2).all(|w| matches!(w, [a, b] if a < b))
 }
 
-/// The list shapes of a session or an epoch record (CTR-CHAT-06, UA-7 §4.2): members and admins strictly sorted, one wrap
-/// hash per member; a session's creator (epoch 0's author) in both.
+/// `PqGroupBase.KEYS_PER_UA_MAX` (owner (M) 2026-11-23, CTR-CHAT-24): the KEM keys one UA may hold in one epoch.
+pub const KEYS_PER_UA_MAX: usize = 8;
+
+/// Members strictly sorted by `(ua, keyId)`, at most [`KEYS_PER_UA_MAX`] keys per UA (CTR-CHAT-24).
+pub fn members_sorted(e: &Epoch) -> bool {
+    let ordered = e
+        .members
+        .windows(2)
+        .all(|w| matches!(w, [a, b] if (a.ua.as_str(), a.key_id) < (b.ua.as_str(), b.key_id)));
+    ordered
+        && distinct(e)
+            .iter()
+            .all(|u| e.members.iter().filter(|m| &m.ua == *u).count() <= KEYS_PER_UA_MAX)
+}
+
+/// The distinct UAs of `e`'s members, in order: every rule but the wraps reads members per UA (CTR-CHAT-24).
+pub fn distinct(e: &Epoch) -> Vec<&String> {
+    let mut v: Vec<&String> = e.members.iter().map(|m| &m.ua).collect();
+    v.dedup();
+    v
+}
+
+/// The list shapes of a session or an epoch record (CTR-CHAT-06, UA-7 §4.2; CTR-CHAT-24): members strictly sorted by
+/// `(ua, keyId)`, admins strictly sorted, one wrap hash per entry; a session's creator (epoch 0's author) in both.
 pub fn shapes(e: &Epoch) -> Result<(), DropReason> {
     if e.members.is_empty()
-        || !strictly_sorted(e.members.iter().map(|m| m.ua.as_str()))
+        || !members_sorted(e)
         || !strictly_sorted(e.admins.iter().map(String::as_str))
         || e.wrap_hashes.len() != e.members.len()
     {
@@ -27,9 +49,42 @@ pub fn shapes(e: &Epoch) -> Result<(), DropReason> {
     Ok(())
 }
 
-/// A child against its verified parent (CTR-CHAT-08, CTR-CHAT-09, CTR-CHAT-20): its number the parent's plus one; a plain
-/// rekey (the parent's members and admins minus those who left) by a member of the parent who neither left nor was removed;
-/// anything else by an admin of the parent who was not removed; no removed UA kept.
+/// The contract's `_keeps` (PqGroupBase.sol, 3C-D7) over two sorted lists: `child` is `parent` less some UAs `flagged` there
+/// (left or removed); a flagged UA may be dropped or kept, nothing else dropped, nothing added.
+pub fn keeps<'a>(
+    parent: impl IntoIterator<Item = &'a String>,
+    child: &[&String],
+    flagged: impl Fn(&String) -> bool,
+) -> bool {
+    let mut j = 0;
+    for p in parent {
+        if child.get(j) == Some(&p) {
+            j += 1;
+        } else if child.get(j).is_some_and(|c| *c < p) || !flagged(p) {
+            // a UA added, or one dropped that neither left nor was removed
+            return false;
+        }
+    }
+    j == child.len()
+}
+
+/// A rekey of `parent` with the distinct UAs `uas` and the admins `admins` is plain (E-1, CTR-CHAT-09, CTR-CHAT-20): both lists
+/// the parent's less some UAs that left it or were removed from it, as the contract's `_keeps` judges them.
+pub fn plain(
+    uas: &[&String],
+    admins: &[String],
+    parent: &Epoch,
+    left: &[String],
+    removed: &[String],
+) -> bool {
+    let flagged = |u: &String| left.contains(u) || removed.contains(u);
+    let admins: Vec<&String> = admins.iter().collect();
+    keeps(distinct(parent), uas, flagged) && keeps(&parent.admins, &admins, flagged)
+}
+
+/// A child against its verified parent (CTR-CHAT-08, CTR-CHAT-09, CTR-CHAT-20, the contract's `_rights` and `_noneRemoved`):
+/// its number the parent's plus one; a plain rekey ([`plain`]) by a member of the parent who did not leave it; anything else by
+/// a live admin of the parent (in its admins, neither left nor removed); its author not removed and no removed UA kept.
 pub fn child(
     child: &Epoch,
     parent: &Epoch,
@@ -43,21 +98,11 @@ pub fn child(
     {
         return Err(DropReason::Control);
     }
-    let kept = |u: &String| !left.contains(u);
-    let plain = child.members.iter().map(|m| &m.ua).eq(parent
-        .members
-        .iter()
-        .map(|m| &m.ua)
-        .filter(|u| kept(u)))
-        && child
-            .admins
-            .iter()
-            .eq(parent.admins.iter().filter(|u| kept(u)));
     let a = &child.author;
-    let rights = if plain {
+    let rights = if plain(&distinct(child), &child.admins, parent, left, removed) {
         parent.has_member(a) && !left.contains(a)
     } else {
-        parent.admins.contains(a)
+        parent.admins.contains(a) && !left.contains(a) && !removed.contains(a)
     };
     let keeps_removed = removed
         .iter()

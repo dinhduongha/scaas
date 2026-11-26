@@ -880,6 +880,12 @@ export function idDisplay(id, kind = 0) {
   return { kind: "derived", urn: `urn:scaas:ua:v1:${k.name}:${h}` };
 }
 
+/** CTR-UA-74 (ua-rs `version_tag`): the tag a new signature of an `msig` at `version` carries (`UASig.signature`, an `msig` member
+ *  slot's `MemberSig.sig`): empty at 0, else 8 bytes big-endian. */
+export const versionTag = (version) => {
+  const v = BigInt(version ?? 0);
+  return v === 0n ? new Uint8Array(0) : fromHex(`0x${v.toString(16).padStart(16, "0")}`);
+};
 export function encodeMsig(threshold, members) {
   const out = new Uint8Array(4 + 36 * members.length);
   const put16 = (o, v) => {

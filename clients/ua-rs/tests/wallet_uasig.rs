@@ -708,6 +708,7 @@ fn check_rows(file: &Value, records: &[(u16, Vec<u8>)], keys: &Keys) -> Tally {
                 &ua,
                 &purpose,
                 &digest,
+                &got.signature,
                 &got.members,
                 &domain,
                 &members,
@@ -918,6 +919,7 @@ fn pq_signatures_json_treasury() {
                 &ua,
                 &purpose,
                 &digest,
+                &got.signature,
                 &got.members,
                 &domain,
                 &members,
@@ -1084,6 +1086,7 @@ fn native_slot_needs_its_typed_data() {
             &ua,
             &purpose,
             &digest,
+            &got.signature,
             &got.members,
             &domain,
             &members,
@@ -1389,7 +1392,11 @@ fn msig_updated_rows_through_the_builder() {
     let keys = Keys::new(&w);
     let (first, now, ua) = (bytes(&u["keyData"]), bytes(&u["current"]), b32(&u["ua"]));
     let enabled = word_of(&u["enabled"]);
-    let current = |id: [u8; 32]| (id == ua).then(|| (now.clone(), enabled));
+    // CTR-UA-74: the registry holds version 1 (`msigAt` of 1, the current one)
+    let version = u["version"].as_u64().unwrap();
+    let current = |id: [u8; 32], v: Option<u64>| {
+        (id == ua && v.is_none_or(|v| v == version)).then(|| (now.clone(), enabled, version))
+    };
     let records = [(0x0120u16, first.clone())];
     let members = keys.members(&records);
     let none = |_: [u8; 32]| None;
@@ -1432,11 +1439,17 @@ fn msig_updated_rows_through_the_builder() {
         &slots,
     )
     .unwrap();
+    assert_eq!(
+        got.signature,
+        version.to_be_bytes(),
+        "the tag of version 1 (CTR-UA-74)"
+    );
     let ok = check_authorization_current(
         &first,
         &ua,
         &purpose,
         &digest,
+        &got.signature,
         &got.members,
         &domain,
         &members,
@@ -1474,6 +1487,7 @@ fn msig_updated_rows_through_the_builder() {
         &ua,
         &purpose,
         &digest,
+        &combined.signature,
         &combined.members,
         &domain,
         &members,

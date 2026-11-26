@@ -154,14 +154,13 @@ contract PqVault is IPqVault, PqGroupBase {
         ep.home = home;
         if (v.mode == 1) s.modes[vid] = 1;
         emit PqVaultCreated(vid, v.creator, v.homeChain);
-        for (uint256 i; i < v.members.length; ++i) {
-            s.vaults[v.members[i].ua].push(vid);
-        }
+        _indexAll(vid, v.members);
     }
 
     /// @dev The lists (at least one member), the creator an admin and a member, a home named, the mode 0 or 1 and in mode 1
     ///      this instance the home, the passphrase flag's shape. Returns whether this instance is the home.
     function _checkCreate(PqVaultCreate calldata v) internal view returns (IUARegistry reg, uint256 limit, bool home) {
+        if (v.groupMode != 0) revert PqVaultModeUnsupported(v.groupMode); // CTR-PQV-18: flat wraps only
         bytes32 uid;
         (reg, limit, uid) = _env();
         IPqChat.MemberKey[] memory members = v.members;
@@ -212,11 +211,19 @@ contract PqVault is IPqVault, PqGroupBase {
         _indexAdded(e.vaultId, members, _uas(pm));
     }
 
+    /// @dev `vaultsOf` gains `vid` once per UA of `m`, not per key (owner (M) 2026-11-23).
+    function _indexAll(bytes32 vid, IPqChat.MemberKey[] memory m) internal {
+        for (uint256 i; i < m.length; ++i) {
+            if (!_sameUa(m, i)) _v().vaults[m[i].ua].push(vid);
+        }
+    }
+
     /// @dev `vaultsOf` gains the vault for each member the child adds to the parent (both sorted). Before the signature: a
     ///      refused record reverts it with the rest.
     function _indexAdded(bytes32 vid, IPqChat.MemberKey[] memory members, bytes32[] memory parent) internal {
         uint256 i;
         for (uint256 j; j < members.length; ++j) {
+            if (_sameUa(members, j)) continue; // a UA's further key (owner (M))
             bytes32 ua = members[j].ua;
             while (i < parent.length && parent[i] < ua) ++i;
             if (i == parent.length || parent[i] != ua) _v().vaults[ua].push(vid);
@@ -224,6 +231,7 @@ contract PqVault is IPqVault, PqGroupBase {
     }
 
     function addVaultWraps(bytes32 epochId, uint32 first, IPqChat.Wrap[] calldata wraps) external {
+        if (wraps.length == 0) revert PqVaultShape(); // A-15 (as C40)
         (, uint256 limit,) = _env();
         Epoch storage ep = _known(epochId);
         _slotFree(ep, epochId);
@@ -246,46 +254,55 @@ contract PqVault is IPqVault, PqGroupBase {
         if (complete) emit PqVaultEpochComplete(epochId);
     }
 
-    /// @notice A member of `l.epochId` leaves it: it writes no item under it again (O3 (b)); an admin's rekey drops it.
+    /// @notice A member leaves: it writes no item under that epoch again (O3 (b)); an admin's rekey drops it. At home it names
+    ///         the head or a complete ancestor within `EXIT_LAG_MAX` of which it is a member too (E-2) and applies at the head
+    ///         (C9, E-3); a member already flagged at the head is refused (sc-E-5). In a replica it flags the epoch it names,
+    ///         a repeat included (A-16).
     function leaveVault(PqVaultLeave calldata l, IUARegistry.UASig calldata sig) external {
         (IUARegistry reg,,) = _env();
-        Epoch storage ep = _known(l.epochId);
-        if (ep.sessionId != l.vaultId) revert PqVaultUnknown(l.epochId);
+        (bytes32 at, Epoch storage ep,) = _exitAt(l.vaultId, l.epochId);
         (, IPqChat.MemberKey[] memory m,) = _lists(ep);
-        if (_memberAt(m, l.member) == type(uint256).max) revert PqVaultNotMember(l.member);
+        bool home = _epochs()[l.vaultId].home;
+        if (_memberAt(m, l.member) == type(uint256).max || (home && (ep.left[l.member] || ep.removedOf[l.member]))) {
+            revert PqVaultNotMember(l.member);
+        }
+        if (at != l.epochId) {
+            // E-2 (controller call 2026-11-25): a member of the epoch named too, where a replica checks it
+            (, m,) = _lists(_known(l.epochId));
+            if (_memberAt(m, l.member) == type(uint256).max) revert PqVaultNotMember(l.member);
+        }
         _auth(reg, _v().modes[l.vaultId], l.member, PqVaultTypes.hashLeave(l), sig);
         _useNonce(PqVaultTypes.scopeEpoch(l.vaultId, l.member), l.nonce);
         ep.left[l.member] = true;
-        emit PqVaultLeft(l.vaultId, l.epochId, l.member);
+        emit PqVaultLeft(l.vaultId, at, l.member);
     }
 
-    /// @notice An admin of the complete epoch `r.epochId` removes 1..REMOVE_MAX of its members, strictly sorted; at home only
-    ///         while it has no complete child. The record and its full `UASig` in state.
+    /// @notice An admin removes 1..REMOVE_MAX members, strictly sorted. At home it names the head or a complete ancestor within
+    ///         `EXIT_LAG_MAX` and is checked and applied at the head (C9, E-3), the admin and each UA named also in the epoch
+    ///         named's lists (E-2); a UA already removed at the head is refused (A-4). In a replica it flags the complete
+    ///         epoch it names, a repeat included (A-16). The record and its full `UASig` in state.
     function removeVaultMembers(PqVaultRemove calldata r, IUARegistry.UASig calldata sig) external {
         (IUARegistry reg, uint256 limit,) = _env();
-        Epoch storage ep = _known(r.epochId);
-        if (ep.sessionId != r.vaultId) revert PqVaultUnknown(r.epochId);
-        if (ep.landed != ep.wraps) revert PqVaultIncomplete(r.epochId);
-        bytes32 child = _v().childOf[r.epochId];
-        if (child != 0) revert PqVaultEpochTaken(r.epochId, child);
-        if (r.nextEpoch != ep.epoch + 1) revert PqVaultEpochNumber(ep.epoch + 1, r.nextEpoch);
+        (bytes32 at, Epoch storage ep, uint64 named) = _exitAt(r.vaultId, r.epochId);
+        if (ep.landed != ep.wraps) revert PqVaultIncomplete(r.epochId); // a replica's epoch named
+        if (r.nextEpoch != named + 1) revert PqVaultEpochNumber(named + 1, r.nextEpoch);
         uint256 n = r.members.length;
         if (n == 0 || n > REMOVE_MAX) revert PqVaultShape();
         (bytes32[] memory admins, IPqChat.MemberKey[] memory m,) = _lists(ep);
         if (!_liveAdmin(ep, admins, r.admin)) revert PqVaultNotAdmin(r.admin); // F2, F7
+        bool home = _epochs()[r.vaultId].home;
         for (uint256 i; i < n; ++i) {
             if (i > 0 && r.members[i] <= r.members[i - 1]) revert PqVaultShape();
-            if (!_removable(m, admins, r.members[i])) revert PqVaultNotMember(r.members[i]); // F3, in the base
+            if (!_removable(m, admins, r.members[i]) || (home && ep.removedOf[r.members[i]])) {
+                revert PqVaultNotMember(r.members[i]); // F3, in the base; A-4 at home (A-16: a replica takes a repeat)
+            }
         }
+        if (at != r.epochId) _namedLists(r.epochId, r.admin, r.members); // E-2 (controller call 2026-11-25)
         _auth(reg, _v().modes[r.vaultId], r.admin, PqVaultTypes.hashRemove(r), sig);
         _useNonce(PqVaultTypes.scopeEpoch(r.vaultId, r.admin), r.nonce);
-        uint256 added;
-        for (uint256 i; i < n; ++i) {
-            if (!ep.removedOf[r.members[i]]) (ep.removedOf[r.members[i]], added) = (true, added + 1);
-        }
-        ep.removed += uint16(added);
-        _v().removals[r.epochId].push(_put(abi.encode(r, sig), limit));
-        emit PqVaultRemoved(r.vaultId, r.epochId, r.admin, r.members);
+        ep.removed += _flagRemoved(ep, r.members);
+        _v().removals[at].push(_put(abi.encode(r, sig), limit));
+        emit PqVaultRemoved(r.vaultId, at, r.admin, r.members);
     }
 
     // ------------------------------------------------------------------ items (CTR-PQV-07, -08, -09, -14)
@@ -599,6 +616,7 @@ contract PqVault is IPqVault, PqGroupBase {
         if (code == F_NOT_ADMIN) revert PqVaultNotAdmin(bytes32(a));
         if (code == F_NOT_MEMBER) revert PqVaultNotMember(bytes32(a));
         if (code == F_REMOVED_KEPT) revert PqVaultRemovedKept(bytes32(a), bytes32(b));
+        if (code == F_EXIT_LAG) revert PqVaultExitLag(uint64(a), uint64(b));
         if (code == F_NONCE_USED) revert PqVaultNonceUsed(bytes32(a), uint64(b));
         revert PqVaultEnv();
     }

@@ -515,6 +515,15 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for = findDowncallHandle("uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT));
+
+    static long uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(long ptr, java.lang.foreign.MemorySegment req) {
+        try {
+            return (long) MH_uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for.invokeExact(ptr, req);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate = findDowncallHandle("uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT));
 
@@ -1952,6 +1961,15 @@ final class UniffiLib {
     static void uniffi_scaas_sdk_fn_free_vault(long handle, java.lang.foreign.MemorySegment uniffiOutErr) {
         try {
             MH_uniffi_scaas_sdk_fn_free_vault.invokeExact(handle, uniffiOutErr);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_fn_method_vault_accept_rollback
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_vault_accept_rollback = findDowncallHandle("uniffi_scaas_sdk_fn_method_vault_accept_rollback", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG));
+
+    static long uniffi_scaas_sdk_fn_method_vault_accept_rollback(long ptr) {
+        try {
+            return (long) MH_uniffi_scaas_sdk_fn_method_vault_accept_rollback.invokeExact(ptr);
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
@@ -3998,6 +4016,15 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for = findDowncallHandle("uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate = findDowncallHandle("uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
 
@@ -5255,6 +5282,15 @@ final class UniffiLib {
     static short uniffi_scaas_sdk_checksum_method_subscription_next() {
         try {
             return (short) MH_uniffi_scaas_sdk_checksum_method_subscription_next.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_method_vault_accept_rollback
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_vault_accept_rollback = findDowncallHandle("uniffi_scaas_sdk_checksum_method_vault_accept_rollback", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_method_vault_accept_rollback() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_method_vault_accept_rollback.invokeExact();
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 

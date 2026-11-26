@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="440" viewBox="0 0 960 440" role="img" aria-labelledby="t d">
-  <title id="t">Who pays the fee</title>
-  <desc id="d">One signed intent, eight ways to pay for it, grouped by who bears the cost. Subject: self-paid (built), fee in the token capped at 1 percent (built). Company: sponsored by a company relayer with fee 0 (built, portal default), enterprise inbound gateway (built on EVM). Payee: direct settlement by payee self-relay (built on EVM), the payee pays the fee (specified). Sponsor or service company: gas sponsorship policy (specified; on-chain pool planned), sponsored call of a non-token contract (specified).</desc>
+  <title id="t">Who pays the gas fee and the token fee</title>
+  <desc id="d">One signed intent, eight ways to pay for it, grouped by who bears the cost. The gas fee is the chain's charge in its native coin, paid by whoever submits; the token fee is signed in the intent and paid in the token to the relayer. Subject: self-paid, the subject submits and pays the gas fee (built); a token fee, at most 1 percent of an amount (built). Company: its relayer pays the gas fee, token fee 0 (built, portal default), enterprise inbound gateway (built on EVM). Payee: direct settlement, the payee submits and pays the gas fee (built on EVM); payee fee, the payee co-signs the token fee (built on EVM). Sponsor or service company: gas sponsorship policy (specified; on-chain pool planned), sponsored call of a non-token contract (specified).</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -19,8 +19,8 @@
   </defs>
 
   <rect x="0.5" y="0.5" width="959" height="439" rx="16" fill="#f8fafc" stroke="#d0d7de"/>
-  <text class="h" x="24" y="40">Who pays the fee</text>
-  <text class="sub" x="24" y="61">One signed intent; only the fee fields and the submitter differ</text>
+  <text class="h" x="24" y="40">Who pays: gas fee and token fee</text>
+  <text class="sub" x="24" y="61">One signed intent; whoever submits pays the gas fee; the submitter and the token-fee fields differ by model</text>
 
   <rect x="330" y="76" width="300" height="44" rx="22" fill="#dbeafe" stroke="#3b82f6"/>
   <text class="b" x="480" y="103" text-anchor="middle">Signed intent (expires, one lane slot)</text>
@@ -43,20 +43,20 @@
   <!-- subject -->
   <rect class="card" x="24" y="198" width="219" height="96" rx="8"/>
   <text class="b" x="38" y="221">Self-paid</text>
-  <text class="s" x="38" y="241">calls from its own account with</text>
-  <text class="s" x="38" y="257">native coins; always possible</text>
+  <text class="s" x="38" y="241">submits from its own account and</text>
+  <text class="s" x="38" y="257">pays the gas fee; always possible</text>
   <rect x="38" y="268" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="63" y="281" text-anchor="middle" fill="#1a7f37">BUILT</text>
 
   <rect class="card" x="24" y="304" width="219" height="96" rx="8"/>
-  <text class="b" x="38" y="327">Fee in the token</text>
-  <text class="s" x="38" y="347">percent or fixed, capped at 1 %;</text>
+  <text class="b" x="38" y="327">Token fee</text>
+  <text class="s" x="38" y="347">percent or fixed, ≤ 1 % of an amount;</text>
   <text class="s" x="38" y="363">any relayer that submits earns it</text>
   <rect x="38" y="374" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="63" y="387" text-anchor="middle" fill="#1a7f37">BUILT</text>
 
   <!-- company -->
   <rect class="card" x="255" y="198" width="219" height="96" rx="8"/>
-  <text class="b" x="269" y="221">Company relayer, fee 0</text>
-  <text class="s" x="269" y="241">gas is the company's operating</text>
+  <text class="b" x="269" y="221">Company relayer, token fee 0</text>
+  <text class="s" x="269" y="241">the gas fee is the company's</text>
   <text class="s" x="269" y="257">cost; bound to its relayer</text>
   <rect x="269" y="268" width="140" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="339" y="281" text-anchor="middle" fill="#1a7f37">BUILT · portal default</text>
 
@@ -69,28 +69,28 @@
   <!-- payee -->
   <rect class="card" x="486" y="198" width="219" height="96" rx="8"/>
   <text class="b" x="500" y="221">Direct settlement</text>
-  <text class="s" x="500" y="241">the payee submits the payer's</text>
-  <text class="s" x="500" y="257">signature: an expiring e-cheque</text>
+  <text class="s" x="500" y="241">the payee submits (pays the gas fee):</text>
+  <text class="s" x="500" y="257">the payer's signed e-cheque</text>
   <rect x="500" y="268" width="96" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="548" y="281" text-anchor="middle" fill="#1a7f37">BUILT on EVM</text>
 
   <rect class="card" x="486" y="304" width="219" height="96" rx="8"/>
   <text class="b" x="500" y="327">Payee fee</text>
-  <text class="s" x="500" y="347">the payee co-signs a fee from its</text>
-  <text class="s" x="500" y="363">own balance; one transaction</text>
+  <text class="s" x="500" y="347">the payee co-signs a token fee</text>
+  <text class="s" x="500" y="363">from its balance; one transaction</text>
   <rect x="500" y="374" width="96" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="548" y="387" text-anchor="middle" fill="#1a7f37">BUILT on EVM</text>
 
   <!-- sponsor -->
   <rect class="card" x="717" y="198" width="219" height="96" rx="8"/>
   <text class="b" x="731" y="221">Gas sponsorship policy</text>
-  <text class="s" x="731" y="241">a node rule books the gas to a</text>
+  <text class="s" x="731" y="241">a node rule books the gas fee to a</text>
   <text class="s" x="731" y="257">sponsor's account</text>
   <rect x="731" y="268" width="168" height="18" rx="9" fill="#ddf4ff"/><text class="chip" x="815" y="281" text-anchor="middle" fill="#0969da">SPECIFIED · pool PLANNED</text>
 
   <rect class="card" x="717" y="304" width="219" height="96" rx="8"/>
   <text class="b" x="731" y="327">Sponsored non-token call</text>
   <text class="s" x="731" y="347">a service company relays it and</text>
-  <text class="s" x="731" y="363">bills off chain; contract fee NONE</text>
+  <text class="s" x="731" y="363">bills off chain; token fee NONE</text>
   <rect x="731" y="374" width="84" height="18" rx="9" fill="#ddf4ff"/><text class="chip" x="773" y="387" text-anchor="middle" fill="#0969da">SPECIFIED</text>
 
-  <text class="sub" x="24" y="424">Fee modes NONE, PERCENT, FIXED; a fee is charged only if the call succeeds (all or nothing).</text>
+  <text class="sub" x="24" y="424">Token-fee modes NONE, PERCENT, FIXED; a token fee is charged only if the call succeeds (all or nothing).</text>
 </svg>

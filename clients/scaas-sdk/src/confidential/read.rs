@@ -9,8 +9,10 @@
 //!   token's `ChainEnv.chainUid` must be the profile's too.
 //! - **R3** one block, the profile's final block ([`final_block`]: `Finalized` or `Depth(d)`, never the plain reads' `Depth(1)`),
 //!   every request by number and hash (EIP-1898, `requireCanonical`).
-//! - **R4** storage words (`eth_getStorageAt`) and code (`eth_getCode`) only, never a view: no `eth_call` is reachable from
-//!   this file (a test reads it). Each pointer's code is checked by what it must hold: the token's code is exactly a clone of a
+//! - **R4** storage words (`eth_getStorageAt`) and code (`eth_getCode`) only, except the line's two address reads: this file
+//!   makes no `eth_call` (a test reads it); the `eth_call`s reached are `words.rs`'s `holderOf` (`held_at`) and `kindHome`
+//!   (`kind_home`) on the bound registry, at the same block under the same purpose, which choose the address the key records
+//!   are read at (a test counts them; reviews A2-10, B-18). Each pointer's code is checked by what it must hold: the token's code is exactly a clone of a
 //!   chain-neutral release with its `ChainEnv` (`scaas_ua::factory::clone_env`), a key pointer's code is `0x00 ‖ Y` with
 //!   `UA(Y)` the UA it is the record of.
 //! - **R5** the token is catalogued by the profile's factory: `_rec[token]` (slot 8, word 1) is class TOKEN and a Zether kind.

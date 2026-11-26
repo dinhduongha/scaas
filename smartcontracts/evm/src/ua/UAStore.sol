@@ -198,8 +198,9 @@ library UAStore {
 
     /// The current structure of the `msig` `ua` held here, `ptr` its record's `keyPtr` (MM-7): 0 = never updated, the
     /// registration's CTR-UA-09 bytes (every slot enabled, version 0); else the `updateMsig` blob `u16 threshold ‖ u16 count ‖
-    /// count × (u16 kind ‖ id ‖ u16 weight) ‖ u256 enabled ‖ u64 version` (MM-6), whose first `4 + 36·count` bytes are the
-    /// CTR-UA-09 form, so every reader that indexes `4 + 36·i` keeps its offsets.
+    /// count × (u16 kind ‖ id ‖ u16 weight) ‖ u256 enabled ‖ u64 version ‖ address prev` (MM-6; CTR-UA-74: `prev` the blob of the
+    /// version before, 0 for version 0's registration bytes), whose first `4 + 36·count` bytes are the CTR-UA-09 form, so every
+    /// reader that indexes `4 + 36·i` keeps its offsets.
     function msig(bytes32 ua, address ptr) internal view returns (bytes memory) {
         return ptr == address(0) ? keyRest(ua) : SSTORE2.read(ptr);
     }
@@ -218,23 +219,37 @@ library UAStore {
         return d.length > o ? uint64(word(d, o) >> 192) : 0;
     }
 
-    /// `enabled` and `version` of an updated `msig` from its blob's last 40 bytes, without its slots (`memberAccepted`,
-    /// `msigStateOf`). `ptr` ≠ 0.
+    /// CTR-UA-74: is `tag` the version tag of the structure `d`: empty at version 0, else its 8 bytes big-endian. What rides beside an
+    /// `msig`'s member signatures (`UASig.signature`, an `msig` slot's `MemberSig.sig`): only the current version is accepted, so the
+    /// bytes a consumer keeps name the structure the record was accepted under. Not signed (a member signs the record, not the tag).
+    function verOk(bytes memory tag, bytes memory d) internal pure returns (bool) {
+        uint64 v = versionOf(d);
+        return v == 0 ? tag.length == 0 : tag.length == 8 && word(tag, 0) >> 192 == v;
+    }
+
+    /// `enabled` and `version` of an updated `msig` from its blob's trailer (the 40 bytes before `prev`), without its slots
+    /// (`memberAccepted`, `msigStateOf`). `ptr` ≠ 0.
     function trailer(address ptr) internal view returns (uint256 enabled, uint64 version) {
-        bytes memory t = SSTORE2.read(ptr, ptr.code.length - 41, 40);
+        bytes memory t = SSTORE2.read(ptr, ptr.code.length - 61, 40);
         (enabled, version) = (word(t, 0), uint64(word(t, 32) >> 192));
     }
 
+    /// CTR-UA-74: the blob of the version before the blob `ptr`'s (its last 20 bytes; 0: version 0, the registration's bytes).
+    function prevOf(address ptr) internal view returns (address) {
+        return address(bytes20(SSTORE2.read(ptr, ptr.code.length - 21, 20)));
+    }
+
     /// The blob of the structure `s` with its trailer (MM-6), in one allocation for any count (P2-4: never `bytes.concat` in a
-    /// loop): what `updateMsig` stores, and the form a gen-1 structure takes here (`msigOf` + `msigStateOf`).
-    function blob(IUARegistry.MsigStructure memory s, uint256 enabled, uint64 version)
+    /// loop): what `updateMsig` stores (`prev`: the blob it replaces, CTR-UA-74), and the form a gen-1 structure takes here (`msigOf`
+    /// + `msigStateOf`, `prev` 0).
+    function blob(IUARegistry.MsigStructure memory s, uint256 enabled, uint64 version, address prev)
         internal
         pure
         returns (bytes memory d)
     {
         IUARegistry.MsigMember[] memory m = s.members;
         uint256 n = m.length;
-        uint256 len = 44 + 36 * n;
+        uint256 len = 64 + 36 * n;
         uint256 t = s.threshold;
         d = new bytes(len + 32); // room for the last 32-byte store; the length is set back below
         assembly ("memory-safe") {
@@ -250,6 +265,7 @@ library UAStore {
             let q := add(p, add(4, mul(36, n)))
             mstore(q, enabled)
             mstore(add(q, 32), shl(192, version))
+            mstore(add(q, 40), shl(96, prev))
             mstore(d, len)
         }
     }

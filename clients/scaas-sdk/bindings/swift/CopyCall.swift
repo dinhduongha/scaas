@@ -28,8 +28,16 @@ public enum CopyCall {
     /// Secret `id` (at most `cap` bytes) out; nil when refused.
     public static func read(_ id: UInt64, cap: Int) -> [UInt8]? {
         var out = [UInt8](repeating: 0, count: cap)
+        return read(id, via: &out)
+    }
+
+    /// `read` through the buffer `out` (its count the cap): the secret's bytes are copied out of it, then it is zeroed, so no
+    /// copy stays behind but the one returned (review T26 C-5).
+    public static func read(_ id: UInt64, via out: inout [UInt8]) -> [UInt8]? {
         let n = out.withUnsafeMutableBufferPointer { readC(id, $0.baseAddress, $0.count) }
-        return n < 0 ? nil : Array(out[0..<Int(n)])
+        let r = n < 0 ? nil : Array(out[0..<Int(n)])
+        out.withUnsafeMutableBytes { if let p = $0.baseAddress { _ = memset(p, 0, $0.count) } }
+        return r
     }
 
     /// Secret `id` zeroed and freed; false when unknown.

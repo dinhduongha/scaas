@@ -76,7 +76,10 @@
 #                          cargo test --locked --features <the same>,vectors --test pqchat_keys --test app_core_vault_rows (the test feature alone: a vectors build refuses
 #                          scaas-ua key handles until a test unlocks them); cargo clippy --locked --all-targets --features <the same>,vectors,native-networks,raw-native -- -D warnings; per PQZ set
 #                          (n2048-kmax1024, n2560-kmax16384, n2816-kmax65536): cargo test --locked --no-default-features --features vault,account,wallet,pqz,pqz-set-<set> --test sets;
-#                          cargo test --locked --test feature_tree (the e2e on anvil, 6 GB, stays the local gate sdk-e2e)
+#                          cargo test --locked --test feature_tree (the e2e on anvil, 6 GB, stays the local gate sdk-e2e); the shared UniFFI
+#                          surface of every UniFFI language (review T26 C-8, C-9): cargo clippy --all-targets with <the UniFFI set>,uniffi and
+#                          ,sync-api; cargo test --test binding with each, cargo test --lib binding::tests with uniffi; in clients/scaas-sdk/ffi:
+#                          cargo clippy --locked --all-targets --features sync-api and --features uniffi -- -D warnings
 #   scaas-sdk-wasm:        in clients/scaas-sdk: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet,evm
 #   scaas-sdk-bindings     one matrix cell per language of clients/scaas-sdk/bindings/langs (decisions CLI-SDK-33 (102)):
 #   [dart]:                SCAAS_GEN=dart clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check (flutter_rust_bridge_codegen 2.13.0 with cargo-expand 1.0.127: the
@@ -85,8 +88,7 @@
 #                          the vault and keystore rows, the e2e smoke on a local anvil: foundry v1.8.5)
 #   [cpp]:                 uniffi-bindgen-cpp v0.10.0+v0.31.0 (cargo install --git --tag --locked); bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh
 #                          --check (its C++ part: the generated sync surface equals the committed one; FRB skipped by SCAAS_GEN=cpp); in
-#                          clients/scaas-sdk/ffi: cargo clippy --locked --all-targets --features sync-api -- -D warnings; in clients/scaas-sdk:
-#                          cargo test --locked --features <the scaas-sdk set>,sync-api --test binding; in clients/scaas-sdk/bindings/cpp:
+#                          clients/scaas-sdk/bindings/cpp: python3 -I test_same_blocks.py (the drift check's comparison, review T26 C-4);
 #                          cmake -B build && cmake --build build && ctest --test-dir build (the keystore and vault rows, a C++ store and
 #                          authenticator, a panic as Internal, a C++ exception as the SDK's error, a cancel token)
 #   [cs]:                  uniffi-bindgen-cs v0.11.1+v0.31.0 (cargo install --git --tag --locked); SCAAS_GEN=cs
@@ -308,6 +310,9 @@ jobs:
       # pre-split side must be rebuilt at that set (at-set.sh's `modules` scope, under scripts/capped: local), so the
       # other cells leave it out
       - name: forge test at ${{ matrix.set }} (at-set.sh)
+        # the runner is the job's cap (no systemd user manager for scripts/capped): the lane runs forge directly
+        env:
+          CAPPED_SCOPE: 1
         run: |
           if [ "${{ matrix.set }}" = n2304-kmax4096 ]; then script/pqz/at-set.sh ${{ matrix.set }} test
           else script/pqz/at-set.sh ${{ matrix.set }} test --no-match-path 'test/modules/*'; fi
@@ -513,6 +518,13 @@ jobs:
         working-directory: clients/scaas-rpc
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -544,6 +556,13 @@ jobs:
         working-directory: scaas-node
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -687,6 +706,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -902,7 +928,7 @@ jobs:
             tests: --test roots
           - cell: app-core
             features: --features app-core,vectors
-            tests: --test app_core --test arweave --test arweave_rows --test file_seal
+            tests: --test app_core --test arweave --test arweave_rows --test file_seal --test tree
           - cell: pqvault
             features: --no-default-features --features pqvault
             tests: --test pqvault_pass
@@ -911,6 +937,13 @@ jobs:
         working-directory: clients/ua-rs
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -949,6 +982,13 @@ jobs:
         working-directory: clients/ua-rs
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -980,6 +1020,13 @@ jobs:
             os: macos-latest
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1022,6 +1069,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1058,6 +1112,13 @@ jobs:
         working-directory: clients/ua-cxx
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1083,6 +1144,13 @@ jobs:
         working-directory: clients/ua-c
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1112,6 +1180,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1141,6 +1216,13 @@ jobs:
         working-directory: clients/ua-py
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1168,6 +1250,13 @@ jobs:
         working-directory: clients/ua-go
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1200,6 +1289,13 @@ jobs:
         working-directory: clients/ua-cs/Scaas.Ua.Tests
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1225,6 +1321,13 @@ jobs:
         working-directory: clients/ua-dart-frb
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1252,13 +1355,22 @@ jobs:
         working-directory: clients/scaas-sdk
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: clients/scaas-sdk
+          workspaces: |
+            clients/scaas-sdk
+            clients/scaas-sdk/ffi
       - name: cargo test (full feature set)
         run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,ton
       - name: the test feature vectors (pqchat-core T1 rows, PqVault V9 rows)
@@ -1287,6 +1399,22 @@ jobs:
           done
       - name: one PQZ set in the feature tree
         run: cargo test --locked --test feature_tree
+      # the shared UniFFI surface of every UniFFI language, whichever cells bindings/langs enables (review T26 C-9: it ran in
+      # the cpp cell only); the binding module's own unit tests too (review T26 C-8)
+      - name: the SDK with each UniFFI surface, its Rust tests
+        run: |
+          U=vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots
+          cargo clippy --locked --all-targets --features "$U,uniffi" -- -D warnings
+          cargo clippy --locked --all-targets --features "$U,sync-api" -- -D warnings
+          cargo test --locked --features "$U,uniffi" --test binding
+          cargo test --locked --features "$U,uniffi" --lib binding::tests
+          cargo test --locked --features "$U,sync-api" --lib sync_cpp::tests
+          cargo test --locked --features "$U,sync-api" --test binding
+      - name: the reference library with each UniFFI surface (review B16)
+        working-directory: clients/scaas-sdk/ffi
+        run: |
+          cargo clippy --locked --all-targets --features sync-api -- -D warnings
+          cargo clippy --locked --all-targets --features uniffi -- -D warnings
 
   scaas-sdk-wasm:
     needs: changes
@@ -1297,6 +1425,13 @@ jobs:
         working-directory: clients/scaas-sdk
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1317,6 +1452,13 @@ jobs:
         working-directory: clients/scaas-cli
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1341,6 +1483,13 @@ jobs:
         working-directory: clients/pqvault-core
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1368,6 +1517,13 @@ jobs:
         working-directory: clients/pqchat-core
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1410,6 +1566,13 @@ jobs:
         lang: ${{ fromJSON(needs.changes.outputs.scaas_sdk_bind_langs) }}
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1504,19 +1667,6 @@ jobs:
         run: |
           cargo clippy --locked --all-targets -- -D warnings
           cargo build --locked
-      - name: the reference library with each UniFFI surface (review B16)
-        if: matrix.lang == 'cpp'
-        working-directory: clients/scaas-sdk/ffi
-        run: |
-          cargo clippy --locked --all-targets --features sync-api -- -D warnings
-          cargo clippy --locked --all-targets --features uniffi -- -D warnings
-      - name: the SDK with each UniFFI surface, the sync surface's Rust tests
-        if: matrix.lang == 'cpp'
-        working-directory: clients/scaas-sdk
-        run: |
-          cargo clippy --locked --all-targets --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,uniffi -- -D warnings
-          cargo clippy --locked --all-targets --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,sync-api -- -D warnings
-          cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,sync-api --test binding
       - name: the SDK with feature wasm for wasm32
         if: matrix.lang == 'js'
         working-directory: clients/scaas-sdk
@@ -1532,6 +1682,7 @@ jobs:
         if: matrix.lang == 'cpp'
         working-directory: clients/scaas-sdk/bindings/cpp
         run: |
+          python3 -I test_same_blocks.py
           cmake -B build
           cmake --build build -j2
           ctest --test-dir build --output-on-failure

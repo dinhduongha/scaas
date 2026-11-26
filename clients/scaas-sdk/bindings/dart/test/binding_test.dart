@@ -25,6 +25,10 @@ void main() {
     await expectLater(loadScaasSdk(lib, needFeatures: 1 << 12), throwsA(isA<AbiMismatch>()));
     await loadScaasSdk(lib);
     expect(features().toInt() & (1 << 23), 0, reason: 'raw-native is never in the generated surface');
+    // review T26 C-2: the Rust opening runs the check itself, whatever Dart checked
+    expect(await failure(() => openSdk(MemStore(), FakeAuth(), expectApi: generatedApiVersion + 1)), 'AbiMismatch');
+    expect(await failure(() => openSdk(MemStore(), FakeAuth(), needFeatures: 1 << 12)), 'AbiMismatch');
+    await openSdk(MemStore(), FakeAuth());
   });
 
   test('generate, seeds, the reveal by the copy call, the backup check, an event', () async {

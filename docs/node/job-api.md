@@ -295,6 +295,17 @@ A job in the old shape is refused `BAD_PAYLOAD: …keyData: unknown field`. Ever
 16 slots at each level, `BAD_PAYLOAD: …: more than 16 slots`, checked before an element is read. The node builds the calldata from these fields, so overlapping offsets, which make the registry copy far more than the calldata holds before its first index check, cannot leave
 it from a named job. Soroban jobs keep `{index, key_data, sig}` until that family's round.
 
+<a id="msig-version-tag"></a>**An `msig`'s version tag (operators and integrators: the job shape is unchanged, its content is not; EVM BUILT,
+UNAUDITED; [CTR-UA-74](../contracts/accounts.md#CTR-UA-74), Change 2026-11-26, A-4 of the Fable fix check).** Wherever a job carries an
+`msig`'s `UASig` (`auth`, `sig`, `payerSig`, …), its `signature` is that `msig`'s structure version tag: `"0x"` at version 0, and from
+its first `updateMsig` on the version as exactly 8 bytes big-endian (`"0x0000000000000001"` at version 1); an `msig` member slot's
+`sig` carries that member's own tag the same way. The signer reads `msigStateOf(ua).version` at signing time (each `msig` member's
+too); a `ua-rs` `UaSigRequest` names it in every `current` row, `{ua, keyData, enabled, version}`, and a row without `version` no longer
+parses. The registry accepts the current version's tag only, so a consumer that keeps sending `signature: "0x"` for an `msig` works
+until its first `updateMsig` and is `UAUnauthorized` at simulation from then on (refused, nothing sent), and a job signed before an
+update is refused after it: re-sign it with the new tag. The node passes the bytes on and does not read the version; a replica copy of
+a PqChat or PqVault record carries the replica registry's tag ([A replica's copy](../contracts/accounts.md#msig-replica-copy)).
+
 <a id="bls-multi-sig-shape"></a>**A `bls12381-multi` (`0x0121`) `UASig` (operators: a new job shape, BUILT `d02f07d32`;
 [CTR-UA-50](../contracts/accounts.md#CTR-UA-50)).** Wherever a job carries a `UASig` (`auth`, `sig`, `payerSig`, …), a group's is
 `{"signature": "0x" + σ (128 bytes, G1, EIP-2537), "signers": [i, …]}`, nothing else: the node checks `signers` first (1 to 64 JSON
@@ -326,7 +337,7 @@ Values: `uint` as canonical decimal strings (`uint8`, `uint16`, `uint32` may be 
 | `dex`, plain | `mtxSettle`, `mtxExchange`, `mtxExchangeVia`, `mtxExchangeBatch`, `mtxHybrid`, `mtxHybridVia`, `mtxCancelOrders`: legs as `{sellToken, shape, order, uaOrder, sig, auth, fill}`; `mtxLiquidity` ([CTR-DEX-30](../contracts/dex.md#CTR-DEX-30)): `{p: {ref, order: LiquidityOrder (17 named fields), auth, pull, positionId, extraTokens}, interactions}`, at most eight inputs, outputs and extra tokens, one `pull` per input, ticks as `int24` numbers (BUILT: the row, the bounded decode, the digest, the pre-checks before simulation `DEX_NOT_LIQUIDITY` (the liquidity mark: a module of group 11 among the DEX's `modules()`), `LIQUIDITY_WRONG_RELAYER` (`relayer` neither 0 nor this lane), `LIQUIDITY_DIGEST_MISMATCH` (the node's `h` is not the DEX's `liquidityOrderDigest`), `BAD_SIGNATURE` (a native signer without code that does not sign `h`), `LIQUIDITY_ORDER_CLOSED` (`pulled(h) ≠ 0`: reported `consumed`, never `dead`), `LIQUIDITY_TOKEN_UNSUPPORTED`, `LIQUIDITY_TOO_LARGE` (the signer's cap × SCaaS inputs + 1 M within min(`max_gas_per_tx`, the block gas limit)), the job's deadline narrowed to the signed `validUntil`, and a starved `NotLiquidityDex` requeued; completion by `LiquiditySettled` and the indexer rows SPECIFIED, spec 2026-11-10-dex-liquidity.md §11); `mtxLiquidityPull` is never a job (a token's DEX-only pull) |
 | `registry`, plain | `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`, `storePqzPop`, `setPqzKey`, `acceptMembership` (`args`: `ua`, `memberSig` `{index, keyData: "0x", sig}`, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37): the member signs, the relayer submits, so a member needs no gas), `updateMsig` (`args`: `ua`, `version`, `structure` `{threshold, members: [{kind, id, weight}]}` at most 256 members, `enabled` a decimal string, `validUntilBlock`, `sigs` at most 16 slots, `chainUid`; [CTR-UA-44](../contracts/accounts.md#CTR-UA-44); operator note: a fee-0 `call` whose cost grows with the slot count, about 16 M gas at 256 slots with EIP-8037 state gas, so a relayer sets its own gas ceiling for this row) |
 | `factory`, plain | `deploy` |
-| `pqchat`, plain | the thirteen `PqChat` writes ([call table](#pqchat-calls)) |
+| `pqchat`, plain | the nineteen `PqChat` writes ([call table](#pqchat-calls), [tree writes](#pqchat-tree-calls)) |
 
 **Mandate lanes.** The named `mtxPayUnderMandate` runs with `batch = mandatePayLane(entryRef)`, `mtxDelegateRevoke` with
 `batch = mandateRevokeLane(token, epoch)`, both at nonce 0 (a revoke is the kill switch, it must not queue behind a pending nonce on
@@ -899,19 +910,25 @@ of the chain's routers (config `governance_routers`, a list: a second router is 
 `chain.chain_uid`. The rule runs on the direct path and on the inner target of `RelayFeeRouter.relay`,
 both directions: a relayed call on a router is one of its rows, and a router-only entry runs only on a configured router.
 Its generic entries (`mtxExecute`, `mtxBatch`, `executeMetaTransaction`) are refused by the contract
-and are no rows. `gov_router` joins `UACancelNonce`'s contracts; no factory row exists and a
+and are no rows. `gov_router` joins `UACancelNonce`'s contracts, and has the keyed cancel `UACancelNonceFor` on
+`mtxCancelNonceFor` (`args.target`, `args.lane`; the lane cancelled in the map the router checks for an op on `target`,
+[CTR-GOV-33](../contracts/token-wrappers.md#CTR-GOV-33); BUILT on branch `router-cancel`): its subject's nonce is read as
+every router row's, `mtxNonceFor(target, from, batch)` for a derived subject. No factory row exists and a
 router job carries no generation: the router is deployed once per chain and UA registry with the release set (`DeployBase`, deploy JSON
 `governance_router`). A lane stays no holder: it relays what the subject signed. No existing job's shape changes.
 Operators: set `governance_routers` to the deploy JSON's `governance_router`, plus the router of any other release set on the chain
 (the PQZ e2e stack's `governance_router` in `deployments/scaas-testnet-pqz.json`); unset, a router job is `CALL_TARGET_REFUSED`.
+Every address listed is a router of the current release, with `mtxNonceFor` (CTR-GOV-33; the router's address moved with it): on an
+older router the view reverts, the nonce read fails and a derived subject's job is requeued without end, never `consumed` or `dead`.
 
 <a id="pqchat-calls"></a>**`PqChat` instances** (BUILT on branch `ua-mtx-merge`, plan T93; UA-7 spec
 [P17](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#74-the-node) and
 [P32](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#21-instances-pqchat-is-a-factory-kind-d22), topics spec
 [P45](../superpowers/specs/2026-11-07-pqchat-public-topics.md#7-node-and-indexer)). `PqChat` is a factory kind (class 3, kind 0 on
-`OpenFactory`'s generic path) and the contract kind `pqchat` of the table: its thirteen writes are plain rows, `createSession`, `rekey`,
+`OpenFactory`'s generic path) and the contract kind `pqchat` of the table: its thirteen writes of the flat mode and the topics are plain rows, `createSession`, `rekey`,
 `addWraps`, `leave`, `remove` (UA-7 P48, owner 2026-11-10), `postMessage`, `storeMessage`, `createTopic`, `updateTopic`, `setTopicWriter`, `postEntry`, `editEntry` and
-`voteEntry`, equal to `IPqChat`'s both directions (`initialize` is the factory's alone and no row). The rule of kind `pqchat`
+`voteEntry`, and the six tree writes ([below](#pqchat-tree-calls)) make nineteen, equal to `IPqChat`'s both directions (`initialize` is
+the factory's alone and no row). The rule of kind `pqchat`
 (`guard.rs` `Rule::FactoryClass(3)`, the generic factory-class rule of factory index §8.6): the target is a contract the chain's
 `token_factory` lists with `infoOf(target).contractClass == 3` and `version ≠ 0`, read at lease and cached (a record never changes);
 otherwise, or with no `token_factory`, `CALL_TARGET_REFUSED`. An instance answers no `chainUid()` (its records are portable), so the
@@ -920,9 +937,9 @@ on the direct path and on the inner target of `RelayFeeRouter.relay`. A `pqchat`
 pays the lane through `RelayFeeRouter` (an `mtxRelayFee` job with `call`).
 
 **Unsigned writes** (P17, owner 2026-11-05, [CTR-CHAT-01](../contracts/pqchat.md#CTR-CHAT-01)). `storeMessage` and `addWraps` carry no
-signature, so anyone could make a lane pay for them. A lane relays one only as a relay fee's inner call (paid through
+signature, so anyone could make a lane pay for them (and the tree commit's three pieces, [below](#pqchat-tree-calls)). A lane relays one only as a relay fee's inner call (paid through
 `RelayFeeRouter`, under the relay-fee rules) or when the chain's `params.relay_unsigned_pqchat = true` (the operator's lane policy,
-default `false`); otherwise the job is refused `UNSIGNED_WRITE_NOT_PAID` (on the legacy pull path `dead`, nothing read or sent). The eleven
+default `false`); otherwise the job is refused `UNSIGNED_WRITE_NOT_PAID` (on the legacy pull path `dead`, nothing read or sent). The fourteen
 signed writes need neither. An unpaid one may find no relayer; its author can send it from its own account.
 
 <a id="pqchatstore-calls"></a>**`PqChatStore`** (BUILT on branch `chains-arweave`, plan T9;
@@ -952,6 +969,36 @@ is `422 HEX_ARGS_REFUSED`.
           "sig": {"keyData": "0x…", "signature": "0x…", "members": []}}}
 ```
 
+<a id="pqchat-tree-calls"></a>**`PqChat` tree writes** (BUILT on branch `pqchat-treekem`, plan 2026-11-23-pqchat-treekem T4, its
+allow-list part; [CTR-CHAT-27](../contracts/pqchat.md#CTR-CHAT-27); UNAUDITED). Six plain rows of kind `pqchat`, under the rule
+and refusal classes above, equal to `IPqChat`'s both directions: the signed `commit(c, ctTargets, ctHashes, nodeKeys, cts, wraps,
+sig)`, `treeLeave(l, sig)` and `treeRemove(r, sig)`; the unsigned pieces `addPathList(epochId, ctTargets, ctHashes)`,
+`addPathKeys(epochId, nodeKeys)` and `addPath(epochId, firstCt, cts)`, relayed paid or under `relay_unsigned_pqchat` as `addWraps`.
+`c` is a `PqChatCommit`, `l` a `PqChatTreeLeave`, `r` a `PqChatTreeRemove`, each `TreeAdd`, `TreeRemove`, `PathCt` and `Wrap` an
+object of its fields. `createSession` (`groupMode = 1`), `addWraps` and `postMessage` serve both modes unchanged; the module's
+`treeCreate` and the tree views (`PqChatTreeViews`, read-only) are no row of any kind. Before any calldata is built the node
+refuses, `BAD_PAYLOAD` naming the path, what the contract refuses on the record or the piece alone: a list over its cap, read
+before its elements (`admins` 32; `removes`, `adds`, `wrapHashes`, `wraps` 20; `nodeKeyHashes`, `nodeKeys` 9; `ctTargets`,
+`ctHashes`, `cts` 511; a `treeRemove`'s `members` 52: the 20 leafy UAs a head may owe plus 32 admins); `removes` plus `adds`
+above 20 (32 until the owner's change of 2026-11-25); `leaves` above 512 (256 until the owner's change of 2026-11-25); `ctCount` not below `leaves`, more `nodeKeyHashes` than `depth(leaves)`, or a path without
+ciphertexts or the reverse; not one `wrapHashes` per add; `sealedInfo` outside 1 to 4,124 B; a list neither absent nor `ctCount`
+entries with one hash each (`addPathList`: at least one); node keys neither absent nor one per hash, or not 1,601 B; path
+ciphertexts above `ctCount` (on `addPath`, `firstCt` plus the count above 511), without the list, or not 1,568 B and 48 B; more
+Welcome wraps than adds; an empty `members`. What needs the chain's state is the contract's. A record or a list as hex is
+`HEX_ARGS_REFUSED`; the decode follows the type, so a hostile depth stops at the type's. **For operators:** job shapes were added,
+none changed. **Not built yet (plan T4, after the merge):** the whole-set guard (fable-r3-6) and the order of C37 when the node
+relays a commit's set. **BUILT (Change 2026-11-24, the code review's D-4 and D-7; `typed.rs` `tree_shape`):**
+`createSession` with `groupMode = 1` is bounded by the tree's bounds at creation (`members` 512, `admins` 32,
+`sealedInfo` 4,124 B; mode 0 has none of these), and an `addPath` with no ciphertext is refused (`cts: 1 or more`), as the
+contract refuses both (C40); an `addWraps` or PqVault's `addVaultWraps` with no wrap the same (`wraps: 1 or more`, both modes;
+Change 2026-11-26, A-5 of the Fable fix check). **For operators
+(the contract's side BUILT on branch `review-fix-contract`, the spec check's change of 2026-11-24 to C9, CTR-CHAT-20,
+CTR-CHAT-10, CTR-PQV-06; the node's reporting rule below SPECIFIED, plan T4, D2-5 of the re-review of 2026-11-25):** an exit (`treeLeave`,
+`treeRemove`, mode 0's `leave` and `remove`, PqVault's `leaveVault` and `removeVaultMembers`) applies at the head when it
+lands, up to `EXIT_LAG_MAX` = 16 epochs after the epoch it names, and anyone may land its public calldata after a revert;
+so a job of an exit that reverted is not `dead` while the head is within the lag and its nonce is unspent, and the node
+reports `dead` only past `PqChatExitLag` / `PqVaultExitLag` or `PqChatNonceUsed`.
+
 <a id="pqvault-calls"></a>**PqVault calls** (PqVault plan V8, [CTR-PQV-11](../contracts/pqvault.md#CTR-PQV-11),
 [CTR-PQV-13](../contracts/pqvault.md#CTR-PQV-13); BUILT, branch `pqvault-v`, UNAUDITED). `PqVault` is a factory kind (class 4, kind 0 on
 `OpenFactory`'s generic path) and the contract kind `pqvault` of the table: its eight writes are plain rows, `createVault`, `rekeyVault`,
@@ -964,7 +1011,7 @@ reverse). The unsigned `addVaultWraps` runs only as a relay fee's inner call or 
 `false`; `relay_unsigned_pqchat` does not open it), else `UNSIGNED_WRITE_NOT_PAID`. The seven signed writes carry their record and its
 `UASig`. Job: `{kind: "call", op: {entry, contract: "pqvault", token: <instance>, args, validUntil}}`, each record (`v`, `e`, `l`, `r`,
 `it`, `d`, `b`) and each `Wrap` an object of its fields, `sig` the `UASig` object; a hex form is `422 HEX_ARGS_REFUSED`. A creation
-`mtxCreateInstance` of class 4 has its named config `{owner}` as `PqChat`'s ([NODE-JOB-27](#NODE-JOB-27)). No vault key or plaintext
+`mtxCreateInstance` of class 4 has its named config `{owner}`, `PqChat`'s owner rule without its setting ([NODE-JOB-27](#NODE-JOB-27)). No vault key or plaintext
 ever reaches the node.
 
 | Selector | Target rule | Typical producer |
@@ -978,8 +1025,8 @@ ever reaches the node.
 | `VestingGrant.release`; `Distribution.claim`, `claimMany` | runtime code = EIP-1167 clone of the registered asset-suite implementation (codehash checked at lease, cached) | client asset-suite flows ([contracts/asset-suite.md](../contracts/asset-suite.md)) |
 | `ExchangeOffer.exchange(MetaTransaction,bytes)` | EIP-1167 clone of the registered `ExchangeOffer` implementation (like `SCaaSDex.mtxSettle`: the leg carries the holder's own signature) | client corporate actions |
 | `Safe.execTransaction` | a registered role-holder contract (`chain_contract.kind = role_holder`); the owners' signatures are inside the calldata | issuer / compliance / buyer role holders |
-| `GovernanceRouter.mtx<Op>` (the `typed.rs` rows of contract kind `gov_router`, 35 at `26586d2e`; group 3f adds `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` ([NODE-JOB-22](#NODE-JOB-22)), group 3h `mtxSetProofStore`, group 3l `mtxSetWrapLimits`, `mtxSetWrapMember`; set-auditor (CTR-GOV-31, BUILT) `mtxSetAuditorKey` (`UASetAuditorKey(bytes32 from,address target,bytes newKey,uint32 epoch,bytes32 chainUid,…)`, the new key's `pop` a named unsigned field `pop` beside the struct) and `mtxSetAuditorUA` (`UASetAuditorUA(…,bytes32 newAuditor,uint32 epoch,bytes32 chainUid,…)`, the new auditor's `consent` a named `UASig`), fee mode `NONE`; CTR-GOV-23 adds the eleven admin ops of `OpenFactory` and a `ComplianceRegistry`, `mtxPublishTokenEnv`, `mtxPublishDexEnv`, `mtxPublishClassEnv`, `mtxDeprecateToken`, `mtxDeprecateDex`, `mtxDeprecateRelease`, `mtxSetTokenKindEnabled`, `mtxSetClassKindEnabled`, `mtxSetKycProvider`, `mtxSetCompliance`, `mtxSetChainEntries`, an `Env` at most 4 deps, 2 params and 32 libs with one code hash each, the compliance arrays of one length at most 256; the four release approvals and the three open deploys are no row: release management is not a node job, owner 2026-11-10; owner 2026-11-12 adds the creations `mtxCreateToken`, `mtxCreateDex`, [NODE-JOB-26](#NODE-JOB-26), and `mtxCreateInstance`, [NODE-JOB-27](#NODE-JOB-27); the five deprecations and kind switches (fix2, Fable D P3-2) and `mtxRenounceAdmin` ([CTR-GOV-27](../decisions.md#CTR-GOV-27)), then `mtxTransferAdmin`, the three `mtxPublish*Env` and `mtxSetChainEntries` (CTR-GOV-27's Change) take a named field `chainUid`, the target's chain word, signed in the struct; a job without it is refused `BAD_PAYLOAD`; `mtxSetChainEntries` takes `args.entries`, a named `ChainEntries` object of nine fields (a blob is refused `BAD_PAYLOAD`), its EIP-712 struct hash the signed word; [CTR-GOV-28](../decisions.md#CTR-GOV-28) gives the twelve admin ops of a token, the DEX and a `ComplianceRegistry` the same named `chainUid`, the last op field: `mtxGrantRole`, `mtxRevokeRole`, `mtxSetGrant`, `mtxCancelGrant`, `mtxDisableFeature`, `mtxEnableFeature`, `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier`, `mtxSetVerifierFee`, `mtxSetKycProvider`, `mtxSetCompliance`); build 3zb + 3zc adds `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` and gives 25 more ops the named `chainUid` ([below](#holder-chain-word))) | `Rule::GovRouter`: one of the chain's `governance_routers` (empty ⇒ refused), bound to this chain | admins and role holders as UAs (a PQ key, an `msig`, a native key), at fee 0. The first call of a delayed `mtxSetWrapLimits` lands and changes nothing (`WrapLimitsProposed`, its `eta`): an operator reads `landed` as proposed, not applied; naming it in the job's result is SPECIFIED, not built. The same holds for `mtxSetMaxSupply` / `mtxSetMaxWrapSupply` under a non-zero `grantDelay` (`MaxSupplyProposed` / `MaxWrapSupplyProposed`, then the same op again in the window: `…Set`) |
-| `PqChat` writes (12, `typed.rs` contract kind `pqchat`, [above](#pqchat-calls)) | `Rule::FactoryClass(3)`: `token_factory`'s `infoOf` lists it as class 3, `version ≠ 0` (unset ⇒ refused); `storeMessage` / `addWraps` only paid or under `relay_unsigned_pqchat` | PqChat clients (sessions, messages, public topics), any relayer |
+| `GovernanceRouter.mtx<Op>` (the `typed.rs` rows of contract kind `gov_router`, 35 at `26586d2e`; group 3f adds `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` ([NODE-JOB-22](#NODE-JOB-22)), group 3h `mtxSetProofStore`, group 3l `mtxSetWrapLimits`, `mtxSetWrapMember`; set-auditor (CTR-GOV-31, BUILT) `mtxSetAuditorKey` (`UASetAuditorKey(bytes32 from,address target,bytes newKey,uint32 epoch,bytes32 chainUid,…)`, the new key's `pop` a named unsigned field `pop` beside the struct) and `mtxSetAuditorUA` (`UASetAuditorUA(…,bytes32 newAuditor,uint32 epoch,bytes32 chainUid,…)`, the new auditor's `consent` a named `UASig`), fee mode `NONE`; CTR-GOV-23 adds the eleven admin ops of `OpenFactory` and a `ComplianceRegistry`, `mtxPublishTokenEnv`, `mtxPublishDexEnv`, `mtxPublishClassEnv`, `mtxDeprecateToken`, `mtxDeprecateDex`, `mtxDeprecateRelease`, `mtxSetTokenKindEnabled`, `mtxSetClassKindEnabled`, `mtxSetKycProvider`, `mtxSetCompliance`, `mtxSetChainEntries`, an `Env` at most 4 deps, 2 params and 32 libs with one code hash each, the compliance arrays of one length at most 256; the four release approvals and the three open deploys are no row: release management is not a node job, owner 2026-11-10; owner 2026-11-12 adds the creations `mtxCreateToken`, `mtxCreateDex`, [NODE-JOB-26](#NODE-JOB-26), and `mtxCreateInstance`, [NODE-JOB-27](#NODE-JOB-27); the five deprecations and kind switches (fix2, Fable D P3-2) and `mtxRenounceAdmin` ([CTR-GOV-27](../decisions.md#CTR-GOV-27)), then `mtxTransferAdmin`, the three `mtxPublish*Env` and `mtxSetChainEntries` (CTR-GOV-27's Change) take a named field `chainUid`, the target's chain word, signed in the struct; a job without it is refused `BAD_PAYLOAD`; `mtxSetChainEntries` takes `args.entries`, a named `ChainEntries` object of nine fields (a blob is refused `BAD_PAYLOAD`), its EIP-712 struct hash the signed word; [CTR-GOV-28](../decisions.md#CTR-GOV-28) gives the twelve admin ops of a token, the DEX and a `ComplianceRegistry` the same named `chainUid`, the last op field: `mtxGrantRole`, `mtxRevokeRole`, `mtxSetGrant`, `mtxCancelGrant`, `mtxDisableFeature`, `mtxEnableFeature`, `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier`, `mtxSetVerifierFee`, `mtxSetKycProvider`, `mtxSetCompliance`); build 3zb + 3zc adds `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` and gives 25 more ops the named `chainUid` ([below](#holder-chain-word)); CTR-GOV-33's Change adds the keyed cancel `mtxCancelNonceFor` (`UACancelNonceFor(bytes32 from,address target,uint256 lane,…)`, no chain word)) | `Rule::GovRouter`: one of the chain's `governance_routers` (empty ⇒ refused), bound to this chain | admins and role holders as UAs (a PQ key, an `msig`, a native key), at fee 0. The first call of a delayed `mtxSetWrapLimits` lands and changes nothing (`WrapLimitsProposed`, its `eta`): an operator reads `landed` as proposed, not applied; naming it in the job's result is SPECIFIED, not built. The same holds for `mtxSetMaxSupply` / `mtxSetMaxWrapSupply` under a non-zero `grantDelay` (`MaxSupplyProposed` / `MaxWrapSupplyProposed`, then the same op again in the window: `…Set`) |
+| `PqChat` writes (19, `typed.rs` contract kind `pqchat`, [above](#pqchat-calls)) | `Rule::FactoryClass(3)`: `token_factory`'s `infoOf` lists it as class 3, `version ≠ 0` (unset ⇒ refused); the unsigned `storeMessage`, `addWraps` and the tree's pieces `addPathList`, `addPathKeys`, `addPath` only paid or under `relay_unsigned_pqchat` | PqChat clients (sessions, messages, public topics), any relayer |
 | `PqVault` writes (8, `typed.rs` contract kind `pqvault`, [above](#pqvault-calls)) | `Rule::FactoryClass(4)`: `token_factory`'s `infoOf` lists it as class 4, `version ≠ 0` (unset ⇒ refused); `addVaultWraps` only paid or under `relay_unsigned_pqvault` | PqVault clients (vaults, items), any relayer |
 | `PqChatStore.storeMessage` (contract kind `pqchatstore`, [above](#pqchatstore-calls)) | `Rule::ChatStore`: the release address, its runtime code hash at the final block the release data's, else `CHATSTORE_ADDRESS` / `CHATSTORE_CODE_HASH`; direct only under `relay_unsigned_pqchat`, or paid as a relay fee's call | PqChat clients on a `chainstore` entry |
 | A configured service's declared entries `<op>(<Op>, UAMetaTransfer, UASig)` (contract kind `service`, [NODE-JOB-25](#NODE-JOB-25)) | `[[chains.services]]` of this chain, equal to its `servicePullEntries()` both directions; one kind per address | payers of a service pull, any relayer |
@@ -1078,8 +1125,10 @@ their names: `{entry: "mtxCreateInstance", args: {target: <OpenFactory>, contrac
 (the generic row) or `{…, config: {…}}` (a per-class row, same entry). `init_call` is the one named exception to explicit
 parameters here: it mirrors the contract's own `bytes initCall` (a class's catalogued initializer with its own typed arguments,
 precedent `Interaction.data`), at most 4,096 bytes (`INIT_CALL_TOO_LONG`). Known classes by named config (BUILT): `PqChat`
-(class 3, kind 0), `config: {owner}`, `owner` 0 or the creator (`envelope.from`; another is refused here, the instance would refuse
-it `PqChatOwnerNotCreator`); the node sends `initialize(owner)`. Refused by name (`dead`, nothing sent): both `config` and
+(class 3, kind 0), `config: {owner, sigStore}`, `owner` 0 or the creator (`envelope.from`; another is refused here, the instance would refuse
+it `PqChatOwnerNotCreator`), `sigStore` the instance's signature-storage setting, absent 2 (`sstore2`, the default), else 0
+(`none`) or 2 (`BAD_PAYLOAD: args.config.sigStore: 0 (none) or 2`; [CTR-CHAT-23](../contracts/pqchat.md#CTR-CHAT-23), Change
+2026-11-23); the node sends `initialize(owner, sigStore)`. Refused by name (`dead`, nothing sent): both `config` and
 `init_call` (`BAD_PAYLOAD: args.config and args.init_call`), neither (`BAD_PAYLOAD: args.init_call: missing`), a job's own
 `initHash` (`BAD_PAYLOAD: args.initHash: the node hashes …`), a named config for a class without one (`INSTANCE_CONFIG_UNKNOWN`),
 an unknown config field. The node signs `initHash = keccak256(initCall)` and, before the simulation, reads the release on the

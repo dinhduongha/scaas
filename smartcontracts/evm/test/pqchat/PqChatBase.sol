@@ -10,6 +10,9 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
+import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
+import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
+import {PqChatTreeMembers} from "../../src/pqchat/PqChatTreeMembers.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {UARegistryBase} from "../ua/UARegistryBase.sol";
@@ -89,6 +92,9 @@ abstract contract PqChatBase is UARegistryBase {
     OpenFactory internal f;
     PqChatHasher internal h;
     PqChatTopics internal topics; // the body module (CTR-TOK-30), pinned in the class env
+    PqChatTree internal treeModule; // the TreeKEM body module (CTR-CHAT-26), pinned in the class env
+    PqChatTreeViews internal viewsModule; // the read-only tree views module (owner 2026-11-24), pinned in `libs` too
+    PqChatTreeMembers internal membersModule; // the tree exits module (owner 2026-11-24), pinned in `libs` too
     address internal impl;
     PqChat internal chat; // instance A, the home of the sessions the tests create unless they say otherwise
     PqChat internal chatB; // instance B, a replica
@@ -111,6 +117,9 @@ abstract contract PqChatBase is UARegistryBase {
         h = new PqChatHasher();
         f = EnvKit.factory(REGISTRAR, chainUidA, 0);
         topics = new PqChatTopics(address(f));
+        treeModule = new PqChatTree(address(f));
+        viewsModule = new PqChatTreeViews(address(f));
+        membersModule = new PqChatTreeMembers(address(f));
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 1, EnvKit.uidOf(address(f)), _classEnv(address(p), LIMIT));
         vm.prank(REGISTRAR);
@@ -132,30 +141,44 @@ abstract contract PqChatBase is UARegistryBase {
         }
     }
 
-    /// The class env: the registry, the code-size limit `params[0]`, the body module pinned in `libs` (3C-D2).
+    /// The class env: the registry, the code-size limit `params[0]`, the body modules pinned in `libs` (3C-D2).
     function _classEnv(address registry, uint256 limit) internal view returns (IFactoryToken.Env memory e) {
         e.registry = registry;
         e.params = new bytes32[](1);
         e.params[0] = bytes32(limit);
-        e.libs = new address[](1);
-        e.libs[0] = address(topics);
-        e.libCodeHashes = new bytes32[](1);
-        e.libCodeHashes[0] = address(topics).codehash;
+        e.libs = new address[](4);
+        (e.libs[0], e.libs[1], e.libs[2], e.libs[3]) =
+        (address(topics), address(treeModule), address(viewsModule), address(membersModule));
+        e.libCodeHashes = new bytes32[](4);
+        (e.libCodeHashes[0], e.libCodeHashes[1], e.libCodeHashes[2], e.libCodeHashes[3]) =
+        (
+            address(topics).codehash,
+            address(treeModule).codehash,
+            address(viewsModule).codehash,
+            address(membersModule).codehash
+        );
     }
 
-    /// The release's `implArgs`: its body module.
+    /// The release's `implArgs`: its body modules.
     function _args() internal view returns (bytes memory) {
-        return abi.encode(address(topics));
+        return abi.encode(address(topics), address(treeModule), address(viewsModule), address(membersModule));
     }
 
     /// An instance whose owner is `ownerUA`, created by it (the owner is 0 or the creator, D P3-1): a native id by its
     /// address, a derived UA as the router's subject would be (`creating()` mocked); `ownerUA` 0: by this test.
     function _instance(bytes32 salt, bytes32 ownerUA) internal returns (PqChat c) {
+        c = _instanceWith(salt, ownerUA, 2);
+    }
+
+    /// `_instance` with the signature-storage setting `sigStore` (CTR-CHAT-23: 0 `none`, 2 `sstore2`, the default).
+    function _instanceWith(bytes32 salt, bytes32 ownerUA, uint8 sigStore) internal returns (PqChat c) {
         bool derived = ownerUA >> 160 != 0;
         if (derived) vm.mockCall(address(f), abi.encodeCall(IOpenFactory.creating, ()), abi.encode(ownerUA));
         else if (ownerUA != 0) vm.prank(address(uint160(uint256(ownerUA))));
         c = PqChat(
-            f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), salt, abi.encodeCall(IPqChat.initialize, (ownerUA)))
+            f.createInstance(
+                IOpenFactory.ReleaseId(3, 0, 1), salt, abi.encodeCall(IPqChat.initialize, (ownerUA, sigStore))
+            )
         );
         if (derived) vm.clearMockedCalls();
     }
@@ -192,6 +215,26 @@ abstract contract PqChatBase is UARegistryBase {
     }
 
     /// The portable signature of `ua` over `digest` (`uaMessage(kind, PURPOSE_PQCHAT, digest)`).
+    /// KEM key version `version` of `ua` set in the registry (a device key, owner (M) 2026-11-23, or a new seed version).
+    function _setKem(bytes32 ua, uint64 version, IUARegistry.KemKey memory k) internal {
+        p.setKemKey(ua, version, k, _kemSig(ua, version, k));
+    }
+
+    function _kemSig(bytes32 ua, uint64 version, IUARegistry.KemKey memory k)
+        internal
+        view
+        returns (IUARegistry.UASig memory s)
+    {
+        s.signature = _sig(keyOf_[ua], UAKinds.uaMessage(ML, UAKinds.PURPOSE_KEM, p.kemRecordDigest(ua, version, k)));
+    }
+
+    /// `ua`'s KEM versions `1..n` set (stand-in keys), so it may sit in an epoch with keyIds `0..n`.
+    function _devices(bytes32 ua, uint64 n) internal {
+        for (uint64 v = 1; v <= n; ++v) {
+            _setKem(ua, v, _kem(uint8(uint256(keccak256(abi.encode(ua, v))))));
+        }
+    }
+
     function _sig(bytes32 ua, bytes32 digest) internal view returns (IUARegistry.UASig memory s) {
         s.signature = _sig(keyOf_[ua], UAKinds.uaMessage(ML, UAKinds.PURPOSE_PQCHAT, digest));
     }

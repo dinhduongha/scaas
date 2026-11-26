@@ -335,8 +335,8 @@ contract UAFrostTest is Test {
                 ++counts[k];
             }
         }
-        assertEq(counts[0], 21);
-        assertEq(counts[1], 16);
+        assertEq(counts[0], 27); // 21 + the 2026-11-26 verify rows (6)
+        assertEq(counts[1], 24); // 16 + the 2026-11-26 verify rows (8)
     }
 
     // ---- DKG negatives not in groups.json (main groups)

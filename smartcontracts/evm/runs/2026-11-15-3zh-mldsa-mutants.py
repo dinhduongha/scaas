@@ -10,6 +10,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+import mutant_guard as guard  # noqa: E402
+
 EVM = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 CAPPED = os.path.join(EVM, "../../scripts/capped")
 M = [
@@ -77,6 +80,7 @@ def main():
     os.makedirs(logs, exist_ok=True)
     env = dict(os.environ, PATH=os.path.expanduser("~/.foundry/bin") + ":" + os.environ.get("PATH", ""))
     gaps = 0
+    guard.refuse_dirty([os.path.join(EVM, m[1]) for m in M], EVM)
     for i, (name, path, old, new, tpath, tests) in enumerate(M, 1):
         p = os.path.join(EVM, path)
         src = open(p).read()
@@ -84,17 +88,19 @@ def main():
             print(f"BAD {name}: the original string is not there exactly once ({src.count(old)})", flush=True)
             gaps += 1
             continue
-        open(p, "w").write(src.replace(old, new))
+        cmd = [CAPPED, "forge", "test", "--match-path", tpath, "--match-test", tests]
+        lim, saved = guard.limit(cmd, cwd=EVM, env=env), {p: open(p, "rb").read()}
         try:
+            open(p, "w").write(src.replace(old, new))
             log = os.path.join(logs, f"mutant-{i:02d}.log")
             with open(log, "w") as f:
-                rc = subprocess.run([CAPPED, "forge", "test", "--match-path", tpath, "--match-test", tests], cwd=EVM, env=env,
-                                    stdout=f, stderr=subprocess.STDOUT).returncode
+                r = guard.run(cmd, lim, cwd=EVM, env=env, stdout=f, stderr=subprocess.STDOUT)
         finally:
-            open(p, "w").write(src)
-        caught = rc != 0 and "[FAIL" in open(log).read()
+            guard.restore(saved)
+        rc = r.returncode
+        caught = r.timeout or rc != 0 and "[FAIL" in open(log).read()
         gaps += not caught
-        print(f"{'caught' if caught else 'GAP   '} {name} ({tpath} {tests}) rc {rc}", flush=True)
+        print(f"{guard.outcome(r, 'caught') if caught else 'GAP   '} {name} ({tpath} {tests}) rc {rc}", flush=True)
     clean = subprocess.run(["git", "diff", "--quiet", "--", "src", "script"], cwd=EVM).returncode == 0
     print(f"mutants: {len(M) - gaps}/{len(M)} caught; sources restored: {'yes' if clean else 'NO'}")
     sys.exit(1 if gaps or not clean else 0)

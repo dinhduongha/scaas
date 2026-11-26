@@ -16,6 +16,7 @@ use std::sync::{Arc, PoisonError};
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(deny_unknown_fields))]
 pub enum Unlock {
     Passphrase(#[cfg_attr(feature = "wasm", serde(with = "crate::wasm::handle"))] Arc<SecretBytes>),
     Passkey,
@@ -102,11 +103,16 @@ impl Vault {
     /// Unlocks the seed by its vault passphrase (every vault opened now, the passphrase not kept) or by its passkey / platform
     /// PRF envelope (the seed and manifest vaults opened, the PRF key kept for the others' first use; spec §6.10, owner
     /// 2026-11-18): `VaultOpen` for a wrong secret, `AuthenticatorRefused` (no authenticator, no envelope, no PRF output),
-    /// `KeystoreMismatch` when the index MAC does not verify (the seed stays locked, the event says so), `SeedUnknown`.
+    /// `KeystoreMismatch` when the index MAC does not verify (the seed stays locked, the event says so), `SeedUnknown`. A seed
+    /// already open stays as it is (`Ok`, nothing asked): one session per seed.
     pub async fn unlock(&self, seed: String, unlock: Unlock) -> Result<(), SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
+                // review T26 A-4 (CLI-SDK-06): an open seed keeps its one session, so `lock` locks the wallet every call holds
+                if sdk.open_seed(&seed).is_ok() {
+                    return Ok(());
+                }
                 let e = sdk.entry(&seed).await?;
                 let key = sdk.key_of(&e, unlock).await?;
                 let id = e.id.clone();
@@ -118,10 +124,16 @@ impl Vault {
                     }
                     other => other?,
                 };
-                sdk.open
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .insert(id.clone(), Arc::new(OpenSeed { wallet }));
+                {
+                    let mut open = sdk.open.lock().unwrap_or_else(PoisonError::into_inner);
+                    // two unlocks at once: the first session stays, the second wallet is locked unused
+                    if open.contains_key(&id) {
+                        drop(open);
+                        wallet.lock();
+                        return Ok(());
+                    }
+                    open.insert(id.clone(), Arc::new(OpenSeed { wallet }));
+                }
                 sdk.emit(Event::SeedUnlocked { seed: id });
                 Ok(())
             })
@@ -184,7 +196,12 @@ impl Vault {
     /// The seed's info as listed now.
     pub async fn seed(&self, seed: String) -> Result<super::SeedInfo, SdkError> {
         let e = self.sdk.entry(&seed).await?;
-        Ok(info(&e, self.sdk.open_seed(&seed).is_ok()))
+        let unlocked = self.sdk.open_seed(&seed).is_ok();
+        Ok(info(
+            &e,
+            unlocked,
+            unlocked && super::seeds::rows_verified(&self.sdk, &e),
+        ))
     }
 }
 

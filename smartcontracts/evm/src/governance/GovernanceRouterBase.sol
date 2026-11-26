@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {UAMetaTxBase, UAMetaTxBaseCore} from "../metatx/UAMetaTxBase.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
+import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
+import {IOpenFactory} from "../factory/IOpenFactory.sol";
+import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 import {IGovernance} from "./IGovernance.sol";
 import {IAdmin} from "./IAdmin.sol";
 import {IGovernanceRouter} from "./IGovernanceRouter.sol";
@@ -252,6 +258,12 @@ library GovernanceRouterTypes {
         "UASetChainEntries(bytes32 from,address target,ChainEntries entries,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
         "ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash)"
     );
+
+    // ---- the keyed cancel (CTR-GOV-33 Change, owner 2026-11-24): `lane` of `from` in the map the router checks for an op on
+    //      `target`; no chain word (the router calls no target)
+    bytes32 internal constant UA_CANCEL_NONCE_FOR = keccak256(
+        "UACancelNonceFor(bytes32 from,address target,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
 }
 
 /// @title What every governance router of a chain shares (CTR-GOV-15 Change, owner 2026-11-04): the flow and the owner's and
@@ -267,22 +279,90 @@ library GovernanceRouterTypes {
 ///         transient pair `(subject, target)`, the typed call `target.<op>(…)`, the pair cleared; a reverting target
 ///         reverts the whole call, the nonce included. `subject()` names the subject only to the live target. No generic
 ///         path: `executeMetaTransaction`, `mtxExecute` and `mtxBatch` refuse; the router's ops are on neither allow-list.
-///         `cancelNonce` and the ordered `mtxCancelNonce(UAEnvelope, lane, UASig)` stay. **UNAUDITED.**
+///         `cancelNonce` and the ordered `mtxCancelNonce(UAEnvelope, lane, UASig)` stay.
+///         G1 (CTR-GOV-33, owner 2026-11-24): a derived signer is checked on the registry of the op's target, `registryFor`:
+///         the env registry the factory wrote into a target it made, else the router's own; its nonce is keyed by that
+///         registry (`mtxNonceFor`). A native signer uses no registry and keeps the one map. **UNAUDITED.**
 abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     /// @notice A signed op names a `target` with no code: the call would do nothing and spend the nonce.
     error TargetHasNoCode(address target);
 
+    /// @notice `mtxCancelNonceFor` bumped `ua`'s lane `batch` in `registry`'s keyed map (CTR-GOV-33): `newNonce` its next nonce.
+    event UANonceCancelledAt(bytes32 indexed ua, address indexed registry, uint256 indexed batch, uint256 newNonce);
+
     // Transient slots, written as literals (assembly takes no keccak256 constant).
     bytes32 private constant _SUBJECT = 0x20935f8cb59257160a8ea6e9f7009952d0d53b805b693a0e0c04a129f2a5ab0e; // keccak256("scaas.govrouter.subject")
     bytes32 private constant _TARGET = 0xa1dd93cf1660937b99999b07adb12f34b563f6b0925eff1ae679d08fb0b5a482; // keccak256("scaas.govrouter.target")
+
+    /// @custom:storage-location erc7201:scaas.govrouter.nonce
+    /// @dev CTR-GOV-33: the nonces of a derived id on a registry other than the router's own, keyed `(registry, id, lane)`.
+    ///      The router's own registry and every native id keep `scaas.metatx` (`mtxNonce`), so `UACancelNonce` is unchanged.
+    struct RouterNonceStorage {
+        mapping(address registry => mapping(bytes32 from => mapping(uint256 batch => uint256))) nonce;
+    }
+
+    // keccak256(abi.encode(uint256(keccak256("scaas.govrouter.nonce")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant _NONCE_STORAGE = 0x3b7181b4a1cb09fc268151c43768a834fdadbe3ebbd3b129e4bbaea7d311e100;
+
+    /// @notice The chain's `OpenFactory` (0 = none: every target gets the router's own registry). Deployed before the
+    ///         router; `configureChain`'s code-hash pin covers this immutable, and since G-3 `configureChain` also reads
+    ///         `factory()` and refuses a router that names another factory (`OpenFactoryLib.checkRouter`).
+    address private immutable _FACTORY;
 
     constructor(
         string memory domainName,
         bytes32 chainUid_,
         address registry_,
         address smartKeyAccountImpl_,
-        bool hedera_
-    ) UAMetaTxBaseCore(domainName, chainUid_, registry_, smartKeyAccountImpl_, hedera_) {}
+        bool hedera_,
+        address factory_
+    ) UAMetaTxBaseCore(domainName, chainUid_, registry_, smartKeyAccountImpl_, hedera_) {
+        _FACTORY = factory_;
+    }
+
+    function factory() external view returns (address) {
+        return _FACTORY;
+    }
+
+    /// @notice The registry a derived signer of an op on `target` is checked on (G1, CTR-GOV-33): when `target` has the
+    ///         clone form (EIP-1167 prefix and suffix) and the factory's index names it (`infoOf(target).addr == target`),
+    ///         the registry at code offset 77 of its env (`ChainEnvCode`), written by the factory, when not 0; else the
+    ///         router's own (the factory itself, a compliance registry, anything the factory did not make). Never what the
+    ///         target answers.
+    function registryFor(address target) public view returns (address) {
+        address own = _registry();
+        address f = _FACTORY;
+        if (f == address(0)) return own;
+        address r = _cloneRegistry(target);
+        if (r == address(0) || r == own) return own;
+        if (IOpenFactory(f).infoOf(target).addr != target) return own;
+        return r;
+    }
+
+    /// @notice The next nonce of `from` on `lane` for an op on `target`: `mtxNonce` for a native id or the router's own
+    ///         registry, else the `(registryFor(target), from)` map (CTR-GOV-33).
+    function mtxNonceFor(address target, bytes32 from, uint256 lane) external view returns (uint256) {
+        if (UAKinds.inNativeSpace(from)) return _nonce(from, lane);
+        address r = registryFor(target);
+        return r == _registry() ? _nonce(from, lane) : _routerNonces().nonce[r][from][lane];
+    }
+
+    /// @dev The env registry in `t`'s code when it has the clone form, else 0.
+    function _cloneRegistry(address t) private view returns (address r) {
+        uint256 off = ChainEnvCode.OFF_REGISTRY;
+        assembly ("memory-safe") {
+            let m := mload(0x40)
+            extcodecopy(t, m, 0, add(off, 20))
+            if and(
+                eq(shr(176, mload(m)), 0x363d3d373d3d3d363d73),
+                eq(shr(136, mload(add(m, 30))), 0x5af43d82803e903d91602b57fd5bf3)
+            ) { r := shr(96, mload(add(m, off))) }
+        }
+    }
+
+    function _routerNonces() private pure returns (RouterNonceStorage storage $) {
+        assembly ("memory-safe") { $.slot := _NONCE_STORAGE }
+    }
 
     /// @notice The subject of the live call, to the live target only; 0 to any other caller and outside a call.
     function subject() external view returns (bytes32 s) {
@@ -451,6 +531,46 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         );
     }
 
+    // ------------------------------------------------------------------ the keyed cancel (CTR-GOV-33)
+
+    /// @notice The ordered cancel of `e.from`'s `lane` in the map the router checks for an op on `target` (CTR-GOV-33 Change,
+    ///         owner 2026-11-24), over `UACancelNonceFor`: so a derived signer on another registry's map can kill an op it
+    ///         signed and did not send. The registry is `registryFor(target)`, as for the op itself, never one the caller
+    ///         names; the router calls nothing. Where that is the router's own map (a native id, or a target of the router's
+    ///         registry) it does what `mtxCancelNonce` does (`UANonceCancelled`); else the cancel's own nonce is spent and `lane`
+    ///         bumped by one in `(registryFor(target), from)`'s map (`_preAt`, `UANonceCancelledAt`). Fee mode `NONE`, as every op.
+    ///         A target with no code is `TargetHasNoCode`, as for an op (G-7 of the re-review, 2026-11-25): a cancel signed for
+    ///         an address the factory has not created yet would run in the router's own map now and again in the keyed map once
+    ///         the factory creates it there.
+    function mtxCancelNonceFor(
+        MetaTxLib.UAEnvelope calldata e,
+        address target,
+        uint256 lane,
+        IUARegistry.UASig calldata auth
+    ) external {
+        if (target.code.length == 0) revert TargetHasNoCode(target);
+        bool outer = _enter();
+        (MtxPipelineLib.Out memory o, address r) = _pre(
+            GovernanceRouterTypes.UA_CANCEL_NONCE_FOR,
+            e,
+            target,
+            abi.encode(target, lane),
+            abi.encodeCall(IMetaTx.cancelNonce, (lane)),
+            auth
+        );
+        if (r == _registry()) {
+            emit IUALedger.UANonceCancelled(e.from, lane, _bumpNonce(e.from, lane));
+        } else {
+            uint256 n;
+            unchecked {
+                n = ++_routerNonces().nonce[r][e.from][lane];
+            }
+            emit UANonceCancelledAt(e.from, r, lane, n);
+        }
+        emit IUALedger.UAMetaTransactionExecuted(e.from, msg.sender, e.batch, e.nonce, o.digest, o.feeTo, o.fee);
+        _exit(outer);
+    }
+
     // ------------------------------------------------------------------ no generic path (governance spec §3.6, B-14)
 
     /// @dev `executeMetaTransaction`: an op signed as a `bytes data` blob is refused, whatever it calls.
@@ -514,14 +634,72 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         IUARegistry.UASig calldata auth
     ) internal {
         bool outer = _enter();
-        MtxPipelineLib.Envelope memory env = MtxPipelineLib.Envelope(
-            e.from, 0, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient
-        );
-        MtxPipelineLib.Out memory o =
-            MtxPipelineLib.preNamedUA(_mtxCtx(), typehash, env, _signed(target, words), _facts(data), auth);
+        (MtxPipelineLib.Out memory o,) = _pre(typehash, e, target, _signed(target, words), data, auth);
         _call(e.from, target, data);
         emit IUALedger.UAMetaTransactionExecuted(e.from, msg.sender, e.batch, e.nonce, o.digest, o.feeTo, o.fee);
         _exit(outer);
+    }
+
+    /// @dev The checks of an op (and of the keyed cancel) on the registry `r` it is checked on: a native id the router's own
+    ///      (no registry call), a derived id `registryFor(target)`; the router's own map through `preNamedUA`, any other
+    ///      registry's through `_preAt`. `args` the struct's words after `from`, `data` the call whose facts are checked.
+    function _pre(
+        bytes32 typehash,
+        MetaTxLib.UAEnvelope calldata e,
+        address target,
+        bytes memory args,
+        bytes memory data,
+        IUARegistry.UASig calldata auth
+    ) private returns (MtxPipelineLib.Out memory o, address r) {
+        MtxPipelineLib.Envelope memory env = MtxPipelineLib.Envelope(
+            e.from, 0, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient
+        );
+        MtxPipelineLib.Ctx memory c = _mtxCtx();
+        r = UAKinds.inNativeSpace(e.from) ? c.registry : registryFor(target);
+        if (r == c.registry) {
+            o = MtxPipelineLib.preNamedUA(c, typehash, env, args, _facts(data), auth);
+        } else {
+            c.registry = r;
+            o = _preAt(c, typehash, env, args, _facts(data), auth);
+        }
+    }
+
+    /// @dev `MtxPipelineLib.preNamedUA`'s steps in its order, for a derived id on a target whose registry `c.registry` is not
+    ///      the router's own (CTR-GOV-33): the envelope (`_checkEnvelope`'s rule; `from` is derived, so never this router),
+    ///      the digest, the authorization on `c.registry`, the call shape, the nonce in `(c.registry, from)`'s map, the fee.
+    ///      A registry that passes any id spends only its own map's nonces, never the router's own registry's.
+    function _preAt(
+        MtxPipelineLib.Ctx memory c,
+        bytes32 typehash,
+        MtxPipelineLib.Envelope memory e,
+        bytes memory args,
+        MtxPipelineLib.CallFacts memory f,
+        IUARegistry.UASig calldata auth
+    ) private returns (MtxPipelineLib.Out memory o) {
+        if (e.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0) {
+            if (e.relayer != msg.sender) {
+                revert IMetaTx.MetaTxUnauthorizedRelayer(e.relayer, msg.sender);
+            }
+            SigCheck.requireNotDelegated(msg.sender);
+        }
+        if (block.timestamp > e.validUntil) revert IMetaTx.MetaTxExpired(e.validUntil, block.timestamp);
+        if (e.mode & ~MetaTxLib.MODE_KNOWN_MASK != 0 || e.mode & MetaTxLib.MODE_FEE_MASK > MetaTxLib.MODE_FEE_FIXED) {
+            revert IMetaTx.MetaTxUnknownMode(e.mode);
+        }
+        mapping(uint256 => uint256) storage lane = _routerNonces().nonce[c.registry][e.from];
+        uint256 expected = lane[e.batch];
+        if (expected != e.nonce) revert IMetaTx.MetaTxBadNonce(expected, e.nonce);
+        o.digest = MessageHashUtils.toTypedDataHash(c.domainSeparator, MtxPipelineLib._namedHash(typehash, e, args));
+        // `_authorize` of a derived id: `c.registry` is not 0 here (`registryFor` returned it for a non-zero env registry)
+        IUARegistry(c.registry).requireAuthorized(e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
+        // `_close`: the allow-list verdict is `_facts`' true (the router's ops are on no list), then shape, nonce, fee
+        MtxPipelineLib._checkCall(f.sel, f.len, f.feeClass, f.amountArg, f.staticLen, e.mode, f.supported);
+        unchecked {
+            ++lane[e.batch];
+        }
+        (o.fee, o.feeTo) = MtxPipelineLib._callFee(
+            f.feeClass, f.basis, e.mode, e.fee, e.feeRecipient == address(0) ? msg.sender : e.feeRecipient
+        );
     }
 
     /// @dev The struct's words after `from`: `target`, then the op's.

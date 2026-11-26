@@ -97,7 +97,8 @@ struct Profile {
     wrappers: Vec<String>,
     /// a non-EVM family's own data (spec §8.7 rule 2), by its family's name; its fields' forms checked at `Sdk::open`
     family_params: Option<Fam>,
-    /// the chain's L1 data fee model (plan T38): `"OpStack"` on Base, Celo and OP; absent: none
+    /// the chain's L1 data fee model (plan T38; T26 B2-1): `"OpStack"` on Base, Celo and OP, `"InEstimate"` on Arbitrum,
+    /// `"Linea"` on Linea; absent: none
     #[serde(default)]
     l1_fee: Option<scaas_sdk::L1Fee>,
     /// the kinds the chain cannot carry, disabled by the owner (2026-11-22): UA kind names and `pqz`

@@ -15,6 +15,8 @@ pub struct Aptos {
     pub client: Client,
     pub indexer: Client,
     chain_id: u8,
+    /// the indexer named this network (its `ledger_infos` `chain_id`), kept for the process
+    indexer_known: std::sync::atomic::AtomicBool,
 }
 
 impl Aptos {
@@ -23,6 +25,7 @@ impl Aptos {
             client,
             indexer,
             chain_id,
+            indexer_known: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -142,19 +145,34 @@ impl Aptos {
             .ok_or_else(not_found)
     }
 
-    /// The Indexer API's answer (its `data`) to `query`; its `errors` are `FamilyError::Rpc`.
+    /// The Indexer API's answer (its `data`) to `query`, through `Client::graphql_at`: its `errors` are `FamilyError::Graphql`,
+    /// an answer without `data` its `AnswerMalformed` (review T26 B-9, CLI-RPC-07). Before its first query the indexer names its
+    /// network (`ledger_infos`' `chain_id`, CLI-RPC-03), kept for the process: another is `WrongChain`, none `IdentityUnread`.
     pub async fn graphql(&self, query: &str, variables: Value) -> Result<Value, FamilyError> {
-        let v = self
-            .indexer
-            .post_at(0, "", &json!({"query": query, "variables": variables}))
-            .await?;
-        match v.get("errors") {
-            Some(e) => Err(FamilyError::Rpc {
-                method: "graphql".into(),
-                error: e.clone(),
-            }),
-            None => Ok(v["data"].clone()),
+        use std::sync::atomic::Ordering::Relaxed;
+        if !self.indexer_known.load(Relaxed) {
+            let d = self
+                .indexer
+                .graphql_at(0, "{ ledger_infos(limit: 1) { chain_id } }", json!({}))
+                .await?;
+            let failure = |k, why| FamilyError::Failure(EndpointFailure::new(0, k, why));
+            match num(&d["ledger_infos"][0]["chain_id"]) {
+                Some(c) if c == u64::from(self.chain_id) => self.indexer_known.store(true, Relaxed),
+                Some(_) => {
+                    return Err(failure(
+                        FailureKind::WrongChain,
+                        "the indexer of another network",
+                    ))
+                }
+                None => {
+                    return Err(failure(
+                        FailureKind::IdentityUnread,
+                        "the indexer names no chain id",
+                    ))
+                }
+            }
         }
+        self.indexer.graphql_at(0, query, variables).await
     }
 }
 

@@ -37,7 +37,7 @@ MUTANTS = [
      [(f"{OP}/submit.rs", "if let Some(op) = earlier_on_lane(&sdk, &prepared).await? {", "if let Some(op) = None::<String> {")],
      L + "retry_on_a_lane_waits_for_expired"),
     ("7: a retry is the earlier op even once Expired",
-     [(f"{OP}/submit.rs", "if op.state(row.op.clone()).await? != OpState::Expired {", "if op.state(row.op.clone()).await.is_ok() {")],
+     [(f"{OP}/submit.rs", "if !matches!(op.state(row.op.clone()).await?, OpState::Expired { .. }) {", "if op.state(row.op.clone()).await.is_ok() {")],
      L + "retry_on_a_lane_waits_for_expired"),
 ]
 

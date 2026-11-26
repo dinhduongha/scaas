@@ -6,6 +6,8 @@
 # (owner 2026-11-15: a wait is never silent; `fuser ~/.cache/r3-locks/heavy*` names the holders).
 # Slot 1 is the historical lock file `heavy`, so `fuser heavy` still finds a job.
 slots=${CAPPED_SLOTS:-3}
+# Inside the scope: a tool that would wrap its own heavy step (script/pqz/lanes.sh) runs it directly instead.
+export CAPPED_SCOPE=1
 # CAPPED_MEM overrides the per-job cap (default 4G; owner 2026-10-19: fuzz campaigns may run 3 at once at 3G).
 dir="$HOME/.cache/r3-locks"
 said=
@@ -15,6 +17,8 @@ while :; do
     exec {fd}>"$f"
     if flock -n "$fd"; then
       [ -z "$said" ] || echo "[capped] slot $i free after $((SECONDS - said)) s: $1" >&2
+      # the slot is held: scripts/mutant_guard.py starts a mutant's deadline at this line (ARCH-POS-23)
+      echo "[capped] slot acquired" >&2
       exec systemd-run --user --scope --quiet -p MemoryMax="${CAPPED_MEM:-4G}" -p MemorySwapMax=2G -- "$@"
     fi
     exec {fd}>&-

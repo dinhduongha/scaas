@@ -42,9 +42,9 @@ Run `matrix.sh` itself in the foreground, never inside `timeout`, and outside `s
 wholly under `capped`; a remote target (the SCaaS testnet, another testnet) compiles under `capped` first, then runs its
 broadcasts without a slot under a memory scope (`MATRIX_REMOTE_MEM`, default 1G, no swap), where forge must print "No
 files changed, compilation skipped" or the step fails (owner 2026-11-10). A remote target sends each forge run at once
-(no `--slow`), so every transaction carries a fee with headroom (`fee.sh`, before each forge run): tip `ONCHAIN_TIP`
+(no `--slow`), so every transaction carries a gas fee with headroom (`fee.sh`, before each forge run): tip `ONCHAIN_TIP`
 (wei, default 1 gwei), max fee `ONCHAIN_MAXFEE` (wei, default 2 x the base fee + the tip); forge's own estimate (1 wei on
-a quiet chain) stranded a batch once the base fee rose. A local target keeps forge's fee.
+a quiet chain) stranded a batch once the base fee rose. A local target keeps forge's gas fee.
 
 Groups in parallel on a remote target (owner 2026-11-16, "many transactions per block, groups in parallel"; NET-EVM-12's
 Change): `sched.py plan` puts the groups in waves, a group after the ones it needs (`pqzwallet` after `pqzkeys`, `pqoff`

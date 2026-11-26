@@ -573,7 +573,7 @@ to the market vault; the fills are the relayer's choice bounded by the signed pr
 (`Cancel{domain="scaas.cancel.v1", network, market, order_hash}`) ⇒ `Fill.filled = sell_amount` (creating the Fill if
 needed, so an order never filled still can never settle); `invalidate_nonces_signed` ⇒ `MinNonce` strictly increasing;
 both touch that market only. Differences from EVM: a fee vault per market (a shared write of that market; `ponytail:` split
-into N vaults when one market hits 12M CU/block); no relayer fee; ATA rent as in [NET-SOL-21](#NET-SOL-21). BUILT.
+into N vaults when one market hits 12M CU/block); no token fee to the relayer; ATA rent as in [NET-SOL-21](#NET-SOL-21). BUILT.
 
 <a id="NET-SOL-29"></a>**NET-SOL-29** — **One pair per `settle` instruction; a batch is several instructions in one
 transaction; `sweep` is permissionless.** Accounts are Anchor-typed (no self-checked `remaining_accounts`); a batch is

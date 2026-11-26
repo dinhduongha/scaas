@@ -88,8 +88,13 @@ PqzVerdictRequest pqzVerdictRequest({
 Limits limitsDefault() => ScaasSdk.instance.api.crateApiLimitsDefault();
 
 /// Opens the SDK (spec §4) over the Dart side's store (spec §6.9) and authenticator (spec §6.10), each a record of async
-/// closures that answer every failure as a value, on the SDK's own runtime. `rp_id` is the deployment's passkey RP ID.
+/// closures that answer every failure as a value, on the SDK's own runtime. `rp_id` is the deployment's passkey RP ID. The
+/// load check runs first, in Rust (spec §16.3, review T26 C-2): `AbiMismatch` for another `expect_api`, a missing bit of
+/// `need_features` or a test-only `vectors` build of `scaas-ua` (one Cargo unified in from another crate of the app's library),
+/// whatever the Dart side checked before.
 Future<SdkHandle> sdkOpen({
+  required int expectApi,
+  required BigInt needFeatures,
   required List<ChainProfile> profiles,
   String? rpId,
   required Limits limits,
@@ -121,6 +126,8 @@ Future<SdkHandle> sdkOpen({
   required FutureOr<SignAnswer> Function(String, Uint8List, String)
   authP256Sign,
 }) => ScaasSdk.instance.api.crateApiSdkOpen(
+  expectApi: expectApi,
+  needFeatures: needFeatures,
   profiles: profiles,
   rpId: rpId,
   limits: limits,

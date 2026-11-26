@@ -89,6 +89,10 @@ codes! {
     Internal,
     /// a contact card that does not count for its UA (UA-7 §14 O7, CLI-PQC-05)
     CardRefused,
+    /// CLI-PQC-15: under `require_signed_records`, a home that keeps no signatures (`sigStore` `none`)
+    HomeUnsigned,
+    /// a leave or removal naming an epoch more than 16 below the home's head (C9, the contract's `PqChatExitLag`; D2-4)
+    ExitLag,
 }
 
 impl fmt::Display for PqChatError {

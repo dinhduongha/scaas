@@ -83,7 +83,7 @@ export function pqzKeySeed(seed, account, index, version = 0) {
   return hkdf(sha256, seed, utf8ToBytes("scaas.ua.pq.v1"), info, 32);
 }
 
-/** The vault v2 label of a registry-class PQZ leaf (CLI-SGN-52): `pqz:registry:<account>:<index>:<version>`, decimal; stored
+/** The vault v2 label of a registry-class PQZ leaf (CLI-SGN-55): `pqz:registry:<account>:<index>:<version>`, decimal; stored
  *  under `vault:` + the label (CLI-SGN-50's leaf key with class `registry`). */
 export const pqzLeafLabel = ({ account, index, version = 0 }) => `pqz:registry:${account}:${index}:${BigInt(version)}`;
 
@@ -91,7 +91,7 @@ const hardened = (v, what) => {
   if (!Number.isInteger(v) || v < 0 || v >= 2 ** 31) throw new Error(`${what} must be an integer in [0, 2^31)`);
 };
 
-/** Key worker (CTR-PQZ-13 seed custody, CLI-SGN-52): derives the registry-class leaf `seed32 = pqzKeySeed(seed, account, index,
+/** Key worker (CTR-PQZ-13 seed custody, CLI-SGN-55): derives the registry-class leaf `seed32 = pqzKeySeed(seed, account, index,
  *  version)` once and seals it as vault v2 (the `sealConfKey` pattern: `pin`, optional `prf`, `id` the seed vault's so the AAD
  *  binds the leaf to its seed). Returns the vault; the seed never leaves this call. */
 export async function sealPqKey({ seed, account, index, version = 0, pin, prf, id }) {
@@ -105,7 +105,7 @@ export async function sealPqKey({ seed, account, index, version = 0, pin, prf, i
   }
 }
 
-/** Zether worker / pqz-cli side (CLI-SGN-52): the 32-byte leaf of `vault`, which must be the leaf of `account` / `index` /
+/** Zether worker / pqz-cli side (CLI-SGN-55): the 32-byte leaf of `vault`, which must be the leaf of `account` / `index` /
  *  `version`; never the seed. Every refusal is one class, `VaultOpen` (another leaf's label, the vault's version, parameters
  *  or id, a wrong passphrase or PRF output, an altered or truncated box, a payload of other than 32 bytes; ARCH-POS-13). The
  *  caller wipes the result. */

@@ -10,7 +10,7 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 |---|---|---|
 | [accounts.md](accounts.md) | the three account forms; Universal Account (ids, kinds, registry, verifiers, credentials, migration); passkeys on chain; the optional `SmartKeyAccount` smart account and its factory, guardians | UA **SPECIFIED**; `SmartKeyAccount` **BUILT** |
 | [metatx.md](metatx.md) | the one base `ERC20MetaTx`: `MetaTransaction` struct, typehash, `mode`, 2D nonces, `mtxExecute` (generic self-call, ticket, selector allowlist, fee classes), `mtx` names, pay references and the pay-once horizon, payee fee | **SPECIFIED** (built as the v1/v2 lines) |
-| [token-wrappers.md](token-wrappers.md) | three token tiers, conversion rates, multi-underlying wrappers, signature wrap, the one `OpenFactory`, allowance rule | tiers **BUILT** (EVM, Hedera); one base and factory **SPECIFIED** |
+| [token-wrappers.md](token-wrappers.md) | three token tiers, conversion rates, multi-underlying wrappers, signature wrap, the one `OpenFactory`, allowance rule | tiers **BUILT** (EVM; Hedera's code behind `IS_HEDERA` too, nothing deployed there); one base and factory **SPECIFIED** |
 | [dex.md](dex.md) | `SCaaSDex` with token-verified `TradeOrder`s, outside-token legs through the `DexPuller`, the exchange path against AMMs (`mtxExchange`), managed-market venue contract | **SPECIFIED** (built: `SCaaSDex`, P2b-1, P2b-2, P2c; `SCaaSDexV1` with DEX-signed orders over allowances) |
 | [tender.md](tender.md) | `SealedBidTender` | **SPECIFIED** |
 | [asset-suite.md](asset-suite.md) | regulated module, vesting, distributions, corporate actions, templates | **SPECIFIED** |
@@ -288,7 +288,7 @@ interacts with, not of the contract). The protocol provides the switches; the cr
 Per-family availability of every contract area is one matrix in
 [networks/README.md](../networks/README.md#availability) ([NET-ALL-17](../networks/README.md#NET-ALL-17),
 [NET-ALL-18](../networks/README.md#NET-ALL-18), [NET-ALL-19](../networks/README.md#NET-ALL-19)). In short: v2 token
-tiers, payee fee, the tender and the asset suite are EVM and Hedera first; classical Zether is EVM only (dev
+tiers, payee fee, the tender and the asset suite are EVM first (Hedera's code included; Hedera is tier 3, [NET-EVM-20](../networks/evm.md#NET-EVM-20)); classical Zether is EVM only (dev
 chains); PQ Zether is the private EVM chain only; the meta-transaction model itself exists natively on every family.
 
 ## <a id="governance"></a>8. Governance
@@ -320,7 +320,7 @@ transfer reads no governance slot (CTR-GOV-11, pinned on every kind).
 ```mermaid
 flowchart LR
     N["native account<br/>(EOA, Safe, SmartKeyAccount)"] -->|"1a. direct call:<br/>grantRole, mint, setMarket, …"| T
-    S["UA subject<br/>(PQ key, msig, …)"] -->|"1b. signs ua&lt;Op&gt; / mtx&lt;Op&gt;"| RL["relayer<br/>(scaas-node, fee 0)"]
+    S["UA subject<br/>(PQ key, msig, …)"] -->|"1b. signs ua&lt;Op&gt; / mtx&lt;Op&gt;"| RL["relayer<br/>(scaas-node, token fee 0)"]
     RL -->|"2. ua&lt;Op&gt;(envelope, target, params, sig)"| GR["GovernanceRouter<br/>one per chain and UA registry"]
     GR -->|"3. requireAuthorized(subject, digest, auth)"| UAR["UARegistry"]
     GR -->|"4. target.&lt;op&gt;(params)<br/>transient (subject, target)"| T["governed contract<br/>GovernanceBase: token kind, SCaaSDex"]

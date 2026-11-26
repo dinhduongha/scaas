@@ -1457,6 +1457,13 @@ func TestNestedReplay(t *testing.T) {
 		wide := bytes.Clone(stored)
 		wide[64+32+29] = 1 // a leaf index over uint16
 		refused(key, index, wide)
+		// CTR-UA-74: the list followed by the member's version tag gives the tag back; 8 zero bytes refused
+		tag := []byte{0, 0, 0, 0, 0, 0, 0, 2}
+		got, err := ReplayedMemberSig(key, index, append(bytes.Clone(stored), tag...))
+		if err != nil || hx(got.Sig) != hx(tag) || hx(EncodeInnerSigs(got.Members)) != m["stored"] {
+			t.Fatal(name, "tagged", err)
+		}
+		refused(key, index, append(bytes.Clone(stored), make([]byte, 8)...))
 	}
 	if replays != 1 {
 		t.Fatal(replays)

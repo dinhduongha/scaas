@@ -55,7 +55,7 @@ abstract contract SCaaSDexGovernance is ReentrancyGuardTransient, GovernanceBase
         return 0;
     }
 
-    function _govRouter() internal view override returns (address) {
+    function _govRouter() internal view virtual override returns (address) {
         return ChainEnvCode.govRouter();
     }
 

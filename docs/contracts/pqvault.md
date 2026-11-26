@@ -121,9 +121,25 @@ seed-derived vault key exists; epochs, wraps in chunks, the home-instance slot, 
 - `createVault(PqVaultCreate, Wrap[], UASig)`, `rekeyVault(PqVaultEpoch, Wrap[], UASig)`, `addVaultWraps(epochId, first,
   Wrap[])` (unsigned), `leaveVault(PqVaultLeave, UASig)`, `removeVaultMembers(PqVaultRemove, UASig)`: the checks of
   [CTR-CHAT-06](pqchat.md#CTR-CHAT-06) to [CTR-CHAT-10](pqchat.md#CTR-CHAT-10) and [CTR-CHAT-20](pqchat.md#CTR-CHAT-20),
-  with at least 1 member at creation, `homeVaultContract` for the home address and `PqVault*` errors, and who may rekey
+  with at least 1 member at creation, `homeVaultContract` for the home address and `PqVault*` errors (an empty
+  `addVaultWraps` is `PqVaultShape`, as `addWraps`: Change 2026-11-25, A-15), and who may rekey
   as [CTR-PQV-13](#CTR-PQV-13) states.
 - Sharing a vault is a `rekeyVault` to the new members with a wrap per member.
+- **Exits apply at the head (Change 2026-11-24, E-3 of the TreeKEM code review; owner 2026-11-24: "Yes, both modes", one rule for the group
+  code; BUILT on branch `review-fix-contract`):** `removeVaultMembers` and `leaveVault` take
+  [CTR-CHAT-20](pqchat.md#CTR-CHAT-20)'s and [CTR-CHAT-10](pqchat.md#CTR-CHAT-10)'s change with `PqVault*` errors: at
+  home the epoch named is the head or an ancestor of it within `EXIT_LAG_MAX` = 16 epochs (`PqVaultExitLag` beyond),
+  complete, and the exit is checked and applied at the head; an exit that would newly flag nobody there is
+  `PqVaultNotMember` (A-4, one rule in the three settings); there is no withdrawal, the lag ends an exit that has left the
+  device; in a replica the exit flags the epoch it names and a flag only allows a plain drop, at its parent or an
+  ancestor at most 16 epochs above, never refuses a child (the spec check, sc-E-2, sc-E-4, sc-E-5). **Change 2026-11-25
+  (E-2 and A-16 of the Fable re-review; controller call, owner: no; BUILT on branch `review-fix2-contract`):** at home the
+  signer and every UA named are in the epoch named's lists as well as the head's (`PqVaultNotAdmin`, `PqVaultNotMember`),
+  and a replica takes an exit that newly flags nobody, so a replica copies every exit the home took. The exposure was the same though only admins rekey ([CTR-PQV-13](#CTR-PQV-13)): an admin about to be
+  removed by another landed an admin rekey first and the removal was `PqVaultEpochTaken`, and any admin's rekey that kept a
+  leaver left its leave on an epoch with a child. Item writes already name the head at home
+  ([CTR-PQV-07](#CTR-PQV-07)), so a member removed or left at the head writes no item under it ([CTR-PQV-14](#CTR-PQV-14)),
+  and the next rekey, wrapped without it, holds a fresh `K`.
 
 <a id="CTR-PQV-13"></a>**CTR-PQV-13** — **`PqVault` is class 4, kind 0; its write names differ from PqChat's so no write
 selector is shared; every `rekeyVault` is authored by an admin of the parent epoch who was not removed from it** (controller
@@ -163,7 +179,8 @@ limit (EIP-8037) and regular under 2^24 where EIP-7825 applies.
 <a id="CTR-PQV-14"></a>**CTR-PQV-14** — **A member removed from an epoch writes no item under it; every ciphertext is 32 to
 16,416 bytes; items and versions are read at the home instance, and a replica's version counts only when the home holds the
 same record and `sigHash` at the same `(itemId, version)`** (controller calls, owner may override; the replica rule as
-PqChat's, [CTR-CHAT-14](pqchat.md#CTR-CHAT-14)). Refusals `PqVaultNotMember`, `PqVaultShape`. The upper bound (the 16,384 B
+PqChat's, [CTR-CHAT-14](pqchat.md#CTR-CHAT-14); a record an `msig` signed compares with the version tags stripped, since a
+replica's copy carries its own registry's tag: [A replica's copy](accounts.md#msig-replica-copy), Change 2026-11-26). Refusals `PqVaultNotMember`, `PqVaultShape`. The upper bound (the 16,384 B
 padding bucket plus salt and tag) makes `latestRange`'s page bound hold on every chain. A replica takes writes under any
 complete epoch it holds, in its own order; it orders nothing. A member that left an epoch writes no item under it either
 (owner 2026-11-17, the spec's O3 (b); `PqVaultNotMember`). A chain-bound vault has no replica
@@ -199,6 +216,12 @@ CTR-PQV-15 lists it held; `PqVault` on it: Part V). UNAUDITED.
 <a id="CTR-PQV-12"></a>**CTR-PQV-12** — **The group code PqChat and PqVault share moves into one abstract base without state
 of its own, PqChat's storage-layout and gas pins proving PqChat unchanged; if that proof fails, PqVault copies the code
 instead and PqChat stays untouched** (owner 2026-11-17, V3, V12). What counts as the proof is [CTR-PQV-15](#CTR-PQV-15).
+Change (owner 2026-11-23, (M), one rule for both apps; BUILT on branch `pqchat-sigs`, UNAUDITED): the base's member rule is
+[CTR-CHAT-24](pqchat.md#CTR-CHAT-24): a vault member may hold several KEM keys in an epoch, `(ua, keyId)` strictly ascending,
+at most 8 per UA, one wrap each; `vaultsOf`, the minimum count, rights, leave and removal per UA
+(`test/pqvault/PqVaultDevices.t.sol`). `PqVault` 30,431 → 30,825 B; `rekeyVault` 1 → 2 398,975 → 400,264, 3 → 1 320,352 →
+321,710, 2 → 1 310,007 → 310,972 regular. `pqvault-core` reads every own wrap of the user and opens the first its account
+holds; it writes one key per member.
 
 <a id="CTR-PQV-15"></a>**CTR-PQV-15** — **PqChat's behaviour counts as unchanged when, with no test, pin or vector edited, its
 layout pin, typehash pins and vectors, ABI and `interfaceId`, every per-operation gas row, every PqChat test, the node's
@@ -206,6 +229,16 @@ PqChat allow-list test and all 55 of its mutants hold; only the release-size pin
 call, owner may override). The mutant script is the one instrument allowed to change, with an old line → new line table per
 mutant. PqChat's bytecode moves, so it is redeployed and verified at the next reset and its diff is in the audit scope. The
 boundary is the spec's [§4.2](../superpowers/specs/2026-11-17-pqvault.md#42-r-b-the-base-shared-with-pqchat-v3).
+
+<a id="CTR-PQV-18"></a>**CTR-PQV-18** — **`PqVaultCreate` carries `uint8 groupMode`, its last field, fixed at creation, 0 only in
+this release (`PqVaultModeUnsupported(groupMode)`), as [CTR-CHAT-25](pqchat.md#CTR-CHAT-25)** (controller call 2026-11-23, one
+rule for both apps of the shared base; the owner confirmed the place and the 0-only rule the same day, PqVault open for a later
+release). The protocol ids are CTR-CHAT-25's. Status: **BUILT on branch `pqchat-sigs`, UNAUDITED**
+(`test/pqvault/PqVaultGroupMode.t.sol`). It is apart from the vault's `mode` (portable or chain-bound, CTR-PQV-17); the
+`PqVaultCreate` typehash `0xb5e6f032…84d587` → `0xa81afc5c…ef53f9`; `createVault`'s selector moves. `pqvault-core` signs 0 and
+refuses a read vault of any other mode. The vectors' row `createTreeKem` (`smartcontracts/vectors/pqvault/records.json`, a
+signed create record of groupMode 1, `PqVaultModeUnsupported(1)`; TODO 8b-8 (1)) is read by clientkeys, `ua-rs`, the SDK,
+`pqvault-core` (refused at `verify` before any SDK call) and the contract's tests (refused by name).
 
 ## 10. The two modes
 

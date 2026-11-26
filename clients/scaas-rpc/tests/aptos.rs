@@ -40,6 +40,11 @@ async fn rest(head: u64, fork: &'static str, chain: u8, seen: Seen) -> String {
 
 /// An Indexer API answering `data`, recording its authorization header.
 async fn indexer(seen: Seen) -> String {
+    indexer_of(seen, 4).await
+}
+
+/// [`indexer`] of the network `chain` (its `ledger_infos` `chain_id`).
+async fn indexer_of(seen: Seen, chain: u8) -> String {
     serve(axum::Router::new().fallback(
         move |h: axum::http::HeaderMap, axum::Json(r): axum::Json<Value>| {
             let seen = seen.clone();
@@ -49,8 +54,16 @@ async fn indexer(seen: Seen) -> String {
                         .and_then(|v| v.to_str().ok())
                         .map(str::to_string),
                 );
-                if r["query"].as_str() == Some("bad") {
-                    return axum::Json(json!({"errors": [{"message": "field not found"}]}));
+                match r["query"].as_str() {
+                    Some("bad") => {
+                        return axum::Json(json!({"errors": [{"message": "field not found"}]}))
+                    }
+                    // review T26 B-9: the indexer's identity, and an answer without its data
+                    Some(q) if q.contains("ledger_infos") => {
+                        return axum::Json(json!({"data": {"ledger_infos": [{"chain_id": chain}]}}))
+                    }
+                    Some("empty") => return axum::Json(json!({"data": null})),
+                    _ => {}
                 }
                 axum::Json(json!({"data": {"processor_status": [{"last_success_version": 7}]}}))
             }
@@ -117,8 +130,13 @@ async fn the_rest_reads_the_quorum_read_and_the_indexer() {
     );
     assert!(matches!(
         n.graphql("bad", json!({})).await,
-        Err(FamilyError::Rpc { .. })
+        Err(FamilyError::Graphql { .. })
     ));
+    // review T26 B-9 (CLI-RPC-07): an answer without its data is the indexer's malformed answer, not an empty list
+    match n.graphql("empty", json!({})).await {
+        Err(FamilyError::Failure(f)) => assert_eq!(f.kind, scaas_rpc::FailureKind::AnswerMalformed),
+        r => panic!("{r:?}"),
+    }
     assert!(is
         .lock()
         .unwrap()
@@ -185,4 +203,19 @@ async fn the_failover_drops_another_network_and_skips_an_endpoint_behind() {
         .unwrap();
     assert_eq!((a.endpoint, seen.lock().unwrap().clone()), (3, vec![3]));
     assert_eq!(n.client.pool().identity_of(1), Some(false));
+}
+
+/// Review T26 B-9 (CLI-RPC-03): the indexer names its network before its first query: another network's indexer answers no
+/// query (`WrongChain`); the twin, this network's, answers (`the_rest_reads_the_quorum_read_and_the_indexer`).
+#[tokio::test]
+async fn an_indexer_of_another_network_answers_nothing() {
+    let rs: Seen = Default::default();
+    let a = rest(30, "aa", 4, rs.clone()).await;
+    let n = aptos(&[&a], &indexer_of(rs.clone(), 2).await, None);
+    match n.graphql("q", json!({})).await {
+        Err(FamilyError::Failure(f)) => assert_eq!(f.kind, scaas_rpc::FailureKind::WrongChain),
+        r => panic!("{r:?}"),
+    }
+    let n = aptos(&[&a], &indexer_of(rs, 4).await, None);
+    assert!(n.graphql("q", json!({})).await.is_ok());
 }

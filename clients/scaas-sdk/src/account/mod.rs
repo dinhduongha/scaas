@@ -22,9 +22,7 @@ pub use msig::{
     MsigStructureArgs, MsigUpdatePlan, UpdateMsig,
 };
 #[cfg(feature = "evm")]
-pub(crate) use register::{
-    receiver_registered, record_call, record_call2, record_holds, record_holds2, Landed,
-};
+pub(crate) use register::{record_call, record_call2, record_holds, record_holds2, Landed};
 #[cfg(feature = "evm")]
 pub use register::{
     Register, RegisterAttrs, RegistrationGas, RegistrationState, RegistryWrite, StepGas,
@@ -204,7 +202,8 @@ impl Account {
         self.sdk
             .spawn(async move {
                 let e = sdk.entry(&seed).await?;
-                let verified = sdk.open_seed(&seed).is_ok();
+                // review T26 A-2: the rows as read, checked under the open wallet
+                let verified = crate::vault::seeds::rows_verified(&sdk, &e);
                 Ok(e.accounts
                     .iter()
                     .map(|r| info(&seed, r, verified))

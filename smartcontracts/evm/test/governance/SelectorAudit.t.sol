@@ -396,7 +396,7 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
 
     function setUp() public override {
         super.setUp();
-        router = new GovernanceRouter(chainUidA, REG_L, address(0), false);
+        router = new GovernanceRouter(chainUidA, REG_L, address(0), false, address(0));
         IFactoryToken.ChainEnv memory e = EnvKit.env(chainUidA, REG_L, address(0), false, address(router));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("N", "N", 6);

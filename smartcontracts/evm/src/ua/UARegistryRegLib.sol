@@ -75,7 +75,10 @@ library UARegistryRegLib {
     /// pays its own uniqueness walk on top and fits or not by itself). Measured (`test_gas_updateRowModel`, `--isolate`, regular +
     /// EIP-8037 state, an update of the same count signed by two EOAs): 3 slots 551,292, 16 slots 1,310,222, 64 slots 4,245,434, 256
     /// slots 16,000,442: 61,209 a slot, 367,665 fixed; rounded up to 62,000 and 400,000 (first figures, 600,000 / 60,000 estimated).
-    uint256 internal constant MSIG_UPDATE_GAS = 400_000;
+    /// CTR-UA-74 (owner 2026-11-25): the blob names the one before it, 20 more fixed bytes (65 with the 45 above). Measured again:
+    /// 3 slots 551,292 -> 600,606, 16 slots 1,310,222 -> 1,369,932, 64 slots 4,245,434 -> 4,276,034, 256 slots 16,000,442 ->
+    /// 16,031,042: 61,087 a slot, 417,345 fixed; 400,000 -> 450,000.
+    uint256 internal constant MSIG_UPDATE_GAS = 450_000;
     uint256 internal constant MSIG_UPDATE_SLOT_GAS = 62_000;
     /// Row 13, per enabled `msig` slot of the target (Fable P2-2): the bound reads that member's structure three times (`_worst`,
     /// `_pqEligible`, `_authBytes`), walking every slot of it. Measured (`test_gas_updateOverWideInners`): an update over four inner
@@ -262,7 +265,12 @@ library UARegistryRegLib {
                 IUARegistry.MemberSig memory m = members[i];
                 bits |= 1 << m.index;
                 UARegistryCoreLib._memberSig(
-                    ua, d, m.index, UAKinds.PURPOSE_POP_V2, m.members.length == 0 ? m.sig : abi.encode(m.members)
+                    ua,
+                    d,
+                    m.index,
+                    UAKinds.PURPOSE_POP_V2,
+                    // CTR-UA-74: an `msig` member's list, then its version tag (nothing at version 0)
+                    m.members.length == 0 ? m.sig : bytes.concat(abi.encode(m.members), m.sig)
                 );
             }
             s.accepted[ua] = bits;
@@ -750,7 +758,11 @@ library UARegistryRegLib {
 
     /// The bytes of the largest `MemberSig[]` a quorum of `d` signs (spec 2026-11-02-msig-nested §2): a signing slot `head + ⌈sig / 32⌉ × 32`,
     /// `head` 192, 128 for a leaf of an inner list; an `msig` slot 192 and its own largest list. CTR-UA-44: the slots that can sign
-    /// (`_signs`; an inner list's own `msig` slots never, MM-14).
+    /// (`_signs`; an inner list's own `msig` slots never, MM-14). Not counted (R-6 of the Fable fix check, 2026-11-26): the
+    /// signing `msig`'s own version tag in `UASig.signature` (CTR-UA-74: one 32-byte word at version >= 1; `updateMsig` and a
+    /// registration's `pop` carry none), at most 32 x 64 = 2,048 gas at the EIP-7976 floor, below each margin it meets: the
+    /// consumer reserve 350,000 against 310,144 measured (+39,856), the `setPqzKey` row 2,600,000 against 2,591,640 (+8,360,
+    /// its signatures' bytes counted again by `_calldata`), the debit bound one holder signature counted twice (`_pqzHolder`).
     function _authBytes(bytes memory d, uint256 head) internal view returns (uint256 n) {
         uint256 count = UAStore.u16(d, 2);
         uint256[] memory weights = new uint256[](count);
@@ -774,8 +786,10 @@ library UARegistryRegLib {
     }
 
     function _slotBytes(uint16 kind, bytes32 id) internal view returns (uint256) {
-        return
-            kind == UAKinds.MSIG ? _authBytes(UARegistryCoreLib._msigBytes(id), 128) : (_sigBytes(kind) + 31) / 32 * 32;
+        // CTR-UA-74: 32 for an `msig` slot's version tag
+        return kind == UAKinds.MSIG
+            ? 32 + _authBytes(UARegistryCoreLib._msigBytes(id), 128)
+            : (_sigBytes(kind) + 31) / 32 * 32;
     }
 
     /// A signature's bytes. ponytail: one figure for every classical kind and native member, 1,024 B over a WebAuthn assertion and over a wallet's usual

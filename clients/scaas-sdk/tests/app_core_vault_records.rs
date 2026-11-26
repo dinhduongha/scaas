@@ -19,7 +19,10 @@
 #[path = "common/fake_chain.rs"]
 mod fake_chain;
 
+#[path = "common/prepared.rs"]
+mod prepared;
 use fake_chain::{fake, keccak_hex, serve, Fake};
+use prepared::SignPrepared as _;
 use scaas_sdk::account::msig::{msig_structure, MsigMemberArgs};
 use scaas_sdk::app_core::{AppCore, AppDesc, AppMemberSig, AppPath, AppUaSig};
 use scaas_sdk::op::KeyRef;
@@ -314,6 +317,41 @@ async fn typed_digests_in_both_domains() {
         modes[usize::try_from(*mode).unwrap()] += 1;
     }
     assert_eq!(modes, [13, 10]);
+    // F-4 / D2-3: a leave's and a removal's review say that they apply within the lag of the epoch they name; other records none
+    let mut exits = 0;
+    for (mode, r) in &all {
+        let (p, dom) = by_mode(&d, *mode);
+        let st = r["struct"].as_str().unwrap();
+        let t = typed(&d, st, &r["record"], &dom);
+        let prep = a
+            .prepare_pqvault_record(key.clone(), p, None, t)
+            .await
+            .unwrap();
+        let line = prep
+            .review
+            .iter()
+            .find(|f| f.name == "appliesWithin")
+            .map(|f| f.value.clone());
+        let want = match st {
+            "PqVaultRemove" => Some(format!(
+                "applies if it lands within 16 epochs of epoch {}; it cannot be withdrawn",
+                r["record"]["nextEpoch"].as_u64().unwrap() - 1
+            )),
+            "PqVaultLeave" => Some(format!(
+                "applies if it lands within 16 epochs of the epoch it names ({}); it cannot be withdrawn",
+                s(&r["record"]["epochId"])
+            )),
+            _ => None,
+        };
+        exits += usize::from(want.is_some());
+        assert_eq!(line, want, "{}", r["name"]);
+    }
+    assert!(exits >= 2, "a leave and a removal row");
+    // CTR-PQV-18: `createTreeKem`, a create record of groupMode 1 (refused by the contract and pqvault-core), hashes as signed
+    let tk = &d["createTreeKem"];
+    assert_eq!(tk["record"]["groupMode"], 1);
+    let t = typed(&d, "PqVaultCreate", &tk["record"], &ds_v(&d));
+    assert_eq!(digest(AppPath::Portable, t).await, s(&tk["typed"]));
     // a create record with its mode flipped after signing: the new mode's domain gives `typed`, never `signedTyped`
     for f in d["modes"]["flipped"].as_array().unwrap() {
         let (_, of) = named(&d, f["of"].as_str().unwrap());
@@ -430,6 +468,12 @@ async fn verify_app_record_on_the_committed_rows() {
         let t = typed(&d, r["struct"].as_str().unwrap(), &r["record"], &dom);
         assert!(verify(ua, p, t, ua_sig(&r["uaSig"])).await, "{}", r["name"]);
     }
+    // CTR-PQV-18: `createTreeKem` carries its creator's real signature (refused for its groupMode alone, by the contract)
+    let tk = &d["createTreeKem"];
+    let t = typed(&d, "PqVaultCreate", &tk["record"], &ds_v(&d));
+    let ua = s(&signer(&d, tk["signer"].as_str().unwrap())["ua"]);
+    assert_eq!(tk["error"], "PqVaultModeUnsupported(1)");
+    assert!(verify(ua, AppPath::Portable, t, ua_sig(&tk["uaSig"])).await);
 
     // one record per mode for the refusals
     for name in ["shared0.item", "shared1.item"] {
@@ -625,6 +669,23 @@ async fn native_member_in_an_msig() {
     );
     state(0b11);
     assert!(verify(seat(&nm["mode0"]["signature"])).await);
+    // C-3 (CTR-UA-74 step 6): the versions call names the msig's version on a pass (0: no tag), none on a refusal
+    let versions = |sig: AppUaSig| {
+        let (a, ms, t) = (a.clone(), ms.clone(), t.clone());
+        async move {
+            a.verify_pqvault_record_versions("local".into(), ms, AppPath::Portable, t, sig)
+                .await
+                .unwrap()
+        }
+    };
+    assert_eq!(
+        versions(seat(&nm["mode0"]["signature"])).await,
+        Some(vec![scaas_sdk::app_core::MsigVersion {
+            msig: ms.to_ascii_lowercase(),
+            version: 0
+        }])
+    );
+    assert_eq!(versions(seat(&nm["mode1"]["signature"])).await, None);
 }
 
 fn code(e: scaas_sdk::SdkError) -> &'static str {

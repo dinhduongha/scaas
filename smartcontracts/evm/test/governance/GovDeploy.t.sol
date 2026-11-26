@@ -171,10 +171,24 @@ contract GovDeployTest is Test {
         assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
         assertEq(uint256(e.params[0]), h.chainCodeLimit(), "params[0]: the declared code limit");
         address topics = vm.parseJsonAddress(json, ".pqchat_topics");
-        assertEq(e.libs.length, 1);
+        address tree = vm.parseJsonAddress(json, ".pqchat_tree");
+        address views = vm.parseJsonAddress(json, ".pqchat_tree_views");
+        assertEq(e.libs.length, 4);
         assertEq(e.libs[0], topics, "the body module pinned in libs (CTR-TOK-30, 3C-D2)");
         assertEq(e.libCodeHashes[0], topics.codehash);
+        assertEq(e.libs[1], tree, "the tree module pinned in libs (CTR-CHAT-26)");
+        assertEq(e.libCodeHashes[1], tree.codehash);
+        assertEq(e.libs[2], views, "the tree views module pinned in libs (owner 2026-11-24)");
+        assertEq(e.libCodeHashes[2], views.codehash);
+        {
+            address members = vm.parseJsonAddress(json, ".pqchat_tree_members");
+            assertEq(e.libs[3], members, "the tree exits module pinned in libs (owner 2026-11-24)");
+            assertEq(e.libCodeHashes[3], members.codehash);
+            assertEq(PqChat(r.implementation).modules()[3], members, "named in implArgs");
+        }
         assertEq(PqChat(r.implementation).modules()[0], topics, "named in implArgs");
+        assertEq(PqChat(r.implementation).modules()[1], tree, "named in implArgs");
+        assertEq(PqChat(r.implementation).modules()[2], views, "named in implArgs");
         address inst = vm.parseJsonAddress(json, ".pqchat_instance");
         assertEq(IPqChat(inst).owner(), bytes32(0), "owned by no UA");
         (IOpenFactory.Created[] memory page, uint256 total) = f.contractsPage(3, 0, 8);
@@ -528,6 +542,27 @@ contract GovDeployTest is Test {
     /// whatever the admin and router; JSON `compliance_registry`, `compliance_registry_codehash`. The
     /// admin's `ELIGIBLE_CONTRACT` rows for a DEX venue (`createDex`) and its `DexPuller` let a `KYC` token (round 3s) reach the
     /// venue, which it refuses before them.
+    /// G-10 (the re-review of 2026-11-25): the book's `open_factory_lib` is the library the factory links: code there, and
+    /// its 20 bytes in the factory's runtime (a linked library's address is a PUSH20 of the caller's code); the control: an
+    /// address the factory does not link is not found there.
+    function test_openFactoryLibBooked() public {
+        DeployHarness h = new DeployHarness();
+        (OpenFactory f, string memory json) = h.deploy(ZUID, false, ska);
+        address lib = vm.parseJsonAddress(json, ".open_factory_lib");
+        assertTrue(lib.code.length != 0, "the library's code");
+        assertTrue(_holds(address(f).code, abi.encodePacked(lib)), "its address in the factory's runtime");
+        assertFalse(_holds(address(f).code, abi.encodePacked(address(h))), "the control: another address is not");
+    }
+
+    function _holds(bytes memory code, bytes memory x) internal pure returns (bool) {
+        for (uint256 i; i + x.length <= code.length; ++i) {
+            uint256 j;
+            while (j < x.length && code[i + j] == x[j]) ++j;
+            if (j == x.length) return true;
+        }
+        return false;
+    }
+
     function test_registryDeployedAndDexAttested() public {
         DeployHarness h = new DeployHarness();
         h.setRegulated(true);
@@ -720,7 +755,7 @@ contract GovDeployTest is Test {
     /// (x 64/63 for the probe's call), EIP-8037 state gas, the total and x 1.05 (`--gas-estimate-multiplier 105`) against a
     /// 200 M block; regular under 2^24 (EIP-7825). Printed for runs/2026-11-03-governance-deploy-gas.txt.
     function test_releaseGasPerKind() public {
-        address router = address(new GovernanceRouter(ZUID, address(this), ska, false));
+        address router = address(new GovernanceRouter(ZUID, address(this), ska, false, address(0)));
         ZetherInnerProductVerifierBls12381 ip = new ZetherInnerProductVerifierBls12381();
         zdeps = [
             address(new ZetherTransferVerifierBls12381(ip)),
@@ -754,7 +789,9 @@ contract GovDeployTest is Test {
             _release(type(NormalPqzToken).creationCode, IOpenFactory.TokenKind.NORMAL_PQZ, router),
             _release(type(WrappedPqzToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ, router),
             _dex(router),
-            abi.encodePacked(type(GovernanceRouter).creationCode, abi.encode(ZUID, address(this), ska, false)),
+            abi.encodePacked(
+                type(GovernanceRouter).creationCode, abi.encode(ZUID, address(this), ska, false, address(0))
+            ),
             _release(type(WrappedRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_REGULATED, router),
             _release(type(WrappedPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, router),
             _release(type(NormalRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_REGULATED, router),
@@ -951,7 +988,8 @@ contract GovDeployTest is Test {
                         bytes32(0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164),
                         address(0x838b5D28fbc07844a070818012A8a68980688C26),
                         address(0x428C6e1Cad562Dc16b2bf19515B9b08dD0361e8f),
-                        false
+                        false,
+                        address(0)
                     )
                 )
             ),
@@ -1063,8 +1101,13 @@ contract GovDeployTest is Test {
         // gains `requirePortableApp` and `UAKinds` `appPurpose`, CTR-UA-46; its code unchanged):
         // 0x36Ebc0Ab03EB1B67D37b6443FD04C06a4E3AB091; setAuditor A1-A8 (bit 32 AUDITOR: the router's `mtxSetAuditorKey` /
         // `mtxSetAuditorUA` ops and their typehashes) and code-format F2 (`bytecode_hash = "none"`: no metadata hash):
-        // 0x7dABB8aA4F869fCC1449eF2f999af56C94058c56; bls-multi Task 5 (kind 0x0121 in `UAKinds`, compiled into `GovernanceLib`, whose address the router's code holds) -> this
-        assertEq(router, 0x49Df7BEb6eb1073e98A9E9A9a1acdD23C088BFe2, "GovernanceRouter");
+        // 0x7dABB8aA4F869fCC1449eF2f999af56C94058c56; bls-multi Task 5 (kind 0x0121 in `UAKinds`, compiled into `GovernanceLib`, whose address the router's code holds):
+        // 0x49Df7BEb6eb1073e98A9E9A9a1acdD23C088BFe2; router-g1 G1 (CTR-GOV-33: the `factory` constructor argument, 0 here,
+        // `registryFor`, `mtxNonceFor`, the keyed nonces): 0xc9c9D1fCB3143fE165F8a6DcE2A0fB29e157ea1d; router-g1 (the keyed path
+        // asks the registry itself): 0xC38E54fEf338e3428525939040Ddb14BE976F5bb; router-cancel (CTR-GOV-33 Change: the keyed
+        // cancel `mtxCancelNonceFor`, the shared `_pre`): 0xe59e41aa13dc0658B7B252106563EbeF931f0501; G-7 of the re-review of
+        // 2026-11-25 (`TargetHasNoCode` at the head of `mtxCancelNonceFor`) -> this
+        assertEq(router, 0x7e3FbA18C2E807206A33b61176c87a5314625F87, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

@@ -81,7 +81,7 @@ void main() {
   test('load_refuses_wrong_abi_or_features', () async {
     load(); // positive control
     expect(features() & kRequiredFeatures, kRequiredFeatures);
-    UaLoadHook.reportedAbiVersion = () => 5; // an older library
+    UaLoadHook.reportedAbiVersion = () => 6; // an older library
     expect(() => load(), throwsA(isA<UAError>().having((e) => e.code, 'code', 'UAAbiMismatch')));
     final words = secs(mn['pq_kat']!['words'] as String);
     expect(await code(() => walletFromMnemonic(words: words, bip39Passphrase: none())), 'UAAbiMismatch');
@@ -91,7 +91,7 @@ void main() {
       await code(() => seal(kemPk: Uint8List(1601)..[0] = 1, purpose: 'scaas/backup/v1', aad: [], pt: none())),
       'UAAbiMismatch',
     );
-    UaLoadHook.reportedAbiVersion = () => 7;
+    UaLoadHook.reportedAbiVersion = () => 8;
     expect(await code(() async => load()), 'UAAbiMismatch');
     UaLoadHook.reset();
     UaLoadHook.reportedFeatures = () => kRequiredFeatures & ~BigInt.from(UaFeature.pqz);
@@ -513,6 +513,7 @@ void main() {
       final kk = await kemOf(r['opener']['kem']);
       final members = r['members'] == null ? null : jsonEncode(r['members']);
       final accepted = r['accepted'] == null ? null : jsonEncode(r['accepted']);
+      final current = r['msigCurrent'] == null ? null : jsonEncode(r['msigCurrent']);
       final got = await code(
         () => r['restore'] == true
             ? walletRestoreBackup(
@@ -521,6 +522,7 @@ void main() {
                 expectJson: jsonEncode(r['expect']),
                 membersJson: members,
                 acceptedJson: accepted,
+                currentJson: current,
                 bip39Passphrase: none(),
               )
             : kk.openContainer(
@@ -528,12 +530,13 @@ void main() {
                 expectJson: jsonEncode(r['expect']),
                 membersJson: members,
                 acceptedJson: accepted,
+                currentJson: current,
               ),
       );
       expect(got, r['error'] == null ? null : 'UA${r['error']}', reason: r['id']);
       n++;
     }
-    expect(n, 28);
+    expect(n, 32); // T26 A2-1: 28 -> 32 (four msigCurrent rows)
   });
 
   test('backup_link_restore', () async {

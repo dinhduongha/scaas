@@ -9,8 +9,12 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'wallet.dart';
 part 'events.freezed.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `next`
+
+/// What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+/// read at the `finalized` block, or endpoint 0's alone under `failover`.
+enum Basis { majority, oneEndpoint }
 
 @freezed
 sealed class Event with _$Event {
@@ -92,7 +96,7 @@ sealed class OpState with _$OpState {
       OpState_Landed;
 
   /// the lane's nonce spent at the final block without that event; a replaced native send
-  const factory OpState.consumed() = OpState_Consumed;
+  const factory OpState.consumed({required Basis basis}) = OpState_Consumed;
 
   /// an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
   const factory OpState.reverted({
@@ -101,7 +105,7 @@ sealed class OpState with _$OpState {
   }) = OpState_Reverted;
 
   /// `validUntil` below the final block's timestamp while the nonce is unspent
-  const factory OpState.expired() = OpState_Expired;
+  const factory OpState.expired({required Basis basis}) = OpState_Expired;
 
   /// anything else, with what is known (never an end)
   const factory OpState.inFlight({required InFlight detail}) = OpState_InFlight;

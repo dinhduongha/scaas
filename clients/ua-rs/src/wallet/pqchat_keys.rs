@@ -181,7 +181,7 @@ fn write_canonical(v: &Value, out: &mut String) -> Result<()> {
 
 /// The canonical JSON of the JSON text `text` (bounded: [`PT_MAX`] bytes, [`JSON_DEPTH`]), in memory wiped on drop (a
 /// content may carry a file key); the parsed value wiped too.
-fn canonical_of_text(text: &[u8]) -> Result<Zeroizing<String>> {
+pub(super) fn canonical_of_text(text: &[u8]) -> Result<Zeroizing<String>> {
     let mut v = super::bounded::json(text, PT_MAX, JSON_DEPTH).map_err(|_| Error::PqChatContent)?;
     let c = canonical_zeroizing(&v, text.len());
     super::bounded::wipe(&mut v);
@@ -428,7 +428,10 @@ pub fn decode_inner(b: &[u8]) -> Result<Inner> {
     let parents = (0..np)
         .map(|i| w32(p + 32 + 32 * i))
         .collect::<Result<Vec<_>>>()?;
-    let ct = a.bytes(a.tail(m, m + 192)?, PT_MAX)?;
+    // T26 A-11: the byte strings of a canonical encoding never overlap, so all of them together fit in `b`; aliasing offsets
+    // run out of this budget before they are copied
+    let mut left = b.len();
+    let ct = take(&a, a.tail(m, m + 192)?, &mut left)?;
     let header = Header {
         session_id: w32(m)?,
         epoch_id: w32(m + 32)?,
@@ -437,7 +440,7 @@ pub fn decode_inner(b: &[u8]) -> Result<Inner> {
         counter,
         parents,
     };
-    let sig = decode_uasig(&a, s)?;
+    let sig = decode_uasig(&a, s, &mut left)?;
     // the canonical form only: a re-encoding equal to the input (no trailing bytes, no aliasing offsets)
     let out = Inner {
         header,
@@ -450,9 +453,16 @@ pub fn decode_inner(b: &[u8]) -> Result<Inner> {
     Ok(out)
 }
 
-fn decode_uasig(a: &Abi, s: usize) -> Result<UASig> {
-    let key_data = a.bytes(a.tail(s, s)?, PT_MAX)?;
-    let signature = a.bytes(a.tail(s, s + 32)?, PT_MAX)?;
+/// The byte string at `at`, at most [`PT_MAX`] and at most `left` bytes, then counted against `left`.
+fn take(a: &Abi, at: usize, left: &mut usize) -> Result<Vec<u8>> {
+    let v = a.bytes(at, (*left).min(PT_MAX))?;
+    *left -= v.len();
+    Ok(v)
+}
+
+fn decode_uasig(a: &Abi, s: usize, left: &mut usize) -> Result<UASig> {
+    let key_data = take(a, a.tail(s, s)?, left)?;
+    let signature = take(a, a.tail(s, s + 32)?, left)?;
     let ml = a.tail(s, s + 64)?;
     let n = a.num(ml, MEMBERS_MAX as u64)?;
     let mut members = Vec::with_capacity(n);
@@ -465,13 +475,13 @@ fn decode_uasig(a: &Abi, s: usize) -> Result<UASig> {
             let u = a.tail(il + 32, il + 32 + 32 * j)?;
             inner.push(InnerSig {
                 index: a.u16w(u)?,
-                sig: a.bytes(a.tail(u, u + 32)?, PT_MAX)?,
+                sig: take(a, a.tail(u, u + 32)?, left)?,
             });
         }
         members.push(MemberSig {
             index: a.u16w(t)?,
             members: inner,
-            sig: a.bytes(a.tail(t, t + 64)?, PT_MAX)?,
+            sig: take(a, a.tail(t, t + 64)?, left)?,
         });
     }
     Ok(UASig {
@@ -520,7 +530,7 @@ impl AppKeys {
     /// An epoch key `K`: a `Derive` handle this scope drew or unwrapped.
     fn epoch_key(&self, k: &KeyHandle) -> Result<Zeroizing<[u8; 32]>> {
         self.check_usage(k, KeyUsage::Derive)?;
-        if !matches!(k.origin, Origin::Drawn | Origin::Unwrapped) {
+        if !matches!(k.origin, Origin::Drawn | Origin::Unwrapped | Origin::Tree) {
             return Err(Error::AppKeyUsage);
         }
         self.bytes(k)
@@ -727,8 +737,26 @@ impl AppKeys {
     ) -> Result<SealedMessage> {
         h.check()?;
         let pt = Zeroizing::new(pad(canon)?);
+        self.seal_padded(k, pos, h, &pt, signer, env_nonce)
+    }
+
+    /// S5 from a padded plaintext `pt` (what [`pad`] wrote, or, in the vectors build only, a hostile one): encrypted at
+    /// `pos`, signed, the envelope and the payload.
+    #[allow(clippy::too_many_arguments)]
+    fn seal_padded(
+        &self,
+        k: &KeyHandle,
+        pos: &KeyHandle,
+        h: &Header,
+        pt: &[u8],
+        signer: &dyn Signer,
+        env_nonce: &[u8; 12],
+    ) -> Result<SealedMessage> {
+        if pt.len() > PT_MAX {
+            return Err(Error::Argument);
+        }
         let (mk, n) = self.message_key(pos, h)?;
-        let ciphertext = aead_seal(Alg::Aes256GcmSiv, &mk, &n, &message_aad(h), &pt)?;
+        let ciphertext = aead_seal(Alg::Aes256GcmSiv, &mk, &n, &message_aad(h), pt)?;
         let td = pqchat::typed("PqChatMessage", h.record(&ciphertext))?;
         let message_id = td.digest()?;
         let sig = pqchat::sign(signer, &td)?;
@@ -823,7 +851,7 @@ impl AppKeys {
 }
 
 /// `unpad`, then the canonical check: the content re-serialised must equal its bytes.
-fn canonical_content(pt: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+pub(super) fn canonical_content(pt: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
     let c = unpad(pt)?;
     let again = canonical_of_text(&c)?;
     if again.as_bytes() != c.as_slice() {
@@ -884,6 +912,40 @@ impl AppKeys {
         self.seal_message_with(k, pos, h, content_json, signer, env_nonce)
     }
 
+    /// pqchat-core T11's hostile harness: S5 from a given padded plaintext `pt` (not checked against [`pad`]: a non-zero fill
+    /// stays), with a fixed envelope nonce.
+    #[allow(clippy::too_many_arguments)]
+    pub fn pqchat_vectors_seal_padded(
+        &self,
+        k: &KeyHandle,
+        pos: &KeyHandle,
+        h: &Header,
+        pt: &[u8],
+        signer: &dyn Signer,
+        env_nonce: &[u8; 12],
+    ) -> Result<SealedMessage> {
+        h.check()?;
+        self.seal_padded(k, pos, h, pt, signer, env_nonce)
+    }
+
+    /// pqchat-core T11's hostile harness: a `sealedInfo` of a given padded plaintext `pt` (not canonicalised nor padded
+    /// here), with a fixed nonce.
+    pub fn pqchat_vectors_seal_info_raw(
+        &self,
+        k: &KeyHandle,
+        session: &[u8; 32],
+        epoch: &[u8; 32],
+        pt: &[u8],
+        nonce: &[u8; 12],
+    ) -> Result<Vec<u8>> {
+        if pt.len() > PT_MAX {
+            return Err(Error::Argument);
+        }
+        let key = self.sub_key(k, INFO, session, epoch)?;
+        let ct = aead_seal(Alg::Aes256GcmSiv, &key, nonce, &[], pt)?;
+        Ok([&nonce[..], &ct].concat())
+    }
+
     /// The envelope of given inner bytes (a vector's `inner`, signed elsewhere), with a fixed nonce.
     pub fn pqchat_vectors_envelope(
         &self,
@@ -894,5 +956,53 @@ impl AppKeys {
         nonce: &[u8; 12],
     ) -> Result<Vec<u8>> {
         self.envelope_with(k, session, epoch, inner, nonce)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+mod decode_budget {
+    use super::*;
+
+    /// T26 A-11: a `UASig` whose `key_data` and `signature` offsets alias one byte string copies more than its input holds:
+    /// refused by the budget before the second copy; the same bytes without aliasing (each string once) decode.
+    #[test]
+    fn aliasing_offsets_run_out_of_budget() {
+        let w = |n: usize| {
+            let mut v = [0u8; 32];
+            v[24..].copy_from_slice(&(n as u64).to_be_bytes());
+            v
+        };
+        let l = 256;
+        // head: key_data, signature, members offsets; one byte string; an empty members list
+        let aliased = [
+            &w(96)[..],
+            &w(96),
+            &w(96 + 32 + l),
+            &w(l),
+            &vec![7u8; l],
+            &w(0),
+        ]
+        .concat();
+        let mut left = aliased.len();
+        assert_eq!(
+            decode_uasig(&Abi { b: &aliased }, 0, &mut left).err(),
+            Some(Error::Argument)
+        );
+        // control: two strings, each once
+        let plain = [
+            &w(96)[..],
+            &w(96 + 32 + l),
+            &w(96 + 2 * (32 + l)),
+            &w(l),
+            &vec![7u8; l],
+            &w(l),
+            &vec![7u8; l],
+            &w(0),
+        ]
+        .concat();
+        let mut left = plain.len();
+        let s = decode_uasig(&Abi { b: &plain }, 0, &mut left).unwrap();
+        assert_eq!((s.key_data.len(), s.signature.len()), (l, l));
     }
 }

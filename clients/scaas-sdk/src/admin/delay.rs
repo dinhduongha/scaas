@@ -2,17 +2,20 @@
 //! The governance-delay sentence (plan T18b; owner 2026-11-18, "as proposed"; set-auditor closing review P3-5, spec
 //! 2026-11-17-set-auditor §4 O13): which of a power bit's delay sentences a wallet shows. The marks are
 //! `smartcontracts/vectors/governance/governance_bits.json`'s (a bit whose `sentences` hold `atOnce`, `singleKey`, `locked`);
-//! the values are read on chain at one block: the token's `factory()` and that factory's `noticePeriod()`, the token's
-//! `grantDelay()`, `lockedFeatures()` and `admin()`. The delay is the longer of the notice period and the grant delay; 0 is
+//! the values are read on chain as one logical read (one endpoint, the profile's final block; T26 A2-2): the token's
+//! `factory()`, which must be the profile's factory, that factory's `infoOf(token)` (class TOKEN, else `TokenUncatalogued`:
+//! T26 A2-3) and `noticePeriod()`, the token's `grantDelay()`, `lockedFeatures()` and `admin()`. The delay is the longer of the notice period and the grant delay; 0 is
 //! `AtOnce`. A read that fails is an error, never a guessed `AtOnce`. UNAUDITED.
 use super::Admin;
-use crate::op::{addr20, evm};
+use crate::op::{addr20, evm, final_block};
 use crate::wallet::tokens::{selector, word};
 use crate::SdkError;
-use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, Bytes};
-use scaas_rpc::evm::EvmPool;
+use scaas_rpc::Purpose;
 use serde_json::Value;
+
+/// The factory's class of a token (`ContractClass.TOKEN`; `confidential::words::CLASS_TOKEN`, a module `admin` builds without).
+const CLASS_TOKEN: u64 = 1;
 
 const BITS: &str =
     include_str!("../../../../smartcontracts/vectors/governance/governance_bits.json");
@@ -66,15 +69,6 @@ fn marks(bit: u16) -> Result<Option<bool>, SdkError> {
     }))
 }
 
-async fn read(pool: &EvmPool, to: [u8; 20], sig: &str) -> Result<Vec<u8>, SdkError> {
-    let tx = alloy::rpc::types::TransactionRequest::default()
-        .with_to(Address::from(to))
-        .with_input(Bytes::from(selector(sig)));
-    let b = pool.call_tx(tx).await.map_err(crate::op::sim)?;
-    word(&b, 0)?;
-    Ok(b.to_vec())
-}
-
 fn small(w: &[u8]) -> Result<u64, SdkError> {
     crate::wallet::tokens::small(word(w, 0)?)
 }
@@ -99,16 +93,52 @@ impl Admin {
                     Some(true) => {}
                 }
                 let token = addr20(&token.to_ascii_lowercase())?;
-                let (_, _, pool) = evm(&sdk, &chain)?;
-                let f = read(&pool, token, "factory()").await?;
-                let factory: [u8; 20] = word(&f, 0)?
-                    .get(12..)
-                    .and_then(|a| a.try_into().ok())
-                    .ok_or(SdkError::Argument)?;
-                let notice = small(&read(&pool, factory, "noticePeriod()").await?)?;
-                let grant = small(&read(&pool, token, "grantDelay()").await?)?;
-                let locked = read(&pool, token, "lockedFeatures()").await?;
-                let admin = read(&pool, token, "admin()").await?;
+                let (profile, _, pool) = evm(&sdk, &chain)?;
+                // T26 A2-3: a token the profile's factory catalogued as a token, else no sentence is built from it
+                let factory = profile
+                    .factory
+                    .as_deref()
+                    .ok_or(SdkError::TokenUncatalogued)
+                    .and_then(|f| addr20(&f.to_ascii_lowercase()))?;
+                let mut arg = [0u8; 32];
+                arg[12..].copy_from_slice(&token);
+                let info = [selector("infoOf(address)").to_vec(), arg.to_vec()].concat();
+                // T26 A2-2: one logical read, on one endpoint at the profile's final block
+                let calls: [([u8; 20], Vec<u8>); 6] = [
+                    (token, selector("factory()").to_vec()),
+                    (factory, info),
+                    (factory, selector("noticePeriod()").to_vec()),
+                    (token, selector("grantDelay()").to_vec()),
+                    (token, selector("lockedFeatures()").to_vec()),
+                    (token, selector("admin()").to_vec()),
+                ];
+                let r = pool
+                    .read_at_block(final_block(&profile), Purpose::Plain, |at| {
+                        let (pool, calls) = (pool.clone(), calls.clone());
+                        async move {
+                            let mut out = Vec::with_capacity(calls.len());
+                            for (to, data) in calls {
+                                out.push(
+                                    pool.call_at(&at, Address::from(to), Bytes::from(data))
+                                        .await?
+                                        .to_vec(),
+                                );
+                            }
+                            Ok(out)
+                        }
+                    })
+                    .await?
+                    .value;
+                let [f, info, notice, grant, locked, admin] = &r[..] else {
+                    return Err(SdkError::Internal);
+                };
+                // `Created(address addr, bytes32 creatorId, uint16 contractClass, …)`: the class in word 2
+                if word(f, 0)?.get(12..) != Some(&factory[..])
+                    || small(info.get(64..).unwrap_or_default())? != CLASS_TOKEN
+                {
+                    return Err(SdkError::TokenUncatalogued);
+                }
+                let (notice, grant) = (small(notice)?, small(grant)?);
                 let delay = notice.max(grant);
                 let mut out = vec![if delay == 0 {
                     DelaySentence::AtOnce
@@ -122,7 +152,7 @@ impl Admin {
                 let byte = locked
                     .get(31 - usize::from(bit / 8))
                     .ok_or(SdkError::Argument)?;
-                let admin_gone = word(&admin, 0)?.iter().all(|b| *b == 0);
+                let admin_gone = word(admin, 0)?.iter().all(|b| *b == 0);
                 if byte & (1 << (bit % 8)) != 0 && admin_gone {
                     out.push(DelaySentence::Locked);
                 }

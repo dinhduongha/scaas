@@ -725,6 +725,9 @@ test reads all of these keys and reverts on a missing one.
 
 ## 9. FeePolicy
 
+Terms ([README §9](../../README.md#fee-terms)): every fee in this section is the **token fee** the signer puts in its intent and
+pays in the token; the **gas fee** is the chain's charge, paid by whoever submits, and never appears in an intent.
+
 <a id="CTR-MTX-13"></a>**CTR-MTX-13** — Public fee modes are `NONE`, `PERCENT` and `FIXED`, chosen by the signer per
 intent through `mode`; the percent unit is ppm (1e6), because per mille cannot express 0.05 %:
 

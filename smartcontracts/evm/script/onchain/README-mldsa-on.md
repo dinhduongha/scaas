@@ -39,8 +39,8 @@ transaction of its own; negatives by `eth_call`: `cacheExpandedKey` refused `UAK
 ### `tokens`: the ML-DSA-65 signer (Tokens.s.sol `_registerMl` 177-198, `_pq` 443-462 from `_common` 420-430)
 
 `uaM`, an ML-DSA-65 UA, `register` on the set's registry (no cache part: a precompile verifier refuses the cache). Per kind 0, 1, 2,
-3, 8, 9, 10, 11 one token on the set's factory, then as `_pq`: `transferToUA(uaM, 10 000)` by test key 1, `mtxTransfer` fee 0 and
-`mtxTransferWithFee` (FIXED 5 to test key 3) signed by `uaM`, sent by test key 2; the balance checked; a negative by `eth_call`:
+3, 8, 9, 10, 11 one token on the set's factory, then as `_pq`: `transferToUA(uaM, 10 000)` by test key 1, `mtxTransfer` token fee 0 and
+`mtxTransferWithFee` (token fee FIXED 5 to test key 3) signed by `uaM`, sent by test key 2; the balance checked; a negative by `eth_call`:
 the same transfer with one signature byte changed. The tokens carry only what the ML-DSA row needs (the wrapped kinds one
 MockERC20 leg wrapped by test key 1; the Zether kinds BLS12-381 version 1 without an auditor; the regulated kinds no KYC / TAX
 flag): the kinds' other features are set `mldsa-off`'s rows.
@@ -48,7 +48,7 @@ flag): the kinds' other features are set `mldsa-off`'s rows.
 ### `pqchat`: every signed write (PqChat.s.sol 217-598)
 
 The set's release and instance (`pqchat_implementation`, `pqchat_instance`), three ML-DSA-65 members with a KEM key at version 0
-(`register`), a kind-0 fee token, then as forge: `_whole`, `_chunks` (`addWraps` through `RelayFeeRouter`), `_rekeys`, `_replica`
+(`register`), a kind-0 token for the relay fee, then as forge: `_whole`, `_chunks` (`addWraps` through `RelayFeeRouter`), `_rekeys`, `_replica`
 (a second instance by `createInstance`), `_postChunked`, `_removeRace`, `_post`, `_leaveAndDrop`, `_store`, `_topic`, `_entries`,
 `_votes`, the views read back after each step, the same negatives by `eth_call`. Not here: `_rescue` (no signature: set
 `mldsa-off`). The typed digests come from the contracts' own code: `PqChatDigests` (PqChat.s.sol 22-80, forge's artifact) run by

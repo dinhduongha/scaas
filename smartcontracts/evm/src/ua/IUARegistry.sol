@@ -32,7 +32,8 @@ interface IUARegistry is IERC5267 {
     }
 
     /// One `msig` slot's signature (CTR-UA-33: a member's key is read from its record). A signing member: `sig`, `members` empty; an
-    /// `msig` member: `members`, its own slots up to its own threshold, `sig` empty. `members` sits where `keyData` sat: an empty array
+    /// `msig` member: `members`, its own slots up to its own threshold, `sig` its version tag (CTR-UA-74: empty while that member was
+    /// never updated here, else its current version, 8 bytes big-endian). `members` sits where `keyData` sat: an empty array
     /// encodes as empty bytes do, so a flat signature's bytes, every stored `pop`, did not change.
     struct MemberSig {
         uint16 index;
@@ -41,9 +42,10 @@ interface IUARegistry is IERC5267 {
     }
 
     /// A UA's signature, explicit (typed-signing TS-D12): a native id only `signature`; a derived single key `keyData`
-    /// (empty for the stored kinds, CTR-UA-17) + `signature`; an `msig` only `members` (its structure is read from the
-    /// record). A portable record's signature (`setKemKey`, `setPqzKey`) never carries `keyData`. Any other field set ⇒
-    /// not authorized.
+    /// (empty for the stored kinds, CTR-UA-17) + `signature`; an `msig` `members` (its structure is read from the
+    /// record) and, in `signature`, its version tag (CTR-UA-74: empty at version 0, else the current version, 8 bytes big-endian;
+    /// any other value is not authorized, so kept bytes name the structure they were accepted under). A portable record's
+    /// signature (`setKemKey`, `setPqzKey`) never carries `keyData`. Any other field set ⇒ not authorized.
     struct UASig {
         bytes keyData;
         bytes signature;
@@ -175,7 +177,7 @@ interface IUARegistry is IERC5267 {
     /// One member signature of the `msig` `ua` (CTR-UA-33, CTR-UA-37, owner 2026-11-03): slot `index`, member `member`. `purpose`:
     /// `PURPOSE_POP_V2`, a slot of the registration's `pop` (one event per slot, in the `pop`'s order, before `UARegistered`), or
     /// `PURPOSE_MEMBERSHIP`, an acceptance. `sig`: the exact bytes whose `keccak256` `memberSigHashOf(ua, index)` returns, the slot's `sig`
-    /// or an `msig` member's `abi.encode(InnerSig[])`. State keeps the hashes only: a copy rebuilds the `pop` from these events.
+    /// or an `msig` member's `abi.encode(InnerSig[])` (followed by its version tag, CTR-UA-74: nothing at version 0). State keeps the hashes only: a copy rebuilds the `pop` from these events.
     event UAMemberSig(bytes32 indexed ua, bytes32 indexed member, uint16 index, bytes32 purpose, bytes sig);
     /// K3-3: scoped PQZ key version `version` of `(ua, scope)` added by `setPqzScopedKey`, with the call's bytes (the record is
     /// copyable from the log: key, opening KEM key or the empty one, `validUntilBlock`, `sig` as `setPqzKey` stores it).
@@ -550,6 +552,12 @@ interface IUARegistry is IERC5267 {
     /// CTR-UA-44: the raw words of the `msig` `ua` here: `version` (0 never updated), `enabled` (bit i = slot i), `accepted`
     /// (CTR-UA-37's bits, never cleared). Zeroes for any other id. Gen 2 forwards gen-1 records.
     function msigStateOf(bytes32 ua) external view returns (uint64 version, uint256 enabled, uint256 accepted);
+    /// CTR-UA-74 (owner 2026-11-25): the typed structure of the `msig` `ua` at `version` on this registry, every slot, and its
+    /// `enabled` word: version 0 the registration's (every slot enabled), a later one as its `updateMsig` stored it; every version
+    /// from 0 to `msigStateOf(ua).version` answers, for ever. Empty (threshold 0, no members, 0) for any other id and a version
+    /// never stored. A reader verifies a kept record of an `msig` against the version its signature names (the tag in
+    /// `UASig.signature`, in an `msig` slot's `MemberSig.sig`), never against another one. Gen 2 forwards gen-1 records.
+    function msigAt(bytes32 ua, uint64 version) external view returns (MsigStructure memory s, uint256 enabled);
     /// CTR-UA-44 (TODO 3ze, owner 2026-11-14): the `msig` `ua` on this registry becomes `structure` (every slot, disabled ones
     /// included: stored slots keep `kind` and `id`, new members are appended slots), `enabled` its bitmap, `version` the stored
     /// one + 1. Anyone submits (fee 0, a `call` job); `sigs` is a threshold of the **stored** structure's enabled and accepted
@@ -572,7 +580,7 @@ interface IUARegistry is IERC5267 {
         bytes32 chainUid_
     ) external;
     /// `keccak256` of the signature object of the `msig` `ua`'s slot `index` (CTR-UA-33, CTR-UA-37, owner 2026-11-03): of `sig`, or of an
-    /// `msig` member's `abi.encode(InnerSig[])`, the slot's kind says which (`msigOf`): a slot of the `pop` from registration, a slot that
+    /// `msig` member's `abi.encode(InnerSig[])` (then its version tag, CTR-UA-74), the slot's kind says which (`msigOf`): a slot of the `pop` from registration, a slot that
     /// accepted later from `acceptMembership`. The bytes are in that slot's `UAMemberSig`; a copy checks them against this hash. Zero for a slot
     /// not accepted and any other id. Gen 2 forwards gen-1 records.
     function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32);

@@ -1,0 +1,54 @@
+# G1 (CTR-GOV-33, owner 2026-11-24), branch router-g1 from origin/ua-rs-sign 229d1453e: step | commit | rc | counts
+# Logs: runs/2026-11-24-router-g1/<tag>/<step>.log and runs/2026-11-24-router-g1/mutants/<name>.log (git-ignored).
+# matrix: every forge directory at the default set; 044ba58e9 and c7a3f1fb8 differ only in test/metatx/MsgSenderLint.t.sol.
+part 1 | forge test/governance RouterPerRelease.t.sol (red first: the mutant registry-switch-removed is the router before G1, one registry for every target) | 32ed6aa5e | 0 | 22 passed 0 failed 0 skipped (forge)
+mutants | script/governance/g1_mutants.py (4, RouterPerRelease.t.sol) | 32ed6aa5e | - | 4 of 4 killed: registry-switch-removed (11 red: 3 of the 4 line tests, 8 RouterG1Test), factory-check-removed (test_g1_fakeInstance_ignored), nonce-key-without-registry (4 red, test_g1_badEnvRegistry_burnsOnlyItsOwnNonces among them), g1-prime-pointer (9 red, test_line_gen2SeesGen1_gen1DoesNotSeeGen2 and the gen-1-env refusals among them)
+matrix | forge-governance (default set n2304-kmax4096) | 044ba58e9 | 0 | 967 passed 0 failed 0 skipped (forge)
+matrix | forge-gas (default set n2304-kmax4096) | e421dde78 | 0 | 406 passed 0 failed 1 skipped (forge)
+matrix | size (default set n2304-kmax4096) | e421dde78 | 0 | size gate: 0 error(s), 180 contracts; GovernanceRouter 30,767 B runtime
+matrix | forge-metatx (default set n2304-kmax4096) | c7a3f1fb8 | 0 | 549 passed 0 failed 1 skipped (forge)
+matrix | forge-v2 (default set n2304-kmax4096) | 044ba58e9 | 0 | 756 passed 0 failed 0 skipped (forge)
+matrix | forge-as (default set n2304-kmax4096) | 044ba58e9 | 0 | 568 passed 0 failed 0 skipped (forge)
+matrix | forge-merge (default set n2304-kmax4096) | 044ba58e9 | 0 | 350 passed 0 failed 0 skipped (forge)
+matrix | forge-factory (default set n2304-kmax4096) | 044ba58e9 | 0 | 2 passed 0 failed 0 skipped (forge)
+matrix | forge-ua (default set n2304-kmax4096) | 044ba58e9 | 0 | 1044 passed 0 failed 0 skipped (forge)
+matrix | forge-wallet (default set n2304-kmax4096) | 044ba58e9 | 0 | 185 passed 0 failed 0 skipped (forge)
+matrix | forge-account (default set n2304-kmax4096) | 044ba58e9 | 0 | 103 passed 0 failed 0 skipped (forge)
+matrix | forge-liquidity (default set n2304-kmax4096) | 044ba58e9 | 0 | 93 passed 0 failed 1 skipped (forge)
+matrix | forge-confidential (default set n2304-kmax4096) | 044ba58e9 | 0 | 5 passed 0 failed 0 skipped (forge)
+matrix | forge-hedera (default set n2304-kmax4096) | 044ba58e9 | 0 | 20 passed 0 failed 0 skipped (forge)
+matrix | forge-pqchat (default set n2304-kmax4096) | 044ba58e9 | 0 | 146 passed 0 failed 0 skipped (forge)
+matrix | forge-pqvault (default set n2304-kmax4096) | 044ba58e9 | 0 | 96 passed 0 failed 0 skipped (forge)
+matrix | forge-p6f (default set n2304-kmax4096) | 044ba58e9 | 0 | 4 passed 0 failed 0 skipped (forge)
+matrix | forge-wrap (default set n2304-kmax4096) | 044ba58e9 | 0 | 324 passed 0 failed 0 skipped (forge)
+matrix | forge-zether (default set n2304-kmax4096) | 044ba58e9 | 0 | 478 passed 0 failed 4 skipped (forge)
+matrix | forge-pqz (default set n2304-kmax4096) | 044ba58e9 | 0 | 694 passed 0 failed 4 skipped (forge)
+matrix | forge-pqzh (default set n2304-kmax4096) | 044ba58e9 | 0 | 42 passed 0 failed 0 skipped (forge)
+matrix | forge-research (default set n2304-kmax4096) | 044ba58e9 | 0 | 360 passed 0 failed 7 skipped (forge)
+matrix | forge-vectors (default set n2304-kmax4096) | 044ba58e9 | 0 | compiled, no tests
+matrix | forge-fork (default set n2304-kmax4096) | 044ba58e9 | 0 | 0 passed 0 failed 1 skipped (forge)
+matrix | forge-top (default set n2304-kmax4096) | 044ba58e9 | 0 | 29 passed 0 failed 0 skipped (forge)
+matrix | forge-modules (default set n2304-kmax4096) | 044ba58e9 | 0 | 35 passed 0 failed 0 skipped (forge)
+matrix | uagas (default set n2304-kmax4096) | 044ba58e9 | 0 | 29 passed 0 failed 0 skipped (forge)
+sets | at-set.sh n2048-kmax1024 sensitive (one set at a time) | c7a3f1fb8 | 0 | 1595 passed 0 failed 3 skipped (forge)
+sets | at-set.sh n2560-kmax16384 sensitive | c7a3f1fb8 | 0 | 1589 passed 0 failed 9 skipped (forge)
+sets | at-set.sh n2816-kmax65536 sensitive | 391b4fd26 (EVM sources = c7a3f1fb8) | 0 | 1577 passed 0 failed 21 skipped (forge)
+sets | the merge of fcadbf681 (a44f6454b) touches no set-sensitive test (at-set.sh list against the merge's EVM diff: none); the three rows stand
+sets | at-set.sh <set> modules, the three sets one at a time (PYTHONPATH absolute: pqz-core/nethermind/chain) | a44f6454b | 0 | 35 passed 0 failed 0 skipped at each of n2048-kmax1024, n2560-kmax16384, n2816-kmax65536 (forge)
+# post-merge (a44f6454b, origin/ua-rs-sign fcadbf681 merged: PqChat TreeKEM), the default set, runs/2026-11-24-router-g1/postmerge/:
+postmerge | forge-governance | a44f6454b | 0 | 967 passed 0 failed 0 skipped (forge)
+postmerge | forge-metatx | a44f6454b | 0 | 549 passed 0 failed 1 skipped (forge)
+postmerge | forge-pqchat (FOUNDRY_OUT out/: PqChatTreeViews.t.sol reads out/; the runner's out/t66a-test-pqchat failed only test_fallbackReachesNoOtherModule on that path) | a44f6454b | 0 | 213 passed 0 failed 1 skipped (forge)
+postmerge | forge-pqvault | a44f6454b | 0 | 96 passed 0 failed 0 skipped (forge)
+postmerge | forge-as | a44f6454b | 0 | 568 passed 0 failed 0 skipped (forge)
+postmerge | forge-v2 (namespaces.json moved in the merge) | a44f6454b | 0 | 756 passed 0 failed 0 skipped (forge)
+postmerge | forge-top | a44f6454b | 0 | 29 passed 0 failed 0 skipped (forge)
+postmerge | size | a44f6454b | 0 | size gate: 0 error(s), 182 contracts; GovernanceRouter 30,767 B; OpenFactory 35,238 B unchanged
+postmerge | node cargo test --lib (CAPPED_MEM 6G; smartcontracts/algorand/out copied as a real directory) | 5143f0aaa | 0 | 897 passed 0 failed 0 ignored (cargo)
+postmerge | node cargo clippy --all-targets -D warnings | 5143f0aaa | 0 | -
+postmerge | node cargo test --test e2e --ignored (Deploy.s.sol: the factory, the router naming it, configureChain) | 5143f0aaa | 101 | 25 passed 2 failed: plain_rows_match_the_forge_abi (the TreeKEM pin 46, fixed upstream b6264c349), relayed_zether_proof_under_the_ua_tag (no clients/clientkeys/node_modules)
+postmerge | node e2e, those two by name (b6264c349 merged; node_modules copied as a real directory) | 0234af032 | 0 | 2 passed 0 failed (cargo)
+postmerge | scaas-sdk cargo test --locked | 5143f0aaa | 0 | 286 passed 0 failed (cargo)
+postmerge | scaas-sdk cargo clippy --all-targets -D warnings | 5143f0aaa | 0 | -
+sdk-gas | clients/scaas-sdk/gas/generate.py --check | e421dde78 | 0 | check ok; gas/test_generate.py fails KeyError 'transaction' in its own synthetic inputs (generate.py and the test unchanged here: not G1)
+docs | scripts/docs_check.py check, paths, test_docs_check.py | 82df4b2a3 | 0 | 0 errors, 7 warnings (line budgets); 0 machine paths; ok

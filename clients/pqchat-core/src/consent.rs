@@ -157,8 +157,9 @@ impl PqChat {
         let creator = match ep.epoch.epoch {
             0 => ep.epoch.author.clone(),
             _ => {
-                self.record_at(&s.chain, &s.home, &s.session_id, &s.session_id)
-                    .await?
+                self.signed_record_at(&s.chain, &s.home, &s.session_id, &s.session_id)
+                    .await
+                    .map_err(drop_err)?
                     .ok_or(PqChatError::SessionUnknown)?
                     .author
             }
@@ -166,7 +167,10 @@ impl PqChat {
         Ok(Preview {
             creator,
             epoch: ep.epoch.id.clone(),
-            members: ep.epoch.members.iter().map(|m| m.ua.clone()).collect(),
+            members: crate::check::distinct(&ep.epoch)
+                .into_iter()
+                .cloned()
+                .collect(),
             admins: ep.epoch.admins.clone(),
             info: handle,
             chain_stores: info

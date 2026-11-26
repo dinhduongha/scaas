@@ -34,7 +34,8 @@
       {"label": "UARegistryRegLib", "artifact": "UARegistryRegLib.sol/UARegistryRegLib", "via": ["UARegistry"]}
     ],
     "factory": [
-      {"label": "OpenFactory", "artifact": "OpenFactory.sol/OpenFactory"}
+      {"label": "OpenFactory", "artifact": "OpenFactory.sol/OpenFactory"},
+      {"label": "OpenFactoryLib", "artifact": "OpenFactoryLib.sol/OpenFactoryLib", "via": ["OpenFactory"]}
     ],
     "accounts": [
       {"label": "SmartKeyAccountFactory", "artifact": "SmartKeyAccountFactory.sol/SmartKeyAccountFactory"},
@@ -97,7 +98,10 @@
     ],
     "pqchat": [
       {"label": "PqChat", "artifact": "PqChat.sol/PqChat"},
-      {"label": "PqChatTopics", "artifact": "PqChatTopics.sol/PqChatTopics", "via": ["PqChat"]}
+      {"label": "PqChatTopics", "artifact": "PqChatTopics.sol/PqChatTopics", "via": ["PqChat"]},
+      {"label": "PqChatTree", "artifact": "PqChatTree.sol/PqChatTree", "via": ["PqChat"]},
+      {"label": "PqChatTreeViews", "artifact": "PqChatTreeViews.sol/PqChatTreeViews", "via": ["PqChat"]},
+      {"label": "PqChatTreeMembers", "artifact": "PqChatTreeMembers.sol/PqChatTreeMembers", "via": ["PqChat"]}
     ]
   }
 }

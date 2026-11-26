@@ -3,6 +3,8 @@
 Public EVM mainnet. Row `base-mainnet` of [`chain-uids.json`](../../../chain-uids.json): chain id **8453**, chain_uid
 `0xf712aa9241cc24369b143cf6dce85f0902a9731e70d66818a3a5845b296c73dd`, network `mainnet`. A chain is (chainId, chain_uid) (NET-ALL-22).
 
+**EVM tier** ([NET-EVM-20](../../../../../docs/networks/evm.md#NET-EVM-20), owner 2026-11-26): *Tier 3: not yet eligible.* Block 40 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled.
+
 Profile [`profile.json`](profile.json) (`draft`, SDK plan T40), from the probes of 2026-11-22
 (`clients/scaas-rpc/runs/2026-11-22-evm-probes.py`; summary `2026-11-22-evm-probes-summary.txt` beside it; one sample each, the
 24-h and 7-day windows of NET-EVM-19 still to run):

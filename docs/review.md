@@ -1,0 +1,280 @@
+# Reviews: the dimensions and the areas
+
+Status: **BUILT** as a process rule: every review brief since the TreeKEM code review uses it. A checker for the brief
+is **PLANNED**.
+
+<a id="ARCH-POS-22"></a>**ARCH-POS-22**: **a review covers every dimension below, divided into areas.**
+
+- **Who decides.** The owner, 2026-11-24.
+- **Briefs.** Every review brief names, for each dimension, the area that covers it, or says why the dimension does not
+  apply. A dimension may never be dropped in silence.
+- **What it applies to.** This holds for:
+  - a spec review and a code review;
+  - a review by Fable, Codex or agy;
+  - the AI audit rounds of [ARCH-POS-14](decisions.md#ARCH-POS-14).
+- **Reviewers.** Fable reviews every crypto spec and its code. Codex runs only when the owner asks.
+- **Reports.** They go to `scratchpad/<subject>-review-<YYYYMMDD-HHMM>/`, one file per reviewer and area. The fixes are
+  tracked there in `STATUS.md`.
+
+**Contents**
+
+1. [Dimensions](#1-dimensions)
+2. [Areas](#2-areas)
+3. [Brief and report](#3-brief-and-report)
+4. [Scale](#4-scale)
+5. [Brief template](#5-brief-template)
+
+## 1. Dimensions
+
+Status: **BUILT**.
+
+Each dimension lists what a reviewer looks for. The [rules that do not bend](../AGENTS.md#rules-that-do-not-bend) are
+dimension 4, and no review skips them.
+
+1. **Conformance.**
+   - The code does what the spec and the owner rulings say, rule by rule (by id), and no more.
+   - A rule marked BUILT has code and a test.
+   - Code has a rule.
+   - The code and the docs agree, including the status tags.
+2. **Cryptography.**
+   - The key schedule and derivations; domain separation; transcripts.
+   - Binding to the context: session, epoch, membership, tree or statement.
+   - Hashes and commitments: what each one binds, and what it does not.
+   - Use of each primitive: KEM and HPKE, signatures, proofs. Parameter sets and their bounds.
+   - Canonical encodings and small-order or malleable inputs.
+   - Forward secrecy and post-compromise security claims; what a removed or new party can learn.
+   - Constant time where a secret is used; randomness and nonce reuse.
+   - Soundness of a proof or a relation.
+   - **Read vertically:** one primitive through every implementation (C, Rust, wasm32, JS, Solidity, the generic and the
+     specialised verifier). A bug class found once is checked everywhere.
+3. **Security.**
+   - Authorization: who may call what, rights per role, the own-account rules.
+   - Forgery, replay and nonces; signature and authorship of each record.
+   - Front-running and ordering.
+   - Downgrade between modes or versions.
+   - Input validation at every trust boundary.
+4. **Rules that do not bend.**
+   - Never lose ciphertext.
+   - No decryption oracle ([ARCH-POS-13](decisions.md#ARCH-POS-13)).
+   - Explicit parameters.
+   - Every `mtx*` call is relayable.
+   - No EIP-7702.
+   - No assumption about a chain.
+   - Maximal support ([ARCH-POS-18](decisions.md#ARCH-POS-18)).
+   - One rule on every chain.
+   - Every RPC consumer takes a list of nodes ([ARCH-POS-15](decisions.md#ARCH-POS-15)).
+   - The node is open.
+   - Nothing deployed is upgraded.
+5. **Secrets and privacy.**
+   - A key, seed, plaintext or decrypted content must not leave its place: the vault, the arena, a `SecretBytes` handle,
+     a binding, a log, `Debug` output or an error text.
+   - Zeroizing.
+   - Metadata a public observer learns from state, events, calldata, sizes or timing.
+   - Business identifiers in clear ([ARCH-POS-17](decisions.md#ARCH-POS-17)).
+6. **Robustness and denial of service.**
+   - Every untrusted decode is bounded by length and by depth.
+   - Gas and storage griefing.
+   - An input that makes the state unusable for others.
+   - Unbounded loops.
+   - The block limit and the inclusion rule of EIP-8037.
+   - Queue and backlog exhaustion.
+7. **Failure handling.**
+   - Everything fails closed, with a named error.
+   - No partial state after a refusal.
+   - Reentrancy.
+   - Retries, reorgs and finality.
+   - The node never reports `dead` while a transaction may still land.
+   - Recovery from state alone.
+8. **Consistency across languages and layers.**
+   - The same bytes in every language: `clientkeys`, every `ua-*`, the SDK, the node and the contracts, all from the
+     vectors.
+   - Allow-lists equal to the contract's in both directions.
+   - A record the contract accepts can be followed by clients, and the reverse; no fork.
+   - A check present in one path is also present in its siblings.
+9. **Contract specifics.**
+   - The storage layout and its pins.
+   - Typehash pins.
+   - Module and library splits: DELEGATECALL storage, `this`, `msg.sender`, return data.
+   - The size gate.
+   - Gas pins that move with old → new figures.
+   - Immutability and the factory catalogue.
+10. **Performance and cost.**
+   - Gas per entry, against the figures the docs quote.
+   - Client CPU and memory, including wasm and mobile budgets.
+   - RPC round trips.
+   - Proof and verify time.
+   - Storage growth over a long life.
+   - Who pays.
+11. **Interfaces and misuse.**
+    - Is the API hard to misuse?
+    - Prepare → review → sign shows every field.
+    - Defaults are the safe choice.
+    - Error codes are stable.
+    - The CLI and the bindings match the SDK.
+    - Changing a job shape needs an operator note.
+12. **Tests.**
+    - A test that cannot fail.
+    - Every refusal has a positive twin.
+    - Mutants cover every check, and the survivors are explained.
+    - Vectors are checked by every reader.
+    - Gates are sized to the change (AGENTS.md "Verify").
+13. **Operations and the supply chain.**
+    - Config holds no secret.
+    - Logs and the metrics are useful and leak nothing.
+    - New dependencies: their licence, `cargo deny` / `npm audit`, the size they add, the pins.
+    - SPDX headers.
+    - No machine path ([ARCH-POS-16](decisions.md#ARCH-POS-16)).
+    - Nothing a secret scan of the push would hit.
+
+## 2. Areas
+
+Status: **BUILT**.
+
+A review is divided into areas, one reviewer each. Every area applies all thirteen dimensions within its scope.
+
+- **One area per layer touched.** The layers are the contracts, `ua-rs` and the other signers, the SDK and its
+  bindings, `clientkeys` with its generators and vectors, the node, and `pqz-core`. A big layer can be split.
+- **One cross-layer area**, always when more than one layer is touched. It covers dimension 8 end to end: spec ↔
+  contract ↔ clients ↔ node. It looks for places where two layers read the same rule differently.
+- **One cryptography area**, always when the change touches cryptography. It reads the spec's mathematics, then one
+  primitive at a time through every implementation and layer (dimension 2, read vertically). The other areas keep
+  dimension 2 within their scope, but this area leads it.
+- **One adversarial area**, always for crypto, value or access control. It plays every role against the whole change:
+  - a malicious member or holder;
+  - a malicious admin;
+  - a relayer that refuses, delays or reorders;
+  - an RPC node that lies;
+  - a front-runner;
+  - a party that has left or been removed.
+
+  It tries to break each rule and to recover from state alone.
+
+## 3. Brief and report
+
+Status: **BUILT**.
+
+The **brief** holds:
+- the tree, at an exact commit and read-only;
+- the area;
+- the files to read;
+- the owner rulings that are not to be reopened, and the accepted risks not to raise again;
+- the dimension table of §1, with a lead area per row;
+- the machine rules: runs go through `scripts/capped` in the foreground, with no background shell.
+
+Each **finding** has:
+- an id `<area>-<n>`;
+- a severity:
+  - P0: loss of a key or plaintext, a forgery, an oracle;
+  - P1: a broken rule with security impact;
+  - P2: a correctness or design defect;
+  - P3: docs or tests;
+- the location, `file:line`;
+- the rule id it breaks;
+- the dimension number;
+- a concrete failure scenario;
+- a fix in one or two lines.
+
+Only verified findings count; a doubtful one is marked `UNSURE`, with what would settle it.
+
+Each report ends with:
+- what was read and what was not;
+- a verdict: approve, approve with fixes, or rework.
+
+**Fixes** go task by task. Every check gets its test red first, then a mutant. `STATUS.md` holds one row per finding
+with its commit.
+
+## 4. Scale
+
+Status: **BUILT**.
+
+- **A small change** (AGENTS.md "Verify": edit, one test, the touched gates) needs no review round.
+- **A spec or a code change of one layer**: one area, plus the cryptography area if it touches cryptography, plus the
+  adversarial area if it touches cryptography, value or access control.
+- **A round across several layers**: one area per layer, plus the cross-layer area, plus the cryptography area when
+  cryptography is touched, plus the adversarial area.
+- **The pre-freeze audit**: the same areas over the whole scope of [ARCH-POS-14](decisions.md#ARCH-POS-14).
+  Its application of this rule (units, prompts with their dimension tables, running order, ledger) is in [audit/](audit/README.md).
+
+## 5. Brief template
+
+Status: **BUILT**.
+
+Copy this block to `scratchpad/<subject>-review-<YYYYMMDD-HHMM>/BRIEF.md` and fill each `<…>`. Keep every row of the
+dimension table. A row may say `N/A: <reason>`, but it may not be deleted. Each reviewer's prompt is then one line:
+"Read `<dir>/BRIEF.md`. Your area is `<X>`. Write `<dir>/<reviewer>-<X>.md`."
+
+````markdown
+# <Subject> review (shared brief)
+
+## Setup
+- **Tree:** branch `<branch>` at `<commit>`, checked out read-only at `<worktree>`. Edit, commit, stash or push nothing there.
+- **Reports:** `<dir>/<reviewer>-<area>.md`. The directory is git-ignored and never pushed.
+- **Who fixes:** the controller fixes the findings later, task by task, in `<dir>/STATUS.md`. Reviewers only report.
+
+## What this is
+<one paragraph: what changed, its spec / plan / decisions by path and id, its size>
+
+## Rules, by precedence
+1. `docs/decisions.md` entries with `owner: yes`.
+2. The component docs: <paths>.
+3. The spec and plan: <paths>.
+4. `AGENTS.md`, above all "Rules that do not bend".
+
+**Owner rulings, not to be reopened:** <list>
+**Accepted risks, never to be raised again:** <list>
+
+## Areas
+| Area | Scope (files, entries) |
+|---|---|
+| <A> | <layer 1> |
+| <B> | <layer 2> |
+| <D> | cross-layer: spec ↔ contract ↔ clients ↔ node |
+| <E> | adversarial: every role against the whole change |
+| <F> | cryptography: the spec's mathematics, one primitive at a time through every implementation |
+
+## Dimensions (docs/review.md §1)
+Each area applies every dimension within its scope. The table names the area that leads each dimension; `N/A` needs a
+reason.
+
+| # | Dimension | Lead area | What to hunt here (specific to this change) |
+|---|---|---|---|
+| 1 | Conformance | <all> | <rule ids to check one by one> |
+| 2 | Cryptography | <F> | <primitives, derivations, hashes to read vertically> |
+| 3 | Security | <E> | <…> |
+| 4 | Rules that do not bend | <all> | <…> |
+| 5 | Secrets and privacy | <…> | <…> |
+| 6 | Robustness and denial of service | <…> | <…> |
+| 7 | Failure handling | <…> | <…> |
+| 8 | Consistency across languages and layers | <D> | <…> |
+| 9 | Contract specifics | <…> | <…> |
+| 10 | Performance and cost | <…> | <…> |
+| 11 | Interfaces and misuse | <…> | <…> |
+| 12 | Tests | <all> | <…> |
+| 13 | Operations and the supply chain | <…> | <…> |
+
+## Findings format (docs/review.md §3)
+- id `<area>-<n>`;
+- severity P0 to P3;
+- `file:line`;
+- rule id;
+- dimension number;
+- concrete failure scenario;
+- fix in one or two lines.
+
+Only verified findings count. Mark a doubtful one `UNSURE`, with what would settle it. At the top of the report, list
+what you read and what you did not get to. End with a verdict: approve, approve with fixes, or rework.
+
+## Machine rules
+- Prefer reading code.
+- Runs go only through `scripts/capped`, in the foreground, `CARGO_INCREMENTAL=0`, `-j 2`, one at a time, with a target
+  dir under `<dir>`.
+- No `timeout`, `sleep` loops, `pkill` / `pgrep -f`, docker or background shell.
+- Do not touch the live testnet.
+- Never print `scratchpad/testnet-wallet.txt`.
+````
+
+**`STATUS.md`** has one row per finding:
+
+```text
+| id | sev | dim | verdict (fix / reject: reason / owner) | commit | test (red line) | mutant |
+```

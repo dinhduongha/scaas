@@ -22,6 +22,11 @@ abstract contract PqGroupBase {
     uint256 internal constant SEALED_KEY = 48;
     /// @notice A packed wrap: member (32) ‖ keyId (8) ‖ mlkemCt (1,568) ‖ x25519Eph (32) ‖ sealedKey (48).
     uint256 internal constant WRAP_BYTES = 1688;
+    /// @dev Owner (M) 2026-11-23: the KEM keys one UA may hold in one epoch (its seed key and device keys), a controller call
+    ///      from the gas figures: 8 keys of each of 2 members are 16 wraps, about a 16-member epoch, still landed in chunks.
+    uint256 internal constant KEYS_PER_UA_MAX = 8;
+    /// @dev C9 (Change 2026-11-24, E-3): an exit names the head or an older complete epoch at most this many below it.
+    uint64 internal constant EXIT_LAG_MAX = 16;
 
     /// @dev What `_fail` raises, each contract by its own named error: `a`, `b` its arguments as words.
     uint8 internal constant F_SHAPE = 0; // ()
@@ -37,6 +42,7 @@ abstract contract PqGroupBase {
     uint8 internal constant F_REMOVED_KEPT = 10; // (epochId, ua)
     uint8 internal constant F_NONCE_USED = 11; // (scope, nonce)
     uint8 internal constant F_ENV = 12; // ()
+    uint8 internal constant F_EXIT_LAG = 13; // (named, head): C9's lag (Change 2026-11-24, E-3)
 
     struct Epoch {
         bytes32 sessionId; // 0 = unknown
@@ -139,6 +145,47 @@ abstract contract PqGroupBase {
         if (ep.sessionId == 0) _fail(F_UNKNOWN, uint256(epochId), 0);
     }
 
+    /// @dev C9 in mode 0 and PqVault (CTR-CHAT-10, CTR-CHAT-20, CTR-PQV-06; Change 2026-11-24, E-3): the epoch an exit naming
+    ///      `epochId` acts on, `at`, and the named epoch's number. At home `epochId` is complete and of the session, so the head
+    ///      or an ancestor of it (CTR-CHAT-08: every complete epoch is on the home's chain), at most `EXIT_LAG_MAX` below the
+    ///      head (`F_EXIT_LAG`), and `at` is the head (the last of `epochsOf`, else epoch 0); in a replica it is `epochId`.
+    function _exitAt(bytes32 sessionId, bytes32 epochId)
+        internal
+        view
+        returns (bytes32 at, Epoch storage ep, uint64 named)
+    {
+        ep = _known(epochId);
+        if (ep.sessionId != sessionId) _fail(F_UNKNOWN, uint256(epochId), 0);
+        (at, named) = (epochId, ep.epoch);
+        if (!_epochs()[sessionId].home) return (at, ep, named);
+        if (ep.landed != ep.wraps) _fail(F_INCOMPLETE, uint256(epochId), 0);
+        bytes32[] storage c = _chain()[sessionId];
+        at = c.length == 0 ? sessionId : c[c.length - 1];
+        ep = _epochs()[at];
+        if (ep.epoch > named + EXIT_LAG_MAX) _fail(F_EXIT_LAG, named, ep.epoch);
+    }
+
+    /// @dev E-2 (controller call 2026-11-25): at home an exit's admin and each UA it names are in the lists of the epoch named
+    ///      too (as well as the head's), where a replica checks them, so a replica can copy every exit the home took.
+    function _namedLists(bytes32 epochId, bytes32 admin, bytes32[] calldata uas) internal view {
+        (bytes32[] memory admins, IPqChat.MemberKey[] memory m,) = _lists(_known(epochId));
+        if (!_has(admins, admin)) _fail(F_NOT_ADMIN, uint256(admin), 0);
+        for (uint256 i; i < uas.length; ++i) {
+            if (!_removable(m, admins, uas[i])) _fail(F_NOT_MEMBER, uint256(uas[i]), 0);
+        }
+    }
+
+    /// @dev Flags `uas` removed from `ep`; returns how many were not flagged yet (all at home, A-4; a replica takes a repeat,
+    ///      A-16).
+    function _flagRemoved(Epoch storage ep, bytes32[] calldata uas) internal returns (uint16 fresh) {
+        for (uint256 i; i < uas.length; ++i) {
+            if (!ep.removedOf[uas[i]]) {
+                ep.removedOf[uas[i]] = true;
+                ++fresh;
+            }
+        }
+    }
+
     /// @notice P9, P10: the parent `parentEpochId` stored and complete in this instance, of `sessionId`, `epoch == parent + 1`, the
     ///         home slot free.
     function _parentOf(bytes32 parentEpochId, bytes32 sessionId, uint64 epoch)
@@ -168,10 +215,13 @@ abstract contract PqGroupBase {
         bytes32 author
     ) internal view returns (bytes32[] memory pu) {
         pu = _uas(pm);
-        if (pe.removed != 0 && pe.removedOf[author]) _fail(F_NOT_MEMBER, uint256(author), 0); // P48
+        bool home = _epochs()[pe.sessionId].home; // the author's flags refuse at home only (sc-E-4: in a replica a flag allows)
+        if (home && pe.removed != 0 && pe.removedOf[author]) _fail(F_NOT_MEMBER, uint256(author), 0); // P48
         if (_keeps(pe, pa, admins) && _keeps(pe, pu, _uas(members))) {
             // Fable P1-2 (a): a member who left the parent authors no plain rekey of it (it would keep itself in)
-            if (_memberAt(pm, author) == type(uint256).max || pe.left[author]) _fail(F_NOT_MEMBER, uint256(author), 0);
+            if (_memberAt(pm, author) == type(uint256).max || (home && pe.left[author])) {
+                _fail(F_NOT_MEMBER, uint256(author), 0);
+            }
         } else if (!_liveAdmin(pe, pa, author)) {
             _fail(F_NOT_ADMIN, uint256(author), 0);
         }
@@ -179,9 +229,10 @@ abstract contract PqGroupBase {
 
     /// @dev One rule for PqChat and PqVault (Fable code review of PqVault F2, F7; controller call 2026-11-21): an admin of `pe`
     ///      acts on it (a membership change, a removal; every PqVault rekey) only while it is in `pe`'s admin list, not removed
-    ///      from `pe` and has not left it (as O3 (b) for item writes).
+    ///      from `pe` and has not left it (as O3 (b) for item writes). In a replica a flag only allows (sc-E-4): the admin
+    ///      list alone.
     function _liveAdmin(Epoch storage pe, bytes32[] memory admins, bytes32 ua) internal view returns (bool) {
-        return _has(admins, ua) && !pe.removedOf[ua] && !pe.left[ua];
+        return _has(admins, ua) && (!_epochs()[pe.sessionId].home || (!pe.removedOf[ua] && !pe.left[ua]));
     }
 
     /// @dev Fable code review of PqVault F3 (controller call 2026-11-21, one rule for PqChat and PqVault): a `remove` takes a UA
@@ -195,31 +246,62 @@ abstract contract PqGroupBase {
         return _memberAt(members, ua) != type(uint256).max || _has(admins, ua);
     }
 
-    /// @dev 3C-D7: `child` (sorted) is `parent` (sorted) minus entries that left the parent epoch.
+    /// @dev 3C-D7: `child` (sorted) is `parent` (sorted) minus entries that left the parent epoch or were removed from it.
     function _keeps(Epoch storage pe, bytes32[] memory parent, bytes32[] memory child) internal view returns (bool) {
         uint256 j;
         for (uint256 i; i < parent.length; ++i) {
             if (j < child.length && child[j] == parent[i]) ++j;
             else if (j < child.length && child[j] < parent[i]) return false; // added
-            else if (!pe.left[parent[i]] && !pe.removedOf[parent[i]]) return false; // dropped without leaving or removal
+            else if (!_flagged(pe, parent[i])) return false; // dropped without leaving or removal
         }
         return j == child.length;
     }
 
+    /// @dev `ua` left `pe` or was removed from it; in a replica also at an ancestor at most `EXIT_LAG_MAX` above it, where the
+    ///      home may have applied an exit that named it (CTR-CHAT-20, the spec check sc-E-4), among the epochs stored here.
+    function _flagged(Epoch storage pe, bytes32 ua) internal view returns (bool) {
+        if (pe.left[ua] || pe.removedOf[ua]) return true;
+        if (_epochs()[pe.sessionId].home) return false;
+        Epoch storage a = pe;
+        for (uint256 k; k < EXIT_LAG_MAX && a.epoch != 0; ++k) {
+            a = _epochs()[a.parent];
+            if (a.sessionId == 0) return false; // not stored in this replica
+            if (a.left[ua] || a.removedOf[ua]) return true;
+        }
+        return false;
+    }
+
+    /// @dev The distinct UAs of a member list (sorted by `(ua, keyId)`, owner (M) 2026-11-23: a UA's keys are adjacent), in
+    ///      order: every rule but the wraps reads members per UA.
     function _uas(IPqChat.MemberKey[] memory m) internal pure returns (bytes32[] memory u) {
         u = new bytes32[](m.length);
+        uint256 n;
         for (uint256 i; i < m.length; ++i) {
-            u[i] = m[i].ua;
+            if (!_sameUa(m, i)) u[n++] = m[i].ua;
         }
+        assembly ("memory-safe") {
+            mstore(u, n)
+        }
+    }
+
+    /// @dev Entry `i` is a further key of the UA of entry `i - 1` (owner (M) 2026-11-23).
+    function _sameUa(IPqChat.MemberKey[] memory m, uint256 i) internal pure returns (bool) {
+        return i > 0 && m[i].ua == m[i - 1].ua;
+    }
+
+    /// @dev The author of a stored epoch record, its second field (`abi.encode(record, sigHash)`: the record's offset, the
+    ///      trailer, the record's first field, then `author`); `PqChat` overrides it for the blobs that keep a signature
+    ///      (CTR-CHAT-23).
+    function _authorOf(Epoch storage ep) internal view virtual returns (bytes32) {
+        return _word(ep.record, 96);
     }
 
     /// @dev P48: the completing child `ep` holds no UA a `remove` took out of its parent, in its members or its admins, and was
     ///      not authored by one (Fable code review of PqVault F1, controller call 2026-11-21: a child staged before its author's
-    ///      removal must not complete after it). The author is the second word of the stored epoch record in both contracts
-    ///      (`abi.encode(record, …)`: the record's offset, then the trailer; the record's first field, then `author`).
+    ///      removal must not complete after it).
     function _noneRemoved(Epoch storage ep) internal view {
         Epoch storage pe = _epochs()[ep.parent];
-        bytes32 author = _word(ep.record, 96);
+        bytes32 author = _authorOf(ep);
         if (pe.removedOf[author]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(author));
         (bytes32[] memory admins, IPqChat.MemberKey[] memory m,) = _lists(ep);
         for (uint256 i; i < m.length; ++i) {
@@ -230,8 +312,9 @@ abstract contract PqGroupBase {
         }
     }
 
-    /// @dev 3C-D6: members strictly sorted, at least `min`, one hash each, each holding its `keyId` here (P3); admins
-    ///      strictly sorted and registered (P8).
+    /// @dev 3C-D6 as owner (M) of 2026-11-23 changed it: members strictly sorted by `(ua, keyId)`, one or more keys per UA
+    ///      and at most `KEYS_PER_UA_MAX`, at least `min` distinct UAs, one hash per entry, each entry a KEM key its UA holds
+    ///      here (P3); admins strictly sorted and registered (P8).
     function _checkLists(
         IUARegistry reg,
         bytes32[] memory admins,
@@ -240,12 +323,20 @@ abstract contract PqGroupBase {
         uint256 min
     ) internal view {
         uint256 n = members.length;
-        if (n < min || nHashes != n) _fail(F_SHAPE, 0, 0);
+        if (nHashes != n) _fail(F_SHAPE, 0, 0);
+        uint256 uas;
+        uint256 keys;
         for (uint256 i; i < n; ++i) {
-            if (i > 0 && members[i].ua <= members[i - 1].ua) _fail(F_SHAPE, 0, 0);
+            if (_sameUa(members, i)) {
+                if (members[i].keyId <= members[i - 1].keyId || ++keys > KEYS_PER_UA_MAX) _fail(F_SHAPE, 0, 0);
+            } else {
+                if (i > 0 && members[i].ua < members[i - 1].ua) _fail(F_SHAPE, 0, 0);
+                (uas, keys) = (uas + 1, 1);
+            }
             (IUARegistry.KemKey memory k,) = reg.kemKeyAt(members[i].ua, members[i].keyId);
             if (k.scheme == 0) _fail(F_KEM_KEY, uint256(members[i].ua), members[i].keyId);
         }
+        if (uas < min) _fail(F_SHAPE, 0, 0);
         for (uint256 i; i < admins.length; ++i) {
             if ((i > 0 && admins[i] <= admins[i - 1]) || !reg.isRegistered(admins[i])) _fail(F_SHAPE, 0, 0);
         }
@@ -260,9 +351,8 @@ abstract contract PqGroupBase {
 
     // ------------------------------------------------------------------ wraps
 
-    /// @dev P11: `wraps` as indices `first..` of `epochId`, each against its signed hash, then its shape and its member's
-    ///      `ua` / `keyId` (3C-D6), stored once; packed as many per blob as the limit holds, one slot each (pointer | offset
-    ///      << 160). The epoch completes when its last wrap lands (`complete`); the caller emits the events of both.
+    /// @dev P11: `_storeWraps`, then `landed` counts them; the epoch completes when its last wrap lands (`complete`,
+    ///      `_complete`); the caller emits the events of both.
     function _land(
         bytes32 epochId,
         Epoch storage ep,
@@ -273,21 +363,44 @@ abstract contract PqGroupBase {
         uint256 limit
     ) internal returns (bool complete) {
         uint256 n = wraps.length;
+        _storeWraps(epochId, ep, first, wraps, members, hashes, limit);
+        uint32 landed = ep.landed + uint32(n);
+        ep.landed = landed;
+        if (landed == ep.wraps && n != 0) {
+            _complete(epochId, ep);
+            return true;
+        }
+    }
+
+    /// @dev P11: `wraps` as indices `first..` of `epochId`, each against its signed hash, then its shape and its member's
+    ///      `ua` / `keyId` (3C-D6), stored once; packed as many per blob as the limit holds, one slot each (pointer | offset
+    ///      << 160). Counts nothing: the caller owns `landed` (a tree epoch counts its pieces, CTR-CHAT-27 C20).
+    function _storeWraps(
+        bytes32 epochId,
+        Epoch storage ep,
+        uint256 first,
+        IPqChat.Wrap[] calldata wraps,
+        IPqChat.MemberKey[] memory members,
+        bytes32[] memory hashes,
+        uint256 limit
+    ) internal {
+        uint256 n = wraps.length;
         if (first + n > members.length) _fail(F_SHAPE, 0, 0);
         uint256 per = (_codeCap(limit) - 1) / WRAP_BYTES;
         for (uint256 j; j < n; j += per) {
             _blob(epochId, ep, first, wraps, j, n - j < per ? n : j + per, members, hashes);
         }
-        uint32 landed = ep.landed + uint32(n);
-        ep.landed = landed;
-        if (landed == ep.wraps && n != 0) {
-            if (ep.epoch != 0) {
-                if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it
-                if (_epochs()[ep.sessionId].home) _childOf()[ep.parent] = epochId; // P9: the slot, home only
-                _chain()[ep.sessionId].push(epochId); // owner 2026-11-10: `epochsOf`
-            }
-            return true;
+    }
+
+    /// @dev The completion of epoch `epochId` above 0 (epoch 0 has nothing to take): P48's check, the home slot (P9) and
+    ///      `epochsOf` (owner 2026-11-10).
+    function _complete(bytes32 epochId, Epoch storage ep) internal {
+        if (ep.epoch == 0) return;
+        if (_epochs()[ep.sessionId].home) {
+            if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it; at home only (sc-E-4)
+            _childOf()[ep.parent] = epochId; // P9: the slot, home only
         }
+        _chain()[ep.sessionId].push(epochId); // owner 2026-11-10: `epochsOf`
     }
 
     /// @dev One blob of `wraps[from..to)`, indices `first + from..`.

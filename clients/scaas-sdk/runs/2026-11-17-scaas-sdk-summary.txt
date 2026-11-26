@@ -93,9 +93,7 @@ frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
 # killed, each by its intended assertion (t17/t18/t18b/t19-mutants.txt).
 # T20 first part (at 5d206063c + the uncommitted T20 files): bind-gen (gen.sh --check, no drift) ok; ci_changes.py self-tests ok; actionlint 1.7.12 with shellcheck 0.11.0 clean; format.sh --check yaml sh py clean; docs check 0 errors, test_docs_check ok. Mutants t20 2/2 killed (the drift check on a source change without regeneration; the Dart load_check test).
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
-ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
-ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 # T20 rest and the native auditor's PQZ consent (1233ed00d, c1a17c82f): the rows at 7f5e03caf "tree dirty" ran on the working
 # tree that became those two commits (the SDK, ffi, Dart and ua-rs files); ua-test ran before a clippy-only rewrite of one
@@ -169,17 +167,13 @@ sdk-test-sync | b5b5ec89c | 0 | 272 passed, 0 failed, 12 ignored (22 binaries) (
 # ua-rs-sign's src/op/gas.rs (indexing_slicing), fixed by c21803966 (clippy clean on the four feature sets by hand; the two
 # gate steps not rerun); sdk-test stopped for the machine's shutdown, not recorded.
 sdk-min | 0b43541d3 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
-sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-rpc-clippy | cd3b6c03e | 0 | -
 gas-gen | 6e7e71142 | 0 | -
-ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
-ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
-ua-test | 95badea99 | 0 | 608 passed, 0 failed, 3 ignored (61 binaries)
-gas-gen | 6e7e71142 | 0 | -
-ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
+ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
+ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
+gas-gen | 6e7e71142 | 0 | -
 # node-e2e rc=143 at 7f156ac72: 25 tests in parallel OOM-killed at the 6 GB cap (kernel oom-kill in capped's scope); the step runs 10 at a time since e80c39854, on the merged tree
 # sdk-evm-profiles: ck-test | 46eabe7f5 | 0 | node: 537 pass, 0 fail, 4 skipped
 # sdk-evm-profiles: ua-test | 287e83eb2 | 0 | 601 passed, 0 failed, 3 ignored (59 binaries)
@@ -200,13 +194,11 @@ ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
 # cli: the rc=101 note above is closed by baf175492 (git cherry-pick -x of sdk-complete's b7a34aff6): cli rc=0 at baf175492
 # node build at 129380772 (the merged tree, CAPPED_MEM=6G, cargo build --locked --offline -j2): rc=0, Finished in 3m 19s; log runs/2026-11-22-sdk-evm-profiles-node-build.log (git-ignored)
 # sdk-evm-profiles: docs | 1cba8f84a | 0 | -
-rpc-test | 4175c2d43 | 0 | 205 passed, 0 failed, 10 ignored (21 binaries)
 rpc-wasm | 4175c2d43 | 0 | -
 node-test | 4175c2d43 | 0 | 897 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 4175c2d43 (origin/ua-rs-sign cc45679e8 into sdk-complete): node-e2e at --test-threads=10, wall 84 s, the capped scope's memory.peak 3.75 GB read at 60 s (cap 6 GiB); two reds before it were the runner's inputs, not the tree: a forge recovery snapshot of chain 31918 left by an interrupted earlier run (moved aside), and zether-cli built without `--features hazmat` (CI's e2e builds it with hazmat)
 sdk-min | 54ddfcb33 | 0 | 74 passed, 0 failed, 0 ignored (13 binaries)
-sdk-noevm | 54ddfcb33 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
 # the rows above at 5c189e9f1 (the merge of sdk-complete e90f26685, a625341ae, and its regenerated bindings): every bind-* step,
 # bind-gen, sdk-uniffi, ffi, sdk-wasm, sdk-clippy, sdk-test, sdk-deny, features, docs, mutants-check green. Mutants at 5c189e9f1:
@@ -221,10 +213,9 @@ node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 ck-xcheck | 0736ad763 | 0 | -
 # merged tree 4175c2d43 (origin/ua-rs-sign cc45679e8 into sdk-complete): node-e2e at --test-threads=10, wall 84 s, the capped scope's memory.peak 3.75 GB read at 60 s (cap 6 GiB); two reds before it were the runner's inputs, not the tree: a forge recovery snapshot of chain 31918 left by an interrupted earlier run (moved aside), and zether-cli built without `--features hazmat` (CI's e2e builds it with hazmat)
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
+rpc-wasm | 0011b40e4 | 0 | -
 ua-c | e90f26685 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | e90f26685 | 0 | ctest: 0 tests failed out of 45
-sdk-noevm | 0011b40e4 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
-rpc-wasm | 0011b40e4 | 0 | -
 
 # faecafcd2 (T41.evm): sdk-e2e's e2e_hand_off_on_anvil alone (CAPPED_MEM=6G, --ignored): 1 passed (A hands off, B lands it, the same blob ImportConsumed, a blob bound to C ImportRelayerBound, A's own self-relay lands); the whole sdk-e2e is the round's matrix (T39). Mutants: t41evm0 9 of 9, t41evm 13 of 13 killed
 ck-xcheck | 0736ad763 | 0 | -
@@ -234,16 +225,12 @@ ck-test | 0736ad763 | 0 | node: 567 pass, 0 fail, 4 skipped
 ck-xcheck | 0736ad763 | 0 | -
 # T41.arweave's ua-rs part at 0736ad763 (CA-T16, CA-T17): the rows above; mutants t41arw1 20/20 killed (the ua-rs rows at 0736ad763, the clientkeys rows at 9764de7c0, their command through capped with the TAP reporter); every mutant script loads (mutants-check's commands, run by hand at 9764de7c0: rc 0)
 # T41.arweave fam-arweave size (clients/ua-rs/runs/fam-sizes.sh, release, the probe now reaching DataItem::parse) at 0736ad763: none 2212040 B; fam-arweave 2205712 → 2265656 B (delta −72 → +53616 B, old the empty feature at 61c5bb014); all 2342744 → 2379296 B (delta +136960 → +167256 B)
-rpc-test | 6f2eb3dbd | 0 | 219 passed, 0 failed, 10 ignored (22 binaries)
 rpc-wasm | 6f2eb3dbd | 0 | -
 sdk-min | 7daa8b2bc | 0 | 74 passed, 0 failed, 0 ignored (14 binaries)
-sdk-noevm | 7daa8b2bc | 0 | 149 passed, 0 failed, 0 ignored (21 binaries)
 ck-test | 898fa1ebc | 0 | node: 568 pass, 0 fail, 4 skipped
 # T41.arweave's scaas-rpc and SDK parts (CA-T19, CA-T20): code 6f2eb3dbd, the shared ArweaveItem code 7daa8b2bc (error_codes_are_names was red at 6f2eb3dbd in sdk-test, sdk-noevm, sdk-min: fixed, rows above at 7daa8b2bc), the notC9 rows 291a864b2 (the survivor of t41arw2 killed); the rpc rows at 6f2eb3dbd are unchanged by the two later code commits (scaas-rpc untouched)
-rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
-ua-appcore | 7992a33e7 | 0 | 14 passed, 0 failed, 0 ignored (1 binaries)
-ua-test | 7992a33e7 | 0 | 622 passed, 0 failed, 3 ignored (63 binaries)
 ua-verify-only | 7992a33e7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
+rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
 ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # PqVault's dedicated signing path (owner 2026-11-22, CLI-PQV-13) 4f64cf766, merged with origin/ua-rs-sign a97cce414 at
 # caecc3ade, mutant text fix 7992a33e7: the 14 rows above at 7992a33e7, clean tree. sdk-test's four reds of 8c869f3c5
@@ -254,7 +241,6 @@ ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # hand, not a runner step). format.sh --check: rust, js, py, sol clean at 4f64cf766 (tact not run: no ton node_modules in the
 # worktree; untouched). Mutants pqvsign 14/14 killed at 7992a33e7. No pin moved: no vector row, typehash, gas or size pin
 # changes (records.json is read, not regenerated; the purpose P_V enters no new digest).
-rpc-test | 76bdb5865 | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
 node-test | 76bdb5865 | 0 | 902 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 76bdb5865 (origin/ua-rs-sign a97cce414): sdk-test's 4 reds are app_core_vault_records' (AppDomainRefused: ua-rs-sign's PqVault domain refusal of 7da6fbb32; branch pqvault-sign fixes them, inherited, not touched); the same set with --no-fail-fast: 412 passed, those 4 failed, 17 ignored in 39 binaries; scripts/format.sh --check: every part ok but tact (tact-fmt not installed in this worktree)
@@ -277,16 +263,9 @@ node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # vectors, and the non-EVM set), its tests handoff 8 and soroban_ops 8; scaas-cli clippy --all-targets --features dev-profiles
 # and tests/cli.rs 13 passed (one_command_per_sdk_call_both_ways, every_signing_command_asks_first: its missing run of
 # pqvault-sign's `app-core sign-pqvault-record` added); docs; format.sh --check rust js py after git add -N.
-rpc-clippy | 028da021c | 0 | -
-sdk-clippy-noevm | 028da021c | 0 | -
 # pqchat-core T8 (on pqchat-core-impl): the app core scope made again after an unlock (d6abf1f97, test app_core::scope_after_lock_and_unlock); sdk-clippy red at e5573b3d6 (type_complexity on that cache), its type named at f238113b8 (no behaviour change), sdk-clippy green there; sdk-test and sdk-vectors at e5573b3d6.
-ua-appcore | ea980befa | 0 | 15 passed, 0 failed, 0 ignored (1 binaries)
 ua-arweave | ea980befa | 0 | 32 passed, 0 failed, 0 ignored (6 binaries)
 ua-verify-only | ea980befa | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
-ua-test | ea980befa | 0 | 628 passed, 0 failed, 3 ignored (64 binaries)
-sdk-vectors | ea980befa | 0 | 19 passed, 0 failed, 0 ignored (2 binaries)
-sdk-clippy | ea980befa | 0 | -
-sdk-test | ea980befa | 0 | 438 passed, 0 failed, 17 ignored (41 binaries)
 docs | ea980befa | 0 | -
 ua-arweave | 028da021c | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 # the rows above at eff2aa3e5 (the merge of ua-rs-sign 3da595648, e33e863c9, and its regenerated bindings) and bind-js at
@@ -305,7 +284,6 @@ sdk-soroban-e2e | 5eeed4adf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 sdk-clippy-default | 5eeed4adf | 0 | -
 sdk-clippy-min | 5eeed4adf | 0 | -
 sdk-min | 5eeed4adf | 0 | 74 passed, 0 failed, 0 ignored (16 binaries)
-sdk-noevm | 5eeed4adf | 0 | 157 passed, 0 failed, 1 ignored (23 binaries)
 gas-gen | 7c637b66f | 0 | -
 # T39 / T25 (2026-11-22, branch sdk-round-end): every step's last row above is rc 0 (sdk-test 437 passed at 363151f8d, after
 # the 101 of 76bdb5865); bind-cpp has no row (clients/scaas-sdk/bindings/cpp does not exist yet: T20b-T20h on sdk-binding) and
@@ -314,7 +292,6 @@ gas-gen | 7c637b66f | 0 | -
 # red GasAboveTxCap, open: runs/2026-11-20-m20-nethermind-summary.txt), the Soroban e2e (sdk-soroban-e2e, green).
 # Mutants: 70 reruns, 70 killed (plan T39). origin/ua-rs-sign b0ee76349 (pqvault-core, url 2.5.9) merged before T25.
 sdk-deny | 4a96991f4 | 0 | -
-sdk-clippy-noevm | 4a96991f4 | 0 | -
 sdk-clippy-default | 4a96991f4 | 0 | -
 sdk-clippy-min | 4a96991f4 | 0 | -
 sdk-wasm | 4a96991f4 | 0 | -
@@ -329,7 +306,6 @@ bind-js | 4a96991f4 | 0 | node: 5 pass, 0 fail, 0 skipped
 bind-java | 4a96991f4 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
 bind-go | 4a96991f4 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
 bind-dart | 4a96991f4 | 0 | dart: +14:
-sdk-test | 4a96991f4 | 0 | 441 passed, 0 failed, 18 ignored (42 binaries)
 # the rows above at 4a96991f4 (the merge of ua-rs-sign 977435769 with the SDK's pinned_reads, 938133189, and its regenerated
 # bindings): the runner names the commit it started at; from sdk-wasm on the tree was d7910088b, whose only change is the CLI's
 # completeness test (it skips the binding adapters; lib::load_check excluded), after cli rc 101 on exactly that list. docs,
@@ -345,24 +321,152 @@ sdk-soroban-e2e | 9f8c4570e | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 # soroban_ops 9, scaas-node families_vectors 5; clippy -D warnings of ua-rs (default), scaas-rpc (--all-features), scaas-sdk
 # (the full set with vectors, the non-EVM set); docs; format.sh --check rust js py sh after git add -N. Mutants t41sor 23 of
 # 23 killed at 9f8c4570e (the new one: a SourceAccount entry taken from another payer).
-sdk-clippy-noevm | 028da021c | 0 | -
 # pqchat-core T8 (on pqchat-core-impl): the app core scope made again after an unlock (d6abf1f97, test app_core::scope_after_lock_and_unlock); sdk-clippy red at e5573b3d6 (type_complexity on that cache), its type named at f238113b8 (no behaviour change), sdk-clippy green there; sdk-test and sdk-vectors at e5573b3d6.
-sdk-test | e5573b3d6 | 0 | 438 passed, 0 failed, 17 ignored (41 binaries)
-sdk-vectors | e5573b3d6 | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
-sdk-clippy | e9682c492 | 0 | -
 # the rows above at e9682c492 (the merge of ua-rs-sign 70c2a3633): bind-gen no drift (pqchat-records is not a default
 # feature), cli 46 (the binding adapters skipped by its completeness test, d7910088b), sdk-clippy, mutants-check green;
 # pqchat-core `cargo check --tests` rc 0 (its three ChainProfile literals state pinned_reads).
-docs | 79994e9a5 | 0 | -
 # the rows above at 79994e9a5 (the bindings per language, decisions CLI-SDK-33 (102)): docs, mutants-check, bind-gen (each of
 # the eight generated parts checked through the list) green; ci_changes.py's self-tests and actionlint green; the controls:
 # an unknown name in the list refused by the generator and the runner (rc 2), go left out: gen.sh skips its part, the runner
 # skips bind-go and runs bind-python (7 ran, OK; tree dirty, no row).
-mutants-check | 3d96c45be | 0 | -
-bind-gen | 3d96c45be | 0 | -
 sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
-cli | 3d96c45be | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+sdk-test | 190cc2ba7 | 0 | 443 passed, 0 failed, 18 ignored (42 binaries)
+sdk-clippy | 190cc2ba7 | 0 | -
 ua-clippy | 3d96c45be | 0 | -
 ua-vectors | 3d96c45be | 0 | 739 passed, 0 failed, 6 ignored (72 binaries)
 ua-core | 3d96c45be | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
+docs | 1e73c93e4 | 0 | -
+sdk-test | 1e73c93e4 | 0 | 460 passed, 0 failed, 18 ignored (42 binaries)
+sdk-vectors | 1e73c93e4 | 0 | 19 passed, 0 failed, 0 ignored (2 binaries)
+rpc-test | 1e73c93e4 | 0 | 231 passed, 0 failed, 10 ignored (23 binaries)
+rpc-clippy | 1e73c93e4 | 0 | -
+ffi | 1e73c93e4 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+bind-gen | 1e73c93e4 | 0 | -
+sdk-uniffi | 78d410f45 | 0 | 21 passed, 0 failed, 0 ignored (4 binaries)
+mutants-check | 3d96c45be | 0 | -
+sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
+features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+sdk-vectors | 190cc2ba7 | 0 | 21 passed, 0 failed, 0 ignored (2 binaries)
+ua-verify-only | 190cc2ba7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
+ua-core | 190cc2ba7 | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
+cli | 190cc2ba7 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+bind-gen | 190cc2ba7 | 0 | -
+docs | 2592e0de8 | 0 | -
+bind-gen | 76c43264c | 0 | -
+sdk-test | 76c43264c | 0 | 467 passed, 0 failed, 18 ignored (42 binaries)
+sdk-noevm | 76c43264c | 0 | 169 passed, 0 failed, 1 ignored (23 binaries)
+sdk-wasm | 76c43264c | 0 | -
+sdk-clippy | 76c43264c | 0 | -
+sdk-clippy-noevm | 76c43264c | 0 | -
+cli | 76c43264c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+ua-test | 76c43264c | 0 | 630 passed, 0 failed, 3 ignored (64 binaries)
+ua-c | 76c43264c | 0 | 9 passed, 0 failed, 0 ignored (2 binaries); unittest: 106 ran, OK
+ua-clippy | 86b15cbfc | 0 | -
+ua-appcore | 86b15cbfc | 0 | 22 passed, 0 failed, 0 ignored (1 binaries)
+ua-py | 86b15cbfc | 0 | unittest: 106 ran, OK
+ua-go | 86b15cbfc | 0 | go test: 2 ok, 0 FAIL
+ua-cs | 86b15cbfc | 0 | dotnet: 66 passed, 0 failed
+ua-cxx | 86b15cbfc | 0 | ctest: 0 tests failed out of 46
+ua-vectors | 4e1d9dcd5 | 0 | 740 passed, 0 failed, 6 ignored (72 binaries)
+bind-cpp | 4e1d9dcd5 | 0 | ctest: 0 tests failed out of 1; unittest: 3 ran, OK
+bind-cs | 4e1d9dcd5 | 0 | dotnet: 4 passed, 0 failed
+bind-dart | 4e1d9dcd5 | 0 | dart: +14:
+bind-go | 4e1d9dcd5 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
+bind-java | 4e1d9dcd5 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
+bind-js | 4e1d9dcd5 | 0 | node: 6 pass, 0 fail, 0 skipped
+bind-kotlin | 4e1d9dcd5 | 0 | kotlin: PASS (0 failures)
+bind-python | 4e1d9dcd5 | 0 | unittest: 7 ran, OK
+bind-swift | 4e1d9dcd5 | 0 | swift: PASS (0 failures)
+mutants-check | 1597f994a | 1 | -
+docs | 1597f994a | 0 | -
+sdk-noevm | 1e73c93e4 | 0 | 168 passed, 0 failed, 1 ignored (23 binaries)
+sdk-wasm | 1e73c93e4 | 0 | -
+ua-test | 1e73c93e4 | 0 | 630 passed, 0 failed, 3 ignored (64 binaries)
+ua-appcore | 1e73c93e4 | 0 | 19 passed, 0 failed, 0 ignored (1 binaries)
+ffi | 1e73c93e4 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+bind-dart | 1e73c93e4 | 0 | dart: +14:
+bind-cpp | 1e73c93e4 | 0 | ctest: 0 tests failed out of 1; unittest: 3 ran, OK
+bind-cs | 1e73c93e4 | 0 | dotnet: 4 passed, 0 failed
+bind-swift | 1e73c93e4 | 0 | swift: PASS (0 failures)
+bind-python | 1e73c93e4 | 0 | unittest: 7 ran, OK
+bind-kotlin | 1e73c93e4 | 0 | kotlin: PASS (0 failures)
+bind-java | 1e73c93e4 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
+bind-go | 1e73c93e4 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
+bind-js | 1e73c93e4 | 0 | node: 6 pass, 0 fail, 0 skipped
+cli | 1e73c93e4 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+mutants-check | 78d410f45 | 0 | -
+sdk-clippy | 78d410f45 | 0 | -
+sdk-clippy-noevm | 78d410f45 | 0 | -
+sdk-uniffi | 78d410f45 | 0 | 21 passed, 0 failed, 0 ignored (4 binaries)
+sdk-arweave | 3d96c45be | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
+features | 3d96c45be | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+sdk-vectors | 190cc2ba7 | 0 | 21 passed, 0 failed, 0 ignored (2 binaries)
+ua-verify-only | 190cc2ba7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
+ua-core | 190cc2ba7 | 0 | 76 passed, 0 failed, 0 ignored (8 binaries)
+cli | 190cc2ba7 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+bind-gen | 190cc2ba7 | 0 | -
+ua-appcore | 82dd42c18 | 0 | 29 passed, 0 failed, 0 ignored (2 binaries)
+ua-vectors | 82dd42c18 | 0 | 740 passed, 0 failed, 6 ignored (72 binaries)
+ua-test | 82dd42c18 | 0 | 630 passed, 0 failed, 3 ignored (64 binaries)
+ua-clippy | 82dd42c18 | 0 | -
+rpc-test | 2592e0de8 | 0 | 232 passed, 0 failed, 10 ignored (23 binaries)
+sdk-clippy | 2592e0de8 | 0 | -
+ua-clippy | 2592e0de8 | 0 | -
+ua-test | 2592e0de8 | 0 | 631 passed, 0 failed, 3 ignored (64 binaries)
+sdk-test | 2592e0de8 | 0 | 464 passed, 0 failed, 18 ignored (42 binaries)
+rpc-clippy | 64747dea8 | 0 | -
+mutants-check | 64747dea8 | 0 | -
+sdk-vectors | 64747dea8 | 0 | 21 passed, 0 failed, 0 ignored (2 binaries)
+bind-gen | ebadbb0ff | 0 | -
+sdk-test | ebadbb0ff | 0 | 474 passed, 0 failed, 18 ignored (42 binaries)
+sdk-noevm | ebadbb0ff | 0 | 171 passed, 0 failed, 1 ignored (23 binaries)
+sdk-wasm | ebadbb0ff | 0 | -
+sdk-clippy | ebadbb0ff | 0 | -
+sdk-clippy-noevm | ebadbb0ff | 0 | -
+sdk-min | ebadbb0ff | 0 | 78 passed, 0 failed, 0 ignored (16 binaries)
+rpc-test | ebadbb0ff | 0 | 234 passed, 0 failed, 10 ignored (23 binaries)
+rpc-clippy | ebadbb0ff | 0 | -
+rpc-wasm | ebadbb0ff | 0 | -
+docs | 6fd5d6e5c | 0 | -
+mutants-check | 957827e7c | 0 | -
+cli | 957827e7c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+sdk-deny | 957827e7c | 0 | -
+sdk-clippy | 69798ca92 | 0 | -
+sdk-clippy-noevm | 69798ca92 | 0 | -
+rpc-clippy | 69798ca92 | 0 | -
+ua-clippy | 69798ca92 | 0 | -
+cli | 69798ca92 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+bind-gen | dfc306d1e | 0 | -
+docs | dfc306d1e | 0 | -
+mutants-check | dfc306d1e | 1 | -
+# the rows above at 69798ca92 / dfc306d1e (t26-merge: origin/ua-rs-sign e26c2dece + sdk-t26-fix 82cfd4f25, sdk-t26-c 502110714,
+# sdk-t26-b 589115908; then 384e7a72d regenerated bindings, dfc306d1e rustfmt only): the older rows of these steps kept by hand
+# (the runner replaces a step's rows). mutants-check rc 1 is five mutant texts sdk-t26-fix had already moved from at 82cfd4f25
+# (its row at 1597f994a): t13rulings R3, t13sponsor's receiver check, t16a R6, t18b's two noticePeriod ones; not re-anchored.
+# cargo check --tests (--locked --offline -j 2, capped) at dfc306d1e: scaas-node, pqchat-core, pqvault-core rc 0;
+# format.sh --check rust py sh js rc 0.
+docs | a24fdb96f | 0 | -
+mutants-check | a24fdb96f | 0 | -
+sdk-clippy | a24fdb96f | 0 | -
+ua-clippy | a24fdb96f | 0 | -
+cli | a24fdb96f | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+bind-gen | a24fdb96f | 0 | -
+ck-test | a24fdb96f | 0 | node: 586 pass, 0 fail, 4 skipped
+# the rows above at a24fdb96f (t26-merge + TODO 8b-8 b114e7b6e..a24fdb96f, clean tree): the older rows of these steps kept by
+# hand (the runner replaces a step's rows). ck-test's first run here was red (263 pass, 33 fail: the worktree's node_modules
+# lacked @scure/sr25519, an install gap of a git-ignored input); rerun after node_modules was refreshed from the same lockfile.
+# Beside them at a24fdb96f, capped -j 2: pqvault-core cargo test --features vectors (lib 8, core 8, devices 3, vectors 4; e2e
+# 5 ignored) and clippy --all-targets -D warnings default and vectors; scaas-sdk app_core_vault_records 6, pqchat_keys
+# (vectors) 18; ua-rs app_core pqvault (app-core,vectors) 3 and its clippy; pqchat-core signed 8, devices 3; forge
+# PqVaultGroupMode 2, PqVaultTypes 7; format.sh --check rust py sh js rc 0. mutants-check rc 0: every SDK mutant script loads.
+sdk-clippy-default | 4ae443025 | 0 | -
+sdk-clippy | 4ae443025 | 0 | -
+mutants-check | 4ae443025 | 0 | -
+docs | 4ae443025 | 0 | -
+# the rows above at 4ae443025 (Part 2: the T26 area-B mutant run, 11bfb27a9..370aa0ee6, and its fixes 273c2f71e, 3e0852c36,
+# 57e346ddd, 4ae443025; clean tree): sdk-clippy-default rc 0 again (red since e4ad5f592 on e2e's app-core helper and since
+# 1d5490233 on B2-13's zether-only test; last green 4a96991f4). Beside them at 57e346ddd / 4ae443025, capped -j 2: history 4 and
+# governance_delay 9 passed (full features), --lib op:: 101 passed (full), --lib op::gas 32 passed (default features);
+# format.sh --check rust py sh js rc 0. Mutants: 76 rows of Part 2, 76 killed (records in the t26, t13rulings, t13sponsor,
+# t16a, t18b, gas3c, m8, r20margin, t11, t24algorand, t24ton, t36read files).

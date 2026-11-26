@@ -12,7 +12,10 @@
 #[path = "common/fake_chain.rs"]
 mod fake_chain;
 
+#[path = "common/prepared.rs"]
+mod prepared;
 use fake_chain::{fake, keccak_hex, serve, Fake};
+use prepared::SignPrepared as _;
 use scaas_sdk::app_core::{AppCore, AppDesc, AppKeyUsage, AppPath, AppUaSig};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_keys::{PqMessageHeader, PqSessionNew};
@@ -633,7 +636,7 @@ async fn sealed_info_rows_and_s1() {
     let info = pq("messages")["sealedInfo"][0]["info"].clone();
     let k = a.pqchat_epoch_key(&seed).unwrap();
     let signed = a
-        .pqchat_sign_session(
+        .pqchat_prepare_session(
             ua(&seed, 0x0131),
             k.clone(),
             PqSessionNew {
@@ -655,6 +658,9 @@ async fn sealed_info_rows_and_s1() {
                 info_json: info.to_string(),
             },
         )
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap();
     let want: Vec<String> = sr["wrapHashes"].as_array().unwrap().iter().map(s).collect();
@@ -975,6 +981,92 @@ async fn generic_signing_refuses_pqchat() {
     assert_eq!(code(sign(AppPath::Portable, typed(mine)).await), "Ok");
 }
 
+/// CTR-CHAT-23 option d (owner 2026-11-23): `read_app_agreed` is `read_app` as an agreed read (CLI-RPC-05), the read's own
+/// option: on the fake chain's one-endpoint list it is refused by the agreed read's own check (`Argument`, two endpoints or
+/// more), while the same `read_app` answers (the control). The agreement itself is scaas-rpc's
+/// (`an_agreed_read_on_a_failover_list_outvotes_one_liar`).
+#[tokio::test(flavor = "multi_thread")]
+async fn read_app_agreed_is_the_agreed_read() {
+    let _one = ONE.lock().await;
+    let (sdk, _seed, chain) = on_fake().await;
+    let a = AppCore::new(sdk, desc(&[PQC])).unwrap();
+    let entry =
+        json!({"type": "function", "name": "sigStore", "stateMutability": "view", "inputs": [],
+        "outputs": [{"name": "", "type": "uint8"}]})
+        .to_string();
+    answer(&chain, VIEW, "sigStore()", &[], w(2));
+    let plain = a
+        .read_app("local".into(), VIEW.into(), entry.clone(), "{}".into())
+        .await
+        .unwrap();
+    assert_eq!(plain, json!({"0": "2"}).to_string());
+    assert_eq!(
+        code(
+            a.read_app_agreed("local".into(), VIEW.into(), entry, "{}".into())
+                .await
+        ),
+        "Argument"
+    );
+}
+
+/// Owner 2026-11-23 (T10b): under a scope of PqChat's own app id, the generic app signing is refused on both paths
+/// (`AppPurposeRefused`: PqChat's app purpose is a SCaaS purpose, `scaas-ua`'s generated list); the twins under another app
+/// id sign. PqChat's own paths are the named entries (`pqchat_prepare_*`, the card, `seal_for_arweave`).
+#[tokio::test(flavor = "multi_thread")]
+async fn generic_signing_refuses_pqchat_app_id() {
+    let _one = ONE.lock().await;
+    let (sdk, seed, _c) = on_fake().await;
+    let typed = |domain: Value| {
+        let fields: Vec<Value> = [
+            ("name", "string"),
+            ("version", "string"),
+            ("chainId", "uint256"),
+            ("verifyingContract", "address"),
+            ("salt", "bytes32"),
+        ]
+        .iter()
+        .filter(|(k, _)| domain.get(*k).is_some())
+        .map(|(k, t)| json!({"name": k, "type": t}))
+        .collect();
+        json!({
+            "types": {"EIP712Domain": fields, "Note": [{"name": "body", "type": "string"}]},
+            "primaryType": "Note",
+            "domain": domain,
+            "message": {"body": "hello"},
+        })
+        .to_string()
+    };
+    let bound =
+        json!({"name": "My App", "version": "1", "chainId": 31337, "verifyingContract": VIEW});
+    let chain_bound = AppPath::ChainBound {
+        chain: "local".into(),
+        purpose: None,
+    };
+    for (id, want) in [
+        (keccak_hex(b"scaas.pqchat.v1"), "AppPurposeRefused"),
+        (APP_ID.to_string(), "Ok"),
+    ] {
+        let a = AppCore::new(
+            sdk.clone(),
+            AppDesc {
+                app_id: Some(id.clone()),
+                ..desc(&[PQC])
+            },
+        )
+        .unwrap();
+        let mine = json!({"name": "My App", "version": "1", "salt": id});
+        let p = a
+            .sign_app_record(ua(&seed, 0x0131), AppPath::Portable, typed(mine))
+            .await;
+        assert_eq!(code(p), want, "portable under {id}");
+        let b = a
+            .sign_app_record(ua(&seed, 0x0131), chain_bound.clone(), typed(bound.clone()))
+            .await;
+        assert_eq!(code(b), want, "chain-bound under {id}");
+        drop(a);
+    }
+}
+
 /// `read_app`: a named JSON answer from the entry's outputs at the final block; trusted reads skip a discovered-only list
 /// elsewhere (the KEM read's test); bounds by name.
 #[tokio::test(flavor = "multi_thread")]
@@ -1008,16 +1100,18 @@ async fn read_app_named_json() {
     answer(&chain, VIEW, "storedRange(bytes32)", &eid, out);
     let args = json!({"epochId": format!("0x{}", hexs(&eid))}).to_string();
     for trusted in [false, true] {
-        let got = a
-            .read_app(
-                "local".into(),
-                VIEW.into(),
-                entry.clone(),
-                args.clone(),
-                trusted,
-            )
-            .await
-            .unwrap();
+        let (c, v, e, x) = (
+            "local".to_string(),
+            VIEW.to_string(),
+            entry.clone(),
+            args.clone(),
+        );
+        let got = if trusted {
+            a.read_app(c, v, e, x).await
+        } else {
+            a.read_app_plain(c, v, e, x).await
+        }
+        .unwrap();
         let v: Value = serde_json::from_str(&got).unwrap();
         assert_eq!(
             v,
@@ -1038,14 +1132,14 @@ async fn read_app_named_json() {
     let bad = json!({"epoch": format!("0x{}", hexs(&eid))}).to_string();
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), entry.clone(), bad, false)
+            a.read_app_plain("local".into(), VIEW.into(), entry.clone(), bad)
                 .await
         ),
         "Argument"
     );
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), "{".into(), args.clone(), false)
+            a.read_app_plain("local".into(), VIEW.into(), "{".into(), args.clone())
                 .await
         ),
         "Argument"
@@ -1053,7 +1147,7 @@ async fn read_app_named_json() {
     let pay = entry.replace("\"view\"", "\"nonpayable\"");
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), pay, args.clone(), false)
+            a.read_app_plain("local".into(), VIEW.into(), pay, args.clone())
                 .await
         ),
         "Argument"
@@ -1069,27 +1163,15 @@ async fn read_app_named_json() {
         .to_string()
     };
     let at16 = a
-        .read_app(
-            "local".into(),
-            VIEW.into(),
-            deep_entry(16),
-            args.clone(),
-            false,
-        )
+        .read_app_plain("local".into(), VIEW.into(), deep_entry(16), args.clone())
         .await
         .unwrap();
     assert_eq!(at16.matches("\"x\":").count(), 17, "{at16}");
     assert!(at16.contains("\"x\":\"5\""), "{at16}");
     assert_eq!(
         code(
-            a.read_app(
-                "local".into(),
-                VIEW.into(),
-                deep_entry(17),
-                args.clone(),
-                false
-            )
-            .await
+            a.read_app_plain("local".into(), VIEW.into(), deep_entry(17), args.clone())
+                .await
         ),
         "Argument"
     );
@@ -1101,7 +1183,7 @@ async fn read_app_named_json() {
         .to_string()
     };
     let d16 = a
-        .read_app("local".into(), VIEW.into(), dims(16), args.clone(), false)
+        .read_app_plain("local".into(), VIEW.into(), dims(16), args.clone())
         .await
         .unwrap();
     assert_eq!(
@@ -1110,7 +1192,7 @@ async fn read_app_named_json() {
     );
     assert_eq!(
         code(
-            a.read_app("local".into(), VIEW.into(), dims(17), args, false)
+            a.read_app_plain("local".into(), VIEW.into(), dims(17), args)
                 .await
         ),
         "Argument"
@@ -1123,13 +1205,19 @@ fn bit_and_no_caller_ciphertext() {
     use scaas_sdk::bits::VECTORS;
     assert_eq!(VECTORS, 1 << 28);
     assert_eq!(scaas_sdk::features() & VECTORS, VECTORS);
+    // review T26 C-2: such a build is refused by every binding's opening (the load check)
+    const { assert!(scaas_ua::VECTORS) };
+    assert_eq!(
+        scaas_sdk::load_check(scaas_sdk::Sdk::api_version(), 0).map_err(|e| e.code()),
+        Err("AbiMismatch")
+    );
     let src = std::fs::read_to_string(format!("{}/src/pqchat_keys.rs", env!("CARGO_MANIFEST_DIR")))
         .unwrap();
     let mut seen = 0;
     for f in [
         "pqchat_seal_message",
-        "pqchat_sign_session",
-        "pqchat_sign_epoch",
+        "pqchat_prepare_session",
+        "pqchat_prepare_epoch",
     ] {
         let at = src.find(&format!("pub async fn {f}(")).unwrap();
         let sig = &src[at..at + src[at..].find('{').unwrap()];
@@ -1232,6 +1320,132 @@ async fn v1_msig_minimal_and_accepted() {
         check(sig(vec![slot(1)])).await.unwrap(),
         "its twin, accepted"
     );
+    // C-3 (CTR-UA-74 step 6): `verify_pqchat_record_versions` names the version the tag gives on a pass, none on a refusal
+    let versions = |g: AppUaSig| {
+        a.verify_pqchat_record_versions(
+            "local".into(),
+            format!("0x{}", hexs(&ms)),
+            "PqChatMessage".into(),
+            r.to_string(),
+            g,
+        )
+    };
+    let at = |v: u64| {
+        Some(vec![scaas_sdk::app_core::MsigVersion {
+            msig: format!("0x{}", hexs(&ms)),
+            version: v,
+        }])
+    };
+    assert_eq!(versions(sig(vec![slot(1)])).await.unwrap(), at(0));
+    assert_eq!(versions(sig(vec![slot(0)])).await.unwrap(), None);
+    // version 1 current (the same slots), its tag on the signature
+    let items: String = m
+        .iter()
+        .map(|(k, id, wt)| format!("{}{}{}", w(u64::from(*k)), hexs(id), w(u64::from(*wt))))
+        .collect();
+    let structure = format!("{}{}{}{}", w(1), w(0x40), w(m.len() as u64), items);
+    answer(
+        &chain,
+        REGISTRY,
+        "msigOf(bytes32)",
+        &ms,
+        format!("{}{}", w(0x20), structure),
+    );
+    answer(
+        &chain,
+        REGISTRY,
+        "msigStateOf(bytes32)",
+        &ms,
+        format!("{}{}{}", w(1), w(0b11), w(0b11)),
+    );
+    let mut tagged = sig(vec![slot(1)]);
+    tagged.signature = 1u64.to_be_bytes().to_vec();
+    assert_eq!(versions(tagged).await.unwrap(), at(1));
+}
+
+/// TODO 8b-8 (4), CLI-PQC-15 on F2's line (CTR-UA-70): V1, the check behind a kept signature (`require_signed_records` and
+/// every `sstore2` home), reads the signer's record where the line says: `holderOf` on the bound registry (generation 2)
+/// names generation 1, whose record verifies, though the bound registry holds none; every call of it at one block. The
+/// controls: the holder the bound registry itself (no record there: false), a holder off the line (the read fails).
+#[tokio::test(flavor = "multi_thread")]
+async fn v1_follows_the_registry_line() {
+    let _one = ONE.lock().await;
+    let (sdk, _seed, chain) = on_fake().await;
+    let a = AppCore::new(sdk, desc(&[PQC])).unwrap();
+    let rec = pq("records");
+    let r = &rec["message"];
+    let x = rec["signers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["name"] == r["signer"])
+        .unwrap();
+    let (id, kind) = (a32(&x["ua"]), x["kind"].as_u64().unwrap() as u16);
+    const OLD: &str = "0x5ca00000000000000000000000000000000000a0";
+    let addr = |a: &str| format!("{:0>64}", a.trim_start_matches("0x"));
+    answer(&chain, REGISTRY, "generation()", &[], w(2));
+    answer(&chain, REGISTRY, "predecessor()", &[], addr(OLD));
+    let holder = |h: &str| {
+        answer(
+            &chain,
+            REGISTRY,
+            "holderOf(bytes32)",
+            &id,
+            format!("{}{}{}", addr(h), w(u64::from(kind)), w(0)),
+        )
+    };
+    holder(OLD);
+    let kd = unhex(&x["publicKey"]);
+    answer(
+        &chain,
+        OLD,
+        "registrationOf(bytes32)",
+        &id,
+        format!(
+            "{}{}{}{}{}{}{}",
+            w(u64::from(kind)),
+            w(0xa0),
+            w(0),
+            w(0),
+            w(0),
+            w(kd.len() as u64),
+            pad(&kd)
+        ),
+    );
+    let check = || {
+        a.verify_pqchat_record(
+            "local".into(),
+            s(&x["ua"]),
+            "PqChatMessage".into(),
+            r["record"].to_string(),
+            sig_of(&r["uaSig"]),
+        )
+    };
+    chain.lock().unwrap().requests.clear();
+    assert!(
+        check().await.unwrap(),
+        "the record at its holder, generation 1"
+    );
+    let blocks: std::collections::BTreeSet<String> = chain
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .filter(|q| q.contains("eth_call"))
+        .map(|q| {
+            let t = q.split("\"blockHash\":\"").nth(1).unwrap_or_default();
+            t.get(..66).unwrap_or(t).to_string()
+        })
+        .collect();
+    assert_eq!(blocks.len(), 1, "one block: {blocks:?}");
+    assert!(blocks.iter().all(|b| b.starts_with("0x")), "{blocks:?}");
+    holder(REGISTRY);
+    assert!(
+        !check().await.unwrap(),
+        "the bound registry holds no record"
+    );
+    holder("0x00000000000000000000000000000000000000ee");
+    assert!(check().await.is_err(), "a holder off the line");
 }
 
 /// The contact card (UA-7 §14 O7) on the fake registry: every card row verifies for its UA at the final block, each refused
@@ -1301,7 +1515,10 @@ async fn cards_sign_and_verify() {
     let me = k.ua().unwrap();
     reg_answer(&chain, &me, 0x0131, &key_data);
     let signed = a
-        .sign_pqchat_card(ua(&seed, 0x0131), 1, "@alice:example.org".into())
+        .prepare_pqchat_card(ua(&seed, 0x0131), 1, "@alice:example.org".into())
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap();
     assert_eq!(
@@ -1332,8 +1549,13 @@ async fn cards_sign_and_verify() {
         .unwrap());
     assert_eq!(
         code(
-            a.sign_pqchat_card(ua(&seed, 0x0131), 1, "alice:example.org".into())
-                .await
+            async {
+                a.prepare_pqchat_card(ua(&seed, 0x0131), 1, "alice:example.org".into())
+                    .await?
+                    .sign()
+                    .await
+            }
+            .await
         ),
         "Argument"
     );
@@ -1343,7 +1565,15 @@ async fn cards_sign_and_verify() {
         index: 0,
     };
     assert_eq!(
-        code(a.sign_pqchat_card(native, 1, String::new()).await),
+        code(
+            async {
+                a.prepare_pqchat_card(native, 1, String::new())
+                    .await?
+                    .sign()
+                    .await
+            }
+            .await
+        ),
         "Argument"
     );
 }
@@ -1545,4 +1775,115 @@ async fn open_file_checks_ct_sha256_first() {
         "FileLength"
     );
     assert_eq!(code(open(s.object.clone(), vec![0; 31])), "Argument");
+}
+
+/// pqchat-core T11's hostile entries (vectors build only): the envelope of a record and a signature given apart reproduces
+/// the `envelope` row; a `sealedInfo` of a given padded plaintext reproduces each `sealedInfo` row and, its plaintext made
+/// non-canonical (one space), is refused at K5 (`PqChatContent`) beside its twin; S5 from the `message` row's padded
+/// plaintext opens, and the same with a non-zero fill byte under `mk` is refused (`PqChatContent`).
+#[tokio::test(flavor = "multi_thread")]
+async fn hostile_seals_for_the_e2e() {
+    let _one = ONE.lock().await;
+    let (sdk, seed, _c) = on_fake().await;
+    let a = AppCore::new(sdk, desc(&[PQC])).unwrap();
+    let (m, rec) = (pq("messages"), pq("records"));
+    let e = &m["envelope"];
+    let k = a
+        .vectors_import(&seed, a32(&e["K"]), AppKeyUsage::Derive)
+        .unwrap();
+    let r = &rec["message"]["record"];
+    let env = a
+        .pqchat_vectors_envelope(
+            k.clone(),
+            record_of(r),
+            sig_of(&rec["message"]["uaSig"]),
+            a12(&e["nonce"]),
+        )
+        .unwrap();
+    assert_eq!(env, unhex(&e["env"]));
+    for row in m["sealedInfo"].as_array().unwrap() {
+        let k = a
+            .vectors_import(&seed, a32(&row["K"]), AppKeyUsage::Derive)
+            .unwrap();
+        let (sid, eid) = (s(&row["sessionId"]), s(&row["epochId"]));
+        let sealed = a
+            .pqchat_vectors_seal_info_raw(
+                k.clone(),
+                sid.clone(),
+                eid.clone(),
+                unhex(&row["pt"]),
+                a12(&row["nonce"]),
+            )
+            .unwrap();
+        assert_eq!(sealed, unhex(&row["sealedInfo"]), "{}", row["name"]);
+        let json = row["json"].as_str().unwrap();
+        let spaced = format!("{{ {}", &json[1..]);
+        let pt = |t: &str| {
+            let mut p = (t.len() as u32).to_be_bytes().to_vec();
+            p.extend_from_slice(t.as_bytes());
+            p.resize(
+                unhex(&row["pt"]).len().max(p.len().next_multiple_of(256)),
+                0,
+            );
+            p
+        };
+        for (t, want) in [(json, "Ok"), (spaced.as_str(), "PqChatContent")] {
+            let x = a
+                .pqchat_vectors_seal_info_raw(k.clone(), sid.clone(), eid.clone(), pt(t), [7; 12])
+                .unwrap();
+            assert_eq!(
+                code(a.pqchat_open_info(k.clone(), sid.clone(), eid.clone(), x)),
+                want,
+                "{}",
+                row["name"]
+            );
+        }
+    }
+    // S5 from a padded plaintext at the account's own chain (the sender is the signing account)
+    let k = a
+        .vectors_import(&seed, a32(&m["message"]["K"]), AppKeyUsage::Derive)
+        .unwrap();
+    let wl = Wallet::from_mnemonic(REPO, "").unwrap();
+    let me = format!(
+        "0x{}",
+        hexs(&wl.ua_key(0x0131, 0, 0).unwrap().ua().unwrap())
+    );
+    let header = PqMessageHeader {
+        session_id: s(&r["sessionId"]),
+        epoch_id: s(&r["epochId"]),
+        device: s(&r["device"]),
+        counter: 3,
+        parents: vec![],
+    };
+    let pos = || {
+        let p0 = a
+            .pqchat_chain(
+                k.clone(),
+                s(&r["sessionId"]),
+                s(&r["epochId"]),
+                me.clone(),
+                s(&r["device"]),
+            )
+            .unwrap();
+        a.pqchat_advance(p0, 3).unwrap()
+    };
+    // the `message` row's padded plaintext, and the same with one fill byte non-zero (as the `unpadRefused` row)
+    let twin = unhex(&m["message"]["pt"]);
+    let mut fill = twin.clone();
+    *fill.last_mut().unwrap() = 1;
+    for (pt, want) in [(twin, "Ok"), (fill, "PqChatContent")] {
+        let x = a
+            .pqchat_vectors_seal_padded(
+                ua(&seed, 0x0131),
+                k.clone(),
+                pos(),
+                header.clone(),
+                pt,
+                [9; 12],
+            )
+            .await
+            .unwrap();
+        assert_eq!(x.record.sender, me);
+        assert_eq!(code(a.pqchat_open_message(pos(), x.record)), want);
+    }
 }

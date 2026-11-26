@@ -17,8 +17,8 @@ import 'rust/api/ua.dart' show UAError;
 import 'rust/api/wallet.dart' as g;
 import 'rust/api/wallet.dart' show SecretBytes;
 
-/// The surface generation this facade was written for (the C ABI's `SCAAS_UA_ABI_VERSION`, 6).
-const int kAbiVersion = 6;
+/// The surface generation this facade was written for (the C ABI's `SCAAS_UA_ABI_VERSION`, 7).
+const int kAbiVersion = 7;
 
 /// The bits of `scaas_ua_features()`.
 abstract final class UaFeature {
@@ -129,13 +129,15 @@ Future<void> walletOpenLabelVault({
   SecretBytes? prf32,
 }) => _loaded(() => g.walletOpenLabelVault(w: w, vaultJson: vaultJson, vaultPassphrase: vaultPassphrase, prf32: prf32));
 
-/// The wallet of a backup container; null: an equal generation installed nothing. [membersJson] / [acceptedJson] null = none.
+/// The wallet of a backup container; null: an equal generation installed nothing. [membersJson] / [acceptedJson] /
+/// [currentJson] (`{"<msig id>": {msig, enabled}}`, an updated msig's current structure, CTR-UA-44) null = none.
 Future<g.UaWallet?> walletRestoreBackup({
   required g.UaKemKey kk,
   required String containerJson,
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
+  String? currentJson,
   required SecretBytes bip39Passphrase,
 }) => _loaded(
   () => g.walletRestoreBackup(
@@ -144,6 +146,7 @@ Future<g.UaWallet?> walletRestoreBackup({
     expectJson: expectJson,
     membersJson: membersJson,
     acceptedJson: acceptedJson,
+    currentJson: currentJson,
     bip39Passphrase: bip39Passphrase,
   ),
 );
@@ -156,6 +159,7 @@ Future<g.UaWallet?> walletRestoreBackupOver({
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
+  String? currentJson,
   required SecretBytes bip39Passphrase,
 }) => _loaded(
   () => g.walletRestoreBackupOver(
@@ -165,6 +169,7 @@ Future<g.UaWallet?> walletRestoreBackupOver({
     expectJson: expectJson,
     membersJson: membersJson,
     acceptedJson: acceptedJson,
+    currentJson: currentJson,
     bip39Passphrase: bip39Passphrase,
   ),
 );
@@ -177,6 +182,7 @@ Future<g.UaWallet?> walletRestoreBackupRollback({
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
+  String? currentJson,
   required SecretBytes bip39Passphrase,
 }) => _loaded(
   () => g.walletRestoreBackupRollback(
@@ -186,6 +192,7 @@ Future<g.UaWallet?> walletRestoreBackupRollback({
     expectJson: expectJson,
     membersJson: membersJson,
     acceptedJson: acceptedJson,
+    currentJson: currentJson,
     bip39Passphrase: bip39Passphrase,
   ),
 );
@@ -197,6 +204,7 @@ Future<g.UaWallet> walletFromLink({
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
+  String? currentJson,
   required SecretBytes bip39Passphrase,
 }) => _loaded(
   () => g.walletFromLink(
@@ -205,6 +213,7 @@ Future<g.UaWallet> walletFromLink({
     expectJson: expectJson,
     membersJson: membersJson,
     acceptedJson: acceptedJson,
+    currentJson: currentJson,
     bip39Passphrase: bip39Passphrase,
   ),
 );

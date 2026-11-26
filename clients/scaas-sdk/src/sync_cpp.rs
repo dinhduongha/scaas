@@ -138,10 +138,12 @@ struct Release(u64, Arc<dyn SyncStore>);
 
 impl Drop for Release {
     fn drop(&mut self) {
+        // review T26 C-7: on a thread of its own, run to its end (never a blocking task a runtime's shutdown drops), and where
+        // no runtime runs too
         let (token, store) = (self.0, self.1.clone());
-        if let Ok(h) = tokio::runtime::Handle::try_current() {
-            h.spawn_blocking(move || store.unlock(token));
-        }
+        let _ = std::thread::Builder::new()
+            .name("scaas-store-unlock".into())
+            .spawn(move || store.unlock(token));
     }
 }
 
@@ -250,4 +252,77 @@ pub fn open_blocking(
         .map_err(|_| SdkError::Internal)?;
     let sdk = rt.block_on(crate::Sdk::open(config))?;
     Ok(binding::Sdk::new(sdk))
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// A sync store counting its unlocks.
+    #[derive(Default)]
+    struct Count(std::sync::atomic::AtomicU32);
+
+    impl SyncStore for Count {
+        fn get(&self, _: String, _: String) -> Result<Option<StoredItem>, StoreError> {
+            Ok(None)
+        }
+        fn put_if(
+            &self,
+            _: String,
+            _: Option<u64>,
+            _: Vec<u8>,
+            _: StorePolicy,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+        fn remove(&self, _: String) -> Result<(), StoreError> {
+            Ok(())
+        }
+        fn lock(&self, _: String) -> Result<u64, StoreError> {
+            Ok(7)
+        }
+        fn unlock(&self, token: u64) {
+            assert_eq!(token, 7);
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    /// Review T26 C-7: the store's lock is released wherever it is dropped: on a thread where no runtime runs, and (the twin)
+    /// inside the runtime that took it, which then shuts down at once.
+    #[test]
+    fn a_lock_is_released_wherever_it_is_dropped() {
+        let unlocks = |c: &Count| {
+            for _ in 0..100 {
+                if c.0.load(Ordering::SeqCst) > 0 {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            c.0.load(Ordering::SeqCst)
+        };
+        let rt = tokio::runtime::Builder::new_multi_thread().build().unwrap();
+        let c = Arc::new(Count::default());
+        let lock = rt
+            .block_on(StoreAdapter(c.clone()).lock("keystore".into()))
+            .unwrap();
+        rt.shutdown_background();
+        drop(lock);
+        assert_eq!(unlocks(&c), 1, "dropped where no runtime runs");
+        let rt = tokio::runtime::Builder::new_multi_thread().build().unwrap();
+        let c = Arc::new(Count::default());
+        rt.block_on(async {
+            let lock = StoreAdapter(c.clone())
+                .lock("keystore".into())
+                .await
+                .unwrap();
+            drop(lock);
+        });
+        rt.shutdown_background();
+        assert_eq!(
+            unlocks(&c),
+            1,
+            "dropped inside its runtime, which then shuts down"
+        );
+    }
 }

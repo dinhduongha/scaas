@@ -66,7 +66,7 @@ ua-dart also take hex, any case). `kindHome == registry` passes; a different non
 ua-cs and ua-dart; the four Rust wrappers (ua-c, ua-cxx, ua-qt, ua-dart-frb) do not export it yet (PLANNED; a caller there
 compares the two addresses itself).
 
-Language notes: Dart's KEM version is a `BigInt` (2^64 − 1 does not fit an `int`); ua-dart-frb's package entry point refuses a version below 0 or at or above 2^64 (`UAKemVersion`) before the bridge, which would otherwise wrap it to 64 bits; the wallet surface's other integers (kind, account, index, coin type, `change`, SS58 prefix, lengths) cross the bridge as `i64` and are `UAArgument` outside their Rust type, and ua-py refuses an integer outside its C type before the `ctypes` call, which would wrap it (ua-rs-native T13 C4); ua-qt's numbers (chain id, KEM version) are JS numbers, exact up to 2^53, and a larger or fractional value is `UAArgument`; ua-qt exposes `holderPopMessage(kind, ua, keyData, pqzKey, pqzPop, kemPk)` (+ `holderPopMessageH` for a hash-only proof, `purposeTagV(purpose, version)`) and returns JSON. **ua-c ABI version 5, the identity surface** (the wallet surface is ABI 6, [CLI-UAL-05](#CLI-UAL-05); 1 → 2: the proof-hash argument takes `(ptr, len)`, len 0 = absent, len ≠ 32 = `UAPqzPopHash`; 2 → 3: the typed digests, `scaas_ua_portable_domain_separator`, `scaas_ua_kem_record_hash`, `scaas_ua_portable_record_digest`, the `kem_record_tag`, `pqz_key_record_tag`, `portable_pop_digest` and `personal_sign_digest` exports gone; then `scaas_ua_registration_args`, `scaas_ua_set_kem_key_args`, `scaas_ua_set_pqz_key_args`): statuses **12–17** (`UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAPqzPopHash`, `UAPqzKeySet`, `UAKemScheme`), structs `ScaasUaHolderPop` and `ScaasUaPqzKeyRecord` (225 bytes, align 1), `scaas_ua_purpose_tag_v`; ua-cxx and ua-dart-frb follow through the Rust wrapper. Tests in every package read `portable.json` (27 registrations, 15 KEM records, 16 PQZ key records, 68 negatives; `mldsa87` and `fndsa1024` with `fndsa512`'s rows each: a KEM register key, KEM records v1-v3, PQZ key records at the four sets) and pin two known answers as literals: `chainKeyHash(1099511627783)` = `keccak256("evm:1099511627783")` = `0x6e45d591…`, and the KEM record digest at version 2^64 − 1 `0xa0063a84…38f07` (ua-qt pins it at 2^53 = `0x04a0150e…990482`, the largest version a QML number carries exactly). Errors carry one code everywhere: `UAKeyData`, `UAIdInNativeSpace`, `UAKindUnknown`,
+Language notes: Dart's KEM version is a `BigInt` (2^64 − 1 does not fit an `int`); ua-dart-frb's package entry point refuses a version below 0 or at or above 2^64 (`UAKemVersion`) before the bridge, which would otherwise wrap it to 64 bits; the wallet surface's other integers (kind, account, index, coin type, `change`, SS58 prefix, lengths) cross the bridge as `i64` and are `UAArgument` outside their Rust type, and ua-py refuses an integer outside its C type before the `ctypes` call, which would wrap it (ua-rs-native T13 C4); ua-qt's numbers (chain id, KEM version) are JS numbers, exact up to 2^53, and a larger or fractional value is `UAArgument`; ua-qt exposes `holderPopMessage(kind, ua, keyData, pqzKey, pqzPop, kemPk)` (+ `holderPopMessageH` for a hash-only proof, `purposeTagV(purpose, version)`) and returns JSON. **ua-c ABI version 5, the identity surface** (the wallet surface is ABI 7, [CLI-UAL-05](#CLI-UAL-05); 1 → 2: the proof-hash argument takes `(ptr, len)`, len 0 = absent, len ≠ 32 = `UAPqzPopHash`; 2 → 3: the typed digests, `scaas_ua_portable_domain_separator`, `scaas_ua_kem_record_hash`, `scaas_ua_portable_record_digest`, the `kem_record_tag`, `pqz_key_record_tag`, `portable_pop_digest` and `personal_sign_digest` exports gone; then `scaas_ua_registration_args`, `scaas_ua_set_kem_key_args`, `scaas_ua_set_pqz_key_args`): statuses **12–17** (`UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAPqzPopHash`, `UAPqzKeySet`, `UAKemScheme`), structs `ScaasUaHolderPop` and `ScaasUaPqzKeyRecord` (225 bytes, align 1), `scaas_ua_purpose_tag_v`; ua-cxx and ua-dart-frb follow through the Rust wrapper. Tests in every package read `portable.json` (27 registrations, 15 KEM records, 16 PQZ key records, 68 negatives; `mldsa87` and `fndsa1024` with `fndsa512`'s rows each: a KEM register key, KEM records v1-v3, PQZ key records at the four sets) and pin two known answers as literals: `chainKeyHash(1099511627783)` = `keccak256("evm:1099511627783")` = `0x6e45d591…`, and the KEM record digest at version 2^64 − 1 `0xa0063a84…38f07` (ua-qt pins it at 2^53 = `0x04a0150e…990482`, the largest version a QML number carries exactly). Errors carry one code everywhere: `UAKeyData`, `UAIdInNativeSpace`, `UAKindUnknown`,
 `UAKindNotDerived`, `UAKindNotNative`, `UAIdFormat`, `UAPurposeUnknown`. The Solidity library has the on-chain subset.
 
 **Nested `msig` (`msig-nested`, [CTR-UA-38](../contracts/accounts.md#CTR-UA-38)).** Key data alone does not show an `msig` member's PQ eligibility, so
@@ -168,7 +168,7 @@ Claude), no external audit.
 | Wallet and keys | `wallet/mod.rs`, `derive.rs`, `store.rs` | `Wallet::{generate, from_mnemonic, open_vault, seal_vault, lock, unlock, manifest, memory_protection, ua_key, native_key}`; derivation as [signers-clientkeys §9](signers-clientkeys.md#9-derivation-and-role-keys) |
 | Single-key signing | `sign.rs`, `pqsign.rs`, `pairing.rs`, `signer.rs` | `UaKey::{sign_ua, sign_member}`, `NativeKey::{sign_typed, sign_transaction, sign_key_proof, sign_digest}`, the `Signer` trait |
 | Native networks (ua-rs-native) | `wallet/mod.rs`, `derive.rs`, `sign.rs`, `substrate.rs` | `Wallet::{bitcoin_key, polkadot_key}`, `NativeKey::{sign_message, sign_near_transaction, sign_sui_transaction, sign_stellar_transaction, sign_hedera_transaction, witness_program, ss58_address}`, `sign_message_by`, `Network::{scheme, all}` ([below](#native-networks-of-the-apps-backend-built)) |
-| `UASig` and groups | `uasig.rs`, `pairing.rs` | `ua_sig`, `msig_sig`, `membership_sig` (`msig` sets minimal at both levels, `UAPoP` otherwise); an updated `msig` (CTR-UA-44): `msig_sig_current`, `membership_sig_current` (the id from the first structure, slots, weights, threshold and minimality from the current one, a disabled slot `Argument`; the JSON request's `current`), `msig_update_typed_data` (a native member signs the `UAMsigUpdate` digest itself under `msig-update`); `pqz-scoped-key` signs with role Pop and an empty `keyData`, as the other portable record purposes; MuSig2 sessions (`UaKey::musig2_session`) and FROST sessions (`Wallet::frost_session`): store handles, a secret nonce in the arena used once, revoked by `lock()`; the FROST share stays the caller's `KeyPackage` until the real DKG work ([CLI-UAL-09](#CLI-UAL-09)) |
+| `UASig` and groups | `uasig.rs`, `pairing.rs` | `ua_sig`, `msig_sig`, `membership_sig` (`msig` sets minimal at both levels, `UAPoP` otherwise); an updated `msig` (CTR-UA-44): `msig_sig_current`, `membership_sig_current` (the id from the first structure, slots, weights, threshold and minimality from the current one, a disabled slot `Argument`; an `msig` at version ≥ 1 signs with its 8-byte version tag in `UASig.signature`, each `msig` member slot's `sig` that member's, empty at version 0 ([CTR-UA-74](../contracts/accounts.md#CTR-UA-74): a signature built the old way after an `updateMsig` is `UAUnauthorized` on every path); the JSON request's `current`, each row with its `version`, required: a request without it is refused, never defaulted), `msig_update_typed_data` (a native member signs the `UAMsigUpdate` digest itself under `msig-update`); `pqz-scoped-key` signs with role Pop and an empty `keyData`, as the other portable record purposes; MuSig2 sessions (`UaKey::musig2_session`) and FROST sessions (`Wallet::frost_session`): store handles, a secret nonce in the arena used once, revoked by `lock()`; the FROST share stays the caller's `KeyPackage` until the real DKG work ([CLI-UAL-09](#CLI-UAL-09)) |
 | EIP-712, policy, transactions | `eip712.rs`, `policy.rs`, `tx.rs` | `TypedData`, `scaas_typed_data`, `pqz_verdict_typed_data` (the `PqzVerdict` a PQZ verifier UA signs under `pqz-verdict`, group 3f), `Expect`; `EvmTx` types 0 to 3 (`alloy-rlp`; type 4 has no variant, chain id 0 refused) |
 | WebAuthn | `webauthn.rs` | `webauthn_challenge`, `webauthn_assertion` |
 | Factory addresses | `factory.rs` | `create3_salt`, `create3_address`: a creation's chain-neutral CREATE3 address (chain-neutral spec §4, `vectors/factory/create3_kat.json`), shown before a router create op |
@@ -191,8 +191,12 @@ Claude), no external audit.
 | `fam-<row>` | one per row of chain-support, only that chain's transaction format (decisions CLI-SDK-33 (31), (37); plan T42): `fam-evm` (RLP, `EvmTx`, `evm`, `hedera_ecdsa`), `fam-hedera` (`hedera_ed25519`), `fam-near`, `fam-algorand`, `fam-cosmos`, `fam-aptos`, `fam-solana`, `fam-soroban` (`stellar`), `fam-sui`, `fam-ton`, `fam-dot` (sr25519, SS58, `polkadot`), `fam-btc` (the two Bitcoin networks), `fam-arweave`; a network whose row is off is `FeatureMissing`; the core (`wallet`) keeps every UA kind and the seed standards | yes (all) |
 | `xcheck-<family>` | a chain's own crate as a third cross-check of its vector rows; tests and CI only ([CLI-UAL-25](#CLI-UAL-25)'s rule for test features) | no |
 
-**C ABI 6** (`clients/ua-c`, `include/scaas_ua.h` by cbindgen; the v5 header is kept at `legacy/ua-rs-sign/scaas_ua.v5.h`).
-Every v5 declaration is unchanged. New: the opaque handles `ScaasUaWallet`, `ScaasUaKey` (UA or native), `ScaasUaKemKey`,
+**C ABI 7** (`clients/ua-c`, `include/scaas_ua.h` by cbindgen; the v5 header is kept at `legacy/ua-rs-sign/scaas_ua.v5.h`, the
+v6 header at `legacy/t26-a2-1/scaas_ua.v6.h`). 6 → 7 (T26 A2-1, [CTR-UA-44](../contracts/accounts.md#CTR-UA-44)): the
+container openers (`scaas_ua_wallet_restore_backup`, `_restore_backup_rollback`, `scaas_ua_wallet_from_link`,
+`scaas_ua_open_container`, `scaas_ua_pqz_share_reseal`, `scaas_ua_wallet_pqz_reconstruct`) take `current_json`
+(`{"<msig id>": {msig, enabled}}`, the current structures of updated `msig`s; NULL = none) after `accepted_json`, and the bindings
+an optional current argument after their accepted one. Every v5 declaration is unchanged. New: the opaque handles `ScaasUaWallet`, `ScaasUaKey` (UA or native), `ScaasUaKemKey`,
 `ScaasUaLinkSession`, `ScaasUaSeedBackup`, `ScaasUaZetherKey`, `ScaasUaPqzKey`; a call per row of the table above;
 `scaas_ua_zether_call` and `scaas_ua_pqz_call` for the facades' JSON; statuses 21 to 43 (`SealOpen`, `SealVersion`, `KemCheck`,
 `Aead`, `VaultOpen`, `VaultParams`, `VaultVersion`, `RawDigestRefused`, `PolicyRefused`, `ExternalSignature`, `WalletLocked`,
@@ -236,11 +240,31 @@ high-water mark ([CLI-SDK-04](scaas-sdk.md#CLI-SDK-04)), and the named-entry JSO
 | Target | Core | Zether, PQZ | Status |
 |---|---|---|---|
 | x86-64 Linux | every cell | every cell (PQZ at two sets) | built and tested locally, every binding's suite |
-| `wasm32-unknown-unknown` | compiles; Falcon `KindUnavailable` (its C is skipped); `mlock` compiled out; `getrandom`'s JS backend per generation | compiles | nine cells built locally; nothing runs through a browser binding yet |
+| `wasm32-unknown-unknown` | compiles; Falcon keys, signs and verifies through falcon-rs ([CLI-UAL-66](#CLI-UAL-66)); `mlock` compiled out; `getrandom`'s JS backend per generation | compiles | nine cells built locally; the Falcon gate runs in Node (`tests/fndsa/wasm/run.sh`); nothing runs through a browser binding yet |
 | `aarch64-linux-android` | compiles (NDK clang, API 24) | compile cells | `ua-c`'s cells built for the size ratchet, `ua-rs`'s verify-only cell locally, its other cells CI's first run; no device run |
 | `aarch64-apple-ios` | CI compile only (iOS 13 or later: `IPHONEOS_DEPLOYMENT_TARGET=13.0`, for the stack probe `___chkstk_darwin`) | CI compile only | not built here (no Xcode) |
 
 Sizes per target and cell, and the timing still to come: [CLI-UAL-43](#CLI-UAL-43).
+
+<a id="CLI-UAL-66"></a>**CLI-UAL-66** — **On wasm32 the Falcon kinds key, sign and verify through falcon-rs 0.3.1; native builds keep
+the vendored PQClean.** PQClean's C needs a libc that `wasm32-unknown-unknown` lacks, and a missing primitive never disables a
+kind ([ARCH-POS-18](../decisions.md#ARCH-POS-18)). With feature `pq` on wasm32, `src/falcon.rs` routes `keypair`, `sign` and
+`verify` to `src/falcon/soft.rs`, after the same length checks as PQClean's path: falcon-rs 0.3.1 (MIT, a port of the round-3
+reference), vendored as published in the repository's `vendor/falcon-rs-0.3.1/` (installed and checked by `scripts/vendor.sh`,
+not committed; its record `vendor/falcon-rs-0.3.1.VENDORED.md`: the crate's sha256, the tree id, the upstream commit) beside
+`vendor/pqclean-falcon-seeded/`, a `path` dependency with `default-features = false` (no `std`, no
+getrandom) and `fpemu`. `fpemu` is the crate's integer IEEE-754 emulation (PQClean clean's approach) in place of its default
+backend, hardware `f64` and `libm::sqrt`, whose timing may depend on values; that `fpemu` runs in constant time is the crate's
+claim, not measured here (libm stays in the graph, a fixed dependency of the package, unused under `fpemu`). The key pair of the
+48-byte HKDF seed takes SHAKE256 of the seed as keygen's stream; a signature takes `rnd` = the 40-byte nonce, then the 48-byte
+seed of the sampler's stream, `HashToPoint(SHAKE256(nonce ‖ ua_msg))`, padded to 666 / 1,280 bytes with zero bytes; verify takes
+the padded form only (the format of [CTR-UA-23](../contracts/accounts.md#CTR-UA-23), EIP-8052). The crate's FIPS 206 API is not
+used: it hashes `nonce ‖ 0x00 ‖ len(ctx) ‖ ctx ‖ m`. `build::FALCON` is true on wasm32 with `pq`. The gate, before and after every
+change of this path: `tests/fndsa_vrfy.rs` natively (every FN-DSA row of the vectors, 220: 48 accept, 172 refuse, equal to
+PQClean on each; 48 wallet cases over the four `keys.json` mnemonics, falcon-rs's key pair and fixed-randomness signature
+byte-equal to PQClean's) and `tests/fndsa/wasm/run.sh` in wasm32 under Node (the same rows, and the same cases' digest over
+`pk ‖ sk ‖ sig`). fn-dsa-vrfy 0.4.0 failed that gate (FIPS 206 `mu` hashing and its key packing):
+`clients/runs/2026-11-26-ua-rs-wasm-fndsa-summary.txt`. Size (stripped wasm32 `libscaas_ua_c`, [CLI-UAL-43](#CLI-UAL-43)): default 5,933,798 → 6,117,173 B (+183,375 B, +3.1 %), +179,226 to +184,321 B in the other four cells. BUILT; signing and verification UNAUDITED until the Fable audit.
 
 <a id="CLI-UAL-01"></a>**CLI-UAL-01** — **`ua-rs` is the only signer, and a secret leaves it only through a named export.**
 Every client signs through `scaas-ua`: a client core or wallet module over it never signs on its own, and apps reach it through
@@ -358,13 +382,15 @@ a kernel page that does not divide 16 KiB (nothing locked), everything on wasm32
 may. BUILT.
 
 <a id="CLI-UAL-11"></a>**CLI-UAL-11** — **A container's sender is expected, never self-declared.** A valid signature proves only that some
-registered UA sealed it, so the one opening call is `open_container(kem_key, container, expect, members, accepted)` and no call
+registered UA sealed it, so the one opening call is `open_container(kem_key, container, expect, members, current, accepted)` and no call
 opens without a `ContainerExpect {purpose, sender (a UA or an approved set), recipient}`. Before any decapsulation, each a refusal
 with nothing imported: the purpose; the recipient, which is the opening key's own; `sender.ua` expected; `sender.auth.keyData`
 derives `sender.ua` (an `msig`, or exactly one single-key kind: the container names no kind, the opener tries the derived kinds
 that may sign, each under its own tag); `sender.auth` verifies over the rebuilt `aad` and wire form. An `msig` sender: no signature of
 its own, the minimal set at both levels, its signers accepted at both levels through the caller's `accepted(id, index)` (a missing
-lookup refuses, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)). A mismatch, or a signer not accepted: `ContainerSender`; a bad signature,
+lookup refuses, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)). An updated `msig` (the sender or an `msig` member) is judged on its current structure from the caller's `current(id)`
+(`msigOf` bytes and `msigStateOf` bitmap; none: never updated): minimality, threshold, weights and slot keys, a slot counting only
+when accepted and enabled ([CTR-UA-44](../contracts/accounts.md#CTR-UA-44), T26 A2-1, decision (134)). A mismatch, or a signer not accepted: `ContainerSender`; a bad signature,
 the wrong `UASig` form or a bad tag: `SealOpen`. **Trust anchors.** Restore: the wallet's identity UA, known before the container
 is read (the UA a backup holder approved, kept in its manifest as `backup_senders`, or the account the user confirms); after
 decryption the payload's entropy must derive `sender.ua`, else `ContainerSender`. Link: the UA the user confirms on the new device
@@ -946,6 +972,13 @@ user's index vault; before encrypting under an epoch a client verifies the signa
 every epoch to its own wrap; members and admins with a classical UA kind are flagged; reads for different vault UAs are
 spread over the RPC list and over time so one node does not link them** (controller call, owner may override). SPECIFIED.
 Details: [spec §6.9](../superpowers/specs/2026-11-17-pqvault.md#69-what-a-client-verifies-before-it-trusts-state-vc15) and §9.
+The chain check holds [CTR-UA-74](../contracts/accounts.md#msig-reader-rule)'s step 6 along the vault: oldest first (the create
+record, each epoch, then the removals kept under it, judged order-free against the versions after it), no `msig` names a
+structure version below the highest one an earlier record named, a signing `msig` member's tag included (the SDK's
+`verify_pqvault_record_versions` gives the versions); else `ChainUnverified` (C-3, R-2). A replica's epoch agrees with the
+home's when its signature equals the home's with the `msig` version tags stripped (`epoch_agrees`, A-1: a copy carries the tag of
+the replica registry's current version, every other byte the home's). Controller calls 2026-11-26, BUILT in `pqvault-core`
+`vault.rs`, `tests/exits.rs`, UNAUDITED.
 
 **Not here.** Per-kind derivation and clientkeys' API ([signers-clientkeys](signers-clientkeys.md)), group vectors, the registry contract, the UA ledger.
 Not built yet: the FRB layer as a Flutter plugin and its Android and iOS builds (no web build: `SecretBytes` needs `dart:ffi`), the wasm-bindgen browser binding of `ua-rs` (the library compiles for wasm32), and Qt packaging for Windows and macOS.

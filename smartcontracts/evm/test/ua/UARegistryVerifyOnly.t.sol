@@ -522,4 +522,5 @@ contract ReadFailsLine {
     function checkedOf(bytes32) external pure returns (uint8, uint8, uint8) {}
     function memberSigHashOf(bytes32, uint256) external pure returns (bytes32) {}
     function msigStateOf(bytes32) external pure returns (uint64, uint256, uint256) {}
+    function msigAt(bytes32, uint64) external pure returns (IUARegistry.MsigStructure memory s, uint256) {}
 }

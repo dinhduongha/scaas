@@ -196,6 +196,7 @@ contract PqVaultRecoveryTest is PqVaultBase {
         v.mode = uint8(vm.parseJsonUint(rec, string.concat(p, ".mode")));
         v.homeChain = vm.parseJsonBytes32(rec, string.concat(p, ".homeChain"));
         v.homeVaultContract = vm.parseJsonAddress(rec, string.concat(p, ".homeVaultContract"));
+        v.groupMode = uint8(vm.parseJsonUint(rec, string.concat(p, ".groupMode")));
         v.admins = vm.parseJsonBytes32Array(rec, string.concat(p, ".admins"));
         v.members = _members(p);
         v.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));

@@ -1162,6 +1162,11 @@ void main() {
       refused(key, index, Uint8List.fromList([...stored, 0]));
       refused(key, index, Uint8List(0));
       refused(key, index, Uint8List.fromList(stored)..[64 + 32 + 29] = 1); // a leaf index over uint16
+      // CTR-UA-74: the list followed by the member's version tag gives the tag back; 8 zero bytes refused
+      final tag = Uint8List.fromList([0, 0, 0, 0, 0, 0, 0, 2]);
+      final tagged = replayedMemberSig(key, index, Uint8List.fromList([...stored, ...tag]));
+      expect([_hx(tagged.$3!), _hx(encodeInnerSigs(tagged.$2))], [_hx(tag), m['stored']]);
+      refused(key, index, Uint8List.fromList([...stored, ...Uint8List(8)]));
     }
     expect(replays, 1);
   });

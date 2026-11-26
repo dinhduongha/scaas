@@ -102,6 +102,7 @@ abstract class ScaasUaApi extends BaseApi {
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
   });
 
   void crateApiWalletUaKeyListPush({required UaKeyList that, required UaKey k});
@@ -679,6 +680,7 @@ abstract class ScaasUaApi extends BaseApi {
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
     required SecretBytes bip39Passphrase,
   });
 
@@ -722,6 +724,7 @@ abstract class ScaasUaApi extends BaseApi {
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
     required SecretBytes bip39Passphrase,
   });
 
@@ -732,6 +735,7 @@ abstract class ScaasUaApi extends BaseApi {
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
     required SecretBytes bip39Passphrase,
   });
 
@@ -742,6 +746,7 @@ abstract class ScaasUaApi extends BaseApi {
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
     required SecretBytes bip39Passphrase,
   });
 
@@ -1034,6 +1039,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -1047,6 +1053,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_String(expectJson, serializer);
           sse_encode_opt_String(membersJson, serializer);
           sse_encode_opt_String(acceptedJson, serializer);
+          sse_encode_opt_String(currentJson, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -1060,7 +1067,14 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           decodeErrorData: sse_decode_ua_error,
         ),
         constMeta: kCrateApiWalletUaKemKeyOpenContainerConstMeta,
-        argValues: [that, containerJson, expectJson, membersJson, acceptedJson],
+        argValues: [
+          that,
+          containerJson,
+          expectJson,
+          membersJson,
+          acceptedJson,
+          currentJson,
+        ],
         apiImpl: this,
       ),
     );
@@ -1075,6 +1089,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           "expectJson",
           "membersJson",
           "acceptedJson",
+          "currentJson",
         ],
       );
 
@@ -5455,6 +5470,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
     required SecretBytes bip39Passphrase,
   }) {
     return handler.executeNormal(
@@ -5469,6 +5485,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_String(expectJson, serializer);
           sse_encode_opt_String(membersJson, serializer);
           sse_encode_opt_String(acceptedJson, serializer);
+          sse_encode_opt_String(currentJson, serializer);
           sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
             bip39Passphrase,
             serializer,
@@ -5492,6 +5509,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           expectJson,
           membersJson,
           acceptedJson,
+          currentJson,
           bip39Passphrase,
         ],
         apiImpl: this,
@@ -5508,6 +5526,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           "expectJson",
           "membersJson",
           "acceptedJson",
+          "currentJson",
           "bip39Passphrase",
         ],
       );
@@ -5773,6 +5792,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
     required SecretBytes bip39Passphrase,
   }) {
     return handler.executeNormal(
@@ -5787,6 +5807,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_String(expectJson, serializer);
           sse_encode_opt_String(membersJson, serializer);
           sse_encode_opt_String(acceptedJson, serializer);
+          sse_encode_opt_String(currentJson, serializer);
           sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
             bip39Passphrase,
             serializer,
@@ -5810,6 +5831,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           expectJson,
           membersJson,
           acceptedJson,
+          currentJson,
           bip39Passphrase,
         ],
         apiImpl: this,
@@ -5826,6 +5848,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           "expectJson",
           "membersJson",
           "acceptedJson",
+          "currentJson",
           "bip39Passphrase",
         ],
       );
@@ -5838,6 +5861,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
     required SecretBytes bip39Passphrase,
   }) {
     return handler.executeNormal(
@@ -5856,6 +5880,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_String(expectJson, serializer);
           sse_encode_opt_String(membersJson, serializer);
           sse_encode_opt_String(acceptedJson, serializer);
+          sse_encode_opt_String(currentJson, serializer);
           sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
             bip39Passphrase,
             serializer,
@@ -5880,6 +5905,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           expectJson,
           membersJson,
           acceptedJson,
+          currentJson,
           bip39Passphrase,
         ],
         apiImpl: this,
@@ -5897,6 +5923,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           "expectJson",
           "membersJson",
           "acceptedJson",
+          "currentJson",
           "bip39Passphrase",
         ],
       );
@@ -5909,6 +5936,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
     required SecretBytes bip39Passphrase,
   }) {
     return handler.executeNormal(
@@ -5927,6 +5955,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_String(expectJson, serializer);
           sse_encode_opt_String(membersJson, serializer);
           sse_encode_opt_String(acceptedJson, serializer);
+          sse_encode_opt_String(currentJson, serializer);
           sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
             bip39Passphrase,
             serializer,
@@ -5951,6 +5980,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           expectJson,
           membersJson,
           acceptedJson,
+          currentJson,
           bip39Passphrase,
         ],
         apiImpl: this,
@@ -5968,6 +5998,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           "expectJson",
           "membersJson",
           "acceptedJson",
+          "currentJson",
           "bip39Passphrase",
         ],
       );
@@ -8670,18 +8701,21 @@ class UaKemKeyImpl extends RustOpaque implements UaKemKey {
     sealed: sealed,
   );
 
-  /// A container's plaintext, accepted as `expect_json` says (spec §6.3); `members_json` / `accepted_json` null = none.
+  /// A container's plaintext, accepted as `expect_json` says (spec §6.3); `members_json` / `accepted_json` / `current_json`
+  /// null = none.
   Future<SecretBytes> openContainer({
     required String containerJson,
     required String expectJson,
     String? membersJson,
     String? acceptedJson,
+    String? currentJson,
   }) => ScaasUa.instance.api.crateApiWalletUaKemKeyOpenContainer(
     that: this,
     containerJson: containerJson,
     expectJson: expectJson,
     membersJson: membersJson,
     acceptedJson: acceptedJson,
+    currentJson: currentJson,
   );
 }
 

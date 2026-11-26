@@ -1061,6 +1061,15 @@ func uniffiCheckChecksums() {
 	}
 	{
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for()
+		})
+		if checksum != 20110 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate()
 		})
 		if checksum != 38309 {
@@ -2317,6 +2326,15 @@ func uniffiCheckChecksums() {
 		if checksum != 46941 {
 			// If this happens try cleaning and rebuilding your project
 			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_subscription_next: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_method_vault_accept_rollback()
+		})
+		if checksum != 51021 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_vault_accept_rollback: UniFFI API checksum mismatch")
 		}
 	}
 	{
@@ -4552,6 +4570,7 @@ type AdminInterface interface {
 	AdminUaApproveTokenRelease(req UaApproveTokenRelease) (*Prepared, error)
 	AdminUaCancelGrant(req UaCancelGrant) (*Prepared, error)
 	AdminUaCancelNonce(req UaCancelNonce) (*Prepared, error)
+	AdminUaCancelNonceFor(req UaCancelNonceFor) (*Prepared, error)
 	AdminUaCancelRate(req UaCancelRate) (*Prepared, error)
 	AdminUaCreateDex(req UaCreateDex) (*Prepared, error)
 	AdminUaCreateInstance(req UaCreateInstance) (*Prepared, error)
@@ -4802,6 +4821,39 @@ func (_self *Admin) AdminUaCancelNonce(req UaCancelNonce) (*Prepared, error) {
 		},
 		C.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(
 			_pointer, FfiConverterUaCancelNonceINSTANCE.Lower(req)),
+		// pollFn
+		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_poll_u64(handle, continuation, data)
+		},
+		// freeFn
+		func(handle C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_free_u64(handle)
+		},
+	)
+
+	if err == nil {
+		return res, nil
+	}
+
+	return res, err
+}
+
+func (_self *Admin) AdminUaCancelNonceFor(req UaCancelNonceFor) (*Prepared, error) {
+	_pointer := _self.ffiObject.incrementPointer("*Admin")
+	defer _self.ffiObject.decrementPointer()
+	res, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
+		// completeFn
+		func(handle C.uint64_t, status *C.RustCallStatus) C.uint64_t {
+			res := C.ffi_scaas_sdk_rust_future_complete_u64(handle, status)
+			return res
+		},
+		// liftFn
+		func(ffi C.uint64_t) *Prepared {
+			return FfiConverterPreparedINSTANCE.Lift(ffi)
+		},
+		C.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(
+			_pointer, FfiConverterUaCancelNonceForINSTANCE.Lower(req)),
 		// pollFn
 		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
 			C.ffi_scaas_sdk_rust_future_poll_u64(handle, continuation, data)
@@ -11185,6 +11237,7 @@ func (_ FfiDestroyerSubscription) Destroy(value *Subscription) {
 
 // Seeds (spec §6).
 type VaultInterface interface {
+	AcceptRollback() error
 	ChangePassphrase(seed string, old *SecretBytes, new *SecretBytes) error
 	ConfirmBackup(seed string) error
 	DeriveChild(req DeriveChild) (NewSeed, error)
@@ -11221,6 +11274,37 @@ type VaultInterface interface {
 // Seeds (spec §6).
 type Vault struct {
 	ffiObject FfiObject
+}
+
+func (_self *Vault) AcceptRollback() error {
+	_pointer := _self.ffiObject.incrementPointer("*Vault")
+	defer _self.ffiObject.decrementPointer()
+	_, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
+		// completeFn
+		func(handle C.uint64_t, status *C.RustCallStatus) struct{} {
+			C.ffi_scaas_sdk_rust_future_complete_void(handle, status)
+			return struct{}{}
+		},
+		// liftFn
+		func(_ struct{}) struct{} { return struct{}{} },
+		C.uniffi_scaas_sdk_fn_method_vault_accept_rollback(
+			_pointer),
+		// pollFn
+		func(handle C.uint64_t, continuation C.UniffiRustFutureContinuationCallback, data C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_poll_void(handle, continuation, data)
+		},
+		// freeFn
+		func(handle C.uint64_t) {
+			C.ffi_scaas_sdk_rust_future_free_void(handle)
+		},
+	)
+
+	if err == nil {
+		return nil
+	}
+
+	return err
 }
 
 func (_self *Vault) ChangePassphrase(seed string, old *SecretBytes, new *SecretBytes) error {
@@ -14053,8 +14137,9 @@ type ChainProfile struct {
 	// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
 	// `Sdk::open`
 	FamilyParams *FamilyParams
-	// the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-	// and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+	// the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+	// (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+	// Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
 	// `Sdk::open` on another family)
 	L1Fee *L1Fee
 	// the kinds this chain cannot carry, disabled by the owner (2026-11-22, ARCH-POS-18 confirmed: OP, Arbitrum, Base mainnet
@@ -15006,7 +15091,8 @@ func (_ FfiDestroyerGasLine) Destroy(value GasLine) {
 }
 
 // A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
-// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded), `data` (`mtxExecute`'s call data) or
+// `calldata` (the transaction row's, entry `transaction` kind `evm`: the price of a byte of the transaction's calldata).
 type GasPerByte struct {
 	Input string
 	Gas   uint64
@@ -17279,7 +17365,8 @@ func (_ FfiDestroyerPay) Destroy(value Pay) {
 
 // A pay's `PayMeta` v3 (CTR-MTX-26): committed to by the signed `entryRef` (`metaPayId`).
 type PayMeta struct {
-	// `0x` + 64 hex; `None`: 32 random bytes
+	// `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+	// the same pay lane, however its ids and amounts are spelt)
 	Salt *string
 	// a UUIDv7 in its text form, or `0x` + 64 hex; `None`: no number
 	PayNo *string
@@ -18120,8 +18207,9 @@ func (_ FfiDestroyerPqzTransfer) Destroy(value PqzTransfer) {
 	value.Destroy()
 }
 
-// `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
-// fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+// `UAPqzTransfer` / `UAPqzTransferCompact`: the real `legs` and `decoys` legs of amount 0 the SDK draws from the registry
+// line's `0x0142` lists, every leg's position shuffled (CTR-UA-29; their count one the set builds, 1, 2, 4 or 8),
+// `decoy_fee` the per-leg fee (decimal; at least the token's `minDecoyFee`, the contract's check).
 type PqzTransferMulti struct {
 	Signer          KeyRef
 	Chain           string
@@ -18129,6 +18217,7 @@ type PqzTransferMulti struct {
 	Batch           string
 	KeyVersion      uint64
 	Legs            []PqzLeg
+	Decoys          uint32
 	DecoyFee        string
 	ValidUntilBlock uint64
 	Envelope        Envelope
@@ -18141,6 +18230,7 @@ func (r *PqzTransferMulti) Destroy() {
 	FfiDestroyerString{}.Destroy(r.Batch)
 	FfiDestroyerUint64{}.Destroy(r.KeyVersion)
 	FfiDestroyerSequencePqzLeg{}.Destroy(r.Legs)
+	FfiDestroyerUint32{}.Destroy(r.Decoys)
 	FfiDestroyerString{}.Destroy(r.DecoyFee)
 	FfiDestroyerUint64{}.Destroy(r.ValidUntilBlock)
 	FfiDestroyerEnvelope{}.Destroy(r.Envelope)
@@ -18162,6 +18252,7 @@ func (c FfiConverterPqzTransferMulti) Read(reader io.Reader) PqzTransferMulti {
 		FfiConverterStringINSTANCE.Read(reader),
 		FfiConverterUint64INSTANCE.Read(reader),
 		FfiConverterSequencePqzLegINSTANCE.Read(reader),
+		FfiConverterUint32INSTANCE.Read(reader),
 		FfiConverterStringINSTANCE.Read(reader),
 		FfiConverterUint64INSTANCE.Read(reader),
 		FfiConverterEnvelopeINSTANCE.Read(reader),
@@ -18183,6 +18274,7 @@ func (c FfiConverterPqzTransferMulti) Write(writer io.Writer, value PqzTransferM
 	FfiConverterStringINSTANCE.Write(writer, value.Batch)
 	FfiConverterUint64INSTANCE.Write(writer, value.KeyVersion)
 	FfiConverterSequencePqzLegINSTANCE.Write(writer, value.Legs)
+	FfiConverterUint32INSTANCE.Write(writer, value.Decoys)
 	FfiConverterStringINSTANCE.Write(writer, value.DecoyFee)
 	FfiConverterUint64INSTANCE.Write(writer, value.ValidUntilBlock)
 	FfiConverterEnvelopeINSTANCE.Write(writer, value.Envelope)
@@ -20047,8 +20139,11 @@ type TokenBalance struct {
 	Address  string
 	Display  string
 	Decimals uint8
-	// the smallest unit, decimal
+	// the smallest unit, decimal; empty when `unknown` is set
 	Amount string
+	// set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+	// `frozen`): the amount is unknown, never a false 0
+	Unknown *string
 }
 
 func (r *TokenBalance) Destroy() {
@@ -20056,6 +20151,7 @@ func (r *TokenBalance) Destroy() {
 	FfiDestroyerString{}.Destroy(r.Display)
 	FfiDestroyerUint8{}.Destroy(r.Decimals)
 	FfiDestroyerString{}.Destroy(r.Amount)
+	FfiDestroyerOptionalString{}.Destroy(r.Unknown)
 }
 
 type FfiConverterTokenBalance struct{}
@@ -20072,6 +20168,7 @@ func (c FfiConverterTokenBalance) Read(reader io.Reader) TokenBalance {
 		FfiConverterStringINSTANCE.Read(reader),
 		FfiConverterUint8INSTANCE.Read(reader),
 		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterOptionalStringINSTANCE.Read(reader),
 	}
 }
 
@@ -20088,6 +20185,7 @@ func (c FfiConverterTokenBalance) Write(writer io.Writer, value TokenBalance) {
 	FfiConverterStringINSTANCE.Write(writer, value.Display)
 	FfiConverterUint8INSTANCE.Write(writer, value.Decimals)
 	FfiConverterStringINSTANCE.Write(writer, value.Amount)
+	FfiConverterOptionalStringINSTANCE.Write(writer, value.Unknown)
 }
 
 type FfiDestroyerTokenBalance struct{}
@@ -20827,6 +20925,74 @@ func (c FfiConverterUaCancelNonce) Write(writer io.Writer, value UaCancelNonce) 
 type FfiDestroyerUaCancelNonce struct{}
 
 func (_ FfiDestroyerUaCancelNonce) Destroy(value UaCancelNonce) {
+	value.Destroy()
+}
+
+// A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+// UACancelNonceFor
+type UaCancelNonceFor struct {
+	Signer KeyRef
+	Chain  string
+	// the lane, decimal
+	Batch  string
+	Target string
+	Lane   string
+	// the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+	ChainUid *string
+	Envelope Envelope
+}
+
+func (r *UaCancelNonceFor) Destroy() {
+	FfiDestroyerKeyRef{}.Destroy(r.Signer)
+	FfiDestroyerString{}.Destroy(r.Chain)
+	FfiDestroyerString{}.Destroy(r.Batch)
+	FfiDestroyerString{}.Destroy(r.Target)
+	FfiDestroyerString{}.Destroy(r.Lane)
+	FfiDestroyerOptionalString{}.Destroy(r.ChainUid)
+	FfiDestroyerEnvelope{}.Destroy(r.Envelope)
+}
+
+type FfiConverterUaCancelNonceFor struct{}
+
+var FfiConverterUaCancelNonceForINSTANCE = FfiConverterUaCancelNonceFor{}
+
+func (c FfiConverterUaCancelNonceFor) Lift(rb RustBufferI) UaCancelNonceFor {
+	return LiftFromRustBuffer[UaCancelNonceFor](c, rb)
+}
+
+func (c FfiConverterUaCancelNonceFor) Read(reader io.Reader) UaCancelNonceFor {
+	return UaCancelNonceFor{
+		FfiConverterKeyRefINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterOptionalStringINSTANCE.Read(reader),
+		FfiConverterEnvelopeINSTANCE.Read(reader),
+	}
+}
+
+func (c FfiConverterUaCancelNonceFor) Lower(value UaCancelNonceFor) C.RustBuffer {
+	return LowerIntoRustBuffer[UaCancelNonceFor](c, value)
+}
+
+func (c FfiConverterUaCancelNonceFor) LowerExternal(value UaCancelNonceFor) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[UaCancelNonceFor](c, value))
+}
+
+func (c FfiConverterUaCancelNonceFor) Write(writer io.Writer, value UaCancelNonceFor) {
+	FfiConverterKeyRefINSTANCE.Write(writer, value.Signer)
+	FfiConverterStringINSTANCE.Write(writer, value.Chain)
+	FfiConverterStringINSTANCE.Write(writer, value.Batch)
+	FfiConverterStringINSTANCE.Write(writer, value.Target)
+	FfiConverterStringINSTANCE.Write(writer, value.Lane)
+	FfiConverterOptionalStringINSTANCE.Write(writer, value.ChainUid)
+	FfiConverterEnvelopeINSTANCE.Write(writer, value.Envelope)
+}
+
+type FfiDestroyerUaCancelNonceFor struct{}
+
+func (_ FfiDestroyerUaCancelNonceFor) Destroy(value UaCancelNonceFor) {
 	value.Destroy()
 }
 
@@ -26948,6 +27114,44 @@ func (_ FfiDestroyerAuthError) Destroy(value *AuthError) {
 	}
 }
 
+// What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+// read at the `finalized` block, or endpoint 0's alone under `failover`.
+type Basis uint
+
+const (
+	BasisMajority    Basis = 1
+	BasisOneEndpoint Basis = 2
+)
+
+type FfiConverterBasis struct{}
+
+var FfiConverterBasisINSTANCE = FfiConverterBasis{}
+
+func (c FfiConverterBasis) Lift(rb RustBufferI) Basis {
+	return LiftFromRustBuffer[Basis](c, rb)
+}
+
+func (c FfiConverterBasis) Lower(value Basis) C.RustBuffer {
+	return LowerIntoRustBuffer[Basis](c, value)
+}
+
+func (c FfiConverterBasis) LowerExternal(value Basis) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[Basis](c, value))
+}
+func (FfiConverterBasis) Read(reader io.Reader) Basis {
+	id := readInt32(reader)
+	return Basis(id)
+}
+
+func (FfiConverterBasis) Write(writer io.Writer, value Basis) {
+	writeInt32(writer, int32(value))
+}
+
+type FfiDestroyerBasis struct{}
+
+func (_ FfiDestroyerBasis) Destroy(value Basis) {
+}
+
 type Class uint
 
 const (
@@ -27842,7 +28046,7 @@ type GasFromApp struct {
 func (e GasFromApp) Destroy() {
 }
 
-// a native send's own estimate (or 21,000 for a plain transfer to an account without code)
+// a native send's own estimate (`eth_estimateGas`, a plain transfer's too)
 type GasFromEstimate struct {
 }
 
@@ -28217,6 +28421,12 @@ type L1Fee uint
 const (
 	// OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
 	L1FeeOpStack L1Fee = 1
+	// the L1 cost charged as gas (Arbitrum, the profile's `in-estimate`): a table-quoted transaction's gas limit adds
+	// `NodeInterface.gasEstimateL1Component` (`0x…C8`) over its calldata, with the margin; an estimate holds it already
+	L1FeeInEstimate L1Fee = 2
+	// the L1 cost carried by the priority fee (Linea, the profile's `linea`): the fees are `linea_estimateGas`'s over the
+	// transaction, never below the chain's own
+	L1FeeLinea L1Fee = 3
 )
 
 type FfiConverterL1Fee struct{}
@@ -28369,9 +28579,11 @@ func (e OpStateLanded) Destroy() {
 
 // the lane's nonce spent at the final block without that event; a replaced native send
 type OpStateConsumed struct {
+	Basis Basis
 }
 
 func (e OpStateConsumed) Destroy() {
+	FfiDestroyerBasis{}.Destroy(e.Basis)
 }
 
 // an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
@@ -28387,9 +28599,11 @@ func (e OpStateReverted) Destroy() {
 
 // `validUntil` below the final block's timestamp while the nonce is unspent
 type OpStateExpired struct {
+	Basis Basis
 }
 
 func (e OpStateExpired) Destroy() {
+	FfiDestroyerBasis{}.Destroy(e.Basis)
 }
 
 // anything else, with what is known (never an end)
@@ -28425,14 +28639,18 @@ func (FfiConverterOpState) Read(reader io.Reader) OpState {
 			FfiConverterStringINSTANCE.Read(reader),
 		}
 	case 2:
-		return OpStateConsumed{}
+		return OpStateConsumed{
+			FfiConverterBasisINSTANCE.Read(reader),
+		}
 	case 3:
 		return OpStateReverted{
 			FfiConverterUint64INSTANCE.Read(reader),
 			FfiConverterStringINSTANCE.Read(reader),
 		}
 	case 4:
-		return OpStateExpired{}
+		return OpStateExpired{
+			FfiConverterBasisINSTANCE.Read(reader),
+		}
 	case 5:
 		return OpStateInFlight{
 			FfiConverterInFlightINSTANCE.Read(reader),
@@ -28450,12 +28668,14 @@ func (FfiConverterOpState) Write(writer io.Writer, value OpState) {
 		FfiConverterStringINSTANCE.Write(writer, variant_value.Hash)
 	case OpStateConsumed:
 		writeInt32(writer, 2)
+		FfiConverterBasisINSTANCE.Write(writer, variant_value.Basis)
 	case OpStateReverted:
 		writeInt32(writer, 3)
 		FfiConverterUint64INSTANCE.Write(writer, variant_value.Block)
 		FfiConverterStringINSTANCE.Write(writer, variant_value.Hash)
 	case OpStateExpired:
 		writeInt32(writer, 4)
+		FfiConverterBasisINSTANCE.Write(writer, variant_value.Basis)
 	case OpStateInFlight:
 		writeInt32(writer, 5)
 		FfiConverterInFlightINSTANCE.Write(writer, variant_value.Detail)

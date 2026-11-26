@@ -684,13 +684,14 @@ pub fn sign_typed_by(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result
 /// owner statements `ZetherRollOver` and `ZetherSetRollOverMode` (`ZetherLib`, owner 2026-11-19 C3; the outer `UA*` forms carry
 /// that signature as `ownerSig`), `zether-auth` for `PqzRollOver` (`PqzStateLib`, CTR-PQZ-41) and a debit's `PqzAuth`
 /// (`PqzCore.requireHolder`, P-T16-1), `auditor-consent` for
-/// `AuditorConsent` (`PqzStateLib`, CTR-PQZ-43), `metatx` for every other envelope. `Expect::Any` is `Argument` here: a SCaaS entry is always signed under its check.
+/// `AuditorConsent` (`PqzStateLib`, CTR-PQZ-43), `metatx` for every other envelope. `Expect::Any` and `Expect::Erc7739` are `Argument` here: a SCaaS entry is always signed under its check.
 pub fn sign_scaas(
     key: &dyn Signer,
     td: &TypedData,
     expect: Expect,
 ) -> Result<crate::ua_portable::UASig> {
-    if matches!(expect, Expect::Any(_)) {
+    // review A2-8: an ERC-7739 nested signature is an app's typed data, never a SCaaS entry's
+    if matches!(expect, Expect::Any(_) | Expect::Erc7739 { .. }) {
         return Err(Error::Argument);
     }
     if let super::signer::KeyRef::Native { .. } = key.key_ref() {
@@ -723,7 +724,9 @@ pub fn sign_auditor_consent_native(
     expect: Expect,
     registry: &crate::Domain,
 ) -> Result<crate::ua_portable::UASig> {
-    if matches!(expect, Expect::Any(_)) || td.primary_type() != "AuditorConsent" {
+    if matches!(expect, Expect::Any(_) | Expect::Erc7739 { .. })
+        || td.primary_type() != "AuditorConsent"
+    {
         return Err(Error::Argument);
     }
     let digest = td.digest()?;
@@ -781,7 +784,7 @@ pub fn sign_scaas_bls_multi(
     td: &TypedData,
     expect: Expect,
 ) -> Result<Vec<u8>> {
-    if matches!(expect, Expect::Any(_)) {
+    if matches!(expect, Expect::Any(_) | Expect::Erc7739 { .. }) {
         return Err(Error::Argument);
     }
     if check(td, &expect)? != td.digest()? {

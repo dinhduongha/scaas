@@ -15,8 +15,8 @@ use super::signer::{KeyRef, SignRequest, Signer};
 use super::{bounded, Error, Network, Result};
 use crate::ua_portable::{
     app_purpose, is_portable_purpose, membership_digest, msig_slots_minimal, msig_update_digest,
-    portable_record_purposes, slot_enabled, Current, Inner, InnerSig, MemberSig, MsigMember,
-    MsigStructure, MsigUpdate, UASig, PORTABLE_DOMAIN_SEPARATOR,
+    portable_record_purposes, slot_enabled, version_tag, Inner, InnerSig, MemberSig, MsigAt,
+    MsigMember, MsigStructure, MsigUpdate, UASig, PORTABLE_DOMAIN_SEPARATOR,
 };
 use crate::{derive_ua, keccak256, member_digest, purpose_tag, ua_message, Domain, UAError};
 use serde_json::Value;
@@ -135,7 +135,7 @@ pub fn ua_sig_app(key: &dyn Signer, app_id: &[u8; 32], digest: &[u8; 32]) -> Res
 /// before anything is signed.
 pub fn msig_sig_app(
     key_data: &[u8],
-    current: &Current,
+    current: &MsigAt,
     inner: &Inner,
     app_id: &[u8; 32],
     record: &TypedData,
@@ -184,7 +184,7 @@ pub fn msig_sig(
 ) -> Result<UASig> {
     msig_sig_current(
         key_data,
-        &|_| None,
+        &|_, _| None,
         inner,
         purpose,
         digest,
@@ -195,14 +195,16 @@ pub fn msig_sig(
 }
 
 /// [`msig_sig`] of an `msig` that `updateMsig` changed (CTR-UA-44, T21 L01): `key_data` its first structure (the id, for ever),
-/// `current` the target registry's `msigOf(id)` (every slot, disabled ones included) and `msigStateOf` `enabled` word, for the
-/// record and for its `msig` members (`None`: never updated there, the first structure authorizes). Slot indexes, weights,
-/// threshold and minimality are the current structure's; every member digest binds the id; a disabled slot, at either level,
-/// is `Argument` before anything is signed. `inner` gives an `msig` member's first structure.
+/// `current` read for the current version (`current(id, None)`: the target registry's `msigOf(id)`, every slot, disabled ones
+/// included, its `msigStateOf` `enabled` word and `version`), for the record and for its `msig` members (`None`: never updated there,
+/// the first structure authorizes). Slot indexes, weights, threshold and minimality are the current structure's; every member digest
+/// binds the id; a disabled slot, at either level, is `Argument` before anything is signed. `inner` gives an `msig` member's first
+/// structure. CTR-UA-74: `UASig.signature` is the `msig`'s version tag ([`version_tag`]), each `msig` member slot's `sig` that
+/// member's.
 #[allow(clippy::too_many_arguments)]
 pub fn msig_sig_current(
     key_data: &[u8],
-    current: &Current,
+    current: &MsigAt,
     inner: &Inner,
     purpose: &[u8; 32],
     digest: &[u8; 32],
@@ -291,7 +293,7 @@ pub(super) fn msig_members(
 ) -> Result<UASig> {
     msig_members_current(
         key_data,
-        &|_| None,
+        &|_, _| None,
         inner,
         purpose,
         digest,
@@ -301,10 +303,13 @@ pub(super) fn msig_members(
     )
 }
 
-/// The structure that authorizes the `msig` `id` whose first structure is `first` (CTR-UA-44) and its `enabled` word (`None`:
-/// never updated, every slot).
-fn now(id: &[u8; 32], first: &[u8], current: &Current) -> (Vec<u8>, Option<[u8; 32]>) {
-    current(*id).map_or_else(|| (first.to_vec(), None), |(c, en)| (c, Some(en)))
+/// The structure that authorizes the `msig` `id` whose first structure is `first` (CTR-UA-44), its `enabled` word (`None`: never
+/// updated, every slot) and its version tag (CTR-UA-74: what a new signature carries).
+fn now(id: &[u8; 32], first: &[u8], current: &MsigAt) -> (Vec<u8>, Option<[u8; 32]>, Vec<u8>) {
+    current(*id, None).map_or_else(
+        || (first.to_vec(), None, vec![]),
+        |(c, en, v)| (c, Some(en), version_tag(v)),
+    )
 }
 fn on(enabled: &Option<[u8; 32]>, index: u16) -> bool {
     enabled.as_ref().is_none_or(|en| slot_enabled(en, index))
@@ -346,7 +351,7 @@ fn native_of<'a>(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn msig_sig_app_chain(
     first: &[u8],
-    current: &Current,
+    current: &MsigAt,
     inner: &Inner,
     purpose: &[u8; 32],
     digest: &[u8; 32],
@@ -361,7 +366,7 @@ pub(super) fn msig_sig_app_chain(
 #[allow(clippy::too_many_arguments)]
 fn msig_members_current(
     first: &[u8],
-    current: &Current,
+    current: &MsigAt,
     inner: &Inner,
     purpose: &[u8; 32],
     digest: &[u8; 32],
@@ -380,7 +385,7 @@ fn msig_members_current(
 #[allow(clippy::too_many_arguments)]
 pub fn msig_slot_sig_current(
     first: &[u8],
-    current: &Current,
+    current: &MsigAt,
     inner: &Inner,
     purpose: &[u8; 32],
     digest: &[u8; 32],
@@ -390,7 +395,7 @@ pub fn msig_slot_sig_current(
 ) -> Result<MemberSig> {
     check_purpose(purpose)?;
     let ua = derive_ua(MSIG, first, false)?;
-    let (key_data, enabled) = now(&ua, first, current);
+    let (key_data, enabled, _) = now(&ua, first, current);
     if !on(&enabled, slot.index()) {
         return Err(Error::Argument);
     }
@@ -407,9 +412,9 @@ pub fn msig_slot_sig_current(
 /// The `msig`'s `UASig` from its slots' `MemberSig`s, signed apart ([`msig_slot_sig_current`]), in any order: put in index
 /// order; a repeated or disabled slot is `Argument`, a set not minimal for the current structure `UAPoP` (CTR-UA-07). The
 /// signatures are the registry's to check.
-pub fn msig_combine(first: &[u8], current: &Current, members: &[MemberSig]) -> Result<UASig> {
+pub fn msig_combine(first: &[u8], current: &MsigAt, members: &[MemberSig]) -> Result<UASig> {
     let ua = derive_ua(MSIG, first, false)?;
-    let (key_data, enabled) = now(&ua, first, current);
+    let (key_data, enabled, tag) = now(&ua, first, current);
     let mut members = members.to_vec();
     members.sort_by_key(|m| m.index);
     let indexes: Vec<u16> = members.iter().map(|m| m.index).collect();
@@ -423,7 +428,7 @@ pub fn msig_combine(first: &[u8], current: &Current, members: &[MemberSig]) -> R
     }
     Ok(UASig {
         key_data: vec![],
-        signature: vec![],
+        signature: tag,
         members,
     })
 }
@@ -431,7 +436,7 @@ pub fn msig_combine(first: &[u8], current: &Current, members: &[MemberSig]) -> R
 /// The members of an `msig` signature, `native` asked only when a slot holds a native member: what that member signs.
 fn msig_build<'a>(
     first: &[u8],
-    current: &Current,
+    current: &MsigAt,
     inner: &Inner,
     purpose: &[u8; 32],
     digest: &[u8; 32],
@@ -439,7 +444,7 @@ fn msig_build<'a>(
     native: impl FnOnce() -> Result<Native<'a>>,
 ) -> Result<UASig> {
     let ua = derive_ua(MSIG, first, false)?;
-    let (key_data, enabled) = now(&ua, first, current);
+    let (key_data, enabled, tag) = now(&ua, first, current);
     let indexes: Vec<u16> = slots.iter().map(Slot::index).collect();
     if !indexes.iter().all(|i| on(&enabled, *i)) {
         return Err(Error::Argument); // a disabled slot signs nothing
@@ -464,7 +469,7 @@ fn msig_build<'a>(
         .collect::<Result<Vec<_>>>()?;
     Ok(UASig {
         key_data: vec![],
-        signature: vec![],
+        signature: tag,
         members,
     })
 }
@@ -473,15 +478,15 @@ fn msig_build<'a>(
 /// `UAMembership{ua, member}` ([`membership_digest`]) under `membership`, as an `msig` slot of that purpose; an `msig` member by a
 /// minimal list of its own slots. One slot, no threshold. A slot past the members: `Argument`; else as [`msig_sig`].
 pub fn membership_sig(key_data: &[u8], inner: &Inner, slot: &Slot) -> Result<MemberSig> {
-    membership_sig_current(key_data, &|_| None, inner, slot)
+    membership_sig_current(key_data, &|_, _| None, inner, slot)
 }
 
 /// [`membership_sig`] of an updated `msig` (CTR-UA-44, T21 L01): `key_data` the first structure (the id the record binds),
 /// `current` as [`msig_sig_current`]; the slot one of the current structure, enabled or not (an appended slot accepts before it
-/// counts, MM-2); an `msig` member's leaves enabled slots of its current structure.
+/// counts, MM-2); an `msig` member's leaves enabled slots of its current structure, its `sig` that member's version tag.
 pub fn membership_sig_current(
     key_data: &[u8],
-    current: &Current,
+    current: &MsigAt,
     inner: &Inner,
     slot: &Slot,
 ) -> Result<MemberSig> {
@@ -506,11 +511,12 @@ enum Native<'a> {
     None,
 }
 
-/// A slot checked against its member.
+/// A slot checked against its member (`tag`: an `msig` member's version tag, CTR-UA-74).
 struct Plan<'a> {
     index: u16,
     member: MsigMember,
     signers: Signers<'a>,
+    tag: Vec<u8>,
 }
 enum Signers<'a> {
     Key(&'a dyn Signer),
@@ -530,7 +536,7 @@ fn plan<'a>(
     structure: &MsigStructure,
     slot: &Slot<'a>,
     inner: &Inner,
-    current: &Current,
+    current: &MsigAt,
 ) -> Result<Plan<'a>> {
     let index = slot.index();
     let member = *structure
@@ -547,6 +553,7 @@ fn plan<'a>(
                 index,
                 member,
                 signers: Signers::Key(*key),
+                tag: vec![],
             })
         }
         Slot::Msig { members, .. } => {
@@ -557,7 +564,7 @@ fn plan<'a>(
             if derive_ua(MSIG, &first, false).ok() != Some(member.id) {
                 return Err(Error::Ua(UAError::MemberUnknown));
             }
-            let (d, enabled) = now(&member.id, &first, current);
+            let (d, enabled, tag) = now(&member.id, &first, current);
             let all = MsigStructure::from_key_data(&d)?.members;
             if all
                 .iter()
@@ -584,6 +591,7 @@ fn plan<'a>(
                 index,
                 member,
                 signers: Signers::Leaves(leaves),
+                tag,
             })
         }
     }
@@ -648,7 +656,7 @@ fn sign(p: &Plan, ua: &[u8; 32], msg: &[u8; 32], native: &Native) -> Result<Memb
             Ok(MemberSig {
                 index: p.index,
                 members,
-                sig: vec![],
+                sig: p.tag.clone(),
             })
         }
     }
@@ -664,8 +672,9 @@ const SLOTS_MAX: usize = 16;
 /// hex): the request names its signing keys by their position in a list of handles the caller passes beside it, so no key
 /// crosses as JSON. `{purpose, digest, domain?, key}` builds [`ua_sig`] of `keys[key]`; `{purpose, digest, domain?, msig: {keyData,
 /// inner?, current?, slots: [{index, key} | {index, members: [{index, key}]}]}}` builds [`msig_sig_current`] (no `record`: a native
-/// member in a purpose whose natives sign the record is `Argument`); `current` `[{ua, keyData, enabled}]` the structures that
-/// authorize now (CTR-UA-44; none: never updated), `keyData` stays the first structure. `domain` is `{generation, chainId,
+/// member in a purpose whose natives sign the record is `Argument`); `current` `[{ua, keyData, enabled, version}]` the structures that
+/// authorize now and their `msigStateOf` versions (CTR-UA-44, CTR-UA-74: the tags; none: never updated), `keyData` stays the first
+/// structure. `domain` is `{generation, chainId,
 /// registry, chainUid}`, read only for a native key.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UaSigRequest {
@@ -674,13 +683,15 @@ pub struct UaSigRequest {
     domain: Option<(u32, u64, [u8; 20], [u8; 32])>,
     by: By,
 }
+/// An `msig`'s structure now: `(ua, keyData, enabled, version)` (CTR-UA-44, CTR-UA-74).
+type Now = ([u8; 32], Vec<u8>, [u8; 32], u64);
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum By {
     Key(usize),
     Msig {
         key_data: Vec<u8>,
         inner: Vec<([u8; 32], Vec<u8>)>,
-        current: Vec<([u8; 32], Vec<u8>, [u8; 32])>,
+        current: Vec<Now>,
         slots: Vec<(u16, SlotBy)>,
     },
 }
@@ -735,11 +746,12 @@ impl UaSigRequest {
                     })
                     .collect::<Result<Vec<_>>>()?;
                 let lookup = crate::json::lookup(inner);
-                let now = |id: [u8; 32]| {
+                // a signer reads the current version only (`None`), CTR-UA-74
+                let now = |id: [u8; 32], v: Option<u64>| {
                     current
                         .iter()
-                        .find(|(x, ..)| *x == id)
-                        .map(|(_, d, en)| (d.clone(), *en))
+                        .find(|(x, .., ver)| *x == id && v.is_none_or(|v| v == *ver))
+                        .map(|(_, d, en, ver)| (d.clone(), *en, *ver))
                 };
                 msig_sig_current(
                     key_data,
@@ -807,13 +819,15 @@ fn parse_request(v: &Value) -> Option<UaSigRequest> {
                     _ => None,
                 }
             };
-            // CTR-UA-44: `current: [{ua, keyData, enabled}]`, the record's and its `msig` members' structures now (optional)
+            // CTR-UA-44: `current: [{ua, keyData, enabled, version}]`, the record's and its `msig` members' structures now and
+            // their versions (CTR-UA-74; optional)
             let now = |c: &Value| {
-                let c = only(c, &["ua", "keyData", "enabled"])?;
+                let c = only(c, &["ua", "keyData", "enabled", "version"])?;
                 Some((
                     h32(c.get("ua")?)?,
                     h(c.get("keyData")?)?,
                     h32(c.get("enabled")?)?,
+                    c.get("version")?.as_u64()?,
                 ))
             };
             let current = match m.get("current") {
@@ -973,12 +987,12 @@ pub(super) fn sign_app_digest(
 }
 
 /// What [`verify_app_record`] reads of the target registry, at one block: `members` each registered id's `(kind, keyData)`
-/// (`registrationOf`; checked against the id here), `current` an `msig`'s `msigOf` and `enabled` word, `accepted` its accepted
+/// (`registrationOf`; checked against the id here), `msig_at` an `msig`'s structures by version (CTR-UA-74, `msigAt`), `accepted` its accepted
 /// bits, `domain` the registry generation's `UAAuth` domain (a native signer's; `None` where none was read).
 #[cfg(feature = "app-core")]
 pub struct AppRecordState<'a> {
     pub members: &'a crate::ua_portable::Members<'a>,
-    pub current: &'a Current<'a>,
+    pub msig_at: &'a MsigAt<'a>,
     pub accepted: &'a crate::ua_portable::Accepted<'a>,
     pub domain: Option<&'a Domain>,
 }
@@ -1047,7 +1061,7 @@ pub(super) fn verify_app_digest(
             &digest,
             sig,
             state.members,
-            state.current,
+            state.msig_at,
             accepted,
         )
         .is_ok();
@@ -1056,17 +1070,18 @@ pub(super) fn verify_app_digest(
         let Some(d) = state.domain else {
             return false;
         };
+        // CTR-UA-74: `signature` the `msig`'s version tag
         return sig.key_data.is_empty()
-            && sig.signature.is_empty()
             && crate::ua_portable::check_authorization_current(
                 &key_data,
                 ua,
                 &purpose,
                 &digest,
+                &sig.signature,
                 &sig.members,
                 d,
                 state.members,
-                state.current,
+                state.msig_at,
                 accepted,
             )
             .is_ok();

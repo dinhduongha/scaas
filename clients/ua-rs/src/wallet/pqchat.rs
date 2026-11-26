@@ -31,7 +31,7 @@ pub const TYPE_STRINGS: &[(&str, &str)] = &[
     ),
     (
         "PqChatSession",
-        "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)",
+        "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode)",
     ),
     (
         "PqChatEpoch",
@@ -81,6 +81,42 @@ pub const TYPE_STRINGS: &[(&str, &str)] = &[
         "PqChatCard",
         "PqChatCard(bytes32 ua,uint64 kemVersion,string matrixId)",
     ),
+    // TreeKEM mode (spec 2026-11-23-pqchat-treekem §6), each struct alone (`typed` adds the nested ones): signed only by the
+    // tree's own operations (`tree`), so none is in RECORDS; the signed ones are TREE_RECORDS
+    (
+        "PqChatCommit",
+        "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo)",
+    ),
+    (
+        "TreeAdd",
+        "TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)",
+    ),
+    ("TreeRemove", "TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)"),
+    ("PathList", "PathList(uint32[] ctTargets,bytes32[] ctHashes)"),
+    (
+        "PathCt",
+        "PathCt(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSecret)",
+    ),
+    (
+        "PqChatTreeLeave",
+        "PqChatTreeLeave(bytes32 sessionId,bytes32 treeId,bytes32 epochId,bytes32 member,uint64 nonce)",
+    ),
+    (
+        "PqChatTreeRemove",
+        "PqChatTreeRemove(bytes32 sessionId,bytes32 treeId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)",
+    ),
+    (
+        "TreeGenesis",
+        "TreeGenesis(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,uint8 groupMode)",
+    ),
+    (
+        "TreeLeaf",
+        "TreeLeaf(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 kemHash)",
+    ),
+    (
+        "TreeParent",
+        "TreeParent(bytes32 keyHash,bytes32 left,bytes32 right)",
+    ),
 ];
 
 /// The records a UA signs for a contract (every type string but the nested `MemberKey`, `Wrap` and `EntryRef`, and the card).
@@ -97,6 +133,11 @@ pub const RECORDS: &[&str] = &[
     "PqTopicEdit",
     "PqTopicVote",
 ];
+
+/// The tree's signed records (spec §6, §15): signed only by the tree's prepared operations ([`super::tree::TreePrepared`],
+/// [`super::tree::PreparedCommit`]), never by [`sign`]; [`verify`] does not take them either (the replay checks their
+/// signatures under the tree's scope).
+pub const TREE_RECORDS: &[&str] = &["PqChatCommit", "PqChatTreeLeave", "PqChatTreeRemove"];
 
 /// `PURPOSE_PQCHAT = keccak256("scaas.ua.purpose.pqchat.v1")`.
 pub fn purpose() -> [u8; 32] {
@@ -166,22 +207,66 @@ pub fn id(tag: &str, words: &[[u8; 32]]) -> [u8; 32] {
 /// A single UA key's `UASig` over the record `td` (one of [`RECORDS`] in `DS_C`, else `Argument`): `uaMessage(kind,
 /// PURPOSE_PQCHAT, typed)`, role `Pop`, no key data, no members. A native key or one claiming the `msig` kind: `Argument`.
 pub fn sign(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
-    if !RECORDS.contains(&td.primary_type()) {
+    if !own_struct(td) {
         return Err(Error::Argument);
     }
     sign_typed(key, td)
 }
 
+/// Review A-8 (as PqVault's path checks its own): `td` is one of [`RECORDS`] with that record's own `encodeType` (referenced
+/// types included), not another struct named like it.
+fn own_struct(td: &TypedData) -> bool {
+    RECORDS.contains(&td.primary_type())
+        && td
+            .to_value()
+            .get("message")
+            .cloned()
+            .and_then(|m| typed(td.primary_type(), m).ok())
+            .is_some_and(|t| t.encode_type() == td.encode_type())
+}
+
 /// [`sign`] after its struct check.
 fn sign_typed(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
+    if td.to_value().get("domain") != Some(&json!({"name": "SCaaS PqChat", "version": "1"})) {
+        return Err(Error::Argument);
+    }
+    sign_digest(key, &td.digest()?, &purpose())
+}
+
+/// The tree's dedicated signing step (spec §15, CTR-CHAT-28): a single UA key's `UASig` over the tree record `td` (one of
+/// [`TREE_RECORDS`], else `Argument`; built by the tree's prepared operations under their scope's typed data) under the
+/// scope's `purpose`, as [`sign`] signs a record.
+pub(crate) fn sign_tree(key: &dyn Signer, td: &TypedData, purpose: &[u8; 32]) -> Result<UASig> {
+    // the record's own encodeType (B-2, as `own_struct`): not another struct under a tree record's name; the domain and the
+    // purpose are the scope's and stand in the review
+    let own = td
+        .to_value()
+        .get("message")
+        .cloned()
+        .and_then(|m| typed(td.primary_type(), m).ok())
+        .is_some_and(|t| t.encode_type() == td.encode_type());
+    if !TREE_RECORDS.contains(&td.primary_type()) || !own {
+        return Err(Error::Argument);
+    }
+    sign_digest(key, &td.digest()?, purpose)
+}
+
+/// [`sign_tree`] for a test (feature `vectors`, never in a release build): its struct check beside its twin.
+#[cfg(feature = "vectors")]
+pub fn vectors_sign_tree(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
+    sign_tree(key, td, &purpose())
+}
+
+/// `uaMessage(kind, purpose, digest)` signed by a single UA key, role `Pop`, no key data, no members; a native key or one
+/// claiming the `msig` kind: `Argument`.
+fn sign_digest(key: &dyn Signer, digest: &[u8; 32], purpose: &[u8; 32]) -> Result<UASig> {
     let KeyRef::Ua { kind, .. } = key.key_ref() else {
         return Err(Error::Argument);
     };
-    let v = td.to_value();
-    if kind == 0x0120 || v.get("domain") != Some(&json!({"name": "SCaaS PqChat", "version": "1"})) {
+    if kind == 0x0120 {
         return Err(Error::Argument);
     }
-    let m = ua_message(kind, &purpose(), &td.digest()?)?;
+    let m = ua_message(kind, purpose, digest)?;
     let req = if kind == 0x0100 {
         SignRequest::WebAuthn { challenge: m }
     } else {
@@ -203,7 +288,7 @@ fn sign_typed(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
 /// `msig` minimal over two levels, its native members over the typed digest). A native id, an unknown UA, another struct or
 /// domain: `false`. No detail: a reader counts a refusal, it never answers one.
 pub fn verify(ua: &[u8; 32], td: &TypedData, sig: &UASig, state: &super::AppRecordState) -> bool {
-    RECORDS.contains(&td.primary_type()) && verify_typed(ua, td, sig, state)
+    own_struct(td) && verify_typed(ua, td, sig, state)
 }
 
 /// [`verify`] after its struct check.
@@ -225,7 +310,7 @@ fn verify_typed(ua: &[u8; 32], td: &TypedData, sig: &UASig, state: &super::AppRe
         &digest,
         sig,
         state.members,
-        state.current,
+        state.msig_at,
         Some(state.accepted),
     )
     .is_ok()

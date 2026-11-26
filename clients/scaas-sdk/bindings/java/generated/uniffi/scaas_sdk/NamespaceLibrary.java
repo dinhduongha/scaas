@@ -259,6 +259,9 @@ final class NamespaceLibrary {
         if (UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce() != ((short) 48105)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
+        if (UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for() != ((short) 20110)) {
+            throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+        }
         if (UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate() != ((short) 38309)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
@@ -677,6 +680,9 @@ final class NamespaceLibrary {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
         if (UniffiLib.uniffi_scaas_sdk_checksum_method_subscription_next() != ((short) 46941)) {
+            throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+        }
+        if (UniffiLib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback() != ((short) 51021)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
         if (UniffiLib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != ((short) 63580)) {

@@ -77,7 +77,7 @@ contract GovRouterAuditorPqzTest is PqzOffchainBase, RouterSig {
     function setUp() public {
         _offStack();
         nId = nid(vm.addr(NKEY));
-        router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false);
+        router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false, EnvKit.nextCreate(2)); // G-3: names the factory built next
         f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(router));
         Catalogue.release(
@@ -172,7 +172,7 @@ contract GovRouterAuditorZetherTest is ZetherFixture, RouterSig {
         _stack();
         _users();
         nId = nid(vm.addr(NKEY));
-        router = new GovernanceRouter(ZUID, address(reg), address(0), false);
+        router = new GovernanceRouter(ZUID, address(reg), address(0), false, EnvKit.nextCreate(2)); // G-3: names the factory built next
         f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, ZUID, 0, address(router));
         Catalogue.release(

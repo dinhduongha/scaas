@@ -10,11 +10,13 @@ public enum FfiConverterTypeOpState implements FfiConverterRustBuffer<OpState> {
         case 1 -> new OpState.Landed(FfiConverterLong.INSTANCE.read(buf),
           FfiConverterString.INSTANCE.read(buf)
           );
-        case 2 -> new OpState.Consumed();
+        case 2 -> new OpState.Consumed(FfiConverterTypeBasis.INSTANCE.read(buf)
+          );
         case 3 -> new OpState.Reverted(FfiConverterLong.INSTANCE.read(buf),
           FfiConverterString.INSTANCE.read(buf)
           );
-        case 4 -> new OpState.Expired();
+        case 4 -> new OpState.Expired(FfiConverterTypeBasis.INSTANCE.read(buf)
+          );
         case 5 -> new OpState.InFlight(FfiConverterTypeInFlight.INSTANCE.read(buf)
           );
         default ->
@@ -29,14 +31,16 @@ public enum FfiConverterTypeOpState implements FfiConverterRustBuffer<OpState> {
             (4L
             + FfiConverterLong.INSTANCE.allocationSize(block)
             + FfiConverterString.INSTANCE.allocationSize(hash));
-          case OpState.Consumed() ->
-            (4L);
+          case OpState.Consumed(var basis) ->
+            (4L
+            + FfiConverterTypeBasis.INSTANCE.allocationSize(basis));
           case OpState.Reverted(var block, var hash) ->
             (4L
             + FfiConverterLong.INSTANCE.allocationSize(block)
             + FfiConverterString.INSTANCE.allocationSize(hash));
-          case OpState.Expired() ->
-            (4L);
+          case OpState.Expired(var basis) ->
+            (4L
+            + FfiConverterTypeBasis.INSTANCE.allocationSize(basis));
           case OpState.InFlight(var detail) ->
             (4L
             + FfiConverterTypeInFlight.INSTANCE.allocationSize(detail));
@@ -51,16 +55,18 @@ public enum FfiConverterTypeOpState implements FfiConverterRustBuffer<OpState> {
           FfiConverterLong.INSTANCE.write(block, buf);
           FfiConverterString.INSTANCE.write(hash, buf);
         }
-        case OpState.Consumed() -> {
+        case OpState.Consumed(var basis) -> {
           buf.putInt(2);
+          FfiConverterTypeBasis.INSTANCE.write(basis, buf);
         }
         case OpState.Reverted(var block, var hash) -> {
           buf.putInt(3);
           FfiConverterLong.INSTANCE.write(block, buf);
           FfiConverterString.INSTANCE.write(hash, buf);
         }
-        case OpState.Expired() -> {
+        case OpState.Expired(var basis) -> {
           buf.putInt(4);
+          FfiConverterTypeBasis.INSTANCE.write(basis, buf);
         }
         case OpState.InFlight(var detail) -> {
           buf.putInt(5);

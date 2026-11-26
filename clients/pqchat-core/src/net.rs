@@ -35,20 +35,28 @@ pub const READS: &[(&str, Trust)] = &[
     ("IPqChat.epochComplete", Trusted),
     ("IPqChat.epochCount", Trusted),
     ("IPqChat.epochOf", Trusted),
+    ("IPqChat.epochSig", Trusted),
     ("IPqChat.epochsOf", Trusted),
     ("IPqChat.latestEpoch", Trusted),
+    ("IPqChat.leaveAt", Trusted),
+    ("IPqChat.leaveCount", Trusted),
+    ("IPqChat.leaveSig", Trusted),
     ("IPqChat.leftIn", Trusted),
     ("IPqChat.messageAt", Trusted),
     ("IPqChat.messageCount", Trusted),
+    ("IPqChat.messageSig", Trusted),
     ("IPqChat.posts", Plain),
     ("IPqChat.removalAt", Trusted),
     ("IPqChat.removalCount", Trusted),
+    ("IPqChat.removalSig", Trusted),
     ("IPqChat.removedIn", Trusted),
     ("IPqChat.replies", Plain),
     ("IPqChat.scoreOf", Plain),
     ("IPqChat.sessionCount", Plain),
     ("IPqChat.sessionOf", Trusted),
+    ("IPqChat.sessionSig", Trusted),
     ("IPqChat.sessionsOf", Plain),
+    ("IPqChat.sigStore", Trusted),
     ("IPqChat.storedCount", Trusted),
     ("IPqChat.storedRange", Trusted),
     ("IPqChat.topicOf", Plain),
@@ -136,6 +144,15 @@ pub struct SdkNet {
     pub app: Arc<AppCore>,
 }
 
+/// CLI-PQC-16 (`PqChatConfig.agreed_reads`): [`SdkNet`] with every trusted `IPqChat` read (the control plane at an instance)
+/// an agreed read, the SDK's `read_app_agreed`; every other read and every write as [`SdkNet`]'s.
+pub struct AgreedNet(pub SdkNet);
+
+/// Whether [`AgreedNet`] reads `item` agreed: a trusted read of an instance (CLI-PQC-16).
+pub fn agreed_item(item: &str) -> bool {
+    item.starts_with("IPqChat.") && matches!(trust(item), Ok(Trusted))
+}
+
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl Net for SdkNet {
@@ -147,16 +164,17 @@ impl Net for SdkNet {
         args: Value,
     ) -> Result<Value, PqChatError> {
         let trusted = trust(item)? == Trusted;
-        let out = self
-            .app
-            .read_app(
-                chain.into(),
-                contract.into(),
-                abi(item)?.into(),
-                args.to_string(),
-                trusted,
-            )
-            .await?;
+        let (c, k, e, a) = (
+            chain.into(),
+            contract.into(),
+            abi(item)?.into(),
+            args.to_string(),
+        );
+        let out = if trusted {
+            self.app.read_app(c, k, e, a).await?
+        } else {
+            self.app.read_app_plain(c, k, e, a).await?
+        };
         serde_json::from_str(&out).map_err(|_| PqChatError::Internal)
     }
 
@@ -185,5 +203,47 @@ impl Net for SdkNet {
 
     async fn submit(&self, call: AppCall) -> Result<String, PqChatError> {
         Ok(self.sdk.wallet().submit_native_send(call.quote).await?)
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+impl Net for AgreedNet {
+    async fn read(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<Value, PqChatError> {
+        if !agreed_item(item) {
+            return self.0.read(chain, contract, item, args).await;
+        }
+        let out = self
+            .0
+            .app
+            .read_app_agreed(
+                chain.into(),
+                contract.into(),
+                abi(item)?.into(),
+                args.to_string(),
+            )
+            .await?;
+        serde_json::from_str(&out).map_err(|_| PqChatError::Internal)
+    }
+
+    async fn prepare(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+        payer: &KeyRef,
+    ) -> Result<AppCall, PqChatError> {
+        self.0.prepare(chain, contract, item, args, payer).await
+    }
+
+    async fn submit(&self, call: AppCall) -> Result<String, PqChatError> {
+        self.0.submit(call).await
     }
 }

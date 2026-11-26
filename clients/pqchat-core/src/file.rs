@@ -129,11 +129,13 @@ impl PqChat {
             return Err(PqChatError::ContentInvalid);
         };
         let v = serde_json::json!({"mediaType": media_type, "name": name, "size": size, "url": url,
-            "ctSha256": ct_sha256})
-        .to_string();
-        let h = SecretBytes::new(v.len()).map_err(|_| PqChatError::Internal)?;
-        h.with_mut(|b| b.copy_from_slice(v.as_bytes()));
-        Ok(Arc::new(h))
+            "ctSha256": ct_sha256});
+        // review T26 C-10: the text in a buffer that wipes itself, moved into the handle
+        let text =
+            zeroize::Zeroizing::new(serde_json::to_vec(&v).map_err(|_| PqChatError::Internal)?);
+        Ok(Arc::new(
+            SecretBytes::from_zeroizing(text).map_err(|_| PqChatError::Internal)?,
+        ))
     }
 
     /// The file of `object` (fetched by the app on its user's action) named by the received `content`: the SDK checks the

@@ -891,6 +891,12 @@ public class VectorTests
             var wide = (byte[])stored.Clone();
             wide[64 + 32 + 29] = 1; // a leaf index over uint16
             NotReplayed(key, index, wide);
+            // CTR-UA-74: the list followed by the member's version tag gives the tag back; 8 zero bytes refused
+            byte[] tag = [0, 0, 0, 0, 0, 0, 0, 2];
+            var tagged = UA.ReplayedMemberSig(key, index, [.. stored, .. tag]);
+            Assert.Equal(Hx(tag), Hx(tagged.Sig));
+            Assert.Equal(m.GetProperty("stored").GetString(), Hx(UA.EncodeInnerSigs(tagged.Members)));
+            NotReplayed(key, index, [.. stored, .. new byte[8]]);
         }
         Assert.Equal(1, replays);
     }

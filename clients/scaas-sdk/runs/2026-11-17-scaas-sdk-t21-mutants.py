@@ -202,8 +202,8 @@ MUTANTS = [
         [
             (
                 AC,
-                "                Purpose::FeedsDecryption,\n                |at| async move {\n                    call_at(pool,",
-                "                Purpose::Plain,\n                |at| async move {\n                    call_at(pool,",
+                "            Purpose::FeedsDecryption,\n            |pool, at, line| async move {\n                let to = line.holder(",
+                "            Purpose::Plain,\n            |pool, at, line| async move {\n                let to = line.holder(",
             )
         ],
         ST_ + "kem_wrap_to_a_ua_reads_its_key_at_the_final_block",
@@ -231,7 +231,7 @@ MUTANTS = [
     ),
     (
         "sdk: verify reads no domain",
-        [(AC, "        let domain = if needs_domain {", "        let domain = if false {")],
+        [(AC, "        let domain = needs_domain\n            .then(", "        let domain = false\n            .then(")],
         ST_ + "verify_app_record_reads_the_registry",
     ),
     (

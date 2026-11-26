@@ -391,7 +391,7 @@ async fn ton_holder_and_token_forms() {
 }
 
 /// One change each from the control: the holder's balance above 2^256 - 1, a listed master whose `get_wallet_address` fails,
-/// a wallet address that is no `addr_std`, a wallet frozen, `get_wallet_data` failing, a wallet of another owner or another
+/// a wallet address that is no `addr_std`, a wallet in no TON state, `get_wallet_data` failing, a wallet of another owner or another
 /// master, a jetton balance that is negative or a cell, an answer of another block, `masterchainInfo` without its root hash:
 /// the endpoint's `AnswerMalformed` (alone `EndpointAllFailed`; behind it a good endpoint answers). Controls: exit code 1
 /// (TVM's other success) is read, and 2^256 - 1 is.
@@ -425,10 +425,10 @@ async fn ton_malformed_answers_are_refused() {
                     .insert((key(MASTER), key(OWNER)), vec![code.clone()]);
             })
         }),
-        ("a frozen wallet", {
+        ("a wallet in a state TON does not have", {
             let w = w.clone();
             Box::new(move |n| {
-                n.accounts.insert(w.clone(), ("1".into(), "frozen".into()));
+                n.accounts.insert(w.clone(), ("1".into(), "melted".into()));
             })
         }),
         (
@@ -502,6 +502,32 @@ async fn ton_malformed_answers_are_refused() {
     assert_eq!(
         balances(&[&u], OWNER).await.unwrap().native.as_deref(),
         Some(max),
+        "control"
+    );
+}
+
+/// Owner 2026-11-23 (T26 B2-15): a frozen jetton wallet's balance is unknown, with its reason, never a false 0; the other
+/// tokens and the native balance still read. Control: the same wallet active reads its balance with no mark.
+#[tokio::test(flavor = "multi_thread")]
+async fn ton_frozen_wallet_is_unknown() {
+    let f = node();
+    let w = key(WALLET);
+    f.lock()
+        .unwrap()
+        .accounts
+        .insert(w, ("1".into(), "frozen".into()));
+    let u = up(&f).await;
+    let b = balances(&[&u], OWNER).await.unwrap();
+    assert_eq!(b.native.as_deref(), Some("2500000000"));
+    assert_eq!(amounts(&b), ["", "0"], "no amount for the frozen wallet");
+    assert_eq!(b.tokens[0].unknown.as_deref(), Some("frozen"));
+    assert_eq!(b.tokens[1].unknown, None);
+    let f = node();
+    let u = up(&f).await;
+    let b = balances(&[&u], OWNER).await.unwrap();
+    assert_eq!(
+        (amounts(&b), b.tokens[0].unknown.clone()),
+        (vec!["101", "0"], None),
         "control"
     );
 }

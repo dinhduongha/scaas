@@ -1,8 +1,9 @@
 package uniffi.scaas_sdk;
 
 /**
- * `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
- * fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+ * `UAPqzTransfer` / `UAPqzTransferCompact`: the real `legs` and `decoys` legs of amount 0 the SDK draws from the registry
+ * line's `0x0142` lists, every leg's position shuffled (CTR-UA-29; their count one the set builds, 1, 2, 4 or 8),
+ * `decoy_fee` the per-leg fee (decimal; at least the token's `minDecoyFee`, the contract's check).
  */
 public class PqzTransferMulti {
     private KeyRef signer;
@@ -11,6 +12,7 @@ public class PqzTransferMulti {
     private java.lang.String batch;
     private long keyVersion;
     private java.util.List<PqzLeg> legs;
+    private int decoys;
     private java.lang.String decoyFee;
     private long validUntilBlock;
     private Envelope envelope;
@@ -22,6 +24,7 @@ public class PqzTransferMulti {
         java.lang.String batch, 
         long keyVersion, 
         java.util.List<PqzLeg> legs, 
+        int decoys, 
         java.lang.String decoyFee, 
         long validUntilBlock, 
         Envelope envelope
@@ -38,6 +41,8 @@ public class PqzTransferMulti {
         this.keyVersion = keyVersion;
         
         this.legs = legs;
+        
+        this.decoys = decoys;
         
         this.decoyFee = decoyFee;
         
@@ -70,6 +75,10 @@ public class PqzTransferMulti {
         return this.legs;
     }
     
+    public int decoys() {
+        return this.decoys;
+    }
+    
     public java.lang.String decoyFee() {
         return this.decoyFee;
     }
@@ -98,6 +107,9 @@ public class PqzTransferMulti {
     }
     public void setLegs(java.util.List<PqzLeg> legs) {
         this.legs = legs;
+    }
+    public void setDecoys(int decoys) {
+        this.decoys = decoys;
     }
     public void setDecoyFee(java.lang.String decoyFee) {
         this.decoyFee = decoyFee;
@@ -129,6 +141,8 @@ public class PqzTransferMulti {
               
               java.util.Objects.equals(legs, t.legs) && 
               
+              decoys == t.decoys && 
+              
               java.util.Objects.equals(decoyFee, t.decoyFee) && 
               
               validUntilBlock == t.validUntilBlock && 
@@ -148,6 +162,7 @@ public class PqzTransferMulti {
         result = 31 * result + java.util.Objects.hashCode(batch);
         result = 31 * result + java.lang.Long.hashCode(keyVersion);
         result = 31 * result + java.util.Objects.hashCode(legs);
+        result = 31 * result + java.lang.Integer.hashCode(decoys);
         result = 31 * result + java.util.Objects.hashCode(decoyFee);
         result = 31 * result + java.lang.Long.hashCode(validUntilBlock);
         result = 31 * result + java.util.Objects.hashCode(envelope);

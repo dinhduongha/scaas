@@ -74,6 +74,9 @@ pub(crate) struct Row {
     /// self-relay `resend` recomputes the operation's own gas figure from them (PR A review, finding 2)
     #[serde(default)]
     pub extra: serde_json::Value,
+    /// what a `consumed` or `expired` rests on (review T26 B-14): `majority` or `one-endpoint`; none in a row of an older build
+    #[serde(default)]
+    pub basis: Option<String>,
     /// an order row's closing fact (plan T17): the contract, the event's signature and the order hash its first topic names
     /// (`UAOrderCancelled`, `OrderCancelled`, `UATradeFilled`); `None`: the executed event of the operation's digest
     #[serde(default)]

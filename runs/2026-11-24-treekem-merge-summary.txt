@@ -1,0 +1,44 @@
+# The merge check of pqchat-treekem (742cf2b1f) into ua-rs-sign (229d1453e): merge 6060b7a13, format fix 8ea1d6bd9 (rows at 8ea1d6bd9)
+# step | commit | rc | counts
+ck-test | 8ea1d6bd9 | 0 | node: 654 pass, 0 fail
+ck-vectors | 8ea1d6bd9 | 0 | -
+docs | 8ea1d6bd9 | 0 | check: 0 error(s), 7 warning(s), 16 note(s)
+fmt | 8ea1d6bd9 | 0 | -
+forge-account | 8ea1d6bd9 | 0 | forge: 103 passed, 0 failed
+forge-as | 8ea1d6bd9 | 0 | forge: 568 passed, 0 failed
+forge-confidential | 8ea1d6bd9 | 0 | -
+forge-factory | 8ea1d6bd9 | 0 | -
+forge-fork | 8ea1d6bd9 | 0 | -
+forge-gas | 8ea1d6bd9 | 0 | forge: 406 passed, 0 failed
+forge-governance | 8ea1d6bd9 | 0 | forge: 958 passed, 0 failed
+forge-hedera | 8ea1d6bd9 | 0 | forge: 20 passed, 0 failed
+forge-liquidity | 8ea1d6bd9 | 0 | forge: 93 passed, 0 failed
+forge-merge | 8ea1d6bd9 | 0 | forge: 350 passed, 0 failed
+forge-metatx | 8ea1d6bd9 | 0 | forge: 549 passed, 0 failed
+forge-modules | 8ea1d6bd9 | 0 | forge: 35 passed, 0 failed
+forge-p6f | 8ea1d6bd9 | 0 | -
+forge-pqchat | 8ea1d6bd9 | 0 | forge: 213 passed, 0 failed
+forge-pqvault | 8ea1d6bd9 | 0 | forge: 96 passed, 0 failed
+forge-pqz | 8ea1d6bd9 | 0 | forge: 694 passed, 0 failed
+forge-pqzh | 8ea1d6bd9 | 0 | forge: 42 passed, 0 failed
+forge-research | 8ea1d6bd9 | 0 | forge: 360 passed, 0 failed
+forge-top | 8ea1d6bd9 | 0 | forge: 29 passed, 0 failed
+forge-ua | 8ea1d6bd9 | 0 | forge: 1044 passed, 0 failed
+forge-v2 | 8ea1d6bd9 | 0 | forge: 756 passed, 0 failed
+forge-wallet | 8ea1d6bd9 | 0 | forge: 185 passed, 0 failed
+forge-wrap | 8ea1d6bd9 | 0 | forge: 324 passed, 0 failed
+forge-zether | 8ea1d6bd9 | 0 | forge: 478 passed, 0 failed
+format | 8ea1d6bd9 | 0 | -
+mutants | 8ea1d6bd9 | 0 | -
+node-clippy | 8ea1d6bd9 | 0 | -
+node-test | 8ea1d6bd9 | 0 | 908 passed, 0 failed, 75 ignored (19 binaries)
+size | 8ea1d6bd9 | 0 | size gate: 0 error(s), 182 contracts
+ua-appcore | 8ea1d6bd9 | 0 | 29 passed, 0 failed, 0 ignored (2 binaries)
+ua-clippy | 8ea1d6bd9 | 0 | -
+uagas | 8ea1d6bd9 | 0 | forge: 29 passed, 0 failed
+ua-vectors | 8ea1d6bd9 | 0 | 741 passed, 0 failed, 6 ignored (72 binaries)
+red: format | 6060b7a13 | 1 | sh: the T3a, T3b and T3c gate runners as pqchat-treekem left them (its own red, not an interaction); shfmt in 8ea1d6bd9, green after
+note: mutants loaded: t3a 30, t3b 43, t3c 5, t3d 20, t1a 27, t1b 46, t2 46, t4 17, T26 118 (T26 prints its records with no row or a stale source and does not fail on them, by design; the ua-rs-sign side changed no client source)
+note: layout pins (test/v2/layout) ran in forge-v2; typehash pins in forge-account, governance, metatx, pqchat, pqvault, pqz, ua, wallet
+note: sets other than n2304-kmax4096 not run: no file changed on both sides, so no set-sensitive pin conflicted (ua-rs-sign's only source change, virtual on two _govRouter overrides, leaves the bytecode as it is)
+note: not run here, the round's end matrix: node e2e (--ignored), the other clients, the sets

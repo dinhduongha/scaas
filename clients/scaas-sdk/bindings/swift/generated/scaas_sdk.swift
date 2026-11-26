@@ -1398,6 +1398,8 @@ public protocol AdminProtocol: AnyObject, Sendable {
     
     func adminUaCancelNonce(req: UaCancelNonce) async throws  -> Prepared
     
+    func adminUaCancelNonceFor(req: UaCancelNonceFor) async throws  -> Prepared
+    
     func adminUaCancelRate(req: UaCancelRate) async throws  -> Prepared
     
     func adminUaCreateDex(req: UaCreateDex) async throws  -> Prepared
@@ -1672,6 +1674,23 @@ open func adminUaCancelNonce(req: UaCancelNonce)async throws  -> Prepared  {
                 uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(
                     self.uniffiCloneHandle(),
                     FfiConverterTypeUaCancelNonce_lower(req)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_u64,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_u64,
+            freeFunc: ffi_scaas_sdk_rust_future_free_u64,
+            liftFunc: FfiConverterTypePrepared_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func adminUaCancelNonceFor(req: UaCancelNonceFor)async throws  -> Prepared  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeUaCancelNonceFor_lower(req)
                 )
             },
             pollFunc: ffi_scaas_sdk_rust_future_poll_u64,
@@ -6418,6 +6437,8 @@ public func FfiConverterTypeSubscription_lower(_ value: Subscription) -> UInt64 
  */
 public protocol VaultProtocol: AnyObject, Sendable {
     
+    func acceptRollback() async throws 
+    
     func changePassphrase(seed: String, old: SecretBytes, new: SecretBytes) async throws 
     
     func confirmBackup(seed: String) async throws 
@@ -6541,6 +6562,23 @@ open class Vault: VaultProtocol, @unchecked Sendable {
 
     
 
+    
+open func acceptRollback()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_vault_accept_rollback(
+                    self.uniffiCloneHandle()
+                    
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_void,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_void,
+            freeFunc: ffi_scaas_sdk_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
     
 open func changePassphrase(seed: String, old: SecretBytes, new: SecretBytes)async throws   {
     return
@@ -8993,8 +9031,9 @@ public struct ChainProfile: Equatable, Hashable {
      */
     public var familyParams: FamilyParams?
     /**
-     * the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-     * and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+     * the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+     * (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+     * Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
      * `Sdk::open` on another family)
      */
     public var l1Fee: L1Fee?
@@ -9067,8 +9106,9 @@ public struct ChainProfile: Equatable, Hashable {
          * `Sdk::open`
          */familyParams: FamilyParams?, 
         /**
-         * the chain's L1 data fee model, added to a self-relay quote's `max_cost` (plan T38, spec §27.3): `OpStack` on Base, Celo
-         * and OP (the node's `params.l1_fee = "op-stack"`); `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
+         * the chain's L1 data fee model of a self-relay quote (plan T38, spec §27.3; T26 B2-1): `OpStack` on Base, Celo and OP
+         * (the node's `params.l1_fee = "op-stack"`), added to `max_cost`; `InEstimate` on Arbitrum, in the gas limit; `Linea` on
+         * Linea, in the fees; `None`: no L1 fee and no L1 read. EVM profiles only (`Argument` at
          * `Sdk::open` on another family)
          */l1Fee: L1Fee?, 
         /**
@@ -10293,7 +10333,8 @@ public func FfiConverterTypeGasLine_lower(_ value: GasLine) -> RustBuffer {
 
 /**
  * A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
- * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+ * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded), `data` (`mtxExecute`'s call data) or
+ * `calldata` (the transaction row's, entry `transaction` kind `evm`: the price of a byte of the transaction's calldata).
  */
 public struct GasPerByte: Equatable, Hashable {
     public var input: String
@@ -13324,7 +13365,8 @@ public func FfiConverterTypePay_lower(_ value: Pay) -> RustBuffer {
  */
 public struct PayMeta: Equatable, Hashable {
     /**
-     * `0x` + 64 hex; `None`: 32 random bytes
+     * `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+     * the same pay lane, however its ids and amounts are spelt)
      */
     public var salt: String?
     /**
@@ -13341,7 +13383,8 @@ public struct PayMeta: Equatable, Hashable {
     // declare one manually.
     public init(
         /**
-         * `0x` + 64 hex; `None`: 32 random bytes
+         * `0x` + 64 hex; `None`: derived from the pay's canonical terms (owner 2026-11-19, ruling D: a retry of the same pay takes
+         * the same pay lane, however its ids and amounts are spelt)
          */salt: String?, 
         /**
          * a UUIDv7 in its text form, or `0x` + 64 hex; `None`: no number
@@ -14386,8 +14429,9 @@ public func FfiConverterTypePqzTransfer_lower(_ value: PqzTransfer) -> RustBuffe
 
 
 /**
- * `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
- * fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+ * `UAPqzTransfer` / `UAPqzTransferCompact`: the real `legs` and `decoys` legs of amount 0 the SDK draws from the registry
+ * line's `0x0142` lists, every leg's position shuffled (CTR-UA-29; their count one the set builds, 1, 2, 4 or 8),
+ * `decoy_fee` the per-leg fee (decimal; at least the token's `minDecoyFee`, the contract's check).
  */
 public struct PqzTransferMulti: Equatable, Hashable {
     public var signer: KeyRef
@@ -14396,19 +14440,21 @@ public struct PqzTransferMulti: Equatable, Hashable {
     public var batch: String
     public var keyVersion: UInt64
     public var legs: [PqzLeg]
+    public var decoys: UInt32
     public var decoyFee: String
     public var validUntilBlock: UInt64
     public var envelope: Envelope
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(signer: KeyRef, chain: String, token: String, batch: String, keyVersion: UInt64, legs: [PqzLeg], decoyFee: String, validUntilBlock: UInt64, envelope: Envelope) {
+    public init(signer: KeyRef, chain: String, token: String, batch: String, keyVersion: UInt64, legs: [PqzLeg], decoys: UInt32, decoyFee: String, validUntilBlock: UInt64, envelope: Envelope) {
         self.signer = signer
         self.chain = chain
         self.token = token
         self.batch = batch
         self.keyVersion = keyVersion
         self.legs = legs
+        self.decoys = decoys
         self.decoyFee = decoyFee
         self.validUntilBlock = validUntilBlock
         self.envelope = envelope
@@ -14436,6 +14482,7 @@ public struct FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer {
                 batch: FfiConverterString.read(from: &buf), 
                 keyVersion: FfiConverterUInt64.read(from: &buf), 
                 legs: FfiConverterSequenceTypePqzLeg.read(from: &buf), 
+                decoys: FfiConverterUInt32.read(from: &buf), 
                 decoyFee: FfiConverterString.read(from: &buf), 
                 validUntilBlock: FfiConverterUInt64.read(from: &buf), 
                 envelope: FfiConverterTypeEnvelope.read(from: &buf)
@@ -14449,6 +14496,7 @@ public struct FfiConverterTypePqzTransferMulti: FfiConverterRustBuffer {
         FfiConverterString.write(value.batch, into: &buf)
         FfiConverterUInt64.write(value.keyVersion, into: &buf)
         FfiConverterSequenceTypePqzLeg.write(value.legs, into: &buf)
+        FfiConverterUInt32.write(value.decoys, into: &buf)
         FfiConverterString.write(value.decoyFee, into: &buf)
         FfiConverterUInt64.write(value.validUntilBlock, into: &buf)
         FfiConverterTypeEnvelope.write(value.envelope, into: &buf)
@@ -16893,20 +16941,30 @@ public struct TokenBalance: Equatable, Hashable {
     public var display: String
     public var decimals: UInt8
     /**
-     * the smallest unit, decimal
+     * the smallest unit, decimal; empty when `unknown` is set
      */
     public var amount: String
+    /**
+     * set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+     * `frozen`): the amount is unknown, never a false 0
+     */
+    public var unknown: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(address: String, display: String, decimals: UInt8, 
         /**
-         * the smallest unit, decimal
-         */amount: String) {
+         * the smallest unit, decimal; empty when `unknown` is set
+         */amount: String, 
+        /**
+         * set when the balance cannot be read, with its reason (owner 2026-11-23, T26 B2-15: a frozen TON jetton wallet,
+         * `frozen`): the amount is unknown, never a false 0
+         */unknown: String?) {
         self.address = address
         self.display = display
         self.decimals = decimals
         self.amount = amount
+        self.unknown = unknown
     }
 
     
@@ -16928,7 +16986,8 @@ public struct FfiConverterTypeTokenBalance: FfiConverterRustBuffer {
                 address: FfiConverterString.read(from: &buf), 
                 display: FfiConverterString.read(from: &buf), 
                 decimals: FfiConverterUInt8.read(from: &buf), 
-                amount: FfiConverterString.read(from: &buf)
+                amount: FfiConverterString.read(from: &buf), 
+                unknown: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -16937,6 +16996,7 @@ public struct FfiConverterTypeTokenBalance: FfiConverterRustBuffer {
         FfiConverterString.write(value.display, into: &buf)
         FfiConverterUInt8.write(value.decimals, into: &buf)
         FfiConverterString.write(value.amount, into: &buf)
+        FfiConverterOptionString.write(value.unknown, into: &buf)
     }
 }
 
@@ -17915,6 +17975,96 @@ public func FfiConverterTypeUaCancelNonce_lift(_ buf: RustBuffer) throws -> UaCa
 #endif
 public func FfiConverterTypeUaCancelNonce_lower(_ value: UaCancelNonce) -> RustBuffer {
     return FfiConverterTypeUaCancelNonce.lower(value)
+}
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UACancelNonceFor
+ */
+public struct UaCancelNonceFor: Equatable, Hashable {
+    public var signer: KeyRef
+    public var chain: String
+    /**
+     * the lane, decimal
+     */
+    public var batch: String
+    public var target: String
+    public var lane: String
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    public var chainUid: String?
+    public var envelope: Envelope
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(signer: KeyRef, chain: String, 
+        /**
+         * the lane, decimal
+         */batch: String, target: String, lane: String, 
+        /**
+         * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+         */chainUid: String?, envelope: Envelope) {
+        self.signer = signer
+        self.chain = chain
+        self.batch = batch
+        self.target = target
+        self.lane = lane
+        self.chainUid = chainUid
+        self.envelope = envelope
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension UaCancelNonceFor: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUaCancelNonceFor: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UaCancelNonceFor {
+        return
+            try UaCancelNonceFor(
+                signer: FfiConverterTypeKeyRef.read(from: &buf), 
+                chain: FfiConverterString.read(from: &buf), 
+                batch: FfiConverterString.read(from: &buf), 
+                target: FfiConverterString.read(from: &buf), 
+                lane: FfiConverterString.read(from: &buf), 
+                chainUid: FfiConverterOptionString.read(from: &buf), 
+                envelope: FfiConverterTypeEnvelope.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UaCancelNonceFor, into buf: inout [UInt8]) {
+        FfiConverterTypeKeyRef.write(value.signer, into: &buf)
+        FfiConverterString.write(value.chain, into: &buf)
+        FfiConverterString.write(value.batch, into: &buf)
+        FfiConverterString.write(value.target, into: &buf)
+        FfiConverterString.write(value.lane, into: &buf)
+        FfiConverterOptionString.write(value.chainUid, into: &buf)
+        FfiConverterTypeEnvelope.write(value.envelope, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUaCancelNonceFor_lift(_ buf: RustBuffer) throws -> UaCancelNonceFor {
+    return try FfiConverterTypeUaCancelNonceFor.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUaCancelNonceFor_lower(_ value: UaCancelNonceFor) -> RustBuffer {
+    return FfiConverterTypeUaCancelNonceFor.lower(value)
 }
 
 
@@ -25547,6 +25697,77 @@ public func FfiConverterTypeAuthError_lower(_ value: AuthError) -> RustBuffer {
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+ * read at the `finalized` block, or endpoint 0's alone under `failover`.
+ */
+
+public enum Basis: Equatable, Hashable {
+    
+    case majority
+    case oneEndpoint
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension Basis: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBasis: FfiConverterRustBuffer {
+    typealias SwiftType = Basis
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Basis {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .majority
+        
+        case 2: return .oneEndpoint
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Basis, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .majority:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .oneEndpoint:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBasis_lift(_ buf: RustBuffer) throws -> Basis {
+    return try FfiConverterTypeBasis.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBasis_lower(_ value: Basis) -> RustBuffer {
+    return FfiConverterTypeBasis.lower(value)
+}
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum Class: Equatable, Hashable {
     
@@ -26466,7 +26687,7 @@ public enum GasFrom: Equatable, Hashable {
      */
     case app
     /**
-     * a native send's own estimate (or 21,000 for a plain transfer to an account without code)
+     * a native send's own estimate (`eth_estimateGas`, a plain transfer's too)
      */
     case estimate
 
@@ -26958,6 +27179,16 @@ public enum L1Fee: Equatable, Hashable {
      * OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
      */
     case opStack
+    /**
+     * the L1 cost charged as gas (Arbitrum, the profile's `in-estimate`): a table-quoted transaction's gas limit adds
+     * `NodeInterface.gasEstimateL1Component` (`0x…C8`) over its calldata, with the margin; an estimate holds it already
+     */
+    case inEstimate
+    /**
+     * the L1 cost carried by the priority fee (Linea, the profile's `linea`): the fees are `linea_estimateGas`'s over the
+     * transaction, never below the chain's own
+     */
+    case linea
 
 
 
@@ -26981,6 +27212,10 @@ public struct FfiConverterTypeL1Fee: FfiConverterRustBuffer {
         
         case 1: return .opStack
         
+        case 2: return .inEstimate
+        
+        case 3: return .linea
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -26991,6 +27226,14 @@ public struct FfiConverterTypeL1Fee: FfiConverterRustBuffer {
         
         case .opStack:
             writeInt(&buf, Int32(1))
+        
+        
+        case .inEstimate:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .linea:
+            writeInt(&buf, Int32(3))
         
         }
     }
@@ -27127,7 +27370,8 @@ public enum OpState: Equatable, Hashable {
     /**
      * the lane's nonce spent at the final block without that event; a replaced native send
      */
-    case consumed
+    case consumed(basis: Basis
+    )
     /**
      * an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
      */
@@ -27136,7 +27380,8 @@ public enum OpState: Equatable, Hashable {
     /**
      * `validUntil` below the final block's timestamp while the nonce is unspent
      */
-    case expired
+    case expired(basis: Basis
+    )
     /**
      * anything else, with what is known (never an end)
      */
@@ -27166,12 +27411,14 @@ public struct FfiConverterTypeOpState: FfiConverterRustBuffer {
         case 1: return .landed(block: try FfiConverterUInt64.read(from: &buf), hash: try FfiConverterString.read(from: &buf)
         )
         
-        case 2: return .consumed
+        case 2: return .consumed(basis: try FfiConverterTypeBasis.read(from: &buf)
+        )
         
         case 3: return .reverted(block: try FfiConverterUInt64.read(from: &buf), hash: try FfiConverterString.read(from: &buf)
         )
         
-        case 4: return .expired
+        case 4: return .expired(basis: try FfiConverterTypeBasis.read(from: &buf)
+        )
         
         case 5: return .inFlight(detail: try FfiConverterTypeInFlight.read(from: &buf)
         )
@@ -27190,9 +27437,10 @@ public struct FfiConverterTypeOpState: FfiConverterRustBuffer {
             FfiConverterString.write(hash, into: &buf)
             
         
-        case .consumed:
+        case let .consumed(basis):
             writeInt(&buf, Int32(2))
-        
+            FfiConverterTypeBasis.write(basis, into: &buf)
+            
         
         case let .reverted(block,hash):
             writeInt(&buf, Int32(3))
@@ -27200,9 +27448,10 @@ public struct FfiConverterTypeOpState: FfiConverterRustBuffer {
             FfiConverterString.write(hash, into: &buf)
             
         
-        case .expired:
+        case let .expired(basis):
             writeInt(&buf, Int32(4))
-        
+            FfiConverterTypeBasis.write(basis, into: &buf)
+            
         
         case let .inFlight(detail):
             writeInt(&buf, Int32(5))
@@ -31295,6 +31544,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce() != 48105) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for() != 20110) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate() != 38309) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -31713,6 +31965,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_subscription_next() != 46941) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_vault_accept_rollback() != 51021) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != 63580) {

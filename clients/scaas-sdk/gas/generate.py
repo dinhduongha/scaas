@@ -255,7 +255,19 @@ def line_rows(inputs, m, src):
 
 def table(inputs, m):
     src = inputs["measurements"]
-    base = []
+    # the transaction's own gas (T26 B2-1): its intrinsic cost and calldata price, data the SDK reads as a base row
+    tx = inputs["transaction"]
+    base = [
+        {
+            "entry": "transaction",
+            "kind": "evm",
+            "fresh": False,
+            "gas": tx["gas"],
+            "measured": tx["gas"],
+            "source": tx["source"],
+            "per_byte": {"input": "calldata", "gas": tx["per_byte"], "source": tx["source"]},
+        }
+    ]
     pending = []
     for group in inputs["base"]:
         for kind in group["kinds"]:

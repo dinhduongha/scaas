@@ -373,7 +373,11 @@ override). Status: clientkeys, `ua-rs`, the wrappers and the reproducers **BUILT
 returns the exact JSON for `eth_signTypedData_v4`: `{domain: {name, version}, types, primaryType, message}`, with `EIP712Domain` of `name` and
 `version` only ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)); `PORTABLE_DOMAIN`, `PORTABLE_TYPES`, `PORTABLE_TYPEHASH`, `portableDomainSeparator`, `kemRecordStruct`,
 `portableRecordStruct` are its parts, and `holderPopMessage` / `pqzKeyRecordMessage` return `typedData` next to the digests. A native `msig` member
-signs that JSON (`signTyped`), never `personal_sign` and never a raw digest; a derived member signs its `memberDigest` as before.
+signs that JSON (`signTyped`), never `personal_sign` and never a raw digest; a derived member signs its `memberDigest` as before. An `msig`
+at structure version ≥ 1 signs with its 8-byte version tag (`ua.versionTag(msigStateOf(ua).version)`) in `UASig.signature`, and each signing
+`msig` member slot's `sig` carries that member's; at version 0 both stay empty ([CTR-UA-74](../contracts/accounts.md#CTR-UA-74); after an
+`updateMsig` a signature built without the tag is `UAUnauthorized` on every path, and a reader verifies a kept record at the version its tag
+names, [the reader rule](../contracts/accounts.md#msig-reader-rule)).
 `registrationArgs({kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner})` (`inner`: an `msig` member's key data by id, [CTR-UA-38](../contracts/accounts.md#CTR-UA-38)) refuses an `msig` `pop` that is not a minimal slot set at both levels (`UAPoP`, as `portableMemberSigs`; `scaas-ua`: `registration_args`) and returns `{entry, args, kemFill}`, the
 [CTR-UA-36](../contracts/accounts.md#CTR-UA-36) call as named fields: `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost` for their kinds
 (the recommended path; the registry also takes `register` with packed key data for all but `msig`) and `register` for the rest, the
@@ -753,6 +757,20 @@ independent same-curve BLS key (it would make G1 DDH decidable and leak balances
 and a test asserts `deriveUAKey` never yields a Zether conf scalar (foreign wallets are a residual risk); one PRF/PIN
 wrapping covers the seed and the conf key, separated by AAD labels; wallets show the kind and role of every key and never
 offer "use this EOA as a passkey/Schnorr/multisig member key".
+
+<a id="group-kind-verifiers"></a>**Group-kind verifiers** (`0x0110`–`0x0113`; **BUILT** 2026-11-26, UNAUDITED). `src/ua-group.js` checks
+the group kinds as the registry does ([accounts.md §1.6.1](../contracts/accounts.md#musig2-and-frost-what-the-registry-checks),
+§1.9; [ARCH-POS-18](../decisions.md#ARCH-POS-18): no kind goes unchecked off chain for want of a verifier), mirroring the EVM verifiers
+and ua-rs `groups.rs`: `verify` on the stored vk (the key data's head: 33-byte SEC1 or 64-byte bn254; `musig2-secp256k1` BIP-340 by
+`x(Q)`, `frost-secp256k1` RFC 9591, the bn254 kinds the scaas Schnorr) and `verifyPop` on the key data (validated, then KeyAgg with
+the hints compared by address, or the bn254 port; the DKG PoKs, the repeated or cancelling `C_i0` refused on secp256k1, `Y = Σ C_i0`;
+then the group signature). `src/ua-verify.js` uses them wherever it judges a UA signature: a group UA's registration and portable
+records (`verifyPop`, the registry's `_single`), an `msig` slot (the vk, [CTR-UA-33](../contracts/accounts.md#CTR-UA-33)), and so the
+tree reader's signers. `test/ua-groups.test.js` reads every `groups.json` row with the verdicts ua-rs `tests/groups_verify.rs` gives;
+mutants in `clients/runs/2026-11-26-clientkeys-group-verify-mutants.py`. Not mirrored, unreachable by any signer: the contract's
+fail-closed refusals of a `musig2-secp256k1` partial sum equal to ±H_i, and of `x(Y)`, `x(C_i0)` ≥ N or `c = 0` in
+`FrostSecp256k1Verifier`'s `ecrecover` checks (ua-rs does not have them either). The bn254 kinds stay single-implementation kinds
+(§1.16): clientkeys and ua-rs agreeing on them is self-consistency only.
 
 <a id="role-keys"></a>
 

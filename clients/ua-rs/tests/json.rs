@@ -138,6 +138,27 @@ fn inner_json_bounded_and_replay_rows() {
             Err(JsonError::Ua(UAError::Unauthorized)),
             "past the members"
         );
+        if m["members"].as_array().unwrap().is_empty() {
+            continue;
+        }
+        // CTR-UA-74: the list followed by the member's version tag gives the tag back; 8 zero bytes refused
+        let tag = [0, 0, 0, 0, 0, 0, 0, 2];
+        let got = out(replayed_member_sig_json(
+            &d,
+            index,
+            &[&stored[..], &tag].concat(),
+        ));
+        assert_eq!(
+            got,
+            json!({ "index": index, "members": m["members"], "sig": "0x0000000000000002" }),
+            "{}: tagged",
+            m["name"]
+        );
+        assert_eq!(
+            replayed_member_sig_json(&d, index, &[&stored[..], &[0; 8]].concat()),
+            Err(JsonError::Ua(UAError::Unauthorized)),
+            "tag 0"
+        );
     }
 }
 

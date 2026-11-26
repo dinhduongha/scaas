@@ -9,9 +9,12 @@ D = "clients/scaas-sdk/src/admin/delay.rs"
 F = "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots"
 SDK = f"cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features {F} --test governance_delay "
 MUTANTS = [
-    ("grantDelay read where noticePeriod applies", [(D, "read(&pool, factory, \"noticePeriod()\")", "read(&pool, token, \"grantDelay()\")")], SDK + "every_bit_has_its_named_sentence"),
+    # the two noticePeriod rows re-anchored 2026-11-23 (T26 A2-2 / A2-3: the six views are one read at the final block): the
+    # same mutations on the current text
+    ("grantDelay read where noticePeriod applies", [(D, "(factory, selector(\"noticePeriod()\").to_vec()),", "(token, selector(\"grantDelay()\").to_vec()),")], SDK + "every_bit_has_its_named_sentence"),
     ("a singleKey bit read as atOnce", [(D, "out.push(DelaySentence::SingleKey);", "out.push(DelaySentence::AtOnce);")], SDK + "every_bit_has_its_named_sentence"),
-    ("an unread delay defaults to zero", [(D, "let notice = small(&read(&pool, factory, \"noticePeriod()\").await?)?;", "let notice = match read(&pool, factory, \"noticePeriod()\").await {\n                    Ok(w) => small(&w)?,\n                    Err(_) => 0,\n                };")], SDK + "a_failed_read_is_an_error"),
+    ("an unread delay defaults to zero", [(D, "                                        .await?\n                                        .to_vec(),", "                                        .await\n                                        .map(|b| b.to_vec())\n                                        .unwrap_or_default(),"),
+                                          (D, "let (notice, grant) = (small(notice)?, small(grant)?);", "let (notice, grant) = (small(notice).unwrap_or(0), small(grant)?);")], SDK + "a_failed_read_is_an_error"),
 ]
 
 if __name__ == "__main__":

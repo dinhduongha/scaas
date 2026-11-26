@@ -24,7 +24,7 @@ contract ExpectRevertLintTest is Test {
     /// to `configureChain`, plan T71).
     function probeTail() external {
         vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
-        new GovernanceRouter(bytes32(0), address(0), address(0), false);
+        new GovernanceRouter(bytes32(0), address(0), address(0), false, address(0));
         revert("tail reached");
     }
 

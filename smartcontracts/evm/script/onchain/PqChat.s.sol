@@ -17,6 +17,9 @@ import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChat as PqChatFace} from "../../src/pqchat/PqChat.sol";
 import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
+import {PqChatTree} from "../../src/pqchat/PqChatTree.sol";
+import {PqChatTreeViews} from "../../src/pqchat/PqChatTreeViews.sol";
+import {PqChatTreeMembers} from "../../src/pqchat/PqChatTreeMembers.sol";
 
 /// @dev `PqChatTypes` over calldata, run in the script's own EVM (never broadcast): the typed digests and ids.
 contract PqChatDigests {
@@ -102,7 +105,9 @@ contract PqChatOnchain is OnchainBase {
     /// @dev A UA registration (ML-DSA-65 PoP through the cached key) and each part of `cacheExpandedKey`: a fixed 56 M (under
     ///      60 M), as Tokens.s.sol: the estimate undershoots regular + state gas (EIP-8037).
     uint256 internal constant REGISTER_GAS = 56_000_000;
-    /// @dev The release transaction (`deployImplementation`), when this run makes it: at most 60 M asked (NET-EVM-11).
+    /// @dev The release transaction (`deployImplementation`) and each body module's CREATE2, when this run makes them: an
+    ///      explicit limit of at most 60 M asked (NET-EVM-11), above every one's need (`PqChatGas.t.sol`: the release
+    ///      55.9 M asked, the largest module, `PqChatTree`, in `test_gas_deployModule`).
     uint256 internal constant RELEASE_GAS = 59_000_000;
 
     IUARegistry reg;
@@ -148,6 +153,21 @@ contract PqChatOnchain is OnchainBase {
 
     // ------------------------------------------------------------------ setup
 
+    /// @dev A body module of the release (`code` with the factory as its argument) through the CREATE2 deployer at the salt
+    ///      `what`, with an explicit gas limit (A-11): forge's estimate x 1.3 of a module near 33 KB asks about 73 M, over a
+    ///      60 M block, where the module itself needs about 53 M (`PqChatGas.t.sol` `test_gas_deployModule`). The address
+    ///      is the one `new {salt}` gave (forge sends that through the same deployer). Code already at it is reused, as
+    ///      `DeployBase._module` (G-11 of the re-review): a rerun after a run that sent the modules and then failed resumes.
+    function _module(bytes memory code, string memory what) internal returns (address at) {
+        bytes memory init = bytes.concat(code, abi.encode(address(f)));
+        bytes32 s = _salt(what);
+        at = vm.computeCreate2Address(s, keccak256(init), CREATE2_FACTORY);
+        if (at.code.length == 0) {
+            (bool ok,) = CREATE2_FACTORY.call{gas: RELEASE_GAS}(bytes.concat(s, init));
+            require(ok && at.code.length != 0, string.concat(what, ": the CREATE2 of the module failed"));
+        }
+    }
+
     /// @dev The deploy's release and instance (`deploy.sh evm` with DEPLOY_PQCHAT=1, plan T92); on a chain deployed before T92
     ///      (the SCaaS testnet's Step 5 deploy) the same steps as `DeployBase._deployPqChat`, sent by the factory's registrar
     ///      (PRIVATE_KEY, the deployer): the class env 1 of `(3, 0)`, release 1 with an explicit gas limit (at most 60 M
@@ -162,13 +182,19 @@ contract PqChatOnchain is OnchainBase {
             impl = f.classReleaseOf(id).implementation;
             if (impl == address(0)) {
                 vm.startBroadcast(dk);
-                address topics = address(new PqChatTopics{salt: _salt("pqchat-topics")}(address(f)));
+                address topics = _module(type(PqChatTopics).creationCode, "pqchat-topics");
+                address tree = _module(type(PqChatTree).creationCode, "pqchat-tree");
+                address views = _module(type(PqChatTreeViews).creationCode, "pqchat-tree-views");
+                address members = _module(type(PqChatTreeMembers).creationCode, "pqchat-tree-members");
                 IFactoryToken.Env memory e;
                 e.registry = address(reg);
                 e.params = new bytes32[](1);
                 e.params[0] = bytes32(vm.envOr("CHAIN_CODE_LIMIT", uint256(131_072)));
-                (e.libs, e.libCodeHashes) = (new address[](1), new bytes32[](1));
+                (e.libs, e.libCodeHashes) = (new address[](4), new bytes32[](4));
                 (e.libs[0], e.libCodeHashes[0]) = (topics, topics.codehash);
+                (e.libs[1], e.libCodeHashes[1]) = (tree, tree.codehash);
+                (e.libs[2], e.libCodeHashes[2]) = (views, views.codehash);
+                (e.libs[3], e.libCodeHashes[3]) = (members, members.codehash);
                 f.publishClassEnv(3, 0, 1, f.chainUid(), e);
                 impl = f.deployImplementation{gas: RELEASE_GAS}(
                     id,
@@ -176,25 +202,28 @@ contract PqChatOnchain is OnchainBase {
                     IPqChat.initialize.selector,
                     type(IPqChat).interfaceId,
                     vm.getCode("PqChat.sol:PqChat"),
-                    abi.encode(topics),
+                    abi.encode(topics, tree, views, members),
                     f.chainUid()
                 );
                 f.setClassKindEnabled(3, 0, true, f.chainUid());
                 vm.stopBroadcast();
             }
             vm.broadcast(k1);
-            chat = IPqChat(f.createInstance(id, _salt("pqchat-1"), abi.encodeCall(IPqChat.initialize, (bytes32(0)))));
+            chat = IPqChat(f.createInstance(id, _salt("pqchat-1"), abi.encodeCall(IPqChat.initialize, (bytes32(0), 2))));
         }
         _book(address(chat), "PqChat");
         _book(impl, "PqChat");
         _book(PqChatFace(impl).modules()[0], "PqChatTopics");
+        _book(PqChatFace(impl).modules()[1], "PqChatTree");
+        _book(PqChatFace(impl).modules()[2], "PqChatTreeViews");
+        _book(PqChatFace(impl).modules()[3], "PqChatTreeMembers");
     }
 
     function _instance() internal {
         vm.broadcast(k1);
         chat2 = IPqChat(
             f.createInstance(
-                IOpenFactory.ReleaseId(3, 0, 1), _salt("pqchat-2"), abi.encodeCall(IPqChat.initialize, (bytes32(0)))
+                IOpenFactory.ReleaseId(3, 0, 1), _salt("pqchat-2"), abi.encodeCall(IPqChat.initialize, (bytes32(0), 2))
             )
         );
         _book(address(chat2), "PqChat");

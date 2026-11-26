@@ -431,6 +431,16 @@ pub enum TxStatus {
     NotFound { latest: u64 },
 }
 
+/// The endpoint's window a `getTransaction` answer names (review T26 B-2): its latest ledger, that ledger's close time (unix
+/// seconds: the chain's time, never the caller's clock), and the oldest ledger whose transactions it still keeps (a
+/// `NOT_FOUND` says nothing of a transaction older than that).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TxWindow {
+    pub latest: u64,
+    pub close_time: u64,
+    pub oldest: u64,
+}
+
 /// One ledger entry an endpoint answered: its `LedgerEntryData` XDR and its TTL (`liveUntilLedgerSeq`) where it has one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
@@ -450,6 +460,11 @@ fn b64e(b: &[u8]) -> String {
 }
 fn lower_hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// A ledger close time as the RPC writes it: a decimal string, or a number.
+fn time_u64(v: &Value) -> Option<u64> {
+    v.as_u64().or_else(|| dec_u64(v))
 }
 
 /// A decimal string of at most 20 digits (a `u64` the RPC writes as text).
@@ -582,22 +597,63 @@ impl Soroban {
 
     /// `getTransaction` of the id `hash` on endpoint `i`.
     pub async fn transaction_at(&self, i: usize, hash: &[u8; 32]) -> Result<TxStatus, FamilyError> {
+        Ok(self.transaction_window_at(i, hash).await?.0)
+    }
+
+    /// [`Soroban::transaction_at`] with the endpoint's [`TxWindow`] from the same answer (`AnswerMalformed` without it).
+    pub async fn transaction_window_at(
+        &self,
+        i: usize,
+        hash: &[u8; 32],
+    ) -> Result<(TxStatus, TxWindow), FamilyError> {
         let r = self
             .call(i, "getTransaction", json!({"hash": lower_hex(hash)}))
             .await?;
         let latest = r["latestLedger"]
             .as_u64()
             .ok_or_else(|| Self::bad(i, "getTransaction without latestLedger"))?;
+        let window = match (
+            time_u64(&r["latestLedgerCloseTime"]),
+            r["oldestLedger"].as_u64(),
+        ) {
+            (Some(close_time), Some(oldest)) if oldest <= latest => TxWindow {
+                latest,
+                close_time,
+                oldest,
+            },
+            _ => return Err(Self::bad(i, "getTransaction without its ledger window")),
+        };
         let ledger = || {
             r["ledger"]
                 .as_u64()
                 .ok_or_else(|| Self::bad(i, "a transaction without its ledger"))
         };
-        match r["status"].as_str() {
-            Some("SUCCESS") => Ok(TxStatus::Success { ledger: ledger()? }),
-            Some("FAILED") => Ok(TxStatus::Failed { ledger: ledger()? }),
-            Some("NOT_FOUND") => Ok(TxStatus::NotFound { latest }),
-            _ => Err(Self::bad(i, "a transaction status out of its form")),
+        let status = match r["status"].as_str() {
+            Some("SUCCESS") => TxStatus::Success { ledger: ledger()? },
+            Some("FAILED") => TxStatus::Failed { ledger: ledger()? },
+            Some("NOT_FOUND") => TxStatus::NotFound { latest },
+            _ => return Err(Self::bad(i, "a transaction status out of its form")),
+        };
+        Ok((status, window))
+    }
+
+    /// `getLedgers` of ledger `seq` on endpoint `i`: its close time (unix seconds), the chain's time at that ledger (review T26
+    /// B-2: a deadline in seconds is compared with it, never with the caller's clock).
+    pub async fn close_time_at(&self, i: usize, seq: u64) -> Result<u64, FamilyError> {
+        let r = self
+            .call(
+                i,
+                "getLedgers",
+                json!({"startLedger": seq, "pagination": {"limit": 1}}),
+            )
+            .await?;
+        let l = &r["ledgers"][0];
+        match (l["sequence"].as_u64(), time_u64(&l["ledgerCloseTime"])) {
+            (Some(n), Some(t)) if n == seq => Ok(t),
+            _ => Err(Self::bad(
+                i,
+                &format!("ledger {seq} without its close time"),
+            )),
         }
     }
 

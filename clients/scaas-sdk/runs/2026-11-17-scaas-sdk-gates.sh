@@ -62,7 +62,7 @@ STEPS=(
     "frb-dart|clients/ua-dart-frb|(cd rust && $cap cargo build $C) && $cap dart test --reporter expanded --no-color"
     "bind-dart|clients/scaas-sdk/bindings/dart|bash ./run.sh"
     "bind-gen|.|bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check"
-    "bind-cpp|clients/scaas-sdk/bindings/cpp|bash ../lib.sh sync-api && $cap cmake -B build && $cap cmake --build build -j2 && cd build && $cap ctest --output-on-failure"
+    "bind-cpp|clients/scaas-sdk/bindings/cpp|python3 -I test_same_blocks.py && bash ../lib.sh sync-api && $cap cmake -B build && $cap cmake --build build -j2 && cd build && $cap ctest --output-on-failure"
     "bind-cs|clients/scaas-sdk/bindings/cs|bash ../lib.sh uniffi && $cap dotnet test; rc=\$?; dotnet build-server shutdown >/dev/null 2>&1; exit \$rc"
     "bind-python|clients/scaas-sdk/bindings/python|python3 -I test_fix_generated.py && bash ../lib.sh uniffi && $cap python3 -I test_smoke.py"
     "bind-kotlin|clients/scaas-sdk/bindings/kotlin|KOTLINC=\${KOTLINC:-$TOOLS/kotlin-2.4.21/kotlinc/bin/kotlinc} bash run.sh"
@@ -70,10 +70,10 @@ STEPS=(
     "bind-js|clients/scaas-sdk/bindings/js|WASM_BINDGEN=\${WASM_BINDGEN:-$TOOLS/wasm-bindgen/bin/wasm-bindgen} bash run.sh"
     "bind-java|clients/scaas-sdk/bindings/java|python3 -I test_fix_generated.py && JAVA_HOME=\${JAVA_HOME_25:-$TOOLS/jdk-25} bash run.sh"
     "bind-go|clients/scaas-sdk/bindings/go|python3 -I test_fix_generated.py && bash run.sh"
-    "sdk-uniffi|clients/scaas-sdk|$cap cargo test $C --features $F,uniffi --test binding && $cap cargo test $C --features $F,sync-api --test binding && $cap cargo clippy $C --all-targets --features $F,uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features $F,sync-api -- -D warnings"
+    "sdk-uniffi|clients/scaas-sdk|$cap cargo test $C --features $F,uniffi --test binding && $cap cargo test $C --features $F,uniffi --lib binding::tests && $cap cargo test $C --features $F,sync-api --lib sync_cpp::tests && $cap cargo test $C --features $F,sync-api --test binding && $cap cargo clippy $C --all-targets --features $F,uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features $F,sync-api -- -D warnings"
     "sdk-opaque|clients/scaas-sdk|$cap cargo test $C --features $F,opaque-calls --test wallet_ops"
     "ua-vectors|clients/ua-rs|$cap cargo clippy $C --all-targets --features vectors,roots -- -D warnings && $cap cargo test $C --features vectors,roots"
-    "ua-appcore|clients/ua-rs|$cap cargo clippy $C --all-targets --features app-core,vectors -- -D warnings && $cap cargo test $C --features app-core,vectors --test app_core && python3 -I scripts/gen_app_refusals.py --check"
+    "ua-appcore|clients/ua-rs|$cap cargo clippy $C --all-targets --features app-core,vectors -- -D warnings && $cap cargo test $C --features app-core,vectors --test app_core --test tree && python3 -I scripts/gen_app_refusals.py --check"
     "ua-verify-only|clients/ua-rs|$cap cargo test $C --no-default-features"
     # plan T42: the core with no family (every UA kind, the seed standards, FeatureMissing) and its clippy; then none, each
     # fam-<row> alone and all on, in release, the size probe's bytes (runs/fam-sizes.sh prints `RESULT` rows for the summary)

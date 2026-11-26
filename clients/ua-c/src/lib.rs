@@ -20,8 +20,9 @@ use std::sync::{Mutex, OnceLock};
 use std::{ptr, slice};
 use ua::wallet as uw;
 
-/// Bumped on any breaking signature or layout change; compare with `scaas_ua_abi_version()`. 5 -> 6: ua-rs-sign T12.
-pub const SCAAS_UA_ABI_VERSION: u32 = 6;
+/// Bumped on any breaking signature or layout change; compare with `scaas_ua_abi_version()`. 5 -> 6: ua-rs-sign T12. 6 -> 7:
+/// T26 A2-1, `current_json` after `accepted_json` in the container openers.
+pub const SCAAS_UA_ABI_VERSION: u32 = 7;
 
 // The shared library never holds the test-only entry points (feature `vectors` of scaas-ua: secrets through hooks, F-01).
 const _: () = assert!(
@@ -1632,17 +1633,20 @@ fn container(json: *const c_char) -> R<uw::SealedContainer> {
     Ok(uw::SealedContainer::from_json(cstr(json)?)?)
 }
 
-/// The opener's three JSON inputs: `expect_json` required, `members_json` NULL = none, `accepted_json` NULL = no lookup.
+/// The opener's four JSON inputs: `expect_json` required, `members_json` NULL = none, `accepted_json` NULL = no lookup,
+/// `current_json` NULL = no `msig` updated.
 struct Opening {
     expect: uw::ContainerExpectJson,
     members: uw::MembersJson,
     accepted: Option<uw::AcceptedJson>,
+    current: uw::CurrentJson,
 }
 impl Opening {
     fn read(
         expect_json: *const c_char,
         members_json: *const c_char,
         accepted_json: *const c_char,
+        current_json: *const c_char,
     ) -> R<Opening> {
         if expect_json.is_null() {
             return Err(argument("expect_json"));
@@ -1657,27 +1661,36 @@ impl Opening {
         } else {
             Some(uw::AcceptedJson::from_json(cstr(accepted_json)?)?)
         };
+        let current = if current_json.is_null() {
+            uw::CurrentJson::default()
+        } else {
+            uw::CurrentJson::from_json(cstr(current_json)?)?
+        };
         Ok(Opening {
             expect: uw::ContainerExpectJson::from_json(cstr(expect_json)?)?,
             members,
             accepted,
+            current,
         })
     }
-    /// `f(expect, members, accepted)` with the lookups as the opener takes them.
+    /// `f(expect, members, current, accepted)` with the lookups as the opener takes them.
     fn with<T>(
         &self,
         f: impl FnOnce(
             &uw::ContainerExpect,
             &ua::ua_portable::Members,
+            &ua::ua_portable::Current,
             Option<&ua::ua_portable::Accepted>,
         ) -> T,
     ) -> T {
         let members = |id: [u8; 32]| self.members.lookup(id);
+        let current = |id: [u8; 32]| self.current.lookup(id);
         let accepted =
             |id: [u8; 32], i: u16| self.accepted.as_ref().is_some_and(|a| a.accepted(id, i));
         f(
             &self.expect.get(),
             &members,
+            &current,
             self.accepted
                 .as_ref()
                 .map(|_| &accepted as &ua::ua_portable::Accepted),
@@ -2147,6 +2160,7 @@ fn restore(
     expect_json: *const c_char,
     members_json: *const c_char,
     accepted_json: *const c_char,
+    current_json: *const c_char,
     current: *const ScaasUaWallet,
     bip39_passphrase: *const c_char,
     out: *mut *mut ScaasUaWallet,
@@ -2158,15 +2172,16 @@ fn restore(
             return Err(argument("NULL"));
         }
         let (kk, c) = (handle(kk)?, container(container_json)?);
-        let o = Opening::read(expect_json, members_json, accepted_json)?;
+        let o = Opening::read(expect_json, members_json, accepted_json, current_json)?;
         let cur = if current.is_null() {
             None
         } else {
             Some(&handle(current)?.0)
         };
         let pass = opt_text(bip39_passphrase)?.unwrap_or("");
-        let r =
-            o.with(|e, m, a| uw::Wallet::restore_backup(&kk.0, &c, e, m, a, cur, rollback, pass))?;
+        let r = o.with(|e, m, x, a| {
+            uw::Wallet::restore_backup(&kk.0, &c, e, m, x, a, cur, rollback, pass)
+        })?;
         put(installed, r.is_some())?;
         match r {
             Some(w) => give(out, ScaasUaWallet(w)),
@@ -2179,9 +2194,11 @@ fn restore(
 /// {set}, recipient: {ua, version} | {kemPkHash}}`, 16 KiB), `members_json` (`{"<id>": {kind, keyData}}`, at most 512 KiB and
 /// 64 UAs, NULL = none) and
 /// `accepted_json` (`{"<msig id>": [accepted member indices]}`, the caller's `memberAccepted` reads; NULL for a single-key sender,
-/// SCAAS_UA_ERR_CONTAINER_SENDER for an `msig` one). Over `current` (NULL = none), a wallet holding the sender's UA: an older
-/// generation is SCAAS_UA_ERR_BACKUP_ROLLBACK, an equal one installs nothing: `*installed = false`, `*out = NULL`, SCAAS_UA_OK.
-/// Otherwise `*installed = true` and the new wallet in `*out`.
+/// SCAAS_UA_ERR_CONTAINER_SENDER for an `msig` one) and `current_json` (`{"<msig id>": {msig, enabled}}`, an updated `msig`'s
+/// `msigOf` bytes (CTR-UA-09, hex) and `msigStateOf` bitmap (a decimal string), at most 512 KiB and 64 ids; NULL or an id not
+/// named = never updated): an `msig` sender is judged on its current structure (CTR-UA-44). Over `current` (NULL = none), a
+/// wallet holding the sender's UA: an older generation is SCAAS_UA_ERR_BACKUP_ROLLBACK, an equal one installs nothing:
+/// `*installed = false`, `*out = NULL`, SCAAS_UA_OK. Otherwise `*installed = true` and the new wallet in `*out`.
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn scaas_ua_wallet_restore_backup(
@@ -2190,6 +2207,7 @@ pub extern "C" fn scaas_ua_wallet_restore_backup(
     expect_json: *const c_char,
     members_json: *const c_char,
     accepted_json: *const c_char,
+    current_json: *const c_char,
     current: *const ScaasUaWallet,
     bip39_passphrase: *const c_char,
     out: *mut *mut ScaasUaWallet,
@@ -2201,6 +2219,7 @@ pub extern "C" fn scaas_ua_wallet_restore_backup(
         expect_json,
         members_json,
         accepted_json,
+        current_json,
         current,
         bip39_passphrase,
         out,
@@ -2219,6 +2238,7 @@ pub extern "C" fn scaas_ua_wallet_restore_backup_rollback(
     expect_json: *const c_char,
     members_json: *const c_char,
     accepted_json: *const c_char,
+    current_json: *const c_char,
     current: *const ScaasUaWallet,
     bip39_passphrase: *const c_char,
     out: *mut *mut ScaasUaWallet,
@@ -2231,6 +2251,7 @@ pub extern "C" fn scaas_ua_wallet_restore_backup_rollback(
         expect_json,
         members_json,
         accepted_json,
+        current_json,
         current,
         bip39_passphrase,
         out,
@@ -2268,12 +2289,14 @@ pub extern "C" fn scaas_ua_wallet_link_seal(
 /// `scaas_ua_wallet_restore_backup`; `created` in the session's 10-minute window, else SCAAS_UA_ERR_CONTAINER_REPLAY). Once the
 /// inputs parse, the session is consumed whatever the outcome: every later call on it is SCAAS_UA_ERR_KEY_REVOKED (free it still).
 #[no_mangle]
+#[allow(clippy::too_many_arguments)]
 pub extern "C" fn scaas_ua_wallet_from_link(
     session: *const ScaasUaLinkSession,
     container_json: *const c_char,
     expect_json: *const c_char,
     members_json: *const c_char,
     accepted_json: *const c_char,
+    current_json: *const c_char,
     bip39_passphrase: *const c_char,
     out: *mut *mut ScaasUaWallet,
 ) -> ScaasUaStatus {
@@ -2282,12 +2305,12 @@ pub extern "C" fn scaas_ua_wallet_from_link(
             return Err(argument("NULL"));
         }
         let (s, c) = (handle(session)?, container(container_json)?);
-        let o = Opening::read(expect_json, members_json, accepted_json)?;
+        let o = Opening::read(expect_json, members_json, accepted_json, current_json)?;
         let pass = opt_text(bip39_passphrase)?.unwrap_or("");
         let taken = lock(&s.0)?
             .take()
             .ok_or_else(|| fail(SCAAS_UA_ERR_KEY_REVOKED))?;
-        let w = o.with(|e, m, a| uw::Wallet::from_link(taken, &c, e, m, a, pass))?;
+        let w = o.with(|e, m, x, a| uw::Wallet::from_link(taken, &c, e, m, x, a, pass))?;
         give(out, ScaasUaWallet(w))
     })
 }
@@ -2730,8 +2753,9 @@ pub extern "C" fn scaas_ua_key_witness_program(
 /// The `UASig` builder as one JSON call: `request_json` (64 KiB, depth 6) names its signing keys by position in `keys[0..n_keys]`:
 /// `{purpose, digest, domain?, key}` (one key) or `{purpose, digest, domain?, msig: {keyData, inner?, current?, slots: [{index, key} |
 /// {index, members: [{index, key}]}]}}`, `domain` `{generation, chainId, registry, chainUid}` (bytes "0x..." hex). An updated
-/// `msig` (CTR-UA-44): `keyData` its first structure (the id), `current` `[{ua, keyData, enabled}]` the structures that authorize
-/// now (`msigOf`, `msigStateOf`) for it and its `msig` members; a disabled slot: SCAAS_UA_ERR_ARGUMENT, nothing signed. Out: the
+/// `msig` (CTR-UA-44): `keyData` its first structure (the id), `current` `[{ua, keyData, enabled, version}]` the structures that
+/// authorize now (`msigOf`, `msigStateOf`) for it and its `msig` members, whose versions the signature's tags name (CTR-UA-74); a
+/// disabled slot: SCAAS_UA_ERR_ARGUMENT, nothing signed. Out: the
 /// `UASig` `{keyData, signature, members: [{index, members: [{index, sig}], sig}]}`, the `sig` of the `_args` calls. An `msig` set
 /// not minimal at both levels: SCAAS_UA_ERR_POP, nothing signed.
 #[no_mangle]
@@ -2932,8 +2956,9 @@ pub extern "C" fn scaas_ua_open(
 }
 
 /// The plaintext of a sealed container (`container_json`, 4 MiB, depth 7), accepted only as `expect_json` says, with
-/// `members_json` and `accepted_json` as `scaas_ua_wallet_restore_backup` (all checks before decapsulation; no container call
-/// without `expect_json`). `pt` needs the ciphertext's length - 16 (checked first). No replay protection. The caller zeroizes `pt`.
+/// `members_json`, `accepted_json` and `current_json` as `scaas_ua_wallet_restore_backup` (all checks before decapsulation; no
+/// container call without `expect_json`). `pt` needs the ciphertext's length - 16 (checked first). No replay protection. The
+/// caller zeroizes `pt`.
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn scaas_ua_open_container(
@@ -2942,14 +2967,15 @@ pub extern "C" fn scaas_ua_open_container(
     expect_json: *const c_char,
     members_json: *const c_char,
     accepted_json: *const c_char,
+    current_json: *const c_char,
     pt: *mut u8,
     pt_len: *mut usize,
 ) -> ScaasUaStatus {
     run(|| {
-        let o = Opening::read(expect_json, members_json, accepted_json)?;
+        let o = Opening::read(expect_json, members_json, accepted_json, current_json)?;
         let (kk, c) = (handle(kk)?, container(container_json)?);
         need(pt_len, c.sealed.ciphertext.len().saturating_sub(16))?;
-        let p = o.with(|e, m, a| kk.0.open_container(&c, e, m, a))?;
+        let p = o.with(|e, m, x, a| kk.0.open_container(&c, e, m, x, a))?;
         write_var(pt, pt_len, &p)
     })
 }
@@ -3800,9 +3826,9 @@ pub extern "C" fn scaas_ua_pqz_seed_backup(
 }
 
 /// A member's share container (`container_json`, opened by `kk` against `expect_json` with purpose "scaas/pqz-share/v1",
-/// `members_json` and `accepted_json` as `scaas_ua_wallet_restore_backup`) sealed again, the same share and header, to `to`
-/// (the member who rebuilds the key) and signed by `sender`: its container JSON into `out_json`. The share never leaves the
-/// library in the clear. SCAAS_UA_ERR_ARGUMENT for another purpose or a malformed share.
+/// `members_json`, `accepted_json` and `current_json` as `scaas_ua_wallet_restore_backup`) sealed again, the same share and
+/// header, to `to` (the member who rebuilds the key) and signed by `sender`: its container JSON into `out_json`. The share never
+/// leaves the library in the clear. SCAAS_UA_ERR_ARGUMENT for another purpose or a malformed share.
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn scaas_ua_pqz_share_reseal(
@@ -3811,6 +3837,7 @@ pub extern "C" fn scaas_ua_pqz_share_reseal(
     expect_json: *const c_char,
     members_json: *const c_char,
     accepted_json: *const c_char,
+    current_json: *const c_char,
     to: *const ScaasUaRecipient,
     sender: *const ScaasUaKey,
     out_json: *mut c_char,
@@ -3828,8 +3855,8 @@ pub extern "C" fn scaas_ua_pqz_share_reseal(
                 recipient(handle(to)?)?,
                 ua_key(handle(sender)?)?,
             );
-            let o = Opening::read(expect_json, members_json, accepted_json)?;
-            let r = o.with(|e, m, a| kk.0.reseal_pqz_share(&c, e, m, a, &to, sender))?;
+            let o = Opening::read(expect_json, members_json, accepted_json, current_json)?;
+            let r = o.with(|e, m, x, a| kk.0.reseal_pqz_share(&c, e, m, x, a, &to, sender))?;
             write_str(out_json, out_len, &r.to_json())
         }
         #[cfg(not(feature = "pqz"))]
@@ -3840,6 +3867,7 @@ pub extern "C" fn scaas_ua_pqz_share_reseal(
                 expect_json,
                 members_json,
                 accepted_json,
+                current_json,
                 to,
                 sender,
                 out_json,
@@ -3867,6 +3895,7 @@ pub extern "C" fn scaas_ua_wallet_pqz_reconstruct(
     expect_json: *const c_char,
     members_json: *const c_char,
     accepted_json: *const c_char,
+    current_json: *const c_char,
     msig_ua32: *const u8,
     version: u64,
     pqz_key_hash32: *const u8,
@@ -3886,9 +3915,9 @@ pub extern "C" fn scaas_ua_wallet_pqz_reconstruct(
                 8,
                 uw::SealedContainer::from_json,
             )?;
-            let o = Opening::read(expect_json, members_json, accepted_json)?;
-            let key = o.with(|e, m, a| {
-                w.0.reconstruct_pqz_seed(&kk.0, &cs, e, m, a, ua, version, kh)
+            let o = Opening::read(expect_json, members_json, accepted_json, current_json)?;
+            let key = o.with(|e, m, x, a| {
+                w.0.reconstruct_pqz_seed(&kk.0, &cs, e, m, x, a, ua, version, kh)
             })?;
             give(out, ScaasUaPqzKey(key))
         }
@@ -3901,6 +3930,7 @@ pub extern "C" fn scaas_ua_wallet_pqz_reconstruct(
                 expect_json,
                 members_json,
                 accepted_json,
+                current_json,
                 msig_ua32,
                 version,
                 pqz_key_hash32,
@@ -4026,8 +4056,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn abi_version_is_6() {
-        assert_eq!(scaas_ua_abi_version(), 6);
+    fn abi_version_is_7() {
+        assert_eq!(scaas_ua_abi_version(), 7);
     }
 
     /// Each bit against the build: ua-c's own forwarded features, and the Falcon bit against whether a Falcon key derives.

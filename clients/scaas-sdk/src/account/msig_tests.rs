@@ -61,13 +61,14 @@ struct T {
 }
 
 async fn setup(registry: &str, genesis: Option<&str>) -> T {
-    setup_auth(registry, genesis, None).await
+    setup_auth(registry, genesis, None, true).await
 }
 
 async fn setup_auth(
     registry: &str,
     genesis: Option<&str>,
     authenticator: Option<Arc<dyn crate::platform::Authenticator>>,
+    pinned_reads: bool,
 ) -> T {
     let chain = fake();
     if let Some(g) = genesis {
@@ -101,7 +102,7 @@ async fn setup_auth(
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
-        pinned_reads: true,
+        pinned_reads,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -307,10 +308,11 @@ async fn msig_minimal_sets() {
             &ua,
             &purpose,
             &digest,
+            &s.signature,
             &s.members,
             &domain(),
             &lookup,
-            &|_| None,
+            &|_, _| None,
             Some(&all),
         )
     };
@@ -334,6 +336,21 @@ async fn msig_minimal_sets() {
     // msig-nested-heavy-outer: the inner slot (w2) by inner-pq's {0, 1} alone
     let s = sign(&outer, vec![leaves(&[0, 1])]).await.unwrap();
     assert_eq!(verify(&outer, &s), Ok(()));
+    // review A2-11: the same slot signed elsewhere (`Signed`, as `member_sign` writes it) names its inner leaves
+    let signed = {
+        let mut m = super::members_json(&s).unwrap()[0].clone();
+        m["ua"] = hex(&scaas_ua::derive_ua(MSIG, &outer, false).unwrap()).into();
+        m["purpose"] = hex(&purpose).into();
+        m["digest"] = hex(&digest).into();
+        MsigSlot::Signed {
+            index: 0,
+            member: m.to_string(),
+        }
+    };
+    assert!(
+        sign(&outer, vec![signed.clone()]).await.is_ok(),
+        "control: a Signed slot"
+    );
     assert_eq!((s.members.len(), s.members[0].members.len()), (1, 2));
     assert_eq!(
         code(sign(&outer, vec![leaves(&[0, 1]), member(&t, 1, FNDSA512, 2)]).await),
@@ -354,6 +371,11 @@ async fn msig_minimal_sets() {
     assert_eq!(
         code(sign(&outer, vec![leaves(&[0, 1])]).await),
         "MsigSlotInactive"
+    );
+    assert_eq!(
+        code(sign(&outer, vec![signed.clone()]).await),
+        "MsigSlotInactive",
+        "review A2-11: an inactive inner leaf of a slot signed elsewhere"
     );
     record(&t, REGISTRY, &inner_pq, &inner_pq, 0, 0b11, 0b11);
     assert!(
@@ -486,10 +508,11 @@ async fn update_msig_current() {
         &ua,
         &tag,
         &b32(&row["digest"]),
+        &[],
         &sigs,
         &domain(),
         &lookup,
-        &|_| None,
+        &|_, _| None,
         Some(&all),
     );
     assert_eq!(
@@ -528,12 +551,17 @@ async fn update_msig_current() {
         .await
         .unwrap();
     let en: [u8; 32] = U256::from(0b1011).to_be_bytes();
-    let current = |id: [u8; 32]| (id == ua).then(|| (now.clone(), en));
+    // CTR-UA-74: `msigAt` of version 1, the one the signature's tag names
+    assert_eq!(s.signature, 1u64.to_be_bytes(), "the tag of version 1");
+    let current = |id: [u8; 32], v: Option<u64>| {
+        (id == ua && v.is_none_or(|v| v == 1)).then(|| (now.clone(), en, 1))
+    };
     let ok = check_authorization_current(
         &first,
         &ua,
         &purpose,
         &digest,
+        &s.signature,
         &s.members,
         &domain(),
         &lookup,
@@ -698,7 +726,7 @@ async fn msig_writes_landed_by_record() {
     let m: &MemberSig = &ms[0];
     assert_eq!(m.index, i2);
     assert_eq!(
-        check_membership_current(&kd, &ua, m, &lookup, &|_| None, Some(&all)),
+        check_membership_current(&kd, &ua, m, &lookup, &|_, _| None, Some(&all)),
         Ok(())
     );
     let q = acc.quote_registry_write(a.clone()).await.unwrap();
@@ -810,7 +838,7 @@ impl crate::platform::Authenticator for Se {
 #[tokio::test(flavor = "multi_thread")]
 async fn msig_members_apart() {
     let se = Arc::new(Se::default());
-    let t = setup_auth(REGISTRY, None, Some(se.clone())).await;
+    let t = setup_auth(REGISTRY, None, Some(se.clone()), true).await;
     let policy = crate::platform::KeyPolicy {
         biometry_current_set: true,
         invalidated_by_enrollment: true,
@@ -855,9 +883,7 @@ async fn msig_members_apart() {
     );
     let (purpose, digest) = (scaas_ua::purpose_tag("metatx").unwrap(), [5u8; 32]);
     // the fndsa512 slot on its own device
-    let (_, _, pool) = crate::op::evm(&t.sdk, "local").unwrap();
-    let reg: Address = REGISTRY.parse().unwrap();
-    let vs = views(&pool, reg, &[ua]).await.unwrap();
+    let (vs, _) = views(&t.sdk, "local", &[ua]).await.unwrap();
     let m = slot_sig(
         &t.sdk,
         &vs,
@@ -921,10 +947,11 @@ async fn msig_members_apart() {
         &ua,
         &purpose,
         &digest,
+        &s.signature,
         &s.members,
         &domain(),
         &lookup,
-        &|_| None,
+        &|_, _| None,
         Some(&all),
     );
     assert_eq!(ok, Ok(()), "the combined set verifies");
@@ -995,15 +1022,24 @@ async fn msig_members_apart() {
     let mut inner: serde_json::Value = serde_json::from_str(&j).unwrap();
     inner["members"] = serde_json::json!(vec![serde_json::json!({"index": 0, "sig": "0x00"}); 257]);
     assert_eq!(at(with(inner.to_string())).await, "Argument");
+    assert!(
+        super::member_of(&inner.to_string()).is_err(),
+        "257 inner signatures"
+    );
     assert_eq!(
         se.n.load(std::sync::atomic::Ordering::SeqCst),
         asked,
         "no device asked"
     );
-    // the controls: at 64 KiB and at 256 inner signatures the slot is read (combined; the registry checks the signatures)
+    // the controls: at 64 KiB the slot is read (combined; the registry checks the signatures); 256 inner signatures parse, but
+    // on this single-key slot they name no inner `msig`: refused since review A2-11 (an inner leaf is checked active)
     assert_eq!(at(with(pad(64 << 10))).await, "Ok");
     inner["members"] = serde_json::json!(vec![serde_json::json!({"index": 0, "sig": "0x00"}); 256]);
-    assert_eq!(at(with(inner.to_string())).await, "Ok");
+    assert!(
+        super::member_of(&inner.to_string()).is_ok(),
+        "256 inner signatures"
+    );
+    assert_eq!(at(with(inner.to_string())).await, "Argument");
     // the secure-element slot not accepted: its own code, no device asked
     record(&t, REGISTRY, &kd, &kd, 0, 0b11, 1 << fi);
     let n = se.n.load(std::sync::atomic::Ordering::SeqCst);
@@ -1106,10 +1142,11 @@ async fn msig_auditor_pqz_consent() {
             &ua32,
             &scaas_ua::purpose_tag(purpose).unwrap(),
             &digest,
+            &[],
             &members,
             &domain(),
             &lookup,
-            &|_| None,
+            &|_, _| None,
             Some(&all),
         )
     };
@@ -1176,5 +1213,89 @@ async fn imported_evm_key_is_a_native_member() {
             .await
             .unwrap(),
         "a UA key: the control"
+    );
+}
+
+/// F2 (owner 2026-11-23, review T26 A-7, A2-2): an `msig` held by generation 1 read through a bound generation 2 is read at
+/// its holder in one read, and its native members sign `UAAuth` in the holder's domain at the holder's generation; a native
+/// signer's domain is the bound registry's own at its generation. A holder off the line and a line that is not consecutive
+/// are refused, each beside its control.
+#[tokio::test(flavor = "multi_thread")]
+async fn msig_on_a_two_generation_line() {
+    for pinned in [true, false] {
+        msig_line(pinned).await;
+    }
+}
+
+/// [`msig_on_a_two_generation_line`] on a chain with pinned reads, and on one without (owner 2026-11-23, "Sticky endpoint":
+/// Moonbeam's profile; the same views by the sticky read, where `PinnedReadsUntrusted` refused them before).
+async fn msig_line(pinned: bool) {
+    const G1: &str = "0x5ca00000000000000000000000000000000000c1";
+    let t = setup_auth(REGISTRY, None, None, pinned).await;
+    let kd = MsigStructure {
+        threshold: 1,
+        members: vec![MsigMember {
+            kind: FNDSA512,
+            id: Wallet::from_mnemonic(REPO, "")
+                .unwrap()
+                .ua_key(FNDSA512, 0, 0)
+                .unwrap()
+                .ua()
+                .unwrap(),
+            weight: 1,
+        }],
+    }
+    .key_data();
+    let ua = scaas_ua::derive_ua(MSIG, &kd, false).unwrap();
+    record(&t, G1, &kd, &kd, 0, 1, 1);
+    let line = |g2: u64| {
+        let word = |a: &str| format!("0x{:0>64}", a.trim_start_matches("0x"));
+        answer(&t, REGISTRY, sel("generation()"), format!("0x{g2:064x}"));
+        answer(&t, REGISTRY, sel("predecessor()"), word(G1));
+        answer(&t, G1, sel("generation()"), format!("0x{:064x}", 1));
+        answer(&t, G1, sel("predecessor()"), word("0x0"));
+    };
+    let holder = |h: &str| {
+        answer(
+            &t,
+            REGISTRY,
+            format!("{}{}", sel("holderOf(bytes32)"), &hex(&ua)[2..]),
+            format!("0x{:0>64}{:064x}{:064x}", &h[2..], MSIG, 0),
+        )
+    };
+    line(2);
+    holder(G1);
+    let (vs, l) = views(&t.sdk, "local", &[ua]).await.unwrap();
+    let d = super::domain(&t.sdk, "local", &l, &vs[&ua]).unwrap();
+    let g1: Address = G1.parse().unwrap();
+    assert_eq!(
+        (d.registry, d.generation),
+        (g1.into_array(), 1),
+        "the holder's domain"
+    );
+    let own = l.domain(None, CHAIN_ID, [0; 32]);
+    let bound: Address = REGISTRY.parse().unwrap();
+    assert_eq!(
+        (own.registry, own.generation),
+        (bound.into_array(), 2),
+        "a native signer's: the bound one's"
+    );
+    // a holder off the line; its control above
+    holder("0x5ca00000000000000000000000000000000000c9");
+    assert!(
+        views(&t.sdk, "local", &[ua]).await.is_err(),
+        "a holder off the line"
+    );
+    holder(G1);
+    // generation 3 over a generation 1: not consecutive
+    line(3);
+    assert!(
+        views(&t.sdk, "local", &[ua]).await.is_err(),
+        "a line that is not consecutive"
+    );
+    line(2);
+    assert!(
+        views(&t.sdk, "local", &[ua]).await.is_ok(),
+        "the control again"
     );
 }

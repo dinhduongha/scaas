@@ -750,9 +750,12 @@ class Sender:
         head = rpc("eth_getBlockByNumber", ["latest", False])
         if gas is None:
             # Amsterdam (EIP-8037): the estimate is regular + state gas and may pass 2^24 (the chain caps the regular
-            # part); the limit is bounded by the chain's block gas limit, read here, never assumed
+            # part); the limit is bounded by the chain's block gas limit, read here, never assumed. The estimate runs
+            # on `latest`: a shield estimated in the block of the previous one merges into its pending entry
+            # (PqzCore._trivial, D18), while the sent one lands a block later and appends a new pending slot (about
+            # 98 k state + 17 k regular gas more: 346,717 estimated, 437,320 used). Hence x 1.5 + 300 k, as pq.py asks.
             try:
-                gas = min(int(head["gasLimit"], 16), int(int(rpc("eth_estimateGas", [tx]), 16) * 1.15) + 50_000)
+                gas = min(int(head["gasLimit"], 16), int(int(rpc("eth_estimateGas", [tx]), 16) * 1.5) + 300_000)
             except RuntimeError as e:
                 check(False, f"{what}: estimateGas {e}")
                 raise
@@ -1414,7 +1417,7 @@ def release_rows():
     each regulated release's `implArgs` the `ComplianceRegistry` runtime's code hash, the pin of test/as/Registry.t.sol."""
     check([k for k, _ in RELEASES] == [0, 4, 5, 12, 13], f"releases: kinds {[k for k, _ in RELEASES]}")
     pin = re.search(
-        r"COMPLIANCE_REGISTRY_CODEHASH = (0x[0-9a-f]{64});", open(os.path.join(EVM, "test/as/Registry.t.sol")).read()
+        r"COMPLIANCE_REGISTRY_CODEHASH =\s*(0x[0-9a-f]{64});", open(os.path.join(EVM, "test/as/Registry.t.sol")).read()
     )
     check(
         pin is not None and compliance_registry_codehash() == hb(pin.group(1)),
@@ -1732,7 +1735,12 @@ def run(kd, kr, ke):
     # before every release, each env naming it as govRouter. By CREATE2 as DeployBase (governance spec §3.1); on this run's
     # own registry (it carries the pqz-mlwe kind, the deploy JSON's has none), so it is not the deploy JSON's router: the
     # node lists both in `governance_routers` (RUNBOOK); JSON key `governance_router` of deployments/<key>-pqz.json
-    router = D.deploy2("GovernanceRouter", encs(["w", "w", "w", "w"], [uid, reg, 0, 0]), label="governance_router")
+    # G1 / G-3 (CTR-GOV-33): the factory first, the router naming it (its fifth argument), then configureChain, which
+    # refuses a router whose factory() is not this factory
+    fac = D.deploy("OpenFactory", encs(["w"], [sd.addr]))
+    router = D.deploy2(
+        "GovernanceRouter", encs(["w", "w", "w", "w", "w"], [uid, reg, 0, 0, fac]), label="governance_router"
+    )
     # plan 5g-Z2: the factory (notice period 0 here) deploys every release itself: env version 1 of each kind
     # (factory, chain_uid, registry, SmartKeyAccount implementation 0, Hedera false, deps, the linked libraries with
     # their code hashes, the GovernanceRouter above (the PQZ kinds link the four PqzStateLib / PqzTransferLib / PqzBurnLib / PqzViewLib, plan 5h D14,
@@ -1741,7 +1749,6 @@ def run(kd, kr, ke):
     # envVersion, env, implArgs)
     # chain-neutral releases (plan T71): the registrar the only constructor argument, then this chain's values once
     # (configureChain: chain_uid, notice period 0, the router above, a reference block of this chain, Fable P1-1)
-    fac = D.deploy("OpenFactory", encs(["w"], [sd.addr]))
     ref = int(rpc("eth_blockNumber", []), 16) - 1
     ref_hash = bytes.fromhex(rpc("eth_getBlockByNumber", [hex(ref), False])["hash"][2:])
     router_h = keccak256(
@@ -2520,9 +2527,10 @@ def rotation(pq, s, reg, C, dave, payer, sk):
     version 1 (a fresh key, `setPqzKey(ua, 1, …)` signed over typed `UAPqzKeyVersionRecord`, `storePqzPop(ua, 1, R_REG over typed
     `UAPqzKeyVersion`)`); a credit after the rotation lands in (dave, 1); the migration (op 1 from (dave, 0) to dave, proved with
     s_0) moves the version-0 balance; the receiver disclosure of the migration checks version 1's key (`keyVersion` 1). Real
-    proofs on the local chain; never the live testnet stack."""
+    proofs on the local chain; never the live testnet stack. `C` is pqUSD (auditor FULL): each transfer carries the auditor
+    leg (CTR-PQZ-24 / CTR-ZTH-49: on FULL an opt-out reverts `AuditorRequired`)."""
     log("\n## 6c. a PQZ key rotation (group 3g): version 1, a credit to it, the migration, the disclosure by version")
-    transfer(pq, s, C, payer, dave, ZERO32, 3, False, f"{payer.name}→dave 3 before the rotation (version 0)")
+    transfer(pq, s, C, payer, dave, ZERO32, 3, True, f"{payer.name}→dave 3 before the rotation (version 0)")
     pk1, s1, e1, _ = K.keygen(sk("pqz-dave-v1"))
     proof = pq.prove(
         3, K.build_register(portable("keyverreg", ua=dave.ua, pqzKey=pk1, version=1), pk1), K.i8(s1) + K.i16(e1)
@@ -2548,13 +2556,13 @@ def rotation(pq, s, reg, C, dave, payer, sk):
     dave1.prior = {0: dave}
     C.uas[dave.ua] = dave1  # the restore reads both versions (KV-6)
     n0 = C.state(dave)["pendingCount"]
-    transfer(pq, s, C, payer, dave1, ZERO32, 4, False, f"{payer.name}→dave 4 after the rotation (lands in version 1)")
+    transfer(pq, s, C, payer, dave1, ZERO32, 4, True, f"{payer.name}→dave 4 after the rotation (lands in version 1)")
     check(
         C.state(dave1)["pendingCount"] == 1 and C.state(dave)["pendingCount"] == n0,
         "the credit is in (dave, 1), (dave, 0) unchanged",
     )
     _, ref, _, _ = transfer(
-        pq, s, C, dave, dave1, ZERO32, 3, False, "the migration: op 1 from (dave, 0) to dave (version 1), 3"
+        pq, s, C, dave, dave1, ZERO32, 3, True, "the migration: op 1 from (dave, 0) to dave (version 1), 3"
     )
     check(C.state(dave1)["pendingCount"] == 2, "the migration's credit is in (dave, 1)")
     stmt = dec_bytes(call(C.tok, cd(API["discStmt"], ["w", "w", "w", "w", "w"], ref, 0, 3, 1, 1)))

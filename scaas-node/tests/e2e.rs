@@ -1237,7 +1237,7 @@ fn plain_rows_match_the_forge_abi() {
             n += 1;
         }
     }
-    assert_eq!(n, 46, "46 rows, one contract each (45 -> 46: PqChatStore's storeMessage, chains-arweave T9; 37 -> 45: PqVault's eight writes, PqVault plan V8; before (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
+    assert_eq!(n, 52, "52 rows, one contract each (46 -> 52: PqChat TreeKEM's six tree writes, commit / addPathList / addPathKeys / addPath / treeLeave / treeRemove, T4; 45 -> 46: PqChatStore's storeMessage, chains-arweave T9; 37 -> 45: PqVault's eight writes, PqVault plan V8; before (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
         30 -> 32: the DEX's mtxLiquidity (CTR-DEX-30) and PqChat's remove (UA-7 P48); 32 -> 34: the registry's setPqzScopedKey, \
         storePqzScopedPop (K3-3); 34 -> 35: the registry's updateMsig (CTR-UA-44); 35 -> 36: the registry's cacheExpandedKey \
         (NODE-JOB-29, TODO 3zh MD-14); 36 -> 37: the registry's registerBlsMulti (bls-multi Task 10)))");
@@ -3188,6 +3188,8 @@ alloy::sol! {
     function isToken(address token) external view returns (bool);
     /// `PqChat`'s owner (class 3, kind 0): 0 or its creator.
     function owner() external view returns (bytes32);
+    /// `PqChat`'s signature-storage setting (CTR-CHAT-23): 0 `none`, 2 `sstore2`.
+    function sigStore() external view returns (uint8);
 }
 
 /// Owner 2026-11-12 (every state-changing `mtx*` relayable, fee 0 too): an EOA with no gas signs `mtxCreateDex` and `mtxCreateToken`
@@ -3338,8 +3340,9 @@ async fn router_creations_signed_by_an_eoa() {
 
 /// Owner 2026-11-12 (`mtxCreateInstance`, "both the generic row and the per-class ones"): an EOA with no gas signs two `PqChat`
 /// creations (class 3, kind 0) on the chain's `GovernanceRouter`, relayed at fee 0: one names its `init_call` bytes
-/// (`initialize(0)`), the other the class's named config `{owner: <creator>}`, which the node builds into the call; both instances
-/// stand at the creator's predicted addresses with their owners. The negatives, `dead` with nothing sent (the lane's nonce does
+/// (`initialize(0, 0)`: owner 0, the setting `none`), the other the class's named config `{owner: <creator>}`, which the node builds
+/// into the call with the default setting `sstore2` (CTR-CHAT-23); both instances stand at the creator's predicted addresses with
+/// their owners and settings. The negatives, `dead` with nothing sent (the lane's nonce does
 /// not move): both forms in one job, an owner that is not the creator, an unpublished release (`RELEASE_UNKNOWN`, read from the
 /// factory before the simulation).
 #[tokio::test]
@@ -3385,8 +3388,8 @@ async fn router_instance_creations_signed_by_an_eoa() {
     };
     let init_zero = json!(format!(
         "0x{}{}",
-        alloy::hex::encode(&alloy::primitives::keccak256("initialize(bytes32)")[..4]),
-        "00".repeat(32)
+        alloy::hex::encode(&alloy::primitives::keccak256("initialize(bytes32,uint8)")[..4]),
+        "00".repeat(64)
     ));
     let raw_op = op(with(base(0x71, "1"), "init_call", init_zero.clone()), 0);
     let named_op = op(with(base(0x72, "1"), "config", json!({"owner": me})), 1);
@@ -3494,6 +3497,14 @@ async fn router_instance_creations_signed_by_an_eoa() {
         view(&rpc, named_at, ownerCall {}).await,
         owner.address().into_word(),
         "the named config: the creator owns it"
+    );
+    assert_eq!(
+        (
+            view(&rpc, raw_at, sigStoreCall {}).await,
+            view(&rpc, named_at, sigStoreCall {}).await
+        ),
+        (0, 2),
+        "init_call: none; the named config: the default sstore2"
     );
     assert_eq!(
         view(&rpc, router, nonce).await,
@@ -6983,6 +6994,7 @@ mod pqvault_types {
         struct PqVaultCreate {
             bytes32 creator; uint64 nonce; uint8 mode; bytes32 homeChain; address homeVaultContract; bytes32[] admins;
             MemberKey[] members; bytes32[] wrapHashes; uint16 passKdf; bytes32 passSalt; bytes sealedInfo;
+            uint8 groupMode;
         }
         struct PqVaultItem { bytes32 vaultId; bytes32 epochId; bytes32 author; uint64 nonce; bytes ciphertext; }
         struct PqVaultEdit { bytes32 itemId; bytes32 epochId; bytes32 author; uint64 nonce; uint32 version; bytes ciphertext; }
@@ -7228,6 +7240,7 @@ async fn pqvault_flow(mode: u8, chain_id: u64) {
         passKdf: 1,
         passSalt: B256::repeat_byte(0x5a),
         sealedInfo: vec![0x5e; 1052].into(), // a nonce, the 1,024-B bucket, a tag (F12)
+        groupMode: 0,
     };
     let jm = |m: &MemberKey| json!({"ua": hb(m.ua), "keyId": "0", "via": hb(m.via)});
     let jw = |w: &Wrap| {
@@ -7238,7 +7251,7 @@ async fn pqvault_flow(mode: u8, chain_id: u64) {
         "v": {"creator": hb(v.creator), "nonce": nonce.to_string(), "mode": mode, "homeChain": hb(uid),
             "homeVaultContract": format!("{inst:#x}"), "admins": [hb(a)], "members": members.iter().map(jm).collect::<Vec<_>>(),
             "wrapHashes": v.wrapHashes.iter().map(|x| hb(*x)).collect::<Vec<_>>(), "passKdf": 1, "passSalt": hb(v.passSalt),
-            "sealedInfo": h(&v.sealedInfo)},
+            "sealedInfo": h(&v.sealedInfo), "groupMode": 0},
         "wraps": wraps.iter().map(jw).collect::<Vec<_>>(),
         "sig": sign(a, v.eip712_signing_hash(&domain)).await,
     });

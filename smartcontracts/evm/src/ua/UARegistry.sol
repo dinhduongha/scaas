@@ -318,7 +318,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function kemRecordHash(bytes32 ua, uint64 version, KemKey calldata kem) external pure returns (bytes32) {
-        return UAKinds.kemRecordHash(ua, version, UAKinds.kemPk(kem));
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.kemRecordHash.selector); // CTR-UA-74: moved for `msigAt`'s bytes
     }
 
     function registrationDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_, bytes32 pqzPopHash)
@@ -330,7 +330,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function kemRecordDigest(bytes32 ua, uint64 version, KemKey calldata kem) external pure returns (bytes32) {
-        return UAKinds.kemRecordDigest(ua, version, UAKinds.kemPk(kem));
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.kemRecordDigest.selector); // CTR-UA-74: moved for `msigAt`'s bytes
     }
 
     function pqzKeyDigest(bytes32 ua, bytes32 pqzKeyHash) external pure returns (bytes32) {
@@ -432,6 +432,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             s.members[i] =
                 MsigMember(uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)), uint16(UAStore.u16(d, o + 34)));
         }
+    }
+
+    function msigAt(bytes32 ua, uint64 version) external view returns (MsigStructure memory s, uint256 enabled) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.msigAt.selector, 0);
     }
 
     function memberAccepted(bytes32 ua, uint256 index) external view returns (bool) {
@@ -937,9 +941,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         }
         uint16 kind = _s.records[ua].kind; // held here (`requireAuthorized` took the rest)
         if (kind == UAKinds.MSIG) {
-            // CTR-UA-44: the current structure (the record's slot is warm: its `keyPtr` costs a warm read, single keys pay nothing)
-            return auth.keyData.length == 0 && auth.signature.length == 0
-                && _msig(ua, purposeTag, digest, UAStore.msig(ua, _s.records[ua].keyPtr), auth.members);
+            // CTR-UA-44: the current structure (the record's slot is warm: its `keyPtr` costs a warm read, single keys pay nothing);
+            // CTR-UA-74: `signature` its version tag
+            bytes memory d = UAStore.msig(ua, _s.records[ua].keyPtr);
+            return auth.keyData.length == 0 && UAStore.verOk(auth.signature, d)
+                && _msig(ua, purposeTag, digest, d, auth.members);
         }
         return auth.members.length == 0 && _derived(ua, kind, purposeTag, digest, auth.keyData, auth.signature);
     }
@@ -1040,13 +1046,13 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         uint256 o = 4 + 36 * uint256(s.index);
         (uint16 kind, bytes32 id) = (uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)));
         if (kind == UAKinds.MSIG) {
-            if (s.sig.length != 0) return false;
             MemberSig[] memory inner = UAStore.lift(s.members);
             if (_s.records[id].kind == 0) {
-                (address h,) = _holderKind(id); // §4: forwarded whole to its holder (R6), directly
-                return UAStore.via(h, id, UAKinds.PURPOSE_MEMBER, md, UASig("", "", inner));
+                (address h,) = _holderKind(id); // §4: forwarded whole to its holder (R6), directly; CTR-UA-74: its tag with it
+                return UAStore.via(h, id, UAKinds.PURPOSE_MEMBER, md, UASig("", s.sig, inner));
             }
-            return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.msig(id, _s.records[id].keyPtr), inner);
+            bytes memory di = UAStore.msig(id, _s.records[id].keyPtr);
+            return UAStore.verOk(s.sig, di) && _msig(id, UAKinds.PURPOSE_MEMBER, md, di, inner); // CTR-UA-74: `sig` its version tag
         }
         if (s.members.length != 0) return false;
         if (!UAKinds.isNative(kind)) return _derived(id, kind, UAKinds.PURPOSE_MEMBER, md, "", s.sig);
@@ -1185,7 +1191,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// The views a successor reads on a predecessor (§11.3, W3): each answers, or `UAConfig(0)`. Review n3: the UA-8 views
-    /// (`checkedOf`); the `InnerSig` ABI of its hand-offs (`memberSigHashOf`); CTR-UA-44's current structure (`msigStateOf`).
+    /// (`checkedOf`); the `InnerSig` ABI of its hand-offs (`memberSigHashOf`); CTR-UA-44's current structure (`msigStateOf`); CTR-UA-74's by version (`msigAt`).
     function _probe(IUARegistry p) private view {
         // §11.3 (W3): the line's views
         try p.holderOf(0) {}
@@ -1225,6 +1231,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             revert UAConfig(0);
         }
         try p.msigStateOf(0) {}
+        catch {
+            revert UAConfig(0);
+        }
+        try p.msigAt(0, 0) {}
         catch {
             revert UAConfig(0);
         }

@@ -316,7 +316,7 @@ contract GovRouterAdminTest is UARegistryBase {
         c[1] = UARegistry.KindConfig(ML65, address(mock), CAP, false, 0);
         c[2] = UARegistry.KindConfig(WA, address(mock), 400_000, false, 0);
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, impl, true, c);
-        router = new GovernanceRouter(chainUidA, PREG, impl, false);
+        router = new GovernanceRouter(chainUidA, PREG, impl, false, address(0));
         relay = new RelayFeeRouter();
         zs = new ZetherStatements();
         uint256 pk;
@@ -367,6 +367,7 @@ contract GovRouterAdminTest is UARegistryBase {
     /// a stranger relayer); and a `ComplianceRegistry(admin_, router)`.
     function _stack(bytes32 admin_) internal returns (OpenFactory f, ComplianceRegistry cr) {
         f = new OpenFactory(nid(deployer));
+        router = new GovernanceRouter(chainUidA, PREG, impl, false, address(f)); // G-3: the router names its factory
         EnvKit.genesis(chainUidA);
         IFactoryToken.Env memory e;
         vm.startPrank(deployer);
@@ -953,7 +954,7 @@ contract GovRouterAdminTest is UARegistryBase {
     function test_gas_routerDeploy() public {
         RouterCreator c = new RouterCreator();
         bytes memory code =
-            abi.encodePacked(type(GovernanceRouter).creationCode, abi.encode(chainUidA, PREG, impl, false));
+            abi.encodePacked(type(GovernanceRouter).creationCode, abi.encode(chainUidA, PREG, impl, false, address(0)));
         address r = c.create(code);
         Vm.Gas memory g = vm.lastCallGas();
         uint256 st = uint256(int256(g.gasStateUsed));
@@ -1093,8 +1094,9 @@ contract GovRouterAdminTest is UARegistryBase {
     /// is refused by the router (`UAUnauthorized(ml)`, no nonce spent); then the untouched call passes (the positive
     /// control) and has its effect. Answers the number of variants.
     function _matrix(uint8 op) internal returns (uint256 n) {
-        (OpenFactory f, ComplianceRegistry cr) = _stack(ml);
+        // G-3: each stack has its own router naming its factory (`_stack`), the last one built is `router`: `g` first
         (OpenFactory g, ComplianceRegistry cr2) = _stack(ml);
+        (OpenFactory f, ComplianceRegistry cr) = _stack(ml);
         if (op == REVOKE) _send(_base(APPROVE_TOKEN, f, cr), ml); // a stored approval to revoke
         P memory p = _base(op, f, cr);
         address other = p.target == address(f) ? address(g) : address(cr2);
@@ -1174,7 +1176,7 @@ contract GovRouterAdminTest is UARegistryBase {
     /// router of another chain (another `chain_uid`) and on another chain id is refused; the control passes once.
     function test_replay_otherChainRefused() public {
         (OpenFactory f, ComplianceRegistry cr) = _stack(ml);
-        GovernanceRouter other = new GovernanceRouter(keccak256("another chain"), PREG, impl, false);
+        GovernanceRouter other = new GovernanceRouter(keccak256("another chain"), PREG, impl, false, address(0));
         uint8[2] memory ops = [SET_KIND, SET_KYC];
         for (uint256 i; i < 2; ++i) {
             P memory p = _base(ops[i], f, cr);
@@ -1335,9 +1337,10 @@ contract GovRouterAdminTest is UARegistryBase {
 
     /// The router's typed entries go from 38 to 53 (round 3r), 53 to 56 (round 3s: `mtxSetAllowed`, `mtxSetDenied`,
     /// `mtxEnableFeature`), 56 to 57 (round 3t: `mtxSetVerifierFee`), 57 to 59 (round 3zc: `mtxSetMaxSupply`,
-    /// `mtxSetMaxWrapSupply`, CTR-GOV-30), 59 to 61 (set-auditor A6: `mtxSetAuditorKey`, `mtxSetAuditorUA`, CTR-GOV-31): every
-    /// `mtx` entry of its ABI but the ordered cancel and the two generic refusals.
-    function test_routerHas61TypedOps() public view {
+    /// `mtxSetMaxWrapSupply`, CTR-GOV-30), 59 to 61 (set-auditor A6: `mtxSetAuditorKey`, `mtxSetAuditorUA`, CTR-GOV-31), 61 to 62
+    /// (the keyed cancel `mtxCancelNonceFor`, CTR-GOV-33 Change, a typed op on a `target`): every `mtx` entry of its ABI but
+    /// the ordered cancel and the two generic refusals.
+    function test_routerHas62TypedOps() public view {
         string memory a = vm.readFile(
             string.concat(vm.envOr("FOUNDRY_OUT", string("out")), "/GovernanceRouter.sol/GovernanceRouter.json")
         );
@@ -1348,9 +1351,10 @@ contract GovRouterAdminTest is UARegistryBase {
             if (s[0] != "m" || s[1] != "t" || s[2] != "x") continue;
             if (_starts(s, "mtxCancelNonce(") || _starts(s, "mtxExecute(") || _starts(s, "mtxBatch(")) continue;
             if (_starts(s, "mtxNonce(") || _starts(s, "mtxDigest(") || _starts(s, "mtxSelectors(")) continue; // the views
+            if (_starts(s, "mtxNonceFor(")) continue; // G1's nonce view (CTR-GOV-33)
             ++n;
         }
-        assertEq(n, 61);
+        assertEq(n, 62);
     }
 
     function _starts(bytes memory s, string memory p) internal pure returns (bool) {
@@ -1375,7 +1379,9 @@ contract GovRouterAdminRowsTest is UALedgerBase {
         super.setUp();
         j = vm.readFile(TYPED_OPS);
         router = vm.parseJsonAddress(j, domainField("UAPublishTokenEnv", K, "domain.verifyingContract"));
-        deployCodeTo("GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false), router);
+        deployCodeTo(
+            "GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false, address(0)), router
+        );
     }
 
     function test_rows_runOnTheRouter() public {

@@ -685,10 +685,12 @@ Algorand: not built, see Staging; Solana, Move, TON and Cosmos have no `msig`.
 - **Storage (MM-6, MM-7).** The current structure is one SSTORE2 blob `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ id ‖ u16 weight) ‖
   u256 enabled ‖ u64 version`, its pointer in the record's `keyPtr` (0 = never updated: the registration bytes, every slot enabled, version
   0). No storage slot is added, the layout pin does not move; the meaning of an `msig`'s `keyPtr` does (`recordOf`); `keyOf` stays empty.
-  Old blobs are never freed. A never-updated `msig` reads nothing more on the hot path.
+  Old blobs are never freed, and each blob ends with the pointer of the one before it ([CTR-UA-74](#CTR-UA-74): `‖ address prev`, 20
+  bytes after `version`). A never-updated `msig` reads nothing more on the hot path.
 - **Views.** `msigOf` the current structure, every slot; `memberAccepted(ua, i)` **enabled and accepted** (a change of meaning: a tool that
   copies acceptances to another registry reads `msigStateOf(ua).accepted` and `memberSigHashOf`); `msigStateOf(ua) → (version, enabled,
-  accepted)` (`0xdaee052e`). Gen 2 forwards each for a gen-1 record, and its constructor probes gen 1 for `msigStateOf` (`UAConfig(0)`).
+  accepted)` (`0xdaee052e`); `msigAt(ua, version)` a structure by version ([CTR-UA-74](#CTR-UA-74)). Gen 2 forwards each for a gen-1
+  record, and its constructor probes gen 1 for `msigStateOf` and `msigAt` (`UAConfig(0)`).
 - **No forced rotation (MM-5).** An update moves no PQZ key, scoped key or KEM record; a disabled member still knows the `msig`'s PQZ secret
   keys and can read, never spend. Wallets warn while a slot is disabled and the `msig` holds a PQZ key, and offer the existing rotation.
   An `msig` that is a token's PQZ verifier changes its shape with any update: its tokens refuse `PqzVerifierChanged` until re-assigned
@@ -698,13 +700,13 @@ Algorand: not built, see Staging; Solana, Move, TON and Cosmos have no `msig`.
   Client rule: at every change sign the same target for each `(chainUid, registry)` that holds or may hold the `msig`, keep the signed
   updates and the key records in one ordered log, and bring a new registry current by replaying them in order. A stored signature of an
   earlier structure was checked when it was written and is not re-judged later.
-  The client record checks judge every record of an updated `msig` by its current structure (`msigOf` and `msigStateOf`'s `enabled`,
-  never `registrationOf`): ua-rs `check_*_current`, clientkeys `verify*` with a record answering `current` / `enabled`, the scoped PQZ key
-  record too (K3-3: ua-rs `check_pqz_scoped_key_record_current`, clientkeys `verifyPqzScopedKeyRecord`; vectors `portable.json`
-  `msigUpdated`, `msigScopedKeyRecords`).
+  A reader judges a kept record by the structure version its signature names ([CTR-UA-74](#CTR-UA-74), the reader rule; BUILT in
+  the clients): ua-rs `check_*_current` over `ua_portable::MsigAt` (`msigAt` by version, `None` the current one), clientkeys
+  `verify*` with a record answering `versions`, the scoped PQZ key record too (K3-3: ua-rs `check_pqz_scoped_key_record_current`,
+  clientkeys `verifyPqzScopedKeyRecord`; vectors `portable.json` `msigUpdated`, `msigScopedKeyRecords`, each row with its tag).
 - **Gas** (measured, `test/ua/UARegistryMsigUpdate.t.sol`, `--isolate`, regular + EIP-8037 state). An update of the same count signed by
   two EOAs: 3 slots 551,292, 16 slots 1,310,222, 64 slots 4,245,434, 256 slots 16,000,442 (61,209 a slot, about 55 k of it the blob's state
-  gas), so `MSIG_UPDATE_GAS = 400,000`, `MSIG_UPDATE_SLOT_GAS = 62,000`. `requireAuthorized` of a 2-of-3 EOA `msig`, cold frame gas: 44,721
+  gas), so `MSIG_UPDATE_GAS = 400,000`, `MSIG_UPDATE_SLOT_GAS = 62,000` (since [CTR-UA-74](#CTR-UA-74): 450,000, the figures there). `requireAuthorized` of a 2-of-3 EOA `msig`, cold frame gas: 44,721
   never updated, 40,160 updated (the blob's read replaces the registration blob's). The once-per-level term of the bound,
   `MSIG_ACCEPTED_GAS`, 2,500 -> 3,500 (the current structure's pointer and enabled word, +783 on the 2-of-2 hot path). At the bound with
   wide blobs (`test_gas_wideBlobsAtBound`, every verifier burning its 400 k cap): an outer over a 230-slot inner, bound 1,387,000, least
@@ -1713,6 +1715,98 @@ Gen 2 forwards a gen-1 record and returns gen 1's verdict (UA8-D11); its constru
 without it reverts, which is a refusal). `UAVerifyGas` when too little gas is left for a verifier's cap. Built as
 `UARegistryCoreLib.requirePortable`, run by DELEGATECALL inside the registry's view (it writes nothing).
 
+<a id="CTR-UA-74"></a>**CTR-UA-74** — **Every version of an `msig`'s structure stays readable, and an `msig`'s signature names the
+version it was accepted under** (owner 2026-11-25, on finding F-1b of the Fable re-review: add the view "msig structure by version" to the
+registry, a contract fix before the freeze, in this round; verbatim in [decisions.md](../decisions.md); the version tag and its form are
+controller calls under that ruling, its place inside the signature object an owner ruling of 2026-11-26, R-4, in the same entry).
+UNAUDITED. **EVM: BUILT** (contract side; the client readers are a follow-up, listed below). Soroban, NEAR and Algorand: with their
+`updateMsig` round ([Staging](#msig-staging)), the same rule; the other families have no `msig`.
+
+- **Why.** A record an `msig` signed stays in a consumer's state ([CTR-CHAT-23](pqchat.md#CTR-CHAT-23): the signature or its hash; a
+  KEM or PQZ key record here) after an `updateMsig` disabled one of its signers. Judged by the current structure the legal record fails
+  for every later reader; judged by "any earlier structure that verifies" a slot disabled because its key leaked would sign new
+  records for ever. So the record carries the one version it was accepted under, and the registry answers for that version.
+- **The view.** `msigAt(bytes32 ua, uint64 version) → (MsigStructure s, uint256 enabled)`, selector `0x7006bbe1`: version 0 is the
+  registration's structure (every slot enabled), version `v ≥ 1` the blob `updateMsig` stored for `v`, every slot and its `enabled`
+  word. Every version from 0 to `msigStateOf(ua).version` answers, for ever. Any other id, or a version never stored: the empty
+  structure (threshold 0, no members, `enabled` 0); a view, it never reverts. Gen 2 forwards a gen-1 record to its holder.
+  The version-of view is `msigStateOf(ua).version` ([CTR-UA-44](#CTR-UA-44)).
+- **Storage.** No storage slot: the blob of version `v ≥ 1` ends with `address prev`, the SSTORE2 pointer of version `v − 1`'s
+  blob (0 for version 0, whose bytes are the registration's), so the blob is `u16 threshold ‖ u16 count ‖ count × 36 ‖ u256 enabled ‖
+  u64 version ‖ address prev`, 64 fixed bytes. SSTORE2 code is immutable and never freed: the chain from the record's `keyPtr` back to
+  the registration is append-only state; no event is read. `msigAt` walks `current − version` blobs back (a view; one code read each).
+  The storage layout pin did not move. 20 more bytes of code per update, nothing on a verify.
+- **The version tag.** Wherever an `msig`'s member signatures travel, one `bytes` beside them is its version tag: `UASig.signature`
+  for the signing `msig` (it was always empty), and `MemberSig.sig` of a slot whose member is an `msig` (it was always empty), for
+  that member's own structure. The tag is empty at version 0 and else the version as exactly 8 bytes, big-endian. The registry
+  accepts only the **current** version's tag, on every path: `requireAuthorized` (tokens' `mtx*`, the router, any chain-bound consumer),
+  `requirePortable`, `requirePortableApp`, `setKemKey`, `setPqzKey`, `setPqzScopedKey`, `acceptMembership`, `registerMsig`'s `pop`,
+  `updateMsig`'s `sigs` (an `msig` member's tag; the update's own version is in its typed data). Any other tag: `UAUnauthorized`, as a
+  wrong signature. A record of an `msig` never updated is byte-identical to before this rule; no typehash, digest or purpose moved.
+  The tag is not signed: the members sign the record, and the registry's equality check at acceptance is what binds it. A relayer
+  cannot change it (only the current value passes).
+- **What a consumer keeps.** A consumer that keeps a record's `UASig` or `keccak256(abi.encode(UASig))` (`PqChat`, `PqVault`) keeps
+  the tags with it and changes nothing. The registry's own stored portable signature of an `msig` (`kemKeyAt`'s `sig`,
+  `pqzKeySigOf`, the scoped key's, and the events' `sig`) is `abi.encode(MemberSig[])` followed by the tag: unchanged at version
+  0; with a tag the length is ≡ 8 mod 32 and the last 8 bytes are the version. The signature object of an `msig` member's slot
+  (`memberSigHashOf`, `UAMemberSig`: its `pop` slot or its acceptance) is `abi.encode(InnerSig[])` followed by that member's tag, the
+  same way; a copy to another registry replays the list with the tag of the member's version **there**. The registration bound counts 32 more bytes for an
+  `msig` slot (`_slotBytes`).
+- <a id="msig-replica-copy"></a>**A replica's copy** (Change 2026-11-26, A-1 of the Fable fix check; controller call under the owner's
+  auto-run grant of 2026-11-25, the owner may veto; EVM BUILT, UNAUDITED). A consumer's replica (another instance of a portable record,
+  on this chain or another: a PqChat session's or a mode-0 vault's records, [CTR-CHAT-14](pqchat.md#CTR-CHAT-14),
+  [CTR-PQV-14](pqvault.md#CTR-PQV-14)) checks an `msig`'s record on **its** registry, so the copy carries the tag of that `msig`'s
+  current version on the replica's registry (and each `msig` member's own tag there), not the home's: after any `updateMsig` the
+  home's bytes are `UAUnauthorized` in the replica, and the copy's `UASig`, and so its `sigHash`, differ from the home's. A reader
+  compares a replica's record with the home's with the version tags stripped (the signer's `UASig.signature` and each `msig` member
+  slot's `MemberSig.sig` set empty, every other byte equal; on a `none` instance each side's `UASig` is first checked against its own
+  `sigHash`), and judges each kept signature by the [reader rule](#msig-reader-rule) on its own instance's registry. When the update
+  disabled a slot the record needs, the copy cannot be stored in the replica at all, as before this rule; nothing else here changed
+  (`test_a1_replicaCopyCarriesTheReplicaTag` in `PqChatEpochs` and `PqVaultEpochs`).
+- <a id="msig-reader-rule"></a>**The reader rule** (ua-rs, clientkeys, every `ua-*` reader; mechanical; BUILT in ua-rs, clientkeys and
+  scaas-sdk; step 6 on the tree walk and its pin `msigVersions` (a signing `msig` member's version included), the mode-0 walk of
+  pqchat-core and pqvault-core's chain check (2026-11-26, C-3, C-4), UNAUDITED):
+  1. Read the kept signature of the record (the `UASig`; on a `none` instance the bytes from any source, compared with the `sigHash`
+     in state first). The signer is an `msig`: `keyData` is empty and `members` is not.
+  2. `v` = the tag in `UASig.signature`: empty → 0; exactly 8 bytes → that big-endian `uint64`, which must be ≥ 1; any other length, or
+     8 zero bytes: the record is refused (a lying read).
+  3. `(s, enabled) = msigAt(ua, v)` on the registry that holds the `msig` on the record's chain. For `v = 0` the reader also checks
+     `uaOf(0x0120, bytes(s)) == ua` (the id commits to the first structure, so version 0 needs no trust in the read). Threshold 0:
+     refused.
+  4. `accepted = msigStateOf(ua).accepted` (acceptance is per slot and permanent, CTR-UA-37). The slots that count are
+     `enabled ∧ accepted`. Check the quorum exactly as the contract does (strictly increasing indexes, minimal on a portable
+     record, weights of `s`, threshold of `s`).
+  5. A signing slot whose member is an `msig`: its tag is that slot's `MemberSig.sig`, same form; verify its `InnerSig[]` against
+     `msigAt(member, tag)` and `msigStateOf(member).accepted`, one level down.
+  6. Along one chain of records (a session's epochs, a vault's versions) the version an `msig` signs with never decreases; a record
+     after the reader's pin names a version ≥ the one the pin saw for that `msig`. A decrease is a lying read.
+  7. Never try another version than the tag's, and never fall back to `msigOf` for a kept record. A **new** signature is always built
+     with the tag of `msigStateOf(ua).version` (and each `msig` member's own), read at signing time.
+  The stored portable signatures of the registry (KEM and PQZ key records) and an `msig` member's slot object (`UAMemberSig`): the
+  tag is the trailing 8 bytes when the stored length is ≡ 8 mod 32, else version 0; then steps 3–5.
+- **What a lying endpoint can still do.** Against true state nothing: the contract accepted each kept record under the tag's version
+  and keeps its bytes or hash. An endpoint that serves false state and holds a quorum of keys of an **earlier** version can present a
+  record under that version only where the reader cannot place it after the update: before the reader's pin it contradicts the pin
+  (step 6); for a reader with no pin it is the same fork an endpoint could already serve by hiding the update, bounded by
+  [ARCH-POS-15](../decisions.md#ARCH-POS-15)'s majority option. It can never present a record under an earlier version *after* a record
+  of a later one in the same chain. Residual, stated: a slot appended at version `v` that accepted later verifies for records of `v`
+  from before its acceptance too (acceptance has no version); that slot is a member the quorum itself appended.
+- **Rejected.** A storage slot per version (`mapping(ua ⇒ mapping(version ⇒ pointer))`): O(1), but +128,718 gas an update (regular and
+  EIP-8037 state) against +30,600 for the 20 bytes, and with `MSIG_UPDATE_GAS` raised to cover it a 256-slot structure's next update
+  no longer fits the bound (`UAMsigSlots(256)`). (a) The registry keeps the block each version became current and every consumer keeps each record's acceptance
+  block: a storage word per record in every consumer, nothing for a consumer that keeps a hash only, and two writes of one block
+  are ambiguous. (b) The version inside the members' signed digest: every `msig` digest, vector and client changes, and it adds
+  nothing over the equality check (a holder of a leaked old key signs any version). (c) Try every stored version: the forgery above.
+- **Gas** (measured, `test/ua/UARegistryMsigUpdate.t.sol` `test_gas_updateRowModel`, `--isolate`, regular + EIP-8037 state). An
+  update of the same count signed by two EOAs: 3 slots 551,292 → 600,606, 16 slots 1,310,222 → 1,369,932, 64 slots 4,245,434 →
+  4,276,034, 256 slots 16,000,442 → 16,031,042 (61,087 a slot, 417,345 fixed), so `MSIG_UPDATE_GAS` 400,000 → 450,000;
+  `MSIG_UPDATE_SLOT_GAS` stays 62,000 and a 256-slot structure still fits. A verify: the tag compared with the structure's
+  version, `requireAuthorized` of a flat 2-of-2 `msig` 53,275 → 53,915 (`test_gasHotPath`); `registerMsig` of it 167,694 → 168,197.
+- **Sizes** (runtime). `msigAt`'s body is in `UARegistryAuxLib` (a thin view on the registry; `msigOf` stays a hot view there), and
+  the `pure` views `kemRecordHash` and `kemRecordDigest` moved to it as the five `*Digest` views did: `UARegistry` 35,166 → 35,069 B,
+  `UARegistryAuxLib` 33,858 → 35,099 B (its line 35,694), `UARegistryCoreLib` 23,465 → 23,790 B, `UARegistryRegLib` 31,683 →
+  31,739 B.
+
 <a id="CTR-UA-45"></a>**CTR-UA-45** — **Apps sign records by two paths, both supported: (A) the registry's open portable
 app namespace, one entry added before the freeze, so any app gets portable (chain-free, replica-able) records with no
 further registry change; (B) the chain-bound `requireAuthorized`, open to any contract and purpose already, the app's own
@@ -1854,6 +1948,7 @@ interface IUARegistry is IERC5267 {
         MemberSig[] calldata sigs, bytes32 chainUid_) external;
     function memberAccepted(bytes32 ua, uint256 index) external view returns (bool);          // CTR-UA-44: enabled and accepted
     function msigStateOf(bytes32 ua) external view returns (uint64 version, uint256 enabled, uint256 accepted); // CTR-UA-44
+    function msigAt(bytes32 ua, uint64 version) external view returns (MsigStructure memory s, uint256 enabled); // CTR-UA-74
     function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32);  // CTR-UA-33 A / CTR-UA-37: keccak256(sig, or abi.encode(InnerSig[]))
     function popSlotsOf(bytes32 ua) external view returns (uint16[] memory index, bytes32[] memory hash);   // CTR-UA-33: the slots that signed the pop
     function smartKeyCloneHash() external view returns (bytes32);                             // 0 for none
@@ -2346,7 +2441,7 @@ sdk-complete, the round's review F2).
   The walk's logic is in `UARegistryCoreLib`; `UARegistry` keeps thin views (`_libView`), so the selectors stay on the registry.
 - **Lookups.** Every reader that forwards reads `holderOf(ua)` once and reads the record at the holder directly: `recordOf`,
   `kindOf`, `registrationOf`, `keyOf`, `webAuthnKeyOf`, `muSig2KeyOf`, `frostKeyOf`, `blsMultiKeyOf`, `popOf`, `popSlotsOf`,
-  `msigOf`, `msigStateOf`, `memberAccepted`, `memberSigHashOf`, `checkedOf`, the KEM views, `expandedKeyOf`; the PQZ views by
+  `msigOf`, `msigStateOf`, `msigAt`, `memberAccepted`, `memberSigHashOf`, `checkedOf`, the KEM views, `expandedKeyOf`; the PQZ views by
   [CTR-UA-71](#CTR-UA-71). `keyOwner` walks back (local first). A kind's list lives in its home; `msig` has one list per
   generation; `0x0142` one per enabling generation ([CTR-UA-29](#CTR-UA-29)).
 - <a id="off-chain-readers"></a>**Off-chain readers** (the SDK's PQZ, verdict and Zether reading layers, indexers, wallets;
@@ -2409,9 +2504,9 @@ generations; BUILT on EVM, `a40d8acc0`).
 <a id="CTR-UA-72"></a>**CTR-UA-72** — **Every generation carries the walked views, the walked interface is frozen, and a
 generation trusts its predecessors fully** (owner rulings W3, W4, W5, P13; M8; BUILT on EVM, `2bbe3380d`, `773ae4988`).
 Generation 1 carries `holderOf`, `kindHome`, `verifierOf`, `verifyOnly`, `pqzHomeOf`, `txGasCap` and a forwarding `expandedKeyOf`;
-each generation's constructor probes every predecessor for them and for `checkedOf`, `memberSigHashOf`, `msigStateOf` (`try` …
+each generation's constructor probes every predecessor for them and for `checkedOf`, `memberSigHashOf`, `msigStateOf`, `msigAt` (`try` …
 `catch` ⇒ `UAConfig(0)`), so a read of a predecessor fails only by gas. What a successor, the node and the SDK call on a
-predecessor is frozen and pinned by `RegistryWalkInterfaceIsPinned` (54 entries, `lineReaches` among them since the round's review, owner 2026-11-20: approved, their full signatures with return types and
+predecessor is frozen and pinned by `RegistryWalkInterfaceIsPinned` (55 entries, `lineReaches` among them since the round's review, owner 2026-11-20: approved; `msigAt` since [CTR-UA-74](#CTR-UA-74), owner 2026-11-25; their full signatures with return types and
 selectors and the list's hash; the error selectors `UAVerifyGas`, `UAKeyNotCached`, `UAKeyCache`, `UAKeyData`, `UAPoP`,
 `UAUnauthorized`, `UAVerifyOnly`; the `UASig` / `MemberSig` encodings; the verifier getters `PRECOMPILE()`, `KEY_FORM()`,
 `verifyCached`; the hold's `GAS_MARGIN` 5,000; `expandedKeyOf`'s pointer form): a change moves the pin old → new and needs the
@@ -2419,6 +2514,26 @@ owner. Trust: a middle generation answers before those below it, so wrong code t
 checks "same code"; the guards are the deploy's walk check against the book ([CTR-UA-64](#CTR-UA-64)) and the
 governance-published env ([CTR-UA-67](#CTR-UA-67)); the only recovery from a faulty generation is a sibling line from the one below
 it, losing the records of the faulty generation and every later one.
+
+<a id="CTR-UA-73"></a>**CTR-UA-73** — **A contract serves the UAs of its env's registry generation and the generations before it,
+never later ones** (owner 2026-11-24; BUILT: the code already behaves so; UNAUDITED).
+- **Why:** the registry line walks back only (§1.8.1). A contract reads its signers and its derived receivers from the
+  registry in its env. That generation knows its own records and the older ones, never a newer one.
+- **A UA held only in a later generation:**
+  - cannot receive a transfer from a contract on an older env (`UANotRegistered`);
+  - cannot sign there (`UAUnauthorized`);
+  - cannot hold a role there.
+
+  The contract refuses the call; nothing is lost.
+- **Governance:** G1 resolves role holders through each factory-made target's own env registry
+  ([CTR-GOV-33](token-wrappers.md#CTR-GOV-33)), so it follows the same rule. Factory operations use the router's own
+  generation.
+- **The way to reach older contracts:**
+  - a UA whose kind the older generation also supports registers there too: the same bytes and the same id, since
+    registration is portable ([CTR-UA-31](#CTR-UA-31));
+  - a UA of a kind that only a later generation has works only with contracts on that generation's env or a later
+    one.
+- **Clients:** they check before signing ([CLI-SDK-34](../clients/scaas-sdk.md#CLI-SDK-34)).
 
 <a id="CTR-UA-65"></a>**CTR-UA-65** — **The node, indexers, the SDK and clients address the line, not one registry** (owner rulings
 of spec §0.2 – §0.4, W2 and P19 among them; node BUILT, `d019be659`, `e6268a472`, [job-api.md](../node/job-api.md#NODE-JOB-19), [ops.md](../node/ops.md); scaas-sdk BUILT,

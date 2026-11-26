@@ -7,6 +7,7 @@ import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
 import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {UAStore} from "../../src/ua/UAStore.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {UACall} from "./UACall.sol";
@@ -78,6 +79,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     mapping(bytes32 => bytes) internal keyOfId;
     mapping(bytes32 => uint16) internal kindOfId;
     mapping(bytes32 => bytes32[]) internal innerSigners; // an `msig` member: which of its slots sign for it
+    bool internal noTag; // `_pqzKeyCall` leaves the version tag out (CTR-UA-74's refusal)
     UARegistry internal dom; // ≠ 0: the registry whose `UAAuth` domain native leaves sign in (a gen-1 record read through gen 2)
 
     struct Up {
@@ -188,7 +190,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         for (uint256 i; i < ids.length; ++i) {
             bytes32 id = ids[i];
             if (kindOfId[id] == UAKinds.MSIG) {
-                s[i] = IUARegistry.MemberSig(_idx(st, id), _inner(x, id, md, digest, portable), "");
+                s[i] = IUARegistry.MemberSig(_idx(st, id), _inner(x, id, md, digest, portable), _tag(x, id));
             } else {
                 s[i] = IUARegistry.MemberSig(
                     _idx(st, id), new IUARegistry.InnerSig[](0), _leaf(x, id, md, digest, portable)
@@ -221,8 +223,18 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         }
     }
 
-    function _auth(IUARegistry.MemberSig[] memory s) internal pure returns (IUARegistry.UASig memory u) {
-        u.members = s;
+    /// CTR-UA-74: the version tag of the `msig` `ua` on `x` now (empty at version 0, else 8 bytes big-endian).
+    function _tag(UARegistry x, bytes32 ua) internal view returns (bytes memory) {
+        (uint64 v,,) = x.msigStateOf(ua);
+        return v == 0 ? bytes("") : abi.encodePacked(v);
+    }
+
+    function _auth(UARegistry x, bytes32 ua, IUARegistry.MemberSig[] memory s)
+        internal
+        view
+        returns (IUARegistry.UASig memory u)
+    {
+        (u.signature, u.members) = (_tag(x, ua), s);
     }
 
     /// Registers `threshold`-of-`ids` (weights `w`) on `x`, its `pop` by `popIds` (empty: none), then every other slot accepts.
@@ -334,21 +346,27 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
 
     function _authorizes(UARegistry x, bytes32 ua, bytes32[] memory ids) internal view {
         x.requireAuthorized(
-            ua, UAKinds.PURPOSE_METATX, TX, _auth(_sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_METATX, TX, false))
+            ua,
+            UAKinds.PURPOSE_METATX,
+            TX,
+            _auth(x, ua, _sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_METATX, TX, false))
         );
     }
 
     function _portable(UARegistry x, bytes32 ua, bytes32[] memory ids) internal view {
         x.requirePortable(
-            ua, UAKinds.PURPOSE_PQCHAT, CHAT, _auth(_sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_PQCHAT, CHAT, true))
+            ua,
+            UAKinds.PURPOSE_PQCHAT,
+            CHAT,
+            _auth(x, ua, _sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_PQCHAT, CHAT, true))
         );
     }
 
     function _authRefused(UARegistry x, bytes32 ua, bytes32[] memory ids) internal {
-        IUARegistry.UASig memory s = _auth(_sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_METATX, TX, false));
+        IUARegistry.UASig memory s = _auth(x, ua, _sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_METATX, TX, false));
         vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, ua));
         x.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX, s);
-        s = _auth(_sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_PQCHAT, CHAT, true));
+        s = _auth(x, ua, _sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_PQCHAT, CHAT, true));
         vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, ua));
         x.requirePortable(ua, UAKinds.PURPOSE_PQCHAT, CHAT, s);
     }
@@ -367,7 +385,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         bytes32 rd = version == 0
             ? UAKinds.pqzKeyRecordDigest(ua, h, hash)
             : UAKinds.pqzKeyVersionRecordDigest(ua, version, h, hash);
-        IUARegistry.UASig memory s = _auth(_sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_PQZ_KEY, rd, true));
+        IUARegistry.UASig memory s;
+        s.members = _sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_PQZ_KEY, rd, true);
+        if (!noTag) s.signature = _tag(x, ua);
         return abi.encodeCall(IUARegistry.setPqzKey, (ua, version, key, hash, s));
     }
 
@@ -534,6 +554,278 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         vm.roll(block.number + 1);
         vm.expectRevert(_err(IUARegistry.UAMsigExpired.selector, ua));
         r.updateMsig(ua, u.version, u.st, u.enabled, u.until, s, chainUidA);
+    }
+
+    // ----- CTR-UA-74 (owner 2026-11-25): every version readable, the signature names its version -----
+
+    /// The reader rule of CTR-UA-74 for a portable record of an `msig` of EOAs: the tag's version, `msigAt` of it, the slots enabled
+    /// there and accepted, each signature over the typed digest, the weights against that version's threshold. No other version.
+    function _readerOk(UARegistry x, bytes32 ua, bytes32 typed, IUARegistry.UASig memory s)
+        internal
+        view
+        returns (bool)
+    {
+        uint64 v;
+        if (s.signature.length == 8) v = uint64(bytes8(s.signature));
+        if (s.signature.length != 0 && v == 0) return false; // not empty, and not 8 bytes of a version ≥ 1
+        (IUARegistry.MsigStructure memory st, uint256 en) = x.msigAt(ua, v);
+        (,, uint256 acc) = x.msigStateOf(ua);
+        uint256 w;
+        for (uint256 i; i < s.members.length; ++i) {
+            uint256 ix = s.members[i].index;
+            if (ix >= st.members.length || (en & acc) >> ix & 1 == 0) return false;
+            if (i != 0 && ix <= s.members[i - 1].index) return false;
+            if (_signer(typed, s.members[i].sig) != st.members[ix].id) return false;
+            w += st.members[ix].weight;
+        }
+        return st.threshold != 0 && w >= st.threshold;
+    }
+
+    function _signer(bytes32 typed, bytes memory sig) internal pure returns (bytes32) {
+        (bytes32 r_, bytes32 s_) = abi.decode(sig, (bytes32, bytes32));
+        return _pad(ecrecover(typed, uint8(sig[64]), r_, s_));
+    }
+
+    /// F-1b: a record `a + b` signed before an update that disabled `b` verifies afterwards against the version its signature names,
+    /// and against no other; the registry keeps refusing the old quorum for a new record under either tag.
+    function test_history_recordBeforeUpdateVerifiesAfter() public {
+        bytes32 ua = _eoa3(r);
+        IUARegistry.MsigStructure memory st0 = r.msigOf(ua);
+        IUARegistry.UASig memory old = _auth(r, ua, _sigs(r, st0, ua, _ids(a, b), UAKinds.PURPOSE_PQCHAT, CHAT, true));
+        assertEq(old.signature.length, 0, "version 0: no tag, the bytes of before this rule");
+        r.requirePortable(ua, UAKinds.PURPOSE_PQCHAT, CHAT, old); // accepted: a consumer keeps `old` (or its hash)
+        assertTrue(_readerOk(r, ua, CHAT, old), "control: verifiable before the update");
+
+        Up memory u = _next(r, ua);
+        _set(u, b, false); // b's key leaked: disabled
+        _apply(r, u, _ids(a, c));
+
+        assertTrue(_readerOk(r, ua, CHAT, old), "the kept record verifies against its version");
+        IUARegistry.UASig memory asCurrent = old;
+        asCurrent.signature = _tag(r, ua);
+        assertFalse(_readerOk(r, ua, CHAT, asCurrent), "control: the current structure refuses it (the hole F-1b)");
+
+        // the leaked key signs a new record: the old quorum is refused whatever tag it carries
+        bytes32 forged = keccak256("a record after the update");
+        IUARegistry.UASig memory f = _auth(r, ua, _sigs(r, st0, ua, _ids(a, b), UAKinds.PURPOSE_PQCHAT, forged, true));
+        f.signature = "";
+        vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, ua));
+        r.requirePortable(ua, UAKinds.PURPOSE_PQCHAT, forged, f);
+        f.signature = abi.encodePacked(uint64(1));
+        vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, ua));
+        r.requirePortable(ua, UAKinds.PURPOSE_PQCHAT, forged, f);
+        // control: the current quorum with the current tag passes, and a reader follows it
+        IUARegistry.UASig memory g = _auth(r, ua, _sigs(r, st0, ua, _ids(a, c), UAKinds.PURPOSE_PQCHAT, forged, true));
+        assertEq(g.signature, abi.encodePacked(uint64(1)));
+        r.requirePortable(ua, UAKinds.PURPOSE_PQCHAT, forged, g);
+        assertTrue(_readerOk(r, ua, forged, g));
+    }
+
+    /// Only the current version's tag is accepted, in its one form, on the chain-bound path and the portable one.
+    function test_history_tagIsTheCurrentVersion() public {
+        bytes32 ua = _eoa3(r);
+        IUARegistry.UASig memory p =
+            _auth(r, ua, _sigs(r, r.msigOf(ua), ua, _ids(a, b), UAKinds.PURPOSE_PQCHAT, CHAT, true));
+        IUARegistry.UASig memory t =
+            _auth(r, ua, _sigs(r, r.msigOf(ua), ua, _ids(a, b), UAKinds.PURPOSE_METATX, TX, false));
+        bytes[5] memory bad0 =
+            [bytes(hex"0000000000000000"), hex"0000000000000001", hex"00", hex"00000000000000", new bytes(32)];
+        for (uint256 i; i < bad0.length; ++i) {
+            _tagRefused(ua, p, t, bad0[i]);
+        }
+        _tagAccepted(ua, p, t, "");
+
+        Up memory u = _next(r, ua);
+        _append(u, d, false); // version 1: the same signers, the same slots
+        _apply(r, u, _ids(a, b));
+        bytes[6] memory bad1 = [
+            bytes(""),
+            hex"0000000000000000",
+            hex"0000000000000002",
+            hex"01",
+            hex"000000000000000100",
+            abi.encode(uint256(1))
+        ];
+        for (uint256 i; i < bad1.length; ++i) {
+            _tagRefused(ua, p, t, bad1[i]);
+        }
+        _tagAccepted(ua, p, t, hex"0000000000000001");
+    }
+
+    function _tagAccepted(bytes32 ua, IUARegistry.UASig memory p, IUARegistry.UASig memory t, bytes memory tag)
+        internal
+        view
+    {
+        (p.signature, t.signature) = (tag, tag);
+        r.requirePortable(ua, UAKinds.PURPOSE_PQCHAT, CHAT, p);
+        r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX, t);
+    }
+
+    function _tagRefused(bytes32 ua, IUARegistry.UASig memory p, IUARegistry.UASig memory t, bytes memory tag)
+        internal
+    {
+        (p.signature, t.signature) = (tag, tag);
+        vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, ua));
+        r.requirePortable(ua, UAKinds.PURPOSE_PQCHAT, CHAT, p);
+        vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, ua));
+        r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX, t);
+    }
+
+    /// `msigAt`: every version from 0 to the current one, its structure and enabled word as stored; nothing else answers.
+    function test_history_msigAtEveryVersion() public {
+        assertEq(IUARegistry.msigAt.selector, bytes4(0x7006bbe1));
+        bytes32 ua = _eoa3(r);
+        (, bytes memory key0,,,) = r.registrationOf(ua);
+        IUARegistry.MsigStructure memory st0 = UACall.structure(key0);
+
+        Up memory u1 = _next(r, ua);
+        _set(u1, c, false);
+        _append(u1, d, true);
+        _apply(r, u1, _ids(a, b));
+        _accept(r, ua, d);
+        Up memory u2 = _next(r, ua);
+        u2.st.threshold = 3;
+        u2.st.members[0].weight = 2;
+        _apply(r, u2, _ids(a, d));
+
+        (IUARegistry.MsigStructure memory s, uint256 en) = r.msigAt(ua, 0);
+        assertEq(abi.encode(s), abi.encode(st0), "version 0: the registration's structure");
+        assertEq(en, 7, "version 0: every slot enabled");
+        assertEq(
+            UAKinds.uaOf(UAKinds.MSIG, UAStore.cut(UAStore.blob(s, 0, 0, address(0)), 0, 4 + 36 * 3)),
+            ua,
+            "version 0 hashes to the id"
+        );
+        (s, en) = r.msigAt(ua, 1);
+        assertEq(abi.encode(s), abi.encode(u1.st), "version 1 as stored");
+        assertEq(en, u1.enabled);
+        (s, en) = r.msigAt(ua, 2);
+        assertEq(abi.encode(s), abi.encode(u2.st), "version 2 as stored");
+        assertEq(en, u2.enabled);
+        assertEq(abi.encode(s), abi.encode(r.msigOf(ua)), "the current version is msigOf");
+        assertEq(abi.encode(uint64(2), en, uint256(15)), _state(ua), "msigStateOf: version 2, its enabled word");
+
+        (s, en) = r.msigAt(ua, 3);
+        assertEq(s.threshold, 0, "a version never stored: empty");
+        assertEq(s.members.length, 0);
+        assertEq(en, 0);
+        (s, en) = r.msigAt(ml[1], 0);
+        assertEq(s.threshold | s.members.length | en, 0, "not an msig: empty");
+        (s, en) = r.msigAt(keccak256("nobody"), 1);
+        assertEq(s.threshold | s.members.length | en, 0, "unregistered: empty");
+
+        _chain(ua);
+    }
+
+    /// State only: each blob names the one before it, down to the registration's bytes; the layout pin did not move.
+    function _chain(bytes32 ua) internal view {
+        (IUARegistry.Record memory rec,) = r.recordOf(ua);
+        address p2 = rec.keyPtr;
+        address p1 = address(bytes20(_tail(p2)));
+        assertTrue(p1 != address(0) && p1 != p2 && p1.code.length != 0, "version 1's blob kept, named by version 2's");
+        assertEq(address(bytes20(_tail(p1))), address(0), "version 1 names version 0: the registration's bytes");
+        assertEq(p2.code.length, 1 + 64 + 36 * 4, "MM-6 + prev: 64 fixed bytes, 36 a slot");
+    }
+
+    function _tail(address ptr) internal view returns (bytes memory t) {
+        t = new bytes(20);
+        assembly ("memory-safe") {
+            extcodecopy(ptr, add(t, 32), sub(extcodesize(ptr), 20), 20)
+        }
+    }
+
+    function _state(bytes32 ua) internal view returns (bytes memory) {
+        (uint64 v, uint256 en, uint256 acc) = r.msigStateOf(ua);
+        return abi.encode(v, en, acc);
+    }
+
+    /// An `msig` member's tag rides in its slot's `MemberSig.sig`: the inner's current version, nothing else.
+    function test_history_innerTag() public {
+        bytes32 in_ = _eoa3(r);
+        innerSigners[in_] = _ids(a, b);
+        bytes32 out = _reg(r, 2, _ids(in_, d, e), _w(3), new bytes32[](0));
+        _portable(r, out, _ids(in_, d)); // inner at version 0: no tag
+        Up memory u = _next(r, in_);
+        _append(u, e, false);
+        _apply(r, u, _ids(a, b));
+
+        IUARegistry.UASig memory s =
+            _auth(r, out, _sigs(r, r.msigOf(out), out, _ids(in_, d), UAKinds.PURPOSE_PQCHAT, CHAT, true));
+        uint256 k = s.members[0].members.length != 0 ? 0 : 1; // the inner's slot among the two signers
+        assertEq(s.signature.length, 0, "the outer is still at version 0");
+        assertEq(s.members[k].sig, abi.encodePacked(uint64(1)), "the inner's tag in its slot");
+        r.requirePortable(out, UAKinds.PURPOSE_PQCHAT, CHAT, s);
+        s.members[k].sig = "";
+        vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, out));
+        r.requirePortable(out, UAKinds.PURPOSE_PQCHAT, CHAT, s);
+        s.members[k].sig = abi.encodePacked(uint64(2));
+        vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, out));
+        r.requirePortable(out, UAKinds.PURPOSE_PQCHAT, CHAT, s);
+
+        IUARegistry.UASig memory t =
+            _auth(r, out, _sigs(r, r.msigOf(out), out, _ids(in_, d), UAKinds.PURPOSE_METATX, TX, false));
+        r.requireAuthorized(out, UAKinds.PURPOSE_METATX, TX, t);
+        t.members[k].sig = "";
+        vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, out));
+        r.requireAuthorized(out, UAKinds.PURPOSE_METATX, TX, t);
+    }
+
+    /// CTR-UA-74: an `msig` member's slot object (its acceptance, its `pop` slot) is its list followed by its tag.
+    function test_history_memberObjectKeepsTheTag() public {
+        bytes32 in_ = _pq3(r);
+        innerSigners[in_] = _ids(ml[1], ml[2]);
+        Up memory u = _next(r, in_);
+        _append(u, ml[6], false);
+        _apply(r, u, _ids(ml[1], ml[2])); // the member at version 1
+
+        bytes32 out = _reg(r, 2, _ids(in_, ml[4], ml[5]), _w(3), _ids(ml[4], ml[5])); // `in_` accepts later
+        IUARegistry.MemberSig memory m = _sigs(
+            r, r.msigOf(out), out, _ids(in_), UAKinds.PURPOSE_MEMBERSHIP, UAKinds.membershipDigest(out, in_), true
+        )[0];
+        assertEq(m.sig, abi.encodePacked(uint64(1)));
+        assertEq(r.memberSigHashOf(out, m.index), keccak256(bytes.concat(abi.encode(m.members), m.sig)), "acceptance");
+
+        bytes32 out2 = _reg(r, 2, _ids(in_, ml[4], ml[6]), _w(3), _ids(in_, ml[4])); // `in_` signs the `pop`
+        IUARegistry.MemberSig[] memory pop = _sigs(
+            r, r.msigOf(out2), out2, _ids(in_, ml[4]), UAKinds.PURPOSE_POP_V2, _regDigest(out2, UAKinds.MSIG), true
+        );
+        m = pop[pop[0].members.length != 0 ? 0 : 1];
+        assertEq(m.sig, abi.encodePacked(uint64(1)));
+        assertEq(r.memberSigHashOf(out2, m.index), keccak256(bytes.concat(abi.encode(m.members), m.sig)), "pop slot");
+    }
+
+    /// CTR-UA-74: the bound counts the 32 bytes of an `msig` slot's version tag (`_slotBytes`): the same update passes on a
+    /// registry whose `txGasCap` is exactly its need and is refused `UAMsigSlots` one gas below.
+    function test_history_boundCountsTheTag() public {
+        uint256 n = 200;
+        uint256 w = 2 * UARegistryRegLib.MSIG_MEMBER_GAS + UARegistryRegLib.MSIG_ACCEPTED_GAS + 50_000
+            + (UARegistryRegLib.MSIG_MEMBER_GAS + UARegistryRegLib.MSIG_ACCEPTED_GAS + 400_000);
+        uint256 need = UARegistryRegLib.MSIG_UPDATE_GAS + n * UARegistryRegLib.MSIG_UPDATE_SLOT_GAS
+            + UARegistryRegLib.MSIG_UPDATE_INNER_GAS + w + 16 * ((192 + 32 + 128 + 3_328) + (192 + 1_024));
+        for (uint256 k; k < 2; ++k) {
+            txCap = uint64(need - k);
+            UARegistry x = _deploy(
+                address(uint160(REG_X) + uint160(k)),
+                keccak256("chain x"),
+                address(0),
+                false,
+                BUDGET,
+                address(0),
+                true,
+                _cfgsMl(400_000)
+            );
+            _members(x);
+            bytes32 i_ = _reg(x, 1, _ids(ml[1]), _w(1), _ids(ml[1]));
+            innerSigners[i_] = _ids(ml[1]);
+            bytes32 ua = _reg(x, 2, _ids(i_, a, b), _w(3), new bytes32[](0));
+            Up memory u = _next(x, ua);
+            for (uint256 j = 3; j < n; ++j) {
+                _append(u, EOA, bytes32(uint256(0x40000 + j)), 1, false);
+            }
+            if (k == 0) _apply(x, u, _ids(a, b));
+            else _refused(x, u, _ids(a, b), _slots(n));
+        }
+        txCap = 1 << 24;
     }
 
     // ----- refusals: rows 1–4 -----
@@ -944,6 +1236,44 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         }
         _authorizes(g2, ua, _ids(a, d));
         _authRefused(g2, ua, _ids(b, c));
+        _gen2History(g2, ua);
+    }
+
+    function _gen2History(UARegistry g2, bytes32 ua) internal {
+        // CTR-UA-74: every version through gen 2, and gen 1's tag on gen 2's path
+        for (uint64 k; k < 3; ++k) {
+            (IUARegistry.MsigStructure memory s2, uint256 e2) = g2.msigAt(ua, k);
+            (IUARegistry.MsigStructure memory s1, uint256 e1) = r.msigAt(ua, k);
+            assertEq(abi.encode(s2), abi.encode(s1));
+            assertEq(e2, e1);
+            assertEq(s1.threshold != 0, k < 2, "versions 0 and 1 answer, 2 does not");
+        }
+        IUARegistry.UASig memory t;
+        t.members = _sigs(g2, g2.msigOf(ua), ua, _ids(a, d), UAKinds.PURPOSE_METATX, TX, false);
+        assertEq(_tag(g2, ua), abi.encodePacked(uint64(1)));
+        vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, ua));
+        g2.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX, t);
+    }
+
+    /// A gen-2 `msig` over a gen-1 `msig` member that was updated on gen 1: the member's tag travels to its holder with its list.
+    function test_history_innerHeldByGen1() public {
+        bytes32 in_ = _eoa3(r);
+        innerSigners[in_] = _ids(a, b);
+        Up memory u = _next(r, in_);
+        _append(u, e, false);
+        _apply(r, u, _ids(a, b));
+        UARegistry g2 =
+            _deploy(REG_G2, chainUidA, address(r), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        dom = r; // gen 1 verifies its native members in its own domain
+        bytes32 out = _reg(g2, 2, _ids(in_, ml[4], ml[5]), _w(3), _ids(ml[4], ml[5])); // PQ-eligible: a `pop`
+        IUARegistry.UASig memory t =
+            _auth(g2, out, _sigs(g2, g2.msigOf(out), out, _ids(in_, ml[4]), UAKinds.PURPOSE_METATX, TX, false));
+        uint256 k = t.members[0].members.length != 0 ? 0 : 1;
+        assertEq(t.members[k].sig, abi.encodePacked(uint64(1)));
+        g2.requireAuthorized(out, UAKinds.PURPOSE_METATX, TX, t);
+        t.members[k].sig = "";
+        vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, out));
+        g2.requireAuthorized(out, UAKinds.PURPOSE_METATX, TX, t);
     }
 
     /// On a gen-2 PQZ host, `setPqzKey` of a gen-1 `msig` signs against gen 1's current structure: an appended signer counts, and a
@@ -988,7 +1318,20 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         _callRefused(
             address(r), _pqzKeyCall(r, ua, 0, _ids(ml[2], ml[3]), 1), _err(IUARegistry.UAUnauthorized.selector, ua)
         );
+        _setPqzKeyTag(ua);
+    }
+
+    /// CTR-UA-74: the tag is the current version's on this path too, and the stored signature keeps it.
+    function _setPqzKeyTag(bytes32 ua) internal {
+        noTag = true;
+        bytes memory bare = _pqzKeyCall(r, ua, 0, _ids(ml[1], ml[4]), 1);
+        noTag = false;
+        _callRefused(address(r), bare, _err(IUARegistry.UAUnauthorized.selector, ua));
         _callOrRevert(address(r), _pqzKeyCall(r, ua, 0, _ids(ml[1], ml[4]), 1));
+        bytes memory kept = r.pqzKeySigOf(ua, 0);
+        assertEq(kept.length % 32, 8, "abi.encode(members), then the 8-byte tag");
+        assertEq(bytes8(UAStore.cut(kept, kept.length - 8, 8)), bytes8(uint64(1)));
+        assertEq(UAStore.word(kept, 32), 2, "the list of two before the tag");
     }
 
     /// The nested positive control: an inner updated under an outer; the outer signs with the inner's new quorum on both paths.
@@ -1193,7 +1536,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         bytes32 hash = keccak256("proof");
         bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
         IUARegistry.UASig memory s =
-            _auth(_sigs(r, r.msigOf(ua), ua, _ids(ml[1], ml[2]), UAKinds.PURPOSE_PQZ_KEY, rd, true));
+            _auth(r, ua, _sigs(r, r.msigOf(ua), ua, _ids(ml[1], ml[2]), UAKinds.PURPOSE_PQZ_KEY, rd, true));
         _callOrRevert(address(r), abi.encodeCall(IUARegistry.setPqzKey, (ua, 0, key, hash, s)));
         uint256 g = vm.lastCallGas().gasTotalUsed;
         emit log_named_uint("setPqzKey regular gas, 22,528 B key, 2 mldsa65 members", g);
@@ -1207,11 +1550,12 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     function test_gas_requireAuthorized() public {
         bytes32 ua = _eoa3(r);
         HotProbe p = new HotProbe();
-        IUARegistry.UASig memory s = _auth(_sigs(r, r.msigOf(ua), ua, _ids(a, b), UAKinds.PURPOSE_METATX, TX, false));
+        IUARegistry.UASig memory s =
+            _auth(r, ua, _sigs(r, r.msigOf(ua), ua, _ids(a, b), UAKinds.PURPOSE_METATX, TX, false));
         uint256 g0 = p.cost(r, ua, UAKinds.PURPOSE_METATX, TX, s);
         Up memory u = _next(r, ua);
         _apply(r, u, _ids(a, b));
-        s = _auth(_sigs(r, r.msigOf(ua), ua, _ids(a, b), UAKinds.PURPOSE_METATX, TX, false));
+        s = _auth(r, ua, _sigs(r, r.msigOf(ua), ua, _ids(a, b), UAKinds.PURPOSE_METATX, TX, false));
         uint256 g1 = p.cost(r, ua, UAKinds.PURPOSE_METATX, TX, s);
         emit log_named_uint("requireAuthorized 2-of-3, never updated", g0);
         emit log_named_uint("requireAuthorized 2-of-3, updated", g1);
@@ -1254,7 +1598,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
                         (l[k - 1], l[k]) = (l[k], l[k - 1]);
                     }
                 }
-                s[i] = IUARegistry.MemberSig(_idx(st, ids[i]), l, "");
+                s[i] = IUARegistry.MemberSig(_idx(st, ids[i]), l, _tag(x, ids[i]));
             } else {
                 s[i] = IUARegistry.MemberSig(_idx(st, ids[i]), new IUARegistry.InnerSig[](0), new bytes(3309));
             }
@@ -1293,9 +1637,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         innerSigners[i_] = _ids(ml[1], ml[2]);
         _widen(x, i_, 230, _ids(ml[1], ml[2])); // row 13 admits about 239 at these caps
         bytes32 v = _reg(x, 2, _ids(i_, ml[4]), _w(2), _ids(i_, ml[4]));
-        uint256 l1 = _least(x, v, _auth(_burnSigs(x, v, _ids(i_, ml[4]))), bound);
+        uint256 l1 = _least(x, v, _auth(x, v, _burnSigs(x, v, _ids(i_, ml[4]))), bound);
         _widen(x, v, 230, _ids(i_, ml[4]));
-        uint256 l2 = _least(x, v, _auth(_burnSigs(x, v, _ids(i_, ml[4]))), bound);
+        uint256 l2 = _least(x, v, _auth(x, v, _burnSigs(x, v, _ids(i_, ml[4]))), bound);
         emit log_named_uint("bound (verifyBudget)", bound);
         emit log_named_uint("least frame gas, inner 230 slots", l1);
         emit log_named_uint("least frame gas, inner and outer 230 slots", l2);

@@ -1,0 +1,20 @@
+review-fix4-contract (Fable fix check of 2026-11-26, contract / node / docs rows), cut from 02e665589. UNAUDITED.
+step | commit | rc | counts
+A-1 forge test_a1_replicaCopyCarriesTheReplicaTag (PqChatEpochs, PqVaultEpochs) | 2c078ff28 | 0 | 2 passed; documents the contract as built (no code change): verbatim copy UAUnauthorized after updateMsig, replica tag lands, own sigHash; empty tag refused for a new record
+A-2 forge player worlds 17-21 + test_scenario_worldCount (WORLDS = 22) | 21de7585d | 0 | PqChatTreeScenarioTest 26 passed; red check: tag dropped in _msigSig -> msigUpdated, msigHistory UAUnauthorized(N)
+A-5 node empty addWraps / addVaultWraps | 7fb412e74 | 0 | red first: empty_wraps_refused (the empty job parsed); after: typed:: 52 passed, typed:: guard:: submit:: 196 passed; mutant (rule for addWraps only) killed on addVaultWraps; clippy --all-targets -D warnings clean
+A-4 / R-5 job-api.md "An msig's version tag", integration.md link | 7fb412e74 | 0 | docs_check 0 errors
+R-6 UARegistryRegLib _authBytes comment (outer tag <= 2,048 gas, under every margin) | 2eb9d293c | 0 | comment only, bytecode unchanged; no mutant
+R-4 owner ruling recorded under CTR-UA-74 | cc2e0aded | 0 | docs_check 0 errors
+A-3 SDK gas re-measure (generate.py --measure, 65/65, 523 s) | 35c4ee778 | 0 | 6 keys moved, +2,900 / +2,920 (cold target): fresh 249,650 -> 252,550, used 151,730 -> 154,630, ua 264,693 -> 267,613, regular 53,810 -> 56,710 (x2), ua regular 68,853 -> 71,773; --check ok, test_generate ok
+forge test/pqchat (default set) | 35c4ee778 | 0 | 287 passed, 2 skipped
+forge test/pqvault | 35c4ee778 | 0 | 105 passed
+forge test/ua | 35c4ee778 | 0 | 1051 passed
+forge test/gas | 35c4ee778 | 0 | 406 passed, 1 skipped
+mutants M113-M115 (runs/2026-11-24-review-fix-contract-mutants.py) | 35c4ee778 | 0 | 3/3 killed (M113 PqVault twin of M90: 5 tests; M114 / M115 tag unchecked on the portable path: test_a1 in pqchat / pqvault)
+size gate | 35c4ee778 | 0 | 184 contracts, 0 errors (nothing moved)
+other sets | - | - | not run: no set-sensitive pin moved (none of the touched tests is in at-set.sh others list)
+format.sh --check (every language) | 2eb9d293c tree | 0 | every part ok
+docs_check check / paths / test_docs_check | cc2e0aded | 0 | 0 errors; 0 machine paths; ok
+e2e.py 5b (read, not rerun) | - | - | the estimate moves with the contract: PqzCore._trivial merges a shield into the tail entry when that entry is of this block (D18); eth_estimateGas on latest runs with block.number of the previous shield's block, so it merges (one warm SSTORE), the transaction lands a block later and appends a new pending slot (+ pendingCount): about 97,920 state gas a new slot + 17,100 regular, against 110,039 measured (346,717 -> 456,756; the earlier run's mtxShield out of gas at its limit 448,724 = estimate x 1.15 + 50k). A contract cost that depends on the block, by design; harness not changed (brief: report and stop)
+Merge note: WORLDS = 22 in PqChatTreeCommit.t.sol; the merge with review-fix4-client (its nested-msig world) sets it to that file's count and plays the new world.

@@ -14,7 +14,7 @@ mod common;
 
 use async_trait::async_trait;
 use common::sdk::*;
-use pqchat_core::content::Content;
+use pqchat_core::content::{Content, BODY_MAX};
 use pqchat_core::matrix::MatrixTransport;
 use pqchat_core::message::OpenEpoch;
 use pqchat_core::model::{hex, unhex, Epoch, Member, ZERO32};
@@ -26,6 +26,7 @@ use scaas_sdk::app_core::AppKey;
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_keys::{PqEpochNew, PqSessionNew};
 use scaas_sdk::pqchat_records::{PqChatSigned, PqMemberKey};
+use scaas_sdk::SecretBytes;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
@@ -188,7 +189,7 @@ async fn signed_epoch(
     let signed = match parent {
         None => w
             .app
-            .pqchat_sign_session(
+            .pqchat_prepare_session(
                 by.key.clone(),
                 k.clone(),
                 PqSessionNew {
@@ -202,10 +203,13 @@ async fn signed_epoch(
                 },
             )
             .await
+            .unwrap()
+            .sign()
+            .await
             .unwrap(),
         Some(p) => w
             .app
-            .pqchat_sign_epoch(
+            .pqchat_prepare_epoch(
                 by.key.clone(),
                 k.clone(),
                 PqEpochNew {
@@ -219,6 +223,9 @@ async fn signed_epoch(
                     info_json,
                 },
             )
+            .await
+            .unwrap()
+            .sign()
             .await
             .unwrap(),
     };
@@ -311,7 +318,7 @@ async fn one_send_every_store_same_bytes() {
     let r = Arc::new(Room::default());
     w.pq.attach_matrix(r.clone());
     let rep =
-        w.pq.send(&s, &me(&w.alice), &txt("hi"), None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &txt("hi"), None, &opts(&w))
             .await
             .unwrap();
     assert_eq!(rep.stores.len(), 3);
@@ -344,14 +351,14 @@ async fn typing_to_the_room_only() {
     w.pq.attach_matrix(r.clone());
     let t = Content::Typing { on: true };
     let rep =
-        w.pq.send(&s, &me(&w.alice), &t, None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &t, None, &opts(&w))
             .await
             .unwrap();
     assert_eq!(rep.stores.len(), 1);
     assert_eq!(r.0.lock().unwrap().len(), 1);
     assert!(w.net.writes_of("IPqChat.storeMessage").is_empty());
     // twin: a text reaches the chain store too
-    w.pq.send(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+    w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
         .await
         .unwrap();
     assert_eq!(w.net.writes_of("IPqChat.storeMessage").len(), 1);
@@ -360,7 +367,7 @@ async fn typing_to_the_room_only() {
     let w = ready().await;
     let (b, s) = alice_sends(&w, vec![chain(HOME)]).await;
     let rep =
-        w.pq.send(&s, &me(&w.alice), &t, None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &t, None, &opts(&w))
             .await
             .unwrap();
     assert_eq!((rep.message_id, rep.stores.len()), (None, 0));
@@ -480,7 +487,7 @@ async fn chain_cost_unconfirmed() {
     let (b, s) = alice_sends(&w, vec![chain(HOME)]).await;
     w.pq.consent_chain_spend(&s.session_id, false).unwrap();
     let e =
-        w.pq.send(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
             .await;
     assert_eq!(code(e), "ChainCostUnconfirmed");
     let d = w.pq.device().unwrap();
@@ -490,7 +497,7 @@ async fn chain_cost_unconfirmed() {
     );
     w.pq.consent_chain_spend(&s.session_id, true).unwrap();
     let rep =
-        w.pq.send(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
             .await
             .unwrap();
     assert!(sent(&rep.stores[0].1));
@@ -508,14 +515,14 @@ async fn receipt_off_with_a_chain_store() {
         target: hex(&[0x42; 32]),
     };
     let rep =
-        w.pq.send(&s, &me(&w.alice), &rc, None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &rc, None, &opts(&w))
             .await
             .unwrap();
     assert_eq!(rep.message_id, None);
     assert_eq!((w.net.writes(), r.0.lock().unwrap().len()), (0, 0));
     w.pq.set_receipts(&s.session_id, true).unwrap();
     let rep =
-        w.pq.send(&s, &me(&w.alice), &rc, None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &rc, None, &opts(&w))
             .await
             .unwrap();
     assert!(rep.message_id.is_some());
@@ -525,7 +532,7 @@ async fn receipt_off_with_a_chain_store() {
     let (_, s) = alice_sends(&w, vec![room()]).await;
     w.pq.attach_matrix(r.clone());
     let rep =
-        w.pq.send(&s, &me(&w.alice), &rc, None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &rc, None, &opts(&w))
             .await
             .unwrap();
     assert!(rep.message_id.is_some());
@@ -539,13 +546,13 @@ async fn post_on_choice_within_the_bucket() {
     let w = ready().await;
     let (_, s) = alice_sends(&w, vec![chain(HOME)]).await;
     let mut o = opts(&w);
-    w.pq.send(&s, &me(&w.alice), &txt("a"), None, &o)
+    w.pq.send_content(&s, &me(&w.alice), &txt("a"), None, &o)
         .await
         .unwrap();
     assert!(w.net.writes_of("IPqChat.postMessage").is_empty());
     o.post = true;
     let rep =
-        w.pq.send(&s, &me(&w.alice), &txt("b"), None, &o)
+        w.pq.send_content(&s, &me(&w.alice), &txt("b"), None, &o)
             .await
             .unwrap();
     assert!(sent(rep.post.as_ref().unwrap()));
@@ -560,14 +567,103 @@ async fn post_on_choice_within_the_bucket() {
     assert_eq!(tl.last().unwrap().id, rep.message_id.clone().unwrap());
     let big = txt(&"l".repeat(1100));
     let n = w.net.writes();
-    let e = w.pq.send(&s, &me(&w.alice), &big, None, &o).await;
+    let e = w.pq.send_content(&s, &me(&w.alice), &big, None, &o).await;
     assert_eq!(code(e), "ContentTooLarge");
     assert_eq!(w.net.writes(), n, "nothing sent anywhere");
     assert_eq!(w.pq.timeline(&s.session_id).len(), 2);
     o.post_cost_confirmed = true;
-    let rep = w.pq.send(&s, &me(&w.alice), &big, None, &o).await.unwrap();
+    let rep =
+        w.pq.send_content(&s, &me(&w.alice), &big, None, &o)
+            .await
+            .unwrap();
     assert!(sent(rep.post.as_ref().unwrap()));
     assert_eq!(st.len(), 2);
+}
+
+/// A content's JSON in a handle, as a binding app writes it through the SDK's copy call.
+fn handle(b: &[u8]) -> Arc<SecretBytes> {
+    let h = SecretBytes::new(b.len()).unwrap();
+    h.with_mut(|x| x.copy_from_slice(b));
+    Arc::new(h)
+}
+
+/// Owner 2026-11-23 (plan T12): `send` takes the content's JSON as a `SecretBytes` handle, parsed and validated in Rust:
+/// exactly a content of a type in scope in P49's form (`ts` is the call's argument); anything else is refused before a
+/// counter is taken, nothing signed or sent. The twin: the same content well formed is sent and shown.
+#[tokio::test(flavor = "multi_thread")]
+async fn send_takes_the_content_json_as_a_handle() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let (b, s) = alice_sends(&w, vec![room(), chain(HOME)]).await;
+    let r = Arc::new(Room::default());
+    w.pq.attach_matrix(r.clone());
+    let d = w.pq.device().unwrap();
+    let n = w.net.writes();
+    let long = format!(r#"{{"type":"text","body":"{}"}}"#, "a".repeat(BODY_MAX + 1));
+    let obo = format!(
+        r#"{{"type":"text","body":"hi","onBehalfOf":"0x{}"}}"#,
+        "11".repeat(32)
+    );
+    // a `file` goes only through `send_file`, which enters its key (a content without one opens nowhere)
+    let z = format!("0x{}", "00".repeat(32));
+    let file = format!(
+        r#"{{"type":"file","mediaType":"image/png","name":"a.png","size":1,"sha256":"{z}","ctSha256":"{z}","url":"ar://{}"}}"#,
+        "A".repeat(43)
+    );
+    let refused: Vec<(&[u8], &str)> = vec![
+        (b"hi", "ContentInvalid"),
+        (br#""hi""#, "ContentInvalid"),
+        (br#"{"type":"call"}"#, "ContentInvalid"),
+        (br#"{"type":"text","body":""}"#, "ContentInvalid"),
+        (
+            br#"{"type":"text","body":"hi","mediaType":"text/html"}"#,
+            "ContentInvalid",
+        ),
+        (br#"{"type":"text","body":"hi","x":1}"#, "ContentInvalid"),
+        (
+            br#"{"type":"text","body":"hi","mediaType":null}"#,
+            "ContentInvalid",
+        ),
+        (br#"{"type":"text","body":"hi","ts":1}"#, "ContentInvalid"),
+        (obo.as_bytes(), "ContentInvalid"),
+        (file.as_bytes(), "ContentInvalid"),
+        (long.as_bytes(), "ContentTooLarge"),
+    ];
+    for (j, want) in refused {
+        let e =
+            w.pq.send(&s, &me(&w.alice), handle(j), Some(1), &opts(&w))
+                .await;
+        let shown = String::from_utf8_lossy(&j[..j.len().min(70)]).into_owned();
+        assert_eq!(code(e), want, "{shown}");
+    }
+    assert_eq!(w.net.writes(), n, "nothing sent to the chain store");
+    assert!(r.0.lock().unwrap().is_empty(), "nothing sent to the room");
+    assert_eq!(
+        w.pq.next_counter(&b.e.id, &d).unwrap(),
+        0,
+        "no counter taken"
+    );
+    // the twin: well formed (keys in any order), sent to both stores and shown with its `ts`
+    let rep =
+        w.pq.send(
+            &s,
+            &me(&w.alice),
+            handle(br#"{"body":"hi","type":"text"}"#),
+            Some(1),
+            &opts(&w),
+        )
+        .await
+        .unwrap();
+    assert!(rep.message_id.is_some());
+    assert_eq!(r.0.lock().unwrap().len(), 1);
+    assert_eq!(w.net.writes_of("IPqChat.storeMessage").len(), 1);
+    let tl = w.pq.timeline(&s.session_id);
+    let shown: Value = tl
+        .last()
+        .unwrap()
+        .content
+        .with(|b| serde_json::from_slice(b).unwrap());
+    assert_eq!(shown, json!({"type": "text", "body": "hi", "ts": 1}));
 }
 
 /// A list naming HCS: the send refused before anything is signed (`StoreUnsupported`), the chain store still read.
@@ -578,7 +674,7 @@ async fn hcs_listed_refused_before_signing() {
     let hcs = json!({"kind": "hcs", "topic": "0.0.1234"});
     let (b, s) = alice_sends(&w, vec![chain(HOME), hcs]).await;
     let e =
-        w.pq.send(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
             .await;
     assert_eq!(code(e), "StoreUnsupported");
     let d = w.pq.device().unwrap();
@@ -638,7 +734,7 @@ async fn store_list_invalid() {
         let w = ready().await;
         let (b, s) = alice_sends(&w, stores.clone()).await;
         let e =
-            w.pq.send(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+            w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
                 .await;
         assert_eq!(code(e), "StoreListInvalid", "{stores:?}");
         let d = w.pq.device().unwrap();
@@ -678,7 +774,7 @@ async fn rekey_by_a_member_adds_an_unconfirmed_store() {
         }]
     );
     let rep =
-        w.pq.send(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
             .await
             .unwrap();
     assert_eq!(
@@ -695,7 +791,7 @@ async fn rekey_by_a_member_adds_an_unconfirmed_store() {
     assert_eq!(w.net.reads_of("IPqChat.storedRange"), 0);
     w.pq.confirm_stores(&ep1).unwrap();
     let rep =
-        w.pq.send(&s, &me(&w.alice), &txt("y"), None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &txt("y"), None, &opts(&w))
             .await
             .unwrap();
     assert!(rep.stores.iter().all(|(_, d)| sent(d)));
@@ -731,7 +827,7 @@ async fn matrix_detached() {
     let w = ready().await;
     let (b, s) = alice_sends(&w, vec![room(), chain(HOME)]).await;
     let e =
-        w.pq.send(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &txt("x"), None, &opts(&w))
             .await;
     assert_eq!(code(e), "MatrixDetached");
     let d = w.pq.device().unwrap();
@@ -856,8 +952,22 @@ async fn a_file_is_sent_and_read() {
     assert_eq!(w.net.writes(), writes, "no write from a read");
     // a text content is no file
     assert!(bob.file_info(own.content.clone()).is_ok());
+    // review T26 C-10: an own message's handle and a file's info handle are built sealed: no copy call overwrites them
+    let info_h = bob.file_info(own.content.clone()).unwrap();
+    for (what, h) in [("own", &own.content), ("file info", &info_h)] {
+        let zeros = vec![0; h.len()];
+        assert!(
+            scaas_ua::wallet::secret_write(h.id(), &zeros).is_err(),
+            "{what}"
+        );
+    }
+    let twin = Arc::new(scaas_ua::wallet::SecretBytes::new(4).unwrap());
+    assert!(
+        scaas_ua::wallet::secret_write(twin.id(), &[1; 4]).is_ok(),
+        "control: a secret made to be written"
+    );
     let t =
-        w.pq.send(&s, &me(&w.alice), &txt("hi"), None, &opts(&w))
+        w.pq.send_content(&s, &me(&w.alice), &txt("hi"), None, &opts(&w))
             .await
             .unwrap();
     assert!(t.message_id.is_some());

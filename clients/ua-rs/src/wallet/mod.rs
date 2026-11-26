@@ -81,6 +81,10 @@ mod signer;
 pub mod soroban_tx;
 mod store;
 mod substrate;
+#[cfg(feature = "app-core")]
+pub mod tree;
+#[cfg(feature = "app-core")]
+pub mod tree_public;
 mod tx;
 mod uasig;
 mod vault;
@@ -126,8 +130,8 @@ pub use policy::{
 pub(crate) use seal::now;
 pub use seal::{
     seal, seal_container, AcceptedJson, ContainerExpect, ContainerExpectJson, ContainerSigner,
-    ExpectedSender, LinkSession, MembersJson, Recipient, RecipientId, Sealed, SealedContainer,
-    LINK_SKEW, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
+    CurrentJson, ExpectedSender, LinkSession, MembersJson, Recipient, RecipientId, Sealed,
+    SealedContainer, LINK_SKEW, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
 };
 pub use secret::{
     secret_dispose, secret_read, secret_write, secrets_live, SecretBytes, SECRET_MAX,
@@ -182,7 +186,7 @@ pub enum Error {
     KeyRevoked,
     /// The call needs secrets and the wallet is locked.
     WalletLocked,
-    /// The kind exists but this build lacks it (Falcon on wasm32: no C).
+    /// The kind exists but this build lacks it.
     KindUnavailable,
     /// The OS random number generator failed.
     Rng,
@@ -233,6 +237,8 @@ pub enum Error {
     AppKeyUsage,
     /// An app-core key handle of another scope or store (scaas-sdk spec §12.3).
     AppHandleForeign,
+    /// `seal_key` of the app root key or a key derived from it (owner ruling A-3, 2026-11-23; scaas-sdk spec §12.3).
+    AppKeyRooted,
     /// The arena holds its stated number of live app-core key handles (scaas-sdk spec §12.2); nothing dropped.
     AppArenaFull,
     /// An app record under a SCaaS purpose (`UAKinds`, `APP_PURPOSE_NS`, the seal purpose; scaas-sdk spec §12.4).
@@ -259,6 +265,9 @@ pub enum Error {
     FileHashMismatch,
     /// An Arweave data item `ua-rs` built that its own verifying parser refused (CLI-UAL-64): nothing returned.
     ArweaveItem,
+    /// A TreeKEM session's named refusal (`tree_public::TreeError`; spec 2026-11-23-pqchat-treekem §8, §10, §11).
+    #[cfg(feature = "app-core")]
+    Tree(tree_public::TreeError),
     Ua(UAError),
 }
 
@@ -289,6 +298,7 @@ impl Error {
             Error::ExternalSignature => "ExternalSignature",
             Error::AppKeyUsage => "AppKeyUsage",
             Error::AppHandleForeign => "AppHandleForeign",
+            Error::AppKeyRooted => "AppKeyRooted",
             Error::AppArenaFull => "AppArenaFull",
             Error::AppPurposeRefused => "AppPurposeRefused",
             Error::AppDomainRefused => "AppDomainRefused",
@@ -301,6 +311,8 @@ impl Error {
             Error::FileFrame => "FileFrame",
             Error::FileHashMismatch => "FileHashMismatch",
             Error::ArweaveItem => "ArweaveItem",
+            #[cfg(feature = "app-core")]
+            Error::Tree(e) => e.code(),
             Error::Ua(e) => e.code(),
         }
     }
@@ -942,7 +954,7 @@ impl Wallet {
 
     /// The UA key `kind` of `account` / `index` (spec §4): `Argument` for a value ≥ 2^31, index ≠ 0 on an EIP-2333 kind
     /// (`0x0104`–`0x0107`, `0x0112`), or a kind not derived from the seed; `KindUnavailable` for Falcon on a build without
-    /// it (wasm32); `WalletLocked` while locked.
+    /// it; `WalletLocked` while locked.
     pub fn ua_key(&self, kind: u16, account: u32, index: u32) -> Result<UaKey> {
         let (secret, key_data) = self.store.key(KeyId::Ua(kind, account, index), |seed| {
             derive::ua_key(kind, derive::ua_secret(seed, kind, account, index)?)
@@ -1156,6 +1168,7 @@ impl Wallet {
         containers: &[SealedContainer],
         expect: &ContainerExpect,
         members: &crate::ua_portable::Members,
+        current: &crate::ua_portable::Current,
         accepted: Option<&crate::ua_portable::Accepted>,
         msig_ua: &[u8; 32],
         version: u64,
@@ -1168,6 +1181,7 @@ impl Wallet {
             containers,
             expect,
             members,
+            current,
             accepted,
             msig_ua,
             version,

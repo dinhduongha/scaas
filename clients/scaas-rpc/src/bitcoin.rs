@@ -44,6 +44,8 @@ pub struct HistoryEntry {
 pub struct TxOut {
     pub value: u64,
     pub script: String,
+    /// Core's `confirmations`: 0 for an output only in its mempool
+    pub confirmations: u64,
 }
 
 /// A disagreement between Esplora and Core, or an output Core says is spent: nothing built on it is signed.
@@ -97,10 +99,11 @@ impl Esplora {
     pub async fn utxos(&self, i: usize, address: &str) -> Result<Vec<Utxo>, FamilyError> {
         crate::family::admit_first(&self.client, self, i).await?;
         let v = self
-            .json(i, &format!("/address/{}/utxo", addr(i, address)?))
+            .json(i, &format!("/address/{}/utxo", addr(address)?))
             .await?;
         let a = list(i, &v, UTXO_MAX)?;
-        a.iter()
+        let out = a
+            .iter()
             .map(|u| {
                 Ok(Utxo {
                     txid: txid(i, &u["txid"])?,
@@ -112,7 +115,13 @@ impl Esplora {
                     height: height(i, &u["status"])?,
                 })
             })
-            .collect()
+            .collect::<Result<Vec<Utxo>, FamilyError>>()?;
+        // one outpoint once: a caller that sums the values would count a repeated one twice (T26 B2-12)
+        let mut seen = std::collections::HashSet::new();
+        if !out.iter().all(|u| seen.insert((u.txid.as_str(), u.vout))) {
+            return Err(malformed(i, "a repeated outpoint"));
+        }
+        Ok(out)
     }
 
     /// One page of `address`'s history on endpoint `i`, newest first: the first page (`/address/{a}/txs`), or the confirmed
@@ -124,7 +133,7 @@ impl Esplora {
         after: Option<&str>,
     ) -> Result<Vec<HistoryEntry>, FamilyError> {
         crate::family::admit_first(&self.client, self, i).await?;
-        let a = addr(i, address)?;
+        let a = addr(address)?;
         let path = match after {
             Some(t) => format!("/address/{a}/txs/chain/{}", txid(i, &json!(t))?),
             None => format!("/address/{a}/txs"),
@@ -278,7 +287,15 @@ impl Core {
         crate::family::admit_first(&self.client, self, i).await?;
         let v = self
             .client
-            .rpc_at(i, "gettxout", json!([txid(i, &json!(id))?, vout, true]))
+            .rpc_at(
+                i,
+                "gettxout",
+                json!([
+                    txid(i, &json!(id)).map_err(|_| FamilyError::Argument("a txid out of form"))?,
+                    vout,
+                    true
+                ]),
+            )
             .await?;
         if v.is_null() {
             return Ok(None);
@@ -297,7 +314,14 @@ impl Core {
             })
             .ok_or_else(|| malformed(i, "a gettxout script out of form"))?
             .to_ascii_lowercase();
-        Ok(Some(TxOut { value, script }))
+        let confirmations = v["confirmations"]
+            .as_u64()
+            .ok_or_else(|| malformed(i, "a gettxout without its confirmations"))?;
+        Ok(Some(TxOut {
+            value,
+            script,
+            confirmations,
+        }))
     }
 }
 
@@ -377,7 +401,12 @@ pub async fn cross_check(
             .map_err(BitcoinCrossCheck::Endpoint)?
         {
             None => return Err(BitcoinCrossCheck::Spent { txid, vout }),
-            Some(o) if o.value != u.value || o.script != script.to_ascii_lowercase() => {
+            // a UTXO Esplora calls confirmed must be confirmed in Core too, not only in its mempool (T26 B2-12)
+            Some(o)
+                if o.value != u.value
+                    || o.script != script.to_ascii_lowercase()
+                    || (u.height.is_some() && o.confirmations == 0) =>
+            {
                 return Err(BitcoinCrossCheck::Output { txid, vout })
             }
             Some(_) => {}
@@ -386,20 +415,16 @@ pub async fn cross_check(
     Ok(())
 }
 
-/// The address as a path segment: 14 to 90 lower-case bech32 characters (the segwit forms `ua-rs` prints), else `Argument`-like
-/// refusal before any request.
-fn addr(i: usize, a: &str) -> Result<&str, FamilyError> {
+/// The address as a path segment: 14 to 90 lower-case bech32 characters (the segwit forms `ua-rs` prints), else the caller's
+/// `FamilyError::Argument` before any request.
+fn addr(a: &str) -> Result<&str, FamilyError> {
     let ok = (14..=90).contains(&a.len())
         && a.bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
     if ok {
         Ok(a)
     } else {
-        Err(FamilyError::Failure(EndpointFailure::new(
-            i,
-            FailureKind::AnswerMalformed,
-            "an address out of form",
-        )))
+        Err(FamilyError::Argument("an address out of form"))
     }
 }
 

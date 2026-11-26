@@ -71,7 +71,7 @@ fn wraps(keys: &Value, prefix: &str) -> Vec<PqWrap> {
         .collect()
 }
 
-async fn core() -> (Arc<AppCore>, String) {
+async fn core() -> (Arc<AppCore>, String, Arc<Sdk>) {
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![],
         store: MemoryStore::new(),
@@ -99,7 +99,7 @@ async fn core() -> (Arc<AppCore>, String) {
         .id;
     // pqchat-core's scope: no app id (it signs SCaaS records only, through these entries)
     let a = AppCore::new(
-        sdk,
+        sdk.clone(),
         AppDesc {
             app_id: None,
             name: "PqChat".into(),
@@ -108,7 +108,7 @@ async fn core() -> (Arc<AppCore>, String) {
         },
     )
     .unwrap();
-    (a, seed)
+    (a, seed, sdk)
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn the_bit_follows_the_feature() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn entries_reproduce_the_vectors() {
-    let (a, seed) = core().await;
+    let (a, seed, sdk) = core().await;
     let (rec, top, keys) = (load("records"), load("topics"), load("keys"));
     let key = KeyRef::Ua {
         seed: seed.clone(),
@@ -156,7 +156,7 @@ async fn entries_reproduce_the_vectors() {
     let x = r(&rec, "session");
     got.push((
         &rec["session"],
-        a.sign_pqchat_session(
+        a.prepare_pqchat_session(
             key.clone(),
             PqChatSession {
                 creator: s(&x["creator"]),
@@ -170,12 +170,15 @@ async fn entries_reproduce_the_vectors() {
             },
         )
         .await
+        .unwrap()
+        .sign()
+        .await
         .unwrap(),
     ));
     let x = r(&rec, "epoch");
     got.push((
         &rec["epoch"],
-        a.sign_pqchat_epoch(
+        a.prepare_pqchat_epoch(
             key.clone(),
             PqChatEpoch {
                 session_id: s(&x["sessionId"]),
@@ -190,12 +193,15 @@ async fn entries_reproduce_the_vectors() {
             },
         )
         .await
+        .unwrap()
+        .sign()
+        .await
         .unwrap(),
     ));
     let x = r(&rec, "leave");
     got.push((
         &rec["leave"],
-        a.sign_pqchat_leave(
+        a.prepare_pqchat_leave(
             key.clone(),
             PqChatLeave {
                 session_id: s(&x["sessionId"]),
@@ -205,12 +211,15 @@ async fn entries_reproduce_the_vectors() {
             },
         )
         .await
+        .unwrap()
+        .sign()
+        .await
         .unwrap(),
     ));
     let x = r(&rec, "remove");
     got.push((
         &rec["remove"],
-        a.sign_pqchat_remove(
+        a.prepare_pqchat_remove(
             key.clone(),
             PqChatRemove {
                 session_id: s(&x["sessionId"]),
@@ -222,12 +231,15 @@ async fn entries_reproduce_the_vectors() {
             },
         )
         .await
+        .unwrap()
+        .sign()
+        .await
         .unwrap(),
     ));
     let x = r(&rec, "message");
     got.push((
         &rec["message"],
-        a.sign_pqchat_message(
+        a.prepare_pqchat_message(
             key.clone(),
             PqChatMessage {
                 session_id: s(&x["sessionId"]),
@@ -240,12 +252,15 @@ async fn entries_reproduce_the_vectors() {
             },
         )
         .await
+        .unwrap()
+        .sign()
+        .await
         .unwrap(),
     ));
     let x = r(&top, "topic");
     got.push((
         &top["topic"],
-        a.sign_pqchat_topic(
+        a.prepare_pqchat_topic(
             key.clone(),
             PqTopic {
                 admin: s(&x["admin"]),
@@ -258,12 +273,15 @@ async fn entries_reproduce_the_vectors() {
             },
         )
         .await
+        .unwrap()
+        .sign()
+        .await
         .unwrap(),
     ));
     let x = r(&top, "update");
     got.push((
         &top["update"],
-        a.sign_pqchat_topic_update(
+        a.prepare_pqchat_topic_update(
             key.clone(),
             PqTopicUpdate {
                 topic_id: s(&x["topicId"]),
@@ -274,12 +292,15 @@ async fn entries_reproduce_the_vectors() {
             },
         )
         .await
+        .unwrap()
+        .sign()
+        .await
         .unwrap(),
     ));
     let x = r(&top, "writer");
     got.push((
         &top["writer"],
-        a.sign_pqchat_topic_writer(
+        a.prepare_pqchat_topic_writer(
             key.clone(),
             PqTopicWriter {
                 topic_id: s(&x["topicId"]),
@@ -289,12 +310,18 @@ async fn entries_reproduce_the_vectors() {
             },
         )
         .await
+        .unwrap()
+        .sign()
+        .await
         .unwrap(),
     ));
     for row in ["post", "reply"] {
         got.push((
             &top[row],
-            a.sign_pqchat_topic_entry(key.clone(), entry(&r(&top, row)))
+            a.prepare_pqchat_topic_entry(key.clone(), entry(&r(&top, row)))
+                .await
+                .unwrap()
+                .sign()
                 .await
                 .unwrap(),
         ));
@@ -302,7 +329,7 @@ async fn entries_reproduce_the_vectors() {
     let x = r(&top, "edit");
     got.push((
         &top["edit"],
-        a.sign_pqchat_topic_edit(
+        a.prepare_pqchat_topic_edit(
             key.clone(),
             PqTopicEdit {
                 entry_id: s(&x["entryId"]),
@@ -314,12 +341,15 @@ async fn entries_reproduce_the_vectors() {
             },
         )
         .await
+        .unwrap()
+        .sign()
+        .await
         .unwrap(),
     ));
     let x = r(&top, "vote");
     got.push((
         &top["vote"],
-        a.sign_pqchat_topic_vote(
+        a.prepare_pqchat_topic_vote(
             key.clone(),
             PqTopicVote {
                 entry_id: s(&x["entryId"]),
@@ -328,6 +358,9 @@ async fn entries_reproduce_the_vectors() {
                 seq: n(&x["seq"]),
             },
         )
+        .await
+        .unwrap()
+        .sign()
         .await
         .unwrap(),
     ));
@@ -377,10 +410,65 @@ async fn entries_reproduce_the_vectors() {
         member: s(&x["member"]),
         nonce: n(&x["nonce"]),
     };
+    // T26 A-5 part b: the review and the typed digest come before any key is opened; the native key is refused at `sign()`
+    let p = a.prepare_pqchat_leave(native, l.clone()).await.unwrap();
+    assert_eq!(p.typed, s(&rec["leave"]["typed"]));
+    assert!(p
+        .review
+        .iter()
+        .any(|f| f.name == "record" && f.value == "PqChatLeave"));
+    // F-4 / D2-3: an exit's review says that it applies within the lag, and of which epoch
+    let within = |r: &[scaas_sdk::op::ReviewField]| {
+        r.iter()
+            .find(|f| f.name == "appliesWithin")
+            .map(|f| f.value.clone())
+            .unwrap_or_default()
+    };
     assert_eq!(
-        a.sign_pqchat_leave(native, l)
+        within(&p.review),
+        format!("applies if it lands within 16 epochs of the epoch it names ({}); it cannot be withdrawn", l.epoch_id)
+    );
+    let x = r(&rec, "remove");
+    let rm = a
+        .prepare_pqchat_remove(
+            key.clone(),
+            PqChatRemove {
+                session_id: s(&x["sessionId"]),
+                epoch_id: s(&x["epochId"]),
+                next_epoch: n(&x["nextEpoch"]),
+                members: strs(&x["members"]),
+                admin: s(&x["admin"]),
+                nonce: n(&x["nonce"]),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        within(&rm.review),
+        format!(
+            "applies if it lands within 16 epochs of epoch {}; it cannot be withdrawn",
+            n(&x["nextEpoch"]) - 1
+        )
+    );
+    assert_eq!(
+        p.sign().await.map_or_else(|e| e.code(), |_| "Ok"),
+        "Argument"
+    );
+    // T26 A-9: a scope without PqChat's prefix (`AppLabelRefused`); the control (the vector's leave) signed above
+    let own = AppCore::new(
+        sdk,
+        AppDesc {
+            app_id: None,
+            name: "Other".into(),
+            class: Some(3),
+            labels: vec!["scaas/other/v1/".into()],
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        own.prepare_pqchat_leave(key.clone(), l)
             .await
             .map_or_else(|e| e.code(), |_| "Ok"),
-        "Argument"
+        "AppLabelRefused"
     );
 }

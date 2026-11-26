@@ -1,0 +1,35 @@
+docs | 0f9a838d8 | 0 | check: 0 error(s), 7 warning(s), 16 note(s)
+fmt | 0f9a838d8 | 0 | -
+forge-account | 0f9a838d8 | 0 | forge: 103 passed, 0 failed
+forge-as | 0f9a838d8 | 0 | forge: 568 passed, 0 failed
+forge-confidential | 0f9a838d8 | 0 | -
+forge-factory | 0f9a838d8 | 0 | -
+forge-fork | 0f9a838d8 | 0 | -
+forge-gas | 0f9a838d8 | 0 | forge: 406 passed, 0 failed
+forge-governance | 0f9a838d8 | 0 | forge: 942 passed, 0 failed
+forge-hedera | 0f9a838d8 | 0 | forge: 20 passed, 0 failed
+forge-liquidity | 0f9a838d8 | 0 | forge: 93 passed, 0 failed
+forge-merge | 0f9a838d8 | 0 | forge: 350 passed, 0 failed
+forge-metatx | 0f9a838d8 | 0 | forge: 549 passed, 0 failed
+forge-modules | 0f9a838d8 | 0 | forge: 35 passed, 0 failed
+forge-p6f | 0f9a838d8 | 0 | -
+forge-pqchat | 0f9a838d8 | 0 | forge: 201 passed, 0 failed
+forge-pqvault | 0f9a838d8 | 0 | forge: 94 passed, 0 failed
+forge-pqz | 0f9a838d8 | 0 | forge: 694 passed, 0 failed
+forge-pqzh | 0f9a838d8 | 0 | forge: 42 passed, 0 failed
+forge-research | 0f9a838d8 | 0 | forge: 360 passed, 0 failed
+forge-top | 0f9a838d8 | 0 | forge: 29 passed, 0 failed
+forge-ua | 0f9a838d8 | 0 | forge: 1044 passed, 0 failed
+forge-v2 | 0f9a838d8 | 0 | forge: 756 passed, 0 failed
+forge-wallet | 0f9a838d8 | 0 | forge: 185 passed, 0 failed
+forge-wrap | 0f9a838d8 | 0 | forge: 324 passed, 0 failed
+forge-zether | 0f9a838d8 | 0 | forge: 478 passed, 0 failed
+mutants | 0f9a838d8 | 0 | -
+mutants-run | 1fcd41ed7 | 0 | t3c runner 5 of 5 killed (M1-M2 the C38 treeRemove, M3-M5 the leave and removal views); t3b runner M16, M37, M42, M43 re-run or new, 43 of 43
+sets-modules | 0f9a838d8 | 0 | one set at a time: 35 passed at each of n2048-kmax1024, n2560-kmax16384, n2816-kmax65536, 0 failed; PqzSet.sol untouched (lanes)
+sets-sensitive | 0f9a838d8 | 0 | one set at a time (the three lanes together never had 6 + 4 GB each): n2048-kmax1024 1595 passed, n2560-kmax16384 1589 passed, n2816-kmax65536 1577 passed, 0 failed
+size | 0f9a838d8 | 0 | size gate: 0 error(s), 181 contracts
+uagas | 0f9a838d8 | 0 | forge: 29 passed, 0 failed
+left: the tree views of spec §6 (treeOf, treeLeaves at TREE_LEAF_PAGE_MAX 64, treeNodes, treeNodeKey, commitOf, pathListOf, pathKeys, pathCtAt, goneOf, goneKeyOf, goneOwnKeyOf), IPqChat's views and its interface id: stopped on size. PqChatTree is 35,267 B (19 B under the T-1 deploy line 35,286 B); the drafted views (test/pqchat/PqChatTreeViewsProbe.sol, a harness, at 1fcd41ed7) make it 39,889 B (+4,622 B). Where they live is the owner's call (no module split by an agent). PqChat is 34,743 B (543 B left) and its release asks 58.92 M x 1.05 of 60 M: about 11 forward stubs fit neither line with much room.
+left: test/pqchat/PqChatTreeGas.t.sol (every row of spec §13, the completion fixtures of codex-r3-6, the ML-DSA-65/87 rows, the 15-wrap rows, --enable-tx-gas-limit with its positive control), the treeLeaves page as an eth_call on the local Nethermind copy, the reachability test (fable-3): not started; the treeLeaves page needs the views first.
+left: LinkClosure release pins and test/v2/layout: unchanged by T3c so far (no storage moved); re-check when the views land.

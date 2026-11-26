@@ -195,7 +195,7 @@ func TestLoadRefusesWrongAbiOrFeatures(t *testing.T) {
 	if err := Load(); err != nil {
 		t.Fatal(err)
 	}
-	abiVersionHook = func(uint32) uint32 { return 5 }
+	abiVersionHook = func(uint32) uint32 { return 6 }
 	loadMu.Lock()
 	loaded = false
 	loadMu.Unlock()
@@ -204,30 +204,30 @@ func TestLoadRefusesWrongAbiOrFeatures(t *testing.T) {
 	_, merr := FromMnemonic([]byte("abandon"), nil)
 	abiVersionHook = func(v uint32) uint32 { return v }
 	if !errors.Is(err, ErrLibraryMismatch) || !errors.Is(gerr, ErrLibraryMismatch) || !errors.Is(merr, ErrLibraryMismatch) {
-		t.Fatalf("ABI 5 accepted: %v / %v / %v", err, gerr, merr)
+		t.Fatalf("ABI 6 accepted: %v / %v / %v", err, gerr, merr)
 	}
 	if err := Load(); err != nil {
 		t.Fatal(err)
 	}
-	// ua-rs-native (spec §10.2): a good build carries FeatureNativeNetworks; an older v6 library without it is refused
+	// ua-rs-native (spec §10.2): a good build carries FeatureNativeNetworks; a library without it is refused
 	good := FeatureWallet | FeaturePq | FeaturePqz | FeaturePqzSetN2304Kmax4096 | FeatureNativeNetworks
-	if CheckBuild(6, good) != nil || CheckBuild(6, FeatureWallet|FeaturePq|FeatureNativeNetworks) != nil {
+	if CheckBuild(7, good) != nil || CheckBuild(7, FeatureWallet|FeaturePq|FeatureNativeNetworks) != nil {
 		t.Fatal("a good build refused")
 	}
 	for label, c := range map[string]struct {
 		abi uint32
 		f   uint64
-	}{"abi 5": {5, good}, "abi 7": {7, good}, "no wallet": {6, good &^ FeatureWallet}, "no pq": {6, good &^ FeaturePq},
-		"an unknown bit": {6, good | 1<<13}, "an older v6 library": {6, good &^ FeatureNativeNetworks}, "a vectors build (C1)": {6, good | FeatureVectors}, "two sets": {6, good | FeaturePqzSetN2048Kmax1024},
-		"pqz without a set": {6, FeatureWallet | FeaturePq | FeaturePqz}, "a set without pqz": {6, FeatureWallet | FeaturePq | FeaturePqzSetN2304Kmax4096}} {
+	}{"abi 6": {6, good}, "abi 8": {8, good}, "no wallet": {7, good &^ FeatureWallet}, "no pq": {7, good &^ FeaturePq},
+		"an unknown bit": {7, good | 1<<13}, "no native-networks": {7, good &^ FeatureNativeNetworks}, "a vectors build (C1)": {7, good | FeatureVectors}, "two sets": {7, good | FeaturePqzSetN2048Kmax1024},
+		"pqz without a set": {7, FeatureWallet | FeaturePq | FeaturePqz}, "a set without pqz": {7, FeatureWallet | FeaturePq | FeaturePqzSetN2304Kmax4096}} {
 		if !errors.Is(CheckBuild(c.abi, c.f), ErrLibraryMismatch) {
 			t.Error(label)
 		}
 	}
 }
 
-func TestAbiVersionIs6AndFeatures(t *testing.T) {
-	if ABI() != 6 {
+func TestAbiVersionIs7AndFeatures(t *testing.T) {
+	if ABI() != 7 {
 		t.Fatal(ABI())
 	}
 	f := Features()
@@ -757,12 +757,12 @@ func TestSealJSONContainersAndAcceptance(t *testing.T) {
 		if _, ok := r["opener"].(obj)["session"]; ok {
 			continue // a link container opens only through its session
 		}
-		pt, err := f.opener(r).OpenContainer(js(r["container"]), js(r["expect"]), js(r["members"]), js(r["accepted"]))
+		pt, err := f.opener(r).OpenContainer(js(r["container"]), js(r["expect"]), js(r["members"]), js(r["accepted"]), js(r["msigCurrent"]))
 		if err != nil || hx(pt) != r["pt"] {
 			t.Errorf("%s: %v", r["id"], err)
 		}
 		if r["accepted"] != nil {
-			if _, err := f.opener(r).OpenContainer(js(r["container"]), js(r["expect"]), js(r["members"]), ""); code(err) != "UAContainerSender" {
+			if _, err := f.opener(r).OpenContainer(js(r["container"]), js(r["expect"]), js(r["members"]), "", ""); code(err) != "UAContainerSender" {
 				t.Errorf("%s without accepted: %v", r["id"], err)
 			}
 		}
@@ -780,11 +780,11 @@ func TestSealJSONContainersAndAcceptance(t *testing.T) {
 		kk := f.opener(r)
 		if rs, _ := r["restore"].(bool); rs {
 			var w *Wallet
-			if w, err = RestoreBackup(kk, js(r["container"]), js(r["expect"]), js(r["members"]), js(r["accepted"]), nil, nil); w != nil {
+			if w, err = RestoreBackup(kk, js(r["container"]), js(r["expect"]), js(r["members"]), js(r["accepted"]), js(r["msigCurrent"]), nil, nil); w != nil {
 				w.Close()
 			}
 		} else {
-			_, err = kk.OpenContainer(js(r["container"]), js(r["expect"]), js(r["members"]), js(r["accepted"]))
+			_, err = kk.OpenContainer(js(r["container"]), js(r["expect"]), js(r["members"]), js(r["accepted"]), js(r["msigCurrent"]))
 		}
 		want := ""
 		if e, ok := r["error"].(string); ok && e != "" {
@@ -795,7 +795,7 @@ func TestSealJSONContainersAndAcceptance(t *testing.T) {
 		}
 		n++
 	}
-	if n != 28 {
+	if n != 32 { // T26 A2-1: 28 -> 32 (four msigCurrent rows)
 		t.Fatal(n)
 	}
 }
@@ -831,7 +831,7 @@ func TestSealJSONReplayBackupRows(t *testing.T) {
 		if ar, _ := r["allowRollback"].(bool); ar {
 			fn = RestoreBackupRollback
 		}
-		w, err := fn(f.opener(r), js(r["container"]), js(r["expect"]), "", "", cur, nil)
+		w, err := fn(f.opener(r), js(r["container"]), js(r["expect"]), "", "", "", cur, nil)
 		if e, ok := r["error"].(string); ok && e != "" {
 			if code(err) != "UA"+e {
 				t.Errorf("%s: %v", r["id"], err)
@@ -862,7 +862,7 @@ func TestBackupSealRestoresAWallet(t *testing.T) {
 		t.Fatal(err, len(cs))
 	}
 	expect := obj{"purpose": "scaas/backup/v1", "sender": obj{"ua": uaOf(t, 0x0102, sender)}, "recipient": obj{"ua": uaOf(t, 0x0130, rkey), "version": 0}}
-	out := must(RestoreBackup(f.kem(k0, nil), js(cs[0]), js(expect), "", "", nil, nil))
+	out := must(RestoreBackup(f.kem(k0, nil), js(cs[0]), js(expect), "", "", "", nil, nil))
 	defer out.Close()
 	if !bytes.Equal(must(f.key(out, 0x0102, 0, 0).KeyData()), must(sender.KeyData())) {
 		t.Fatal("restored key")
@@ -895,10 +895,10 @@ func TestLinkSessionAndLinkSeal(t *testing.T) {
 	h := ua.Keccak256(pk)
 	expect := r["expect"].(obj)
 	expect["recipient"] = obj{"kemPkHash": hx(h[:])}
-	if _, err := FromLink(s, js(r["container"]), js(expect), "", "", nil); code(err) != "UAContainerReplay" {
+	if _, err := FromLink(s, js(r["container"]), js(expect), "", "", "", nil); code(err) != "UAContainerReplay" {
 		t.Fatal(err)
 	}
-	if _, err := FromLink(s, js(r["container"]), js(expect), "", "", nil); code(err) != "UAKeyRevoked" {
+	if _, err := FromLink(s, js(r["container"]), js(expect), "", "", "", nil); code(err) != "UAKeyRevoked" {
 		t.Fatal(err)
 	}
 	w := f.fresh("twelve_words")
@@ -914,7 +914,7 @@ func TestLinkSessionAndLinkSeal(t *testing.T) {
 		c := must(w.LinkSeal(key, pk, sc))
 		h := ua.Keccak256(pk)
 		ex := js(obj{"purpose": "scaas/link/v1", "sender": obj{"ua": uaOf(t, 0x0102, key)}, "recipient": obj{"kemPkHash": hx(h[:])}})
-		out, err := FromLink(s, c, ex, "", "", nil)
+		out, err := FromLink(s, c, ex, "", "", "", nil)
 		if wrong {
 			if code(err) != "UASealOpen" {
 				t.Fatal(err)
@@ -1166,7 +1166,7 @@ func TestErrorStringsNeverContainAnInput(t *testing.T) {
 		},
 		func() error { _, err := evm.SignTransaction(`{"type":2,"chainId":"SECRETvalue0xdead"}`); return err },
 		func() error {
-			_, err := kk.OpenContainer(`{"v":"Pa55-word-Secret"}`, `{"purpose":"zebrasecretword"}`, "", "")
+			_, err := kk.OpenContainer(`{"v":"Pa55-word-Secret"}`, `{"purpose":"zebrasecretword"}`, "", "", "")
 			return err
 		},
 		func() error { _, err := qk.Call("zebrasecretword", "{}"); return err },

@@ -19,7 +19,8 @@ MUTANTS = [
      T + "pqz_token_checks"),
     ("a token of a Zether kind taken (R5)", [(P, "!PQZ_KINDS.contains(&kind)", "kind == 0")],
      T + "pqz_token_checks"),
-    ("an unproven key record taken (R6)", [(P, "if !proven || ptr", "if ptr")],
+    # re-anchored 2026-11-23 (T26 A2-4: an OFFCHAIN token's key counts unproven, `!(proven || offchain)`): the same mutation
+    ("an unproven key record taken (R6)", [(P, "if !(proven || offchain)\n        || ptr", "if ptr")],
      T + "pqz_leg_of_another_key_refused"),
     ("the registry's key not compared with the handle's (R6)", [(P, "code.and_then(|c| c.split_first()) != Some((&0, pk))", "code.is_none()")],
      T + "pqz_leg_of_another_key_refused"),

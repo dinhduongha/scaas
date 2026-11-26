@@ -494,7 +494,7 @@ pub fn set_pqz_key_version_args_json(t: &str) -> JsonResult<String> {
 // ------------------------------------------------------------------ pay-meta-tax T41: the pay structs (`crate::pay`)
 
 /// A uint of the JSON, a number or a decimal string, as its ABI word (`Argument` above 256 bits or not a number).
-fn uint_in(v: &Value) -> JsonResult<[u8; 32]> {
+pub(crate) fn uint_in(v: &Value) -> JsonResult<[u8; 32]> {
     let s = match v {
         Value::Number(n) => n.as_u64().ok_or(Argument)?.to_string(),
         Value::String(s)

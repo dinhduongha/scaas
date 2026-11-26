@@ -64,7 +64,8 @@ impl Account {
             .spawn(async move {
                 let (_, _, pool) = sdk.evm(&chain)?;
                 let e = sdk.entry(&seed).await?;
-                let verified = sdk.open_seed(&seed).is_ok();
+                // review T26 A-2: the rows as read, checked under the open wallet
+                let verified = crate::vault::seeds::rows_verified(&sdk, &e);
                 let mut out = Vec::with_capacity(e.accounts.len());
                 for r in &e.accounts {
                     let mut i = super::info(&seed, r, verified);

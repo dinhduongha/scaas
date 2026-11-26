@@ -226,20 +226,40 @@ library Catalogue {
     /// @dev DEX release `version` from `code` on a DEX env with `ska` (published once per distinct env). T66b §4.2: the
     ///      admin module D is deployed for `f` first, pinned in the env beside the libraries, and named in `implArgs`.
     function dex(OpenFactory f, uint64 version, bytes memory code, address ska) internal returns (address) {
+        return dex(f, version, code, ska, address(0));
+    }
+
+    /// @dev As above on a DEX env naming `registry` (G1, CTR-GOV-33: a DEX on a later registry generation).
+    function dex(OpenFactory f, uint64 version, bytes memory code, address ska, address registry)
+        internal
+        returns (address)
+    {
         (address[] memory ms, bytes memory implArgs) = _dexModules(f);
-        IFactoryToken.Env memory e = plainEnv(address(f), ska, f.chainUid(), address(0), false);
+        uint16 v = _dexEnvVersion(f, _dexEnv(f, ska, registry, ms));
+        vm.prank(address(uint160(uint256(f.admin()))));
+        return f.deployDexImplementation(version, v, code, implArgs, EnvKit.uidOf(address(f)));
+    }
+
+    /// @dev `e`'s DEX env version: the latest when equal, else published as the next.
+    function _dexEnvVersion(OpenFactory f, IFactoryToken.Env memory e) private returns (uint16 v) {
+        v = f.latestDexEnvVersion();
+        if (v == 0 || keccak256(abi.encode(f.dexEnvOf(v))) != keccak256(abi.encode(e))) {
+            vm.prank(address(uint160(uint256(f.admin()))));
+            f.publishDexEnv(++v, EnvKit.uidOf(address(f)), e);
+        }
+    }
+
+    function _dexEnv(OpenFactory f, address ska, address registry, address[] memory ms)
+        private
+        view
+        returns (IFactoryToken.Env memory e)
+    {
+        e = plainEnv(address(f), ska, f.chainUid(), registry, false);
         e.libs = new address[](2);
         (e.libs[0], e.libs[1]) = (address(GovernanceLib), address(TradeLib));
         e.libCodeHashes = new bytes32[](2);
         (e.libCodeHashes[0], e.libCodeHashes[1]) = (address(GovernanceLib).codehash, address(TradeLib).codehash);
         e = withModules(e, ms);
-        uint16 v = f.latestDexEnvVersion();
-        if (v == 0 || keccak256(abi.encode(f.dexEnvOf(v))) != keccak256(abi.encode(e))) {
-            vm.prank(address(uint160(uint256(f.admin()))));
-            f.publishDexEnv(++v, EnvKit.uidOf(address(f)), e);
-        }
-        vm.prank(address(uint160(uint256(f.admin()))));
-        return f.deployDexImplementation(version, v, code, implArgs, EnvKit.uidOf(address(f)));
     }
 
     /// @dev The D of the latest DEX env when it serves `f` (so one env serves every release of a test), else a new one.

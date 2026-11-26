@@ -108,6 +108,30 @@ public class Vault implements AutoCloseable, VaultInterface {
 
   
     @Override
+    public java.util.concurrent.CompletableFuture<java.lang.Void> acceptRollback(){
+        return acceptRollback(java.util.concurrent.ForkJoinPool.commonPool());
+    }public java.util.concurrent.CompletableFuture<java.lang.Void> acceptRollback(java.util.concurrent.Executor uniffiExecutor
+    ){
+        return UniffiAsyncHelpers.uniffiRustCallAsync(
+        uniffiExecutor,
+        callWithHandle(uniffiHandle -> {
+            return UniffiLib.uniffi_scaas_sdk_fn_method_vault_accept_rollback(
+                uniffiHandle
+                
+            );
+        }),
+        (future, callback, continuationHandle) -> UniffiLib.ffi_scaas_sdk_rust_future_poll_void(future, callback, continuationHandle),
+        (_allocator, future, continuation) -> UniffiLib.ffi_scaas_sdk_rust_future_complete_void(future, continuation),
+        (future) -> UniffiLib.ffi_scaas_sdk_rust_future_free_void(future),
+        // lift function
+        () -> {},
+        // Error FFI converter
+        new SdkExceptionErrorHandler()
+    );
+    }
+
+  
+    @Override
     public java.util.concurrent.CompletableFuture<java.lang.Void> changePassphrase(java.lang.String seed, SecretBytes old, SecretBytes _new){
         return changePassphrase(seed, old, _new, java.util.concurrent.ForkJoinPool.commonPool());
     }public java.util.concurrent.CompletableFuture<java.lang.Void> changePassphrase(java.lang.String seed, SecretBytes old, SecretBytes _new, java.util.concurrent.Executor uniffiExecutor

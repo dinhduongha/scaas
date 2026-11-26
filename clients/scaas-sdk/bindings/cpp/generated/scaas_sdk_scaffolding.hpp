@@ -98,6 +98,7 @@ uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_approve_release_blocking(uint
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_approve_token_release_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_grant_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
+uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_create_dex_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_method_admin_admin_ua_create_instance_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
@@ -242,6 +243,7 @@ void uniffi_scaas_sdk_fn_free_subscription(uint64_t handle, RustCallStatus *out_
 RustBuffer uniffi_scaas_sdk_fn_method_subscription_next_blocking(uint64_t ptr, uint64_t timeout_ms, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_clone_vault(uint64_t handle, RustCallStatus *out_status);
 void uniffi_scaas_sdk_fn_free_vault(uint64_t handle, RustCallStatus *out_status);
+void uniffi_scaas_sdk_fn_method_vault_accept_rollback_blocking(uint64_t ptr, RustBuffer cancel, RustCallStatus *out_status);
 void uniffi_scaas_sdk_fn_method_vault_change_passphrase_blocking(uint64_t ptr, RustBuffer seed, uint64_t old, uint64_t new_, RustBuffer cancel, RustCallStatus *out_status);
 void uniffi_scaas_sdk_fn_method_vault_confirm_backup_blocking(uint64_t ptr, RustBuffer seed, RustBuffer cancel, RustCallStatus *out_status);
 RustBuffer uniffi_scaas_sdk_fn_method_vault_derive_child_blocking(uint64_t ptr, RustBuffer req, RustBuffer cancel, RustCallStatus *out_status);
@@ -442,6 +444,7 @@ uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_approve_release_blockin
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_approve_token_release_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_grant_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_blocking();
+uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_create_dex_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_admin_admin_ua_create_instance_blocking();
@@ -572,6 +575,7 @@ uint16_t uniffi_scaas_sdk_checksum_method_sdk_vault();
 uint16_t uniffi_scaas_sdk_checksum_method_sdk_wallet();
 uint16_t uniffi_scaas_sdk_checksum_method_sdk_watch_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_subscription_next_blocking();
+uint16_t uniffi_scaas_sdk_checksum_method_vault_accept_rollback_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_vault_change_passphrase_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_vault_confirm_backup_blocking();
 uint16_t uniffi_scaas_sdk_checksum_method_vault_derive_child_blocking();

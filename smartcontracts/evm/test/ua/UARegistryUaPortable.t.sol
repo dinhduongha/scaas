@@ -3629,7 +3629,8 @@ contract UARegistryUaPortableTest is UARegistryBase {
     // the libraries' DELEGATECALL; `ua8-pins-3.1b.txt` there) and by fix3 (the row "registrationOf msig-pq on gen 2 (gen 1
     // record)" at n2048, n2560, n2816 +44, the shift of fix2's CTR-GOV-27 / CTR-MTX-86 that only n2304's run re-pinned;
     // `runs/2026-11-13-fix3-chainuid/ua8-pins.txt`) (old -> new
-    // in their commit messages). Regular gas = `gasTotalUsed`, EIP-8037 state gas = `gasStateUsed`
+    // in their commit messages); by CTR-UA-74 (owner 2026-11-25: `register msig-classical` 202,275 -> 202,778, `register msig-pq-native` 362,682 -> 363,185, `setKemKey
+    // fndsa512/v2` 2,524,867 -> 2,524,889 at the four sets, the registry's and the Aux library's dispatch). Regular gas = `gasTotalUsed`, EIP-8037 state gas = `gasStateUsed`
     // (the log `runs/2026-10-30-ua8-gas.txt` has the table). The `mldsa65` precompile is the exact-input mock, so its
     // verify gas is the mock's, and the 0x0142 verifier is the `rreg` stand-in: both verifies are not real figures.
 
@@ -3682,12 +3683,13 @@ contract UARegistryUaPortableTest is UARegistryBase {
         // pqz-three-keys step 3 (K3-3, the scoped records; the registry and Aux dispatchers carry eleven more selectors): register fndsa512 2,746,835 -> 2,746,837; popOf 20,118 -> 20,229; register msig-classical: 166,225 -> 166,449; register msig-pq-native: 330,779 -> 331,080; setKemKey fndsa512/v2 n2048-kmax1024: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024: 17,661 -> 17,772; popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop): 17,328 -> 17,439; popOf unregistered (view baseline): 10,784 -> 10,819; setKemKey fndsa512/v2 n2304-kmax4096: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096: 17,661 -> 17,772; setKemKey fndsa512/v2 n2560-kmax16384: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384: 17,661 -> 17,772; setKemKey fndsa512/v2 n2816-kmax65536: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536: 17,661 -> 17,772 (the rows of the other sets by the same delta, re-measured by at-set)
         if (h == keccak256("register fndsa512")) return (2756408, 6384690);
         if (h == keccak256("register slhdsa128s")) return (1138973, 13246740);
-        if (h == keccak256("register msig-classical")) return (202275, 1115370);
+        // CTR-UA-74 (owner 2026-11-25): 202,275 -> 202,778 (+503: the version tag's check on the step-6 path, the moved dispatch)
+        if (h == keccak256("register msig-classical")) return (202778, 1115370);
         if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3367832, 70713540);
-        if (h == keccak256("register msig-pq-native")) return (362682, 1360170);
+        if (h == keccak256("register msig-pq-native")) return (363185, 1360170);
         if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024")) return (20315, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2524867, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2524889, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024")) return (17858, 0);
         if (
             h
@@ -3709,7 +3711,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
         if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3640216, 77197680);
         if (h == keccak256("setKemKey mldsa65/v2 n2304-kmax4096")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096")) return (20315, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2524867, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2524889, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096")) return (17858, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2304-kmax4096")) return (3613592, 87997950);
         if (h == keccak256("register mldsa65 without pqzPop n2304-kmax4096")) return (1667992, 40742370);
@@ -3724,7 +3726,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
         if (h == keccak256("register msig-pq/n2560-kmax16384")) return (3908504, 83632860);
         if (h == keccak256("setKemKey mldsa65/v2 n2560-kmax16384")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384")) return (20315, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2524867, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2524889, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384")) return (17858, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2560-kmax16384")) return (3881880, 94433130);
         if (h == keccak256("register mldsa65 without pqzPop n2560-kmax16384")) return (1799064, 43875810);
@@ -3739,7 +3741,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
         if (h == keccak256("register msig-pq/n2816-kmax65536")) return (4227992, 91547550);
         if (h == keccak256("setKemKey mldsa65/v2 n2816-kmax65536")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536")) return (20315, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2524867, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2524889, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536")) return (17858, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2816-kmax65536")) return (4201368, 102347820);
         if (h == keccak256("register mldsa65 without pqzPop n2816-kmax65536")) return (1930136, 47009250);

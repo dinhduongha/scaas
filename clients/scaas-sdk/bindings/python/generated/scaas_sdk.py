@@ -615,6 +615,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce() != 48105:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for() != 20110:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate() != 38309:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_create_dex() != 41403:
@@ -938,6 +940,8 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_scaas_sdk_checksum_method_seedbackup_verify() != 53176:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_subscription_next() != 46941:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback() != 51021:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != 63580:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -1909,6 +1913,11 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce.argtypes = (
     _UniffiRustBuffer,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_rate.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -2768,6 +2777,10 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_subscription_next.argtypes = (
     ctypes.c_uint64,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_subscription_next.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_vault_accept_rollback.argtypes = (
+    ctypes.c_uint64,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_vault_accept_rollback.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_vault_change_passphrase.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -3242,6 +3255,9 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_grant.restype 
 _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_nonce_for.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_admin_admin_ua_cancel_rate.restype = ctypes.c_uint16
@@ -3728,6 +3744,9 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_seedbackup_verify.restype = ctypes.c
 _UniffiLib.uniffi_scaas_sdk_checksum_method_subscription_next.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_subscription_next.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_vault_accept_rollback.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase.restype = ctypes.c_uint16
@@ -6087,17 +6106,18 @@ class TokenBalance:
     """
     One token's balance.
 """
-    def __init__(self, *, address:str, display:str, decimals:int, amount:str):
+    def __init__(self, *, address:str, display:str, decimals:int, amount:str, unknown:typing.Optional[str]):
         self.address = address
         self.display = display
         self.decimals = decimals
         self.amount = amount
+        self.unknown = unknown
         
         
 
     
     def __str__(self):
-        return "TokenBalance(address={}, display={}, decimals={}, amount={})".format(self.address, self.display, self.decimals, self.amount)
+        return "TokenBalance(address={}, display={}, decimals={}, amount={}, unknown={})".format(self.address, self.display, self.decimals, self.amount, self.unknown)
     def __eq__(self, other):
         if self.address != other.address:
             return False
@@ -6106,6 +6126,8 @@ class TokenBalance:
         if self.decimals != other.decimals:
             return False
         if self.amount != other.amount:
+            return False
+        if self.unknown != other.unknown:
             return False
         return True
 
@@ -6117,6 +6139,7 @@ class _UniffiFfiConverterTypeTokenBalance(_UniffiConverterRustBuffer):
             display=_UniffiFfiConverterString.read(buf),
             decimals=_UniffiFfiConverterUInt8.read(buf),
             amount=_UniffiFfiConverterString.read(buf),
+            unknown=_UniffiFfiConverterOptionalString.read(buf),
         )
 
     @staticmethod
@@ -6125,6 +6148,7 @@ class _UniffiFfiConverterTypeTokenBalance(_UniffiConverterRustBuffer):
         _UniffiFfiConverterString.check_lower(value.display)
         _UniffiFfiConverterUInt8.check_lower(value.decimals)
         _UniffiFfiConverterString.check_lower(value.amount)
+        _UniffiFfiConverterOptionalString.check_lower(value.unknown)
 
     @staticmethod
     def write(value, buf):
@@ -6132,6 +6156,7 @@ class _UniffiFfiConverterTypeTokenBalance(_UniffiConverterRustBuffer):
         _UniffiFfiConverterString.write(value.display, buf)
         _UniffiFfiConverterUInt8.write(value.decimals, buf)
         _UniffiFfiConverterString.write(value.amount, buf)
+        _UniffiFfiConverterOptionalString.write(value.unknown, buf)
 
 class _UniffiFfiConverterSequenceTypeTokenBalance(_UniffiConverterRustBuffer):
     @classmethod
@@ -6887,7 +6912,8 @@ class _UniffiFfiConverterSequenceTypeListedToken(_UniffiConverterRustBuffer):
 class GasPerByte:
     """
     A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
-    variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+    variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded), `data` (`mtxExecute`'s call data) or
+    `calldata` (the transaction row's, entry `transaction` kind `evm`: the price of a byte of the transaction's calldata).
 """
     def __init__(self, *, input:str, gas:int):
         self.input = input
@@ -7896,6 +7922,18 @@ class L1Fee(enum.Enum):
     OP Stack: `GasPriceOracle.getL1Fee(bytes)` (`0x4200…000F`) over the unsigned transaction, read at the quote's block
 """
     
+    IN_ESTIMATE = 1
+    """
+    the L1 cost charged as gas (Arbitrum, the profile's `in-estimate`): a table-quoted transaction's gas limit adds
+    `NodeInterface.gasEstimateL1Component` (`0x…C8`) over its calldata, with the margin; an estimate holds it already
+"""
+    
+    LINEA = 2
+    """
+    the L1 cost carried by the priority fee (Linea, the profile's `linea`): the fees are `linea_estimateGas`'s over the
+    transaction, never below the chain's own
+"""
+    
 
 
 class _UniffiFfiConverterTypeL1Fee(_UniffiConverterRustBuffer):
@@ -7904,11 +7942,19 @@ class _UniffiFfiConverterTypeL1Fee(_UniffiConverterRustBuffer):
         variant = buf.read_i32()
         if variant == 1:
             return L1Fee.OP_STACK
+        if variant == 2:
+            return L1Fee.IN_ESTIMATE
+        if variant == 3:
+            return L1Fee.LINEA
         raise InternalError("Raw enum value doesn't match any cases")
 
     @staticmethod
     def check_lower(value):
         if value == L1Fee.OP_STACK:
+            return
+        if value == L1Fee.IN_ESTIMATE:
+            return
+        if value == L1Fee.LINEA:
             return
         raise ValueError(value)
 
@@ -7916,6 +7962,10 @@ class _UniffiFfiConverterTypeL1Fee(_UniffiConverterRustBuffer):
     def write(value, buf):
         if value == L1Fee.OP_STACK:
             buf.write_i32(1)
+        if value == L1Fee.IN_ESTIMATE:
+            buf.write_i32(2)
+        if value == L1Fee.LINEA:
+            buf.write_i32(3)
 
 
 
@@ -9921,7 +9971,7 @@ class GasFrom:
     @dataclass
     class ESTIMATE:
         """
-        a native send's own estimate (or 21,000 for a plain transfer to an account without code)
+        a native send's own estimate (`eth_estimateGas`, a plain transfer's too)
 """
         
         def __init__(self, ):
@@ -14973,16 +15023,18 @@ class _UniffiFfiConverterSequenceTypePqzLeg(_UniffiConverterRustBuffer):
 @dataclass
 class PqzTransferMulti:
     """
-    `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
-    fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+    `UAPqzTransfer` / `UAPqzTransferCompact`: the real `legs` and `decoys` legs of amount 0 the SDK draws from the registry
+    line's `0x0142` lists, every leg's position shuffled (CTR-UA-29; their count one the set builds, 1, 2, 4 or 8),
+    `decoy_fee` the per-leg fee (decimal; at least the token's `minDecoyFee`, the contract's check).
 """
-    def __init__(self, *, signer:KeyRef, chain:str, token:str, batch:str, key_version:int, legs:typing.List[PqzLeg], decoy_fee:str, valid_until_block:int, envelope:Envelope):
+    def __init__(self, *, signer:KeyRef, chain:str, token:str, batch:str, key_version:int, legs:typing.List[PqzLeg], decoys:int, decoy_fee:str, valid_until_block:int, envelope:Envelope):
         self.signer = signer
         self.chain = chain
         self.token = token
         self.batch = batch
         self.key_version = key_version
         self.legs = legs
+        self.decoys = decoys
         self.decoy_fee = decoy_fee
         self.valid_until_block = valid_until_block
         self.envelope = envelope
@@ -14991,7 +15043,7 @@ class PqzTransferMulti:
 
     
     def __str__(self):
-        return "PqzTransferMulti(signer={}, chain={}, token={}, batch={}, key_version={}, legs={}, decoy_fee={}, valid_until_block={}, envelope={})".format(self.signer, self.chain, self.token, self.batch, self.key_version, self.legs, self.decoy_fee, self.valid_until_block, self.envelope)
+        return "PqzTransferMulti(signer={}, chain={}, token={}, batch={}, key_version={}, legs={}, decoys={}, decoy_fee={}, valid_until_block={}, envelope={})".format(self.signer, self.chain, self.token, self.batch, self.key_version, self.legs, self.decoys, self.decoy_fee, self.valid_until_block, self.envelope)
     def __eq__(self, other):
         if self.signer != other.signer:
             return False
@@ -15004,6 +15056,8 @@ class PqzTransferMulti:
         if self.key_version != other.key_version:
             return False
         if self.legs != other.legs:
+            return False
+        if self.decoys != other.decoys:
             return False
         if self.decoy_fee != other.decoy_fee:
             return False
@@ -15023,6 +15077,7 @@ class _UniffiFfiConverterTypePqzTransferMulti(_UniffiConverterRustBuffer):
             batch=_UniffiFfiConverterString.read(buf),
             key_version=_UniffiFfiConverterUInt64.read(buf),
             legs=_UniffiFfiConverterSequenceTypePqzLeg.read(buf),
+            decoys=_UniffiFfiConverterUInt32.read(buf),
             decoy_fee=_UniffiFfiConverterString.read(buf),
             valid_until_block=_UniffiFfiConverterUInt64.read(buf),
             envelope=_UniffiFfiConverterTypeEnvelope.read(buf),
@@ -15036,6 +15091,7 @@ class _UniffiFfiConverterTypePqzTransferMulti(_UniffiConverterRustBuffer):
         _UniffiFfiConverterString.check_lower(value.batch)
         _UniffiFfiConverterUInt64.check_lower(value.key_version)
         _UniffiFfiConverterSequenceTypePqzLeg.check_lower(value.legs)
+        _UniffiFfiConverterUInt32.check_lower(value.decoys)
         _UniffiFfiConverterString.check_lower(value.decoy_fee)
         _UniffiFfiConverterUInt64.check_lower(value.valid_until_block)
         _UniffiFfiConverterTypeEnvelope.check_lower(value.envelope)
@@ -15048,6 +15104,7 @@ class _UniffiFfiConverterTypePqzTransferMulti(_UniffiConverterRustBuffer):
         _UniffiFfiConverterString.write(value.batch, buf)
         _UniffiFfiConverterUInt64.write(value.key_version, buf)
         _UniffiFfiConverterSequenceTypePqzLeg.write(value.legs, buf)
+        _UniffiFfiConverterUInt32.write(value.decoys, buf)
         _UniffiFfiConverterString.write(value.decoy_fee, buf)
         _UniffiFfiConverterUInt64.write(value.valid_until_block, buf)
         _UniffiFfiConverterTypeEnvelope.write(value.envelope, buf)
@@ -17709,6 +17766,76 @@ class _UniffiFfiConverterTypeUaCancelNonce(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypeKeyRef.write(value.signer, buf)
         _UniffiFfiConverterString.write(value.chain, buf)
         _UniffiFfiConverterString.write(value.batch, buf)
+        _UniffiFfiConverterString.write(value.lane, buf)
+        _UniffiFfiConverterOptionalString.write(value.chain_uid, buf)
+        _UniffiFfiConverterTypeEnvelope.write(value.envelope, buf)
+
+@dataclass
+class UaCancelNonceFor:
+    """
+    A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+    UACancelNonceFor
+"""
+    def __init__(self, *, signer:KeyRef, chain:str, batch:str, target:str, lane:str, chain_uid:typing.Optional[str], envelope:Envelope):
+        self.signer = signer
+        self.chain = chain
+        self.batch = batch
+        self.target = target
+        self.lane = lane
+        self.chain_uid = chain_uid
+        self.envelope = envelope
+        
+        
+
+    
+    def __str__(self):
+        return "UaCancelNonceFor(signer={}, chain={}, batch={}, target={}, lane={}, chain_uid={}, envelope={})".format(self.signer, self.chain, self.batch, self.target, self.lane, self.chain_uid, self.envelope)
+    def __eq__(self, other):
+        if self.signer != other.signer:
+            return False
+        if self.chain != other.chain:
+            return False
+        if self.batch != other.batch:
+            return False
+        if self.target != other.target:
+            return False
+        if self.lane != other.lane:
+            return False
+        if self.chain_uid != other.chain_uid:
+            return False
+        if self.envelope != other.envelope:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeUaCancelNonceFor(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return UaCancelNonceFor(
+            signer=_UniffiFfiConverterTypeKeyRef.read(buf),
+            chain=_UniffiFfiConverterString.read(buf),
+            batch=_UniffiFfiConverterString.read(buf),
+            target=_UniffiFfiConverterString.read(buf),
+            lane=_UniffiFfiConverterString.read(buf),
+            chain_uid=_UniffiFfiConverterOptionalString.read(buf),
+            envelope=_UniffiFfiConverterTypeEnvelope.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterTypeKeyRef.check_lower(value.signer)
+        _UniffiFfiConverterString.check_lower(value.chain)
+        _UniffiFfiConverterString.check_lower(value.batch)
+        _UniffiFfiConverterString.check_lower(value.target)
+        _UniffiFfiConverterString.check_lower(value.lane)
+        _UniffiFfiConverterOptionalString.check_lower(value.chain_uid)
+        _UniffiFfiConverterTypeEnvelope.check_lower(value.envelope)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterTypeKeyRef.write(value.signer, buf)
+        _UniffiFfiConverterString.write(value.chain, buf)
+        _UniffiFfiConverterString.write(value.batch, buf)
+        _UniffiFfiConverterString.write(value.target, buf)
         _UniffiFfiConverterString.write(value.lane, buf)
         _UniffiFfiConverterOptionalString.write(value.chain_uid, buf)
         _UniffiFfiConverterTypeEnvelope.write(value.envelope, buf)
@@ -24144,6 +24271,50 @@ class _UniffiFfiConverterTypeAuthError(_UniffiConverterRustBuffer):
 
 
 
+class Basis(enum.Enum):
+    """
+    What a `Consumed` or `Expired` rests on (CLI-RPC-09, owner 2026-11-17, T13 S7; review T26 B-14): the strict majority's agreed
+    read at the `finalized` block, or endpoint 0's alone under `failover`.
+"""
+    
+    MAJORITY = 0
+    
+    ONE_ENDPOINT = 1
+    
+
+
+class _UniffiFfiConverterTypeBasis(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        variant = buf.read_i32()
+        if variant == 1:
+            return Basis.MAJORITY
+        if variant == 2:
+            return Basis.ONE_ENDPOINT
+        raise InternalError("Raw enum value doesn't match any cases")
+
+    @staticmethod
+    def check_lower(value):
+        if value == Basis.MAJORITY:
+            return
+        if value == Basis.ONE_ENDPOINT:
+            return
+        raise ValueError(value)
+
+    @staticmethod
+    def write(value, buf):
+        if value == Basis.MAJORITY:
+            buf.write_i32(1)
+        if value == Basis.ONE_ENDPOINT:
+            buf.write_i32(2)
+
+
+
+
+
+
+
+
 class DelaySentence:
     """
     One delay sentence of a power bit, by name.
@@ -24572,7 +24743,10 @@ class OpState:
         the lane's nonce spent at the final block without that event; a replaced native send
 """
         
-        def __init__(self, ):
+        def __init__(self, basis:Basis):
+            self.basis = basis
+            
+            
             pass
 
     
@@ -24580,11 +24754,13 @@ class OpState:
             
     
         def __str__(self):
-            return "OpState.CONSUMED()".format()
+            return "OpState.CONSUMED(basis={})".format(self.basis)
         def __eq__(self, other):
             if not isinstance(other, OpState):
                 return NotImplemented
             if not other.is_CONSUMED():
+                return False
+            if self.basis != other.basis:
                 return False
             return True
 
@@ -24626,7 +24802,10 @@ class OpState:
         `validUntil` below the final block's timestamp while the nonce is unspent
 """
         
-        def __init__(self, ):
+        def __init__(self, basis:Basis):
+            self.basis = basis
+            
+            
             pass
 
     
@@ -24634,11 +24813,13 @@ class OpState:
             
     
         def __str__(self):
-            return "OpState.EXPIRED()".format()
+            return "OpState.EXPIRED(basis={})".format(self.basis)
         def __eq__(self, other):
             if not isinstance(other, OpState):
                 return NotImplemented
             if not other.is_EXPIRED():
+                return False
+            if self.basis != other.basis:
                 return False
             return True
 
@@ -24718,6 +24899,7 @@ class _UniffiFfiConverterTypeOpState(_UniffiConverterRustBuffer):
             )
         if variant == 2:
             return OpState.CONSUMED(
+                _UniffiFfiConverterTypeBasis.read(buf),
             )
         if variant == 3:
             return OpState.REVERTED(
@@ -24726,6 +24908,7 @@ class _UniffiFfiConverterTypeOpState(_UniffiConverterRustBuffer):
             )
         if variant == 4:
             return OpState.EXPIRED(
+                _UniffiFfiConverterTypeBasis.read(buf),
             )
         if variant == 5:
             return OpState.IN_FLIGHT(
@@ -24740,12 +24923,14 @@ class _UniffiFfiConverterTypeOpState(_UniffiConverterRustBuffer):
             _UniffiFfiConverterString.check_lower(value.hash)
             return
         if value.is_CONSUMED():
+            _UniffiFfiConverterTypeBasis.check_lower(value.basis)
             return
         if value.is_REVERTED():
             _UniffiFfiConverterUInt64.check_lower(value.block)
             _UniffiFfiConverterString.check_lower(value.hash)
             return
         if value.is_EXPIRED():
+            _UniffiFfiConverterTypeBasis.check_lower(value.basis)
             return
         if value.is_IN_FLIGHT():
             _UniffiFfiConverterTypeInFlight.check_lower(value.detail)
@@ -24760,12 +24945,14 @@ class _UniffiFfiConverterTypeOpState(_UniffiConverterRustBuffer):
             _UniffiFfiConverterString.write(value.hash, buf)
         if value.is_CONSUMED():
             buf.write_i32(2)
+            _UniffiFfiConverterTypeBasis.write(value.basis, buf)
         if value.is_REVERTED():
             buf.write_i32(3)
             _UniffiFfiConverterUInt64.write(value.block, buf)
             _UniffiFfiConverterString.write(value.hash, buf)
         if value.is_EXPIRED():
             buf.write_i32(4)
+            _UniffiFfiConverterTypeBasis.write(value.basis, buf)
         if value.is_IN_FLIGHT():
             buf.write_i32(5)
             _UniffiFfiConverterTypeInFlight.write(value.detail, buf)
@@ -26956,6 +27143,8 @@ class AdminProtocol(typing.Protocol):
         raise NotImplementedError
     async def admin_ua_cancel_nonce(self, req: UaCancelNonce) -> Prepared:
         raise NotImplementedError
+    async def admin_ua_cancel_nonce_for(self, req: UaCancelNonceFor) -> Prepared:
+        raise NotImplementedError
     async def admin_ua_cancel_rate(self, req: UaCancelRate) -> Prepared:
         raise NotImplementedError
     async def admin_ua_create_dex(self, req: UaCreateDex) -> Prepared:
@@ -27205,6 +27394,23 @@ class Admin(AdminProtocol):
         _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
         return await _uniffi_rust_call_async(
             _UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_u64,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_u64,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_u64,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def admin_ua_cancel_nonce_for(self, req: UaCancelNonceFor) -> Prepared:
+        
+        _UniffiFfiConverterTypeUaCancelNonceFor.check_lower(req)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeUaCancelNonceFor.lower(req),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypePrepared.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_admin_admin_ua_cancel_nonce_for(*_uniffi_lowered_args),
             _UniffiLib.ffi_scaas_sdk_rust_future_poll_u64,
             _UniffiLib.ffi_scaas_sdk_rust_future_complete_u64,
             _UniffiLib.ffi_scaas_sdk_rust_future_free_u64,
@@ -30849,6 +31055,8 @@ class VaultProtocol(typing.Protocol):
     Seeds (spec §6).
 """
     
+    async def accept_rollback(self, ) -> None:
+        raise NotImplementedError
     async def change_passphrase(self, seed: str,old: SecretBytes,new: SecretBytes) -> None:
         raise NotImplementedError
     async def confirm_backup(self, seed: str) -> None:
@@ -30944,6 +31152,20 @@ class Vault(VaultProtocol):
         inst = cls.__new__(cls)
         inst._handle = handle
         return inst
+    async def accept_rollback(self, ) -> None:
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = lambda val: None
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_vault_accept_rollback(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_void,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_void,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_void,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
     async def change_passphrase(self, seed: str,old: SecretBytes,new: SecretBytes) -> None:
         
         _UniffiFfiConverterString.check_lower(seed)
@@ -32827,6 +33049,7 @@ __all__ = [
     "Presence",
     "AccountRow",
     "AuthError",
+    "Basis",
     "DelaySentence",
     "InFlight",
     "OpState",
@@ -32966,6 +33189,7 @@ __all__ = [
     "UaApproveTokenRelease",
     "UaCancelGrant",
     "UaCancelNonce",
+    "UaCancelNonceFor",
     "UaCancelRate",
     "UaCreateDex",
     "UaCreateInstance",

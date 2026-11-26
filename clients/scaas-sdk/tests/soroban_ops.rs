@@ -19,7 +19,7 @@ use fake_http::serve;
 use scaas_sdk::vault::{ImportWords, MemoryStore};
 use scaas_sdk::wallet::{
     NativeKeyRef, SignedOpBlob, SorobanImportExpect, SorobanNativeSend, SorobanOpKind,
-    SorobanOpRequest, SorobanPath, Wallet,
+    SorobanOpRequest, SorobanPath, SorobanPrepared, Wallet,
 };
 use scaas_sdk::{
     ChainProfile, EndpointConfig, Family, FamilyParams, Finality, Limits, ListedToken, NativeCap,
@@ -115,6 +115,31 @@ struct Node {
     fee_p90: &'static str,
     /// the simulation records the source account's own `SourceAccount` entry (a self-paid op), not the subject's Address one
     auth_source: bool,
+    /// the chain's time: the latest ledger's close time (unix seconds), and the oldest ledger whose transactions it keeps
+    close_time: u64,
+    oldest: u64,
+    /// review T26 B-3: the next `getTransaction` answers first, then the transaction lands (its status and spends) behind it
+    land_on_status: bool,
+}
+
+impl Node {
+    fn new(fee_p90: &'static str) -> Node {
+        Node {
+            ledger: L,
+            entries: HashMap::new(),
+            simulated: vec![],
+            sent: vec![],
+            status: HashMap::new(),
+            next: "SUCCESS",
+            spends: vec![],
+            sim_error: None,
+            fee_p90,
+            auth_source: false,
+            close_time: NOW,
+            oldest: 1,
+            land_on_status: false,
+        }
+    }
 }
 type Fake = Arc<Mutex<Node>>;
 
@@ -199,10 +224,28 @@ fn answer(n: &mut Node, body: &[u8]) -> (u16, Vec<u8>) {
         }
         "getTransaction" => {
             let h = r["params"]["hash"].as_str().unwrap();
-            match n.status.get(h).copied().unwrap_or("NOT_FOUND") {
-                "NOT_FOUND" => json!({"status": "NOT_FOUND", "latestLedger": n.ledger}),
-                s => json!({"status": s, "ledger": n.ledger, "latestLedger": n.ledger}),
+            let window = json!({"latestLedger": n.ledger, "latestLedgerCloseTime": n.close_time.to_string(),
+                "oldestLedger": n.oldest, "oldestLedgerCloseTime": "1"});
+            let mut a = match n.status.get(h).copied().unwrap_or("NOT_FOUND") {
+                "NOT_FOUND" => json!({"status": "NOT_FOUND"}),
+                s => json!({"status": s, "ledger": n.ledger}),
+            };
+            a.as_object_mut()
+                .unwrap()
+                .extend(window.as_object().unwrap().clone());
+            if std::mem::take(&mut n.land_on_status) {
+                n.status.insert(h.into(), "SUCCESS");
+                for k in std::mem::take(&mut n.spends) {
+                    n.entries.insert(k, vec![0, 0, 0, 6]);
+                }
             }
+            a
+        }
+        "getLedgers" => {
+            let at = r["params"]["startLedger"].as_u64().unwrap();
+            assert!(at <= n.ledger, "a ledger the chain has");
+            json!({"ledgers": [{"sequence": at, "hash": "ab".repeat(32), "ledgerCloseTime": n.close_time.to_string()}],
+                "latestLedger": n.ledger})
         }
         m => panic!("{m}"),
     };
@@ -221,6 +264,8 @@ struct T {
     seed: String,
     node: Fake,
     gateway: Bodies,
+    /// the `chain_uid` the gateway announces for its Soroban chain (`GET /v1/gateway`)
+    gw_uid: Arc<Mutex<String>>,
     clock: Arc<AtomicU64>,
 }
 
@@ -256,22 +301,24 @@ fn endpoint(url: &str) -> EndpointConfig {
 }
 
 async fn setup(cap: Option<&str>, policy: scaas_rpc::Policy, extra_rpc: Option<Fake>) -> T {
+    setup_class(cap, policy, extra_rpc, scaas_rpc::Class::Named).await
+}
+
+/// [`setup`] with endpoint 0 of the class `class0`.
+async fn setup_class(
+    cap: Option<&str>,
+    policy: scaas_rpc::Policy,
+    extra_rpc: Option<Fake>,
+    class0: scaas_rpc::Class,
+) -> T {
     let v = fam();
     let mut entries = HashMap::new();
     for (i, seq) in [(0, 7i64), (1, 9), (2, 41)] {
         entries.insert(account_key(&g(i)), account_entry(&g(i), 100_000_000, seq));
     }
     let node = Arc::new(Mutex::new(Node {
-        ledger: L,
         entries,
-        simulated: vec![],
-        sent: vec![],
-        status: HashMap::new(),
-        next: "SUCCESS",
-        spends: vec![],
-        sim_error: None,
-        fee_p90: "100",
-        auth_source: false,
+        ..Node::new("100")
     }));
     let up = |f: Fake| async move {
         serve(Arc::new(move |_m: &str, _p: &str, b: &[u8]| {
@@ -280,13 +327,24 @@ async fn setup(cap: Option<&str>, policy: scaas_rpc::Policy, extra_rpc: Option<F
         .await
         .0
     };
-    let mut rpc = vec![endpoint(&up(node.clone()).await)];
+    let mut rpc = vec![EndpointConfig {
+        class: class0,
+        ..endpoint(&up(node.clone()).await)
+    }];
     if let Some(e) = extra_rpc {
         rpc.push(endpoint(&up(e).await));
     }
     let bodies: Bodies = Arc::default();
     let b2 = bodies.clone();
+    let uid = format!("0x{}", hex(&scaas_ua::sha256(PASSPHRASE.as_bytes())));
+    let gw_uid = Arc::new(Mutex::new(uid));
+    let u2 = gw_uid.clone();
     let (gw, _) = serve(Arc::new(move |_m: &str, p: &str, body: &[u8]| {
+        if p == "/v1/gateway" {
+            let info = json!({"api": 1, "chains": [{"chain_key": "soroban:local", "chain_uid": *u2.lock().unwrap(),
+                "family": "soroban", "routes": ["ops"]}]});
+            return (200, serde_json::to_vec(&info).unwrap());
+        }
         assert_eq!(p, "/v1/ops");
         b2.lock()
             .unwrap()
@@ -369,6 +427,7 @@ async fn setup(cap: Option<&str>, policy: scaas_rpc::Policy, extra_rpc: Option<F
         seed,
         node,
         gateway: bodies,
+        gw_uid,
         clock,
     }
 }
@@ -804,18 +863,7 @@ async fn a_native_xlm_send() {
 #[tokio::test(flavor = "multi_thread")]
 async fn strict_majority_compares_the_quotes_reads() {
     for (p90, want) in [("100", "Ok"), ("999", "EndpointNoMajority")] {
-        let other = Arc::new(Mutex::new(Node {
-            ledger: L,
-            entries: HashMap::new(),
-            simulated: vec![],
-            sent: vec![],
-            status: HashMap::new(),
-            next: "SUCCESS",
-            spends: vec![],
-            sim_error: None,
-            fee_p90: p90,
-            auth_source: false,
-        }));
+        let other = Arc::new(Mutex::new(Node::new(p90)));
         for i in 0..3 {
             other.lock().unwrap().entries.insert(
                 account_key(&g(i)),
@@ -880,4 +928,235 @@ async fn a_source_account_entry_only_when_the_subject_pays() {
         "one SourceAccount entry"
     );
     assert_eq!(t.w.soroban_follow(id).await.unwrap(), "landed");
+}
+
+/// A transfer `valid_until` seconds ahead, through the gateways (no transaction of its own): its row's id and expiry ledger.
+async fn a_transfer_sent(t: &T, ahead: u64) -> (String, u64) {
+    let req = SorobanOpRequest {
+        kind: SorobanOpKind::Transfer {
+            to: g(1),
+            amount: "5".into(),
+        },
+        valid_until: NOW + ahead,
+        ..pay(t)
+    };
+    let p = t.w.soroban_prepare(req).await.unwrap();
+    let expiry = u64::from(p.expiry);
+    let q =
+        t.w.soroban_quote(p.clone(), SorobanPath::Gateway)
+            .await
+            .unwrap();
+    (t.w.soroban_submit(p, q).await.unwrap(), expiry)
+}
+
+/// Review T26 B-1: a transfer is bound by its auth entry's expiry ledger alone (only a pay signs `valid_until`), so it is not
+/// `expired` while that ledger is ahead, whatever the time; the twin: past its expiry ledger and unspent, `expired`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_transfer_ends_on_its_expiry_ledger_not_on_the_clock() {
+    let t = setup(None, scaas_rpc::Policy::Failover, None).await;
+    let (id, expiry) = a_transfer_sent(&t, 3_600).await;
+    assert_eq!(expiry, L + 3_600, "one ledger a second: an upper bound");
+    // a day later on both clocks, the chain at ~5 s a ledger: the entry is still good
+    t.clock.store(NOW + 86_400, SeqCst);
+    {
+        let mut n = t.node.lock().unwrap();
+        n.close_time = NOW + 86_400;
+        n.ledger = expiry;
+    }
+    assert_eq!(t.w.soroban_follow(id.clone()).await.unwrap(), "sent");
+    t.node.lock().unwrap().ledger = expiry + 1;
+    assert_eq!(t.w.soroban_follow(id).await.unwrap(), "expired");
+}
+
+/// Review T26 B-2: a pay's `valid_until` is compared with the chain's time (the read ledger's close time), never the SDK's
+/// clock: the clock past it, the chain not, still `sent`; the twin: the chain's time past it, `expired`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pay_expires_on_the_chains_time() {
+    let t = setup(None, scaas_rpc::Policy::Failover, None).await;
+    let p = t.w.soroban_prepare(pay(&t)).await.unwrap();
+    let q =
+        t.w.soroban_quote(p.clone(), SorobanPath::Gateway)
+            .await
+            .unwrap();
+    let id = t.w.soroban_submit(p.clone(), q).await.unwrap();
+    t.clock.store(p.valid_until + 60, SeqCst);
+    t.node.lock().unwrap().close_time = p.valid_until;
+    assert_eq!(t.w.soroban_follow(id.clone()).await.unwrap(), "sent");
+    t.node.lock().unwrap().close_time = p.valid_until + 1;
+    assert_eq!(t.w.soroban_follow(id).await.unwrap(), "expired");
+}
+
+/// Review T26 B-2: a native send not found ends `expired` only on the chain's time past its `max_time`, and only when the
+/// endpoint keeps the transactions of the ledger it was sent at; the SDK's clock past `max_time` alone, or a history that
+/// starts after the send, keeps it `sent`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_native_send_expires_on_the_chains_time_within_its_history() {
+    let t = setup(Some("100"), scaas_rpc::Policy::Failover, None).await;
+    let q =
+        t.w.soroban_prepare_native_send(SorobanNativeSend {
+            chain: CHAIN.into(),
+            key: key(&t, 2),
+            to: g(1),
+            amount: "1".into(),
+        })
+        .await
+        .unwrap();
+    let max_time = q.max_time;
+    t.node.lock().unwrap().next = "NOT_FOUND";
+    let id = t.w.soroban_submit_native_send(q).await.unwrap();
+    t.clock.store(max_time + 60, SeqCst);
+    t.node.lock().unwrap().close_time = max_time;
+    assert_eq!(
+        t.w.soroban_follow(id.clone()).await.unwrap(),
+        "sent",
+        "the SDK's clock alone"
+    );
+    {
+        let mut n = t.node.lock().unwrap();
+        n.close_time = max_time + 1;
+        n.ledger = L + 2;
+        n.oldest = L + 1;
+    }
+    assert_eq!(
+        t.w.soroban_follow(id.clone()).await.unwrap(),
+        "sent",
+        "a history that starts after the send"
+    );
+    t.node.lock().unwrap().oldest = L;
+    assert_eq!(t.w.soroban_follow(id).await.unwrap(), "expired");
+}
+
+/// Review T26 B-2 (CLI-RPC-09): under failover only endpoint 0 decides, and only when it is not `discovered`: a landed send read
+/// from a discovered endpoint 0 stays `sent`; the twin (a named one) is `a_native_xlm_send`'s `landed`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_discovered_endpoint_decides_nothing() {
+    let t = setup_class(
+        Some("100"),
+        scaas_rpc::Policy::Failover,
+        None,
+        scaas_rpc::Class::Discovered,
+    )
+    .await;
+    let q =
+        t.w.soroban_prepare_native_send(SorobanNativeSend {
+            chain: CHAIN.into(),
+            key: key(&t, 2),
+            to: g(1),
+            amount: "1".into(),
+        })
+        .await
+        .unwrap();
+    let id = t.w.soroban_submit_native_send(q).await.unwrap();
+    assert_eq!(t.w.soroban_follow(id.clone()).await.unwrap(), "sent");
+    t.node.lock().unwrap().close_time = u64::MAX / 2;
+    assert_eq!(t.w.soroban_follow(id).await.unwrap(), "sent");
+}
+
+/// Review T26 B-3: the spent entries are read before the status, on the same endpoint, so an own transaction that lands between
+/// the two reads is never `consumed`: the row stays `sent`, then ends `landed`. The twin: another's landing first is
+/// `a_pay_landed_by_another_first_is_consumed_for_the_payee`.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_own_landing_between_the_reads_is_never_consumed() {
+    let t = setup(Some("100000000"), scaas_rpc::Policy::Failover, None).await;
+    let p = t.w.soroban_prepare(pay(&t)).await.unwrap();
+    let q =
+        t.w.soroban_quote(p.clone(), SorobanPath::SelfRelay { payer: key(&t, 2) })
+            .await
+            .unwrap();
+    t.node.lock().unwrap().next = "NOT_FOUND";
+    let id = t.w.soroban_submit(p, q).await.unwrap();
+    {
+        let mut n = t.node.lock().unwrap();
+        n.spends = pay_spends();
+        n.land_on_status = true;
+    }
+    assert_eq!(t.w.soroban_follow(id.clone()).await.unwrap(), "sent");
+    assert_eq!(t.w.soroban_follow(id).await.unwrap(), "landed");
+}
+
+/// Review T26 B-4 (CLI-SDK-08, CLI-SDK-09): a `SorobanPrepared` is a plain record a caller can build, so `soroban_submit` and
+/// `soroban_hand_off` run `prepare`'s checks again before the subject signs: an unlisted token (`ProfileMismatch`), another
+/// `from` (`Argument`), an expiry ledger beyond the window (`Argument`), a `valid_until` past or beyond the window
+/// (`ValidUntilRefused`); nothing is signed or sent. The twins: the prepared op as `prepare` gave it submits and hands off.
+#[tokio::test(flavor = "multi_thread")]
+async fn submit_and_hand_off_check_a_handed_back_op_again() {
+    let t = setup(None, scaas_rpc::Policy::Failover, None).await;
+    let p = t.w.soroban_prepare(pay(&t)).await.unwrap();
+    let bad = [
+        (
+            SorobanPrepared {
+                contract: fam()["sac"].as_str().unwrap().into(),
+                ..p.clone()
+            },
+            "ProfileMismatch",
+        ),
+        (
+            SorobanPrepared {
+                from: g(1),
+                ..p.clone()
+            },
+            "Argument",
+        ),
+        (
+            SorobanPrepared {
+                expiry: u32::MAX,
+                ..p.clone()
+            },
+            "Argument",
+        ),
+        (
+            SorobanPrepared {
+                valid_until: NOW,
+                ..p.clone()
+            },
+            "ValidUntilRefused",
+        ),
+        (
+            SorobanPrepared {
+                valid_until: NOW + 86_401,
+                ..p.clone()
+            },
+            "ValidUntilRefused",
+        ),
+    ];
+    let q =
+        t.w.soroban_quote(p.clone(), SorobanPath::Gateway)
+            .await
+            .unwrap();
+    for (b, want) in &bad {
+        assert_eq!(
+            code(t.w.soroban_submit(b.clone(), q.clone()).await),
+            *want,
+            "submit {b:?}"
+        );
+        assert_eq!(
+            code(t.w.soroban_hand_off(b.clone()).await),
+            *want,
+            "hand off {b:?}"
+        );
+    }
+    assert!(t.gateway.lock().unwrap().is_empty(), "nothing sent");
+    t.w.soroban_hand_off(p.clone()).await.unwrap();
+    t.w.soroban_submit(p, q).await.unwrap();
+    assert_eq!(t.gateway.lock().unwrap().len(), 1);
+}
+
+/// Spec §4 (the sibling of review T26 B-7, controller call): the gateway path posts only to a gateway that announces the
+/// profile's `chain_uid` for its Soroban chain; one of another chain is not used, none left is `ProfileMismatch` at the quote
+/// and at the submit, nothing posted. The twin: `a_pay_through_the_gateways_is_the_vectors_signed_op`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_gateway_of_another_chain_takes_no_op() {
+    let t = setup(None, scaas_rpc::Policy::Failover, None).await;
+    let p = t.w.soroban_prepare(pay(&t)).await.unwrap();
+    let q =
+        t.w.soroban_quote(p.clone(), SorobanPath::Gateway)
+            .await
+            .unwrap();
+    *t.gw_uid.lock().unwrap() = format!("0x{}", "61".repeat(32));
+    assert_eq!(
+        code(t.w.soroban_quote(p.clone(), SorobanPath::Gateway).await),
+        "ProfileMismatch"
+    );
+    assert_eq!(code(t.w.soroban_submit(p, q).await), "ProfileMismatch");
+    assert!(t.gateway.lock().unwrap().is_empty(), "nothing posted");
 }

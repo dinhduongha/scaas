@@ -10,7 +10,7 @@
     clippy::panic
 )]
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
@@ -767,6 +767,9 @@ fn confirm_class(sdk: &str) -> Option<&'static str> {
     let signs = f.starts_with("sign_")
         || f.contains("_sign_")
         || f.starts_with("submit")
+        // T26 A-5 part b: a PqChat record or card prepared (the SDK's review), confirmed, then signed in one command
+        || f.starts_with("prepare_pqchat_")
+        || f.starts_with("pqchat_prepare_")
         || [
             "member_sign",
             "hand_off",
@@ -779,6 +782,9 @@ fn confirm_class(sdk: &str) -> Option<&'static str> {
             "pqchat_seal_message",
             "pqchat_seal_file_message",
             "prepare_app_call",
+            // T26 A-5: an app record prepared (the SDK's review), confirmed, then signed in one command
+            "prepare_app_record",
+            "prepare_pqvault_record",
             // SDK plan T41.soroban: the signer's hand-off, the subject's op signed, the payer's native send signed
             "soroban_submit",
             "soroban_hand_off",
@@ -838,6 +844,29 @@ fn zero<T: serde::de::DeserializeOwned + serde::Serialize>() -> Value {
         }
     }
     strip(&mut v);
+    v
+}
+
+/// [`zero`] with every empty string a zero word (an address field 20 zero bytes, `info_json` `{}`): a request the SDK's
+/// prepare accepts, so a signing command that prepares its review before the confirm (T26 A-5) reaches the confirm.
+fn zero_words<T: serde::de::DeserializeOwned + serde::Serialize>() -> Value {
+    fn fill(k: &str, v: &mut Value) {
+        match v {
+            Value::String(s) if s.is_empty() => {
+                *s = match k {
+                    "info_json" => "{}".into(),
+                    "home_chat_contract" | "pqchat" => format!("0x{}", "00".repeat(20)),
+                    "device" => format!("0x{}", "00".repeat(16)),
+                    _ => format!("0x{}", "00".repeat(32)),
+                }
+            }
+            Value::Object(m) => m.iter_mut().for_each(|(k, x)| fill(k, x)),
+            Value::Array(a) => a.iter_mut().for_each(|x| fill(k, x)),
+            _ => {}
+        }
+    }
+    let mut v = zero::<T>();
+    fill("", &mut v);
     v
 }
 
@@ -1135,14 +1164,47 @@ fn every_signing_command_asks_first() {
         std::fs::write(&pf, profile.to_string()).unwrap();
         let app = dir.join("app.json");
         std::fs::write(&app, json!({"app_id": APP_ID, "name": "My App", "class": 7, "labels": ["scaas/call/v1/"]}).to_string()).unwrap();
+        // T26 A-5: the PqChat and PqVault commands prepare in their own scope (A-9, CLI-PQV-12) before the confirm
+        let pqchat_app = dir.join("pqchat-app.json");
+        std::fs::write(&pqchat_app, json!({"app_id": null, "name": "PqChat", "class": 3, "labels": ["scaas/pqchat/v1/"]}).to_string()).unwrap();
+        let pqv: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/pqvault/records.json",
+            env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
+        let pqvault_app = dir.join("pqvault-app.json");
+        std::fs::write(&pqvault_app, json!({"app_id": pqv["purpose"]["appId"], "name": "PqVault", "class": null,
+            "labels": ["scaas/pqvault/v1/"]}).to_string()).unwrap();
+        let (pqchat_app, pqvault_app) = (pqchat_app.to_str().unwrap().to_string(), pqvault_app.to_str().unwrap().to_string());
+        // a real PqVault record (the vectors' first portable one) in `DS_V`, its types from the vectors' type strings
+        let pqv_typed = {
+            let r = &pqv["vaults"].as_array().unwrap().iter().find(|v| v["mode"] == 0).unwrap()["records"][0];
+            let st = r["struct"].as_str().unwrap();
+            let mut types = Map::new();
+            for enc in [pqv["typehashes"][st]["type"].as_str().unwrap(), pqv["domains"]["V"]["type"].as_str().unwrap()] {
+                let mut rest = enc;
+                while let Some(open) = rest.find('(') {
+                    let close = open + rest[open..].find(')').unwrap();
+                    let fields: Vec<Value> = rest[open + 1..close].split(',').filter(|f| !f.is_empty())
+                        .map(|f| { let (t, n) = f.split_once(' ').unwrap(); json!({"name": n, "type": t}) }).collect();
+                    types.insert(rest[..open].to_string(), Value::Array(fields));
+                    rest = &rest[close + 1..];
+                }
+            }
+            let d = &pqv["domains"]["V"];
+            json!({"types": types, "primaryType": st, "domain": {"name": d["name"], "version": d["version"], "salt": d["salt"]},
+                "message": r["record"]}).to_string()
+        };
         let pass_file = dir.join("pass");
         std::fs::write(&pass_file, format!("{PASS}\n")).unwrap();
         let base = vec!["--json".to_string(), "--data-dir".into(), dd.clone(), "--profiles".into(),
             pf.to_str().unwrap().to_string(), "--app".into(), app.to_str().unwrap().to_string()];
         let one = {
             let base = base.clone();
-            move |extra: Vec<String>, stdin: String| {
+            move |mut extra: Vec<String>, stdin: String| {
                 let mut a = base.clone();
+                // a command's own `--app` first replaces the base's
+                if extra.first().map(String::as_str) == Some("--app") {
+                    a[6] = extra[1].clone();
+                    extra.drain(..2);
+                }
                 a.extend(extra);
                 tokio::task::spawn_blocking(move || {
                     let a: Vec<&str> = a.iter().map(String::as_str).collect();
@@ -1162,6 +1224,8 @@ fn every_signing_command_asks_first() {
         let native = json!({"Native": {"seed": seed, "network": "evm", "index": 0}});
         let ua_key = json!({"Ua": {"seed": seed, "kind": ED25519, "account": 0, "index": 0}});
         let (sg, nk) = (signer.to_string(), native.to_string());
+        // S1 / S2 and the card take the signer's UA (`account_ua`): a UA key, not an imported one
+        let ua = ua_key.to_string();
         let valid = (now + 3600).to_string();
         // the objects a session's signing command takes, made by the commands that make them
         let prepared = || vec![
@@ -1187,7 +1251,7 @@ fn every_signing_command_asks_first() {
             Run::One(a)
         };
         let rec = |cmd: &str, z: Value| {
-            let mut a = s(&["app-core", cmd, "--account", &sg]);
+            let mut a = s(&["--app", &pqchat_app, "app-core", cmd, "--account", &sg]);
             a.extend(["--r".to_string(), z.to_string()]);
             Run::One(a)
         };
@@ -1219,9 +1283,16 @@ fn every_signing_command_asks_first() {
                 "admin sign-rescue-vault" => zf(&["admin", "sign-rescue-vault"], zero::<scaas_sdk::admin::RescueVault>()),
                 "admin sign-pqz-auditor-consent" => zf(&["admin", "sign-pqz-auditor-consent"], zero::<scaas_sdk::admin::AuditorConsent>()),
                 "admin sign-zether-auditor-consent" => zf(&["admin", "sign-zether-auditor-consent"], zero::<scaas_sdk::admin::AuditorConsent>()),
-                "app-core sign-app-record" => Run::One(s(&["app-core", "sign-app-record", "--account", &sg, "--path", "Portable", "--typed-json", "{}"])),
-                "app-core sign-pqvault-record" => Run::One(s(&["app-core", "sign-pqvault-record", "--account", &sg, "--path", "Portable", "--typed-json", "{}"])),
-                "app-core sign-pqchat-card" => Run::One(s(&["app-core", "sign-pqchat-card", "--account", &sg, "--kem-version", "1", "--matrix-id", ""])),
+                "app-core prepare-app-record" => {
+                    // T26 A-5: the SDK prepares (its review) before the confirm, so the request is a record of the scope
+                    let rec = json!({"types": {"EIP712Domain": [{"name": "name", "type": "string"}, {"name": "version", "type": "string"},
+                        {"name": "salt", "type": "bytes32"}], "Note": [{"name": "body", "type": "string"}]}, "primaryType": "Note",
+                        "domain": {"name": "My App", "version": "1", "salt": APP_ID}, "message": {"body": "hello"}});
+                    Run::One(s(&["app-core", "prepare-app-record", "--account", &sg, "--path", "Portable", "--typed-json", &rec.to_string()]))
+                }
+                "app-core prepare-pqvault-record" => Run::One(s(&["--app", &pqvault_app, "app-core", "prepare-pqvault-record", "--account", &sg,
+                    "--path", "Portable", "--typed-json", &pqv_typed])),
+                "app-core prepare-pqchat-card" => Run::One(s(&["--unlock", &seed, "--passphrase-fd", "0", "--app", &pqchat_app, "app-core", "prepare-pqchat-card", "--account", &ua, "--kem-version", "1", "--matrix-id", ""])),
                 "app-core prepare-app-call" => {
                     let entry = json!({"type": "function", "name": "ping", "stateMutability": "nonpayable", "outputs": [],
                         "inputs": [{"name": "x", "type": "uint64"}]});
@@ -1233,21 +1304,21 @@ fn every_signing_command_asks_first() {
                 "app-core pqchat-seal-file-message" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-seal-file-message", "--account", sg,
                     "--k", "k", "--pos", "k", "--header", zero::<scaas_sdk::pqchat_keys::PqMessageHeader>().to_string(), "--fields-json", "{}",
                     "--file-key", "k"])),
-                "app-core pqchat-sign-session" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-sign-session", "--account", sg, "--k", "k",
-                    "--r", zero::<scaas_sdk::pqchat_keys::PqSessionNew>().to_string()])),
-                "app-core pqchat-sign-epoch" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-sign-epoch", "--account", sg, "--k", "k",
-                    "--r", zero::<scaas_sdk::pqchat_keys::PqEpochNew>().to_string()])),
-                "app-core sign-pqchat-session" => rec("sign-pqchat-session", zero::<PqChatSession>()),
-                "app-core sign-pqchat-epoch" => rec("sign-pqchat-epoch", zero::<PqChatEpoch>()),
-                "app-core sign-pqchat-leave" => rec("sign-pqchat-leave", zero::<PqChatLeave>()),
-                "app-core sign-pqchat-remove" => rec("sign-pqchat-remove", zero::<PqChatRemove>()),
-                "app-core sign-pqchat-message" => rec("sign-pqchat-message", zero::<PqChatMessage>()),
-                "app-core sign-pqchat-topic" => rec("sign-pqchat-topic", zero::<PqTopic>()),
-                "app-core sign-pqchat-topic-update" => rec("sign-pqchat-topic-update", zero::<PqTopicUpdate>()),
-                "app-core sign-pqchat-topic-writer" => rec("sign-pqchat-topic-writer", zero::<PqTopicWriter>()),
-                "app-core sign-pqchat-topic-entry" => rec("sign-pqchat-topic-entry", zero::<PqTopicEntry>()),
-                "app-core sign-pqchat-topic-edit" => rec("sign-pqchat-topic-edit", zero::<PqTopicEdit>()),
-                "app-core sign-pqchat-topic-vote" => rec("sign-pqchat-topic-vote", zero::<PqTopicVote>()),
+                "app-core pqchat-prepare-session" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-prepare-session", "--account", ua, "--k", "k",
+                    "--r", zero_words::<scaas_sdk::pqchat_keys::PqSessionNew>().to_string()])),
+                "app-core pqchat-prepare-epoch" => Run::Session(vec![app_key("k")], json!(["app-core", "pqchat-prepare-epoch", "--account", ua, "--k", "k",
+                    "--r", zero_words::<scaas_sdk::pqchat_keys::PqEpochNew>().to_string()])),
+                "app-core prepare-pqchat-session" => rec("prepare-pqchat-session", zero_words::<PqChatSession>()),
+                "app-core prepare-pqchat-epoch" => rec("prepare-pqchat-epoch", zero_words::<PqChatEpoch>()),
+                "app-core prepare-pqchat-leave" => rec("prepare-pqchat-leave", zero_words::<PqChatLeave>()),
+                "app-core prepare-pqchat-remove" => rec("prepare-pqchat-remove", zero_words::<PqChatRemove>()),
+                "app-core prepare-pqchat-message" => rec("prepare-pqchat-message", zero_words::<PqChatMessage>()),
+                "app-core prepare-pqchat-topic" => rec("prepare-pqchat-topic", zero_words::<PqTopic>()),
+                "app-core prepare-pqchat-topic-update" => rec("prepare-pqchat-topic-update", zero_words::<PqTopicUpdate>()),
+                "app-core prepare-pqchat-topic-writer" => rec("prepare-pqchat-topic-writer", zero_words::<PqTopicWriter>()),
+                "app-core prepare-pqchat-topic-entry" => rec("prepare-pqchat-topic-entry", zero_words::<PqTopicEntry>()),
+                "app-core prepare-pqchat-topic-edit" => rec("prepare-pqchat-topic-edit", zero_words::<PqTopicEdit>()),
+                "app-core prepare-pqchat-topic-vote" => rec("prepare-pqchat-topic-vote", zero_words::<PqTopicVote>()),
                 _ => return None,
             })
         };
@@ -1275,6 +1346,10 @@ fn every_signing_command_asks_first() {
                 }
                 Run::Session(pre, last) => {
                     let mut a = base.clone();
+                    // T26 A-5: S1 / S2 prepare in PqChat's scope (A-9) before the confirm
+                    if cmd.starts_with("app-core pqchat-prepare-") {
+                        a[6] = pqchat_app.clone();
+                    }
                     a.extend(s(&["--unlock", &seed, "--passphrase-fd", "3"]));
                     let mut l = pre.clone();
                     l.push(last);

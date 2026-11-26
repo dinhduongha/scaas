@@ -60,18 +60,13 @@ impl Wallet {
                     return Err(SdkError::TxTypeRefused);
                 }
                 let (_, chain_id, pool) = evm(&sdk, &req.chain)?;
-                if chain_id == 0 {
-                    return Err(SdkError::Argument);
-                }
                 let to = addr20(&req.to.to_ascii_lowercase())?;
                 let value = U256::from_str_radix(&req.value, 10).map_err(|_| SdkError::Argument)?;
                 let data = match &req.data {
                     Some(d) => unhex(d)?,
                     None => vec![],
                 };
-                if data.len() > 128 * 1024 {
-                    return Err(SdkError::Argument);
-                }
+                native_args(chain_id, &data)?;
                 let from = payer_address(&sdk, &req.key)?;
                 let mut quote = self_relay(
                     &sdk,
@@ -138,14 +133,10 @@ impl Wallet {
                 }
                 let (_, chain_id, _) = evm(&sdk, &q.chain)?;
                 let value = U256::from_str_radix(&q.value, 10).map_err(|_| SdkError::Argument)?;
-                let (raw, id) = sign_tx(
-                    &sdk,
-                    chain_id,
-                    &q.quote,
-                    addr20(&q.to)?,
-                    value,
-                    unhex(&q.data)?,
-                )?;
+                // the caller's record is checked as `prepare` checks the request (T26 B-16)
+                let data = unhex(&q.data)?;
+                native_args(chain_id, &data)?;
+                let (raw, id) = sign_tx(&sdk, chain_id, &q.quote, addr20(&q.to)?, value, data)?;
                 let row = Row {
                     op: crate::vault::uuid4()?,
                     chain: q.chain.clone(),
@@ -177,6 +168,7 @@ impl Wallet {
                     members: None,
                     ended_at: None,
                     fact: None,
+                    basis: None,
                     message: serde_json::Value::Null,
                 };
                 state::put(&sdk, &row).await?;
@@ -186,4 +178,13 @@ impl Wallet {
             })
             .await
     }
+}
+
+/// A native send's chain id (never 0) and data (at most 128 KiB), checked at `prepare` and again at `submit` (T26 B-16):
+/// `Argument`.
+fn native_args(chain_id: u64, data: &[u8]) -> Result<(), SdkError> {
+    if chain_id == 0 || data.len() > 128 * 1024 {
+        return Err(SdkError::Argument);
+    }
+    Ok(())
 }

@@ -36,10 +36,12 @@ def main():
                 continue
             print(f"start {i + 1}/{len(t.M)} {name}", flush=True)
             rc, red = runner.run(HERE, name, f, old, new, os.path.dirname(tfile), tfile)
-            killed = killer in red
-            o.write(f"{name} | {', '.join(red) or '-'} | {rc} | {killer if killed else 'SURVIVED'}\n")
+            # a hang counts as killed, recorded apart (scripts/mutant_guard.py, owner 2026-11-24)
+            hung = [x for x in red if x.startswith("killed (timeout")]
+            by = hung[0] if hung else killer if killer in red else "SURVIVED"
+            o.write(f"{name} | {', '.join(red) or '-'} | {rc} | {by}\n")
             o.flush()
-            print(f"{'killed' if killed else 'SURVIVED'} {name}: {', '.join(red) or '-'}", flush=True)
+            print(f"{'SURVIVED' if by == 'SURVIVED' else 'killed'} {name}: {', '.join(red) or '-'}", flush=True)
 
 
 if __name__ == "__main__":

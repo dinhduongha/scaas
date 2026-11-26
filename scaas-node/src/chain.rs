@@ -329,8 +329,21 @@ impl Chain {
 
     /// The subject's next nonce on its lane (R80), by the contract's kind (ua-mtx-merge plan T14): `mtxNonce(bytes32 id, batch)`
     /// on a token, the router and a mandate wallet (one nonce map on ids, CTR-UA-26: an address envelope's `from` padded),
-    /// `mtxNonce(address, batch)` on `SmartKeyAccount`.
+    /// `mtxNonce(address, batch)` on `SmartKeyAccount`. A router op of a derived subject (G1, CTR-GOV-33): `mtxNonceFor(target,
+    /// from, batch)`, the map of the registry the router checks it on (a native id has one map, `mtxNonce`).
     pub async fn subject_nonce(&self, m: &MetaRef) -> Result<U256> {
+        if let Some(target) = m.gov_target.filter(|_| m.from[..12] != [0u8; 12]) {
+            return self
+                .view(
+                    m.token,
+                    crate::abi::IGovRouterNonce::mtxNonceForCall {
+                        target,
+                        from: m.from,
+                        lane: m.batch,
+                    },
+                )
+                .await;
+        }
         if m.addr_nonce {
             return self
                 .view(
@@ -376,6 +389,7 @@ impl Chain {
             .event_signature(executed_events(m))
             .topic1(m.from)
             .topic3(B256::from(m.batch));
+        let mut found = Vec::new();
         for log in self.logs_back(filter, lookback).await? {
             let e =
                 match log.topic0() == Some(&IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH) {
@@ -400,11 +414,9 @@ impl Chain {
                             )
                         }),
                 };
-            if let Some((_, digest, relayer)) = e.filter(|e| e.0 == m.nonce) {
-                return Ok(Some((digest, relayer)));
-            }
+            found.extend(e);
         }
-        Ok(None)
+        Ok(pick_executed(m, found))
     }
 
     /// The byte length of `a`'s code (a PQZ key's SSTORE2 pointer: its key length plus the STOP byte).
@@ -511,9 +523,75 @@ pub fn executed_events(m: &MetaRef) -> Vec<B256> {
     }
 }
 
+/// E-6 (the re-review of 2026-11-25): of the executed logs `(nonce, digest, relayer)` of `(from, batch)`, the one with `m`'s
+/// nonce and `m`'s digest when `m` has one, else the first with its nonce. On a G1 router one `(from, batch, nonce)` can run
+/// in two maps (the router's own and a keyed one), each with its own digest: the first log with the nonce may be another op's.
+fn pick_executed(
+    m: &MetaRef,
+    logs: impl IntoIterator<Item = (U256, B256, Address)>,
+) -> Option<(B256, Address)> {
+    let mut first = None;
+    for (nonce, digest, relayer) in logs {
+        if nonce != m.nonce {
+            continue;
+        }
+        if m.digest.is_none_or(|d| d == digest) {
+            return Some((digest, relayer));
+        }
+        first.get_or_insert((digest, relayer));
+    }
+    first
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    /// E-6: the executed log of `m` is the one with its digest, not the first with its nonce (a G1 router's two maps); none
+    /// with the digest: the first with the nonce (`classify` says "superseded"); no digest yet: the first with the nonce.
+    #[test]
+    fn pick_executed_matches_the_digest() {
+        let (a, b, c) = (
+            B256::repeat_byte(0xaa),
+            B256::repeat_byte(0xbb),
+            B256::repeat_byte(0xcc),
+        );
+        let (r1, r2) = (Address::repeat_byte(1), Address::repeat_byte(2));
+        let mut m = MetaRef {
+            token: Address::ZERO,
+            from: B256::ZERO,
+            batch: U256::ZERO,
+            nonce: U256::from(7),
+            digest: Some(b),
+            ua: true,
+            addr_nonce: false,
+            gov_target: None,
+        };
+        let logs = vec![
+            (U256::from(6), b, r2),
+            (U256::from(7), a, r1),
+            (U256::from(7), b, r2),
+        ];
+        assert_eq!(
+            pick_executed(&m, logs.clone()),
+            Some((b, r2)),
+            "the digest's log"
+        );
+        m.digest = Some(c);
+        assert_eq!(
+            pick_executed(&m, logs.clone()),
+            Some((a, r1)),
+            "none with the digest: the first with the nonce"
+        );
+        m.digest = None;
+        assert_eq!(
+            pick_executed(&m, logs.clone()),
+            Some((a, r1)),
+            "no digest: the first with the nonce"
+        );
+        m.nonce = U256::from(9);
+        assert_eq!(pick_executed(&m, logs), None);
+    }
     use serde_json::{json, Value};
 
     /// An RPC whose block 0 is the recorded Hedera testnet block (any block will do: only its hash is read).
@@ -865,7 +943,8 @@ pub(crate) mod tests {
                 nonce: U256::ZERO,
                 digest: None,
                 ua: true,
-                addr_nonce: false
+                addr_nonce: false,
+                gov_target: None
             })
             .await
             .unwrap(),
@@ -886,6 +965,7 @@ pub(crate) mod tests {
             digest: None,
             ua: true,
             addr_nonce: false,
+            gov_target: None,
         };
         let at = |n: u64| -> fn(&Value) -> Value {
             match n {
@@ -919,6 +999,62 @@ pub(crate) mod tests {
         );
     }
 
+    /// G1 (CTR-GOV-33): a router op of a derived subject reads `mtxNonceFor(target, from, batch)` (the map of the registry the
+    /// router checks it on); a native subject, and any job without a router target, `mtxNonce`. The fake answers 7 to the first
+    /// and 3 to the second, so a wrong view is a wrong number.
+    #[tokio::test]
+    async fn a_router_ops_derived_subject_reads_the_target_keyed_nonce() {
+        let (rpc, _) = fake_rpc(|r| {
+            if r["method"].as_str() == Some("eth_blockNumber") {
+                return json!({"result": "0x10"});
+            }
+            let call = &r["params"][0];
+            let data = call["input"]
+                .as_str()
+                .or(call["data"].as_str())
+                .unwrap_or("");
+            let sel = alloy::hex::encode(crate::abi::IGovRouterNonce::mtxNonceForCall::SELECTOR);
+            let n = if data.trim_start_matches("0x").starts_with(&sel) {
+                7
+            } else {
+                3
+            };
+            json!({"result": format!("0x{n:064x}")})
+        })
+        .await;
+        let c = chain_of(&[&rpc]);
+        let m = |from: B256, gov_target: Option<Address>| MetaRef {
+            token: Address::repeat_byte(0x60),
+            from,
+            batch: U256::ZERO,
+            nonce: U256::ZERO,
+            digest: None,
+            ua: true,
+            addr_nonce: false,
+            gov_target,
+        };
+        let (derived, native) = (
+            B256::repeat_byte(0xd1),
+            Address::repeat_byte(0xa1).into_word(),
+        );
+        let t = Some(Address::repeat_byte(0x70));
+        assert_eq!(
+            c.subject_nonce(&m(derived, t)).await.unwrap(),
+            U256::from(7),
+            "derived, router op: mtxNonceFor"
+        );
+        assert_eq!(
+            c.subject_nonce(&m(native, t)).await.unwrap(),
+            U256::from(3),
+            "native: mtxNonce"
+        );
+        assert_eq!(
+            c.subject_nonce(&m(derived, None)).await.unwrap(),
+            U256::from(3),
+            "no router target: mtxNonce"
+        );
+    }
+
     /// An RPC at head 12,288 whose `eth_getLogs` caps the range at `cap(request)` blocks and answers one log per accepted request,
     /// its `blockNumber` the request's `fromBlock` and its `logIndex` the span's length.
     fn capped_logs(r: &Value, cap: u64) -> Value {
@@ -939,7 +1075,8 @@ pub(crate) mod tests {
                 if to - from + 1 > cap {
                     return json!({"error": {"code": -32005, "message": format!("query exceeds max block range {cap}")}});
                 }
-                json!({"result": [{"address": format!("{:#x}", Address::ZERO), "topics": [], "data": "0x",
+                // T26 B2-4 (fixture correction): the log the filter names (topic 0 asked), as a real node answers
+                json!({"result": [{"address": format!("{:#x}", Address::ZERO), "topics": [format!("{:#x}", B256::ZERO)], "data": "0x",
                     "blockNumber": format!("{from:#x}"), "blockHash": format!("{:#x}", B256::repeat_byte(9)),
                     "transactionHash": format!("{:#x}", B256::repeat_byte(8)), "transactionIndex": "0x0",
                     "logIndex": format!("{:#x}", to - from + 1), "removed": false}]})
@@ -1506,6 +1643,7 @@ pub(crate) mod tests {
             digest: None,
             ua,
             addr_nonce: false,
+            gov_target: None,
         };
         let (ua_ev, mtx_ev) = (
             IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH,

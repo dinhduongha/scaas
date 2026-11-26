@@ -154,12 +154,38 @@ impl PqChat {
             home: home.clone(),
             session_id: sid.to_ascii_lowercase(),
         };
-        let at_home = self.record_at(&s.chain, &home, sid, sid).await?;
-        let here = crate::model::Epoch::from_session(sid, &v)?;
-        let (Some(at_home), Some(here)) = (at_home, here) else {
+        // CLI-PQC-15: the home's record with its kept signature verified (`sstore2`), else not shown
+        let Ok(at_home) = self.record_kept_at(&s.chain, &home, sid, sid).await else {
             return Ok(None);
         };
-        if Self::replica(&at_home, &here).is_err() {
+        let here = crate::model::Epoch::from_session(sid, &v)?;
+        let (Some((at_home, home_kept)), Some(here)) = (at_home, here) else {
+            return Ok(None);
+        };
+        // A-1: where both keep signatures, the instance's kept one compared without its `msig` version tags
+        let here_sig = match self.verifies(chain, instance).await {
+            Ok(true) => {
+                let x = self
+                    .net
+                    .read(
+                        chain,
+                        instance,
+                        "IPqChat.sessionSig",
+                        json!({ "sessionId": sid }),
+                    )
+                    .await?;
+                crate::signed::ua_sig(x.get("sig").unwrap_or(at(&x, "0"))).ok()
+            }
+            _ => None,
+        };
+        if Self::replica_kept(
+            &at_home,
+            home_kept.as_ref().map(|k| &k.sig),
+            &here,
+            here_sig.as_ref(),
+        )
+        .is_err()
+        {
             return Ok(None);
         }
         let n = self
@@ -177,7 +203,10 @@ impl PqChat {
         }
         let latest = self.latest_epoch(&s).await?;
         let ua = me.ua.to_ascii_lowercase();
-        let left = match self.record_at(&s.chain, &home, sid, &latest).await? {
+        let Ok(latest_rec) = self.signed_record_at(&s.chain, &home, sid, &latest).await else {
+            return Ok(None);
+        };
+        let left = match latest_rec {
             Some(e) if e.has_member(&ua) => {
                 let l = self
                     .net

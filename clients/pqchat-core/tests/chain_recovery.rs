@@ -120,7 +120,7 @@ async fn chain_recovery_from_state() {
         post_cost_confirmed: false,
     };
     let r = pa
-        .send(
+        .send_content(
             &s,
             &alice,
             &Content::Text {

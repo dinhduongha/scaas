@@ -106,7 +106,7 @@ fn session_at(w: &World, contract: &str, e: &Epoch, home: &str, sig_hash: &str) 
         .map(|m| json!({"ua": m.ua, "keyId": m.key_id.to_string(), "via": m.via}))
         .collect();
     let s = json!({"creator": e.author, "nonce": e.nonce.to_string(), "homeChain": hex(&[7; 32]),
-        "homeChatContract": home, "admins": e.admins, "members": members, "wrapHashes": e.wrap_hashes,
+        "homeChatContract": home, "groupMode": "0", "admins": e.admins, "members": members, "wrapHashes": e.wrap_hashes,
         "sealedInfo": hex(&e.sealed_info)});
     w.net.answer(
         contract,
@@ -274,7 +274,10 @@ async fn pending_session_reaches_nothing() {
     assert_eq!(bob.unwrap_calls(), 0);
     let sr = sref(&s.e);
     assert_eq!(
-        code(bob.send(&sr, &me(&w.bob), &txt("x"), None, &opts(&w)).await),
+        code(
+            bob.send_content(&sr, &me(&w.bob), &txt("x"), None, &opts(&w))
+                .await
+        ),
         "SessionPending"
     );
     let ep = s.open();
@@ -382,7 +385,7 @@ async fn left_session_declined() {
     );
     assert_eq!(
         code(
-            bob.send(&sref(&s.e), &me(&w.bob), &txt("x"), None, &opts(&w))
+            bob.send_content(&sref(&s.e), &me(&w.bob), &txt("x"), None, &opts(&w))
                 .await
         ),
         "SessionPending"

@@ -24,7 +24,8 @@ __pycache__/
 *.log
 
 # Claude Code worktrees
-.claude/
+.claude/*
+!.claude/skills
 
 # Local review notes and scratch (kept on disk, not versioned)
 reviews/
@@ -35,3 +36,8 @@ scratchpad/
 
 # session hand-over notes: local only (owner 2026-11-02)
 HANDOFF.md
+
+# vendor/: the third-party sources, fetched at their pins and checked by scripts/vendor.sh (owner 2026-11-26,
+# ARCH-POS-24); SCaaS's own files beside them (README.md, <name>.VENDORED.md, <name>.local/) stay tracked
+/vendor/*/
+!/vendor/*.local/

@@ -16,7 +16,10 @@
 //!
 //! `accHint` is sent empty: the token reads `acc`'s slots (a stale or missing hint never reverts). ponytail: no hint, which
 //! costs a materialised PQZL op 1 0.5–0.9 M gas more (pq-zero-knowledge.md §7.2); send the packed stream when that matters.
-//! Decoys of an op 7 are the caller's legs of amount 0 (the facade refuses a leg count outside the set's built ones).
+//! Decoys of an op 7 (CTR-UA-29, T26 B2-2, as Zether's): the caller names the real legs and a count of decoys; the SDK draws
+//! the decoys uniformly from the registry line's `0x0142` lists (never the holder or a real recipient, amount 0), then
+//! shuffles every leg's position, both draws by the facade's CSPRNG (`pickDecoys`) on public data only; the facade refuses a
+//! leg count outside the set's built ones.
 //! UNAUDITED.
 use super::pqz::{call, field as sfield, holder, read};
 use super::verdict::{request as verdict, PqzVerdictRequest};
@@ -25,7 +28,7 @@ use crate::op::{
     Source,
 };
 use crate::wallet::{put_envelope, Envelope};
-use crate::SdkError;
+use crate::{Sdk, SdkError};
 use alloy::primitives::{Address, U256};
 use scaas_ua::facade::pqz::{
     bind_mode, envelope_binding, pqz_auth_message, pqz_set, unwrap_envelope, Mode, PqzEnvelope,
@@ -64,8 +67,9 @@ pub struct PqzLeg {
     pub amount: String,
 }
 
-/// `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
-/// fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+/// `UAPqzTransfer` / `UAPqzTransferCompact`: the real `legs` and `decoys` legs of amount 0 the SDK draws from the registry
+/// line's `0x0142` lists, every leg's position shuffled (CTR-UA-29; their count one the set builds, 1, 2, 4 or 8),
+/// `decoy_fee` the per-leg fee (decimal; at least the token's `minDecoyFee`, the contract's check).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(deny_unknown_fields)]
@@ -76,6 +80,7 @@ pub struct PqzTransferMulti {
     pub batch: String,
     pub key_version: u64,
     pub legs: Vec<PqzLeg>,
+    pub decoys: u32,
     pub decoy_fee: String,
     pub valid_until_block: u64,
     pub envelope: Envelope,
@@ -124,6 +129,7 @@ enum Form {
     Multi {
         legs: Vec<(W, u64)>,
         decoy_fee: u64,
+        decoys: u32,
     },
     Burn {
         amount: u64,
@@ -315,9 +321,16 @@ impl super::Confidential {
         if legs.is_empty() {
             return Err(SdkError::Argument);
         }
+        review.push(field(
+            "request.decoys",
+            &r.decoys.to_string(),
+            &r.decoys.to_string(),
+            Source::Request,
+        ));
         let form = Form::Multi {
             legs,
             decoy_fee: num(&r.decoy_fee)?,
+            decoys: r.decoys,
         };
         self.pqz_debit(Debit {
             name,
@@ -334,11 +347,16 @@ impl super::Confidential {
         .await
     }
 
-    async fn pqz_debit(&self, d: Debit) -> Result<Arc<Prepared>, SdkError> {
+    async fn pqz_debit(&self, mut d: Debit) -> Result<Arc<Prepared>, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
+                // a profile disabling `pqz` refuses before any read, proof or verdict request (T26 B2-11)
+                crate::op::kind_enabled(&evm(&sdk, &d.chain)?.0, "pqz")?;
                 let (ua, key) = holder(&sdk, &d.signer, d.key_version)?;
+                if let Form::Multi { legs, decoys, .. } = &mut d.form {
+                    *legs = drawn(&sdk, &d.signer, d.key_version, &d.chain, &ua, legs, *decoys).await?;
+                }
                 let pk = key.1.pk();
                 let (profile, chain_id, pool) = evm(&sdk, &d.chain)?;
                 let t = addr20(&d.token.to_ascii_lowercase())?;
@@ -355,7 +373,7 @@ impl super::Confidential {
                 // the envelope's binding over the lane's next nonce (`PqzLayer._uaEnvelopeBinding`)
                 let e = &d.envelope;
                 let batch = dec(&json!(d.batch))?;
-                let nonce = lane_nonce(&pool, Address::from(t), "pqz", &ua, batch).await?;
+                let nonce = lane_nonce(&pool, Address::from(t), "pqz", &ua, batch, None).await?;
                 let word = |x: U256| x.to_be_bytes::<32>();
                 let binding = envelope_binding(
                     chain_id,
@@ -402,7 +420,7 @@ impl super::Confidential {
                         o.insert("mode".into(), json!(mode_name));
                         ("proveTransfer", 1u8, bind_mode(&binding, mode, verification))
                     }
-                    Form::Multi { legs, decoy_fee } => {
+                    Form::Multi { legs, decoy_fee, .. } => {
                         let l: Vec<Value> = legs
                             .iter()
                             .zip(&r.keys)
@@ -477,7 +495,7 @@ impl super::Confidential {
                         args.insert("openingTo".into(), empty.clone());
                         args.insert("openingAuditor".into(), empty);
                     }
-                    Form::Multi { legs, decoy_fee } => {
+                    Form::Multi { legs, decoy_fee, .. } => {
                         // `header ‖ pk_f ‖ pk_0…pk_{M−1} ‖ [pk_a] ‖ T ‖ u_0…u_{G−1} ‖ v_0…v_{M−1} ‖ v_f ‖ [v_{a,0}…v_{a,M−1}]`
                         let m = legs.len();
                         let fixed = HEADER + pkl * (1 + m + aud) + ct + v * (m * (1 + aud) + 1);
@@ -587,4 +605,50 @@ impl super::Confidential {
             })
             .await
     }
+}
+
+/// The legs of an op 7 (CTR-UA-29, T26 B2-2, as `zether::proved`): `decoys` drawn uniformly from the registry line's `0x0142`
+/// lists ([`crate::line::decoy_candidates`]), never the holder `ua` or a real recipient, of amount 0, then every leg's position
+/// shuffled; both draws by the facade's `pickDecoys` (its CSPRNG), on public data only.
+async fn drawn(
+    sdk: &Sdk,
+    signer: &KeyRef,
+    version: u64,
+    chain: &str,
+    ua: &W,
+    legs: &[(W, u64)],
+    decoys: u32,
+) -> Result<Vec<(W, u64)>, SdkError> {
+    let mut all: Vec<String> = legs.iter().map(|l| hex(&l.0)).collect();
+    if decoys > 0 {
+        let (registry, pool) = crate::line::bound(sdk, chain)?;
+        let cands = crate::line::decoy_candidates(&pool, registry).await?;
+        let mut exclude = vec![hex(ua)];
+        exclude.extend(all.iter().cloned());
+        let cands: Vec<String> = cands.iter().map(|u| hex(u)).collect();
+        let req = json!({"candidates": cands, "exclude": exclude, "count": decoys});
+        let d = call(sdk, holder(sdk, signer, version)?.1, "pickDecoys", &req).await?;
+        for x in d
+            .get("decoys")
+            .and_then(Value::as_array)
+            .ok_or(SdkError::Internal)?
+        {
+            all.push(x.as_str().ok_or(SdkError::Internal)?.to_string());
+        }
+    }
+    let req = json!({"candidates": all, "exclude": [], "count": all.len()});
+    let order = call(sdk, holder(sdk, signer, version)?.1, "pickDecoys", &req).await?;
+    let mut out = Vec::with_capacity(all.len());
+    for x in order
+        .get("decoys")
+        .and_then(Value::as_array)
+        .ok_or(SdkError::Internal)?
+    {
+        let u = w32(x.as_str().ok_or(SdkError::Internal)?)?;
+        out.push(legs.iter().find(|l| l.0 == u).map_or((u, 0), |l| *l));
+    }
+    if out.len() != all.len() {
+        return Err(SdkError::Internal);
+    }
+    Ok(out)
 }

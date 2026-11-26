@@ -43,7 +43,9 @@ fn usage(n: u64) -> KeyUsage {
     match n {
         1 => KeyUsage::Derive,
         2 => KeyUsage::Data,
-        _ => KeyUsage::KeyWrap,
+        3 => KeyUsage::KeyWrap,
+        4 => KeyUsage::File,
+        n => panic!("usage {n}"),
     }
 }
 
@@ -209,9 +211,14 @@ fn seal_key_rows() {
         let back = k.open_key(&under, &wire, u, &unhex(&r["aad"])).unwrap();
         assert_eq!(back.usage(), u);
         assert!(k.same_key(&back, &key).unwrap());
-        for other in [KeyUsage::Derive, KeyUsage::Data, KeyUsage::KeyWrap]
-            .into_iter()
-            .filter(|o| *o != u)
+        for other in [
+            KeyUsage::Derive,
+            KeyUsage::Data,
+            KeyUsage::KeyWrap,
+            KeyUsage::File,
+        ]
+        .into_iter()
+        .filter(|o| *o != u)
         {
             assert_eq!(
                 k.open_key(&under, &wire, other, &unhex(&r["aad"]))
@@ -702,7 +709,7 @@ impl St {
             sig,
             &AppRecordState {
                 members: &members,
-                current: &|_| None,
+                msig_at: &|_, _| None,
                 accepted: &accepted,
                 domain: d,
             },
@@ -779,10 +786,11 @@ fn msig_vector_sets_through_the_authorization_check() {
             &ua,
             &scaas_ua::purpose_tag(s["purpose"].as_str().unwrap()).unwrap(),
             &a32(&s["digest"]),
+            &[],
             &slots,
             &d,
             &members,
-            &|_| None,
+            &|_, _| None,
             Some(&|_, _| true),
         );
         assert_eq!(got.is_ok(), s["valid"].as_bool().unwrap(), "{}", s["name"]);
@@ -932,7 +940,7 @@ fn verify_app_record_signers() {
             },
         ),
     ]);
-    let ma = msig_sig_app(&kd, &|_| None, &inner_of, &APP, &pa, &slots).unwrap();
+    let ma = msig_sig_app(&kd, &|_, _| None, &inner_of, &APP, &pa, &slots).unwrap();
     assert!(st.check(&ua, &a, &pa, &ma, None));
     let refused = |id, i| St {
         recs: st.recs.clone(),
@@ -978,7 +986,7 @@ fn verify_app_record_signers() {
             },
         ),
     ]);
-    let na = msig_sig_app(&kd, &|_| None, &inner_of, &APP, &pa, &two).unwrap();
+    let na = msig_sig_app(&kd, &|_, _| None, &inner_of, &APP, &pa, &two).unwrap();
     assert!(st.check(&ua, &a, &pa, &na, None));
     // three slots where two reach the threshold: not minimal
     let mut extra = na.clone();
@@ -1050,6 +1058,7 @@ fn pqchat_records_reproduce_the_vectors() {
     let rows = [
         (&rec, "session", "PqChatSession"),
         (&rec, "epoch", "PqChatEpoch"),
+        (&rec, "epochDevices", "PqChatEpoch"), // owner (M) 2026-11-23: a member with two keys
         (&rec, "leave", "PqChatLeave"),
         (&rec, "remove", "PqChatRemove"),
         (&rec, "message", "PqChatMessage"),
@@ -1151,6 +1160,20 @@ fn pqchat_sign_records_only() {
         "a native key"
     );
     assert!(pqchat::typed("Nope", Value::Null).is_err());
+    // review A-8: a struct named like a record with another encodeType (one field more) is no record
+    let mut v = td.to_value();
+    v["types"]["PqChatLeave"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"name": "extra", "type": "uint256"}));
+    v["message"]["extra"] = "1".into();
+    let other = scaas_ua::wallet::TypedData::from_json(v.to_string().as_bytes()).unwrap();
+    assert_eq!(other.primary_type(), "PqChatLeave");
+    assert_eq!(
+        pqchat::sign(&k, &other).err(),
+        Some(Error::Argument),
+        "another struct under a record's name"
+    );
 }
 
 /// A UA key signs its contact card (a control verifying under its key); a native key does not; a malformed Matrix id is no card.
@@ -1304,7 +1327,11 @@ fn pqvault_records_reproduce_the_vectors() {
         refused: None,
     };
     let mut n = 0;
-    for v in d["vaults"].as_array().unwrap() {
+    // every vault's records, then CTR-PQV-18's `createTreeKem` (groupMode 1, mode 0: signed and hashed as any create record;
+    // refused by the contract and pqvault-core for its groupMode)
+    let tk = serde_json::json!({"mode": 0, "records": [d["createTreeKem"].clone()]});
+    assert_eq!(d["createTreeKem"]["record"]["groupMode"], 1);
+    for v in d["vaults"].as_array().unwrap().iter().chain([&tk]) {
         let (path, dom, denc) = pqv_mode(&d, v["mode"].as_u64().unwrap());
         for r in v["records"].as_array().unwrap() {
             let s = r["struct"].as_str().unwrap();
@@ -1338,7 +1365,7 @@ fn pqvault_records_reproduce_the_vectors() {
                     sig,
                     &AppRecordState {
                         members: &members,
-                        current: &|_| None,
+                        msig_at: &|_, _| None,
                         accepted: &|_, _| true,
                         domain: None,
                     },
@@ -1351,7 +1378,7 @@ fn pqvault_records_reproduce_the_vectors() {
             n += 1;
         }
     }
-    assert_eq!(n, 23);
+    assert_eq!(n, 24);
 }
 
 /// Each refusal one change at a time beside its control: the generic path in PqVault's domain or under its purpose; the
@@ -1378,7 +1405,7 @@ fn pqvault_sign_refusals() {
     let members = |id: [u8; 32]| (id == ua).then(|| (kind, kd.clone()));
     let state = AppRecordState {
         members: &members,
-        current: &|_| None,
+        msig_at: &|_, _| None,
         accepted: &|_, _| true,
         domain: None,
     };
@@ -1520,19 +1547,115 @@ fn pqvault_sign_refusals() {
     );
 }
 
-/// Drift: `SCAAS_APP_IDS` is exactly `PqVaultTypes.sol`'s `APP_ID` (the generator's list), its hash `pqvault::app_id()`.
+/// Drift: `SCAAS_APP_IDS`'s contract rows are exactly `PqVaultTypes.sol`'s `APP_ID` (the generator's list), its hash
+/// `pqvault::app_id()`; the other rows are clientkeys' ([`scaas_app_ids_hold_pqchat`]).
 #[test]
 fn scaas_app_ids_match_the_contracts() {
     let t = src("pqvault/PqVaultTypes.sol");
     assert!(t.contains("bytes32 internal constant APP_ID = keccak256(\"scaas.pqvault.v1\");"));
-    assert_eq!(
-        SCAAS_APP_IDS,
-        &[("PqVaultTypes.APP_ID", "scaas.pqvault.v1")]
-    );
+    let contracts: Vec<_> = SCAAS_APP_IDS
+        .iter()
+        .filter(|(n, _)| n.ends_with(".APP_ID"))
+        .collect();
+    assert_eq!(contracts, [&("PqVaultTypes.APP_ID", "scaas.pqvault.v1")]);
     assert_eq!(
         scaas_ua::keccak256(SCAAS_APP_IDS[0].1.as_bytes()),
         pqvault::app_id()
     );
+}
+
+/// Drift (owner 2026-11-23): PqChat's app id, which no contract names, is in `SCAAS_APP_IDS` from clientkeys'
+/// `src/pqchat.js` (`APP_ID_TAG`, the generator's second source), its hash `pqchat::app_id()`.
+#[test]
+fn scaas_app_ids_hold_pqchat() {
+    let js = std::fs::read_to_string(format!(
+        "{}/../clientkeys/src/pqchat.js",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    assert!(js.contains("export const APP_ID_TAG = \"scaas.pqchat.v1\";"));
+    let row = SCAAS_APP_IDS
+        .iter()
+        .find(|(_, s)| *s == pqchat::APP_ID_TAG)
+        .expect("PqChat's app id in SCAAS_APP_IDS: run clients/ua-rs/scripts/gen_app_refusals.py");
+    assert_eq!(row.0, "pqchat.js APP_ID_TAG");
+    assert_eq!(scaas_ua::keccak256(row.1.as_bytes()), pqchat::app_id());
+}
+
+/// Owner 2026-11-23 (T10b): PqChat's app purpose is a SCaaS purpose. The generic app signing refuses PqChat's app id on the
+/// portable path and its `appPurpose` on the chain-bound path (`AppPurposeRefused`); the twins, another app's id and
+/// purpose, sign.
+#[test]
+fn generic_signing_refuses_pqchat_app_purpose() {
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let key = w.ua_key(0x0108, 0, 0).unwrap();
+    let id = pqchat::app_id();
+    let purpose = scaas_ua::ua_portable::app_purpose(&id).unwrap();
+    assert!(is_scaas_purpose(&purpose));
+    assert_eq!(
+        sign_app_record(
+            &key,
+            None,
+            &AppPath::Portable { app_id: id },
+            &portable(&id, "My App", None)
+        )
+        .err(),
+        Some(Error::AppPurposeRefused),
+        "PqChat's app id on the portable path"
+    );
+    assert_eq!(
+        sign_app_record(
+            &key,
+            None,
+            &AppPath::ChainBound { purpose },
+            &chain_bound("My App", true)
+        )
+        .err(),
+        Some(Error::AppPurposeRefused),
+        "PqChat's app purpose on the chain-bound path"
+    );
+    let own = scaas_ua::keccak256(b"an app's own purpose");
+    assert!(sign_app_record(
+        &key,
+        None,
+        &AppPath::Portable { app_id: APP },
+        &portable(&APP, "My App", None)
+    )
+    .is_ok());
+    assert!(sign_app_record(
+        &key,
+        None,
+        &AppPath::ChainBound { purpose: own },
+        &chain_bound("My App", true)
+    )
+    .is_ok());
+}
+
+/// Owner 2026-11-23 (T10b): with PqChat's app purpose refused by the generic call, PqChat's own paths still sign: a record
+/// entry and the contact card under `PURPOSE_PQCHAT`, each verifying under its key, and the app root key of PqChat's app id
+/// (the file seal's root; the seal itself in `pqchat-core`'s `a_file_is_sent_and_read`).
+#[test]
+fn pqchat_dedicated_paths_still_sign() {
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let k = w.ua_key(0x0131, 0, 0).unwrap();
+    let (ua, kind, kd) = id_of(&k);
+    let ok = |td: &TypedData, sig: &[u8]| {
+        let m = scaas_ua::ua_message(kind, &pqchat::purpose(), &td.digest().unwrap()).unwrap();
+        scaas_ua::verify::verify(kind, &kd, &m, sig, true, false)
+    };
+    let td = pqchat::typed("PqChatLeave", pq("records")["leave"]["record"].clone()).unwrap();
+    let s = pqchat::sign(&k, &td).expect("a record entry");
+    assert!(ok(&td, &s.signature));
+    let card = pqchat::Card {
+        ua,
+        kem_version: 1,
+        matrix_id: "@alice:example.org".into(),
+    };
+    let s = pqchat::sign_card(&k, &card).expect("the card");
+    assert!(ok(&pqchat::card_typed(&card).unwrap(), &s.signature));
+    let ak = w.app_keys();
+    ak.app_root_key(&pqchat::app_id(), &ua)
+        .expect("PqChat's app root");
 }
 
 /// Owner 2026-11-22 (CLI-PQV-15 (1) (b)): PqVault's dedicated path signs as an `msig` the way the generic `msig` paths do,
@@ -1594,7 +1717,7 @@ fn pqvault_msig_signs_both_paths() {
             s,
             &AppRecordState {
                 members: &members,
-                current: &|_| None,
+                msig_at: &|_, _| None,
                 accepted: &|_, _| true,
                 domain: dom,
             },
@@ -1635,8 +1758,8 @@ fn pqvault_msig_signs_both_paths() {
         enabled(&[at(id1), at(nid)]),
         enabled(&[at(id1)]),
     );
-    let cur_all = |id: [u8; 32]| (id == ua).then(|| (kd2.clone(), all));
-    let cur_off = |id: [u8; 32]| (id == ua).then(|| (kd2.clone(), one_off));
+    let cur_all = |id: [u8; 32], _: Option<u64>| (id == ua).then(|| (kd2.clone(), all, 1));
+    let cur_off = |id: [u8; 32], _: Option<u64>| (id == ua).then(|| (kd2.clone(), one_off, 1));
     assert!(
         pqvault::sign_msig(&kd, &cur_all, &none, None, &pa, &tv, &slots).is_ok(),
         "every slot enabled"
@@ -1678,7 +1801,7 @@ fn pqvault_msig_signs_both_paths() {
     );
 }
 
-fn none_cur(_: [u8; 32]) -> Option<(Vec<u8>, [u8; 32])> {
+fn none_cur(_: [u8; 32], _: Option<u64>) -> Option<(Vec<u8>, [u8; 32], u64)> {
     None
 }
 
@@ -1700,4 +1823,84 @@ fn generated_passphrase_six_bip39_words() {
         seen.extend(p.split(' ').map(str::to_string));
     }
     assert!(seen.len() > 1500, "{} distinct words", seen.len());
+}
+
+/// Owner ruling A-3 (2026-11-23, "Restrict (1) only"): `seal_key` never seals out the app root key or a key derived from it,
+/// by `derive` or `mac_derive`, whatever the wrapping key (`AppKeyRooted`); a caller who chose that key's password could open
+/// the output. The twins: the pinned wraps seal drawn keys and keys derived from drawn keys (PqVault's `keyWrap` of an
+/// epoch key, its file key under `kFile`), under a key from a caller's password too.
+#[test]
+fn the_app_root_and_its_derivations_are_never_sealed_out() {
+    let (_w, k) = keys();
+    let under = k
+        .argon2id(
+            b"a caller's password",
+            &[7; 16],
+            Argon2Params {
+                m_kib: 64,
+                t: 1,
+                p: 1,
+            },
+        )
+        .unwrap();
+    let under = k
+        .derive(&[&under], b"", b"wrap", KeyUsage::KeyWrap, false)
+        .unwrap();
+    let root = k.app_root_key(&[1; 32], &[2; 32]).unwrap();
+    let child = k
+        .derive(&[&root], b"", b"upload", KeyUsage::Data, false)
+        .unwrap();
+    let mac = k.mac_derive(&root, b"m", KeyUsage::Derive).unwrap();
+    let grandchild = k.derive(&[&mac], b"", b"g", KeyUsage::Data, false).unwrap();
+    for (what, key) in [
+        ("root", &root),
+        ("derived", &child),
+        ("mac", &mac),
+        ("grandchild", &grandchild),
+    ] {
+        assert_eq!(
+            k.seal_key(&under, key, b"").err().map(|e| e.code()),
+            Some("AppKeyRooted"),
+            "{what}"
+        );
+    }
+    let epoch = k.random_key(KeyUsage::Derive).unwrap();
+    let kv = k
+        .derive(&[&epoch], b"", b"kv", KeyUsage::Derive, false)
+        .unwrap();
+    let file = k.random_key(KeyUsage::Data).unwrap();
+    assert!(
+        k.seal_key(&under, &kv, b"").is_ok(),
+        "a key derived from a drawn one"
+    );
+    assert!(k.seal_key(&under, &file, b"").is_ok(), "a drawn file key");
+}
+
+/// Review T26 A-3 (b): no KEM wrap carries the app root or a key derived from it to any KEM key (`AppKeyRooted`), the vectors
+/// twin with its fixed randomness too. The twin: a drawn key wraps to the same KEM key.
+#[test]
+fn the_app_root_and_its_derivations_are_never_kem_wrapped() {
+    let (_w, k) = keys();
+    let kem = KemKeyPair::vectors_ephemeral(&[3u8; 96]).unwrap();
+    let pk = kem.kem_pk();
+    let root = k.app_root_key(&[1; 32], &[2; 32]).unwrap();
+    let child = k
+        .derive(&[&root], b"", b"c", KeyUsage::Derive, false)
+        .unwrap();
+    for (what, key) in [("root", &root), ("derived", &child)] {
+        assert_eq!(
+            k.kem_wrap(key, b"l", b"a", &pk).err().map(|e| e.code()),
+            Some("AppKeyRooted"),
+            "{what}"
+        );
+        assert_eq!(
+            k.vectors_kem_wrap(key, b"l", b"a", &pk, &[4; 32], &[5; 32])
+                .err()
+                .map(|e| e.code()),
+            Some("AppKeyRooted"),
+            "{what}: vectors"
+        );
+    }
+    let epoch = k.random_key(KeyUsage::Derive).unwrap();
+    assert!(k.kem_wrap(&epoch, b"l", b"a", &pk).is_ok(), "a drawn key");
 }
