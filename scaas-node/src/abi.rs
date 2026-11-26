@@ -956,7 +956,7 @@ sol! {
         bytes32 sessionId; bytes32 author; uint64 nonce; uint64 epoch; bytes32 parentEpochId; bytes32 treeId;
         bytes32 parentTreeHash; uint32 leaf; uint64 keyId; uint32 leaves; bytes32[] admins; TreeRemove[] removes;
         TreeAdd[] adds; bytes32[] wrapHashes; bytes32[] nodeKeyHashes; uint32 ctCount; bytes32 ctListHash; bytes32 treeHash;
-        bytes sealedInfo;
+        bytes sealedInfo; bool pathless; bytes32 confirmTag;
     }
     #[derive(Debug, PartialEq, Eq)]
     struct PathCt { bytes mlkemCt; bytes32 x25519Eph; bytes sealedSecret; }
@@ -988,6 +988,7 @@ sol! {
         error PqChatPathList(bytes32 epochId); error PqChatPathHash(bytes32 epochId, uint256 index);
         error PqChatPathStored(bytes32 epochId, uint256 index); error PqChatTreeTargets(uint256 count);
         error PqChatTreeHash(bytes32 computed); error PqChatTreeKeyLive(bytes32 kemHash); error PqChatEnv();
+        error PqChatTreePathRequired(); error PqChatTreePathBound(uint32 sincePath, uint32 bound);
         error PqVaultEnv(); error PqVaultNotFactory(); error PqVaultInitialized(); error PqVaultOwnerNotCreator(bytes32 ownerUA);
         error PqVaultShape(); error PqVaultModeUnsupported(uint8 groupMode); error PqVaultKemKey(bytes32 member, uint64 keyId);
         error PqVaultUnknown(bytes32 id); error PqVaultIncomplete(bytes32 epochId); error PqVaultEpochNumber(uint64 expected, uint64 got);

@@ -161,6 +161,8 @@ abstract contract PqChatTreeWorld is PqChatBase {
             s.members[i] = IPqChat.MemberKey(_b32(k, ".ua"), uint64(_u(k, ".keyId")), _b32(k, ".via"));
         }
         s.groupMode = uint8(_j().readUint(string.concat(g, ".groupMode")));
+        s.pathRefreshBound = uint32(_j().readUint(string.concat(g, ".pathRefreshBound")));
+        s.confirmTag = _j().readBytes32(string.concat(g, ".confirmTag"));
         s.wrapHashes = _j().readBytes32Array(string.concat(g, ".wrapHashes"));
         s.sealedInfo = _j().readBytes(string.concat(g, ".sealedInfo"));
         w = _wrapsAt(string.concat(_sc(si), ".genesis.wraps"));
@@ -262,6 +264,8 @@ abstract contract PqChatTreeWorld is PqChatBase {
         c.ctListHash = _j().readBytes32(string.concat(r, ".ctListHash"));
         c.treeHash = _j().readBytes32(string.concat(r, ".treeHash"));
         c.sealedInfo = _j().readBytes(string.concat(r, ".sealedInfo"));
+        c.pathless = _j().readBool(string.concat(r, ".pathless"));
+        c.confirmTag = _j().readBytes32(string.concat(r, ".confirmTag"));
     }
 
     /// A `treeLeave` or `treeRemove` step, landed.

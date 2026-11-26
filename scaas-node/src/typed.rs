@@ -148,7 +148,7 @@ const NESTED: &[(&str, &str)] = &[
     // the op of that name
     ("MemberKey", "bytes32 ua,uint64 keyId,bytes32 via"),
     ("Wrap", "bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey"),
-    ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode"),
+    ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode,uint32 pathRefreshBound,bytes32 confirmTag"),
     ("PqChatEpoch", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
     ("PqChatLeave", "bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce"),
     ("PqChatRemove", "bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce"),
@@ -164,7 +164,7 @@ const NESTED: &[(&str, &str)] = &[
     // `ctListHash`, never sent whole; the rows' lists at the contract's bounds ([`tree_lists`], [`tree_shape`])
     ("TreeAdd", "uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash"),
     ("TreeRemove", "uint32 leaf,bytes32 ua,uint64 keyId"),
-    ("PqChatCommit", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo"),
+    ("PqChatCommit", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo,bool pathless,bytes32 confirmTag"),
     ("PathList", "uint32[] ctTargets,bytes32[] ctHashes"),
     ("PathCt", "bytes mlkemCt,bytes32 x25519Eph,bytes sealedSecret"),
     ("PqChatTreeLeave", "bytes32 sessionId,bytes32 treeId,bytes32 epochId,bytes32 member,uint64 nonce"),
@@ -929,6 +929,8 @@ const TREE_LEAVES_MAX: u64 = 512; // R8: 256 -> 512 (owner 2026-11-25), depth 9
 const TREE_ADMINS_MAX: usize = 32;
 const TREE_CHANGES_MAX: usize = 20; // C10: 32 -> 20 (owner 2026-11-25)
 const TREE_INFO_MAX: usize = 4124;
+/// C41 (the path-less delta §3.1): the largest `pathRefreshBound` that can bind, `TREE_LEAVES_MAX − 2`.
+const PATH_REFRESH_BOUND_MAX: u64 = TREE_LEAVES_MAX - 2;
 const TREE_DEPTH_MAX: usize = 9;
 const TREE_CTS_MAX: usize = TREE_LEAVES_MAX as usize - 1;
 /// A node key (`0x01 ‖ ek ‖ pk_X`), a path ciphertext's ML-KEM ciphertext and its sealed secret.
@@ -1046,6 +1048,13 @@ fn tree_shape(entry: &str, fields: &[(String, String)], vals: &[Val]) -> Result<
             if len(at("wraps")) > adds {
                 return bad("wraps: at most one per add");
             }
+            // the path-less delta §5.1 items 2, 3 (C42, R19), the stateless part: Adds only and no path; the head's admins,
+            // `owed` and the bound need the chain's state and are the contract's
+            if matches!(cv("pathless"), Some(Val::Bool(true)))
+                && (adds == 0 || keys != 0 || ct_count != 0 || len(cv("removes")) != 0)
+            {
+                return bad("c.pathless: Adds only, no nodeKeyHashes, ctCount 0 and no removes");
+            }
         }
         "addPathList" => {
             let n = len(at("ctTargets"));
@@ -1078,6 +1087,19 @@ fn tree_shape(entry: &str, fields: &[(String, String)], vals: &[Val]) -> Result<
             };
             let sf = &NESTED_MAP["PqChatSession"];
             let sv = |n: &str| pos(sf, n).map(|i| &t[i]);
+            // the path-less delta §3.1 (C41, C43): both 0 in mode 0, the bound at most 510 in mode 1
+            let bound = num(sv("pathRefreshBound"));
+            let tag_zero = sv("confirmTag")
+                .and_then(Val::as_fixed_bytes)
+                .is_some_and(|b| b.0.iter().all(|x| *x == 0));
+            if num(sv("groupMode")) == 0 && (bound != 0 || !tag_zero) {
+                return bad("s: pathRefreshBound and confirmTag 0 in mode 0");
+            }
+            if num(sv("groupMode")) == 1 && bound > PATH_REFRESH_BOUND_MAX {
+                return bad(&format!(
+                    "s.pathRefreshBound: above {PATH_REFRESH_BOUND_MAX} in a tree session"
+                ));
+            }
             if num(sv("groupMode")) == 1 {
                 if len(sv("members")) as u64 > TREE_LEAVES_MAX {
                     return bad(&format!(

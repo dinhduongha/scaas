@@ -5719,7 +5719,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     }
 
     /// CTR-CHAT-27: `PqChatTree.treeCreate`, the module's creation step that `PqChat.createSession` calls; no row of any kind.
-    const TREE_CREATE: &str = "treeCreate((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes,uint8),\
+    const TREE_CREATE: &str = "treeCreate((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes,uint8,uint32,bytes32),\
         (bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
     /// `PqChat`'s unsigned writes (UA-7 P17; CTR-CHAT-27: the tree commit's three pieces), under `params.relay_unsigned_pqchat`.
     const UNSIGNED_PQCHAT: [&str; 5] = [

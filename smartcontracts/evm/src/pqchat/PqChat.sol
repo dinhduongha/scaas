@@ -147,6 +147,10 @@ contract PqChat is IPqChat, PqChatCore {
     /// @dev P8, 3C-D6: the lists, the creator a member and an admin, the home instance named (P32).
     function _checkSession(IUARegistry reg, PqChatSession calldata s) internal view {
         if (s.groupMode > 1) revert PqChatModeUnsupported(s.groupMode); // CTR-CHAT-25, CTR-CHAT-26: flat wraps and TreeKEM
+        // the path-less delta §3.1 (C41, C43): both fields 0 in mode 0; the bound at most TREE_LEAVES_MAX - 2 in mode 1
+        if (
+            s.groupMode == 0 ? s.pathRefreshBound != 0 || s.confirmTag != 0 : s.pathRefreshBound > TREE_LEAVES_MAX - 2
+        ) revert PqChatShape();
         MemberKey[] memory members = s.members;
         bytes32[] memory admins = s.admins;
         _checkLists(reg, admins, members, s.wrapHashes.length, 2);

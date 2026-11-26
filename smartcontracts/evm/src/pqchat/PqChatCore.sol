@@ -159,6 +159,8 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
         if (code == T_BACKLOG) revert IPqChat.PqChatTreeBacklog(a);
         if (code == T_TARGETS) revert IPqChat.PqChatTreeTargets(a);
         if (code == T_HASH) revert IPqChat.PqChatTreeHash(bytes32(a));
+        if (code == T_PATH_REQUIRED) revert IPqChat.PqChatTreePathRequired();
+        if (code == T_PATH_BOUND) revert IPqChat.PqChatTreePathBound(uint32(a), uint32(b));
         if (code == T_REMOVED_KEPT) _chatFail(F_REMOVED_KEPT, a, b);
         if (code == T_NOT_MEMBER) _chatFail(F_NOT_MEMBER, a, b);
         if (code == T_NOT_ADMIN) _chatFail(F_NOT_ADMIN, a, b);

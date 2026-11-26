@@ -109,7 +109,7 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
         (M memory m, Step memory st, M memory n) = _grown();
         IPqChatTreeViews v = _v();
         {
-            (bytes32 tid, uint32 leaves, uint32 used, bytes32 root, bytes32 gen, bytes32 head, uint32 owed) =
+            (bytes32 tid, uint32 leaves, uint32 used, bytes32 root, bytes32 gen, bytes32 head, uint32 owed,) =
                 v.treeOf(m.sid);
             assertEq(tid, n.treeId, "treeId");
             assertEq((uint256(leaves) << 32) | used, (n.leaves << 32) | n.used, "leaves, used");
@@ -168,7 +168,7 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
         (uint256 rk, uint256 re) = _gone(vchat, m.sid, E);
         assertEq((uint256(kind) << 64) | ep, (rk << 64) | re, "goneOf: the slot");
         assertEq((uint256(kind) << 64) | ep, (2 << 64) | n.epoch, "removed at the head");
-        (,,,,,, uint32 owed) = v.treeOf(m.sid);
+        (,,,,,, uint32 owed,) = v.treeOf(m.sid);
         assertEq(owed, 1, "E's leaf owed");
         (kind, ep) = v.goneOf(m.sid, B);
         assertEq(uint256(kind) + ep, 0, "B a member");

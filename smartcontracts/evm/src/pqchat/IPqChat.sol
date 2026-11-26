@@ -42,6 +42,11 @@ interface IPqChat is IPqGroupTree {
         ///         (`PqChatModeUnsupported`); fixed at creation (no epoch record names it); last, so every other field keeps its
         ///         place
         uint8 groupMode;
+        /// @notice The path-less delta §3.1 (R18, C41): mode 1's forced path commit, 0 never forced, N > 0 the (N + 1)-th
+        ///         path-less leaf since the last path commit refused; at most 510 in mode 1, 0 in mode 0; fixed at creation
+        uint32 pathRefreshBound;
+        /// @notice C43: epoch 0's confirmation `H(S_0, …/confirm ‖ genesisCtx)` in mode 1 (a client check), 0 in mode 0
+        bytes32 confirmTag;
     }
 
     struct PqChatEpoch {
@@ -185,6 +190,11 @@ interface IPqChat is IPqGroupTree {
         bytes32 ctListHash;
         bytes32 treeHash;
         bytes sealedInfo;
+        /// @notice The path-less delta §3.2 (C42): a commit of Adds only with no path (no node key, no ciphertext, the head's
+        ///         admin list, no Remove); the contract requires that shape exactly when it is true
+        bool pathless;
+        /// @notice C43: `H(S_e, …/confirm ‖ ctx_e)`, every commit (a client check)
+        bytes32 confirmTag;
     }
 
     /// @notice A path ciphertext: 1,568 + 32 + 48 B, hashed as `PathCt` into the list's `ctHashes`.
@@ -316,6 +326,12 @@ interface IPqChat is IPqGroupTree {
     error PqChatTreeHash(bytes32 computed);
     /// @notice CTR-CHAT-27 C18: a key that a live leaf already holds (`kemHash = keccak256(kemPk)`).
     error PqChatTreeKeyLive(bytes32 kemHash);
+    /// @notice The path-less delta §5.1 item 3 (R19): a path-less commit with a Remove, or whose admin list is not the
+    ///         head's element for element.
+    error PqChatTreePathRequired();
+    /// @notice R18: a path-less commit whose leaves would bring the count since the last path commit above the session's
+    ///         `pathRefreshBound`.
+    error PqChatTreePathBound(uint32 sincePath, uint32 bound);
     /// @notice `validateEnv`: `chainUid` 0, registry 0, no code-size limit or one under EIP-170's 24,576 B (3C-D1); a
     ///         constructor id other than class 3, kind 0, version >= 1.
     error PqChatEnv();

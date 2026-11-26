@@ -79,9 +79,18 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
 
     /// A tree session on `vchat` of `members` (sorted by `(ua, keyId)`), created by `members[0].ua` with `admins`.
     function _open(IPqChat.MemberKey[] memory members, bytes32[] memory admins) internal returns (M memory m) {
+        return _openB(members, admins, 0);
+    }
+
+    /// `_open` with the session's `pathRefreshBound` (the path-less delta §3.1).
+    function _openB(IPqChat.MemberKey[] memory members, bytes32[] memory admins, uint32 bound)
+        internal
+        returns (M memory m)
+    {
         IPqChat.PqChatSession memory s;
         (s.creator, s.nonce, s.homeChain, s.homeChatContract) = (members[0].ua, ++nonceN, homeChain_, address(vchat));
         (s.admins, s.members, s.groupMode, s.sealedInfo) = (admins, members, 1, hex"5ea1");
+        (s.pathRefreshBound, s.confirmTag) = (bound, keccak256("epoch 0's tag"));
         IPqChat.Wrap[] memory w = _wraps(members, PqChatTypes.sessionId(s.creator, s.nonce));
         s.wrapHashes = _hashes(w);
         m.sid = vchat.createSession(s, w, _sig(s.creator, h.session(s)));
@@ -185,6 +194,26 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
         view
         returns (Step memory st, M memory n)
     {
+        return _buildX(m, leaf, changes, admins, false);
+    }
+
+    /// A path-less Add (the path-less delta §3.2) of `adds` by `leaf` on `m`'s head, with the head's admin list `admins`:
+    /// no node key, no target, `ctCount` 0 and the empty list's hash; each Add blanks its own direct path (C6).
+    function _buildPl(M memory m, uint32 leaf, Ch[] memory adds, bytes32[] memory admins)
+        internal
+        view
+        returns (Step memory st, M memory n)
+    {
+        return _buildX(m, leaf, adds, admins, true);
+    }
+
+    bytes32 internal constant EMPTY_LIST = 0x314f8c453563644126ee2ba7f65398ffecccac5e0b863019a52ec0f677f605da;
+
+    function _buildX(M memory m, uint32 leaf, Ch[] memory changes, bytes32[] memory admins, bool pathless)
+        internal
+        view
+        returns (Step memory st, M memory n)
+    {
         n = _copy(m);
         IPqChat.PqChatCommit memory c = st.c;
         (c.sessionId, c.author, c.nonce, c.epoch, c.parentEpochId) =
@@ -215,7 +244,9 @@ abstract contract PqChatTreeModel is PqChatTreeWorld {
             _blank(n, 2 * x.leaf);
         }
         c.leaves = uint32(n.leaves);
-        _path(n, st);
+        if (pathless) (c.pathless, c.ctListHash) = (true, EMPTY_LIST);
+        else _path(n, st);
+        c.confirmTag = keccak256(abi.encode("tag", c.nonce));
         st.epochId = PqChatTypes.epochId(c.sessionId, c.author, c.nonce);
         st.wraps = new IPqChat.Wrap[](na);
         c.wrapHashes = new bytes32[](na);

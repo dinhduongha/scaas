@@ -131,6 +131,8 @@ contract PqChatTypesTest is Test {
         s.homeChain = _b32(rec, string.concat(p, ".homeChain"));
         s.homeChatContract = vm.parseJsonAddress(rec, string.concat(p, ".homeChatContract"));
         s.groupMode = uint8(vm.parseJsonUint(rec, string.concat(p, ".groupMode")));
+        s.pathRefreshBound = uint32(vm.parseJsonUint(rec, string.concat(p, ".pathRefreshBound")));
+        s.confirmTag = vm.parseJsonBytes32(rec, string.concat(p, ".confirmTag"));
         s.admins = vm.parseJsonBytes32Array(rec, string.concat(p, ".admins"));
         s.members = _membersAt(rec, p);
         s.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));
@@ -189,6 +191,8 @@ contract PqChatTypesTest is Test {
         s.homeChain = _b32(rec, string.concat(p, ".homeChain"));
         s.homeChatContract = vm.parseJsonAddress(rec, string.concat(p, ".homeChatContract"));
         s.groupMode = uint8(vm.parseJsonUint(rec, string.concat(p, ".groupMode")));
+        s.pathRefreshBound = uint32(vm.parseJsonUint(rec, string.concat(p, ".pathRefreshBound")));
+        s.confirmTag = vm.parseJsonBytes32(rec, string.concat(p, ".confirmTag"));
         s.admins = vm.parseJsonBytes32Array(rec, string.concat(p, ".admins"));
         s.members = _membersAt(rec, p);
         s.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));
@@ -208,6 +212,8 @@ contract PqChatTypesTest is Test {
         s.homeChain = _b32(rec, string.concat(p, ".homeChain"));
         s.homeChatContract = vm.parseJsonAddress(rec, string.concat(p, ".homeChatContract"));
         s.groupMode = uint8(vm.parseJsonUint(rec, string.concat(p, ".groupMode")));
+        s.pathRefreshBound = uint32(vm.parseJsonUint(rec, string.concat(p, ".pathRefreshBound")));
+        s.confirmTag = vm.parseJsonBytes32(rec, string.concat(p, ".confirmTag"));
         s.admins = vm.parseJsonBytes32Array(rec, string.concat(p, ".admins"));
         s.members = _membersAt(rec, p);
         s.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));

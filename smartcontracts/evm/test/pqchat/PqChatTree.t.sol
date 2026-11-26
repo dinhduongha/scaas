@@ -42,7 +42,7 @@ contract TreeHarness is PqChatCore {
     }
 
     function open(bytes32 gid, uint256 used, bytes32[] calldata admins) external {
-        _treeOpen(gid, keccak256(abi.encode(gid)), used, admins);
+        _treeOpen(gid, keccak256(abi.encode(gid)), used, admins, 0);
     }
 
     function setLeaf(IUARegistry reg, bytes32 gid, uint256 i, bytes32 ua, uint64 keyId) external returns (bool) {
