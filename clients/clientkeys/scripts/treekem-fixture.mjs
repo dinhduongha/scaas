@@ -134,7 +134,41 @@ export function keylessOf(name) {
         }));
         return { signature: hex(ua.versionTag(version)), members: hex(encodeMemberSigs(list)) };
       };
+    // `X` (the fix check's C-4, R-1, 2026-11-26): a 1-of-2 `msig` whose slots are N (an `msig` member) and a key of the seed (index 13), never updated (its
+    // tag empty). It signs by its key (`sign`) or through N (`signVia(slots, version)`: N's slots over the inner digest, N's tag
+    // that version), so a record names N's version as well as its own
+    const xK = { ...pqKeygen(SEED, "mldsa65", 0, 13) };
+    const xSlots = [
+      { kind: 0x0120, id: nUa, weight: 1 },
+      { kind: MLDSA65, id: hex(xK.ua), weight: 1 },
+    ].sort((x, y) => (x.id < y.id ? -1 : 1));
+    const xKey = ua.encodeMsig(1, xSlots);
+    const xUa = hex(ua.deriveUA(0x0120, xKey));
+    const xSign = (via) => (purpose, digest) => {
+      const md = ua.memberDigest(xUa, ua.uaMessage(0x0120, purpose, digest));
+      const at = xSlots.findIndex((x) => (via ? x.id === nUa : x.id === hex(xK.ua)));
+      const inner = ua.innerDigest(fromHex(nUa), md);
+      const slot = via
+        ? {
+            index: at,
+            members: via.slots.map((index) => ({
+              index,
+              sig: pqSign(nSlots[index].k.secretKey, ua.purposeTag("member"), inner),
+            })),
+            sig: hex(ua.versionTag(via.version)),
+          }
+        : { index: at, members: [], sig: pqSign(xK.secretKey, ua.purposeTag("member"), md) };
+      return { signature: "0x", members: hex(encodeMemberSigs([slot])) };
+    };
     keyless = {
+      X: {
+        ua: xUa,
+        kind: 0x0120,
+        keyData: hex(xKey),
+        subs: [{ ua: hex(xK.ua), kind: MLDSA65, keyData: hex(xK.publicKey) }],
+        sign: xSign(null),
+        signVia: (slots, version) => xSign({ slots, version }),
+      },
       N: {
         ua: nUa,
         kind: 0x0120,
@@ -171,7 +205,7 @@ export function keylessOf(name) {
   }
   return keyless[name];
 }
-const KEYLESS = ["M", "W", "N"];
+const KEYLESS = ["M", "W", "N", "X"];
 /** A record's signature by `who` (a person: ML-DSA-65; `M`, `W` or `N`: a keyless admin's portable signature). */
 export const sign = (who, struct, record) =>
   KEYLESS.includes(who)
@@ -598,6 +632,24 @@ export function msigHistoryScenario() {
   commit(w, "B", { removes: ["C"] }); // 2
   gone(w, 2, "N", ["D"], 2);
   commit(w, "B", { removes: ["D"] }); // 3
+  return w;
+}
+/** The fix check's C-4, R-1 (2026-11-26; CTR-UA-74 steps 5 and 6): the keyless admin X (an `msig` with the `msig` N as a member) removes C through N at N's
+ *  version 1 (N's slot 2, applied at 1); B honours it (2); D commits (3). Every device follows; the walk keeps
+ *  N's version beside X's (a signing `msig` member's tag), so a later record through N at version 0 is a lying read (the lies). */
+export function msigNestedScenario() {
+  const w = createSession({
+    tag: "msig-nested",
+    creator: "A",
+    nonce: 20,
+    admins: ["A", "X"],
+    members: ["A", "B", "C", "D"],
+    info: INFO.I1,
+  });
+  commit(w, "B"); // 1
+  gone(w, 2, "X", ["C"], 1, null, keylessOf("X").signVia([2], 1));
+  commit(w, "B", { removes: ["C"] }); // 2
+  commit(w, "D"); // 3
   return w;
 }
 /** C-1: an epoch-0 head (A the admin, B, C): every target of the first commit a key the registry record authenticates. */
@@ -1438,6 +1490,39 @@ export function lies(worlds) {
         "treeLeaves()": lv.map((l, i) => (i === 1 ? { ...l, joinEpoch: 5 } : l)),
       },
       { replay: "TreePeriod", prepare: null },
+    );
+  }
+  {
+    // the fix check's C-4, R-1 (2026-11-26; CTR-UA-74 step 6 with step 5): in msig-nested X signed through N at N's version 1 (applied at 1); X's removal of
+    // B kept under the head through N's first quorum (slots 0 and 1, N's tag empty) verifies at N's version 0 alone, but N's
+    // version went back along the chain (X's own tag did not move): a lying read, from the cold tree and from A's pin (which
+    // holds N's version). Twin: the same removal through N at version 1 (slot 2) is accepted.
+    const w = W("msig-nested");
+    const X = keylessOf("X");
+    const via = (slots, version, nonce) =>
+      keptRemoval(w, "X", ["B"], 3, nonce, w.home.treeId, { signBy: X.signVia(slots, version) });
+    add(
+      "a removal through an inner msig at its later version (fix check R-1)",
+      "msig-nested",
+      "A",
+      { "removalCount(3)": 1, "removalAt(3,0)": via([2], 1, 5) },
+      { replay: null, prepare: null },
+    );
+    add(
+      "an inner msig's empty tag after its later version was seen (fix check R-1, CTR-UA-74 step 6)",
+      "msig-nested",
+      "A",
+      { "removalCount(3)": 1, "removalAt(3,0)": via([0, 1], 0, 6) },
+      lie,
+    );
+    const pin = replayOf(w, "A").pin;
+    add(
+      "an inner msig's empty tag after the pin saw its later version (fix check R-1, CTR-UA-74 step 6)",
+      "msig-nested",
+      "A",
+      { "removalCount(3)": 1, "removalAt(3,0)": via([0, 1], 0, 7) },
+      lie,
+      pin,
     );
   }
   return rows;

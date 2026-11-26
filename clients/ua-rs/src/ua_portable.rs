@@ -2144,7 +2144,7 @@ pub fn check_pqz_key_record_with(
 }
 /// [`check_pqz_key_record_with`] on the target registry's structures by version ([`MsigAt`], CTR-UA-74): `key_data` the first structure
 /// (the id); `sig` as `pqzKeySigOf` keeps it, an `msig`'s `MemberSig[]` followed by its tag ([`split_stored_tag`]), the record and its
-/// signing `msig` members judged by the versions their tags name; `accepted` that registry's `memberAccepted`.
+/// signing `msig` members judged by the versions their tags name; `accepted` that registry's `msigStateOf(id).accepted` ([`Accepted`]).
 #[allow(clippy::too_many_arguments)]
 pub fn check_pqz_key_record_current(
     kind: u16,
@@ -2466,7 +2466,7 @@ pub fn split_stored_tag(stored: &[u8]) -> (&[u8], &[u8]) {
 }
 /// [`check_authorization`] on the target registry's structures by version ([`MsigAt`]): `key_data` the first structure
 /// (`registrationOf`: the id, `pop`, `popSlotsOf`; [`is_record_of`] applies to it only), the record and its `msig` members judged by the
-/// versions their tags name (CTR-UA-74); `accepted` that registry's `memberAccepted` (enabled and accepted).
+/// versions their tags name (CTR-UA-74); `accepted` that registry's `msigStateOf(id).accepted` ([`Accepted`]).
 #[allow(clippy::too_many_arguments)]
 pub fn check_authorization_current(
     key_data: &[u8],
@@ -2551,6 +2551,34 @@ pub fn check_portable_current(
             )?
     };
     bits.verdict(ok, UAError::Unauthorized)
+}
+
+/// CTR-UA-74 step 6 (the reader rule): every `(msig, version)` the signature `sig` of `ua` (kind `kind`, first structure
+/// `key_data`) names: the signer's own tag (`signature`) and each signing `msig` member slot's (`MemberSig.sig`, the slot read in the
+/// signer's structure at that version). Empty for a single key. `None` when a tag does not decode or names a structure `at` does not
+/// give (a record a check refuses). What a reader holds along a chain of records: no version below one seen before.
+pub fn named_versions(
+    kind: u16,
+    key_data: &[u8],
+    ua: &[u8; 32],
+    sig: &UASig,
+    members: &Members,
+    at: &MsigAt,
+) -> Option<Vec<([u8; 32], u64)>> {
+    if kind != 0x0120 {
+        return Some(vec![]);
+    }
+    let cx = Cx { members, at };
+    let (d, _) = cx.tagged(ua, key_data, &sig.signature).ok()?;
+    let s = MsigStructure::from_key_data(&d).ok()?;
+    let mut out = vec![(*ua, tag_version(&sig.signature)?)];
+    for m in &sig.members {
+        let x = s.members.get(usize::from(m.index))?;
+        if x.kind == 0x0120 {
+            out.push((x.id, tag_version(&m.sig)?));
+        }
+    }
+    Some(out)
 }
 
 #[allow(clippy::too_many_arguments)]

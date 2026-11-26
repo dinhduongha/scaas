@@ -476,7 +476,7 @@ impl Net for Seam {
         p: AppPath,
         t: String,
         s: UaSig,
-    ) -> Result<bool, SdkError> {
+    ) -> Result<Option<Vec<scaas_sdk::app_core::MsigVersion>>, SdkError> {
         self.calls.lock().unwrap().push("verify".into());
         self.inner.verify(c, ua, p, t, s).await
     }
@@ -1231,7 +1231,7 @@ async fn a_second_app_core_is_kept_apart() {
         !pv.net
             .verify("anvil", ua, AppPath::Portable, toy_rec, sig(&ts))
             .await
-            .unwrap_or(false),
+            .is_ok_and(|v| v.is_some()),
         "PqVault refuses the toy's record"
     );
     let item = ItemRecord {
@@ -1251,7 +1251,8 @@ async fn a_second_app_core_is_kept_apart() {
         .net
         .verify("anvil", ua, AppPath::Portable, typed.clone(), sig(&ps))
         .await
-        .unwrap());
+        .unwrap()
+        .is_some());
     assert!(!toy
         .verify_app_record(
             "anvil".into(),

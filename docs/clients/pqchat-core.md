@@ -159,7 +159,11 @@ as amended on 2026-11-13; BUILT).
   author's rights hold against the parent; members and admins are strictly sorted and the creator is in both. On an `sstore2` home
   each record's kept signature verifies over its rebuilt typed digest, `sealedInfo` included, before any of this
   ([CLI-PQC-15](#CLI-PQC-15)); on a `none` home their authorship rests on the contract's check and CLI-PQC-13's trusted reads. A
-  replica's record counts only when it equals the home's record and `sigHash` under the same id (P32).
+  replica's record counts only when it equals the home's record and `sigHash` under the same id (P32); where both instances keep
+  signatures, the two kept signatures are compared with their `msig` version tags stripped instead of the `sigHash` (A-1,
+  [CTR-UA-74](../contracts/accounts.md#CTR-UA-74): a replica's copy carries the tag of its registry's current version; the
+  signed content and every other signature byte must be the home's; controller call 2026-11-26, BUILT `reads.rs`
+  `replica_kept`, `recovery.rs`, UNAUDITED).
 - **A failure** is no error, no receipt, no retry and no write; it is counted on the device only, per reason (`envelope`, `decode`,
   `signature`, `member`, `counter`, `duplicate`, `replica`, `unlisted`, `wrap-hash`, `content`, `too-far`, and `control` for a
   control-plane record that breaks the epoch rule, the rights or the shapes, which only a forged answer shows; an own wrap that
@@ -251,7 +255,14 @@ by [CTR-CHAT-23](../contracts/pqchat.md#CTR-CHAT-23); the default off a controll
   UAs that left or were removed there, a flagged UA dropped or kept (E-1). Every record is the one its id names, and an
   epoch counts only through its chain down to the signed session record: each link judged against its parent with the
   parent's exits, the verified epochs remembered per instance so each is walked once (U-1, `reads.rs` `walk`, BUILT
-  2026-11-25, UNAUDITED). A replica's record counts only when it equals the home's, which was judged at home, so no exit
+  2026-11-25, UNAUDITED). A remembered id binds the hash of the record verified under it: a record read again under that id
+  counts only when it is the same (an author can sign another record with the same nonce, so the same id: C-1), else
+  `control`; each parent read is numbered one below its child, so a record naming itself or a later epoch ends the walk
+  (`control`, C-2). Along the session, oldest first, no `msig` signs a record with a structure version below the highest
+  one the session's verified records named, a signing `msig` member's tag included (the reader rule's step 6,
+  [CTR-UA-74](../contracts/accounts.md#msig-reader-rule); the exits kept under an epoch judged order-free against the
+  versions after it; kept with the walk's memory, so never below what this device saw before; C-3, R-2): else `control`
+  (BUILT 2026-11-26, `reads.rs` `walk`, `tests/signed.rs`, UNAUDITED). A replica's record counts only when it equals the home's, which was judged at home, so no exit
   is read at a replica (E-5). Left to the read trust (CLI-PQC-13): a genuine leave of a UA that is still a member, shown
   again under a later head within the lag (the contract refuses the replay by its spent nonce, which a reader cannot
   see), makes a non-admin's drop of that UA look plain and a posted message (`messageSig`) each count only when their signer's `UASig` verifies over the
@@ -314,8 +325,11 @@ warning, an admin's new info after a gap, the order of a commit's pieces, the cl
   "unconfirmed"; Change 2026-11-24, the code review's E-1, C-1, B-1, F-1, C-3, and the spec check), compares each target key with its hash in the tree, and has `ua-rs` verify against the
   registry record every key no signed tree hash covers yet (an added key, a member at creation, every leaf of the cold
   tree a walk rebuilds: `kemKeyAt` with its kept signature, the re-review's C-1, BUILT in `ua-rs` and clientkeys 2026-11-25,
-  UNAUDITED), in every tree session; an `msig` signer is verified on its current structure and enabled slots (CTR-UA-44,
-  F-1; a record signed before an update that disabled its slot is the owner's open question F-1b); reads
+  UNAUDITED), in every tree session; an `msig` signer is verified at the structure version its tag names, never another
+  (the reader rule of [CTR-UA-74](../contracts/accounts.md#msig-reader-rule): a record signed before an update stays
+  verifiable after it, F-1b fixed), and along the walk no `msig` version a record names, the signer's or a signing `msig`
+  member's, goes below one named before it or held by the pin (step 6, C-4, R-1, BUILT 2026-11-26 in `ua-rs` and
+  clientkeys, UNAUDITED); reads
   follow [CLI-PQC-13](#CLI-PQC-13). A replay resumes from the device's previous one (`tree_resume`: its pin, the node keys
   it held, the info in force there) and reads and opens only the epochs after it, and a walk holds the public tree at its
   start and its head only, so a device pays the history once (spec §10 step 3; the re-review's E-3, BUILT 2026-11-25). What a candidate seals counts as disclosed to every key of the tree it was built on.

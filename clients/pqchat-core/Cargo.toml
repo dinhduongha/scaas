@@ -28,6 +28,8 @@ async-trait = "0.1"
 zeroize = "=1.8.2"
 # the Matrix event's transport encoding (RFC 4648 §4 with padding, CLI-PQC-05; the SDK's version)
 base64 = "0.22"
+# C-1: the hash a remembered epoch id binds in the walk's memory (no key; in the SDK's graph already)
+sha2 = "0.10"
 
 [features]
 # test-only (plan T3, CLI-PQC-11): the SDK's vectors build (fixed randomness, key import); never in a release build nor a

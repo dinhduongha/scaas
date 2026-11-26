@@ -52,7 +52,7 @@ impl Net for Recorder {
         _: AppPath,
         _: String,
         _: UaSig,
-    ) -> Result<bool, SdkError> {
+    ) -> Result<Option<Vec<scaas_sdk::app_core::MsigVersion>>, SdkError> {
         self.0.lock().unwrap().push("verify".into());
         Err(SdkError::Argument)
     }

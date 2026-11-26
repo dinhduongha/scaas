@@ -66,8 +66,8 @@ impl Net for Seam {
         _: AppPath,
         _: String,
         _: UaSig,
-    ) -> Result<bool, SdkError> {
-        Ok(true)
+    ) -> Result<Option<Vec<scaas_sdk::app_core::MsigVersion>>, SdkError> {
+        Ok(Some(vec![]))
     }
     async fn kem_wrap(
         &self,

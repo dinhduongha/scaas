@@ -1764,7 +1764,8 @@ UNAUDITED. **EVM: BUILT** (contract side; the client readers are a follow-up, li
   disabled a slot the record needs, the copy cannot be stored in the replica at all, as before this rule; nothing else here changed
   (`test_a1_replicaCopyCarriesTheReplicaTag` in `PqChatEpochs` and `PqVaultEpochs`).
 - <a id="msig-reader-rule"></a>**The reader rule** (ua-rs, clientkeys, every `ua-*` reader; mechanical; BUILT in ua-rs, clientkeys and
-  scaas-sdk, step 6 on the tree walk's pin `msigVersions`, UNAUDITED):
+  scaas-sdk; step 6 on the tree walk and its pin `msigVersions` (a signing `msig` member's version included), the mode-0 walk of
+  pqchat-core and pqvault-core's chain check (2026-11-26, C-3, C-4), UNAUDITED):
   1. Read the kept signature of the record (the `UASig`; on a `none` instance the bytes from any source, compared with the `sigHash`
      in state first). The signer is an `msig`: `keyData` is empty and `members` is not.
   2. `v` = the tag in `UASig.signature`: empty → 0; exactly 8 bytes → that big-endian `uint64`, which must be ≥ 1; any other length, or

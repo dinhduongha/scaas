@@ -1048,6 +1048,7 @@ test("the lies of plan T11 (E-1, F-1, sc-F-3, sc-F-7, E-4, the lag): replay and 
     ["genesis", f.genesisScenario()],
     ["backlog", f.backlogScenario()],
     ["msig-history", f.msigHistoryScenario()],
+    ["msig-nested", f.msigNestedScenario()],
   ]);
   const code = (fn) => {
     try {
@@ -1341,4 +1342,35 @@ test("C-6: an exit count above EXITS_MAX is refused before any record is read (u
     assert.equal(got, want, `count ${n}`);
     assert.ok(!rd.log.some((x) => x.startsWith("leaveAt(1,")), `count ${n}: no record read`);
   }
+});
+
+// The fix check's C-7 (2026-11-26; ua-rs `tree_kem_record_check`, the same rows of `ua/portable.json`): a member's KEM key at version 0 is the registration's,
+// authenticated by its proof of possession (in full and as the hash commit), as ua-rs `kem_record_key` takes it; a substituted
+// key, a flipped proof, another UA's registration and another version: `TreeKemRecord`. Before C-7 the reference refused
+// every version-0 key.
+test("a version-0 KEM key by the registration's proof of possession (fix check C-7)", () => {
+  const p = JSON.parse(readFileSync(new URL("../../../smartcontracts/vectors/ua/portable.json", import.meta.url)));
+  const g = p.registrations.find((r) => r.kemCommit);
+  const other = p.registrations.find((r) => r.ua !== g.ua && r.kind === g.kind);
+  const records = new Map(p.registrations.map((r) => [r.ua, { kind: r.kind, keyData: r.keyData }]));
+  const uaRecordOf = (u) => records.get(u) ?? null;
+  const v1 = p.kemRecords.find((r) => r.id === "mldsa65/v1");
+  const key = g.attrs.kemPk;
+  const flip = (h) => {
+    const x = fromHex(h);
+    x[9] ^= 1;
+    return hex(x);
+  };
+  for (const [form, rec] of [
+    ["in full", { kemPk: key, attrs: g.attrs, pop: g.pop }],
+    ["as the hash commit", { kemPk: key, attrs: g.kemCommit.register.attrs, pop: g.kemCommit.register.pop }],
+  ]) {
+    assert.equal(tk.recordKey(g.ua, 0, rec, uaRecordOf), key, form);
+    refused("TreeKemRecord", () => tk.recordKey(g.ua, 0, { ...rec, kemPk: v1.kemPk }, uaRecordOf));
+    refused("TreeKemRecord", () => tk.recordKey(g.ua, 0, { ...rec, pop: flip(rec.pop) }, uaRecordOf));
+    refused("TreeKemRecord", () => tk.recordKey(other.ua, 0, rec, uaRecordOf));
+    refused("TreeKemRecord", () => tk.recordKey(g.ua, 1, rec, uaRecordOf));
+  }
+  // a reader with no registration for the UA (`registrationOf` null): refused
+  refused("TreeKemRecord", () => tk.recordKey(g.ua, 0, { kemPk: key }, uaRecordOf));
 });

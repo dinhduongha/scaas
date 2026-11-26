@@ -1528,6 +1528,7 @@ write("tree.json", {
     ["backlog", fx.backlogScenario()],
     ["flag-clear", fx.flagClearScenario()],
     ["msig-history", fx.msigHistoryScenario()],
+    ["msig-nested", fx.msigNestedScenario()],
   ];
   const DEVICE_NAMES = ["A", "A2", "B", "B2", "C", "C2", "C3", "D", "E", "E2", "F", "G", "H"];
   // the registry's keys: every device a world holds (the backlog world's extra versions are replayed by none), each with its
@@ -1689,10 +1690,11 @@ write("tree.json", {
       "the pin of the head (C25, C26: the forward walk from the cold tree; an exit's views without treeId). signers: every " +
       "signer's registry record (kind, keyData; an msig updated on its registry also versions: [{version, msig, enabled}], its " +
       "msigAt answers for versions >= 1, CTR-UA-74), the keyless admins M (msig 2-of-2), W (WebAuthn) and N (msig 2-of-2 updated " +
-      "to version 1: a slot appended, threshold 1, slot 0 disabled; F-1) included (F-3); an msig's signature names its version " +
+      "to version 1: a slot appended, threshold 1, slot 0 disabled; F-1) and X (msig 1-of-2 over N and a key, never updated: a " +
+      "signing msig member, world msig-nested, the fix check's R-1) included (F-3); an msig's signature names its version " +
       "in signature (empty: 0, else 8 bytes big-endian) and is judged at that version only (the reader rule; world msig-history: " +
       "N's version-0 removal by a slot the update disabled, F-1b); a pin's msigVersions: [ua, version] the highest version each " +
-      "msig's records named before its exits (versions never decrease); devices: kemSig, the person's setKemKey signature of the key (kemKeyAt " +
+      "msig's records named before its exits, a signing msig member's tag included (versions never decrease); devices: kemSig, the person's setKemKey signature of the key (kemKeyAt " +
       "serves {kemPk, sig}; a cold tree's keys are authenticated by it, C-1); a " +
       "signature is hex (a single key) or {signature, members} (an msig's abi.encode(MemberSig[])). lies: an endpoint's views " +
       "replaced by read name, the device and its pin, and what replay and prepare give (null: accepted; plan T11). UNAUDITED.",

@@ -1320,6 +1320,47 @@ async fn v1_msig_minimal_and_accepted() {
         check(sig(vec![slot(1)])).await.unwrap(),
         "its twin, accepted"
     );
+    // C-3 (CTR-UA-74 step 6): `verify_pqchat_record_versions` names the version the tag gives on a pass, none on a refusal
+    let versions = |g: AppUaSig| {
+        a.verify_pqchat_record_versions(
+            "local".into(),
+            format!("0x{}", hexs(&ms)),
+            "PqChatMessage".into(),
+            r.to_string(),
+            g,
+        )
+    };
+    let at = |v: u64| {
+        Some(vec![scaas_sdk::app_core::MsigVersion {
+            msig: format!("0x{}", hexs(&ms)),
+            version: v,
+        }])
+    };
+    assert_eq!(versions(sig(vec![slot(1)])).await.unwrap(), at(0));
+    assert_eq!(versions(sig(vec![slot(0)])).await.unwrap(), None);
+    // version 1 current (the same slots), its tag on the signature
+    let items: String = m
+        .iter()
+        .map(|(k, id, wt)| format!("{}{}{}", w(u64::from(*k)), hexs(id), w(u64::from(*wt))))
+        .collect();
+    let structure = format!("{}{}{}{}", w(1), w(0x40), w(m.len() as u64), items);
+    answer(
+        &chain,
+        REGISTRY,
+        "msigOf(bytes32)",
+        &ms,
+        format!("{}{}", w(0x20), structure),
+    );
+    answer(
+        &chain,
+        REGISTRY,
+        "msigStateOf(bytes32)",
+        &ms,
+        format!("{}{}{}", w(1), w(0b11), w(0b11)),
+    );
+    let mut tagged = sig(vec![slot(1)]);
+    tagged.signature = 1u64.to_be_bytes().to_vec();
+    assert_eq!(versions(tagged).await.unwrap(), at(1));
 }
 
 /// TODO 8b-8 (4), CLI-PQC-15 on F2's line (CTR-UA-70): V1, the check behind a kept signature (`require_signed_records` and

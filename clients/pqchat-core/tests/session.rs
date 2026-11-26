@@ -440,6 +440,62 @@ async fn exits_are_checked_at_the_head() {
     assert_eq!(code(remove!()), "NotMember");
 }
 
+/// C-5 (E-2, the contract's `_namedLists`): an exit naming an epoch below the head is checked in the named epoch's lists too:
+/// carol, a member and admin of the head who joined after the epoch named, cannot leave it (`NotMember`) nor remove from it
+/// (`NotAdmin`), and an admin cannot remove her from it (`NotMember`); the twins naming bob, in both lists, are built.
+#[tokio::test(flavor = "multi_thread")]
+async fn exits_below_the_head_are_checked_in_the_named_lists() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let o = session2(&w).await;
+    assert!(!o.e.has_member(&w.carol.ua) && !o.e.admins.contains(&w.carol.ua));
+    let mut h = o.e.clone();
+    h.id = hex(&[0x71; 32]);
+    h.parent = hex(&[0x70; 32]);
+    h.epoch = o.e.epoch + 1;
+    h.members.push(pqchat_core::model::Member {
+        ua: w.carol.ua.clone(),
+        key_id: 1,
+        via: ZERO32.into(),
+    });
+    h.members
+        .sort_by(|x, y| (&x.ua, x.key_id).cmp(&(&y.ua, y.key_id)));
+    h.wrap_hashes = vec![hex(&[0x72; 32]); h.members.len()];
+    h.admins.push(w.carol.ua.clone());
+    h.admins.sort();
+    put_record(&w.net, HOME, &h);
+    w.net.answer(
+        HOME,
+        "IPqChat.latestEpoch",
+        json!({"sessionId": o.e.session_id}),
+        json!({"epochId": h.id}),
+    );
+    macro_rules! remove {
+        ($by:expr, $who:expr) => {
+            w.pq.remove(
+                &sref(&o),
+                &o.e,
+                &me($by),
+                2,
+                std::slice::from_ref($who),
+                &payer(&w),
+            )
+            .await
+        };
+    }
+    macro_rules! leave {
+        ($a:expr) => {
+            w.pq.leave(&sref(&o), &o.e, &me($a), 1, &payer(&w)).await
+        };
+    }
+    assert_eq!(code(leave!(&w.carol)), "NotMember");
+    assert_eq!(code(remove!(&w.carol, &w.bob.ua)), "NotAdmin");
+    assert_eq!(code(remove!(&w.alice, &w.carol.ua)), "NotMember");
+    assert_eq!(w.net.writes(), 0, "nothing signed or sent");
+    assert_eq!(code(leave!(&w.bob)), "Ok");
+    assert_eq!(code(remove!(&w.alice, &w.bob.ua)), "Ok");
+}
+
 /// A member who left authors no plain rekey (`NotMember`); the others' plain rekey drops them.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_member_who_left_authors_nothing() {

@@ -8,7 +8,9 @@ use crate::content::{self, Merge};
 use crate::keys::{self, ItemAt};
 use crate::records::*;
 use crate::{Error, PqVault, Result};
-use scaas_sdk::app_core::{AppCall, AppKey, AppKeyUsage, AppPath, AppSigned, SecretBytes};
+use scaas_sdk::app_core::{
+    msig_versions_up, AppCall, AppKey, AppKeyUsage, AppPath, AppSigned, MsigVersion, SecretBytes,
+};
 use scaas_sdk::op::KeyRef;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -158,6 +160,17 @@ impl EpochState {
     fn member_at(&self, ua: B32) -> Option<usize> {
         self.members.iter().position(|m| m.ua == ua)
     }
+}
+
+/// VC17's compare of one epoch at a replica with the home's (`a` the replica's): its id, sealed info, members and admins, and its
+/// signature with the `msig` version tags stripped (A-1, CTR-UA-74: a copy carries the tag of the replica registry's current
+/// version, every other byte the home's).
+pub fn epoch_agrees(a: &EpochState, b: &EpochState) -> bool {
+    a.id == b.id
+        && a.sig.without_tags() == b.sig.without_tags()
+        && a.sealed_info == b.sealed_info
+        && a.members == b.members
+        && a.admins == b.admins
 }
 
 /// A vault's state read from one instance: locked until [`PqVault::unlock`]; `verified` once [`PqVault::verify`] passed.
@@ -613,7 +626,7 @@ impl PqVault {
         ua: B32,
         r: &R,
         sig: &UaSig,
-    ) -> Result<bool> {
+    ) -> Result<Option<Vec<MsigVersion>>> {
         let typed = typed_json(r, s.domain()).map_err(|_| Error::ChainUnverified)?;
         Ok(self
             .net
@@ -625,14 +638,17 @@ impl PqVault {
                 sig.clone(),
             )
             .await
-            .unwrap_or(false))
+            .unwrap_or(None))
     }
 
     /// Spec §6.9 on a fetched state: the creator's signature in the domain its mode names and `vaultId` recomputed; in mode 1
     /// the instance read is the home and chain the record names; each epoch from 1 to the newest signed by an admin of its
     /// verified parent not removed from it by a verified removal, its parent and number chained, its id recomputed; each
     /// removal signed by an admin of its epoch; the user's wraps against the signed `wrapHashes`. Every signature through the
-    /// SDK's `verify_pqvault_record` (the registry's records read as a read that feeds a decryption). `ChainUnverified` else.
+    /// SDK's `verify_pqvault_record_versions` (the registry's records read as a read that feeds a decryption). CTR-UA-74 step 6
+    /// (C-3, R-2): along the vault, oldest first, no `msig` names a version below the highest one an earlier record named (the
+    /// create record, each epoch, then the removals kept under it, judged order-free against the versions after it).
+    /// `ChainUnverified` else.
     pub async fn verify(&self, mut s: VaultState) -> Result<VaultState> {
         let c = &s.create;
         let mode = u8::try_from(c.mode.0).map_err(|_| Error::ChainUnverified)?;
@@ -652,17 +668,21 @@ impl PqVault {
         {
             return Err(Error::ChainUnverified);
         }
-        if !self
+        // CTR-UA-74 step 6: the highest version per `msig` the records named so far
+        let mut seen = BTreeMap::new();
+        let up = |seen: &mut BTreeMap<String, u64>, v: Option<Vec<MsigVersion>>| match v {
+            Some(v) if msig_versions_up(seen, &v) => Ok(()),
+            _ => Err(Error::ChainUnverified),
+        };
+        let v = self
             .verify_sig(
                 &s,
                 c.creator,
                 c,
                 &s.epochs.first().ok_or(Error::ChainUnverified)?.sig,
             )
-            .await?
-        {
-            return Err(Error::ChainUnverified);
-        }
+            .await?;
+        up(&mut seen, v)?;
         for i in 0..s.epochs.len() {
             let e = s.epochs.get(i).ok_or(Error::ChainUnverified)?;
             if i > 0 {
@@ -686,11 +706,13 @@ impl PqVault {
                     || !p.admins.contains(&e.author)
                     || p.removed().contains(&e.author)
                     || (e.pass_kdf == 0) != (e.pass_salt == B32::default())
-                    || !self.verify_sig(&s, e.author, &rec, &e.sig).await?
                 {
                     return Err(Error::ChainUnverified);
                 }
+                let v = self.verify_sig(&s, e.author, &rec, &e.sig).await?;
+                up(&mut seen, v)?;
             }
+            let floor = seen.clone();
             for r in &e.removals {
                 let x = &r.record;
                 // kept under the head it was applied at, naming it or an ancestor within EXIT_LAG_MAX (C9, CTR-PQV-06)
@@ -701,9 +723,15 @@ impl PqVault {
                 if x.vault_id != s.vault_id
                     || named.is_none_or(|a| x.next_epoch.0 != a.number + 1)
                     || !e.admins.contains(&x.admin)
-                    || !self.verify_sig(&s, x.admin, x, &r.sig).await?
                 {
                     return Err(Error::ChainUnverified);
+                }
+                // the removals kept under one epoch: each against the versions after it, order-free
+                let mut f = floor.clone();
+                up(&mut f, self.verify_sig(&s, x.admin, x, &r.sig).await?)?;
+                for (m, n) in f {
+                    let e = seen.entry(m).or_insert(0);
+                    *e = (*e).max(n);
                 }
             }
             for (j, w) in &e.own_wraps {
@@ -1507,20 +1535,19 @@ impl PqVault {
     }
 
     /// VC17: whether the vault read at `replica` holds the home state's records byte for byte (the create record, each epoch
-    /// it has, its signatures), and each item's latest version there is the home's version of the same number (an item the
+    /// it has, its signatures with their `msig` version tags stripped: A-1, CTR-UA-74, a copy carries the tag of the replica
+    /// registry's current version, every other byte the home's), and each item's latest version there is the home's version of the same number (an item the
     /// home lacks, or another ciphertext or author, is a divergence). Items are read at home (recovery); this flags a replica.
     pub async fn replica_agrees(&self, home: &VaultState, replica: &Instance) -> Result<bool> {
         let r = self.fetch(replica, home.vault_id, home.me).await?;
         if r.create != home.create || r.epochs.len() > home.epochs.len() {
             return Ok(false);
         }
-        let same = r.epochs.iter().zip(&home.epochs).all(|(a, b)| {
-            a.id == b.id
-                && a.sig == b.sig
-                && a.sealed_info == b.sealed_info
-                && a.members == b.members
-                && a.admins == b.admins
-        });
+        let same = r
+            .epochs
+            .iter()
+            .zip(&home.epochs)
+            .all(|(a, b)| epoch_agrees(a, b));
         if !same {
             return Ok(false);
         }

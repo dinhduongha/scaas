@@ -756,7 +756,8 @@ impl PqChat {
     /// An admin's `remove` of `members` naming `e` (P48, S3): signed, prepared. `e` is the head or an ancestor within 16 epochs,
     /// and the contract checks and applies it at the head (C9), so the builder does (D2-4, [`Self::exit_head`]): the signer a
     /// live admin of the head (`NotAdmin`), each UA a member or an admin of it (`MembersInvalid`) not already removed there
-    /// (`NotMember`, A-4); only those UAs' flags are read.
+    /// (`NotMember`, A-4); only those UAs' flags are read. When `e` is not the head, E-2 (C-5): the signer an admin of `e` too
+    /// (`NotAdmin`) and each UA a member or an admin of `e` (`NotMember`), as the contract's `_namedLists`.
     pub async fn remove(
         &self,
         s: &SessionRef,
@@ -787,6 +788,14 @@ impl PqChat {
                 return Err(PqChatError::NotMember);
             }
         }
+        if h.id != e.id {
+            if !e.admins.contains(&ua) {
+                return Err(PqChatError::NotAdmin);
+            }
+            if m.iter().any(|u| !(e.has_member(u) || e.admins.contains(u))) {
+                return Err(PqChatError::NotMember);
+            }
+        }
         let r = PqChatRemove {
             session_id: s.session_id.clone(),
             epoch_id: e.id.clone(),
@@ -809,7 +818,8 @@ impl PqChat {
     }
 
     /// The account's `leave` naming `e` (CTR-CHAT-10, S3): signed, prepared, checked and applied at the head (C9, D2-4,
-    /// [`Self::exit_head`]): a member of the head that neither left nor was removed there (`NotMember`, A-4).
+    /// [`Self::exit_head`]): a member of the head that neither left nor was removed there (`NotMember`, A-4), and of `e` too
+    /// when `e` is not the head (E-2, C-5: `NotMember`).
     pub async fn leave(
         &self,
         s: &SessionRef,
@@ -824,6 +834,7 @@ impl PqChat {
         if !h.has_member(&ua)
             || self.flag(s, &h, "IPqChat.leftIn", &ua).await?
             || self.flag(s, &h, "IPqChat.removedIn", &ua).await?
+            || (h.id != e.id && !e.has_member(&ua))
         {
             return Err(PqChatError::NotMember);
         }

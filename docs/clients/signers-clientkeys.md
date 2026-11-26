@@ -373,7 +373,11 @@ override). Status: clientkeys, `ua-rs`, the wrappers and the reproducers **BUILT
 returns the exact JSON for `eth_signTypedData_v4`: `{domain: {name, version}, types, primaryType, message}`, with `EIP712Domain` of `name` and
 `version` only ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)); `PORTABLE_DOMAIN`, `PORTABLE_TYPES`, `PORTABLE_TYPEHASH`, `portableDomainSeparator`, `kemRecordStruct`,
 `portableRecordStruct` are its parts, and `holderPopMessage` / `pqzKeyRecordMessage` return `typedData` next to the digests. A native `msig` member
-signs that JSON (`signTyped`), never `personal_sign` and never a raw digest; a derived member signs its `memberDigest` as before.
+signs that JSON (`signTyped`), never `personal_sign` and never a raw digest; a derived member signs its `memberDigest` as before. An `msig`
+at structure version ≥ 1 signs with its 8-byte version tag (`ua.versionTag(msigStateOf(ua).version)`) in `UASig.signature`, and each signing
+`msig` member slot's `sig` carries that member's; at version 0 both stay empty ([CTR-UA-74](../contracts/accounts.md#CTR-UA-74); after an
+`updateMsig` a signature built without the tag is `UAUnauthorized` on every path, and a reader verifies a kept record at the version its tag
+names, [the reader rule](../contracts/accounts.md#msig-reader-rule)).
 `registrationArgs({kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner})` (`inner`: an `msig` member's key data by id, [CTR-UA-38](../contracts/accounts.md#CTR-UA-38)) refuses an `msig` `pop` that is not a minimal slot set at both levels (`UAPoP`, as `portableMemberSigs`; `scaas-ua`: `registration_args`) and returns `{entry, args, kemFill}`, the
 [CTR-UA-36](../contracts/accounts.md#CTR-UA-36) call as named fields: `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost` for their kinds
 (the recommended path; the registry also takes `register` with packed key data for all but `msig`) and `register` for the rest, the
