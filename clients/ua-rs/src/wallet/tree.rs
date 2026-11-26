@@ -22,8 +22,8 @@ use super::signer::Signer;
 use super::tree_public::{
     admit_kem_key, array_hash, b32, b32j, bytes, ct_targets_hash, direct_path, genesis_ctx, hx,
     kem_record_key, list, path_list_hash, refuse, struct_hash, tree_id, u32j, u64j, Add, Changes,
-    KemRecord, Leaf, Node, Remove, Tree, TreeError, Typed, TREE_ADMINS_MAX, TREE_CHANGES_MAX,
-    TREE_LEAVES_MAX, ZERO,
+    KemRecord, Leaf, Node, Remove, Tree, TreeError, Typed, PATH_REFRESH_BOUND_MAX, TREE_ADMINS_MAX,
+    TREE_CHANGES_MAX, TREE_LEAVES_MAX, ZERO,
 };
 use super::{Error, Result};
 use crate::keccak256;
@@ -306,11 +306,88 @@ fn joiner_secret(
         &[&sc.l("joiner")[..], tree_id, epoch_id].concat(),
     )
 }
-/// `S_e = H(joiner, …/epoch ‖ ctx_e)`, `K_e = H(S_e, …/key)`.
-fn schedule(sc: &TreeScope, joiner: &[u8], f: &EpochFields) -> Result<(Secret, Secret)> {
-    let s = h(joiner, &[&sc.l("epoch")[..], &f.context(sc)].concat())?;
-    let k = h(&s[..], &sc.l("key"))?;
-    Ok((s, k))
+/// A path-less Add's joiner (the path-less delta §4.1, R20): `H(next_e, …/add-joiner ‖ treeId ‖ epochId ‖ hash(adds))`.
+fn add_joiner_secret(
+    sc: &TreeScope,
+    next: &[u8],
+    tree_id: &[u8; 32],
+    epoch_id: &[u8; 32],
+    adds_hash: &[u8; 32],
+) -> Result<Secret> {
+    h(
+        next,
+        &[&sc.l("add-joiner")[..], tree_id, epoch_id, adds_hash].concat(),
+    )
+}
+/// An epoch's branches of `S_e` (the path-less delta §4.1, C43): `K_e = H(S_e, …/key)`, `next_e = H(S_e, …/next)` and the
+/// published `confirmTag = H(S_e, …/confirm ‖ ctx_e)` (epoch 0: `‖ genesisCtx`). `S_e` itself is dropped here (F-6).
+struct Sched {
+    k: Secret,
+    next: Secret,
+    tag: [u8; 32],
+}
+/// `S_e = H(joiner, …/epoch ‖ ctx_e)` and its three branches.
+fn schedule_s(sc: &TreeScope, joiner: &[u8], f: &EpochFields) -> Result<(Secret, Sched)> {
+    let ctx = f.context(sc);
+    let s = h(joiner, &[&sc.l("epoch")[..], &ctx].concat())?;
+    let tag_ctx = if f.epoch == 0 { f.tree_id } else { ctx };
+    let sched = Sched {
+        k: h(&s[..], &sc.l("key"))?,
+        next: h(&s[..], &sc.l("next"))?,
+        tag: *h(&s[..], &[&sc.l("confirm")[..], &tag_ctx].concat())?,
+    };
+    Ok((s, sched))
+}
+fn schedule(sc: &TreeScope, joiner: &[u8], f: &EpochFields) -> Result<Sched> {
+    Ok(schedule_s(sc, joiner, f)?.1)
+}
+/// The most tries of a path-less Add's nonce (C47).
+pub const ADD_NONCE_TRIES: u32 = 8;
+/// A path-less Add's nonce (C47): the first 8 B, big-endian, of `H(kemSeed, …/add-nonce ‖ treeId ‖ parentEpochId ‖
+/// parentTreeHash ‖ hash(adds) ‖ u32be(try))`; `TreeAddNonce` for a `try` at or above [`ADD_NONCE_TRIES`].
+fn add_nonce(sc: &TreeScope, kem: &KemKeyPair, parent: &[[u8; 32]; 4], try_: u32) -> Result<u64> {
+    if try_ >= ADD_NONCE_TRIES {
+        return refuse(TreeError::AddNonce);
+    }
+    let [tree_id, parent_epoch_id, parent_tree_hash, adds_hash] = parent;
+    let info = [
+        &sc.l("add-nonce")[..],
+        tree_id,
+        parent_epoch_id,
+        parent_tree_hash,
+        adds_hash,
+        &be32(try_),
+    ]
+    .concat();
+    let o = kem.seed_hkdf(&info, 32)?;
+    let b: [u8; 8] = o.get(..8).and_then(|x| x.try_into().ok()).ok_or(Error::Argument)?;
+    Ok(u64::from_be_bytes(b))
+}
+/// The own-commit test of a path-less record (C47, the delta §6.5): whether a `try` of the device's seed gives its nonce.
+fn add_nonce_reproduced(sc: &TreeScope, kem: &KemKeyPair, c: &Value) -> Result<bool> {
+    let adds = c.get("adds").and_then(Value::as_array).ok_or(Error::Argument)?;
+    let parent = [
+        b32j(c, "treeId")?,
+        b32j(c, "parentEpochId")?,
+        b32j(c, "parentTreeHash")?,
+        array_hash(sc.typed, "TreeAdd", adds)?,
+    ];
+    let nonce = u64j(c, "nonce")?;
+    for t in 0..ADD_NONCE_TRIES {
+        if add_nonce(sc, kem, &parent, t)? == nonce {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+/// The admins' warning threshold (C46, the delta §6.4): `W(0)` = [`PATHLESS_WARN_LEAVES`], `W(N) = max(1, N − ⌈N/4⌉)`.
+pub const PATHLESS_WARN_LEAVES: u32 = 20;
+pub fn warn_at(n: u32) -> u32 {
+    if n == 0 {
+        PATHLESS_WARN_LEAVES
+    } else {
+        (n - n.div_ceil(4)).max(1)
+    }
 }
 fn seal_path_secret(
     sc: &TreeScope,
@@ -459,7 +536,15 @@ fn target_key(tree: &Tree, parent_epoch: u64, x: u32, k: TargetKey) -> Result<Ve
     Ok(key)
 }
 
-/// A built commit: the record (unsigned, in the type's field order), its pieces, the tree after it and `K_e`.
+/// The head's handle (the path-less delta §4.1 lifetime, §6.5): the epoch's id and tree hash, and its `next` secret, held
+/// only here and only while this epoch is the device's head: a replay keeps one, of the last epoch it holds.
+pub struct TreeHead {
+    pub epoch_id: [u8; 32],
+    pub tree_hash: [u8; 32],
+    pub next: KeyHandle,
+}
+
+/// A built commit: the record (unsigned, in the type's field order), its pieces, the tree after it, `K_e` and the new head.
 pub struct BuiltCommit {
     pub record: Value,
     pub epoch_id: [u8; 32],
@@ -471,6 +556,7 @@ pub struct BuiltCommit {
     pub wraps: Vec<Value>,
     pub tree: Tree,
     pub k: KeyHandle,
+    pub head: TreeHead,
 }
 
 impl AppKeys {
@@ -576,7 +662,8 @@ impl AppKeys {
             Origin::Drawn,
             None,
         )?;
-        let (_, k) = schedule(sc, &self.bytes(&joiner)?[..], &f)?;
+        let sch = schedule(sc, &self.bytes(&joiner)?[..], &f)?;
+        let k = sch.k;
         let mut wraps = Vec::new();
         for (i, ((ua, key_id), kem_pk)) in members.iter().zip(&kem_pks).enumerate() {
             let (m, e) = (
@@ -605,6 +692,8 @@ impl AppKeys {
             .collect::<Result<Vec<_>>>()?;
         obj.insert("wrapHashes".into(), json!(hashes));
         obj.insert("sealedInfo".into(), json!(hx(&sealed)));
+        // epoch 0's tag (C43, F-7): after genesisCtx, outside it
+        obj.insert("confirmTag".into(), json!(hx(&sch.tag)));
         Ok(Genesis {
             session_id: f.epoch_id,
             genesis_ctx: f.tree_id,
@@ -657,6 +746,7 @@ impl AppKeys {
             key_id: a.key_id,
             removes: a.removes.clone(),
             adds: add_recs.clone(),
+            pathless: false,
         };
         let p = tree.filtered_path_after(&ch)?;
         let ct_targets: Vec<u32> = p.iter().flat_map(|q| q.targets.iter().copied()).collect();
@@ -729,7 +819,8 @@ impl AppKeys {
             tree_hash: applied.tree_hash,
             admins: a.admins.clone(),
         };
-        let (_, k) = schedule(sc, &joiner[..], &f)?;
+        let sch = schedule(sc, &joiner[..], &f)?;
+        let k = &sch.k;
         let mut wraps = Vec::new();
         for (i, (x, kem_pk)) in add_recs.iter().zip(&add_keys).enumerate() {
             let (m, e) = (
@@ -748,6 +839,8 @@ impl AppKeys {
             .collect::<Result<Vec<_>>>()?;
         obj.insert("wrapHashes".into(), json!(hashes));
         obj.insert("sealedInfo".into(), json!(hx(&sealed)));
+        obj.insert("pathless".into(), json!(false));
+        obj.insert("confirmTag".into(), json!(hx(&sch.tag)));
         Ok(BuiltCommit {
             record: rec,
             epoch_id,
@@ -757,10 +850,147 @@ impl AppKeys {
             node_keys,
             cts,
             wraps,
+            head: self.tree_head(epoch_id, applied.tree_hash, &sch.next[..])?,
             tree: applied.tree,
             k: self.tree_key(&k[..])?,
         })
     }
+
+    fn tree_head(&self, epoch_id: [u8; 32], tree_hash: [u8; 32], next: &[u8]) -> Result<TreeHead> {
+        Ok(TreeHead {
+            epoch_id,
+            tree_hash,
+            next: self.make(next, KeyUsage::Derive, Origin::Derived, None)?,
+        })
+    }
+
+    /// Builds a path-less Add inside the boundary (the path-less delta §4.1 construction order, §6.5): on the head the
+    /// forward walk verified (`a.parent`) and the device's handle of that head (`head`: refused `TreeHandle` unless its
+    /// `epochId` and `treeHash` are the record's `parentEpochId` and `parentTreeHash`, claude-19), the Adds' keys
+    /// authenticated, the nonce `addNonce` at `try_` (C47) unless the vectors give one, the tree after the Adds, the head's
+    /// admin list, `joiner = H(next, …/add-joiner …)`, the Welcome wraps, `sealedInfo` and the tag; `pathless` true.
+    fn build_pathless(
+        &self,
+        sc: &TreeScope,
+        a: PathlessInput,
+        head: &TreeHead,
+        nonce: Nonce,
+        rand: Rand,
+    ) -> Result<BuiltCommit> {
+        let pr = a.parent;
+        let tree = &pr.tree;
+        if head.epoch_id != pr.parent_epoch_id || head.tree_hash != pr.parent_tree_hash {
+            return refuse(TreeError::Handle);
+        }
+        if tree.tree_hash() != pr.parent_tree_hash {
+            return refuse(TreeError::Parent);
+        }
+        if tree.leaf(a.leaf).map(|l| l.kem_hash) != Some(keccak256(&a.kem.kem_pk())) {
+            return refuse(TreeError::KeyHash);
+        }
+        let mut add_keys = Vec::new();
+        for (x, r) in &a.adds {
+            let k = kem_record_key(&x.ua, x.key_id, r)?;
+            if keccak256(&k) != x.kem_hash {
+                return refuse(TreeError::KeyHash);
+            }
+            add_keys.push(k);
+        }
+        let add_recs: Vec<Add> = a.adds.iter().map(|(x, _)| x.clone()).collect();
+        let adds: Vec<Value> = add_recs.iter().map(Add::to_json).collect();
+        let adds_hash = array_hash(sc.typed, "TreeAdd", &adds)?;
+        let nonce = match nonce {
+            Nonce::Given(n) => n,
+            Nonce::Try(t) => add_nonce(
+                sc,
+                a.kem,
+                &[a.tree_id, pr.parent_epoch_id, pr.parent_tree_hash, adds_hash],
+                t,
+            )?,
+        };
+        let ch = Changes {
+            author: a.author,
+            leaf: a.leaf,
+            key_id: a.key_id,
+            removes: Vec::new(),
+            adds: add_recs.clone(),
+            pathless: true,
+        };
+        let applied = tree.apply_commit(&ch, &[])?;
+        let admins = pr.parent_admins.clone();
+        tree.judge_commit(&applied.tree, &ch, &admins, &pr.parent_admins)?;
+        let epoch_id = sc.epoch_id(&a.session_id, &a.author, nonce);
+        let mut rec = json!({
+            "sessionId": hx(&a.session_id), "author": hx(&a.author), "nonce": nonce, "epoch": pr.parent_epoch + 1,
+            "parentEpochId": hx(&pr.parent_epoch_id), "treeId": hx(&a.tree_id), "parentTreeHash": hx(&pr.parent_tree_hash),
+            "leaf": a.leaf, "keyId": a.key_id, "leaves": applied.tree.leaves,
+            "admins": admins.iter().map(|x| hx(x)).collect::<Vec<_>>(), "removes": [], "adds": adds,
+            "nodeKeyHashes": [], "ctCount": 0, "ctListHash": hx(&path_list_hash(sc.typed, &[], &[])?),
+            "treeHash": hx(&applied.tree_hash),
+        });
+        let next = self.bytes(&head.next)?;
+        let joiner = add_joiner_secret(sc, &next[..], &a.tree_id, &epoch_id, &adds_hash)?;
+        let joiner_h = self.make(&joiner[..], KeyUsage::Derive, Origin::Derived, None)?;
+        let f = EpochFields::commit(sc, &rec)?;
+        let sch = schedule(sc, &joiner[..], &f)?;
+        let mut wraps = Vec::new();
+        for (i, (x, kem_pk)) in add_recs.iter().zip(&add_keys).enumerate() {
+            admit_kem_key(kem_pk)?;
+            let (m, e) = (
+                r32(rand, &format!("welcome/{i}/mlkem-m"))?,
+                r32(rand, &format!("welcome/{i}/x25519-ephemeral"))?,
+            );
+            wraps.push(self.tree_wrap(
+                sc, &joiner_h, &a.tree_id, &epoch_id, &x.ua, x.key_id, kem_pk, &m, &e,
+            )?);
+        }
+        let nonce12 = rand("sealed-info-nonce", 12)?;
+        let sealed = seal_info(sc, &sch.k[..], &a.session_id, &epoch_id, a.info, &nonce12)?;
+        let hashes = wraps
+            .iter()
+            .map(|w| Ok(hx(&wrap_hash(sc, w)?)))
+            .collect::<Result<Vec<_>>>()?;
+        let obj = rec.as_object_mut().ok_or(Error::Argument)?;
+        obj.insert("wrapHashes".into(), json!(hashes));
+        obj.insert("sealedInfo".into(), json!(hx(&sealed)));
+        obj.insert("pathless".into(), json!(true));
+        obj.insert("confirmTag".into(), json!(hx(&sch.tag)));
+        Ok(BuiltCommit {
+            record: rec,
+            epoch_id,
+            path_context: ZERO,
+            ct_targets: Vec::new(),
+            ct_hashes: Vec::new(),
+            node_keys: Vec::new(),
+            cts: Vec::new(),
+            wraps,
+            head: self.tree_head(epoch_id, applied.tree_hash, &sch.next[..])?,
+            tree: applied.tree,
+            k: self.tree_key(&sch.k[..])?,
+        })
+    }
+}
+
+/// What a path-less Add is built from (the path-less delta §6.5): the head the forward walk verified, the author's leaf and
+/// KEM key (its seed derives the nonce), the Adds with each added key's registry record and the info (`None`: the marker).
+/// The admin list is the head's; there are no Removes.
+pub struct PathlessInput<'a> {
+    pub parent: &'a Prepared,
+    pub session_id: [u8; 32],
+    pub tree_id: [u8; 32],
+    pub author: [u8; 32],
+    pub leaf: u32,
+    pub key_id: u64,
+    pub kem: &'a KemKeyPair,
+    pub adds: Vec<(Add, KemRecord)>,
+    pub info: Option<&'a [u8]>,
+}
+
+/// A path-less Add's nonce: `addNonce` at a `try` (C47), or one the vectors give (an insider's record, a refusal row).
+enum Nonce {
+    Try(u32),
+    #[cfg_attr(not(feature = "vectors"), allow(dead_code))]
+    Given(u64),
 }
 
 // ------------------------------------------------------------------ the signing operations (spec §15; T26 A-5)
@@ -959,6 +1189,48 @@ impl AppKeys {
         let built = self.build_commit(sc, a, nonce, rand)?;
         let more = vec![
             ("adminsChanged".to_string(), changed.to_string()),
+            ("sessionInfo".to_string(), info),
+        ];
+        let rec = TreePrepared::new(sc, "PqChatCommit", built.record.clone(), more)?;
+        Ok(PreparedCommit { built, rec })
+    }
+
+    /// The typed operation of a path-less Add (the path-less delta §6.5; one operation per kind): [`PathlessInput`] on the
+    /// device's handle of the head (`TreeHandle` for another), the nonce `addNonce` at `try_` (C47: the lowest whose record
+    /// is not in state for this parent and these Adds; `TreeAddNonce` from [`ADD_NONCE_TRIES`] on), built here, then prepared
+    /// for the author's signature with its review (§6.4: "adds without refreshing the group's keys; n of N since the last
+    /// refresh"). The new handle is [`BuiltCommit::head`]. Randomness from the OS.
+    pub fn tree_prepare_pathless(
+        &self,
+        sc: &TreeScope,
+        a: PathlessInput,
+        head: &TreeHead,
+        try_: u32,
+    ) -> Result<PreparedCommit> {
+        self.prepare_pathless(sc, a, head, Nonce::Try(try_), &mut os_rand)
+    }
+
+    fn prepare_pathless(
+        &self,
+        sc: &TreeScope,
+        a: PathlessInput,
+        head: &TreeHead,
+        nonce: Nonce,
+        rand: Rand,
+    ) -> Result<PreparedCommit> {
+        let info = match a.info {
+            Some(j) => canonical_of_text(j)?.to_string(),
+            None => "unchanged (the marker)".to_string(),
+        };
+        let built = self.build_pathless(sc, a, head, nonce, rand)?;
+        let (n, cap) = (built.tree.since_path, built.tree.path_bound);
+        let line = if cap > 0 {
+            format!("adds without refreshing the group's keys; {n} of {cap} since the last refresh")
+        } else {
+            format!("adds without refreshing the group's keys; {n} since the last refresh")
+        };
+        let more = vec![
+            ("pathless".to_string(), line),
             ("sessionInfo".to_string(), info),
         ];
         let rec = TreePrepared::new(sc, "PqChatCommit", built.record.clone(), more)?;
@@ -1288,7 +1560,9 @@ impl Walk {
         let bounded = (|| {
             Some(
                 s0.get("members")?.as_array()?.len() <= TREE_LEAVES_MAX as usize
-                    && (1..=TREE_INFO_MAX).contains(&bytes(s0.get("sealedInfo")?).ok()?.len()),
+                    && (1..=TREE_INFO_MAX).contains(&bytes(s0.get("sealedInfo")?).ok()?.len())
+                    && u32j(&s0, "pathRefreshBound").ok()? <= PATH_REFRESH_BOUND_MAX
+                    && b32j(&s0, "confirmTag").is_ok(),
             )
         })();
         if bounded != Some(true) {
@@ -1429,7 +1703,8 @@ impl Walk {
                 kem_hash: keccak256(&k),
             });
         }
-        Tree::cold(&leaves).map_err(|_| Error::Tree(TreeError::ReadCorrupted))
+        Tree::cold_with(&leaves, u32j(&self.s0, "pathRefreshBound")?)
+            .map_err(|_| Error::Tree(TreeError::ReadCorrupted))
     }
 
     /// The record at number `n` whose id is `id` (a verified record's `parentEpochId`): its id recomputed, its number, session
@@ -1543,6 +1818,8 @@ impl Walk {
                     && len("wrapHashes")? == len("adds")?
                     && u64j(&c, "ctCount").ok()? < leaves
                     && (1..=TREE_INFO_MAX).contains(&bytes(c.get("sealedInfo")?).ok()?.len())
+                    && c.get("pathless")?.is_boolean()
+                    && b32j(&c, "confirmTag").is_ok()
                     && changes.chain(c.get("adds")?.as_array()?).all(below),
             )
         })()
@@ -1699,6 +1976,7 @@ impl Walk {
             b32j(t, "treeId").ok()? == self.tree_id
                 && u32j(t, "leaves").ok()? == w.leaves
                 && u32j(t, "used").ok()? == w.used
+                && u32j(t, "sincePath").ok()? == w.since_path
                 && b32j(t, "treeHash").ok()? == w.tree_hash()
                 && (!cold || b32j(t, "genesisTreeHash").ok()? == self.trees.get(&0)?.tree_hash())
                 && n >= w.used as usize
@@ -1888,22 +2166,28 @@ pub struct TreeDevice<'a> {
 pub enum State {
     Followed,
     /// with the reason: "opening failed", "list", "wrong target", "target not held", "node key mismatch", "welcome disagrees",
-    /// "info does not open" (a commit without its author's right is a lying read, C25, never "not followed")
+    /// "tag" (the derived confirmation is not the signed one: claude-21, F-7), "parent not followed", "welcome may not match"
+    /// (a path-less joiner in its first run, F-1); a commit without its author's right is a lying read (C25), never this
     NotFollowed(&'static str),
-    /// its own `(ua, keyId)` committed what its seed does not reproduce (R10, fable-r2-1)
+    /// its own `(ua, keyId)` committed what its seed does not reproduce (R10, fable-r2-1; a path-less record by its nonce, C47)
     Compromise,
+    /// C45 (the path-less delta §6.2): a path-less epoch whose tag fails at a device anchored in its run; the device keeps the
+    /// chain's key, takes no info, and the epoch's added leaves are under review
+    AuthorDidNotHold,
 }
 
-/// What a followed epoch's `sealedInfo` did to the info in force (C33).
+/// What a followed epoch's `sealedInfo` did to the info in force (C33); `NotTaken`: a good tag with a `sealedInfo` that does
+/// not open (F-8), no info in force from that epoch on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InfoTook {
     Full,
     Changed,
     Ignored,
     Marker,
+    NotTaken,
 }
 
-/// One epoch of the device's secret range.
+/// One epoch of the device's secret range. No `next` here: only the head's handle holds it ([`Replay::head`]).
 pub struct EpochRow {
     pub epoch: u64,
     pub epoch_id: [u8; 32],
@@ -1925,6 +2209,16 @@ pub struct Warning {
     pub leaves_left: Vec<u32>,
 }
 
+/// A C45 state (the path-less delta §6.2), shown to every member: the epoch, its author, the leaves it added and which of
+/// them are still in the tree at the head.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Suspect {
+    pub epoch: u64,
+    pub author: [u8; 32],
+    pub adds: Vec<(u32, [u8; 32], u64)>,
+    pub leaves_left: Vec<u32>,
+}
+
 /// A roster entry: `(ua, keyId)` of a leaf, `None` blank.
 pub type Roster = Vec<Option<([u8; 32], u64)>>;
 
@@ -1937,8 +2231,19 @@ pub struct Replay {
     pub rosters: BTreeMap<u64, Roster>,
     pub epochs: Vec<EpochRow>,
     pub warnings: Vec<Warning>,
+    /// the C45 states (the path-less delta §6.2)
+    pub suspects: Vec<Suspect>,
+    /// the leaves under review (F-3): every still-live leaf a warning or a C45 state names, ascending
+    pub review: Vec<u32>,
+    /// the walk's `sincePath` at the head and whether this device is warned (R18, C46: an admin at `sincePath ≥ W(N)`)
+    pub since_path: u32,
+    pub path_warning: bool,
     /// the node keys the device holds after the range (its leaf's key is its own, not here)
     pub held: BTreeMap<u32, KemKeyPair>,
+    /// the head's handle with its `next` (the path-less delta §4.1), when the device holds the head's epoch; whether it is
+    /// anchored in the run
+    pub head: Option<TreeHead>,
+    pub anchored: bool,
     pub pin: Pin,
 }
 
@@ -1962,11 +2267,18 @@ struct Piece {
     wrap: Option<Value>,
 }
 
+/// The chain a device holds into the next epoch: the epoch's `next` and whether it is anchored in the run (C45).
+struct Chain {
+    next: Secret,
+    anchored: bool,
+}
+
 struct Opened {
     state: State,
     k: Option<Secret>,
     info: Option<Info>,
     derived: Vec<(u32, KemKeyPair)>,
+    chain: Option<Chain>,
 }
 fn not(reason: &'static str) -> Opened {
     Opened {
@@ -1974,6 +2286,7 @@ fn not(reason: &'static str) -> Opened {
         k: None,
         info: None,
         derived: Vec::new(),
+        chain: None,
     }
 }
 fn compromise() -> Opened {
@@ -1982,14 +2295,28 @@ fn compromise() -> Opened {
         ..not("")
     }
 }
+/// The tag decides the key state, `sealedInfo` only the info (C12 as amended, F-8): followed, `info` `None` when it does
+/// not open ("followed, info not taken").
+fn taken(sc: &TreeScope, a: &Walk, epoch_id: &[u8; 32], sealed: &[u8], sch: Sched, anchored: bool) -> Opened {
+    Opened {
+        state: State::Followed,
+        info: open_info(sc, &sch.k[..], &a.sid, epoch_id, sealed),
+        k: Some(sch.k),
+        derived: Vec::new(),
+        chain: Some(Chain {
+            next: sch.next,
+            anchored,
+        }),
+    }
+}
 
 impl AppKeys {
     /// A device's replay of a tree session from the home's state alone (§10): the forward walk from the cold tree (C25), the
     /// checkpoint compared with it (C26), the key's one period, the secret range's pieces all read before anything is opened
     /// (C22), then per epoch its state, `K` (a handle for each epoch from `keys_from` on, so a long session never fills the
-    /// arena, B-3), the info in force (C33), the compromise warnings and the next pin. `Ok(None)`: the key is in no period of
-    /// this session. Refusals by name (`TreeError`); a record or piece that fails a signed hash, a signature or the walk:
-    /// `TreeReadCorrupted`, before any decapsulation.
+    /// arena, B-3), the info in force (C33), the compromise warnings, the C45 states and the next pin. `Ok(None)`: the key is
+    /// in no period of this session. Refusals by name (`TreeError`); a record or piece that fails a signed hash, a signature or
+    /// the walk: `TreeReadCorrupted`, before any decapsulation.
     pub fn tree_replay(
         &self,
         sc: &TreeScope,
@@ -2002,10 +2329,10 @@ impl AppKeys {
     }
 
     /// [`AppKeys::tree_replay`] resumed from the device's previous replay `from` (spec §10 step 3, E-3, B2-2): the walk starts at
-    /// its pin, and only the epochs after it are read and opened, with the node keys it held and the info in force there, so
-    /// the device pays the history once. `from` a replay whose key is still in the tree (`TreePeriod` else). C-6: every read
-    /// comes before the secrets (C22), so a refusal, a failed or a lying read leaves `from` as it was (its node keys and pin);
-    /// on success its node keys move into the new replay, which replaces it.
+    /// its pin, and only the epochs after it are read and opened, with the node keys it held, its head's `next` and the info in
+    /// force there, so the device pays the history once. `from` a replay whose key is still in the tree (`TreePeriod` else).
+    /// C-6: every read comes before the secrets (C22), so a refusal, a failed or a lying read leaves `from` as it was (its node
+    /// keys, head and pin); on success its node keys and head move into the new replay, which replaces it.
     pub fn tree_resume(
         &self,
         sc: &TreeScope,
@@ -2098,7 +2425,8 @@ impl AppKeys {
                 }
             }
         }
-        // 6. the secret range's pieces, by public data only, all read before anything is opened (C22)
+        // 6. the secret range's pieces, by public data only, all read before anything is opened (C22); a record whose
+        // `ctCount` is 0 (a path-less Add, the last live leaf's commit) has no list: the record and, at the join, the wrap
         let mut plan: Vec<Piece> = Vec::new();
         for n in first..=last {
             if n == 0 {
@@ -2122,22 +2450,27 @@ impl AppKeys {
             let own = b32j(&c, "author")? == dev.ua
                 && u64j(&c, "keyId")? == dev.key_id
                 && u32j(&c, "leaf")? == leaf;
-            let l = rd.read(View::PathListOf(n))?;
-            let targets = served(
-                list(&l, "ctTargets", |v| {
-                    v.as_u64()
-                        .and_then(|x| u32::try_from(x).ok())
-                        .ok_or(Error::Argument)
-                })
-                .ok(),
-            )?;
-            let hashes = served(list(&l, "ctHashes", b32).ok())?;
-            if Some(&targets) != a.targets.get(&n)
-                || hashes.len() as u64 != u64j(&c, "ctCount")?
-                || path_list_hash(sc.typed, &targets, &hashes)? != b32j(&c, "ctListHash")?
-            {
-                return corrupt();
-            }
+            let (targets, hashes) = if u64j(&c, "ctCount")? == 0 {
+                (Vec::new(), Vec::new())
+            } else {
+                let l = rd.read(View::PathListOf(n))?;
+                let targets = served(
+                    list(&l, "ctTargets", |v| {
+                        v.as_u64()
+                            .and_then(|x| u32::try_from(x).ok())
+                            .ok_or(Error::Argument)
+                    })
+                    .ok(),
+                )?;
+                let hashes = served(list(&l, "ctHashes", b32).ok())?;
+                if Some(&targets) != a.targets.get(&n)
+                    || hashes.len() as u64 != u64j(&c, "ctCount")?
+                    || path_list_hash(sc.typed, &targets, &hashes)? != b32j(&c, "ctListHash")?
+                {
+                    return corrupt();
+                }
+                (targets, hashes)
+            };
             let mut p = Piece {
                 n,
                 own,
@@ -2168,33 +2501,54 @@ impl AppKeys {
             }
             plan.push(p);
         }
-        // the secrets, from those bytes only (resumed: the node keys held and the info in force at the pin)
-        let (mut held, mut in_force, mut flagged) = match from {
+        // the secrets, from those bytes only (resumed: the node keys held, the head's next and the info in force at the pin)
+        let (mut held, mut in_force, mut flagged, mut chain) = match from {
             Some(f) => {
                 let (i, fl) = f
                     .epochs
                     .last()
                     .map_or((None, false), |e| (e.in_force.clone(), e.flagged));
-                (std::mem::take(&mut f.held), i, fl)
+                let chain = match f.head.take() {
+                    Some(hd) => Some(Chain {
+                        next: s32(&self.bytes(&hd.next)?[..])?,
+                        anchored: f.anchored,
+                    }),
+                    None => None,
+                };
+                (std::mem::take(&mut f.held), i, fl, chain)
             }
-            None => (BTreeMap::new(), None, false),
+            None => (BTreeMap::new(), None, false, None),
+        };
+        let top = a.trees.get(&head).ok_or(Error::Argument)?;
+        let live = |x: &Add| {
+            top.leaf(x.leaf)
+                .is_some_and(|l| l.ua == x.ua && l.key_id == x.key_id && l.kem_hash == x.kem_hash)
         };
         let mut epochs = Vec::new();
         let mut warnings = Vec::new();
+        let mut suspects = Vec::new();
         for p in plan {
             let n = p.n;
             let c = a.rec(n)?.clone();
+            let pathless = n > 0 && c.get("pathless").and_then(Value::as_bool) == Some(true);
             let res = if n == 0 {
                 self.open_genesis(sc, &a, dev, &p)?
+            } else if pathless {
+                self.pathless_commit(sc, &a, dev, &p, &c, chain.as_ref())?
             } else if p.own {
                 self.own_commit(sc, &a, dev, &p, &c)?
             } else {
                 self.others_commit(sc, &a, dev, &p, &c, leaf, &held)?
             };
             if n > 0 {
+                // a path-less Add blanks only its new leaves' direct paths, the root included (C6); a path commit also the
+                // author's
                 let leaves_n = u32j(&c, "leaves")?;
-                let mut xs = vec![u32j(&c, "leaf")?];
-                xs.extend(list(&c, "removes", |v| u32j(v, "leaf"))?);
+                let mut xs = Vec::new();
+                if !pathless {
+                    xs.push(u32j(&c, "leaf")?);
+                    xs.extend(list(&c, "removes", |v| u32j(v, "leaf"))?);
+                }
                 xs.extend(list(&c, "adds", |v| u32j(v, "leaf"))?);
                 for x in xs {
                     for y in direct_path(2 * x, leaves_n) {
@@ -2207,57 +2561,70 @@ impl AppKeys {
                 k,
                 info: opened,
                 derived,
+                chain: next_chain,
             } = res;
+            chain = next_chain;
             held.extend(derived);
             let mut info = None;
-            if state == State::Followed {
-                let author = if n == 0 { ZERO } else { b32j(&c, "author")? };
-                let admin = n == 0 || a.admins_at(n - 1)?.contains(&author);
-                match opened {
-                    Some(Info::Marker) | None => info = Some(InfoTook::Marker),
-                    Some(Info::Json(j)) => match &in_force {
-                        None => {
-                            flagged = !(admin || author == dev.ua);
-                            in_force = Some(j);
-                            info = Some(InfoTook::Full);
-                        }
-                        Some(cur) if *cur != j => {
-                            if admin {
+            match (state, opened) {
+                (State::Followed, Some(opened)) => {
+                    let author = if n == 0 { ZERO } else { b32j(&c, "author")? };
+                    let admin = n == 0 || a.admins_at(n - 1)?.contains(&author);
+                    match opened {
+                        Info::Marker => info = Some(InfoTook::Marker),
+                        Info::Json(j) => match &in_force {
+                            None => {
+                                flagged = !(admin || author == dev.ua);
                                 in_force = Some(j);
-                                flagged = false;
-                                info = Some(InfoTook::Changed);
-                            } else {
-                                info = Some(InfoTook::Ignored);
+                                info = Some(InfoTook::Full);
                             }
-                        }
-                        Some(_) => {
-                            if admin {
-                                flagged = false;
+                            Some(cur) if *cur != j => {
+                                if admin {
+                                    in_force = Some(j);
+                                    flagged = false;
+                                    info = Some(InfoTook::Changed);
+                                } else {
+                                    info = Some(InfoTook::Ignored);
+                                }
                             }
-                            info = Some(InfoTook::Full);
-                        }
-                    },
+                            Some(_) => {
+                                if admin {
+                                    flagged = false;
+                                }
+                                info = Some(InfoTook::Full);
+                            }
+                        },
+                    }
                 }
-            } else {
-                // a device that did not follow an epoch has no info in force from that epoch on (fable-r3-1)
-                in_force = None;
-                flagged = false;
+                (st, _) => {
+                    // a device that did not follow an epoch, or did not take its info, has no info in force from that
+                    // epoch on (fable-r3-1; the delta's F-8 and C45)
+                    in_force = None;
+                    flagged = false;
+                    if st == State::Followed {
+                        info = Some(InfoTook::NotTaken);
+                    }
+                }
             }
+            let adds_of = || list(&c, "adds", Add::from_json);
             if state == State::Compromise {
-                let adds = list(&c, "adds", Add::from_json)?;
+                let adds = adds_of()?;
                 // C-2, B2-7: an added leaf is left when the walk's head tree still holds that Add's key at its leaf (a pair has
                 // one period, C28); the served `joinEpoch` decides nothing
-                let top = a.trees.get(&head).ok_or(Error::Argument)?;
-                let live = |x: &Add| {
-                    top.leaf(x.leaf).is_some_and(|l| {
-                        l.ua == x.ua && l.key_id == x.key_id && l.kem_hash == x.kem_hash
-                    })
-                };
                 warnings.push(Warning {
                     epoch: n,
                     adds: adds.iter().map(|x| (x.leaf, x.ua, x.key_id)).collect(),
                     removes: list(&c, "removes", Remove::from_json)?,
                     admins_changed: list(&c, "admins", b32)? != a.admins_at(n - 1)?,
+                    leaves_left: adds.iter().filter(|x| live(x)).map(|x| x.leaf).collect(),
+                });
+            }
+            if state == State::AuthorDidNotHold {
+                let adds = adds_of()?;
+                suspects.push(Suspect {
+                    epoch: n,
+                    author: b32j(&c, "author")?,
+                    adds: adds.iter().map(|x| (x.leaf, x.ua, x.key_id)).collect(),
                     leaves_left: adds.iter().filter(|x| live(x)).map(|x| x.leaf).collect(),
                 });
             }
@@ -2274,6 +2641,21 @@ impl AppKeys {
                 flagged,
             });
         }
+        let review: BTreeSet<u32> = warnings
+            .iter()
+            .flat_map(|w| w.leaves_left.iter())
+            .chain(suspects.iter().flat_map(|s| s.leaves_left.iter()))
+            .copied()
+            .collect();
+        let is_admin = a.admins_at(head)?.contains(&dev.ua);
+        let path_warning =
+            is_admin && end_epoch.is_none() && top.since_path >= warn_at(top.path_bound);
+        let (since_path, top_hash) = (top.since_path, top.tree_hash());
+        let anchored = chain.as_ref().is_some_and(|c| c.anchored);
+        let head_handle = match chain {
+            Some(ch) if last == head => Some(self.tree_head(at(&a.ids, head)?, top_hash, &ch.next[..])?),
+            _ => None,
+        };
         Ok(Some(Replay {
             leaf,
             join_epoch,
@@ -2281,7 +2663,13 @@ impl AppKeys {
             rosters,
             epochs,
             warnings,
+            suspects,
+            review: review.into_iter().collect(),
+            since_path,
+            path_warning,
             held,
+            head: head_handle,
+            anchored,
             pin: a.pin_at(sc, head)?,
         }))
     }
@@ -2378,20 +2766,17 @@ impl AppKeys {
         let Some(joiner) = self.tree_unwrap(sc, dev.kem, wrap, &a.gctx, &a.sid) else {
             return Ok(not("opening failed"));
         };
-        let (_, k) = schedule(sc, &joiner[..], &EpochFields::genesis(sc, &a.s0)?)?;
+        let sch = schedule(sc, &joiner[..], &EpochFields::genesis(sc, &a.s0)?)?;
+        // epoch 0's tag in the session record (C43, F-7): a genesis wrap that does not match it is not followed
+        if sch.tag != b32j(&a.s0, "confirmTag")? {
+            return Ok(not("tag"));
+        }
         let sealed = bytes(a.s0.get("sealedInfo").ok_or(Error::Argument)?)?;
-        Ok(match open_info(sc, &k[..], &a.sid, &a.sid, &sealed) {
-            Some(info) => Opened {
-                state: State::Followed,
-                k: Some(k),
-                info: Some(info),
-                derived: Vec::new(),
-            },
-            None => not("info does not open"),
-        })
+        Ok(taken(sc, a, &a.sid, &sealed, sch, true))
     }
 
-    /// The tail of a commit's processing: the joiner, the Welcome when there is one, the schedule, the confirmation (C12).
+    /// The tail of a path commit's processing: the joiner, the Welcome when there is one, the schedule, the tag (claude-21:
+    /// "not followed (tag)"), then the info.
     fn finish(
         &self,
         sc: &TreeScope,
@@ -2415,16 +2800,67 @@ impl AppKeys {
                 _ => return Ok(not("welcome disagrees")),
             }
         }
-        let (_, k) = schedule(sc, &joiner[..], &EpochFields::commit(sc, c)?)?;
+        let sch = schedule(sc, &joiner[..], &EpochFields::commit(sc, c)?)?;
+        if sch.tag != b32j(c, "confirmTag")? {
+            return Ok(not("tag"));
+        }
         let sealed = bytes(c.get("sealedInfo").ok_or(Error::Argument)?)?;
-        Ok(match open_info(sc, &k[..], &a.sid, &epoch_id, &sealed) {
-            Some(info) => Opened {
-                state: State::Followed,
-                k: Some(k),
-                info: Some(info),
-                derived: Vec::new(),
-            },
-            None => not("info does not open"),
+        Ok(taken(sc, a, &epoch_id, &sealed, sch, true))
+    }
+
+    /// A path-less Add (the path-less delta §4.1, §6.2, §6.3, §6.5). Its own `(ua, keyId)` first: reproduced only when a
+    /// `try` of the seed gives its nonce, else the compromise warning (C47), with or without the epoch state. A joiner at its
+    /// join opens its wrap (unanchored); a device holding the parent's `next` (`chain`) derives the joiner secret; the tag
+    /// then decides: good, followed; failing at an anchored device, [`State::AuthorDidNotHold`] with the chain's key kept
+    /// (C45); at an unanchored one "welcome may not match" (F-1); at the join "tag".
+    fn pathless_commit(
+        &self,
+        sc: &TreeScope,
+        a: &Walk,
+        dev: &TreeDevice,
+        p: &Piece,
+        c: &Value,
+        chain: Option<&Chain>,
+    ) -> Result<Opened> {
+        if p.own && !add_nonce_reproduced(sc, dev.kem, c)? {
+            return Ok(compromise());
+        }
+        let epoch_id = at(&a.ids, p.n)?;
+        let f = EpochFields::commit(sc, c)?;
+        let tag = b32j(c, "confirmTag")?;
+        let sealed = bytes(c.get("sealedInfo").ok_or(Error::Argument)?)?;
+        if let Some(w) = &p.wrap {
+            let Some(joiner) = self.tree_unwrap(sc, dev.kem, w, &a.tree_id, &epoch_id) else {
+                return Ok(not("opening failed"));
+            };
+            let sch = schedule(sc, &joiner[..], &f)?;
+            if sch.tag != tag {
+                return Ok(not("tag"));
+            }
+            return Ok(taken(sc, a, &epoch_id, &sealed, sch, false));
+        }
+        let Some(ch) = chain else {
+            return Ok(not("parent not followed"));
+        };
+        let adds = c.get("adds").and_then(Value::as_array).ok_or(Error::Argument)?;
+        let adds_hash = array_hash(sc.typed, "TreeAdd", adds)?;
+        let joiner = add_joiner_secret(sc, &ch.next[..], &a.tree_id, &epoch_id, &adds_hash)?;
+        let sch = schedule(sc, &joiner[..], &f)?;
+        if sch.tag == tag {
+            return Ok(taken(sc, a, &epoch_id, &sealed, sch, ch.anchored));
+        }
+        if !ch.anchored {
+            return Ok(not("welcome may not match"));
+        }
+        Ok(Opened {
+            state: State::AuthorDidNotHold,
+            k: Some(sch.k),
+            info: None,
+            derived: Vec::new(),
+            chain: Some(Chain {
+                next: sch.next,
+                anchored: true,
+            }),
         })
     }
 
@@ -2490,8 +2926,8 @@ impl AppKeys {
         Ok(r)
     }
 
-    /// Its own commit: `ps[0]` from the seed; reproduced is both tests, the node keys and the info (codex-r3-4), else the
-    /// compromise warning, never "not followed" (R10, fable-r2-1).
+    /// Its own commit: `ps[0]` from the seed; reproduced is both tests, the node keys and the tag (codex-r3-4, claude-21; for
+    /// the last live leaf the tag alone), else the compromise warning, never "not followed" (R10, fable-r2-1).
     fn own_commit(
         &self,
         sc: &TreeScope,
@@ -2530,6 +2966,9 @@ impl AppKeys {
 /// `ps[0..=m]` and the node keys of `ps[0..m]` (a vector's comparison).
 #[cfg(feature = "vectors")]
 pub type PathAndKeys = (Vec<Vec<u8>>, Vec<Vec<u8>>);
+/// `(S, K, next, confirmTag)` (a vector's comparison).
+#[cfg(feature = "vectors")]
+pub type VectorsSchedule = (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>);
 
 /// Test-only entry points (feature `vectors`, never in a release build): fixed randomness, and the secrets a vector compares.
 #[cfg(feature = "vectors")]
@@ -2604,15 +3043,49 @@ impl AppKeys {
     ) -> Option<Vec<u8>> {
         open_path_secret(sc, at, key, ct).map(|s| s.to_vec())
     }
-    /// `(S, K)` of a joiner secret and an epoch's fields.
+    /// `(S, K, next, confirmTag)` of a joiner secret and an epoch's fields.
     pub fn vectors_tree_schedule(
         &self,
         sc: &TreeScope,
         joiner: &[u8],
         f: &EpochFields,
-    ) -> Result<(Vec<u8>, Vec<u8>)> {
-        let (s, k) = schedule(sc, joiner, f)?;
-        Ok((s.to_vec(), k.to_vec()))
+    ) -> Result<VectorsSchedule> {
+        let (s, x) = schedule_s(sc, joiner, f)?;
+        Ok((s.to_vec(), x.k.to_vec(), x.next.to_vec(), x.tag.to_vec()))
+    }
+    /// [`AppKeys::tree_prepare_pathless`] with `rand(name, n)` and, for an insider's or a refusal row, a given nonce.
+    pub fn vectors_tree_prepare_pathless(
+        &self,
+        sc: &TreeScope,
+        a: PathlessInput,
+        head: &TreeHead,
+        try_: u32,
+        nonce: Option<u64>,
+        rand: Rand,
+    ) -> Result<PreparedCommit> {
+        let n = nonce.map_or(Nonce::Try(try_), Nonce::Given);
+        self.prepare_pathless(sc, a, head, n, rand)
+    }
+    /// `addNonce` of `kem`'s seed over `[treeId, parentEpochId, parentTreeHash, hash(adds)]` at `try_` (C47).
+    pub fn vectors_tree_add_nonce(
+        &self,
+        sc: &TreeScope,
+        kem: &KemKeyPair,
+        parent: &[[u8; 32]; 4],
+        try_: u32,
+    ) -> Result<u64> {
+        add_nonce(sc, kem, parent, try_)
+    }
+    /// A path-less Add's joiner secret from a `next` (the path-less delta §4.1).
+    pub fn vectors_tree_add_joiner(
+        &self,
+        sc: &TreeScope,
+        next: &[u8],
+        tree_id: &[u8; 32],
+        epoch_id: &[u8; 32],
+        adds_hash: &[u8; 32],
+    ) -> Result<Vec<u8>> {
+        Ok(add_joiner_secret(sc, next, tree_id, epoch_id, adds_hash)?.to_vec())
     }
     /// A `sealedInfo` opened under the epoch key `k`.
     pub fn vectors_tree_open_info(

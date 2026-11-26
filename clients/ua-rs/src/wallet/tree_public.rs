@@ -19,6 +19,8 @@ pub const TREE_LEAVES_MAX: u32 = 512; // R8: 256 -> 512 (owner 2026-11-25), dept
 pub const TREE_CHANGES_MAX: usize = 20; // C10: 32 -> 20 (owner 2026-11-25)
 pub const TREE_ADMINS_MAX: usize = 32;
 pub const KEYS_PER_UA_MAX: usize = 8;
+/// The largest `pathRefreshBound` that can bind (C41, the path-less delta §3.1): `TREE_LEAVES_MAX − 2`.
+pub const PATH_REFRESH_BOUND_MAX: u32 = TREE_LEAVES_MAX - 2;
 pub const ZERO: [u8; 32] = [0; 32];
 const KEM_PK_LEN: usize = 1601;
 
@@ -58,6 +60,14 @@ pub enum TreeError {
     Admins,
     /// a commit that is not plain by an author outside the head's admins (§9, C8)
     NotAdmin,
+    /// a path-less commit with a Remove or another admin list than the head's (the path-less delta §5.1 item 3, R19)
+    PathRequired,
+    /// a path-less commit whose leaves would cross the session's `pathRefreshBound` (R18)
+    PathBound,
+    /// a path-less Add built on a handle that is not the record's parent (claude-19)
+    Handle,
+    /// a path-less Add's `try` at or above `ADD_NONCE_TRIES` (C47)
+    AddNonce,
 }
 
 impl TreeError {
@@ -87,6 +97,10 @@ impl TreeError {
             TreeError::KemRecord => "TreeKemRecord",
             TreeError::Admins => "PqChatTreeAdmins",
             TreeError::NotAdmin => "PqChatNotAdmin",
+            TreeError::PathRequired => "PqChatTreePathRequired",
+            TreeError::PathBound => "PqChatTreePathBound",
+            TreeError::Handle => "TreeHandle",
+            TreeError::AddNonce => "TreeAddNonce",
         }
     }
 }
@@ -190,6 +204,10 @@ pub struct Tree {
     pub gone_ua: BTreeSet<[u8; 32]>,
     pub gone_own_key: BTreeMap<[u8; 32], BTreeSet<[u8; 32]>>,
     pub gone_key: BTreeSet<[u8; 32]>,
+    /// the leaves path-less commits added since the last path commit, and the session's `pathRefreshBound` (the path-less
+    /// delta §5.3)
+    pub since_path: u32,
+    pub path_bound: u32,
 }
 
 /// A Remove of a commit (`TreeRemove`).
@@ -210,14 +228,15 @@ pub struct Add {
     pub kem_hash: [u8; 32],
 }
 
-/// The author's leaf and a commit's Removes and Adds.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// The author's leaf and a commit's Removes and Adds; `pathless` its signed kind (the path-less delta §3.2).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Changes {
     pub author: [u8; 32],
     pub leaf: u32,
     pub key_id: u64,
     pub removes: Vec<Remove>,
     pub adds: Vec<Add>,
+    pub pathless: bool,
 }
 
 /// One step of a filtered path: the path node, its copath child and that child's resolution.
@@ -281,6 +300,10 @@ impl Tree {
 
     /// The cold tree of a session (§8): leaf `i` = `members[i]` with its registry `kemHash`, every parent blank.
     pub fn cold(members: &[Leaf]) -> Result<Tree> {
+        Tree::cold_with(members, 0)
+    }
+    /// [`Tree::cold`] of a session whose `pathRefreshBound` is `path_bound` (the path-less delta §5.3).
+    pub fn cold_with(members: &[Leaf], path_bound: u32) -> Result<Tree> {
         let used = u32::try_from(members.len()).map_err(|_| Error::Tree(TreeError::Shape))?;
         if used > TREE_LEAVES_MAX {
             return refuse(TreeError::Shape);
@@ -290,6 +313,7 @@ impl Tree {
             leaves,
             used,
             nodes: vec![Node::Blank; node_width(leaves) as usize],
+            path_bound,
             ..Tree::default()
         };
         for (i, m) in (0u32..).zip(members) {
@@ -526,7 +550,26 @@ impl Tree {
     /// A commit applied in the contract's order (§8): Removes, Adds, the `gone` UAs after the Adds, the author's filtered
     /// path keyed by `node_key_hashes` (its length the walk's, `PqChatTreeTargets`), the rest of its direct path blanked.
     pub fn apply_commit(&self, c: &Changes, node_key_hashes: &[[u8; 32]]) -> Result<Applied> {
+        // the path-less shape exactly when `pathless` is true (the delta §5.1 item 2, C42)
+        if c.pathless && (c.adds.is_empty() || !node_key_hashes.is_empty()) {
+            return refuse(TreeError::Shape);
+        }
         let mut t = self.apply_changes(c)?;
+        if c.pathless {
+            // item 4, the bound (R18), refused whole; item 5: no path walk, each Add has blanked its own direct path (C6)
+            let n = u32::try_from(c.adds.len()).map_err(|_| Error::Tree(TreeError::Shape))?;
+            if t.path_bound > 0 && t.since_path.saturating_add(n) > t.path_bound {
+                return refuse(TreeError::PathBound);
+            }
+            t.since_path = t.since_path.saturating_add(n);
+            let tree_hash = t.tree_hash();
+            return Ok(Applied {
+                ct_targets: Vec::new(),
+                tree: t,
+                tree_hash,
+            });
+        }
+        t.since_path = 0;
         let p = t.filtered_path(c.leaf);
         if p.len() != node_key_hashes.len() {
             return refuse(TreeError::Targets);
@@ -556,6 +599,10 @@ impl Tree {
         admins: &[[u8; 32]],
         head_admins: &[[u8; 32]],
     ) -> Result<()> {
+        // the path-less conditions (the delta §5.1 item 3, R19): no Remove, the head's admin list element for element
+        if c.pathless && (!c.removes.is_empty() || admins != head_admins) {
+            return refuse(TreeError::PathRequired);
+        }
         if admins.len() > TREE_ADMINS_MAX || admins.windows(2).any(|w| w.first() >= w.get(1)) {
             return refuse(TreeError::Shape);
         }
@@ -642,6 +689,8 @@ impl Tree {
             gone_ua: set("goneUa")?,
             gone_own_key,
             gone_key: set("goneKey")?,
+            since_path: j.get("sincePath").map_or(Ok(0), |_| u32j(j, "sincePath"))?,
+            path_bound: j.get("pathBound").map_or(Ok(0), |_| u32j(j, "pathBound"))?,
         })
     }
 
@@ -659,6 +708,8 @@ impl Tree {
             "goneUa": set(&self.gone_ua),
             "goneOwnKey": self.gone_own_key.iter().map(|(u, ks)| (hx(u), json!(set(ks)))).collect::<serde_json::Map<_, _>>(),
             "goneKey": set(&self.gone_key),
+            "sincePath": self.since_path,
+            "pathBound": self.path_bound,
         })
     }
 }
@@ -776,6 +827,8 @@ impl Changes {
             key_id: u64j(v, "keyId")?,
             removes: list(v, "removes", Remove::from_json)?,
             adds: list(v, "adds", Add::from_json)?,
+            // a record names its kind (the walk checks the field is a bool); a tree.json path commit row has none
+            pathless: v.get("pathless").and_then(Value::as_bool).unwrap_or(false),
         })
     }
 }
@@ -813,8 +866,8 @@ pub fn path_list_hash(
 pub fn tree_id(typed: Typed, session: &Value) -> Result<[u8; 32]> {
     struct_hash(typed, "PqChatSession", session)
 }
-/// The `TreeGenesis` fields: the session's without `wrapHashes` and `sealedInfo` (C29).
-pub const GENESIS_FIELDS: [&str; 7] = [
+/// The `TreeGenesis` fields: the session's without `wrapHashes`, `sealedInfo` and `confirmTag` (C29, the path-less delta's C43).
+pub const GENESIS_FIELDS: [&str; 8] = [
     "creator",
     "nonce",
     "homeChain",
@@ -822,6 +875,7 @@ pub const GENESIS_FIELDS: [&str; 7] = [
     "admins",
     "members",
     "groupMode",
+    "pathRefreshBound",
 ];
 /// `genesisCtx = hashStruct(TreeGenesis)`, each field given (`PqChatShape` otherwise).
 pub fn genesis_ctx(typed: Typed, session: &Value) -> Result<[u8; 32]> {

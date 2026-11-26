@@ -31,7 +31,7 @@ pub const TYPE_STRINGS: &[(&str, &str)] = &[
     ),
     (
         "PqChatSession",
-        "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode)",
+        "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode,uint32 pathRefreshBound,bytes32 confirmTag)",
     ),
     (
         "PqChatEpoch",
@@ -85,7 +85,7 @@ pub const TYPE_STRINGS: &[(&str, &str)] = &[
     // tree's own operations (`tree`), so none is in RECORDS; the signed ones are TREE_RECORDS
     (
         "PqChatCommit",
-        "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo)",
+        "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo,bool pathless,bytes32 confirmTag)",
     ),
     (
         "TreeAdd",
@@ -107,7 +107,7 @@ pub const TYPE_STRINGS: &[(&str, &str)] = &[
     ),
     (
         "TreeGenesis",
-        "TreeGenesis(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,uint8 groupMode)",
+        "TreeGenesis(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,uint8 groupMode,uint32 pathRefreshBound)",
     ),
     (
         "TreeLeaf",
