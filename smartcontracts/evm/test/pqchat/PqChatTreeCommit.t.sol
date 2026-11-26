@@ -317,22 +317,64 @@ abstract contract PqChatTreeWorld is PqChatBase {
         s.members = _slots(ua, keyOf_[ua], UAKinds.PURPOSE_PQCHAT, digest);
     }
 
-    /// Every slot's member signature of the `msig` `ua` (structure `d`, ML-DSA-65 members) over `purpose` and `digest`.
+    /// The member signatures of the `msig` `ua` (structure `d`) over `purpose` and `digest`: its first slots up to its threshold
+    /// (a `MemberSig` past it fails), an ML-DSA-65 member by its key, an `msig` member (world 22's X over N) by its own first
+    /// slots up to its threshold at its registration structure (version 0, an empty tag).
     function _slots(bytes32 ua, bytes memory d, bytes32 purpose, bytes32 digest)
         internal
         view
         returns (IUARegistry.MemberSig[] memory sigs)
     {
         bytes32 md = _memberDigest(ua, purpose, digest);
-        uint256 m = uint16(bytes2(abi.encodePacked(d[2], d[3])));
-        sigs = new IUARegistry.MemberSig[](m);
-        for (uint256 i; i < m; ++i) {
-            sigs[i] = IUARegistry.MemberSig(
-                uint16(i),
-                new IUARegistry.InnerSig[](0),
-                _sig(keyOf_[_slotId(d, i)], UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md))
+        uint16[] memory x = _toThreshold(d);
+        sigs = new IUARegistry.MemberSig[](x.length);
+        for (uint256 i; i < x.length; ++i) {
+            bytes32 id = _slotId(d, i);
+            sigs[i] = _slotKind(d, i) == UAKinds.MSIG
+                ? IUARegistry.MemberSig(uint16(i), _innerSigs(id, keyOf_[id], _toThreshold(keyOf_[id]), md), "")
+                : IUARegistry.MemberSig(
+                    uint16(i),
+                    new IUARegistry.InnerSig[](0),
+                    _sig(keyOf_[id], UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md))
+                );
+        }
+    }
+
+    /// Slots 0, 1, ... of the structure `d` until their weights reach its threshold.
+    function _toThreshold(bytes memory d) internal pure returns (uint16[] memory x) {
+        (uint256 t, uint256 m) = (_u16(d, 0), _u16(d, 2));
+        (uint256 n, uint256 acc) = (0, 0);
+        for (; n < m && acc < t; ++n) {
+            acc += _u16(d, 4 + 36 * n + 34);
+        }
+        x = new uint16[](n);
+        for (uint256 i; i < n; ++i) {
+            x[i] = uint16(i);
+        }
+    }
+
+    /// The slots `x` of the `msig` member `id` (its structure `di`, ML-DSA-65 members) under the outer `member_digest` `md`:
+    /// each signs `memberDigest(id, uaMessage(MSIG, PURPOSE_MEMBER, md))` under `member` (the registry's `_memberOk`).
+    function _innerSigs(bytes32 id, bytes memory di, uint16[] memory x, bytes32 md)
+        internal
+        view
+        returns (IUARegistry.InnerSig[] memory l)
+    {
+        bytes32 inner = UAKinds.memberDigest(id, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBER, md));
+        l = new IUARegistry.InnerSig[](x.length);
+        for (uint256 j; j < x.length; ++j) {
+            l[j] = IUARegistry.InnerSig(
+                x[j], _sig(keyOf_[_slotId(di, x[j])], UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, inner))
             );
         }
+    }
+
+    function _u16(bytes memory d, uint256 o) internal pure returns (uint256) {
+        return uint16(bytes2(abi.encodePacked(d[o], d[o + 1])));
+    }
+
+    function _slotKind(bytes memory d, uint256 s) internal pure returns (uint16) {
+        return uint16(_u16(d, 4 + 36 * s));
     }
 
     // ----- C-4 of the re-review of 2026-11-25 (the contract part): the worlds of this round's rules, on the contract -----
@@ -382,12 +424,39 @@ abstract contract PqChatTreeWorld is PqChatBase {
         s.members = new IUARegistry.MemberSig[](named.length);
         for (uint256 i; i < named.length; ++i) {
             uint16 x = named[i];
-            s.members[i] = IUARegistry.MemberSig(
-                x,
-                new IUARegistry.InnerSig[](0),
-                _sig(keyOf_[_slotId(d, x)], UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md))
-            );
+            s.members[i] = _slotKind(d, x) == UAKinds.MSIG
+                ? _nestedSig(string.concat(key, ".members"), i, x, _slotId(d, x), md)
+                : IUARegistry.MemberSig(
+                    x,
+                    new IUARegistry.InnerSig[](0),
+                    _sig(keyOf_[_slotId(d, x)], UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md))
+                );
         }
+    }
+
+    /// Element `i` of a vector `MemberSig[]` whose slot `x` is the `msig` member `id` (world 22): its version tag and its
+    /// inner slots as the vector names them, re-signed over the member's structure at that version, which the test registry
+    /// first reaches by `_updateTo`.
+    function _nestedSig(string memory key, uint256 i, uint16 x, bytes32 id, bytes32 md)
+        internal
+        returns (IUARegistry.MemberSig memory s)
+    {
+        bytes memory e = _j().readBytes(key);
+        uint256 el = _w(e, 0) + 32 + _w(e, _w(e, 0) + 32 + 32 * i); // the element's head
+        uint256 tag = el + _w(e, el + 64);
+        s.sig = new bytes(_w(e, tag));
+        for (uint256 b; b < s.sig.length; ++b) {
+            s.sig[b] = e[tag + 32 + b];
+        }
+        uint64 v = s.sig.length == 0 ? 0 : uint64(bytes8(s.sig));
+        _updateTo(id, v);
+        uint256 arr = el + _w(e, el + 32); // InnerSig[]: its length, then offsets from the word after it
+        uint16[] memory ix = new uint16[](_w(e, arr));
+        for (uint256 j; j < ix.length; ++j) {
+            ix[j] = uint16(_w(e, arr + 32 + _w(e, arr + 32 + 32 * j)));
+        }
+        s.index = x;
+        s.members = _innerSigs(id, _structureAt(id, v), ix, md);
     }
 
     /// The slot indexes of a vector `abi.encode(MemberSig[])` (each element's first word; read by offset, the decoder of
@@ -705,8 +774,8 @@ contract PqChatTreeScenarioTest is PqChatTreeWorld {
     // (their genesis lands); 20 is commits alone.
 
     /// The number of worlds in `tree-secrets.json`, each played by a test here: a new world is red until it is played and
-    /// this constant moves. The merge with branch `review-fix4-client` (its nested-msig world) sets it to that file's count.
-    uint256 internal constant WORLDS = 22;
+    /// this constant moves. The merge with branch `review-fix4-client` (its nested-msig world 22) moved it 22 -> 23.
+    uint256 internal constant WORLDS = 23;
 
     function test_scenario_worldCount() public {
         _open();
@@ -739,6 +808,20 @@ contract PqChatTreeScenarioTest is PqChatTreeWorld {
         _open();
         _keyless();
         _run(21, false);
+    }
+
+    /// World 22: the keyless `msig` admin X (threshold 1; slot 0 the `msig` N, slot 1 an ML-DSA-65 key), registered by N's
+    /// PoP one level down, removes by N at version 1 (N's tag; X's own empty, never updated): `_msigSig` nests N's slot.
+    function test_scenario_msigNested() public {
+        _open();
+        _keyless();
+        _run(22, false);
+        IUARegistry.MsigStructure memory st = p.msigOf(_b32(_stepKey(22, 1), ".gone.record.admin"));
+        assertEq(st.members[0].kind, UAKinds.MSIG, "X's slot 0 is an msig");
+        (uint64 v,,) = p.msigStateOf(st.members[0].id);
+        assertEq(v, 1, "N's tag named version 1");
+        (v,,) = p.msigStateOf(_b32(_stepKey(22, 1), ".gone.record.admin"));
+        assertEq(v, 0, "X never updated");
     }
 
     /// The lag world (17 commits), then C9's lag on its head: a leave naming epoch 0, 17 below the head, is
