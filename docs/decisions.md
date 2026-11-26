@@ -7909,8 +7909,7 @@ vectors); the testnet moves at the reset. Not changed, open for the owner: the B
 chainlist.org (2026-11-26; 22888 is Access Network). Replay protection is only as good as the chain id.
 **Cost if wrong.** A signature or transaction made for one chain replays on a public chain with the same id where only the
 genesis-hash binding stops it.
-**Source.** Owner ruling 2026-11-26 (chat): "Mainnet dùng chain id 22777; SCaaS testnet dùng chain id 22779." (The
-mainnet uses chain id 22777; the SCaaS testnet uses chain id 22779.)
+**Source.** Owner ruling 2026-11-26 (chat): the mainnet uses chain id 22777; the SCaaS testnet uses chain id 22779.
 
 ## 28. Networks — Hedera
 
