@@ -186,7 +186,10 @@ export const ADD_NONCE_TRIES = 8;
  *  parentTreeHash ‖ hash(adds) ‖ u32be(try))`, a BigInt (a uint64). */
 export function addNonce(sc, kemSeed, { treeId, parentEpochId, parentTreeHash, addsHash }, tryN) {
   if (!(Number.isInteger(tryN) && tryN >= 0 && tryN < ADD_NONCE_TRIES)) refuse("TreeAddNonce");
-  const h = H(kemSeed, concatBytes(sc.addNonce, b(treeId), b(parentEpochId), b(parentTreeHash), b(addsHash), u32(tryN)));
+  const h = H(
+    kemSeed,
+    concatBytes(sc.addNonce, b(treeId), b(parentEpochId), b(parentTreeHash), b(addsHash), u32(tryN)),
+  );
   return h.subarray(0, 8).reduce((a, x) => (a << 8n) | BigInt(x), 0n);
 }
 /** The `try` < ADD_NONCE_TRIES whose `addNonce` is the record's `nonce`, or -1 (the own-commit test, C47, the delta §6.5). */
@@ -1272,7 +1275,8 @@ export function replay(sc, rd, dev, store = null, from = null) {
     heldKeys: held,
     chain,
     // the head's handle (the delta §6.5): its `next` only while the device holds the head's epoch
-    head: chain && last === head ? { epochId: ids[head], treeHash: tr.treeHash(headTree), next: hex(chain.next) } : null,
+    head:
+      chain && last === head ? { epochId: ids[head], treeHash: tr.treeHash(headTree), next: hex(chain.next) } : null,
     pin: pinAt(a, head),
   };
 }
@@ -1341,7 +1345,11 @@ function pathlessCommit(sc, a, dev, p, chain, joining) {
     return taken(sc, a, epochId, c.sealedInfo, sch, false);
   }
   if (!chain) return { state: "not followed", reason: "parent not followed" };
-  const sch = schedule(sc, addJoinerSecret(sc, chain.next, a.treeId, epochId, tr.arrayHash("TreeAdd", c.adds)), commitFields(c));
+  const sch = schedule(
+    sc,
+    addJoinerSecret(sc, chain.next, a.treeId, epochId, tr.arrayHash("TreeAdd", c.adds)),
+    commitFields(c),
+  );
   if (sameTag(sch, c.confirmTag)) return taken(sc, a, epochId, c.sealedInfo, sch, chain.anchored);
   if (!chain.anchored) return { state: "not followed", reason: "welcome may not match" };
   return { state: "author did not hold", K: sch.K, chain: { next: sch.next, anchored: true } };

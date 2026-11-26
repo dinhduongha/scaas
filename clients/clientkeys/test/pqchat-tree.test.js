@@ -484,17 +484,22 @@ const session = {
   wrapHashes: [id("w0"), id("w1")],
   sealedInfo: "0x" + "ab".repeat(284),
   groupMode: 1,
+  pathRefreshBound: 24,
+  confirmTag: id("tag"),
 };
 const tree = { ...session, groupMode: 1 };
 
-test("TreeGenesis is PqChatSession's type without wrapHashes and sealedInfo", () => {
-  const s = pc.TYPES.PqChatSession.filter((f) => f.name !== "wrapHashes" && f.name !== "sealedInfo");
+test("TreeGenesis is PqChatSession's type without wrapHashes, sealedInfo and confirmTag (C29, the delta's C43)", () => {
+  const s = pc.TYPES.PqChatSession.filter((f) => !["wrapHashes", "sealedInfo", "confirmTag"].includes(f.name));
   assert.deepEqual(tr.TREE_TYPES.TreeGenesis, s);
 });
 
 test("genesisCtx: every genesis field moves it, wrapHashes and sealedInfo do not; treeId is PqChatSession's struct hash", () => {
   const g = hex(tr.genesisCtx(tree));
-  assert.equal(hex(tr.genesisCtx({ ...tree, wrapHashes: [id("x"), id("y")], sealedInfo: "0x01" })), g);
+  assert.equal(
+    hex(tr.genesisCtx({ ...tree, wrapHashes: [id("x"), id("y")], sealedInfo: "0x01", confirmTag: id("t2") })),
+    g,
+  );
   for (const [f, v] of Object.entries({
     creator: id("ua/B"),
     nonce: 4,
@@ -503,11 +508,14 @@ test("genesisCtx: every genesis field moves it, wrapHashes and sealedInfo do not
     admins: [id("ua/B")],
     members: session.members.slice(1),
     groupMode: 2,
+    pathRefreshBound: 25,
   }))
     assert.notEqual(hex(tr.genesisCtx({ ...tree, [f]: v })), g, f);
   refused("PqChatShape", () => tr.genesisCtx({ ...tree, groupMode: undefined }));
   assert.equal(hex(tr.treeId(session)), hex(pc.structHash("PqChatSession", session)));
   assert.notEqual(hex(tr.treeId({ ...session, wrapHashes: [id("x"), id("y")] })), hex(tr.treeId(session)));
+  assert.notEqual(hex(tr.treeId({ ...session, confirmTag: id("t2") })), hex(tr.treeId(session)));
+  refused("PqChatShape", () => tr.genesisCtx({ ...tree, pathRefreshBound: undefined }));
 });
 
 test("PathList of the empty list (codex-r2-14), by hand; arrays hash as EIP-712 arrays of struct hashes", () => {

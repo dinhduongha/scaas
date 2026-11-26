@@ -1057,7 +1057,12 @@ const treeRefusals = [
   ["a key change undone", "a key change", { ...by("C2", 3), adds: [asAdd("C", 2)] }, "PqChatTreeOwnKeyReturn"],
   ["a path one node short", "cold 3", { ...by("A", 0), nodeKeyHashes: nk("r", 1) }, "PqChatTreeTargets"],
   // the delta §3.2: an Add with an empty path is a path commit missing its path; the path-less shape exactly when pathless
-  ["an Add with an empty path, pathless false", "cold 3", { ...by("A", 0), adds: [asAdd("D", 3)] }, "PqChatTreeTargets"],
+  [
+    "an Add with an empty path, pathless false",
+    "cold 3",
+    { ...by("A", 0), adds: [asAdd("D", 3)] },
+    "PqChatTreeTargets",
+  ],
   ["path-less with no Add", "cold 3", { ...by("A", 0), pathless: true }, "PqChatShape"],
   [
     "path-less with a node key",
@@ -1765,7 +1770,8 @@ write("tree.json", {
   // joiner from its parent's next; two children of one parent and a twin under one id; a holder of next at an exit; W(N)
   const pw = byName.get("pathless");
   const kemSeedOf = (s) => hex(fx.deviceOf(s.author).kemSeed);
-  for (const r of schedule) if (new Set([r.K, r.next, r.confirmTag]).size !== 3) throw new Error(`branches equal: ${r.name}`);
+  for (const r of schedule)
+    if (new Set([r.K, r.next, r.confirmTag]).size !== 3) throw new Error(`branches equal: ${r.name}`);
   const pSteps = pw.steps.filter((s) => s.built);
   const parentNext = (w, i) => {
     // the next of the epoch below step i (a built step), from the schedule of its record or of the genesis
@@ -1816,7 +1822,13 @@ write("tree.json", {
       const we = byName.get("pathless-exit");
       const c2 = we.steps.filter((s) => s.built)[1].built;
       const held = fx.replayOf(we, "C").chain;
-      const tried = tk.addJoinerSecret(sc, held.next, c2.record.treeId, c2.epochId, tr.arrayHash("TreeAdd", c2.record.adds));
+      const tried = tk.addJoinerSecret(
+        sc,
+        held.next,
+        c2.record.treeId,
+        c2.epochId,
+        tr.arrayHash("TreeAdd", c2.record.adds),
+      );
       if (hex(tried) === hex(c2.joiner)) throw new Error("exitNext derives the path commit");
       return { next: hex(held.next), epochId: c2.epochId, tried: hex(tried), joiner: hex(c2.joiner) };
     })(),
@@ -1865,10 +1877,9 @@ write("tree.json", {
       "addNonce rows (try 0 and 1), addJoiner rows, twins (two children of one parent, a twin under one id), exitNext (a " +
       "holder of next at an exit does not derive the honouring path commit), warn (W(N)). UNAUDITED.",
     labels: Object.fromEntries(
-      ["path", "node", "commit", "ct", "joiner", "epoch", "key", "next", "addJoiner", "confirm", "addNonce"].map((k) => [
-        k,
-        new TextDecoder().decode(sc[k]),
-      ]),
+      ["path", "node", "commit", "ct", "joiner", "epoch", "key", "next", "addJoiner", "confirm", "addNonce"].map(
+        (k) => [k, new TextDecoder().decode(sc[k])],
+      ),
     ),
     tags: { tagPath: hex(sc.tagPath), tagContext: hex(sc.tagContext), wrap: sc.wrap },
     infoMax: tk.TREE_INFO_MAX,

@@ -771,9 +771,17 @@ export function pathlessFaultsScenario() {
   commit(w, "A"); // 1
   const bad = (tag) => ({ welcomeJoiner: hex(rnd(`tree-secrets/pathless-faults/${tag}`)) });
   commit(w, "A", { pathless: true, adds: [["D", 3]], faults: bad("welcome") }); // 2
-  commit(w, "B", { pathless: true, adds: [["B2", 4]], faults: { tag: hex(rnd("tree-secrets/pathless-faults/tag-3")) } }); // 3
+  commit(w, "B", {
+    pathless: true,
+    adds: [["B2", 4]],
+    faults: { tag: hex(rnd("tree-secrets/pathless-faults/tag-3")) },
+  }); // 3
   commit(w, "A", { pathless: true, adds: [["F", 5]], info: INFO.I2 }); // 4
-  commit(w, "C", { pathless: true, adds: [["C2", 6]], faults: { infoK: hex(rnd("tree-secrets/pathless-faults/info")) } }); // 5
+  commit(w, "C", {
+    pathless: true,
+    adds: [["C2", 6]],
+    faults: { infoK: hex(rnd("tree-secrets/pathless-faults/info")) },
+  }); // 5
   commit(w, "A", { pathless: true, adds: [["G", 7]], faults: { tag: hex(rnd("tree-secrets/pathless-faults/tag-6")) } }); // 6
   commit(w, "A", { info: INFO.I2 }); // 7: the reset
   commit(w, "B", { faults: { tag: hex(rnd("tree-secrets/pathless-faults/tag-8")) } }); // 8
@@ -834,7 +842,12 @@ export function pathlessWarnScenario() {
   });
   let at = 4;
   for (const n of ["B", "C", "D"])
-    commit(w, n, { pathless: true, adds: keys(n).slice(0, 7 - (n === "D") * 1).map((k) => [k, at++]) });
+    commit(w, n, {
+      pathless: true,
+      adds: keys(n)
+        .slice(0, 7 - (n === "D") * 1)
+        .map((k) => [k, at++]),
+    });
   commit(w, "D", { pathless: true, adds: [["D8", at++]] });
   return w;
 }
@@ -1700,7 +1713,9 @@ export function lies(worlds) {
     };
     pl("with a Remove (R19)", { removes: ["C"] });
     pl("that changes the admins (R19)", { admins: ["A", "B"] });
-    pl("with a node key (C42)", { edit: (r) => ({ ...r, nodeKeyHashes: [hex(rnd("tree-secrets/lies/pathless-key"))] }) });
+    pl("with a node key (C42)", {
+      edit: (r) => ({ ...r, nodeKeyHashes: [hex(rnd("tree-secrets/lies/pathless-key"))] }),
+    });
     pl("with no Add (C42)", { edit: (r) => ({ ...r, adds: [], wrapHashes: [], leaves: 8 }) });
     // the owed exit: B removed at the head, then a path-less record on it
     pl("on a head that owes an exit (§5.5)", {
@@ -1709,7 +1724,13 @@ export function lies(worlds) {
     // the bound (R18): N = 2 and sincePath 1 at the head; two more leaves cross it (built on a tree without the bound)
     const wb = W("pathless-bound");
     const free = tr.treeFromJson({ ...tr.treeJson(wb.home.tree), pathBound: 0 });
-    const f = forgedCommit(wb, "A", free, { pathless: true, adds: [["F", 5], ["G", 6]] });
+    const f = forgedCommit(wb, "A", free, {
+      pathless: true,
+      adds: [
+        ["F", 5],
+        ["G", 6],
+      ],
+    });
     add("a path-less record over the bound (R18)", "pathless-bound", "B", served(wb, f.built, f.sig), both);
     const g = forgedCommit(wb, "A", free, { pathless: true, adds: [["F", 5]] });
     add("a path-less record at the bound (control)", "pathless-bound", "B", served(wb, g.built, g.sig), {

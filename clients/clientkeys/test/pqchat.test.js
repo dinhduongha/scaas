@@ -213,9 +213,27 @@ test("session records: digests, ids, scopes, the message signature and blob", ()
   assert.equal(R.sessionMode2.record.groupMode, 2);
   assert.equal(R.sessionMode2.error, "PqChatModeUnsupported");
   checkRow("sessionMode2", R.sessionMode2);
+  // the path-less delta §3.1: both new fields 0 in mode 0; the bound rows accepted or refused by PqChatShape
+  assert.equal(S.record.pathRefreshBound, 0);
+  assert.equal(S.record.confirmTag, Z32);
+  assert.equal(R.sessionTreeKem.record.pathRefreshBound, 20);
+  for (const [name, mode, bound, error] of [
+    ["sessionBound0", 1, 0, undefined],
+    ["sessionBound24", 1, 24, undefined],
+    ["sessionBound510", 1, 510, undefined],
+    ["sessionBound511", 1, 511, "PqChatShape"],
+    ["sessionMode0Bound1", 0, 1, "PqChatShape"],
+    ["sessionMode0Tag", 0, 0, "PqChatShape"],
+  ]) {
+    assert.equal(R[name].record.groupMode, mode, name);
+    assert.equal(R[name].record.pathRefreshBound, bound, name);
+    assert.equal(R[name].error, error, name);
+    assert.equal(R[name].record.confirmTag === Z32, name === "sessionMode0Bound1", name);
+    checkRow(name, R[name]);
+  }
   for (const rec of [S.record, E.record, L.record, Mg.record]) {
     for (const [f, v] of Object.entries(rec))
-      if (f !== "groupMode")
+      if (!["groupMode", "pathRefreshBound", "confirmTag"].includes(f))
         assert.ok(
           v !== 0 && v !== Z32 && v !== "0x" && v !== hex(new Uint8Array(20)) && !(Array.isArray(v) && !v.length),
           f,
