@@ -32,10 +32,18 @@ ua-c clippy + test | cad090144 | 0 | 9 passed, 0 failed
 cargo tree --locked -e normal (ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb, ua-rs/fuzz, zether-prover, scaas-node) | cad090144 | 0 | -
 cargo deny --all-features check (ua-rs; ua-c, ua-cxx, ua-qt, ua-dart-frb, zether-prover by ua-rs/deny.toml) | cad090144 | 0 | one aes, one curve25519-dalek
 cargo audit (the same six, deny.toml's ignores) | cad090144 | 0 | -
-cargo metadata --locked, 37 lockfiles | cad090144 | 0 | every new entry >= 14 days old
+cargo metadata --locked, 35 lockfiles | cad090144 | 0 | every new entry >= 14 days old
 format.sh --check (all parts) | cad090144 | 0 | -
 docs_check check / facts check / paths; test_docs_check | docs commit | 0 | 0 errors, 7 warnings, 16 notes; 0 misses; 0 paths; ok
 # Not run here (left to the round's matrix): the ua-c wasm32 size cells (sizes.py), the other ua-rs CI cells, the
 # bindings (ua-cxx / ua-qt / ua-dart-frb / ua-py / ua-go / ua-cs), node e2e. pqz-core clippy has lints that predate this
 # change (not on a changed line; CI does not clippy pqz-core). Owed: the pqz-core full gate at the four sets, once, on
 # dev's final core tree.
+# after the merge of dev 740942b6d (chain id 22779 / 22777; merge 83e2e2f33, no conflict, no lockfile or vector touched by both)
+ffi/vectors/run.sh (pqz-vectors --check, pqz_kat.py --check, tamper, wasm32 replay) | 83e2e2f33 | 0 | 18 files ok; pqz_kat ok; 209/225; 63 cases, 0 fails
+ua-rs test --features app-core,vectors --all-targets | 83e2e2f33 | 0 | 773 passed, 0 failed
+ua-rs test (default); --test pqz_wallet_rows | 83e2e2f33 | 0 | 635 + 2 passed, 0 failed
+scaas-node test --lib | 83e2e2f33 | 0 | 900 passed, 0 failed (a first run: 899 / 1, gateway::ops_tests::a_client_digest_other_than_the_nodes_is_bad_payload; passed 3 of 3 alone and in the full rerun: flaky, no crypto in it)
+scaas-node test --test mesh_vectors --test families_vectors | 83e2e2f33 | 0 | 6 passed, 0 failed
+zether-prover test | 83e2e2f33 | 0 | 86 passed, 0 failed
+docs_check check / facts check / paths | 83e2e2f33 | 0 | 0 errors; 0 misses; 0 paths
