@@ -804,12 +804,14 @@ contract PqChatTreeGasReplicaTest is Test {
         uint256 k = ss / perSlot;
         (uint256 rk,) = _gas(b, 0, k, salt + 2);
         (uint256 rn,) = _gas(b, 100_000, k, salt + 3);
-        uint256 n = (rr - rk) * 100_000 / (rn - rk);
+        // a row whose regular gas is below its slots' own (a small piece): no hash rounds, the replica an upper bound of it
+        uint256 n = rr > rk ? (rr - rk) * 100_000 / (rn - rk) : 0;
         (uint256 r, uint256 s) = _gas(b, n, k, salt + 4);
         emit log_named_string("REPLICA", string.concat(what, " n=", vm.toString(n), " k=", vm.toString(k)));
         emit log_named_uint(string.concat("REPLICA ", what, " regular"), r);
         emit log_named_uint(string.concat("REPLICA ", what, " state"), s);
-        assertApproxEqRel(r, rr, 0.001e18, "regular");
+        if (n > 0) assertApproxEqRel(r, rr, 0.001e18, "regular");
+        else assertGe(r, rr, "regular (an upper bound)");
         assertApproxEqAbs(s, ss, perSlot, "state");
     }
 
@@ -824,6 +826,19 @@ contract PqChatTreeGasReplicaTest is Test {
         _row(b, "last live leaf A-17 worst head ML-DSA-87", 16_158_289, 24_372_900, 9e6);
         _row(b, "last live leaf A-17 worst head ML-DSA-65", 13_205_502, 22_365_540, 10e6);
         _row(b, "closing treeRemove A-17 ML-DSA-87", 10_518_373, 8_656_740, 11e6);
+        // plan T8 (2026-11-26): the points of the SDK's tree gas rows (clients/scaas-sdk/gas/pqchat_tree_rows.py)
+        _row(b, "sdk: the list at the bound, 20 targets", 140_618, 1_482_570, 20e6);
+        _row(b, "sdk: the list of a cold commit, 511 targets", 2_118_552, 28_526_850, 21e6);
+        _row(b, "sdk: the node keys at the bound, six", 942_589, 14_980_230, 22e6);
+        _row(b, "sdk: the node keys, depth 9", 1_346_222, 22_328_820, 23e6);
+        _row(b, "sdk: one ciphertext in addPath", 140_184, 2_804_490, 24e6);
+        _row(b, "sdk: reachability: a chunk of ciphertexts", 1_891_224, 42_094_890, 25e6);
+        _row(b, "sdk: 15 genesis wraps in one transaction", 3_963_889, 46_758_330, 26e6);
+        _row(b, "sdk: the session record, 64 member keys", 1_775_286, 20_064_420, 27e6);
+        _row(b, "sdk: the session record, 128 member keys", 3_593_250, 32_402_340, 28e6);
+        _row(b, "sdk: commit record, plain, the tree check on a cold tree of 512", 4_595_919, 7_971_300, 29e6);
+        _row(b, "sdk: commit record at its bounds, ML-DSA-65", 4_738_597, 21_386_340, 30e6);
+        _row(b, "sdk: completion at its bounds with the held ciphertext", 7_960_290, 28_655_370, 31e6);
         _row(b, "control under 2^24", 16_700_000, 1_000_000, 7e6);
         _row(b, "control over 2^24", 16_850_000, 1_000_000, 8e6);
     }
