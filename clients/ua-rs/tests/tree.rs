@@ -1856,6 +1856,13 @@ fn tree_states_of_signed_faults() {
     let r = o.replay(&mut h, 2);
     assert_eq!(last(&r), (State::Followed, Some(InfoTook::Changed)));
     assert_eq!(r.epochs.last().unwrap().in_force.as_deref(), Some(INFO_B));
+    // the admin judged on the parent's admins (T6b of the TreeKEM plan): an admin that hands the role to another member in the
+    // same commit still changes the info; a member made admin by that commit does not count as one for it
+    let mut h = o.home();
+    o.commit(&mut h, 0, &[1], INFO_B, &[], honest);
+    let r = o.replay(&mut h, 2);
+    assert_eq!(last(&r), (State::Followed, Some(InfoTook::Changed)));
+    assert_eq!(r.epochs.last().unwrap().in_force.as_deref(), Some(INFO_B));
     // the derived-key comparison: ciphertexts that open to secrets whose keys are not the signed ones
     let mut h = o.home();
     o.commit(&mut h, 0, &[0], INFO_A, &[], other_node_keys);
