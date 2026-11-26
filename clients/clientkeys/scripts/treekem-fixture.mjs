@@ -1766,6 +1766,18 @@ export function lies(worlds) {
       ],
     });
     add("a path-less record over the bound (R18)", "pathless-bound", "B", served(wb, f.built, f.sig), both);
+    // the snapshot's counter (C44): `treeOf` serving another `sincePath` than the walk's is refused, as any other field
+    const t0 = tk.reader(w.home).treeOf();
+    add(
+      "a treeOf whose sincePath is not the walk's (C44)",
+      "pathless",
+      "C",
+      { "treeOf()": { ...t0, sincePath: t0.sincePath + 1 } },
+      {
+        replay: "TreeHeadRoot",
+        prepare: "TreeHeadRoot",
+      },
+    );
     const g = forgedCommit(wb, "A", free, { pathless: true, adds: [["F", 5]] });
     add("a path-less record at the bound (control)", "pathless-bound", "B", served(wb, g.built, g.sig), {
       replay: null,

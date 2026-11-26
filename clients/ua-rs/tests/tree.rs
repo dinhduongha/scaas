@@ -3064,3 +3064,71 @@ fn tree_pathless_handle_of_another_parent() {
         .vectors_tree_prepare_pathless(SC, input(&prep), hd, 0, None, &mut rand)
         .is_ok());
 }
+
+/// C43, F-7 (the path-less delta §4.2): epoch 0's tag in the session record decides the genesis key state: a record signed
+/// with another tag is not followed ("tag") by every member; the honest record is followed.
+#[test]
+fn tree_genesis_tag_decides() {
+    let o = Own::new();
+    let session = json!({"creator": hx(&o.ua(0)), "nonce": 1, "homeChain": hx(&[7; 32]),
+        "homeChatContract": hx(&[0xc4; 20]), "admins": [hx(&o.ua(0))],
+        "members": (0..3).map(|i| json!({"ua": hx(&o.ua(i)), "keyId": 1, "via": hx(&ZERO)})).collect::<Vec<_>>(),
+        "groupMode": 1, "pathRefreshBound": 0});
+    let kems: Vec<KemRecord> = (0..3).map(|i| o.record(i)).collect();
+    let g = o
+        .keys
+        .tree_create_genesis(OWN, &session, &kems, INFO_A.as_bytes())
+        .unwrap();
+    for bad in [false, true] {
+        let mut rec = g.record.clone();
+        if bad {
+            rec["confirmTag"] = json!(hx(&[0x7a; 32]));
+        }
+        let sig = o.sign(0, "PqChatSession", &rec);
+        let kems = (0..4).map(|i| ((o.ua(i), 1), o.record(i))).collect();
+        let ua_keys = (0..4)
+            .map(|i| (o.ua(i), (MLDSA65, o.uas[i].key_data())))
+            .collect();
+        let tid = tp::tree_id(OWN.typed, &rec).unwrap();
+        let mut h = new_home(&rec, sig, g.wraps.clone(), g.session_id, tid, kems, ua_keys);
+        for i in 0..3 {
+            let r = o.replay(&mut h, i);
+            let want = if bad {
+                State::NotFollowed("tag")
+            } else {
+                State::Followed
+            };
+            assert_eq!(r.epochs[0].state, want, "member {i}, bad tag {bad}");
+        }
+    }
+}
+
+/// C41 (the path-less delta §3.1): a session record whose `pathRefreshBound` is above 510 is one the contract refuses, so the
+/// walk takes it as a lying read; 510 is walked.
+#[test]
+fn tree_session_bound_above_the_cap_is_a_lie() {
+    let o = Own::new();
+    for (bound, ok) in [(510u32, true), (511, false)] {
+        let session = json!({"creator": hx(&o.ua(0)), "nonce": 1, "homeChain": hx(&[7; 32]),
+            "homeChatContract": hx(&[0xc4; 20]), "admins": [hx(&o.ua(0))],
+            "members": (0..3).map(|i| json!({"ua": hx(&o.ua(i)), "keyId": 1, "via": hx(&ZERO)})).collect::<Vec<_>>(),
+            "groupMode": 1, "pathRefreshBound": bound});
+        let kems: Vec<KemRecord> = (0..3).map(|i| o.record(i)).collect();
+        let g = o
+            .keys
+            .tree_create_genesis(OWN, &session, &kems, INFO_A.as_bytes())
+            .unwrap();
+        let sig = o.sign(0, "PqChatSession", &g.record);
+        let kems = (0..4).map(|i| ((o.ua(i), 1), o.record(i))).collect();
+        let ua_keys = (0..4)
+            .map(|i| (o.ua(i), (MLDSA65, o.uas[i].key_data())))
+            .collect();
+        let mut h = new_home(&g.record, sig, g.wraps.clone(), g.session_id, g.tree_id, kems, ua_keys);
+        let r = o.keys.tree_replay(OWN, &mut h, &o.dev(1), None, 0);
+        if ok {
+            assert_eq!(r.unwrap().unwrap().epochs[0].state, State::Followed);
+        } else {
+            assert_eq!(code(r), "TreeReadCorrupted", "bound {bound}");
+        }
+    }
+}
