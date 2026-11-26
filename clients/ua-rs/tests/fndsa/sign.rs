@@ -3,7 +3,8 @@
 //! pairs and two messages each, through the wallet (`ua_key`, its arena secret, `vectors_sign_ua_msg` with fixed randomness):
 //! PQClean natively, falcon-rs on wasm32. Each signature must verify (`pq::verify`), and keccak256 over `pk ‖ sk ‖ sig` of
 //! every case must equal [`DIGEST`] on both, so a wasm32 key or signature differing in one byte from PQClean's fails.
-//! Shared by tests/fndsa_vrfy.rs and tests/fndsa/wasm.
+//! [`keys_digest`]: the key pairs of [`SEEDS`] seeds per degree (Fable audit FR-5), the same digest natively (PQClean) and on
+//! wasm32 (falcon-rs). Shared by tests/fndsa_vrfy.rs and tests/fndsa/wasm.
 use scaas_ua::pq;
 use scaas_ua::wallet::{UaKey, Wallet};
 use serde_json::Value;
@@ -14,6 +15,43 @@ pub const DIGEST: &str = "aad3af3e3f1fd64839fc3f8e2c018ea112ea7fe03f0cee6db4db63
 pub const CASES: usize = 48;
 
 const PATHS: [(u32, u32); 3] = [(0, 0), (0, 1), (1, 0)];
+
+/// Key pairs per degree of [`keys_digest`].
+pub const SEEDS: u32 = 1000;
+/// keccak256 over every `pk ‖ sk` of [`keys_digest`], PQClean's (native).
+pub const KEYS_DIGEST: &str = "02513c7bc57c8122f13a424fdc30870ca5c1e35ac3c42b9eadc24186bcfebab3";
+
+/// Seed `i` of degree `kind`: SHAKE256 of a label, the kind and `i`, 48 bytes (keygen's seed length).
+pub fn parity_seed(kind: u16, i: u32) -> Vec<u8> {
+    use sha3::digest::{ExtendableOutput, Update, XofReader};
+    let mut h = sha3::Shake256::default();
+    h.update(b"ua-rs fndsa keygen parity");
+    h.update(&kind.to_be_bytes());
+    h.update(&i.to_be_bytes());
+    let mut seed = vec![0u8; 48];
+    h.finalize_xof().read(&mut seed);
+    seed
+}
+
+/// The key pair of each [`parity_seed`], `SEEDS` per Falcon kind, through the wallet's keygen (`derive::ua_key`: PQClean
+/// natively, falcon-rs on wasm32); `each` sees the kind, the seed and the key pair. Returns the count and keccak256 over every
+/// `pk ‖ sk`.
+pub fn keys_digest(mut each: impl FnMut(u16, &[u8], &[u8], &[u8])) -> (usize, String) {
+    let (mut n, mut d) = (0, Keccak256::new());
+    for kind in [0x0132u16, 0x0135] {
+        for i in 0..SEEDS {
+            let seed = parity_seed(kind, i);
+            let (sk, pk) =
+                scaas_ua::wallet::derive::ua_key(kind, zeroize::Zeroizing::new(seed.clone()))
+                    .unwrap();
+            d.update(&pk);
+            d.update(&*sk);
+            each(kind, &seed, &pk, &sk);
+            n += 1;
+        }
+    }
+    (n, hex::encode(d.finalize()))
+}
 
 /// The case's message and 88 bytes of randomness (nonce ‖ sampler seed), keccak256 of its labels.
 fn inputs(id: &str, kind: u16, account: u32, index: u32, j: u8) -> ([u8; 32], Vec<u8>) {

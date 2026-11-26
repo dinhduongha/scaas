@@ -52,6 +52,11 @@
 #                          fam-<row> alone and all on (wallet always), each probe's size printed
 #   ua-rs-targets:         compile only, no run (MD-5, plan T0 / T18), wasm32-unknown-unknown, aarch64-linux-android (NDK clang, API 24), aarch64-apple-ios (macOS): cargo build --locked --lib --target <t> <cell> in ua-rs
 #                          for the default, --no-default-features, signers, json, pq, wallet, zether, pqz at n2048-kmax1024; then cargo build --locked --lib --target <t> in ua-c
+#   ua-rs-fndsa-wasm:      CLI-UAL-66 (Fable audit FR-4, FR-5): in clients/ua-rs: cargo test --release --locked --no-default-features --features vectors
+#                          --test fndsa_vrfy -- --include-ignored (the key pairs of 1,000 seeds per degree, falcon-rs = PQClean natively);
+#                          wasm-bindgen-cli 0.2.130, Node 26.8.1; in clients/ua-rs/tests/fndsa/wasm: cargo clippy --locked
+#                          --target wasm32-unknown-unknown -- -D warnings; ./run.sh (ua-rs for wasm32, falcon-rs: every FN-DSA row, the wallet's Falcon
+#                          keys and signatures, the key pairs of 1,000 seeds per degree, against PQClean's digests)
 #   ua-deps:               cargo tree --locked -e normal for ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node (no lockfile moves);
 #                          cargo deny --all-features check in ua-rs; cargo deny --all-features --config <ua-rs>/deny.toml check in ua-c, ua-cxx, ua-qt,
 #                          ua-dart-frb/rust and zether-prover (cargo-deny 0.20.2; T21 L68: the three binding locks too);
@@ -242,6 +247,7 @@ jobs:
       zether_prover: ${{ steps.f.outputs.zether_prover }}
       scaas_ct: ${{ steps.f.outputs.scaas_ct }}
       ua_rs: ${{ steps.f.outputs.ua_rs }}
+      ua_rs_fndsa_wasm: ${{ steps.f.outputs.ua_rs_fndsa_wasm }}
       ua_cxx: ${{ steps.f.outputs.ua_cxx }}
       ua_c: ${{ steps.f.outputs.ua_c }}
       ua_qt: ${{ steps.f.outputs.ua_qt }}
@@ -1060,6 +1066,48 @@ jobs:
       - name: ua-c (libscaas_ua_c, the default build)
         working-directory: clients/ua-c
         run: cargo build --locked --lib --target ${{ matrix.target }}
+
+  # CLI-UAL-66 (Fable audit FR-4): the Falcon gate in wasm32, the code that ships (falcon-rs under wasm32 code generation):
+  # tests/fndsa/wasm/run.sh, with the wasm-bindgen CLI and Node of the SDK's [js] cell
+  ua-rs-fndsa-wasm:
+    needs: changes
+    if: needs.changes.outputs.ua_rs_fndsa_wasm == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/ua-rs/tests/fndsa/wasm
+    steps:
+      - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh)
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            clients/ua-rs
+            clients/ua-rs/tests/fndsa/wasm
+          key: fndsa
+      # FR-5 natively: falcon-rs's key pairs of 1,000 seeds per degree against PQClean's, the digest run.sh checks (release: minutes unoptimised)
+      - name: fndsa_vrfy with the key-pair parity (native, release)
+        working-directory: clients/ua-rs
+        run: cargo test --release --locked --no-default-features --features vectors --test fndsa_vrfy -- --include-ignored
+      - name: wasm-bindgen-cli 0.2.130
+        run: cargo install wasm-bindgen-cli --version =0.2.130 --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.8.1
+      - name: clippy (wasm32)
+        run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
+      - name: run.sh (wasm32 under Node)
+        run: ./run.sh
 
   # Every lockfile over ua-rs resolves as committed; cargo deny (advisories, bans, licenses, sources) by clients/ua-rs/deny.toml;
   # cargo audit (the RustSec database again, the plan's second reader) with deny.toml's exceptions, one list.
