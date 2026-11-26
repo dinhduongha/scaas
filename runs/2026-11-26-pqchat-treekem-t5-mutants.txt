@@ -1,0 +1,7 @@
+# t5 mutants at commit f977de424 (name | outcome | test)
+a chunk plan that exceeds the block-limit rule | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --lib pqchat_tree
+every ciphertext released before the node keys are final | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --lib pqchat_tree
+a refusal by a protocol-wide constant (60 M), not the chain's block | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --lib pqchat_tree
+the decoder that drops the signature again | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --lib pqchat_tree
+the order broken taken as complete | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --lib pqchat_tree
+5 mutants, 5 killed, 0 survived (0 killed elsewhere), 0 not loaded

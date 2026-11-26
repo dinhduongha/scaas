@@ -1,0 +1,9 @@
+# t6 mutants at commit f977de424 (name | outcome | test)
+the majority read made only when an info changed (a read that depends on a decryption) | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 4 --features vectors --test tree_scenarios
+a changed info taken with 2 named endpoints | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 4 --features vectors --test tree_scenarios
+a changed info taken on a majority that names another head | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 4 --features vectors --test tree_scenarios
+the snapshot not compared with the tree read at its end | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 4 --features vectors --test tree_scenarios
+an admin's new info after a gap sealed unreviewed | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 4 --features vectors --test tree_scenarios
+the registry's KEM key read without its kept signature | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 4 --features vectors --test tree_scenarios
+a view read from another session (the session id dropped) | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 4 --features vectors --test tree_scenarios
+7 mutants, 7 killed, 0 survived (0 killed elsewhere), 0 not loaded
