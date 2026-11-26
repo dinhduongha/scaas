@@ -754,6 +754,20 @@ and a test asserts `deriveUAKey` never yields a Zether conf scalar (foreign wall
 wrapping covers the seed and the conf key, separated by AAD labels; wallets show the kind and role of every key and never
 offer "use this EOA as a passkey/Schnorr/multisig member key".
 
+<a id="group-kind-verifiers"></a>**Group-kind verifiers** (`0x0110`–`0x0113`; **BUILT** 2026-11-26, UNAUDITED). `src/ua-group.js` checks
+the group kinds as the registry does ([accounts.md §1.6.1](../contracts/accounts.md#musig2-and-frost-what-the-registry-checks),
+§1.9; [ARCH-POS-18](../decisions.md#ARCH-POS-18): no kind goes unchecked off chain for want of a verifier), mirroring the EVM verifiers
+and ua-rs `groups.rs`: `verify` on the stored vk (the key data's head: 33-byte SEC1 or 64-byte bn254; `musig2-secp256k1` BIP-340 by
+`x(Q)`, `frost-secp256k1` RFC 9591, the bn254 kinds the scaas Schnorr) and `verifyPop` on the key data (validated, then KeyAgg with
+the hints compared by address, or the bn254 port; the DKG PoKs, the repeated or cancelling `C_i0` refused on secp256k1, `Y = Σ C_i0`;
+then the group signature). `src/ua-verify.js` uses them wherever it judges a UA signature: a group UA's registration and portable
+records (`verifyPop`, the registry's `_single`), an `msig` slot (the vk, [CTR-UA-33](../contracts/accounts.md#CTR-UA-33)), and so the
+tree reader's signers. `test/ua-groups.test.js` reads every `groups.json` row with the verdicts ua-rs `tests/groups_verify.rs` gives;
+mutants in `clients/runs/2026-11-26-clientkeys-group-verify-mutants.py`. Not mirrored, unreachable by any signer: the contract's
+fail-closed refusals of a `musig2-secp256k1` partial sum equal to ±H_i, and of `x(Y)`, `x(C_i0)` ≥ N or `c = 0` in
+`FrostSecp256k1Verifier`'s `ecrecover` checks (ua-rs does not have them either). The bn254 kinds stay single-implementation kinds
+(§1.16): clientkeys and ua-rs agreeing on them is self-consistency only.
+
 <a id="role-keys"></a>
 
 <a id="CLI-SGN-29"></a>**CLI-SGN-29** — **One key, one purpose, starting at the wallet layer.** Wallets and clientkeys derive

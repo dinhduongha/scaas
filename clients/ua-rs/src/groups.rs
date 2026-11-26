@@ -142,7 +142,7 @@ fn musig2_secp256k1_pop(kd: &[u8], msg: &[u8; 32], pop: &[u8]) -> bool {
         if address(&rec.to_affine().to_sec1_point(false).as_bytes()[1..]) != address(h) {
             return false;
         }
-        sum += rec; // = H_i (address match); the EVM adds H_i in affine coordinates
+        sum += rec; // = H_i (address match); the EVM sums in Jacobian and refuses S = ±H_i
     }
     compressed(&sum) == kd[..33] && bip340(&kd[1..33], msg, &pop[..64])
 }

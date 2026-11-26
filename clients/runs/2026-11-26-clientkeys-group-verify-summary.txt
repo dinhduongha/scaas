@@ -1,0 +1,14 @@
+# clientkeys group-kind verifiers (branch clientkeys-group-verify, 2026-11-26; UNAUDITED). Full output in git-ignored .log files.
+# step | commit | rc | counts
+groups.json regen (ua-rs --features vectors --test groups -- --ignored write_groups_json) | 1c35284e9 | 0 | 98 negatives (70 + 28 verify rows), additions only
+ua-rs --test groups_verify | 68d09b0b1 tree (0360375e4 + count pins) | 0 | 5 passed (98 negatives refused, 20 groups)
+ua-rs --features vectors --test groups (incl. groups_json_regenerates_byte_for_byte) | same | 0 | 11 passed, 1 ignored (the writer)
+forge test/ua/{verifiers/Musig2Verifiers,UAFrost,UARegistryGroups,UAMsigGroupMember}.t.sol | same | 0 | 43 passed (the EVM verifiers refuse every new row; pins 33 -> 47, 21 -> 27, 16 -> 24)
+clientkeys npm test (node --test test/*.test.js) | same | 0 | 674 tests: 669 pass, 5 skipped, 0 fail
+clientkeys mutants (clients/runs/2026-11-26-clientkeys-group-verify-mutants.py) | 68d09b0b1 | 0 | 26: 19 killed, 7 equivalent (argued in the runner), 0 survived
+format.sh --check, every language | 68d09b0b1 (js py sol rechecked after prettier) | 0 | all ok (pqchat-core needs its git-ignored frb_generated.rs present)
+docs_check check / paths / test_docs_check | 0360375e4 | 0 / 0 / 0 | 0 errors, 7 budget warnings (existing); 0 machine paths; ok
+# contract-only refusals not mirrored in clientkeys or ua-rs (no signer can reach them; the contract fails closed):
+#   musig2-secp256k1 partial sum = +-H_i (Musig2Secp256k1Verifier._addMixed: Z = 0)
+#   frost-secp256k1 x(Y) or x(C_i0) >= N, c = 0 (FrostSecp256k1.isLinear: ecrecover refuses r >= N, s = 0)
+#   musig2-secp256k1 hint coordinates >= p (the address of the canonical a_i*P_i must match: a keccak-160 collision)
