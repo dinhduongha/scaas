@@ -142,6 +142,8 @@ errors, memory and thread rules as the host language sees them), the CLI, and th
 - the supply chain: `clients/*/deny.toml`, `clients/*/.cargo/audit.toml`, every `Cargo.lock` and `package-lock.json`, the
   `cargo deny` / `cargo audit` / `npm audit` jobs, `rust-toolchain.toml`, the pinned tool versions in CI
 - the scripts: `scripts/evm_libs.sh` (the `smartcontracts/evm/lib/` commit and sha256 pins), `scripts/format.sh`,
+  `scripts/vendor.sh` (ARCH-POS-24, added 2026-11-26: `install` / `check`, the sha256 and tree pins, `vendor/README.md`,
+  `vendor/*.VENDORED.md`, the root `.gitignore`'s `/vendor/*/`), `scripts/mutant_guard.py` (ARCH-POS-23),
   `scripts/capped`, `scripts/check_test_features.py`, `scripts/docs_check.py` (the parts that refuse consumer names, machine
   paths and temp paths), `scripts/size_gate.py`; the CI steps "no machine paths in tracked files" and "no temp paths in
   tracked files"
@@ -175,10 +177,19 @@ f. **The supply chain.** Every dependency pinned (lockfiles committed and resolv
 g. **Secret and path checks.** The temp-path and machine-path steps match what `AGENTS.md` refuses and cannot match
    themselves away; `docs_check.py` refuses consumer names; there is no gitleaks in CI by design, so say what does guard a push
    (the pre-push scan is local) and whether any CI step prints a secret.
+h. **The vendored sources** (added 2026-11-26; ARCH-POS-24): `scripts/vendor.sh install` checks each archive's sha256
+   before unpacking it in a fresh temporary directory, applies only the steps it names (the PQClean symbol rename) and
+   writes the directory whole; `check` recomputes each tree id (ignore rules off) and fails closed by name (`MISSING`,
+   `MISMATCH`, `CRATE_SHA256_MISMATCH`, `TREE_MISMATCH`, `SYMLINK_FAILS_CHECK`), the falcon-rs audit's tree recomputed as
+   `VENDORED.md` states (FR-3); the temp directory removed on every exit, a refusal included; CI runs both before every job
+   that builds `ua-rs` or a crate over it, and no job builds from an unchecked tree; the wasm32 Falcon gate still runs by hand
+   (FR-4, open: report it only where a doc claims CI runs it). `scripts/mutant_guard.py` (ARCH-POS-23): a deadline per
+   mutant, the restore on every exit, a dirty target refused.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `scratchpad/review-t21/` (part 5, the boundary and wrappers), `scratchpad/sdk-binding-review/`, `scratchpad/pr-a-review/`
 - `scratchpad/sdk-review-20261123-0621/` (the CLI rows of T26: A-5, A-6, B-22)
+- `T/docs/audit/audited/vendor-falcon-rs.md` (FR-3, FR-4: the vendor pins and the wasm32 gate in CI)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - the tag's client gate summary: `ua-c`, `ua-cxx`, `ua-qt`, `ua-cs`, `ua-py`, `ua-go`, `ua-dart`, `ua-dart-frb` rows, `cli` rows,
@@ -206,7 +217,7 @@ number (section 9).
 | 10 | Performance and cost | N/A except CI cost: a job that runs the full matrix on every path change, or skips one it should run. |
 | 11 | Interfaces and misuse | **Leads within the unit.** Each binding idiomatic and hard to misuse (ownership, threads, disposal); the CLI's defaults safe. |
 | 12 | Tests | Each binding's tests can fail; `check_test_features.py`; CI steps that always pass (a `|| true`, a grep that matches itself). |
-| 13 | Operations and the supply chain | **Leads this dimension for the repository.** Invariants e, f, g: pins, `cargo deny` / `cargo audit` / `npm audit`, `evm_libs.sh`, `format.sh`, the temp-path and machine-path checks, SPDX headers, licences of new dependencies. |
+| 13 | Operations and the supply chain | **Leads this dimension for the repository.** Invariants e, f, g: pins, `cargo deny` / `cargo audit` / `npm audit`, `evm_libs.sh`, `format.sh`, the temp-path and machine-path checks, SPDX headers, licences of new dependencies; `scripts/vendor.sh` and its CI steps (invariant h). |
 
 ## 9. Report format (Markdown, English)
 

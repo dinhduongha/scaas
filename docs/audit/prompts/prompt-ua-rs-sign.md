@@ -122,8 +122,12 @@ ua-rs single-signer schemes (classical and PQ) and the group schemes (MuSig2, FR
 
 **Scope (paths under `T/`):**
 - `clients/ua-rs/src/wallet/{sign,signer,pqsign,uasig,webauthn,tx}.rs`, `src/{falcon,pq,verify,keydata}.rs`
+- `src/falcon/soft.rs` (the wasm32 glue over falcon-rs, CLI-UAL-66) and the `build.rs` / `Cargo.toml` routing of the two
+  Falcon paths (added 2026-11-26; the falcon-rs tree is unit `vendor-falcon-rs`)
+- `src/ua_portable.rs` (added 2026-11-26, as no layer unit held it: portable records and the `msig` reader rule by version,
+  CTR-UA-74)
 - `clients/ua-rs/src/{musig2,frost,groups}.rs`, `src/ua8.rs` where it builds group keys
-- tests: `wallet_sign`, `wallet_pq`, `wallet_uasig`, `wallet_webauthn`, `wallet_tx`, `signatures`, `pq`, `groups`, `groups_verify`, `ua8`, `nested`
+- tests: `wallet_sign`, `wallet_pq`, `wallet_uasig`, `wallet_webauthn`, `wallet_tx`, `signatures`, `pq`, `groups`, `groups_verify`, `ua8`, `nested`, `fndsa_vrfy`, `fndsa/`, the `msig` reader rows
 
 **Specifications and rules to read first:**
 - spec `T/docs/superpowers/specs/2026-11-05-ua-rs-sign.md`, plan `T/docs/superpowers/plans/2026-11-05-ua-rs-sign.md`
@@ -135,13 +139,32 @@ ua-rs single-signer schemes (classical and PQ) and the group schemes (MuSig2, FR
 2. Low-s and malleability equal to the contracts; `UASig` and the `msig` minimal form; `sign_transaction` cannot produce a type-4 (EIP-7702) transaction.
 3. MuSig2 / FROST: no nonce reuse (secret nonces consumed, not `pub` in release), session state, rogue-key defence, binding factors, DKG complaints, serialization bounds.
 4. Imported keys map to the right kinds (secp256k1 -> 0x0108, ed25519 seed -> 0x0102).
+5. **The `msig` version tag** (added 2026-11-26; CTR-UA-74): a new `msig` signature carries the tag of
+   `msigStateOf(ua).version` read at signing time, and each `msig` member's own (`uasig.rs`); `ua_portable.rs` applies the
+   reader rule's seven steps (the tag's forms, 8 zero bytes refused; `msigAt`; version 0 checked by `uaOf`; `enabled ∧
+   accepted`; one level down for an `msig` member; step 6 along a chain; never another version, never `msigOf` for a kept
+   record); a replica record compared with the home's with the tags stripped.
+6. **Falcon on wasm32** (added 2026-11-26; CLI-UAL-66): `soft.rs` keys, signs and verifies through falcon-rs on wasm32 only,
+   never natively, and fails closed by name; its wipes (FR-10), the padded retry, the public `ua_msg` as the only message of
+   the variable-time hash-to-point (FR-7), the dependency's target gating (FR-12).
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `scratchpad/review-t21/` (T21 at `806f4f2c2`: `scope.md`, `ledger.md` with its FIX-NOW / OWNER / LATER / REJECT rows and the owner decisions O1-O8, the Fable and Codex part reports); the fix waves landed after it (`git -C T log --grep 't21'`)
 - `T/docs/research/ua-rs-sign-fable-review.md`, `ua-rs-sign-codex-review.md`
+- the review-fix round (2026-11-24 to -26, local; `ua-rs`: F-1, B2-1, C-4, R-1, R-3): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
+- `T/docs/audit/audited/vendor-falcon-rs.md` (FR-6 to FR-12 touch the glue)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - `T/smartcontracts/evm/runs/2026-11-16-ua-rs-sign-t21-summary.txt`, `2026-11-16-ua-rs-sign-sync7-summary.txt`, `2026-11-09-ua-rs-sign-t20d-summary.txt`, and the tag's own client gate summary
+- `T/clients/runs/2026-11-26-ua-rs-wasm-fndsa-summary.txt`, `T/clients/ua-rs/runs/2026-11-26-ua-rs-wasm-fndsa-mutants.py` (12 glue
+  mutants)
+- the review-fix round's client rows: `T/clients/runs/2026-11-25-review-fix-client-summary.txt`,
+  `2026-11-26-review-fix3-client-summary.txt`, `2026-11-26-review-fix4-client-summary.txt` (with their `-mutants.py`
+  runners), and the round's closing matrix (`T/smartcontracts/evm/runs/2026-11-26-round-matrix.sh` and its summary)
 
 **Also accepted for this unit (do not report):**
 - T21 ledger rows marked REJECT or LATER, and the owner decisions O1-O8 as ruled (e.g. O2: the link key must arrive over an authenticated channel, the fingerprint compare is LATER)
@@ -153,19 +176,19 @@ number (section 9).
 
 | # | Dimension | What to hunt in this unit |
 |---|---|---|
-| 1 | Conformance | The ua-rs spec and plan (T21 parts 1, 2), CLI-SGN-*, CLI-UAL-* against `wallet/{sign,signer,pqsign,uasig,webauthn,tx}.rs`, `src/{falcon,pq,verify,keydata,musig2,frost,groups}.rs`. |
-| 2 | Cryptography | Leads within the unit (with `crypto-signatures`): nonces per kind (RFC 6979, BIP-340, scaas Schnorr bn254 / BLS12-381 with its 512-bit map, hedged ML-DSA, SLH-DSA, Falcon keygen from the seed through vendored PQClean); low-s and malleability equal to the contracts; MuSig2 / FROST nonce handling, rogue-key defence, binding factors, DKG complaints; the `pq_msg` tag per kind; domain separation of `UASig`. |
+| 1 | Conformance | The ua-rs spec and plan (T21 parts 1, 2), CLI-SGN-*, CLI-UAL-* against `wallet/{sign,signer,pqsign,uasig,webauthn,tx}.rs`, `src/{falcon,pq,verify,keydata,musig2,frost,groups}.rs`; CTR-UA-74's reader rule and CLI-UAL-66 (invariants 5, 6). |
+| 2 | Cryptography | Leads within the unit (with `crypto-signatures`): nonces per kind (RFC 6979, BIP-340, scaas Schnorr bn254 / BLS12-381 with its 512-bit map, hedged ML-DSA, SLH-DSA, Falcon keygen from the seed through vendored PQClean natively and falcon-rs on wasm32); low-s and malleability equal to the contracts; MuSig2 / FROST nonce handling, rogue-key defence, binding factors, DKG complaints; the `pq_msg` tag per kind; domain separation of `UASig`. |
 | 3 | Security | Imported keys mapped to the right kinds (secp256k1 -> 0x0108, ed25519 seed -> 0x0102); `sign_transaction` cannot produce a type-4 (7702) transaction; a signature for one purpose usable for another. |
 | 4 | Rules that do not bend | No EIP-7702; explicit parameters into each signer; every kind the contracts accept is signable (maximal support). |
 | 5 | Secrets and privacy | Secret nonces consumed, never `pub` in release; keys in the arena only; no secret in errors or `Debug`. |
 | 6 | Robustness and denial of service | Serialization bounds of group messages; no panic on a malformed share. |
 | 7 | Failure handling | Named errors; a refused signing leaves no half-consumed nonce state. |
-| 8 | Consistency across languages and layers | Every kind's signature verifies in the Solidity verifiers (`T/smartcontracts/evm/src/ua/`) and matches clientkeys rows (`pq.js`, `ua.js`) and the vectors. |
+| 8 | Consistency across languages and layers | Every kind's signature verifies in the Solidity verifiers (`T/smartcontracts/evm/src/ua/`) and matches clientkeys rows (`pq.js`, `ua.js`) and the vectors; the reader rule equal to clientkeys `ua-verify.js` on the `msig` rows. |
 | 9 | Contract specifics | N/A: no contract code. |
-| 10 | Performance and cost | Sign time and memory of SLH-DSA and Falcon on mobile and wasm (no Falcon on wasm32: say what the caller gets). |
+| 10 | Performance and cost | Sign time and memory of SLH-DSA and Falcon on mobile and wasm (Falcon on wasm32 through falcon-rs `fpemu`, integer-emulated floats). |
 | 11 | Interfaces and misuse | Signer API: no caller RNG where the spec forbids one; prepare -> review -> sign shows every field. |
 | 12 | Tests | Tests `wallet_sign`, `wallet_pq`, `groups`, `groups_verify`, the MuSig2 / FROST vector files; a negative test per malleability check. |
-| 13 | Operations and the supply chain | `vendor/pqclean-falcon-seeded` (repository root) provenance and pin; `frost-*` =3.0.0 with the known advisory; `deny.toml` reasons; SPDX headers. |
+| 13 | Operations and the supply chain | `vendor/pqclean-falcon-seeded` and `vendor/falcon-rs-0.3.1` (repository root, git-ignored, installed and checked by `scripts/vendor.sh`, ARCH-POS-24) provenance and pins; `frost-*` =3.0.0 with the known advisory; `deny.toml` reasons; SPDX headers. |
 
 ## 9. Report format (Markdown, English)
 

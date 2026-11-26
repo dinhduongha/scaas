@@ -188,6 +188,16 @@ e. **The registry line is read the same way.** `holderOf` / `pqzHome` (CTR-UA-65
    the record.
 f. **Errors and refusals named the same** across the contract, `ua-rs`, the SDK and the node where one maps the other's (a
    contract error the SDK turns into a generic one hides the rule from the user).
+g. **The review-fix round's seams** (added 2026-11-26): the `msig` version tag (CTR-UA-74) written and read the same way by
+   the registry, `ua-rs` (`uasig.rs`, `ua_portable.rs`, `wallet/tree.rs`), clientkeys (`ua-verify.js`, `treekem.js`), the SDK
+   (`account/msig.rs`: one `msigAt` read per version a record names, at most 17), pqchat-core (`reads.rs` walk) and
+   pqvault-core (`vault.rs` `verify`, `epoch_agrees`), and passed through unchanged by the node; step 6 wherever a chain of
+   records is read; a replica record compared with its home's with the tags stripped (A-1). The tree bounds after R8 512 /
+   C10 20 equal in the contract, the node's `typed.rs`, `ua-rs` and clientkeys; the exit lag of 16 equal in the contracts,
+   pqchat-core's `ExitLag`, the SDK's and `ua-rs`'s review lines; an empty `addWraps` / `addVaultWraps` refused by the
+   contract and the node alike (A-5); the group kinds 0x0110-0x0113 judged alike by Solidity, `ua-rs` `groups.rs` and
+   clientkeys `ua-group.js` on `vectors/ua/groups.json`; Falcon keys and signatures equal natively and on wasm32
+   (CLI-UAL-66).
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `T/docs/research/security-review-record.md` (index of every review, and what no review covered)
@@ -196,6 +206,11 @@ f. **Errors and refusals named the same** across the contract, `ua-rs`, the SDK 
   `scratchpad/review-3zh/`, `scratchpad/review-t21/` (`ledger.md`, O1-O8), `scratchpad/sdk-complete-review/`,
   `scratchpad/sdk-review-20261123-0621/` (T26, `STATUS.md`), `scratchpad/pqvault-review/`,
   `scratchpad/treekem-review-20261123-1426/`
+- the review-fix round (2026-11-24 to -26, local): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 - the reports of the layer units of this round under `scratchpad/ai-audit/results/` when they exist: read them for leads,
   do not repeat their findings; a finding of yours that a layer unit already reported names that unit's id
 
@@ -206,6 +221,12 @@ f. **Errors and refusals named the same** across the contract, `ua-rs`, the SDK 
 - `T/pqz-core/runs/gate/3zh-g2-<set>-summary.txt` for the four sets
 - `T/clients/clientkeys/` vector `--check` rows, `T/clients/ua-rs/` `vectors` test rows and each wrapper's vector rows in the
   tag's client gate summary
+- the review-fix round: `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt` (with
+  `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
+  matrix (`2026-11-26-round-matrix.sh` and its summary)
+- the review-fix round's client rows: `T/clients/runs/2026-11-25-review-fix-client-summary.txt`,
+  `2026-11-26-review-fix3-client-summary.txt`, `2026-11-26-review-fix4-client-summary.txt` (with their `-mutants.py`
+  runners)
 
 **Also accepted for this unit (do not report as such):** what a doc marks SPECIFIED or PLANNED and is unbuilt; the non-EVM
 families other than Soroban are deferred (owner 2026-10-31, confirmed 2026-11-24): name a fork with them only if a built EVM

@@ -142,7 +142,7 @@ chain. Not in scope: `*/legacy/`, `test/` except to read what a test claims.
 - `T/docs/review.md` §1 dimension 4 (the rules that do not bend) and §2 (the adversarial area); `T/AGENTS.md` "Rules that do
   not bend"; `T/docs/node/threat-model.md` (NODE-SEC-01); the threat sections of the specs: PqChat TreeKEM §14, PqVault §10,
   pqchat-core §9, the three-key spec, the proof-path spec
-- decisions ARCH-POS-13, -15, -17, -18, CTR-UA-24 (no EIP-7702), CTR-CHAT-09, -14, -20, -26, -27, CTR-PQV-03 to -17, CTR-PQZ-07,
+- decisions ARCH-POS-13, -15, -17, -18, CTR-UA-24 (no EIP-7702), CTR-UA-74, CTR-GOV-33, CTR-CHAT-09, -14, -20, -26, -27, CTR-PQV-03 to -17, CTR-PQZ-07,
   -08, -37, CTR-ZTH-16, -36, -42, CTR-GOV-20, -25, -28 to -30, CTR-DEX-19, NODE-LANE-03, -09, -12, NODE-JOB-07, -11, -24
 
 **Roles (each one a section of your report; for each, try every rule of section 5 and recovery from state alone):**
@@ -162,21 +162,25 @@ c. **A relayer that refuses, delays or reorders.** It may refuse or delay, never
    recipient, a floor or an unbound field; reorder two signed records of one signer into a different outcome (nonce scopes,
    PqChat pieces, PqVault batches, PQZ rollover halves); delay past a deadline to force a refund or a `dead` report; make the
    node report `dead` while the transaction may still land (NODE-LANE-09, the cancel one nonce ahead); hold back the last
-   piece of a multi-transaction flow.
+   piece of a multi-transaction flow. Stop a replica from copying the home's exits (E-2, A-16) or an `msig` author's
+   records (CTR-UA-74, A-1).
 d. **A lying RPC node, below and above the strict-majority option.** Below it (failover, one endpoint answers): what a lying
    endpoint can make a client sign, show or decrypt (a balance, a KEM key, a recipient, an epoch, a decoy set, a gas quote, a
    finality answer); the rule that a read feeding a decryption uses the majority option with at least three nodes and a
    discovered node only then (ARCH-POS-15, CLI-RPC-06). Above it (a strict majority of the configured nodes lies): what
    remains guarded by the contracts alone, and what a client then signs; name every read that feeds a decryption or a key
    choice and say which purpose it runs under. A mix of two endpoints inside one read; a stale head; a forked chain with the
-   same chain id but another `chainUid` (NET-ALL-25).
+   same chain id but another `chainUid` (NET-ALL-25). An endpoint that serves an earlier `msig` structure (`msigAt`,
+   `msigStateOf`) or hides an `updateMsig`: what CTR-UA-74 says it can still do, and whether step 6 holds everywhere.
 e. **A front-runner.** Front-runs `initialize` on a clone or a deploy at a CREATE2 / CREATE3 address; a registration with other
    `pop` bytes; a DEX fill against a signed floor; a PqChat or PqVault child slot; a PQZ rollover against a debit; a grant
-   change against its use.
+   change against its use; an exit against the lag (complete 17 epochs, each signed, to strand a signed leave or removal:
+   `EXIT_LAG_MAX` 16, C9); a keyed router cancel for a predicted address (G-7).
 f. **A removed party.** A member that left or was removed (PqChat flat and tree, PqVault, `msig` slot disabled): what it can
    still read (forward secrecy and post-compromise claims as the specs state them), sign, replay (`UAMembership` after
    disable + re-add), or block; a removed device key; an auditor replaced or a verifier rotated (`pqzVerifierEpoch`); a key
-   version rotated with a debit in flight.
+   version rotated with a debit in flight. An `msig` slot disabled because its key leaked: can it sign a new record under
+   an older version tag?
 
 **Recovery from state alone** (CTR-CHAT-14, CTR-PQV-10, the PQZ proof path, Zether rollover): for each role, say whether an
 honest party can still recover its balance, keys, sessions or vaults from contract state alone after the attack, with no
@@ -189,6 +193,11 @@ event log and no local list.
   `scratchpad/review-3zh/`, `scratchpad/review-t21/` (`ledger.md`, O1-O8), `scratchpad/sdk-complete-review/`,
   `scratchpad/sdk-review-20261123-0621/` (T26, `STATUS.md`), `scratchpad/pqvault-review/`,
   `scratchpad/treekem-review-20261123-1426/`
+- the review-fix round (2026-11-24 to -26, local): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 - the reports of the layer units of this round under `scratchpad/ai-audit/results/` when they exist: read them for leads,
   do not repeat their findings; a finding of yours that a layer unit already reported names that unit's id
 
