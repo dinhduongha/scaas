@@ -8,7 +8,9 @@ tag strip: `sdkp` (tests/pqchat_keys.rs, tests/app_core_vault_records.rs) and `p
 member (C-4, R-1): clientkeys `js` (node --test test/treekem.test.js test/pqchat-tree.test.js) and ua-rs `rs` (cargo test --test
 tree, features app-core and vectors), on the lie rows of world msig-nested. C-7 (a version-0 KEM key by the registration):
 `js`. fable-R's four hand mutants on the reader's inner tag (slotOk / authOk to version 0, to the current version) and their
-ua-rs twins: `jsr` (ua-portable, ua-nested, ua-wallet, treekem) and `rsr` (ua_portable, json, wallet_uasig, tree). One mutant
+ua-rs twins: `jsr` (ua-portable, ua-nested, ua-wallet, treekem) and `rsr` (ua_portable, json, wallet_uasig, nested, tree;
+`nested` added after M33 and M34 survived without it: the requireAuthorized rows of nested.json are there). `sdka`: the SDK's
+own chain-order row (M21's first run went to `sdkp`, which does not hold it). One mutant
 per run, every file restored byte for byte after it; a Rust mutant that does not compile kills nothing; a mutant that passes
 is a finding (exit 1) unless argued equivalent in the summary.
   python3 -I clients/runs/2026-11-26-review-fix4-client-mutants.py [first last]   (from the worktree root)
@@ -48,8 +50,15 @@ SUITES = {
     "rs": ([*CAP, "cargo", "test", "--locked", "--features", "app-core,vectors", "-j", "2", "--test", "tree"], "clients/ua-rs", RUST),
     "rsr": (
         [*CAP, "cargo", "test", "--locked", "--features", "app-core,vectors", "-j", "2", "--test", "ua_portable", "--test", "json",
-         "--test", "wallet_uasig", "--test", "tree"],
+         "--test", "wallet_uasig", "--test", "nested", "--test", "tree"],
         "clients/ua-rs",
+        RUST,
+    ),
+    # the SDK's own chain-order row (tests/app_core.rs: a single record alone, then along a chain)
+    "sdka": (
+        [*CAP, "cargo", "test", "--locked", "-j", "2", "--features", "app-core,pqchat-records", "--test", "app_core",
+         "verify_app_record_reads_the_registry"],
+        "clients/scaas-sdk",
         RUST,
     ),
     "pqc": ([*CAP, "cargo", "test", "--locked", "-j", "2", "--test", "signed", "--test", "session"], "clients/pqchat-core", RUST),
@@ -86,7 +95,7 @@ M = [
     ("pqv", "A-1: a single key's signature stripped", [(SA, "        if self.members.is_empty() {\n            return self.clone();\n        }\n", "")]),
     ("sdkp", "C-3: the SDK names no version (PqVault)", [(SA, "        self.with_records(&chain, id, chain_bound, &sig, |state| {\n            f(&id, &p, &typed, &sig, state)\n                .then(|| named_versions(&id, &sig, state))", "        self.with_records(&chain, id, chain_bound, &sig, |state| {\n            f(&id, &p, &typed, &sig, state)\n                .then(|| Some(vec![]))")]),
     ("sdkp", "C-3: the SDK names no version (PqChat)", [(SK, "                .then(|| crate::app_core::named_versions(&id, &sig, state))", "                .then(|| Some(vec![]))")]),
-    ("sdkp", "C-3: a decrease accepted by msig_versions_up", [(SA, "        .any(|x| x.version < seen.get(&x.msig).copied().unwrap_or(0))", "        .any(|_| false)")]),
+    ("sdka", "C-3: a decrease accepted by msig_versions_up", [(SA, "        .any(|x| x.version < seen.get(&x.msig).copied().unwrap_or(0))", "        .any(|_| false)")]),
     # ---- the tree walk: a signing msig member's version (C-4, R-1)
     ("js", "C-4: an msig member's tag not named", [(UV, "    if (x.kind !== 0x0120) continue;\n", "    continue;\n")]),
     ("rs", "C-4: an msig member's tag not named", [(RU, "        if x.kind == 0x0120 {\n            out.push((x.id, tag_version(&m.sig)?));\n        }\n", "")]),

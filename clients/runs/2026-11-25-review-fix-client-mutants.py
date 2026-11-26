@@ -14,8 +14,8 @@ after it; a Rust mutant that does not compile kills nothing; a mutant that passe
   python3 -I clients/runs/2026-11-25-review-fix-client-mutants.py check           (every replacement found once)
 A hung run: past its deadline (3 x the unmutated baseline, at least 10 min, or `--timeout N`) its process group is killed and
 the row reads `killed (timeout N s)`; a target file that differs from HEAD refuses the run; the restore holds on SIGINT /
-SIGTERM (scripts/mutant_guard.py, ARCH-POS-23). 2026-11-26 (branch review-fix4-client): M19, M24, M97, M110, M131, M136, M154,
-M161, M162, M192 read the code the fix check moved (the same mutants on the new text); that round's own rows are in
+SIGTERM (scripts/mutant_guard.py, ARCH-POS-23). 2026-11-26 (branch review-fix4-client): M4, M19, M24, M45, M59, M64, M97,
+M154, M161, M162, M192 read the code the fix check moved (the same mutants on the new text); that round's own rows are in
 2026-11-26-review-fix4-client-mutants.py."""
 import os
 import re
@@ -281,7 +281,7 @@ M = [
     ("pqc", "E-4: a leaver outside the parent", [(CS, "            if named(l).await?.is_some() && p.has_member(&member) {", "            if named(l).await?.is_some() {")]),
     ("pqc", "B2-4: the exit counts unbounded", [(CS, "            if n > most {", "            if false {")]),
     ("pqc", "B2-3: no lag on the ancestors", [(CS, "        while cur.epoch > 0 && (out.len() as u64) <= EXIT_LAG_MAX {", "        while cur.epoch > 0 {")]),
-    ("pqc", "B2-3: a removal's nextEpoch", [(CS, "            if ok && named(r).await?.is_some_and(|n| n.checked_add(1) == Some(next)) {", "            if ok && named(r).await?.is_some() {")]),
+    ("pqc", "B2-3: a removal's nextEpoch", [(CS, "                    .is_some_and(|n| n.checked_add(1) == Some(next))\n", "                    .is_some()\n")]),
     ("pqc", "E-5: a replica judged", [(CR, "            let (r, rep_kept) = self.checked_at(s, rep, epoch_id, false).await?;", "            let (r, rep_kept) = self.checked_at(s, rep, epoch_id, true).await?;")]),
     ("pqc", "D2-4: no lag before signing", [(CB, "        if h.epoch < e.epoch || h.epoch > e.epoch + crate::signed::EXIT_LAG_MAX {", "        if h.epoch < e.epoch {")]),
     ("pqc", "D2-4: a removal pre-checked at the epoch named", [(CB, '            if self.flag(s, &h, "IPqChat.removedIn", u).await? {', '            if self.flag(s, e, "IPqChat.removedIn", u).await? {')]),

@@ -1,24 +1,29 @@
-# The Fable fix check of 2026-11-26, client rows (branch review-fix4-client from 02e665589). PARTIAL: the round was stopped
-# for a machine shutdown (controller 2026-11-26); the gates and mutants not run are listed as such. Full logs were local and
-# git-ignored. UNAUDITED.
+# The Fable fix check of 2026-11-26, client rows (branch review-fix4-client from 02e665589; code 4e3f35aa8, b567e4e58, b9b028610,
+# 11d220e3f, docs 0cf93aa8c, the ffi lock 12e13d434). Stopped once for a machine shutdown and resumed on the same tree; every
+# gate below ran on 12e13d434. Full logs local and git-ignored. Default set n2304-kmax4096. UNAUDITED.
 
 step | commit | rc | counts
-red first C-1 (poc1, old pqchat-core src) | 02e665589 | 101 | a_remembered_id_binds_its_record: left None right Some(Control)
+red first C-1 (fable-C poc1, the old pqchat-core src) | 02e665589 | 101 | a_remembered_id_binds_its_record: left None right Some(Control)
 red first C-2 (poc2) | 02e665589 | 101 | a_record_that_is_its_own_parent_ends_the_walk: Elapsed after 20 s ("the walk ends")
 red first C-3 mode 0 | 02e665589 | 101 | a_mode0_msig_version_never_goes_back: left Some(Envelope) right Some(Control)
-red first A-1 | 02e665589 | 101 | a_replica_copy_after_an_msig_update_counts_without_its_tag: left Some(Replica) right Some(Envelope); a_replica_record_is_compared_with_the_homes (twin moved)
+red first A-1 | 02e665589 | 101 | a_replica_copy_after_an_msig_update_counts_without_its_tag: left Some(Replica) right Some(Envelope); a_replica_record_is_compared_with_the_homes (twin moved: a sigHash alone now counts)
 red first C-5 | 02e665589 | 101 | exits_below_the_head_are_checked_in_the_named_lists: left "Ok" right "NotMember"
-vectors pqchat-vectors.mjs (tree-secrets.json) | 4e3f35aa8 | 0 | signers 16 -> 18, worlds 22 -> 23 (msig-nested), lies 80 -> 83 appended; old rows byte-identical; the other six files unchanged
-clientkeys node --test test/*.test.js | before the last regeneration (row names, lie order) | 0 | 668 passed, 0 failed; treekem + pqchat-tree + pqchat after it: 103 passed
-ua-rs --features app-core,vectors --test tree | before the last regeneration | 0 | 16 passed (C-6 resume test, nested lie rows, keyless exits 6 -> 7)
-ua-rs --features app-core,vectors (every target) | 4e3f35aa8 | stopped | 22 targets passed, 0 failed, then stopped for the shutdown: NOT complete
-pqchat-core --test signed --test session | b9b028610 | 0 | 17 + 19 passed (before the commit; the msig tests again after a rebuild: ok)
-pqvault-core --features vectors --test exits --test core --test devices | 11d220e3f | 0 | 3 + 8 + 3 passed
+red first C-4, C-7, C-3 PqVault (the old behaviour as a mutant) | 12e13d434 | 1 | M22, M23 (a member's tag not named), M26 (version 0 refused), M12 (no step 6 along the vault): each killed by its new rows
+C-6 | 4e3f35aa8 | - | the old API moves the replay (by value): the new assertion cannot be written against it; tree_replay_resumed_from_the_pin holds r4's keys and pin after a lying commitOf(6)
+vectors pqchat-vectors.mjs (tree-secrets.json) | 4e3f35aa8 | 0 | signers 16 -> 18 (X and its key), worlds 22 -> 23 (msig-nested), lies 80 -> 83 appended; old rows byte-identical; the other six files unchanged
+pins moved | 4e3f35aa8, b9b028610 | - | ua-rs keyless exits (6, 6) -> (6, 7); pqchat-core a_replica_record_is_compared_with_the_homes's twin (another sigHash alone counts; bob's other record under the same id is `replica`)
+clientkeys npm test (test/*.test.js) | 12e13d434 | 0 | 668 passed, 0 failed, 5 skipped
+ua-rs cargo test --features app-core,vectors (every target) | 12e13d434 | 0 | 75 targets: 802 passed, 0 failed, 6 ignored
+pqchat-core cargo test --features vectors (every target) | 12e13d434 | 0 | 23 targets: 139 passed, 0 failed, 7 ignored (chain / e2e gates)
+pqvault-core cargo test --features vectors (every target) | 12e13d434 | 0 | 7 targets: 26 passed, 0 failed, 5 ignored (e2e)
 scaas-sdk --features app-core,pqchat-records(,vectors) --test app_core app_core_vault_records pqchat_keys | b567e4e58 | 0 | 13 + 6 + 18 passed
-clippy -D warnings --all-targets: ua-rs (app-core,vectors), pqchat-core (default, vectors), pqvault-core (default, vectors), scaas-sdk (app-core,pqchat-records,vectors), scaas-cli (dev-profiles) | before 4e3f35aa8 (one rustfmt-only change after) | 0 | clean
-format.sh --check rust js py | 0cf93aa8c tree | 0 | ok (the whole --check: rust failed only on tree.rs, fixed by rustfmt; the other parts not re-run)
-docs_check check / paths; test_docs_check | 0cf93aa8c tree | 0 | 0 errors, 7 warnings, 16 notes; 0 paths; ok
-mutants 2026-11-26-review-fix4-client-mutants.py M22 (js, C-4 member tag) | 4e3f35aa8 | 1 | killed (4 red: the lie rows, vectors byte check)
-mutants M1-M21, M23-M34 | - | - | NOT RUN (M24-M30 started, stopped before a result; files restored)
-old runner 2026-11-25-review-fix-client-mutants.py | - | - | 10 rows retargeted to the moved code, check ok; NOT re-run
-Not run: pqchat-core / pqvault-core every target, scaas-cli cargo test (CLI parity of the two new commands), scaas-sdk gas/generate.py --check, pqchat-vectors.mjs --check, format.sh --check every part, the forge player on the new world (the contract branch's).
+scaas-cli cargo test (one command per SDK call, both ways) | 12e13d434 | 0 | 3 targets: 22 passed
+scaas-sdk gas/generate.py --check | 12e13d434 | 0 | check ok
+pqchat-vectors.mjs --check | 12e13d434 | 0 | ok, seven files byte-identical
+clippy --all-targets -D warnings: ua-rs (app-core,vectors), pqchat-core (default, vectors), pqvault-core (default, vectors), scaas-sdk (app-core,pqchat-records,vectors), scaas-cli (dev-profiles) | b567e4e58 .. 11d220e3f | 0 | clean
+format.sh --check (every part) | 12e13d434 | 0 | every part ok; clients/pqchat-core/ffi/src/frb_generated.rs generated first as the repo does (FRB 2.13.0, runs/2026-11-17-pqchat-core-bind.sh's steps); its run left ffi/Cargo.lock behind pqchat-core's sha2: 12e13d434
+docs_check check / paths; test_docs_check | 12e13d434 | 0 | 0 errors, 7 warnings (line budgets), 16 notes; 0 machine paths; ok
+mutants 2026-11-26-review-fix4-client-mutants.py M1-M34 | 12e13d434 | 1 -> 0 | 34 run: 33 killed, M3 equivalent (below); M21 first ran in `sdkp` (survived: the chain-order row is tests/app_core.rs), killed in `sdka`; M33, M34 survived in `rsr` without tests/nested.rs, killed with it (verdicts::nested_check_authorizations)
+M3 equivalent | - | - | `p.epoch - k` vs the checked subtraction: a name's index k comes from `ancestors` (each read one number below, stopping at epoch 0) or from the walk's ids (each parent one number below since C-2, the remembered links followed only while the number is > 0), so k <= p.epoch on every path; the check is defence in depth, no reachable input underflows
+mutants 2026-11-25-review-fix-client-mutants.py M4, M19, M24, M45, M59, M64, M97, M154, M161, M162, M192 (retargeted to the moved code) | 12e13d434 | 0 | 11 of 11 killed
+Round total: 45 client mutants run (34 new, 11 retargeted): 44 killed, 1 equivalent (M3)
