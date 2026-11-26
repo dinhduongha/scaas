@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="650" viewBox="0 0 960 650" role="img" aria-labelledby="t d">
   <title id="t">Chain families</title>
-  <desc id="d">Six chain families built, two planned (NEAR, Algorand) and TRON planned as an EVM profile; GRAM is the former TON. EVM, in three tiers (networks/evm.md, NET-EVM-20): the SCaaS testnet 7622 is tier 1, it supports Glamsterdam (built, first target); anvil 31337 is a test tool (built, dev only); Hedera 295 to 298 is tier 3, not yet eligible (its code is built behind IS_HEDERA, nothing deployed, own page); BNB Smart Chain 56 and Polygon PoS 137 are tier 2, waiting for a code-size fork; Gnosis 100 (block gas not measured), Celo 42220 and Base 8453 (kinds disabled for block gas) are tier 3; all seeded as draft profiles until the operator gate passes. Cosmos (CosmWasm chains), Soroban (Stellar and Pi Network, not on the mesh), Move (Sui and Aptos), GRAM (blocked for every path except the ERP pull path until the forward-TON cap lands) and Solana are built.</desc>
+  <desc id="d">Six chain families built, two planned (NEAR, Algorand) and TRON planned as an EVM profile; GRAM is the former TON. EVM, in three tiers (networks/evm.md, NET-EVM-20): the SCaaS testnet 22779 is tier 1, it supports Glamsterdam (built, first target); anvil 31337 is a test tool (built, dev only); Hedera 295 to 298 is tier 3, not yet eligible (its code is built behind IS_HEDERA, nothing deployed, own page); BNB Smart Chain 56 and Polygon PoS 137 are tier 2, waiting for a code-size fork; Gnosis 100 (block gas not measured), Celo 42220 and Base 8453 (kinds disabled for block gas) are tier 3; all seeded as draft profiles until the operator gate passes. Cosmos (CosmWasm chains), Soroban (Stellar and Pi Network, not on the mesh), Move (Sui and Aptos), GRAM (blocked for every path except the ERP pull path until the forward-TON cap lands) and Solana are built.</desc>
   <defs>
     <style>
       text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
@@ -23,11 +23,11 @@
   <!-- EVM -->
   <rect x="16" y="78" width="928" height="232" rx="12" fill="#dbeafe" stroke="#3b82f6"/>
   <text class="tier" x="30" y="103">EVM</text>
-  <text class="tiers" x="72" y="103">contract-level EIP-712 (ERC20MetaTx) · BUILT on the private chain 7622 and anvil</text>
+  <text class="tiers" x="72" y="103">contract-level EIP-712 (ERC20MetaTx) · BUILT on the SCaaS testnet and anvil</text>
 
   <text class="grp" x="30" y="128">PRIVATE AND TEST</text>
   <rect class="card" x="30" y="136" width="200" height="72" rx="8" stroke="#3b82f6"/>
-  <text class="b" x="44" y="157">SCaaS testnet 7622</text>
+  <text class="b" x="44" y="157">SCaaS testnet 22779</text>
   <text class="s" x="44" y="175">tier 1: Glamsterdam; free gas</text>
   <rect x="44" y="183" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="69" y="196" text-anchor="middle" fill="#1a7f37">BUILT</text>
   <text class="s" x="102" y="196">first target</text>

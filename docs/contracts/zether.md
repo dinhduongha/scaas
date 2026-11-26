@@ -1384,7 +1384,7 @@ fail by design, and two valid calls of the same shape under the same cap show th
 
 <a id="chains"></a>
 <a id="CTR-ZTH-27"></a>**CTR-ZTH-27** — *Open (owner).* The owner put the private chain in scope as the **first**
-target for confidential payments (where gas is not a blocking constraint); the private reference chain is the SCaaS testnet (chain id 7622).
+target for confidential payments (where gas is not a blocking constraint); the private reference chain is the SCaaS testnet (chain id 22779).
 Classical Zether runs there as on every chain with the curve's precompiles ([CTR-ZTH-52](#CTR-ZTH-52)); post-quantum
 Zether is a separate class on the same chain ([pq-zero-knowledge.md](pq-zero-knowledge.md)).
 
@@ -1393,7 +1393,7 @@ Zether is a separate class on the same chain ([pq-zero-knowledge.md](pq-zero-kno
 <a id="safety-gate"></a>
 <a id="dev-gate"></a>
 <a id="CTR-ZTH-52"></a>**CTR-ZTH-52** — **Classical Zether is open on every chain that has the curve's precompiles**
-(owner ruling 2026-10-31): no chain-id check in any contract or script — the SCaaS testnet 7622, the SCaaS mainnet 22776
+(owner ruling 2026-10-31): no chain-id check in any contract or script — the SCaaS testnet 22779, the SCaaS mainnet 22777
 and customer chains alike. The only chain requirement is capability: BLS12-381 needs the Prague precompiles `0x0b`–`0x10`
 (EIP-2537). A chain without them fails the call: the inner-product verifier's constructor (the generators) reverts, a
 token's `initialize` reverts `VerifierUnsupportedOnThisChain` (the release's transfer verifier answers

@@ -1,0 +1,51 @@
+# Chain id 22779 (SCaaS testnet) / 22777 (SCaaS mainnet), owner 2026-11-26 ("Thôi, 22777 cho mainnet, 22779 cho testnet."),
+# branch chain-id-22779 from origin/dev f900e38f7. Full output in git-ignored logs; <tmp> = the scratch directory of the run.
+# genesis: pqz-core/nethermind/chain/scaas-testnet/genesis.json = the reset-5 live chainspec with chainId/networkID 0x1dc6 -> 0x58fb
+#   and extraData vanity = keccak256("scaas-testnet:22779:2026-11-26") (NET-ALL-25); genesis hash 0x9ae9048b…5b13 -> 0x9693692c4ffc3bdca7d4181dbaab179ade3fe010975f8dd0b51ff7c3dff5be86
+#   (genesis-hash.py; --check reproduces reset 4's 0x9ae9048b…5b13 from the same file with the nonce zeroed). chain-uids.json chainUid follows.
+# vectors regenerated (generator -> files):
+#   node clients/clientkeys/scripts/ua-vectors.mjs -> vectors/ua/structures.json
+#   node clients/clientkeys/scripts/ua-sig-vectors.mjs -> vectors/ua/signatures.json, pq_signatures.json
+#   node clients/clientkeys/scripts/ua-wallet-vectors.mjs -> vectors/ua/sign.json (keys.json unchanged: the UA-tree purpose 22776' is kept)
+#   python3 -I smartcontracts/vectors/ua/gen_liquidity.py -> vectors/ua/liquidity_kat.json
+#   python3 -I smartcontracts/vectors/metatx/gen_servicepull.py -> vectors/metatx/servicepull.json
+#   forge test (WRITE_KAT, WRITE_RESCUE_VAULT, WRITE_VERDICT_VECTORS, PAYTAX_WRITE, RELAYREF_WRITE) on AccountKat, TokenKat, DexKat,
+#     PqzVerdictVectors, Tax, RelayFeeRouter, RescueVault -> evm/test/vectors/{smart_key_account,mandate,erc7739,metatx,metatransfer,dex_order}_kat.json,
+#     vectors/pqz/n2304-kmax4096/verdict.json, vectors/metatx/paytax.json, relayref.json, vectors/governance/rescue_vault_testnet_alloc.json
+#   sh smartcontracts/vectors/pqz/gen_wallet_state.sh -> vectors/pqz/n2304-kmax4096/wallet_state.json
+#   cargo test --test mesh_vectors -- --ignored regenerate (scaas-node) -> scaas-node/tests/vectors/mesh-envelope-v1.3.json
+# step | commit | rc | counts
+genesis-hash --check | b4e17694a | 0 | scaas-testnet/genesis.json 0x9693692c…5be86 pinned; nonce zeroed = reset 4's 0x9ae9048b…5b13
+patch-chainspec --check | b4e17694a | 0 | ok (TESTNET 22779, MAINNET 22777); --testnet-reset on the new genesis: header unchanged, hash 0x9693692c…5be86
+forge-account | b4e17694a | 0 | forge: 58 passed, 0 failed
+forge-as | b4e17694a | 0 | forge: 361 passed, 0 failed
+forge-liquidity | b4e17694a | 0 | forge: 82 passed, 0 failed, 1 skipped
+forge-wallet | b4e17694a | 0 | forge: 100 passed, 0 failed
+forge-metatx | b4e17694a | 1 -> 0 | forge: 549 passed, 1 failed (MtxCtx legacy metatx_kat: the test now reads the legacy vector's own chain id); rerun 12 passed
+forge-zether | b4e17694a | 0 | forge: 478 passed, 0 failed, 4 skipped
+forge-v2 | b4e17694a | 0 | forge: 758 passed, 0 failed
+forge-hedera | b4e17694a | 0 | forge: 20 passed, 0 failed
+forge-gas | b4e17694a | 0 | forge: 406 passed, 0 failed, 1 skipped (no gas pin moved)
+forge-governance | b4e17694a | 0 | forge: 1013 passed, 0 failed
+forge-pqz | b4e17694a | 1 -> 0 | forge: 693 passed, 1 failed (PqzRelay ua binding KAT pin 0x2bf9ed02…bd33 -> 0xbf40b365…dfce, chain id in the domain); rerun with MtxCtx 12 passed
+forge-ua | b4e17694a | 0 | forge: 1051 passed, 0 failed
+forge-uagas (--isolate UAGas, UARegistryGroups) | b4e17694a | 0 | forge: 29 passed, 0 failed
+forge-merge | b4e17694a | 0 | forge: 350 passed, 0 failed
+forge-wrap | b4e17694a | 0 | forge: 324 passed, 0 failed
+forge-modules (legacy_artifacts build + Diff/Modules/Paths/Groups) | b4e17694a | 0 | forge: 35 passed, 0 failed
+at-set others sensitive | - | not run | no set-sensitive pin moved (gas 406/406 unchanged)
+evm script tests | b4e17694a | 0 | test_deploybook, test_vcheck, test_forkcheck 19/19, test_pq_verifiers, test_tx_gas_cap 7/7, test_mldsa_on; e2e.py --self-test 0 failures
+node-test (cargo test --lib --test mesh_vectors) | b4e17694a | 0 | 900 passed + 1 passed, 0 failed
+node-clippy (--all-targets -D warnings) | b4e17694a | 0 | -
+ck-test (npm test) | b4e17694a | 0 | 675 tests, 670 pass, 0 fail (after: legacy metatx_kat tests read the KAT's chain id; paymeta bound_call body kept)
+ck-vectors (gencmp ua-vectors, ua-sig-vectors, ua-wallet-vectors; pqchat-vectors --check) | b4e17694a | 0 | byte-identical
+ua-rs (cargo test --features app-core,vectors) | b4e17694a | 0 | 807 passed, 0 failed
+scaas-sdk --test config | b4e17694a | 0 | 14 passed
+scaas-rpc --test node --test evm_profiles | b4e17694a | 0 | 5 + 25 passed
+scaas-pqz-verifier cargo test | b4e17694a | 0 | 41 passed
+pqz-vectors --check | b4e17694a | 0 | 18 files ok
+pqz_kat.py --check | b4e17694a | 0 | ok (self-test entryRef(22779, …) = c594c659…e2ce)
+gen_liquidity.py / gen_servicepull.py --check | b4e17694a | 0 | ok
+Nethermind.Pqz.Test SpecTests (dotnet) | - | not run | the plugin does not build in this worktree (Nethermind references absent: CS0246)
+format.sh --check (all parts) | b4e17694a | 0 | -
+docs_check check / facts check / paths / consumer / test_docs_check | b4e17694a | 0 | 0 errors; 8852 facts, 0 misses; 0; 0; ok

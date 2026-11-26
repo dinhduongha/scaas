@@ -633,7 +633,7 @@ metrics_bind = ""
 
 [[chains]]
 family = "evm"
-evm_chain_number = 7622
+evm_chain_number = 22779
 rpc_urls = ["http://rpc-a:8545", "http://rpc-b:8545"]   # ≥ finality.quorum independent endpoints
 finality = { mode = "depth", depth = 1, quorum = 1 }    # 'depth' | 'tag' | 'instant'
 dex = "0x…"                                     # a SCaaSDex clone (the venue's DEX, the call table's DEX rows), optional

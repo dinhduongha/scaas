@@ -32,7 +32,7 @@ chain in *italics*.
 
 | Tier | Chain (chain id) | Reason (repo facts; the profile READMEs in `smartcontracts/evm/src/chains/<key>/`) |
 |---|---|---|
-| 1 | **SCaaS testnet** (7622) | Amsterdam from block 1, runtime ceiling 131,072 B ([§2](#2-private-scaas-testnet), [NET-EVM-06](#NET-EVM-06)); owner-named |
+| 1 | **SCaaS testnet** (22779) | Amsterdam from block 1, runtime ceiling 131,072 B ([§2](#2-private-scaas-testnet), [NET-EVM-06](#NET-EVM-06)); owner-named |
 | 1 | **Sepolia** (11155111) | Amsterdam since its fork: runtime 65,536 B, init 131,072 B measured; block 199.8 M; owner-named |
 | 2 | Ethereum mainnet (1) | block 59.9 M, every kind fits; `osaka` today, runtime 24,576 B; owner-named |
 | 2 | Polygon PoS (137) | Osaka opcode set, 32,768-B contracts, a 2^25 per-transaction cap; owner-named |
@@ -56,7 +56,7 @@ Anvil (31337) is a test tool, not a tier. A chain moves tier when its facts chan
 
 | Chain | Chain id | Profile | Gas | Finality gate | Status |
 |---|---|---|---|---|---|
-| **SCaaS testnet** (private reference chain; tier 1) | 7622 | `scaas-testnet` (Solidity `amsterdam`, [NET-EVM-06](#NET-EVM-06)) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
+| **SCaaS testnet** (private reference chain; tier 1) | 22779 | `scaas-testnet` (Solidity `amsterdam`, [NET-EVM-06](#NET-EVM-06)) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
 | Anvil (tests) | 31337 (also 1337) | — | — | depth | BUILT (dev only) |
 | *Gnosis Chain* (tier 3) | 100 | `gnosis` (`amsterdam`; Pectra since 2025-04-30, then Fusaka; deploy after its Glamsterdam fork) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
 | *Celo* (tier 3) | 42220 | `celo` (`amsterdam`; `prague` by the probe of 2026-11-22, runtime 65,536 B, block 30 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled, owner 2026-11-22, decisions CLI-SDK-32; deploy after its Glamsterdam fork) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
@@ -161,16 +161,26 @@ is always the hard value. Gas is never assumed: Zether-sized transactions do not
 
 <a id="private-chain"></a><a id="private-7622"></a>
 
-<a id="NET-EVM-02"></a>**NET-EVM-02** — **The private reference chain is chain id 7622; its identity is the pair
-(chain id 7622, genesis hash `0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13` since reset 4 (2026-11-15: the RescueVault in the genesis alloc, [NET-EVM-14](#NET-EVM-14); `0xf1f491ab…3164` from the 2026-10-31 reset, fs3 Task 13: the CREATE2 deployer in the genesis alloc, EIP-7702 off; `0xa17faef4…2ac2` from 2026-10-22, genesis gas limit 200 M); the client test vectors keep
-the earlier `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` as a fixed constant), profile
-`scaas-testnet`.** Owner ruling 2026-10-07; the name `scaas-testnet` is owner ruling 2026-10-31 (it replaces the
-2026-10-07 name). Chain id `0x1dc6`; the chain was reset with a new genesis when it moved
-from 9000, which is also Evmos Testnet — replay protection is only as good as the chain id, so every signer and node
-also binds the genesis hash ([NET-ALL-22](README.md#NET-ALL-22)). Genesis hashes of the live EVM chains, two sources each (7622: one, its own local RPC), are in [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json). Nodes bind the profile to the genesis hash, not to
-the chain id alone. The profile, seeds, environment variable names and test vectors use `scaas-testnet`; the chain's
-directory is `src/chains/scaas-testnet`. In prose the chain is "the SCaaS testnet". The future mainnet, chain id 22776,
-will be `scaas-mainnet`.
+<a id="NET-EVM-02"></a>**NET-EVM-02** — **The private reference chain is chain id 22779 (`0x58fb`); its identity is the pair
+(chain id 22779, genesis hash `0x9693692c4ffc3bdca7d4181dbaab179ade3fe010975f8dd0b51ff7c3dff5be86`, the genesis of
+`pqz-core/nethermind/chain/scaas-testnet/genesis.json` as `pqz-core/nethermind/chain/genesis-hash.py` computes it; the
+client test vectors keep the earlier `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` as a fixed
+constant), profile `scaas-testnet`.** Owner ruling 2026-10-07 (a private chain id of our own); the ids are owner ruling
+2026-11-26 ([NET-EVM-21](../decisions.md#NET-EVM-21)): the SCaaS testnet is 22779 and the future SCaaS mainnet 22777
+(`0x58f9`, `scaas-mainnet`); the name `scaas-testnet` is owner ruling 2026-10-31. Status: the repository is SPECIFIED for
+22779 (chainspec, tools, profiles, vectors); the chain moves at the reset before the pre-freeze tag, a new genesis
+([RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md) "Chain id 22779"). Until then the live chain answers chain id
+7622 (`0x1dc6`) with genesis `0x9ae9048b…5b13` (reset 4, 2026-11-15: the RescueVault in the genesis alloc,
+[NET-EVM-14](#NET-EVM-14); `0xf1f491ab…3164` from the 2026-10-31 reset, fs3 Task 13: the CREATE2 deployer in the genesis
+alloc, EIP-7702 off; `0xa17faef4…2ac2` from 2026-10-22, genesis gas limit 200 M); before 7622 it was 9000, which is also
+Evmos Testnet. Replay protection is only as good as the chain id, so every signer and node also binds the genesis hash
+([NET-ALL-22](README.md#NET-ALL-22)); the new genesis carries the unique `extraData` nonce
+`keccak256("scaas-testnet:22779:2026-11-26")` ([NET-ALL-25](README.md#NET-ALL-25)), so its hash is not reset 4's.
+Genesis hashes of the live EVM chains, two sources each (the SCaaS testnet: one, its own local RPC, after the reset; until
+then the computed value), are in [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json). Nodes bind the profile to
+the genesis hash, not to the chain id alone. The profile, seeds, environment variable names and test vectors use
+`scaas-testnet`; the chain's directory is `src/chains/scaas-testnet`. In prose the chain is "the SCaaS testnet". The
+future mainnet, chain id 22777, will be `scaas-mainnet`.
 
 <a id="NET-EVM-03"></a>**NET-EVM-03** — **The first target chain is the private PoA chain; public chains follow, and
 CI builds the `scaas-testnet` profile.** Owner decision. Gas is free there, so gas is not a constraint for the first
@@ -207,7 +217,7 @@ the SCaaS testnet. The earlier 16,777,216 block gas limit admitted only ~5 class
 measured); the 2026-10-22 reset starts at 200 M ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)).
 
 Further operator traps, found on the P6f copy of the SCaaS testnet (2026-10-15, `pqz-core/nethermind/runs/2026-10-15-copy-*.txt`):
-**no follower can sync 7622's chainspec as it is** — `eip4844TransitionTimestamp` 0 without
+**no follower could sync the SCaaS testnet's chainspec as it was** — `eip4844TransitionTimestamp` 0 without
 `eip4895TransitionTimestamp` makes a syncing peer reject every block (`InvalidWithdrawalsRoot`: the header has no
 `withdrawalsRoot`, its wire slot is a zero hash), and without `maximumExtraDataSize` (default 32 B) it rejects every
 Clique header (97 B `extraData`; Nethermind's own Clique chainspecs set `0xffff`). A single signer never validates
@@ -263,7 +273,7 @@ so a transaction priced at 1 wei is never mined; clients price at least `baseFee
   that section and the addresses stay empty accounts (shown on the copy), so contracts self-test and nodes probe.
   Runbook: `pqz-core/nethermind/chain/RUNBOOK.md`.
 - <a id="NET-EVM-15"></a>**NET-EVM-15** — **The SCaaS chains keep their PQ precompiles in the `0x…5caa` range; a Draft EIP's
-  address is never taken.** The SCaaS testnet and mainnet 22776 serve `PQZ`, `MLDSA44`, `MLDSA65`, `MLDSA87` at the
+  address is never taken.** The SCaaS testnet and mainnet 22777 serve `PQZ`, `MLDSA44`, `MLDSA65`, `MLDSA87` at the
   `0x000000000000000000000000000000005caa….` addresses above, not at a Draft EIP's (EIP-8355's `0x12` / `0x13` / `0x14`,
   claimed by EIP-8051 and EIP-7932 too): a Draft's address may end up assigned to another function, and a contract
   written for Ethereum would then call a different function on our chain. Once an EIP is Final, the SCaaS chains add its
@@ -297,10 +307,10 @@ the deployer's nonce, so the same contract lands at unrelated addresses on each 
 every later address; with CREATE2 the address follows from what was deployed. Cost: a fixed-salt deployer must exist on
 each chain before the first deployment, and a redeploy with the same init code collides with the first (a new
 version needs a new salt or new code). On the SCaaS testnet the deployer is in the genesis `alloc` (owner ruling
-2026-10-30 for the 7622 reset): 7622 carries the deterministic deployment proxy's runtime code at
+2026-10-30 for the SCaaS testnet reset): the SCaaS testnet carries the deterministic deployment proxy's runtime code at
 `0x4e59b44847b379578588920cA78FbF26c0B4956C` from its 2026-10-31 reset (its keyless pre-EIP-155 deploy transaction, a
-fixed 100,000 gas, cannot pay Amsterdam's code-deposit state gas). The same alloc is proposed for mainnet 22776; the
-owner decides at the 22776 launch.
+fixed 100,000 gas, cannot pay Amsterdam's code-deposit state gas). The same alloc is proposed for mainnet 22777; the
+owner decides at the 22777 launch.
 
 **Change (2026-11-07, owner; chain-neutral releases, [CTR-TOK-29](../contracts/token-wrappers.md#CTR-TOK-29),
 [NET-ALL-22](README.md#NET-ALL-22)):** the deterministic deployer is a requirement of every chain (the SCaaS mainnet's genesis
@@ -313,7 +323,7 @@ and on a chain id that `chain-uids.json` lists more than once the admin's run st
 siblings are configured. Status: **BUILT** on branch `ua-mtx-merge` (T71–T74, `test/v2/ChainNeutral.t.sol`,
 `ChainNeutralFactory.t.sol`; `DeployBase` writes and checks the list).
 
-<a id="NET-EVM-14"></a>**NET-EVM-14** — **Only test networks get the `RescueVault` in the genesis `alloc`; mainnet 22776
+<a id="NET-EVM-14"></a>**NET-EVM-14** — **Only test networks get the `RescueVault` in the genesis `alloc`; mainnet 22777
 (`scaas-mainnet`) and every `*-mainnet` chain never do.** Owner ruling 2026-11-14; status **BUILT** (vector, patch tool and
 their tests; the SCaaS testnet's reset 4 is the first chain made with it). On the SCaaS testnet the genesis carries the
 `RescueVault` ([CTR-GOV-25](../decisions.md#CTR-GOV-25)) at `RescueLib.SCAAS_DEV_RESCUE`
@@ -324,7 +334,7 @@ their tests; the SCaaS testnet's reset 4 is the first chain made with it). On th
 `pqz-core/nethermind/chain/patch-chainspec.py --testnet-reset --rescue-vault-alloc <vector>` adds it and nothing else to the
 accounts. **On `scaas-mainnet` and every `*-mainnet` chain there is no alloc:** the vault comes through the public CREATE2
 deployer `0x4e59b44847b379578588920cA78FbF26c0B4956C` (`script/DeployRescueVault.s.sol`) with the real dev admin of the
-committed init code, counterfactual until needed. The patch tool refuses an alloc for chain id 22776 or for an alloc file
+committed init code, counterfactual until needed. The patch tool refuses an alloc for chain id 22777 or for an alloc file
 whose chain key ends in `-mainnet` (`RESCUE_VAULT_ALLOC_MAINNET_REFUSED`, before any other check). The real dev admin never
 signs a `setRescuer` or `rotateAdmin` toward a test key: the vault's signatures are chain-neutral and replay on the vault of
 every chain, mainnet included. Why: the testnet matrix runs the vault's admin rows with test keys only, without the real
@@ -344,7 +354,7 @@ block cannot rotate (a 60 M chain is in practice an `n2304-kmax4096` chain).
 
 <a id="NET-EVM-06"></a>**NET-EVM-06** — **Every Foundry profile compiles for the `amsterdam` EVM: every chain that runs these contracts
 requires Glamsterdam, and a public chain is deployed only after its own fork.** Owner ruling 2026-10-21; status **BUILT**.
-The SCaaS testnet (7622) runs Nethermind 2.2.0 with Amsterdam from block 1, and the test suite runs on Foundry 1.8.5,
+The SCaaS testnet (22779) runs Nethermind 2.2.0 with Amsterdam from block 1, and the test suite runs on Foundry 1.8.5,
 which needs `experimental = true` for `evm_version = "amsterdam"`; the profiles `default`, `scaas-testnet`, `zether`,
 `gnosis`, `celo`, `bsc`, `polygon` and `base` all set it, with one set of gas bounds. No contract reads `block.slotnum`
 (EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the earlier `osaka` build apart
@@ -353,7 +363,7 @@ EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the t
 state gas) exceeds 2^24, up to about 115.7 M simulated for the largest implementation deploy (`WRAPPED_PQZ`, 121.4 M at × 1.05, table below), so the SCaaS testnet runs a 200 M block gas limit
 (genesis `gasLimit` `0xbebc200`, reset 2026-10-22; `TargetBlockGasLimit` 200,000,000).
 
-**Change (owner 2026-11-03, [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)):** the SCaaS testnet runs every Amsterdam EIP but EIP-7954, by removing `eip7954TransitionTimestamp` from its chainspec, because with EIP-7954 active the code limit is 65,536 B whatever `maxCodeSize` says (`pqz-core/nethermind/runs/2026-11-03-code-size-probe.txt`). `maxCodeSize` is `0x20000` (131,072 B); the init code limit is then 262,144 B, measured. 22776 stays the owner's at launch. Every other chain keeps the rule above. Status: **BUILT, executed 2026-11-04** (SCaaS testnet reset 1, owner's go; `patch-chainspec.py --testnet-reset`, governance T16 `52ef7d22`, `55a97e0e`, refusing every chain but 7622): image `2.2.0-pqz7`, genesis unchanged `0xf1f491ab…3164`; 65,537 B and 119,800 B deploy at a 200 M block, `WrappedPqzToken` (72,160 B) is deployed; `pqz-core/nethermind/chain/RUNBOOK.md` "Code size 128 KiB on the SCaaS testnet: reset 1", `smartcontracts/evm/runs/2026-11-04-testnet-reset1-7622.txt`.
+**Change (owner 2026-11-03, [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)):** the SCaaS testnet runs every Amsterdam EIP but EIP-7954, by removing `eip7954TransitionTimestamp` from its chainspec, because with EIP-7954 active the code limit is 65,536 B whatever `maxCodeSize` says (`pqz-core/nethermind/runs/2026-11-03-code-size-probe.txt`). `maxCodeSize` is `0x20000` (131,072 B); the init code limit is then 262,144 B, measured. The SCaaS mainnet (22777) stays the owner's at launch. Every other chain keeps the rule above. Status: **BUILT, executed 2026-11-04** (SCaaS testnet reset 1, owner's go; `patch-chainspec.py --testnet-reset`, governance T16 `52ef7d22`, `55a97e0e`, refusing every chain but the SCaaS testnet): image `2.2.0-pqz7`, genesis unchanged `0xf1f491ab…3164`; 65,537 B and 119,800 B deploy at a 200 M block, `WrappedPqzToken` (72,160 B) is deployed; `pqz-core/nethermind/chain/RUNBOOK.md` "Code size 128 KiB on the SCaaS testnet: reset 1", `smartcontracts/evm/runs/2026-11-04-testnet-reset1-7622.txt`.
 
 <a id="NET-EVM-18"></a>**NET-EVM-18** — **On a chain without the Amsterdam fork a contract deploys only when its `amsterdam`
 build fits that chain** (owner 2026-11-21, ARCH-POS-19 Q1 "per contract"; the five conditions a controller call of
@@ -407,7 +417,7 @@ release's creation as one transaction, not real receipts, measured on branch `go
 EIP-8037 state gas (the code deposit at 1,530 per byte and the new account), their total, and that total × 1.05
 (the explicit gas limit `deploy.sh` sends, [NET-EVM-11](#NET-EVM-11)), the gas the transaction asks of the block. The factory's `deployTokenImplementation`
 adds its own frame and a slot or two. A kind fits when regular × 1.05 < 2^24 (EIP-7825) and total × 1.05 ≤ 200,000,000. Anvil's
-own `gasUsed` does not charge EIP-8037, so it says nothing here; the one run over a real client (7622, Nethermind, the pre-round
+own `gasUsed` does not charge EIP-8037, so it says nothing here; the one run over a real client (the SCaaS testnet, Nethermind, the pre-round
 sizes, `runs/2026-10-31-fs3-t13-pqz-7622-public-rpc.txt`) gave `UARegistry` 58.1 M, `NormalToken` 61.1 M, `WrappedPqzToken` 96.5 M.
 
 | Kind (contract) | Runtime | Init | Deploy gate need | Regular | State | Total | Total × 1.05 | 200 M block |
@@ -464,7 +474,7 @@ chain, deploy it first (the keyless presigned deployment transaction of that pro
 and re-run. `forge script … --broadcast` needs `--sender <deployer address>`, which `deploy.sh` and the e2e pass; forge
 places the linked libraries from that sender, not by CREATE2. It deploys `OpenFactory` (notice period `NOTICE_PERIOD`
 seconds; owner ruling 2026-10-20: every mainnet — any chain outside `DeployBase._isTestChain`'s fixed list of test /
-dev chains, so 22776, Hedera 295 and an unknown chain too — defaults to and may not go below 3 days; the SCaaS testnet defaults to 10
+dev chains, so 22777, Hedera 295 and an unknown chain too — defaults to and may not go below 3 days; the SCaaS testnet defaults to 10
 minutes, the other listed test / dev chains to 0; at most 30 days, the factory's `MAX_NOTICE_PERIOD`; `DEMO_SUPPLY`
 needs 0), first the `GovernanceRouter` (CREATE2, after the UA registry and before every release, JSON `governance_router`;
 every release's `Env.govRouter` names it, [CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)), and, when
@@ -550,7 +560,7 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   simulates `Deploy.s.sol` (nothing sent), then `script/DeploySend.s.sol` sends its plan in order, each transaction's limit
   `(regular + state) × 1.05` measured on the RPC's fork and capped at the RPC's block gas limit; one that needs more refuses
   the plan by name (`TxGasOverBlockLimit`) before anything is sent. Forge's estimate × 1.05 had sent `UARegistryCoreLib` with
-  61,800,392 (52,317,793 used on 7622), over a 60 M block; now 56,629,029, and the full deploy (104 transactions) runs on a
+  61,800,392 (52,317,793 used on the SCaaS testnet), over a 60 M block; now 56,629,029, and the full deploy (104 transactions) runs on a
   60 M anvil (`smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-followup-gas.txt`). Change (owner 2026-11-15): before the
   simulation, `deploy.sh evm` deploys on the real chain the verifiers whose constructors probe its own precompiles
   (`script/pq_verifiers.py`: `PqzKeyVerifier`, `MldsaVerifier(0x0134)`; by CREATE2 with `DEPLOY_SALT`, each transaction's
@@ -622,7 +632,7 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json) has the key `<chain>-mainnet` or `<chain>-testnet`
   (`ethereum-mainnet`, `ethereum-testnet` = Sepolia, `polygon-testnet` = Amoy, `avalanche-testnet` = Fuji, …); a second testnet
   keeps its own name (`ethereum-hoodi`); the full name stays in `name` ("Polygon Amoy"); every row carries
-  `"network": "mainnet" | "testnet"`; `scaas-testnet` stays and 22776 will be `scaas-mainnet`. `src/chains/<key>/` uses the
+  `"network": "mainnet" | "testnet"`; `scaas-testnet` stays and 22777 will be `scaas-mainnet`. `src/chains/<key>/` uses the
   same keys. **Books (BUILT, branch `ua-mtx-3q`):** `deployments/<key>.json` replaces `deployments/<chainid>.json`: `<key>.json` is the chain's
   book and a companion is `<key>-<what>.json` (`scaas-testnet.json`, `scaas-testnet-t66b-releases.json`,
   `scaas-testnet-zether-e2e.json`, `scaas-testnet-pqz.json`); a Hedera chain's book is its `<key>.json` too
@@ -731,13 +741,13 @@ it signs by ECDSA with its own key only, never through the delegate's ERC-1271; 
 while delegated (`CallerDelegated`; it uses relayed `mtx*` signed by its key, token fee may be 0, or clears its delegation); and
 SCaaS never calls into it as a relay target or a native-coin unwrap recipient.
 
-<a id="NET-EVM-07"></a>**NET-EVM-07** — **EIP-7702 is off on SCaaS's own chains** (owner ruling 2026-10-30): EIP-7702 is **off** on the SCaaS testnet 7622 from its next reset (fs3 Task 13;
+<a id="NET-EVM-07"></a>**NET-EVM-07** — **EIP-7702 is off on SCaaS's own chains** (owner ruling 2026-10-30): EIP-7702 is **off** on the SCaaS testnet from its 2026-10-31 reset (fs3 Task 13;
 the chainspec `eip7702TransitionTimestamp` line is removed, and a reset must start from that chainspec, never from an older
-genesis copy) and on the mainnet 22776 from its launch. A throwaway node with the new chainspec refused a type-4
+genesis copy) and on the SCaaS mainnet (22777) from its launch. A throwaway node with the new chainspec refused a type-4
 transaction (`InvalidTxType`) while legacy and EIP-1559 transfers mined (the check is the Source of NET-EVM-07 in
 [decisions.md](../decisions.md)). Customer chains (Ethereum and most L2s since Pectra, BSC,
 Polygon, Base, …) keep 7702, so the contract rule above applies on every chain; the forge tests are its proof, since the
-SCaaS testnet can no longer exercise 7702 after the reset. Verified on 7622 after the 2026-10-31 reset: a type-4 transaction is refused with `-32000 InvalidTxType`.
+SCaaS testnet can no longer exercise 7702 after the reset. Verified on the SCaaS testnet after the 2026-10-31 reset: a type-4 transaction is refused with `-32000 InvalidTxType`.
 
 <a id="NET-EVM-08"></a>**NET-EVM-08** — **The SCaaS testnet's node never signs for an RPC caller** (owner ruling 2026-10-31):
 since the node split ([NET-EVM-10](#NET-EVM-10)) the endpoints below are on the key-less `rpc` node and the sealer
@@ -749,7 +759,7 @@ sidecar container in the node's network namespace, so no other container reaches
 network only (`Eth`, `Net`, `Web3`, `TxPool`, for the explorer; not the `scaas-node` gateway port) — `Personal` nowhere, and a calls filter that refuses `eth_sendTransaction`, `eth_sign`,
 `eth_signTransaction` and `eth_signTypedData*` on every endpoint (Nethermind 2.2.0 needs the sealer account in
 `UnlockAccounts` to read its key, so the wallet methods are refused instead). Layout, checks and rollback:
-[RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md) § 7622 node layout and access. Mainnet 22776 additionally gets a
+[RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md) § SCaaS testnet node layout and access. Mainnet 22777 additionally gets a
 TLS reverse proxy with rate limits and keeps the sealer key out of the RPC node.
 
 <a id="NET-EVM-09"></a>**NET-EVM-09** — **Blockscout runs on the SCaaS testnet, lean and capped** (owner ruling
@@ -814,7 +824,7 @@ state a pruned node lacks. Topology, enodes, start / stop order and recovery: [R
 § Node split. Every service runs `restart: unless-stopped` (owner ruling 2026-10-31): Docker restarts a node after a
 `PQZ-NODE-FAULT` exit 120; a fault caused by a pooled transaction can loop on the sealer (`rpc` gossips it again), so
 `watch.sh` reports `RestartCount`; after a reboot Docker starts every service at once. Live configs (no secrets):
-`pqz-core/nethermind/chain/scaas-testnet/`. Mainnet 22776: the same topology is proposed; the owner decides at launch.
+`pqz-core/nethermind/chain/scaas-testnet/`. Mainnet 22777: the same topology is proposed; the owner decides at launch.
 
 ## 6. Limitations
 
