@@ -23,7 +23,7 @@ pqchat-core: the bindings check (runs/2026-11-17-pqchat-core-bind.sh) | 6da10db8
 scaas-node: capped cargo test --lib | bdf6ef30c | 0 | 909 passed (tree_set 6, the fake-chain tree tests 2, a_part_another_sender_landed_first_is_no_verdict new)
 scaas-node: clippy --all-targets -D warnings | bdf6ef30c | 0 | clean
 scaas-node: the whole suite (integration, 6 GB) | - | - | not run: another agent's capped mutants ran beside; left for the combined matrix
-mutants T6 (clients/pqchat-core/runs/2026-11-26-pqchat-treekem-t6-mutants.py) | 4a9f5ea2d..bdf6ef30c | 0 | 35 mutants, 35 killed (5 survived the first run: 4 by a killer that could not see them, now ua-rs tests/tree.rs over the lies; 1 by a missing case, added in bdf6ef30c)
+mutants T6 (clients/pqchat-core/runs/2026-11-26-pqchat-treekem-t6-mutants.py) | 4a9f5ea2d..bdf6ef30c | 0 | 35 mutants, 35 killed (first run 30 killed, 4 survived, 1 not loaded: two walk checks now killed by ua-rs tests/tree.rs over the lies, the pin's majority mutant now drops both of its named checks, the not-loaded one rewritten to compile, the parent's-admins case added in bdf6ef30c)
 mutants T5 (clients/scaas-sdk/runs/2026-11-26-pqchat-treekem-t5-mutants.py) | 04e0b1ea8..5ae420567 | 0 | 13 mutants, 13 killed (2 survived the first run: an equivalent term dropped, a test tightened in 4a9f5ea2d)
 mutants T4b (runs/2026-11-26-pqchat-treekem-t4b-mutants.py) | 04e0b1ea8 | 0 | 13 mutants, 13 killed
 mutants T8 (runs/2026-11-26-pqchat-treekem-t8-mutants.py) | 4a9f5ea2d..5ae420567 | 0 | 5 mutants, 5 killed
