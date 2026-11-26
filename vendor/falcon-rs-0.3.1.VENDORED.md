@@ -21,7 +21,7 @@
   `57a1aa39f980835a94100cf0b0d81bf8b221752e`: approve with fixes, 0 P0, 0 P1, 3 P2, 9 P3. By reading, the round-3 code
   under `fpemu` is a faithful port of the C PQClean ships (no hardware float or `libm` on the signing path; integer tables
   equal; `rnd = nonce || sampler seed` as `seeded.c`). FR-3 (a re-check of this tree against the crate's sha256 in CI,
-  P2) is fixed by `scripts/vendor.sh check`. Open before the label changes: the wasm32 gate as a CI job (P2), native / wasm32 key-generation parity over many seeds (P2),
+  P2) is fixed by `scripts/vendor.sh check` in CI at `f3ebb2da4`. Open before the label changes: the wasm32 gate as a CI job (P2), native / wasm32 key-generation parity over many seeds (P2),
   the P3 items (signatures equal PQClean's except with probability about 2^-39 per signature, from `fpr_expm_p63`; a
   rejected candidate left unwiped; variable-time hash-to-point, so never a secret message; `zeroize` in the glue; more
   edge refusal rows), and a timing test. The record, with every finding, is
