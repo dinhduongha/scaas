@@ -463,8 +463,9 @@ session's details; the warning is the admins'.
 
 - **The form.** For an Adds-only change the planner offers the path-less form by default when every condition holds: the
   device followed the head (it holds `next` of the head's handle), nothing is owed, no head admin is `gone`, the admin list
-  is unchanged, no Remove, the bound leaves room, **no path commit of anyone is staged on the head** (F-5: a one-transaction
-  path-less Add would take the slot from it; the record is public state; shown as "a key refresh is in progress"), and no
+  is unchanged, no Remove, the bound leaves room, **no path commit of its own is staged on the head** (F-5, owner ruling 2026-11-27: a one-transaction
+  path-less Add would take the slot from it, shown as "a key refresh is in progress"; another author's staged commit is not
+  visible to the client and no contract view lists it: the contract's order decides, the loser is refused by name and rebuilt), and no
   `try` is left (C47). Otherwise, or when the user picks "add and refresh", it builds a path commit with the Adds, listing
   any leaves under review (§6.2). The quote names both prices (§9). At the bound the client offers the path form (the
   contract would refuse the other, `PqChatTreePathBound`); while leaves are under review it lists them and asks first,
