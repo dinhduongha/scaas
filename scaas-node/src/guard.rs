@@ -6112,10 +6112,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .collect();
         assert_eq!(ours, theirs, "the PqChat allow-list, both directions");
         let forge: HashSet<[u8; 4]> = [
-            "821d41ae", "1222a945", "2b9ab93a", "3c289881", "6035115c", "a52f4d6d", "95660a78",
+            // the path-less delta (C41-C43): createSession 821d41ae -> f2f10b9f, commit 9575f9cb -> 1af1cd19
+            "f2f10b9f", "1222a945", "2b9ab93a", "3c289881", "6035115c", "a52f4d6d", "95660a78",
             "47bee6d5", "c8de3d2d", "04857ea8", "1fd5aeac", "f3ee47ee", "5aee92d5",
             // CTR-CHAT-27: commit, addPathList, addPathKeys, addPath, treeLeave, treeRemove
-            "9575f9cb", "0b9b356b", "de142cf8", "44889230", "12a4e9ac", "eb3f5236",
+            "1af1cd19", "0b9b356b", "de142cf8", "44889230", "12a4e9ac", "eb3f5236",
         ]
         .iter()
         .map(|h| alloy::hex::decode(h).unwrap().try_into().unwrap())
@@ -6154,6 +6155,13 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             }
         }
         // CTR-CHAT-27: `treeCreate` is the module's step under `createSession`, the tree views `PqChatTreeViews`' (read-only)
+        // the positive control (the path-less delta §13): the string is `PqChatTree.treeCreate`'s selector, forge's
+        // methodIdentifiers of out/PqChatTree.sol (0x86320c45 since the session's two fields), so "no row" checks a live one
+        assert_eq!(
+            sel(TREE_CREATE),
+            [0x86, 0x32, 0x0c, 0x45],
+            "PqChatTree.treeCreate"
+        );
         for s in [
             "initialize(bytes32,uint8)",
             "owner()",

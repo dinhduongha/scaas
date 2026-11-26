@@ -986,11 +986,10 @@ entries with one hash each (`addPathList`: at least one); node keys neither abse
 ciphertexts above `ctCount` (on `addPath`, `firstCt` plus the count above 511), without the list, or not 1,568 B and 48 B; more
 Welcome wraps than adds; an empty `members`. What needs the chain's state is the contract's. A record or a list as hex is
 `HEX_ARGS_REFUSED`; the decode follows the type, so a hostile depth stops at the type's. **For operators:** job shapes were added,
-**For operators (path-less Adds, the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md) §8; SPECIFIED, nothing built):** `createSession`'s `s` gains the
+none changed. **For operators (path-less Adds, the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md) §8; BUILT on branch `treekem-pathless`, UNAUDITED):** `createSession`'s `s` gains the
 named fields `pathRefreshBound` and `confirmTag`, `commit`'s `c` gains `pathless` and `confirmTag`; a job on the old shape of
 either is refused by name. A path-less commit (`pathless` true) with no Add, a Remove, a node key, `ctCount` above 0 or a
-list is `BAD_PAYLOAD`; at creation mode 0 with a bound or a tag that is not 0, and mode 1 with a bound above 510, are too.
-none changed. <a id="tree-set-guard"></a>**The whole-set guard and the order of C37** (BUILT, plan T4 after the merge,
+list is `BAD_PAYLOAD`; at creation mode 0 with a bound or a tag that is not 0, and mode 1 with a bound above 510, are too. <a id="tree-set-guard"></a>**The whole-set guard and the order of C37** (BUILT, plan T4 after the merge,
 `scaas-node/src/tree_set.rs` with `submit.rs` `tree`; spec §8, §15, fable-r3-6, codex-r3-12; UNAUDITED): a tree commit is relayed as
 **one `commit` job holding its whole set**, every piece its record signs (the list, the node keys, every path ciphertext, every
 Welcome wrap). Before any send the node checks each piece against its signed hash (`ctListHash`, `nodeKeyHashes`, `ctHashes`,

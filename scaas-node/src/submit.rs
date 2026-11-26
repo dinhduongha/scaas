@@ -2751,6 +2751,8 @@ pub(crate) mod tests {
                     ctListHash: t.signed.1,
                     treeHash: t.signed.0,
                     sealedInfo: Bytes::new(),
+                    pathless: false,
+                    confirmTag: B256::ZERO,
                 },
                 sigHash: B256::ZERO,
             }))
