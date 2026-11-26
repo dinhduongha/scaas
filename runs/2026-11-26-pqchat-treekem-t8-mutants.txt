@@ -1,6 +1,7 @@
-# t8 mutants at commit 091ad32e9 (name | outcome | test)
-the whole set sent again where the record alone goes first | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib a_tree_commit_job_lands_in_c37_order_on_a_fake_chain
-the held piece's job replaced by the whole commit | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib a_tree_commit_job_lands_in_c37_order_on_a_fake_chain
-a set too big for one transaction refused, not split | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib a_tree_commit_job_lands_in_c37_order_on_a_fake_chain
-a complete set not reported consumed | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib a_tree_commit_job_lands_in_c37_order_on_a_fake_chain
-4 mutants, 4 killed, 0 survived (0 killed elsewhere), 0 not loaded
+# t8 mutants, each row at its commit (name | outcome | commit | test); the first run's survivors fixed and run again
+the whole set sent again where the record alone goes first | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib a_tree_commit_job_lands_in_c37_order_on_a_fake_chain
+the held piece's job replaced by the whole commit | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib a_tree_commit_job_lands_in_c37_order_on_a_fake_chain
+a set too big for one transaction refused, not split | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib a_tree_commit_job_lands_in_c37_order_on_a_fake_chain
+A-1 a part another sender landed first taken as a refusal | killed | 5ae420567 | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib a_part_another_sender_landed_first_is_no_verdict
+a complete set not reported consumed | killed | 4a9f5ea2d | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked -j 2 --lib a_tree_commit_job_lands_in_c37_order_on_a_fake_chain
+5 mutants, 5 killed, 0 survived (0 killed elsewhere), 0 not loaded

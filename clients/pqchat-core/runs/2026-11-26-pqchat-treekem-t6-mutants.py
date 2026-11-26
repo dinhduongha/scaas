@@ -61,7 +61,8 @@ MUTANTS = [
        "            let versions: Vec<u64> = if high <= KEM_SCAN_MAX {\n                vec![high]")],
      CMD, "the_add_warnings_lookup"),
     ("T6a a pin replaced on one node's word",
-     [(T, "        if named < 3\n            || at(&v, \"0\")", "        if at(&v, \"0\")")],
+     [(T, "        if named < 3\n            || at(&v, \"0\")", "        if at(&v, \"0\")"),
+      (T, "Ok((v, named)) => named >= 3 && *at(&v, \"c\") == served,", "Ok((v, _)) => *at(&v, \"c\") == served,")],
      CMD, "a_twin_at_the_pin_is_settled_by_the_majority"),
     ("T6a the setting taken from one discovered node (sigStore a plain read)",
      [(N, '    ("IPqChat.sigStore", Trusted),', '    ("IPqChat.sigStore", Plain),')],
@@ -114,14 +115,14 @@ MUTANTS = [
     ("T6b the join's author judged without the parent's admins",
      [(U, "let admin = n == 0 || a.admins_at(n - 1)?.contains(&author);",
        "let admin = n == 0 || a.admins_at(n)?.contains(&author);")],
-     CMD, "recovery_every_scenario_device"),
+     UA),
     ("T6b the warning cleared by a refresh while a foreign leaf stays",
      [(U, "                    leaves_left: adds.iter().filter(|x| live(x)).map(|x| x.leaf).collect(),",
        "                    leaves_left: vec![],")],
-     CMD, "recovery_every_scenario_device"),
+     UA),
     ("T6b a commit author not checked against the roster",
      [(UP, "Some(me) if c.leaf < t.leaves && me.ua == c.author && me.key_id == c.key_id =>",
-       "Some(_) if c.leaf < t.leaves =>")], UA),
+       "Some(me) if c.leaf < t.leaves && (true || me.ua == c.author) && me.key_id == c.key_id =>")], UA),
     # ---- the T4-T9 review's fixes
     ("C-1 a record stored alone taken as complete",
      [(S, "    if fin.complete {\n        return PqTreeNext::Done;\n    }\n    if plan.txs.len() == 1 && landed.record {",
@@ -164,7 +165,7 @@ MUTANTS = [
     ("C-9 the forged continuation taken at another number",
      [(U, "            let changes = c.get(\"removes\")?.as_array()?.iter();\n            Some(\n                u64j(&c, \"epoch\").ok()? == n\n                    && b32j(&c, \"sessionId\").ok()? == self.sid\n                    && sc.epoch_id(",
        "            let changes = c.get(\"removes\")?.as_array()?.iter();\n            Some(\n                true\n                    && b32j(&c, \"sessionId\").ok()? == self.sid\n                    && sc.epoch_id(")],
-     CMD, "hostile_reads_are_refused"),
+     UA),
 ]
 
 if __name__ == "__main__":
