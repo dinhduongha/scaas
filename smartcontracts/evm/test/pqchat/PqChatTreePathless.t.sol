@@ -153,6 +153,9 @@ contract PqChatTreePathlessTest is PqChatTreeModel {
         M memory m2 = _s(_l3(A, B, C), _list(A, B), 0);
         (x,) = _buildPl(m2, 0, _chs(_add(3, D, 1)), _list(A));
         _refused(x, abi.encodeWithSelector(IPqChat.PqChatTreePathRequired.selector));
+        // the same length, another admin (B replaced by C): element for element, not the count
+        (x,) = _buildPl(m2, 0, _chs(_add(3, D, 1)), _list(A, C));
+        _refused(x, abi.encodeWithSelector(IPqChat.PqChatTreePathRequired.selector));
         _pl(m2, 0, _chs(_add(3, D, 1)), _list(A, B));
     }
 
@@ -338,7 +341,7 @@ contract PqChatTreePathlessTest is PqChatTreeModel {
     }
 
     /// Row 11: the pieces of a path on a path-less epoch are refused as for `ctCount` 0; `pathless` true with a node key,
-    /// with `ctCount` above 0, with another list hash or with no Add is `PqChatShape`; `pathless` false with Adds and an empty
+    /// with `ctCount` above 0, with another list hash, with a whole consistent path or with no Add is `PqChatShape`; `pathless` false with Adds and an empty
     /// path is `PqChatTreeTargets`. The control: `addWraps` lands the wraps and the same Adds with `pathless` true complete.
     function test_r11_theShapeExactlyWhenPathless() public {
         _open(); // the vectors in this call's memory
@@ -359,6 +362,11 @@ contract PqChatTreePathlessTest is PqChatTreeModel {
         x = _copy2(good);
         x.c.pathless = false;
         _refused(x, abi.encodeWithSelector(IPqChat.PqChatTreeTargets.selector, uint256(2)));
+        // a whole path on a path-less record (node keys, ciphertexts and their list, each consistent with the others, so no
+        // other shape rule refuses it): `PqChatShape` by the path-less rule alone
+        (Step memory p,) = _build(m, 0, _chs(_add(3, D, 1)), _list(A));
+        p.c.pathless = true;
+        _refused(p, abi.encodeWithSelector(IPqChat.PqChatShape.selector));
         // staged: the record alone; the path pieces refused, the wrap lands and completes
         ++nonceN;
         _commitAlone(vchat, good);
