@@ -419,7 +419,7 @@ impl Http {
             }
             Some(EndpointAuth::Hmac(secret)) => {
                 use base64::Engine as _;
-                use hmac::Mac as _;
+                use hmac::{KeyInit as _, Mac as _};
                 let ts = web_time::SystemTime::now()
                     .duration_since(web_time::UNIX_EPOCH)
                     .map_or(0, |d| d.as_secs())

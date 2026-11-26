@@ -9,9 +9,10 @@ description = "PQZL (the LaZer lattice proof system of SCaaS PQZ) in pure Rust, 
 
 [dependencies]
 # D1: AES-256 block cipher (fixslice, constant time; AES-NI where detected) for the rng's AES-256-CTR
-aes = "=0.8.4"
-# D1: SHAKE128 / SHAKE256 (Keccak) for the transcript hashes and the keys' streams
-sha3 = { version = "=0.10.8", default-features = false }
+aes = "=0.9.4"
+# D1: SHAKE128 / SHAKE256 (Keccak) for the transcript hashes and the keys' streams (`shake`: sha3 0.12 moved them there;
+# the versions ml-kem 0.3.4 takes)
+shake = { version = "=0.1.0", default-features = false }
 
 [build-dependencies]
 # feature `c-oracle` only: build.rs compiles the C core; a default build compiles no C
@@ -19,6 +20,8 @@ cc = { version = "1", optional = true }
 
 [dev-dependencies]
 serde_json = "1"
+# the vector tests' SHA3-256 / Keccak-256 of the inputs
+sha3 = { version = "=0.12.0", default-features = false }
 
 [features]
 # one parameter set per build (owner 2026-10-21; pqz-core/params/sets/<set>/): exactly one `set-<set>` feature; a

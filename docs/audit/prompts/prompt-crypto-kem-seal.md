@@ -232,7 +232,7 @@ number (section 9).
 | 10 | Performance and cost | Argon2id and scrypt cost on mobile against the rulings (no timing runs). |
 | 11 | Interfaces and misuse | Seal APIs that take a label or AAD from the caller where the spec fixes it; handles from another vault refused. |
 | 12 | Tests | Negative rows (wrong key, version, truncation, small-order point) read by every implementation; mutants of each label and AAD. |
-| 13 | Operations and the supply chain | `ml-kem` =0.3.4, `aes-gcm`, `aes-gcm-siv`, `argon2` =0.5.3, `scrypt` =0.11.0, `bip39` =2.2.2, `@noble/*` pins and advisories. |
+| 13 | Operations and the supply chain | `ml-kem` =0.3.4, `aes-gcm` =0.11.1, `aes-gcm-siv` =0.12.1, `argon2` =0.6.0, `scrypt` =0.12.0, `bip39` =2.2.2, `@noble/*` pins and advisories. |
 
 ## 9. Report format (Markdown, English)
 

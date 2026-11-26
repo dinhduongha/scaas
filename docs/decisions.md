@@ -580,6 +580,42 @@ and the mesh are out of scope.
 It said: legal questions are deferred to a separate chapter that does not block the buildable parts.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 47.
 
+<a id="ARCH-POS-25"></a>
+### ARCH-POS-25 — Our direct RustCrypto uses on the stack's next generation, before the pre-freeze tag
+- old: — · status: current · owner: yes · date: 2026-11-26 · normative: decisions.md#ARCH-POS-25 · superseded-by: —
+
+**Rule.** Every crate of ours that names a RustCrypto crate directly takes its next generation (digest 0.11, cipher 0.5,
+aead 0.6, `hybrid-array` instead of `generic-array`) where a release at least two weeks old exists and no type of that use
+crosses into a dependency still on the old generation; a use that crosses stays, named with its reason. No behaviour
+change: AES-CTR, AES-GCM, AES-GCM-SIV, SHA-2, SHA-3, SHAKE, HMAC, HKDF, PBKDF2, scrypt, Argon2id and BLAKE2 outputs are
+byte-identical, so no vector, KAT or pinned digest moves (one that moved would be a semantic change, and a stop).
+Moved: `aes` 0.8.4 -> 0.9.4 (`pqzl`, `pqz-ffi`), `aes-gcm` 0.10.3 -> 0.11.1, `aes-gcm-siv` 0.11.1 -> 0.12.1, `ghash`
+0.5.1 -> 0.6.0, `polyval` 0.6.2 -> 0.7.3, `sha2` 0.10 -> 0.11.1, `sha3` 0.10 -> 0.12.0 with SHAKE from `shake` 0.1.0 (sha3
+0.12 moved it there; the versions ml-kem 0.3.4 and ml-dsa 0.1.1 take), `hmac` 0.12 -> 0.13.0, `hkdf` 0.12 -> 0.13.0,
+`pbkdf2` 0.12.2 -> 0.13.0, `scrypt` 0.11.0 -> 0.12.0, `argon2` 0.5.3 -> 0.6.0, `blake2` 0.10 -> 0.11.0, `ripemd` 0.1 -> 0.2.0
+(node), `p256` 0.13 -> 0.14 (node tests), in `ua-rs`, `zether-prover`, `pqz-core` (`pqzl`, `ffi`, `pqzh/ligero`,
+`pqzh/stark-backup`), `scaas-node`, `scaas-rpc`, `pqchat-core`, `scaas-cli`; the `zeroize` pin =1.8.2 -> =1.9.1 everywhere
+it is pinned (`aes` 0.9.2 and later need ^1.9). Kept, with the reason: `sha2` 0.10.9 as `sha2-for-ark` for arkworks 0.5's
+`DefaultFieldHasher` only (BLS12-381 hash to curve in `ua-rs` and `zether-prover`; ark-ff 0.5 takes a digest 0.10 hasher);
+`curve25519-dalek` 4 and `ed25519-dalek` 2 (`ua-rs`, `pqz-ffi`, `scaas-node`): schnorrkel 0.11.5, its latest release, is on
+curve25519-dalek 4 and `ua-rs`'s `deny.toml` requires one `curve25519-dalek`, so curve25519-dalek 5 / ed25519-dalek 3 wait
+for schnorrkel; `k256` 0.13, `ecdsa` 0.16, `elliptic-curve` 0.13 (alloy, ZF frost-secp256k1 =3.0.0, coins-bip32), the
+eth-keystore generation under alloy (`aes` 0.8, `sha3` 0.10, `hkdf` 0.12 in `scaas-node`'s and `scaas-pqz-verifier`'s
+locks), and `rand_core` 0.6 (arkworks 0.5, frost). The contracts' crates (Cosmos, NEAR, Solana, Soroban) keep theirs: their
+wasm or program bytes and the host SDKs' pins are each family's own round. Old run records (`runs/` spikes) keep their
+pins; only the T0 spike's `zeroize` follows scaas-ua.
+
+**Status.** BUILT on branch `rustcrypto-next`, UNAUDITED (the pre-freeze audit covers it at its commit). Evidence:
+`runs/2026-11-26-rustcrypto-next-summary.txt`. The pqz-core full gate at four sets runs once on the final core tree, with
+the chain-id change's pqz steps; the affected steps ran on this branch.
+**Why.** The audit should see the dependencies the freeze ships, not a generation about to be replaced; it also removes
+most of the two generations side by side in the lockfiles and the deprecated `generic-array` 0.14 calls (`aes_ctr.rs`,
+`Nonce::from_slice` in `opening.rs`, 8b-2).
+**Cost if wrong.** A changed byte in a KDF, cipher or hash output: another key, a ciphertext no other client opens, a
+proof the verifier refuses. The vectors and KATs catch it; none moved.
+**Source.** Owner 2026-11-26 (chat, through the coordinator), verbatim: "Ok, làm trước tag pre-freeze." (OK, do it before
+the pre-freeze tag; it was planned for after the freeze, TODO 8b-2b.)
+
 ## 2. Node — General
 
 ### NODE-GEN-01 — Node holds no subject funds or keys

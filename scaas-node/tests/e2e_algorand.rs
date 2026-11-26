@@ -521,7 +521,7 @@ impl Pk {
         Pk(p256::ecdsa::SigningKey::from_bytes(&[seed; 32].into()).unwrap())
     }
     fn raw(&self) -> Vec<u8> {
-        self.0.verifying_key().to_encoded_point(false).as_bytes()[1..].to_vec()
+        self.0.verifying_key().to_sec1_point(false).as_bytes()[1..].to_vec()
     }
     fn id(&self) -> [u8; 32] {
         ua(
@@ -548,7 +548,7 @@ impl Who for Pk {
             .0
             .sign_prehash(&sha(&[&ad[..], &sha(cd.as_bytes())].concat()))
             .unwrap();
-        let sig = sig.normalize_s().unwrap_or(sig).to_bytes();
+        let sig = sig.normalize_s().to_bytes();
         [
             &[3u8][..],
             &self.raw(),

@@ -18,11 +18,12 @@ path = "lib.rs"
 scaas-ua = { path = "../../..", default-features = false, features = ["vectors"] }
 hex = "0.4"
 serde_json = "=1.0.145"
-sha3 = "0.10"
+sha3 = "0.12"
+shake = "0.1"
 wasm-bindgen = "=0.2.130"
 # tests/fndsa/timing.rs and the keygen parity (src/falcon/soft.rs, the wallet's keys): ua-rs's pins
 falcon-rs = { path = "../../../../../vendor/falcon-rs-0.3.1", default-features = false, features = ["fpemu"] }
-zeroize = "=1.8.2"
+zeroize = "=1.9.1"
 
 [workspace]
 

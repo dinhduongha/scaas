@@ -107,7 +107,7 @@ serde_json = "1"
 async-trait = "0.1"
 # the keystore label's NFC check (spec §6.1), the pin of scaas-ua
 unicode-normalization = "=0.1.26"
-zeroize = "=1.8.2"
+zeroize = "=1.9.1"
 # ids (seed, account, operation): a UUID v4 from 16 bytes of the OS generator (not a key)
 uuid = { version = "1", default-features = false }
 getrandom = "0.2"

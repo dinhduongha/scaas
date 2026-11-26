@@ -890,7 +890,7 @@ impl Wallet {
     /// passphrase) and its backup. The caller derives from a main set (an empty BIP-39 passphrase); `Argument` once the index
     /// would reach 2^31, `WalletLocked` while locked.
     pub fn bip85_child(&self) -> Result<(Wallet, SeedBackup)> {
-        use hmac::Mac as _;
+        use hmac::{KeyInit as _, Mac as _};
         let entropy = self.store.with_all(|a, m| {
             let i = m.bip85_next;
             let next = i

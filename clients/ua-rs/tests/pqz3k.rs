@@ -29,9 +29,9 @@ fn n(v: &Value) -> u64 {
 
 /// BIP-39's seed: PBKDF2-HMAC-SHA512(mnemonic, "mnemonic", 2048), 64 bytes (one block), here for the KAT only.
 fn bip39_seed(mnemonic: &str) -> [u8; 64] {
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     let prf = |parts: &[&[u8]]| {
-        let mut m = <Hmac<sha2::Sha512> as Mac>::new_from_slice(mnemonic.as_bytes()).unwrap();
+        let mut m = <Hmac<sha2::Sha512> as KeyInit>::new_from_slice(mnemonic.as_bytes()).unwrap();
         for p in parts {
             m.update(p);
         }

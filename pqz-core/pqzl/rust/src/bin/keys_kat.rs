@@ -16,8 +16,7 @@ use pqzl::testkit::{enc_seed_lowered, keygen_lowered};
 use pqzl::{
     dec, enc_group_seed, enc_seed, keygen, Ctx, Enc, Error, Key, CT_BYTES, POLYVEC_BYTES, V_BYTES,
 };
-use sha3::digest::{ExtendableOutput, Update, XofReader};
-use sha3::Shake256;
+use shake::{ExtendableOutput, Shake256, Update, XofReader};
 use std::fmt::Write;
 
 const NK: usize = 20;
