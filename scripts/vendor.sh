@@ -124,8 +124,10 @@ cmd=${1:-}
 [ $# -gt 0 ] && shift
 [ $# -gt 0 ] || set -- core
 for grp in "$@"; do
-    echo "$PINS" | grep -q "^$grp|" || die "UNKNOWN_GROUP: $grp (core, kat, research)"
+    echo "$PINS" | grep -q "^$grp|" || die "UNKNOWN_GROUP: $grp (core)"
 done
+t=
+trap 'rm -rf "$t"' EXIT
 case "$cmd" in
     install)
         for r in $(rows "$@"); do
@@ -171,7 +173,7 @@ ROW
         exit "$bad"
         ;;
     *)
-        echo "usage: $0 install|check [core|kat|research...]" >&2
+        echo "usage: $0 install|check [group...] (groups: core, the default)" >&2
         exit 2
         ;;
 esac
