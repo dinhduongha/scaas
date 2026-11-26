@@ -1165,6 +1165,12 @@ impl Submitter {
                                 if let Err(SimError::Revert(r2)) =
                                     guard::gas(&self.chain, &p, self.cfg.max_gas_per_tx).await
                                 {
+                                    // R2-D-4 of the T4-T9 re-check: another sender's record landed between the two
+                                    // simulations is no verdict (A-1): the next pass reads the state
+                                    if tree_race(&r2) {
+                                        let why = format!("the record with its list: {r2} (another sender's part)");
+                                        return self.requeue(&w, sending(why)).await;
+                                    }
                                     if !tree_over(&r2) {
                                         return self
                                         .fail(&w, format!("{}: the record with its list: {r2}; nothing sent", ts::TREE_SET_REFUSED))
@@ -2695,6 +2701,9 @@ pub(crate) mod tests {
         /// A-1: another sender lands the list just before the node's own `addPathList` is estimated (that estimate reverts
         /// `PqChatPathList`, as the contract answers a second list)
         race_list: bool,
+        /// R2-D-4: another sender lands the record just before the node's record-with-list estimate (that estimate reverts
+        /// `PqChatNonceUsed`, as the contract answers the same record again)
+        race_record: bool,
     }
 
     /// A `PqChat` write's entry and named args, as the node's rows read the calldata.
@@ -2861,6 +2870,21 @@ pub(crate) mod tests {
                         t.list = true;
                     }
                     let data = crate::abi::IPqChatErrors::PqChatPathList { epochId: B256::ZERO }.abi_encode();
+                    Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                }
+                "eth_estimateGas" if e.tree.as_ref().is_some_and(|t| t.race_record && !t.record) && {
+                    let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
+                    tree_args(&alloy::hex::decode(&input[2..]).unwrap()).is_some_and(|(en, a)| {
+                        en == "commit"
+                            && a["cts"].as_array().is_some_and(Vec::is_empty)
+                            && a["ctTargets"].as_array().is_some_and(|c| !c.is_empty())
+                    })
+                } => {
+                    use alloy::sol_types::SolError;
+                    if let Some(t) = e.tree.as_mut() {
+                        t.record = true;
+                    }
+                    let data = crate::abi::IPqChatErrors::PqChatNonceUsed { scope: B256::ZERO, nonce: 0 }.abi_encode();
                     Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                 }
                 "eth_estimateGas" if e.tree.as_ref().is_some_and(|t| t.whole_over) && {
@@ -3391,11 +3415,22 @@ pub(crate) mod tests {
         }
     }
 
+    /// R2-D-4 of the T4-T9 re-check: another sender lands the record between the whole commit's simulation and the record
+    /// with its list's (that one reverts `PqChatNonceUsed`): no verdict either, the set completes and is `consumed`.
+    #[tokio::test]
+    async fn a_record_another_sender_landed_between_the_simulations_is_no_verdict() {
+        part_landed_first(false).await;
+    }
+
     /// A-1 of the TreeKEM T4-T9 review: another sender lands the list first, so the node's own `addPathList` simulation
     /// reverts `PqChatPathList`: no verdict (the job waits under `TREE_SET_SENDING`), the next pass reads the list in state and
     /// goes on; the set completes and is `consumed`, never `dead`.
     #[tokio::test]
     async fn a_part_another_sender_landed_first_is_no_verdict() {
+        part_landed_first(true).await;
+    }
+
+    async fn part_landed_first(list: bool) {
         let set = crate::tree_set::tests::sets()
             .into_iter()
             .find(|a| {
@@ -3414,7 +3449,8 @@ pub(crate) mod tests {
         let (url, rpc) = fake_evm(Evm {
             tree: Some(FakeTree {
                 whole_over: true,
-                race_list: true,
+                race_list: list,
+                race_record: !list,
                 cts: vec![false; cts],
                 wraps: vec![false; adds],
                 signed: (
@@ -3452,9 +3488,14 @@ pub(crate) mod tests {
             "{st:?}"
         );
         let sent = rpc.lock().unwrap().tree.as_ref().unwrap().sent.clone();
+        let (part, entry) = if list {
+            ("list", "addPathList")
+        } else {
+            ("record", "commit")
+        };
         assert!(
-            !sent.iter().any(|x| x.0 == "addPathList"),
-            "the node never sent the list: {sent:?}"
+            !sent.iter().any(|x| x.0 == entry),
+            "the node never sent the {part}: {sent:?}"
         );
     }
 
