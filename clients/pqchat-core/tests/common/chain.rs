@@ -192,6 +192,7 @@ impl Local {
                 chain_uid: self.uid.clone(),
                 registry: self.registry.clone(),
                 factory: self.factory.clone(),
+                tree_gas: None,
             }],
             ..PqChatConfig::default()
         }

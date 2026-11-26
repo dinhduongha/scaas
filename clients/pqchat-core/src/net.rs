@@ -67,6 +67,17 @@ pub const READS: &[(&str, Trust)] = &[
     ("IPqChat.wrapAt", Trusted),
     ("IPqChat.writerOf", Plain),
     ("IPqChat.writersOf", Plain),
+    ("IPqChatTreeViews.commitOf", Trusted),
+    ("IPqChatTreeViews.goneKeyOf", Trusted),
+    ("IPqChatTreeViews.goneOf", Trusted),
+    ("IPqChatTreeViews.goneOwnKeyOf", Trusted),
+    ("IPqChatTreeViews.pathCtAt", Trusted),
+    ("IPqChatTreeViews.pathKeys", Trusted),
+    ("IPqChatTreeViews.pathListOf", Trusted),
+    ("IPqChatTreeViews.treeLeaves", Trusted),
+    ("IPqChatTreeViews.treeNodeKey", Trusted),
+    ("IPqChatTreeViews.treeNodes", Trusted),
+    ("IPqChatTreeViews.treeOf", Trusted),
     ("IUARegistry.checkedOf", Trusted),
     ("IUARegistry.kemKeyAt", Trusted),
     ("IUARegistry.kemKeyOf", Trusted),
@@ -76,7 +87,11 @@ pub const READS: &[(&str, Trust)] = &[
 
 /// Every write of the crate, by ABI item.
 pub const WRITES: &[&str] = &[
+    "IPqChat.addPath",
+    "IPqChat.addPathKeys",
+    "IPqChat.addPathList",
     "IPqChat.addWraps",
+    "IPqChat.commit",
     "IPqChat.createSession",
     "IPqChat.createTopic",
     "IPqChat.editEntry",
@@ -87,6 +102,8 @@ pub const WRITES: &[&str] = &[
     "IPqChat.remove",
     "IPqChat.setTopicWriter",
     "IPqChat.storeMessage",
+    "IPqChat.treeLeave",
+    "IPqChat.treeRemove",
     "IPqChat.updateTopic",
     "IPqChat.voteEntry",
 ];

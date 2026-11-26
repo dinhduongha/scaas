@@ -271,7 +271,7 @@ impl PqChat {
     /// The leaves of `uas` (P13, CTR-UA-38): a UA as itself (`via` zero); an `msig` seat as its accepted slots, an accepted
     /// `msig` slot as its own accepted leaves (two levels), each with `via` = the seat; a deeper level is no leaf. A leaf named
     /// twice keeps its first `via` (direct members first). `MembersInvalid` for a seat with no leaf.
-    async fn expand(
+    pub(crate) async fn expand(
         &self,
         chain: &str,
         uas: &[String],

@@ -410,6 +410,14 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
 
 ### T5. SDK: thin calls (`clients/scaas-sdk`)
 
+**Progress (2026-11-26, branch `treekem-t4-t10`; controller calls in decisions.md CTR-CHAT-27's Change of the day).** BUILT,
+UNAUDITED: `src/pqchat_tree.rs` (the calls over `PqTreeReads` with `PqTreeStep::Need`, the registry's records with the kept
+signature, the creation, the commit prepared and signed once, the exits, the replay and its resumption, `plan_commit`,
+`next_send`, `create_cap` over the data rows `gas/pqchat-tree.json`); tests `pqchat_tree::tests` (the 20 M block, the order
+broken and its controls, the creation cap). Left: the binding surface check of the SDK is unchanged (the calls are `AppCore`'s,
+outside the module objects); the five mutants below; the per-chain rows measured on each chain (the reference rows are a linear
+fit of the forge bound rows).
+
 - [ ] **The creation in one transaction (owner 2026-11-25: "khi init session TreeKEM: tối đa 16 thành viên + 16 wraps …
       số thành viên bằng số wraps"):** the SDK's tree-session creation sends the session record **with all its wraps in the
       same transaction**, one wrap per member key (`wraps.length == members.length`, the contract's rule), so the session is
@@ -444,6 +452,13 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
 
 ### T6a. `pqchat-core`: the public tree and building a commit (`clients/pqchat-core`)
 
+**Progress (2026-11-26, branch `treekem-t4-t10`).** BUILT, UNAUDITED: `src/tree.rs` (the views by `ua-rs`'s names through the
+port, all trusted; `create_tree` in one transaction, a `none` home refused; `tree_commit` and `tree_next` in C37's order;
+`tree_leave`, `tree_remove`; the Add warning's lookup `tree_add_check` over the candidates, `KEM_SCAN_MAX` 64; `tree_open` for
+messages); `tests/chain_tree.rs` (gate `pqc-chain`). Left: the strict-majority read before a changed info (R13), an admin's
+info after a gap (codex-r3-7), the prepared creation across a restart (codex-r3-5; the creation is one transaction), the
+size hint (C3), `tests/hostile` and the mutants below.
+
 - [ ] **The creation default of T5 (owner 2026-11-25):** a tree session is created with the creator and a few members and
       grown by commits of at most 32 Adds with their Welcome wraps; a test creates a large group that way and replays it.
 
@@ -476,6 +491,12 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
       one endpoint; a discovered node counted among the 3; a receipt sent in a tree session.
 
 ### T6b. `pqchat-core`: replay, the store, not followed
+
+**Progress (2026-11-26, branch `treekem-t4-t10`).** BUILT, UNAUDITED: `tree_state` (the replay from state, from the store's
+pin or resumed from the device's previous replay; the pin stored by `treeId` after a replay that succeeded; the epochs'
+states, `K`, rosters and warnings from `ua-rs`; the closed session). Left: the trace test, `tests/recovery.rs` over the
+scenario rows through the crate (the walk itself is held to them in `ua-rs`), every page of a snapshot at one block
+(fable-r3-9; the port reads each at the final block) and the mutants below.
 
 - [ ] Replay from state (spec §10) on a fresh store: the fixed read list, the checks at the read boundary, the forward
       walk from the cold tree, or from the pin with its tree and exits (C25, C26 as amended 2026-11-24), the rights check with the signed leave or removal of

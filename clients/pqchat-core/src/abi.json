@@ -3686,6 +3686,558 @@
   "stateMutability": "view",
   "type": "function"
  },
+ "IPqChatTreeViews.TREE_LEAF_PAGE_MAX": {
+  "inputs": [],
+  "name": "TREE_LEAF_PAGE_MAX",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.TREE_RANGE_MAX": {
+  "inputs": [],
+  "name": "TREE_RANGE_MAX",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.commitOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "commitOf",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "author",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "epoch",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "parentEpochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "treeId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "parentTreeHash",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint32",
+      "name": "leaf",
+      "type": "uint32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "keyId",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint32",
+      "name": "leaves",
+      "type": "uint32"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "admins",
+      "type": "bytes32[]"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint32",
+        "name": "leaf",
+        "type": "uint32"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "uint64",
+        "name": "keyId",
+        "type": "uint64"
+       }
+      ],
+      "internalType": "struct IPqGroupTree.TreeRemove[]",
+      "name": "removes",
+      "type": "tuple[]"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint32",
+        "name": "leaf",
+        "type": "uint32"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "uint64",
+        "name": "keyId",
+        "type": "uint64"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "via",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "kemHash",
+        "type": "bytes32"
+       }
+      ],
+      "internalType": "struct IPqGroupTree.TreeAdd[]",
+      "name": "adds",
+      "type": "tuple[]"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "wrapHashes",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "nodeKeyHashes",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "uint32",
+      "name": "ctCount",
+      "type": "uint32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "ctListHash",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "treeHash",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedInfo",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatCommit",
+    "name": "c",
+    "type": "tuple"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "sigHash",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.goneKeyOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "kemHash",
+    "type": "bytes32"
+   }
+  ],
+  "name": "goneKeyOf",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "gone",
+    "type": "bool"
+   },
+   {
+    "internalType": "uint64",
+    "name": "joinEpoch",
+    "type": "uint64"
+   },
+   {
+    "internalType": "uint64",
+    "name": "endEpoch",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.goneOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   }
+  ],
+  "name": "goneOf",
+  "outputs": [
+   {
+    "internalType": "uint8",
+    "name": "kind",
+    "type": "uint8"
+   },
+   {
+    "internalType": "uint64",
+    "name": "epoch",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.goneOwnKeyOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "kemHash",
+    "type": "bytes32"
+   }
+  ],
+  "name": "goneOwnKeyOf",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "gone",
+    "type": "bool"
+   },
+   {
+    "internalType": "uint64",
+    "name": "joinEpoch",
+    "type": "uint64"
+   },
+   {
+    "internalType": "uint64",
+    "name": "endEpoch",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.pathCtAt": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "i",
+    "type": "uint256"
+   }
+  ],
+  "name": "pathCtAt",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "mlkemCt",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "x25519Eph",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedSecret",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PathCt",
+    "name": "",
+    "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.pathKeys": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "pathKeys",
+  "outputs": [
+   {
+    "internalType": "bytes[]",
+    "name": "",
+    "type": "bytes[]"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.pathListOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "pathListOf",
+  "outputs": [
+   {
+    "internalType": "uint32[]",
+    "name": "ctTargets",
+    "type": "uint32[]"
+   },
+   {
+    "internalType": "bytes32[]",
+    "name": "ctHashes",
+    "type": "bytes32[]"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.treeLeaves": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "first",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "count",
+    "type": "uint256"
+   }
+  ],
+  "name": "treeLeaves",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "ua",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "keyId",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "joinEpoch",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint32",
+      "name": "wrapIndex",
+      "type": "uint32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "kemHash",
+      "type": "bytes32"
+     }
+    ],
+    "internalType": "struct IPqChatTreeViews.TreeLeafView[]",
+    "name": "",
+    "type": "tuple[]"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.treeNodeKey": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "node",
+    "type": "uint256"
+   }
+  ],
+  "name": "treeNodeKey",
+  "outputs": [
+   {
+    "internalType": "bytes",
+    "name": "",
+    "type": "bytes"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.treeNodes": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "first",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "count",
+    "type": "uint256"
+   }
+  ],
+  "name": "treeNodes",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "hash",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "keyHash",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "epoch",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct IPqChatTreeViews.TreeNodeView[]",
+    "name": "",
+    "type": "tuple[]"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChatTreeViews.treeOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "treeOf",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "treeId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint32",
+    "name": "leaves",
+    "type": "uint32"
+   },
+   {
+    "internalType": "uint32",
+    "name": "used",
+    "type": "uint32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "treeHash",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "genesisTreeHash",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "headEpochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint32",
+    "name": "owed",
+    "type": "uint32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
  "IUARegistry.checkedOf": {
   "inputs": [
    {

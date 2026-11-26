@@ -93,6 +93,15 @@ codes! {
     HomeUnsigned,
     /// a leave or removal naming an epoch more than 16 below the home's head (C9, the contract's `PqChatExitLag`; D2-4)
     ExitLag,
+    /// a tree call whose reads did not settle within its bound of read rounds (CLI-PQC-17)
+    TreeReads,
+    /// a tree creation over the chain's one-transaction cap, or a commit whose required piece does not fit (spec §13)
+    TreeTooLarge,
+    /// a tree session on a home that keeps no signatures (C1, the contract's `PqChatTreeSigStore`)
+    TreeHomeNone,
+    /// a commit whose pieces another sender landed out of order, so that the piece left cannot pay the completion: void,
+    /// rebuilt with a new nonce (C37, codex-r3-12)
+    TreeVoid,
 }
 
 impl fmt::Display for PqChatError {

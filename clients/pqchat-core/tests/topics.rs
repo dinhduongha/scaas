@@ -75,6 +75,7 @@ fn two_chains(w: &World) -> Arc<PqChat> {
         chain_uid: uid(8),
         registry: REGISTRY.into(),
         factory: FACTORY.into(),
+        tree_gas: None,
     });
     PqChat::with_net(
         w.app.clone(),

@@ -257,6 +257,7 @@ pub fn conf() -> PqChatConfig {
             chain_uid: hex(&[7; 32]),
             registry: REGISTRY.into(),
             factory: FACTORY.into(),
+            tree_gas: None,
         }],
         ..PqChatConfig::default()
     }

@@ -45,6 +45,10 @@ pub mod signed;
 pub mod store;
 pub mod stores;
 pub mod topics;
+// plan T7 (controller call 2026-11-26): the tree mode is Rust-only in this round; its calls take and return the SDK's tree
+// values (named JSON, handles), mirrored for the bindings with the app's tree screens
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+pub mod tree;
 
 pub use drops::{DropCounts, DropReason};
 pub use error::PqChatError;
@@ -86,6 +90,10 @@ pub struct ChainConf {
     pub chain_uid: String,
     pub registry: String,
     pub factory: String,
+    /// The chain's TreeKEM gas rows (release data, the SDK's `PqTreeGas` as JSON; spec §13): the plan of a tree commit and the
+    /// cap of a creation in one transaction. Absent: one transaction each, held to the quote.
+    #[serde(default)]
+    pub tree_gas: Option<String>,
 }
 
 /// The crate's configuration: the chains it serves.
