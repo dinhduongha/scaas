@@ -1,0 +1,15 @@
+# PqChat TreeKEM T4 (the rest) to T9 on branch treekem-t4-t10 (cut from bcbfb4a7a); T10a / T10b are the controller's
+# step | commit | rc | counts
+t4 node lib: capped cargo test --lib | 2de961ec8 | 0 | 906 passed (tree_set 5, an_exit_waits_within_the_lag 1 new)
+t4 node clippy --all-targets -D warnings | 2de961ec8 | 0 | clean
+t4 mutants (runs/2026-11-26-pqchat-treekem-t4b-mutants.py) | 2de961ec8 | 0 | 10 mutants, 10 killed
+t4 docs_check check / paths | 2de961ec8 | 0 | 0 errors, 7 budget warnings as before; 0 machine paths
+t5 sdk: capped cargo test --features pqchat-records --lib pqchat_tree | 728bdf514 | 0 | 4 passed
+t5 sdk: clippy --features pqchat-records --lib --tests -D warnings | 728bdf514 | 0 | clean
+t5 mutants (clients/scaas-sdk/runs/2026-11-26-pqchat-treekem-t5-mutants.py) | 728bdf514 | - | 5 load (check), not run: no free capped slot during the round's matrix
+t6 pqchat-core: clippy --all-targets -D warnings | 1fd3912b9 | 0 | clean (tests/chain_tree.rs compiled)
+t6 pqchat-core: check_reads.py / gen_abi.py --check | 1fd3912b9 | 0 | 56 reads (42 trusted), 19 writes, 0 refused; abi.json equal
+t6 pqchat-core: cargo test (non-ignored) | 1fd3912b9 | - | not run: waited about 70 min for a capped slot, stopped (the matrix's three slots busy)
+t7 bind (runs/2026-11-17-pqchat-core-bind.sh) | 1fd3912b9 | - | not run; the tree module is frb-ignored (Rust-only this round), four error codes appended
+t8 pqc-chain chain_tree_session (anvil, forge script) | 1fd3912b9 | - | not run (no slot); the Nethermind rows: T3d's replica run (runs/2026-11-25-treekem512-nethermind.py), not repeated
+t9 docs_check check / paths, test_docs_check | 1fd3912b9 | 0 | 0 errors, 7 budget warnings as before; 0 machine paths; ok
