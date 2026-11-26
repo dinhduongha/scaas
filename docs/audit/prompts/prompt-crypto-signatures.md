@@ -153,7 +153,7 @@ alone.
   (`@noble/post-quantum` 0.7.1 `ml_dsa44` / `ml_dsa65` / `ml_dsa87`), `src/uakey.js`, `src/ua-verify.js`
 - **Falcon / FN-DSA** (`fndsa512` 0x0132, `fndsa1024` 0x0135; round-3 specification v1.2, padded form; FIPS 206 risk accepted,
   CTR-UA-40 Q1): Solidity `src/ua/FnDsa.sol` (pure Solidity on every EVM chain, no precompile: CTR-UA-40); `ua-rs`
-  `src/falcon.rs` over the vendored PQClean `vendor/pqclean-falcon-seeded` (no Falcon on wasm32: say what a wasm caller gets);
+  `src/falcon.rs` over the vendored PQClean `vendor/pqclean-falcon-seeded` (repository root) (no Falcon on wasm32: say what a wasm caller gets);
   clientkeys `src/pq.js` (`falcon512padded`, `falcon1024padded`); Soroban: the kind tag in `ua-registry/src/digest.rs` (say
   whether Soroban verifies or refuses it)
 - **SLH-DSA-SHA2-128s** (`slhdsa128s` 0x0133; FIPS 205): Solidity `src/ua/SlhDsa.sol`; `ua-rs` `src/pq.rs` (crate `slh-dsa`

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Feature `pq`: PQClean Falcon-padded-512 / -1024 (clean), vendored with its randomness passed in
-//! (vendor/pqclean-falcon-seeded, MD-8; replaces `pqcrypto-falcon`, RUSTSEC-2026-0162/-0163/-0165). Every length is checked
+//! (the repository's vendor/pqclean-falcon-seeded, MD-8; replaces `pqcrypto-falcon`, RUSTSEC-2026-0162/-0163/-0165). Every length is checked
 //! here before a pointer reaches the C code, which reads fixed sizes. On wasm32 (no libc for the C code, no
-//! `cfg(scaas_falcon)`) the same calls run through falcon-rs's round-3 module ([`soft`], CLI-UAL-66), after the same checks.
+//! `cfg(scaas_falcon)`) the same calls run through the vendored falcon-rs 0.3.1 ([`soft`], CLI-UAL-66), after the same checks.
 //! UNAUDITED.
 
 /// The parameters of one degree: log2 of the degree, public key, secret key and padded signature lengths.

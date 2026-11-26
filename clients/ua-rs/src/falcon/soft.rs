@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! Falcon-padded-512 / -1024 on wasm32 (CLI-UAL-66): falcon-rs 0.4.0's `round3` module (falcon-rs 0.3.1, a port of the
-//! round-3 reference), the format and algorithm of the vendored PQClean that native builds use. The key pair of a 48-byte
+//! Falcon-padded-512 / -1024 on wasm32 (CLI-UAL-66): falcon-rs 0.3.1 (vendor/falcon-rs-0.3.1, a port of the round-3
+//! reference, feature `fpemu`), the format and algorithm of the vendored PQClean that native builds use. The key pair of a 48-byte
 //! seed: SHAKE256 of the seed as keygen's stream (seeded.c `keypair`). A signature: `rnd` = the 40-byte nonce, then the 48-byte
 //! seed of the sampler's SHAKE256 stream, `HashToPoint(SHAKE256(nonce ‖ m))`, padded, retried on the same stream when it does
 //! not fit (seeded.c `do_sign`). Verify: the padded format only, trailing bytes zero. The caller (src/falcon.rs) checks every
 //! length first. tests/fndsa_vrfy.rs includes this file as it is and runs it beside PQClean on every row. Secrets in this
 //! file's buffers are cleared before return; falcon-rs's own internals clear none (a stated residual, as PQClean's).
 //! UNAUDITED.
-use ::falcon::round3::falcon as r3;
-use ::falcon::round3::shake::InnerShake256Context;
+use ::falcon::falcon as r3;
+use ::falcon::shake::InnerShake256Context;
 
 fn wipe(b: &mut [u8], rng: &mut InnerShake256Context) {
     b.fill(0);

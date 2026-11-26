@@ -690,20 +690,8 @@ dependencies = [
 [[package]]
 name = "falcon-rs"
 version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97afa6b3e692aa0c332b883f18e3f999e99df06331ac93196b60805950b0f65f"
 dependencies = [
  "libm",
- "zeroize",
-]
-
-[[package]]
-name = "falcon-rs"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7efd548cc428112069ef69eb36713d1e9a7bd577aa2b500742777bcb9d3a1d26"
-dependencies = [
- "falcon-rs 0.3.1",
  "zeroize",
 ]
 
@@ -1435,7 +1423,7 @@ dependencies = [
  "cc",
  "curve25519-dalek",
  "ed25519-dalek",
- "falcon-rs 0.4.0",
+ "falcon-rs",
  "frost-core",
  "frost-secp256k1",
  "getrandom",

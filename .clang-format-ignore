@@ -8,9 +8,10 @@
 */*/*/legacy/*/*
 # vendored: LaZer (pqz-core/NOTICE), PQClean Falcon
 pqz-core/pqzl/lazer/*
-clients/ua-rs/vendor/*/*
-clients/ua-rs/vendor/*/*/*
-clients/ua-rs/vendor/*/*/*/*
+vendor/*/*
+vendor/*/*/*
+vendor/*/*/*/*
+vendor/*/*/*/*/*
 # generated: the parameter sets' headers (gen_set.py, the LaZer code generator), gen_aes.py, cbindgen
 pqz-core/params/sets/*/*.h
 pqz-core/pqzl/params/*/*.h

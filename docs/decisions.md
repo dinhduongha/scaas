@@ -11359,7 +11359,7 @@ Advisories: RUSTSEC-2026-0387 (`crypto-bigint` 0.5.5): T3a moved `k256` and `p25
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: decisions.md#CLI-UAL-52 · superseded-by: —
 
 **Rule.** Every question as recommended, with its outcome.
-- **Q1 Falcon keys from the seed:** T0 compares PQClean's seeded keygen with noble 0.7.1. Outcome: equal byte for byte (102 comparisons, 0 differ, negative control red; `e79af3a1`), so `ua-rs` calls a vendored PQClean (`clients/ua-rs/vendor/pqclean-falcon-seeded/`, T3b `1ce2b70e`) and the Falcon vector rows stay. BUILT.
+- **Q1 Falcon keys from the seed:** T0 compares PQClean's seeded keygen with noble 0.7.1. Outcome: equal byte for byte (102 comparisons, 0 differ, negative control red; `e79af3a1`), so `ua-rs` calls a vendored PQClean (`clients/ua-rs/vendor/pqclean-falcon-seeded/`, T3b `1ce2b70e`; at the repository root's `vendor/pqclean-falcon-seeded/` since 2026-11-26, CLI-UAL-66) and the Falcon vector rows stay. BUILT.
 - **Q2 KEM key from the seed:** derived; a random key stays possible for an owner who wants deletion to bound something. BUILT (CLI-SGN-43).
 - **Q3 keystore KDF:** scrypt in the clientkeys vault v1 format. BUILT (CLI-UAL-18).
 - **Q4 browsers:** a wasm32 binding of `ua-rs` after the size and speed numbers; browsers sign with clientkeys until then. PLANNED.
@@ -11781,6 +11781,21 @@ Change (2026-11-21, the spec's revision 2 after Fable's review; controller call,
 **Cost if wrong.** Anyone learns the exact size from the public object, or a client shows a file other than the one the message signed.
 **Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
 Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C10, C15, C17, C22; owner: no): the header's `owner: yes` corrected to `owner: no` (review F11; the owner's part is ARCH-POS-19 Q4, `ar://`). Old, `ct ‖ 0x00…` up to the bucket with `ctSha256` of `ct` (the GCM tag ends in a non-zero byte, so stripping the zeros gave the exact size, review F1, P1); new, the padding inside the AEAD as above, which changes UA-7's `ct` for `ar://` files (UA-7 §6.4.1 Change). The plaintext `size` and `sha256` checked in `open_file` (review F3); buckets in integers with edge rows (review F20); the in-memory cap and the exact-length read (review F5).
+
+### CLI-UAL-66 — Falcon on wasm32 through falcon-rs's round-3 module, after every FN-DSA vector row passes
+- old: — · status: current · owner: yes · date: 2026-11-26 · normative: clients/ua-libraries.md#CLI-UAL-66 · superseded-by: —
+
+**Rule.** (Summary; normative [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-66).) On `wasm32-unknown-unknown` the Falcon kinds
+(`0x0132`, `0x0135`) key, sign and verify in `ua-rs` through falcon-rs 0.3.1 (MIT), vendored as published in `vendor/falcon-rs-0.3.1/` at the repository root (owner), with `fpemu` (integer floating point; controller call), in the
+PQClean / EIP-8052 round-3 format; native builds keep the vendored PQClean. The dependency stays only while every FN-DSA vector row
+gives PQClean's verdict through it and its keys and fixed-randomness signatures equal PQClean's byte for byte, natively and in wasm32.
+**Status.** BUILT on branch `ua-rs-wasm-fndsa`, UNAUDITED: 220 rows (48 accept, 172 refuse) equal to PQClean, natively and in wasm32;
+48 wallet cases byte-equal; 12 mutants of the glue, every one killed.
+**Why.** PQClean's C needs a libc that wasm32 lacks, so the Falcon kinds were `KindUnavailable` there, and a missing primitive never
+disables a kind ([ARCH-POS-18](#ARCH-POS-18)); the web wallet must sign, not only verify.
+**Cost if wrong.** A browser wallet whose Falcon key or signature differs from the native one: another UA for the same seed, or
+signatures the contracts refuse.
+**Source.** Owner 2026-11-26 (chat, through the coordinator): first "Ok" to the proposal "fn-dsa-vrfy 0.4.0 by Thomas Pornin, wasm32 only, after every FN-DSA vector row passes"; fn-dsa-vrfy failed the rows (FIPS 206 `mu` hashing; no SCaaS key decodes), so, verbatim: "a. Thử crate khác: falcon-rs trước, nếu vẫn lệch thì tự port bản Falcon round 3 sang Rust." (try another crate, falcon-rs first; if it still differs, port Falcon round-3 to Rust ourselves); and, relayed: the web wallet must sign on wasm32 too, so the check covers signing. falcon-rs passed, so no port was written. Then, relayed: the audited code lives in the repository under a vendor directory; verbatim "vendors ở ngoài cùng" (at the repository root) and "Có, chuyển đi" (move PQClean there too); the name `vendor/` is the controller's recommendation, which the owner asked for. Controller call: `fpemu` for signing. Evidence: `clients/runs/2026-11-26-ua-rs-wasm-fndsa-summary.txt`.
 
 ## 40. Clients — network crate (`scaas-rpc`)
 

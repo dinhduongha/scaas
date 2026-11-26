@@ -1033,7 +1033,7 @@ flowchart LR
 ## 16. Repository layout
 
 <details>
-<summary><b>Top-level folders</b> — <code>smartcontracts/</code>, <code>scaas-node/</code>, <code>pqz-core/</code>, <code>clients/</code>, <code>scaas-pqz-verifier/</code>, <code>docs/</code>, <code>scripts/</code></summary>
+<summary><b>Top-level folders</b> — <code>smartcontracts/</code>, <code>scaas-node/</code>, <code>pqz-core/</code>, <code>clients/</code>, <code>scaas-pqz-verifier/</code>, <code>docs/</code>, <code>scripts/</code>, <code>vendor/</code></summary>
 
 | Path | What |
 |---|---|
@@ -1043,6 +1043,7 @@ flowchart LR
 | `scaas-pqz-verifier/` | The reference PQZ verifier (off-chain) for `OFFCHAIN`-mode tokens ([CTR-PQZ-27](docs/contracts/pq-zero-knowledge.md#CTR-PQZ-27)). See [`scaas-pqz-verifier/README.md`](scaas-pqz-verifier/README.md) |
 | `pqz-core/` | The post-quantum proof engine: `pqzl`, `pqzh`, the statements, the FFI and the node plugin. See [`pqz-core/README.md`](pqz-core/README.md) |
 | `docs/` | Product docs — start at [`docs/README.md`](docs/README.md). Check: `python3 scripts/docs_check.py check` |
+| `vendor/` | Third-party sources, unedited: `pqclean-falcon-seeded` (PQClean Falcon with the randomness passed in, `ua-rs` natively) and `falcon-rs-0.3.1` (`ua-rs`'s Falcon on wasm32). See [`vendor/README.md`](vendor/README.md) |
 | `scripts/` | [`capped`](scripts/capped): run a heavy build in a 4 GB systemd scope, at most three at a time machine-wide (`CAPPED_SLOTS`); [`docs_check.py`](scripts/docs_check.py): the docs checker; [`size_gate.py`](scripts/size_gate.py): the contract size gate; [`mutant_guard.py`](scripts/mutant_guard.py): the mutant runners' guard ([ARCH-POS-23](docs/decisions.md#ARCH-POS-23)) |
 
 </details>

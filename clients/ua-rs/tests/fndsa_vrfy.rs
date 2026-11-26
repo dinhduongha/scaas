@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Gate of the wasm32 Falcon path (owner 2026-11-26, CLI-UAL-66), natively: every FN-DSA row of tests/fndsa/rows.rs through
-//! PQClean (`pq::verify_raw`) and through src/falcon/soft.rs (falcon-rs 0.4.0's round-3 module, the code wasm32 runs,
+//! PQClean (`pq::verify_raw`) and through src/falcon/soft.rs (the vendored falcon-rs 0.3.1, `fpemu`, the code wasm32 runs,
 //! included here as it is), after src/falcon.rs's length checks; with `vectors`, the wallet cases of tests/fndsa/sign.rs:
 //! falcon-rs's key pair of each HKDF seed and its signature with the same fixed randomness byte-equal to PQClean's.
-//! falcon-rs's FIPS 206 API (`FnDsaSignature::verify`) is counted too: it hashes `nonce ‖ 0x00 ‖ len(ctx) ‖ ctx ‖ m`, not
+//! falcon-rs's FIPS 206 API (`FnDsaSignature::verify`, its `safe_api`) is counted too: it hashes `nonce ‖ 0x00 ‖ len(ctx) ‖ ctx ‖ m`, not
 //! round 3's `nonce ‖ m`, so it refuses every accept row. fn-dsa-vrfy 0.4.0 failed this gate
 //! (clients/runs/2026-11-26-ua-rs-wasm-fndsa-summary.txt). tests/fndsa/wasm runs the same rows and cases in wasm32. UNAUDITED.
 #[path = "fndsa/rows.rs"]
