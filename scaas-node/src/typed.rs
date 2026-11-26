@@ -6470,6 +6470,21 @@ mod tests {
             .unwrap_err();
             assert!(e.starts_with("BAD_PAYLOAD: args.c"), "{e}");
         }
+        // a whole path on a path-less record (node keys and ciphertexts together, so the shape rule above passes it): refused
+        // by the path-less rule alone; the control, the same record as a path commit, parses
+        let with_path = |a: &mut Value| {
+            pathless(a);
+            big(a, 512, 1, 1)
+        };
+        pair(
+            "commit",
+            &|a| {
+                with_path(a);
+                a["c"]["pathless"] = json!(false)
+            },
+            &with_path,
+            "c.pathless: Adds only",
+        );
         // treeRemove (C21: at most 20 leafy UAs and 32 admins)
         pair(
             "treeRemove",
