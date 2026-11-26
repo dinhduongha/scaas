@@ -90,6 +90,7 @@ impl PqChat {
     /// equal under the same id and the two kept signatures equal with their `msig` version tags stripped
     /// ([`AppUaSig::without_tags`]), since a copy carries the tag of the replica registry's current version and so another
     /// `sigHash`; the signed content and every other signature byte the home's. Either kept signature absent: [`Self::replica`].
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     pub fn replica_kept(
         home: &Epoch,
         home_sig: Option<&AppUaSig>,

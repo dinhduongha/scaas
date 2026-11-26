@@ -172,7 +172,7 @@ contract UARegistryZetherTest is UARegistryBase {
     }
 
     /// S13: the Zether tag and the UA Schnorr tag never accept each other's signature; the verifier deploys on any chain
-    /// (owner ruling 2026-10-31, CTR-ZTH-02 superseded): the SCaaS testnet 7622 and the mainnet 22776.
+    /// (owner ruling 2026-10-31, CTR-ZTH-02 superseded): the SCaaS testnet 22779 and the mainnet 22777.
     function test_zetherVerifiers() public {
         SchnorrBls12381Verifier ua = new SchnorrBls12381Verifier();
         bytes memory y = ZetherKeys.pub(X1, true);
@@ -185,9 +185,10 @@ contract UARegistryZetherTest is UARegistryBase {
         assertFalse(zbls.verify(y, keccak256("n"), zsig));
         assertFalse(zbls.verify(ZetherKeys.pub(X1, false), m, ZetherKeys.schnorr(X1, m, false)), "a bn254 key");
         assertFalse(zbls.verify(y, m, new bytes(160)), "malformed: false, no revert");
-        for (uint256 c = 7622; c <= 22776; c += 22776 - 7622) {
-            vm.chainId(c);
-            assertTrue(new ZetherSchnorrBls12381Verifier().verify(y, m, zsig), "open on 7622 and 22776");
+        uint256[2] memory ids = [uint256(22779), 22777];
+        for (uint256 i; i < ids.length; ++i) {
+            vm.chainId(ids[i]);
+            assertTrue(new ZetherSchnorrBls12381Verifier().verify(y, m, zsig), "open on 22779 and 22777");
         }
     }
 }

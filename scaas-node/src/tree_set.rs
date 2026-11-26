@@ -22,6 +22,8 @@ pub const TREE_SET_REFUSED: &str = "TREE_SET_REFUSED";
 pub const TREE_SET_SENDING: &str = "TREE_SET_SENDING";
 /// A piece job on its own whose record still misses other pieces: it waits for them (another sender may land them).
 pub const TREE_SET_WAITING: &str = "TREE_SET_WAITING";
+/// A `commit` job whose epoch id holds another record (the author signed two with one nonce): its set can never land.
+pub const TREE_SET_SUPERSEDED: &str = "TREE_SET_SUPERSEDED";
 
 /// A node key: `0x01 ‖ ek ‖ pk_X`.
 const KEM_PK: usize = 1601;
@@ -196,6 +198,13 @@ pub fn whole(args: &Value) -> Result<Set, String> {
         if hash("Wrap", w) != b32(h) {
             return bad(format!("Welcome wrap {i} does not hash to wrapHashes[{i}]"));
         }
+        // D-12: the wrap names its Add's member and key (the contract's `_storeWraps` refuses another)
+        let add = &arr(&c["adds"])[i];
+        if b32(&w["member"]) != b32(&add["ua"]) || num(&w["keyId"]) != num(&add["keyId"]) {
+            return bad(format!(
+                "Welcome wrap {i} names another member or key than adds[{i}]"
+            ));
+        }
     }
     Ok(Set {
         eid: epoch_id(sid, author, nonce),
@@ -206,7 +215,7 @@ pub fn whole(args: &Value) -> Result<Set, String> {
     })
 }
 
-/// What of a set is in state at one block.
+/// What of a set is in state at one block; `signed`: the stored record's `treeHash` and `ctListHash`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Landed {
     pub record: bool,
@@ -214,6 +223,16 @@ pub struct Landed {
     pub keys: bool,
     pub cts: Vec<bool>,
     pub wraps: Vec<bool>,
+    pub signed: Vec<B256>,
+}
+
+/// The job record's `treeHash` and `ctListHash`, as [`Landed::signed`] holds the stored one's (A-7).
+pub fn signed_of(s: &Set) -> Vec<B256> {
+    let c = &s.args["c"];
+    vec![
+        b32(&c["treeHash"]).unwrap_or_default(),
+        b32(&c["ctListHash"]).unwrap_or_default(),
+    ]
 }
 
 impl Landed {
@@ -225,6 +244,7 @@ impl Landed {
             keys: s.keys > 0,
             cts: vec![true; s.cts],
             wraps: vec![true; s.adds],
+            signed: signed_of(s),
         }
     }
 }
@@ -271,6 +291,12 @@ fn path_op(s: &Set, a: usize, b: usize) -> Value {
 
 fn wraps_op(s: &Set, a: usize, b: usize) -> Value {
     json!({"epochId": format!("{:#x}", s.eid), "first": a.to_string(), "wraps": arr(&s.args["wraps"])[a..b]})
+}
+
+/// The record with its list only (D-12: simulated before the record goes alone, so a list the contract refuses is seen first).
+pub fn record_and_list(s: &Set) -> Value {
+    json!({"c": s.args["c"], "ctTargets": s.args["ctTargets"], "ctHashes": s.args["ctHashes"], "nodeKeys": [], "cts": [],
+        "wraps": [], "sig": s.args["sig"]})
 }
 
 /// The record alone: `commit` with every piece array empty (C37's first transaction when the whole does not fit).
@@ -425,7 +451,21 @@ pub fn piece(
                     ));
                 }
             }
-            have.keys = held.len() == r.key_hashes.len();
+            // A-5: the contract takes the node keys whole, once
+            if held.len() != r.key_hashes.len() {
+                return bad(format!(
+                    "node keys: {} signed, {} held",
+                    r.key_hashes.len(),
+                    held.len()
+                ));
+            }
+            have.keys = true;
+        }
+        // A-4: a ciphertext before its list waits for the list (another sender may land it)
+        "addPath" if r.cts > 0 && ct_hashes.is_empty() => {
+            return Ok(Some(format!(
+                "{TREE_SET_WAITING}: the list is not stored yet"
+            )));
         }
         "addPath" => {
             let first = num(&args["firstCt"]).unwrap_or(u64::MAX) as usize;
@@ -484,7 +524,7 @@ pub fn piece(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn rows(name: &str) -> Value {
@@ -507,7 +547,7 @@ mod tests {
     }
 
     /// Every commit step of `tree-secrets.json`'s scenarios as a `commit` job's args (the signature a placeholder).
-    fn sets() -> Vec<Value> {
+    pub(crate) fn sets() -> Vec<Value> {
         let v = rows("tree-secrets.json");
         let mut out = Vec::new();
         for sc in arr(&v["scenarios"]) {
@@ -738,6 +778,55 @@ mod tests {
         assert!(piece("addPath", &bad, &r, &list, &latest)
             .unwrap_err()
             .starts_with(TREE_SET_REFUSED));
+    }
+
+    /// The T4-T9 review's A-4, A-5, D-12: a ciphertext job before its list waits for the list (never refused as a bad hash);
+    /// node keys short of the signed count are refused (the contract takes them whole); a Welcome wrap naming another member
+    /// than its Add is refused before anything is sent.
+    #[test]
+    fn a_piece_early_a_short_key_list_and_a_wrap_of_another_member() {
+        let a = sets()
+            .into_iter()
+            .find(|a| {
+                arr(&a["cts"]).len() > 1
+                    && arr(&a["nodeKeys"]).len() > 1
+                    && !arr(&a["wraps"]).is_empty()
+            })
+            .unwrap();
+        let s = whole(&a).unwrap();
+        let r = Rec::of(&a["c"]);
+        let latest = Landed {
+            record: true,
+            cts: vec![false; s.cts],
+            wraps: vec![false; s.adds],
+            ..Landed::default()
+        };
+        let job = json!({"epochId": "0x", "firstCt": "0", "cts": [a["cts"][0]]});
+        let w = piece("addPath", &job, &r, &[], &latest).unwrap().unwrap();
+        assert!(w.starts_with(TREE_SET_WAITING) && w.contains("list"), "{w}");
+        let mut keys = a["nodeKeys"].clone();
+        keys.as_array_mut().unwrap().pop();
+        let e = piece(
+            "addPathKeys",
+            &json!({"epochId": "0x", "nodeKeys": keys}),
+            &r,
+            &[],
+            &latest,
+        )
+        .unwrap_err();
+        assert!(
+            e.starts_with(TREE_SET_REFUSED) && e.contains("node keys"),
+            "{e}"
+        );
+        let mut b = a.clone();
+        b["wraps"][0]["member"] = json!(format!("{:#x}", B256::repeat_byte(9)));
+        // the wrap's hash moved with it: signed under its own hash, so only the member check refuses it
+        b["c"]["wrapHashes"][0] = json!(format!("{:#x}", hash("Wrap", &b["wraps"][0]).unwrap()));
+        let e = whole(&b).unwrap_err();
+        assert!(
+            e.contains("names another member or key than adds[0]"),
+            "{e}"
+        );
     }
 
     #[test]

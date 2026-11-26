@@ -32,7 +32,7 @@ contract FalsePayToken {
 }
 
 /// A `MandateWallet` of `owner` holding 10 000 of a kind-NORMAL token, a mandate for `delegate` (1 000 per payment,
-/// 2 500 per day, 30 days) and one approved payee; chain 7622 with its real `chain_uid`, no registry (every party native).
+/// 2 500 per day, 30 days) and one approved payee; chain 22779 with its real `chain_uid`, no registry (every party native).
 /// ua-mtx-merge T3b: ids `bytes32` (the EOAs zero-padded), signed entries on `UAEnvelope` + `UASig` (Q6).
 abstract contract MandateFixture is V2Fixture {
     uint256 internal constant OWNER_PK = 0x0A11CE;
@@ -45,7 +45,7 @@ abstract contract MandateFixture is V2Fixture {
     MandateWallet internal w;
 
     function setUp() public virtual {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         t = _normal(address(this), 0, address(this));
         w = new MandateWallet(_id(owner), UID_, address(0), false);
@@ -735,7 +735,7 @@ contract MandateWalletTest is MandateFixture {
         (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt_,) = w.eip712Domain();
         assertEq(name, "SCaaS MandateWallet");
         assertEq(version, "1");
-        assertEq(chainId, 7622);
+        assertEq(chainId, 22779);
         assertEq(vc, address(w));
         assertEq(salt_, UID_);
         assertEq(w.chainUid(), UID_);

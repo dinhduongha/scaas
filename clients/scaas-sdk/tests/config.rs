@@ -30,7 +30,7 @@ fn profile(key: &str) -> ChainProfile {
     ChainProfile {
         key: key.into(),
         family: if evm { Family::Evm } else { Family::Near },
-        chain_id: evm.then_some(7622),
+        chain_id: evm.then_some(22779),
         chain_uid: UID.into(),
         rpc: vec![
             endpoint("http://127.0.0.1:1/"),

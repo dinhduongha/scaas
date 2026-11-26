@@ -59,7 +59,7 @@ contract PqzRelayTest is PqzFixture {
     function test_uaBindingOfAnEoaKat() public {
         address at = address(0x5CAa01);
         vm.etch(at, address(tok).code);
-        vm.chainId(7622);
+        vm.chainId(22779);
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(
             MetaTxLib.pad(0x1111111111111111111111111111111111111111),
             hex"c0de",
@@ -73,7 +73,7 @@ contract PqzRelayTest is PqzFixture {
         );
         assertEq(NormalPqzToken(at).chainUid(), PQZ_UID);
         assertEq(
-            NormalPqzToken(at).envelopeBinding(m), 0x2bf9ed02f291a24e973d7013c788d50aae3bb9844c40c4c3ca5e9a37419abd33
+            NormalPqzToken(at).envelopeBinding(m), 0xbf40b3658daa449a3561396f8d4503b0f4ed5f9b3578916b1de8219b5709dfce
         );
     }
 

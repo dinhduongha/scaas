@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Verify every contract of forge broadcasts (Deploy.s.sol, the Zether e2e) and of the PQZ e2e runs on Blockscout (owner
-# 2026-10-31, SCaaS testnet 7622).
+# 2026-10-31, SCaaS testnet).
 # usage: verify-blockscout.sh [broadcast.json ...] [e2e-run-log ...]  (paths relative to smartcontracts/evm; an argument
-#   ending in .json is a broadcast; default broadcast/Deploy.s.sol/7622/run-latest.json and, when present,
-#   broadcast/ZetherE2E.s.sol/7622/run-latest.json)
+#   ending in .json is a broadcast; default broadcast/Deploy.s.sol/22779/run-latest.json and, when present,
+#   broadcast/ZetherE2E.s.sol/22779/run-latest.json)
 #   env BLOCKSCOUT_API (default http://127.0.0.1:8548/api: the SCaaS testnet's Blockscout API, host port 8548 since owner 2026-11-20), RPC (default http://127.0.0.1:8545; loopback: the host's LAN
 #   address is not fixed),
 #   FOUNDRY_PROFILE (default scaas-testnet)
-# Run after every 7622 reset or deploy. Broadcast: the CREATE / CREATE2 rows and the contracts they create
+# Run after every SCaaS testnet reset or deploy. Broadcast: the CREATE / CREATE2 rows and the contracts they create
 # (additionalContracts: RelayFeeExecutor, the SmartKeyAccount implementation, the token / DEX implementations); the
 # constructor arguments are the tail of each init code after the artifact's creation bytecode. A child forge cannot
 # name: an EIP-1167 clone (a factory token, `createToken`) is checked as below, an SSTORE2 data contract (code starting
@@ -41,8 +41,8 @@ while [ $# -gt 0 ] && [[ "$1" == *.json ]]; do
     shift
 done
 if [ ${#bs[@]} -eq 0 ]; then
-    bs=(broadcast/Deploy.s.sol/7622/run-latest.json)
-    [ -f broadcast/ZetherE2E.s.sol/7622/run-latest.json ] && bs+=(broadcast/ZetherE2E.s.sol/7622/run-latest.json)
+    bs=(broadcast/Deploy.s.sol/22779/run-latest.json)
+    [ -f broadcast/ZetherE2E.s.sol/22779/run-latest.json ] && bs+=(broadcast/ZetherE2E.s.sol/22779/run-latest.json)
 fi
 for B in "${bs[@]}"; do [ -f "$B" ] || {
     echo "no broadcast $B" >&2

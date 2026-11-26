@@ -22,7 +22,7 @@ import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /// Shared writer of the account-side KATs (metatx.md §15: the `SmartKeyAccount` vector is a `MetaTransaction` vector in
-/// its own domain; the `MandateWallet` one, since ua-mtx-merge T3b, its `UA<Op>` structs), chain 7622 with its real
+/// its own domain; the `MandateWallet` one, since ua-mtx-merge T3b, its `UA<Op>` structs), chain 22779 with its real
 /// `chain_uid`.
 /// `WRITE_KAT=true forge test --match-path test/account/AccountKat.t.sol` rewrites them; clientkeys reads them.
 abstract contract MtxKatBase is Test {
@@ -39,7 +39,7 @@ abstract contract MtxKatBase is Test {
                 ),
                 keccak256(bytes(name)),
                 keccak256("1"),
-                uint256(7622),
+                uint256(22779),
                 vc,
                 UID
             )
@@ -59,7 +59,7 @@ abstract contract MtxKatBase is Test {
         assertEq(digest, keccak256(abi.encodePacked(hex"1901", _domainSep(name, vc), m.hashStruct())), "digest formula");
         vm.serializeString(k, "domain_name", name);
         vm.serializeString(k, "domain_version", "1");
-        vm.serializeString(k, "chain_id", "7622");
+        vm.serializeString(k, "chain_id", "22779");
         vm.serializeString(k, "verifying_contract", vm.toString(vc));
         vm.serializeString(k, "salt", vm.toString(UID));
         vm.serializeString(k, "domain_separator", vm.toString(_domainSep(name, vc)));
@@ -101,7 +101,7 @@ contract SmartKeyAccountKatTest is MtxKatBase {
     uint256 internal constant SEED = 0x5EED;
 
     function test_smartKeyAccountKat() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         SmartKeyAccountFactory fac = new SmartKeyAccountFactory(UID);
         SubjectKey memory first = SubjectKey(KeyKind.SECP256K1, bytes32(uint256(uint160(vm.addr(SEED)))), 0, 0, 0);
@@ -170,7 +170,7 @@ contract MandateWalletKatTest is MtxKatBase {
     MandateWallet internal w;
 
     function test_mandateWalletKat() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         tok = NormalToken(
             EnvKit.clone(
@@ -194,7 +194,7 @@ contract MandateWalletKatTest is MtxKatBase {
 
         vm.serializeString("kat", "domain_name", "SCaaS MandateWallet");
         vm.serializeString("kat", "domain_version", "1");
-        vm.serializeString("kat", "chain_id", "7622");
+        vm.serializeString("kat", "chain_id", "22779");
         vm.serializeString("kat", "verifying_contract", vm.toString(address(w)));
         vm.serializeString("kat", "salt", vm.toString(UID));
         vm.serializeString("kat", "domain_separator", vm.toString(_domainSep("SCaaS MandateWallet", address(w))));
@@ -351,7 +351,7 @@ contract Erc7739KatTest is MtxKatBase {
                 keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
                 keccak256("Example App"),
                 keccak256("2"),
-                uint256(7622),
+                uint256(22779),
                 APP
             )
         );
@@ -384,9 +384,9 @@ contract Erc7739KatTest is MtxKatBase {
     }
 
     function test_erc7739Kat() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         MandateWallet w = new MandateWallet(MetaTxLib.pad(vm.addr(OWNER_PK)), UID, address(0), false);
-        vm.serializeString("kat", "chain_id", "7622");
+        vm.serializeString("kat", "chain_id", "22779");
         vm.serializeString("kat", "salt", vm.toString(UID));
         vm.serializeString("kat", "smart_key_account", _ska());
         vm.serializeString("kat", "mandate_wallet", _mw(w));

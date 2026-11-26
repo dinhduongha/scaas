@@ -705,7 +705,7 @@ contract TaxTest is RegFixture {
     /// The vector's fixed domain (a token's shape: name, version, chainId, verifyingContract, salt), so the row does not move
     /// with a deployment address; the tests above sign the same struct hash in a live token's domain and land.
     string internal constant VEC_NAME = "SCaaS MetaToken";
-    uint256 internal constant VEC_CHAIN = 7622;
+    uint256 internal constant VEC_CHAIN = 22779;
     address internal constant VEC_TOKEN = address(0x7A7a7A7a7a7a7a7A7a7a7a7A7a7A7A7A7A7A7a7A);
     bytes32 internal constant VEC_SALT = keccak256("scaas.paytax.vector");
 

@@ -171,7 +171,7 @@ finalized before its run, or the run covers the rest and lists the FRAME part as
 - After the fixes, only the units whose scope files changed rerun; each rerun reads the tag→fix diff plus the unit.
 - An unchanged unit keeps its result, marked "unchanged since `<SHA>`".
 
-**Later rounds** (the non-EVM add-on audits, the gate before mainnet 22776) add their units here and follow the same order
+**Later rounds** (the non-EVM add-on audits, the gate before mainnet 22777) add their units here and follow the same order
 rules and the same local ledger.
 
 ## Prior reviews each unit reads (closure table in every report)

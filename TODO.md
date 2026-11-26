@@ -10,7 +10,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 - **Concurrency** (owner 2026-10-08 / 2026-10-15): max 3 agents; `scripts/capped` has 2 heavy slots (`heavy`,
   `heavy.2`; `CAPPED_SLOTS` overrides), 4 GB each; docker containers need their own `--memory`.
 - **Chains** (owner 2026-10-15): SCaaS testnet = testnet, resettable — the controller backs up the chain data, then resets /
-  redeploys itself; 22776 = future mainnet — every change is the owner's (work on a throwaway copy), precompiles only
+  redeploys itself; 22777 (`scaas-mainnet`) = future mainnet — every change is the owner's (work on a throwaway copy), precompiles only
   after the production gates (cryptographic audit, G-LIC), and from its launch "test-only, no migration" ends there.
 - **P6 mandate** (owner 2026-10-14, session 4): carry P6 to its end; merge AND push each sub-phase once tests, size gate,
   docs checkers and review pass; decisions that come up are picked from the measurements and recorded in
@@ -20,7 +20,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   of 2026-10-26 (owner); it stays a production gate, not a publication gate.
 - **Priority** (owner 2026-10-13): P6 / PQZ first; UA-5c and UA F5 paused until then. Owner 2026-10-19: the P0 PQZL
   Fiat–Shamir fix first; the token-family rename before P6h / P6i / P6j / P6-PUB.
-- **Gas calibration** (owner 2026-10-15): one run; re-calibrate before 22776; timing on a quiet host (ask the owner to
+- **Gas calibration** (owner 2026-10-15): one run; re-calibrate before 22777; timing on a quiet host (ask the owner to
   stop other heavy sessions first).
 - **One `PQZ` precompile for PQZL and PQZH** (owner 2026-10-14): dispatch on `proofSystemId` via `pqz-ffi`, each id
   priced separately, node limits sized for the PQZH input 393,216 B (CTR-PQZ-10).
@@ -113,7 +113,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
        **fs3 Task 13 (7622 reset): EIP-7702 off** (owner ruling 2026-10-30, NET-EVM-07): the reset must start from
        `~dockers/mba-chain-nethermind/genesis.json` (`eip7702TransitionTimestamp` removed 2026-10-30; backup
        `genesis.json.bak-pre-no7702-20261030`) — **never from a scratchpad genesis copy** (17 stale copies still enable 7702);
-       after the reset a type-4 transaction must be refused (`InvalidTxType`). **Mainnet 22776: 7702 off at launch** (no
+       after the reset a type-4 transaction must be refused (`InvalidTxType`). **Mainnet 22777: 7702 off at launch** (no
        config in the repo yet).
      - **Specs (docs only):** the combined DEX spec (minFill code + `mtxHybrid` / `Via` + `mtxExchangeBatch`), the
        **UA-Soroban spec for Soroban**, the governance matrix (§0).
@@ -176,8 +176,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   5. **Done 2026-10-31 (branch `fs3-t13-rollout`):** 7622 reset onto `2.2.0-pqz6` with the calibrated rows (option (b)),
      the CREATE2 deployer in the genesis alloc, EIP-7702 off (type-4 refused), contracts redeployed (`Deploy.s.sol` + PQZ e2e
      full / `--split`, 0 failures), the node hardened (NET-EVM-08), Blockscout on (NET-EVM-09). Left: the option (c)
-     re-calibration on a quiet host (compare with (b); chainspec only if it differs materially); 22776: TLS reverse proxy
-     with rate limits, and the same `sealer` + `rpc` topology as 7622 proposed (owner decides at launch); an external
+     re-calibration on a quiet host (compare with (b); chainspec only if it differs materially); 22777: TLS reverse proxy
+     with rate limits, and the same `sealer` + `rpc` topology as the SCaaS testnet proposed (owner decides at launch); an external
      signer for the sealer still to check (Nethermind 2.2.0 `Mining.Signer` / `Nethermind.ExternalSigner.Plugin`, not tried).
      **Node split done 2026-10-31 (branch `fs3-t13-rollout`, owner ruling):** 7622 runs `sealer` (key, pruned, no port,
      internal network) + `rpc` (no key, archive, public RPC, the sentry for external nodes); NET-EVM-10; Blockscout on the
@@ -498,7 +498,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 - [ ] **Family redeploys carry the formatted build** (code-format round, 2026-11-18): the family contracts' Rust was formatted (rustfmt); panic locations moved, so these artifacts differ from the deployed ones: Cosmos `scaas_mandate`, `scaas_relayfee`, `scaas_token` (docs/networks/cosmos.md §8); Solana `scaas.so` (docs/networks/solana.md §12); NEAR `scaas_near_token`, `scaas_near_dex`, `scaas_near_relayfee` (docs/networks/near.md §12). No hash of them is pinned.
 - [ ] **A gen-1 UA registry without `zether-bls12381` can never add it** (found 2026-10-31 on the SCaaS testnet, branch
-  `zether-testnet`; a finding, not a ruling; **owner decision before the SCaaS mainnet 22776 deploys its gen-1 registry**;
+  `zether-testnet`; a finding, not a ruling; **owner decision before the SCaaS mainnet 22777 deploys its gen-1 registry**;
   note it for the contracts audit). Kinds are constructor immutables (CTR-UA-15), and `UARegistry._groupInPredecessor`
   refuses in gen 2 every single-key kind whose keyHash group gen 1 enables: `zether-bls12381` (0x0141) shares the group
   `bls12381-g1` with `schnorr-bls12381` (0x0105), so a gen 2 in front of a gen 1 with 0x0105 reverts `UAConfig(321)`
@@ -585,7 +585,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     them if exact rows are wanted.
 - [ ] **Zether BLS12-381 verifier precompile in Rust** (owner 2026-10-17; after the PQZL Rust port, not scheduled):
   full verifier (Σ-protocol + the two Bulletproofs, `…/bls12-381/n64-n64/v2`) in `Nethermind.Pqz` (Rust cdylib +
-  P/Invoke) for the SCaaS testnet / 22776; chains with it use it, others keep the Solidity `ZetherVerifier` (same statement, proof
+  P/Invoke) for the SCaaS testnet / 22777; chains with it use it, others keep the Solidity `ZetherVerifier` (same statement, proof
   bytes and verdict; chain allowlist + self-test as `PqzSafety`); built only with an explicit option (Cargo feature +
   MSBuild property, image build argument; default off); a node built without it refuses a chainspec that activates it.
   bn254 stays Solidity-only. Controller notes in COMPLETED.md.
@@ -684,7 +684,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     (3) **hybrid underlying** — wrap (citizen brings a stablecoin) plus issuer mint under one `maxSupply`; reserve
     accounting needed (proposal: unbacked units not redeemable for the underlying; alternatives pro-rata or queue P15);
     PQZ / Zether minters never mint shielded value.
-- [ ] **SCaaS Chain 22776** (owner 2026-10-12): a new chain "SCaaS Chain", chain id 22776, beside the existing ones; SCaaS testnet stays unchanged; the UA key tree moved to `m/22776'/…` (owner 2026-11-05). Ports in the 22776+ range (proposed RPC HTTP 22776, WS 22777, P2P 22778). Onboard like any chain: docs/networks/evm.md row, profile, finality gate, genesis/identity pin, deploy, node config. The chain itself (docker/chainspec) is run by the owner outside this repo.
+- [ ] **SCaaS mainnet 22777** (owner 2026-10-12; chain id 22777 owner 2026-11-26, NET-EVM-21: public chain lists give the 22776 documented before to MAP Protocol): a new chain "SCaaS Chain", `scaas-mainnet`, chain id 22777, beside the existing ones; the SCaaS testnet moves to chain id 22779 at the reset before the pre-freeze tag; the UA key tree moved to `m/22776'/…` (owner 2026-11-05). Ports in the 22776+ range (proposed RPC HTTP 22776, WS 22777, P2P 22778). Onboard like any chain: docs/networks/evm.md row, profile, finality gate, genesis/identity pin, deploy, node config. The chain itself (docker/chainspec) is run by the owner outside this repo.
 - [ ] **Template library** (owner 2026-10-12): every README use case (escrow with an arbiter, milestone service
   contracts, sale with delivery, leases, installment loans, subscriptions, revenue sharing, deposit with periodic
   withdrawal, provenance and family-tree registries) as an implementation deployed once per chain, instances by clone /

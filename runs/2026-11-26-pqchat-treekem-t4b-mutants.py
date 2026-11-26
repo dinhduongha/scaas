@@ -67,6 +67,18 @@ MUTANTS = [
      [(G, '    (exit_op(data) && EXIT_WAITS.iter().any(|p| reason.starts_with(p)))\n',
        '    (exit_op(data) && (reason.starts_with("PqChatExitLag") || EXIT_WAITS.iter().any(|p| reason.starts_with(p))))\n')],
      EXIT, "an_exit_waits_within_the_lag"),
+    # the T4-T9 review's fixes (A-4, A-5, D-12)
+    ("A-4 a ciphertext before its list refused as a bad hash",
+     [(T, '        "addPath" if r.cts > 0 && ct_hashes.is_empty() => {', '        "addPath" if false => {')],
+     SET, "a_piece_early_a_short_key_list_and_a_wrap_of_another_member"),
+    ("A-5 node keys short of the signed count waiting for ever",
+     [(T, "            if held.len() != r.key_hashes.len() {\n                return bad(format!(",
+       "            if false {\n                return bad(format!(")],
+     SET, "a_piece_early_a_short_key_list_and_a_wrap_of_another_member"),
+    ("D-12 a Welcome wrap of another member than its Add",
+     [(T, "        if b32(&w[\"member\"]) != b32(&add[\"ua\"]) || num(&w[\"keyId\"]) != num(&add[\"keyId\"]) {",
+       "        if false {")],
+     SET, "a_piece_early_a_short_key_list_and_a_wrap_of_another_member"),
 ]
 
 if __name__ == "__main__":

@@ -631,8 +631,8 @@ const registry = "0x5ca0000000000000000000000000000000000001";
 // the chain contexts of the chain-bound UAAuth rows (and of signatures.json); the PoP rows have none (UA-8 P1)
 const contexts = {
   A: { chainId: 31337, chainUid: hex(label("chain uid A")), registry },
-  B: { chainId: 7622, chainUid: hex(label("chain uid B")), registry },
-  C: { chainId: 7622, chainUid: hex(label("chain uid C")), registry },
+  B: { chainId: 22779, chainUid: hex(label("chain uid B")), registry },
+  C: { chainId: 22779, chainUid: hex(label("chain uid C")), registry },
   D: { chainId: 31337, chainUid: hex(label("chain uid A")), registry: "0x5ca0000000000000000000000000000000000002" },
   E: { chainId: 2 ** 40 + 7, chainUid: hex(label("chain uid E")), registry },
 };

@@ -1325,10 +1325,10 @@ mod tests {
             B256::ZERO,
             "the taker's destination is signed: a non-zero one"
         );
-        let dd = domain("SCaaS Dex", 7622, a("dex"), uid);
+        let dd = domain("SCaaS Dex", 22779, a("dex"), uid);
         let hm = dex_order_hash(&dd, a("outside_token"), &maker);
         assert_eq!(format!("{hm:#x}"), word(&k, "dex_order_hash"));
-        let td = domain("SCaaS MetaToken", 7622, a("token"), uid);
+        let td = domain("SCaaS MetaToken", 22779, a("token"), uid);
         assert_eq!(
             format!("{:#x}", trade_order_hash(&td, &taker)),
             word(&k, "taker_order_hash")

@@ -1,7 +1,15 @@
-# t5 mutants at commit f977de424 (name | outcome | test)
-a chunk plan that exceeds the block-limit rule | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --lib pqchat_tree
-every ciphertext released before the node keys are final | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --lib pqchat_tree
-a refusal by a protocol-wide constant (60 M), not the chain's block | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --lib pqchat_tree
-the decoder that drops the signature again | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --lib pqchat_tree
-the order broken taken as complete | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --lib pqchat_tree
-5 mutants, 5 killed, 0 survived (0 killed elsewhere), 0 not loaded
+# t5 mutants, each row at its commit (name | outcome | commit | test); the first run's survivors fixed and run again
+a chunk plan that exceeds the block-limit rule | killed | 04e0b1ea8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+every ciphertext released before the node keys are final | killed | 04e0b1ea8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+a refusal by a protocol-wide constant (60 M), not the chain's block | killed | 04e0b1ea8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+the decoder that drops the signature again | killed | 04e0b1ea8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+the order broken taken as complete | killed | 04e0b1ea8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+the 2^24 rule unpinned | killed | 04e0b1ea8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+asked() without the 5 % | killed | 04e0b1ea8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+the held piece sent before every chunk is final | killed | 5ae420567 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+B-1 a commit with no piece sized as record plus completion | killed | 04e0b1ea8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+B-2 the record's tree term at the worst tree | killed | 5ae420567 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+B-9 chunks halved, not the most that fit | killed | 04e0b1ea8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+B-8 a chunk left last sent whole | killed | 04e0b1ea8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+C-1 the one-transaction fallback to the pieces dropped | killed | 04e0b1ea8 | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked -j 2 --features pqchat-records --offline --lib pqchat_tree
+13 mutants, 13 killed, 0 survived (0 killed elsewhere), 0 not loaded

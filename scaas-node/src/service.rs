@@ -605,7 +605,7 @@ mod tests {
         .unwrap();
         let domain = domain_of(
             cfg.address,
-            7622,
+            22779,
             ret.fields.0,
             ret.name,
             ret.version,
@@ -652,7 +652,7 @@ mod tests {
             );
             let d = p
                 .typed
-                .digest_in("SCaaS MetaToken", 7622, b32(&r["token"]["salt"]))
+                .digest_in("SCaaS MetaToken", 22779, b32(&r["token"]["salt"]))
                 .unwrap();
             assert_eq!(
                 d,
@@ -745,7 +745,7 @@ mod tests {
         let ok = |f: u8, cid: u64, vc: Address, ext: &[U256]| {
             domain_of(
                 s,
-                7622,
+                22779,
                 [f],
                 "N".into(),
                 "1".into(),
@@ -755,13 +755,13 @@ mod tests {
                 ext,
             )
         };
-        ok(0x0f, 7622, s, &[]).unwrap();
-        ok(0x1f, 7622, s, &[]).unwrap();
+        ok(0x0f, 22779, s, &[]).unwrap();
+        ok(0x1f, 22779, s, &[]).unwrap();
         for e in [
             ok(0x0f, 1, s, &[]),
-            ok(0x0f, 7622, Address::repeat_byte(6), &[]),
-            ok(0x07, 7622, s, &[]),
-            ok(0x0f, 7622, s, &[U256::from(1)]),
+            ok(0x0f, 22779, Address::repeat_byte(6), &[]),
+            ok(0x07, 22779, s, &[]),
+            ok(0x0f, 22779, s, &[U256::from(1)]),
         ] {
             assert!(e
                 .unwrap_err()

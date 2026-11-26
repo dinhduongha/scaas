@@ -6,7 +6,7 @@ Instructions for AI coding agents in this repository. People: start with [README
 **SCaaS: the smart contracts are the API services; `scaas-node` is the open relayer and indexer in front of them.** The subject signs
 every valuable write. The contracts check everything themselves. A relayer can refuse or delay, never forge or alter. The repository is
 **public**. Nothing is live with value: every chain is test-only, so no migration or compatibility work is needed today. That ends
-when mainnet 22776 launches, which only the owner may touch.
+when mainnet 22777 launches, which only the owner may touch.
 
 ## Map
 
@@ -57,7 +57,7 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 - **Nothing deployed is upgraded.** Contracts are immutable; versions live in the factory's catalogue.
 - **Backup, do not delete.** Superseded code moves to `legacy/`. Never drop an API because nothing calls it yet.
 - Keep apart in code and prose: **Zether ≠ PQZ**, **NEAR ≠ Algorand**. Name sets `n2304-kmax4096`, never "v3" or "16k". Rounds are
-  `ua-<family>`, `ua-portable-<family>`, `zether-<family>`. 7622 is `scaas-testnet` in ids, "SCaaS testnet" in prose.
+  `ua-<family>`, `ua-portable-<family>`, `zether-<family>`. 22779 is `scaas-testnet` and 22777 `scaas-mainnet` in ids, "SCaaS testnet" and "SCaaS mainnet" in prose.
 
 ## Security
 

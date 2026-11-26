@@ -288,8 +288,8 @@ interface IOpenFactory is IAdmin {
     ) external;
     /// @notice 0 until `configureChain`.
     function chainUid() external view returns (bytes32);
-    /// @notice Seconds between a release's deployment and its first use (chain-configured: minutes on 7622, days on
-    ///         22776; 0 on the dev chains and in tests).
+    /// @notice Seconds between a release's deployment and its first use (chain-configured: minutes on the SCaaS
+    ///         testnet, days on the SCaaS mainnet; 0 on the dev chains and in tests).
     function noticePeriod() external view returns (uint64);
     /// @notice This chain's `GovernanceRouter` (0 = none): every instance's `ChainEnv.govRouter`.
     function govRouter() external view returns (address);

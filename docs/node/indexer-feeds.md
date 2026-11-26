@@ -298,7 +298,7 @@ events (a client's decoder can be reused as is, and a race between balance and r
 items are `dex_order`, `dex_trade`, `dex_range` ([dex-venue.md#persistence](dex-venue.md#persistence)).
 
 ```json
-{"seq": 77, "kind": "range", "chain_key": "evm:7622", "from_block": 41233001, "to_block": 41233040,
+{"seq": 77, "kind": "range", "chain_key": "evm:22779", "from_block": 41233001, "to_block": 41233040,
  "to_block_hash": "0x…",
  "events": [{"event": "PaymentSettled", "contract": "0xtoken…", "block_number": 41233017, "block_hash": "0x…",
              "tx_hash": "0x…", "log_index": 3, "from": "0xpayer…", "to": "0xpayee…", "amount": "100000000",
@@ -322,7 +322,7 @@ Index-time: the indexer filters `Transfer` by the union of all watch lists; a wa
 served filtered to the namespace's watch pairs:
 
 ```json
-{"seq": 78, "kind": "balances", "chain_key": "evm:7622", "height": 140,
+{"seq": 78, "kind": "balances", "chain_key": "evm:22779", "height": 140,
  "balances": [{"token": "0x…", "address": "0x…", "balance": "1000000"}]}
 ```
 

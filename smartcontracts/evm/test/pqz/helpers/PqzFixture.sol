@@ -27,7 +27,7 @@ import {Catalogue, pqzEnv} from "../../helpers/Catalogue.sol";
 import {nid} from "../../helpers/Ids.sol";
 import {EnvKit} from "../../helpers/EnvKit.sol";
 
-/// @notice The PQZ token stack of chain 7622 in forge (P6g plan D6): the gen-1 registry (`PqzRegistryBase`), `OpenFactory`
+/// @notice The PQZ token stack of chain 22779 in forge (P6g plan D6): the gen-1 registry (`PqzRegistryBase`), `OpenFactory`
 ///         with the PQZ gate on, `NormalPqzToken` clones. The `PQZ` precompile answers 1 for ops 1, 2, 4, 5 unless
 ///         a test changes it; everything else is real. The test is the client: it mirrors each account's `acc` and
 ///         entries (arbitrary canonical bytes; the proofs are mocked; the token reads both from its own state, plan 5h) and the alice / bob / auditor keys of

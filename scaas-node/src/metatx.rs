@@ -742,7 +742,7 @@ mod tests {
         Domain {
             name: "SCaaS MetaToken".into(),
             version: "1".into(),
-            chain_id: 7622,
+            chain_id: 22779,
             verifying_contract: Address::repeat_byte(0xcd),
             salt: B256::repeat_byte(0x24),
         }

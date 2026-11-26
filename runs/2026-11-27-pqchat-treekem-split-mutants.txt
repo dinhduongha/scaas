@@ -1,0 +1,4 @@
+# split mutants at commit bca6ac218 (name | outcome | test)
+the split's margin dropped | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib a_batch_of_adds_over_the_cap_is_split
+no split: the whole batch in one commit | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib a_batch_of_adds_over_the_cap_is_split
+2 mutants, 2 killed, 0 survived (0 killed elsewhere), 0 not loaded

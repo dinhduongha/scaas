@@ -368,7 +368,7 @@ mod tests {
     /// genesis of its own, starts.
     #[tokio::test]
     async fn an_unpinned_profile_is_checked_at_lane_start() {
-        let scaas: B256 = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"
+        let scaas: B256 = "0x9693692c4ffc3bdca7d4181dbaab179ade3fe010975f8dd0b51ff7c3dff5be86"
             .parse()
             .unwrap();
         for (id, zero, ok) in [(7623, scaas, false), (7624, B256::repeat_byte(0xa9), true)] {

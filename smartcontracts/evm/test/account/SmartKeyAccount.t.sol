@@ -121,7 +121,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     NormalToken internal t;
 
     function setUp() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         fac = new SmartKeyAccountFactory(UID_);
         NormalToken impl = NormalToken(
@@ -965,7 +965,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         assertEq(f, hex"1f");
         assertEq(name, "SCaaS SmartKeyAccount");
         assertEq(version, "1");
-        assertEq(chainId, 7622);
+        assertEq(chainId, 22779);
         assertEq(vc, address(acct));
         assertEq(salt_, UID_);
         assertEq(acct.chainUid(), UID_);
@@ -978,7 +978,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
                 ),
                 keccak256("SCaaS SmartKeyAccount"),
                 keccak256("1"),
-                uint256(7622),
+                uint256(22779),
                 address(acct),
                 UID_
             )

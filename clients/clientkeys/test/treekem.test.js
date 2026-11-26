@@ -1420,6 +1420,26 @@ test("E-3, B2-2: a replay resumed from the device's previous one walks from its 
   refused("TreeConflict", () => tk.replay(sc, tk.reader(w.home), B, null, { ...r6, pin: { ...r6.pin, hash: Z32 } }));
 });
 
+test("R2-D-6 (C-4 as ua-rs): a resume that finds no new epoch keeps the info in force, its flag and the head followed, so it seals what the replay it resumed from sealed", () => {
+  const w = f.createSession({
+    tag: "t/resume-twice",
+    creator: "A",
+    nonce: 72,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+  });
+  f.commit(w, "B");
+  const B = f.deviceOf("B");
+  const r1 = tk.replay(sc, tk.reader(w.home), B);
+  assert.notEqual(tk.infoToSeal(r1), null);
+  const r2 = tk.replay(sc, tk.reader(w.home), B, null, r1);
+  assert.deepEqual(r2.epochs, []);
+  assert.deepEqual(tk.infoToSeal(r2), tk.infoToSeal(r1));
+  const r3 = tk.replay(sc, tk.reader(w.home), B, null, r2);
+  assert.deepEqual(tk.infoToSeal(r3), tk.infoToSeal(r1));
+});
+
 test("C-1: a key no signed tree hash covers is authenticated by its registry record before it is used: an Add's, a member's at creation", () => {
   const w = f.createSession({
     tag: "t/auth",

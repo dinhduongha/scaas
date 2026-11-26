@@ -135,7 +135,7 @@ fn a_family_that_is_off_is_feature_missing() {
             "fam-dot's gate before the path is parsed"
         );
     }
-    let json = br#"{"type":0,"chainId":"7622","nonce":"0","gasPrice":"1","gasLimit":"21000","to":"0x5ca00000000000000000000000000000000000c0","value":"1","data":"0x"}"#;
+    let json = br#"{"type":0,"chainId":"22779","nonce":"0","gasPrice":"1","gasLimit":"21000","to":"0x5ca00000000000000000000000000000000000c0","value":"1","data":"0x"}"#;
     if Network::Evm.built() {
         assert!(EvmTx::from_json(json).unwrap().sighash().is_ok());
     } else {

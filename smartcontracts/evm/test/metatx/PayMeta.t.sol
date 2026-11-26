@@ -346,6 +346,8 @@ contract PayMetaTest is PayRigBase {
                 0,
                 false,
                 3,
+                // an illustrative body (the SCaaS testnet's chain id when the row was made): paymeta.json's rows, read by
+                // every family's vectors, stay as they are (owner 2026-11-26 moved the testnet to 22779)
                 abi.encode(
                     uint256(7622), bytes32(uint256(uint160(address(0xC0FFEE)))), keccak256("scaas.paymeta.vector.call")
                 )

@@ -1006,6 +1006,25 @@ impl EvmPool {
         self.pool.agree(self, choice, purpose, f).await
     }
 
+    /// [`EvmPool::read_at_block_agreed`] over the list's `named` endpoints only ([`crate::pool::Pool::agree_named`]: at least 3,
+    /// a strict majority of them; discovered and default nodes do not count).
+    pub async fn read_at_block_agreed_named<T, F, Fut>(
+        &self,
+        choice: BlockChoice,
+        purpose: Purpose,
+        f: F,
+    ) -> Result<Agreed<T, B256>, RpcError>
+    where
+        T: Clone + PartialEq,
+        F: Fn(ReadAt<B256>) -> Fut,
+        Fut: Future<Output = Result<T, ReadError>>,
+    {
+        if !self.pinned_reads {
+            return Err(RpcError::PinnedReadsUntrusted);
+        }
+        self.pool.agree_named(self, choice, purpose, f).await
+    }
+
     /// Whether this pool's pinned reads are trusted (the profile's `pinnedReads`).
     pub fn pinned_reads(&self) -> bool {
         self.pinned_reads

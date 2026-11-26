@@ -324,7 +324,7 @@ and the deploy gate and the node require each contract's `chainUid()` = the RPC'
 
 A wrong value makes correct signatures
 fail; it is unsafe only if it equals another chain's `chain_uid`, which that comparison excludes. The guarantee is that
-honest contracts on two chains sharing a chain id (7622 or any other) never accept each other's signatures, whichever
+honest contracts on two chains sharing a chain id (22779 or any other) never accept each other's signatures, whichever
 wallet produced them. A replica deployed elsewhere from a copy of our profile is trusted by nothing of ours: tokens
 bind the registry address at `initialize`, and the node binds every contract's `chainUid()` and the RPC's genesis hash
 per chain profile and refuses a mismatch. On a chain id shared by several live chains the factory is configured on each

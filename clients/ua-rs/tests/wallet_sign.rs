@@ -783,7 +783,7 @@ fn portable_app_rows() {
             Some(Error::Argument)
         );
         let mut v = n["typedData"].clone();
-        v["domain"]["chainId"] = Value::from(7622);
+        v["domain"]["chainId"] = Value::from(22779);
         v["types"]["EIP712Domain"]
             .as_array_mut()
             .unwrap()

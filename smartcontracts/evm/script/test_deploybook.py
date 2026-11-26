@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(HERE, "onchain"))
 import deploybook as d  # noqa: E402
 import basebook  # noqa: E402
 
-SCAAS = (7622, "0x9AE9048BFD6165D6B25290FA9295AD14E38C3E158371B80049D9A554341E5B13")  # case does not matter
+SCAAS = (22779, "0x9693692C4FFC3BDCA7D4181DBAAB179ADE3FE010975F8DD0B51FF7C3DFF5BE86")  # case does not matter
 HOODI = (560048, "0xbbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b")
 OTHER = "0x" + "01" * 32
 
@@ -37,7 +37,7 @@ fails("DEPLOY_NAME_MISMATCH", d.resolve, *SCAAS, env={"DEPLOY_NAME": "other-test
 assert d.resolve(*HOODI, env={}) == ("ethereum-hoodi", "Ethereum Hoodi", "testnet")
 # an unknown chain (a listed chain id with another genesis too) needs DEPLOY_NAME: no chain-id fallback
 fails("DEPLOY_NAME_REQUIRED", d.resolve, 31337, OTHER, env={})
-fails("DEPLOY_NAME_REQUIRED", d.resolve, 7622, OTHER, env={})
+fails("DEPLOY_NAME_REQUIRED", d.resolve, 22779, OTHER, env={})
 assert d.resolve(31337, OTHER, env={"DEPLOY_NAME": "local-testnet"}) == ("local-testnet", "local-testnet", "testnet")
 assert d.resolve(31337, OTHER, env={"DEPLOY_NAME": "lab-mainnet"})[2] == "mainnet"
 for bad in ("local", "Local-testnet", "local_testnet", "local-devnet"):
@@ -107,7 +107,7 @@ with tempfile.TemporaryDirectory() as t:
     assert d.find(31337, OTHER, "-releases.json", env=env) == "deployments/fixture-testnet-releases.json"
 
 # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): the labels, the merge, a reader's book
-H = d.header("scaas-testnet", "SCaaS testnet", 7622, SCAAS[1], "testnet")
+H = d.header("scaas-testnet", "SCaaS testnet", 22779, SCAAS[1], "testnet")
 assert d.set_label("mldsa-off") == "mldsa-off" and d.set_label("mldsa-on", "on") == "mldsa-on"
 assert d.set_label("mldsa-on", "") == "mldsa-on"  # MLDSA_PRECOMPILE unset: on (deploy.sh's default)
 fails("DEPLOY_SET_UNKNOWN", d.set_label, "mldsa")

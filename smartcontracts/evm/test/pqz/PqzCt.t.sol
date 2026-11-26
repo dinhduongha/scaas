@@ -178,7 +178,7 @@ contract PqzCtTest is PqzMock {
 
     /// Owner ruling 2026-10-31: no chain allowlist; the self-test alone decides, whatever the chain id.
     function test_safetyNoChainLock() public {
-        uint256[4] memory ids = [uint256(31337), 7622, 22776, 987654321];
+        uint256[4] memory ids = [uint256(31337), 22779, 22777, 987654321];
         for (uint256 i; i < ids.length; ++i) {
             vm.chainId(ids[i]);
             vm.clearMockedCalls();

@@ -14,10 +14,13 @@
 mod common;
 
 use common::chain::*;
+use pqchat_core::content::Content;
 use pqchat_core::reads::SessionRef;
 use pqchat_core::session::{Info, Me, StoreEntry};
-use pqchat_core::tree::{CreateTree, TreeCommit, TreeState};
+use pqchat_core::stores::{Delivery, SendOpts};
+use pqchat_core::tree::{CreateTree, TreeBuilt, TreeCommit, TreeState};
 use pqchat_core::PqChat;
+use scaas_sdk::OpState;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -57,6 +60,15 @@ async fn land_commit(
         assert!(n <= plan.txs.len(), "more sends than the plan");
     }
     n
+}
+
+/// A store's send landed on the chain.
+async fn landed(l: &Local, d: &Delivery) {
+    let Delivery::Sent(op) = d else {
+        panic!("not sent: {d:?}")
+    };
+    let st = follow(&l.sdk, op.clone()).await;
+    assert!(matches!(st, OpState::Landed { .. }), "{st:?}");
 }
 
 /// The leaf `me` holds at the head of `st` with its key's version.
@@ -158,7 +170,12 @@ async fn chain_tree_session() {
                 "kemHash": kem_of(&l, me)})
         })
         .collect();
-    let (c1, plan1) = pq
+    let TreeBuilt {
+        signed: c1,
+        plan: plan1,
+        head_confirmed,
+        adds_left,
+    } = pq
         .tree_commit(
             &s,
             &a0,
@@ -176,13 +193,20 @@ async fn chain_tree_session() {
         )
         .await
         .unwrap();
+    // R2-C-5 of the TreeKEM T4-T9 re-check: one endpoint, no strict majority: an Add built with its head not confirmed
+    assert!(adds_left.is_empty(), "two Adds: one commit");
+    assert!(
+        !head_confirmed && a0.unconfirmed,
+        "one endpoint confirms nothing"
+    );
     let sent = land_commit(&l, &pq, &s, &c1, &plan1).await;
     println!(
         "[tree] commit 1 (2 Adds) in {sent} transaction(s), plan {:?}",
         plan1.txs.iter().map(|t| t.entry).collect::<Vec<_>>()
     );
     let a1 = pq.tree_state(&s, &alice, 0, None).await.unwrap();
-    let c1s = device().tree_state(&s, &carol, 0, None).await.unwrap();
+    let pc = device();
+    let c1s = pc.tree_state(&s, &carol, 0, None).await.unwrap();
     assert_eq!(a1.head, 1);
     assert!(
         followed(&a1).contains(&1) && followed(&c1s).contains(&1),
@@ -190,10 +214,61 @@ async fn chain_tree_session() {
         followed(&a1),
         followed(&c1s)
     );
+    // C-3 = D-7 of the T4-T9 review: a message sent under the tree epoch opened from the replay (its info in force names the
+    // chain store) and received by carol under the same epoch from her own replay; R11: no receipt by default
+    let head1 = a1.replay.epochs.last().unwrap().epoch_id.clone();
+    let ea = pq
+        .use_epoch(&s, pq.tree_open(&s, &a1, &head1).unwrap())
+        .await
+        .unwrap();
+    pq.confirm_stores(&ea).unwrap();
+    pq.consent_chain_spend(&s.session_id, true).unwrap();
+    let o = SendOpts {
+        payer: l.payer.clone(),
+        post: false,
+        post_cost_confirmed: false,
+    };
+    let text = Content::Text {
+        media_type: None,
+        body: "under the tree".into(),
+    };
+    let sent = pq
+        .send_content(&s, &alice, &text, Some(1), &o)
+        .await
+        .unwrap();
+    landed(&l, &sent.stores[0].1).await;
+    let ec = pc
+        .use_epoch(&s, pc.tree_open(&s, &c1s, &head1).unwrap())
+        .await
+        .unwrap();
+    pc.confirm_stores(&ec).unwrap();
+    pc.accept(&s, true).unwrap();
+    let store = info(&l).stores[0].clone();
+    assert_eq!(pc.read_chain_store(&ec, &store).await.unwrap(), 1);
+    assert!(pc
+        .timeline(&s.session_id)
+        .iter()
+        .any(|m| Some(&m.id) == sent.message_id.as_ref()));
+    let rc = Content::Receipt {
+        target: sent.message_id.clone().unwrap(),
+    };
+    assert_eq!(
+        pc.send_content(&s, &carol, &rc, None, &o)
+            .await
+            .unwrap()
+            .message_id,
+        None,
+        "R11: no receipt from a tree session by default"
+    );
+    println!("[tree] a message sent and received under tree epoch 1; no receipt");
     // a commit by a non-admin (bob refreshes his own leaf)
     let b1 = pb.tree_state(&s, &bob, 0, None).await.unwrap();
     let (leaf_b, _) = leaf_of(&b1, &bob);
-    let (c2, plan2) = pb
+    let TreeBuilt {
+        signed: c2,
+        plan: plan2,
+        ..
+    } = pb
         .tree_commit(
             &s,
             &b1,
@@ -225,7 +300,11 @@ async fn chain_tree_session() {
         .unwrap();
     land(&l, call).await;
     let (leaf_d, key_d) = leaf_of(&d2, &dave);
-    let (c3, plan3) = pq
+    let TreeBuilt {
+        signed: c3,
+        plan: plan3,
+        ..
+    } = pq
         .tree_commit(
             &s,
             &a2,

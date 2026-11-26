@@ -19,6 +19,7 @@ owner, or the controller session the owner has allowed to back up, reset and dep
 | [Node split: sealer + rpc](#node-split-sealer--rpc-owner-2026-10-31) — the single node split into a key-holding `sealer` (no port, internal network) and a key-less archive `rpc` (public RPC, sentry for external nodes); Blockscout on `rpc` | 2026-10-31 | `../runs/2026-10-31-pqz6-live.txt` § S |
 | [Zether on the SCaaS testnet](#zether-on-the-scaas-testnet-executed-2026-10-31) — the whole contract stack again with a new CREATE2 salt and `DEPLOY_ZETHER=1` beside the phase C set (no reset), the Zether e2e, Blockscout verification | 2026-10-31 | `smartcontracts/evm/runs/2026-10-31-zether-testnet-*-7622.txt` |
 | [Code size 128 KiB: reset 1](#code-size-128-kib-on-the-scaas-testnet-reset-1-executed-2026-11-04) — reset onto image `2.2.0-pqz7`: `maxCodeSize` `0x20000`, EIP-7954 left out (CTR-GOV-19), `MLDSA87` with PROVISIONAL `mldsa87Gas` (CTR-UA-39); genesis unchanged; every kind deployed, PQZ / Zether e2e, governance smoke, Blockscout reset and verified | 2026-11-04 | `../runs/2026-11-04-testnet-reset1.txt`, `smartcontracts/evm/runs/2026-11-04-testnet-reset1-7622.txt` |
+| [Chain id 22779](#chain-id-22779-at-the-reset-before-the-pre-freeze-tag-prepared-2026-11-26) — the next reset moves the SCaaS testnet to chain id 22779 with a new genesis (`scaas-testnet/genesis.json`, hash computed); **prepared, not executed** | 2026-11-26 | `runs/2026-11-26-chain-id-22779-summary.txt` |
 
 The commands below are the ones that were executed. Steps marked *live only* ran on the SCaaS testnet itself; everything else
 ran on the copy. Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
@@ -33,8 +34,8 @@ hash, `MAX_INPUT` and the vectors of `PQZ_SET` (default `n2304-kmax4096`, the li
 (`2.2.0-pqz3` and before: P6f D3's `0x5caa50…0f01` / `…0012` / `…0013`, the `n2048-kmax1024` library, the old-id rows)
 run the scripts of that image's commit.
 
-**Chain roles** (owner 2026-10-15): **the SCaaS testnet (chain id 7622) is the test chain**, and its data may be reset. **22776 is the future
-mainnet** (owner only; not built). Chain 22776 gets the precompiles only after the production gates — the external
+**Chain roles** (owner 2026-10-15): **the SCaaS testnet (chain id 22779 from the reset before the pre-freeze tag, NET-EVM-02) is the test chain**, and its data may be reset. **22777 (`scaas-mainnet`) is the future
+mainnet** (owner only; not built). Chain 22777 gets the precompiles only after the production gates — the external
 audit and the G-LIC written licence clearance ([pq-zero-knowledge.md CTR-PQZ-01](../../../docs/contracts/pq-zero-knowledge.md),
 the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the same addresses.
 
@@ -55,7 +56,7 @@ the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the
 
 | Path | When | chainspec | Data |
 |---|---|---|---|
-| **A. Transition timestamp** (an upgrade of a running chain) | 22776 later, any chain upgrade, a re-price or a new op such as the multi-recipient transfer (`R_TXM`, op 7), added as a second schedule | `engine.Pqz.schedules[0].timestamp` = T in the future; history before T is unchanged; a proofSystemId change at T: a node with the new library starts only once its head has reached T − 1, a node with the old library is refused at any restart once the schedule is in the chainspec, a fresh node needs a data copy past T; with a block period the last block before T usually lies below T − 1, so the swap comes after T and the old-library nodes (old chainspec) seal the first blocks at or after T under the old ids — send no PQZ call between T and the swap (`pq-zero-knowledge.md` §9.1) | kept |
+| **A. Transition timestamp** (an upgrade of a running chain) | 22777 later, any chain upgrade, a re-price or a new op such as the multi-recipient transfer (`R_TXM`, op 7), added as a second schedule | `engine.Pqz.schedules[0].timestamp` = T in the future; history before T is unchanged; a proofSystemId change at T: a node with the new library starts only once its head has reached T − 1, a node with the old library is refused at any restart once the schedule is in the chainspec, a fresh node needs a data copy past T; with a block period the last block before T usually lies below T − 1, so the swap comes after T and the old-library nodes (old chainspec) seal the first blocks at or after T under the old ids — send no PQZ call between T and the swap (`pq-zero-knowledge.md` §9.1) | kept |
 | **B. From genesis** (a new chain, the SCaaS testnet reset, owner 2026-10-15) | Task 10 on the SCaaS testnet (used on 2026-10-16) | `engine.Pqz` with the first timestamp = the genesis timestamp (0 on 7622): active in every block | fresh (the old data dir is backed up, not used) |
 
 The plugin refuses a first timestamp *before* genesis; a timestamp equal to genesis is path B.
@@ -65,7 +66,7 @@ The plugin refuses a first timestamp *before* genesis; a timestamp equal to gene
 ## The copy (Tasks 7–8)
 
 **What it is.** The copy is a **replica** of the SCaaS testnet: the live chainspec's parameters, engine and genesis header
-(`../Nethermind.Pqz.Test/chainspecs/genesis-7622.json`) with a throwaway signer key in `extraData`. The stock image
+(`../Nethermind.Pqz.Test/chainspecs/genesis-scaas-testnet.json`) with a throwaway signer key in `extraData`. The stock image
 first produces some history on it. The live directory is never read beyond read-only `cat` / `ls` /
 `docker image inspect`, and no live data or key material is copied. As a result the copy's genesis hash is its own,
 not the SCaaS testnet's (`0x24e43dcb…c464` then, `0xa17faef4…2ac2` since the 200 M genesis reset of 2026-10-22,
@@ -297,7 +298,7 @@ Success: the head hash equals the rollback head written down in step 1. Then rep
 
 - `PQZ-START` is present in the log, and there is no `PQZ-REFUSE` or `PQZ-NODE-FAULT`.
 - The head advances every 5 s.
-- `eth_chainId` = `0x1dc6`.
+- `eth_chainId` = `0x58fb` (22779, NET-EVM-02).
 - `OP_SELFTEST` (op 6) = `d6c01fbc…6f68d` (images `2.2.0-pqz5` / `2.2.0-pqz6` / `2.2.0-pqz7`, set `n2304-kmax4096`; `23d7a1db…c97c0` on `2.2.0-pqz4`, `ed910a2c…d205` before).
 
 A node fault (plan D4) stops the node with exit code 120 and the tag `PQZ-NODE-FAULT` in its log. The block in
@@ -321,7 +322,7 @@ must be reachable from the chain host only; public RPC goes to a follower behind
 (`config.follower.json`, `nginx-rpc.conf`; the copy publishes it on `127.0.0.1:18545`; P6f-era configs), whose exit
 stops only that follower. The live configs since the node split are in `scaas-testnet/`. **On the SCaaS testnet** the live `docker-compose.yml` (read 2026-10-19) publishes `8545:8545` and `8546:8546` on every
 host interface; **accepted for the testnet (owner 2026-10-19)**: no firewall or binding change. The rule above binds
-mainnet 22776. Since the node split (2026-10-31) 7622 follows it too: the sealer serves no RPC beyond its container
+mainnet 22777. Since the node split (2026-10-31) the SCaaS testnet follows it too: the sealer serves no RPC beyond its container
 loopback, and the public endpoints are on `rpc`. A start-up refusal
 `PQZ-REFUSE … sha256 … != the reviewed …` means the image's `libpqz_ffi.so` is not the reviewed build (review W-G):
 use an image built by `build-image.sh` from the reviewed commit.
@@ -329,9 +330,9 @@ use an image built by `build-image.sh` from the reviewed commit.
 ### Owner steps outside this runbook
 
 - The follower node and public RPC: **done on the SCaaS testnet** by the node split of 2026-10-31 (§ Node split). The
-  reference configs for mainnet 22776 are the live ones copied into `scaas-testnet/` (`config.json` = the sealer,
+  reference configs for mainnet 22777 are the live ones copied into `scaas-testnet/` (`config.json` = the sealer,
   `config.rpc.json`, `docker-compose.yml`; the calls filter is `jsonrpc.filter` here; secrets stay in the stack: `.env`,
-  `password.txt`, `keystore/`, `rpc-node.key`). Still a 22776 item: the TLS reverse proxy with rate limits in front of
+  `password.txt`, `keystore/`, `rpc-node.key`). Still a 22777 item: the TLS reverse proxy with rate limits in front of
   `rpc`. The copy's `docker-compose.copy.yml`, `config.signer.json`, `config.follower.json` and `nginx-rpc.conf` are P6f
   history (the rehearsal configs).
 - Restart policy: **done**, `restart: unless-stopped` on every service (owner ruling 2026-10-31, above).
@@ -627,7 +628,7 @@ single-key kind whose keyHash group gen 1 enables, and `schnorr-bls12381` (0x010
 on the live chain: `eth_call --create` of the registry's init code (from the phase C broadcast) as gen 2 with predecessor
 `0x06d0…9776` and `[(0x0141, <contract>, 70000)]` reverts `UAConfig(321)`; the control `[(0x0142, …)]` constructs. A
 Zether env needs a registry with 0x0141, so the whole set was deployed again (`TODO.md`: the design finding, for the
-owner before 22776's gen-1 registry and for the audit).
+owner before 22777's gen-1 registry and for the audit).
 
 1. Deploy: `PRIVATE_KEY=<key 4, the phase C deployer and registrar> DEPLOY_SALT=keccak256("scaas.deploy.v2")
    DEPLOY_ZETHER=1 FOUNDRY_PROFILE=scaas-testnet CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh evm
@@ -697,7 +698,7 @@ registered are skipped; a new run makes new tokens: `E2E_SALT` defaults from the
 leaves EIP-7954 out and keeps every other Amsterdam EIP, so that every token kind, `WrappedPqzToken` (72,160 B) included,
 runs at a higher `maxCodeSize` (governance plan T16; NET-EVM-06's Change, governance spec §12.10). Go: owner 2026-11-04
 ("Làm reset: mục 2, reset lần 1", TODO pre-freeze item 2), with [`MLDSA87`](#mldsa87-on-the-scaas-testnet-executed-2026-11-04-with-reset-1-ctr-ua-39-owner-2026-11-04)
-in the same reset. 22776 is the owner's and is never touched (`--testnet-reset` refuses every chain but 7622).
+in the same reset. The SCaaS mainnet is the owner's and is never touched (`--testnet-reset` refuses every chain but the SCaaS testnet).
 
 **Status: executed 2026-11-04** (13:01:49Z) by the controller. Logs `../runs/2026-11-04-testnet-reset1.txt` (script
 `../runs/2026-11-04-testnet-reset1.sh`: `reset`, `check`, `explorer`, `rollback`), the throwaway runs
@@ -851,7 +852,40 @@ in their windows (2026-11-17 03:33 and 15:41 local): the group 165 transactions 
 218 linked clones, 265 SSTORE2 data, 150 CREATE3 proxies, genesis and the RescueVault alloc, 0 unverified. The `sc-verifier`
 container needs 4 GB to compile kind 13's modules (OOM-killed at 768 MiB and at 2 GB; owner 2026-11-17: `mem_limit` 4g).
 
-## 7622 node layout and access (owner 2026-10-31)
+## Chain id 22779 at the reset before the pre-freeze tag (prepared 2026-11-26)
+
+**The decision** (owner 2026-11-26, [NET-EVM-21](../../../docs/decisions.md#NET-EVM-21)): "Thôi, 22777 cho mainnet, 22779 cho
+testnet." The SCaaS testnet moves from chain id 7622 (`0x1dc6`) to **22779** (`0x58fb`) at the full reset before the
+pre-freeze tag; the SCaaS mainnet's documented id is **22777** (`0x58f9`; public chain lists give 22776 to MAP Protocol).
+Nothing here touches the live stack before that reset; the mainnet stays the owner's.
+
+**The new genesis** is [`scaas-testnet/genesis.json`](scaas-testnet/genesis.json): the reset-5 live chainspec (read, not
+changed, 2026-11-26) with exactly three edits — `params.chainId` and `params.networkID` `0x1dc6` → `0x58fb`, and the
+`extraData` vanity (its first 32 bytes, zero before) = `keccak256("scaas-testnet:22779:2026-11-26")` =
+`0xfc94b8b8…e447db`, the unique nonce of [NET-ALL-25](../../../docs/networks/README.md#NET-ALL-25) (a private chain
+re-created from the same genesis file would repeat its hash). The alloc (test keys, the CREATE2 deployer, the RescueVault
+of `smartcontracts/vectors/governance/rescue_vault_testnet_alloc.json`, now `chainId` 22779) and every other header field
+are reset 4's. Genesis hash: **`0x9ae9048b…5b13` → `0x9693692c4ffc3bdca7d4181dbaab179ade3fe010975f8dd0b51ff7c3dff5be86`**,
+computed by `python3 -I genesis-hash.py scaas-testnet/genesis.json`; `genesis-hash.py --check` reproduces reset 4's
+`0x9ae9048b…5b13` (the hash the RPC reported) from the same file with the nonce zeroed. The chain id is no header field, so
+the nonce alone moves the hash. `smartcontracts/evm/chain-uids.json` and `scaas-node/node.example.toml` carry the new
+hash.
+
+**At the reset** (the reset-5 procedure, with these differences):
+
+```sh
+cp scaas-testnet/genesis.json <stack>/genesis.json                      # the new chainspec (chain id 22779, new nonce)
+python3 -I patch-chainspec.py <stack>/genesis.json <engine-pqz.json> 0 <out> --testnet-reset   # TESTNET = 22779
+python3 -I genesis-hash.py <out>                                         # must print 0x9693692c…5be86 (header unchanged)
+# compose: CHAIN_ID / NEXT_PUBLIC_NETWORK_ID "22779" (scaas-testnet/docker-compose.yml); Blockscout DB reset (new chain)
+# scripts: RPC_SCAAS_TESTNET=<rpc> (replaces RPC_7622); forge broadcasts land under broadcast/*/22779/
+```
+
+After it: `eth_chainId` = `0x58fb`, block 0's hash = `0x9693692c…5be86` on every configured RPC (stop if not), then the
+deploy sets, `chain-uids.json`'s `sources` from the RPC and the node's `chain_uid`. A genesis whose hash differs (the
+RescueVault code or an alloc changed before the reset) is recomputed with `genesis-hash.py` and the pins move with it.
+
+## SCaaS testnet node layout and access (owner 2026-10-31)
 
 Two nodes since the node split (owner 2026-10-31, [NET-EVM-10](../../../docs/networks/evm.md#NET-EVM-10)): `sealer`
 (the Clique signer, container `mba_chain_sealer`) and `rpc` (the public node, container `mba_chain_rpc`), both in the
@@ -935,7 +969,7 @@ config files; `admin_nodeInfo` on either sidecar prints them.
   over P2P from `rpc`'s pool; blocks go back the same way.
 - **External nodes connect to `rpc`, never to the sealer.** `rpc` is the sentry: an external follower (or a future second
   signer's node) sets `rpc`'s enode as its static peer, `enode://daa72efa1376e41b62e43c22991b185a80e0731048b60a9ac7ea26a4f14c15ac4e9084f9df1eed3063aaecb967de472a440090745e2384dbf93f597a8d385737@192.168.1.72:30303`
-  (stable: fixed key file), with the 7622 chainspec (`$L/genesis.json`; a follower needs its
+  (stable: fixed key file), with the SCaaS testnet chainspec (`$L/genesis.json`; a follower needs its
   `eip4895TransitionTimestamp` and `maximumExtraDataSize`, which the live chainspec has, [NET-EVM-02 traps](../../../docs/networks/evm.md#private-chain)),
   or the operator adds it from `rpc`'s side with `admin_addPeer` through the `rpc` sidecar. Why: the sealer then has
   one peer it knows, no inbound connection from anyone else and no public RPC, so a peer or a caller that misbehaves
@@ -1013,7 +1047,7 @@ config files; `admin_nodeInfo` on either sidecar prints them.
 - **Rollback, *single node*, to before the hardening:** `cp config.json.bak-pre-hardening-20261031 config.json; cp docker-compose.yml.bak-pre-hardening-20261031
   docker-compose.yml; docker compose up -d blockchain-node` (the single-endpoint layout; Blockscout services are then
   commented out again).
-- **TODO for mainnet 22776 (not built):** a reverse proxy with TLS and rate limits in front of 8545 / 8546; the same
+- **TODO for mainnet 22777 (not built):** a reverse proxy with TLS and rate limits in front of 8545 / 8546; the same
   sealer + rpc split proposed (owner decides at launch); an external signer for the sealer still to check (Nethermind
   2.2.0 has `Mining.Signer`, "the URL of an external signer like Clef", and ships `Nethermind.ExternalSigner.Plugin`; not
   tried).
@@ -1094,10 +1128,10 @@ docker compose up -d sc-verifier            # before explorer-backend
 docker compose stop sc-verifier
 ```
 
-**After every 7622 reset or deploy run, and after each PQZ e2e run** `smartcontracts/evm/script/verify-blockscout.sh`
-(`[broadcast.json …] [e2e-run-log …]`, default `broadcast/Deploy.s.sol/7622/run-latest.json`, the Zether e2e's
-`broadcast/ZetherE2E.s.sol/7622/run-latest.json` when present, and every `runs/*.txt` whose
-`# P6g e2e on chain 7622` header names the current genesis hash; `BLOCKSCOUT_API`, `RPC` default
+**After every SCaaS testnet reset or deploy run, and after each PQZ e2e run** `smartcontracts/evm/script/verify-blockscout.sh`
+(`[broadcast.json …] [e2e-run-log …]`, default `broadcast/Deploy.s.sol/22779/run-latest.json`, the Zether e2e's
+`broadcast/ZetherE2E.s.sol/22779/run-latest.json` when present, and every `runs/*.txt` whose
+`# P6g e2e on chain <chain id>` header names the current genesis hash; `BLOCKSCOUT_API`, `RPC` default
 `http://192.168.1.72:8545`, `FOUNDRY_PROFILE` default `scaas-testnet`): one `forge verify-contract … --verifier blockscout`
 per CREATE / CREATE2 row and per factory child of the broadcast (RelayFeeExecutor, the SmartKeyAccount implementation,
 the NormalToken / SCaaSDex implementations), constructor arguments from the init code; for the PQZ e2e

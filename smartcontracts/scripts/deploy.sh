@@ -18,7 +18,7 @@
 #                            wherever their cap fits half the verify budget: unaudited, P6c; no chain-id lock).
 #                            Always --disable-code-size-limit (forge 1.8.5 also applies EIP-3860 to the script contract itself); every token implementation
 #                            exceeds EIP-170 since the UA ledger (UA-4; owner: wait for Glamsterdam), so the chain needs
-#                            64 KiB code (anvil --code-size-limit 65536, chain 7622 maxCodeSize 0x10000 until the next reset);
+#                            64 KiB code (anvil --code-size-limit 65536, the SCaaS testnet's maxCodeSize 0x10000 until the 2026-10-31 reset);
 #                            a chain at 24,576 refuses the deploy. CHAIN_CODE_LIMIT? (default 65,536, EIP-7954): the chain's
 #                            declared code limit, a release above it refused by name before anything is sent (CTR-GOV-19,
 #                            GD-4); the SCaaS testnet after the reset of pqz-core/nethermind/chain/RUNBOOK.md ("Code size

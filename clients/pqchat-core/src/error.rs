@@ -109,6 +109,10 @@ codes! {
     /// a tree creation that did not complete and whose prepared record this store does not hold: it cannot be finished
     /// (codex-r3-5)
     TreeCreationIncomplete,
+    /// a tree commit on a state whose head moved since (C33: replay first)
+    TreeStale,
+    /// a send under a tree epoch whose info in force the device does not hold (after a gap, or taken flagged: C33)
+    TreeInfoMissing,
 }
 
 impl fmt::Display for PqChatError {

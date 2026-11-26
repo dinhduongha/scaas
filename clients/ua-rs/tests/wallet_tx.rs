@@ -236,7 +236,7 @@ fn blob_tx_without_hashes_refused_when_built() {
     assert_eq!(built.sighash().err(), Some(Error::Argument));
 }
 
-/// chainSeparation (owner 2026-11-05): types 0 and 2 on 7622 and 22776 are byte-equal to clientkeys, and a signature for one
+/// chainSeparation (owner 2026-11-05): types 0 and 2 on 22779 and 22777 are byte-equal to clientkeys, and a signature for one
 /// chain does not recover to the key over the other chain's sighash (positive control: over its own).
 #[test]
 fn chain_separation_tx_rows() {

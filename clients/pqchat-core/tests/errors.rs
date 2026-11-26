@@ -40,8 +40,9 @@ fn spec_codes() -> Vec<String> {
 fn codes_are_spec_8_in_order() {
     let want = spec_codes();
     // CLI-PQC-15 (owner 2026-11-23): `HomeUnsigned` appended, 27 -> 28; D2-4 (2026-11-25): `ExitLag`, 28 -> 29; the tree mode
-    // (CLI-PQC-17, plan 2026-11-23-pqchat-treekem T6a / T6b): seven `Tree*` codes, 29 -> 36
-    assert_eq!(want.len(), 36, "{want:?}");
+    // (CLI-PQC-17, plan 2026-11-23-pqchat-treekem T6a / T6b): seven `Tree*` codes, 29 -> 36; the T4-T9 review's fixes
+    // (D-10, C-3): `TreeStale`, `TreeInfoMissing`, 36 -> 38
+    assert_eq!(want.len(), 38, "{want:?}");
     assert_eq!(
         CODES,
         want.iter()

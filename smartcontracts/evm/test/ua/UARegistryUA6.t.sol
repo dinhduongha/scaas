@@ -380,7 +380,7 @@ contract UARegistryUA6Test is UARegistryBase {
         assertEq(g2.keyOwner(_h(key)), msUa);
     }
 
-    /// UA8-D8: where 0x0142 has no verifier (every chain but 7622; formerly `UAKindDisabled(0x0142)`) a holder's key and
+    /// UA8-D8: where 0x0142 has no verifier (every chain but 22779; formerly `UAKindDisabled(0x0142)`) a holder's key and
     /// proof are stored unproven; a non-holder's key is still `UAPqzHolder`.
     function test_UA6_pqzDisabled() public {
         bytes memory p = _key(0x0101);

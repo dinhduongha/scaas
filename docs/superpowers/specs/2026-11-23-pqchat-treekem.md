@@ -627,9 +627,14 @@ compares `keccak256` of every derived `kemPk` with the signed `nodeKeyHashes`, t
    the highest epoch number the device verified with **the `hashStruct` of that commit record** (of the session record at
    epoch 0), and never builds on a lower number or on another record at that number. An epoch id is author plus nonce and does
    not bind the record: its author can sign a twin under the same id. Every later read of a pinned epoch is compared with its
-   pinned hash. **A conflict (fable-r3-3):** the pin is written from a read under the default failover, and verifying a head
-   proves a signature and a matching root, not that the record is the home's; so the head's author, with an endpoint, can
-   have its twin pinned first. On a mismatch at a pinned number the client reads that epoch under the strict-majority
+   pinned hash. **The first pin** (CLI-PQC-17; the T4-T9 review's D-2, amended 2026-11-26 after the re-check's R2-D-2, a
+   controller call the owner may veto) is written only from a strict-majority read over at least 3 named endpoints that
+   serves the head the device walked to, so a lying endpoint cannot plant one; a pin the device holds then moves to each
+   head it verifies under the default failover. Cost: with fewer than 3 named endpoints (a `default`-only list has none) no
+   pin is ever written, so every start and every commit walks from epoch 0 and nothing refuses, across a restart, a head
+   below one the device verified before. **A conflict (fable-r3-3):** a pin moves on a read under the default failover,
+   and verifying a head proves a signature and a matching root, not that the record is the home's; so the head's author,
+   with an endpoint, can have its twin pinned. On a mismatch at a pinned number the client reads that epoch under the strict-majority
    option (at least 3 nodes, ARCH-POS-15): the majority's record, verified like any head, replaces the pin, the epoch is
    replayed from it and the event is shown. Without 3 nodes, or without a majority that agrees, the session shows
    **"conflicting head"** and the client builds nothing on it until such a read succeeds. **A higher head does not settle

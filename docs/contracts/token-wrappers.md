@@ -659,7 +659,7 @@ check was dropped); the rule handles each one explicitly:
 | Case | `code.length` | Treated as | Why |
 |---|---|---|---|
 | Plain EOA | 0 | EOA | — |
-| EOA with an EIP-7702 delegation (`0xef0100 ‖ addr`, 23 bytes, starting `0xef0100`; Prague; off on the SCaaS testnet 7622 from its next reset, live on most customer chains) | 23 | **EOA** (refused) | the code is only a designator; the EOA's private key still signs anything. As a caller it is refused even before this check: `_msgSender()` reverts `CallerDelegated(caller)` ([CTR-UA-24](accounts.md#CTR-UA-24), owner ruling D2, 2026-10-30); as a spender it gets `SpenderNotContract` |
+| EOA with an EIP-7702 delegation (`0xef0100 ‖ addr`, 23 bytes, starting `0xef0100`; Prague; off on the SCaaS testnet since its 2026-10-31 reset, live on most customer chains) | 23 | **EOA** (refused) | the code is only a designator; the EOA's private key still signs anything. As a caller it is refused even before this check: `_msgSender()` reverts `CallerDelegated(caller)` ([CTR-UA-24](accounts.md#CTR-UA-24), owner ruling D2, 2026-10-30); as a spender it gets `SpenderNotContract` |
 | Contract during its constructor | 0 | **EOA** (refused) | indistinguishable from an EOA at that moment; consequence: a contract **cannot** be approved or spend an allowance from its own constructor |
 | Deployed contract | > 0, not a designator | contract | — |
 
@@ -806,7 +806,7 @@ implementation itself, so what a release depends on is fixed in its code by cons
   old names.
 - **Notice period.** `usableFrom = block.timestamp + noticePeriod`; `createToken` / `createDex` refuse a release before
   it (`VersionNotYetUsable`, `DexVersionNotYetUsable`). The deploy script reads `NOTICE_PERIOD`: every mainnet (any
-  chain outside `DeployBase._isTestChain`'s fixed test / dev list — 22776, Hedera 295, Ethereum, BSC, an unknown chain)
+  chain outside `DeployBase._isTestChain`'s fixed test / dev list — 22777, Hedera 295, Ethereum, BSC, an unknown chain)
   defaults to and may not go below 3 days; the SCaaS testnet defaults to 10 minutes, the other test / dev chains to 0 (owner
   ruling 2026-10-20). The constructor caps it at 30 days (`MAX_NOTICE_PERIOD`, `NoticePeriodTooLong`: near `2^64` every deployment would overflow).
 - **Limit.** The registrar's key is the trust root for code: it chooses the init code and the env. The factory proves

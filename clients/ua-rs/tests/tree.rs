@@ -470,6 +470,8 @@ struct Home {
     /// an updated `msig`'s structures by version, `msigAt` (CTR-UA-74)
     msig: MsigVersions,
     log: Vec<String>,
+    /// the contract's `treeOf.owed`: the live leaves of the UAs gone at the head, owed by the next commit
+    owed: u64,
 }
 
 impl Home {
@@ -521,6 +523,7 @@ impl Home {
             self.node_key.insert(*x, (unhex(&st["nodeKeys"][k]), epoch));
         }
         self.tree = a.tree;
+        self.owed = 0;
         self.epochs.push(Epoch {
             id: a32(&st["epochId"]),
             record: c.clone(),
@@ -548,8 +551,15 @@ impl Home {
                 .map(a32)
                 .collect()
         };
-        self.tree.mark_gone(&uas);
         let head = self.epochs.len() as u64 - 1;
+        for ua in &uas {
+            if !self.gone.contains_key(ua) {
+                self.owed += (0..self.tree.leaves)
+                    .filter(|i| self.tree.leaf(*i).is_some_and(|l| l.ua == *ua))
+                    .count() as u64;
+            }
+        }
+        self.tree.mark_gone(&uas);
         for ua in uas {
             self.gone.entry(ua).or_insert((kind, head));
         }
@@ -580,7 +590,8 @@ impl TreeReader for Home {
             View::SessionOf => json!({"record": self.epochs[0].record, "sig": self.epochs[0].sig}),
             View::TreeOf => json!({"treeId": hx(&self.tree_id), "leaves": self.tree.leaves, "used": self.tree.used,
                 "treeHash": hx(&self.tree.tree_hash()), "genesisTreeHash": hx(&self.genesis_tree_hash),
-                "sincePath": self.tree.since_path}),
+                "sincePath": self.tree.since_path,
+                "owed": self.owed}),
             View::TreeLeaves => json!((0..self.tree.leaves)
                 .map(|i| match self.tree.leaf(i) {
                     Some(l) => {
@@ -684,6 +695,7 @@ fn new_home(
         ua_keys,
         msig: BTreeMap::new(),
         log: vec![],
+        owed: 0,
     }
 }
 
@@ -1994,6 +2006,13 @@ fn tree_states_of_signed_faults() {
     let r = o.replay(&mut h, 2);
     assert_eq!(last(&r), (State::Followed, Some(InfoTook::Changed)));
     assert_eq!(r.epochs.last().unwrap().in_force.as_deref(), Some(INFO_B));
+    // the admin judged on the parent's admins (T6b of the TreeKEM plan): an admin that hands the role to another member in the
+    // same commit still changes the info; a member made admin by that commit does not count as one for it
+    let mut h = o.home();
+    o.commit(&mut h, 0, &[1], INFO_B, &[], honest);
+    let r = o.replay(&mut h, 2);
+    assert_eq!(last(&r), (State::Followed, Some(InfoTook::Changed)));
+    assert_eq!(r.epochs.last().unwrap().in_force.as_deref(), Some(INFO_B));
     // the derived-key comparison: ciphertexts that open to secrets whose keys are not the signed ones
     let mut h = o.home();
     o.commit(&mut h, 0, &[0], INFO_A, &[], other_node_keys);
@@ -2929,4 +2948,65 @@ fn tree_path_of_a_leaf_outside() {
     assert!(scaas_ua::wallet::tree::path_from_list(0, &[2], 4).is_some());
     let t = Tree::cold(&[]).unwrap_or_default();
     assert!(t.filtered_path(u32::MAX).is_empty());
+}
+
+/// C-4 = D-6 (+ B-16) of the TreeKEM T4-T9 review: a resume that finds no new epoch keeps the info in force and the node keys
+/// (its replay seals the full info as the previous one did), and a device that resumes from it after more commits follows
+/// them as a full replay does: each resume chains, none drops what the device held.
+#[test]
+fn tree_resume_twice_keeps_the_keys_and_the_info() {
+    let o = Own::new();
+    let mut h = o.home();
+    for n in 1..=4usize {
+        o.commit(&mut h, n % 2, &[0], INFO_A, &[], honest);
+    }
+    let mut r4 = o.replay(&mut h, 2);
+    let seal = r4.info_to_seal().map(str::to_string);
+    assert!(
+        seal.is_some(),
+        "control: the device holds the info in force at 4"
+    );
+    let held = r4.held.keys().copied().collect::<Vec<_>>();
+    let mut idle = o
+        .keys
+        .tree_resume(OWN, &mut h, &o.dev(2), &mut r4, 0)
+        .unwrap()
+        .unwrap();
+    assert!(idle.epochs.is_empty(), "no new epoch");
+    assert_eq!(
+        idle.info_to_seal().map(str::to_string),
+        seal,
+        "the info in force kept"
+    );
+    assert_eq!(
+        idle.held.keys().copied().collect::<Vec<_>>(),
+        held,
+        "the node keys kept"
+    );
+    for n in 5..=7usize {
+        o.commit(&mut h, n % 2, &[0], INFO_A, &[], honest);
+    }
+    let full = o.replay(&mut h, 2);
+    let more = o
+        .keys
+        .tree_resume(OWN, &mut h, &o.dev(2), &mut idle, 0)
+        .unwrap()
+        .unwrap();
+    let reveal = |k: &Option<scaas_ua::wallet::KeyHandle>| {
+        k.as_ref().map(|k| o.keys.vectors_reveal(k).unwrap())
+    };
+    assert_eq!(
+        more.epochs.iter().map(|e| e.epoch).collect::<Vec<_>>(),
+        vec![5, 6, 7]
+    );
+    for e in &more.epochs {
+        let g = full.epochs.iter().find(|x| x.epoch == e.epoch).unwrap();
+        assert_eq!(
+            (e.state, reveal(&e.k)),
+            (g.state, reveal(&g.k)),
+            "epoch {}",
+            e.epoch
+        );
+    }
+    assert_eq!(more.info_to_seal(), full.info_to_seal());
 }

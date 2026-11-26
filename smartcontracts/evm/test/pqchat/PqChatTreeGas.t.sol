@@ -144,6 +144,11 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         emit log_named_uint(string.concat("GAS ", what, " asked x 1.05"), (r + s) * 105 / 100);
     }
 
+    /// A row's count (targets, node keys, keys of a creation), for the SDK's rows (`gas/pqchat_tree_rows.py` reads it).
+    function _count(string memory what, uint256 n) internal {
+        emit log_named_uint(string.concat("GAS ", what, " count"), n);
+    }
+
     /// `_row` with `extra` regular gas (a verify), asserted to fit: regular < 2^24, asked within the block.
     function _fits(string memory what, uint256 extra) internal returns (uint256 r, uint256 s) {
         (r, s) = _row(what);
@@ -371,7 +376,14 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         bytes32[] memory p = _people(4, 8);
         M memory m = _session(_keysOf(p, 8), _list(p[0]), true);
         (Step memory st, M memory n) = _build(m, 0, _noCh(), _list(p[0])); // the author's path made warm
-        m = _landPieces(st, n, m);
+        m = _plainMeasured(st, n, m);
+        (st, n) = _build(m, 0, _noCh(), _list(p[0]));
+        uint256 snap = vm.snapshotState(); // the SDK's row of a plain record on a warm tree, then undone
+        ++nonceN;
+        _record(st, SIG65);
+        _fits("commit record, plain, on a warm tree of 32", VERIFY65);
+        _count("commit record, plain, on a warm tree of 32", st.c.ctCount);
+        vm.revertToState(snap);
         bytes32[] memory q = _people(CHANGES, 1);
         uint32[] memory at = new uint32[](CHANGES);
         for (uint256 i; i < CHANGES; ++i) {
@@ -396,6 +408,23 @@ contract PqChatTreeGasTest is PqChatTreeModel {
             IPqChat.PqChatTreeRemove(m.sid, m.treeId, n.head, n.epoch + 1, _list(q[0]), p[0], ++nonceN);
         vchat.treeRemove(r, _sized(SIG65));
         _fits("treeRemove of one UA with its gone slot", VERIFY65);
+    }
+
+    /// The first commit of the fixture (a plain commit on the cold tree of 32, the author's path made warm) landed in C37's
+    /// order, its record and its completion measured (the SDK's rows: the record's tree term, the completion's base and per
+    /// node key).
+    function _plainMeasured(Step memory st, M memory n, M memory m) internal returns (M memory) {
+        ++nonceN;
+        _record(st, SIG65);
+        _fits("commit record, plain, on a cold tree of 32", VERIFY65);
+        _count("commit record, plain, on a cold tree of 32", st.c.ctCount);
+        _list(st);
+        _keys(st);
+        _middle(st, 0);
+        _completion(st, "completion of a plain commit, cold tree of 32");
+        _count("completion of a plain commit, cold tree of 32", st.nodeKeys.length);
+        assertEq(_root(vchat, m.sid), _mRoot(n), "stored root is the model's");
+        return n;
     }
 
     /// The bound (codex-r3-6) and every piece at 512 keys (R8, owner 2026-11-25: 256 -> 512, depth 9) and 20 changes (C10,
@@ -424,8 +453,13 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         _fits("the node keys, depth 9", 0);
         _cts(st, 0, 1);
         _fits("one ciphertext in addPath", 0);
+        _count("commit record, plain, the tree check on a cold tree of 512", st.c.ctCount);
+        _middle(st, 1);
+        _completion(st, "completion of a plain commit, cold tree of 512");
+        _count("completion of a plain commit, cold tree of 512", st.nodeKeys.length);
         vm.revertToState(snap);
         m = _reach(m, p);
+        _addsOnTheReachedTree(m);
         uint256 z = p.length;
         _pause();
         for (uint256 g = 6; g < z - 9; g += 5) {
@@ -453,6 +487,7 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         ++nonceN;
         _record(st, SIG65);
         _fits("reachability: the record, 20 forced Removes", VERIFY65);
+        _count("reachability: the record, 20 forced Removes", st.c.ctCount);
         _list(st);
         _fits("reachability: the list", 0);
         _keys(st);
@@ -462,10 +497,31 @@ contract PqChatTreeGasTest is PqChatTreeModel {
             _cts(st, i, i + CT_PER < k - 1 ? i + CT_PER : k - 1);
             _fits("reachability: a chunk of ciphertexts", 0);
         }
+        _count("reachability: a chunk of ciphertexts", CT_PER);
         _cts(st, k - 1, k);
         _fits("reachability: the held ciphertext with the completion", 0);
+        _count("reachability: the held ciphertext with the completion", st.nodeKeys.length);
         assertTrue(vchat.epochComplete(st.epochId), "complete");
         return n;
+    }
+
+    /// The SDK's row of Adds on a large tree (then undone): 20 Adds of UAs with no session into the 20 leaves the reachability
+    /// commit blanked, on the tree of 491 live leaves (most of the path cold), the record alone with ML-DSA-87.
+    function _addsOnTheReachedTree(M memory m) internal {
+        bytes32[] memory q = _people(CHANGES, 1);
+        uint32[] memory at = new uint32[](CHANGES);
+        uint256 k;
+        for (uint256 i; i < m.used && k < CHANGES; ++i) {
+            if (!m.live[i]) at[k++] = uint32(i);
+        }
+        assertEq(k, CHANGES, "20 blank leaves");
+        (Step memory st,) = _build(m, 0, _addsTo(q, at), _list(m.ua[0]));
+        uint256 snap = vm.snapshotState();
+        ++nonceN;
+        _record(st, SIG87);
+        _fits("commit record, 20 Adds on the reached tree of 491, ML-DSA-87", VERIFY87);
+        _count("commit record, 20 Adds on the reached tree of 491, ML-DSA-87", st.c.ctCount);
+        vm.revertToState(snap);
     }
 
     /// The author's own three other keys and four UAs, then the commit of the last live leaf at its bounds: 20 Removes that
@@ -621,6 +677,7 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         assertEq(k, CHANGES, "20 one-key UAs left beside the author");
         emit log_named_uint("A-17 the live leaves from position", lo);
         emit log_named_uint("A-17 the live leaves to position", hi);
+        _oneRemoveLast(m, at, c, admins);
         (st,) = _build(m, at, c, admins);
         st.c.sealedInfo = new bytes(4124);
         assertEq(st.c.ctCount + st.nodeKeys.length, 0, "no piece");
@@ -635,6 +692,37 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         _pin(r87, s87, WORST87_REGULAR, WORST87_STATE, "the last live leaf on the worst head, ML-DSA-87");
         emit log_named_uint("GAS the last live leaf on the worst head, ML-DSA-87: under 2^24 by", CAP - r87);
         assertTrue(vchat.epochComplete(st.epochId), "complete in the one transaction");
+    }
+
+    /// The SDK's no-piece row at one Remove (then undone): on the worst head, 19 of the 20 one-key UAs removed first (no row,
+    /// the head's admins kept), then the last live leaf's commit of the one left, the admins replaced as A-17's and 4,124 B
+    /// of info, ML-DSA-65, one transaction.
+    function _oneRemoveLast(M memory m, uint32 at, Ch[] memory c, bytes32[] memory admins) internal {
+        uint256 snap = vm.snapshotState();
+        Ch[] memory first = new Ch[](CHANGES - 1);
+        for (uint256 i; i + 1 < CHANGES; ++i) {
+            first[i] = c[i];
+        }
+        Ch[] memory last = new Ch[](1);
+        last[0] = c[CHANGES - 1];
+        _pause();
+        (Step memory s1, M memory n1) = _build(m, at, first, _headAdmins(m));
+        M memory m1 = _landPieces(s1, n1, m);
+        _resume();
+        (Step memory st,) = _build(m1, at, last, admins);
+        st.c.sealedInfo = new bytes(4124);
+        assertEq(st.c.ctCount + st.nodeKeys.length, 0, "no piece");
+        ++nonceN;
+        _record(st, SIG65);
+        _fits("the last live leaf on the worst head, one Remove, ML-DSA-65, one transaction", VERIFY65);
+        assertTrue(vchat.epochComplete(st.epochId), "complete in the one transaction");
+        vm.revertToState(snap);
+    }
+
+    /// The admins of `m`'s head record.
+    function _headAdmins(M memory m) internal view returns (bytes32[] memory) {
+        (IPqChat.PqChatCommit memory c,) = IPqChatTreeViews(address(vchat)).commitOf(m.head);
+        return c.admins;
     }
 
     function _one(bytes32 a) internal pure returns (bytes32[] memory l) {
@@ -733,9 +821,23 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         assertGt(r65 + rc, CAP, "over 2^24: the record goes alone (spec s13)");
     }
 
-    /// The record at its bounds with ML-DSA-87 (then undone) and with ML-DSA-65; their regular gas with the verify.
+    /// The record at its bounds with ML-DSA-87 (then undone) and with ML-DSA-65; their regular gas with the verify. Before
+    /// them, each undone, the same record with one admin (the head's) and with the plain record's 2 B of info: the SDK's
+    /// per-admin and per-KiB terms.
     function _boundRecord(Step memory st) internal returns (uint256 r65, uint256 r87) {
+        _count("commit record at its bounds, ML-DSA-65", st.c.ctCount);
+        (bytes32[] memory admins, bytes memory info) = (st.c.admins, st.c.sealedInfo);
         uint256 snap = vm.snapshotState();
+        st.c.admins = _one(st.c.author);
+        _record(st, SIG65);
+        _fits("commit record at its bounds, one admin", VERIFY65);
+        vm.revertToState(snap);
+        (st.c.admins, st.c.sealedInfo) = (admins, hex"c0de");
+        _record(st, SIG65);
+        _fits("commit record at its bounds, 2 B of info", VERIFY65);
+        vm.revertToState(snap);
+        st.c.sealedInfo = info;
+        snap = vm.snapshotState();
         _record(st, SIG87);
         (r87,) = _fits("commit record at its bounds, ML-DSA-87", VERIFY87);
         vm.revertToState(snap);
@@ -769,10 +871,37 @@ contract PqChatTreeGasTest is PqChatTreeModel {
         emit log_named_uint("GAS treeLeaves, the full tree in eight calls", sum);
     }
 
-    /// The session records at 64, 128 and 192 member keys fit; 15 genesis wraps in one transaction.
+    /// A tree session of `all`'s first `k` keys created with `admins` and every wrap in one transaction (then undone): a row.
+    function _creation(IPqChat.MemberKey[] memory all, uint256 k, bytes32[] memory admins, string memory what)
+        internal
+    {
+        IPqChat.MemberKey[] memory mk = new IPqChat.MemberKey[](k);
+        for (uint256 i; i < k; ++i) {
+            mk[i] = all[i];
+        }
+        IPqChat.PqChatSession memory s;
+        (s.creator, s.nonce, s.homeChain, s.homeChatContract) = (mk[0].ua, ++nonceN, homeChain_, address(vchat));
+        (s.admins, s.members, s.groupMode, s.sealedInfo) = (admins, mk, 1, hex"5ea1");
+        IPqChat.Wrap[] memory w = _wraps(mk, PqChatTypes.sessionId(s.creator, s.nonce));
+        s.wrapHashes = _hashes(w);
+        uint256 snap = vm.snapshotState();
+        vchat.createSession(s, w, _sized(SIG65));
+        _fits(what, VERIFY65);
+        _count(what, k);
+        assertTrue(vchat.epochComplete(PqChatTypes.sessionId(s.creator, s.nonce)), "complete in one transaction");
+        vm.revertToState(snap);
+    }
+
+    /// The session records at 64, 128 and 192 member keys fit; 15 genesis wraps in one transaction; the creation in one
+    /// transaction (the record with every wrap, owner 2026-11-25) at 4 and 11 member keys (one each of as many UAs; 12 ask 63.1 M) with one
+    /// admin and at 4 with 32 (the SDK's creation row).
     function test_sessionRecords() public {
         bytes32[] memory p = _people(24, 8);
         IPqChat.MemberKey[] memory all = _keysOf(p, 8);
+        IPqChat.MemberKey[] memory one = _keysOf(p, 1);
+        _creation(one, 4, _list(p[0]), "creation in one transaction, 4 member keys");
+        _creation(one, 11, _list(p[0]), "creation in one transaction, 11 member keys");
+        _creation(one, 4, _withAuthor(p[0], _people(31, 0)), "creation in one transaction, 4 member keys, 32 admins");
         for (uint256 k = 64; k <= 192; k += 64) {
             IPqChat.MemberKey[] memory mk = new IPqChat.MemberKey[](k);
             for (uint256 i; i < k; ++i) {
@@ -804,12 +933,14 @@ contract PqChatTreeGasReplicaTest is Test {
         uint256 k = ss / perSlot;
         (uint256 rk,) = _gas(b, 0, k, salt + 2);
         (uint256 rn,) = _gas(b, 100_000, k, salt + 3);
-        uint256 n = (rr - rk) * 100_000 / (rn - rk);
+        // a row whose regular gas is below its slots' own (a small piece): no hash rounds, the replica an upper bound of it
+        uint256 n = rr > rk ? (rr - rk) * 100_000 / (rn - rk) : 0;
         (uint256 r, uint256 s) = _gas(b, n, k, salt + 4);
         emit log_named_string("REPLICA", string.concat(what, " n=", vm.toString(n), " k=", vm.toString(k)));
         emit log_named_uint(string.concat("REPLICA ", what, " regular"), r);
         emit log_named_uint(string.concat("REPLICA ", what, " state"), s);
-        assertApproxEqRel(r, rr, 0.001e18, "regular");
+        if (n > 0) assertApproxEqRel(r, rr, 0.001e18, "regular");
+        else assertGe(r, rr, "regular (an upper bound)");
         assertApproxEqAbs(s, ss, perSlot, "state");
     }
 
@@ -824,6 +955,19 @@ contract PqChatTreeGasReplicaTest is Test {
         _row(b, "last live leaf A-17 worst head ML-DSA-87", 16_158_289, 24_372_900, 9e6);
         _row(b, "last live leaf A-17 worst head ML-DSA-65", 13_205_502, 22_365_540, 10e6);
         _row(b, "closing treeRemove A-17 ML-DSA-87", 10_518_373, 8_656_740, 11e6);
+        // plan T8 (2026-11-26): the points of the SDK's tree gas rows (clients/scaas-sdk/gas/pqchat_tree_rows.py)
+        _row(b, "sdk: the list at the bound, 20 targets", 140_618, 1_482_570, 20e6);
+        _row(b, "sdk: the list of a cold commit, 511 targets", 2_118_552, 28_526_850, 21e6);
+        _row(b, "sdk: the node keys at the bound, six", 942_589, 14_980_230, 22e6);
+        _row(b, "sdk: the node keys, depth 9", 1_346_222, 22_328_820, 23e6);
+        _row(b, "sdk: one ciphertext in addPath", 140_184, 2_804_490, 24e6);
+        _row(b, "sdk: reachability: a chunk of ciphertexts", 1_891_224, 42_094_890, 25e6);
+        _row(b, "sdk: 15 genesis wraps in one transaction", 3_963_889, 46_758_330, 26e6);
+        _row(b, "sdk: the session record, 64 member keys", 1_775_286, 20_064_420, 27e6);
+        _row(b, "sdk: the session record, 128 member keys", 3_593_250, 32_402_340, 28e6);
+        _row(b, "sdk: commit record, plain, the tree check on a cold tree of 512", 4_595_919, 7_971_300, 29e6);
+        _row(b, "sdk: commit record at its bounds, ML-DSA-65", 4_738_597, 21_386_340, 30e6);
+        _row(b, "sdk: completion at its bounds with the held ciphertext", 7_960_290, 28_655_370, 31e6);
         _row(b, "control under 2^24", 16_700_000, 1_000_000, 7e6);
         _row(b, "control over 2^24", 16_850_000, 1_000_000, 8e6);
     }

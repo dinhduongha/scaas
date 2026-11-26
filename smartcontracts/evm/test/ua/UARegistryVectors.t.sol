@@ -176,7 +176,7 @@ contract UARegistryVectorsTest is UARegistryBase {
                     REG_A, chainUidA, address(gen1), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0)
                 );
             } else if (keccak256(bytes(ctx)) == keccak256("B")) {
-                vm.chainId(7622);
+                vm.chainId(22779);
                 r = _deploy(
                     REG_A,
                     vm.parseJsonBytes32(s, ".contexts.B.chainUid"),

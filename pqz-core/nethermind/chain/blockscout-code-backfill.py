@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""blockscout-code-backfill.py <rpc> | --prune-coin-balances <rpc> <backup.csv> | --self-test: one-off for Blockscout on the pruned 7622 node: the ContractCode fetcher asks eth_getCode at the creation block,
+"""blockscout-code-backfill.py <rpc> | --prune-coin-balances <rpc> <backup.csv> | --self-test: one-off for Blockscout on the pruned SCaaS testnet node: the ContractCode fetcher asks eth_getCode at the creation block,
 which a pruned node no longer has ("No state available"), and retries forever. Contract code is immutable here
 (no SELFDESTRUCT after EIP-6780 outside the creation tx), so take it at latest and mark the rows done.
 Only the transactions selected by this run are marked; empty code (failed creation, or a create that self-destructed

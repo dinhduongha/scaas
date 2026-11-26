@@ -442,6 +442,19 @@ fn tree_over(r: &str) -> bool {
     guard::over_cap(r) || guard::rpc_cap(r) || r.starts_with(guard::TX_EXCEEDS_CHAIN_LIMIT)
 }
 
+/// A-1 of the TreeKEM T4-T9 review: a tree set's revert that another sender's landing explains (the record already stored,
+/// a piece landed first): no verdict, the next pass reads the state.
+fn tree_race(r: &str) -> bool {
+    [
+        "PqChatNonceUsed",
+        "PqChatPathList",
+        "PqChatPathStored",
+        "PqChatWrapStored",
+    ]
+    .iter()
+    .any(|n| r.contains(n))
+}
+
 pub fn work_of_op(
     job_id: Option<i64>,
     op: &serde_json::Value,
@@ -571,6 +584,9 @@ pub struct Submitter {
     journal: Option<(Store, String)>,
     /// NODE-JOB-29: [`guard::rpc_cap`] refusals in a row per cache part (its call key), bounded by [`PART_CAP_WAITS`].
     cap_waits: HashMap<B256, u32>,
+    /// A-2 of the TreeKEM T4-T9 review: tree commit jobs tracked after a restart, never re-signed from their payload (their
+    /// transaction may be a part of the set): their receipt or gap-fill puts them back in the queue, never a verdict.
+    tree_orphans: std::collections::HashSet<i64>,
 }
 
 impl Submitter {
@@ -650,6 +666,7 @@ impl Submitter {
             failover_mark: 0,
             journal,
             cap_waits: HashMap::new(),
+            tree_orphans: Default::default(),
         };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
@@ -674,6 +691,12 @@ impl Submitter {
             };
             let fees = me.chain.fees().await?;
             let work = match me.guard.work(&j.payload, me.cfg.fee_recipient) {
+                // A-2: a tree commit job's tracked transaction may be its record alone or its held piece, not the payload's
+                // whole commit: tracked by its hash only, never replaced with the payload's calldata
+                Ok(w) if tree_entry(&w.data) == Some("commit") => {
+                    me.tree_orphans.insert(j.job_id);
+                    None
+                }
                 Ok(mut w) => {
                     if let Err(e) = guard::fill_digest(&me.chain, &mut w).await {
                         anyhow::bail!("typed digest: {e:?}");
@@ -1100,7 +1123,25 @@ impl Submitter {
             false => ts::Landed::default(),
         };
         let sending = |why: String| format!("{}: {why}", ts::TREE_SET_SENDING);
+        // A-7: the record stored at this epoch id is the job's (an author's two commits share an id by nonce)
+        if latest.record && latest.signed != ts::signed_of(&s) {
+            return self
+                .fail(
+                    &w,
+                    format!(
+                        "{}: another record holds epoch {:#x}; nothing sent",
+                        ts::TREE_SET_SUPERSEDED,
+                        s.eid
+                    ),
+                )
+                .await;
+        }
         match ts::step(&s, &latest, &fin) {
+            // A-7: `consumed` once the final block shows the set complete too
+            Step::Done if ts::step(&s, &fin, &fin) != Step::Done => {
+                self.requeue(&w, sending("complete at the head, not final yet".into()))
+                    .await
+            }
             Step::Done => {
                 if let Some(id) = w.job_id {
                     let why = "TREE_SET_COMPLETE: every piece of the set is in state";
@@ -1109,26 +1150,58 @@ impl Submitter {
                 }
             }
             Step::Wait(why) => self.requeue(&w, sending(why)).await,
-            Step::Whole => match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
-                Ok(g) => {
-                    self.dispatch(w, guard, g, None).await;
-                }
-                Err(SimError::Revert(r)) if tree_over(&r) => {
-                    match self.tree_part(&w, "commit", ts::record_alone(&s)).await {
-                        Ok(()) => {
-                            let why = format!("the whole commit does not fit one transaction ({r}): the record first, alone");
-                            self.requeue(&w, sending(why)).await
+            Step::Whole => {
+                match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
+                    Ok(g) => {
+                        self.dispatch(w, guard, g, None).await;
+                    }
+                    Err(SimError::Revert(r)) if tree_over(&r) => {
+                        // D-12: before the record goes alone, the record with its list simulated: a list whose targets the
+                        // contract refuses is refused here, before the relayer pays for a record that cannot complete (when the
+                        // two do not fit one simulation, the contract checks the list when it lands)
+                        if s.cts > 0 {
+                            let op = tree_op(&w, "commit", ts::record_and_list(&s));
+                            if let Ok((p, _)) = work_of_op(None, &op, None) {
+                                if let Err(SimError::Revert(r2)) =
+                                    guard::gas(&self.chain, &p, self.cfg.max_gas_per_tx).await
+                                {
+                                    // R2-D-4 of the T4-T9 re-check: another sender's record landed between the two
+                                    // simulations is no verdict (A-1): the next pass reads the state
+                                    if tree_race(&r2) {
+                                        let why = format!("the record with its list: {r2} (another sender's part)");
+                                        return self.requeue(&w, sending(why)).await;
+                                    }
+                                    if !tree_over(&r2) {
+                                        return self
+                                        .fail(&w, format!("{}: the record with its list: {r2}; nothing sent", ts::TREE_SET_REFUSED))
+                                        .await;
+                                    }
+                                }
+                            }
                         }
-                        Err((true, e)) => self.requeue(&w, sending(e)).await,
-                        Err((false, e)) => {
-                            self.fail(&w, format!("{}: {e}; nothing sent", ts::TREE_SET_REFUSED))
+                        match self.tree_part(&w, "commit", ts::record_alone(&s)).await {
+                            Ok(()) => {
+                                let why = format!("the whole commit does not fit one transaction ({r}): the record first, alone");
+                                self.requeue(&w, sending(why)).await
+                            }
+                            Err((true, e)) => self.requeue(&w, sending(e)).await,
+                            Err((false, e)) => {
+                                self.fail(
+                                    &w,
+                                    format!("{}: {e}; nothing sent", ts::TREE_SET_REFUSED),
+                                )
                                 .await
+                            }
                         }
                     }
+                    Err(SimError::Revert(r)) if tree_race(&r) => {
+                        self.requeue(&w, sending(format!("the whole commit: {r}")))
+                            .await
+                    }
+                    Err(SimError::Revert(r)) => self.refused(&w, r).await,
+                    Err(SimError::Transport(r)) => self.requeue(&w, format!("simulate: {r}")).await,
                 }
-                Err(SimError::Revert(r)) => self.refused(&w, r).await,
-                Err(SimError::Transport(r)) => self.requeue(&w, format!("simulate: {r}")).await,
-            },
+            }
             Step::Parts(parts) => {
                 let names: Vec<&str> = parts.iter().map(|p| p.0).collect();
                 for (e, a) in parts {
@@ -1162,6 +1235,10 @@ impl Submitter {
                     Ok(g) => {
                         self.dispatch(last, guard, g, None).await;
                     }
+                    Err(SimError::Revert(r)) if tree_race(&r) => {
+                        self.requeue(&last, sending(format!("the held piece: {r}")))
+                            .await
+                    }
                     Err(SimError::Revert(r)) => self.refused(&last, r).await,
                     Err(SimError::Transport(r)) => {
                         self.requeue(&last, format!("simulate: {r}")).await
@@ -1194,6 +1271,15 @@ impl Submitter {
             .await
         {
             Ok(r) => r.c,
+            // A-4: the record not stored yet waits (another sender may land it); an epoch of the other mode is the contract's
+            Err(SimError::Revert(r)) if r.contains("PqChatUnknown") => {
+                return self
+                    .requeue(
+                        &w,
+                        format!("{}: its record is not stored yet", ts::TREE_SET_WAITING),
+                    )
+                    .await
+            }
             Err(SimError::Revert(_)) => return self.send(w, guard).await,
             Err(SimError::Transport(e)) => return self.requeue(&w, format!("commitOf: {e}")).await,
         };
@@ -1216,6 +1302,10 @@ impl Submitter {
                 }
             },
         };
+        // A-6: the piece's own hashes first, on nothing in state: a piece that cannot be the record's costs no state read
+        if let Err(e) = ts::piece(entry, args, &r, &list, &ts::Landed::default()) {
+            return self.fail(&w, e).await;
+        }
         let shape = (eid, r.cts, r.key_hashes.len(), r.wrap_hashes.len());
         let latest = match self.tree_landed(w.to, shape, false).await {
             Ok(l) => l,
@@ -1261,7 +1351,10 @@ impl Submitter {
             ..Default::default()
         };
         l.record = match rd!(commitOfCall { epochId: eid }) {
-            Ok(_) => true,
+            Ok(r) => {
+                l.signed = vec![r.c.treeHash, r.c.ctListHash];
+                true
+            }
             Err(SimError::Revert(_)) => false,
             Err(SimError::Transport(e)) => return Err(e),
         };
@@ -1332,6 +1425,21 @@ impl Submitter {
                             todo.push(hi);
                             todo.push(lo);
                         }
+                        // A-3 (NODE-JOB-29's rule): a piece over this lane's own cap, or the RPC's (bounded), waits: another
+                        // sender may land it; only the chain's own limit refuses the set
+                        None if guard::lane_cap(&r) => {
+                            let key = p.call_key();
+                            let n = self.cap_waits.entry(key).or_default();
+                            *n += 1;
+                            if !guard::rpc_cap(&r) || *n < PART_CAP_WAITS {
+                                return Err((true, format!("{entry} does not fit this lane: {r}")));
+                            }
+                            self.cap_waits.remove(&key);
+                            return Err((
+                                false,
+                                format!("{entry} does not fit one transaction: {PART_CAP_WAITS} simulations in a row: {r}"),
+                            ));
+                        }
                         None => {
                             return Err((
                                 false,
@@ -1339,6 +1447,9 @@ impl Submitter {
                             ))
                         }
                     }
+                }
+                Err(SimError::Revert(r)) if tree_race(&r) => {
+                    return Err((true, format!("{entry}: {r} (another sender's piece)")))
                 }
                 Err(SimError::Revert(r)) => return Err((false, format!("{entry}: {r}"))),
                 Err(SimError::Transport(r)) => {
@@ -2249,6 +2360,15 @@ impl Submitter {
             }
         }
         let Some(w) = work else {
+            if let Some((id, _)) = orphan.filter(|(id, _)| self.tree_orphans.remove(id)) {
+                // A-2: a tree commit job tracked after a restart: its next pass reads the set's state (`consumed` when complete)
+                let why = format!(
+                    "{}: its transaction tracked after a restart settled; the set's state decides",
+                    crate::tree_set::TREE_SET_SENDING
+                );
+                _ = self.report(id, "queued", None, None, Some(why)).await;
+                return;
+            }
             match orphan {
                 Some((id, true)) if rc.status() => {
                     _ = self.report(id, "mined", Some(h), None, None).await
@@ -2266,6 +2386,15 @@ impl Submitter {
             (false, true, _) => self.report_consumed(&w).await,
             (true, _, Some(id)) => _ = self.report(id, "mined", Some(h), None, None).await,
             (false, false, Some(id)) => {
+                // A-1: a tree set's transaction that reverted (another sender landed that piece first, or the record) is no
+                // verdict: the next pass reads the set's state, `consumed` when it is complete
+                if tree_entry(&w.data).is_some() {
+                    let why = format!(
+                        "{}: the receipt reverted; the set's state decides",
+                        crate::tree_set::TREE_SET_SENDING
+                    );
+                    return self.requeue(&w, why).await;
+                }
                 // NODE-JOB-29: an ML-DSA registration that reverted for its cache (a part dropped by a reorg) waits for the parts
                 // T21 batch G: unread, or passing now (mined before its last part), it may still land: back in the queue too
                 if guard::mldsa_register(&w.data).is_some() {
@@ -2550,6 +2679,149 @@ pub(crate) mod tests {
         latest: Option<u64>,
         /// T21 L80: `eth_sendRawTransaction` fails (a transport error; nothing recorded).
         send_down: bool,
+        /// Plan T8 (C37 at the submit level): a `PqChat` tree commit's state, as each sent transaction lands it at once
+        /// (`None`: no tree views).
+        tree: Option<FakeTree>,
+    }
+
+    /// What of one tree commit is in the fake's state (every block the same: `latest` = final), and every tree transaction
+    /// sent as `(entry, ciphertexts and wraps it carries)`.
+    #[derive(Default)]
+    struct FakeTree {
+        /// The whole commit (any ciphertext in it) estimates above 2^24: it does not fit one transaction.
+        whole_over: bool,
+        record: bool,
+        list: bool,
+        keys: bool,
+        cts: Vec<bool>,
+        wraps: Vec<bool>,
+        sent: Vec<(String, usize)>,
+        /// the stored record's `treeHash` and `ctListHash` (the job's, A-7)
+        signed: (B256, B256),
+        /// A-1: another sender lands the list just before the node's own `addPathList` is estimated (that estimate reverts
+        /// `PqChatPathList`, as the contract answers a second list)
+        race_list: bool,
+        /// R2-D-4: another sender lands the record just before the node's record-with-list estimate (that estimate reverts
+        /// `PqChatNonceUsed`, as the contract answers the same record again)
+        race_record: bool,
+    }
+
+    /// A `PqChat` write's entry and named args, as the node's rows read the calldata.
+    fn tree_args(input: &[u8]) -> Option<(String, Value)> {
+        let op = crate::typed::call_op("pqchat", TOKEN, input, "0").ok()?;
+        Some((op["entry"].as_str()?.to_string(), op["args"].clone()))
+    }
+
+    /// The fake's answer to a tree view (`None`: not one).
+    fn tree_view(t: &FakeTree, input: &[u8]) -> Option<Result<Value, Value>> {
+        use crate::abi::IPqChatTree as T;
+        use alloy::sol_types::SolCall;
+        let sel = input.get(..4)?;
+        let hex = |b: Vec<u8>| Ok(json!(format!("0x{}", alloy::hex::encode(b))));
+        let idx = |i: usize| {
+            input
+                .get(36..68)
+                .map_or(0, |w| U256::from_be_slice(w).to::<usize>())
+                == i
+        };
+        let at = |v: &[bool]| (0..v.len()).any(|i| idx(i) && v[i]);
+        let revert = || Err(err(3, "execution reverted", Some("0x".into())));
+        Some(if sel == T::commitOfCall::SELECTOR {
+            if !t.record {
+                return Some(revert());
+            }
+            hex(T::commitOfCall::abi_encode_returns(&T::commitOfReturn {
+                c: crate::abi::PqChatCommit {
+                    sessionId: B256::ZERO,
+                    author: B256::ZERO,
+                    nonce: 0,
+                    epoch: 0,
+                    parentEpochId: B256::ZERO,
+                    treeId: B256::ZERO,
+                    parentTreeHash: B256::ZERO,
+                    leaf: 0,
+                    keyId: 0,
+                    leaves: 0,
+                    admins: vec![],
+                    removes: vec![],
+                    adds: vec![],
+                    wrapHashes: vec![],
+                    nodeKeyHashes: vec![],
+                    ctCount: 0,
+                    ctListHash: t.signed.1,
+                    treeHash: t.signed.0,
+                    sealedInfo: Bytes::new(),
+                },
+                sigHash: B256::ZERO,
+            }))
+        } else if sel == T::pathListOfCall::SELECTOR {
+            hex(T::pathListOfCall::abi_encode_returns(
+                &T::pathListOfReturn {
+                    ctTargets: if t.list { vec![0] } else { vec![] },
+                    ctHashes: vec![],
+                },
+            ))
+        } else if sel == T::pathKeysCall::SELECTOR {
+            hex(T::pathKeysCall::abi_encode_returns(&if t.keys {
+                vec![Bytes::from(vec![1u8])]
+            } else {
+                vec![]
+            }))
+        } else if sel == T::pathCtAtCall::SELECTOR {
+            let mlkem = if at(&t.cts) { vec![1u8] } else { vec![] };
+            hex(T::pathCtAtCall::abi_encode_returns(&crate::abi::PathCt {
+                mlkemCt: mlkem.into(),
+                x25519Eph: B256::ZERO,
+                sealedSecret: Bytes::new(),
+            }))
+        } else if sel == T::wrapAtCall::SELECTOR {
+            let mlkem = if at(&t.wraps) { vec![1u8] } else { vec![] };
+            hex(T::wrapAtCall::abi_encode_returns(&crate::abi::Wrap {
+                member: B256::ZERO,
+                keyId: 0,
+                mlkemCt: mlkem.into(),
+                x25519Eph: B256::ZERO,
+                sealedKey: Bytes::new(),
+            }))
+        } else {
+            return None;
+        })
+    }
+
+    /// A sent tree transaction lands in the fake's state at once.
+    fn tree_land(t: &mut FakeTree, input: &[u8]) {
+        let Some((entry, a)) = tree_args(input) else {
+            return;
+        };
+        let n = |k: &str| a[k].as_array().map_or(0, Vec::len);
+        let first = |k: &str| {
+            a[k].as_u64()
+                .map(|x| x as usize)
+                .or_else(|| a[k].as_str().and_then(|x| x.parse().ok()))
+                .unwrap_or(0)
+        };
+        match entry.as_str() {
+            "commit" => {
+                t.record = true;
+                if n("cts") > 0 || n("wraps") > 0 {
+                    (t.list, t.keys) = (true, true);
+                    t.cts
+                        .iter_mut()
+                        .chain(t.wraps.iter_mut())
+                        .for_each(|x| *x = true);
+                }
+            }
+            "addPathList" => t.list = true,
+            "addPathKeys" => t.keys = true,
+            "addPath" => {
+                (first("firstCt")..first("firstCt") + n("cts")).for_each(|i| t.cts[i] = true)
+            }
+            "addWraps" => {
+                (first("first")..first("first") + n("wraps")).for_each(|i| t.wraps[i] = true)
+            }
+            _ => {}
+        }
+        t.sent.push((entry, n("cts") + n("wraps")));
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -2589,6 +2861,37 @@ pub(crate) mod tests {
                 // Nethermind 2.2.0's estimate-stage answer for a call over 2^24 regular gas (at its 100 M RPC gas cap)
                 "eth_estimateGas" if e.sim == Some("estimate_oog") => Err(err(-32000, "gas required exceeds allowance (100000000)", None)),
                 "eth_estimateGas" if e.sim == Some("estimate_down") => Err(err(-32000, "upstream timeout", None)),
+                "eth_estimateGas" if e.tree.as_ref().is_some_and(|t| t.race_list && !t.list) && {
+                    let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
+                    tree_args(&alloy::hex::decode(&input[2..]).unwrap()).is_some_and(|(en, _)| en == "addPathList")
+                } => {
+                    use alloy::sol_types::SolError;
+                    if let Some(t) = e.tree.as_mut() {
+                        t.list = true;
+                    }
+                    let data = crate::abi::IPqChatErrors::PqChatPathList { epochId: B256::ZERO }.abi_encode();
+                    Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                }
+                "eth_estimateGas" if e.tree.as_ref().is_some_and(|t| t.race_record && !t.record) && {
+                    let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
+                    tree_args(&alloy::hex::decode(&input[2..]).unwrap()).is_some_and(|(en, a)| {
+                        en == "commit"
+                            && a["cts"].as_array().is_some_and(Vec::is_empty)
+                            && a["ctTargets"].as_array().is_some_and(|c| !c.is_empty())
+                    })
+                } => {
+                    use alloy::sol_types::SolError;
+                    if let Some(t) = e.tree.as_mut() {
+                        t.record = true;
+                    }
+                    let data = crate::abi::IPqChatErrors::PqChatNonceUsed { scope: B256::ZERO, nonce: 0 }.abi_encode();
+                    Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                }
+                "eth_estimateGas" if e.tree.as_ref().is_some_and(|t| t.whole_over) && {
+                    let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
+                    tree_args(&alloy::hex::decode(&input[2..]).unwrap())
+                        .is_some_and(|(en, a)| en == "commit" && a["cts"].as_array().is_some_and(|c| !c.is_empty()))
+                } => Ok(json!(format!("{:#x}", 30_000_000u64))),
                 "eth_estimateGas" => Ok(json!(format!("{:#x}", e.estimate.unwrap_or(0x30000)))),
                 "eth_getTransactionByHash" if e.tx_err => Err(err(-32000, "upstream timeout", None)),
                 "eth_getTransactionByHash" => Ok(e.tx_gas.map_or(Value::Null, |g| {
@@ -2646,6 +2949,12 @@ pub(crate) mod tests {
                     b["hash"] = json!(format!("{:#x}", B256::from(U256::from(UID))));
                     Ok(b)
                 }
+                // plan T8: the tree test's reads at the final block name it, then read its header (one block, `latest` = final)
+                "eth_getBlockByNumber" if e.tree.is_some() => {
+                    let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                    b["number"] = json!("0x10");
+                    Ok(b)
+                }
                 "eth_getBlockByNumber" => Ok(Value::Null),
                 "eth_getCode" => {
                     let a: Address = p[0].as_str().unwrap().parse().unwrap();
@@ -2653,6 +2962,13 @@ pub(crate) mod tests {
                     Ok(json!(if a == PQZ_KEY0 || a == PQZ_KEY1 { format!("0x00{}", "42".repeat(4 + usize::from(e.pqz_other_len && a == PQZ_KEY1))) }
                              else if e.designator == Some(a) { format!("0xef0100{}", "55".repeat(20)) }
                              else if e.contract_signer || e.code_only == Some(a) { "0x6001".into() } else { "0x".into() }))
+                }
+                "eth_call" if e.tree.as_ref().is_some_and(|t| {
+                    let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
+                    tree_view(t, &alloy::hex::decode(&input[2..]).unwrap()).is_some()
+                }) => {
+                    let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
+                    tree_view(e.tree.as_ref().unwrap(), &alloy::hex::decode(&input[2..]).unwrap()).unwrap()
                 }
                 "eth_call" => {
                     let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
@@ -2670,7 +2986,7 @@ pub(crate) mod tests {
                     } else if sel == IToken::eip712DomainCall::SELECTOR {
                         let name = e.domain.unwrap_or("SCaaS MetaToken");
                         Ok(json!(format!("0x{}", alloy::hex::encode(IToken::eip712DomainCall::abi_encode_returns(&IToken::eip712DomainReturn {
-                            fields: alloy::primitives::FixedBytes([0x1f]), name: name.into(), version: "1".into(), chainId: U256::from(7622),
+                            fields: alloy::primitives::FixedBytes([0x1f]), name: name.into(), version: "1".into(), chainId: U256::from(22779),
                             verifyingContract: TOKEN, salt: B256::ZERO, extensions: vec![] })))))
                     } else if sel == crate::abi::IOpenFactory::classReleaseOfCall::SELECTOR {
                         use crate::abi::IOpenFactory as F;
@@ -2848,6 +3164,9 @@ pub(crate) mod tests {
                     let tx = TxEnvelope::decode_2718(&mut raw.as_slice()).unwrap();
                     let h = *tx.tx_hash();
                     e.sent.push((h, tx.to().unwrap(), tx.input().clone()));
+                    if let Some(t) = e.tree.as_mut() {
+                        tree_land(t, tx.input());
+                    }
                     e.gas.push(tx.gas_limit());
                     e.fees.push(tx.max_fee_per_gas());
                     Ok(json!(format!("{h:#x}")))
@@ -3000,6 +3319,184 @@ pub(crate) mod tests {
         s.poll_outbox().await;
         assert_eq!(states(&o), ["signed", "broadcast"]);
         (s, rpc, o, set)
+    }
+
+    /// Plan T8 (CTR-CHAT-27, C37 at the submit level, a fake chain): a tree commit job whose whole set does not fit one
+    /// transaction goes as the record alone, then the list, then the node keys, then the other ciphertexts and wraps, then
+    /// the held ciphertext alone, each only once the state shows the one before; then `consumed`, nothing `dead`. Control:
+    /// the same job that fits goes whole, one transaction.
+    #[tokio::test]
+    async fn a_tree_commit_job_lands_in_c37_order_on_a_fake_chain() {
+        let set = crate::tree_set::tests::sets()
+            .into_iter()
+            .find(|a| {
+                let n = |k: &str| a[k].as_array().map_or(0, Vec::len);
+                n("cts") > 2 && n("nodeKeys") > 0 && n("wraps") > 0
+            })
+            .map(|mut a| {
+                a.as_object_mut().unwrap().remove("epochId"); // the vectors' id, no field of `commit`
+                a
+            })
+            .expect("a scenario commit with ciphertexts, node keys and wraps");
+        let (cts, adds) = (
+            set["cts"].as_array().unwrap().len(),
+            set["wraps"].as_array().unwrap().len(),
+        );
+        for over in [true, false] {
+            let (url, rpc) = fake_evm(Evm {
+                tree: Some(FakeTree {
+                    whole_over: over,
+                    cts: vec![false; cts],
+                    wraps: vec![false; adds],
+                    signed: (
+                        set["c"]["treeHash"].as_str().unwrap().parse().unwrap(),
+                        set["c"]["ctListHash"].as_str().unwrap().parse().unwrap(),
+                    ),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })
+            .await;
+            let (external_pull, o) = fake_external_pull(Fake {
+                tokens: toks(),
+                ..Default::default()
+            })
+            .await;
+            let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
+            let op = json!({"entry": "commit", "contract": "pqchat", "token": format!("{TOKEN:#x}"),
+                "validUntil": (now() + 300).to_string(), "args": set});
+            let (w, _) = work_of_op(Some(9), &op, None).unwrap();
+            for _ in 0..12 {
+                if states(&o).iter().any(|x| x == "consumed") {
+                    break;
+                }
+                s.tree(w.clone(), None, "commit").await;
+                let hashes: Vec<B256> = rpc.lock().unwrap().sent.iter().map(|x| x.0).collect();
+                hashes.into_iter().for_each(|h| {
+                    rpc.lock().unwrap().receipts.insert(h, true);
+                });
+                s.track().await;
+            }
+            let st = states(&o);
+            assert!(
+                st.iter().any(|x| x == "consumed") && !st.iter().any(|x| x == "dead"),
+                "over {over}: {st:?}"
+            );
+            let sent = rpc.lock().unwrap().tree.as_ref().unwrap().sent.clone();
+            let names: Vec<&str> = sent.iter().map(|x| x.0.as_str()).collect();
+            if !over {
+                assert_eq!(
+                    sent,
+                    [("commit".to_string(), cts + adds)],
+                    "the whole set in one transaction"
+                );
+                continue;
+            }
+            assert_eq!(
+                &names[..3],
+                ["commit", "addPathList", "addPathKeys"],
+                "{sent:?}"
+            );
+            assert_eq!(sent[0].1, 0, "the record alone first: {sent:?}");
+            assert_eq!(
+                sent.last(),
+                Some(&("addPath".to_string(), 1)),
+                "the held ciphertext last and alone: {sent:?}"
+            );
+            let carried: usize = sent.iter().map(|x| x.1).sum();
+            assert_eq!(
+                carried,
+                cts + adds,
+                "every ciphertext and wrap once: {sent:?}"
+            );
+            let t = rpc.lock().unwrap();
+            let t = t.tree.as_ref().unwrap();
+            assert!(t.record && t.list && t.keys && t.cts.iter().chain(&t.wraps).all(|x| *x));
+        }
+    }
+
+    /// R2-D-4 of the T4-T9 re-check: another sender lands the record between the whole commit's simulation and the record
+    /// with its list's (that one reverts `PqChatNonceUsed`): no verdict either, the set completes and is `consumed`.
+    #[tokio::test]
+    async fn a_record_another_sender_landed_between_the_simulations_is_no_verdict() {
+        part_landed_first(false).await;
+    }
+
+    /// A-1 of the TreeKEM T4-T9 review: another sender lands the list first, so the node's own `addPathList` simulation
+    /// reverts `PqChatPathList`: no verdict (the job waits under `TREE_SET_SENDING`), the next pass reads the list in state and
+    /// goes on; the set completes and is `consumed`, never `dead`.
+    #[tokio::test]
+    async fn a_part_another_sender_landed_first_is_no_verdict() {
+        part_landed_first(true).await;
+    }
+
+    async fn part_landed_first(list: bool) {
+        let set = crate::tree_set::tests::sets()
+            .into_iter()
+            .find(|a| {
+                let n = |k: &str| a[k].as_array().map_or(0, Vec::len);
+                n("cts") > 2 && n("nodeKeys") > 0 && n("wraps") > 0
+            })
+            .map(|mut a| {
+                a.as_object_mut().unwrap().remove("epochId");
+                a
+            })
+            .unwrap();
+        let (cts, adds) = (
+            set["cts"].as_array().unwrap().len(),
+            set["wraps"].as_array().unwrap().len(),
+        );
+        let (url, rpc) = fake_evm(Evm {
+            tree: Some(FakeTree {
+                whole_over: true,
+                race_list: list,
+                race_record: !list,
+                cts: vec![false; cts],
+                wraps: vec![false; adds],
+                signed: (
+                    set["c"]["treeHash"].as_str().unwrap().parse().unwrap(),
+                    set["c"]["ctListHash"].as_str().unwrap().parse().unwrap(),
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await;
+        let (external_pull, o) = fake_external_pull(Fake {
+            tokens: toks(),
+            ..Default::default()
+        })
+        .await;
+        let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
+        let op = json!({"entry": "commit", "contract": "pqchat", "token": format!("{TOKEN:#x}"),
+            "validUntil": (now() + 300).to_string(), "args": set});
+        let (w, _) = work_of_op(Some(9), &op, None).unwrap();
+        for _ in 0..12 {
+            if states(&o).iter().any(|x| x == "consumed") {
+                break;
+            }
+            s.tree(w.clone(), None, "commit").await;
+            let hashes: Vec<B256> = rpc.lock().unwrap().sent.iter().map(|x| x.0).collect();
+            hashes.into_iter().for_each(|h| {
+                rpc.lock().unwrap().receipts.insert(h, true);
+            });
+            s.track().await;
+        }
+        let st = states(&o);
+        assert!(
+            st.iter().any(|x| x == "consumed") && !st.iter().any(|x| x == "dead"),
+            "{st:?}"
+        );
+        let sent = rpc.lock().unwrap().tree.as_ref().unwrap().sent.clone();
+        let (part, entry) = if list {
+            ("list", "addPathList")
+        } else {
+            ("record", "commit")
+        };
+        assert!(
+            !sent.iter().any(|x| x.0 == entry),
+            "the node never sent the {part}: {sent:?}"
+        );
     }
 
     fn states(o: &Shared) -> Vec<String> {

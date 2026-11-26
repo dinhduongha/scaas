@@ -11,7 +11,7 @@ and msig `UASig`), wrap-shield, commit-reveal `R_TX0`, unshield-unwrap.
 ```sh
 scripts/capped forge build                                                   # smartcontracts/evm/out
 (cd pqz-core/ffi && scripts/capped cargo build --release --offline -j2 --features prove --example pqz_prove)
-python3 -I smartcontracts/evm/script/pqz/e2e.py --rpc http://127.0.0.1:8545 --log smartcontracts/evm/runs/<date>-p6g-7622.txt
+python3 -I smartcontracts/evm/script/pqz/e2e.py --rpc http://127.0.0.1:8545 --log smartcontracts/evm/runs/<date>-p6g-scaas-testnet.txt
 python3 -I smartcontracts/evm/script/pqz/e2e.py --self-test                  # no chain, after forge build
 python3 -I smartcontracts/evm/script/pqz/test_e2e_linked.py                  # no chain: link closure, `Signed`
 ```

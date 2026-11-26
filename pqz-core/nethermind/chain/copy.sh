@@ -1,14 +1,14 @@
 #!/bin/sh
-# P6f D10 (as adapted, see README §Copy): the throwaway copy of chain 7622 under $COPY (default <repo>/scratchpad/
+# P6f D10 (as adapted, see README §Copy): the throwaway copy of the SCaaS testnet under $COPY (default <repo>/scratchpad/
 # p6f-copy, git-ignored). The live directory ~dockers/mba-chain-nethermind is never read here: the copy is a
-# replica — the live chainspec's parameters (Nethermind.Pqz.Test/chainspecs/genesis-7622.json, the live params,
+# replica — the live chainspec's parameters (Nethermind.Pqz.Test/chainspecs/genesis-scaas-testnet.json, the live params,
 # engine and genesis header) with a throwaway signer key, whose history the stock image produces first.
 #   copy.sh init                       fresh key, password, genesis.stock.json, configs; empty data dirs
 #   copy.sh up <image> <genesis file>  start signer + follower + rpc (detached)
 #   copy.sh down                       stop and remove the containers (data kept)
 #   copy.sh patch <engine.json> <ts>   genesis.pqz.json = genesis.stock.json + engine.Pqz (first timestamp ts)
 #   copy.sh genesis0 <engine.json>     genesis.pqz0.json: engine.Pqz from block 0 + --testnet-reset, from the faithful
-#                                      replica (the 7622 reset of Task 10, owner 2026-10-15)
+#                                      replica (the SCaaS testnet reset of Task 10, owner 2026-10-15)
 #   copy.sh backup <label> | restore <label>   data dirs + chainspecs + configs, through alpine:3 (cp -a)
 #   copy.sh wipe                       empty both data dirs (through alpine:3: the files belong to the container user)
 #   copy.sh rpc <method> [params-json] JSON-RPC to the follower through nginx
@@ -44,13 +44,13 @@ k = json.load(open(sys.argv[1])); k["address"] = sys.argv[3]
 json.dump(k, open(sys.argv[2], "w")); os.remove(sys.argv[1])
 PY
         PUB=$(cast wallet public-key --private-key "$PK" | sed 's/^0x//')
-        python3 -I - "$HERE/../Nethermind.Pqz.Test/chainspecs/genesis-7622.json" "$COPY/genesis.stock.json" "$LOW" "$COPY/genesis.faithful.json" <<'PY'
+        python3 -I - "$HERE/../Nethermind.Pqz.Test/chainspecs/genesis-scaas-testnet.json" "$COPY/genesis.stock.json" "$LOW" "$COPY/genesis.faithful.json" <<'PY'
 import json, sys
 g = json.load(open(sys.argv[1]))
 g["genesis"]["extraData"] = "0x" + "00" * 32 + sys.argv[3] + "00" * 65
 g["accounts"] = {"0x" + sys.argv[3]: {"balance": hex(10**30)}}
-json.dump(g, open(sys.argv[4], "w"), indent=1)  # the 7622 params as they are (path B starts from this)
-# copy deviations (runs/2026-10-15-copy-stock-history.txt): a follower cannot sync the 7622 params as they are --
+json.dump(g, open(sys.argv[4], "w"), indent=1)  # the SCaaS testnet params as they are (path B starts from this)
+# copy deviations (runs/2026-10-15-copy-stock-history.txt): a follower cannot sync the SCaaS testnet params as they are --
 # eip4844 without eip4895 (InvalidWithdrawalsRoot) and no maximumExtraDataSize (default 32 B < Clique's 97 B)
 g["params"]["eip4895TransitionTimestamp"] = 0
 g["params"]["maximumExtraDataSize"] = "0xffff"

@@ -1,0 +1,19 @@
+# t10b mutants at commit b0ee10913 (name | outcome | test; R2-D-5 rerun alone at b0ee10913 with its test name as the expectation)
+R2-D-1 treeOf.owed not compared (ua-rs) | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree
+R2-D-1 treeOf.owed not compared (clientkeys) | killed | ../../scripts/capped node scripts/pqchat-vectors.mjs --check
+R2-C-2 a consumed replay resumed again | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+R2-C-2 a resume from below the store's pin | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+R2-D-5 / U-a the node keys moved before the pin is stored | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+R2-C-1 K handles from the pin's epoch | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+R2-D-3 unconfirmed cleared once the pin reaches the head | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+R2-C-3 a tree epoch without its author | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+R2-C-6 the tree epochs' info kept past the seed lock | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+R2-C-4 a failover's kept revert not read | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+R2-C-5 the later poll resumed from epoch 0 | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+R2-C-5 pin_replaced never set | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+R2-C-5 unconfirmed never set | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios
+R2-C-5 head_confirmed always true | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test chain_tree -- --ignored
+R2-D-8 D-11's agreed read restored to IPqChat. only | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test signed agreed_reads_cover_the_control_plane_only
+R2-D-7 a derived kind without a verify row | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features pqchat-records,vectors --lib every_signer_kind_has_a_verify_row
+R2-D-4 a race in the record-with-list simulation is a verdict | killed | CARGO_INCREMENTAL=0 ../scripts/capped cargo test --locked --offline -j 2 --lib a_record_another_sender_landed_between_the_simulations_is_no_verdict
+17 mutants, 17 killed, 0 survived (0 killed elsewhere), 0 not loaded

@@ -10,12 +10,12 @@
       "registry": "0x5ca0000000000000000000000000000000000001"
     },
     "B": {
-      "chainId": 7622,
+      "chainId": 22779,
       "chainUid": "0x1540a5a7aa6b5b759ab69d8038865749204e04e2a388f3efafb9aade9fc2165b",
       "registry": "0x5ca0000000000000000000000000000000000001"
     },
     "C": {
-      "chainId": 7622,
+      "chainId": 22779,
       "chainUid": "0x00886c7fb2c2147071e92a35a311ec79d07bd07fe7da8503e003d647b60d24e7",
       "registry": "0x5ca0000000000000000000000000000000000001"
     },
@@ -1185,8 +1185,8 @@
         "generation": 1,
         "purpose": "metatx",
         "digest": "0x5375b84b2103af61e48a56e14be860f04d3be78e6516cb385ac9873014f6043c",
-        "uaAuthDigest": "0x8b67650b95a02bc8a2d6c9344f75a48d67d06f24e4d68a162cca3ab48eeffff9",
-        "sig": "0x7b8f310be7a3060a68e3bd10415659dc1864b4c9706f4f6e2d784d99e74bd4a526d8d2bfc1c18376cefb8f10560cbea77bbe6b9dcacb9512aa8be3549dd0f4be1b"
+        "uaAuthDigest": "0x7472a3590669ece41e330267d1d1bad5f25d8902528ff9955801925d01ee4d92",
+        "sig": "0x6d439435bb5ddf424225c806b9b72cc5fa25783a1736e893d1661f093dd9fd24497b7f912f36cd6ca0699dc5d976da2e8a62abd640108cecd26bf8c39d79834e1c"
       }
     ],
     "negatives": [

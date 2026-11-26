@@ -51,7 +51,7 @@ general-purpose zero-knowledge system.
 | `proofSystemId` | the 32-byte id in every statement that says which proof system (PQZL or PQZH) made the proof, and at which parameter set |
 | SV | the specialised verifier `verify_fast` (Rust `pqzl`; C `pqz_verify_fast`), the fast PQZL verifier used on chain; the generic verifier is its reference |
 | `pqz-stmt`, `pqz-ffi` | the shared statement codec, and the library the node loads (the `PQZ` precompile) |
-| SCaaS testnet / 22776 | the SCaaS testnet (chain id 7622, may be reset) / the future mainnet |
+| SCaaS testnet / SCaaS mainnet | the SCaaS testnet (chain id 22779, may be reset) / the future mainnet (chain id 22777) |
 | `scripts/capped` | the repository's machine lock: heavy jobs run under it, two at a time by default (`CAPPED_SLOTS`) |
 
 ## 1. At a glance
@@ -85,7 +85,7 @@ The gas row uses the testnet's provisional precompile price (§3). The verify li
 times in [§5](#5-measurements) met it, and Task 9 re-measures them. One precompile verifies both systems:
 the `proofSystemId` inside the statement selects the system and the parameter set.
 
-**Live on the SCaaS testnet** (chain 7622): image `2.2.0-pqz5` at `n2304-kmax4096` since 2026-10-26, probe 420 ok and
+**Live on the SCaaS testnet**: image `2.2.0-pqz5` at `n2304-kmax4096` since 2026-10-26, probe 420 ok and
 e2e 84 ok ([nethermind/runs/2026-10-26-pqz5-live.txt](nethermind/runs/2026-10-26-pqz5-live.txt)). The PQZ contracts
 (a fresh factory, real proofs from `pqz_prove`) passed their testnet e2e on 2026-10-26: 217 ok / 0 FAIL (plan 5h Task
 8d part 2b, [smartcontracts/evm/runs/2026-10-26-t8d2b-e2e-7622.txt](../smartcontracts/evm/runs/2026-10-26-t8d2b-e2e-7622.txt)). See [§3](#3-two-proof-systems-one-precompile) for the precompile and its gas prices.
@@ -186,7 +186,7 @@ the η-filtered final challenge; [params/sets/README.md](params/sets/README.md#p
   - `src/bin/pqz-vectors.rs` generates the test vectors: `smartcontracts/vectors/pqz/` for `n2048-kmax1024`,
     `smartcontracts/vectors/pqz/<set>/` for the other sets.
 
-**Live on the SCaaS testnet** (chain 7622, reset on path B on 2026-10-31 and again on 2026-11-04, reset 1; genesis hash `0xf1f491ab…3164`): the
+**Live on the SCaaS testnet** (reset on path B on 2026-10-31 and again on 2026-11-04, reset 1; genesis hash `0xf1f491ab…3164`): the
 Nethermind plugin `Nethermind.Pqz` ([nethermind/README.md](nethermind/README.md), image
 `scaas/nethermind-pqz:2.2.0-pqz7` since reset 1, `2.2.0-pqz6` before, built locally, never pushed) loads `libpqz_ffi.so` (the Rust PQZL backend, set
 `n2304-kmax4096`, reviewed library `dd0e7668…`) and adds three precompiles at 32-bit addresses (live since image
@@ -208,7 +208,7 @@ schedule at a future timestamp). At start-up the plugin refuses a schedule whose
 and a library other than the reviewed one. Status 4 (a node fault) makes the node log `PQZ-NODE-FAULT` and exit with
 code 120; it never turns into a verdict. Live run: probe 420 ok / 0 FAIL, e2e 84 ok / 0 FAIL
 (`nethermind/runs/2026-10-26-pqz5-live.txt`); roll-out and rollback: [nethermind/chain/RUNBOOK.md](nethermind/chain/RUNBOOK.md).
-Chain 22776 (the future mainnet) gets the precompiles only after the production gates: the external audit and the
+The SCaaS mainnet (chain id 22777) gets the precompiles only after the production gates: the external audit and the
 licence clearance ([RUNBOOK.md](nethermind/chain/RUNBOOK.md), chain roles).
 
 ## 4. Statement forms, ids, limits

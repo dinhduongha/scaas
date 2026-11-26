@@ -1,4 +1,4 @@
-# P6f D10: the throwaway copy of chain 7622 (project pqzcopy, its own network, never peers with the live node):
+# P6f D10: the throwaway copy of the SCaaS testnet (project pqzcopy, its own network, never peers with the live node):
 # signer (no published port, mining), follower (static peer = signer), nginx (127.0.0.1:18545 → follower, rate
 # limits). Data under $COPY (scratchpad/p6f-copy, git-ignored). Memory: 1700 + 1700 + 64 MiB ≤ 4 GB (the host).
 # Run through copy.sh, which sets COPY, IMAGE, GENESIS.

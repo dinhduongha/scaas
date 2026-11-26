@@ -373,6 +373,8 @@ operation states).
 | `TreeInfoUnconfirmed` | a changed session info whose head a strict majority of at least 3 named endpoints did not confirm (TreeKEM spec R13) |
 | `TreeInfoReview` | an admin's new info after a gap, sealed without the admin's review of it (TreeKEM spec codex-r3-7) |
 | `TreeCreationIncomplete` | a tree creation that did not complete and whose prepared record this store does not hold: it cannot be finished (codex-r3-5) |
+| `TreeStale` | a tree commit on a state whose head moved since (C33: replay first; the TreeKEM T4-T9 review's D-10) |
+| `TreeInfoMissing` | a send under a tree epoch whose info in force the device does not hold (after a gap, or taken flagged: C33; the review's C-3) |
 
 ## 9. Threat model
 

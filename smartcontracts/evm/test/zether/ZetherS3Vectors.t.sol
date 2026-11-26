@@ -387,7 +387,7 @@ contract ZetherS3VectorsTest is Test {
         bytes32 ua = j.readBytes32(string.concat(key, ".UA"));
         bytes memory pop = j.readBytes(string.concat(key, ".pop.pop"));
         for (uint256 i; i < 2; ++i) {
-            vm.chainId(i == 0 ? 31337 : 7622);
+            vm.chainId(i == 0 ? 31337 : 22779);
             address at = address(uint160(0xaa00 + i));
             deployCodeTo("UARegistry.sol:UARegistry", _regArgs(keccak256(abi.encode("s3 chain", i)), k), at);
             IUARegistry reg = IUARegistry(at);
