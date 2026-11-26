@@ -531,6 +531,21 @@ fn unknown(item: &str) -> PqChatError {
     PqChatError::Internal
 }
 
+/// [`unknown`] behind a first endpoint that is down: every other endpoint reverted, the pool's failover keeps the revert
+/// (`EndpointAllFailed`, a failover endpoint's revert is no verdict alone, CLI-RPC-04).
+fn failed_over(item: &str) -> PqChatError {
+    if item == "IPqChatTreeViews.commitOf" {
+        let sel = scaas_ua::keccak256(b"PqChatUnknown()")[..4].to_vec();
+        return PqChatError::Sdk(scaas_sdk::SdkError::Rpc(
+            scaas_rpc::RpcError::EndpointAllFailed {
+                last: None,
+                failover_revert: Some(sel),
+            },
+        ));
+    }
+    PqChatError::Internal
+}
+
 /// The crate's port over a model of the home: every read recorded, every write refused and counted.
 struct HomeNet {
     home: Mutex<Home>,
@@ -546,6 +561,9 @@ struct HomeNet {
     majority: Option<Mutex<Home>>,
     /// the latest block's state, when it is ahead of the final block's (`read_latest`)
     latest: Option<Mutex<Home>>,
+    /// the list's first endpoint is down: a record the home does not hold reverts on every other endpoint, which the pool
+    /// answers as a failover over endpoints that all failed, the revert kept (R2-C-4)
+    failover: bool,
 }
 
 impl HomeNet {
@@ -563,6 +581,7 @@ impl HomeNet {
             majority_agrees,
             majority: None,
             latest: None,
+            failover: false,
         })
     }
     /// The endpoint serves `home`; a strict majority of `named` named endpoints serves `majority`.
@@ -577,6 +596,7 @@ impl HomeNet {
             majority_agrees: true,
             majority: Some(Mutex::new(majority)),
             latest: None,
+            failover: false,
         })
     }
     fn items(&self) -> Vec<String> {
@@ -618,7 +638,11 @@ impl Net for HomeNet {
             t(item, &args, &mut v);
         }
         if v.is_null() {
-            return Err(unknown(item));
+            return Err(if self.failover {
+                failed_over(item)
+            } else {
+                unknown(item)
+            });
         }
         Ok(v)
     }
@@ -690,6 +714,15 @@ fn crate_over(w: &common::sdk::World, net: Arc<HomeNet>) -> Run {
 
 /// [`crate_over`] with the device's store `store` (kept across crates: a restart of the same device).
 fn crate_with(w: &common::sdk::World, net: Arc<HomeNet>, store: Arc<MemoryStore>) -> Run {
+    crate_on(w, net, store)
+}
+
+/// [`crate_with`] over any store.
+fn crate_on(
+    w: &common::sdk::World,
+    net: Arc<HomeNet>,
+    store: Arc<dyn pqchat_core::PqChatStore>,
+) -> Run {
     let pq = PqChat::with_net(w.app.clone(), net, store, common::sdk::conf());
     Run {
         pq,
@@ -946,7 +979,7 @@ async fn a_failed_open_reads_as_a_followed_one() {
         let st = replay(r, v, s, "E").await.unwrap();
         let first = net.items();
         net.reads.lock().unwrap().clear();
-        replay(r, v, s, "E").await.unwrap();
+        resume(r, v, s, "E", Some(&st.replay)).await.unwrap();
         let again = net.items();
         assert_eq!(*net.writes.lock().unwrap(), 0, "a send");
         (rows(&st).0, first, again)
@@ -958,9 +991,20 @@ async fn a_failed_open_reads_as_a_followed_one() {
     assert_eq!(failed[1][2], "opening failed", "{failed}");
     assert_eq!(opened[1][1], "followed", "{opened}");
     assert_eq!(f1, c1, "the failed open's reads are the followed one's");
-    // a later poll starts at the stored pin: the same reads for both again, and fewer than the first
+    // a later poll resumes at the pin: the same reads for both again, and no record below the pin (R2-C-5: the count of
+    // records read, not of every read, which a skipped majority read alone would lower)
     assert_eq!(f2, c2, "a later poll's reads are the followed one's too");
-    assert!(f2.len() < f1.len(), "the later poll starts at the pin");
+    let commits = |r: &[String]| {
+        r.iter()
+            .filter(|i| *i == "IPqChatTreeViews.commitOf")
+            .count()
+    };
+    assert!(
+        commits(&f2) < commits(&f1),
+        "the later poll starts at the pin: {} of {} records",
+        commits(&f2),
+        commits(&f1)
+    );
 }
 
 /// R13 binds the publisher, not the reader (the review's D-5): a member whose replay meets an admin's changed info gets the
@@ -1334,7 +1378,8 @@ async fn a_first_pin_needs_the_majority() {
         let (s, tree_id) = (sref(&home), home.tree_id.clone());
         let store = Arc::new(MemoryStore::new());
         let r = crate_with(&w, HomeNet::with(home, None, named, agrees), store.clone());
-        replay(&r, &v, &s, "A").await.unwrap();
+        let st = replay(&r, &v, &s, "A").await.unwrap();
+        assert_eq!(st.unconfirmed, !pins, "{named} / {agrees}");
         assert_eq!(
             pinned(&store, &tree_id).is_some(),
             pins,
@@ -1400,6 +1445,7 @@ async fn a_twin_at_the_pin_is_settled_by_the_majority() {
         let r = crate_with(&w, net, store.clone());
         match (settled, replay(&r, &v, &s, "A").await) {
             (true, Ok(st)) => {
+                assert!(st.pin_replaced, "{what}: the event shown");
                 assert_eq!(st.replay.pin, want, "{what}");
                 assert_eq!(pinned(&store, &tree_id).unwrap(), want, "{what}");
             }
@@ -1599,7 +1645,16 @@ async fn a_head_that_moves_during_a_resume_keeps_every_epoch_followed() {
     };
     let from = prev.head;
     assert_eq!(states(&st, from), states(&full, from));
-    // C-8, D-13: a resume reads the records from the previous pin on, not the whole history
+    // C-8, D-13: a resume reads the records from the previous pin on, not the whole history (from a replay of its own:
+    // the first resume consumed `prev`, R2-C-2)
+    let prev = replay(
+        &crate_over(&w, HomeNet::new(Home::scenario(&v, &sc, Some(3)))),
+        &v,
+        &s,
+        "A",
+    )
+    .await
+    .unwrap();
     let net = HomeNet::new(Home::scenario(&v, &sc, None));
     let r = crate_over(&w, net.clone());
     resume(&r, &v, &s, "A", Some(&prev.replay)).await.unwrap();
@@ -1760,6 +1815,7 @@ async fn a_record_landed_not_final_is_not_sent_again() {
         majority_agrees: true,
         majority: None,
         latest: Some(Mutex::new(latest)),
+        failover: false,
     });
     let r = crate_over(&w, net.clone());
     let payer = KeyRef::Native {
@@ -1770,6 +1826,357 @@ async fn a_record_landed_not_final_is_not_sent_again() {
     let e = r.pq.tree_next(&s, &c, &plan, &payer).await.err().unwrap();
     assert_eq!(e.code(), "EpochNotFinal");
     assert!(net.prepared.lock().unwrap().is_empty());
+}
+
+/// R2-C-2 of the T4-T9 re-check (C26): a resume never lowers the checkpoint. After `st2` resumed from `st1` (the store's pin
+/// at `st2`'s head), a resume from `st1` again over an endpoint that serves a head between the two pins is refused
+/// (`TreeCheckpoint`), the pin kept; `st1`, consumed by the first resume, is refused on a device with no pin too
+/// (`TreePeriod`), never followed again with its node keys gone.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_resume_never_lowers_the_checkpoint() {
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let sc = scenario(&v, "main");
+    let store = Arc::new(MemoryStore::new());
+    let at = |k: usize| Home::scenario(&v, &sc, Some(k));
+    let (s, tree_id) = (sref(&at(3)), at(3).tree_id.clone());
+    let st1 = replay(
+        &crate_with(&w, HomeNet::new(at(3)), store.clone()),
+        &v,
+        &s,
+        "A",
+    )
+    .await
+    .unwrap();
+    let r = crate_with(&w, HomeNet::new(at(7)), store.clone());
+    let st2 = resume(&r, &v, &s, "A", Some(&st1.replay)).await.unwrap();
+    assert_eq!(pinned(&store, &tree_id).unwrap(), st2.replay.pin);
+    let r = crate_with(&w, HomeNet::new(at(6)), store.clone());
+    let e = resume(&r, &v, &s, "A", Some(&st1.replay))
+        .await
+        .err()
+        .map(|e| e.code());
+    assert_eq!(e, Some("TreeCheckpoint"), "a resume below the pin");
+    assert_eq!(
+        pinned(&store, &tree_id).unwrap(),
+        st2.replay.pin,
+        "the pin kept"
+    );
+    let r = crate_over(&w, HomeNet::new(at(7)));
+    let e = resume(&r, &v, &s, "A", Some(&st1.replay))
+        .await
+        .err()
+        .map(|e| e.code());
+    assert_eq!(e, Some("TreePeriod"), "a consumed replay");
+    // the control: the replay the first resume made resumes again
+    let r = crate_with(&w, HomeNet::new(at(8)), store.clone());
+    resume(&r, &v, &s, "A", Some(&st2.replay)).await.unwrap();
+}
+
+/// R2-C-1 of the T4-T9 re-check: a device restarted with a pin replays from the cold tree and gets `K` for every epoch it
+/// follows, below the pin too, so the history before the restart stays readable.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_restart_keeps_k_below_the_pin() {
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let sc = scenario(&v, "main");
+    let store = Arc::new(MemoryStore::new());
+    let home = Home::scenario(&v, &sc, None);
+    let (s, tree_id) = (sref(&home), home.tree_id.clone());
+    replay(
+        &crate_with(&w, HomeNet::new(home), store.clone()),
+        &v,
+        &s,
+        "A",
+    )
+    .await
+    .unwrap();
+    assert!(pinned(&store, &tree_id).is_some());
+    let r = crate_with(&w, HomeNet::new(Home::scenario(&v, &sc, None)), store);
+    let st = replay(&r, &v, &s, "A").await.unwrap();
+    let below = st
+        .replay
+        .epochs
+        .iter()
+        .find(|e| e.epoch < st.head && e.state == "followed")
+        .unwrap();
+    assert!(below.k.is_some(), "K below the pin");
+    r.pq.tree_open(&s, &st, &below.epoch_id).unwrap();
+}
+
+/// R2-C-3 of the T4-T9 re-check: a tree epoch opened for messages carries its record's author and the admins after it (epoch
+/// 0: the creator and the session's admins), as the room's sync and `StoresChanged` read them; R2-C-6: a seed lock drops
+/// the info the crate holds for it with its `K`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_tree_epoch_carries_its_author_and_admins() {
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let sc = scenario(&v, "main");
+    let home = Home::scenario(&v, &sc, None);
+    let s = sref(&home);
+    let recs: Vec<Value> = home.epochs.iter().map(|e| e.record.clone()).collect();
+    let r = crate_over(&w, HomeNet::new(home));
+    let st = replay(&r, &v, &s, "A").await.unwrap();
+    let low = |x: &Value| x.as_str().unwrap().to_ascii_lowercase();
+    let mut n = 0;
+    for e in st.replay.epochs.iter().filter(|e| e.state == "followed") {
+        let ep = r.pq.tree_open(&s, &st, &e.epoch_id).unwrap().epoch;
+        let rec = &recs[e.epoch as usize];
+        let author = if e.epoch == 0 {
+            &rec["creator"]
+        } else {
+            &rec["author"]
+        };
+        let admins: Vec<String> = rec["admins"].as_array().unwrap().iter().map(low).collect();
+        assert_eq!(
+            (ep.author, ep.admins),
+            (low(author), admins),
+            "epoch {}",
+            e.epoch
+        );
+        n += 1;
+    }
+    assert!(n >= 2, "{n}");
+    let head = st.replay.epochs.last().unwrap();
+    let ep = r.pq.tree_open(&s, &st, &head.epoch_id).unwrap();
+    let ep = r.pq.use_epoch(&s, ep).await.unwrap();
+    assert!(r.pq.info(&ep).is_ok());
+    r.pq.locked();
+    assert!(r.pq.info(&ep).is_err(), "the info dropped at the lock");
+}
+
+/// R2-C-4 of the T4-T9 re-check: with the list's first endpoint down, a record not stored reverts on every other endpoint
+/// (the pool's failover keeps the revert): `tree_next` reads it as "not landed" and prepares the commit, never fails.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_record_unknown_behind_a_down_first_endpoint_is_not_landed() {
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let sc = scenario(&v, "main");
+    let c = signed_of(&w, &sc["steps"][1]);
+    let plan = scaas_sdk::pqchat_tree::PqTreePlan {
+        txs: vec![scaas_sdk::pqchat_tree::PqTreeTx {
+            entry: "commit",
+            first: 0,
+            count: 0,
+            gas: Default::default(),
+        }],
+        completion: Default::default(),
+        dearest_last: Default::default(),
+    };
+    let home = Home::scenario(&v, &sc, Some(1));
+    let s = sref(&home);
+    let net = Arc::new(HomeNet {
+        home: Mutex::new(home),
+        reads: Mutex::new(vec![]),
+        writes: Mutex::new(0),
+        prepared: Mutex::new(vec![]),
+        tamper: None,
+        named: 3,
+        majority_agrees: true,
+        majority: None,
+        latest: None,
+        failover: true,
+    });
+    let r = crate_over(&w, net.clone());
+    let payer = KeyRef::Native {
+        seed: w.seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let got = r.pq.tree_next(&s, &c, &plan, &payer).await;
+    assert_eq!(
+        *net.prepared.lock().unwrap(),
+        vec!["IPqChat.commit".to_string()],
+        "{:?}",
+        got.err()
+    );
+}
+
+/// R2-D-3 of the T4-T9 re-check: `unconfirmed` holds until a strict majority read of the head agreed, not only for the poll
+/// that moved the pin; R2-C-5: `pin_replaced` false outside a settled twin.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unconfirmed_holds_until_the_majority_agrees() {
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let sc = scenario(&v, "main");
+    let store = Arc::new(MemoryStore::new());
+    let older = Home::scenario(&v, &sc, Some(6));
+    let s = sref(&older);
+    let st = replay(
+        &crate_with(&w, HomeNet::new(older), store.clone()),
+        &v,
+        &s,
+        "A",
+    )
+    .await
+    .unwrap();
+    assert!(!st.unconfirmed && !st.pin_replaced);
+    for (agrees, want) in [(false, true), (false, true), (true, false), (false, false)] {
+        let net = HomeNet::with(Home::scenario(&v, &sc, None), None, 3, agrees);
+        let st = replay(&crate_with(&w, net, store.clone()), &v, &s, "A")
+            .await
+            .unwrap();
+        assert_eq!(st.unconfirmed, want, "majority agrees {agrees}");
+        assert!(!st.pin_replaced);
+    }
+}
+
+/// R2-D-5 of the T4-T9 re-check: a store that fails to write the pin after a resume succeeded returns the error and leaves
+/// the replay it resumed from whole: a resume from it again follows every epoch after its pin.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_failed_pin_write_keeps_the_replay_resumed_from() {
+    struct NoPins(MemoryStore);
+    impl pqchat_core::PqChatStore for NoPins {
+        fn load(&self, key: &str) -> Result<Option<pqchat_core::Item>, pqchat_core::StoreFault> {
+            self.0.load(key)
+        }
+        fn replace(
+            &self,
+            key: &str,
+            expected: u64,
+            value: &[u8],
+        ) -> Result<bool, pqchat_core::StoreFault> {
+            if key.starts_with("tree/pin/") {
+                return Err(pqchat_core::StoreFault);
+            }
+            self.0.replace(key, expected, value)
+        }
+    }
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let sc = scenario(&v, "main");
+    let older = Home::scenario(&v, &sc, Some(3));
+    let s = sref(&older);
+    let prev = replay(&crate_over(&w, HomeNet::new(older)), &v, &s, "A")
+        .await
+        .unwrap();
+    let net = HomeNet::new(Home::scenario(&v, &sc, None));
+    let r = crate_on(&w, net, Arc::new(NoPins(MemoryStore::new())));
+    let e = resume(&r, &v, &s, "A", Some(&prev.replay))
+        .await
+        .err()
+        .map(|e| e.code());
+    assert_eq!(e, Some("StoreIo"));
+    let r = crate_over(&w, HomeNet::new(Home::scenario(&v, &sc, None)));
+    let st = resume(&r, &v, &s, "A", Some(&prev.replay)).await.unwrap();
+    assert!(
+        st.replay
+            .epochs
+            .iter()
+            .filter(|e| e.epoch > prev.head)
+            .all(|e| e.state == "followed"),
+        "every epoch after the pin followed"
+    );
+}
+
+/// R2-C-5 of the T4-T9 re-check: a send under a tree epoch whose info in force the device does not hold (heal's A after its
+/// gap: the marker only) is refused (`TreeInfoMissing`), nothing sent.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_send_without_the_info_in_force_is_refused() {
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let home = Home::scenario(&v, &scenario(&v, "heal"), None);
+    let s = sref(&home);
+    let net = HomeNet::new(home);
+    let r = crate_over(&w, net.clone());
+    let st = replay(&r, &v, &s, "A").await.unwrap();
+    let head = st.replay.epochs.last().unwrap();
+    assert_eq!(
+        (head.state.as_str(), head.in_force.is_none()),
+        ("followed", true)
+    );
+    let ep = r.pq.tree_open(&s, &st, &head.epoch_id).unwrap();
+    r.pq.use_epoch(&s, ep).await.unwrap();
+    r.pq.accept(&s, false).unwrap();
+    let me = pqchat_core::session::Me {
+        key: KeyRef::Ua {
+            seed: w.seed.clone(),
+            kind: common::sdk::KIND,
+            account: 0,
+            index: 0,
+        },
+        ua: v["devices"]["A"]["ua"].as_str().unwrap().into(),
+    };
+    let o = pqchat_core::stores::SendOpts {
+        payer: KeyRef::Native {
+            seed: w.seed.clone(),
+            network: "evm".into(),
+            index: 0,
+        },
+        post: false,
+        post_cost_confirmed: false,
+    };
+    let text = pqchat_core::content::Content::Text {
+        media_type: None,
+        body: "no info in force".into(),
+    };
+    let e =
+        r.pq.send_content(&s, &me, &text, None, &o)
+            .await
+            .err()
+            .unwrap();
+    assert_eq!(e.code(), "TreeInfoMissing");
+    assert_eq!(*net.writes.lock().unwrap(), 0);
+}
+
+/// C9, C-10 (R2-C-5 of the T4-T9 re-check): `tree_remove` refuses no member or more than 20 (`MembersInvalid`) and an epoch
+/// past the lag (`ExitLag`) before anything is signed; one naming the head, a member twice, is prepared.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_tree_removal_is_bounded_and_prepared() {
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let home = Home::scenario(&v, &scenario(&v, "lag"), None);
+    let (s, first, head) = (
+        sref(&home),
+        home.epochs[0].id.clone(),
+        home.epochs.last().unwrap().id.clone(),
+    );
+    let net = HomeNet::new(home);
+    let r = crate_over(&w, net.clone());
+    let me = pqchat_core::session::Me {
+        key: KeyRef::Ua {
+            seed: w.seed.clone(),
+            kind: common::sdk::KIND,
+            account: 0,
+            index: 0,
+        },
+        ua: v["devices"]["A"]["ua"].as_str().unwrap().into(),
+    };
+    let payer = KeyRef::Native {
+        seed: w.seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let ua = |d: &str| v["devices"][d]["ua"].as_str().unwrap().to_string();
+    let many: Vec<String> = (0..21).map(|i| format!("0x{:064x}", i + 1)).collect();
+    for (members, epoch, want) in [
+        (vec![], &head, "MembersInvalid"),
+        (many, &head, "MembersInvalid"),
+        (vec![ua("B")], &first, "ExitLag"),
+    ] {
+        let e =
+            r.pq.tree_remove(&s, &me, epoch, members, 1, &payer)
+                .await
+                .err()
+                .unwrap();
+        assert_eq!(e.code(), want);
+    }
+    assert!(net.prepared.lock().unwrap().is_empty(), "nothing prepared");
+    let _ =
+        r.pq.tree_remove(&s, &me, &head, vec![ua("C"), ua("B"), ua("C")], 1, &payer)
+            .await;
+    assert_eq!(
+        *net.prepared.lock().unwrap(),
+        vec!["IPqChat.treeRemove".to_string()]
+    );
 }
 
 /// C26 (the plan's hostile row, D-16 of the review): a head below the device's checkpoint is refused (`TreeCheckpoint`), the

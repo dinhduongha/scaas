@@ -1916,6 +1916,9 @@ pub enum InfoTook {
 pub struct EpochRow {
     pub epoch: u64,
     pub epoch_id: [u8; 32],
+    /// its record's author (epoch 0: the creator) and the admins after it (R2-C-3 of the T4-T9 re-check: the room's sync)
+    pub author: [u8; 32],
+    pub admins: Vec<[u8; 32]>,
     pub state: State,
     pub k: Option<KeyHandle>,
     pub info: Option<InfoTook>,
@@ -1954,9 +1957,26 @@ pub struct Replay {
     pub in_force: Option<String>,
     pub flagged: bool,
     pub head_followed: bool,
+    /// a resume's: the nodes its commits replaced, until [`Replay::adopt`] moves the rest of `from`'s node keys in
+    replaced: Option<BTreeSet<u32>>,
+    /// its node keys moved into a later replay: a resume from it is refused (`TreePeriod`, R2-C-2 of the T4-T9 re-check)
+    consumed: bool,
 }
 
 impl Replay {
+    /// A resume's replay takes `from`'s node keys it keeps on (all but the nodes its commits replaced) once the caller keeps
+    /// it (D-5, U-a of the T4-T9 re-check: after the caller's last step that can fail, so a refusal, a missed read or a
+    /// failed store write leaves `from` whole); `from` is consumed. Nothing for a replay that was not resumed.
+    pub fn adopt(&mut self, from: &mut Replay) {
+        if let Some(replaced) = self.replaced.take() {
+            let mut held = std::mem::take(&mut from.held);
+            held.retain(|x, _| !replaced.contains(x));
+            held.append(&mut self.held);
+            self.held = held;
+            from.consumed = true;
+        }
+    }
+
     /// The info a device seals in a commit of its own (C33): the full info in force only when it followed the head and
     /// holds one not flagged; otherwise the marker (`None`). A changed info is the admin's own action, never this.
     pub fn info_to_seal(&self) -> Option<&str> {
@@ -2016,9 +2036,9 @@ impl AppKeys {
 
     /// [`AppKeys::tree_replay`] resumed from the device's previous replay `from` (spec §10 step 3, E-3, B2-2): the walk starts at
     /// its pin, and only the epochs after it are read and opened, with the node keys it held and the info in force there, so
-    /// the device pays the history once. `from` a replay whose key is still in the tree (`TreePeriod` else). C-6: every read
-    /// comes before the secrets (C22), so a refusal, a failed or a lying read leaves `from` as it was (its node keys and pin);
-    /// on success its node keys move into the new replay, which replaces it.
+    /// the device pays the history once. `from` a replay whose key is still in the tree and that no resume consumed
+    /// (`TreePeriod` else). C-6: every read comes before the secrets (C22), so a refusal, a failed or a lying read leaves
+    /// `from` as it was (its node keys and pin); on success its node keys move into the new replay, which replaces it.
     pub fn tree_resume(
         &self,
         sc: &TreeScope,
@@ -2027,6 +2047,28 @@ impl AppKeys {
         from: &mut Replay,
         keys_from: u64,
     ) -> Result<Option<Replay>> {
+        let r = self.tree_resume_kept(sc, rd, dev, from, None, keys_from)?;
+        Ok(r.map(|mut r| {
+            r.adopt(from);
+            r
+        }))
+    }
+
+    /// [`AppKeys::tree_resume`] with `from` left whole: the caller moves its node keys in by [`Replay::adopt`] once it keeps
+    /// the new replay (its pin stored), so nothing it drops has consumed `from`. `store`, the device's checkpoint: a `from`
+    /// whose pin is below it is refused (`TreeCheckpoint`, R2-C-2 of the T4-T9 re-check: a resume never lowers it).
+    pub fn tree_resume_kept(
+        &self,
+        sc: &TreeScope,
+        rd: &mut dyn TreeReader,
+        dev: &TreeDevice,
+        from: &Replay,
+        store: Option<&Pin>,
+        keys_from: u64,
+    ) -> Result<Option<Replay>> {
+        if store.is_some_and(|p| from.pin.epoch < p.epoch) {
+            return refuse(TreeError::Checkpoint);
+        }
         self.replay(sc, rd, dev, None, Some(from), keys_from)
     }
 
@@ -2036,9 +2078,12 @@ impl AppKeys {
         rd: &mut dyn TreeReader,
         dev: &TreeDevice,
         store: Option<&Pin>,
-        from: Option<&mut Replay>,
+        from: Option<&Replay>,
         keys_from: u64,
     ) -> Result<Option<Replay>> {
+        if from.is_some_and(|f| f.consumed) {
+            return refuse(TreeError::Period);
+        }
         let kem_hash = keccak256(&dev.kem.kem_pk());
         let a = match &from {
             Some(f) => Walk::new(sc, rd, Some(&f.pin), Some(&[]))?,
@@ -2183,11 +2228,11 @@ impl AppKeys {
         }
         // the secrets, from those bytes only (resumed: the node keys held and the info in force at the pin). C-4, D-6 of the
         // T4-T9 review: `from`'s node keys are only looked up here (`base`, less the nodes a later commit replaced), the new
-        // ones kept apart (`own`); they move out of `from` after the last step that can fail, so a refusal leaves it whole
+        // ones kept apart (`own`); they move out of `from` only by `Replay::adopt`, so a refusal leaves it whole
         let empty = BTreeMap::new();
-        let base = from.as_ref().map_or(&empty, |f| &f.held);
-        let (mut in_force, mut flagged, mut head_followed) =
-            from.as_ref().map_or((None, false, false), |f| {
+        let base = from.map_or(&empty, |f| &f.held);
+        let (mut in_force, mut flagged, mut head_followed) = from
+            .map_or((None, false, false), |f| {
                 (f.in_force.clone(), f.flagged, f.head_followed)
             });
         let mut own: BTreeMap<u32, KemKeyPair> = BTreeMap::new();
@@ -2280,9 +2325,16 @@ impl AppKeys {
                 });
             }
             head_followed = n == head && state == State::Followed;
+            let (author, admins) = if n == 0 {
+                (b32j(&a.s0, "creator")?, list(&a.s0, "admins", b32)?)
+            } else {
+                (b32j(&c, "author")?, a.admins_at(n)?)
+            };
             epochs.push(EpochRow {
                 epoch: n,
                 epoch_id: at(&a.ids, n)?,
+                author,
+                admins,
                 state,
                 k: match k {
                     Some(k) if n >= keys_from => Some(self.tree_key(&k[..])?),
@@ -2298,10 +2350,6 @@ impl AppKeys {
             head_followed = false;
         }
         let pin = a.pin_at(sc, head)?;
-        // every step that can fail is behind: the node keys move out of `from` now
-        let mut held = from.map_or_else(BTreeMap::new, |f| std::mem::take(&mut f.held));
-        held.retain(|x, _| !gone_nodes.contains(x));
-        held.extend(own);
         Ok(Some(Replay {
             leaf,
             join_epoch,
@@ -2309,11 +2357,13 @@ impl AppKeys {
             rosters,
             epochs,
             warnings,
-            held,
+            held: own,
             pin,
             in_force,
             flagged,
             head_followed,
+            replaced: from.map(|_| gone_nodes),
+            consumed: false,
         }))
     }
 

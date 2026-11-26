@@ -179,6 +179,11 @@ fn pin_key(tree_id: &str) -> String {
     format!("tree/pin/{}", tree_id.to_ascii_lowercase())
 }
 
+/// The store key of the head number a strict majority last confirmed (R2-D-3 of the T4-T9 re-check), by `treeId`.
+fn confirmed_key(tree_id: &str) -> String {
+    format!("tree/confirmed/{}", tree_id.to_ascii_lowercase())
+}
+
 impl PqChat {
     /// A view of `s`'s home by `scaas-ua`'s name, read through the port (trusted) and put in `reads` in the views' shape: a
     /// record with its kept signature (`sessionOf`, `commitOf`, `leaveAt`, `removalAt`), a page view whole (every page of
@@ -729,14 +734,18 @@ impl PqChat {
         }
     }
 
-    /// The device's replay of `s` (spec §10) by `me`'s key `key_id`: from the store's pin (resumed when the device holds its
-    /// previous replay, else walked from the cold tree with the pin compared), every read scheduled from public data, `K`
-    /// handles from the pin's epoch on (D-13: a long session does not fill the arena; a fresh device takes every epoch's).
-    /// C26 (the T4-T9 review's D-2, C-5, D-5): a pin the store holds moves to the verified head on success; a device with no
-    /// pin writes its first one only when a strict majority of at least 3 named endpoints serves the head it walked to, else
-    /// the state is `unconfirmed` and nothing is pinned; a conflict at the pinned number is settled by the majority's record
-    /// there (the pin replaced, `pin_replaced`), else `TreeConflict` ("conflicting head"). Neither the reads nor the pin depend
-    /// on any opening (ARCH-POS-13). A key in no period of the session: `NotMember`.
+    /// The device's replay of `s` (spec §10) by `me`'s key `key_id`: resumed from `from`, the device's previous replay (only
+    /// the epochs after its pin), else walked from the cold tree with the store's pin compared; every read scheduled from
+    /// public data; `K` handles for every followed epoch the walk opens (R2-C-1 of the T4-T9 re-check: a restart keeps the
+    /// history below the pin readable). C26 (the T4-T9 review's D-2, C-5, D-5): a pin the store holds moves to the verified
+    /// head on success, never down: a `from` whose pin is below the store's is refused (`TreeCheckpoint`, R2-C-2), and a
+    /// `from` an earlier resume consumed too (`TreePeriod`); `from`'s node keys move into the new state only after the pin is
+    /// stored (a store error returns it, `from` whole: R2-D-5). A device with no pin writes its first one only when a strict
+    /// majority of at least 3 named endpoints serves the head it walked to; the state is `unconfirmed` until such a read of
+    /// its head agreed (R2-D-3), and nothing is pinned before; a conflict at the pinned number (the store's, or `from`'s on a
+    /// resume: R2-C-6) is settled by the majority's record there (the pin replaced, `pin_replaced`; a resume then walks from
+    /// the cold tree), else `TreeConflict` ("conflicting head"). Neither the reads nor the pin depend on any opening
+    /// (ARCH-POS-13). A key in no period of the session: `NotMember`.
     pub async fn tree_state(
         &self,
         s: &SessionRef,
@@ -745,12 +754,9 @@ impl PqChat {
         from: Option<&PqTreeReplay>,
     ) -> Result<TreeState, PqChatError> {
         let key = me.key.clone();
-        let start = from
-            .and_then(|f| f.pin.get("epoch"))
-            .and_then(Value::as_u64);
-        self.tree_state_by(s, start, |app, rd, pin, keys_from| match from {
-            Some(f) => app.pqchat_tree_resume(key.clone(), key_id, rd, f, keys_from),
-            None => app.pqchat_tree_replay(key.clone(), key_id, rd, pin, keys_from),
+        self.tree_state_by(s, from, |app, rd, pin, resume| match (from, resume) {
+            (Some(f), true) => app.pqchat_tree_resume(key.clone(), key_id, rd, pin, f, 0),
+            _ => app.pqchat_tree_replay(key.clone(), key_id, rd, pin, 0),
         })
         .await
     }
@@ -766,27 +772,26 @@ impl PqChat {
         key_id: u64,
         from: Option<&PqTreeReplay>,
     ) -> Result<TreeState, PqChatError> {
-        let start = from
-            .and_then(|f| f.pin.get("epoch"))
-            .and_then(Value::as_u64);
-        self.tree_state_by(s, start, |app, rd, pin, keys_from| {
-            app.pqchat_tree_vectors_replay(seed, kem_seed, ua, key_id, rd, pin, from, keys_from)
+        self.tree_state_by(s, from, |app, rd, pin, resume| {
+            let from = from.filter(|_| resume);
+            app.pqchat_tree_vectors_replay(seed, kem_seed, ua, key_id, rd, pin, from, 0)
         })
         .await
     }
 
-    /// `resumed`: the walk starts at the previous replay's pin, epoch `resumed`, not at the store's.
+    /// `f(app, reads, pin, resume)`: the replay, resumed from `from` when `resume`, else from the cold tree against `pin`.
     async fn tree_state_by(
         &self,
         s: &SessionRef,
-        resumed: Option<u64>,
+        from: Option<&PqTreeReplay>,
         mut f: impl FnMut(
             &AppCore,
             &PqTreeReads,
             Option<&Value>,
-            u64,
+            bool,
         ) -> Result<PqTreeStep<Option<Arc<PqTreeReplay>>>, SdkError>,
     ) -> Result<TreeState, PqChatError> {
+        let epoch_of = |p: Option<&Value>| p.and_then(|p| p.get("epoch")).and_then(Value::as_u64);
         let mut reads = PqTreeReads::default();
         self.tree_view(s, &mut reads, "treeOf()").await?;
         let t = reads.views.get("treeOf()").cloned().unwrap_or_default();
@@ -796,30 +801,41 @@ impl PqChat {
             .get::<Value>(&pin_key(&tree_id))?
             .filter(|p| !p.is_null());
         let app = self.app.clone();
+        let mut resume = from.is_some();
         let mut replaced = false;
         let r = loop {
-            let pinned = pin
-                .as_ref()
-                .and_then(|p| p.get("epoch"))
-                .and_then(Value::as_u64);
-            let keys_from = resumed.or(pinned).unwrap_or(0);
+            let start = if resume {
+                epoch_of(from.map(|f| &f.pin))
+            } else {
+                None
+            };
             let run = self
-                .tree_run(s, &mut reads, resumed.unwrap_or(0), |rd| {
-                    f(&app, rd, pin.as_ref(), keys_from)
+                .tree_run(s, &mut reads, start.unwrap_or(0), |rd| {
+                    f(&app, rd, pin.as_ref(), resume)
                 })
                 .await;
             match run {
-                Err(e) if e.code() == "TreeConflict" && resumed.is_none() && !replaced => {
-                    // C26: settled by the majority's record at the pinned number, else "conflicting head"
-                    let twin = match &pin {
+                Err(e) if e.code() == "TreeConflict" && !replaced => {
+                    // C26: settled by the majority's record at the pinned number (the store's, or the resumed replay's),
+                    // else "conflicting head"
+                    let at_pin = if resume {
+                        from.map(|f| &f.pin)
+                    } else {
+                        pin.as_ref()
+                    };
+                    let twin = match at_pin {
                         Some(p) => self.pin_is_twin(s, &reads, p).await,
                         None => false,
                     };
                     if !twin {
                         return Err(e);
                     }
-                    items.update::<Value, _>(&pin_key(&tree_id), |_| Ok(Value::Null))?;
-                    (pin, replaced) = (None, true);
+                    if !resume || pin.as_ref() == at_pin {
+                        items.update::<Value, _>(&pin_key(&tree_id), |_| Ok(Value::Null))?;
+                        items.update::<Value, _>(&confirmed_key(&tree_id), |_| Ok(Value::Null))?;
+                        pin = None;
+                    }
+                    (resume, replaced) = (false, true);
                     reads = PqTreeReads::default();
                     self.tree_view(s, &mut reads, "treeOf()").await?;
                 }
@@ -837,16 +853,23 @@ impl PqChat {
             })
             .unwrap_or_default();
         let head = ids.len().saturating_sub(1) as u64;
-        // ARCH-POS-13: the majority read is made whenever no pin is kept or the head moved above it, public facts only
-        let pinned = pin
-            .as_ref()
-            .and_then(|p| p.get("epoch"))
-            .and_then(Value::as_u64);
-        let asked = pinned.is_none_or(|p| head > p);
+        // ARCH-POS-13: the majority read is made until a majority confirmed the head (R2-D-3), public facts only
+        let confirmed: Option<u64> = items
+            .get::<Value>(&confirmed_key(&tree_id))?
+            .and_then(|v| v.as_u64());
+        let asked = confirmed.is_none_or(|c| head > c);
         let seen = reads.views.get("treeOf()").cloned().unwrap_or_default();
         let unconfirmed = asked && self.majority_tree(s, &seen).await != Fresh::Confirmed;
+        // the confirmation first: a pin write that fails after it leaves a confirmed head, which a later poll pins
+        if asked && !unconfirmed {
+            items.update::<Value, _>(&confirmed_key(&tree_id), |_| Ok(json!(head)))?;
+        }
         if pin.is_some() || !unconfirmed {
             items.update::<Value, _>(&pin_key(&tree_id), |_| Ok(r.pin.clone()))?;
+        }
+        // every step that can fail is behind: `from`'s node keys move into the new state (D-5, U-a)
+        if let (Some(f), true) = (from, resume) {
+            r.adopt(f);
         }
         Ok(TreeState {
             closed: closed_of(&r.pin),
@@ -915,8 +938,8 @@ impl PqChat {
     }
 
     /// Epoch `epoch_id` of a followed tree session opened for messages (the mode branch at "obtain `K`", CLI-PQC-17): its
-    /// `K` from the replay (`followed` only; else `EpochIncomplete`, nothing sent), its members the roster's UAs, its parent
-    /// the epoch before it. The crate keeps it as a tree epoch (C-3, D-7, D-8 of the T4-T9 review): its info is the info in
+    /// `K` from the replay (`followed` only; else `EpochIncomplete`, nothing sent), its members the roster's UAs, its author
+    /// and admins its record's, its parent the epoch before it. The crate keeps it as a tree epoch (C-3, D-7, D-8 of the T4-T9 review): its info is the info in
     /// force there from the replay (none held, or held flagged: `TreeInfoMissing` when the app sends), a send under it that
     /// meets a later epoch at home asks for a replay (`EpochTaken`), and no receipt leaves it unless the user turned them on
     /// (R11). A state of another session: `SessionUnknown`.
@@ -984,11 +1007,12 @@ impl PqChat {
             epoch: model::Epoch {
                 id,
                 session_id: s.session_id.to_ascii_lowercase(),
-                author: String::new(),
+                // R2-C-3 of the T4-T9 re-check: the room's sync and `StoresChanged` act on the record's author and admins
+                author: e.author.to_ascii_lowercase(),
                 nonce: 0,
                 epoch: e.epoch,
                 parent,
-                admins: vec![],
+                admins: e.admins.iter().map(|a| a.to_ascii_lowercase()).collect(),
                 members,
                 wrap_hashes: vec![],
                 sealed_info: vec![],
@@ -1100,7 +1124,8 @@ impl PqChat {
     /// The next transaction of a signed commit on the state now (C37): prepared, or `None` once the epoch is complete at
     /// the final block (C-1 = B-4 = D-9 of the T4-T9 review: a record another sender stored alone is not complete, the
     /// pieces go through their entries). What is landed is read at the latest block and what is final at the final block
-    /// (D-14): a piece landed and not final is waited for (`EpochNotFinal`), never sent twice. The order broken so that the
+    /// (D-14): a piece landed and not final is waited for (`EpochNotFinal`), never sent twice once it landed; a piece sent and
+    /// not landed yet is prepared again by a second call (the app waits for its send before it asks again, R2-C-6). The order broken so that the
     /// piece left cannot pay the completion: `TreeVoid` (rebuild with a new nonce), nothing more sent.
     pub async fn tree_next(
         &self,
@@ -1137,8 +1162,9 @@ impl PqChat {
     }
 
     /// What of `c` is in state at the home: at the final block, or at the latest one (`latest`, D-14); whether its epoch is
-    /// complete. A `commitOf` that reverts (the record not stored) is "not landed"; a read that fails keeps its error
-    /// (C-11, D-18).
+    /// complete. A `commitOf` that reverts (the record not stored: the first endpoint's revert, or `PqChatUnknown()` kept by
+    /// a failover whose endpoints all reverted, R2-C-4 of the T4-T9 re-check) is "not landed"; a read that fails keeps its
+    /// error (C-11, D-18).
     async fn tree_landed(
         &self,
         s: &SessionRef,
@@ -1163,7 +1189,7 @@ impl PqChat {
         l.complete = at(&done, "0") == true;
         l.record = match read("IPqChatTreeViews.commitOf", json!({ "epochId": eid })).await {
             Ok(_) => true,
-            Err(e) if is_revert(&e) => false,
+            Err(PqChatError::Sdk(e)) if pt::record_unknown(&e) => false,
             Err(e) => return Err(e),
         };
         if !l.record {
@@ -1450,11 +1476,6 @@ fn one_tx() -> pt::PqTreePlan {
         completion: Default::default(),
         dearest_last: Default::default(),
     }
-}
-
-/// Whether a read's error is the contract's revert (a view that refuses), not a transport failure.
-fn is_revert(e: &PqChatError) -> bool {
-    e.code() == "Revert"
 }
 
 /// Integers as decimal strings (the port's named arguments).

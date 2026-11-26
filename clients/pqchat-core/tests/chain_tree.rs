@@ -173,7 +173,7 @@ async fn chain_tree_session() {
     let TreeBuilt {
         signed: c1,
         plan: plan1,
-        ..
+        head_confirmed,
     } = pq
         .tree_commit(
             &s,
@@ -192,6 +192,11 @@ async fn chain_tree_session() {
         )
         .await
         .unwrap();
+    // R2-C-5 of the TreeKEM T4-T9 re-check: one endpoint, no strict majority: an Add built with its head not confirmed
+    assert!(
+        !head_confirmed && a0.unconfirmed,
+        "one endpoint confirms nothing"
+    );
     let sent = land_commit(&l, &pq, &s, &c1, &plan1).await;
     println!(
         "[tree] commit 1 (2 Adds) in {sent} transaction(s), plan {:?}",

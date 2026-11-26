@@ -687,6 +687,9 @@ pub struct PqTreeRemove {
 pub struct PqTreeEpoch {
     pub epoch: u64,
     pub epoch_id: String,
+    /// its record's author (epoch 0: the creator) and the admins after it, lowercase hex
+    pub author: String,
+    pub admins: Vec<String>,
     pub state: String,
     pub k: Option<Arc<AppKey>>,
     pub info: Option<String>,
@@ -719,6 +722,22 @@ pub struct PqTreeReplay {
     /// by epoch of the range, each leaf's `(ua, keyId)` (`None` blank): the roster the forward walk reached (C25)
     pub rosters: BTreeMap<u64, Vec<Option<(String, u64)>>>,
     inner: Mutex<Replay>,
+}
+
+impl PqTreeReplay {
+    /// A resume's replay ([`AppCore::pqchat_tree_resume`]) takes the node keys of `from` it keeps on, once the caller keeps it
+    /// (its pin stored: D-5, U-a of the T4-T9 re-check), and `from` is consumed: a resume from it again is refused
+    /// (`TreePeriod`, R2-C-2). Nothing for a replay that was not resumed, or for `from` itself.
+    pub fn adopt(&self, from: &PqTreeReplay) {
+        if std::ptr::eq(self, from) {
+            return;
+        }
+        let mut f = from.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        self.inner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .adopt(&mut f);
+    }
 }
 
 impl AppCore {
@@ -970,17 +989,20 @@ impl AppCore {
         self.replay(account, key_id, reads, pin, None, keys_from)
     }
 
-    /// [`AppCore::pqchat_tree_replay`] resumed from `from` (spec §10 step 3): only the epochs after its pin; on success its node
-    /// keys move into the new replay. A refusal or a missing read leaves `from` as it was.
+    /// [`AppCore::pqchat_tree_replay`] resumed from `from` (spec §10 step 3): only the epochs after its pin. `from` is left
+    /// whole (a refusal, a missing read, a replay the caller drops); its node keys move into the new replay by
+    /// [`PqTreeReplay::adopt`] once the caller keeps it. A consumed `from`: `TreePeriod`; a `from` whose pin is below the
+    /// store's checkpoint `pin`: `TreeCheckpoint` (R2-C-2 of the T4-T9 re-check).
     pub fn pqchat_tree_resume(
         &self,
         account: KeyRef,
         key_id: u64,
         reads: &PqTreeReads,
+        pin: Option<&Value>,
         from: &PqTreeReplay,
         keys_from: u64,
     ) -> Result<PqTreeStep<Option<Arc<PqTreeReplay>>>, SdkError> {
-        self.replay(account, key_id, reads, None, Some(from), keys_from)
+        self.replay(account, key_id, reads, pin, Some(from), keys_from)
     }
 
     fn replay(
@@ -1016,7 +1038,6 @@ impl AppCore {
         self.label(PQCHAT_TREE.prefix.as_bytes())?;
         let b: &[u8; 96] = kem_seed.try_into().map_err(|_| SdkError::Argument)?;
         let kem = scaas_ua::wallet::KemKeyPair::vectors_ephemeral(b)?;
-        let pin = if from.is_some() { None } else { pin };
         self.replay_with(seed, h32(ua)?, key_id, &kem, reads, pin, from, keys_from)
     }
 
@@ -1039,8 +1060,8 @@ impl AppCore {
         let sc = self.scope(&seed)?;
         let r = match from {
             Some(f) => {
-                let mut g = f.inner.lock().unwrap_or_else(PoisonError::into_inner);
-                sc.tree_resume(&PQCHAT_TREE, &mut rd, &dev, &mut g, keys_from)
+                let g = f.inner.lock().unwrap_or_else(PoisonError::into_inner);
+                sc.tree_resume_kept(&PQCHAT_TREE, &mut rd, &dev, &g, pin.as_ref(), keys_from)
             }
             None => sc.tree_replay(&PQCHAT_TREE, &mut rd, &dev, pin.as_ref(), keys_from),
         };
@@ -1055,6 +1076,8 @@ impl AppCore {
                 .map(|e| PqTreeEpoch {
                     epoch: e.epoch,
                     epoch_id: hex(&e.epoch_id),
+                    author: hex(&e.author),
+                    admins: e.admins.iter().map(|a| hex(a)).collect(),
                     state: match e.state {
                         tree::State::Followed => "followed".into(),
                         tree::State::NotFollowed(why) => format!("not followed: {why}"),
@@ -1267,6 +1290,21 @@ pub struct PqTreePlan {
     pub txs: Vec<PqTreeTx>,
     pub completion: PqGas,
     pub dearest_last: PqGas,
+}
+
+/// Whether a home view's read error says the record is not stored: the first endpoint's revert (a view that refuses), or
+/// a failover over endpoints that all failed whose kept revert is the contract's `PqChatUnknown()` (R2-C-4 of the T4-T9
+/// re-check: a failover endpoint's revert is no verdict alone, CLI-RPC-04, but the record unknown to every endpoint that
+/// answered is the contract's answer); never a transport failure.
+pub fn record_unknown(e: &SdkError) -> bool {
+    match e {
+        SdkError::Rpc(scaas_rpc::RpcError::Revert { .. }) => true,
+        SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
+            failover_revert: Some(d),
+            ..
+        }) => d.starts_with(&scaas_ua::keccak256(b"PqChatUnknown()")[..4]),
+        _ => false,
+    }
 }
 
 /// A plan refused by name (only the operation whose required piece does not fit), with its figures.
@@ -1899,22 +1937,18 @@ mod tests {
 
     /// B-5 = C-7 of the review: every signer kind the contract accepts has a verify row (ARCH-POS-18, never a kind refused
     /// for want of a row); a kind with none is refused by its own name, not as a size.
+    /// R2-D-7 of the T4-T9 re-check: the kinds walked are `scaas-ua`'s (`KINDS`, every derived kind), so a kind added there
+    /// without a row turns this test red. Named apart: the `msig` structure (an `msig` author is planned, CLI-PQC-02) and
+    /// `zether-bls12381` (0x0141, a SIGNING kind with no measured row yet: its commit is held to the quote alone, C-7; its row
+    /// is left for the owner, the walk found it).
     #[test]
     fn every_signer_kind_has_a_verify_row() {
         let g = rows();
-        for kind in [
-            "mldsa44",
-            "mldsa65",
-            "mldsa87",
-            "fndsa512",
-            "fndsa1024",
-            "slhdsa128s",
-            "ed25519",
-            "p256",
-            "webauthn-p256",
-            "secp256k1",
-            "bip340",
-        ] {
+        for kind in scaas_ua::KINDS
+            .iter()
+            .filter(|k| !k.native && !["msig", "zether-bls12381"].contains(&k.name))
+            .map(|k| k.name)
+        {
             assert!(plan_commit(&g, L60, kind, &plain()).is_ok(), "{kind}");
             assert!(create_cap(&g, L60, kind, 1) > 0, "{kind}");
         }

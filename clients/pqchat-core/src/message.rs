@@ -394,6 +394,11 @@ impl PqChat {
         self.set_locked(true);
         self.chains().clear();
         self.in_use().0.clear();
+        // R2-C-6 of the T4-T9 re-check: the tree epochs' info goes with their `K` (opened again by `tree_open`)
+        self.tree_epochs
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
     }
 
     fn in_use(&self) -> std::sync::MutexGuard<'_, InUse> {
