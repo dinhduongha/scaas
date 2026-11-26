@@ -32,8 +32,11 @@ def is_test(f):
     return f in TEST or f.startswith("xcheck-")
 
 
-# test-only crates: the fuzz harness of ua-rs (its targets reach the facades through `vectors`)
-TEST_ONLY = {"clients/ua-rs/fuzz/Cargo.toml"}
+# test-only crates, each named with its reason: the fuzz harness of ua-rs (its targets reach the facades through `vectors`);
+# the wasm32 Falcon gate's runner (CLI-UAL-66, tests/fndsa/wasm/run.sh: publish = false, its own workspace and lockfile, a
+# cdylib loaded only by run.cjs; tests/fndsa/sign.rs signs through the `vectors` hooks `vectors_with_secret` and
+# `vectors_sign_ua_msg`, so the feature is what it tests, never a build beside a shipped artifact)
+TEST_ONLY = {"clients/ua-rs/fuzz/Cargo.toml", "clients/ua-rs/tests/fndsa/wasm/Cargo.toml"}
 # the production artifacts: (directory, extra cargo tree arguments); the bindings' cores and zether-read-balance
 ARTIFACTS = [
     ("clients/ua-c", []),
