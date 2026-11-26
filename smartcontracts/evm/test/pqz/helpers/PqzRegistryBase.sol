@@ -35,12 +35,12 @@ contract SlhStandIn {
     }
 }
 
-bytes32 constant PQZ_UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464; // chain 7622's genesis
+bytes32 constant PQZ_UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464; // the SCaaS testnet's first genesis hash (fixed)
 // the build's set's ids (plan 5h Task 8d; PQZH_ID is the zero word at a set without PQZH)
 bytes32 constant PQZL_ID = PqzSet.PQZL_ID;
 bytes32 constant PQZH_ID = PqzSet.PQZH_ID;
 
-/// @notice A gen-1 `UARegistry` as on chain 7622 (P6g plan D15): `mldsa65` on its precompile candidate (mocked: every
+/// @notice A gen-1 `UARegistry` as on chain 22779 (P6g plan D15): `mldsa65` on its precompile candidate (mocked: every
 ///         input ⇒ 1 except the probe's invalid one) and the PQZ key verifier `PqzKeyVerifier` (slot 0x0142; the `PQZ`
 ///         precompile mocked, `PqzMock`). ML-DSA signatures are filler bytes of the right length; what is real is every
 ///         registry and verifier path between them.

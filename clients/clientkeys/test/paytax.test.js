@@ -31,7 +31,7 @@ test("paytax.json: PERCENT is the floor at the rate (2^255 included); refused ro
     if (r.taxMode === 1 && r.refused === "") assert.equal(percentTax(amount, r.ratePpm), tax, r.name);
     const pay = {
       token: "0x" + "7a".repeat(20),
-      chainId: 7622,
+      chainId: 22779,
       chainUid: "0x" + "c1".repeat(32),
       from: padId("0x" + "11".repeat(20)),
       to: padId("0x" + "22".repeat(20)),
@@ -79,7 +79,7 @@ test("the UAPayWithTax digest row: canonical payment hash, struct hash, digest i
 test("buildPayWithTax: mtxPayWithTax(t, uint8, uint256, UASig, PayMeta); the rate check; tax <= amount", () => {
   const pay = {
     token: "0x" + "7a".repeat(20),
-    chainId: 7622,
+    chainId: 22779,
     chainUid: "0x" + "c1".repeat(32),
     from: padId("0x" + "11".repeat(20)),
     to: padId("0x" + "22".repeat(20)),

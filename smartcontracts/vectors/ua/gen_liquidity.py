@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import famvec as V  # noqa: E402
 
 OUT = os.path.join(V.REPO, "smartcontracts", "vectors", "ua", "liquidity_kat.json")
-CHAIN_ID = 7622  # scaas-testnet
+CHAIN_ID = 22779  # scaas-testnet
 CHAIN_UID = V.unhx("0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464")  # the forge fixtures' UID_
 DEX = V.unhx("0xd1d1000000000000000000000000000000000d1d")
 TOKEN_A = V.unhx("0xa0a0000000000000000000000000000000000a0a")  # SCaaS

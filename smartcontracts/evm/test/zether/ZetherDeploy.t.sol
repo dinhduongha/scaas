@@ -165,7 +165,7 @@ contract ZetherDeployTest is Test {
     }
 
     /// Without `DEPLOY_ZETHER` no chain gets the stack (a plain anvil deploys as before P3); with it the SCaaS testnet
-    /// 7622 and the mainnet 22776 get it (owner ruling 2026-10-31, CTR-ZTH-02 superseded, `test_testnetAndMainnet_…`)
+    /// 22779 and the mainnet 22777 get it (owner ruling 2026-10-31, CTR-ZTH-02 superseded, `test_testnetAndMainnet_…`)
     /// and Hedera refuses `DEPLOY_ZETHER`. One deploy per test: a `DeployHarness` (about 700 KB of runtime) costs over a
     /// billion gas to create at Amsterdam, and five in one test passed the 2^33 test gas limit.
     function _defaultNoZether(uint256 id) internal {
@@ -191,7 +191,7 @@ contract ZetherDeployTest is Test {
     }
 
     function test_defaultNoZether_scaasTestnet() public {
-        _defaultNoZether(7622);
+        _defaultNoZether(22779);
     }
 
     function test_hederaRefusesZether() public {
@@ -202,7 +202,7 @@ contract ZetherDeployTest is Test {
     }
 
     function test_testnetAndMainnet_registerZether() public {
-        uint256[2] memory ids = [uint256(7622), 22776];
+        uint256[2] memory ids = [uint256(22779), 22777];
         for (uint256 i; i < ids.length; ++i) {
             vm.chainId(ids[i]);
             DeployHarness h = new DeployHarness();
@@ -221,16 +221,16 @@ contract ZetherDeployTest is Test {
     }
 
     /// `NOTICE_PERIOD` (owner ruling 2026-10-20, review 5g-Z2 P2-4): safe by default — every chain outside the fixed
-    /// test / dev list is a mainnet, default and floor 3 days; 7622 defaults to 10 minutes, the other test chains to 0;
+    /// test / dev list is a mainnet, default and floor 3 days; 22779 defaults to 10 minutes, the other test chains to 0;
     /// a value over `uint64` is refused, never truncated.
     function test_noticePeriod_mainnetFloorAndDefaults() public {
         DeployHarness h = new DeployHarness();
-        uint256[8] memory test = [uint256(31337), 1337, 31950, 7622, 296, 298, 11155111, 97];
+        uint256[8] memory test = [uint256(31337), 1337, 31950, 22779, 296, 298, 11155111, 97];
         for (uint256 i; i < test.length; ++i) {
-            assertEq(h.defaultNotice(test[i]), test[i] == 7622 ? 10 minutes : 0);
+            assertEq(h.defaultNotice(test[i]), test[i] == 22779 ? 10 minutes : 0);
             assertEq(h.noticeFor(test[i], 0), 0);
         }
-        uint256[6] memory main = [uint256(22776), 295, 1, 56, 100, 987654321]; // the last: an unknown chain
+        uint256[6] memory main = [uint256(22777), 295, 1, 56, 100, 987654321]; // the last: an unknown chain
         for (uint256 i; i < main.length; ++i) {
             assertEq(h.defaultNotice(main[i]), 3 days);
             assertEq(h.noticeFor(main[i], 3 days), 3 days);
@@ -238,7 +238,7 @@ contract ZetherDeployTest is Test {
             h.noticeFor(main[i], 3 days - 1);
         }
         vm.expectRevert("NOTICE_PERIOD exceeds uint64");
-        h.noticeFor(7622, uint256(type(uint64).max) + 1);
+        h.noticeFor(22779, uint256(type(uint64).max) + 1);
     }
 
     /// Each Zether-stack deploy fits one Osaka transaction as `deploy.sh` sends it (the verifiers through the CREATE2

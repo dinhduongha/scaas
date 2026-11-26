@@ -107,7 +107,7 @@ contract ERC20MetaTxTest is MtxFixture {
         assertEq(f, hex"1f");
         assertEq(n, "SCaaS MetaToken");
         assertEq(v, "1");
-        assertEq(cid, 7622);
+        assertEq(cid, 22779);
         assertEq(vc, address(t));
         assertEq(salt, UID);
         assertEq(t.supportedModes(), 0xF3);

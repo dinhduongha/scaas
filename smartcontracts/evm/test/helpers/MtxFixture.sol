@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MtxRegistryMock} from "./MtxRegistryMock.sol";
 
-/// Shared setup of the `MetaTxBase` tests: chain 7622 with its real `chain_uid` (chain-uids.json, scaas-testnet).
+/// Shared setup of the `MetaTxBase` tests: chain 22779 (scaas-testnet) with the vectors' fixed `chain_uid` (chain-uids.json's note).
 abstract contract MtxFixture is Test {
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     uint256 internal constant ALICE_PK = 0xA11CE;
@@ -16,7 +16,7 @@ abstract contract MtxFixture is Test {
     MtxRegistryMock internal reg;
 
     function setUp() public virtual {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         reg = new MtxRegistryMock("SCaaS TestRegistry", UID);
     }

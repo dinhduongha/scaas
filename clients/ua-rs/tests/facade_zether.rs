@@ -907,13 +907,13 @@ fn auditor_pop_from_named_fields() {
         format!("0x{}", "c1".repeat(32)),
     );
     let r =
-        json!({"curve": "bls12381", "chainId": 7622, "chainUid": uid, "token": token, "epoch": 2});
+        json!({"curve": "bls12381", "chainId": 22779, "chainUid": uid, "token": token, "epoch": 2});
     let out = call(&k, "auditorPop", &r).unwrap();
     let m = json!({"token": token, "auditor": format!("0x{}", hex::encode(k.ua())), "epoch": 2, "chainUid": uid});
     let t: Value = serde_json::from_str(
         &zether_prover::api::call(
             "typedDigest",
-            &json!({"op": "AuditorConsent", "chainId": 7622,
+            &json!({"op": "AuditorConsent", "chainId": 22779,
         "chainUid": uid, "token": token, "message": m})
             .to_string(),
         )

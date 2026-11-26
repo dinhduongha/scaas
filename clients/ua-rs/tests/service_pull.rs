@@ -107,7 +107,7 @@ fn unbound_fee_recipient_is_canonical() {
         "UAMetaTransfer",
         Some("SCaaS MetaToken"),
         &token,
-        7622,
+        22779,
         &uid,
         &r["t"],
     )

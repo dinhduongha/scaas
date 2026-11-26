@@ -303,7 +303,7 @@ test("signing: a raw digest is refused without the opt-in; signTyped / signKeyPr
   assert.throws(() => signDigest(evm, auth, { allowRawDigest: 1 }), /raw digest refused/, "only literal true");
   const td = uaMetaTransferTypedData({
     contract: "0x" + "11".repeat(20),
-    chainId: 7622,
+    chainId: 22779,
     chainUid: "0x" + "22".repeat(32),
     message: { from: padId(evm.address), to: padId("0x" + "33".repeat(20)), value: "1", validUntil: "9" },
   });

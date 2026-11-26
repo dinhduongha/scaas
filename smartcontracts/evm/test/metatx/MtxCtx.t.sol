@@ -44,7 +44,7 @@ contract GasProbe {
 /// calldata a token hands the library are read from the DELEGATECALL itself (`vm.startStateDiffRecording`), so the test
 /// sees what the library got, not what a view reports.
 ///
-/// The `NORMAL` fixture `tok` runs on the gen-1 registry of chain 7622 (`mldsa65` on its mocked precompile, cap 100,000)
+/// The `NORMAL` fixture `tok` runs on the gen-1 registry of chain 22779 (`mldsa65` on its mocked precompile, cap 100,000)
 /// with this chain's `SmartKeyAccount` implementation; `htok` is the same kind built `IS_HEDERA` (HIP-632 at 0x16a,
 /// `MockHederaAccountService`).
 contract MtxCtxTest is PqzRegistryBase {
@@ -69,7 +69,7 @@ contract MtxCtxTest is PqzRegistryBase {
     bytes32 internal u; // an `mldsa65` UA of `reg`
 
     function setUp() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         _registryStack();
         fac = new SmartKeyAccountFactory(PQZ_UID);
@@ -380,13 +380,18 @@ contract MtxCtxTest is PqzRegistryBase {
     /// address digest of a Zether kind (the zether-prover's envelope.json), each on a clone etched at the vector's
     /// token address on the vector's chain.
     function test_digestViewsEqualKats() public {
-        // legacy metatx_kat.json: the address `MetaTransaction` (a client computes it, MtxDigest), a `NORMAL` clone, 7622
+        // legacy metatx_kat.json: the address `MetaTransaction` (a client computes it, MtxDigest), a `NORMAL` clone, on the
+        // vector's own chain id (the legacy file keeps the SCaaS testnet's id of its time)
         string memory j = vm.readFile("test/vectors/legacy/ua-mtx-merge/metatx_kat.json");
-        address at = _etchNormal(vm.parseJsonAddress(j, ".verifying_contract"), vm.parseJsonBytes32(j, ".salt"), 7622);
+        address at = _etchNormal(
+            vm.parseJsonAddress(j, ".verifying_contract"),
+            vm.parseJsonBytes32(j, ".salt"),
+            vm.parseUint(vm.parseJsonString(j, ".chain_id"))
+        );
         assertEq(MtxDigest.metaTx(at, _katTx(j)), vm.parseJsonBytes32(j, ".digest"), "legacy metatx_kat");
         // metatx_kat.json / metatransfer_kat.json (ua-mtx-merge T2): the token's own views
         j = vm.readFile("test/vectors/metatx_kat.json");
-        at = _etchNormal(vm.parseJsonAddress(j, ".verifying_contract"), vm.parseJsonBytes32(j, ".salt"), 7622);
+        at = _etchNormal(vm.parseJsonAddress(j, ".verifying_contract"), vm.parseJsonBytes32(j, ".salt"), 22779);
         assertEq(NormalToken(at).mtxDigest(_katUaTx(j)), vm.parseJsonBytes32(j, ".digest"), "metatx_kat");
         j = vm.readFile("test/vectors/metatransfer_kat.json");
         assertEq(vm.parseJsonAddress(j, ".verifying_contract"), at);

@@ -354,7 +354,7 @@ contract FactoryTest is Test {
         assertEq(f.latestVersion(NORMAL), 2);
     }
 
-    /// Plan 5g-Z2: a release is usable `noticePeriod` seconds after its deployment (7622: minutes, 22776: days).
+    /// Plan 5g-Z2: a release is usable `noticePeriod` seconds after its deployment (22779: minutes, 22777: days).
     function test_noticePeriod() public {
         // the period is written once (configureChain), capped at 30 days (review 5g-Z2 P2-4: near 2^64 `usableFrom`
         // would overflow)

@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import famvec as V  # noqa: E402
 
 OUT = os.path.join(V.REPO, "smartcontracts", "vectors", "metatx", "servicepull.json")
-CHAIN_ID = 7622  # scaas-testnet
+CHAIN_ID = 22779  # scaas-testnet
 CHAIN_UID = V.unhx("0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464")  # TokenKat.t.sol's UID
 TOKEN = V.unhx("0x7070000000000000000000000000000000007070")  # the pulled token (and the fee token F = T)
 SERVICE = V.unhx("0x5e5e000000000000000000000000000000005e5e")  # RefServiceEscrow

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-/// @notice P6f (plan R5): test-only probe for the PQZ / ML-DSA precompiles on the copy and on 7622 — never in src/.
+/// @notice P6f (plan R5): test-only probe for the PQZ / ML-DSA precompiles on the copy and on 22779 — never in src/.
 /// `call` measures one STATICCALL with all gas: `gasUsed` = gasleft() before − after (the call's own cost, 100 warm,
 /// plus the precompile's gas, plus a constant few gas of stack work that `probe.sh` measures on the identity
 /// precompile), `rlen` = returndatasize, `word` = the 32-byte answer, or type(uint256).max if the call failed.

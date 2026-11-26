@@ -115,7 +115,7 @@ contract UADeployTest is Test {
         vm.mockCall(at[1], bytes(""), abi.encode(uint256(1))); // the word 1 to every input
         assertEq(_registry(31337, false).verifyCap(0x0134), 8_850_000, "no precompile counts: the cache");
         vm.clearMockedCalls();
-        assertEq(_registry(7622, false).verifyCap(0x0134), 8_850_000, "no precompile in this EVM: the cache");
+        assertEq(_registry(22779, false).verifyCap(0x0134), 8_850_000, "no precompile in this EVM: the cache");
     }
 
     /// `test_mldsa87_precompileOrCache`'s Hedera row, its own test since bls-multi Task 7: five full deploys (each ~1 G of EIP-8037
@@ -128,7 +128,7 @@ contract UADeployTest is Test {
     /// probe, and refuses any `MLDSA<x>_VERIFIER`; `on` where the chain answers and no verifier is handed in refuses by name;
     /// `on` with the CREATE2 verifier takes it (the deploy JSON records each kind's path, MD-15).
     function test_mldsaPrecompileFlag() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         DeployHarness h = new DeployHarness();
         h.setMldsa(false, address(0), address(0));
         h.forceMl(true, true);
@@ -211,17 +211,17 @@ contract UADeployTest is Test {
         assertLe(uint256(reg.verifyCap(UAKinds.FNDSA1024)) * 100, uint256(reg.verifyBudget()) * 75);
     }
 
-    /// Owner ruling 2026-10-31: no chain-id lock for any kind. Chain 7622, the mainnet 22776, the e2e's 31901 and an
+    /// Owner ruling 2026-10-31: no chain-id lock for any kind. Chain 22779, the mainnet 22777, the e2e's 31901 and an
     /// arbitrary id get every kind whose requirement the chain meets (here: the probe passes, the budget is 12 M).
     /// Hedera 298: `hederaNative`, budget 10.5 M, all four PQ kinds (75 % = 7.875 M ≥ `mldsa65`'s 5.95 M; not the cached `mldsa87`); no
     /// `zether-bls12381` (no Zether token on Hedera).
     function test_otherChains() public {
-        IUARegistry r7622 = _registry(7622, false);
-        bool[5] memory on = _kinds(r7622, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
+        IUARegistry rTestnet = _registry(22779, false);
+        bool[5] memory on = _kinds(rTestnet, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
         assertTrue(on[0] && on[1] && on[2] && !on[3] && on[4]);
-        _pq(r7622, true);
-        assertFalse(r7622.kindEnabled(UAKinds.PQZ_MLWE));
-        uint256[3] memory ids = [uint256(31901), 22776, 987654321];
+        _pq(rTestnet, true);
+        assertFalse(rTestnet.kindEnabled(UAKinds.PQZ_MLWE));
+        uint256[3] memory ids = [uint256(31901), 22777, 987654321];
         for (uint256 i; i < ids.length; ++i) {
             IUARegistry r = _registry(ids[i], false);
             on = _kinds(r, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);

@@ -14,7 +14,7 @@ use scaas_ua::facade::pqz_pack::{unpack, ACC_WORDS, B, CTP, PKP, VP};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const CHAIN_ID: u64 = 7622;
+pub const CHAIN_ID: u64 = 22779;
 pub const UID: Word = [0xC1; 32];
 pub const TOKEN: [u8; 20] = [0x11; 20];
 pub const REG: [u8; 20] = [0x22; 20];

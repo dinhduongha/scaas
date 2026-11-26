@@ -29,7 +29,7 @@ public class SpecTests
 
     public static ChainSpec Load(Action<JsonObject>? edit = null)
     {
-        JsonObject g = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "chainspecs", "genesis-7622.json")))!.AsObject();
+        JsonObject g = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "chainspecs", "genesis-scaas-testnet.json")))!.AsObject();
         edit?.Invoke(g);
         return new ChainSpecLoader(new EthereumJsonSerializer(), LimboLogs.Instance).Load(new MemoryStream(Encoding.UTF8.GetBytes(g.ToJsonString())));
     }
@@ -77,7 +77,7 @@ public class SpecTests
     [Test]
     public void Genesis_activation_from_block_0()
     {
-        // a new chain (the 7622 testnet reset, owner 2026-10-15): the schedule at the genesis timestamp is active in
+        // a new chain (the SCaaS testnet reset, owner 2026-10-15): the schedule at the genesis timestamp is active in
         // every block, genesis included; not a fork transition
         ISpecProvider stock = new ChainSpecBasedSpecProvider(Load(), LimboLogs.Instance);
         ISpecProvider p = Provider(WithPqz(Schedule(0)));

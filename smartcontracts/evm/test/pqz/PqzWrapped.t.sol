@@ -143,7 +143,7 @@ contract PqzWrappedTest is PqzFixture {
     /// The largest implementation (`WrappedPqzToken`, plan 5g-Z) fits one transaction's regular-gas cap as `deploy.sh`
     /// sends a deploy (gas limit = forge's estimate × `--gas-estimate-multiplier 105`; forge's estimate ran ~1.05× the
     /// measured CREATE2 + intrinsic + calldata, ZetherDeploy.t; Osaka: the limit itself, ×1.30 did not fit). Init code over EIP-3860's 49,152
-    /// fits 7622 / anvil (131,072 with `--code-size-limit 65536`).
+    /// fits 22779 / anvil (131,072 with `--code-size-limit 65536`).
     /// Plan 5g-Z2: measured through `OpenFactory.deployTokenImplementation` itself (the env appended, the release's checks),
     /// as the registrar's transaction: intrinsic + calldata + the call.
     function test_largestImplementationFitsOneOsakaTx() public {

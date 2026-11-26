@@ -647,14 +647,14 @@ test("Q3 (owner 2026-11-19): a third party's webauthn-p256 member cannot bypass 
   );
 });
 
-test("chain separation (owner 2026-11-05): one message and one key on 7622 and 22776, other digests and signatures, no cross-chain verify", () => {
+test("chain separation (owner 2026-11-05): one message and one key on 22779 and 22777, other digests and signatures, no cross-chain verify", () => {
   const C = S.chainSeparation;
   assert.ok(C, "sign.json chainSeparation");
   const key = U.deriveUAKey(seeds()[C.key.mnemonic], { kind: C.key.kind, account: C.key.account, index: C.key.index });
   const metatx = ua.purposeTag("metatx");
   assert.deepEqual(
     C.typed.map((r) => r.chainId),
-    [7622, 22776],
+    [22779, 22777],
   );
   for (const r of C.typed) {
     assert.equal(Number(r.td.domain.chainId), r.chainId);
@@ -679,10 +679,10 @@ test("chain separation (owner 2026-11-05): one message and one key on 7622 and 2
   assert.deepEqual(
     C.tx.map((r) => [r.type, r.chainId]),
     [
-      [0, 7622],
-      [0, 22776],
-      [2, 7622],
-      [2, 22776],
+      [0, 22779],
+      [0, 22777],
+      [2, 22779],
+      [2, 22777],
     ],
   );
   for (const r of C.tx) {
@@ -710,7 +710,7 @@ test("chain separation (owner 2026-11-05): one message and one key on 7622 and 2
     }
   }
   const [p] = C.portable;
-  assert.deepEqual(p.chains, [7622, 22776]);
+  assert.deepEqual(p.chains, [22779, 22777]);
   assert.ok(!("chainId" in p.td.domain) && !("verifyingContract" in p.td.domain));
   assert.deepEqual(p.td.domain, ua.PORTABLE_DOMAIN);
   assert.equal(hex(evm.hashTypedData(p.td)), p.digest);

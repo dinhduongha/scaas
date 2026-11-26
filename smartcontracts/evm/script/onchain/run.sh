@@ -4,9 +4,9 @@
 # smartcontracts/evm, through scripts/capped, in the foreground:
 #   ONCHAIN_RPC=<url> … run.sh <target> <Group> [forge args]   the target's node (matrix.sh sets it: a fresh local chain,
 #                                                              the SCaaS testnet, another testnet); DEPLOY_JSON its deploy
-#   … run.sh local <Group>   without ONCHAIN_RPC: an anvil fork of FORK_RPC (else RPC_7622) on 127.0.0.1:$PORT for
+#   … run.sh local <Group>   without ONCHAIN_RPC: an anvil fork of FORK_RPC (else RPC_SCAAS_TESTNET) on 127.0.0.1:$PORT for
 #                            this run only (an option; the local target of matrix.sh needs no other chain)
-#   … run.sh 7622 <Group>    without ONCHAIN_RPC: the SCaaS testnet RPC (RPC_7622; also as scaas-testnet)
+#   … run.sh scaas-testnet <Group>   without ONCHAIN_RPC: the SCaaS testnet RPC (RPC_SCAAS_TESTNET)
 # No default RPC (Fable D P3-3, as matrix.sh): every URL is named explicitly; any other target needs ONCHAIN_RPC.
 # Each group builds into its own out/onchain-<group> and cache/onchain-<group> (groups run side by side). Every
 # transaction asks forge's estimate x ONCHAIN_GAS_MULTIPLIER / 100 (default 130, forge's own): the estimate is the
@@ -31,7 +31,7 @@ if [ -n "${ONCHAIN_RPC:-}" ]; then
     RPC=$ONCHAIN_RPC
 elif [ "$net" = local ]; then
     PORT=${PORT:-18601}
-    FORK=${FORK_RPC:-${RPC_7622:?the local target forks FORK_RPC or RPC_7622, named explicitly (no default)}}
+    FORK=${FORK_RPC:-${RPC_SCAAS_TESTNET:?the local target forks FORK_RPC or RPC_SCAAS_TESTNET, named explicitly (no default)}}
     anvil --fork-url "$FORK" --port "$PORT" --hardfork amsterdam >"$T/anvil.log" 2>&1 &
     A=$!
     for i in $(seq 90); do
@@ -44,8 +44,8 @@ elif [ "$net" = local ]; then
         sleep 1
     done
     RPC=http://127.0.0.1:$PORT
-elif [ "$net" = 7622 ] || [ "$net" = scaas-testnet ]; then
-    RPC=${RPC_7622:?the $net target needs RPC_7622, named explicitly (no default)}
+elif [ "$net" = scaas-testnet ]; then
+    RPC=${RPC_SCAAS_TESTNET:?the $net target needs RPC_SCAAS_TESTNET, named explicitly (no default)}
 else
     echo "[$net/$lg] the target $net needs ONCHAIN_RPC (no default RPC)"
     exit 1

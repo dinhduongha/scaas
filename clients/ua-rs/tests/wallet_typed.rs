@@ -540,7 +540,7 @@ fn nested_metatransfer_zeroed() {
             "UAPayeeFee",
             Some("SCaaS MetaToken"),
             &[0x5c; 20],
-            7622,
+            22779,
             &[1; 32],
             m,
         )
@@ -807,7 +807,7 @@ fn expect_bounds_and_forms() {
 }
 
 /// `chainSeparation.typed` (owner 2026-11-05): the same `UAMetaTransfer` in a token domain hashes per chain to the row's digest,
-/// 7622 and 22776 apart.
+/// 22779 and 22777 apart.
 #[test]
 fn chain_separation_typed_digests() {
     let s = load("ua/sign.json");
@@ -1279,8 +1279,8 @@ fn evm_address_of(a: &str) -> Vec<u8> {
 /// the ranges and the fields of the struct; the verdict is in no other SCaaS builder (`scaas_typed_data`).
 #[test]
 fn pqz_verdict_builder_rules() {
-    let (contract, chain, uid) = ([0x7a; 20], 7622, [0xc1; 32]);
-    let m = json!({"token": format!("0x{}", "7a".repeat(20)), "chainId": 7622, "proofSystemId": format!("0x{}", "5e".repeat(32)),
+    let (contract, chain, uid) = ([0x7a; 20], 22779, [0xc1; 32]);
+    let m = json!({"token": format!("0x{}", "7a".repeat(20)), "chainId": 22779, "proofSystemId": format!("0x{}", "5e".repeat(32)),
         "statementHash": format!("0x{}", "51".repeat(32)), "proofHash": format!("0x{}", "9f".repeat(32)), "pqzVerifierEpoch": 3,
         "validUntil": 1800000900u64});
     let digest =
@@ -1290,7 +1290,7 @@ fn pqz_verdict_builder_rules() {
     assert_eq!(td.primary_type(), "PqzVerdict");
     assert_eq!(
         td.to_value()["domain"],
-        json!({"name": "SCaaS PqzToken", "version": "1", "chainId": "7622",
+        json!({"name": "SCaaS PqzToken", "version": "1", "chainId": "22779",
         "verifyingContract": format!("0x{}", "7a".repeat(20)), "salt": format!("0x{}", "c1".repeat(32))})
     );
     let with = |k: &str, v: Value| {
@@ -1322,7 +1322,7 @@ fn pqz_verdict_builder_rules() {
         "the address in any case"
     );
     assert_eq!(
-        digest(&with("chainId", json!("7622"))).unwrap(),
+        digest(&with("chainId", json!("22779"))).unwrap(),
         base,
         "a decimal string"
     );

@@ -25,16 +25,16 @@
     {
       "key": "scaas-testnet",
       "name": "SCaaS testnet",
-      "chainId": 7622,
+      "chainId": 22779,
       "network": "testnet",
       "testnet": true,
       "private": true,
-      "chainUid": "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13",
+      "chainUid": "0x9693692c4ffc3bdca7d4181dbaab179ade3fe010975f8dd0b51ff7c3dff5be86",
       "genesisTimestamp": null,
       "sources": [
-        "http://127.0.0.1:8545 (eth_getBlockByNumber 0x0, 2026-11-15)"
+        "pqz-core/nethermind/chain/genesis-hash.py of pqz-core/nethermind/chain/scaas-testnet/genesis.json (2026-11-26, before the reset; confirm with eth_getBlockByNumber 0x0 after it)"
       ],
-      "note": "SCaaS testnet reset 4 2026-11-15 (TODO 3zd: image 2.2.0-pqz9, the RescueVault in the genesis alloc, NET-EVM-14, so the state root and the hash move; smartcontracts/evm/runs/2026-11-15-reset4.txt); before it 0xf1f491ab…3164 (2026-10-31 reset: image 2.2.0-pqz6, the CREATE2 deployer 0x4e59b448… in the genesis alloc, EIP-7702 off), 0xa17faef4…2ac2 (2026-10-22 reset, genesis gasLimit 200 M). Client test vectors keep the earlier 0x24e43dcb…c464 as a fixed constant (owner 2026-10-22)"
+      "note": "Chain id 22779 from the reset before the pre-freeze tag (owner 2026-11-26, NET-EVM-02 Change): the reset-4 genesis with chainId 0x58fb and the extraData nonce keccak256('scaas-testnet:22779:2026-11-26') (NET-ALL-25), so the hash moves from reset 4's 0x9ae9048b…5b13. Reset 4 2026-11-15 (TODO 3zd: image 2.2.0-pqz9, the RescueVault in the genesis alloc, NET-EVM-14, so the state root and the hash move; smartcontracts/evm/runs/2026-11-15-reset4.txt); before it 0xf1f491ab…3164 (2026-10-31 reset: image 2.2.0-pqz6, the CREATE2 deployer 0x4e59b448… in the genesis alloc, EIP-7702 off), 0xa17faef4…2ac2 (2026-10-22 reset, genesis gasLimit 200 M). Client test vectors keep the earlier 0x24e43dcb…c464 as a fixed constant (owner 2026-10-22)"
     },
     {
       "key": "ethereum-mainnet",

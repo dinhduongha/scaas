@@ -891,7 +891,7 @@ def selftest(log):
     # every statement form: build -> parse -> same objects; lengths; the D15 / R6 rejections
     pk, ct = keys[0][0], u + vs[0]
     out4, out3 = u + vs[0] + vs[1] + vs[2], u + vs[0] + vs[1]
-    hdr = {"chainId": 7622, "token": bytes(range(20)), "fee": 7, "salt": bytes(range(16)), "sendCounter": 3}
+    hdr = {"chainId": 22779, "token": bytes(range(20)), "fee": 7, "salt": bytes(range(16)), "sendCounter": 3}
     forms = {
         "TRANSFER": build_debit("TRANSFER", hdr, pk, ct, out4, pk_t=pk, pk_a=pk),
         "TRANSFER0": build_debit("TRANSFER", hdr, pk, ct, out3, pk_t=pk),
@@ -1147,7 +1147,7 @@ def selftest(log):
     )
     o = opening(b"\1" * 33, b"\2" * 5)
     ok(len(o) == 64 + 32 + 64 + 32 + 32 and o[:64] == word(64) + word(160), "opening = abi.encode(bytes, bytes)")
-    log(f"     entryRef(7622, 1, token, 2, 0) = {entry_ref(7622, 1, bytes(range(20)), 2, 0).hex()}")
+    log(f"     entryRef(22779, 1, token, 2, 0) = {entry_ref(22779, 1, bytes(range(20)), 2, 0).hex()}")
     # u5-2: check_proofs refuses a file whose id is not one of the set's (before any row is read); positive control:
     # the set's own proof files in --check
     for what, i in (("all-zero id", bytes(32)), ("retired PQZL v5", bytes.fromhex(RETIRED_IDS["PQZL v5"]))):

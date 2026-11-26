@@ -630,10 +630,10 @@ contract ZetherRevertPathsTest is ZetherFixture {
     }
 
     /// Owner ruling 2026-10-31 (CTR-ZTH-02 superseded): classical Zether is open on every chain. On the SCaaS testnet
-    /// 7622 and the mainnet 22776 the whole stack deploys (the verifiers, the `zether-bls12381` UA verifier, the
+    /// 22779 and the mainnet 22777 the whole stack deploys (the verifiers, the `zether-bls12381` UA verifier, the
     /// release, a token through the factory's enabled kind) and a shield, roll-over and transfer go through.
     function test_openOnTestnetAndMainnet() public {
-        uint256[2] memory ids = [uint256(7622), 22776];
+        uint256[2] memory ids = [uint256(22779), 22777];
         for (uint256 i; i < ids.length; ++i) {
             vm.chainId(ids[i]);
             _deploy(false);

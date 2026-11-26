@@ -30,7 +30,7 @@ The explorer (NET-EVM-12) from the environment: VERIFY_EXPLORER blockscout | eth
 `chainid`) | sourcify, VERIFY_URL its API, VERIFY_RPC the chain's RPC, VERIFY_API_KEY_ENV the NAME of the env var that
 holds the API key (required for etherscan; forge gets it in its environment, never as an argument), VERIFY_SCAN=1 the
 whole-chain scan (a chain of ours only). scaas-testnet defaults: its Blockscout and RPC on loopback (BLOCKSCOUT_API,
-RPC_7622), the scan on. A target without an explorer: VERIFY_NOT_CONFIGURED, exit 1. --config checks that and stops.
+RPC_SCAAS_TESTNET), the scan on. A target without an explorer: VERIFY_NOT_CONFIGURED, exit 1. --config checks that and stops.
 On Etherscan and Sourcify a clone's own code is its link (no proxy link to read there).
 Rows: <state> | <name> | <address> [| note]. Test chains only."""
 
@@ -262,7 +262,7 @@ def config(net, env):
     if net == "scaas-testnet":  # its own Blockscout and RPC, loopback (NET-EVM-09)
         c["kind"] = c["kind"] or "blockscout"
         c["url"] = c["url"] or env.get("BLOCKSCOUT_API", "http://127.0.0.1:8548/api")
-        c["rpc"] = c["rpc"] or env.get("RPC_7622", "http://127.0.0.1:8545")
+        c["rpc"] = c["rpc"] or env.get("RPC_SCAAS_TESTNET", "http://127.0.0.1:8545")
         c["scan"] = env.get("VERIFY_SCAN", "1") == "1"
     if not c["kind"]:
         raise NotConfigured(

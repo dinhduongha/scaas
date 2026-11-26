@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """P6g Tasks 7-8 (plan docs/superpowers/plans/2026-10-16-p6g-contracts.md, D7 / D15): deploy the PQZ contracts on
-chain 7622 and run the e2e with REAL proofs. Python stdlib (python3 -I); P6f's eth.py (Keccak, RLP, secp256k1, legacy
+the SCaaS testnet and run the e2e with REAL proofs. Python stdlib (python3 -I); P6f's eth.py (Keccak, RLP, secp256k1, legacy
 EIP-155 transactions: calldata of 100-300 KB cannot pass cast's argv); pqz_kat.py (P6e) for KeyGen, Enc, Dec and the
 witnesses; pqz-ffi's example `pqz_prove` (feature prove) for the proofs; `mldsa.mjs` (@noble/post-quantum 0.7.1) for the
 ML-DSA signatures. Statements are always read from the token's own views, so the proofs cover exactly what the
@@ -38,7 +38,7 @@ its first step (`script/pq_verifiers.py`) builds `PqzKeyVerifier` and the `mldsa
 `Deployer` and probes.
 
 Deploying contracts and sending transactions only: the node is not touched. Gas price 2·baseFee + 1 gwei (baseFee +
-tip). Test keys of the 7622 genesis (0x…01–0x…03). Exit 0 iff every check passed."""
+tip). Test keys of the SCaaS testnet genesis (0x…01–0x…03). Exit 0 iff every check passed."""
 
 import argparse
 import ast
@@ -761,7 +761,7 @@ class Sender:
                 raise
         fee = int(head["baseFeePerGas"], 16)
         raw = legacy_tx(
-            self.key, self.nonce, 2 * fee + 10**9, gas, to, 0, data, CTX[0] or 7622
+            self.key, self.nonce, 2 * fee + 10**9, gas, to, 0, data, CTX[0] or 22779
         )  # the run's chain (run, pq_verifiers.py)
         self.nonce += 1
         h = rpc("eth_sendRawTransaction", ["0x" + raw.hex()])
@@ -1563,10 +1563,10 @@ def self_test():
     # ua-mtx-merge T10 (R36): the UA binding of an EOA's envelope (`from` its address zero-padded; the relayer bound, a non-zero
     # fee recipient unbound and so 0) = the word test/pqz/PqzRelay.t.sol `test_uaBindingOfAnEoaKat` pins from the token's view
     m = [pad("0x" + "11" * 20), b"\xc0\xde", 3, 4, 5, 0x21, "0x" + "22" * 20, 6, "0x" + "33" * 20]
-    kat = (7622, hb("0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"))
+    kat = (22779, hb("0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"))
     check(
         ua_binding("0x" + "00" * 17 + "5caa01", kat, m)
-        == hb("0x2bf9ed02f291a24e973d7013c788d50aae3bb9844c40c4c3ca5e9a37419abd33"),
+        == hb("0xbf40b3658daa449a3561396f8d4503b0f4ed5f9b3578916b1de8219b5709dfce"),
         "ua_binding of an EOA's envelope = PqzRelay's KAT (SCAAS-PQZ-UA-ENVELOPE-V1, from padded, unbound fee recipient 0)",
     )
     check(
@@ -1654,7 +1654,7 @@ def run(kd, kr, ke):
         f"# P6g e2e on chain {chain}, {time.strftime('%Y-%m-%d %H:%M:%S %z')}; genesis {g['hash']}; head "
         f"{int(head['number'], 16)}, gasLimit {int(head['gasLimit'], 16):,}, baseFee {int(head['baseFeePerGas'], 16)}"
     )
-    check(chain == 7622, "chain id 7622")
+    check(chain == 22779, "chain id 22779")
     book = deploybook.resolve(
         chain, g["hash"]
     )  # NET-EVM-13: the book's key before anything is sent (a copy: DEPLOY_NAME)

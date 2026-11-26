@@ -47,7 +47,7 @@ contract BookHarness is DeployBook {
 /// header first, then the rest in forge's pretty form; a reader checks `network` against the key's suffix.
 /// `script/test_deploybook.py` is the Python twin.
 contract DeployBookTest is Test {
-    bytes32 constant SCAAS_UID = 0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13;
+    bytes32 constant SCAAS_UID = 0x9693692c4ffc3bdca7d4181dbaab179ade3fe010975f8dd0b51ff7c3dff5be86;
     bytes32 constant HOODI_UID = 0xbbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b;
     bytes32 constant AVAX_UID = 0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b; // 43114 and 43113
     // fixtures under forge's git-ignored cache, never beside the books in deployments/ (review P3-9)
@@ -72,7 +72,7 @@ contract DeployBookTest is Test {
     }
 
     function test_knownChainResolves() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         (string memory k, string memory n, string memory net) = h.key(SCAAS_UID);
         _eq3(k, n, net, "scaas-testnet", "SCaaS testnet", "testnet");
         h.setName("scaas-testnet"); // DEPLOY_NAME may name the table's key
@@ -97,10 +97,10 @@ contract DeployBookTest is Test {
             )
         );
         h.key(bytes32(uint256(1)));
-        vm.chainId(7622); // a listed chain id with another genesis (a reset, a copy) is unknown too: no chain-id fallback
+        vm.chainId(22779); // a listed chain id with another genesis (a reset, a copy) is unknown too: no chain-id fallback
         vm.expectRevert(
             bytes(
-                "DEPLOY_NAME_REQUIRED: chain 7622 is not in chain-uids.json; set DEPLOY_NAME=<name>-testnet or <name>-mainnet (NET-EVM-13)"
+                "DEPLOY_NAME_REQUIRED: chain 22779 is not in chain-uids.json; set DEPLOY_NAME=<name>-testnet or <name>-mainnet (NET-EVM-13)"
             )
         );
         h.key(bytes32(uint256(1)));
@@ -119,7 +119,7 @@ contract DeployBookTest is Test {
     }
 
     function test_headerFirstAndChecked() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         string memory p = string.concat(FIXTURES, "/deploybook-test.json");
         vm.createDir(FIXTURES, true);
         // the body's keys in its own order (forge's writeJson keeps it), after the header; 2-space indent, as
@@ -130,7 +130,7 @@ contract DeployBookTest is Test {
             '{"z_last":"0x0000000000000000000000000000000000000002","token_factory":"0x0000000000000000000000000000000000000001","row":{"class":1}}'
         );
         string memory head = string.concat(
-            '{\n  "key": "scaas-testnet",\n  "name": "SCaaS testnet",\n  "chainId": 7622,\n',
+            '{\n  "key": "scaas-testnet",\n  "name": "SCaaS testnet",\n  "chainId": 22779,\n',
             '  "chainUid": "',
             vm.toString(SCAAS_UID),
             '",\n  "network": "testnet"'
@@ -227,10 +227,10 @@ contract DeployBookTest is Test {
         string memory s = string.concat('"chainUid":"', vm.toString(SCAAS_UID), '"');
         string memory a = string.concat('"chainUid":"', vm.toString(AVAX_UID), '"');
         string memory hit = string.concat(
-            '{"key":"scaas-testnet","name":"s","chainId":7622,"network":"testnet",', s, ',"private":true}'
+            '{"key":"scaas-testnet","name":"s","chainId":22779,"network":"testnet",', s, ',"private":true}'
         );
         h.setTable(p);
-        vm.chainId(7622);
+        vm.chainId(22779);
         string[4] memory rest = [
             string.concat(
                 ',{"key":"copy-testnet","name":"c","chainId":7623,"network":"testnet",', s, ',"private":false}'
@@ -280,7 +280,7 @@ contract DeployBookTest is Test {
         h.setName("avax-copy-testnet");
         (k,,) = h.key(AVAX_UID);
         assertEq(k, "avax-copy-testnet");
-        vm.chainId(7622); // twin: the private chain itself
+        vm.chainId(22779); // twin: the private chain itself
         h.setName("");
         (k,,) = h.key(SCAAS_UID);
         assertEq(k, "scaas-testnet");
@@ -312,7 +312,7 @@ contract DeployBookTest is Test {
             }
             h.kind("PqChatStore", AVAX_UID); // twin: the store keeps no homeChain record
         }
-        vm.chainId(7622);
+        vm.chainId(22779);
         for (uint256 i; i < 4; ++i) {
             h.kind(ks[i], SCAAS_UID); // twin: a genesis no other row shares
         }
@@ -355,7 +355,7 @@ contract DeployBookTest is Test {
         d.deployRegistry(AVAX_UID);
         vm.expectRevert(e);
         d.deployGen(AVAX_UID, address(0), "{}");
-        vm.chainId(7622); // twin: the gate passes, the gen mode then refuses the empty book by its own check
+        vm.chainId(22779); // twin: the gate passes, the gen mode then refuses the empty book by its own check
         vm.expectRevert();
         d.deployGen(SCAAS_UID, address(0), "{}");
     }

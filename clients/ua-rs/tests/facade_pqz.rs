@@ -68,7 +68,7 @@ fn refused_before_the_prover<T: std::fmt::Debug>(what: &str, f: impl FnOnce() ->
 }
 /// A debit header as a caller gives it (counter `ctr`, fee 7).
 fn header(ctr: u64) -> Value {
-    json!({"chainId": 7622, "token": hx(&[0x11; 20]), "registry": hx(&[0x22; 20]), "fromUA": hx(&[0xA1; 32]),
+    json!({"chainId": 22779, "token": hx(&[0x11; 20]), "registry": hx(&[0x22; 20]), "fromUA": hx(&[0xA1; 32]),
         "beneficiaryUA": hx(&[0xA3; 32]), "fee": 7, "sendCounter": ctr, "p": 5, "validUntilBlock": 1_000_000, "plainUsed": 0,
         "chainUid": hx(&[0xC1; 32]), "envelopeBinding": hx(&[0xE1; 32])})
 }
@@ -92,7 +92,7 @@ fn disclosure(
     v: &[u8],
 ) -> Vec<u8> {
     let mut w = Disclose::words(form, id);
-    w[2] = st::u64_word(7622);
+    w[2] = st::u64_word(22779);
     w[3] = [0xC1; 32];
     w[4] = {
         let mut a = [0u8; 32];

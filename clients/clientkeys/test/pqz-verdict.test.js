@@ -40,7 +40,7 @@ const PQZ_ENTRIES = [
   "UAPqzUnshield",
   "UAPqzUnshieldUnwrap",
 ];
-const at = { contract: "0x" + "7a".repeat(20), chainId: 7622, chainUid: "0x" + "c1".repeat(32) };
+const at = { contract: "0x" + "7a".repeat(20), chainId: 22779, chainUid: "0x" + "c1".repeat(32) };
 const verdict = (o = {}) => ({
   token: at.contract,
   chainId: at.chainId,
@@ -69,7 +69,7 @@ test("PqzVerdict: the type string of PqzCore.sol, the purpose of UAKinds.sol, th
   assert.deepEqual(td.domain, {
     name: "SCaaS PqzToken",
     version: "1",
-    chainId: "7622",
+    chainId: "22779",
     verifyingContract: at.contract,
     salt: at.chainUid,
   });
