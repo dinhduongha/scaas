@@ -14,7 +14,8 @@ rules are ARCH-POS-14 and ARCH-POS-22. This skill is the procedure; on any diffe
    - The tag exists on `main`; record its full SHA.
    - Create the frozen, detached worktree `.claude/worktrees/audit-<TAG>`.
    - The ignored inputs must be real directories, not symlinks: `smartcontracts/evm/lib` via `scripts/evm_libs.sh install` then
-     `check`, and `clients/clientkeys/node_modules`.
+     `check`, `clients/clientkeys/node_modules`, and `vendor/` via `scripts/vendor.sh install` then `check` (unit
+     `vendor-falcon-rs` reads it).
 2. **Prompts.**
    - Copy `docs/audit/prompts/` to `scratchpad/ai-audit/run-<TAG>/`.
    - Fill in `<TAG>` and `<SHA>` there, and the tag's gate evidence.

@@ -1,7 +1,7 @@
 # Pre-freeze AI audit: plan
 
 The AI audit of [ARCH-POS-14](../decisions.md#ARCH-POS-14) at the pre-freeze tag. This directory holds the plan (this file),
-the [unit index](INDEX.md) and the 31 self-contained [prompts](prompts/); that is all the repository holds of the audit, except the records of separate audit streams the owner asked to keep in
+the [unit index](INDEX.md) and the 32 self-contained [prompts](prompts/); that is all the repository holds of the audit, except the records of separate audit streams the owner asked to keep in
 [`audited/`](audited/) (owner 2026-11-26: `vendor-falcon-rs` only). The
 results, the run ledger and the closure tables are local and git-ignored, under `scratchpad/ai-audit/` (owner 2026-11-24). The
 repository is public: anyone can rerun the audit on the same tag with the same prompts
@@ -15,7 +15,8 @@ and the owner may change any reviewer's model (owner 2026-11-24; Codex today: GP
 audit, then the audit fixes and their gates, then the freeze (2026-11-12, with the freeze after P6-PUB, the SDK and scaas-app
 before it: 2026-11-16); scope widened on 2026-11-05 (regulated kinds, `PqChat`, `ua-rs` as the only signer), on 2026-11-12
 (`pqz-core`, the Nethermind precompiles, `ua-rs` as audit units) and on 2026-11-22 / 2026-11-24 (the node, the SDK, PqVault, the
-app cores, the layer units 22-24 and the cross-cutting units 25-31). Prompts in the repository, Codex on every unit in a fixed
+app cores, the layer units 22-24 and the cross-cutting units 25-31), and on 2026-11-26 (unit 32 `vendor-falcon-rs`,
+a controller call). Prompts in the repository, Codex on every unit in a fixed
 order, the ledger, and the results kept local: owner 2026-11-24.
 
 ## Target
@@ -35,7 +36,7 @@ neither touches the code in scope.
 Each unit has one self-contained prompt, [prompts/prompt-&lt;unit&gt;.md](prompts/), with the 13-row dimension table of
 [review.md §1](../review.md#1-dimensions). The [index](INDEX.md) lists the units with their finding-id prefixes and which units
 lead each dimension. Sizes are lines at `ua-mtx-merge` `f13d322e2` / `ua-rs-sign` `9c12e1aac` (units 18-31: at the day they were
-added).
+added); the rows changed on 2026-11-26 and unit 32: at `b202a6fa2`.
 
 | Unit | Files (under the tag) | Size |
 |---|---|---|
@@ -47,29 +48,30 @@ added).
 | `evm-regulated-public` | `src/regulated/{RegulatedBase,RegulatedLib,ComplianceRegistry,IComplianceRegistry,IRegulatedToken}.sol`, the Normal / Wrapped regulated tokens, cores and modules | ~4.0 K |
 | `evm-regulated-confidential` | `src/regulated/` the four PQZ / Zether regulated kinds, cores and modules | ~8.0 K |
 | `evm-dex-gov` | `src/dex/`, `src/trade/`, `src/governance/` | ~5.3 K |
-| `evm-pqchat` | `src/pqchat/`, `src/pqgroup/PqGroupBase.sol` (+ the registry's `requirePortable` and KEM records, read); the TreeKEM mode FRAME until the TreeKEM build merges | ~1.5 K |
+| `evm-pqchat` | `src/pqchat/` (with `PqChatTree`, `PqChatTreeMembers`, `PqChatTreeViews`), `src/pqgroup/{PqGroupBase,PqGroupTree,IPqGroupTree}.sol` (+ the registry's `requirePortable` and KEM records, read) | ~4 K |
 | `evm-pqvault` | `src/pqvault/` (+ `PqGroupBase` read for PqVault's use) | ~1 K |
 | `pqz-core-pqzl` | `pqz-core/pqzl/rust/src/` (production), `pqzl/src/*.{c,h}` (the C oracle), `pqzl/rust/tests/` | ~17 K |
 | `pqz-core-pqzh-stmt-ffi` | `pqz-core/pqzh/ligero/src/`, `ligero_params.py`, `pqz-core/stmt/src/`, `pqz-core/ffi/src/`, `ffi/{wasm,wallet-wasm,offchain}/` | ~10 K |
 | `pqz-core-params-vectors` | `pqz-core/params/sets/` (generator, `set.toml` per set, generated files), `smartcontracts/vectors/pqz/` and `ffi/src/bin/pqz-vectors.rs` | generator ~2 K + generated |
 | `nethermind-precompiles` | `pqz-core/nethermind/Nethermind.Pqz/` (PQZ, ML-DSA-44 / -65 / -87), `chain/{patch-chainspec,add-schedule,check-provisional-ids}.py`, `engine-pqz*.json`, `Dockerfile` | ~1 K C# + scripts |
-| `ua-rs-sign` | `clients/ua-rs/src/wallet/{sign,signer,pqsign,uasig,webauthn,tx}.rs`, `src/{falcon,pq,verify,keydata,musig2,frost,groups}.rs`, `src/ua8.rs` (group keys) | ~4 K |
-| `ua-rs-custody` | `clients/ua-rs/src/wallet/{vault,store,aead,seal,kem,derive,pairing,manifest,bounded,policy,service_pull}.rs`, `wallet/mod.rs` | ~6 K |
-| `ua-rs-digests` | `clients/ua-rs/src/wallet/eip712.rs`, `src/{pay,regulated,factory,admin,wraplimit,pqzfee,pqz3k,algorand,near,mldsa_cache}.rs`, `src/facade/` | ~7 K |
+| `ua-rs-sign` | `clients/ua-rs/src/wallet/{sign,signer,pqsign,uasig,webauthn,tx}.rs`, `src/{falcon,pq,verify,keydata,musig2,frost,groups}.rs`, `src/falcon/soft.rs`, `src/ua_portable.rs`, `src/ua8.rs` (group keys) | ~8 K |
+| `ua-rs-custody` | `clients/ua-rs/src/wallet/{vault,store,aead,seal,kem,derive,pairing,manifest,bounded,policy,service_pull}.rs`, `wallet/mod.rs`, `wallet/{tree,tree_public}.rs` | ~13 K |
+| `ua-rs-digests` | `clients/ua-rs/src/wallet/eip712.rs`, `src/{pay,regulated,factory,admin,wraplimit,pqzfee,pqz3k,algorand,near,mldsa_cache}.rs`, `src/facade/`, `src/wallet/{pqchat,pqchat_keys,pqchat_file,pqvault}.rs` | ~12 K |
 | `ua-rs-boundary` | `clients/ua-rs/src/{json,lib}.rs`, `src/bin/`, `clients/ua-c/`, the wrappers at their FFI boundary (`ua-cxx`, `ua-qt`, `ua-cs`, `ua-py`, `ua-go`, `ua-dart-frb`), `Cargo.lock`, `deny.toml`, `fuzz/` | ~5 K + wrappers |
 | `scaas-node` | `scaas-node/src/` (gateway, job API, lanes, indexer, mesh, DEX venue, adapters per family), `migrations/`, `node.example.toml` | ~102 K with in-file tests |
 | `scaas-sdk` | `clients/scaas-sdk/src/` (incl. `line.rs`, `app_core/`), `ffi/`, `bindings/`, `clients/scaas-rpc/src/` | ~53 K + FFI (mostly generated) |
 | `app-cores` | `clients/pqchat-core/` (with its Dart binding `ffi/`), `clients/pqvault-core/`; pqchat-core's TreeKEM layer FRAME | ~13 K |
 | `clientkeys-vectors` | `clients/clientkeys/src/`, `scripts/` (the generators), the generators beside `smartcontracts/vectors/`, `pqz-core/ffi/src/bin/pqz-vectors.rs`, `clients/zether-prover/src/vectors.rs`; the vector files `smartcontracts/vectors/`, `smartcontracts/evm/test/vectors/` | ~13 K + ~15 K generators + data |
 | `pqz-verifier-deploy` | `scaas-pqz-verifier/`; `smartcontracts/evm/script/` (deploy scripts, release list, books), the factory catalogue as the scripts use it, `release-data/`; the git-ignored books `deployments/<key>.json` (local) | ~2 K + ~33 K scripts |
-| `bindings-cli-ci` | the `ua-*` bindings over `libscaas_ua_c` beyond their FFI edge (`ua-c`, `ua-cxx`, `ua-qt`, `ua-cs`, `ua-py`, `ua-go`, `ua-dart`, `ua-dart-frb`), `clients/scaas-cli/`, `.github/workflows/ci.yml`, `.github/ci_changes.py`, every `deny.toml` / lockfile, `scripts/{evm_libs.sh,format.sh,capped,check_test_features.py,docs_check.py,size_gate.py}` | ~32 K bindings + ~7 K CLI, CI, scripts |
+| `bindings-cli-ci` | the `ua-*` bindings over `libscaas_ua_c` beyond their FFI edge (`ua-c`, `ua-cxx`, `ua-qt`, `ua-cs`, `ua-py`, `ua-go`, `ua-dart`, `ua-dart-frb`), `clients/scaas-cli/`, `.github/workflows/ci.yml`, `.github/ci_changes.py`, every `deny.toml` / lockfile, `scripts/{evm_libs.sh,vendor.sh,mutant_guard.py,format.sh,capped,check_test_features.py,docs_check.py,size_gate.py}` | ~32 K bindings + ~7 K CLI, CI, scripts |
 | `crypto-signatures` | read vertically: every signature kind through Solidity, the ML-DSA precompile, the Soroban host, `ua-rs`, clientkeys; purposes and domains | cross-cutting |
 | `crypto-pqz` | read vertically: PQZ statements, relations, transcripts, `pqzl` / `pqzh` / `stmt` / `ffi` in C, Rust, wasm, the precompile, the verifier service, the sets, the three-key model | cross-cutting |
 | `crypto-kem-seal` | read vertically: KEM scheme 1, seal / open, vault derivation, the PqVault and PqChat wraps, the file seal, the sealed PQZ leaf | cross-cutting |
 | `crypto-zether` | read vertically: Zether on BLS12-381 in the contract, `zether-prover`, `ua-rs`, clientkeys, the SDK; MSM; disclosure | cross-cutting |
-| `crypto-pqchat-tree` | read vertically: the PqChat TreeKEM schedule, tree hash, node-key admission, PCS on removal; `treekem.js`, `wallet/tree.rs`, `PqGroupTree` (FRAME until the TreeKEM build merges) | cross-cutting, ~5 K on the branch |
+| `crypto-pqchat-tree` | read vertically: the PqChat TreeKEM schedule, tree hash, node-key admission, PCS on removal; `treekem.js`, `wallet/tree.rs`, `PqGroupTree`, `PqChatTreeMembers` | cross-cutting, ~5 K |
 | `cross-layer` | dimension 8 end to end: the vectors and every writer and reader, the node allow-lists against the contracts, records followed both ways, sibling checks | cross-cutting |
 | `adversarial` | every role against the whole target: subject / holder / member, admin, relayer, lying RPC (below and above the majority option), front-runner, removed party | cross-cutting |
+| `vendor-falcon-rs` | `vendor/falcon-rs-0.3.1/` (git-ignored, installed and checked by `scripts/vendor.sh`) with its `VENDORED.md`; the `ua-rs` glue `src/falcon/soft.rs`, `src/falcon.rs`, `build.rs` / `Cargo.toml`, `tests/fndsa_vrfy.rs`, `tests/fndsa/`; the reference `vendor/pqclean-falcon-seeded/`, `vendor/pqclean-falcon-seeded.local/seeded.c` (read) | ~14.7 K + glue |
 
 The units of the earlier EVM plan map as follows. A1 is `evm-ua-verifiers`, A2 `evm-tokens-pqz`, A3 `evm-tokens-zether`, A4
 `evm-ua-registry`, A5 `evm-metatx-factory`, A6 `evm-dex-gov` (with governance), A7 the two `evm-regulated-*` units, A8
@@ -79,7 +81,11 @@ five parts of the T21 review (parts 1 and 2 are `ua-rs-sign`). `pqz-core` follow
 `pqzl`, u2 + u3 `pqzh-stmt-ffi`, u5 `params-vectors`; u4, the plugin, is `nethermind-precompiles`).
 
 **Falcon-1024:** `fndsa1024` (0x0135) verifies in pure Solidity on every EVM chain (CTR-UA-40), so it is audited in
-`evm-ua-verifiers`. The Nethermind plugin has no Falcon precompile; `nethermind-precompiles` confirms that nothing wires one.
+`evm-ua-verifiers`. The Nethermind plugin has no Falcon precompile; `nethermind-precompiles` confirms that nothing wires one. On wasm32 `ua-rs`
+keys, signs and verifies both Falcon kinds through the vendored falcon-rs 0.3.1 (CLI-UAL-66); that third-party code is
+audited as code, against PQClean's round-3 C, in its own unit `vendor-falcon-rs` (it had no audit before the owner's
+stream of 2026-11-26, whose record is its prior review); `crypto-signatures` reads the two paths' parity, `ua-rs-sign` the
+glue's use.
 
 Across units: every optimisation that replaced code with shared code, a library or a module must keep behaviour, and the report
 says so when it does not.
@@ -100,10 +106,10 @@ says so when it does not.
 
 | Reviewer | Units | How |
 |---|---|---|
-| **Fable** | all 31, in parallel | one read-only agent per unit, written before reading any other reviewer's report |
-| **Codex** (CLI, read-only sandbox, the model and effort of its config, no override; today GPT-6.2-astra, high) | all 31, **one after another** | credits are limited per window, so the units run in the fixed order of [Running order](#running-order), with the local ledger `scratchpad/ai-audit/LEDGER.md` so the run resumes after a credit stop |
-| **agy** (Gemini) | all 31, in parallel | the same prompts |
-| **Claude workflow** | all 31, in parallel | per unit: finders by lens, three refuters, each with a fresh context, on each finding, rounds until two add nothing, a completeness critic |
+| **Fable** | all 32, in parallel | one read-only agent per unit, written before reading any other reviewer's report |
+| **Codex** (CLI, read-only sandbox, the model and effort of its config, no override; today GPT-6.2-astra, high) | all 32, **one after another** | credits are limited per window, so the units run in the fixed order of [Running order](#running-order), with the local ledger `scratchpad/ai-audit/LEDGER.md` so the run resumes after a credit stop |
+| **agy** (Gemini) | all 32, in parallel | the same prompts |
+| **Claude workflow** | all 32, in parallel | per unit: finders by lens, three refuters, each with a fresh context, on each finding, rounds until two add nothing, a completeness critic |
 | **Fable, a fresh agent** | adjudication and consolidation | every P0-P2 reported by one source checked against the frozen tree; it did not write the unit reports it judges |
 
 Same model family as the implementers: fresh context and refutation reduce that; Codex and agy are what is different.
@@ -111,7 +117,9 @@ Same model family as the implementers: fresh context and refutation reduce that;
 ## How to run
 
 1. Cut `<TAG>` on `main` (see [Target](#target)) and make the frozen worktree:
-   `git worktree add --detach .claude/worktrees/audit-<TAG> <TAG>`.
+   `git worktree add --detach .claude/worktrees/audit-<TAG> <TAG>`. Its git-ignored inputs are real directories, not
+   symlinks: `scripts/evm_libs.sh install` then `check`, `clients/clientkeys/node_modules`, and `scripts/vendor.sh install`
+   then `check` (`vendor/`, which unit `vendor-falcon-rs` reads).
 2. Copy `docs/audit/prompts/` into a local, git-ignored folder (for example `scratchpad/ai-audit/run-<TAG>/`) and fill in the
    placeholders there: `sed -i 's/<TAG>/.../g; s/<SHA>/.../g' prompt-*.md`. Replace each prompt's gate-evidence list with the
    tag's own closing-gate summaries. The committed prompts keep `<TAG>` and `<SHA>`.
@@ -134,22 +142,22 @@ the [audit-rounds table](../decisions.md#audit-rounds) updated (target and statu
 
 ## Running order
 
-**Fable, agy and Claude** run all 31 units in parallel after the tag. A cross-cutting unit run before its layer units has no
+**Fable, agy and Claude** run all 32 units in parallel after the tag. A cross-cutting unit run before its layer units has no
 layer reports to read for leads; it is complete without them.
 
-**Codex** runs all 31 units in sequence: tier 1, then tiers 2, 3 and 4. Within a tier, a unit with a Fable P0 or P1 goes first;
+**Codex** runs all 32 units in sequence: tier 1, then tiers 2, 3 and 4. Within a tier, a unit with a Fable P0 or P1 goes first;
 the others keep the order listed.
 
 | Tier | What it guards | Units, in order |
 |---|---|---|
-| 1 | keys, plaintext, value, forgery | `crypto-pqz`, `crypto-signatures`, `crypto-kem-seal`, `nethermind-precompiles`, `ua-rs-custody`, `evm-ua-verifiers`, `evm-tokens-pqz` |
+| 1 | keys, plaintext, value, forgery | `crypto-pqz`, `crypto-signatures`, `crypto-kem-seal`, `nethermind-precompiles`, `ua-rs-custody`, `evm-ua-verifiers`, `evm-tokens-pqz`, `vendor-falcon-rs` |
 | 2 | authorization and integrity | `adversarial`, `cross-layer`, `evm-ua-registry`, `evm-metatx-factory`, `scaas-node`, `scaas-sdk`, `clientkeys-vectors` |
 | 3 | — | `crypto-pqchat-tree`, `crypto-zether`, `evm-pqchat`, `evm-pqvault`, `ua-rs-sign`, `ua-rs-digests`, `ua-rs-boundary`, `pqz-core-pqzl`, `pqz-core-pqzh-stmt-ffi`, `pqz-core-params-vectors` |
 | 4 | — | `evm-dex-gov`, `evm-regulated-public`, `evm-regulated-confidential`, `evm-tokens-zether`, `app-cores`, `pqz-verifier-deploy`, `bindings-cli-ci` |
 
-The four tiers name each of the 31 units exactly once (7 + 7 + 10 + 7). This order replaces the earlier "what Codex saw least
-first" order. A FRAME part of a prompt (`crypto-pqchat-tree`, the TreeKEM parts of `evm-pqchat` and `app-cores`) is finalized
-before its run, or the run covers the rest and lists the FRAME part as not covered.
+The four tiers name each of the 32 units exactly once (8 + 7 + 10 + 7). This order replaces the earlier "what Codex saw least
+first" order. A FRAME part of a prompt (since 2026-11-26 only `app-cores`: pqchat-core's TreeKEM layer and the biometric unlock) is
+finalized before its run, or the run covers the rest and lists the FRAME part as not covered.
 
 **Resume.**
 - A run stopped by credits is marked `aborted-credits` and reruns the whole unit; its partial output is not trusted.
@@ -181,6 +189,10 @@ them. A rerun elsewhere reads the committed records only.
   parts 1-5) and the fix waves after it; `docs/research/ua-rs-sign-fable-review.md`, `ua-rs-sign-codex-review.md`.
 - **Node, SDK, PqVault, app cores, TreeKEM:** each prompt's section 8 names its own (local review folders and the committed
   specs' review sections).
+- **The review-fix round (2026-11-24 to -26):** local `scratchpad/treekem-g1-review-20261124-1550/` (the TreeKEM and G1
+  code review), `scratchpad/review-fix-review-20261125-1959/` (the re-review) and `scratchpad/review-fix-check-20261126-0429/`
+  (the fix check), each with its `STATUS.md`; every changed unit names them.
+- **falcon-rs:** the committed record [audited/vendor-falcon-rs.md](audited/vendor-falcon-rs.md) (unit `vendor-falcon-rs`).
 
 ## Gate evidence
 

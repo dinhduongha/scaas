@@ -124,7 +124,9 @@ The meta-transaction pipeline every token uses (typed entries, envelopes, nonce 
 **Scope (paths under `T/`):**
 - `smartcontracts/evm/src/metatx/` (incl. `RelayFeeRouter.sol`, `WrappedLib.sol`, the Normal / Wrapped token cores and modules)
 - `smartcontracts/evm/src/common/{MetaTxLib,FeePolicy,SaltedEIP712,SSTORE2,ERC7739Lib}.sol`
-- `smartcontracts/evm/src/factory/`, `src/trade/ITradeToken.sol` (interface only)
+- `smartcontracts/evm/src/factory/` (with `OpenFactoryLib.sol`, added 2026-11-25: `checkRouter`, an external `view` library
+  the factory links, split out when G-3 took `OpenFactory` over its size line, under the owner's pre-approval recorded in
+  CTR-GOV-33's Change), `src/trade/ITradeToken.sol` (interface only)
 
 **Specifications and rules to read first:**
 - `T/docs/contracts/metatx.md`, `T/docs/contracts/token-wrappers.md`, `T/docs/contracts/asset-suite.md`
@@ -141,16 +143,33 @@ The meta-transaction pipeline every token uses (typed entries, envelopes, nonce 
 7. Wrap and unwrap on every path move `totalWrapped`; `maxWrapSupply <= maxSupply` when both non-zero; cap changes delayed by `grantDelay`, carry `chainUid`, floor `>= totalWrapped()` / `>= totalSupply()`; wrap / unwrap limit windows (CTR-TOK-31); `reserveValue()`.
 8. Factory: chain-neutral releases (CTR-TOK-29: one address per release on every chain, chain values in each clone's code), the catalogue, CREATE3, `initialize` cannot be front-run or re-run, the EIP-1167 clone with appended data, `ChainEnvCode`.
 9. Pay records: `payNo` as `bytes32`, `PayMeta.save`, the service pull.
+10. **The factory's G-1 and G-3** (added 2026-11-26; Changes of 2026-11-24 under CTR-GOV-33; G-9, G-10 of the re-review):
+   every creation path (`_create`, `createDex`, `createInstance`) indexes the instance before its initializer runs, so
+   `registryFor(target)` names one registry for the whole creation transaction (a revert unwinds both); `configureChain`
+   checks the router through `OpenFactoryLib.checkRouter` (its code hash the admin's, not 0 or the empty hash; `chainUid()`
+   this chain's; `registry()` an account with code; `smartKeyCloneHash()` its registry's; `factory()` the factory itself; a
+   call that answers no word fails closed); the split keeps behaviour (an external library called by DELEGATECALL: no
+   storage, `address(this)` not read, `self` passed in, errors verbatim; the link in every release's bytecode and its
+   `LinkClosure` pins).
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `T/pqz-core/research/code-review-2026-10-26/README.md` (whole-contract review at `64549aa4`) and `code-review-2026-10-19/README.md`
 - `T/docs/research/security-review-record.md` (index of every review, and what no review covered)
 - `scratchpad/review-ua-mtx-merge/` (A-regulated, B-metatx-ua, C-pqz-zether, D-factory-gov-dex-pqchat, recheck-*, recheck2-*)
 - `T/docs/research/paytax-codex-review.md`, `paytax-fable-review.md`, `T/docs/research/eip7702-audit-2026-10-30.md`
+- the review-fix round (2026-11-24 to -26, local): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - the tag's closing gate summary under `T/smartcontracts/evm/runs/` (every forge directory at the default set, the set-sensitive tests at the other three sets)
 - `T/smartcontracts/evm/runs/2026-11-15-3zh-core-g2.txt`, `2026-11-15-burner-wrap-caps.txt`, `2026-11-15-pqz-three-keys-round/summary.txt`, `2026-11-13-fix3-chainuid/summary.txt`, `2026-11-14-msig-members/mutants.txt`, `2026-11-15-3zh-mldsa.txt`
+- `T/smartcontracts/evm/runs/2026-11-24-router-g1-summary.txt` (G1 and the factory)
+- the review-fix round: `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt` (with
+  `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
+  matrix (`2026-11-26-round-matrix.sh` and its summary)
 - `T/smartcontracts/evm/size-baseline.json` with `T/scripts/size_gate.py` (the size ratchet, ceiling 64 KiB)
 
 **Dimension table** (ARCH-POS-22, `T/docs/review.md` §1; added 2026-11-24). Apply every dimension within this unit's
@@ -159,7 +178,7 @@ number (section 9).
 
 | # | Dimension | What to hunt in this unit |
 |---|---|---|
-| 1 | Conformance | CTR-MTX-18, -25, -26, -28 to -30, the merge rulings Q1-Q7 and MD-1 to MD-11, CTR-TOK-01, -05, -29, -31, CTR-GOV-28, -30, NET-ALL-22, -85, NET-EVM-11 one by one in `src/metatx/`, `src/common/{MetaTxLib,FeePolicy,SaltedEIP712,SSTORE2,ERC7739Lib}.sol` and `src/factory/`; `docs/contracts/metatx.md`, `token-wrappers.md`, `asset-suite.md` BUILT rows with tests. |
+| 1 | Conformance | CTR-MTX-18, -25, -26, -28 to -30, the merge rulings Q1-Q7 and MD-1 to MD-11, CTR-TOK-01, -05, -29, -31, CTR-GOV-28, -30, NET-ALL-22, -85, NET-EVM-11 one by one in `src/metatx/`, `src/common/{MetaTxLib,FeePolicy,SaltedEIP712,SSTORE2,ERC7739Lib}.sol` and `src/factory/`; `docs/contracts/metatx.md`, `token-wrappers.md`, `asset-suite.md` BUILT rows with tests; CTR-GOV-33's factory Changes (G-1, G-3; invariant 10). |
 | 2 | Cryptography | EIP-712 domain separation per contract (`SaltedEIP712`: name, version, chainId, verifyingContract, salt = `chainUid`); typehash strings and nested struct encoding (`CancelOrder(TradeOrder)`, `ReceiverFee(MetaTransfer)`, `RelayFee`, `WrapOrder`); `MetaTxLib.canon` zeroing the unbound `relayer` / `feeRecipient`; ERC-7739 nested typed data and the raw-hash ERC-1271 refusal (`ERC7739Lib.sol`); the CREATE3 / clone salt and the appended chain data (`ChainEnvCode`) as a binding to the chain. |
 | 3 | Security | One intent runs once (typed entries vs the generic execute, two entries, two modules); nonce lanes and `cancelNonce`; a relayer altering a fee or recipient; front-running `initialize` on a clone; role checks on cap changes with `grantDelay` and `chainUid`; CTR-TOK-01 (no EOA allowance). |
 | 4 | Rules that do not bend | Every `mtx*` relayable with fee 0 (`FeePolicy`); explicit parameters on every typed entry; no EIP-7702 path in the meta-tx signer checks; nothing upgradable (the factory catalogue only adds releases); one address per release on every chain (CTR-TOK-29); no chain assumption in `FeePolicy` or the relay-fee router. |
@@ -167,7 +186,7 @@ number (section 9).
 | 6 | Robustness and denial of service | Batch sizes, module loops, the relay-fee router's executor call (`RelayTargetNoCode`), griefing of a nonce lane, wrap / unwrap limit windows that one user can exhaust for others (CTR-TOK-31, R10 accepted), the largest typed op within 2^24 and EIP-8037. |
 | 7 | Failure handling | Named errors; no partial state after a failed module call; reentrancy across modules and through the relay executor; return-data bubbling; a failed fee transfer after the operation ran. |
 | 8 | Consistency across languages and layers | Every typehash and digest equal to `T/smartcontracts/vectors/typed/typed_ops.json`, `test/vectors/erc7739_kat.json`, `metatx_kat.json`, and to what clientkeys `evm.js` / `metaop.js`, `ua-rs` `wallet/eip712.rs` and the SDK `op/` build; `mtxSelectors()` equal the node's `typed.rs` / `guard.rs` rows and `selector_audit.json` in both directions. |
-| 9 | Contract specifics | The module split (A, P, T, W, R, Z, Q, S): DELEGATECALL storage, `msg.sender`, selector routing complete and unique; layout pins `test/v2/layout/NormalToken.json`, `WrappedToken.json`, `namespaces.json`; typehash pins; the size gate (`WrappedPqzToken` in `_above64KiB`); gas pins with old -> new figures; the factory catalogue and EIP-1167 clones. |
+| 9 | Contract specifics | The module split (A, P, T, W, R, Z, Q, S): DELEGATECALL storage, `msg.sender`, selector routing complete and unique; layout pins `test/v2/layout/NormalToken.json`, `WrappedToken.json`, `namespaces.json`; typehash pins; the size gate (`WrappedPqzToken` in `_above64KiB`); gas pins with old -> new figures; the factory catalogue and EIP-1167 clones; the `OpenFactoryLib` link (invariant 10). |
 | 10 | Performance and cost | Meta-tx overhead against `test/vectors/metatx-overhead-presplit.json` and the docs' figures; who pays the relay fee and the state gas of SSTORE2 records. |
 | 11 | Interfaces and misuse | Typed entries hard to misuse: one entry per operation, no generic `bytes` path that a client could sign by mistake; error codes stable across modules. |
 | 12 | Tests | Every refusal with a positive twin; the typehash pins can fail; vectors read by the forge tests and by every client; mutants of `MetaTxLib.canon` (a non-zero unbound value). |

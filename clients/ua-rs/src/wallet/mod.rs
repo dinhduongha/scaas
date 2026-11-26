@@ -190,6 +190,12 @@ pub enum Error {
     KindUnavailable,
     /// The OS random number generator failed.
     Rng,
+    /// Falcon key generation gave up after falcon-rs's 1,000 attempts (wasm32; PQClean loops on), probability below
+    /// 2^-1000 with a working stream (CLI-UAL-66, Fable audit FR-9): no key.
+    FalconKeygenCap,
+    /// A Falcon signature this build made that does not verify under its own key: a fault (CLI-UAL-66, FR-12); nothing
+    /// returned.
+    FalconSelfCheck,
     /// The signing policy refused the typed data: it is not what the `Expect` says the user confirmed (spec §5.4, MD-9).
     PolicyRefused,
     /// A WebAuthn assertion that is not the chains' form for the expected challenge, or does not verify (spec §5.6).
@@ -279,6 +285,8 @@ impl Error {
             Error::WalletLocked => "WalletLocked",
             Error::KindUnavailable => "KindUnavailable",
             Error::Rng => "Rng",
+            Error::FalconKeygenCap => "FalconKeygenCap",
+            Error::FalconSelfCheck => "FalconSelfCheck",
             Error::PolicyRefused => "PolicyRefused",
             Error::WebAuthnAssertion => "WebAuthnAssertion",
             Error::WebAuthnTooLong => "WebAuthnTooLong",

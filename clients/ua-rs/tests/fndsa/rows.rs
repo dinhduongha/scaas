@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Every FN-DSA-512 / FN-DSA-1024 row of smartcontracts/vectors/ua with its stated verdict: clientkeys' pq_kat (+ mutations) and
 //! pq_signatures, the NIST round-3 KATs of pq_external, the Falcon rows of rs_signatures and sign.json, and three refusals
-//! derived from each accept row as FnDsa.t.sol does (a set padding byte, the other degree's header, a flipped message bit).
-//! Shared by tests/fndsa_vrfy.rs (native) and tests/fndsa/wasm (the same rows in wasm32).
+//! derived from each accept row as FnDsa.t.sol does (a set padding byte, the other degree's header, a flipped message bit), and
+//! the encoding edges of each accept row (Fable audit FR-11, [`edges`]). Shared by tests/fndsa_vrfy.rs (native) and
+//! tests/fndsa/wasm (the same rows in wasm32).
 use serde_json::Value;
 
 fn bytes(v: &Value) -> Vec<u8> {
@@ -159,5 +160,122 @@ pub fn rows(load: impl Fn(&str) -> Value) -> Vec<Row> {
         })
         .collect();
     out.extend(derived);
+    let edges: Vec<Row> = out.iter().filter(|r| r.valid).flat_map(edges).collect();
+    out.extend(edges);
+    out
+}
+
+/// The rows' verdict counts: accept, refuse.
+pub const COUNTS: (usize, usize) = (48, 796);
+
+/// The bits of `b`, most significant first (the round-3 codecs' order).
+fn bits(b: &[u8]) -> Vec<u8> {
+    b.iter()
+        .flat_map(|x| (0..8).rev().map(move |i| (x >> i) & 1))
+        .collect()
+}
+
+/// `bits` packed into `len` bytes, zero-padded.
+fn pack(bits: &[u8], len: usize) -> Vec<u8> {
+    let mut out = vec![0u8; len];
+    for (i, b) in bits.iter().enumerate() {
+        out[i / 8] |= b << (7 - i % 8);
+    }
+    out
+}
+
+/// Where each coefficient of a valid compressed `s2` starts (round 3 `comp_decode`: sign, seven low bits, the high part in
+/// unary ended by a 1), and where the last one ends.
+fn coefficients(bits: &[u8], n: usize) -> (Vec<usize>, usize) {
+    let mut starts = Vec::with_capacity(n);
+    let mut i = 0;
+    for _ in 0..n {
+        starts.push(i);
+        i += 8;
+        while bits[i] == 0 {
+            i += 1;
+        }
+        i += 1;
+    }
+    (starts, i)
+}
+
+/// A 14-bit coefficient `k` of a public key (header byte, then `n` coefficients, round 3 `modq_encode`) set to `v`.
+fn set_pk_coefficient(pk: &[u8], k: usize, v: u16) -> Vec<u8> {
+    let mut b = bits(pk);
+    for j in 0..14 {
+        b[8 + 14 * k + j] = ((v >> (13 - j)) & 1) as u8;
+    }
+    pack(&b, pk.len())
+}
+
+/// The encoding edges of an accept row, each refused by PQClean and falcon-rs alike: a "-0" coefficient, a high part running
+/// past 2,047, the first bit after `s2` set (an unused bit of its last byte, or the first padding byte), the signature without
+/// its padding and one byte past it, a public-key coefficient equal to q and to 2^14 - 1, three other key headers and three
+/// other signature headers (unpadded and constant-time formats, the high bit).
+fn edges(r: &Row) -> Vec<Row> {
+    let (n, logn) = if r.kind == 0x0132 {
+        (512, 9u8)
+    } else {
+        (1024, 10)
+    };
+    let c = &r.sig[41..];
+    let b = bits(c);
+    let (starts, end) = coefficients(&b, n);
+    let sig_with = |comp: Vec<u8>| [&r.sig[..41], &comp[..]].concat();
+    let mut sigs: Vec<(&str, Vec<u8>)> = Vec::new();
+    let minus_zero = [&[1, 0, 0, 0, 0, 0, 0, 0, 1][..], &b[starts[1]..end]].concat();
+    sigs.push(("-0 coefficient", sig_with(pack(&minus_zero, c.len()))));
+    sigs.push((
+        "high part past 2047",
+        sig_with(pack(&b[..starts[n / 2] + 8], c.len())),
+    ));
+    if end < b.len() {
+        let mut after = b[..end].to_vec();
+        after.push(1);
+        sigs.push(("bit after s2", sig_with(pack(&after, c.len()))));
+    }
+    if 41 + end.div_ceil(8) < r.sig.len() {
+        sigs.push(("unpadded", r.sig[..41 + end.div_ceil(8)].to_vec()));
+    }
+    sigs.push(("one byte past padding", [&r.sig[..], &[0]].concat()));
+    for (what, h) in [
+        ("sig header 0x2_", 0x20 + logn),
+        ("sig header 0x5_", 0x50 + logn),
+        ("sig header 0xb_", 0x80 | (0x30 + logn)),
+    ] {
+        let mut s = r.sig.clone();
+        s[0] = h;
+        sigs.push((what, s));
+    }
+    let mut pks: Vec<(&str, Vec<u8>)> = vec![
+        ("pk coefficient q", set_pk_coefficient(&r.pk, 0, 12289)),
+        (
+            "pk coefficient 2^14-1",
+            set_pk_coefficient(&r.pk, n - 1, 0x3fff),
+        ),
+    ];
+    for (what, h) in [
+        ("pk header other degree", logn ^ 0x03),
+        ("pk header 0x1_", 0x10 | logn),
+        ("pk header 0x8_", 0x80 | logn),
+    ] {
+        let mut k = r.pk.clone();
+        k[0] = h;
+        pks.push((what, k));
+    }
+    let row = |how: &str, pk: Vec<u8>, sig: Vec<u8>| Row {
+        what: format!("{} / {how}", r.what),
+        kind: r.kind,
+        pk,
+        m: r.m.clone(),
+        sig,
+        valid: false,
+    };
+    let mut out: Vec<Row> = sigs
+        .into_iter()
+        .map(|(h, s)| row(h, r.pk.clone(), s))
+        .collect();
+    out.extend(pks.into_iter().map(|(h, k)| row(h, k, r.sig.clone())));
     out
 }

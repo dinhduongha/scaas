@@ -185,15 +185,32 @@ with its id and say it belongs to the base.
    vault's members, and that `createItems` takes the copy within the bounds of invariant 3.
 10. Fit: `createItems` and the largest records within the chain's block gas limit (regular + state, EIP-8037) and regular gas
    under 2^24 where EIP-7825 applies (CTR-PQV-09: no protocol bound on the count; the client sizes the batch).
+11. **Exits at the head and the round's fixes** (added 2026-11-26; the PqVault Changes of 2026-11-24 to -26, CTR-CHAT-10 /
+   -20's with `PqVault*` errors, one rule for the group code): `leaveVault` and `removeVaultMembers` at home name the head
+   or a complete ancestor within `EXIT_LAG_MAX` = 16 (`PqVaultExitLag`), checked and applied at the head, the signer and
+   the named UAs also in the named epoch's lists when it is not the head (E-2), a repeat or an exit that newly flags nobody
+   `PqVaultNotMember`, no withdrawal; a replica keeps the epoch named and takes a repeat (A-16); an `addVaultWraps` with no
+   wrap is `PqVaultShape` (A-15); a replica's copy of an `msig` author's record carries the replica registry's current
+   version tag (CTR-UA-74, A-1, `test_a1_replicaCopyCarriesTheReplicaTag` in `PqVaultEpochs`), so CTR-PQV-14's comparison
+   of a replica with its home strips the tags. Only admins rekey (CTR-PQV-13): check that an admin about to be removed can
+   no longer strand its removal by an admin rekey, and that the base's walk serves PqVault as it serves PqChat.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - the Fable code review of PqVault (F1-F15) and the spec reviews r1 / r2, as recorded in the spec's §16-§17 and the decisions
   Changes of 2026-11-21; `scratchpad/pqvault-review/20261121-fable-code-review-v1-v8.md` (local)
+- the review-fix round (2026-11-24 to -26, local): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 - `T/docs/research/security-review-record.md`
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - the tag's closing gate summary under `T/smartcontracts/evm/runs/` (every forge directory at the default set, the
   set-sensitive tests at the other three sets); `T/smartcontracts/evm/runs/2026-11-21-pqvault/` (gates, mutants, node mutants)
+- the review-fix round: `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt` (with
+  `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
+  matrix (`2026-11-26-round-matrix.sh` and its summary)
 - `T/smartcontracts/evm/size-baseline.json` with `T/scripts/size_gate.py` (the size ratchet, ceiling 64 KiB)
 
 **Dimension table** (ARCH-POS-22, `T/docs/review.md` §1; added 2026-11-24). Apply every dimension within this unit's
@@ -202,9 +219,9 @@ number (section 9).
 
 | # | Dimension | What to hunt in this unit |
 |---|---|---|
-| 1 | Conformance | CTR-PQV-01 to -17, CTR-CHAT-06 to -10, -14, -20 as PqVault follows them, owner rulings V1-V10, O1 (c), O3 (b), the admin model (b), the F1-F15 Changes, NET-ALL-25, CTR-UA-46 against `src/pqvault/`; spec §15 rule ids each with code and test. |
+| 1 | Conformance | CTR-PQV-01 to -17, CTR-CHAT-06 to -10, -14, -20 as PqVault follows them, owner rulings V1-V10, O1 (c), O3 (b), the admin model (b), the F1-F15 Changes, NET-ALL-25, CTR-UA-46 against `src/pqvault/`; spec §15 rule ids each with code and test; the exit Changes of 2026-11-24 to -26 (invariant 11), CTR-PQV-18, CTR-UA-74's replica copy. |
 | 2 | Cryptography | The typehashes and domain of the seven signed writes (`DS_V`), the `scaas/pqvault/v1/…` id and nonce tags (CTR-PQV-04), wrap hashes, item AAD binding, `sealedInfo` as an opaque blob; what each typed hash binds (vault, epoch, item, version, author); the `groupMode` refusal (`PqVaultModeUnsupported`). |
-| 3 | Security | The admin model (b): who rekeys, who removes, an admin that is no member removable, `PqVaultRemovedKept`, frozen membership with no admin; `requireAuthorized` / `requirePortable` by mode; replay and reorder by a relayer into a different outcome; the share box (O1 (c)): nothing of a personal vault reaches a shared vault's members. |
+| 3 | Security | The admin model (b): who rekeys, who removes, an admin that is no member removable, `PqVaultRemovedKept`, frozen membership with no admin; `requireAuthorized` / `requirePortable` by mode; replay and reorder by a relayer into a different outcome; the share box (O1 (c)): nothing of a personal vault reaches a shared vault's members; exits at the head and the replica rule (invariant 11). |
 | 4 | Rules that do not bend | Ciphertexts and `sealedInfo` in state (CTR-PQV-05); no decryption oracle; explicit parameters; every write relayable with fee 0 (CTR-PQV-11); the home-chain shared-genesis refusal (NET-ALL-25) at create and in the deploy gate; nothing upgradable. |
 | 5 | Secrets and privacy | Metadata: member lists, item counts and sizes (padding to 1,024 B is the client's), edit cadence; what `vaultsOf` reveals. |
 | 6 | Robustness and denial of service | `sealedInfo` 28 to 16,412 B, ciphertexts 32 to 16,416 B, each bound before any copy; `REMOVE_MAX`; `createItems` sized by the client within EIP-8037 and 2^24. |

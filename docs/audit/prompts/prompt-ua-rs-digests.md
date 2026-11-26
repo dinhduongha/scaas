@@ -122,6 +122,10 @@ ua-rs digests against the contracts: EIP-712 typed data, every op of the wallet 
 
 **Scope (paths under `T/`):**
 - `clients/ua-rs/src/wallet/eip712.rs`, `src/{pay,regulated,factory,admin,wraplimit,pqzfee,pqz3k,algorand,near,mldsa_cache}.rs`, `src/facade/` (`pqz.rs`, `pqz/proven.rs`, `pqz_path.rs`, `pqz_backup.rs`, `zether.rs`, `decoys.rs`)
+- `src/wallet/{pqchat,pqchat_keys,pqchat_file,pqvault}.rs` (added 2026-11-26, as no layer unit held them: the PqChat and
+  PqVault record digests and their signing, equal to the contracts' typehashes and `T/smartcontracts/vectors/{pqchat,pqvault}/`;
+  the exit records' review lines with the lag, F-4); the TreeKEM records of `src/wallet/tree.rs` (`PqChatCommit`,
+  `PqChatTreeLeave`, `PqChatTreeRemove`) as digests only (their secrets are unit `ua-rs-custody`)
 - tests: `wallet_typed`, `pay`, `regulated`, `factory`, `admin`, `wraplimit`, `pqzfee`, `pqz3k`, `metatx`, `facade_*`, `pqz_read`, `pqz_wallet_rows`, `vectors`, `no_oracle`
 - compare with: `smartcontracts/evm/src/` (typehashes, `MetaTxLib.canon`, `ERC7739Lib.sol`) and `smartcontracts/vectors/typed/typed_ops.json`, `smartcontracts/evm/test/vectors/erc7739_kat.json`
 
@@ -139,6 +143,11 @@ ua-rs digests against the contracts: EIP-712 typed data, every op of the wallet 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `scratchpad/review-t21/` (T21 at `806f4f2c2`: `scope.md`, `ledger.md` with its FIX-NOW / OWNER / LATER / REJECT rows and the owner decisions O1-O8, the Fable and Codex part reports); the fix waves landed after it (`git -C T log --grep 't21'`)
 - `T/docs/research/ua-rs-sign-fable-review.md`, `ua-rs-sign-codex-review.md`
+- the review-fix round (2026-11-24 to -26, local; F-4, the exit review lines): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - `T/smartcontracts/evm/runs/2026-11-16-ua-rs-sign-t21-summary.txt`, `2026-11-16-ua-rs-sign-sync7-summary.txt`, `2026-11-09-ua-rs-sign-t20d-summary.txt`, and the tag's own client gate summary
@@ -153,7 +162,7 @@ number (section 9).
 
 | # | Dimension | What to hunt in this unit |
 |---|---|---|
-| 1 | Conformance | CLI-SGN-*, CLI-UAL-*, the proof-path spec §13.3 (C-PP-1 to C-PP-10), O5, O6 against `wallet/eip712.rs`, `src/{pay,regulated,factory,admin,wraplimit,pqzfee,pqz3k,algorand,near,mldsa_cache}.rs`, `src/facade/`. |
+| 1 | Conformance | CLI-SGN-*, CLI-UAL-*, the proof-path spec §13.3 (C-PP-1 to C-PP-10), O5, O6 against `wallet/eip712.rs`, `src/{pay,regulated,factory,admin,wraplimit,pqzfee,pqz3k,algorand,near,mldsa_cache}.rs`, `src/facade/`; the PqChat and PqVault record digests added 2026-11-26. |
 | 2 | Cryptography | Typed-data hashing (EIP-712 encodeType order, nested structs, arrays), domains with salt `chainUid`; ERC-7739 nested typed data (O6); the PQZ facade's `ownTag`, `memoHash`, proof-path reading (`balanceProven`), the three-key handle (`PqzKeyHandle`, O5); the Zether facade's digests. |
 | 3 | Security | A digest valid on another chain, token, kind, op or nonce lane; raw-hash ERC-1271; `relayer` / `feeRecipient` not zeroed as `MetaTxLib.canon`. |
 | 4 | Rules that do not bend | Explicit parameters (no packed fields); relayable ops signable with fee 0; no decryption oracle on the client (`no_oracle` harness through the proof path). |

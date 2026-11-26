@@ -262,6 +262,95 @@ chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R28
 
 - [ ] Zether prover gas cap: add an authorization allowance by `authRef` kind (UA-3: the `AuthScheme`s below map to `authRef` kinds, accounts.md §1.13) to `check_gas` (re-review of P3b: a BLS_12381 UA authorization adds ≈ 186 k direct / 192 k relayed, a passkey/1271 envelope payer ≈ +48 k; the tightest edge, bn254 NONE no-auditor relayed M = 9, has 218 k of room); proposed: 0 SELF_SCHNORR/PQ, 50 k FROST/MuSig2, 70 k 1271, 160 k BLS_BN254, 200 k BLS_12381, 10 k per multisig signature, +60 k contract payer when relayed; the node cap note likewise (≈ 4.7 M for a BLS UA on a BLS12-381 relay).
 
+### Done 2026-11-23 to 2026-11-24 (branch `ua-rs-sign`, PR #30; all code UNAUDITED)
+
+**SDK review T26 and pqchat-sigs**
+- **T26** (Fable areas A, A2, B, B2, C):
+  - every finding fixed, and the three fix branches merged (`ffe0d8821`);
+  - F2's shared line reader (`clients/scaas-sdk/src/line.rs`), Moonbeam sticky reads, B-20 (`wasm-streams`);
+  - the A-3 rule, extended so that no KEM wrap seals out a rooted key;
+  - the area-B mutant run, 76 of 76 killed (the T26 record is now 95 of 95, `b908110cc`).
+- **The four pqchat-sigs follow-ups (8b-8)** (`f4c779b3c`):
+  - the PqVault `groupMode` 1 vector row;
+  - a pqvault-core bug, found by its new test: a member's second key was dropped. Members are now kept per
+    `(ua, keyId)`;
+  - `read_app_agreed` stays unbound, by design (CLI-SDK-33);
+  - `require_signed_records` on F2's reader;
+  - 5 mutant rows re-anchored.
+- **CI fixes:**
+  - the JS C-6 smoke twin moved to `request_verdict` (A2-7 re-checks the blob at depth 8);
+  - the C-6 mutant killed by timeout;
+  - Prettier and `shfmt` fixes;
+  - `sdk-clippy-default`, and the node e2e plain-row pin 46 → 52 (`b6264c349`).
+- **Dependabot alerts (#55–#64):** arbundles overrides.
+- **pqchat-core T2–T11** merged earlier.
+
+**PqChat TreeKEM (`groupMode = 1`, minimal mode 1; spec `docs/superpowers/specs/2026-11-23-pqchat-treekem.md`)**
+- **Spec:** reviewed in three rounds (Codex and Fable); R16, a two-level key no-return set; merged `d8bced434`.
+- **T1a / T1b:** clientkeys `treekem.js` and the frozen vectors, regenerated with members sorted by `(ua, keyId)` and
+  real ML-DSA-65 UAs.
+- **T2 / T2b:** ua-rs `wallet/tree.rs` and `tree_public.rs`; typed tree signing via prepare → review → sign; the registry
+  KEM record check.
+- **T3a–T3d:**
+  - the app-agnostic base `PqGroupTree` (CTR-CHAT-28) and the body module `PqChatTree`;
+  - commit / pieces / completion, R16, C21, C38;
+  - the read-only views module `PqChatTreeViews` (owner option A);
+  - the §13 gas rows.
+- **T4 allow-list part:** the six node rows and the bounds.
+- **Merged into `ua-rs-sign`** at `fcadbf681`, with mutants T1a 27, T1b 46, T2 46, T3a 30, T3b 43, T3c 5, T3d 19 of 20,
+  T4 17, all killed.
+
+**Governance router**
+- **P3:** checked; a release may name its router in `deps` (R-a). R-b router versions in the catalogue, plus opt-in user
+  routers (CTR-GOV-32).
+- **`virtual`** on the two `_govRouter` overrides, byte-identical (`fef021147`).
+- **G1 (CTR-GOV-33):**
+  - the router checks a derived signer on its target's own env registry, for every factory-made form;
+  - nonces keyed `(registry, id, lane)`, read through `mtxNonceFor`, by node and SDK;
+  - deploy order: factory, then router, then `configureChain`;
+  - merged at `8cac68125`.
+- **The keyed cancel:** `mtxCancelNonceFor` / `UACancelNonceFor`, with the node row, ua-rs, SDK and bindings. Fable G-2
+  tests; D-1 (the SDK follows a router op on `mtxNonceFor`); 17 of 17 mutants killed. Merged at `d34fcf566`.
+- **CTR-UA-73:** a contract serves its env generation and older ones. **CLI-SDK-34:** the SDK checks this before
+  signing.
+
+**Review and audit process**
+- **`docs/review.md` (ARCH-POS-22):**
+  - 13 dimensions, with cryptography and security split;
+  - areas per layer, cross-layer, cryptography and adversarial;
+  - a brief template.
+- **Skills** `.agents/skills/scaas-review` and `scaas-audit`, tested baseline against with-skill. Claude Code reads them
+  through the committed `.claude/skills` link.
+- **`docs/audit/`:** the plan, the index and 31 prompts, including the new cross-layer, adversarial and five vertical
+  cryptography units, plus three layer units.
+  - Codex runs every unit in tier order; results and the ledger stay local in `scratchpad/ai-audit/`.
+  - The `AI-AUDITED` label names the models of the round (ARCH-POS-14 Change; Codex is GPT-6.2-astra).
+- **ARCH-POS-23:** every mutant runner goes through `scripts/mutant_guard.py`. Each mutant has a deadline that counts from
+  the held capped slot, and its files are restored on every exit.
+- **The Fable code review of TreeKEM + G1** (7 areas, `scratchpad/treekem-g1-review-20261124-1550/`) and a focused spec
+  check (`scratchpad/treekem-spec-check-20261124-1703/`).
+- **Spec amendments from those reviews,** in two rounds (`c05619c9a`, `dfa5744cc`):
+  - C25 / C26 forward replay;
+  - C9 exits survive front-running in tree mode, mode 0 and PqVault, with `EXIT_LAG_MAX` 16;
+  - C39, C40, A-4;
+  - G-1 / G-3 rule text;
+  - plan T11.
+
+**Docs and research**
+- **README:**
+  - reviewed and updated: status and figures, phase ids replaced, the code-hash sentence corrected, `token-tree.svg`
+    with the regulated kinds;
+  - badges, §17 further reading, §18 Free Pay;
+  - "independent audit" removed from the docs.
+- **CLI-TUI-18:** key maps, `basic` and optional `vim`, no prefix keys.
+- **The TUI owner answers:** Q-T2 (the TUI links pqchat-core and pqvault-core), Q-T5, Q-T6, Q-T7.
+- **Research notes 2026-11-24:**
+  - Zama lessons (§7a / §7b, the tender v2 direction);
+  - chat-TUI survey (with Zalo);
+  - NFT / multi-token;
+  - traceability (with the Odoo MRP example);
+  - off-chain ledger backends (§11, the owner's backend-service direction).
+
 ## From HANDOFF.md
 
 ### Session 2026-10-19 (afternoon; PQZL v3 fix merged) — resume here

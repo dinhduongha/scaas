@@ -236,6 +236,14 @@ k. **The store** (`store/mod.rs`, `store/sqlite.rs`, `migrations/`, store.md): S
    (NODE-JOB-04, JCS `payload_hash`; the gateway's `keccak256` of its own serialisation), quotas.
 l. **The payer service** NODE-SPN-05 (the Arweave credit payer): SPECIFIED, nothing built. **Out of scope until built**; say
    so in "Not covered", and report only code that already acts as a payer.
+m. **The review-fix round's rows** (added 2026-11-26): an empty `addWraps` / `addVaultWraps` refused by name, as the
+   contract does (A-5, `typed.rs` `empty_wraps_refused`); the tree bounds equal to the contract's after R8 512 and C10 20
+   (`typed.rs`: leaves 512, targets 511, node keys 9, changes 20; both directions); `meta_executed` (`chain.rs`) picks the log
+   that matches the digest, not the first with the nonce (E-6, `pick_executed_matches_the_digest`); a router op of a derived
+   subject reads `mtxNonceFor(target, from, lane)` (`subject_nonce`, CTR-GOV-33); the `msig` version tag travels inside the
+   signature object (CTR-UA-74), so the node forwards it unchanged and a job with a stale tag fails on chain
+   `UAUnauthorized`, as `T/docs/node/job-api.md`'s operators' note says (A-4); a reverted exit within the lag is a SPECIFIED
+   plan row (D2-5, TreeKEM plan T4): report it only where code claims it.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `scratchpad/review-ua-mtx-merge/E-node-clients.md`, `recheck-node.md`, `recheck2-node.md` (Fable E N-1 to N-11 and the
@@ -245,6 +253,11 @@ l. **The payer service** NODE-SPN-05 (the Arweave credit payer): SPECIFIED, noth
   `scratchpad/ua-mtx-merge-review-codex-2026-11-04.md`, `scratchpad/ua-mtx-merge-review-fable-2026-11-04.md` (node findings)
 - `scratchpad/sdk-complete-review/` (the T13-T20 reviews: the node rows of the SDK round), `scratchpad/chains-arweave-review/20261121-fable-contract-review.md`
   (the node's `PqChatStore` row, NET-ALL-25 at lane start)
+- the review-fix round (2026-11-24 to -26, local; the node rows: area D of the code review, E-6, D2-5, A-4, A-5): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 - `T/docs/research/security-review-record.md` (part 3, the node relay, not done before this unit)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
@@ -252,6 +265,10 @@ l. **The payer service** NODE-SPN-05 (the Arweave credit payer): SPECIFIED, noth
   clippy, e2e and the per-family e2e rows), and the tag's own node gate summary
 - `T/scaas-node/runs/2026-11-12-fix2-node-mutants.txt`, `2026-11-08-ua-mtx-merge-t47-summary.txt`,
   `T/smartcontracts/evm/runs/2026-11-21-pqvault/node_mutants.py`
+- `T/runs/2026-11-23-pqchat-treekem-t4-summary.txt` and `-t4-mutants.txt` (the node's tree rows)
+- the review-fix round: `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt` (with
+  `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
+  matrix (`2026-11-26-round-matrix.sh` and its summary)
 
 **Also accepted or known for this unit (do not report as such):**
 - Documented status: what a node doc marks SPECIFIED or PLANNED is not a finding for being unbuilt (the start-up probe

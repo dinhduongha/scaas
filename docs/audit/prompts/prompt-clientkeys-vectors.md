@@ -132,13 +132,15 @@ The JS reference library and every vector generator, with the vector files they 
   `keystore.js`, `keystore-mac.js`, `zether.js`, `zether-keys.js`, `evm.js`, `metaop.js`, `pq.js`, `pqzopen.js`,
   `pqzopenWasm.js`, `pqchat.js`, `pqvault.js`, `appcore.js`, `arweave.js`, `bls-multi.js`, `regulated.js`, `factory.js`,
   `soroban.js`, `near.js`, `algorand.js`, `substrate.js`, `webauthn.js`, `passkey-signer.js`, `seed-signer.js`, `backup.js`,
-  `bytes.js`, `fam/`; once the TreeKEM build merges, `treekem.js` and `pqchat-tree.js`
+  `bytes.js`, `fam/`, `treekem.js`, `pqchat-tree.js` (the TreeKEM build, merged), and `ua-group.js` (added 2026-11-26: the
+  registry's checks of the group kinds 0x0110-0x0113, MuSig2 and FROST on secp256k1 and bn254, as the EVM verifiers and
+  `ua-rs` `groups.rs` apply them; ARCH-POS-18)
 - the generators: `clients/clientkeys/scripts/` (`typed-ops-vectors.mjs`, `typed-ops-expected.mjs`, `typed-ops-cast-check.mjs`,
   `ua-vectors.mjs`, `ua-portable-vectors.mjs`, `ua-sig-vectors.mjs`, `ua-wallet-vectors.mjs`, `ua-signers.mjs`,
   `registration-blob-vectors.mjs`, `keys-vectors.mjs`, `keystore-vectors.mjs`, `pq-vectors.mjs`, `pq-external.mjs`,
   `pqz-leaf-vectors.mjs`, `pqz3k-vectors.mjs`, `pqchat-vectors.mjs`, `pqvault-vectors.mjs`, `appcore-vectors.mjs`,
   `arweave-vectors.mjs`, `families-vectors.mjs`, `native-vectors.mjs`, `native-tx-vectors.mjs`, `soroban-ua-ops-vectors.mjs`,
-  `soroban-sign.mjs`, `id-display-vectors.mjs`, `webauthn-vector.mjs`, `pinned.mjs`; `treekem-fixture.mjs` once merged);
+  `soroban-sign.mjs`, `id-display-vectors.mjs`, `webauthn-vector.mjs`, `pinned.mjs`, `treekem-fixture.mjs`);
   the generators beside the vectors (`smartcontracts/vectors/metatx/famvec.py`, `gen_servicepull.py`, `ua/gen_liquidity.py`,
   `ua/gen_mldsa_cache.mjs`, `wraplimits/gen_wraplimits.py`, `pqz/pqz_kat.py`, `pqz/gen_wallet_state.sh`); the other writers of
   rows every language reads: `pqz-core/ffi/src/bin/pqz-vectors.rs`, `clients/zether-prover/src/vectors.rs`
@@ -178,15 +180,34 @@ f. **clientkeys as a signer.** The same custody rules as `ua-rs` where clientkey
    `pqvault.js`.
 g. **Reproducibility.** Generators read no network or clock; npm dependencies pinned exactly (`package-lock.json`,
    `npm ci --ignore-scripts`); the same output on every run.
+h. **The round's rows** (added 2026-11-26): `ua-group.js` checks each group kind as the contract's verifier does (verify on
+   the stored key; `verifyPop` on validated key data: KeyAgg with the hints, the DKG PoKs, a repeated or cancelling `C_i0`
+   refused, `Y` the sum), and its commit names what it does not mirror (the contract's refusal of a MuSig2 partial sum equal
+   to `±H_i`, of `x(Y)` / `x(C_i0)` >= N or c = 0, "unreachable by any signer"): say whether that holds; `ua-verify.js` no
+   longer turns the group kinds into `UANotVerifiable`; `vectors/ua/groups.json` (the 28 verify negatives, read by forge,
+   `ua-rs` and clientkeys); the `msig` reader rule by version (CTR-UA-74 `msig-reader-rule`: the tag's forms, `msigAt`,
+   `accepted`, a nested `msig` member, step 6 into the pin's `msigVersions`) in `ua-verify.js` / `treekem.js` with the lie rows
+   of `tree-secrets.json` (worlds `msig-updated`, `msig-nested`; the world count pinned in the forge player); KEM version 0
+   accepted as `ua-rs` accepts it (C-7); the depth-9 commit of `tree.json`; `ua/portable.json`. Each new row read by every
+   reader of its object (invariant e).
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `scratchpad/review-t21/` (clientkeys parts), `scratchpad/sdk-review-20261123-0621/` (A2-1's clientkeys rows),
   `scratchpad/treekem-review-20261123-1426/` (the tree vectors)
+- the review-fix round (2026-11-24 to -26, local; clientkeys: area C of the code review, the C- and F- rows, C-4, C-7, R-1, R-3): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 - `T/docs/research/security-review-record.md`
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - the clientkeys rows of the tag's client gate summary (`npm test`, each generator's `--check`), the `keystore-vectors` and
-  `ua-vectors` CI rows, `T/clients/clientkeys/runs/` mutant records (the TreeKEM T1a / T1b records once merged)
+  `ua-vectors` CI rows, `T/clients/clientkeys/runs/` mutant records (the TreeKEM T1a / T1b records); `T/clients/runs/2026-11-26-clientkeys-group-verify-summary.txt` (with its
+  `-mutants.py`)
+- the review-fix round's client rows: `T/clients/runs/2026-11-25-review-fix-client-summary.txt`,
+  `2026-11-26-review-fix3-client-summary.txt`, `2026-11-26-review-fix4-client-summary.txt` (with their `-mutants.py`
+  runners), and the round's closing matrix (`T/smartcontracts/evm/runs/2026-11-26-round-matrix.sh` and its summary)
 
 **Also accepted for this unit (do not report):** what `signers-clientkeys.md` marks SPECIFIED or PLANNED; the Vietnamese
 comments; vectors under `*/legacy/`.
@@ -198,7 +219,7 @@ number (section 9).
 | # | Dimension | What to hunt in this unit |
 |---|---|---|
 | 1 | Conformance | CLI-SGN-*, CLI-UAL-* against `clients/clientkeys/src/`; each vector directory's README against its generator; a row whose meaning no doc states. |
-| 2 | Cryptography | The reference implementations of every digest, seal and KEM the vectors pin (`evm.js`, `ua.js`, `seal.js`, `kem.js`, `vault.js`, `seed.js`, `zether.js`, `pq.js`, `pqchat.js`, `pqvault.js`, `treekem.js`): each against its standard and the contract; the crypto units read them vertically, this unit reads them as the authors of the bytes. |
+| 2 | Cryptography | The reference implementations of every digest, seal and KEM the vectors pin (`evm.js`, `ua.js`, `seal.js`, `kem.js`, `vault.js`, `seed.js`, `zether.js`, `pq.js`, `pqchat.js`, `pqvault.js`, `treekem.js`): each against its standard and the contract; the crypto units read them vertically, this unit reads them as the authors of the bytes; `ua-group.js` (the group kinds, invariant h). |
 | 3 | Security | Signing in clientkeys: prepare -> review -> sign, purposes and domains, replay fields in every digest (chain id, `chainUid`, nonce lane); a JS app using clientkeys as a signer. |
 | 4 | Rules that do not bend | Explicit parameters in every builder; no decryption oracle in `pqzopen.js` / `seal.js`; relayable ops built with fee 0; no 7702 transaction built. |
 | 5 | Secrets and privacy | Keys and seeds `wipe`d, not kept in strings; no secret in error text or logs; keystore files (`keystore.js`) as specified. |

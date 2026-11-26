@@ -73,6 +73,8 @@ JOBS = {
     # secret_mul's own tests (ua-rs-sign T3c; T15o closes the gap T20 found: ua-rs and zether-prover only build the crate)
     "scaas-ct": ["clients/scaas-ct/"] + RT,
     "ua-rs": UARS + ["smartcontracts/"],
+    # the Falcon gate in wasm32 (CLI-UAL-66, Fable audit FR-4): tests/fndsa/wasm over ua-rs and the vectors it compiles in
+    "ua-rs-fndsa-wasm": UARS + ["smartcontracts/vectors/"],
     "ua-cxx": ["clients/ua-cxx/", "smartcontracts/vectors/"] + UARS,
     "ua-c": ["clients/ua-c/", "smartcontracts/vectors/"] + UARS,
     "ua-qt": ["clients/ua-qt/", "smartcontracts/vectors/", "smartcontracts/near/", "smartcontracts/algorand/"] + UARS,
@@ -309,6 +311,7 @@ if __name__ == "__main__":
         "zether-prover",
         "scaas-ct",
         "ua-rs",
+        "ua-rs-fndsa-wasm",
         "ua-cxx",
         "ua-c",
         "ua-qt",
@@ -374,6 +377,7 @@ if __name__ == "__main__":
         "zether-prover",
         "scaas-ct",
         "ua-rs",
+        "ua-rs-fndsa-wasm",
         "ua-cxx",
         "ua-c",
         "ua-qt",
@@ -417,6 +421,14 @@ if __name__ == "__main__":
         "zether-prover",
     }
     assert not needed(["clients/ua-rs/src/lib.rs"])["scaas-ct"]  # its own directory only
+    # FR-4: the wasm32 Falcon gate runs on ua-rs, vendor/ and the vectors, not on another family's contracts
+    for p in (
+        "clients/ua-rs/src/falcon/soft.rs",
+        "vendor/falcon-rs-0.3.1/src/sign.rs",
+        "smartcontracts/vectors/ua/pq_kat.json",
+    ):
+        assert needed([p])["ua-rs-fndsa-wasm"], p
+    assert not needed(["smartcontracts/evm/src/x.sol"])["ua-rs-fndsa-wasm"]
     assert not needed(["scaas-node/src/main.rs"])["ua-deps"] and not needed(["clients/ua-py/x.py"])["ua-c"]
     assert needed(["smartcontracts/evm/foundry.txt"])["contract-evm"]  # a .txt outside runs/ counts
     assert needed(["scaas-node/runs/a.txt", "scaas-node/src/x.rs"])["node"]
