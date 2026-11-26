@@ -1144,7 +1144,7 @@ fn scrypt_rfc7914_known_answers() {
         scrypt::scrypt(
             pw.as_bytes(),
             salt.as_bytes(),
-            &scrypt::Params::new(log_n, r, p, 64).unwrap(),
+            &scrypt::Params::new(log_n, r, p).unwrap(),
             &mut out,
         )
         .unwrap();

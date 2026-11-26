@@ -7,7 +7,7 @@
 //! column in increasing index order: salt (32) and m + 12 F_q values | pruned multiproof digests. F_q^4 = 4 F_q
 //! elements, F_q = 6 bytes big-endian, canonical. Every length follows from the parameters and the transcript.
 
-use sha3::digest::{ExtendableOutput, Update, XofReader};
+use shake::{ExtendableOutput, Update, XofReader};
 
 use crate::cs::{self, Comb, Layout, Rel};
 use crate::fft::{smooth, Domain, GEN};
@@ -206,18 +206,18 @@ impl Params {
 /// prover randomness, hedged with the witness (plan D6, CTR-PQZ-19): SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" || rnd32 ||
 /// u8(op) || be32(len(stmt)) || stmt || wit). A repeated rnd32 with another witness gives unrelated masks.
 /// Its state yields every mask and salt (Keccak-f is a permutation), so it is replaced in place on drop (review P-C):
-/// sha3 0.10.8 has no `zeroize` feature and no `Drop`, and access to the state would need `unsafe`; the hasher's state
-/// before `finalize_xof` (moved by value) is not cleared (the platform boundary of `crate::Wipe`).
-struct Rng(sha3::Shake256Reader);
+/// `shake` is taken without `zeroize` (sha3 0.10.8 had none), and access to the state would need `unsafe`; the hasher's
+/// state before `finalize_xof` (moved by value) is not cleared (the platform boundary of `crate::Wipe`).
+struct Rng(shake::Shake256Reader);
 impl Drop for Rng {
     fn drop(&mut self) {
-        self.0 = sha3::Shake256::default().finalize_xof();
+        self.0 = shake::Shake256::default().finalize_xof();
         std::hint::black_box(&self.0);
     }
 }
 impl Rng {
     fn new(rnd: [u8; 32], op: u8, stmt: &[u8], wit: &[u8]) -> Rng {
-        let mut h = sha3::Shake256::default();
+        let mut h = shake::Shake256::default();
         h.update(b"SCAAS-PQZH-LIGERO-RNG-V2");
         h.update(&rnd);
         h.update(&[op]);

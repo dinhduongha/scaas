@@ -25,11 +25,11 @@ tracing = "0.1"
 # the transport trait's and the chain port's async methods as trait objects (in the SDK's graph already)
 async-trait = "0.1"
 # a content handle's text in a buffer that wipes itself (review T26 C-10; in the SDK's graph already)
-zeroize = "=1.8.2"
+zeroize = "=1.9.1"
 # the Matrix event's transport encoding (RFC 4648 §4 with padding, CLI-PQC-05; the SDK's version)
 base64 = "0.22"
 # C-1: the hash a remembered epoch id binds in the walk's memory (no key; in the SDK's graph already)
-sha2 = "0.10"
+sha2 = "0.11"
 
 [features]
 # test-only (plan T3, CLI-PQC-11): the SDK's vectors build (fixed randomness, key import); never in a release build nor a

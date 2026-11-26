@@ -103,7 +103,7 @@ pub fn hash_to_g1_bls(msg: &[u8], dst: &[u8]) -> G<Bls12381> {
     use ark_ff::field_hashers::DefaultFieldHasher;
     let h = MapToCurveBasedHasher::<
         G<Bls12381>,
-        DefaultFieldHasher<sha2::Sha256, 128>,
+        DefaultFieldHasher<sha2_for_ark::Sha256, 128>,
         WBMap<Bls12381>,
     >::new(dst)
     .expect("valid DST");

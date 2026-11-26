@@ -17,8 +17,8 @@ use std::time::Instant;
 
 use pqz_ffi::stmt::{self as st, Bundle, Debit, Disclose, Form, Register, Stmt, FORMS};
 use pqz_ffi::{pqz_precompile, pqzl, selftest, Reject, Word, INVALID, PQZH_ID, PQZL_ID, VALID};
-use sha3::digest::{ExtendableOutput, Update, XofReader};
-use sha3::{Keccak256, Sha3_256, Shake256};
+use sha3::{Keccak256, Sha3_256};
+use shake::{ExtendableOutput, Shake256, Update, XofReader};
 
 // The parameter set of this build (pqz-ffi feature `set-<set>`, owner 2026-10-21): every set-dependent number below
 // comes from pqz-stmt's set constants (MAX_PROOF_PQZH and MAX_INPUT too) and, for PQZH, from pqzh-ligero at the set (its

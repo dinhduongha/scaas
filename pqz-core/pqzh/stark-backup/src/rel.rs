@@ -80,8 +80,8 @@ pub fn stmt_digest(op: u8, stmt: &[u8]) -> [u8; 32] {
 /// rnd32 || u8(op) || be32(len(stmt)) || stmt || wit), 32 bytes; a repeated rnd32 with another witness gives
 /// unrelated masks and salts.
 pub fn mask_seed(rnd32: &[u8; 32], op: u8, stmt: &[u8], wit: &[u8]) -> [u8; 32] {
-    use sha3::digest::{ExtendableOutput, Update, XofReader};
-    let mut h = sha3::Shake256::default();
+    use shake::{ExtendableOutput, Update, XofReader};
+    let mut h = shake::Shake256::default();
     h.update(b"SCAAS-PQZH-STARK-RNG-V1");
     h.update(rnd32);
     h.update(&[op]);

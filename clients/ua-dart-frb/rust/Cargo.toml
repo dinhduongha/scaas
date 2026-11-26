@@ -34,7 +34,7 @@ scaas-ua = { path = "../../ua-rs", default-features = false, features = [
   "fam-btc",
   "fam-arweave",
 ] }
-zeroize = "=1.8.2"
+zeroize = "=1.9.1"
 
 # arkworks subgroup checks crawl unoptimised
 [profile.dev.package."*"]

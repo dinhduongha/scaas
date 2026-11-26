@@ -317,7 +317,7 @@ async fn a_gateways_intent_id_and_revert_data_are_bounded() {
 /// "." nonce "." METHOD " " path?query "\n" body))`, recomputed here; another body gives another signature.
 #[tokio::test]
 async fn hmac_headers_follow_node_gw_02() {
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     let (g, seen) = gateway(queued()).await;
     let secret = "0123456789abcdef-secret";
     let c = client(&[(&g, Some(EndpointAuth::Hmac(Secret::new(secret))))]);

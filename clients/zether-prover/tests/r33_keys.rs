@@ -1,7 +1,7 @@
 //! R33: conf key tree — pinned vectors, independence across paths/curves, and
 //! "x never equals a signing scalar of the same seed".
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha512;
 #[cfg(feature = "bn254")]
 use zether_prover::curve::Bn254;

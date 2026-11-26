@@ -590,7 +590,7 @@ fn h2(msg: &[u8]) -> G2Affine {
     use ark_ff::field_hashers::DefaultFieldHasher;
     MapToCurveBasedHasher::<
         G2Projective,
-        DefaultFieldHasher<sha2::Sha256, 128>,
+        DefaultFieldHasher<sha2_for_ark::Sha256, 128>,
         WBMap<ark_bls12_381::g2::Config>,
     >::new(b"TEST-H2G2")
     .unwrap()

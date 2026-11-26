@@ -5,7 +5,7 @@ use std::path::Path;
 
 use alloy::signers::local::coins_bip39::{English, Mnemonic};
 use anyhow::{anyhow, bail, Context, Result};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::Deserialize;
 use sha2::Sha512;
 use zeroize::Zeroizing;

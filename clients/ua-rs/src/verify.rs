@@ -381,7 +381,7 @@ fn bls_bn254_minsig(key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: bool) 
 pub fn hash_to_g1_bls12381(msg: &[u8], dst: &[u8]) -> ark_bls12_381::G1Affine {
     MapToCurveBasedHasher::<
         ark_bls12_381::G1Projective,
-        DefaultFieldHasher<Sha256, 128>,
+        DefaultFieldHasher<sha2_for_ark::Sha256, 128>,
         WBMap<ark_bls12_381::g1::Config>,
     >::new(dst)
     .and_then(|h| h.hash(msg))

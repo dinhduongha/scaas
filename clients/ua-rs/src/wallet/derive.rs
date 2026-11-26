@@ -11,7 +11,7 @@ use super::{Error, Network, Result};
 use crate::kind_tag_string;
 use ark_ff::{BigInteger, PrimeField};
 use hkdf::Hkdf;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use p256::elliptic_curve::ff::{Field, PrimeField as _};
 use p256::elliptic_curve::sec1::ToSec1Point;
 use sha2::{Digest, Sha256, Sha512};

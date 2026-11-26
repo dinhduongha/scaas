@@ -13,7 +13,7 @@ description = "secret_mul: blinded fixed-width Montgomery ladder for secret scal
 ark-ec = "0.5"
 ark-ff = "0.5"
 subtle = { version = "=2.6.1", default-features = false }
-zeroize = "=1.8.2"
+zeroize = "=1.9.1"
 rand_core = { version = "0.6", features = ["getrandom"] }
 
 # wasm32-unknown-unknown: `rand_core` 0.6's `OsRng` through getrandom 0.2's JS backend (as scaas-ua)
