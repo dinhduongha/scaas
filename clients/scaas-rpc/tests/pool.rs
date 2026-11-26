@@ -1445,3 +1445,98 @@ async fn a_wrong_chain_endpoint_never_counts_in_an_agreement() {
     .unwrap();
     assert_eq!((a.value, a.members), (5, vec![0, 1]), "control");
 }
+
+/// R13 of the TreeKEM spec (D-4 of its T4-T9 review): the named-only agreement counts the named endpoints only. 3 named and 4
+/// discovered: one named liar with the 4 discovered agreeing on its value is refused (need is 2 of the 3 named, and no
+/// discovered endpoint is asked); 2 named agreeing is the answer; fewer than 3 named is `AgreementNeedsThree`. The plain
+/// agreement over the same list, as the control, takes the liar's group of 5.
+#[tokio::test]
+async fn the_named_agreement_counts_named_endpoints_only() {
+    let mut c = vec![Class::Named; 3];
+    c.extend([Class::Discovered; 4]);
+    let p = Pool::new(&list_of(&c, Policy::StrictMajority, 5_000), true);
+    let f = Fake::new(vec![ep(100); 7]);
+    let lie = vec![
+        A::V(6),
+        A::V(5),
+        A::V(7),
+        A::V(6),
+        A::V(6),
+        A::V(6),
+        A::V(6),
+    ];
+    let r = p
+        .agree_named(
+            &*f,
+            BlockChoice::Depth(1),
+            Purpose::FeedsDecryption,
+            at(&f, lie.clone(), false),
+        )
+        .await;
+    assert!(
+        matches!(r, Err(RpcError::EndpointNoMajority { n: 3, need: 2, .. })),
+        "{r:?}"
+    );
+    assert_eq!(
+        (3..7).map(|i| f.reqs[i].load(SeqCst)).sum::<usize>(),
+        0,
+        "no discovered endpoint asked"
+    );
+    let any = p
+        .agree(
+            &*f,
+            BlockChoice::Depth(1),
+            Purpose::FeedsDecryption,
+            at(&f, lie, false),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        any.value, 6,
+        "control: the plain agreement takes the discovered group"
+    );
+    let ok = p
+        .agree_named(
+            &*f,
+            BlockChoice::Depth(1),
+            Purpose::FeedsDecryption,
+            at(
+                &f,
+                vec![
+                    A::V(5),
+                    A::V(5),
+                    A::V(7),
+                    A::V(6),
+                    A::V(6),
+                    A::V(6),
+                    A::V(6),
+                ],
+                false,
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!((ok.value, ok.members), (5, vec![0, 1]));
+    let two = Pool::new(
+        &list_of(
+            &[
+                Class::Named,
+                Class::Named,
+                Class::Discovered,
+                Class::Discovered,
+            ],
+            Policy::StrictMajority,
+            5_000,
+        ),
+        true,
+    );
+    let r = two
+        .agree_named(
+            &*f,
+            BlockChoice::Depth(1),
+            Purpose::FeedsDecryption,
+            at(&f, vec![A::V(5); 4], false),
+        )
+        .await;
+    assert!(matches!(r, Err(RpcError::AgreementNeedsThree)), "{r:?}");
+}
