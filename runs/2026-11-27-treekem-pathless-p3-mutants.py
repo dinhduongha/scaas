@@ -36,7 +36,7 @@ MUTANTS = [
     ("the warning at W(N) - 1", [(U, "        (n - n.div_ceil(4)).max(1)", "        (n - n.div_ceil(4)).max(1) - 1")], UA, ROWS),
     ("the warning shown to a non-admin", [(U, "            is_admin && end_epoch.is_none() && top.since_path >= warn_at(top.path_bound);", "            end_epoch.is_none() && top.since_path >= warn_at(top.path_bound);")], UA, ROWS),
     ("the session's bound unchecked", [(U, '                    && u32j(&s0, "pathRefreshBound").ok()? <= PATH_REFRESH_BOUND_MAX\n', '')], UA, "tree_session_bound_above_the_cap_is_a_lie"),
-    ("the snapshot's sincePath unchecked", [(U, '                && u32j(t, "sincePath").ok()? == w.since_path\n', '')], UA, ROWS),
+    ("the snapshot's sincePath unchecked", [(U, '                && u32j(t, "sincePath").ok()? == w.since_path\n', '')], UA, "tree_lies_and_pins"),
     ("the bound > as >=", [(P, "            if t.path_bound > 0 && t.since_path.saturating_add(n) > t.path_bound {", "            if t.path_bound > 0 && t.since_path.saturating_add(n) >= t.path_bound {")], UA, ROWS),
     ("sincePath + 1 per commit", [(P, "            t.since_path = t.since_path.saturating_add(n);", "            t.since_path = t.since_path.saturating_add(1);")], UA, ROWS),
     ("no reset by a path commit", [(P, "        t.since_path = 0;\n", "")], UA, ROWS),
