@@ -10,11 +10,11 @@ file. Crates offered under "MIT OR Apache-2.0" (and the other dual / multiple li
 their MIT or Apache-2.0 terms; their notices are carried by the crates themselves and are not repeated here.
 
 -------------------------------------------------------------------------------------------------------------------
-1. PQClean Falcon (C, compiled in with feature `pq`: vendored in vendor/pqclean-falcon-seeded, MD-8, ua-rs-sign T3b)
+1. PQClean Falcon (C, compiled in with feature `pq`: vendored in the repository's vendor/pqclean-falcon-seeded, MD-8, ua-rs-sign T3b)
 -------------------------------------------------------------------------------------------------------------------
   - crypto_sign/falcon-padded-{512,1024}/clean (from pqcrypto-falcon 0.4.1; symbols renamed by vendor.sh) and
     seeded.c (PQClean's pqclean.c with the randomness passed in): MIT licence, "Copyright (c) 2017-2019 Falcon
-    Project", written by Thomas Pornin (vendor/pqclean-falcon-seeded/LICENSE). Its LICENSE file also carries a
+    Project", written by Thomas Pornin (vendor/pqclean-falcon-seeded/LICENSE at the repository root). Its LICENSE file also carries a
     statement about a patent; it is reproduced with the licence text in full.
   - common/fips202.{c,h} (from pqcrypto-internals 0.2.11; symbols renamed): based on public-domain implementations
     (its header).
@@ -42,6 +42,10 @@ their MIT or Apache-2.0 terms; their notices are carried by the crates themselve
   - generic-array 0.14.7: Copyright (c) 2015 Bartłomiej Kamiński.
   - const-crc32-nostd 1.3.1: Copyright (c) 2022 Jonathan Strong.
   - enum-ordinalize 4.4.2 (MIT; its derive crate, derive-getters and educe are build-time proc macros, not compiled in).
+  - falcon-rs 0.3.1 (vendored as published in vendor/falcon-rs-0.3.1 at the repository root; wasm32 only, feature `pq`,
+    CLI-UAL-66): Copyright (c) 2017-2019 Falcon Project (Thomas Pornin); Copyright (c) 2026 Rust port contributors.
+  - libm 0.2.16 (falcon-rs 0.3.1's fixed dependency, unused under its `fpemu`; wasm32 only): Copyright (c) 2018 Jorge Aparicio; the musl / FreeBSD notices of its
+    LICENSE.txt (Sun Microsystems, David Schultz, Steven G. Kargl, Bruce D. Evans and others) are carried with it.
 
 -------------------------------------------------------------------------------------------------------------------
 4. CC0-1.0 crates (no notice required; listed for the inventory)

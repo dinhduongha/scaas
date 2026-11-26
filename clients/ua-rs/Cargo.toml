@@ -34,7 +34,7 @@ scaas-ct = { path = "../scaas-ct", optional = true }
 # feature `json`: the registry's explicit arguments as JSON string calls (src/json.rs), for ua-c, ua-cxx, ua-qt, ua-dart-frb
 serde_json = { version = "=1.0.145", optional = true }
 # feature `pq`: the off-chain verifier's PQ kinds (src/pq.rs): the relayer's and the node's only check of what Soroban stores unverified.
-# Falcon (ua-rs-sign T3b, MD-8): PQClean vendored in vendor/pqclean-falcon-seeded, built by build.rs (`cc`); pqcrypto-falcon
+# Falcon (ua-rs-sign T3b, MD-8): PQClean vendored in vendor/pqclean-falcon-seeded at the repository root, built by build.rs (`cc`); pqcrypto-falcon
 # =0.4.1 / pqcrypto-traits =0.3.5 (and pqcrypto-internals 0.2.11, getrandom 0.3.4) left the graph (RUSTSEC-2026-0162/-0163/-0165).
 ml-dsa = { version = "=0.1.1", default-features = false, features = ["alloc"], optional = true }
 slh-dsa = { version = "=0.2.0-rc.5", default-features = false, optional = true }
@@ -95,6 +95,12 @@ libc = { version = "0.2", optional = true }
 getrandom = { version = "=0.2.17", features = ["js"], optional = true }
 # ua-rs-sign T8: the link window clock (`js_sys::Date::now`; `SystemTime::now` panics on wasm32-unknown-unknown)
 js-sys = { version = "=0.3.107", optional = true }
+# feature `pq` on wasm32 (owner 2026-11-26, CLI-UAL-66): Falcon-padded-512 / -1024 key pairs, signatures and verification through
+# falcon-rs 0.3.1 (lattice-safe, MIT, the round-3 port), vendored as published in vendor/falcon-rs-0.3.1 at the repository root (its VENDORED.md), in
+# src/falcon/soft.rs; native builds keep the vendored PQClean (build.rs). `fpemu` (controller 2026-11-26): integer IEEE-754
+# emulation instead of hardware f64 + libm::sqrt, PQClean clean's approach (libm 0.2, MIT, stays: a fixed dependency of the
+# package, unused under `fpemu`). No `std` (getrandom 0.2 is not taken: every call passes its own seed and randomness).
+falcon-rs = { path = "../../vendor/falcon-rs-0.3.1", default-features = false, features = ["fpemu"], optional = true }
 
 [features]
 # MD-5 (owner: the facades on by default). `--no-default-features` keeps the verify-only identity layer (+ `pq` / `json` /
@@ -199,7 +205,7 @@ fam-btc = ["wallet"]
 # Arweave as a store: ANS-104 and `seal_for_arweave` (chains-arweave CA-T16, CA-T17 on branch `sdk-arweave`); the generic file
 # seal stays in the core
 fam-arweave = []
-pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc"]
+pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc", "dep:falcon-rs"]
 
 [build-dependencies]
 # feature `pq`: the vendored PQClean Falcon (build.rs); any 1.x, so a dependent keeps its own (ua-rs locks 1.10.0)
@@ -210,6 +216,9 @@ hex = "0.4"
 # ua-rs-native: the tests' independent sr25519 verify of the wallet's signatures (the same pin)
 schnorrkel = { version = "=0.11.5", default-features = false, features = ["getrandom"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+# owner 2026-11-26 (CLI-UAL-66): the wasm32 Falcon gate (tests/fndsa_vrfy.rs) runs src/falcon/soft.rs natively beside PQClean,
+# with the features wasm32 uses
+falcon-rs = { path = "../../vendor/falcon-rs-0.3.1", default-features = false, features = ["fpemu"] }
 
 # ua-rs-sign T10: tests/wallet_memory.rs lowers RLIMIT_MEMLOCK (libc was in the lock)
 [target.'cfg(unix)'.dev-dependencies]
@@ -505,3 +514,8 @@ required-features = ["app-core", "fam-arweave", "vectors"]
 [[test]]
 name = "file_seal"
 required-features = ["app-core"]
+
+# owner 2026-11-26: the wasm32 Falcon verifier's gate, every FN-DSA row through falcon-rs 0.4.0 beside PQClean
+[[test]]
+name = "fndsa_vrfy"
+required-features = ["pq"]

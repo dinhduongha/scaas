@@ -240,11 +240,30 @@ high-water mark ([CLI-SDK-04](scaas-sdk.md#CLI-SDK-04)), and the named-entry JSO
 | Target | Core | Zether, PQZ | Status |
 |---|---|---|---|
 | x86-64 Linux | every cell | every cell (PQZ at two sets) | built and tested locally, every binding's suite |
-| `wasm32-unknown-unknown` | compiles; Falcon `KindUnavailable` (its C is skipped); `mlock` compiled out; `getrandom`'s JS backend per generation | compiles | nine cells built locally; nothing runs through a browser binding yet |
+| `wasm32-unknown-unknown` | compiles; Falcon keys, signs and verifies through falcon-rs ([CLI-UAL-66](#CLI-UAL-66)); `mlock` compiled out; `getrandom`'s JS backend per generation | compiles | nine cells built locally; the Falcon gate runs in Node (`tests/fndsa/wasm/run.sh`); nothing runs through a browser binding yet |
 | `aarch64-linux-android` | compiles (NDK clang, API 24) | compile cells | `ua-c`'s cells built for the size ratchet, `ua-rs`'s verify-only cell locally, its other cells CI's first run; no device run |
 | `aarch64-apple-ios` | CI compile only (iOS 13 or later: `IPHONEOS_DEPLOYMENT_TARGET=13.0`, for the stack probe `___chkstk_darwin`) | CI compile only | not built here (no Xcode) |
 
 Sizes per target and cell, and the timing still to come: [CLI-UAL-43](#CLI-UAL-43).
+
+<a id="CLI-UAL-66"></a>**CLI-UAL-66** — **On wasm32 the Falcon kinds key, sign and verify through falcon-rs 0.3.1; native builds keep
+the vendored PQClean.** PQClean's C needs a libc that `wasm32-unknown-unknown` lacks, and a missing primitive never disables a
+kind ([ARCH-POS-18](../decisions.md#ARCH-POS-18)). With feature `pq` on wasm32, `src/falcon.rs` routes `keypair`, `sign` and
+`verify` to `src/falcon/soft.rs`, after the same length checks as PQClean's path: falcon-rs 0.3.1 (MIT, a port of the round-3
+reference), vendored as published in the repository's `vendor/falcon-rs-0.3.1/` (its `VENDORED.md`: the crate's sha256, the
+upstream commit) beside `vendor/pqclean-falcon-seeded/`, a `path` dependency with `default-features = false` (no `std`, no
+getrandom) and `fpemu`. `fpemu` is the crate's integer IEEE-754 emulation (PQClean clean's approach) in place of its default
+backend, hardware `f64` and `libm::sqrt`, whose timing may depend on values; that `fpemu` runs in constant time is the crate's
+claim, not measured here (libm stays in the graph, a fixed dependency of the package, unused under `fpemu`). The key pair of the
+48-byte HKDF seed takes SHAKE256 of the seed as keygen's stream; a signature takes `rnd` = the 40-byte nonce, then the 48-byte
+seed of the sampler's stream, `HashToPoint(SHAKE256(nonce ‖ ua_msg))`, padded to 666 / 1,280 bytes with zero bytes; verify takes
+the padded form only (the format of [CTR-UA-23](../contracts/accounts.md#CTR-UA-23), EIP-8052). The crate's FIPS 206 API is not
+used: it hashes `nonce ‖ 0x00 ‖ len(ctx) ‖ ctx ‖ m`. `build::FALCON` is true on wasm32 with `pq`. The gate, before and after every
+change of this path: `tests/fndsa_vrfy.rs` natively (every FN-DSA row of the vectors, 220: 48 accept, 172 refuse, equal to
+PQClean on each; 48 wallet cases over the four `keys.json` mnemonics, falcon-rs's key pair and fixed-randomness signature
+byte-equal to PQClean's) and `tests/fndsa/wasm/run.sh` in wasm32 under Node (the same rows, and the same cases' digest over
+`pk ‖ sk ‖ sig`). fn-dsa-vrfy 0.4.0 failed that gate (FIPS 206 `mu` hashing and its key packing):
+`clients/runs/2026-11-26-ua-rs-wasm-fndsa-summary.txt`. Size (stripped wasm32 `libscaas_ua_c`, [CLI-UAL-43](#CLI-UAL-43)): default 5,933,798 → 6,117,173 B (+183,375 B, +3.1 %), +179,226 to +184,321 B in the other four cells. BUILT; signing and verification UNAUDITED until the Fable audit.
 
 <a id="CLI-UAL-01"></a>**CLI-UAL-01** — **`ua-rs` is the only signer, and a secret leaves it only through a named export.**
 Every client signs through `scaas-ua`: a client core or wallet module over it never signs on its own, and apps reach it through

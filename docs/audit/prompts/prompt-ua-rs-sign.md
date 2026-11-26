@@ -165,7 +165,7 @@ number (section 9).
 | 10 | Performance and cost | Sign time and memory of SLH-DSA and Falcon on mobile and wasm (no Falcon on wasm32: say what the caller gets). |
 | 11 | Interfaces and misuse | Signer API: no caller RNG where the spec forbids one; prepare -> review -> sign shows every field. |
 | 12 | Tests | Tests `wallet_sign`, `wallet_pq`, `groups`, `groups_verify`, the MuSig2 / FROST vector files; a negative test per malleability check. |
-| 13 | Operations and the supply chain | `vendor/pqclean-falcon-seeded` provenance and pin; `frost-*` =3.0.0 with the known advisory; `deny.toml` reasons; SPDX headers. |
+| 13 | Operations and the supply chain | `vendor/pqclean-falcon-seeded` (repository root) provenance and pin; `frost-*` =3.0.0 with the known advisory; `deny.toml` reasons; SPDX headers. |
 
 ## 9. Report format (Markdown, English)
 

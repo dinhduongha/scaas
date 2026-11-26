@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Feature `pq`: PQClean Falcon-padded-512 / -1024 (clean), vendored with its randomness passed in
-//! (vendor/pqclean-falcon-seeded, MD-8; replaces `pqcrypto-falcon`, RUSTSEC-2026-0162/-0163/-0165). Every length is checked
-//! here before a pointer reaches the C code, which reads fixed sizes. Without `cfg(scaas_falcon)` (wasm32: no libc for
-//! the C code) nothing is built: no key, no signature, and no signature verifies. UNAUDITED.
+//! (the repository's vendor/pqclean-falcon-seeded, MD-8; replaces `pqcrypto-falcon`, RUSTSEC-2026-0162/-0163/-0165). Every length is checked
+//! here before a pointer reaches the C code, which reads fixed sizes. On wasm32 (no libc for the C code, no
+//! `cfg(scaas_falcon)`) the same calls run through the vendored falcon-rs 0.3.1 ([`soft`], CLI-UAL-66), after the same checks.
+//! UNAUDITED.
 
 /// The parameters of one degree: log2 of the degree, public key, secret key and padded signature lengths.
 #[derive(Clone, Copy)]
 pub(crate) struct Params {
-    #[cfg_attr(not(scaas_falcon), allow(dead_code))]
     pub logn: u8,
     pub pk: usize,
     #[cfg_attr(not(feature = "wallet"), allow(dead_code))]
@@ -34,9 +34,12 @@ pub(crate) const SEED_LEN: usize = 48;
 #[cfg_attr(not(feature = "wallet"), allow(dead_code))]
 pub(crate) const RND_LEN: usize = 88;
 
-/// Whether this build has Falcon.
+/// Whether this build has Falcon: PQClean (native) or falcon-rs (wasm32).
 #[cfg_attr(not(feature = "wallet"), allow(dead_code))]
-pub(crate) const AVAILABLE: bool = cfg!(scaas_falcon);
+pub(crate) const AVAILABLE: bool = cfg!(any(scaas_falcon, target_arch = "wasm32"));
+
+#[cfg(all(not(scaas_falcon), target_arch = "wasm32"))]
+mod soft;
 
 #[cfg(scaas_falcon)]
 #[cfg_attr(not(feature = "wallet"), allow(dead_code))]
@@ -98,7 +101,11 @@ pub(crate) fn keypair(p: Params, seed: &[u8], pk: &mut [u8], sk: &mut [u8]) -> b
         };
         rc == 0
     }
-    #[cfg(not(scaas_falcon))]
+    #[cfg(all(not(scaas_falcon), target_arch = "wasm32"))]
+    {
+        soft::keypair(p.logn.into(), seed, pk, sk)
+    }
+    #[cfg(all(not(scaas_falcon), not(target_arch = "wasm32")))]
     false
 }
 
@@ -133,7 +140,11 @@ pub(crate) fn sign(p: Params, sk: &[u8], m: &[u8], rnd: &[u8], sig: &mut [u8]) -
         };
         rc == 0
     }
-    #[cfg(not(scaas_falcon))]
+    #[cfg(all(not(scaas_falcon), target_arch = "wasm32"))]
+    {
+        soft::sign(p.logn.into(), sk, m, rnd, sig)
+    }
+    #[cfg(all(not(scaas_falcon), not(target_arch = "wasm32")))]
     {
         let _ = m;
         false
@@ -170,7 +181,11 @@ pub(crate) fn verify(p: Params, pk: &[u8], m: &[u8], sig: &[u8]) -> bool {
         };
         rc == 0
     }
-    #[cfg(not(scaas_falcon))]
+    #[cfg(all(not(scaas_falcon), target_arch = "wasm32"))]
+    {
+        soft::verify(p.logn.into(), pk, m, sig)
+    }
+    #[cfg(all(not(scaas_falcon), not(target_arch = "wasm32")))]
     {
         let _ = m;
         false

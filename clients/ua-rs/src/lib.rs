@@ -51,8 +51,12 @@ pub use scaas_ct;
 pub mod build {
     pub const WALLET: bool = cfg!(feature = "wallet");
     pub const PQ: bool = cfg!(feature = "pq");
-    /// The vendored PQClean Falcon was built (`build.rs`; not on wasm32): `0x0132`, `0x0135` sign and verify.
-    pub const FALCON: bool = cfg!(scaas_falcon);
+    /// `0x0132`, `0x0135` sign and verify: the vendored PQClean Falcon was built (`build.rs`), or falcon-rs on wasm32
+    /// (CLI-UAL-66).
+    pub const FALCON: bool = cfg!(all(
+        feature = "pq",
+        any(scaas_falcon, target_arch = "wasm32")
+    ));
     pub const ZETHER: bool = cfg!(feature = "zether");
     pub const PQZ: bool = cfg!(feature = "pqz");
     /// The `pqz-set-*` features, in this order: `n2048-kmax1024`, `n2304-kmax4096`, `n2560-kmax16384`, `n2816-kmax65536`.

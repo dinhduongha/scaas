@@ -2138,6 +2138,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "falcon-rs"
+version = "0.3.1"
+dependencies = [
+ "libm",
+ "zeroize",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4281,6 +4289,7 @@ dependencies = [
  "cc",
  "curve25519-dalek",
  "ed25519-dalek",
+ "falcon-rs",
  "hmac 0.12.1",
  "k256 0.14.0",
  "ml-dsa",

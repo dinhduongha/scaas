@@ -1,0 +1,26 @@
+# CLI-UAL-66 (owner 2026-11-26): Falcon (fndsa512 0x0132, fndsa1024 0x0135) on wasm32 in ua-rs, branch ua-rs-wasm-fndsa from
+# 02e665589. Full logs git-ignored (*.log); mutants: clients/ua-rs/runs/2026-11-26-ua-rs-wasm-fndsa-mutants.py. Rows:
+# clients/ua-rs/tests/fndsa/rows.rs (220: 48 accept, 172 refuse = pq_kat 2 + 10 mutations, pq_external NIST round-3 KATs 20,
+# pq_signatures 10 + 16 negatives, rs_signatures 10, sign.json 6, and 3 refusals derived from each accept row: a set padding
+# byte, the other degree's header, a flipped message bit). Wallet cases: clients/ua-rs/tests/fndsa/sign.rs (48 = 4 keys.json
+# mnemonics x 2 kinds x 3 account/index x 2 messages, fixed randomness). UNAUDITED.
+
+step | commit | rc | counts
+gate 1: fn-dsa-vrfy 0.4.0 (Unlicense) natively | 97c8630f7 | 1 | 220 rows; PQClean = every row; fn-dsa-vrfy decodes 0 of 220 keys (LSB-first 14-bit packing vs round 3's MSB-first) and refuses all 48 accept rows; it hashes nonce || mu, mu = SHAKE256(SHAKE256(pk) || 0x00 || len(ctx) || ctx || m) for every hash id (HASH_ID_EXTMU takes a 64-byte mu only), round 3 / EIP-8052 hash nonce || m: not a re-encoding; not integrated, dependencies dropped in 05556d0dd
+gate 2: falcon-rs 0.4.0 round3 (falcon-rs 0.3.1, MIT) natively | 05556d0dd | 0 | 220 rows: 0 differ from PQClean; its FIPS 206 API (FnDsaSignature::verify) differs on all 48 accept rows; 48 wallet cases: falcon-rs key pair (pk, sk) and signature byte-equal to PQClean's, digest aad3af3e3f1fd64839fc3f8e2c018ea112ea7fe03f0cee6db4db63bfb7ab7acd
+wasm32 tests/fndsa/wasm/run.sh (wasm-bindgen 0.2.130, Node) | 05556d0dd | 0 | 220 rows, 0 differ; 48 wallet cases, digest equal (aad3af3e...7acd)
+fpemu on (controller): native + wasm32 rerun | 05556d0dd + fpemu (folded into 5120ac3c5) | 0 | 220 rows 0 differ; 48 cases, the same digest, both
+vendor/: falcon-rs 0.3.1 as published (sha256 97afa6b3e692aa0c332b883f18e3f999e99df06331ac93196b60805950b0f65f = Cargo.lock checksum; upstream 59b2e673f714), PQClean git mv; native rerun | 5120ac3c5 | 0 | fndsa_vrfy 2 passed (220 rows 0 differ; 48 cases, same digest); pq 6 passed; wallet_pq 11 passed, 1 ignored
+wasm32 tests/fndsa/wasm/run.sh | 5120ac3c5 | 0 | 220 rows, 0 differ; 48 wallet cases, digest aad3af3e...7acd
+mutants (scripts/mutant_guard.py): 6 soft.rs (native) + 6 wasm32 arms (falcon.rs, lib.rs) | 5120ac3c5 | 0 | 12 of 12 killed (padded->compressed verify, verdict inverted, m not hashed, nonce/m swapped, sampler seeded by the nonce, keygen seed cut; wasm verify always true, degree 512 always, sign over m[1..], keygen seed cut, AVAILABLE and build::FALCON as before); 05556d0dd: the same 12 killed
+ua-rs cargo test --features app-core,vectors | 5120ac3c5 | 0 | 76 targets: 804 passed, 0 failed, 6 ignored
+ua-rs clippy --all-targets --features app-core,vectors -D warnings | 5120ac3c5 | 0 | clean
+ua-rs clippy --lib --target wasm32-unknown-unknown -D warnings: default; --no-default-features --features pq; --features app-core,vectors | 5120ac3c5 | 0 | clean (3 cells); tests/fndsa/wasm clippy wasm32 clean
+cargo deny --all-features check: ua-rs; ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, zether-prover with ua-rs/deny.toml | 5120ac3c5 | 0 | advisories ok, bans ok, licenses ok, sources ok (6); cargo audit ua-rs, ua-c clean
+sizes.py measure wasm32 ua-c/ (stripped cdylib, llvm-strip of NDK 25) before -> after | 02e665589 -> 5120ac3c5 | 0 | default 5933798 -> 6117173 (+183375); n2048-kmax1024 5896101 -> 6075327 (+179226); n2560-kmax16384 5963499 -> 6145934 (+182435); n2816-kmax65536 5501361 -> 5685169 (+183808); no-default 3462714 -> 3647035 (+184321)
+size-baseline.json, the five wasm32 ua-c cells (old -> new; reason: falcon-rs on wasm32, CLI-UAL-66) | this commit | 0 | 5906308 -> 6117173, 5867343 -> 6075327, 5927040 -> 6145934, 5449825 -> 5685169, 3451965 -> 3647035; sizes.py check 0 failures (before tree: 0 failures against the old baseline)
+format.sh --check (every language; vendor/ left out) | 5120ac3c5 | 0 | 35 parts ok
+docs_check check / paths / test_docs_check | this commit | 0 | 0 errors (7 budget warnings, none in a touched file) / 0 machine paths / ok
+
+# Not run: a browser (Node only); the wasm32 gate is not a CI job yet (tests/fndsa/wasm/run.sh is manual, like the SDK's JS
+# smoke); no timing (fpemu's constant time is falcon-rs's claim, not measured).

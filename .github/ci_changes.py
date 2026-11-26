@@ -22,9 +22,11 @@ SC = ["smartcontracts/scripts/", "smartcontracts/vectors/"]
 # the root rust-toolchain.toml: the one Rust toolchain of every crate (ARCH-POS-12)
 RT = ["rust-toolchain.toml"]
 # ua-rs and every crate it builds (ua-rs-sign T18): scaas-ct, zether-prover (the Zether facade), pqz-ffi, pqzl, pqz-stmt, Ligero
-# and the parameter sets (the PQZ facade, MD-5); a job over ua-rs reads them all
+# and the parameter sets (the PQZ facade, MD-5); a job over ua-rs reads them all; vendor/ (the third-party sources it builds:
+# PQClean Falcon natively, falcon-rs 0.3.1 on wasm32, CLI-UAL-66)
 UARS = [
     "clients/ua-rs/",
+    "vendor/",
     "clients/scaas-ct/",
     "clients/zether-prover/",
     "pqz-core/ffi/",

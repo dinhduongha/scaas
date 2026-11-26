@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! Feature `pq`: builds the vendored PQClean Falcon-padded-512 / -1024 (vendor/pqclean-falcon-seeded, MD-8) and sets
+//! Feature `pq`: builds the vendored PQClean Falcon-padded-512 / -1024 (the repository's vendor/pqclean-falcon-seeded, MD-8) and sets
 //! `cfg(scaas_falcon)`. Not on wasm32: PQClean's C needs a libc (`stdlib.h`, `malloc` in fips202.c) that
-//! wasm32-unknown-unknown lacks (T0), so the Falcon kinds are `KindUnavailable` there and their signatures do not verify
-//! (spec §12).
+//! wasm32-unknown-unknown lacks (T0); there the Falcon kinds key, sign and verify through falcon-rs's round-3 module
+//! (src/falcon/soft.rs, CLI-UAL-66).
 
 fn main() {
     println!("cargo::rustc-check-cfg=cfg(scaas_falcon)");
@@ -14,11 +14,11 @@ fn main() {
 fn falcon() {
     use std::env;
     use std::path::Path;
-    println!("cargo::rerun-if-changed=vendor/pqclean-falcon-seeded");
+    println!("cargo::rerun-if-changed=../../vendor/pqclean-falcon-seeded");
     if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("wasm32") {
         return;
     }
-    let root = Path::new("vendor/pqclean-falcon-seeded");
+    let root = Path::new("../../vendor/pqclean-falcon-seeded");
     let out = Path::new(&env::var("OUT_DIR").expect("OUT_DIR")).to_path_buf();
     for (logn, dir) in [("9", "falcon-padded-512"), ("10", "falcon-padded-1024")] {
         let d = root.join(dir);

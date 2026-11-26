@@ -186,7 +186,7 @@ pub enum Error {
     KeyRevoked,
     /// The call needs secrets and the wallet is locked.
     WalletLocked,
-    /// The kind exists but this build lacks it (Falcon on wasm32: no C).
+    /// The kind exists but this build lacks it.
     KindUnavailable,
     /// The OS random number generator failed.
     Rng,
@@ -954,7 +954,7 @@ impl Wallet {
 
     /// The UA key `kind` of `account` / `index` (spec §4): `Argument` for a value ≥ 2^31, index ≠ 0 on an EIP-2333 kind
     /// (`0x0104`–`0x0107`, `0x0112`), or a kind not derived from the seed; `KindUnavailable` for Falcon on a build without
-    /// it (wasm32); `WalletLocked` while locked.
+    /// it; `WalletLocked` while locked.
     pub fn ua_key(&self, kind: u16, account: u32, index: u32) -> Result<UaKey> {
         let (secret, key_data) = self.store.key(KeyId::Ua(kind, account, index), |seed| {
             derive::ua_key(kind, derive::ua_secret(seed, kind, account, index)?)

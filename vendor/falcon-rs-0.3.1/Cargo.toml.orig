@@ -1,0 +1,71 @@
+[package]
+name = "falcon-rs"
+version = "0.3.1"
+edition = "2021"
+rust-version = "1.84"
+authors = ["lattice-safe contributors"]
+description = "Native Rust implementation of FN-DSA (draft FIPS 206), the NIST post-quantum digital signature scheme formerly known as Falcon"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/lattice-safe/falcon-rs"
+homepage = "https://github.com/lattice-safe/falcon-rs"
+documentation = "https://docs.rs/falcon-rs"
+keywords = [
+    "fn-dsa",
+    "fips-206",
+    "post-quantum",
+    "cryptography",
+    "digital-signature",
+]
+categories = ["cryptography", "no-std"]
+# The published crate does not need the marketing page, the fuzz corpus or
+# the CI scaffolding; keep it to code, tests and the security docs.
+exclude = [
+    "docs/article/*",
+    "docs/mnemonic/*",
+    "fuzz/*",
+    ".github/*",
+    "Dockerfile",
+    ".dockerignore",
+]
+
+[features]
+default = ["std"]
+std = ["getrandom"]
+serde = ["dep:serde", "zeroize/serde"]
+# Branchless integer floating-point backend: removes the floating-point
+# timing side channel, at a performance cost. Results are bit-identical.
+fpemu = []
+
+[dependencies]
+getrandom = { version = "0.2", optional = true }
+libm = "0.2"
+serde = { version = "1", features = ["derive"], optional = true }
+zeroize = { version = "1", features = [
+    "alloc",
+    "derive",
+], default-features = false }
+
+[lib]
+name = "falcon"
+path = "src/lib.rs"
+
+
+
+
+
+
+
+
+
+[dev-dependencies]
+serde_json = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1"
+
+[[bench]]
+name = "falcon_bench"
+harness = false
+
+[profile.release]
+opt-level = 3

@@ -20,6 +20,7 @@ when mainnet 22776 launches, which only the owner may touch.
 | `clients/` | `clientkeys` (JS reference), `ua-{rs,c,cxx,qt,cs,py,go,dart,dart-frb}`, `zether-prover` | one per language |
 | `docs/` | Rules by component, `decisions.md`, `research/`, `history/` | `scripts/docs_check.py` |
 | `*/legacy/` | Superseded code, not built | do not edit |
+| `vendor/` | Third-party sources, unedited: `pqclean-falcon-seeded` (`ua-rs` natively), `falcon-rs-0.3.1` (`ua-rs` on wasm32); see `vendor/README.md` | do not edit; not formatted |
 | `TODO.md`, `COMPLETED.md` | Work order, done work | |
 | `.agents/skills/` | Agent skills: `scaas-review` (any spec or code review), `scaas-audit` (an AI audit round). Codex, Gemini and Copilot read this path; Claude Code reads it through the committed link `.claude/skills` | |
 

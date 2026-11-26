@@ -41,7 +41,7 @@ fn rnd_len(kind: u16) -> Result<usize> {
 }
 
 /// What the arena keeps for PQ kind `kind` from its HKDF seed (32 bytes for ML-DSA, 48 for SLH-DSA and Falcon), and the
-/// key data. `KindUnavailable` for Falcon on a build without it (wasm32).
+/// key data. `KindUnavailable` for Falcon on a build without it.
 pub(crate) fn keypair(kind: u16, seed: &[u8]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>)> {
     match kind {
         0x0130 => mldsa_keypair::<MlDsa44>(seed),
