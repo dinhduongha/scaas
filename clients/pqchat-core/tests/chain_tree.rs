@@ -125,6 +125,7 @@ async fn chain_tree_session() {
             members: vec![bob.ua.clone()],
             info: info(&l),
             payer: l.payer.clone(),
+            path_refresh_bound: None,
         })
         .await
         .unwrap();
@@ -188,6 +189,7 @@ async fn chain_tree_session() {
                 info: None,
                 info_reviewed: false,
                 payer: l.payer.clone(),
+                refresh: false,
             },
             leaf_a,
         )
@@ -195,6 +197,13 @@ async fn chain_tree_session() {
         .unwrap();
     // R2-C-5 of the TreeKEM T4-T9 re-check: one endpoint, no strict majority: an Add built with its head not confirmed
     assert!(adds_left.is_empty(), "two Adds: one commit");
+    // the path-less delta §6.5 (C46): an Adds-only change on the head the device holds goes path-less by default, relayed as
+    // any commit (the record and its two Welcome wraps, the last one held back when it is sent in several transactions)
+    assert_eq!(c1.record["pathless"], json!(true), "the default form");
+    assert!(
+        plan1.txs.iter().all(|t| !t.entry.starts_with("addPath")),
+        "no path piece"
+    );
     assert!(
         !head_confirmed && a0.unconfirmed,
         "one endpoint confirms nothing"
@@ -206,6 +215,10 @@ async fn chain_tree_session() {
     );
     let a1 = pq.tree_state(&s, &alice, 0, None).await.unwrap();
     let pc = device();
+    assert_eq!(
+        a1.replay.since_path, 2,
+        "two path-less leaves since the last path commit"
+    );
     let c1s = pc.tree_state(&s, &carol, 0, None).await.unwrap();
     assert_eq!(a1.head, 1);
     assert!(
@@ -281,6 +294,7 @@ async fn chain_tree_session() {
                 info: None,
                 info_reviewed: false,
                 payer: l.payer.clone(),
+                refresh: false,
             },
             leaf_b,
         )
@@ -319,6 +333,7 @@ async fn chain_tree_session() {
                 info: None,
                 info_reviewed: false,
                 payer: l.payer.clone(),
+                refresh: false,
             },
             leaf_of(&a2, &alice).0,
         )

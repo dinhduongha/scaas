@@ -403,7 +403,9 @@ impl AppCore {
         let wh = wrap_hashes(&r.wraps)?;
         let m = json!({"creator": r.creator, "nonce": r.nonce, "homeChain": r.home_chain,
             "homeChatContract": r.home_chat_contract, "groupMode": 0, "admins": r.admins, "members": members(&r.members),
-            "wrapHashes": wh, "sealedInfo": hex(&r.sealed_info)});
+            "wrapHashes": wh, "sealedInfo": hex(&r.sealed_info),
+            // the path-less delta §3.1: mode 1's option and epoch 0's tag, both 0 in mode 0
+            "pathRefreshBound": 0, "confirmTag": format!("0x{}", "00".repeat(32))});
         let id = Id::Of("session", vec![w32(&r.creator)?, w64(r.nonce)]);
         self.prepare_pq(account, "PqChatSession", m, id, wh).await
     }
@@ -433,9 +435,21 @@ impl AppCore {
             .get("nonce")
             .and_then(Value::as_u64)
             .ok_or(SdkError::Argument)?;
+        // the path-less delta §3.1 (C46): the creation review names the forced key refresh
+        let bound = record
+            .get("pathRefreshBound")
+            .and_then(Value::as_u64)
+            .ok_or(SdkError::Argument)?;
         let id = Id::Of("session", vec![w32(creator)?, w64(nonce)]);
-        self.prepare_pq(account, "PqChatSession", record, id, wh)
-            .await
+        let mut p = self
+            .prepare_pq(account, "PqChatSession", record, id, wh)
+            .await?;
+        p.review.push(crate::app_core::field(
+            "keyRefresh",
+            crate::pqchat_tree::refresh_line(bound),
+            Source::Derived,
+        ));
+        Ok(p)
     }
 
     /// `PqChatEpoch`, its `wrapHashes` from `r.wraps`.

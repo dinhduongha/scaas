@@ -504,6 +504,16 @@
       "internalType": "bytes",
       "name": "sealedInfo",
       "type": "bytes"
+     },
+     {
+      "internalType": "bool",
+      "name": "pathless",
+      "type": "bool"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "confirmTag",
+      "type": "bytes32"
      }
     ],
     "internalType": "struct IPqChat.PqChatCommit",
@@ -707,6 +717,16 @@
       "internalType": "uint8",
       "name": "groupMode",
       "type": "uint8"
+     },
+     {
+      "internalType": "uint32",
+      "name": "pathRefreshBound",
+      "type": "uint32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "confirmTag",
+      "type": "bytes32"
      }
     ],
     "internalType": "struct IPqChat.PqChatSession",
@@ -2683,6 +2703,16 @@
       "internalType": "uint8",
       "name": "groupMode",
       "type": "uint8"
+     },
+     {
+      "internalType": "uint32",
+      "name": "pathRefreshBound",
+      "type": "uint32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "confirmTag",
+      "type": "bytes32"
      }
     ],
     "internalType": "struct IPqChat.PqChatSession",
@@ -3862,6 +3892,16 @@
       "internalType": "bytes",
       "name": "sealedInfo",
       "type": "bytes"
+     },
+     {
+      "internalType": "bool",
+      "name": "pathless",
+      "type": "bool"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "confirmTag",
+      "type": "bytes32"
      }
     ],
     "internalType": "struct IPqChat.PqChatCommit",
@@ -4232,6 +4272,11 @@
    {
     "internalType": "uint32",
     "name": "owed",
+    "type": "uint32"
+   },
+   {
+    "internalType": "uint32",
+    "name": "sincePath",
     "type": "uint32"
    }
   ],

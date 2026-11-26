@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mutants_lib import main
 
 S = "clients/scaas-sdk/src/pqchat_tree.rs"
-ST = ("cd clients/scaas-sdk && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --lib "
-      "pathless_form_and_its_plan")
+ST = ("cd clients/scaas-sdk && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 "
+      "--features pqchat-records,vectors --lib pathless_form_and_its_plan")
 K = "pathless_form_and_its_plan"
 B = "        if self.bound > 0 && self.since_path.saturating_add(self.adds) > self.bound {"
 MUTANTS = [

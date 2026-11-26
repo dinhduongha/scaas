@@ -92,11 +92,11 @@
  },
  "creation": {
   "base": {
-   "regular": 225822,
-   "state": 7408038
+   "regular": 227420,
+   "state": 7505958
   },
   "per": {
-   "regular": 301596,
+   "regular": 301613,
    "state": 3589818
   }
  },
@@ -105,21 +105,21 @@
   "state": 146880
  },
  "wrap": {
-  "regular": 264283,
+  "regular": 264309,
   "state": 3117222
  },
  "record": {
   "base": {
-   "regular": 329301,
-   "state": 7762812
+   "regular": 331119,
+   "state": 7860732
   },
   "per": {
-   "regular": 8350,
+   "regular": 8351,
    "state": 408
   }
  },
  "recordPerAdd": {
-  "regular": 196592,
+  "regular": 196628,
   "state": 291637
  },
  "recordPerAddDrop": {
@@ -127,34 +127,34 @@
   "state": 5
  },
  "recordPerRemove": {
-  "regular": 42941,
+  "regular": 42949,
   "state": 137496
  },
  "recordPerAdmin": {
-  "regular": 8726,
+  "regular": 8756,
   "state": 48960
  },
  "recordPerKibInfo": {
-  "regular": 18291,
+  "regular": 18313,
   "state": 1566720
  },
  "list": {
   "base": {
-   "regular": 60038,
+   "regular": 60328,
    "state": 380970
   },
   "per": {
-   "regular": 4029,
+   "regular": 4028,
    "state": 55080
   }
  },
  "keys": {
   "base": {
-   "regular": 135319,
+   "regular": 135572,
    "state": 283050
   },
   "per": {
-   "regular": 134545,
+   "regular": 134552,
    "state": 2449530
   }
  },
@@ -170,7 +170,7 @@
  },
  "completion": {
   "base": {
-   "regular": 201945,
+   "regular": 202672,
    "state": 758064
   },
   "per": {
@@ -179,20 +179,20 @@
   }
  },
  "completionPerAdd": {
-  "regular": 372349,
+  "regular": 372408,
   "state": 1253825
  },
  "completionPerRemove": {
-  "regular": 102742,
+  "regular": 102754,
   "state": 88944
  },
  "noPiece": {
   "base": {
-   "regular": 2054929,
+   "regular": 2047116,
    "state": 18546660
   },
   "per": {
-   "regular": 260027,
+   "regular": 260058,
    "state": 342720
   }
  }

@@ -74,6 +74,8 @@ pub struct CreateTree {
     pub members: Vec<String>,
     pub info: crate::session::Info,
     pub payer: KeyRef,
+    /// the session's `pathRefreshBound` (the path-less delta §3.1, R18): `None` the client default 20, 0 never forced
+    pub path_refresh_bound: Option<u32>,
 }
 
 /// A created tree session: its ids, `K_0`'s handle and the prepared `createSession` with every wrap (one transaction).
@@ -97,6 +99,9 @@ pub struct TreeCommit {
     /// the admin reviewed `info` as a new info after a gap (codex-r3-7): required when the device holds no info in force
     pub info_reviewed: bool,
     pub payer: KeyRef,
+    /// "add and refresh" (the path-less delta §6.5): an Adds-only change built as a path commit; otherwise it goes
+    /// path-less whenever the conditions of C46 hold
+    pub refresh: bool,
 }
 
 /// A tree session as this device follows it: the replay's epochs and warnings, and whether the device can send.
@@ -183,6 +188,12 @@ pub const TREE_HINT_KEYS: usize = 7;
 /// C3's size hint: whether to propose a tree session for `keys` member keys of which `committers` commit.
 pub fn tree_advised(keys: usize, committers: usize) -> bool {
     keys >= TREE_HINT_KEYS && committers >= 2
+}
+
+/// The store key of this device's own path commit staged on a head (the path-less delta §6.5, F-5 by the owner's ruling of
+/// 2026-11-27): `{epochId, parent}`; it holds back a path-less Add only while its parent is the head.
+fn staged_key(session_id: &str) -> String {
+    format!("tree/staged/{}", session_id.to_ascii_lowercase())
 }
 
 /// The store key of a tree session's checkpoint (C26), by its `treeId` (C16).
@@ -640,8 +651,11 @@ impl PqChat {
                 }
             }
         }
-        let session = json!({"creator": me, "nonce": r.nonce, "homeChain": c.chain_uid,
+        let mut session = json!({"creator": me, "nonce": r.nonce, "homeChain": c.chain_uid,
             "homeChatContract": r.home.to_ascii_lowercase(), "admins": admins, "members": members, "groupMode": 1});
+        if let (Some(b), Some(o)) = (r.path_refresh_bound, session.as_object_mut()) {
+            o.insert("pathRefreshBound".into(), json!(b));
+        }
         let info = serde_json::to_string(&r.info).map_err(|_| PqChatError::Internal)?;
         let sref = SessionRef {
             chain: r.chain.clone(),
@@ -1072,6 +1086,18 @@ impl PqChat {
         }
         let plan = split.plans.first().cloned().unwrap_or_else(one_tx);
         let signed = prepared.sign().map_err(sdk)?;
+        // F-5 (owner 2026-11-27): this device's own path commit sent in several transactions holds its path-less Adds back
+        // while it is staged on this head
+        if signed.record.get("pathless") == Some(&json!(false)) && plan.txs.len() > 1 {
+            let parent = signed
+                .record
+                .get("parentEpochId")
+                .cloned()
+                .unwrap_or_default();
+            let v = json!({"epochId": signed.epoch_id, "parent": parent});
+            crate::store::Items(&*self.store)
+                .update::<Value, _>(&staged_key(&st.session_id), |_| Ok(v.clone()))?;
+        }
         Ok(TreeBuilt {
             signed,
             plan,
@@ -1208,16 +1234,31 @@ impl PqChat {
             info,
         };
         let key = c.me.key.clone();
+        let pathless = !c.refresh && self.pathless_form(st, c, adds, &seen)?.is_ok();
         let prepared = self
             .tree_run(s, &mut reads, start.unwrap_or(0), |rd| {
-                self.app.pqchat_tree_prepare_commit(
-                    key.clone(),
-                    c.key_id,
-                    leaf,
-                    rd,
-                    pin.as_ref(),
-                    ch.clone(),
-                )
+                if pathless {
+                    self.app.pqchat_tree_prepare_pathless(
+                        key.clone(),
+                        c.key_id,
+                        leaf,
+                        rd,
+                        pin.as_ref(),
+                        &st.replay,
+                        &ch.adds,
+                        ch.info.clone(),
+                        0,
+                    )
+                } else {
+                    self.app.pqchat_tree_prepare_commit(
+                        key.clone(),
+                        c.key_id,
+                        leaf,
+                        rd,
+                        pin.as_ref(),
+                        ch.clone(),
+                    )
+                }
             })
             .await?;
         // the walk built on the state read and confirmed first: a head that moved during the build is stale
@@ -1225,6 +1266,73 @@ impl PqChat {
             return Err(PqChatError::TreeStale);
         }
         Ok((prepared, head_confirmed))
+    }
+
+    /// The path-less delta §6.5 (C46; F-5 by the owner's ruling of 2026-11-27): whether `c` with the Adds `adds` goes
+    /// path-less on the head of `st` (`seen` its `treeOf`): Adds only, the head's admin list, the device holding the head's
+    /// epoch, nothing owed, no head admin gone, room under the bound and no path commit of this device's own staged on the
+    /// head; else the reason the path form is built.
+    pub fn pathless_form(
+        &self,
+        st: &TreeState,
+        c: &TreeCommit,
+        adds: &[Value],
+        seen: &Value,
+    ) -> Result<Result<(), &'static str>, PqChatError> {
+        let r = &st.replay;
+        let head_admins: Vec<String> = r
+            .epochs
+            .last()
+            .map(|e| e.admins.iter().map(|a| a.to_ascii_lowercase()).collect())
+            .unwrap_or_default();
+        let mut mine: Vec<String> = c.admins.iter().map(|a| a.to_ascii_lowercase()).collect();
+        mine.sort();
+        // the pin's register before the head's exits, and the exits applied at the head: every UA gone there
+        let list = |k: &str| {
+            r.pin
+                .get(k)
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+        };
+        let gone: Vec<String> = list("gone")
+            .into_iter()
+            .chain(list("exits"))
+            .filter_map(|g| {
+                g.get(0)
+                    .and_then(Value::as_str)
+                    .map(str::to_ascii_lowercase)
+            })
+            .collect();
+        let staged: Option<Value> =
+            crate::store::Items(&*self.store).get(&staged_key(&st.session_id))?;
+        let head = st.ids.last().map(|x| x.to_ascii_lowercase());
+        let check = pt::PqPathlessCheck {
+            holds_head: r.holds_head,
+            // the SDK's named JSON: a number as a decimal string; anything else counts as owed (the path form)
+            owed: at(seen, "owed")
+                .as_str()
+                .and_then(|x| x.parse::<u32>().ok())
+                .or_else(|| {
+                    at(seen, "owed")
+                        .as_u64()
+                        .and_then(|x| u32::try_from(x).ok())
+                })
+                .unwrap_or(u32::MAX),
+            gone_admin: head_admins.iter().any(|a| gone.contains(a)),
+            admins_changed: mine != head_admins,
+            removes: !c.removes.is_empty(),
+            since_path: r.since_path,
+            bound: r.path_bound,
+            adds: u32::try_from(adds.len()).unwrap_or(u32::MAX),
+            own_path_commit_staged: staged
+                .as_ref()
+                .and_then(|v| v.get("parent").and_then(Value::as_str))
+                .map(str::to_ascii_lowercase)
+                == head,
+            tries_left: true,
+        };
+        Ok(check.form())
     }
 
     /// The next transaction of a signed commit on the state now (C37): prepared, or `None` once the epoch is complete at

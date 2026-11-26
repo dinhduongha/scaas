@@ -138,7 +138,7 @@ impl Home {
                 }
             })
             .collect();
-        let tree = Tree::cold(&cold).unwrap();
+        let tree = Tree::cold_with(&cold, u(&rec["pathRefreshBound"]) as u32).unwrap();
         let mut msigs = BTreeMap::new();
         let mut signers = BTreeMap::new();
         for r in v["signers"].as_array().unwrap() {
@@ -344,7 +344,8 @@ impl Home {
     fn tree_of(&self) -> Value {
         json!({"treeId": self.tree_id, "leaves": self.tree.leaves.to_string(), "used": self.tree.used.to_string(),
             "treeHash": hx(&self.tree.tree_hash()), "genesisTreeHash": self.genesis_tree_hash,
-            "headEpochId": self.epochs.last().unwrap().id, "owed": self.owed.to_string()})
+            "headEpochId": self.epochs.last().unwrap().id, "owed": self.owed.to_string(),
+            "sincePath": self.tree.since_path.to_string()})
     }
 
     /// The contract's answer to `item(args)`, the SDK's named JSON; `None` for an item the home does not serve.
@@ -1137,6 +1138,7 @@ async fn an_info_after_a_gap_needs_its_review() {
             network: "evm".into(),
             index: 0,
         },
+        refresh: false,
     };
     let reads = net.items().len();
     let e =
@@ -1203,6 +1205,7 @@ fn commit_req(
             network: "evm".into(),
             index: 0,
         },
+        refresh: false,
     }
 }
 
@@ -2203,4 +2206,78 @@ async fn a_head_below_the_checkpoint_is_refused() {
     assert_eq!(e.code(), "TreeCheckpoint");
     assert_eq!(pinned(&store, &tree_id).unwrap(), pin);
     assert_eq!(*net.writes.lock().unwrap(), 0);
+}
+
+/// The path-less delta §6.5 (C46; F-5 by the owner's ruling of 2026-11-27): the crate's choice of the default form from the
+/// state it holds. On the `pathless` scenario's head (bound 24, `sincePath` 1) A's Adds-only change with the head's admins
+/// goes path-less; each condition the crate reads falls back to the path form by its reason: an exit owed in the `treeOf`
+/// read, an admin change, a Remove, this device's own path commit staged on the head (the crate's marker), a device that does
+/// not hold the head (`pathless-own`'s B); a marker staged on another parent holds nothing back.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_pathless_form_from_the_state() {
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let ua = |d: &str| v["devices"][d]["ua"].as_str().unwrap().to_ascii_lowercase();
+    let add = json!({"leaf": 9, "ua": v["devices"]["H"]["ua"], "keyId": u(&v["devices"]["H"]["keyId"]), "via": ZERO,
+        "kemHash": hx(&scaas_ua::keccak256(&unhex(&v["devices"]["H"]["kemPk"])))});
+    let req = |dev: &str| {
+        let mut c = commit_req(&w, &v, dev, None, vec![add.clone()]);
+        c.admins = vec![ua("A")];
+        c
+    };
+    let adds = vec![add.clone()];
+    let home = Home::scenario(&v, &scenario(&v, "pathless"), None);
+    let (s, seen) = (sref(&home), home.tree_of());
+    let store = Arc::new(MemoryStore::new());
+    let r = crate_with(&w, HomeNet::new(home), store.clone());
+    let st = replay(&r, &v, &s, "A").await.unwrap();
+    let form = |c: &pqchat_core::tree::TreeCommit, seen: &Value| {
+        r.pq.pathless_form(&st, c, &adds, seen).unwrap()
+    };
+    assert_eq!(form(&req("A"), &seen), Ok(()), "the default form");
+    let mut owed = seen.clone();
+    owed["owed"] = json!("1");
+    assert!(
+        form(&req("A"), &owed).is_err_and(|e| e.contains("owed")),
+        "an exit owed"
+    );
+    let mut c = req("A");
+    c.admins.push(ua("B"));
+    assert!(
+        form(&c, &seen).is_err_and(|e| e.contains("admin change")),
+        "an admin change"
+    );
+    let mut c = req("A");
+    c.removes = vec![json!({"leaf": 1, "ua": ua("B"), "keyId": "0"})];
+    assert!(
+        form(&c, &seen).is_err_and(|e| e.contains("Remove")),
+        "a Remove"
+    );
+    let staged = |parent: &str| {
+        pqchat_core::Items(&*store)
+            .update::<Value, _>(
+                &format!("tree/staged/{}", st.session_id.to_ascii_lowercase()),
+                |_| Ok(json!({"epochId": ZERO, "parent": parent})),
+            )
+            .unwrap();
+    };
+    staged(&st.ids[st.ids.len() - 2]);
+    assert_eq!(form(&req("A"), &seen), Ok(()), "a marker on another parent");
+    staged(st.ids.last().unwrap());
+    assert!(
+        form(&req("A"), &seen).is_err_and(|e| e.contains("in progress")),
+        "its own path commit staged on the head"
+    );
+    let home = Home::scenario(&v, &scenario(&v, "pathless-own"), None);
+    let (s, seen) = (sref(&home), home.tree_of());
+    let r = crate_over(&w, HomeNet::new(home));
+    let st = replay(&r, &v, &s, "B").await.unwrap();
+    assert!(!st.replay.holds_head);
+    assert!(
+        r.pq.pathless_form(&st, &req("B"), &adds, &seen)
+            .unwrap()
+            .is_err_and(|e| e.contains("the head's epoch")),
+        "a device that does not hold the head"
+    );
 }

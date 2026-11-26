@@ -448,7 +448,9 @@ impl PqChat {
         let sealed = model::unhex(field(&signed, "message.sealedInfo")?)?;
         let s = json!({"creator": me, "nonce": r.nonce.to_string(), "homeChain": c.chain_uid,
             "homeChatContract": r.home.to_ascii_lowercase(), "groupMode": "0", "admins": admins, "members": members_json(&w.keys),
-            "wrapHashes": signed.wrap_hashes, "sealedInfo": model::hex(&sealed)});
+            "wrapHashes": signed.wrap_hashes, "sealedInfo": model::hex(&sealed),
+            // the path-less delta §3.1: mode 1's option and epoch 0's tag, both 0 in mode 0
+            "pathRefreshBound": "0", "confirmTag": format!("0x{}", "00".repeat(32))});
         let epoch = Epoch {
             id: sid.clone(),
             session_id: sid.clone(),

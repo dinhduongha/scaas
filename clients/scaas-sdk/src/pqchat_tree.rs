@@ -11,8 +11,8 @@ use crate::error::SdkError;
 use crate::op::{hex, KeyRef};
 use scaas_ua::ua_portable::{KemKey, UAAttrs, UASig};
 use scaas_ua::wallet::tree::{
-    self, CommitInput, PreparedCommit, Replay, TargetKey, TreeDevice, TreePrepared, TreeReader,
-    View, PQCHAT_TREE,
+    self, CommitInput, PathlessInput, PreparedCommit, Replay, TargetKey, TreeDevice, TreePrepared,
+    TreeReader, View, PQCHAT_TREE,
 };
 use scaas_ua::wallet::tree_public::{Add, KemRecord, Remove};
 use serde_json::Value;
@@ -570,6 +570,25 @@ pub struct PqTreeGenesis {
     pub k: Arc<AppKey>,
 }
 
+/// The client default of `pathRefreshBound` (C46; owner 2026-11-25, the delta's R18 as amended: 20): what a creation names
+/// when its caller names none; 0 only when named.
+pub const PATH_REFRESH_BOUND_DEFAULT: u64 = 20;
+
+/// The creation review's line of a session's bound (the path-less delta §3.1, C46).
+pub fn refresh_line(bound: u64) -> String {
+    if bound == 0 {
+        format!(
+            "key refresh never forced; the admins are warned after {} added keys",
+            tree::PATHLESS_WARN_LEAVES
+        )
+    } else {
+        format!(
+            "key refresh forced after {bound} added keys; the admins are warned from {}",
+            tree::warn_at(u32::try_from(bound).unwrap_or(u32::MAX))
+        )
+    }
+}
+
 /// A commit's changes as the caller asks them: the Removes and the Adds (`TreeRemove`, `TreeAdd` JSON; each added key's
 /// registry record comes from the reads), the admins after it, and the info to seal (`None`: the marker "unchanged").
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -721,6 +740,18 @@ pub struct PqTreeReplay {
     pub info_to_seal: Option<String>,
     /// by epoch of the range, each leaf's `(ua, keyId)` (`None` blank): the roster the forward walk reached (C25)
     pub rosters: BTreeMap<u64, Vec<Option<(String, u64)>>>,
+    /// the path-less delta §6.2: the C45 epochs ("the author did not hold the epoch") with their added leaves
+    pub suspects: Vec<PqTreeWarning>,
+    /// the leaves under review (F-3): every still-live leaf a warning or a C45 epoch names; listed by every path commit's
+    /// review, never keyed by a commit this client builds by itself
+    pub review: Vec<u32>,
+    /// the walk's `sincePath` at the head, the session's bound, and the admins' warning (R18, C46: `sincePath ≥ W(N)` on an
+    /// admin's device)
+    pub since_path: u32,
+    pub path_bound: u32,
+    pub path_warning: bool,
+    /// whether the device holds the head's epoch (its handle with `next`, inside `scaas-ua`): a path-less Add can be built
+    pub holds_head: bool,
     inner: Mutex<Replay>,
 }
 
@@ -772,6 +803,12 @@ impl AppCore {
     ) -> Result<PqTreeStep<PqTreeGenesis>, SdkError> {
         self.label(PQCHAT_TREE.prefix.as_bytes())?;
         let (seed, me, _) = self.device_kem(&account, 0)?;
+        // C46: the default bound when the caller names none (0 only when named)
+        let mut session = session;
+        if let Some(o) = session.as_object_mut() {
+            o.entry("pathRefreshBound")
+                .or_insert(Value::from(PATH_REFRESH_BOUND_DEFAULT));
+        }
         if session.get("groupMode").and_then(Value::as_u64) != Some(1)
             || session
                 .get("creator")
@@ -905,6 +942,98 @@ impl AppCore {
                 key_of: &mut key_of,
             },
         );
+        let p = match built {
+            Ok(p) => p,
+            Err(e) => return rd.step(Err(e.into())),
+        };
+        let out = PqTreeCommit {
+            review: p.review().to_vec(),
+            digest: hex(&p.digest()?),
+            epoch_id: hex(&p.built().epoch_id),
+            record: p.built().record.clone(),
+            core: self.clone(),
+            account,
+            seed,
+            p: Mutex::new(Some(p)),
+        };
+        rd.step(Ok(out))
+    }
+
+    /// A path-less Add (the path-less delta §6.5) by `account`'s leaf `leaf` (its KEM key `key_id`) of `adds` on the head the
+    /// forward walk reaches over `reads` from `pin`, on the head's handle `from` holds (its own replay of that head: refused
+    /// `TreeHandle` for another), its nonce at `try_` (C47): built inside `scaas-ua` with the head's admins, reviewed ("adds
+    /// without refreshing the group's keys; n of N since the last refresh"), then signed. `info`: the info to seal. Its Adds
+    /// are planned and split as any commit's ([`plan_commit`], [`split_adds`]).
+    #[allow(clippy::too_many_arguments)]
+    pub fn pqchat_tree_prepare_pathless(
+        self: &Arc<Self>,
+        account: KeyRef,
+        key_id: u64,
+        leaf: u32,
+        reads: &PqTreeReads,
+        pin: Option<&Value>,
+        from: &PqTreeReplay,
+        adds: &[Value],
+        info: Option<String>,
+        try_: u32,
+    ) -> Result<PqTreeStep<PqTreeCommit>, SdkError> {
+        self.label(PQCHAT_TREE.prefix.as_bytes())?;
+        let (seed, me, kem) = self.device_kem(&account, key_id)?;
+        let pin = pin.map(tree::Pin::from_json).transpose()?;
+        let mut rd = Snap::new(reads);
+        let prepared = match tree::tree_prepare(&PQCHAT_TREE, &mut rd, pin.as_ref()) {
+            Ok(p) => p,
+            Err(e) => return rd.step(Err(e.into())),
+        };
+        let (Ok(session), Some(Ok(tree_id))) = (
+            rd.read(View::SessionOf),
+            rd.read(View::TreeOf)
+                .ok()
+                .and_then(|v| v.get("treeId").and_then(Value::as_str).map(h32)),
+        ) else {
+            return rd.step(Err(SdkError::Argument));
+        };
+        let creator = session
+            .pointer("/record/creator")
+            .and_then(Value::as_str)
+            .map(h32)
+            .transpose()?
+            .ok_or(SdkError::Argument)?;
+        let nonce = session
+            .pointer("/record/nonce")
+            .and_then(Value::as_u64)
+            .ok_or(SdkError::Argument)?;
+        let mut with = Vec::new();
+        for a in adds {
+            let x = Add::from_json(a)?;
+            match kem_record(&mut rd, &x.ua, x.key_id) {
+                Some(r) => with.push((x, r)),
+                None => return rd.step(Err(SdkError::Argument)),
+            }
+        }
+        let g = from.inner.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(head) = g.head.as_ref() else {
+            return rd.step(Err(SdkError::from(scaas_ua::wallet::Error::Tree(
+                scaas_ua::wallet::tree_public::TreeError::Handle,
+            ))));
+        };
+        let built = self.scope(&seed)?.tree_prepare_pathless(
+            &PQCHAT_TREE,
+            PathlessInput {
+                parent: &prepared,
+                session_id: PQCHAT_TREE.session_id(&creator, nonce),
+                tree_id,
+                author: me,
+                leaf,
+                key_id,
+                kem: &kem,
+                adds: with,
+                info: info.as_deref().map(str::as_bytes),
+            },
+            head,
+            try_,
+        );
+        drop(g);
         let p = match built {
             Ok(p) => p,
             Err(e) => return rd.step(Err(e.into())),
@@ -1082,9 +1211,13 @@ impl AppCore {
                         tree::State::Followed => "followed".into(),
                         tree::State::NotFollowed(why) => format!("not followed: {why}"),
                         tree::State::Compromise => "compromise".into(),
+                        tree::State::AuthorDidNotHold => "author did not hold".into(),
                     },
                     k: e.k.take().map(|h| self.wrap(&seed, h)),
-                    info: e.info.map(|i| format!("{i:?}").to_lowercase()),
+                    info: e.info.map(|i| match i {
+                        tree::InfoTook::NotTaken => "not taken".into(),
+                        i => format!("{i:?}").to_lowercase(),
+                    }),
                     in_force: e.in_force.clone(),
                     flagged: e.flagged,
                 })
@@ -1100,7 +1233,24 @@ impl AppCore {
                     leaves_left: w.leaves_left.clone(),
                 })
                 .collect();
+            let suspects = r
+                .suspects
+                .iter()
+                .map(|w| PqTreeWarning {
+                    epoch: w.epoch,
+                    adds: w.adds.iter().map(|(l, u, k)| (*l, hex(u), *k)).collect(),
+                    removes: Vec::new(),
+                    admins_changed: false,
+                    leaves_left: w.leaves_left.clone(),
+                })
+                .collect();
             Arc::new(PqTreeReplay {
+                suspects,
+                review: r.review.clone(),
+                since_path: r.since_path,
+                path_bound: r.pin.tree.path_bound,
+                path_warning: r.path_warning,
+                holds_head: r.head.is_some(),
                 leaf: r.leaf,
                 join_epoch: r.join_epoch,
                 end_epoch: r.end_epoch,
@@ -1556,6 +1706,61 @@ fn pieces(
     })
 }
 
+/// The deferred cost of a run (the path-less delta §6.4, D-10): the next path commit carries about one ciphertext per leaf
+/// owed one (`sincePath` plus the warm nodes the Adds blanked); what those ciphertexts ask, from the chain's rows.
+pub fn deferred_cost(g: &PqTreeGas, owed_ciphertexts: u64) -> PqGas {
+    g.cts.per.times(owed_ciphertexts)
+}
+
+/// The planner's choice for an Adds-only change (the path-less delta §6.5, C46; F-5 by the owner's ruling of 2026-11-27):
+/// the path-less form only when the device holds the head's epoch, nothing is owed, no head admin is gone, the admin list and
+/// Removes do not change, the bound leaves room, no path commit of the device's own is staged on the head (another author's
+/// is not visible: the contract's order decides) and a `try` is left; otherwise a path commit with the Adds.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PqPathlessCheck {
+    pub holds_head: bool,
+    pub owed: u32,
+    pub gone_admin: bool,
+    pub admins_changed: bool,
+    pub removes: bool,
+    pub since_path: u32,
+    pub bound: u32,
+    pub adds: u32,
+    pub own_path_commit_staged: bool,
+    pub tries_left: bool,
+}
+
+impl PqPathlessCheck {
+    /// The path-less form is offered (`Ok`); else the reason the path form is built.
+    pub fn form(&self) -> Result<(), &'static str> {
+        if !self.holds_head {
+            return Err("the device does not hold the head's epoch");
+        }
+        if self.owed > 0 {
+            return Err("an exit is owed: the next commit honours it with a path");
+        }
+        if self.gone_admin {
+            return Err("a head admin is gone: dropping it keeps a path");
+        }
+        if self.admins_changed || self.removes {
+            return Err("an admin change or a Remove keeps a path");
+        }
+        if self.adds == 0 {
+            return Err("no Add");
+        }
+        if self.bound > 0 && self.since_path.saturating_add(self.adds) > self.bound {
+            return Err("the bound: the next Add carries a key refresh");
+        }
+        if self.own_path_commit_staged {
+            return Err("a key refresh is in progress");
+        }
+        if !self.tries_left {
+            return Err("no try is left");
+        }
+        Ok(())
+    }
+}
+
 /// `n` items in chunks of the most that fit one transaction each (B-9: the largest by a search on the monotone `gas`).
 fn chunk(
     txs: &mut Vec<PqTreeTx>,
@@ -1765,6 +1970,116 @@ pub fn create_cap(g: &PqTreeGas, l: PqLimits, signer: &str, admins: u64) -> u64 
 mod tests {
     use super::*;
 
+    /// The path-less delta §6.5 (C46; F-5 by the owner's ruling of 2026-11-27): the path-less form only when every condition
+    /// holds, each condition alone falling back to the path form by its reason; the creation review's line of the bound;
+    /// a path-less shape planned and split by the same rule as any commit (no list, no keys, the held piece a wrap).
+    #[test]
+    fn pathless_form_and_its_plan() {
+        let ok = PqPathlessCheck {
+            holds_head: true,
+            owed: 0,
+            gone_admin: false,
+            admins_changed: false,
+            removes: false,
+            since_path: 22,
+            bound: 24,
+            adds: 2,
+            own_path_commit_staged: false,
+            tries_left: true,
+        };
+        assert_eq!(ok.form(), Ok(()));
+        let no: [(PqPathlessCheck, &str); 9] = [
+            (
+                PqPathlessCheck {
+                    holds_head: false,
+                    ..ok
+                },
+                "the head's epoch",
+            ),
+            (PqPathlessCheck { owed: 1, ..ok }, "owed"),
+            (
+                PqPathlessCheck {
+                    gone_admin: true,
+                    ..ok
+                },
+                "gone",
+            ),
+            (
+                PqPathlessCheck {
+                    admins_changed: true,
+                    ..ok
+                },
+                "admin change",
+            ),
+            (
+                PqPathlessCheck {
+                    removes: true,
+                    ..ok
+                },
+                "Remove",
+            ),
+            (PqPathlessCheck { adds: 3, ..ok }, "the bound"),
+            (PqPathlessCheck { adds: 0, ..ok }, "no Add"),
+            (
+                PqPathlessCheck {
+                    own_path_commit_staged: true,
+                    ..ok
+                },
+                "in progress",
+            ),
+            (
+                PqPathlessCheck {
+                    tries_left: false,
+                    ..ok
+                },
+                "try",
+            ),
+        ];
+        for (c, why) in no {
+            assert!(c.form().is_err_and(|e| e.contains(why)), "{why}");
+        }
+        assert_eq!(
+            PqPathlessCheck {
+                bound: 0,
+                adds: 30,
+                ..ok
+            }
+            .form(),
+            Ok(()),
+            "bound 0 never forces"
+        );
+        assert_eq!(
+            refresh_line(0),
+            "key refresh never forced; the admins are warned after 20 added keys"
+        );
+        assert_eq!(
+            refresh_line(24),
+            "key refresh forced after 24 added keys; the admins are warned from 18"
+        );
+        assert_eq!(PATH_REFRESH_BOUND_DEFAULT, 20);
+        let g = rows();
+        let pathless = PqCommitShape {
+            changes: 20,
+            adds: 20,
+            cts: 0,
+            keys: 0,
+            ..plain()
+        };
+        let p = plan_commit(&g, L60, "mldsa65", &pathless).unwrap();
+        assert!(
+            p.txs.iter().all(|t| !t.entry.starts_with("addPath")),
+            "{p:?}"
+        );
+        assert!(
+            split_adds(&g, L60, "mldsa65", &pathless)
+                .unwrap()
+                .iter()
+                .sum::<u64>()
+                == 20
+        );
+        assert_eq!(deferred_cost(&g, 3), g.cts.per.times(3));
+    }
+
     fn rows() -> PqTreeGas {
         serde_json::from_str(include_str!("../gas/pqchat-tree.json")).unwrap()
     }
@@ -1828,7 +2143,9 @@ mod tests {
             )
             .unwrap()
             .regular,
-            16_310_179
+            // the path-less delta P4's rows (gas/pqchat-tree.json regenerated: the record's two fields): 16,310,179 ->
+            // 16,314,102, under the margined cap 16,357,786
+            16_314_102
         );
         let sixteen = PqCommitShape {
             adds: 16,
