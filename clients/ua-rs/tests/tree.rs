@@ -3010,3 +3010,57 @@ fn tree_resume_twice_keeps_the_keys_and_the_info() {
     }
     assert_eq!(more.info_to_seal(), full.info_to_seal());
 }
+
+// ------------------------------------------------------------------ the path-less operation's handle (the path-less delta §6.5)
+
+/// claude-19: the path-less operation on a handle of another parent is `TreeHandle`, nothing built; the device's handle of
+/// the head it replayed builds. The handle's `next` is the replay's head only (every row's `head` compared in `replay_row`:
+/// none for a device that did not follow the head or whose period ended).
+#[test]
+fn tree_pathless_handle_of_another_parent() {
+    let v = pq("tree-secrets");
+    let (_w, keys) = keys();
+    let world = World::new(&v);
+    let s = v["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["name"] == "pathless")
+        .unwrap();
+    let mut differs = Vec::new();
+    let mut home = scenario(&keys, &v, &world, s, &mut differs, Some(3));
+    let (d, kem) = &world.devices["A"];
+    let dev = TreeDevice {
+        ua: a32(&d["ua"]),
+        key_id: u(&d["keyId"]),
+        kem,
+    };
+    let old = keys.tree_replay(SC, &mut home, &dev, None, 0).unwrap().unwrap();
+    let step6 = &s["steps"][5]["record"];
+    let add = Add::from_json(&step6["adds"][0]).unwrap();
+    let input = |prep| PathlessInput {
+        parent: prep,
+        session_id: a32(&step6["sessionId"]),
+        tree_id: a32(&step6["treeId"]),
+        author: dev.ua,
+        leaf: 0,
+        key_id: dev.key_id,
+        kem,
+        adds: vec![(add.clone(), world.record(&add.ua, add.key_id))],
+        info: None,
+    };
+    home.land_commit(&s["steps"][3]);
+    let prep = tree_prepare(SC, &mut home, None).unwrap();
+    let mut rand = |x: &str, n: usize| Ok(rnd(&format!("t/handle/{x}"), n));
+    let hd = old.head.as_ref().expect("the head's handle");
+    assert_eq!(
+        code(keys.vectors_tree_prepare_pathless(SC, input(&prep), hd, 0, None, &mut rand)),
+        "TreeHandle"
+    );
+    let now = keys.tree_replay(SC, &mut home, &dev, None, 0).unwrap().unwrap();
+    let hd = now.head.as_ref().expect("the head's handle");
+    assert_eq!(hd.epoch_id, prep.parent_epoch_id());
+    assert!(keys
+        .vectors_tree_prepare_pathless(SC, input(&prep), hd, 0, None, &mut rand)
+        .is_ok());
+}
