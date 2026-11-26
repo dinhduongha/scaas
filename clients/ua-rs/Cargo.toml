@@ -96,7 +96,7 @@ getrandom = { version = "=0.2.17", features = ["js"], optional = true }
 # ua-rs-sign T8: the link window clock (`js_sys::Date::now`; `SystemTime::now` panics on wasm32-unknown-unknown)
 js-sys = { version = "=0.3.107", optional = true }
 # feature `pq` on wasm32 (owner 2026-11-26, CLI-UAL-66): Falcon-padded-512 / -1024 key pairs, signatures and verification through
-# falcon-rs 0.3.1 (lattice-safe, MIT, the round-3 port), vendored as published in vendor/falcon-rs-0.3.1 at the repository root (its VENDORED.md), in
+# falcon-rs 0.3.1 (lattice-safe, MIT, the round-3 port), vendored as published in vendor/falcon-rs-0.3.1 at the repository root (scripts/vendor.sh; vendor/falcon-rs-0.3.1.VENDORED.md), in
 # src/falcon/soft.rs; native builds keep the vendored PQClean (build.rs). `fpemu` (controller 2026-11-26): integer IEEE-754
 # emulation instead of hardware f64 + libm::sqrt, PQClean clean's approach (libm 0.2, MIT, stays: a fixed dependency of the
 # package, unused under `fpemu`). No `std` (getrandom 0.2 is not taken: every call passes its own seed and randomness).

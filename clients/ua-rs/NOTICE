@@ -12,8 +12,8 @@ their MIT or Apache-2.0 terms; their notices are carried by the crates themselve
 -------------------------------------------------------------------------------------------------------------------
 1. PQClean Falcon (C, compiled in with feature `pq`: vendored in the repository's vendor/pqclean-falcon-seeded, MD-8, ua-rs-sign T3b)
 -------------------------------------------------------------------------------------------------------------------
-  - crypto_sign/falcon-padded-{512,1024}/clean (from pqcrypto-falcon 0.4.1; symbols renamed by vendor.sh) and
-    seeded.c (PQClean's pqclean.c with the randomness passed in): MIT licence, "Copyright (c) 2017-2019 Falcon
+  - crypto_sign/falcon-padded-{512,1024}/clean (from pqcrypto-falcon 0.4.1; symbols renamed by scripts/vendor.sh) and
+    vendor/pqclean-falcon-seeded.local/seeded.c (PQClean's pqclean.c with the randomness passed in): MIT licence, "Copyright (c) 2017-2019 Falcon
     Project", written by Thomas Pornin (vendor/pqclean-falcon-seeded/LICENSE at the repository root). Its LICENSE file also carries a
     statement about a patent; it is reproduced with the licence text in full.
   - common/fips202.{c,h} (from pqcrypto-internals 0.2.11; symbols renamed): based on public-domain implementations

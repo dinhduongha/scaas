@@ -538,6 +538,33 @@ the runner restored `js.rs` only after the test returned, so a killed run left i
 the held slot. A baseline is one more run per command.
 **Source.** Owner 2026-11-24, verbatim "Có, sửa mutant đi" (yes, fix the mutant runners).
 
+<a id="ARCH-POS-24"></a>
+### ARCH-POS-24 — Third-party sources live in `vendor/`, git-ignored, fetched and checked by `scripts/vendor.sh`
+- old: — · status: current · owner: yes · date: 2026-11-26 · normative: decisions.md#ARCH-POS-24 · superseded-by: —
+
+**Rule.** Every third-party source the repository builds or runs lives in the root `vendor/`, one directory per package at
+an exact published version, and is not in git (`/vendor/*/` in the root `.gitignore`; history keeps what was committed
+before). `scripts/vendor.sh install` fetches each package (the `.crate` from the cargo cache or crates.io), checks the
+archive's sha256 against its pin before unpacking it in a fresh temporary directory, applies only the steps the script names
+(the PQClean symbol rename) and writes the directory whole; `scripts/vendor.sh check` requires each directory's git tree id
+(`git write-tree` over every file, ignore rules off) to equal its pin and fails closed with a named reason
+(`MISSING`, `MISMATCH`, `CRATE_SHA256_MISMATCH`, `TREE_MISMATCH`, `SYMLINK_FAILS_CHECK`). What SCaaS writes stays tracked
+beside the package: `vendor/README.md`, `vendor/<name>.VENDORED.md` (source, pins, use, audit status) and `vendor/<name>.local/`
+(our own source built with it). CI runs `install` then `check` before every job that builds `ua-rs` or a crate over it. A
+new version is a new directory and pin row, never an edit in place.
+
+**Status.** BUILT for `falcon-rs-0.3.1` and `pqclean-falcon-seeded` (group `core`; `seeded.c` moved unchanged to
+`vendor/pqclean-falcon-seeded.local/`, the old `vendor/pqclean-falcon-seeded/vendor.sh` folded into `scripts/vendor.sh`),
+UNAUDITED tooling. PLANNED, timing open with the owner: the forge libraries (`smartcontracts/evm/lib` by `scripts/evm_libs.sh`
+today), the lazer clone of the pqz-core KAT scripts and the lattice estimators of `pqz-core/pqzl/params`.
+**Why.** Third-party code in the tree read as ours in diffs, the format and secret scans and reviews, and nothing re-checked it
+against the published package (audit finding FR-3, [record](audit/audited/vendor-falcon-rs.md)). One script with pins, as
+`scripts/evm_libs.sh` already did for the forge libraries, gives the same bytes everywhere and a check CI runs.
+**Cost if wrong.** A build needs the network or a cargo cache once per clone; `cargo` refuses a missing `path` dependency even
+behind a feature that is off, so a crate over `ua-rs` does not build before `install`. crates.io removing a version would stop a
+fresh install (the sha256 pin still names the bytes).
+**Source.** Owner 2026-11-26 (chat), verbatim "Thêm vendor vào .gitignore" (add vendor to .gitignore); asked how, the owner chose ignore plus a fetch script with pins, as `smartcontracts/evm/lib` and `scripts/evm_libs.sh`; then "Vì sao ignore: Tất cả vendor repo đều nên đưa vào vendor/" (why ignore: every vendor repository should go into vendor/).
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 

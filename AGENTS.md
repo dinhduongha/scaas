@@ -20,7 +20,7 @@ when mainnet 22776 launches, which only the owner may touch.
 | `clients/` | `clientkeys` (JS reference), `ua-{rs,c,cxx,qt,cs,py,go,dart,dart-frb}`, `zether-prover` | one per language |
 | `docs/` | Rules by component, `decisions.md`, `research/`, `history/` | `scripts/docs_check.py` |
 | `*/legacy/` | Superseded code, not built | do not edit |
-| `vendor/` | Third-party sources, unedited: `pqclean-falcon-seeded` (`ua-rs` natively), `falcon-rs-0.3.1` (`ua-rs` on wasm32); see `vendor/README.md` | do not edit; not formatted |
+| `vendor/` | Third-party sources, unedited and git-ignored: `pqclean-falcon-seeded` (`ua-rs` natively), `falcon-rs-0.3.1` (`ua-rs` on wasm32); ours beside them tracked (`README.md`, `*.VENDORED.md`, `*.local/`) | `scripts/vendor.sh install`, then `check`; do not edit; not formatted |
 | `TODO.md`, `COMPLETED.md` | Work order, done work | |
 | `.agents/skills/` | Agent skills: `scaas-review` (any spec or code review), `scaas-audit` (an AI audit round). Codex, Gemini and Copilot read this path; Claude Code reads it through the committed link `.claude/skills` | |
 
@@ -192,8 +192,8 @@ Oversized jobs get the terminal killed by `systemd-oomd`, and every agent with i
 - Never wait with `until`, `sleep` loops or `pgrep -f`: such a loop matches itself and hangs. Leave no background shell or `anvil`.
 - Rust 1.97.1 from the root `rust-toolchain.toml` for every crate; override with `RUSTUP_TOOLCHAIN` (CI: `RUST_TOOLCHAIN`). NEAR is
   capped by cargo-near, so going above 1.97.1 needs a NEAR check first (ARCH-POS-12).
-- A fresh worktree needs git-ignored inputs as real directories, not symlinks: `smartcontracts/evm/lib`, `clients/clientkeys/node_modules`,
-  `smartcontracts/algorand/out`.
+- A fresh worktree needs git-ignored inputs as real directories, not symlinks: `vendor/` (`scripts/vendor.sh install`, then
+  `check`; every crate over `ua-rs` needs it), `smartcontracts/evm/lib`, `clients/clientkeys/node_modules`, `smartcontracts/algorand/out`.
 
 ## Traps
 

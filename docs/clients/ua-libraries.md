@@ -250,8 +250,9 @@ Sizes per target and cell, and the timing still to come: [CLI-UAL-43](#CLI-UAL-4
 the vendored PQClean.** PQClean's C needs a libc that `wasm32-unknown-unknown` lacks, and a missing primitive never disables a
 kind ([ARCH-POS-18](../decisions.md#ARCH-POS-18)). With feature `pq` on wasm32, `src/falcon.rs` routes `keypair`, `sign` and
 `verify` to `src/falcon/soft.rs`, after the same length checks as PQClean's path: falcon-rs 0.3.1 (MIT, a port of the round-3
-reference), vendored as published in the repository's `vendor/falcon-rs-0.3.1/` (its `VENDORED.md`: the crate's sha256, the
-upstream commit) beside `vendor/pqclean-falcon-seeded/`, a `path` dependency with `default-features = false` (no `std`, no
+reference), vendored as published in the repository's `vendor/falcon-rs-0.3.1/` (installed and checked by `scripts/vendor.sh`,
+not committed; its record `vendor/falcon-rs-0.3.1.VENDORED.md`: the crate's sha256, the tree id, the upstream commit) beside
+`vendor/pqclean-falcon-seeded/`, a `path` dependency with `default-features = false` (no `std`, no
 getrandom) and `fpemu`. `fpemu` is the crate's integer IEEE-754 emulation (PQClean clean's approach) in place of its default
 backend, hardware `f64` and `libm::sqrt`, whose timing may depend on values; that `fpemu` runs in constant time is the crate's
 claim, not measured here (libm stays in the graph, a fixed dependency of the package, unused under `fpemu`). The key pair of the

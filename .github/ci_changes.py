@@ -23,18 +23,22 @@ SC = ["smartcontracts/scripts/", "smartcontracts/vectors/"]
 RT = ["rust-toolchain.toml"]
 # ua-rs and every crate it builds (ua-rs-sign T18): scaas-ct, zether-prover (the Zether facade), pqz-ffi, pqzl, pqz-stmt, Ligero
 # and the parameter sets (the PQZ facade, MD-5); a job over ua-rs reads them all; vendor/ (the third-party sources it builds:
-# PQClean Falcon natively, falcon-rs 0.3.1 on wasm32, CLI-UAL-66)
-UARS = [
-    "clients/ua-rs/",
-    "vendor/",
-    "clients/scaas-ct/",
-    "clients/zether-prover/",
-    "pqz-core/ffi/",
-    "pqz-core/pqzl/",
-    "pqz-core/stmt/",
-    "pqz-core/pqzh/",
-    "pqz-core/params/",
-] + RT
+# PQClean Falcon natively, falcon-rs 0.3.1 on wasm32, CLI-UAL-66) and scripts/vendor.sh, which installs and checks it (ARCH-POS-24)
+VENDOR = ["vendor/", "scripts/vendor.sh"]
+UARS = (
+    [
+        "clients/ua-rs/",
+        "clients/scaas-ct/",
+        "clients/zether-prover/",
+        "pqz-core/ffi/",
+        "pqz-core/pqzl/",
+        "pqz-core/stmt/",
+        "pqz-core/pqzh/",
+        "pqz-core/params/",
+    ]
+    + VENDOR
+    + RT
+)
 JOBS = {
     "contract-evm": ["smartcontracts/evm/"] + SC + ["pqz-core/params/", "scripts/size_gate.py", "scripts/evm_libs.sh"],
     "contract-soroban": ["smartcontracts/soroban/"] + SC + RT,
@@ -46,9 +50,9 @@ JOBS = {
     "contract-sui": ["smartcontracts/move/sui/"] + SC,
     "contract-cosmos": ["smartcontracts/cosmos/"] + SC + RT,
     "contract-ton": ["smartcontracts/ton/"] + SC,
-    "node": ["scaas-node/", "clients/ua-rs/", "clients/scaas-rpc/", "smartcontracts/"] + RT,
+    "node": ["scaas-node/", "clients/ua-rs/", "clients/scaas-rpc/", "smartcontracts/"] + VENDOR + RT,
     # the network crate and the depth scan it takes from ua-rs (json)
-    "scaas-rpc": ["clients/scaas-rpc/", "clients/ua-rs/"] + RT,
+    "scaas-rpc": ["clients/scaas-rpc/", "clients/ua-rs/"] + VENDOR + RT,
     "docs": [""],
     "clientkeys": ["clients/clientkeys/", "smartcontracts/", "scaas-node/src/"],
     # the directories the pqz job builds and tests (pqzl, ffi, stmt, pqzh/ligero, params, fuzz); pqz-core/nethermind/ (chain
@@ -87,6 +91,7 @@ JOBS = {
         "scaas-node/Cargo.toml",
         "scaas-node/Cargo.lock",
     ]
+    + VENDOR
     + RT,
     "ua-dart": ["clients/ua-dart/", "smartcontracts/vectors/", "smartcontracts/evm/"],
     # the SDK (plan T20) and what it builds: ua-rs, scaas-rpc, zether-prover, pqz-core's crates, the vectors and gas tables it reads
@@ -132,7 +137,9 @@ JOBS = {
     "keystore-vectors": ["clients/scaas-sdk/", "clients/clientkeys/", "smartcontracts/vectors/keystore/"] + UARS,
     # ARCH-POS-13 (ua-rs-sign T15c2): no test feature in a production artifact; every manifest that can reach scaas-ua,
     # zether-prover or pqz-ffi
-    "test-features": ["clients/", "pqz-core/ffi/", "scaas-node/Cargo.toml", "scripts/check_test_features.py"] + RT,
+    "test-features": ["clients/", "pqz-core/ffi/", "scaas-node/Cargo.toml", "scripts/check_test_features.py"]
+    + VENDOR
+    + RT,
 }
 # ci-full-<group>: the jobs a label or a manual run forces on; ci-full: every job.
 GROUPS = {

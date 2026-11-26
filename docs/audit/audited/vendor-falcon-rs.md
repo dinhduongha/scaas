@@ -15,8 +15,8 @@ changed after its round is `UNAUDITED` again), [ARCH-POS-22](../../review.md#ARC
 
 | | |
 |---|---|
-| Code | [`vendor/falcon-rs-0.3.1/`](../../../vendor/falcon-rs-0.3.1/VENDORED.md) (crates.io `falcon-rs` 0.3.1, MIT; features `default-features = false, fpemu`; used by `ua-rs` on `wasm32-unknown-unknown` only) and the `ua-rs` glue: `clients/ua-rs/src/falcon/soft.rs`, `src/falcon.rs`, `build.rs` / `Cargo.toml` routing, `src/wallet/pqsign.rs`, the gate tests `tests/fndsa_vrfy.rs`, `tests/fndsa/` |
-| Reference | the round-3 C in `vendor/pqclean-falcon-seeded/` (PQClean `falcon-padded-512` / `-1024`, `seeded.c`), function by function |
+| Code | `vendor/falcon-rs-0.3.1/` ([its record](../../../vendor/falcon-rs-0.3.1.VENDORED.md); installed by `scripts/vendor.sh`, not committed since 2026-11-26) (crates.io `falcon-rs` 0.3.1, MIT; features `default-features = false, fpemu`; used by `ua-rs` on `wasm32-unknown-unknown` only) and the `ua-rs` glue: `clients/ua-rs/src/falcon/soft.rs`, `src/falcon.rs`, `build.rs` / `Cargo.toml` routing, `src/wallet/pqsign.rs`, the gate tests `tests/fndsa_vrfy.rs`, `tests/fndsa/` |
+| Reference | the round-3 C in `vendor/pqclean-falcon-seeded/` (PQClean `falcon-padded-512` / `-1024`) and `seeded.c` (since 2026-11-26 in `vendor/pqclean-falcon-seeded.local/`), function by function |
 | Commit | `5120ac3c5cfc671217bb561f5e9834c15ec02dd3` (branch `ua-rs-wasm-fndsa`); git tree id of `vendor/falcon-rs-0.3.1` there: `57a1aa39f980835a94100cf0b0d81bf8b221752e` |
 | Reviewer | Fable (model `claude-fable-5-2`, effort as the harness default), 2026-11-26, one read-only agent |
 | Method | reading only: no build, test, benchmark or timing run; every constant-time statement below is by reading the source |
@@ -38,7 +38,7 @@ Confirmed by reading:
 
 | id | sev | where | finding | fix | state |
 |---|---|---|---|---|---|
-| FR-3 | P2 | `vendor/falcon-rs-0.3.1/VENDORED.md`; `clients/ua-rs/Cargo.lock` (a `path` entry has no checksum) | nothing re-checks the vendored tree against the published package | a `vendor.sh` that fetches the `.crate`, checks its sha256 and diffs the tree, run in CI; record the git tree id in `VENDORED.md` | open |
+| FR-3 | P2 | `vendor/falcon-rs-0.3.1/VENDORED.md`; `clients/ua-rs/Cargo.lock` (a `path` entry has no checksum) | nothing re-checks the vendored tree against the published package | a `vendor.sh` that fetches the `.crate`, checks its sha256 and diffs the tree, run in CI; record the git tree id in `VENDORED.md` | fixed by `scripts/vendor.sh check` in CI at COMMIT_FR3: the crate's sha256 before unpacking, the tree id `315fb462…` of the installed directory, and the audit's tree `57a1aa39…` recomputed as that tree plus the audit-time `VENDORED.md` ([ARCH-POS-24](../../decisions.md#ARCH-POS-24)) |
 | FR-4 | P2 | `clients/ua-rs/tests/fndsa/wasm/run.sh`; `.github/workflows/ci.yml` | the wasm32 gate (the code that ships) runs by hand only | a CI job with the wasm-bindgen + Node the JS job has | open |
 | FR-5 | P2 | `clients/ua-rs/tests/fndsa/sign.rs` | seed -> key-pair equality native vs wasm32 rests on 24 key pairs; rare key-generation restart branches untested | a parity test over at least 1,000 seeds per degree | open |
 | FR-1 | P3 | `vendor/falcon-rs-0.3.1/src/fpr/emu.rs` `fpr_expm_p63` | the reference's Horner form in emulated floats, where PQClean clean uses 64-bit fixed point: the same `(sk, msg, rnd)` gives a different, equally valid signature with probability about 2^-39 per signature; key pairs unaffected | state the caveat beside "byte-equal to PQClean" in `soft.rs` and CLI-UAL-66 | open |

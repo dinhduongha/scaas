@@ -518,6 +518,13 @@ jobs:
         working-directory: clients/scaas-rpc
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -549,6 +556,13 @@ jobs:
         working-directory: scaas-node
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -692,6 +706,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -916,6 +937,13 @@ jobs:
         working-directory: clients/ua-rs
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -954,6 +982,13 @@ jobs:
         working-directory: clients/ua-rs
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -985,6 +1020,13 @@ jobs:
             os: macos-latest
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1027,6 +1069,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1063,6 +1112,13 @@ jobs:
         working-directory: clients/ua-cxx
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1088,6 +1144,13 @@ jobs:
         working-directory: clients/ua-c
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1117,6 +1180,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1146,6 +1216,13 @@ jobs:
         working-directory: clients/ua-py
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1173,6 +1250,13 @@ jobs:
         working-directory: clients/ua-go
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1205,6 +1289,13 @@ jobs:
         working-directory: clients/ua-cs/Scaas.Ua.Tests
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1230,6 +1321,13 @@ jobs:
         working-directory: clients/ua-dart-frb
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1257,6 +1355,13 @@ jobs:
         working-directory: clients/scaas-sdk
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1320,6 +1425,13 @@ jobs:
         working-directory: clients/scaas-sdk
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1340,6 +1452,13 @@ jobs:
         working-directory: clients/scaas-cli
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1364,6 +1483,13 @@ jobs:
         working-directory: clients/pqvault-core
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1391,6 +1517,13 @@ jobs:
         working-directory: clients/pqchat-core
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -1433,6 +1566,13 @@ jobs:
         lang: ${{ fromJSON(needs.changes.outputs.scaas_sdk_bind_langs) }}
     steps:
       - uses: actions/checkout@v4
+      # vendor/ is not committed: fetch the pinned packages and check their trees (ARCH-POS-24, scripts/vendor.sh); cargo needs
+      # vendor/falcon-rs-0.3.1 for every crate over ua-rs, vendor/pqclean-falcon-seeded for ua-rs's native pq build
+      - name: vendor/ at its pins
+        working-directory: .
+        run: |
+          scripts/vendor.sh install
+          scripts/vendor.sh check
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
