@@ -2550,6 +2550,141 @@ pub(crate) mod tests {
         latest: Option<u64>,
         /// T21 L80: `eth_sendRawTransaction` fails (a transport error; nothing recorded).
         send_down: bool,
+        /// Plan T8 (C37 at the submit level): a `PqChat` tree commit's state, as each sent transaction lands it at once
+        /// (`None`: no tree views).
+        tree: Option<FakeTree>,
+    }
+
+    /// What of one tree commit is in the fake's state (every block the same: `latest` = final), and every tree transaction
+    /// sent as `(entry, ciphertexts and wraps it carries)`.
+    #[derive(Default)]
+    struct FakeTree {
+        /// The whole commit (any ciphertext in it) estimates above 2^24: it does not fit one transaction.
+        whole_over: bool,
+        record: bool,
+        list: bool,
+        keys: bool,
+        cts: Vec<bool>,
+        wraps: Vec<bool>,
+        sent: Vec<(String, usize)>,
+    }
+
+    /// A `PqChat` write's entry and named args, as the node's rows read the calldata.
+    fn tree_args(input: &[u8]) -> Option<(String, Value)> {
+        let op = crate::typed::call_op("pqchat", TOKEN, input, "0").ok()?;
+        Some((op["entry"].as_str()?.to_string(), op["args"].clone()))
+    }
+
+    /// The fake's answer to a tree view (`None`: not one).
+    fn tree_view(t: &FakeTree, input: &[u8]) -> Option<Result<Value, Value>> {
+        use crate::abi::IPqChatTree as T;
+        use alloy::sol_types::SolCall;
+        let sel = input.get(..4)?;
+        let hex = |b: Vec<u8>| Ok(json!(format!("0x{}", alloy::hex::encode(b))));
+        let idx = |i: usize| {
+            input
+                .get(36..68)
+                .map_or(0, |w| U256::from_be_slice(w).to::<usize>())
+                == i
+        };
+        let at = |v: &[bool]| (0..v.len()).any(|i| idx(i) && v[i]);
+        let revert = || Err(err(3, "execution reverted", Some("0x".into())));
+        Some(if sel == T::commitOfCall::SELECTOR {
+            if !t.record {
+                return Some(revert());
+            }
+            hex(T::commitOfCall::abi_encode_returns(&T::commitOfReturn {
+                c: crate::abi::PqChatCommit {
+                    sessionId: B256::ZERO,
+                    author: B256::ZERO,
+                    nonce: 0,
+                    epoch: 0,
+                    parentEpochId: B256::ZERO,
+                    treeId: B256::ZERO,
+                    parentTreeHash: B256::ZERO,
+                    leaf: 0,
+                    keyId: 0,
+                    leaves: 0,
+                    admins: vec![],
+                    removes: vec![],
+                    adds: vec![],
+                    wrapHashes: vec![],
+                    nodeKeyHashes: vec![],
+                    ctCount: 0,
+                    ctListHash: B256::ZERO,
+                    treeHash: B256::ZERO,
+                    sealedInfo: Bytes::new(),
+                },
+                sigHash: B256::ZERO,
+            }))
+        } else if sel == T::pathListOfCall::SELECTOR {
+            hex(T::pathListOfCall::abi_encode_returns(
+                &T::pathListOfReturn {
+                    ctTargets: if t.list { vec![0] } else { vec![] },
+                    ctHashes: vec![],
+                },
+            ))
+        } else if sel == T::pathKeysCall::SELECTOR {
+            hex(T::pathKeysCall::abi_encode_returns(&if t.keys {
+                vec![Bytes::from(vec![1u8])]
+            } else {
+                vec![]
+            }))
+        } else if sel == T::pathCtAtCall::SELECTOR {
+            let mlkem = if at(&t.cts) { vec![1u8] } else { vec![] };
+            hex(T::pathCtAtCall::abi_encode_returns(&crate::abi::PathCt {
+                mlkemCt: mlkem.into(),
+                x25519Eph: B256::ZERO,
+                sealedSecret: Bytes::new(),
+            }))
+        } else if sel == T::wrapAtCall::SELECTOR {
+            let mlkem = if at(&t.wraps) { vec![1u8] } else { vec![] };
+            hex(T::wrapAtCall::abi_encode_returns(&crate::abi::Wrap {
+                member: B256::ZERO,
+                keyId: 0,
+                mlkemCt: mlkem.into(),
+                x25519Eph: B256::ZERO,
+                sealedKey: Bytes::new(),
+            }))
+        } else {
+            return None;
+        })
+    }
+
+    /// A sent tree transaction lands in the fake's state at once.
+    fn tree_land(t: &mut FakeTree, input: &[u8]) {
+        let Some((entry, a)) = tree_args(input) else {
+            return;
+        };
+        let n = |k: &str| a[k].as_array().map_or(0, Vec::len);
+        let first = |k: &str| {
+            a[k].as_u64()
+                .map(|x| x as usize)
+                .or_else(|| a[k].as_str().and_then(|x| x.parse().ok()))
+                .unwrap_or(0)
+        };
+        match entry.as_str() {
+            "commit" => {
+                t.record = true;
+                if n("cts") > 0 || n("wraps") > 0 {
+                    (t.list, t.keys) = (true, true);
+                    t.cts
+                        .iter_mut()
+                        .chain(t.wraps.iter_mut())
+                        .for_each(|x| *x = true);
+                }
+            }
+            "addPathList" => t.list = true,
+            "addPathKeys" => t.keys = true,
+            "addPath" => {
+                (first("firstCt")..first("firstCt") + n("cts")).for_each(|i| t.cts[i] = true)
+            }
+            "addWraps" => {
+                (first("first")..first("first") + n("wraps")).for_each(|i| t.wraps[i] = true)
+            }
+            _ => {}
+        }
+        t.sent.push((entry, n("cts") + n("wraps")));
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -2589,6 +2724,11 @@ pub(crate) mod tests {
                 // Nethermind 2.2.0's estimate-stage answer for a call over 2^24 regular gas (at its 100 M RPC gas cap)
                 "eth_estimateGas" if e.sim == Some("estimate_oog") => Err(err(-32000, "gas required exceeds allowance (100000000)", None)),
                 "eth_estimateGas" if e.sim == Some("estimate_down") => Err(err(-32000, "upstream timeout", None)),
+                "eth_estimateGas" if e.tree.as_ref().is_some_and(|t| t.whole_over) && {
+                    let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
+                    tree_args(&alloy::hex::decode(&input[2..]).unwrap())
+                        .is_some_and(|(en, a)| en == "commit" && a["cts"].as_array().is_some_and(|c| !c.is_empty()))
+                } => Ok(json!(format!("{:#x}", 30_000_000u64))),
                 "eth_estimateGas" => Ok(json!(format!("{:#x}", e.estimate.unwrap_or(0x30000)))),
                 "eth_getTransactionByHash" if e.tx_err => Err(err(-32000, "upstream timeout", None)),
                 "eth_getTransactionByHash" => Ok(e.tx_gas.map_or(Value::Null, |g| {
@@ -2646,6 +2786,12 @@ pub(crate) mod tests {
                     b["hash"] = json!(format!("{:#x}", B256::from(U256::from(UID))));
                     Ok(b)
                 }
+                // plan T8: the tree test's reads at the final block name it, then read its header (one block, `latest` = final)
+                "eth_getBlockByNumber" if e.tree.is_some() => {
+                    let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                    b["number"] = json!("0x10");
+                    Ok(b)
+                }
                 "eth_getBlockByNumber" => Ok(Value::Null),
                 "eth_getCode" => {
                     let a: Address = p[0].as_str().unwrap().parse().unwrap();
@@ -2653,6 +2799,13 @@ pub(crate) mod tests {
                     Ok(json!(if a == PQZ_KEY0 || a == PQZ_KEY1 { format!("0x00{}", "42".repeat(4 + usize::from(e.pqz_other_len && a == PQZ_KEY1))) }
                              else if e.designator == Some(a) { format!("0xef0100{}", "55".repeat(20)) }
                              else if e.contract_signer || e.code_only == Some(a) { "0x6001".into() } else { "0x".into() }))
+                }
+                "eth_call" if e.tree.as_ref().is_some_and(|t| {
+                    let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
+                    tree_view(t, &alloy::hex::decode(&input[2..]).unwrap()).is_some()
+                }) => {
+                    let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
+                    tree_view(e.tree.as_ref().unwrap(), &alloy::hex::decode(&input[2..]).unwrap()).unwrap()
                 }
                 "eth_call" => {
                     let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
@@ -2848,6 +3001,9 @@ pub(crate) mod tests {
                     let tx = TxEnvelope::decode_2718(&mut raw.as_slice()).unwrap();
                     let h = *tx.tx_hash();
                     e.sent.push((h, tx.to().unwrap(), tx.input().clone()));
+                    if let Some(t) = e.tree.as_mut() {
+                        tree_land(t, tx.input());
+                    }
                     e.gas.push(tx.gas_limit());
                     e.fees.push(tx.max_fee_per_gas());
                     Ok(json!(format!("{h:#x}")))
@@ -3000,6 +3156,96 @@ pub(crate) mod tests {
         s.poll_outbox().await;
         assert_eq!(states(&o), ["signed", "broadcast"]);
         (s, rpc, o, set)
+    }
+
+    /// Plan T8 (CTR-CHAT-27, C37 at the submit level, a fake chain): a tree commit job whose whole set does not fit one
+    /// transaction goes as the record alone, then the list, then the node keys, then the other ciphertexts and wraps, then
+    /// the held ciphertext alone, each only once the state shows the one before; then `consumed`, nothing `dead`. Control:
+    /// the same job that fits goes whole, one transaction.
+    #[tokio::test]
+    async fn a_tree_commit_job_lands_in_c37_order_on_a_fake_chain() {
+        let set = crate::tree_set::tests::sets()
+            .into_iter()
+            .find(|a| {
+                let n = |k: &str| a[k].as_array().map_or(0, Vec::len);
+                n("cts") > 2 && n("nodeKeys") > 0 && n("wraps") > 0
+            })
+            .map(|mut a| {
+                a.as_object_mut().unwrap().remove("epochId"); // the vectors' id, no field of `commit`
+                a
+            })
+            .expect("a scenario commit with ciphertexts, node keys and wraps");
+        let (cts, adds) = (
+            set["cts"].as_array().unwrap().len(),
+            set["wraps"].as_array().unwrap().len(),
+        );
+        for over in [true, false] {
+            let (url, rpc) = fake_evm(Evm {
+                tree: Some(FakeTree {
+                    whole_over: over,
+                    cts: vec![false; cts],
+                    wraps: vec![false; adds],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })
+            .await;
+            let (external_pull, o) = fake_external_pull(Fake {
+                tokens: toks(),
+                ..Default::default()
+            })
+            .await;
+            let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
+            let op = json!({"entry": "commit", "contract": "pqchat", "token": format!("{TOKEN:#x}"),
+                "validUntil": (now() + 300).to_string(), "args": set});
+            let (w, _) = work_of_op(Some(9), &op, None).unwrap();
+            for _ in 0..12 {
+                if states(&o).iter().any(|x| x == "consumed") {
+                    break;
+                }
+                s.tree(w.clone(), None, "commit").await;
+                let hashes: Vec<B256> = rpc.lock().unwrap().sent.iter().map(|x| x.0).collect();
+                hashes.into_iter().for_each(|h| {
+                    rpc.lock().unwrap().receipts.insert(h, true);
+                });
+                s.track().await;
+            }
+            let st = states(&o);
+            assert!(
+                st.iter().any(|x| x == "consumed") && !st.iter().any(|x| x == "dead"),
+                "over {over}: {st:?}"
+            );
+            let sent = rpc.lock().unwrap().tree.as_ref().unwrap().sent.clone();
+            let names: Vec<&str> = sent.iter().map(|x| x.0.as_str()).collect();
+            if !over {
+                assert_eq!(
+                    sent,
+                    [("commit".to_string(), cts + adds)],
+                    "the whole set in one transaction"
+                );
+                continue;
+            }
+            assert_eq!(
+                &names[..3],
+                ["commit", "addPathList", "addPathKeys"],
+                "{sent:?}"
+            );
+            assert_eq!(sent[0].1, 0, "the record alone first: {sent:?}");
+            assert_eq!(
+                sent.last(),
+                Some(&("addPath".to_string(), 1)),
+                "the held ciphertext last and alone: {sent:?}"
+            );
+            let carried: usize = sent.iter().map(|x| x.1).sum();
+            assert_eq!(
+                carried,
+                cts + adds,
+                "every ciphertext and wrap once: {sent:?}"
+            );
+            let t = rpc.lock().unwrap();
+            let t = t.tree.as_ref().unwrap();
+            assert!(t.record && t.list && t.keys && t.cts.iter().chain(&t.wraps).all(|x| *x));
+        }
     }
 
     fn states(o: &Shared) -> Vec<String> {

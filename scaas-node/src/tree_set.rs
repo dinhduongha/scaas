@@ -484,7 +484,7 @@ pub fn piece(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn rows(name: &str) -> Value {
@@ -507,7 +507,7 @@ mod tests {
     }
 
     /// Every commit step of `tree-secrets.json`'s scenarios as a `commit` job's args (the signature a placeholder).
-    fn sets() -> Vec<Value> {
+    pub(crate) fn sets() -> Vec<Value> {
         let v = rows("tree-secrets.json");
         let mut out = Vec::new();
         for sc in arr(&v["scenarios"]) {
