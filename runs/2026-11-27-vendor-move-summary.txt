@@ -1,0 +1,38 @@
+# vendor-move (TODO 8b-9 (4b), ARCH-POS-24; vendor.sh link: owner 2026-11-27): forge libraries, LaZer and the lattice
+# estimators into vendor/, from dev 1846954af; code at 0360120e1 + d48768d5d (ignore rule). Full logs local (git-ignored).
+# Linked worktree: a second, detached worktree whose vendor/<name> are links (scripts/vendor.sh link) to this one's.
+# UNAUDITED tooling.
+# step | commit | rc | counts
+evm-libs check at base (old evm_libs.sh, copied lib/) | 1846954af | 0 | openzeppelin-contracts, forge-std OK
+forge build src --sizes at base (lib/ real copies) | 1846954af | 0 | 325 artifacts (204 with code)
+forge build src --sizes (lib/<name> -> vendor/) | 0360120e1 | 0 | 325 artifacts: init + runtime bytecode, rawMetadata, storageLayout identical to base, 0 differing; sizes JSON identical
+size gate (size_gate.py, default out/) | 0360120e1 | 0 | 0 error(s), 184 contracts
+rejected variant: remappings to ../../vendor/... | (not committed) | 0 | bytecode identical, but 18 duplicate OpenZeppelin units under absolute machine paths, 6 artifact paths moved
+forge test test/v2 (default set) | 0360120e1 | 0 | 57 suites, 758 passed, 0 failed, 0 skipped
+forge test test/gas | 0360120e1 | 0 | 53 suites, 406 passed, 0 failed, 1 skipped (gas pins held)
+forge test test/pqz | 0360120e1 | 0 | 64 suites, 694 passed, 0 failed, 4 skipped
+legacy_artifacts.py build (cp -alL of lib/) | 0360120e1 | 0 | pre-split releases in out/t66b-legacy
+forge test test/modules | 0360120e1 | 0 | 32 suites, 253 passed, 0 failed, 0 skipped
+pqz gate step kat n2304-kmax4096 | 0360120e1 | 0 | 19/19 cases equal (lazer-3330e48 golden)
+pqz gate step kat n2048-kmax1024 | 0360120e1 | 0 | 19/19 cases equal
+pqz gate step kat n2560-kmax16384 | 0360120e1 | 0 | 19/19 cases equal
+pqz gate step kat n2816-kmax65536 | 0360120e1 | 0 | 19/19 cases equal
+gen_set.py --all --check, to_rust.py --check | 0360120e1 | 0 | -
+vendor.sh install core kat research from empty | 0360120e1 | 0 | 7 packages installed, 2 lib links
+vendor.sh check core kat research | 0360120e1 | 0 | 7 packages OK (commit, sha256, tree), 2 links OK
+vendor.sh negatives | 0360120e1 | 1 each | tampered file MISMATCH tree; extra file MISMATCH tree; other commit MISMATCH commit; missing MISSING; wrong link LINK_MISMATCH; no link LINK_MISSING; real dir LINK_IS_A_DIRECTORY (check and install); wrong sha256 pin SHA256_MISMATCH (nothing written); unknown group
+vendor.sh link, scratch copies | 0360120e1 | 0 / 1 | same pin LINKED; check through the link OK; install over a passing link writes nothing; tampered file behind the link MISMATCH (rc 1); install over the failing link SYMLINK_FAILS_CHECK (rc 1); link with the copy off-pin COPY; scratch pin lazer b958e247 COPY, check OK at that pin; the source copy unchanged
+vendor.sh link <real main checkout> | d48768d5d | 1 | LINK_SOURCE_MISSING (the main checkout has no vendor/ yet)
+linked worktree: vendor.sh link + check core kat research | d48768d5d | 0 | 7 LINKED, 2 lib links, check OK through the links; git status clean
+linked worktree: forge build src --sizes | d48768d5d | 0 | 325 artifacts identical to base (bytecode, metadata, layout); no machine path in build-info
+linked worktree: size gate | d48768d5d | 0 | 0 error(s), 184 contracts
+linked worktree: forge test test/v2 | d48768d5d | 0 | 57 suites, 758 passed, 0 failed, 0 skipped
+linked worktree: forge test test/gas | d48768d5d | 0 | 53 suites, 406 passed, 0 failed, 1 skipped
+linked worktree: ua-rs native cargo test --release --no-default-features --features vectors --test fndsa_vrfy (pqclean + falcon-rs through the links) | d48768d5d | 0 | 4 passed, 0 failed, 1 ignored
+linked worktree: ua-rs cargo build --lib --target wasm32-unknown-unknown --no-default-features --features pq (falcon-rs through the link) | d48768d5d | 0 | built
+linked worktree: pqz gate step kat n2304-kmax4096 | d48768d5d | 0 | 19/19 cases equal
+linked worktree: git clone of vendor/lazer-3330e48 through the link (build-lazer-dump.sh's path, docker part not run) | d48768d5d | 0 | HEAD 3330e48
+git check-ignore / git ls-files of the moved trees | d48768d5d | 0 | the 7 vendor/<name> (directory or link) and smartcontracts/evm/lib/<name> ignored; none tracked (git ls-files vendor: README.md, *.VENDORED.md, pqclean-falcon-seeded.local/seeded.c)
+scripts/format.sh --check (every part) | d48768d5d | 0 | rust, sol, js, yaml, py, go, cs, dart, c, move, tact, sh, toml, actionlint, hadolint ok
+docs_check.py check / facts check / paths / consumer; test_docs_check.py | d48768d5d | 0 | 0 errors; 8852 facts, 0 misses; 0 machine paths; 0 consumer names; ok
+ci.yml parses (yaml.safe_load); ci_changes.py self-test | d48768d5d | 0 | vendor.sh change reaches contract-evm, zether-prover, clientkeys, pqz, node
