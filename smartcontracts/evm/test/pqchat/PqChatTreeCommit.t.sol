@@ -687,6 +687,11 @@ contract PqChatTreeScenarioTest is PqChatTreeWorld {
         for (uint256 i; i < 8; ++i) {
             assertEq(got[i], vm.parseJsonBytes32(tj, string.concat(".typehashes.", names[i], ".hash")), names[i]);
         }
+        // the path-less delta (C42, C43; C41 for the genesis): PqChatCommit 0xce1e681e…23fd4d -> 0x871e8239…d62a01 (`bool
+        // pathless`, `bytes32 confirmTag` after `sealedInfo`); TreeGenesis 0xb3b1ba63…e7337d -> 0xbdb75e71…fdc0ae
+        // (`uint32 pathRefreshBound` after `groupMode`)
+        assertEq(PqChatTypes.COMMIT_TYPEHASH, 0x871e8239f743e42defe7cdfeaeefb9df9dc72f76b294214408868ef0e6d62a01);
+        assertEq(PqChatTypes.TREE_GENESIS_TYPEHASH, 0xbdb75e71daf7422753cfe342b2598d1a2c47cec7acdc5ec82837682920fdc0ae);
         bytes32 empty = th2.pathList(new uint32[](0), new bytes32[](0));
         assertEq(empty, vm.parseJsonBytes32(tj, ".digests.emptyPathList"));
         assertEq(
@@ -778,8 +783,9 @@ contract PqChatTreeScenarioTest is PqChatTreeWorld {
     // (their genesis lands); 20 is commits alone.
 
     /// The number of worlds in `tree-secrets.json`, each played by a test here: a new world is red until it is played and
-    /// this constant moves. The merge with branch `review-fix4-client` (its nested-msig world 22) moved it 22 -> 23.
-    uint256 internal constant WORLDS = 23;
+    /// this constant moves. The merge with branch `review-fix4-client` (its nested-msig world 22) moved it 22 -> 23; the
+    /// path-less delta's eight worlds (23 to 30) 23 -> 31.
+    uint256 internal constant WORLDS = 31;
 
     function test_scenario_worldCount() public {
         _open();
@@ -826,6 +832,45 @@ contract PqChatTreeScenarioTest is PqChatTreeWorld {
         assertEq(v, 1, "N's tag named version 1");
         (v,,) = p.msigStateOf(_b32(_stepKey(22, 1), ".gone.record.admin"));
         assertEq(v, 0, "X never updated");
+    }
+
+    // The path-less delta (§13): worlds 23 to 30, each landed whole or in pieces (a path-less record, then its wraps, the
+    // last one completing it); the contract checks the shapes, R19, the bound and the counter, never a tag or a Welcome
+
+    function test_scenario_pathless() public {
+        _run(23, false);
+    }
+
+    function test_scenario_pathless_chunked() public {
+        _run(23, true);
+    }
+
+    function test_scenario_pathlessFirst() public {
+        _run(24, false);
+    }
+
+    function test_scenario_pathlessFaults() public {
+        _run(25, true);
+    }
+
+    function test_scenario_pathlessOwn() public {
+        _run(26, false);
+    }
+
+    function test_scenario_pathlessOwnBehind() public {
+        _run(27, false);
+    }
+
+    function test_scenario_pathlessBound() public {
+        _run(28, true);
+    }
+
+    function test_scenario_pathlessWarn() public {
+        _run(29, false);
+    }
+
+    function test_scenario_pathlessExit() public {
+        _run(30, false);
     }
 
     /// The lag world (17 commits), then C9's lag on its head: a leave naming epoch 0, 17 below the head, is

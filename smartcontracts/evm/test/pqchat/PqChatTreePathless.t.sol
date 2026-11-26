@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {IPqChatTreeViews} from "../../src/pqchat/IPqChatTreeViews.sol";
-import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChatTreeModel} from "./PqChatTreeModel.sol";
 
 /// The path-less Adds of TreeKEM mode 1 (docs/superpowers/specs/2026-11-25-treekem-pathless-add.md §5, §13 rows 1-22; owner
@@ -226,9 +225,9 @@ contract PqChatTreePathlessTest is PqChatTreeModel {
     /// Row 7: bound 0: 30 path-less leaves in a row accepted.
     function test_r7_boundZeroNeverForces() public {
         _open(); // the vectors in this call's memory
-        M memory m = _s(_list(A), _list(A), 0);
-        m = _pl(m, 0, _cat(_keys(B, 100, 8, 1), _keys(C, 100, 8, 9)), _list(A));
-        m = _pl(m, 0, _cat(_keys(D, 100, 8, 17), _keys(E, 100, 6, 25)), _list(A));
+        M memory m = _s(_list(A, B), _list(A), 0);
+        m = _pl(m, 0, _cat(_keys(C, 100, 8, 2), _keys(D, 100, 8, 10)), _list(A));
+        m = _pl(m, 0, _cat(_keys(E, 100, 8, 18), _keys(F, 100, 6, 26)), _list(A));
         (uint256 since,) = _since(m.sid);
         assertEq(since, 30);
     }
@@ -281,21 +280,16 @@ contract PqChatTreePathlessTest is PqChatTreeModel {
         _open(); // the vectors in this call's memory
         for (uint256 exit; exit < 2; ++exit) {
             M memory m = _s(_l3(A, B, C), _list(A), 0);
-            (Step memory st, M memory n) =
-                _buildPl(m, 0, _cat(_keys(D, 100 + 10 * uint64(exit), 8, 3), _keys(E, 100 + 10 * uint64(exit), 4, 11)), _list(A));
+            (Step memory st, M memory n) = _buildPl(
+                m, 0, _cat(_keys(D, 100 + 10 * uint64(exit), 8, 3), _keys(E, 100 + 10 * uint64(exit), 4, 11)), _list(A)
+            );
             ++nonceN;
             IPqChat.Wrap[] memory first = new IPqChat.Wrap[](11);
             for (uint256 i; i < 11; ++i) {
                 first[i] = st.wraps[i];
             }
             vchat.commit(
-                st.c,
-                new uint32[](0),
-                new bytes32[](0),
-                new bytes[](0),
-                new IPqChat.PathCt[](0),
-                first,
-                _signC(st.c)
+                st.c, new uint32[](0), new bytes32[](0), new bytes[](0), new IPqChat.PathCt[](0), first, _signC(st.c)
             );
             IPqChat.Wrap[] memory last = new IPqChat.Wrap[](1);
             last[0] = st.wraps[11];
@@ -450,15 +444,21 @@ contract PqChatTreePathlessTest is PqChatTreeModel {
         return abi.encodePacked(k.scheme, k.mlkemEk, k.x25519);
     }
 
-    /// Row 21: a one-leaf tree: its sole member adds its own second key path-less (`leaves` 1 -> 2); an admin's Add of a
-    /// new UA likewise.
+    /// Row 21: a one-leaf tree. A chat opens none (`_checkLists` wants two UAs at creation) and `leaves` never shrinks, so
+    /// the chat's case is one live leaf: after A's path commit removes B, A adds its own second key path-less at B's blank
+    /// leaf; an admin's Add of a new UA (C) likewise. Both complete, `leaves` stays 2.
     function test_r21_aOneLeafTree() public {
         _open(); // the vectors in this call's memory
         for (uint256 who; who < 2; ++who) {
-            M memory m = _s(_list(A), _list(A), 0);
-            m = _pl(m, 0, _chs(who == 0 ? _add(1, A, 2) : _add(1, B, 1)), _list(A));
-            (, uint256 leaves,) = _sizes(vchat, m.sid);
+            M memory m = _s(_list(A, B), _list(A), 0);
+            (Step memory st, M memory n) = _build(m, 0, _chs(_rm(1, B, 1)), _list(A));
+            m = _land(st, n, m);
+            m = _pl(m, 0, who == 0 ? _keys(A, 100, 1, 1) : _chs(_add(1, C, 1)), _list(A));
+            (uint256 used, uint256 leaves,) = _sizes(vchat, m.sid);
+            assertEq(used, 2);
             assertEq(leaves, 2);
+            (uint256 since,) = _since(m.sid);
+            assertEq(since, 1);
         }
     }
 

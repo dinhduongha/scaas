@@ -94,17 +94,20 @@ contract PqChatTreeGasTest is PqChatTreeModel {
     /// layout was over 2^24 already on a tree of 256, 17,322,116) ML-DSA-87 15,588,376 / 31,716,900, ML-DSA-65 12,637,463
     /// / 29,709,540; at 512 and 32 changes ML-DSA-87 18,087,866 (over 2^24) / 31,521,060, ML-DSA-65 15,130,972 /
     /// 29,513,700; at 512 and 20 changes ML-DSA-87 15,782,531 (994,685 under 2^24) / 27,408,420, ML-DSA-65 12,829,777 /
-    /// 25,401,060.
-    uint256 internal constant LAST87_REGULAR = 15_782_531;
-    uint256 internal constant LAST65_REGULAR = 12_829_777;
+    /// 25,401,060; the path-less delta P4 (C24, C41-C44): regular ML-DSA-87 15,782,531 -> 15,775,319 (1,001,897 under
+    /// 2^24), ML-DSA-65 12,829,777 -> 12,822,542, states unchanged.
+    uint256 internal constant LAST87_REGULAR = 15_775_319;
+    uint256 internal constant LAST65_REGULAR = 12_822_542;
     uint256 internal constant LAST87_STATE = 27_408_420;
     uint256 internal constant LAST65_STATE = 25_401_060;
     /// A-17 (the re-review of 2026-11-25), new pins: A-8's row on the worst head (32 admins replaced, the live leaves at
     /// positions 12 to 499 of 512), the verify included: ML-DSA-87 16,158,289 (618,927 under 2^24; the light head's
     /// 15,782,531 + 375,758) / 24,372,900, ML-DSA-65 13,205,502 / 22,365,540; the closing `treeRemove` (an ML-DSA-87
     /// keyless admin, 512 positions scanned) 10,518,373 / 8,656,740.
-    uint256 internal constant WORST87_REGULAR = 16_158_289;
-    uint256 internal constant WORST65_REGULAR = 13_205_502;
+    /// The path-less delta P4 (C24, C41-C44): the worst head's regular ML-DSA-87 16,158,289 -> 16,151,068 (626,148 under
+    /// 2^24), ML-DSA-65 13,205,502 -> 13,198,258, states unchanged; the closing `treeRemove` within its slack.
+    uint256 internal constant WORST87_REGULAR = 16_151_068;
+    uint256 internal constant WORST65_REGULAR = 13_198_258;
     uint256 internal constant WORST87_STATE = 24_372_900;
     uint256 internal constant WORST65_STATE = 22_365_540;
     uint256 internal constant CLOSE87_REGULAR = 10_518_373;
@@ -895,6 +898,37 @@ contract PqChatTreeGasTest is PqChatTreeModel {
     /// The session records at 64, 128 and 192 member keys fit; 15 genesis wraps in one transaction; the creation in one
     /// transaction (the record with every wrap, owner 2026-11-25) at 4 and 11 member keys (one each of as many UAs; 12 ask 63.1 M) with one
     /// admin and at 4 with 32 (the SDK's creation row).
+    /// The path-less delta §9 (P8, forge's half): a path-less Add of 1, 10 and 20 new UAs on a cold tree of 64 keys (the
+    /// first Add grows it to 128): the record alone with the ML-DSA-65 verify, and the last Welcome wrap with the
+    /// completion (C37's held piece of a commit with no ciphertext). Rows only: no pin until the local Nethermind copy with
+    /// 2^24 enforced measures them (the delta §15.1 item 9).
+    function test_pathlessAddRows() public {
+        bytes32[] memory p = _people(16, 4);
+        uint256[3] memory ns = [uint256(1), 10, 20];
+        for (uint256 k; k < 3; ++k) {
+            uint256 snap = vm.snapshotState();
+            M memory m = _session(_keysOf(p, 4), _list(p[0]), true);
+            bytes32[] memory q = _people(ns[k], 1);
+            Ch[] memory adds = new Ch[](ns[k]);
+            for (uint256 i; i < ns[k]; ++i) {
+                adds[i] = Ch(true, uint32(64 + i), q[i], 1);
+            }
+            (Step memory st,) = _buildPl(m, 0, adds, _list(p[0]));
+            string memory n = vm.toString(ns[k]);
+            ++nonceN;
+            _record(st, SIG65);
+            _fits(string.concat("pathless record, ", n, " Adds, a cold tree of 64"), VERIFY65);
+            _pause();
+            if (st.wraps.length > 1) vchat.addWraps(st.epochId, 0, _slice(st.wraps, 0, st.wraps.length - 1));
+            _resume();
+            uint256 last = st.wraps.length - 1;
+            vchat.addWraps(st.epochId, uint32(last), _slice(st.wraps, last, last + 1));
+            _fits(string.concat("pathless completion with the last wrap, ", n, " Adds"), 0);
+            assertTrue(vchat.epochComplete(st.epochId), "complete");
+            vm.revertToState(snap);
+        }
+    }
+
     function test_sessionRecords() public {
         bytes32[] memory p = _people(24, 8);
         IPqChat.MemberKey[] memory all = _keysOf(p, 8);

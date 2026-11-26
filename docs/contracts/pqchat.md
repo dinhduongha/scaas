@@ -100,7 +100,7 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
 - **The owner UA names the instance and nothing more** (Q2): `owner()` returns it; it has no power over sessions, epochs,
   messages, topics, entries or votes, and no entry reads it. The instance has no pause, no admin and no upgrade.
 - **Introspection**: `factoryInfo()` returns `(factory, chainUid, contractClass = 3, kind = 0, version,
-  initialized)` (CTR-GOV-23: no owner in it; the instance's `owner()` answers its owner UA); `supportsInterface` answers ERC-165 (`0x01ffc9a7`), `type(IPqChat).interfaceId` (`0x7b7acc12`) and the tree views'
+  initialized)` (CTR-GOV-23: no owner in it; the instance's `owner()` answers its owner UA); `supportsInterface` answers ERC-165 (`0x01ffc9a7`), `type(IPqChat).interfaceId` (`0x8412b2f1` since the path-less delta's records; `0x7b7acc12` before) and the tree views'
   `type(IPqChatTreeViews).interfaceId` (`0xec42e734`).
 - **The body module** ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30), applied by 3C-D2 when the release passed the
   33,594 B line at 34,223 B): `PqChatTopics` holds the bodies of the public topics and votes (§9: the six writes and
@@ -323,7 +323,7 @@ its place last, after the TreeKEM research note, a controller call). Status: **B
 - **Checked first** in `createSession`, before the lists, the KEM keys and the signature: a record of another mode costs no
   registry read.
 - **Pins moved:** the `PqChatSession` typehash `0xe2c3b4c1…ad1e4d` → `0x7e832d4c…62d911` (full value in `PqChatTypes.t.sol` and
-  the vectors), the selectors of `createSession` and `sessionOf` (`interfaceId` → `0x869305e0`, `selector_audit.json`, the node's
+  the vectors), the selectors of `createSession` and `sessionOf` (`interfaceId` → `0x869305e0`, then `0x7b7acc12` with the tree entries and `0x8412b2f1` with the path-less delta's records, `selector_audit.json`, the node's
   type row). Cost: one word more in calldata and in the stored record, +48,960 state gas per `createSession`.
 
 <a id="CTR-CHAT-24"></a>**CTR-CHAT-24** — **A member may sit in an epoch with several KEM keys: `members` is strictly sorted

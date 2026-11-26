@@ -63,7 +63,12 @@ contract PqChatGroupModeTest is PqChatBase {
         _create(chat, s, w);
         string memory rec = vm.readFile("../vectors/pqchat/records.json");
         string[6] memory rows = [
-            ".sessionBound0", ".sessionBound24", ".sessionBound510", ".sessionBound511", ".sessionMode0Bound1", ".sessionMode0Tag"
+            ".sessionBound0",
+            ".sessionBound24",
+            ".sessionBound510",
+            ".sessionBound511",
+            ".sessionMode0Bound1",
+            ".sessionMode0Tag"
         ];
         for (uint256 i; i < rows.length; ++i) {
             (IPqChat.PqChatSession memory v, IUARegistry.UASig memory vs) = _vectorSession(rows[i]);

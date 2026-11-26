@@ -348,7 +348,8 @@ contract PqChatTreeViewsTest is PqChatTreeModel {
     /// The interface ids (pins): `IPqChat`'s unchanged by the views, which have their own; both reported.
     function test_interfaceIdsArePinned() public view {
         assertEq(type(IPqChatTreeViews).interfaceId, bytes4(0xec42e734), "IPqChatTreeViews (new)");
-        assertEq(type(IPqChat).interfaceId, bytes4(0x7b7acc12), "IPqChat (unchanged by the views)");
+        // the path-less delta (C41-C43, `createSession` and `commit` take the new records): 0x7b7acc12 -> 0x8412b2f1
+        assertEq(type(IPqChat).interfaceId, bytes4(0x8412b2f1), "IPqChat (unchanged by the views)");
         assertTrue(chat.supportsInterface(type(IPqChatTreeViews).interfaceId));
         assertTrue(chat.supportsInterface(type(IPqChat).interfaceId));
     }

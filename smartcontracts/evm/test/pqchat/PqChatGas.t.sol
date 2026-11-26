@@ -90,9 +90,11 @@ contract PqChatGasTest is PqTopicsBase {
     // regular 2,430,967 -> 2,293,654; state 54,091,620 -> 50,898,510 (-2,087 x 1,530); asked x 1.05 55,851,772 of 60 M.
     // A-15 (controller call 2026-11-25: an empty `addWraps` is `PqChatShape`): 32,891 -> 32,924 B; regular 2,293,654 ->
     // 2,295,734; state 50,898,510 -> 50,949,000 (+33 x 1,530); asked x 1.05 55,906,970 of 60 M.
-    uint256 internal constant RUNTIME = 32_924;
-    uint256 internal constant RELEASE_REGULAR = 2_295_734;
-    uint256 internal constant RELEASE_STATE = 50_949_000;
+    // The path-less delta P4 (C24, C41-C44: `pathless`, `confirmTag`, `pathRefreshBound`, the counter): 32,924 -> 33,354
+    // B; regular 2,295,734 -> 2,324,861; state 50,949,000 -> 51,606,900 (+430 x 1,530); asked x 1.05 56,628,349 of 60 M.
+    uint256 internal constant RUNTIME = 33_354;
+    uint256 internal constant RELEASE_REGULAR = 2_324_861;
+    uint256 internal constant RELEASE_STATE = 51_606_900;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice:
     // 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
@@ -106,19 +108,23 @@ contract PqChatGasTest is PqTopicsBase {
     uint256 internal constant MODULE_REGULAR = 1_099_442;
     uint256 internal constant MODULE_STATE = 25_287_840;
     // A-11 (the code review of 2026-11-24): the tree's three modules, first pins (2026-11-25), each under 60 M asked
-    uint256 internal constant TREE_RUNTIME = 32_812;
-    uint256 internal constant TREE_REGULAR = 2_166_743;
-    uint256 internal constant TREE_STATE = 50_385_960; // asked x 1.05 55,180,338
-    uint256 internal constant VIEWS_RUNTIME = 9_640;
-    uint256 internal constant VIEWS_REGULAR = 660_455;
-    uint256 internal constant VIEWS_STATE = 14_932_800; // asked x 1.05 16,372,917
+    // The path-less delta P4 (C24, C41-C44), old -> new: PqChatTree 32,812 -> 33,711 B,
+    // regular 2,166,743 -> 2,224,997, state 50,385,960 -> 51,761,430 (+899 x 1,530); PqChatTreeViews 9,640 -> 9,761 B,
+    // 660,455 -> 666,697, 14,932,800 -> 15,117,930 (+121 x 1,530); PqChatTreeMembers (the base's checks) 13,981 -> 14,157
+    // B, 941,324 -> 953,807, 21,574,530 -> 21,843,810 (+176 x 1,530)
+    uint256 internal constant TREE_RUNTIME = 33_711;
+    uint256 internal constant TREE_REGULAR = 2_224_997;
+    uint256 internal constant TREE_STATE = 51_761_430; // asked x 1.05 56,685,748
+    uint256 internal constant VIEWS_RUNTIME = 9_761;
+    uint256 internal constant VIEWS_REGULAR = 666_697;
+    uint256 internal constant VIEWS_STATE = 15_117_930; // asked x 1.05 16,573,858
     // C10 32 -> 20 (owner 2026-11-25; the compiler's output for the new constant in C21's check):
     // runtime 13,506 -> 13,507 B; state 20,847,780 -> 20,849,310 (+1 x 1,530); regular 910,116 unchanged
     // E-2, A-16 (controller call 2026-11-25: at home an exit's UAs in the named epoch's lists too; a replica takes a repeat):
     // runtime 13,507 -> 13,981 B; regular 910,116 -> 941,324; state 20,849,310 -> 21,574,530 (+474 x 1,530)
-    uint256 internal constant MEMBERS_RUNTIME = 13_981;
-    uint256 internal constant MEMBERS_REGULAR = 941_324;
-    uint256 internal constant MEMBERS_STATE = 21_574_530; // asked x 1.05 23,641,646
+    uint256 internal constant MEMBERS_RUNTIME = 14_157;
+    uint256 internal constant MEMBERS_REGULAR = 953_807;
+    uint256 internal constant MEMBERS_STATE = 21_843_810; // asked x 1.05 23,937,497
 
     function _row(string memory what, uint256 regular, uint256 state) internal {
         Vm.Gas memory g = vm.lastCallGas();
@@ -159,7 +165,9 @@ contract PqChatGasTest is PqTopicsBase {
         // regular 344,756 -> 345,909
         // CTR-CHAT-25 / CTR-PQV-18 (owner 2026-11-23: `groupMode` in the session and create records, one word more, 0 only):
         // 345,909 / 8,082,990 -> 346,600 / 8,131,950
-        _row("createSession 2 members, both wraps, index 2", 346_600, 8_131_950);
+        // the path-less delta P4 (C24, C41-C44: the session's `pathRefreshBound` and `confirmTag`, 64 B more of record):
+        // 346,600 / 8,131,950 -> 348,009 / 8,229,870
+        _row("createSession 2 members, both wraps, index 2", 348_009, 8_229_870);
 
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[1], 1, 1, sid, s.admins, s.members);
         sig = _sig(e.author, h.epoch(e));
@@ -231,7 +239,9 @@ contract PqChatGasTest is PqTopicsBase {
         // in the record) over the 2-wrap row
         // CTR-CHAT-25 / CTR-PQV-18 (owner 2026-11-23: `groupMode` in the session and create records, one word more, 0 only):
         // 453,528 / 10,959,390 -> 455,576 / 11,008,350
-        _row("createSession 2 members, 3 wraps (a device key)", 455_576, 11_008_350);
+        // the path-less delta P4 (C24, C41-C44: the session's `pathRefreshBound` and `confirmTag`, 64 B more of record):
+        // 455,576 / 11,008,350 -> 459,672 / 11,106,270
+        _row("createSession 2 members, 3 wraps (a device key)", 459_672, 11_106_270);
         IPqChat.MemberKey[] memory m4 = new IPqChat.MemberKey[](4);
         (m4[0], m4[1], m4[2], m4[3]) = (m[0], m[1], m[2], IPqChat.MemberKey(b, 1, bytes32(0)));
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[1], 1, 1, sid, s.admins, m4);
@@ -253,7 +263,9 @@ contract PqChatGasTest is PqTopicsBase {
         // regular 297,087 -> 298,235
         // CTR-CHAT-25 / CTR-PQV-18 (owner 2026-11-23: `groupMode` in the session and create records, one word more, 0 only):
         // 298,235 / 5,402,430 -> 298,914 / 5,451,390
-        _row("createSession 2 members, one wrap", 298_914, 5_451_390);
+        // the path-less delta P4 (C24, C41-C44: the session's `pathRefreshBound` and `confirmTag`, 64 B more of record):
+        // 298,914 / 5,451,390 -> 300,271 / 5,549,310
+        _row("createSession 2 members, one wrap", 300_271, 5_549_310);
         IPqChat.Wrap[] memory rest = _slice(w, 1, 2);
         vm.prank(STRANGER);
         chat.addWraps(sid, 1, rest);
@@ -289,7 +301,9 @@ contract PqChatGasTest is PqTopicsBase {
         // CTR-CHAT-23 (the calldata floor holds the regular figure): state 32,269,230 -> 32,660,910
         // CTR-CHAT-25 / CTR-PQV-18 (owner 2026-11-23: `groupMode` in the session and create records, one word more, 0 only):
         // 1,356,696 / 32,660,910 -> 1,358,744 / 32,709,870
-        _row("createSession 10 members, all wraps", 1_358_744, 32_709_870);
+        // the path-less delta P4 (C24, C41-C44: the session's `pathRefreshBound` and `confirmTag`, 64 B more of record):
+        // 1,358,744 / 32,709,870 -> 1,362,840 / 32,807,790
+        _row("createSession 10 members, all wraps", 1_362_840, 32_807_790);
         (s, w) = _session(20, 2, address(chat));
         sig = _sig(s.creator, h.session(s));
         vm.prank(STRANGER);
@@ -297,7 +311,9 @@ contract PqChatGasTest is PqTopicsBase {
         // CTR-CHAT-23: state 61,914,510 -> 62,306,190
         // CTR-CHAT-25 / CTR-PQV-18 (owner 2026-11-23: `groupMode` in the session and create records, one word more, 0 only):
         // 2,646,936 / 62,306,190 -> 2,648,984 / 62,355,150
-        _row("createSession 20 members, all wraps", 2_648_984, 62_355_150);
+        // the path-less delta P4 (C24, C41-C44: the session's `pathRefreshBound` and `confirmTag`, 64 B more of record):
+        // 2,648,984 / 62,355,150 -> 2,653,080 / 62,453,070
+        _row("createSession 20 members, all wraps", 2_653_080, 62_453_070);
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(sid, ids[3], 1, 1, sid, s.admins, s.members);
         sig = _sig(e.author, h.epoch(e));
         vm.prank(STRANGER);
@@ -320,7 +336,9 @@ contract PqChatGasTest is PqTopicsBase {
         // regular 1,525,793 -> 1,540,631
         // CTR-CHAT-25 / CTR-PQV-18 (owner 2026-11-23: `groupMode` in the session and create records, one word more, 0 only):
         // 1,540,631 / 34,521,390 -> 1,541,381 / 34,570,350
-        _row("createSession 20 members, first 10 wraps", 1_541_381, 34_570_350);
+        // the path-less delta P4 (C24, C41-C44: the session's `pathRefreshBound` and `confirmTag`, 64 B more of record):
+        // 1,541,381 / 34,570,350 -> 1,542,894 / 34,668,270
+        _row("createSession 20 members, first 10 wraps", 1_542_894, 34_668_270);
         vm.prank(STRANGER);
         chat.addWraps(sid, 10, _slice(w, 10, 20));
         _row("addWraps 10 wraps, completing 20 members", 1_231_768, 26_990_730);
