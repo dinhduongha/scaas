@@ -7903,8 +7903,9 @@ ids 7622 (the testnet until that reset) and 22776 (the mainnet documented until 
 profile entries change for the mainnet; nothing that touches a live network. In prose "SCaaS testnet" / "SCaaS mainnet", in
 ids `scaas-testnet` / `scaas-mainnet`; a bare chain id only where it is the literal value.
 **Status.** SPECIFIED: the repository is ready (chainspec, patch tool, genesis hash, profiles, node and client tests,
-vectors); the testnet moves at the reset. Not changed, open for the owner: the BIP-43 purpose `22776'` of the UA tree
-([CLI-SGN-30](clients/signers-clientkeys.md#CLI-SGN-30)), whose Why named the mainnet id of the time; moving it re-derives every UA-tree key.
+vectors); the testnet moves at the reset. Kept (owner 2026-11-26): the BIP-43 purpose `22776'` of the UA tree
+([CLI-SGN-30](clients/signers-clientkeys.md#CLI-SGN-30)) stays `22776'`; it is a derivation constant, not a chain id, and
+moving it would re-derive every UA-tree key.
 **Why.** Public chain lists give 22776 to MAP Protocol; 22777 and 22779 were free on ethereum-lists, chainid.network and
 chainlist.org (2026-11-26; 22888 is Access Network). Replay protection is only as good as the chain id.
 **Cost if wrong.** A signature or transaction made for one chain replays on a public chain with the same id where only the
