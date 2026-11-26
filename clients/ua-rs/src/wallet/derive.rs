@@ -301,7 +301,7 @@ fn secp_public(s: &[u8], compressed: bool) -> Result<Vec<u8>> {
 }
 
 /// The key data of UA kind `kind` from its secret (accounts.md §1.6 forms; a MuSig2 participant: its individual key).
-/// `KindUnavailable` for Falcon on a build without it (wasm32).
+/// `KindUnavailable` for Falcon on a build without it.
 pub fn ua_key_data(kind: u16, s: &[u8]) -> Result<Vec<u8>> {
     match kind {
         0x0101 => {

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Feature `pq`: builds the vendored PQClean Falcon-padded-512 / -1024 (vendor/pqclean-falcon-seeded, MD-8) and sets
 //! `cfg(scaas_falcon)`. Not on wasm32: PQClean's C needs a libc (`stdlib.h`, `malloc` in fips202.c) that
-//! wasm32-unknown-unknown lacks (T0), so the Falcon kinds are `KindUnavailable` there and their signatures do not verify
-//! (spec §12).
+//! wasm32-unknown-unknown lacks (T0); there the Falcon kinds key, sign and verify through falcon-rs's round-3 module
+//! (src/falcon/soft.rs, CLI-UAL-66).
 
 fn main() {
     println!("cargo::rustc-check-cfg=cfg(scaas_falcon)");

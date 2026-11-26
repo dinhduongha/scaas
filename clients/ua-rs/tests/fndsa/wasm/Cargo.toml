@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# CLI-UAL-66: the Falcon gate in wasm32 (run.sh): tests/fndsa/rows.rs and tests/fndsa/sign.rs through ua-rs built for
+# wasm32-unknown-unknown (falcon-rs's round-3 module), a cdylib for the wasm-bindgen CLI and Node. Test-only (`vectors`),
+# never shipped. Its own lockfile. UNAUDITED.
+[package]
+name = "scaas-ua-fndsa-wasm"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../../../../LICENSE"
+
+[lib]
+crate-type = ["cdylib"]
+path = "lib.rs"
+
+[dependencies]
+scaas-ua = { path = "../../..", default-features = false, features = ["vectors"] }
+hex = "0.4"
+serde_json = "=1.0.145"
+sha3 = "0.10"
+wasm-bindgen = "=0.2.130"
+
+[workspace]
+
+[profile.release]
+opt-level = 3

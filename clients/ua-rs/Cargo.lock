@@ -707,6 +707,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "falcon-rs"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97afa6b3e692aa0c332b883f18e3f999e99df06331ac93196b60805950b0f65f"
+dependencies = [
+ "libm",
+ "zeroize",
+]
+
+[[package]]
+name = "falcon-rs"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7efd548cc428112069ef69eb36713d1e9a7bd577aa2b500742777bcb9d3a1d26"
+dependencies = [
+ "falcon-rs 0.3.1",
+ "zeroize",
+]
+
+[[package]]
 name = "ff"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -737,25 +757,6 @@ name = "find-msvc-tools"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
-
-[[package]]
-name = "fn-dsa-comm"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1635e68ba9d301da36ab5fb4a78e5dc006c3b0faa8ea07f2acb986d880512579"
-dependencies = [
- "cpufeatures 0.2.17",
- "rand_core 0.6.4",
-]
-
-[[package]]
-name = "fn-dsa-vrfy"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1028459ccd32c695ce0ca44ae5d59ea7046a04bc145004cc1b8aabd91d3457a7"
-dependencies = [
- "fn-dsa-comm",
-]
 
 [[package]]
 name = "fnv"
@@ -1092,6 +1093,12 @@ name = "libc"
 version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
+
+[[package]]
+name = "libm"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "litrs"
@@ -1475,8 +1482,7 @@ dependencies = [
  "cc",
  "curve25519-dalek",
  "ed25519-dalek",
- "fn-dsa-comm",
- "fn-dsa-vrfy",
+ "falcon-rs 0.4.0",
  "frost-core",
  "frost-secp256k1",
  "getrandom",
