@@ -413,6 +413,35 @@ fn op_work(
 }
 
 /// `(work, a ua* entry)`, one [`Op::parse`]: the job path and the gateway.
+/// CTR-CHAT-27: the tree entry `data` calls on `PqChat` (`commit` and its pieces, `addWraps`), from the node's rows.
+fn tree_entry(data: &[u8]) -> Option<&'static str> {
+    const TREE: [&str; 5] = [
+        "commit",
+        "addPathList",
+        "addPathKeys",
+        "addPath",
+        "addWraps",
+    ];
+    let sel = data.get(..4)?;
+    crate::typed::rows()
+        .iter()
+        .find(|r| {
+            r.contracts.contains(&"pqchat") && r.selector[..] == *sel && TREE.contains(&r.entry)
+        })
+        .map(|r| r.entry)
+}
+
+/// A tree part's named op on the job's target, under the job's deadline.
+fn tree_op(w: &Work, entry: &str, args: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({"entry": entry, "contract": "pqchat", "token": format!("{:#x}", w.to),
+        "validUntil": w.valid_until.to_string(), "args": args})
+}
+
+/// A gas refusal that means "does not fit one transaction": the lane's cap, the block's, the 2^24 regular gas or the RPC's cap.
+fn tree_over(r: &str) -> bool {
+    guard::over_cap(r) || guard::rpc_cap(r) || r.starts_with(guard::TX_EXCEEDS_CHAIN_LIMIT)
+}
+
 pub fn work_of_op(
     job_id: Option<i64>,
     op: &serde_json::Value,
@@ -1026,7 +1055,298 @@ impl Submitter {
             },
         };
         let guard = self.digests.with_hold(guard, hold);
+        // CTR-CHAT-27 (plan T4, fable-r3-6, C37): a tree commit's whole set, or a tree piece on its own
+        if let Some(entry) = tree_entry(&w.data) {
+            return self.tree(w, guard, entry).await;
+        }
         self.send(w, guard).await
+    }
+
+    /// CTR-CHAT-27 (spec 2026-11-23-pqchat-treekem §8, §15; C37; plan T4): a `commit` job is a tree commit's whole set, checked
+    /// whole ([`crate::tree_set::whole`]) and sent in C37's order; a piece on its own is relayed only when it completes its
+    /// stored record ([`crate::tree_set::piece`]). Every refusal before a send is named and sends nothing.
+    async fn tree(&mut self, w: Work, guard: Option<InflightGuard>, entry: &'static str) {
+        use crate::tree_set::{self as ts, Step};
+        let args = match crate::typed::call_op("pqchat", w.to, &w.data, &w.valid_until.to_string())
+        {
+            Ok(op) => op["args"].clone(),
+            Err(e) => {
+                return self
+                    .fail(&w, format!("{}: {e:#}", ts::TREE_SET_REFUSED))
+                    .await
+            }
+        };
+        if entry != "commit" {
+            return self.tree_piece(w, guard, entry, &args).await;
+        }
+        let s = match ts::whole(&args) {
+            Ok(s) => s,
+            Err(e) => return self.fail(&w, e).await,
+        };
+        let shape = (s.eid, s.cts, s.keys, s.adds);
+        let latest = match self.tree_landed(w.to, shape, false).await {
+            Ok(l) => l,
+            Err(e) => {
+                return self
+                    .requeue(&w, format!("{}: state unread: {e}", ts::TREE_SET_SENDING))
+                    .await
+            }
+        };
+        let fin = match latest.record {
+            true => self
+                .tree_landed(w.to, shape, true)
+                .await
+                .unwrap_or_default(),
+            false => ts::Landed::default(),
+        };
+        let sending = |why: String| format!("{}: {why}", ts::TREE_SET_SENDING);
+        match ts::step(&s, &latest, &fin) {
+            Step::Done => {
+                if let Some(id) = w.job_id {
+                    let why = "TREE_SET_COMPLETE: every piece of the set is in state";
+                    self.report(id, "consumed", None, None, Some(why.into()))
+                        .await;
+                }
+            }
+            Step::Wait(why) => self.requeue(&w, sending(why)).await,
+            Step::Whole => match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
+                Ok(g) => {
+                    self.dispatch(w, guard, g, None).await;
+                }
+                Err(SimError::Revert(r)) if tree_over(&r) => {
+                    match self.tree_part(&w, "commit", ts::record_alone(&s)).await {
+                        Ok(()) => {
+                            let why = format!("the whole commit does not fit one transaction ({r}): the record first, alone");
+                            self.requeue(&w, sending(why)).await
+                        }
+                        Err((true, e)) => self.requeue(&w, sending(e)).await,
+                        Err((false, e)) => {
+                            self.fail(&w, format!("{}: {e}; nothing sent", ts::TREE_SET_REFUSED))
+                                .await
+                        }
+                    }
+                }
+                Err(SimError::Revert(r)) => self.refused(&w, r).await,
+                Err(SimError::Transport(r)) => self.requeue(&w, format!("simulate: {r}")).await,
+            },
+            Step::Parts(parts) => {
+                let names: Vec<&str> = parts.iter().map(|p| p.0).collect();
+                for (e, a) in parts {
+                    match self.tree_part(&w, e, a).await {
+                        Ok(()) => {}
+                        Err((true, e)) => return self.requeue(&w, sending(e)).await,
+                        Err((false, e)) => {
+                            return self
+                                .fail(&w, format!("{}: {e}", ts::TREE_SET_REFUSED))
+                                .await
+                        }
+                    }
+                }
+                self.requeue(
+                    &w,
+                    sending(format!("sent {names:?}; the held piece goes last")),
+                )
+                .await
+            }
+            Step::Last(e, a) => {
+                let (last, _) = match work_of_op(w.job_id, &tree_op(&w, e, a), None) {
+                    Ok(p) => p,
+                    Err(err) => {
+                        return self
+                            .fail(&w, format!("{}: {e}: {err:#}", ts::TREE_SET_REFUSED))
+                            .await
+                    }
+                };
+                // the held piece: estimated on the state now, so it carries the completion's gas
+                match guard::gas(&self.chain, &last, self.cfg.max_gas_per_tx).await {
+                    Ok(g) => {
+                        self.dispatch(last, guard, g, None).await;
+                    }
+                    Err(SimError::Revert(r)) => self.refused(&last, r).await,
+                    Err(SimError::Transport(r)) => {
+                        self.requeue(&last, format!("simulate: {r}")).await
+                    }
+                }
+            }
+        }
+    }
+
+    /// A tree piece job on its own: against its stored record (`commitOf`), or, for an epoch that is no tree commit (mode 0's
+    /// `addWraps`, epoch 0's wraps), the contract's own answer.
+    async fn tree_piece(
+        &mut self,
+        w: Work,
+        guard: Option<InflightGuard>,
+        entry: &str,
+        args: &serde_json::Value,
+    ) {
+        use crate::abi::IPqChatTree::{commitOfCall, pathListOfCall};
+        use crate::tree_set as ts;
+        let Some(eid) = args["epochId"]
+            .as_str()
+            .and_then(|e| e.parse::<B256>().ok())
+        else {
+            return self.send(w, guard).await;
+        };
+        let c = match self
+            .chain
+            .call_view(w.to, commitOfCall { epochId: eid })
+            .await
+        {
+            Ok(r) => r.c,
+            Err(SimError::Revert(_)) => return self.send(w, guard).await,
+            Err(SimError::Transport(e)) => return self.requeue(&w, format!("commitOf: {e}")).await,
+        };
+        let r = ts::Rec {
+            cts: c.ctCount as usize,
+            list_hash: c.ctListHash,
+            key_hashes: c.nodeKeyHashes.clone(),
+            wrap_hashes: c.wrapHashes.clone(),
+        };
+        let list = match r.cts {
+            0 => Vec::new(),
+            _ => match self
+                .chain
+                .call_view(w.to, pathListOfCall { epochId: eid })
+                .await
+            {
+                Ok(l) => l.ctHashes,
+                Err(SimError::Revert(e) | SimError::Transport(e)) => {
+                    return self.requeue(&w, format!("pathListOf: {e}")).await
+                }
+            },
+        };
+        let shape = (eid, r.cts, r.key_hashes.len(), r.wrap_hashes.len());
+        let latest = match self.tree_landed(w.to, shape, false).await {
+            Ok(l) => l,
+            Err(e) => {
+                return self
+                    .requeue(&w, format!("{}: state unread: {e}", ts::TREE_SET_WAITING))
+                    .await
+            }
+        };
+        match ts::piece(entry, args, &r, &list, &latest) {
+            Ok(None) => self.send(w, guard).await,
+            Ok(Some(wait)) => self.requeue(&w, wait).await,
+            Err(e) => self.fail(&w, e).await,
+        }
+    }
+
+    /// What of a tree commit `(epochId, ctCount, node keys, adds)` is in state, at the head or (`fin`) at the final block. At
+    /// the head an unread answer is an error; at the final block it reads as not there yet (the job waits).
+    async fn tree_landed(
+        &self,
+        to: Address,
+        (eid, cts, keys, adds): (B256, usize, usize, usize),
+        fin: bool,
+    ) -> std::result::Result<crate::tree_set::Landed, String> {
+        use crate::abi::IPqChatTree::{
+            commitOfCall, pathCtAtCall, pathKeysCall, pathListOfCall, wrapAtCall,
+        };
+        macro_rules! rd {
+            ($call:expr) => {
+                if fin {
+                    self.chain
+                        .call_final(to, $call)
+                        .await
+                        .map_err(|e| SimError::Revert(format!("{e:#}")))
+                } else {
+                    self.chain.call_view(to, $call).await
+                }
+            };
+        }
+        let mut l = crate::tree_set::Landed {
+            cts: vec![false; cts],
+            wraps: vec![false; adds],
+            ..Default::default()
+        };
+        l.record = match rd!(commitOfCall { epochId: eid }) {
+            Ok(_) => true,
+            Err(SimError::Revert(_)) => false,
+            Err(SimError::Transport(e)) => return Err(e),
+        };
+        if !l.record {
+            return Ok(l);
+        }
+        let unread = |e: SimError| match e {
+            SimError::Revert(_) if fin => Ok(false),
+            SimError::Revert(e) | SimError::Transport(e) => Err(e),
+        };
+        if cts > 0 {
+            l.list = match rd!(pathListOfCall { epochId: eid }) {
+                Ok(v) => !v.ctTargets.is_empty(),
+                Err(e) => unread(e)?,
+            };
+        }
+        if keys > 0 {
+            l.keys = match rd!(pathKeysCall { epochId: eid }) {
+                Ok(v) => !v.is_empty(),
+                Err(e) => unread(e)?,
+            };
+        }
+        for i in 0..cts {
+            l.cts[i] = match rd!(pathCtAtCall {
+                epochId: eid,
+                i: U256::from(i)
+            }) {
+                Ok(v) => !v.mlkemCt.is_empty(),
+                Err(e) => unread(e)?,
+            };
+        }
+        for i in 0..adds {
+            l.wraps[i] = match rd!(wrapAtCall {
+                epochId: eid,
+                i: U256::from(i)
+            }) {
+                Ok(v) => !v.mlkemCt.is_empty(),
+                Err(e) => unread(e)?,
+            };
+        }
+        Ok(l)
+    }
+
+    /// One job-less part of a tree set (C37), at most once node-wide while in flight (its receipt comes, the next lease reads
+    /// the state); a part over the transaction cap goes as halves. `Err((retry, why))`: back in the queue, or the set refused.
+    async fn tree_part(
+        &mut self,
+        w: &Work,
+        entry: &str,
+        args: serde_json::Value,
+    ) -> std::result::Result<(), (bool, String)> {
+        let mut todo = vec![args];
+        while let Some(a) = todo.pop() {
+            let op = tree_op(w, entry, a.clone());
+            let (p, _) =
+                work_of_op(None, &op, None).map_err(|e| (false, format!("{entry}: {e:#}")))?;
+            let Some(g) = self.digests.try_acquire(p.call_key()) else {
+                continue;
+            };
+            match guard::gas(&self.chain, &p, self.cfg.max_gas_per_tx).await {
+                Ok(gas) => {
+                    self.dispatch(p, Some(g), gas, Some(&op)).await;
+                }
+                Err(SimError::Revert(r)) if tree_over(&r) => {
+                    match crate::tree_set::halve(entry, &a) {
+                        Some((lo, hi)) => {
+                            drop(g);
+                            todo.push(hi);
+                            todo.push(lo);
+                        }
+                        None => {
+                            return Err((
+                                false,
+                                format!("{entry} does not fit one transaction: {r}"),
+                            ))
+                        }
+                    }
+                }
+                Err(SimError::Revert(r)) => return Err((false, format!("{entry}: {r}"))),
+                Err(SimError::Transport(r)) => {
+                    return Err((true, format!("{entry}: simulate: {r}")))
+                }
+            }
+        }
+        Ok(())
     }
 
     /// `guard` theo `w` vào `Sent` khi tx được gửi; mọi lối ra khác thả nó (nhả digest).

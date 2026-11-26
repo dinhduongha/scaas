@@ -1068,7 +1068,7 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
 - **The node.** `scaas-node`'s rows of the six tree writes, their lists and shapes at the bounds above, equal to the contract's
   both directions ([job-api](../node/job-api.md#pqchat-tree-calls); Change 2026-11-24, plan T4's allow-list part, BUILT on
   branch `pqchat-treekem`), with `createSession`'s tree bounds at creation and the empty `addPath` refused (D-4, D-7, BUILT on
-  branch `review-fix-contract`). The whole-set guard and the order of C37 at the node are SPECIFIED (plan T4, after the merge).
+  branch `review-fix-contract`). The whole-set guard and the order of C37 at the node are BUILT (plan T4 after the merge, branch `treekem-t4-t10`, `scaas-node/src/tree_set.rs`, [job-api](../node/job-api.md#tree-set-guard); UNAUDITED).
 - **Open with the owner:** nothing (the spec's §16).
 
 <a id="CTR-CHAT-28"></a>**CTR-CHAT-28** — **The tree is app-agnostic: its labels and the app's scope are parameters, PqChat is one

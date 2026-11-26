@@ -386,20 +386,20 @@ whole-set guard, the gas and C37's order in the lanes, the e2e, and the whole-se
       are built, **with the contract's bounds** (`TREE_LEAVES_MAX`, `TREE_CHANGES_MAX`, `TREE_ADMINS_MAX`, `TREE_INFO_MAX`, the
       depth, `ctCount < leaves`; codex-20). `guard.rs`: `commit`, `treeLeave`, `treeRemove` as the signed writes, the three unsigned entries under
       `relay_unsigned_pqchat` as `addWraps`. `selector_audit.json`. Both directions equal to the contract's.
-- [ ] **The whole-set guard (fable-r3-6, spec §8, §15):** the node relays a tree commit's record or pieces only when it holds
+- [x] **The whole-set guard (fable-r3-6, spec §8, §15):** the node relays a tree commit's record or pieces only when it holds
       every piece the record signs that is not yet in state, each hashing to its signed hash and every node key passing
       the admission check; otherwise a named refusal and zero sends. Test: a commit with one bad `ctHashes` entry, one
       with a node key that fails the admission check and one with a piece missing are refused with nothing sent; the
       right set is relayed. Mutant: the guard checks the hashes but not the admission check.
-- [ ] Gas for a piece is estimated on the state at send time, so the piece that turns out last gets the completion's limit
+- [x] Gas for a piece is estimated on the state at send time, so the piece that turns out last gets the completion's limit
       (fable-r2-9). **The node sends a set in the order of C37:** the record, the list, the node keys, each final before
       the next, then ciphertexts and wraps, one ciphertext alone at the end (codex-r3-12). Test: the last transaction of
       a relayed commit holds one ciphertext; mutant: the node keys sent last.
-- [ ] `docs/node/job-api.md`: the six calls' named fields and the whole-set guard with its refusal; a note for operators (job shapes were added, none changed).
+- [x] `docs/node/job-api.md`: the six calls' named fields and the whole-set guard with its refusal; a note for operators (job shapes were added, none changed).
 - [ ] Gates: `scripts/capped cargo test`, clippy `-D warnings`; the node rebuilds the vector rows' calldata byte for byte.
 - [ ] Mutants: a missing bound on `ctTargets`; a bound one above the contract's; an unsigned entry relayed with the option off;
       one selector missing on either side.
-- [ ] **A reverted exit is not `dead` within the lag (D2-5 of the re-review of 2026-11-25; `docs/node/job-api.md`'s operator
+- [x] **A reverted exit is not `dead` within the lag (D2-5 of the re-review of 2026-11-25; `docs/node/job-api.md`'s operator
       note on exit jobs, SPECIFIED):** an exit job (`treeLeave`, `treeRemove`, mode 0's `leave` / `remove`, `leaveVault`,
       `removeVaultMembers`) whose simulation reverts with a refusal that may clear at a later head (`PqChatTreeBacklog`,
       `PqChatIncomplete`, `PqVaultIncomplete`) stays queued and is retried while the head is within `EXIT_LAG_MAX` = 16 of

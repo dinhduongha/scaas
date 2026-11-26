@@ -24,4 +24,5 @@ pub mod service;
 pub mod signer;
 pub mod store;
 pub mod submit;
+pub mod tree_set;
 pub mod typed;

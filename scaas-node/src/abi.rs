@@ -944,6 +944,60 @@ pub fn pqz_refusal(reason: &str) -> Option<PqzRefusal> {
     )
 }
 
+sol! {
+    /// CTR-CHAT-27 (spec 2026-11-23-pqchat-treekem §6, §8; plan T4): `IPqChat`'s and `IPqChatTreeViews`' records and views the
+    /// node's whole-set guard reads (`crate::tree_set`), copied from `smartcontracts/evm/src/pqchat/` and `pqgroup/IPqGroupTree.sol`.
+    #[derive(Debug, PartialEq, Eq)]
+    struct TreeAdd { uint32 leaf; bytes32 ua; uint64 keyId; bytes32 via; bytes32 kemHash; }
+    #[derive(Debug, PartialEq, Eq)]
+    struct TreeRemove { uint32 leaf; bytes32 ua; uint64 keyId; }
+    #[derive(Debug, PartialEq, Eq)]
+    struct PqChatCommit {
+        bytes32 sessionId; bytes32 author; uint64 nonce; uint64 epoch; bytes32 parentEpochId; bytes32 treeId;
+        bytes32 parentTreeHash; uint32 leaf; uint64 keyId; uint32 leaves; bytes32[] admins; TreeRemove[] removes;
+        TreeAdd[] adds; bytes32[] wrapHashes; bytes32[] nodeKeyHashes; uint32 ctCount; bytes32 ctListHash; bytes32 treeHash;
+        bytes sealedInfo;
+    }
+    #[derive(Debug, PartialEq, Eq)]
+    struct PathCt { bytes mlkemCt; bytes32 x25519Eph; bytes sealedSecret; }
+    #[derive(Debug, PartialEq, Eq)]
+    struct Wrap { bytes32 member; uint64 keyId; bytes mlkemCt; bytes32 x25519Eph; bytes sealedKey; }
+
+    interface IPqChatTree {
+        function commitOf(bytes32 epochId) external view returns (PqChatCommit memory c, bytes32 sigHash);
+        function pathListOf(bytes32 epochId) external view returns (uint32[] memory ctTargets, bytes32[] memory ctHashes);
+        function pathKeys(bytes32 epochId) external view returns (bytes[] memory);
+        function pathCtAt(bytes32 epochId, uint256 i) external view returns (PathCt memory);
+        function wrapAt(bytes32 epochId, uint256 i) external view returns (Wrap memory);
+    }
+
+    /// `IPqChat`'s and `IPqVault`'s errors (copied), so a refusal reads by name (D2-5: an exit that may clear later waits).
+    #[derive(Debug, PartialEq, Eq)]
+    interface IPqChatErrors {
+        error PqChatShape(); error PqChatOwnerNotCreator(bytes32 ownerUA); error PqChatNonceUsed(bytes32 scope, uint64 nonce);
+        error PqChatKemKey(bytes32 member, uint64 keyId); error PqChatWrapHash(bytes32 epochId, uint256 index);
+        error PqChatWrapStored(bytes32 epochId, uint256 index); error PqChatUnknown(bytes32 id);
+        error PqChatIncomplete(bytes32 epochId); error PqChatEpochNumber(uint64 expected, uint64 got);
+        error PqChatExitLag(uint64 named, uint64 head); error PqChatEpochTaken(bytes32 parentEpochId, bytes32 child);
+        error PqChatNotAdmin(bytes32 author); error PqChatNotMember(bytes32 ua); error PqChatRemovedKept(bytes32 epochId, bytes32 ua);
+        error PqChatNotFactory(); error PqChatInitialized(); error PqChatSigStore(uint8 sigStore); error PqChatSigNotStored();
+        error PqChatModeUnsupported(uint8 groupMode); error PqChatModeEntry(uint8 groupMode); error PqChatTreeSigStore();
+        error PqChatTreeHome(); error PqChatTreeParent(bytes32 stored); error PqChatTreeReturn(bytes32 ua);
+        error PqChatTreeKeyReturn(bytes32 kemHash); error PqChatTreeOwnKeyReturn(bytes32 ua, bytes32 kemHash);
+        error PqChatTreeLeaf(uint32 leaf); error PqChatTreeAdmins(); error PqChatTreeBacklog(uint256 owed);
+        error PqChatPathList(bytes32 epochId); error PqChatPathHash(bytes32 epochId, uint256 index);
+        error PqChatPathStored(bytes32 epochId, uint256 index); error PqChatTreeTargets(uint256 count);
+        error PqChatTreeHash(bytes32 computed); error PqChatTreeKeyLive(bytes32 kemHash); error PqChatEnv();
+        error PqVaultEnv(); error PqVaultNotFactory(); error PqVaultInitialized(); error PqVaultOwnerNotCreator(bytes32 ownerUA);
+        error PqVaultShape(); error PqVaultModeUnsupported(uint8 groupMode); error PqVaultKemKey(bytes32 member, uint64 keyId);
+        error PqVaultUnknown(bytes32 id); error PqVaultIncomplete(bytes32 epochId); error PqVaultEpochNumber(uint64 expected, uint64 got);
+        error PqVaultExitLag(uint64 named, uint64 head); error PqVaultEpochTaken(bytes32 parentEpochId, bytes32 child);
+        error PqVaultNotMember(bytes32 ua); error PqVaultNotAdmin(bytes32 ua); error PqVaultNonceUsed(bytes32 scope, uint64 nonce);
+        error PqVaultWrapHash(bytes32 epochId, uint256 index); error PqVaultWrapStored(bytes32 epochId, uint256 index);
+        error PqVaultRemovedKept(bytes32 epochId, bytes32 ua); error PqVaultVersion(uint32 expected, uint32 got);
+    }
+}
+
 /// Readable error name for `last_error` on the client; raw hex when it is none of ours.
 pub fn decode_revert(data: &[u8]) -> String {
     if let Ok(e) = IToken::ITokenErrors::abi_decode(data) {
@@ -983,6 +1037,9 @@ pub fn decode_revert(data: &[u8]) -> String {
         return format!("{e:?}");
     }
     if let Ok(e) = IUARegistry::IUARegistryErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = IPqChatErrors::IPqChatErrorsErrors::abi_decode(data) {
         return format!("{e:?}");
     }
     format!("revert 0x{}", alloy::hex::encode(data))
