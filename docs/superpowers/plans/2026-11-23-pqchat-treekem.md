@@ -415,8 +415,8 @@ UNAUDITED: `src/pqchat_tree.rs` (the calls over `PqTreeReads` with `PqTreeStep::
 signature, the creation, the commit prepared and signed once, the exits, the replay and its resumption, `plan_commit`,
 `next_send`, `create_cap` over the data rows `gas/pqchat-tree.json`); tests `pqchat_tree::tests` (the 20 M block, the order
 broken and its controls, the creation cap). Left: the binding surface check of the SDK is unchanged (the calls are `AppCore`'s,
-outside the module objects); the five mutants below; the per-chain rows measured on each chain (the reference rows are a linear
-fit of the forge bound rows).
+outside the module objects); the five mutants below; the per-chain rows measured on each chain (the reference rows are lines through
+the measured forge rows, `gas/pqchat_tree_rows.py`, checked against the points they do not come from).
 
 - [ ] **The creation in one transaction (owner 2026-11-25: "khi init session TreeKEM: tối đa 16 thành viên + 16 wraps …
       số thành viên bằng số wraps"):** the SDK's tree-session creation sends the session record **with all its wraps in the
@@ -458,8 +458,9 @@ port, all trusted; `create_tree` in one transaction, a `none` home refused; `tre
 messages); R13's majority read (made whenever a replay advances, ARCH-POS-13), an admin's info after a gap (`info_reviewed`),
 the prepared creation across a restart (`tree_resume_create`), the size hint (`tree_advised`); `tests/tree_scenarios.rs`
 (the hostile reads, R13, the review) and `tests/chain_tree.rs` (gate `pqc-chain`); mutants
-`clients/pqchat-core/runs/2026-11-26-pqchat-treekem-t6-mutants.py`. Left: none of T6a; the warning's index hints stay the
-caller's candidates.
+`clients/pqchat-core/runs/2026-11-26-pqchat-treekem-t6-mutants.py`. The T4-T9 review's fixes (2026-11-26, the CTR-CHAT-27 Change
+of the day): R13 on the sending side, the pin rules, the message branch, completion, with their tests and mutants. Left: the
+warning's index hints stay the caller's candidates.
 
 - [ ] **The creation default of T5 (owner 2026-11-25):** a tree session is created with the creator and a few members and
       grown by commits of at most 32 Adds with their Welcome wraps; a test creates a large group that way and replays it.
