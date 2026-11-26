@@ -314,6 +314,10 @@ its place last, after the TreeKEM research note, a controller call). Status: **B
   deployment (an immutable store such as immudb, or Supabase), `groupMode = 2` is the whole group off chain (a tree of depth
   up to 18) and `groupMode = 3` is the membership on chain with the KEM bytes off chain. No build is decided. Contracts refuse
   both, with 4-255, `PqChatModeUnsupported` (the vector row `sessionMode2`).
+- **Path-less Adds' fields (Change 2026-11-25, the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md); SPECIFIED, nothing built):** `groupMode` is
+  followed by `uint32 pathRefreshBound` and `bytes32 confirmTag` (mode 1's option and epoch 0's tag, both 0 in mode 0, else
+  `PqChatShape()`; the bound at most 510 in mode 1). The struct and its typehash move once more (test-only chains), so the
+  stability sentence above is superseded.
 - **Fixed at creation:** only the session record names it; no epoch, leave or removal record carries it, so no child can
   change it (there is no field to change). `sessionOf` returns it with the record.
 - **Checked first** in `createSession`, before the lists, the KEM keys and the signature: a record of another mode costs no
@@ -948,6 +952,12 @@ scheme 1, in minimal scope (a commit with an UpdatePath, Adds and Removes, Welco
 - **Accepted cost of the joiner without RFC 9420's `init` chain (owner 2026-11-23):** as in mode 0's `rekey`, one UA signature
   lets its holder build the next epoch; the contract cannot check knowledge of the previous one.
 - **Recovery** is from state alone ([CTR-CHAT-14](#CTR-CHAT-14)), by replaying the commits since the device's Welcome.
+- **Path-less Adds (owner 2026-11-25, the rulings of the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md); SPECIFIED, nothing built).** In mode 1 only, a
+  commit of Adds only may carry no path (`pathless` true): no node key, no path ciphertext, one Welcome wrap per added key, the
+  rights of the spec's §9. Its joiner secret derives from the parent epoch's `next` secret, a chain reset by every path
+  commit. A session option `pathRefreshBound`, fixed at creation: 0 never forced; N > 0, the (N + 1)-th path-less leaf since
+  the last path commit is refused, every path-less leaf counted; the client default 20 and, with 0, the admins warned after
+  20. Removals, exits, admin changes and refreshes keep a path. Mode 0 and `PqVault` do not change.
 - **Two layers (owner 2026-11-23: "agreed, that is how it should be"; and "or other systems that use a tree"; verbatim in
   the [register](../decisions.md#ctr-chat-26--pqchats-treekem-mode-groupmode--1-is-built-now-in-minimal-scope-in-a-body-module)).** The tree
   is built as `PqGroupBase` and `PqChat` are: `src/pqgroup/PqGroupTree.sol`, an abstract base with no app domain, record
@@ -1069,6 +1079,14 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   both directions ([job-api](../node/job-api.md#pqchat-tree-calls); Change 2026-11-24, plan T4's allow-list part, BUILT on
   branch `pqchat-treekem`), with `createSession`'s tree bounds at creation and the empty `addPath` refused (D-4, D-7, BUILT on
   branch `review-fix-contract`). The whole-set guard and the order of C37 at the node are BUILT (plan T4 after the merge, branch `treekem-t4-t10`, `scaas-node/src/tree_set.rs`, [job-api](../node/job-api.md#tree-set-guard); UNAUDITED).
+- **Path-less Adds' checks (Change 2026-11-25, the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md) §5; controller calls C41-C47; SPECIFIED).**
+  `pathless` true requires at least one Add, an empty `nodeKeyHashes`, `ctCount` 0 and the empty list's `ctListHash`
+  (`PqChatShape`), no Remove and `admins` equal element for element to the head's (`PqChatTreePathRequired()`), nothing owed
+  and no `gone` admin kept (`PqChatRemovedKept`), and `sincePath + adds.length` at most `pathRefreshBound` when that is not 0
+  (`PqChatTreePathBound(sincePath, bound)`); no path walk, each Add blanks its own direct path up to the root (C6). `Tree`
+  gains `uint32 sincePath` and `uint32 pathBound` in its slot 3; `sincePath` grows by the Adds at a path-less completion and is
+  0 after every completed path commit; `treeOf` appends it. No targets hash is written when `ctCount` is 0. Every commit and
+  the session record carry `confirmTag`, a client check.
 - **Open with the owner:** nothing (the spec's §16).
 
 <a id="CTR-CHAT-28"></a>**CTR-CHAT-28** — **The tree is app-agnostic: its labels and the app's scope are parameters, PqChat is one
@@ -1078,6 +1096,7 @@ Status: clientkeys and `ua-rs` **BUILT**, the contract's cold tree **BUILT** (`P
 
 - **Labels.** Every tree label is `<prefix>/<name>` (`path`, `node`, `commit`, `ct`, `joiner`, `epoch`, `key`, `wrap`, and the
   tags of `path-context` and `context`); PqChat's prefix is `scaas/pqchat/v1/tree`.
+  Plus `next`, `add-joiner`, `confirm`, `add-nonce` (Change 2026-11-25, the path-less [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md); SPECIFIED).
 - **The app's scope.** The info label above `K`, the records' typed data, the UA purpose and the ids are the scope's; PqChat's
   are mode 0's info label, `DS_C`, `PURPOSE_PQCHAT` and its `scaas/pqchat/v1/*` ids. Another app takes the same tree, the same
   checks and the same records' shapes under its own scope; nothing in the tree's code names PqChat but its one instance.

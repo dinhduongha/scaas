@@ -1,7 +1,7 @@
 # PqChat TreeKEM mode (`groupMode = 1`), minimal scope: design
 
 **Status:** SPECIFIED; BUILT (UNAUDITED): the contract (plan T1a-T3d with the code review's fixes of 2026-11-24 on branch `review-fix-contract`), clientkeys and `ua-rs` (T1a, T1b, the forward walk of C25 / C26), the node's rows and bounds (T4's allow-list part, D-4, D-7); PLANNED: T4's whole-set guard and C37's order at the node, T5-T10. **UNAUDITED**: a new cryptographic protocol; every construction below is a design, not a
-reviewed protocol. **Revision 3 (2026-11-23)**, after two review rounds by Codex and Fable: of revision 1 (`f42a75af2`; 22 and
+reviewed protocol. **Change (2026-11-25):** path-less Adds in mode 1, the delta [`2026-11-25-treekem-pathless-add.md`](2026-11-25-treekem-pathless-add.md) (owner R17-R20, SPECIFIED); its §11 amends R1, R3, R9, R10, C6, C9, C12, C23-C25, C29, C37 and the sentences of §3 and §5 marked below. **Revision 3 (2026-11-23)**, after two review rounds by Codex and Fable: of revision 1 (`f42a75af2`; 22 and
 16 findings, 2 unsure) and of revision 2 (`29ba84732`; Codex 16, Fable 9 and 1 unsure). A finding is cited by its id where its
 fix sits (`codex-n`, `fable-n`; round 2: `codex-r2-n`, `fable-r2-n`; round 3: `fable-r3-n`, `codex-r3-n`); [§17](#17-what-revisions-2-and-3-changed) lists them. **A
 third, focused round by Fable on revision 3 (`fable-r3-n`: 0 P0, 2 P1, 4 P2, 3 P3; approve with fixes) is fixed in place:**
@@ -174,11 +174,11 @@ return of a UA that left or was removed (R14), a tree in PqVault (R5), any other
 
 **Deviations from RFC 9420, all deliberate:** typed EIP-712 records instead of TLS-encoded messages; keccak256 in the tree hash;
 no parent hash (C13); HKDF-SHA-256 labels of this repo instead of `ExpandWithLabel`; scheme-1 KEM plus AES-256-GCM instead of
-HPKE; no unmerged leaves, so **an added leaf is in the resolution of its commit** and receives a path ciphertext (RFC 9420 §7.5
-excludes new members and puts a path secret in the Welcome; fable-5); `sealedInfo` instead of the confirmation tag; the group
+HPKE; no unmerged leaves, so **an added leaf is in the resolution of its commit** when that is a path commit and receives a path ciphertext (a path-less Add's leaf receives a Welcome only, delta §6.3) (RFC 9420 §7.5
+excludes new members and puts a path secret in the Welcome; fable-5); a confirmation tag in every commit (C12, C43 of the delta); the group
 context without a transcript hash (the chain orders and keeps the transcript); deterministic committer secrets (R4); a joiner
-secret without the `init` chain (C23, R9), so that **a commit proves its author's signature and not knowledge of the previous
-epoch** (R10); no membership tag. None of RFC 9420's analyses covers the result.
+secret without the `init` chain (C23, R9), so that **a path commit proves its author's signature and not knowledge of the previous
+epoch** (R10; a path-less Add is usable only by one who held the parent epoch); no membership tag. None of RFC 9420's analyses covers the result.
 
 ## 4. The ratchet tree
 
@@ -344,12 +344,12 @@ one id and one tree can differ in `sealedInfo` or in `admins`. Which of them is 
   wrap seals `joiner_e` to an added key. The `Wrap` struct is mode 0's; `kek` and `aad` are mode 0's `wrapKek` and `wrapAad`
   with the label `scaas/pqchat/v1/tree/wrap` and, in place of `sessionId`, `genesisCtx` for epoch 0 and `treeId` for a
   Welcome, so a tree wrap opens under no flat processing (fable-13).
-- **A joiner also takes its path secret** (codex-5, fable-5): the added leaf is a target of its join commit (§4), and the
+- **A joiner of a path commit also takes its path secret** (codex-5, fable-5; a joiner of a path-less Add holds no node secret, delta §6.3): the added leaf is a target of its join commit (§4), and the
   joiner opens that ciphertext, derives upward, compares the node keys and so holds every node above its leaf that the commit
   set. The Welcome wrap and the path ciphertext must give the same `joiner_e`; a difference is "not followed" (§10).
 - **`K_e` is the epoch key.** Sender chains (`…/v1/chain`), `infoKey`, `envKey`, `hint` and call keys derive from `K_e` exactly
   as in mode 0; messages, `sealedInfo` and the stores do not change.
-- **Confirmation (C12).** A member that derived `K_e` opens the commit's `sealedInfo`; the handle of epoch `e` is usable only
+- **Confirmation (C12; as amended by the delta: the tag, then `sealedInfo`, the states of C12).** A member that derived `K_e` opens the commit's `sealedInfo`; the handle of epoch `e` is usable only
   after that. A failure means the device did not follow that epoch (§10).
 - **Session info and the marker (C33; codex-r2-3, fable-r2-5).** `sealedInfo` is mode 0's form: the content padded (`pad`: 256,
   1,024, 4,096 B buckets here), sealed under `infoKey`; 12 + 16 B longer than its bucket, so at most 4,124 B (`TREE_INFO_MAX`,
