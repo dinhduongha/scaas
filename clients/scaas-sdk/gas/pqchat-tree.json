@@ -1,0 +1,19 @@
+{
+  "format": "scaas.pqchat-tree-gas",
+  "name": "reference",
+  "family": "evm",
+  "source": "a linear fit to the measured bound rows of docs/contracts/pqchat.md CTR-CHAT-27 (forge, test/pqchat/PqChatTreeGas.t.sol, 2026-11-25, at 512 leaves and 20 changes): the record at its bounds, the list of 511, the node keys of depth 9, the completion with the held ciphertext, the session records at 64 / 128 keys, 15 genesis wraps; each figure regular and state gas (EIP-8037). Plan and quote only: every transaction's limit is its estimate at send time. A chain's own rows replace these in its release data.",
+  "verify": { "mldsa65": 5950000, "mldsa87": 8860000 },
+  "session": { "base": { "regular": 1000000, "state": 650000 }, "per": { "regular": 30000, "state": 192000 } },
+  "sessionPerAdmin": { "regular": 20000, "state": 60000 },
+  "wrap": { "regular": 250000, "state": 3000000 },
+  "wrapFirstOfSubtree": { "regular": 280000, "state": 3500000 },
+  "record": { "base": { "regular": 1000000, "state": 2000000 }, "per": { "regular": 120000, "state": 600000 } },
+  "recordPerAdmin": { "regular": 30000, "state": 100000 },
+  "recordPerKibInfo": { "regular": 70000, "state": 1050000 },
+  "list": { "base": { "regular": 200000, "state": 300000 }, "per": { "regular": 10000, "state": 49000 } },
+  "keys": { "base": { "regular": 200000, "state": 300000 }, "per": { "regular": 300000, "state": 2300000 } },
+  "cts": { "base": { "regular": 100000, "state": 200000 }, "per": { "regular": 50000, "state": 1250000 } },
+  "completion": { "base": { "regular": 1500000, "state": 2000000 }, "per": { "regular": 250000, "state": 1000000 } },
+  "completionPerNode": { "regular": 150000, "state": 580000 }
+}

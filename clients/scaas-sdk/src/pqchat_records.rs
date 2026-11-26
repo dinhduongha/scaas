@@ -408,6 +408,36 @@ impl AppCore {
         self.prepare_pq(account, "PqChatSession", m, id, wh).await
     }
 
+    /// A tree session's record (`groupMode` 1) as `scaas-ua`'s creation built it (`AppCore::pqchat_tree_genesis`: its
+    /// `wrapHashes` and `sealedInfo`), prepared for the creator's signature; any other `groupMode`: `Argument`.
+    pub async fn prepare_pqchat_tree_session(
+        self: &Arc<Self>,
+        account: KeyRef,
+        record: Value,
+    ) -> Result<PqChatPrepared, SdkError> {
+        if record.get("groupMode").and_then(Value::as_u64) != Some(1) {
+            return Err(SdkError::Argument);
+        }
+        let wh: Vec<String> = record
+            .get("wrapHashes")
+            .and_then(Value::as_array)
+            .ok_or(SdkError::Argument)?
+            .iter()
+            .map(|h| h.as_str().map(str::to_string).ok_or(SdkError::Argument))
+            .collect::<Result<_, _>>()?;
+        let creator = record
+            .get("creator")
+            .and_then(Value::as_str)
+            .ok_or(SdkError::Argument)?;
+        let nonce = record
+            .get("nonce")
+            .and_then(Value::as_u64)
+            .ok_or(SdkError::Argument)?;
+        let id = Id::Of("session", vec![w32(creator)?, w64(nonce)]);
+        self.prepare_pq(account, "PqChatSession", record, id, wh)
+            .await
+    }
+
     /// `PqChatEpoch`, its `wrapHashes` from `r.wraps`.
     pub async fn prepare_pqchat_epoch(
         self: &Arc<Self>,
