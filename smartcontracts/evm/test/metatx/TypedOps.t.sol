@@ -2285,10 +2285,13 @@ contract TypedOpsRouterTest is UALedgerBase {
         assertEq(GovernanceRouter(router).mtxNonce(me, _uint("UACancelNonce", "lane")), 1);
     }
 
-    /// The keyed cancel (CTR-GOV-33 Change): the row's native signer is on the router's own map whatever the target (here no
-    /// code, nothing is called), so the row cancels `lane` there, as `UACancelNonce`.
+    /// The keyed cancel (CTR-GOV-33 Change): the row's native signer is on the router's own map for a target outside the
+    /// factory's index (nothing is called), so the row cancels `lane` there, as `UACancelNonce`. G-7 of the re-review
+    /// (2026-11-25): a target with no code is `TargetHasNoCode`, so the row's target gets one byte of code first (as
+    /// SdkGasRouterTest's `SG_COLD_TARGET`); it is in no index, the map stays the router's own.
     function test_routerRow_UACancelNonceFor() public {
         string memory op = "UACancelNonceFor";
+        vm.etch(_addr(op, "target"), hex"00");
         _row(op);
         assertEq(GovernanceRouter(router).mtxNonce(me, _uint(op, "lane")), 1);
         assertEq(GovernanceRouter(router).mtxNonceFor(_addr(op, "target"), me, _uint(op, "lane")), 1);
