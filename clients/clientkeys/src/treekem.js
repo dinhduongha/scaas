@@ -1106,9 +1106,11 @@ export function replay(sc, rd, dev, store = null, from = null) {
   }
   // the secrets, from those bytes only
   const held = from ? new Map(from.heldKeys) : new Map([[2 * leaf, { kemPk: hex(dev.kemPk), key: dev.key }]]);
-  const was = from?.epochs.at(-1);
-  let inForce = was ? was.inForce : null;
-  let flagged = was ? was.flagged : false;
+  // R2-D-6 of the T4-T9 re-check (C-4, as ua-rs): the info in force, its flag and whether the device followed the head are
+  // the replay's own, kept by a resume that finds no new epoch
+  let inForce = from ? from.inForce : null;
+  let flagged = from ? from.flagged : false;
+  let headFollowed = from ? from.headFollowed : false;
   const epochs = [];
   const warnings = [];
   for (const p of plan) {
@@ -1154,6 +1156,7 @@ export function replay(sc, rd, dev, store = null, from = null) {
         leavesLeft: c.adds.filter(live).map((x) => x.leaf),
       });
     }
+    headFollowed = n === head && res.state === "followed";
     const row = { epoch: n, epochId: ids[n], state: res.state };
     if (res.reason) row.reason = res.reason;
     if (res.K) row.K = hex(res.K);
@@ -1172,6 +1175,10 @@ export function replay(sc, rd, dev, store = null, from = null) {
     held: [...held.keys()].sort((x, y) => x - y),
     heldKeys: held,
     pin: pinAt(a, head),
+    inForce,
+    flagged,
+    // the key's period ended before the head: the device does not follow it
+    headFollowed: headFollowed && last === head,
   };
 }
 
@@ -1260,10 +1267,7 @@ function ownCommit(sc, a, dev, p) {
 /** The info a device seals in a commit of its own (C33): the full info in force only when it followed the parent (the head)
  *  and holds one not flagged; otherwise the marker (null). A changed info is the admin's own action, never this. */
 export function infoToSeal(r) {
-  const e = r.epochs.at(-1);
-  return e && e.epoch === r.pin.epoch && e.state === "followed" && e.inForce !== null && !e.flagged
-    ? JSON.parse(e.inForce)
-    : null;
+  return r.headFollowed && r.inForce !== null && !r.flagged ? JSON.parse(r.inForce) : null;
 }
 
 /** The public tree a commit is built on (§8 steps 1 to 3, C25, C26): the forward walk from the checkpoint `store` (its tree and
