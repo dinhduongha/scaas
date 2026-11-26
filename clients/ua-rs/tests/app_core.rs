@@ -43,7 +43,9 @@ fn usage(n: u64) -> KeyUsage {
     match n {
         1 => KeyUsage::Derive,
         2 => KeyUsage::Data,
-        _ => KeyUsage::KeyWrap,
+        3 => KeyUsage::KeyWrap,
+        4 => KeyUsage::File,
+        n => panic!("usage {n}"),
     }
 }
 
@@ -209,9 +211,14 @@ fn seal_key_rows() {
         let back = k.open_key(&under, &wire, u, &unhex(&r["aad"])).unwrap();
         assert_eq!(back.usage(), u);
         assert!(k.same_key(&back, &key).unwrap());
-        for other in [KeyUsage::Derive, KeyUsage::Data, KeyUsage::KeyWrap]
-            .into_iter()
-            .filter(|o| *o != u)
+        for other in [
+            KeyUsage::Derive,
+            KeyUsage::Data,
+            KeyUsage::KeyWrap,
+            KeyUsage::File,
+        ]
+        .into_iter()
+        .filter(|o| *o != u)
         {
             assert_eq!(
                 k.open_key(&under, &wire, other, &unhex(&r["aad"]))

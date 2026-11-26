@@ -38,7 +38,7 @@ test("sealKey rows: each opens with its usage only, never by open", () => {
   for (const r of V.sealKey) {
     assert.equal(hex(ac.sealKey(b(r.under), b(r.nonce), b(r.key), r.usage, b(r.aad))), r.wire, r.name);
     assert.equal(hex(ac.openKey(b(r.under), b(r.wire), r.usage, b(r.aad))), r.key, r.name);
-    for (const other of [1, 2, 3].filter((u) => u !== r.usage))
+    for (const other of [1, 2, 3, 4].filter((u) => u !== r.usage))
       assert.throws(() => ac.openKey(b(r.under), b(r.wire), other, b(r.aad)), undefined, `${r.name} as ${other}`);
     // a Data open of the wire fails whatever the aad: the key-wrap prefix is not producible by `seal`
     const w = b(r.wire);
