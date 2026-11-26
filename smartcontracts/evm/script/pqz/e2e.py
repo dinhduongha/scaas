@@ -2527,9 +2527,10 @@ def rotation(pq, s, reg, C, dave, payer, sk):
     version 1 (a fresh key, `setPqzKey(ua, 1, …)` signed over typed `UAPqzKeyVersionRecord`, `storePqzPop(ua, 1, R_REG over typed
     `UAPqzKeyVersion`)`); a credit after the rotation lands in (dave, 1); the migration (op 1 from (dave, 0) to dave, proved with
     s_0) moves the version-0 balance; the receiver disclosure of the migration checks version 1's key (`keyVersion` 1). Real
-    proofs on the local chain; never the live testnet stack."""
+    proofs on the local chain; never the live testnet stack. `C` is pqUSD (auditor FULL): each transfer carries the auditor
+    leg (CTR-PQZ-24 / CTR-ZTH-49: on FULL an opt-out reverts `AuditorRequired`)."""
     log("\n## 6c. a PQZ key rotation (group 3g): version 1, a credit to it, the migration, the disclosure by version")
-    transfer(pq, s, C, payer, dave, ZERO32, 3, False, f"{payer.name}→dave 3 before the rotation (version 0)")
+    transfer(pq, s, C, payer, dave, ZERO32, 3, True, f"{payer.name}→dave 3 before the rotation (version 0)")
     pk1, s1, e1, _ = K.keygen(sk("pqz-dave-v1"))
     proof = pq.prove(
         3, K.build_register(portable("keyverreg", ua=dave.ua, pqzKey=pk1, version=1), pk1), K.i8(s1) + K.i16(e1)
@@ -2555,13 +2556,13 @@ def rotation(pq, s, reg, C, dave, payer, sk):
     dave1.prior = {0: dave}
     C.uas[dave.ua] = dave1  # the restore reads both versions (KV-6)
     n0 = C.state(dave)["pendingCount"]
-    transfer(pq, s, C, payer, dave1, ZERO32, 4, False, f"{payer.name}→dave 4 after the rotation (lands in version 1)")
+    transfer(pq, s, C, payer, dave1, ZERO32, 4, True, f"{payer.name}→dave 4 after the rotation (lands in version 1)")
     check(
         C.state(dave1)["pendingCount"] == 1 and C.state(dave)["pendingCount"] == n0,
         "the credit is in (dave, 1), (dave, 0) unchanged",
     )
     _, ref, _, _ = transfer(
-        pq, s, C, dave, dave1, ZERO32, 3, False, "the migration: op 1 from (dave, 0) to dave (version 1), 3"
+        pq, s, C, dave, dave1, ZERO32, 3, True, "the migration: op 1 from (dave, 0) to dave (version 1), 3"
     )
     check(C.state(dave1)["pendingCount"] == 2, "the migration's credit is in (dave, 1)")
     stmt = dec_bytes(call(C.tok, cd(API["discStmt"], ["w", "w", "w", "w", "w"], ref, 0, 3, 1, 1)))
