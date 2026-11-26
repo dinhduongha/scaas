@@ -102,6 +102,13 @@ codes! {
     /// a commit whose pieces another sender landed out of order, so that the piece left cannot pay the completion: void,
     /// rebuilt with a new nonce (C37, codex-r3-12)
     TreeVoid,
+    /// a changed session info whose head a strict majority of at least 3 named endpoints did not confirm (R13)
+    TreeInfoUnconfirmed,
+    /// an admin's new info after a gap, sealed without the admin's review of it (codex-r3-7)
+    TreeInfoReview,
+    /// a tree creation that did not complete and whose prepared record this store does not hold: it cannot be finished
+    /// (codex-r3-5)
+    TreeCreationIncomplete,
 }
 
 impl fmt::Display for PqChatError {

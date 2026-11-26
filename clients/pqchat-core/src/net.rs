@@ -82,7 +82,10 @@ pub const READS: &[(&str, Trust)] = &[
     ("IUARegistry.kemKeyAt", Trusted),
     ("IUARegistry.kemKeyOf", Trusted),
     ("IUARegistry.memberAccepted", Trusted),
+    ("IUARegistry.msigAt", Trusted),
     ("IUARegistry.msigOf", Trusted),
+    ("IUARegistry.msigStateOf", Trusted),
+    ("IUARegistry.registrationOf", Trusted),
 ];
 
 /// Every write of the crate, by ABI item.
@@ -153,6 +156,18 @@ pub trait Net: Send + Sync {
     ) -> Result<AppCall, PqChatError>;
     /// Sends exactly a prepared write; the SDK operation's id.
     async fn submit(&self, call: AppCall) -> Result<String, PqChatError>;
+    /// R13 (CLI-PQC-17): the view `item` read by a strict majority of the chain's endpoints at the final block (CLI-RPC-05),
+    /// with how many named endpoints the chain lists. A port without an agreed read answers `TreeInfoUnconfirmed`.
+    async fn read_majority(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<(Value, usize), PqChatError> {
+        let _ = (chain, contract, item, args);
+        Err(PqChatError::TreeInfoUnconfirmed)
+    }
 }
 
 /// [`Net`] over the SDK.
@@ -221,6 +236,30 @@ impl Net for SdkNet {
     async fn submit(&self, call: AppCall) -> Result<String, PqChatError> {
         Ok(self.sdk.wallet().submit_native_send(call.quote).await?)
     }
+
+    async fn read_majority(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<(Value, usize), PqChatError> {
+        trust(item)?;
+        let named = self.app.named_endpoints(chain)?;
+        let out = self
+            .app
+            .read_app_agreed(
+                chain.into(),
+                contract.into(),
+                abi(item)?.into(),
+                args.to_string(),
+            )
+            .await?;
+        Ok((
+            serde_json::from_str(&out).map_err(|_| PqChatError::Internal)?,
+            named,
+        ))
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
@@ -262,5 +301,15 @@ impl Net for AgreedNet {
 
     async fn submit(&self, call: AppCall) -> Result<String, PqChatError> {
         self.0.submit(call).await
+    }
+
+    async fn read_majority(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<(Value, usize), PqChatError> {
+        self.0.read_majority(chain, contract, item, args).await
     }
 }

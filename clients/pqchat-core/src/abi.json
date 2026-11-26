@@ -4383,6 +4383,64 @@
   "stateMutability": "view",
   "type": "function"
  },
+ "IUARegistry.msigAt": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint64",
+    "name": "version",
+    "type": "uint64"
+   }
+  ],
+  "name": "msigAt",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "uint16",
+      "name": "threshold",
+      "type": "uint16"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "kind",
+        "type": "uint16"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "uint16",
+        "name": "weight",
+        "type": "uint16"
+       }
+      ],
+      "internalType": "struct IUARegistry.MsigMember[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.MsigStructure",
+    "name": "s",
+    "type": "tuple"
+   },
+   {
+    "internalType": "uint256",
+    "name": "enabled",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
  "IUARegistry.msigOf": {
   "inputs": [
    {
@@ -4426,6 +4484,113 @@
     "internalType": "struct IUARegistry.MsigStructure",
     "name": "",
     "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IUARegistry.msigStateOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   }
+  ],
+  "name": "msigStateOf",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "version",
+    "type": "uint64"
+   },
+   {
+    "internalType": "uint256",
+    "name": "enabled",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "accepted",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IUARegistry.registrationOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   }
+  ],
+  "name": "registrationOf",
+  "outputs": [
+   {
+    "internalType": "uint16",
+    "name": "kind",
+    "type": "uint16"
+   },
+   {
+    "internalType": "bytes",
+    "name": "keyData",
+    "type": "bytes"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "pqzKey",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "pqzPopHash",
+      "type": "bytes32"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint8",
+        "name": "scheme",
+        "type": "uint8"
+       },
+       {
+        "internalType": "bytes",
+        "name": "mlkemEk",
+        "type": "bytes"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "x25519",
+        "type": "bytes32"
+       }
+      ],
+      "internalType": "struct IUARegistry.KemKey",
+      "name": "kem",
+      "type": "tuple"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "kemPkHash",
+      "type": "bytes32"
+     }
+    ],
+    "internalType": "struct IUARegistry.UAAttrs",
+    "name": "attrs",
+    "type": "tuple"
+   },
+   {
+    "internalType": "bytes",
+    "name": "pop",
+    "type": "bytes"
+   },
+   {
+    "internalType": "bytes",
+    "name": "pqzPop",
+    "type": "bytes"
    }
   ],
   "stateMutability": "view",

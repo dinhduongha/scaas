@@ -15,7 +15,7 @@ PICK = {
     "IPqChat.sol/IPqChat.json": None,
     "IPqChatTreeViews.sol/IPqChatTreeViews.json": None,
     "IPqGroupTree.sol/IPqGroupTree.json": [],
-    "IUARegistry.sol/IUARegistry.json": ["kemKeyOf", "kemKeyAt", "checkedOf", "memberAccepted", "msigOf"],
+    "IUARegistry.sol/IUARegistry.json": ["kemKeyOf", "kemKeyAt", "checkedOf", "memberAccepted", "msigOf", "registrationOf", "msigStateOf", "msigAt"],
     "IOpenFactory.sol/IOpenFactory.json": ["infoOf", "contractsPage"],
 }
 

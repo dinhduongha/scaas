@@ -88,7 +88,20 @@ fn followed(st: &TreeState) -> Vec<u64> {
 async fn chain_tree_session() {
     let (l, m) = local(&[(0, true), (1, true), (2, true), (3, true)]).await;
     let (alice, bob, carol, dave) = (m[0].clone(), m[1].clone(), m[2].clone(), m[3].clone());
-    let pq = l.pq();
+    // one live PqChat scope at a time: every device a crate over the same scope with its own store
+    let app = pqchat_core::scope(&l.sdk).unwrap();
+    let device = || {
+        PqChat::with_net(
+            app.clone(),
+            Arc::new(pqchat_core::net::SdkNet {
+                sdk: l.sdk.clone(),
+                app: app.clone(),
+            }),
+            Arc::new(pqchat_core::MemoryStore::new()),
+            l.conf(),
+        )
+    };
+    let pq = device();
     // created small: alice and bob, the record and both wraps in one transaction
     let created = pq
         .create_tree(CreateTree {
@@ -103,12 +116,27 @@ async fn chain_tree_session() {
         })
         .await
         .unwrap();
+    // codex-r3-5: before it lands, a fresh store cannot finish the creation; this store prepares the same call again
+    let s0 = sref(&l, &created.session_id);
+    match device().tree_resume_create(&s0, &l.payer).await {
+        Err(e) => assert_eq!(e.code(), "TreeCreationIncomplete"),
+        Ok(_) => panic!("a fresh store finished a creation it does not hold"),
+    }
+    assert!(pq
+        .tree_resume_create(&s0, &l.payer)
+        .await
+        .unwrap()
+        .is_some());
     let gas = land(&l, created.call.clone()).await;
     println!(
         "[tree] session {} created in one transaction, gas limit {gas}",
         created.session_id
     );
     let s = sref(&l, &created.session_id);
+    assert!(
+        pq.tree_resume_create(&s, &l.payer).await.unwrap().is_none(),
+        "complete: nothing to resend"
+    );
     let a0 = pq.tree_state(&s, &alice, 0, None).await.unwrap();
     assert_eq!(
         (a0.head, followed(&a0)),
@@ -116,7 +144,7 @@ async fn chain_tree_session() {
         "epoch 0 followed by its creator"
     );
     // bob, on his own device, replays epoch 0 from state alone
-    let pb = l.pq();
+    let pb = device();
     let b0 = pb.tree_state(&s, &bob, 0, None).await.unwrap();
     assert_eq!(followed(&b0), vec![0]);
     // alice adds carol and dave in one commit (their Welcome wraps)
@@ -133,6 +161,7 @@ async fn chain_tree_session() {
     let (c1, plan1) = pq
         .tree_commit(
             &s,
+            &a0,
             TreeCommit {
                 me: alice.clone(),
                 key_id: 0,
@@ -140,6 +169,7 @@ async fn chain_tree_session() {
                 adds,
                 admins: vec![alice.ua.to_ascii_lowercase()],
                 info: None,
+                info_reviewed: false,
                 payer: l.payer.clone(),
             },
             leaf_a,
@@ -152,7 +182,7 @@ async fn chain_tree_session() {
         plan1.txs.iter().map(|t| t.entry).collect::<Vec<_>>()
     );
     let a1 = pq.tree_state(&s, &alice, 0, None).await.unwrap();
-    let c1s = l.pq().tree_state(&s, &carol, 0, None).await.unwrap();
+    let c1s = device().tree_state(&s, &carol, 0, None).await.unwrap();
     assert_eq!(a1.head, 1);
     assert!(
         followed(&a1).contains(&1) && followed(&c1s).contains(&1),
@@ -166,6 +196,7 @@ async fn chain_tree_session() {
     let (c2, plan2) = pb
         .tree_commit(
             &s,
+            &b1,
             TreeCommit {
                 me: bob.clone(),
                 key_id: 0,
@@ -173,6 +204,7 @@ async fn chain_tree_session() {
                 adds: vec![],
                 admins: vec![alice.ua.to_ascii_lowercase()],
                 info: None,
+                info_reviewed: false,
                 payer: l.payer.clone(),
             },
             leaf_b,
@@ -185,7 +217,7 @@ async fn chain_tree_session() {
     assert!(followed(&a2).contains(&2), "{:?}", followed(&a2));
     // dave leaves (treeLeave names the head); the next commit drops his leaf
     let head_id = a2.replay.epochs.last().unwrap().epoch_id.clone();
-    let pd = l.pq();
+    let pd = device();
     let d2 = pd.tree_state(&s, &dave, 0, None).await.unwrap();
     let call = pd
         .tree_leave(&s, &dave, &head_id, 7, &l.payer)
@@ -196,6 +228,7 @@ async fn chain_tree_session() {
     let (c3, plan3) = pq
         .tree_commit(
             &s,
+            &a2,
             TreeCommit {
                 me: alice.clone(),
                 key_id: 0,
@@ -205,6 +238,7 @@ async fn chain_tree_session() {
                 adds: vec![],
                 admins: vec![alice.ua.to_ascii_lowercase()],
                 info: None,
+                info_reviewed: false,
                 payer: l.payer.clone(),
             },
             leaf_of(&a2, &alice).0,
@@ -223,11 +257,11 @@ async fn chain_tree_session() {
         .flatten()
         .all(|(u, _)| *u != dave.ua.to_ascii_lowercase()));
     // a fresh device of carol (a new store) replays to the same head and follows every epoch from her join
-    let c3s = l.pq().tree_state(&s, &carol, 0, None).await.unwrap();
+    let c3s = device().tree_state(&s, &carol, 0, None).await.unwrap();
     assert_eq!(c3s.head, 3);
     assert_eq!(followed(&c3s), vec![1, 2, 3]);
     // dave, gone, follows nothing after his leave's honouring commit
-    let d3 = l.pq().tree_state(&s, &dave, 0, None).await.unwrap();
+    let d3 = device().tree_state(&s, &dave, 0, None).await.unwrap();
     assert!(!followed(&d3).contains(&3), "{:?}", followed(&d3));
     println!(
         "[tree] heads: alice {}, carol (fresh) {}, dave stopped at {:?}",
@@ -237,10 +271,15 @@ async fn chain_tree_session() {
 
 /// `kemHash` of `me`'s registry key at version 0 (`keccak256(scheme ‖ ek ‖ x25519)`) through `cast`.
 fn kem_of(l: &Local, me: &Me) -> String {
-    let out = l.call(
+    let out = cast(&[
+        "call",
+        "--rpc-url",
+        &l.rpc,
+        &l.registry,
         "kemKeyAt(bytes32,uint64)((uint8,bytes,bytes32),bytes)",
-        &[&me.ua, "0"],
-    );
+        &me.ua,
+        "0",
+    ]);
     // `(1, 0x<ek>, 0x<x>)\n0x<sig>`
     let t = out
         .lines()

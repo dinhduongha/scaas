@@ -310,6 +310,130 @@ fn kem_view(out: &[u8]) -> Result<Value, SdkError> {
     Ok(serde_json::json!({"kemPk": hex(&kem_pk(&r.kem)), "sig": hex(&r.sig)}))
 }
 
+/// `v[k]`, `Null` when absent.
+fn at<'a>(v: &'a Value, k: &str) -> &'a Value {
+    v.get(k).unwrap_or(&Value::Null)
+}
+
+/// A decimal uint256 string's bits set (little-endian bit `i` = slot `i`), at most 256.
+fn bits_of(dec: &str) -> Option<Vec<u16>> {
+    let n = alloy::primitives::U256::from_str_radix(dec, 10).ok()?;
+    Some((0..256u16).filter(|i| n.bit(usize::from(*i))).collect())
+}
+
+impl PqTreeReads {
+    /// `IUARegistry.registrationOf(ua)`'s named answer (`{kind, keyData, attrs: {pqzKey, pqzPopHash, kem: {scheme,
+    /// mlkemEk, x25519}, kemPkHash}, pop, pqzPop}`, read by the caller's port at the final block, trusted): the UA's key and
+    /// its registration; kind 0 is read and not registered.
+    pub fn put_registration(&mut self, ua: &str, v: &Value) -> Result<(), SdkError> {
+        let k = hex(&h32(ua)?);
+        let s = |x: &Value| x.as_str().map(str::to_string).ok_or(SdkError::Argument);
+        let kind: u16 = s(at(v, "kind"))?.parse().map_err(|_| SdkError::Argument)?;
+        if kind == 0 {
+            self.keys.insert(k.clone(), None);
+            self.registrations.insert(k, None);
+            return Ok(());
+        }
+        let a = at(v, "attrs");
+        let kem = TreeKemKey {
+            scheme: s(at(at(a, "kem"), "scheme"))?
+                .parse()
+                .map_err(|_| SdkError::Argument)?,
+            mlkemEk: unhex(&s(at(at(a, "kem"), "mlkemEk"))?)?.into(),
+            x25519: h32(&s(at(at(a, "kem"), "x25519"))?)?.into(),
+        };
+        self.keys.insert(
+            k.clone(),
+            Some(PqUaKey {
+                kind,
+                key_data: s(at(v, "keyData"))?,
+            }),
+        );
+        self.registrations.insert(
+            k,
+            Some(PqRegistration {
+                pqz_key: s(at(a, "pqzKey"))?,
+                pqz_pop_hash: s(at(a, "pqzPopHash"))?,
+                kem_pk: hex(&kem_pk(&kem)),
+                kem_pk_hash: s(at(a, "kemPkHash"))?,
+                pop: s(at(v, "pop"))?,
+            }),
+        );
+        Ok(())
+    }
+
+    /// `IUARegistry.kemKeyAt(ua, version)`'s named answer (`{kem: {scheme, mlkemEk, x25519}, sig}`) as the view `name`: the
+    /// key **with its kept signature** (codex-1).
+    pub fn put_kem_key_at(&mut self, name: &str, v: &Value) -> Result<(), SdkError> {
+        let s = |x: &Value| x.as_str().map(str::to_string).ok_or(SdkError::Argument);
+        let kem = TreeKemKey {
+            scheme: s(at(at(v, "kem"), "scheme"))?
+                .parse()
+                .map_err(|_| SdkError::Argument)?,
+            mlkemEk: unhex(&s(at(at(v, "kem"), "mlkemEk"))?)?.into(),
+            x25519: h32(&s(at(at(v, "kem"), "x25519"))?)?.into(),
+        };
+        self.views.insert(
+            name.to_string(),
+            serde_json::json!({"kemPk": hex(&kem_pk(&kem)), "sig": s(at(v, "sig"))?}),
+        );
+        Ok(())
+    }
+
+    /// `IUARegistry.msigStateOf(ua)`'s named answer: its accepted slots.
+    pub fn put_msig_state(&mut self, ua: &str, v: &Value) -> Result<(), SdkError> {
+        let a = at(v, "accepted")
+            .as_str()
+            .and_then(bits_of)
+            .ok_or(SdkError::Argument)?;
+        self.accepted.insert(hex(&h32(ua)?), a);
+        Ok(())
+    }
+
+    /// `IUARegistry.msigAt(ua, version)`'s named answer (`{s: {threshold, members: [{kind, id, weight}]}, enabled}`): the
+    /// structure as its key data and the `enabled` word; an empty answer (threshold 0) read as none.
+    pub fn put_msig_at(&mut self, ua: &str, version: u64, v: &Value) -> Result<(), SdkError> {
+        use scaas_ua::ua_portable::{MsigMember, MsigStructure};
+        let n = |x: &Value| {
+            x.as_str()
+                .and_then(|t| t.parse::<u16>().ok())
+                .ok_or(SdkError::Argument)
+        };
+        let st = at(v, "s");
+        let threshold = n(at(st, "threshold"))?;
+        let e = if threshold == 0 {
+            ("0x".to_string(), "0x".to_string())
+        } else {
+            let members = at(st, "members")
+                .as_array()
+                .ok_or(SdkError::Argument)?
+                .iter()
+                .map(|m| {
+                    Ok(MsigMember {
+                        kind: n(at(m, "kind"))?,
+                        id: h32(at(m, "id").as_str().ok_or(SdkError::Argument)?)?,
+                        weight: n(at(m, "weight"))?,
+                    })
+                })
+                .collect::<Result<Vec<_>, SdkError>>()?;
+            let en = alloy::primitives::U256::from_str_radix(
+                at(v, "enabled").as_str().ok_or(SdkError::Argument)?,
+                10,
+            )
+            .map_err(|_| SdkError::Argument)?;
+            (
+                hex(&MsigStructure { threshold, members }.key_data()),
+                hex(&en.to_be_bytes::<32>()),
+            )
+        };
+        self.msigs
+            .entry(hex(&h32(ua)?))
+            .or_default()
+            .insert(version, e);
+        Ok(())
+    }
+}
+
 /// A registry name a tree call missed (`registrationOf(<ua>)`, `kemKeyAt(<ua>,<v>)`, `msigStateOf(<ua>)`, `msigAt(<ua>,<v>)`):
 /// its UA and number; `None` for a home view (the caller's port reads those).
 pub fn registry_name(name: &str) -> Option<(&str, [u8; 32], u64)> {
@@ -865,11 +989,43 @@ impl AppCore {
     ) -> Result<PqTreeStep<Option<Arc<PqTreeReplay>>>, SdkError> {
         self.label(PQCHAT_TREE.prefix.as_bytes())?;
         let (seed, ua, kem) = self.device_kem(&account, key_id)?;
-        let dev = TreeDevice {
-            ua,
-            key_id,
-            kem: &kem,
-        };
+        self.replay_with(&seed, ua, key_id, &kem, reads, pin, from, keys_from)
+    }
+
+    /// Test-only (feature `vectors`, never in a release build): [`AppCore::pqchat_tree_replay`] by a vector device's KEM key
+    /// (`kemSeed`, 96 B, as `tree-secrets.json` lays it out) instead of a wallet key; `K` handles in `seed`'s arena.
+    #[cfg(feature = "vectors")]
+    #[allow(clippy::too_many_arguments)]
+    pub fn pqchat_tree_vectors_replay(
+        &self,
+        seed: &str,
+        kem_seed: &[u8],
+        ua: &str,
+        key_id: u64,
+        reads: &PqTreeReads,
+        pin: Option<&Value>,
+        keys_from: u64,
+    ) -> Result<PqTreeStep<Option<Arc<PqTreeReplay>>>, SdkError> {
+        self.label(PQCHAT_TREE.prefix.as_bytes())?;
+        let b: &[u8; 96] = kem_seed.try_into().map_err(|_| SdkError::Argument)?;
+        let kem = scaas_ua::wallet::KemKeyPair::vectors_ephemeral(b)?;
+        self.replay_with(seed, h32(ua)?, key_id, &kem, reads, pin, None, keys_from)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn replay_with(
+        &self,
+        seed: &str,
+        ua: [u8; 32],
+        key_id: u64,
+        kem: &scaas_ua::wallet::KemKeyPair,
+        reads: &PqTreeReads,
+        pin: Option<&Value>,
+        from: Option<&PqTreeReplay>,
+        keys_from: u64,
+    ) -> Result<PqTreeStep<Option<Arc<PqTreeReplay>>>, SdkError> {
+        let seed = seed.to_string();
+        let dev = TreeDevice { ua, key_id, kem };
         let pin = pin.map(tree::Pin::from_json).transpose()?;
         let mut rd = Snap::new(reads);
         let sc = self.scope(&seed)?;
@@ -936,8 +1092,18 @@ impl AppCore {
 // ------------------------------------------------------------------ the plan (spec §13, C37; codex-r2-9, codex-r3-12)
 
 impl AppCore {
-    /// `chain`'s limits for a tree plan: the latest block's gas limit (read by RPC, failed over) and the profile's regular gas
-    /// cap of a transaction (2^24, EIP-7825, when the profile names none).
+    /// How many of `chain`'s endpoints are named (R13: a changed tree info needs a strict majority of at least 3; CLI-RPC-06).
+    pub fn named_endpoints(&self, chain: &str) -> Result<usize, SdkError> {
+        let (profile, _, _) = crate::op::evm(&self.sdk, chain)?;
+        Ok(profile
+            .rpc
+            .iter()
+            .filter(|e| e.class == scaas_rpc::Class::Named)
+            .count())
+    }
+
+    /// `chain`'s limits for a tree plan: the latest block's gas limit (read by RPC, failed over) and the profile's regular
+    /// gas cap of a transaction (2^24, EIP-7825, when the profile names none).
     pub async fn pqchat_tree_limits(&self, chain: &str) -> Result<PqLimits, SdkError> {
         let (profile, _, pool) = crate::op::evm(&self.sdk, chain)?;
         let block = pool.block_gas().await.map_err(|_| SdkError::Argument)?;

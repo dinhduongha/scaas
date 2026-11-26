@@ -126,7 +126,7 @@ and its chain stores still serve reads.
 Status: **BUILT** for CLI-PQC-06 to CLI-PQC-10 and CLI-PQC-13 to CLI-PQC-16 (`src/stores.rs`, `consent.rs`, `check.rs`,
 `drops.rs`, `session.rs`, `recovery.rs`, `reads.rs`, `message.rs`, `signed.rs`; tests `tests/stores.rs`, `check.rs`, `session.rs`,
 `recovery.rs`, `reads.rs`, `message.rs`, `signed.rs`, `chain_*.rs`; the reads check `runs/check_reads.py`),
-but the sealed local history of CLI-PQC-09, **PLANNED**; the tree mode, CLI-PQC-17, its core **BUILT** (`src/tree.rs`), the rest **SPECIFIED**.
+but the sealed local history of CLI-PQC-09, **PLANNED**; the tree mode, CLI-PQC-17, **BUILT** (`src/tree.rs`).
 
 <a id="CLI-PQC-06"></a>**CLI-PQC-06** — **Every message goes to every listed message store its type may use; a session with a store
 the crate does not implement cannot send; chain-store gas is spent only under the user's consent; a new store is used only after the
@@ -290,7 +290,7 @@ commits since its Welcome; every tree secret stays in `ua-rs`; a committer's pat
 that cannot follow an epoch shows it and sends nothing by itself** (owner 2026-11-23: our own TreeKEM in `ua-rs` after RFC
 9420's algorithms, no MLS library; seed-derived committer secrets, no self-wrap; spec
 [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md), revision 3, §5, §8, §10, §11, §15; the contract
-side is [CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **BUILT** for the crate's core (plan T6a, T6b, branch `treekem-t4-t10`, `src/tree.rs`: the views read by `ua-rs`'s names through the port, the creation in one transaction, a commit built by `ua-rs` and sent in C37's order, the exits, the replay with its pin kept by `treeId`, the epoch opened for messages from the replay's `K`; `tests/chain_tree.rs` on a local chain), **SPECIFIED** for the rest of the bullets below (the strict-majority read before a changed info, the Add warning's lookup, the hostile and trace suites), UNAUDITED;
+side is [CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **BUILT** for the crate's core (plan T6a, T6b, branch `treekem-t4-t10`, `src/tree.rs`: the views read by `ua-rs`'s names through the port, the creation in one transaction, a commit built by `ua-rs` and sent in C37's order, the exits, the replay with its pin kept by `treeId`, the epoch opened for messages from the replay's `K`; `tests/chain_tree.rs` on a local chain), with the strict-majority read before a changed info (the TreeKEM spec's ruling 13), an admin's info after a gap, the prepared creation across a restart, the size hint, one snapshot per state and the Add warning's lookup, and its suites `tests/tree_scenarios.rs` (every scenario's every device replayed through the crate to the vectors, the hostile reads, the trace test of ARCH-POS-13, the majority read, the snapshot) and `tests/chain_tree.rs` (a local chain), UNAUDITED; the tree calls are Rust-only in the bindings this round;
 its `ua-rs` side (the tree secrets, the forward walk, replay, the signing operations; plan T2, T11) is **BUILT**, UNAUDITED. The bullets below
 other than the owner's rulings are controller calls, the owner may override. **Owner rulings of 2026-11-23 on the second
 review:** the joiner without RFC 9420's `init` chain and its cost; the compromise warning; no automatic receipts in a tree

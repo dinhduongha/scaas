@@ -455,9 +455,11 @@ fit of the forge bound rows).
 **Progress (2026-11-26, branch `treekem-t4-t10`).** BUILT, UNAUDITED: `src/tree.rs` (the views by `ua-rs`'s names through the
 port, all trusted; `create_tree` in one transaction, a `none` home refused; `tree_commit` and `tree_next` in C37's order;
 `tree_leave`, `tree_remove`; the Add warning's lookup `tree_add_check` over the candidates, `KEM_SCAN_MAX` 64; `tree_open` for
-messages); `tests/chain_tree.rs` (gate `pqc-chain`). Left: the strict-majority read before a changed info (R13), an admin's
-info after a gap (codex-r3-7), the prepared creation across a restart (codex-r3-5; the creation is one transaction), the
-size hint (C3), `tests/hostile` and the mutants below.
+messages); R13's majority read (made whenever a replay advances, ARCH-POS-13), an admin's info after a gap (`info_reviewed`),
+the prepared creation across a restart (`tree_resume_create`), the size hint (`tree_advised`); `tests/tree_scenarios.rs`
+(the hostile reads, R13, the review) and `tests/chain_tree.rs` (gate `pqc-chain`); mutants
+`clients/pqchat-core/runs/2026-11-26-pqchat-treekem-t6-mutants.py`. Left: none of T6a; the warning's index hints stay the
+caller's candidates.
 
 - [ ] **The creation default of T5 (owner 2026-11-25):** a tree session is created with the creator and a few members and
       grown by commits of at most 32 Adds with their Welcome wraps; a test creates a large group that way and replays it.
@@ -494,9 +496,10 @@ size hint (C3), `tests/hostile` and the mutants below.
 
 **Progress (2026-11-26, branch `treekem-t4-t10`).** BUILT, UNAUDITED: `tree_state` (the replay from state, from the store's
 pin or resumed from the device's previous replay; the pin stored by `treeId` after a replay that succeeded; the epochs'
-states, `K`, rosters and warnings from `ua-rs`; the closed session). Left: the trace test, `tests/recovery.rs` over the
-scenario rows through the crate (the walk itself is held to them in `ua-rs`), every page of a snapshot at one block
-(fable-r3-9; the port reads each at the final block) and the mutants below.
+states, `K`, rosters and warnings from `ua-rs`; the closed session); one snapshot per state (the `treeOf` compared at the
+end, fable-r3-9); `tests/tree_scenarios.rs`: every scenario's every device replayed through the crate over a model of the
+home to the vectors' rows (the recovery gate, the late joiner, removed and retired keys), the trace test (`gap` against
+`gap-control`), the snapshot test.
 
 - [ ] Replay from state (spec §10) on a fresh store: the fixed read list, the checks at the read boundary, the forward
       walk from the cold tree, or from the pin with its tree and exits (C25, C26 as amended 2026-11-24), the rights check with the signed leave or removal of

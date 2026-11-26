@@ -9,7 +9,7 @@ use crate::model::{self, at};
 use crate::reads::SessionRef;
 use crate::session::Me;
 use crate::{PqChat, PqChatError};
-use scaas_sdk::app_core::{AppCall, AppKey};
+use scaas_sdk::app_core::{AppCall, AppCore, AppKey};
 use scaas_sdk::op::KeyRef;
 use scaas_sdk::pqchat_tree::{
     self as pt, PqCommitShape, PqTreeChanges, PqTreeCommitSigned, PqTreeGas, PqTreeLanded,
@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 /// The most read-and-call rounds one tree call takes (each round reads every view the call missed).
 // ponytail: a fixed bound; a session whose walk needs more rounds fails closed (`TreeReads`), raise it with a reason
-const ROUNDS_MAX: usize = 96;
+const ROUNDS_MAX: usize = 4096;
 /// A page of `treeLeaves` (C36) and of `treeNodes` / `epochsOf` (`TREE_RANGE_MAX`).
 const LEAF_PAGE: u64 = 64;
 const RANGE_PAGE: u64 = 256;
@@ -84,6 +84,8 @@ pub struct TreeCommit {
     pub adds: Vec<Value>,
     pub admins: Vec<String>,
     pub info: Option<String>,
+    /// the admin reviewed `info` as a new info after a gap (codex-r3-7): required when the device holds no info in force
+    pub info_reviewed: bool,
     pub payer: KeyRef,
 }
 
@@ -116,6 +118,19 @@ fn parse(name: &str) -> Result<(&str, Vec<&str>), PqChatError> {
 
 fn arg<'a>(a: &[&'a str], i: usize) -> Result<&'a str, PqChatError> {
     a.get(i).copied().ok_or(PqChatError::Internal)
+}
+
+/// The store key of a tree creation's signed record and wraps, kept until epoch 0 completes (codex-r3-5).
+fn create_key(session_id: &str) -> String {
+    format!("tree/create/{}", session_id.to_ascii_lowercase())
+}
+
+/// C3: the tree mode is proposed from this many member keys where several members commit; a hint, never enforced.
+pub const TREE_HINT_KEYS: usize = 7;
+
+/// C3's size hint: whether to propose a tree session for `keys` member keys of which `committers` commit.
+pub fn tree_advised(keys: usize, committers: usize) -> bool {
+    keys >= TREE_HINT_KEYS && committers >= 2
 }
 
 /// The store key of a tree session's checkpoint (C26), by its `treeId` (C16).
@@ -367,22 +382,127 @@ impl PqChat {
         reads: &mut PqTreeReads,
         mut f: impl FnMut(&PqTreeReads) -> Result<PqTreeStep<T>, SdkError>,
     ) -> Result<T, PqChatError> {
+        let mut prefetched = false;
         for _ in 0..ROUNDS_MAX {
+            // the reads every walk makes per epoch, scheduled from public data (the epoch list and the exit counts) once the
+            // list is known, so a long session takes a few rounds, not one per view
+            if !prefetched && reads.views.contains_key("epochsOf()") {
+                prefetched = true;
+                self.tree_prefetch(s, reads).await?;
+            }
             match f(reads).map_err(sdk)? {
-                PqTreeStep::Done(v) => return Ok(v),
+                PqTreeStep::Done(v) => {
+                    // fable-r3-9: the snapshot is one state of the home: the tree read again at the end is the one read first,
+                    // else every view is read again (the head moved while the pages were read)
+                    let Some(first) = reads.views.get("treeOf()").cloned() else {
+                        return Ok(v);
+                    };
+                    let again = self
+                        .home_read(
+                            s,
+                            "IPqChatTreeViews.treeOf",
+                            json!({ "sessionId": s.session_id.to_ascii_lowercase() }),
+                        )
+                        .await?;
+                    if same_head(&first, &again) {
+                        return Ok(v);
+                    }
+                    reads.views.clear();
+                }
                 PqTreeStep::Need(names) => {
-                    let done = self
-                        .app
-                        .pqchat_tree_registry(&s.chain, &names, reads)
-                        .await
-                        .map_err(sdk)?;
-                    for n in names.iter().filter(|n| !done.contains(n)) {
-                        self.tree_view(s, reads, n).await?;
+                    for n in &names {
+                        match pt::registry_name(n) {
+                            Some((f, ua, k)) => {
+                                self.registry_view(s, reads, f, &model::hex(&ua), k, n)
+                                    .await?
+                            }
+                            None => self.tree_view(s, reads, n).await?,
+                        }
                     }
                 }
             }
         }
         Err(PqChatError::TreeReads)
+    }
+
+    /// Every epoch's record and exit counts, then each exit, as one walk reads them (public data only, C22).
+    async fn tree_prefetch(
+        &self,
+        s: &SessionRef,
+        reads: &mut PqTreeReads,
+    ) -> Result<(), PqChatError> {
+        let n = reads
+            .views
+            .get("epochsOf()")
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len);
+        for e in 0..n {
+            let mut names = vec![format!("leaveCount({e})"), format!("removalCount({e})")];
+            if e > 0 {
+                names.push(format!("commitOf({e})"));
+            }
+            for name in names {
+                if !reads.views.contains_key(&name) {
+                    self.tree_view(s, reads, &name).await?;
+                }
+            }
+            for (count, at_) in [("leaveCount", "leaveAt"), ("removalCount", "removalAt")] {
+                let k = reads
+                    .views
+                    .get(&format!("{count}({e})"))
+                    .and_then(|v| model::num(v).ok())
+                    .unwrap_or(0);
+                for i in 0..k {
+                    let name = format!("{at_}({e},{i})");
+                    if !reads.views.contains_key(&name) {
+                        self.tree_view(s, reads, &name).await?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// A registry record a tree call missed, read through the port at the chain's registry (trusted) and put in `reads` by
+    /// the SDK's converters: a KEM key with its kept signature, a UA's registration, an `msig`'s accepted slots and its
+    /// structure at a version (codex-1, CTR-UA-74).
+    async fn registry_view(
+        &self,
+        s: &SessionRef,
+        reads: &mut PqTreeReads,
+        f: &str,
+        ua: &str,
+        k: u64,
+        name: &str,
+    ) -> Result<(), PqChatError> {
+        let reg = self.conf(&s.chain)?.registry.clone();
+        let rd = |item: &'static str, args: Value| self.net.read(&s.chain, &reg, item, args);
+        match f {
+            "kemKeyAt" => {
+                let v = rd(
+                    "IUARegistry.kemKeyAt",
+                    json!({"ua": ua, "version": k.to_string()}),
+                )
+                .await?;
+                reads.put_kem_key_at(name, &v).map_err(sdk)
+            }
+            "registrationOf" => {
+                let v = rd("IUARegistry.registrationOf", json!({ "ua": ua })).await?;
+                reads.put_registration(ua, &v).map_err(sdk)
+            }
+            "msigStateOf" => {
+                let v = rd("IUARegistry.msigStateOf", json!({ "ua": ua })).await?;
+                reads.put_msig_state(ua, &v).map_err(sdk)
+            }
+            _ => {
+                let v = rd(
+                    "IUARegistry.msigAt",
+                    json!({"ua": ua, "version": k.to_string()}),
+                )
+                .await?;
+                reads.put_msig_at(ua, k, &v).map_err(sdk)
+            }
+        }
     }
 
     /// A tree session created small (owner 2026-11-25): the creator and a few members, each member key wrapped, the session
@@ -446,6 +566,9 @@ impl PqChat {
             .map_err(sdk)?;
         let sig = crate::session::sig_json(&signed.sig);
         let args = json!({"s": strings(&g.record), "wraps": strings(&json!(g.wraps)), "sig": sig});
+        // codex-r3-5: the signed record and every wrap kept before anything leaves, until the session is complete at home
+        crate::store::Items(&*self.store)
+            .update::<Value, _>(&create_key(&g.session_id), |_| Ok(args.clone()))?;
         let call = self
             .net
             .prepare(
@@ -476,6 +599,34 @@ impl PqChat {
         })
     }
 
+    /// A tree creation after a restart (codex-r3-5): complete at home, its kept record dropped and `None`; else the kept
+    /// `createSession` prepared again (the same signed record and wraps); with no kept record on an incomplete creation
+    /// `TreeCreationIncomplete`: nothing is sent, the app offers a new session.
+    pub async fn tree_resume_create(
+        &self,
+        s: &SessionRef,
+        payer: &KeyRef,
+    ) -> Result<Option<AppCall>, PqChatError> {
+        let sid = s.session_id.to_ascii_lowercase();
+        let done = self
+            .home_read(s, "IPqChat.epochComplete", json!({ "epochId": sid }))
+            .await?;
+        let key = create_key(&sid);
+        if at(&done, "0") == true {
+            crate::store::Items(&*self.store).update::<Value, _>(&key, |_| Ok(Value::Null))?;
+            return Ok(None);
+        }
+        let kept: Option<Value> = crate::store::Items(&*self.store).get(&key)?;
+        let args = kept
+            .filter(|v| !v.is_null())
+            .ok_or(PqChatError::TreeCreationIncomplete)?;
+        Ok(Some(
+            self.net
+                .prepare(&s.chain, &s.home, "IPqChat.createSession", args, payer)
+                .await?,
+        ))
+    }
+
     /// The signer kind name of the gas rows' `verify` (`mldsa65` for the wallet's PQ default, by the key's kind).
     fn signer_kind(&self, me: &Me) -> Result<String, PqChatError> {
         match &me.key {
@@ -498,28 +649,93 @@ impl PqChat {
         key_id: u64,
         from: Option<&PqTreeReplay>,
     ) -> Result<TreeState, PqChatError> {
+        let key = me.key.clone();
+        self.tree_state_by(s, |app, rd, pin| match from {
+            Some(f) => app.pqchat_tree_resume(key.clone(), key_id, rd, f, 0),
+            None => app.pqchat_tree_replay(key.clone(), key_id, rd, pin, 0),
+        })
+        .await
+    }
+
+    /// Test-only (feature `vectors`): [`PqChat::tree_state`] of a vector device's KEM key (`kemSeed`), `K` in `seed`'s arena.
+    #[cfg(feature = "vectors")]
+    pub async fn tree_state_vectors(
+        &self,
+        s: &SessionRef,
+        seed: &str,
+        kem_seed: &[u8],
+        ua: &str,
+        key_id: u64,
+    ) -> Result<TreeState, PqChatError> {
+        self.tree_state_by(s, |app, rd, pin| {
+            app.pqchat_tree_vectors_replay(seed, kem_seed, ua, key_id, rd, pin, 0)
+        })
+        .await
+    }
+
+    async fn tree_state_by(
+        &self,
+        s: &SessionRef,
+        mut f: impl FnMut(
+            &AppCore,
+            &PqTreeReads,
+            Option<&Value>,
+        ) -> Result<PqTreeStep<Option<Arc<PqTreeReplay>>>, SdkError>,
+    ) -> Result<TreeState, PqChatError> {
         let mut reads = PqTreeReads::default();
         self.tree_view(s, &mut reads, "treeOf()").await?;
         let t = reads.views.get("treeOf()").cloned().unwrap_or_default();
         let tree_id = model::h(at(&t, "treeId"))?;
         let pin: Option<Value> = crate::store::Items(&*self.store).get(&pin_key(&tree_id))?;
-        let key = me.key.clone();
+        let app = self.app.clone();
         let r = self
-            .tree_run(s, &mut reads, |rd| match from {
-                Some(f) => self.app.pqchat_tree_resume(key.clone(), key_id, rd, f, 0),
-                None => self
-                    .app
-                    .pqchat_tree_replay(key.clone(), key_id, rd, pin.as_ref(), 0),
-            })
+            .tree_run(s, &mut reads, |rd| f(&app, rd, pin.as_ref()))
             .await?
             .ok_or(PqChatError::NotMember)?;
-        crate::store::Items(&*self.store)
-            .update::<Value, _>(&pin_key(&tree_id), |_| Ok(r.pin.clone()))?;
-        let head = reads
+        let ids: Vec<String> = reads
             .views
             .get("epochsOf()")
             .and_then(Value::as_array)
-            .map_or(0, |v| v.len().saturating_sub(1)) as u64;
+            .map(|v| {
+                v.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let head = ids.len().saturating_sub(1) as u64;
+        // R13: a changed info is taken only once a strict majority of at least 3 named endpoints confirms the head it was
+        // read at; fewer, or a majority that disagrees, refuses it by name and the pin does not move
+        let pinned = pin
+            .as_ref()
+            .and_then(|p| p.get("epoch"))
+            .and_then(Value::as_u64);
+        // ARCH-POS-13: the majority read is made whenever the replay reached an epoch after the pin, whatever any epoch's info
+        // opened to, so the reads never depend on a decryption; its answer counts only for a changed info
+        let new_epochs: Vec<_> = r
+            .epochs
+            .iter()
+            .filter(|e| pinned.is_none_or(|p| e.epoch > p))
+            .collect();
+        if !new_epochs.is_empty() {
+            let args = json!({ "sessionId": s.session_id.to_ascii_lowercase() });
+            let agreed = self
+                .net
+                .read_majority(&s.chain, &s.home, "IPqChatTreeViews.treeOf", args)
+                .await
+                .ok()
+                .filter(|(_, named)| *named >= 3)
+                .and_then(|(v, _)| model::h(at(&v, "headEpochId")).ok())
+                .is_some_and(|h| Some(h) == ids.last().map(|x| x.to_ascii_lowercase()));
+            if !agreed
+                && new_epochs
+                    .iter()
+                    .any(|e| e.info.as_deref() == Some("changed"))
+            {
+                return Err(PqChatError::TreeInfoUnconfirmed);
+            }
+        }
+        crate::store::Items(&*self.store)
+            .update::<Value, _>(&pin_key(&tree_id), |_| Ok(r.pin.clone()))?;
         // C38: closed when no leaf the walk reached at the head is held (every UA left or removed)
         let closed = r
             .rosters
@@ -594,9 +810,17 @@ impl PqChat {
     pub async fn tree_commit(
         &self,
         s: &SessionRef,
+        st: &TreeState,
         c: TreeCommit,
         leaf: u32,
     ) -> Result<(PqTreeCommitSigned, pt::PqTreePlan), PqChatError> {
+        // C33: the device seals the info in force when it holds it, else the marker; a new info after a gap (the device
+        // holds none in force) is the admin's reviewed action only (codex-r3-7), never sealed by itself
+        let info = match (&c.info, st.replay.info_to_seal.as_ref()) {
+            (Some(_), None) if !c.info_reviewed => return Err(PqChatError::TreeInfoReview),
+            (Some(i), _) => Some(i.clone()),
+            (None, held) => held.cloned(),
+        };
         let mut reads = PqTreeReads::default();
         self.tree_view(s, &mut reads, "treeOf()").await?;
         let tree_id = model::h(at(
@@ -608,7 +832,7 @@ impl PqChat {
             removes: c.removes.clone(),
             adds: c.adds.clone(),
             admins: c.admins.iter().map(|a| a.to_ascii_lowercase()).collect(),
-            info: c.info.clone(),
+            info,
         };
         let key = c.me.key.clone();
         let prepared = self
@@ -865,10 +1089,18 @@ impl PqChat {
                 .map(|k| format!("kemKeyAt({c},{k})"))
                 .collect();
             let mut reads = PqTreeReads::default();
-            self.app
-                .pqchat_tree_registry(chain, &names, &mut reads)
-                .await
-                .map_err(sdk)?;
+            for (k, n) in versions.iter().zip(&names) {
+                let v = self
+                    .net
+                    .read(
+                        chain,
+                        &reg,
+                        "IUARegistry.kemKeyAt",
+                        json!({"ua": c, "version": k.to_string()}),
+                    )
+                    .await?;
+                reads.put_kem_key_at(n, &v).map_err(sdk)?;
+            }
             for (k, n) in versions.iter().zip(&names) {
                 let pk = reads
                     .views
@@ -884,6 +1116,11 @@ impl PqChat {
         }
         Ok(out)
     }
+}
+
+/// Two `treeOf` answers of one state: the same head and tree hash.
+fn same_head(a: &Value, b: &Value) -> bool {
+    at(a, "headEpochId") == at(b, "headEpochId") && at(a, "treeHash") == at(b, "treeHash")
 }
 
 /// Integers as decimal strings (the port's named arguments).
