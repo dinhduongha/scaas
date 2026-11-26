@@ -27,7 +27,7 @@ const SPEC = {
   MemberKey: "MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
   Wrap: "Wrap(bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey)",
   PqChatSession:
-    "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
+    "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode,uint32 pathRefreshBound,bytes32 confirmTag)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
   PqChatEpoch:
     "PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
   PqChatLeave: "PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)",
@@ -50,6 +50,12 @@ const STRUCT_OF = {
   session: "PqChatSession",
   sessionTreeKem: "PqChatSession",
   sessionMode2: "PqChatSession",
+  sessionBound0: "PqChatSession",
+  sessionBound24: "PqChatSession",
+  sessionBound510: "PqChatSession",
+  sessionBound511: "PqChatSession",
+  sessionMode0Bound1: "PqChatSession",
+  sessionMode0Tag: "PqChatSession",
   epoch: "PqChatEpoch",
   epochDevices: "PqChatEpoch",
   leave: "PqChatLeave",

@@ -138,3 +138,19 @@ export function abiEncode(types, values) {
   });
   return concatBytes(...heads, ...tails);
 }
+
+/** JSON with exact uint64s (a path-less Add's nonce, C47): a BigInt is written as a bare integer, and an integer beyond
+ *  2^53 is read back as a BigInt from its source text. */
+export const jsonStringify = (v, replacer = null, space = undefined) =>
+  JSON.stringify(
+    v,
+    (k, x) => {
+      const y = replacer ? replacer(k, x) : x;
+      return typeof y === "bigint" ? `@@uint:${y}` : y;
+    },
+    space,
+  ).replace(/"@@uint:(\d+)"/g, "$1");
+export const jsonParse = (s) =>
+  JSON.parse(s, (_, v, c) =>
+    typeof v === "number" && !Number.isSafeInteger(v) && c && /^\d+$/.test(c.source) ? BigInt(c.source) : v,
+  );

@@ -15,6 +15,8 @@ export const TREE_LEAVES_MAX = 512; // R8: 256 -> 512 (owner 2026-11-25), depth 
 export const TREE_CHANGES_MAX = 20; // C10: 32 -> 20 (owner 2026-11-25)
 export const TREE_ADMINS_MAX = 32;
 export const KEYS_PER_UA_MAX = 8;
+/** The largest `pathRefreshBound` that can bind (C41, the path-less delta §3.1): `TREE_LEAVES_MAX − 2`. */
+export const PATH_REFRESH_BOUND_MAX = TREE_LEAVES_MAX - 2;
 /** 0x-hex, lower case, of bytes or of a hex string. */
 const hex = (v) => (typeof v === "string" ? v.toLowerCase() : hexOf(v));
 const ZERO = hex(new Uint8Array(32));
@@ -101,6 +103,8 @@ const clone = (t) => ({
   goneUa: new Set(t.goneUa),
   goneOwnKey: new Map([...(t.goneOwnKey ?? [])].map(([ua, ks]) => [ua, new Set(ks)])),
   goneKey: new Set(t.goneKey),
+  sincePath: t.sincePath ?? 0,
+  pathBound: t.pathBound ?? 0,
 });
 const pairOut = (t, ua, kemHash) => {
   if (!t.goneOwnKey.has(ua)) t.goneOwnKey.set(ua, new Set());
@@ -109,8 +113,9 @@ const pairOut = (t, ua, kemHash) => {
 const norm = (k) => ({ ua: hex(k.ua), keyId: Number(k.keyId), kemHash: hex(k.kemHash) });
 const live = (t) => t.nodes.filter((n, x) => n && x % 2 === 0);
 
-/** The cold tree of a session (§8): leaf `i` = `members[i]` with its registry `kemHash`, every parent blank. */
-export function coldTree(members) {
+/** The cold tree of a session (§8): leaf `i` = `members[i]` with its registry `kemHash`, every parent blank; `pathBound` the
+ *  session's `pathRefreshBound` (the path-less delta §5.3), `sincePath` 0. */
+export function coldTree(members, pathBound = 0) {
   if (members.length > TREE_LEAVES_MAX) refuse("PqChatShape");
   const leaves = sizeFor(members.length);
   const t = {
@@ -120,6 +125,8 @@ export function coldTree(members) {
     hash: [],
     goneUa: [],
     goneKey: [],
+    sincePath: 0,
+    pathBound,
   };
   members.forEach((m, i) => {
     if (live(t).some((n) => n.kemHash === hex(m.kemHash))) refuse("PqChatTreeKeyLive");
@@ -282,7 +289,18 @@ export const filteredPathAfter = (tree, leaf, changes = {}) => {
  *  author's filtered path keyed by `nodeKeyHashes` (its length the walk's, `PqChatTreeTargets`), the rest of its direct path
  *  blanked, `th` recomputed along every changed path. Returns `{ tree, ctTargets, treeHash }`. */
 export function applyCommit(tree, c) {
+  // the path-less shape exactly when `pathless` is true (the delta §5.1 item 2, C42)
+  if (c.pathless === true && (!(c.adds?.length > 0) || c.nodeKeyHashes.length !== 0)) refuse("PqChatShape");
   const { t, touched } = applyChanges(tree, c);
+  if (c.pathless === true) {
+    // item 4, the bound (R18), refused whole; item 5: no path walk, the author's path not blanked by the commit itself, each
+    // Add has blanked its own direct path up to the root (C6); the counter moves by the leaves (§5.3)
+    if (t.pathBound > 0 && t.sincePath + c.adds.length > t.pathBound) refuse("PqChatTreePathBound");
+    t.sincePath += c.adds.length;
+    rehashPaths(t, touched);
+    return { tree: t, ctTargets: [], treeHash: t.hash[root(t.leaves)] };
+  }
+  t.sincePath = 0;
   const p = filteredPath(t, c.leaf);
   if (p.length !== c.nodeKeyHashes.length) refuse("PqChatTreeTargets");
   blankPath(t, 2 * c.leaf);
@@ -300,6 +318,9 @@ export function applyCommit(tree, c) {
 export function judgeCommit(tree, after, c, headAdmins) {
   const admins = c.admins.map(hex);
   const head = headAdmins.map(hex);
+  // the path-less conditions (the delta §5.1 item 3, R19): no Remove, the head's admin list element for element
+  if (c.pathless === true && (c.removes.length !== 0 || JSON.stringify(admins) !== JSON.stringify(head)))
+    refuse("PqChatTreePathRequired");
   if (admins.length > TREE_ADMINS_MAX || admins.some((x, i) => i > 0 && x <= admins[i - 1])) refuse("PqChatShape");
   const out = (ua) => after.goneUa.has(ua);
   if (admins.some(out)) refuse("PqChatRemovedKept");
@@ -320,7 +341,8 @@ export const TREE_TYPE_STRINGS = Object.freeze({
   PqChatCommit:
     "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId," +
     "bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds," +
-    "bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo)" +
+    "bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo," +
+    "bool pathless,bytes32 confirmTag)" +
     "TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)",
   TreeAdd: "TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)",
   TreeRemove: "TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)",
@@ -333,7 +355,7 @@ export const TREE_TYPE_STRINGS = Object.freeze({
   // PqChatSession's fields (pqchat-sigs) in its order without wrapHashes and sealedInfo; hashed, never signed (§5, C29)
   TreeGenesis:
     "TreeGenesis(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins," +
-    "MemberKey[] members,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
+    "MemberKey[] members,uint8 groupMode,uint32 pathRefreshBound)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)",
   TreeLeaf: "TreeLeaf(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 kemHash)",
   TreeParent: "TreeParent(bytes32 keyHash,bytes32 left,bytes32 right)",
 });
@@ -417,5 +439,7 @@ export const treeJson = (t) => ({
     [...t.goneOwnKey].sort(([a], [b]) => (a < b ? -1 : 1)).map(([u, ks]) => [u, [...ks].sort()]),
   ),
   goneKey: [...t.goneKey].sort(),
+  sincePath: t.sincePath,
+  pathBound: t.pathBound,
 });
 export const treeFromJson = (j) => rehashAll(clone({ ...j, hash: [], goneOwnKey: Object.entries(j.goneOwnKey ?? {}) }));

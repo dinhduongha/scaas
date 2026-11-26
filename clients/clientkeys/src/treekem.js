@@ -45,6 +45,11 @@ export function treeScope(prefix, { infoKey, typed, purpose }) {
     joiner: l("joiner"),
     epoch: l("epoch"),
     key: l("key"),
+    // the path-less delta §4.1 (R20, C43, C47)
+    next: l("next"),
+    addJoiner: l("add-joiner"),
+    confirm: l("confirm"),
+    addNonce: l("add-nonce"),
     wrap: `${prefix}/wrap`,
     tagPath: keccak_256(l("path-context")),
     tagContext: keccak_256(l("context")),
@@ -157,11 +162,43 @@ export const epochContext = (sc, x) =>
   );
 export const joinerSecret = (sc, commitSecret, treeId, epochId) =>
   H(commitSecret, concatBytes(sc.joiner, b(treeId), b(epochId)));
-/** `S_e = H(joiner, …/epoch ‖ ctx_e)`, `K_e = H(S_e, …/key)`. */
+/** A path-less Add's joiner (the delta §4.1, R20): `H(next_e, …/add-joiner ‖ treeId ‖ epochId ‖ hash(adds))`. */
+export const addJoinerSecret = (sc, next, treeId, epochId, addsHash) =>
+  H(next, concatBytes(sc.addJoiner, b(treeId), b(epochId), b(addsHash)));
+/** `S_e = H(joiner, …/epoch ‖ ctx_e)`, `K_e = H(S_e, …/key)`, `next_e = H(S_e, …/next)` and the confirmation
+ *  `confirmTag = H(S_e, …/confirm ‖ ctx_e)`, at epoch 0 over `genesisCtx` (the delta §4.1, C43): four branches of one `S`. */
 export function schedule(sc, joiner, fields) {
   const ctx = epochContext(sc, fields);
   const S = H(joiner, concatBytes(sc.epoch, ctx));
-  return { ctx, joiner: b(joiner), S, K: H(S, sc.key) };
+  const tagCtx = fields.epoch === 0 ? b(fields.treeId) : ctx;
+  return {
+    ctx,
+    joiner: b(joiner),
+    S,
+    K: H(S, sc.key),
+    next: H(S, sc.next),
+    tag: H(S, concatBytes(sc.confirm, tagCtx)),
+  };
+}
+/** The most tries of a path-less Add's nonce (C47). */
+export const ADD_NONCE_TRIES = 8;
+/** A path-less Add's nonce (C47): the first 8 B, big-endian, of `H(kemSeed, …/add-nonce ‖ treeId ‖ parentEpochId ‖
+ *  parentTreeHash ‖ hash(adds) ‖ u32be(try))`, a BigInt (a uint64). */
+export function addNonce(sc, kemSeed, { treeId, parentEpochId, parentTreeHash, addsHash }, tryN) {
+  if (!(Number.isInteger(tryN) && tryN >= 0 && tryN < ADD_NONCE_TRIES)) refuse("TreeAddNonce");
+  const h = H(kemSeed, concatBytes(sc.addNonce, b(treeId), b(parentEpochId), b(parentTreeHash), b(addsHash), u32(tryN)));
+  return h.subarray(0, 8).reduce((a, x) => (a << 8n) | BigInt(x), 0n);
+}
+/** The `try` < ADD_NONCE_TRIES whose `addNonce` is the record's `nonce`, or -1 (the own-commit test, C47, the delta §6.5). */
+export function addNonceTry(sc, kemSeed, c) {
+  const x = {
+    treeId: c.treeId,
+    parentEpochId: c.parentEpochId,
+    parentTreeHash: c.parentTreeHash,
+    addsHash: tr.arrayHash("TreeAdd", c.adds),
+  };
+  for (let t = 0; t < ADD_NONCE_TRIES; t++) if (addNonce(sc, kemSeed, x, t) === BigInt(c.nonce)) return t;
+  return -1;
 }
 /** The context fields of epoch 0 (C29) and of a commit. */
 export const genesisFields = (session) => ({
@@ -255,7 +292,13 @@ export function createGenesis(sc, { session, kems, uaRecordOf, accepted, info, r
     }),
   );
   const sealedInfo = sealTreeInfo(sc, sch.K, fields.epochId, fields.epochId, info, rand("sealed-info-nonce", 12));
-  const record = { ...session, wrapHashes: wraps.map((w) => w.hash), sealedInfo };
+  // the record in the type's field order, epoch 0's tag last (C43)
+  const record = Object.fromEntries(
+    pc.TYPES.PqChatSession.map((f) => [
+      f.name,
+      { ...session, wrapHashes: wraps.map((w) => w.hash), sealedInfo, confirmTag: hex(sch.tag) }[f.name],
+    ]),
+  );
   return {
     record,
     sessionId: hex(fields.epochId),
@@ -286,26 +329,46 @@ export function pathFromList(authorLeaf, ctTargets, leaves) {
 /** Builds a commit on `tree` (the parent tree, src/pqchat-tree.js form) at `parent` (`{ epochId, epoch, treeHash }`).
  *  `adds[i]` is a `TreeAdd` with its `kemPk` and `sig` (its registry record, authenticated by `uaRecordOf` and `accepted`,
  *  C-1); `keyOf(node)` the key of a target the parent tree holds (a leaf's registry key
- *  or a node key); `info` a full info or null (the marker); `rand(name, n)` the randomness. `faults` is for refusal rows
+ *  or a node key); `info` a full info or null (the marker); `rand(name, n)` the randomness. `pathless` (the delta §4.1, §6.5):
+ *  a path-less Add on the head handle `head` (`{ epochId, treeHash, next }` of the replay, `TreeHandle` unless it is
+ *  `parent`'s), its nonce `addNonce` at `try` (default 0) unless `nonce` is given. `faults` is for refusal rows
  *  only (a commit whose author signs what it built wrong: `nodeKeys`, `ct[j]` a `sealedSecret`, `eph[j]` a small-order
- *  `x25519Eph` of ciphertext j, `welcomeJoiner`, `welcomeEph[i]` the same in Welcome i, `infoK`);
+ *  `x25519Eph` of ciphertext j, `welcomeJoiner`, `welcomeEph[i]` the same in Welcome i, `infoK`, `tag` a confirmTag);
  *  a foreign `kemSeed` is a commit that seed did not build. Returns the record (unsigned), its pieces, the tree after
  *  it and the secrets. */
 export function buildCommit(sc, a, faults = {}) {
   const adds = a.adds ?? [];
   const removes = a.removes ?? [];
+  const pathless = a.pathless === true;
   const addRecs = adds.map(({ kemPk, sig, ...x }) => x);
   // C-1: each added key authenticated by its registry record, and the Add's kemHash its hash, before it is used
   for (const x of adds) {
     const k = recordKey(x.ua, x.keyId, x, a.uaRecordOf, a.accepted);
     if (kemHashOf(k) !== hex(x.kemHash)) refuse("TreeKeyHash");
   }
-  const p = tr.filteredPathAfter(a.tree, a.leaf, { removes, adds: addRecs });
+  const addsHash = tr.arrayHash("TreeAdd", addRecs);
+  if (pathless) {
+    // claude-19: the head handle is the record's parent, else nothing is built
+    const hd = a.head;
+    if (!hd?.next || hex(hd.epochId) !== hex(a.parent.epochId) || hex(hd.treeHash) !== hex(a.parent.treeHash))
+      refuse("TreeHandle");
+  }
+  const nonce =
+    a.nonce ??
+    (pathless
+      ? addNonce(
+          sc,
+          a.kemSeed,
+          { treeId: a.treeId, parentEpochId: a.parent.epochId, parentTreeHash: a.parent.treeHash, addsHash },
+          a.try ?? 0,
+        )
+      : refuse("TreeNonce"));
+  const p = pathless ? [] : tr.filteredPathAfter(a.tree, a.leaf, { removes, adds: addRecs });
   const ctTargets = p.flatMap((q) => q.targets);
   const head = {
     sessionId: a.sessionId,
     author: a.author,
-    nonce: a.nonce,
+    nonce,
     epoch: a.parent.epoch + 1,
     parentEpochId: a.parent.epochId,
     treeId: a.treeId,
@@ -313,11 +376,11 @@ export function buildCommit(sc, a, faults = {}) {
     leaf: a.leaf,
     keyId: a.keyId,
   };
-  const ctx = pathContext(sc, { ...head, removes, adds: addRecs }, ctTargets);
-  const ps = pathSecrets(sc, firstPathSecret(sc, a.kemSeed, ctx), p.length);
+  const ctx = pathless ? null : pathContext(sc, { ...head, removes, adds: addRecs }, ctTargets);
+  const ps = pathless ? [] : pathSecrets(sc, firstPathSecret(sc, a.kemSeed, ctx), p.length);
   const nodeKeys = faults.nodeKeys ?? ps.slice(0, p.length).map((s) => hex(nodeKeyOf(sc, s).kemPk));
   const nodeKeyHashes = nodeKeys.map((k) => hex(keccak_256(b(k))));
-  const epochId = hex(pc.epochId(a.sessionId, a.author, a.nonce));
+  const epochId = hex(pc.epochId(a.sessionId, a.author, nonce));
   const added = new Map(addRecs.map((x, i) => [2 * x.leaf, adds[i].kemPk]));
   const cts = [];
   p.forEach((q, k) =>
@@ -340,7 +403,7 @@ export function buildCommit(sc, a, faults = {}) {
     }),
   );
   const ctHashes = cts.map((c) => hex(tr.treeStructHash("PathCt", c.ct)));
-  const applied = tr.applyCommit(a.tree, { ...head, removes, adds: addRecs, nodeKeyHashes });
+  const applied = tr.applyCommit(a.tree, { ...head, pathless, removes, adds: addRecs, nodeKeyHashes });
   const rec = {
     ...head,
     leaves: applied.tree.leaves,
@@ -352,8 +415,11 @@ export function buildCommit(sc, a, faults = {}) {
     ctListHash: hex(tr.pathListHash(ctTargets, ctHashes)),
     treeHash: applied.treeHash,
   };
-  const commitSecret = ps[p.length];
-  const sch = schedule(sc, joinerSecret(sc, commitSecret, a.treeId, epochId), commitFields(rec));
+  const commitSecret = pathless ? null : ps[p.length];
+  const joiner = pathless
+    ? addJoinerSecret(sc, a.head.next, a.treeId, epochId, addsHash)
+    : joinerSecret(sc, commitSecret, a.treeId, epochId);
+  const sch = schedule(sc, joiner, commitFields(rec));
   const wraps = adds.map((x, i) => {
     const w = sealTreeWrap(sc, {
       joiner: faults.welcomeJoiner ?? sch.joiner,
@@ -377,17 +443,18 @@ export function buildCommit(sc, a, faults = {}) {
     a.info,
     a.rand("sealed-info-nonce", 12),
   );
+  const confirmTag = hex(faults.tag ?? sch.tag);
   // the record in the type's field order
   const record = Object.fromEntries(
     tr.TREE_TYPES.PqChatCommit.map((f) => [
       f.name,
-      { ...rec, wrapHashes: wraps.map((w) => w.hash), sealedInfo }[f.name],
+      { ...rec, wrapHashes: wraps.map((w) => w.hash), sealedInfo, pathless, confirmTag }[f.name],
     ]),
   );
   return {
     record,
     epochId,
-    pathContext: hex(ctx),
+    pathContext: ctx === null ? null : hex(ctx),
     ps: ps.map(hex),
     ctTargets,
     ctHashes,
@@ -402,7 +469,7 @@ export function buildCommit(sc, a, faults = {}) {
 // ------------------------------------------------------------------ the home's state, as the contract keeps it (a model)
 
 const kemHashOf = (kemPk) => hex(keccak_256(b(kemPk)));
-const clone = (v) => JSON.parse(JSON.stringify(v));
+const clone = (v) => structuredClone(v);
 /** An exit's record as the contract's `leaveAt` / `removalAt` serve it: without `treeId` (the session's, `treeOf`). */
 const keptExit = ({ treeId, ...r }) => r;
 
@@ -414,7 +481,10 @@ const keptExit = ({ treeId, ...r }) => r;
  *  endpoint that lies would serve it. */
 export function newHome({ genesis, sig, kems, uaRecords }) {
   const s = genesis.record;
-  const tree = tr.coldTree(s.members.map((m) => ({ ...m, kemHash: kemHashOf(kems.get(`${m.ua}/${m.keyId}`).kemPk) })));
+  const tree = tr.coldTree(
+    s.members.map((m) => ({ ...m, kemHash: kemHashOf(kems.get(`${m.ua}/${m.keyId}`).kemPk) })),
+    s.pathRefreshBound,
+  );
   return {
     sessionId: genesis.sessionId,
     treeId: genesis.treeId,
@@ -508,6 +578,7 @@ export function reader(h, tamper = (_, v) => v) {
       used: h.tree.used,
       treeHash: headHash(h),
       genesisTreeHash: h.genesisTreeHash,
+      sincePath: h.tree.sincePath,
     })),
     treeLeaves: view("treeLeaves", () =>
       Array.from({ length: h.tree.leaves }, (_, i) => {
@@ -678,7 +749,10 @@ function walk(sc, rd, pin = null, keep = []) {
       Array.isArray(r.admins) &&
       isHex(r.sealedInfo) &&
       b(r.sealedInfo).length >= 1 &&
-      b(r.sealedInfo).length <= TREE_INFO_MAX,
+      b(r.sealedInfo).length <= TREE_INFO_MAX &&
+      isNat(r.pathRefreshBound) &&
+      r.pathRefreshBound <= tr.PATH_REFRESH_BOUND_MAX &&
+      isB32(r.confirmTag),
     "sessionOf()",
   );
   const v0 = verified(sc, rd, "PqChatSession", S0, S0.creator, s.sig, "sessionOf()");
@@ -726,7 +800,7 @@ function walk(sc, rd, pin = null, keep = []) {
     versionUp(new Map(), versions, v0, "sessionOf()");
     const cold = S0.members.map((m) => ({ ...m, kemHash: kemHashOf(kemAt(rd, m.ua, m.keyId)) }));
     try {
-      tree = tr.coldTree(cold);
+      tree = tr.coldTree(cold, S0.pathRefreshBound);
     } catch (e) {
       // a signed member list the contract refuses (one key at two leaves): a lying read
       if (e instanceof pc.PqChatError) corrupt("sessionOf()");
@@ -781,6 +855,7 @@ function walk(sc, rd, pin = null, keep = []) {
     t.treeId === treeId &&
     t.leaves === w.leaves &&
     t.used === w.used &&
+    t.sincePath === w.sincePath &&
     t.treeHash === tr.treeHash(w) &&
     (pin || t.genesisTreeHash === tr.treeHash(a.trees[0])) &&
     leaves.length >= w.used &&
@@ -841,6 +916,8 @@ function commitAt(sc, rd, a, n) {
       isHex(r.sealedInfo) &&
       b(r.sealedInfo).length >= 1 &&
       b(r.sealedInfo).length <= TREE_INFO_MAX &&
+      typeof r.pathless === "boolean" &&
+      isB32(r.confirmTag) &&
       [...r.removes, ...r.adds].every((x) => isObj(x) && Number.isInteger(x.leaf) && x.leaf < r.leaves),
     where,
   );
@@ -1060,7 +1137,8 @@ export function replay(sc, rd, dev, store = null, from = null) {
     }
   }
   const adminsAt = (n) => a.admins[n];
-  // 6. the secret range's pieces, by public data only, all read before anything is opened (C22)
+  // 6. the secret range's pieces, by public data only, all read before anything is opened (C22); a record whose `ctCount`
+  // is 0 (a path-less Add, the last live leaf's commit) has no list: the record and, at the join, the wrap (the delta §6)
   const plan = [];
   for (let n = first; n <= last; n++) {
     if (n === 0) {
@@ -1071,17 +1149,20 @@ export function replay(sc, rd, dev, store = null, from = null) {
     }
     const c = recs[n];
     const p = { n, own: c.author === dev.ua && c.keyId === dev.keyId && c.leaf === leaf, j: -1 };
-    p.list = served(
-      rd.pathListOf(n),
-      (x) => isObj(x) && Array.isArray(x.ctTargets) && Array.isArray(x.ctHashes),
-      `pathListOf(${n})`,
-    );
-    if (
-      JSON.stringify(p.list.ctTargets) !== JSON.stringify(a.targets[n]) ||
-      p.list.ctHashes.length !== c.ctCount ||
-      hex(tr.pathListHash(p.list.ctTargets, p.list.ctHashes)) !== c.ctListHash
-    )
-      corrupt(`pathListOf(${n})`);
+    if (c.ctCount === 0) p.list = { ctTargets: [], ctHashes: [] };
+    else {
+      p.list = served(
+        rd.pathListOf(n),
+        (x) => isObj(x) && Array.isArray(x.ctTargets) && Array.isArray(x.ctHashes),
+        `pathListOf(${n})`,
+      );
+      if (
+        JSON.stringify(p.list.ctTargets) !== JSON.stringify(a.targets[n]) ||
+        p.list.ctHashes.length !== c.ctCount ||
+        hex(tr.pathListHash(p.list.ctTargets, p.list.ctHashes)) !== c.ctListHash
+      )
+        corrupt(`pathListOf(${n})`);
+    }
     if (!p.own) {
       const mine = new Set([2 * leaf, ...tr.directPath(2 * leaf, c.leaves)]);
       p.j = p.list.ctTargets.findIndex((x) => mine.has(x));
@@ -1096,26 +1177,32 @@ export function replay(sc, rd, dev, store = null, from = null) {
     }
     plan.push(p);
   }
-  // the secrets, from those bytes only
+  // the secrets, from those bytes only; `chain` the previous epoch's `next` and whether the device is anchored in the run
+  // (the delta §6.2, C45): null when it did not follow (or hold the chain's key of) the previous epoch
   const held = from ? new Map(from.heldKeys) : new Map([[2 * leaf, { kemPk: hex(dev.kemPk), key: dev.key }]]);
   const was = from?.epochs.at(-1);
   let inForce = was ? was.inForce : null;
   let flagged = was ? was.flagged : false;
+  let chain = from ? from.chain : null;
   const epochs = [];
   const warnings = [];
+  const suspects = [];
   for (const p of plan) {
     const n = p.n;
     const c = recs[n];
     let res;
     if (n === 0) res = openGenesis(sc, a, dev, p);
+    else if (c.pathless) res = pathlessCommit(sc, a, dev, p, chain, n === joinEpoch && wrapIndex >= 0);
     else res = (p.own ? ownCommit : othersCommit)(sc, a, dev, p, held);
+    chain = res.chain ?? null;
     if (n > 0) {
-      for (const x of [c.leaf, ...c.removes.map((r) => r.leaf), ...c.adds.map((r) => r.leaf)])
-        for (const y of tr.directPath(2 * x, c.leaves)) held.delete(y);
+      // a path-less Add blanks only its new leaves' direct paths, the root included (C6); a path commit also the author's
+      const moved = c.pathless ? c.adds : [c, ...c.removes, ...c.adds];
+      for (const x of moved) for (const y of tr.directPath(2 * x.leaf, c.leaves)) held.delete(y);
       for (const [x, k] of res.derived ?? []) held.set(x, { kemPk: hex(k.kemPk), key: k });
     }
     let info = null;
-    if (res.state === "followed") {
+    if (res.state === "followed" && res.info) {
       const admin = n === 0 || adminsAt(n - 1).includes(c.author);
       if (res.info.marker) info = "marker";
       else if (inForce === null) {
@@ -1128,21 +1215,32 @@ export function replay(sc, rd, dev, store = null, from = null) {
         info = "full";
       }
     } else {
-      // a device that did not follow an epoch has no info in force from that epoch on (fable-r3-1)
+      // a device that did not follow an epoch, or did not take its info, has no info in force from that epoch on
+      // (fable-r3-1; the delta's F-8: "followed, info not taken"; C45)
       [inForce, flagged] = [null, false];
+      if (res.state === "followed") info = "not taken";
     }
+    // C-2, B2-7: an added leaf is left when the walk's head tree still holds that Add's key at its leaf (a pair has one
+    // period, C28); the served `joinEpoch` decides nothing
+    const live = (x) => {
+      const y = a.trees[head].nodes[2 * x.leaf];
+      return y?.ua === x.ua && y.keyId === x.keyId && y.kemHash === x.kemHash;
+    };
     if (res.state === "compromise") {
-      // C-2, B2-7: an added leaf is left when the walk's head tree still holds that Add's key at its leaf (a pair has one
-      // period, C28); the served `joinEpoch` decides nothing
-      const live = (x) => {
-        const y = a.trees[head].nodes[2 * x.leaf];
-        return y?.ua === x.ua && y.keyId === x.keyId && y.kemHash === x.kemHash;
-      };
       warnings.push({
         epoch: n,
         adds: c.adds.map((x) => ({ leaf: x.leaf, ua: x.ua, keyId: x.keyId })),
         removes: c.removes,
         adminsChanged: !sameList(c.admins, adminsAt(n - 1)),
+        leavesLeft: c.adds.filter(live).map((x) => x.leaf),
+      });
+    }
+    if (res.state === "author did not hold") {
+      // C45: the epoch, its author and the leaves it added, shown to every member; those still live are under review
+      suspects.push({
+        epoch: n,
+        author: c.author,
+        adds: c.adds.map((x) => ({ leaf: x.leaf, ua: x.ua, keyId: x.keyId })),
         leavesLeft: c.adds.filter(live).map((x) => x.leaf),
       });
     }
@@ -1152,6 +1250,10 @@ export function replay(sc, rd, dev, store = null, from = null) {
     Object.assign(row, { info, inForce, flagged });
     epochs.push(row);
   }
+  // the leaves under review (F-3): every still-live leaf a compromise warning or a C45 state names
+  const review = [...new Set([...warnings, ...suspects].flatMap((x) => x.leavesLeft))].sort((x, y) => x - y);
+  const headTree = a.trees[head];
+  const isAdmin = a.admins[head].includes(hex(dev.ua));
   return {
     inSession: true,
     reads: rd.log,
@@ -1161,11 +1263,23 @@ export function replay(sc, rd, dev, store = null, from = null) {
     rosters,
     epochs,
     warnings,
+    suspects,
+    review,
+    // the admins' warning (R18, C46): from `sincePath ≥ W(N)`, shown on an admin's device only
+    sincePath: headTree.sincePath,
+    pathWarning: isAdmin && endEpoch === null && headTree.sincePath >= warnAt(headTree.pathBound),
     held: [...held.keys()].sort((x, y) => x - y),
     heldKeys: held,
+    chain,
+    // the head's handle (the delta §6.5): its `next` only while the device holds the head's epoch
+    head: chain && last === head ? { epochId: ids[head], treeHash: tr.treeHash(headTree), next: hex(chain.next) } : null,
     pin: pinAt(a, head),
   };
 }
+
+/** The admins' warning threshold (C46, the delta §6.4): `W(0)` = 20 (PATHLESS_WARN_LEAVES), `W(N) = max(1, N − ⌈N/4⌉)`. */
+export const PATHLESS_WARN_LEAVES = 20;
+export const warnAt = (N) => (N === 0 ? PATHLESS_WARN_LEAVES : Math.max(1, N - Math.ceil(N / 4)));
 
 /** What a holder of node secrets alone (`held`: node → `{ kemPk, key }`, a leaked set) gets from commit `n`: its `K`, or the
  *  reason it gets none (fable-6, codex-15). An analysis of the leaked-set rows: no device calls it. */
@@ -1177,15 +1291,27 @@ export function withHeld(sc, rd, n, held) {
   return othersCommit(sc, a, null, p, new Map(held));
 }
 
+const sameTag = (sch, tag) => hex(sch.tag) === hex(tag);
+/** The tail of every kind: the tag decides the key state, `sealedInfo` only the info (C12 as amended, F-8): a good tag with
+ *  an info that does not open is "followed" with no info (`info` null: "followed, info not taken"). */
+const taken = (sc, a, epochId, sealed, sch, anchored) => ({
+  state: "followed",
+  K: sch.K,
+  info: openTreeInfo(sc, sch.K, a.sid, epochId, sealed),
+  chain: { next: sch.next, anchored },
+});
+
 function openGenesis(sc, a, dev, p) {
   const joiner = openTreeWrap(sc, { wrap: p.wrap, ctxId: a.gctx, epochId: a.sid, kemPk: dev.kemPk }, dev.key);
   if (!joiner) return { state: "not followed", reason: "opening failed" };
   const sch = schedule(sc, joiner, genesisFields(a.S0));
-  const info = openTreeInfo(sc, sch.K, a.sid, a.sid, a.S0.sealedInfo);
-  return info ? { state: "followed", K: sch.K, info } : { state: "not followed", reason: "info does not open" };
+  // epoch 0's tag in the session record (C43, F-7): a genesis wrap that does not match it is not followed
+  if (!sameTag(sch, a.S0.confirmTag)) return { state: "not followed", reason: "tag" };
+  return taken(sc, a, a.sid, a.S0.sealedInfo, sch, true);
 }
 
-/** The tail of a commit's processing: the joiner, the Welcome when there is one, the schedule, the confirmation (C12). */
+/** The tail of a path commit's processing: the joiner, the Welcome when there is one, the schedule, the tag (claude-21: "not
+ *  followed (tag)"), then the info. */
 function finish(sc, a, c, p, dev, commitSecret) {
   const epochId = a.ids[c.epoch];
   const joiner = joinerSecret(sc, commitSecret, a.treeId, epochId);
@@ -1194,8 +1320,31 @@ function finish(sc, a, c, p, dev, commitSecret) {
     if (!w || hex(w) !== hex(joiner)) return { state: "not followed", reason: "welcome disagrees" };
   }
   const sch = schedule(sc, joiner, commitFields(c));
-  const info = openTreeInfo(sc, sch.K, a.sid, epochId, c.sealedInfo);
-  return info ? { state: "followed", K: sch.K, info } : { state: "not followed", reason: "info does not open" };
+  if (!sameTag(sch, c.confirmTag)) return { state: "not followed", reason: "tag" };
+  return taken(sc, a, epochId, c.sealedInfo, sch, true);
+}
+
+/** A path-less Add (the delta §4.1, §6.2, §6.3, §6.5). Its own `(ua, keyId)` first: reproduced only when a `try` of the seed
+ *  gives its nonce, else the compromise warning (C47), with or without the epoch state. A joiner at its join opens its wrap
+ *  (unanchored); a device that holds the parent's `next` (`chain`) derives the joiner secret; the tag then decides: good,
+ *  followed; failing at an anchored device, "author did not hold" with the chain's key kept (C45); at an unanchored one,
+ *  "not followed" ("welcome may not match", F-1); at the join, "not followed" ("tag"). */
+function pathlessCommit(sc, a, dev, p, chain, joining) {
+  const c = a.recs[p.n];
+  const epochId = a.ids[p.n];
+  if (p.own && !(dev.kemSeed && addNonceTry(sc, dev.kemSeed, c) >= 0)) return { state: "compromise" };
+  if (joining) {
+    const joiner = openTreeWrap(sc, { wrap: p.wrap, ctxId: a.treeId, epochId, kemPk: dev.kemPk }, dev.key);
+    if (!joiner) return { state: "not followed", reason: "opening failed" };
+    const sch = schedule(sc, joiner, commitFields(c));
+    if (!sameTag(sch, c.confirmTag)) return { state: "not followed", reason: "tag" };
+    return taken(sc, a, epochId, c.sealedInfo, sch, false);
+  }
+  if (!chain) return { state: "not followed", reason: "parent not followed" };
+  const sch = schedule(sc, addJoinerSecret(sc, chain.next, a.treeId, epochId, tr.arrayHash("TreeAdd", c.adds)), commitFields(c));
+  if (sameTag(sch, c.confirmTag)) return taken(sc, a, epochId, c.sealedInfo, sch, chain.anchored);
+  if (!chain.anchored) return { state: "not followed", reason: "welcome may not match" };
+  return { state: "author did not hold", K: sch.K, chain: { next: sch.next, anchored: true } };
 }
 
 /** Another member's commit: the one ciphertext over its leaf, upward with the key comparison (§10). */
@@ -1228,8 +1377,9 @@ function othersCommit(sc, a, dev, p, held) {
   return r.state === "followed" ? { ...r, derived } : r;
 }
 
-/** Its own commit: `ps[0]` from the seed; reproduced is both tests, the node keys and the info (codex-r3-4), else the
- *  compromise warning, never "not followed" (R10, fable-r2-1). */
+/** Its own commit: `ps[0]` from the seed; reproduced is both tests, the node keys and the tag (codex-r3-4, claude-21; for the
+ *  last live leaf the tag alone), else the compromise warning, never "not followed" (R10, fable-r2-1); the info then as any
+ *  member's. */
 function ownCommit(sc, a, dev, p) {
   const c = a.recs[p.n];
   if (!dev.kemSeed) return { state: "not followed", reason: "random key" };
