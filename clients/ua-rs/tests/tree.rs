@@ -1223,11 +1223,16 @@ fn rebuild(keys: &AppKeys, world: &World, home: &mut Home, st: &Value) -> bool {
         assert!(p
             .review()
             .iter()
-            .any(|(k, v)| k == "pathless" && v.starts_with("adds without refreshing the group's keys")));
+            .any(|(k, v)| k == "pathless"
+                && v.starts_with("adds without refreshing the group's keys")));
         let person = world.person(&a32(&c["author"]));
         let (b, sig) = p.sign(&person.key()).unwrap();
         if b.record == *c {
-            assert_eq!(json!(hx(&sig.signature)), st["sig"], "{name}: the author's signature");
+            assert_eq!(
+                json!(hx(&sig.signature)),
+                st["sig"],
+                "{name}: the author's signature"
+            );
         }
         return b.record == *c
             && hx(&b.epoch_id) == st["epochId"]
@@ -1358,7 +1363,11 @@ fn replay_row(keys: &AppKeys, world: &World, home: &mut Home, tag: &str, dev: &s
     assert_eq!(json!(suspects), want["suspects"], "{at} suspects");
     assert_eq!(json!(r.review), want["review"], "{at} review");
     assert_eq!(json!(r.since_path), want["sincePath"], "{at} sincePath");
-    assert_eq!(json!(r.path_warning), want["pathWarning"], "{at} pathWarning");
+    assert_eq!(
+        json!(r.path_warning),
+        want["pathWarning"],
+        "{at} pathWarning"
+    );
     let head = r.head.as_ref().map(|h| {
         json!({"epochId": hx(&h.epoch_id), "treeHash": hx(&h.tree_hash),
             "next": hx(&keys.vectors_reveal(&h.next).unwrap())})
@@ -1404,8 +1413,7 @@ fn replay_row(keys: &AppKeys, world: &World, home: &mut Home, tag: &str, dev: &s
         .unwrap()
         .unwrap();
     assert!(w.epochs.iter().all(|e| e.k.is_some()
-        == (e.epoch == pin.epoch
-            && matches!(e.state, State::Followed | State::AuthorDidNotHold))));
+        == (e.epoch == pin.epoch && matches!(e.state, State::Followed | State::AuthorDidNotHold))));
 }
 
 // ------------------------------------------------------------------ refusals beside their positive twins
@@ -3035,7 +3043,10 @@ fn tree_pathless_handle_of_another_parent() {
         key_id: u(&d["keyId"]),
         kem,
     };
-    let old = keys.tree_replay(SC, &mut home, &dev, None, 0).unwrap().unwrap();
+    let old = keys
+        .tree_replay(SC, &mut home, &dev, None, 0)
+        .unwrap()
+        .unwrap();
     let step6 = &s["steps"][5]["record"];
     let add = Add::from_json(&step6["adds"][0]).unwrap();
     let input = |prep| PathlessInput {
@@ -3057,7 +3068,10 @@ fn tree_pathless_handle_of_another_parent() {
         code(keys.vectors_tree_prepare_pathless(SC, input(&prep), hd, 0, None, &mut rand)),
         "TreeHandle"
     );
-    let now = keys.tree_replay(SC, &mut home, &dev, None, 0).unwrap().unwrap();
+    let now = keys
+        .tree_replay(SC, &mut home, &dev, None, 0)
+        .unwrap()
+        .unwrap();
     let hd = now.head.as_ref().expect("the head's handle");
     assert_eq!(hd.epoch_id, prep.parent_epoch_id());
     assert!(keys
@@ -3123,7 +3137,15 @@ fn tree_session_bound_above_the_cap_is_a_lie() {
         let ua_keys = (0..4)
             .map(|i| (o.ua(i), (MLDSA65, o.uas[i].key_data())))
             .collect();
-        let mut h = new_home(&g.record, sig, g.wraps.clone(), g.session_id, g.tree_id, kems, ua_keys);
+        let mut h = new_home(
+            &g.record,
+            sig,
+            g.wraps.clone(),
+            g.session_id,
+            g.tree_id,
+            kems,
+            ua_keys,
+        );
         let r = o.keys.tree_replay(OWN, &mut h, &o.dev(1), None, 0);
         if ok {
             assert_eq!(r.unwrap().unwrap().epochs[0].state, State::Followed);

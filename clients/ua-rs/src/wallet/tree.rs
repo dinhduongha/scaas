@@ -360,12 +360,18 @@ fn add_nonce(sc: &TreeScope, kem: &KemKeyPair, parent: &[[u8; 32]; 4], try_: u32
     ]
     .concat();
     let o = kem.seed_hkdf(&info, 32)?;
-    let b: [u8; 8] = o.get(..8).and_then(|x| x.try_into().ok()).ok_or(Error::Argument)?;
+    let b: [u8; 8] = o
+        .get(..8)
+        .and_then(|x| x.try_into().ok())
+        .ok_or(Error::Argument)?;
     Ok(u64::from_be_bytes(b))
 }
 /// The own-commit test of a path-less record (C47, the delta §6.5): whether a `try` of the device's seed gives its nonce.
 fn add_nonce_reproduced(sc: &TreeScope, kem: &KemKeyPair, c: &Value) -> Result<bool> {
-    let adds = c.get("adds").and_then(Value::as_array).ok_or(Error::Argument)?;
+    let adds = c
+        .get("adds")
+        .and_then(Value::as_array)
+        .ok_or(Error::Argument)?;
     let parent = [
         b32j(c, "treeId")?,
         b32j(c, "parentEpochId")?,
@@ -904,7 +910,12 @@ impl AppKeys {
             Nonce::Try(t) => add_nonce(
                 sc,
                 a.kem,
-                &[a.tree_id, pr.parent_epoch_id, pr.parent_tree_hash, adds_hash],
+                &[
+                    a.tree_id,
+                    pr.parent_epoch_id,
+                    pr.parent_tree_hash,
+                    adds_hash,
+                ],
                 t,
             )?,
         };
@@ -2330,7 +2341,14 @@ fn compromise() -> Opened {
 }
 /// The tag decides the key state, `sealedInfo` only the info (C12 as amended, F-8): followed, `info` `None` when it does
 /// not open ("followed, info not taken").
-fn taken(sc: &TreeScope, a: &Walk, epoch_id: &[u8; 32], sealed: &[u8], sch: Sched, anchored: bool) -> Opened {
+fn taken(
+    sc: &TreeScope,
+    a: &Walk,
+    epoch_id: &[u8; 32],
+    sealed: &[u8],
+    sch: Sched,
+    anchored: bool,
+) -> Opened {
     Opened {
         state: State::Followed,
         info: open_info(sc, &sch.k[..], &a.sid, epoch_id, sealed),
@@ -2730,7 +2748,9 @@ impl AppKeys {
         let (since_path, top_hash) = (top.since_path, top.tree_hash());
         let anchored = chain.as_ref().is_some_and(|c| c.anchored);
         let head_handle = match chain {
-            Some(ch) if last == head => Some(self.tree_head(at(&a.ids, head)?, top_hash, &ch.next[..])?),
+            Some(ch) if last == head => {
+                Some(self.tree_head(at(&a.ids, head)?, top_hash, &ch.next[..])?)
+            }
             _ => None,
         };
         Ok(Some(Replay {
@@ -2924,7 +2944,10 @@ impl AppKeys {
         let Some(ch) = chain else {
             return Ok(not("parent not followed"));
         };
-        let adds = c.get("adds").and_then(Value::as_array).ok_or(Error::Argument)?;
+        let adds = c
+            .get("adds")
+            .and_then(Value::as_array)
+            .ok_or(Error::Argument)?;
         let adds_hash = array_hash(sc.typed, "TreeAdd", adds)?;
         let joiner = add_joiner_secret(sc, &ch.next[..], &a.tree_id, &epoch_id, &adds_hash)?;
         let sch = schedule(sc, &joiner[..], &f)?;
