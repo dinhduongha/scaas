@@ -205,7 +205,8 @@ fam-btc = ["wallet"]
 # Arweave as a store: ANS-104 and `seal_for_arweave` (chains-arweave CA-T16, CA-T17 on branch `sdk-arweave`); the generic file
 # seal stays in the core
 fam-arweave = []
-pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc", "dep:falcon-rs"]
+# `zeroize` (the wallet's pin, already in falcon-rs's graph): src/falcon/soft.rs clears its buffers with it (Fable audit FR-10)
+pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc", "dep:falcon-rs", "dep:zeroize"]
 
 [build-dependencies]
 # feature `pq`: the vendored PQClean Falcon (build.rs); any 1.x, so a dependent keeps its own (ua-rs locks 1.10.0)
@@ -515,7 +516,12 @@ required-features = ["app-core", "fam-arweave", "vectors"]
 name = "file_seal"
 required-features = ["app-core"]
 
-# owner 2026-11-26: the wasm32 Falcon verifier's gate, every FN-DSA row through falcon-rs 0.4.0 beside PQClean
+# owner 2026-11-26: the wasm32 Falcon verifier's gate, every FN-DSA row through falcon-rs 0.3.1 beside PQClean
 [[test]]
 name = "fndsa_vrfy"
+required-features = ["pq"]
+
+# the Fable audit of vendor-falcon-rs: a timing measurement of falcon-rs (ignored; not a gate)
+[[test]]
+name = "fndsa_timing"
 required-features = ["pq"]

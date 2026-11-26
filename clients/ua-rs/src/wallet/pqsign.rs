@@ -69,9 +69,7 @@ pub(crate) fn keypair(kind: u16, seed: &[u8]) -> Result<(Zeroizing<Vec<u8>>, Vec
                 return Err(Error::KindUnavailable);
             }
             let (mut pk, mut sk) = (vec![0u8; p.pk], Zeroizing::new(vec![0u8; p.sk]));
-            if !falcon::keypair(p, seed, &mut pk, &mut sk) {
-                return Err(Error::Argument);
-            }
+            falcon::keypair(p, seed, &mut pk, &mut sk)?;
             Ok((sk, pk))
         }
         _ => Err(Error::Argument),
@@ -90,10 +88,12 @@ fn mldsa_keypair<P: MlDsaParams>(seed: &[u8]) -> Result<(Zeroizing<Vec<u8>>, Vec
 
 /// The signature of `ua_msg` with `secret` (as [`keypair`] keeps it): randomness from the OS RNG, or `fixed` (feature
 /// `vectors` only: exactly the kind's length; ML-DSA zero = the deterministic variant, SLH-DSA `PK.seed` = its deterministic
-/// variant).
+/// variant). Falcon's signature is verified under `key_data` (the key pair's public key) before it is returned, else
+/// `FalconSelfCheck` and nothing (Fable audit FR-12: a fault, hardware or JIT, never leaves as a signature).
 pub(crate) fn sign(
     kind: u16,
     secret: &[u8],
+    key_data: &[u8],
     ua_msg: &[u8; 32],
     fixed: Option<&[u8]>,
 ) -> Result<Vec<u8>> {
@@ -116,11 +116,13 @@ pub(crate) fn sign(
                 return Err(Error::KindUnavailable);
             }
             let mut sig = vec![0u8; p.sig];
-            if falcon::sign(p, secret, &m, &rnd, &mut sig) {
-                Ok(sig)
-            } else {
-                Err(Error::Argument)
+            if !falcon::sign(p, secret, &m, &rnd, &mut sig) {
+                return Err(Error::Argument);
             }
+            if !falcon::verify(p, key_data, &m, &sig) {
+                return Err(Error::FalconSelfCheck);
+            }
+            Ok(sig)
         }
     }
 }
@@ -165,5 +167,38 @@ pub fn sign_internal(kind: u16, sk: &[u8], mprime: &[u8], rnd: Option<&[u8]>) ->
         0x0134 => expanded::<MlDsa87>(sk, mprime, rnd.unwrap_or(&zero)),
         0x0133 => slhdsa(sk, &[mprime], rnd),
         _ => Err(Error::Argument),
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+
+    /// The Falcon glue's refusals (Fable audit FR-11, FR-12): a seed or secret key of the wrong length, and a signature that
+    /// does not verify under the key data given (`FalconSelfCheck`, verify after sign); PQClean natively, falcon-rs on wasm32.
+    #[test]
+    fn falcon_glue_refusals() {
+        if !falcon::AVAILABLE {
+            return;
+        }
+        for kind in [0x0132u16, 0x0135] {
+            let (seed, other) = ([5u8; 48], [6u8; 48]);
+            assert_eq!(keypair(kind, &seed[..47]).err(), Some(Error::Argument));
+            assert_eq!(keypair(kind, &[5u8; 49]).err(), Some(Error::Argument));
+            let (sk, pk) = keypair(kind, &seed).unwrap();
+            let (_, pk2) = keypair(kind, &other).unwrap();
+            let m = [3u8; 32];
+            let sig = sign(kind, &sk, &pk, &m, None).unwrap();
+            assert!(crate::pq::verify(kind, &pk, &m, &sig), "positive control");
+            assert_eq!(
+                sign(kind, &sk[..sk.len() - 1], &pk, &m, None).err(),
+                Some(Error::Argument)
+            );
+            assert_eq!(
+                sign(kind, &sk, &pk2, &m, None).err(),
+                Some(Error::FalconSelfCheck)
+            );
+        }
     }
 }

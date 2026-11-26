@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! CLI-UAL-66: tests/fndsa/rows.rs (every FN-DSA row, `pq::verify_raw`) and tests/fndsa/sign.rs (the wallet's Falcon keys and
 //! fixed-randomness signatures, their digest against PQClean's) in wasm32, where ua-rs runs falcon-rs. The vector files are
-//! compiled in. `run` returns `ok …` or `FAIL …`; run.cjs prints it and exits non-zero on `FAIL`. UNAUDITED.
+//! compiled in; and the key pairs of tests/fndsa/sign.rs `keys_digest` (1,000 seeds per degree, Fable audit FR-5) against
+//! PQClean's digest. `run` returns `ok …` or `FAIL …`; run.cjs prints it and exits non-zero on `FAIL`. `timing` is
+//! tests/fndsa/timing.rs in wasm32 (a measurement, not a gate; timing.cjs). UNAUDITED.
 #[path = "../rows.rs"]
 mod rows;
 #[path = "../sign.rs"]
 mod sign;
+#[allow(dead_code)] // verify
+#[path = "../../../src/falcon/soft.rs"]
+mod soft;
+#[path = "../timing.rs"]
+mod timing;
 
 use scaas_ua::pq;
 use serde_json::Value;
@@ -43,10 +50,28 @@ pub fn run() -> String {
         differs += (pq::verify_raw(r.kind, &r.pk, &r.m, &r.sig) != r.valid) as usize;
     }
     let (n, digest) = sign::wallet_digest(load, |_, _, _, _, _, _, _| {});
-    let ok = (acc, rej, differs) == (48, 172, 0) && n == sign::CASES && digest == sign::DIGEST;
+    let (keys, keys_digest) = sign::keys_digest(|_, _, _, _| {});
+    let ok = (acc, rej) == rows::COUNTS
+        && differs == 0
+        && n == sign::CASES
+        && digest == sign::DIGEST
+        && keys == 2 * sign::SEEDS as usize
+        && keys_digest == sign::KEYS_DIGEST;
     format!(
-        "{} {} rows: {acc} accept, {rej} refuse, {differs} differ; {n} wallet cases, digest {digest}",
+        "{} {} rows: {acc} accept, {rej} refuse, {differs} differ; {n} wallet cases, digest {digest}; {keys} key pairs, digest {keys_digest}",
         if ok { "ok" } else { "FAIL" },
         rows.len()
     )
+}
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = performance)]
+    fn now() -> f64;
+}
+
+/// tests/fndsa/timing.rs under the engine (Node's `performance.now`, in ns); a measurement, not a gate.
+#[wasm_bindgen]
+pub fn timing(scale: usize) -> String {
+    timing::run(&|| now() * 1e6, scale)
 }

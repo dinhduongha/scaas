@@ -79,11 +79,18 @@ mod ffi {
     }
 }
 
-/// The key pair of a 48-byte seed into `pk` and `sk` (exactly `p.pk` / `p.sk` bytes); `false` on a wrong length.
+/// The key pair of a 48-byte seed into `pk` and `sk` (exactly `p.pk` / `p.sk` bytes); `Argument` on a wrong length,
+/// `FalconKeygenCap` when falcon-rs (wasm32) gave up after its 1,000 attempts where PQClean loops on (FR-9).
 #[cfg(feature = "wallet")]
-pub(crate) fn keypair(p: Params, seed: &[u8], pk: &mut [u8], sk: &mut [u8]) -> bool {
+pub(crate) fn keypair(
+    p: Params,
+    seed: &[u8],
+    pk: &mut [u8],
+    sk: &mut [u8],
+) -> Result<(), crate::wallet::Error> {
+    use crate::wallet::Error;
     if seed.len() != SEED_LEN || pk.len() != p.pk || sk.len() != p.sk {
-        return false;
+        return Err(Error::Argument);
     }
     #[cfg(scaas_falcon)]
     {
@@ -99,14 +106,22 @@ pub(crate) fn keypair(p: Params, seed: &[u8], pk: &mut [u8], sk: &mut [u8]) -> b
                 _ => -1,
             }
         };
-        rc == 0
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(Error::Argument)
+        }
     }
     #[cfg(all(not(scaas_falcon), target_arch = "wasm32"))]
     {
-        soft::keypair(p.logn.into(), seed, pk, sk)
+        match soft::keypair(p.logn.into(), seed, pk, sk) {
+            0 => Ok(()),
+            soft::KEYGEN_CAP => Err(Error::FalconKeygenCap),
+            _ => Err(Error::Argument),
+        }
     }
     #[cfg(all(not(scaas_falcon), not(target_arch = "wasm32")))]
-    false
+    Err(Error::KindUnavailable)
 }
 
 /// The padded signature of `m` with `sk` and `rnd` (88 bytes) into `sig` (exactly `p.sig` bytes); `false` on a wrong length

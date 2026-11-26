@@ -11842,6 +11842,15 @@ disables a kind ([ARCH-POS-18](#ARCH-POS-18)); the web wallet must sign, not onl
 signatures the contracts refuse.
 **Source.** Owner 2026-11-26 (chat, through the coordinator): first "Ok" to the proposal "fn-dsa-vrfy 0.4.0 by Thomas Pornin, wasm32 only, after every FN-DSA vector row passes"; fn-dsa-vrfy failed the rows (FIPS 206 `mu` hashing; no SCaaS key decodes), so, verbatim: "a. Thử crate khác: falcon-rs trước, nếu vẫn lệch thì tự port bản Falcon round 3 sang Rust." (try another crate, falcon-rs first; if it still differs, port Falcon round-3 to Rust ourselves); and, relayed: the web wallet must sign on wasm32 too, so the check covers signing. falcon-rs passed, so no port was written. Then, relayed: the audited code lives in the repository under a vendor directory; verbatim "vendors ở ngoài cùng" (at the repository root) and "Có, chuyển đi" (move PQClean there too); the name `vendor/` is the controller's recommendation, which the owner asked for. Controller call: `fpemu` for signing. Evidence: `clients/runs/2026-11-26-ua-rs-wasm-fndsa-summary.txt`.
 
+Change (2026-11-26, the fixes of the Fable audit of falcon-rs, [record](audit/audited/vendor-falcon-rs.md); controller call; owner:
+no): stated beside "byte-equal to PQClean": a signature may differ from PQClean's with probability about 2^-39 per signature
+(`fpr_expm_p63`), both valid, and signed zero differs in four functions, unreachable with hashed targets (FR-1, FR-2); the rule
+"never a secret message through the padded signer" (variable-time hash-to-point, FR-7); the glue on `falcon::falcon::*` only,
+with a test guard (FR-8); every Falcon signature verified under its own key before it is returned (`FalconSelfCheck`, FR-12);
+falcon-rs's keygen cap named `FalconKeygenCap` (FR-9). The gate gains the encoding edges of each accept row (844 rows: 48 accept,
+796 refuse) and the key pairs of 1,000 seeds per degree (FR-5, FR-11), and runs in CI (job `ua-rs-fndsa-wasm`, FR-4). Evidence:
+`clients/runs/2026-11-26-falcon-rs-fixes-summary.txt`.
+
 ## 40. Clients — network crate (`scaas-rpc`)
 
 The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the [scaas-rpc spec](superpowers/specs/2026-11-17-scaas-rpc.md), reviewed by Fable on 2026-11-17 (findings F1–F28, I1–I3, all applied before any code).
