@@ -1416,6 +1416,66 @@ pub fn plan_commit(
     pieces(g, l, s, record)
 }
 
+/// The safety margin of a batch of Adds split into several commits (owner 2026-11-27, CTR-CHAT-27): each commit is planned
+/// within each limit less `limit / SPLIT_MARGIN_DIV` (2.5 %: 419,430 gas at a 2^24 cap), so the documented worst case (a cold
+/// tree of 511 targets, 32 admins, 4,124 B of info, ML-DSA-87) takes at most 16 Adds per commit (16,310,179 regular gas by
+/// the rows, 17 ask 16,464,358 against 16,357,786).
+pub const SPLIT_MARGIN_DIV: u64 = 40;
+
+/// `l` less the split's safety margin on each limit.
+pub fn margined(l: PqLimits) -> PqLimits {
+    PqLimits {
+        block: l.block - l.block / SPLIT_MARGIN_DIV,
+        tx_regular: l.tx_regular.map(|c| c - c / SPLIT_MARGIN_DIV),
+    }
+}
+
+/// The most Adds of `s` one commit takes within the margined limits (`s` with that many Adds, its Removes, admins, info and
+/// pieces as they are): what an app suggests ("at most N Adds per transaction"). A shape with no Add: 0. Not even one Add:
+/// the refusal by name of the one-Add commit.
+pub fn adds_per_commit(
+    g: &PqTreeGas,
+    l: PqLimits,
+    signer: &str,
+    s: &PqCommitShape,
+) -> Result<u64, PqTreeRefused> {
+    let m = margined(l);
+    let with = |n: u64| PqCommitShape {
+        adds: n,
+        changes: s.removes() + n,
+        ..*s
+    };
+    let mut best = 0;
+    for n in 1..=s.adds {
+        match plan_commit(g, m, signer, &with(n)) {
+            Ok(_) => best = n,
+            Err(e) if n == 1 => return Err(e),
+            Err(_) => break,
+        }
+    }
+    Ok(best)
+}
+
+/// A batch of Adds whose commit does not fit split into several ordinary commits (owner 2026-11-27): the Adds in their
+/// order, [`adds_per_commit`] in each, the last the rest; one commit when they all fit. Each commit is built on its own head
+/// and planned in C37's order; not even one Add fits: refused by name.
+pub fn split_adds(
+    g: &PqTreeGas,
+    l: PqLimits,
+    signer: &str,
+    s: &PqCommitShape,
+) -> Result<Vec<u64>, PqTreeRefused> {
+    let per = adds_per_commit(g, l, signer, s)?;
+    if per == 0 {
+        return Ok(vec![s.adds].into_iter().filter(|n| *n > 0).collect());
+    }
+    let mut out = vec![per; (s.adds / per) as usize];
+    if !s.adds.is_multiple_of(per) {
+        out.push(s.adds % per);
+    }
+    Ok(out)
+}
+
 /// The split plan of `s` with the record's gas `record` (C37): the record, the list, the node keys, the ciphertexts but one
 /// and the wraps in chunks that fit, the held piece with the completion. Also the fallback of a one-transaction plan whose
 /// record another sender stored (fable-r2-9), with `record` zero.
@@ -1736,6 +1796,52 @@ mod tests {
             keys: 9,
             adds: 20,
         }
+    }
+
+    /// Owner 2026-11-27 (CTR-CHAT-27): the worst case's 20 Adds split into 16 + 4, each commit planned within the cap less
+    /// the margin; 16 Adds one commit; a cap too small for one Add refuses it by name.
+    #[test]
+    fn a_batch_of_adds_over_the_cap_is_split() {
+        let g = rows();
+        assert_eq!(adds_per_commit(&g, L60, "mldsa87", &bounds()), Ok(16));
+        assert_eq!(split_adds(&g, L60, "mldsa87", &bounds()), Ok(vec![16, 4]));
+        let m = margined(L60);
+        assert_eq!(m.tx_regular, Some((1 << 24) - 419_430));
+        for n in [16, 4] {
+            let s = PqCommitShape {
+                adds: n,
+                changes: n,
+                ..bounds()
+            };
+            let p = plan_commit(&g, m, "mldsa87", &s).unwrap();
+            assert!(p.txs.iter().all(|t| m.fits(t.gas)), "{n}: {p:?}");
+        }
+        assert_eq!(
+            record_gas(
+                &g,
+                "mldsa87",
+                &PqCommitShape {
+                    adds: 16,
+                    changes: 16,
+                    ..bounds()
+                }
+            )
+            .unwrap()
+            .regular,
+            16_310_179
+        );
+        let sixteen = PqCommitShape {
+            adds: 16,
+            changes: 16,
+            ..bounds()
+        };
+        assert_eq!(split_adds(&g, L60, "mldsa87", &sixteen), Ok(vec![16]));
+        let small = PqLimits {
+            block: 60_000_000,
+            tx_regular: Some(10_000_000),
+        };
+        let e = split_adds(&g, small, "mldsa87", &bounds()).unwrap_err();
+        assert_eq!(e.what, "commit", "{e:?}");
     }
 
     /// Plan T5: a chain with a small block (20 M) takes a plain commit and refuses a record at its bounds by name, with

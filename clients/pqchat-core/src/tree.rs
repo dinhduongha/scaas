@@ -123,6 +123,17 @@ pub struct TreeBuilt {
     pub signed: PqTreeCommitSigned,
     pub plan: pt::PqTreePlan,
     pub head_confirmed: bool,
+    /// the Adds left for the next commits when the request was split (owner 2026-11-27), in order; empty otherwise
+    pub adds_left: Vec<Value>,
+}
+
+/// The commits a commit request becomes (owner 2026-11-27, [`PqChat::tree_commit_plan`]): the most Adds one commit takes
+/// within the cap less the margin (`None` without rows, for a kind they do not name, or without Adds), the Adds of each commit
+/// in order, and each commit's plan (its transactions with their gas).
+pub struct TreeSplit {
+    pub adds_per_commit: Option<u64>,
+    pub batches: Vec<u64>,
+    pub plans: Vec<pt::PqTreePlan>,
 }
 
 /// What a strict-majority read of `treeOf` said about the one a call read (R13, C26).
@@ -1036,8 +1047,10 @@ impl PqChat {
     /// moved since `st` (`TreeStale`, C33: the info `st` holds is the one in force at its head only; D-10); a changed info
     /// without a strict majority of at least 3 named endpoints serving the `treeOf` it reads, whole (`TreeInfoUnconfirmed`,
     /// R13; C-2 = D-1, D-3); an Add whose majority serves another state (the same name), or, with fewer than 3 named
-    /// endpoints, built with `head_confirmed` false for its review (spec §11). A required piece that does not fit refuses the
-    /// operation (`TreeTooLarge`), nothing signed.
+    /// endpoints, built with `head_confirmed` false for its review (spec §11). Adds over one commit (owner 2026-11-27,
+    /// [`PqChat::tree_commit_plan`]): this commit holds the first batch (with the Removes, admins and info), the rest is
+    /// `adds_left` for the next commit on the head this one makes, in order. A commit that cannot hold even one Add, or a
+    /// required piece that does not fit, refuses the operation (`TreeTooLarge`), nothing signed.
     pub async fn tree_commit(
         &self,
         s: &SessionRef,
@@ -1045,6 +1058,118 @@ impl PqChat {
         c: TreeCommit,
         leaf: u32,
     ) -> Result<TreeBuilt, PqChatError> {
+        let (mut prepared, mut head_confirmed) = self.tree_built(s, st, &c, &c.adds, leaf).await?;
+        let mut split = self
+            .tree_split(s, &c.me, &shape_of(&prepared.record))
+            .await?;
+        let first = split.batches.first().copied().unwrap_or(0) as usize;
+        let (head, left) = c.adds.split_at(first.min(c.adds.len()));
+        if split.batches.len() > 1 {
+            (prepared, head_confirmed) = self.tree_built(s, st, &c, head, leaf).await?;
+            split = self
+                .tree_split(s, &c.me, &shape_of(&prepared.record))
+                .await?;
+        }
+        let plan = split.plans.first().cloned().unwrap_or_else(one_tx);
+        let signed = prepared.sign().map_err(sdk)?;
+        Ok(TreeBuilt {
+            signed,
+            plan,
+            head_confirmed,
+            adds_left: left.to_vec(),
+        })
+    }
+
+    /// Before anything is signed (owner 2026-11-27): the commits a request becomes, built on the head of `st` as
+    /// [`PqChat::tree_commit`] builds it (nothing signed or sent): the most Adds one commit takes within the chain's cap less
+    /// the SDK's margin ([`pt::adds_per_commit`]: what the app suggests, "at most N Adds per transaction"), the Adds of each
+    /// commit in their order, and each commit's plan, its transactions with their gas (the first from the built commit, the
+    /// others on its shape with their Adds), for the app to show their count and fees. Each commit is an ordinary one (C37,
+    /// its own epoch); the app makes them one after the other and stops at the first refusal, the epochs landed before it
+    /// kept. The same refusals as `tree_commit`.
+    pub async fn tree_commit_plan(
+        &self,
+        s: &SessionRef,
+        st: &TreeState,
+        c: &TreeCommit,
+        leaf: u32,
+    ) -> Result<TreeSplit, PqChatError> {
+        let (prepared, _) = self.tree_built(s, st, c, &c.adds, leaf).await?;
+        self.tree_split(s, &c.me, &shape_of(&prepared.record)).await
+    }
+
+    /// The split of a built commit's shape on the chain's rows (one commit, one transaction, without rows or for a kind
+    /// the rows do not name, C-7).
+    async fn tree_split(
+        &self,
+        s: &SessionRef,
+        me: &Me,
+        shape: &PqCommitShape,
+    ) -> Result<TreeSplit, PqChatError> {
+        let one = || TreeSplit {
+            adds_per_commit: None,
+            batches: vec![shape.adds],
+            plans: vec![one_tx()],
+        };
+        let Some(g) = self.conf(&s.chain)?.tree_gas.as_deref() else {
+            return Ok(one());
+        };
+        let g: PqTreeGas = serde_json::from_str(g).map_err(|_| PqChatError::Internal)?;
+        let l = self.app.pqchat_tree_limits(&s.chain).await.map_err(sdk)?;
+        let kind = self.signer_kind(me)?;
+        // C-7: a kind the rows do not name is held to the quote alone, as without rows
+        let unnamed = |r: &pt::PqTreeRefused| r.what == pt::NO_KIND_ROW;
+        let (per, batches) = match (
+            pt::adds_per_commit(&g, l, &kind, shape),
+            pt::split_adds(&g, l, &kind, shape),
+        ) {
+            (Ok(per), Ok(b)) if b.len() > 1 => (Some(per), b),
+            (Ok(per), _) => ((shape.adds > 0).then_some(per), vec![shape.adds]),
+            (Err(r), _) if unnamed(&r) => return Ok(one()),
+            (Err(_), _) => return Err(PqChatError::TreeTooLarge),
+        };
+        let mut plans = Vec::new();
+        for (k, n) in batches.iter().enumerate() {
+            let sh = if k == 0 && batches.len() == 1 {
+                *shape
+            } else {
+                PqCommitShape {
+                    adds: *n,
+                    changes: if k == 0 {
+                        shape.changes - shape.adds
+                    } else {
+                        0
+                    } + n,
+                    ..*shape
+                }
+            };
+            let limits = if batches.len() > 1 {
+                pt::margined(l)
+            } else {
+                l
+            };
+            match pt::plan_commit(&g, limits, &kind, &sh) {
+                Ok(p) => plans.push(p),
+                Err(r) if unnamed(&r) => return Ok(one()),
+                Err(_) => return Err(PqChatError::TreeTooLarge),
+            }
+        }
+        Ok(TreeSplit {
+            adds_per_commit: per,
+            batches,
+            plans,
+        })
+    }
+
+    /// `c` with the Adds `adds` built (not signed) on the head of `st`, and whether a strict majority confirmed that head.
+    async fn tree_built(
+        &self,
+        s: &SessionRef,
+        st: &TreeState,
+        c: &TreeCommit,
+        adds: &[Value],
+        leaf: u32,
+    ) -> Result<(pt::PqTreeCommit, bool), PqChatError> {
         // C33: the device seals the info in force when it holds it, else the marker; a new info after a gap (the device
         // holds none in force) is the admin's reviewed action only (codex-r3-7), never sealed by itself
         let info = match (&c.info, st.replay.info_to_seal.as_ref()) {
@@ -1059,7 +1184,7 @@ impl PqChat {
         if st.ids.last().map(String::as_str) != model::h(at(&seen, "headEpochId")).ok().as_deref() {
             return Err(PqChatError::TreeStale);
         }
-        let head_confirmed = if changed || !c.adds.is_empty() {
+        let head_confirmed = if changed || !adds.is_empty() {
             match self.majority_tree(s, &seen).await {
                 Fresh::Confirmed => true,
                 Fresh::Unavailable if !changed => false,
@@ -1078,7 +1203,7 @@ impl PqChat {
             .and_then(Value::as_u64);
         let ch = PqTreeChanges {
             removes: c.removes.clone(),
-            adds: c.adds.clone(),
+            adds: adds.to_vec(),
             admins: c.admins.iter().map(|a| a.to_ascii_lowercase()).collect(),
             info,
         };
@@ -1099,26 +1224,7 @@ impl PqChat {
         if reads.views.get("treeOf()") != Some(&seen) {
             return Err(PqChatError::TreeStale);
         }
-        let shape = shape_of(&prepared.record);
-        let plan = match self.conf(&s.chain)?.tree_gas.as_deref() {
-            Some(g) => {
-                let g: PqTreeGas = serde_json::from_str(g).map_err(|_| PqChatError::Internal)?;
-                let l = self.app.pqchat_tree_limits(&s.chain).await.map_err(sdk)?;
-                match pt::plan_commit(&g, l, &self.signer_kind(&c.me)?, &shape) {
-                    Ok(p) => p,
-                    // C-7: a kind the rows do not name is held to the quote alone, as without rows
-                    Err(r) if r.what == pt::NO_KIND_ROW => one_tx(),
-                    Err(_) => return Err(PqChatError::TreeTooLarge),
-                }
-            }
-            None => one_tx(),
-        };
-        let signed = prepared.sign().map_err(sdk)?;
-        Ok(TreeBuilt {
-            signed,
-            plan,
-            head_confirmed,
-        })
+        Ok((prepared, head_confirmed))
     }
 
     /// The next transaction of a signed commit on the state now (C37): prepared, or `None` once the epoch is complete at

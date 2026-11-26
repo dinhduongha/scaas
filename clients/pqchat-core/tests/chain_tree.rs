@@ -174,6 +174,7 @@ async fn chain_tree_session() {
         signed: c1,
         plan: plan1,
         head_confirmed,
+        adds_left,
     } = pq
         .tree_commit(
             &s,
@@ -193,6 +194,7 @@ async fn chain_tree_session() {
         .await
         .unwrap();
     // R2-C-5 of the TreeKEM T4-T9 re-check: one endpoint, no strict majority: an Add built with its head not confirmed
+    assert!(adds_left.is_empty(), "two Adds: one commit");
     assert!(
         !head_confirmed && a0.unconfirmed,
         "one endpoint confirms nothing"
