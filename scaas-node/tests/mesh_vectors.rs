@@ -25,7 +25,7 @@ const UNREGISTERED: &str = "0x00000000000000000000000000000000000bad00";
 /// A `SmartKeyAccount` (the address body, Q6) and a mandate wallet (the UA body, Q6): no token of ours.
 const ACCOUNT: &str = "0x00000000000000000000000000000000000acc07";
 const WALLET: &str = "0x000000000000000000000000000000000000a11e";
-/// `chain_uid` of chain 7622 (the KATs' salt); the vectors use it for `hedera:296` too.
+/// The KATs' salt: the SCaaS testnet's first genesis hash, a fixed test constant (chain-uids.json's note); the vectors use it for `hedera:296` too.
 const UID: &str = "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464";
 
 // Vector chéo của adapter (cùng bytes ở Move/Python/program) — xem test trong src/adapters/*.rs.
@@ -527,7 +527,7 @@ fn regenerate() {
         f(&mut x);
         x
     };
-    let e1 = evm_env("evm:7622", &token, &base);
+    let e1 = evm_env("evm:22779", &token, &base);
     let mut cases = vec![
         case(
             "01_evm_open_fixed_fee",
@@ -538,7 +538,7 @@ fn regenerate() {
         case(
             "02_evm_garbage_unbound_fields",
             evm_env(
-                "evm:7622",
+                "evm:22779",
                 &token,
                 &m(&|x| {
                     x["relayer"] = json!("0x00000000000000000000000000000000deadbeef");
@@ -557,7 +557,7 @@ fn regenerate() {
     cases.push(case(
         "03a_evm_restrict_relayer_our_lane_kat",
         evm_env_named(
-            "evm:7622",
+            "evm:22779",
             &token,
             k["domain_name"].as_str().unwrap(),
             &kat_m,
@@ -569,7 +569,7 @@ fn regenerate() {
     cases.push(case(
         "03b_evm_restrict_relayer_foreign_lane",
         evm_env(
-            "evm:7622",
+            "evm:22779",
             &token,
             &m(&|x| {
                 x["mode"] = json!(0x21);
@@ -580,14 +580,14 @@ fn regenerate() {
     ));
     cases.push(case(
         "04_evm_restrict_relayer_zero",
-        evm_env("evm:7622", &token, &m(&|x| x["mode"] = json!(0x21))),
+        evm_env("evm:22779", &token, &m(&|x| x["mode"] = json!(0x21))),
         reject("RELAYER_BOUND_ZERO"),
     ));
     // 05: a plain transfer `MetaTransfer` (`entryRef = 0`): selector `transfer` (case 01 is a payment: `pay`).
     cases.push(case(
         "05_evm_transfer",
         evm_env(
-            "evm:7622",
+            "evm:22779",
             &token,
             &m(&|x| x["entryRef"] = json!(format!("{:#x}", alloy::primitives::B256::ZERO))),
         ),
@@ -599,7 +599,7 @@ fn regenerate() {
         "feeRecipient": zero.clone()});
     cases.push(case(
         "05b_evm_call",
-        evm_env("evm:7622", &token, &call),
+        evm_env("evm:22779", &token, &call),
         json!({"accept": true, "selector": "0xcfdd7aea", "fee_effective": "5000"}),
     ));
     // 05c: `SmartKeyAccount` keeps the address body (Q6): a `MetaTransaction` on a contract that is no token of ours.
@@ -607,7 +607,7 @@ fn regenerate() {
     cases.push(case(
         "05c_evm_account_address_call",
         address_env(
-            "evm:7622",
+            "evm:22779",
             ACCOUNT,
             "SCaaS SmartKeyAccount",
             &addr_call,
@@ -625,7 +625,7 @@ fn regenerate() {
     cases.push(case(
         "05d_evm_token_address_transfer_kat",
         address_env(
-            "evm:7622",
+            "evm:22779",
             &token,
             lk["domain_name"].as_str().unwrap(),
             &legacy_m,
@@ -635,14 +635,14 @@ fn regenerate() {
     ));
     cases.push(case(
         "05e_evm_token_address_call",
-        address_env("evm:7622", &token, "SCaaS MetaToken", &addr_call, None),
+        address_env("evm:22779", &token, "SCaaS MetaToken", &addr_call, None),
         reject("OP_KIND_MISMATCH"),
     ));
     // 05f: the mandate wallets' body is the UA structs (Q6): a `UAMetaTransaction` in the wallet's domain.
     cases.push(case(
         "05f_evm_mandate_wallet_ua_call",
         evm_env_named(
-            "evm:7622",
+            "evm:22779",
             WALLET,
             "SCaaS MandateWallet",
             &call,
@@ -655,13 +655,13 @@ fn regenerate() {
     cases.push(case(
         "06b_evm_derived_from",
         evm_env(
-            "evm:7622",
+            "evm:22779",
             &token,
             &m(&|x| x["from"] = json!(format!("0x{}", "aa".repeat(32)))),
         ),
         reject("DERIVED_FROM_UNSUPPORTED"),
     ));
-    let mut e6c = evm_env("evm:7622", &token, &base);
+    let mut e6c = evm_env("evm:22779", &token, &base);
     e6c["evm"]["auth"]["keyData"] = json!("0x01");
     seal(&mut e6c);
     cases.push(case(
@@ -671,7 +671,7 @@ fn regenerate() {
     ));
     let wallet = m(&|x| x["from"] = json!(format!("0x{}1271", "0".repeat(60))));
     let e6 = evm_env_named(
-        "evm:7622",
+        "evm:22779",
         &token,
         "SCaaS MetaToken",
         &wallet,
@@ -966,7 +966,7 @@ fn regenerate() {
     cases.push(case(
         "18a_valid_too_long",
         evm_env(
-            "evm:7622",
+            "evm:22779",
             &token,
             &m(&|x| x["validUntil"] = json!((NOW + 3601).to_string())),
         ),
@@ -975,7 +975,7 @@ fn regenerate() {
     cases.push(case(
         "18b_expired_inside_skew",
         evm_env(
-            "evm:7622",
+            "evm:22779",
             &token,
             &m(&|x| x["validUntil"] = json!((NOW + 10).to_string())),
         ),
@@ -1079,14 +1079,14 @@ fn regenerate() {
         reject("BAD_ENVELOPE"),
     ));
     let pol = |contract: &str, min_fee: &str| {
-        json!([{"chain_key": "evm:7622", "contract": contract, "selector": "*", "support": "full",
+        json!([{"chain_key": "evm:22779", "contract": contract, "selector": "*", "support": "full",
         "submit": true, "pool_visibility": "open", "min_fee": min_fee, "fee_recipient_allow": "any"}])
     };
     cases.push(with(
         case(
             "29_none_mode_huge_fee",
             evm_env(
-                "evm:7622",
+                "evm:22779",
                 &token,
                 &m(&|x| {
                     x["mode"] = json!(0x00);
@@ -1105,7 +1105,7 @@ fn regenerate() {
     cases.push(with(
         case(
             "29b_percent_call_counts_zero",
-            evm_env("evm:7622", &token, &pct),
+            evm_env("evm:22779", &token, &pct),
             json!({"accept": true, "fee_effective": "0", "may_submit": false}),
         ),
         "policy",
@@ -1114,13 +1114,13 @@ fn regenerate() {
     cases.push(with(
         case(
             "30_unregistered_contract",
-            evm_env("evm:7622", UNREGISTERED, &base),
+            evm_env("evm:22779", UNREGISTERED, &base),
             json!({"accept": true, "token": UNREGISTERED, "may_submit": false}),
         ),
         "policy",
         pol(UNREGISTERED, "0"),
     ));
-    let mut e31 = evm_env_named("evm:7622", &token, "SCaaS MetaToken", &base, "eoa", None);
+    let mut e31 = evm_env_named("evm:22779", &token, "SCaaS MetaToken", &base, "eoa", None);
     e31["evm"]["domain"]["name"] = json!("SCaaS MetaTokén");
     cases.push(case(
         "31_non_ascii_body_string",
@@ -1133,12 +1133,12 @@ fn regenerate() {
                       "envelope_raw": raw, "expect": {"accept": true}}));
 
     let tokens = json!({
-        "evm:7622": [token], "evm:7623": [token], "hedera:296": [token],
+        "evm:22779": [token], "evm:7623": [token], "hedera:296": [token],
         "cosmos:scaas-1": [cosmos_vector("contract")], "sui:localnet": [SUI_REGISTRY], "aptos:4": [asset],
         "ton:-239": [master.raw()], sol_chain.clone(): [SOL_USD],
     });
     let lanes = json!({
-        "evm:7622": [EVM_LANE], "evm:7623": [EVM_LANE], "hedera:296": [EVM_LANE], "cosmos:scaas-1": ["wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp"],
+        "evm:22779": [EVM_LANE], "evm:7623": [EVM_LANE], "hedera:296": [EVM_LANE], "cosmos:scaas-1": ["wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp"],
         "sui:localnet": [format!("0x{}", "77".repeat(32))], "aptos:4": [format!("0x{}", "77".repeat(32))],
         "ton:-239": [format!("0:{}", "77".repeat(32))], sol_chain.clone(): [SOL_BOB],
     });
@@ -1152,7 +1152,7 @@ fn regenerate() {
         "params": {"max_hops": 4, "clock_skew_secs": 30, "max_valid_for_secs": 3600, "exclusive_ms": 10000},
         "tokens": tokens,
         "lanes": lanes,
-        "chain_params": {"evm:7622": {"chain_uid": UID}, "hedera:296": {"chain_uid": UID},
+        "chain_params": {"evm:22779": {"chain_uid": UID}, "hedera:296": {"chain_uid": UID},
                          "aptos:4": {"program": APTOS_PACKAGE}, sol_chain: {"program": SOL_PROGRAM},
                          "ton:-239": {"wallet_codes": {master.raw(): {"hash": alloy::hex::encode(code), "depth": depth}}}},
         "cases": [],

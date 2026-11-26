@@ -471,7 +471,7 @@ TestCase {
             compare(UaKinds.relayRef(r.chainId, r.target, r.callData), r.ref, r.name)
             compare(UaKinds.payLane(r.ref), r.payLane, r.name)
         }
-        compare(UaKinds.relayRef(7622, "0x" + "11".repeat(32), "0x"), "")
+        compare(UaKinds.relayRef(22779, "0x" + "11".repeat(32), "0x"), "")
         compare(UaKinds.lastError, "UAArgument")
         compare(UaKinds.relayRef(-1, rr[0].target, "0x"), "")
         compare(UaKinds.lastError, "UAArgument")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """P6f Tasks 7-8 (pq-zero-knowledge.md §10 steps 1-2, 5): probes and end-to-end transactions against a PQZ chain, through
-one JSON-RPC endpoint (the follower behind nginx on the copy; 127.0.0.1:8545 on 7622 in Task 10). Python stdlib
+one JSON-RPC endpoint (the follower behind nginx on the copy; 127.0.0.1:8545 on the SCaaS testnet in Task 10). Python stdlib
 (run with python3 -I) with eth.py (keccak, legacy EIP-155 signing); forge artifacts from
 smartcontracts/evm/out. Requests are paced (the proxy allows 10 r/s, burst 20) and retried on 429.
 Since plan 5h Task 8d part 1 this targets the next image (32-bit addresses, PQZ_SET's self-test hash / MAX_INPUT /
@@ -11,7 +11,7 @@ corpus, default n2304-kmax4096), the SCaaS testnet's image 2.2.0-pqz5 since 2026
                                             gas = formula for every row (valid = invalid), misses, ML-DSA both levels
   e2e.py stock   --engine E                 the stock image after T: the probe must FAIL (G2 demonstration)
   e2e.py e2e     --engine E --key K [--no-ua]  transactions: probe contract, check() per row, direct > 128 KiB
-                                            inputs, MldsaVerifier at both levels (not with --no-ua: live 7622)
+                                            inputs, MldsaVerifier at both levels (not with --no-ua: the live SCaaS testnet)
   e2e.py burst   [--clients 4 --calls 50]   step 5: eth_call spam at PQZ (the largest honest input a transaction can
                                             carry); counts 200 / 429; block interval
   e2e.py fill    --engine E --key K [--n 8] the largest honest inputs a transaction can carry (PQZH transfers before
@@ -56,7 +56,7 @@ SELFTEST = json.load(
     )
 )["hash"]
 MAX_INPUT = json.load(open(os.path.join(ROOT, "pqz-core/params/sets", PQZ_SET, "set.json")))["max_input"]
-CHAIN_ID = 7622
+CHAIN_ID = 22779
 PK44, SIG44, PK65, SIG65 = 1312, 2420, 1952, 3309
 FAILS = []
 RPC = "http://127.0.0.1:18545"
@@ -429,7 +429,7 @@ class Sender:
 
     def send(self, to, data_hex, gas):
         # gas price max(2·baseFee + 1, 1 gwei) (full blocks raise the base fee by ≥ 1 wei each): once a block passes the EIP-1559 target the base fee is ≥ 1 wei for good (the
-        # decrease rounds to 0), and a priority fee of 0 is rejected by the min-gas-price filter (7622's config key
+        # decrease rounds to 0), and a priority fee of 0 is rejected by the min-gas-price filter (the SCaaS testnet's config key
         # Mining.MinGasPrice is not a Nethermind key; Blocks.MinGasPrice defaults to 1 wei)
         fee = int(rpc("eth_getBlockByNumber", ["latest", False])["baseFeePerGas"], 16)
         raw = legacy_tx(
@@ -521,7 +521,7 @@ def cmd_e2e(a):
             f"direct tx to PQZ, {row['name']} ({len(b):,} B > 131,072): gasUsed {got:,} = max(standard {std:,}, {'EIP-7976' if AMS else 'EIP-7623'} floor {floor:,}), block {int(rc['blockNumber'], 16)}",
         )
     if a.no_ua:
-        log("MldsaVerifier skipped (--no-ua: on 7622 it is deployed with the registry in P6g, plan R5)")
+        log("MldsaVerifier skipped (--no-ua: on the SCaaS testnet it is deployed with the registry in P6g, plan R5)")
         return
     # MldsaVerifier(kind, MLDSAxx, valid, flipped) on the copy (R5): the probe must pick the precompile
     vcode, _ = artifact("MlDsa.sol", "MldsaVerifier")

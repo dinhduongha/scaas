@@ -711,7 +711,7 @@ test("round 3zc: UASetMaxSupply, UASetMaxWrapSupply; a non-zero unbound relayer 
 
 test("a router row refuses a field off GrantTerms, a value out of range, a string bool, another domain; target is signed", () => {
   const B = evm.OP_BUILDERS;
-  const at = { contract: "0x" + "7a".repeat(20), chainId: 7622, chainUid: "0x" + "c1".repeat(32) };
+  const at = { contract: "0x" + "7a".repeat(20), chainId: 22779, chainUid: "0x" + "c1".repeat(32) };
   assert.throws(
     () => B.uaSetGrantTypedData({ ...at, message: { terms: { floor: 1 } } }),
     /floor is not a field of GrantTerms/,
@@ -839,7 +839,7 @@ test("checkOp: the deadline, the fee policy, the contract, the chain, the operat
   const RELAYER = "0x" + "22".repeat(20);
   const FEE_TO = "0x" + "33".repeat(20);
   const op = { wrapped: 1000000, recipient: "0x" + "44".repeat(20), minOut: 990000, from: ME };
-  const at = { name: "SCaaS MetaToken", contract: TOKEN, chainId: 7622, chainUid: UID };
+  const at = { name: "SCaaS MetaToken", contract: TOKEN, chainId: 22779, chainUid: UID };
   const server = (over = {}, a = at) =>
     evm.uaUnwrapTypedData({
       ...a,
@@ -905,7 +905,7 @@ test("canonical zero for an unbound relayer / fee recipient: envelope and nested
   const at = {
     name: "SCaaS MetaToken",
     contract: "0x" + "7a".repeat(20),
-    chainId: 7622,
+    chainId: 22779,
     chainUid: "0x" + "c1".repeat(32),
   };
   const m = (mode) =>
@@ -1048,7 +1048,7 @@ test("the builder refuses a field off the struct, a value out of range, a domain
   const at = {
     name: "SCaaS MetaToken",
     contract: "0x" + "7a".repeat(20),
-    chainId: 7622,
+    chainId: 22779,
     chainUid: "0x" + "c1".repeat(32),
   };
   assert.throws(() => evm.uaBurnTypedData({ ...at, message: { amountt: 1 } }), /amountt/);
@@ -1141,7 +1141,7 @@ const R_NOW = 1_800_000_000;
 const R_AT = {
   name: "SCaaS MetaToken",
   contract: "0x" + "7a".repeat(20),
-  chainId: 7622,
+  chainId: 22779,
   chainUid: "0x" + "c1".repeat(32),
 };
 const R_ME = "0x" + "00".repeat(12) + "11".repeat(20);

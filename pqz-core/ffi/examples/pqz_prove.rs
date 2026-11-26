@@ -1,4 +1,4 @@
-//! P6g e2e helper (plan D7): proofs for statements the PQZ contracts built on chain 7622.
+//! P6g e2e helper (plan D7): proofs for statements the PQZ contracts built on the SCaaS testnet.
 //!
 //! Reads jobs from stdin, one per line, until EOF; answers one line each on stdout:
 //!   `prove <op> <stmt hex> <wit hex> <rnd32 hex>`  →  the proof as hex (`ERR <reason>` on failure)

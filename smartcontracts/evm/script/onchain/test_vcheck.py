@@ -32,9 +32,9 @@ assert (
     v.classify(CODE, {"is_verified": True, "is_partially_verified": True}, genesis=True, ours="0x6080")[0]
     == "unverified"
 )
-rv = v.ours_at_genesis(7622)
+rv = v.ours_at_genesis(22779)
 assert list(rv) == ["0xd33d17991f57befb4ccbb3e57c477c10bde5b465"] and v.ours_at_genesis(
-    22776
+    22777
 ) == {} == v.ours_at_genesis(31337)
 assert v.classify("0x", {})[0] == "no code"
 assert v.classify("0x00" + "ff" * 40, {})[0] == "data"
@@ -125,7 +125,7 @@ assert (c["kind"], c["url"], c["rpc"], c["scan"]) == (
     "http://127.0.0.1:8545",
     True,
 )
-assert v.config("scaas-testnet", {"RPC_7622": "http://h:1", "VERIFY_SCAN": "0"})["rpc"] == "http://h:1"
+assert v.config("scaas-testnet", {"RPC_SCAAS_TESTNET": "http://h:1", "VERIFY_SCAN": "0"})["rpc"] == "http://h:1"
 assert "no explorer" in nc("base-sepolia", {"VERIFY_RPC": "https://rpc.example"})
 assert "not one of" in nc(
     "x", {"VERIFY_EXPLORER": "routescan", "VERIFY_URL": "https://e.example/api", "VERIFY_RPC": "https://r"}
@@ -146,7 +146,7 @@ assert (
 # request shapes, offline
 A = "0x" + "11" * 20
 assert (
-    v.lookup_url("blockscout", "http://127.0.0.1:8548/api", 7622, A)
+    v.lookup_url("blockscout", "http://127.0.0.1:8548/api", 22779, A)
     == f"http://127.0.0.1:8548/api/v2/smart-contracts/{A}"
 )
 u = v.lookup_url("etherscan", "https://api.etherscan.io/v2/api", 8453, A, "k123")
@@ -189,7 +189,7 @@ assert v.classify(CLONE, v.normalize("etherscan", {"result": [{}]}, CLONE), Fals
 # deploy sets (owner 2026-11-16): every set's entries with DEPLOY_SET all, one set's with a label, named refusals
 import deploybook as _db  # noqa: E402
 
-_h = _db.header("scaas-testnet", "SCaaS testnet", 7622, "0x" + "9a" * 32, "testnet")
+_h = _db.header("scaas-testnet", "SCaaS testnet", 22779, "0x" + "9a" * 32, "testnet")
 _on, _off = dict(_h, ua_registry="0x" + "0a" * 20), dict(_h, ua_registry="0x" + "0b" * 20)
 _bk = _db.set_merge(_off, _db.set_merge(_on, None, "mldsa-on", ""), "mldsa-off", "")
 _rel = dict(_h, NormalToken={"address": "0x" + "0c" * 20})

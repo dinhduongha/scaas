@@ -3,7 +3,7 @@
 // and the native keys of src/seed.js per mnemonic, kind, account and index, with the refusals; the UA signatures, member
 // signatures, BLS roles, the scaas Schnorr nonce-map rows, typed-data rows (generic hasher, canonical builders), the signing
 // policy (src/evm.js check*), EVM transactions of types 0-3 and the EIP-155 example, WebAuthn assertions, msig member sets and the
-// chain-separation rows (7622 / 22776, owner 2026-11-05).
+// chain-separation rows (22779 / 22777, owner 2026-11-05).
 // Randomness: a fixed SHAKE256 stream per label, so the files do not move between runs; a row with `compare: "verify"` is a
 // randomized signature (its randomness is not given), checked by verification only. test/ua-wallet.test.js reads every row
 // back; clients/ua-rs is held to them (T2-T6).
@@ -520,7 +520,7 @@ const BASKET_TYPES = {
 const VDOMAIN = {
   name: "SCaaS Vectors",
   version: "1",
-  chainId: "7622",
+  chainId: "22779",
   verifyingContract: "0x5ca00000000000000000000000000000000000f0",
 };
 const tag = (s) => hex(keccak_256(utf8ToBytes(s)));
@@ -628,7 +628,7 @@ const meta = {
   feeRecipient: FEE_TO,
 };
 const uaMeta = { ...meta, from: evm.padId(ACCOUNT), to: evm.padId(PAYEE) };
-const domainOf = { name: "SCaaS MetaToken", contract: TOKEN, chainId: 7622, chainUid: CHAIN_UID };
+const domainOf = { name: "SCaaS MetaToken", contract: TOKEN, chainId: 22779, chainUid: CHAIN_UID };
 const canonRows = [
   [
     "MetaTransaction",
@@ -722,7 +722,7 @@ const set = (td, f) => {
   f(c);
   return c;
 };
-const W = { chainId: 7622, chainUid: CHAIN_UID, now: NOW };
+const W = { chainId: 22779, chainUid: CHAIN_UID, now: NOW };
 // ua-mtx-merge (R12, R20, R39, R46): a payment, a payee fee, a SCaaS sell token's order and a wrap order are the `UA` structs
 // between 32-byte ids (`padId` of a native address); `PayMeta` v3 (CTR-MTX-26, T83) is `{salt, payNo, save, schema, body}`.
 const [UA_ACCOUNT, UA_PAYEE] = [evm.padId(ACCOUNT), evm.padId(PAYEE)];
@@ -786,7 +786,7 @@ const PM_META = { salt: PM.salt, payNo: PM.payNo, save: PM.save, schema: PM.sche
 const payMeta = evm.buildPay({
   name: "SCaaS MetaToken",
   token: TOKEN,
-  chainId: 7622,
+  chainId: 22779,
   chainUid: CHAIN_UID,
   from: UA_ACCOUNT,
   to: UA_PAYEE,
@@ -829,7 +829,7 @@ const subjectKey = (a) => evm.secpSubjectKey(a).map((v) => (v instanceof Uint8Ar
 const NEW_KEY = subjectKey("0x" + "77".repeat(20));
 const owner = evm.addKeyTypedData({
   contract: ACCOUNT,
-  chainId: 7622,
+  chainId: 22779,
   chainUid: CHAIN_UID,
   message: {
     from: ACCOUNT,
@@ -862,7 +862,7 @@ const tradeOrder = {
 };
 const trade = evm.uaTradeOrderTypedData({
   token: TOKEN,
-  chainId: 7622,
+  chainId: 22779,
   chainUid: CHAIN_UID,
   order: { ...tradeOrder, from: UA_ACCOUNT, nonce: "5" },
 });
@@ -882,7 +882,7 @@ const cancel = evm.cancelUAOrderTypedData({
 const cancelExpect = {
   check: "Cancel",
   account: UA_ACCOUNT,
-  chainId: 7622,
+  chainId: 22779,
   chainUid: CHAIN_UID,
   contract: TOKEN,
   order: { ...tradeOrder, from: UA_ACCOUNT, nonce: "5" },
@@ -995,10 +995,10 @@ must(policy.filter((p) => p.digest).length === 10, "accepted policy rows");
 // --- EVM transactions ---
 const TO = "0x5ca00000000000000000000000000000000000c0";
 const txs = [
-  { type: 0, chainId: "7622", nonce: "0", gasPrice: "1000000000", gasLimit: "21000", to: TO, value: "1", data: "0x" },
+  { type: 0, chainId: "22779", nonce: "0", gasPrice: "1000000000", gasLimit: "21000", to: TO, value: "1", data: "0x" },
   {
     type: 0,
-    chainId: "7622",
+    chainId: "22779",
     nonce: "1",
     gasPrice: "1000000000",
     gasLimit: "1000000",
@@ -1008,7 +1008,7 @@ const txs = [
   },
   {
     type: 1,
-    chainId: "7622",
+    chainId: "22779",
     nonce: "2",
     gasPrice: "2000000000",
     gasLimit: "60000",
@@ -1019,7 +1019,7 @@ const txs = [
   },
   {
     type: 2,
-    chainId: "7622",
+    chainId: "22779",
     nonce: "3",
     maxPriorityFeePerGas: "1000000000",
     maxFeePerGas: "30000000000",
@@ -1043,7 +1043,7 @@ const txs = [
   },
   {
     type: 3,
-    chainId: "7622",
+    chainId: "22779",
     nonce: "4",
     maxPriorityFeePerGas: "1000000000",
     maxFeePerGas: "30000000000",
@@ -1233,11 +1233,11 @@ const txRefusals = [
   return { id, tx };
 });
 
-// --- chain separation (owner 2026-11-05): one message, one key, SCaaS testnet 7622 and SCaaS mainnet 22776 ---
+// --- chain separation (owner 2026-11-05): one message, one key, SCaaS testnet 22779 and SCaaS mainnet 22777 ---
 // A domain with chainId (a token's UAMetaTransfer) and an EIP-155 transaction differ per chain: other digests, other signatures,
 // and a signature for one chain does not verify against the other's digest. A portable record (domain without chainId) is the
 // same on both chains.
-const CHAINS = [7622, 22776];
+const CHAINS = [22779, 22777];
 const sepKey = keyOf(ref("pq_kat", 0x0108));
 const METATX = ua.purposeTag("metatx");
 const sepTyped = CHAINS.map((chainId) => {
@@ -1769,7 +1769,7 @@ const sign = {
     "canon = the SCaaS builders, whose unbound relayer / feeRecipient hash as zero (nested too); policy = expectDigest(td, " +
     "expect) over the check* functions. tx: evmTransaction types 0-3 (no type 4), chainId 1 … 2^64 − 1, signTransaction. webauthn: " +
     "webauthnAssertion against the expected challenge, clientDataJSON UTF-8, authData and clientDataJSON at most 1,024 bytes together (WebAuthnTooLong, owner 2026-11-19, G3). msig: msigMemberSigs, minimal at both levels. chainSeparation (owner 2026-11-05): one message and " +
-    "one key on chain 7622 (SCaaS testnet) and 22776 (SCaaS mainnet): a UAMetaTransfer in a token domain with chainId (UA key 0x0108, " +
+    "one key on chain 22779 (SCaaS testnet) and 22777 (SCaaS mainnet): a UAMetaTransfer in a token domain with chainId (UA key 0x0108, " +
     "signUA metatx) and EIP-155 transactions of types 0 and 2 (the EVM key) give other digests and signatures per chain; refusals: a " +
     "signature for one chain does not verify against the other's digest; portable: a record in the portable domain (no chainId) " +
     "is one digest and one signature on both. external (T1c): RFC 6979 A.2.5 (P-256, SHA-256; s as published, high or low) and a " +

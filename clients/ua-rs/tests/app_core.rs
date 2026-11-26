@@ -510,7 +510,7 @@ fn portable(app_id: &[u8; 32], name: &str, extra: Option<(&str, &str)>) -> Typed
 }
 
 fn chain_bound(name: &str, with_contract: bool) -> TypedData {
-    let mut domain = serde_json::json!({"name": name, "version": "1", "chainId": "7622"});
+    let mut domain = serde_json::json!({"name": name, "version": "1", "chainId": "22779"});
     if with_contract {
         domain["verifyingContract"] =
             serde_json::json!("0x00000000000000000000000000000000000000aa");

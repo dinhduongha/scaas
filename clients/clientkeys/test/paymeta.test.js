@@ -41,7 +41,7 @@ const UID = "0x" + "c1".repeat(32);
 const NOW = 1_800_000_000;
 const base = {
   token: TOKEN,
-  chainId: 7622,
+  chainId: 22779,
   chainUid: UID,
   from: padId(PAYER),
   to: padId(PAYEE),
@@ -142,7 +142,7 @@ test("the bodies from named fields: each schema equals the forge row", () => {
     "schema 2: (string creditorRef, uint64 dueDate), no invoiceNo",
   );
   const bc = decodeMetaBody(3, row("bound_call").body);
-  assert.equal(bc.chainId, 7622n);
+  assert.equal(bc.chainId, 7622n); // PayMeta.t.sol's illustrative bound_call body, kept as it was
   assert.equal(hex(encodeMetaBody(3, bc)), row("bound_call").body);
   assert.deepEqual(decodeMetaBody(4, row("encrypted_illustrative").body), { encrypted: 96 });
   assert.equal(
@@ -256,7 +256,7 @@ test("payWithFeeToUA carries PayMeta; checkPayMeta refuses a server entryRef ove
   const other = row("salt_only").payId;
   const td = uaMetaTransferTypedData({
     contract: TOKEN,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     message: {
       from: padId(PAYER),
@@ -272,7 +272,7 @@ test("payWithFeeToUA carries PayMeta; checkPayMeta refuses a server entryRef ove
   });
   const opts = {
     account: padId(PAYER),
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     amount: "1000",
     decimals: 0,
@@ -284,7 +284,7 @@ test("payWithFeeToUA carries PayMeta; checkPayMeta refuses a server entryRef ove
   assert.throws(() => checkPayMeta(td, opts), /does not commit/);
   const ok = uaMetaTransferTypedData({
     contract: TOKEN,
-    chainId: 7622,
+    chainId: 22779,
     chainUid: UID,
     message: { ...td.message, entryRef: r.payId, batch: payLane(r.payId) },
   });

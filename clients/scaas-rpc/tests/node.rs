@@ -73,9 +73,9 @@ async fn bodies_are_sent_byte_for_byte() {
     let (g, seen) = gateway(queued()).await;
     let c = client(&[(&g, None)]);
     let o = op();
-    c.submit_op_at(0, 7622, &o).await.unwrap();
+    c.submit_op_at(0, 22779, &o).await.unwrap();
     let want = format!(
-        r#"{{"chain":7622,"op":{}}}"#,
+        r#"{{"chain":22779,"op":{}}}"#,
         serde_json::to_string(&o).unwrap()
     );
     let s = seen.lock().unwrap()[0].clone();
@@ -84,7 +84,7 @@ async fn bodies_are_sent_byte_for_byte() {
         ("/v1/op", want)
     );
     let m = UaMetaTxReq {
-        chain: 7622,
+        chain: 22779,
         token: "0xaa".into(),
         contract: None,
         struct_: Some("transfer".into()),
@@ -145,7 +145,7 @@ async fn each_route_refuses_a_body_above_its_cap_unsent() {
         "control: at the cap"
     );
     let req = |pad: usize| UaMetaTxReq {
-        chain: 7622,
+        chain: 22779,
         token: "0xaa".into(),
         contract: None,
         struct_: Some("transfer".into()),
@@ -366,7 +366,7 @@ async fn a_second_gateway_receives_no_credential_of_the_first() {
         (&b, None),
     ]);
     assert_eq!(
-        c.dex_markets(7622).await.unwrap(),
+        c.dex_markets(22779).await.unwrap(),
         json!({"markets": []}),
         "the read fails over"
     );
@@ -457,7 +457,7 @@ async fn the_same_bytes_to_every_selected_node() {
     let (b, sb) = gateway(queued()).await;
     let (c, sc) = gateway(queued()).await;
     let cl = client(&[(&a, None), (&b, None), (&c, None)]);
-    cl.submit_op(7622, &op(), Fanout::All).await.unwrap();
+    cl.submit_op(22779, &op(), Fanout::All).await.unwrap();
     let bodies: Vec<Vec<u8>> = [sa, sb, sc]
         .iter()
         .map(|s| s.lock().unwrap()[0].body.clone())
@@ -466,7 +466,7 @@ async fn the_same_bytes_to_every_selected_node() {
     let (d, sd) = gateway(queued()).await;
     let (e, se) = gateway(queued()).await;
     client(&[(&d, None), (&e, None)])
-        .submit_op(7622, &op(), Fanout::First)
+        .submit_op(22779, &op(), Fanout::First)
         .await
         .unwrap();
     assert_eq!(

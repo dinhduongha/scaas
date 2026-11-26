@@ -3342,7 +3342,7 @@ mod tests {
                                     fields: alloy::primitives::FixedBytes([0x1f]),
                                     name: name.into(),
                                     version: "1".into(),
-                                    chainId: U256::from(7622),
+                                    chainId: U256::from(22779),
                                     verifyingContract: to,
                                     salt: B256::ZERO,
                                     extensions: vec![],

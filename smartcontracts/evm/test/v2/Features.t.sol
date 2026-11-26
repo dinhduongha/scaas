@@ -42,7 +42,7 @@ contract FeaturesTest is Test {
     address internal impl;
 
     function setUp() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
     }

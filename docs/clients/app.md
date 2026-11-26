@@ -40,7 +40,7 @@ meta-tx token; wrap/unwrap including gasless unwrap (target: `mtxExecute` with t
 (SSRF-guarded), policy, gossip (peers, topics, announces, bans, trusted), DEX markets and homes, external-client API keys,
 admin users, audit, and a metrics dashboard link.
 
-**Families**, all behind one adapter interface: EVM (Gnosis 100, Celo 42220, SCaaS testnet (chain id 7622, formerly 9000), anvil 31337); Hedera
+**Families**, all behind one adapter interface: EVM (Gnosis 100, Celo 42220, SCaaS testnet (chain id 22779), anvil 31337); Hedera
 295–298 (EVM on HSCS plus the HTS specifics); Cosmos (CosmWasm); Soroban (Stellar and Pi); Aptos; Sui; GRAM; Solana.
 
 **Deployment**: two modes from one build — a static SPA with a runtime `config.json`, or served by `scaas-node` on its
@@ -288,7 +288,7 @@ trusted.** (a) Once per RPC at adapter load the chain identity is checked; a mis
 
 | Family | Call | Must equal |
 |---|---|---|
-| EVM, Hedera | `eth_chainId`; block 0 hash | the id in `key`; the profile's `chain_uid` (genesis hash; a chain id such as 7622 is not assumed unique, [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
+| EVM, Hedera | `eth_chainId`; block 0 hash | the id in `key`; the profile's `chain_uid` (genesis hash; a chain id such as 22779 is not assumed unique, [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
 | Sui | `sui_getChainIdentifier` | the configured `chainIdentifier` (from the `key` network: mainnet/testnet/devnet known values; localnet: first-run pinned in dev only) |
 | Solana | `getGenesisHash` | `<genesis>` in `key` |
 | Soroban | `getNetwork().passphrase` | `networkPassphrase` |

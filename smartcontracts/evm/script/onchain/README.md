@@ -62,11 +62,11 @@ refusals); `MATRIX_TEST_FAIL=<group>` makes that group's command fail (the sched
 
 ## Local
 
-Fresh chains only; no other RPC is read (`RPC_7622` may point nowhere):
+Fresh chains only; no other RPC is read (`RPC_SCAAS_TESTNET` may point nowhere):
 
 ```sh
 cd smartcontracts/evm
-RPC_7622=http://127.0.0.1:9 COPY=$PWD/../../scratchpad/onchain-copy sh script/onchain/matrix.sh local
+RPC_SCAAS_TESTNET=http://127.0.0.1:9 COPY=$PWD/../../scratchpad/onchain-copy sh script/onchain/matrix.sh local
 ```
 
 - a fresh anvil (chain 31337, Amsterdam, 200 M block gas, 128 KiB code) with anvil's dev keys, `deploy.sh evm` on it with
@@ -75,7 +75,7 @@ RPC_7622=http://127.0.0.1:9 COPY=$PWD/../../scratchpad/onchain-copy sh script/on
   zether, verifiers, pqchat, rescue, views, wraplimits;
 - a fresh Nethermind copy under `COPY` (git-ignored; `copy.sh init`, `genesis0 engine-pqz.json`, `copygen.py`: the
   Amsterdam transitions `init`'s chainspec lacks, test keys 0x…01-0x…03, the CREATE2 deployer; then `up`) for pq and
-  pqoff, which need its PQZ and ML-DSA precompiles; e2e.py signs for chain id 7622, so the copy keeps it. Its compose
+  pqoff, which need its PQZ and ML-DSA precompiles; e2e.py signs for chain id 22779, so the copy keeps it. Its compose
   file caps each container (1700 MB per node, 64 MB nginx); `matrix.sh` stops it after (`copy.sh down`).
 - Without `COPY`: `LOCAL_PQ_RPC` names a copy already up, or the PQ groups are listed as not run.
 
@@ -86,7 +86,7 @@ Its RPC only; never its containers, config or port. It builds on the Step 5 depl
 
 ```sh
 cd smartcontracts/evm
-RPC_7622=http://127.0.0.1:8545 sh script/onchain/matrix.sh scaas-testnet
+RPC_SCAAS_TESTNET=http://127.0.0.1:8545 sh script/onchain/matrix.sh scaas-testnet
 ```
 
 `MATRIX_GROUPS="tokens misc"` runs some groups; groups run one after another (one set of keys and nonces).
@@ -99,7 +99,7 @@ SCaaS testnet:
 
 ```sh
 cd smartcontracts/evm
-RPC_7622=http://127.0.0.1:8545 COPY=$PWD/../../scratchpad/onchain-copy \
+RPC_SCAAS_TESTNET=http://127.0.0.1:8545 COPY=$PWD/../../scratchpad/onchain-copy \
   sh script/onchain/matrix.sh local scaas-testnet
 ```
 
@@ -122,7 +122,7 @@ A named target `<name>` reads `ONCHAIN_RPC_<NAME>`, `PRIVATE_KEY_<NAME>`, `ONCHA
 - **PQZ:** with the PQZ precompile, PRECOMPILE mode (`ONCHAIN_PQZ=precompile`: pq and pqoff); without it, a PQZ token runs
   only in the `OFFCHAIN` verify mode (`pqzVerifyMode` 1: a verifier UA signs a `PqzVerdict` per proof, the releases on
   deps `[0x0]`; `ONCHAIN_PQZ=offchain` runs pqoff alone). Today `pq.py` (through e2e.py) still needs the precompile for
-  the holders' registration proofs and signs for chain id 7622, so another chain takes the fallback, the default:
+  the holders' registration proofs and signs for chain id 22779, so another chain takes the fallback, the default:
   `ONCHAIN_PQZ=off`, PQZ left out, its contracts at 0 in the table; record why in the runs note.
 
 ```sh

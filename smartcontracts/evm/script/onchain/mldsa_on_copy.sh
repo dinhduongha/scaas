@@ -4,7 +4,7 @@
 # (owner 2026-11-16). Its own container, data dir and port: never the live stack, never copy.sh's pqzcopy-* project. From
 # smartcontracts/evm:
 #   MO_COPY=<dir> sh script/onchain/mldsa_on_copy.sh init     copy.sh init + genesis0 + copygen.py into <dir> (Clique period 2 s;
-#                                                             chain id MO_CHAIN, default 1337 (a local dev chain of DeployBase._isTestChain): not 7622,
+#                                                             chain id MO_CHAIN, default 1337 (a local dev chain of DeployBase._isTestChain): not 22779,
 #                                                             whose chain_uid DeployBase requires there, NET-ALL-22)
 #   MO_COPY=<dir> sh script/onchain/mldsa_on_copy.sh up       docker run (--memory 1700m) the signer, its RPC on 127.0.0.1:$MO_PORT
 #   MO_COPY=<dir> ../../scripts/capped sh script/onchain/mldsa_on_copy.sh deploy   deploy.sh evm, MLDSA_PRECOMPILE=on, DEPLOY_PQZ=1

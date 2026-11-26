@@ -42,7 +42,7 @@ public class PqzChainSpecEngineParameters : IChainSpecEngineParameters
     }
 
     /// <summary>The first timestamp is either the genesis timestamp (a new chain: active from block 0, owner
-    /// 2026-10-15 for the 7622 testnet reset) or after it (an upgrade: history before it is unchanged); before genesis
+    /// 2026-10-15 for the SCaaS testnet reset) or after it (an upgrade: history before it is unchanged); before genesis
     /// is an error.</summary>
     public void ValidateGenesis(ulong genesisTimestamp)
     {

@@ -199,7 +199,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
         assertEq(tok.balanceOf(MetaTxLib.UA_POOL), 0);
     }
 
-    uint256 internal constant TX_GAS_CAP = 16_777_216; // EIP-7825; chain 7622's block gas limit is the same
+    uint256 internal constant TX_GAS_CAP = 16_777_216; // EIP-7825; chain 22779's block gas limit is the same
 
     /// `mtxPayWithPayeeFee` with two `mldsa65` signatures (payer and payee) runs inside one capped transaction: the call
     /// is given exactly `TX_GAS_CAP − 21,000 − calldata` (the registry holds each verify's full cap first), and the

@@ -41,7 +41,7 @@ contract PayeeFeeTest is Test {
     NormalToken internal t;
 
     function setUp() public {
-        vm.chainId(7622);
+        vm.chainId(22779);
         vm.warp(1_800_000_000);
         address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         t = NormalToken(EnvKit.clone(impl, EnvKit.env(UID, address(0), address(0), false)));
@@ -376,7 +376,7 @@ contract PayeeFeeTest is Test {
                 ),
                 keccak256("SCaaS MetaToken"),
                 keccak256("1"),
-                uint256(7622),
+                uint256(22779),
                 address(t),
                 UID
             )

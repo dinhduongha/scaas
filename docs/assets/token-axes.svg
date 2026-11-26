@@ -55,7 +55,7 @@
   <rect x="552" y="262" width="188" height="122" rx="8" fill="#f6fef9" stroke="#16a34a"/>
   <text class="s" x="562" y="282">the same shape on module-LWE;</text>
   <text class="s" x="562" y="298">one lattice proof per operation;</text>
-  <text class="s" x="562" y="314">precompile on chain 7622;</text>
+  <text class="s" x="562" y="314">precompile on the SCaaS testnet;</text>
   <text class="s" x="562" y="330">post-quantum confidentiality</text>
   <rect x="562" y="344" width="110" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="617" y="356" text-anchor="middle" fill="#1a7f37">BUILT, UNAUDITED</text>
   <text class="s" x="562" y="376">PQ Zether</text>

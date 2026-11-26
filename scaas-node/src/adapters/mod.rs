@@ -179,7 +179,7 @@ mod tests {
     fn example_config_builds_every_family() {
         let mut cfg: Config = toml::from_str(include_str!("../../node.example.toml")).unwrap();
         cfg.validate().unwrap();
-        // review P5 m3: the EVM example pins the recorded block 0 of chain 7622
+        // review P5 m3: the EVM example pins the recorded block 0 of chain 22779
         let uids: serde_json::Value =
             serde_json::from_str(include_str!("../../../smartcontracts/evm/chain-uids.json"))
                 .unwrap();
@@ -187,7 +187,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .find(|c| c["chainId"] == 7622)
+            .find(|c| c["chainId"] == 22779)
             .unwrap()["chainUid"]
             .as_str()
             .unwrap();

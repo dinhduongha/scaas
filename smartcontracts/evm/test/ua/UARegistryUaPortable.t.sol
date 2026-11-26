@@ -390,14 +390,14 @@ contract UARegistryUaPortableTest is UARegistryBase {
         }
     }
 
-    /// Registry A (chain 31337, context A) or B (chain 7622, another chain uid and address).
+    /// Registry A (chain 31337, context A) or B (chain 22779, another chain uid and address).
     function _regA(bool pqz) internal returns (UARegistry) {
         vm.chainId(31337);
         return _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, pqz));
     }
 
     function _regB() internal returns (UARegistry r) {
-        vm.chainId(7622);
+        vm.chainId(22779);
         r = _deploy(REG_B, chainUidB, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
         vm.chainId(31337);
     }
@@ -590,7 +590,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
         UARegistry b = _regB();
         assertTrue(a.chainUid() != b.chainUid() && address(a) != address(b) && a.chainKeyHash() != b.chainKeyHash());
         uint256 na = _registerAll(a, rows);
-        vm.chainId(7622);
+        vm.chainId(22779);
         uint256 nb = _registerAll(b, rows);
         vm.chainId(31337);
         assertEq(na, 21, "19 set-free rows + 2 of this set");
@@ -619,7 +619,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
         }
         copied[4] = _find(rows, string.concat("mldsa65/", _setName()));
         copied[5] = _find(rows, string.concat("msig-pq/", _setName()));
-        vm.chainId(7622);
+        vm.chainId(22779);
         for (uint256 i; i < copied.length; ++i) {
             bytes32 ua = copied[i].ua;
             (uint16 k, bytes memory d, IUARegistry.UAAttrs memory att, bytes memory p, bytes memory z) =
@@ -734,7 +734,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
         _members(b, rows);
         Row memory m = _find(rows, string.concat("msig-pq/", _setName()));
         _reg(a, m);
-        vm.chainId(7622);
+        vm.chainId(22779);
         _reg(b, m);
         vm.chainId(31337);
         assertEq(keccak256(_stored(a, m.ua)), keccak256(_stored(b, m.ua)));
@@ -766,7 +766,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
         UACall.register(a, m.kind, m.keyData, m.attrs, g.values[0], m.pqzPop);
         // the vector's typed pop: accepted on A and on B
         _reg(a, m);
-        vm.chainId(7622);
+        vm.chainId(22779);
         _reg(b, m);
         vm.chainId(31337);
         assertEq(keccak256(_stored(a, m.ua)), keccak256(_stored(b, m.ua)));
@@ -2652,14 +2652,14 @@ contract UARegistryUaPortableTest is UARegistryBase {
         UARegistry a = _regA(false);
         UARegistry b = _regB();
         _kemSetup(a, rows, ks);
-        vm.chainId(7622);
+        vm.chainId(22779);
         _kemSetup(b, rows, ks);
         uint256 written;
         for (uint256 i; i < ks.length; ++i) {
             KemRec memory k = ks[i];
             UARegistry[2] memory rs = [a, b];
             for (uint256 j; j < 2; ++j) {
-                vm.chainId(j == 0 ? 31337 : 7622);
+                vm.chainId(j == 0 ? 31337 : 22779);
                 vm.prank(address(0xC0B1E5), address(0xC0B1E5));
                 rs[j].setKemKey(k.ua, k.version, UACall.kem(k.kemPk), UACall.sig(k.sig));
                 _assertKemAt(rs[j], k.ua, k.version, k.kemPk, k.sig);

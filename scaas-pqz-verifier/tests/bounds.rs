@@ -5,7 +5,7 @@ use alloy::primitives::{Address, Bytes};
 use scaas_pqz_verifier::chain::{Block, Chain, ChainError, Rpc};
 use serde_json::{json, Value};
 
-const CHAIN_ID: u64 = 7622;
+const CHAIN_ID: u64 = 22779;
 
 /// A node answering `eth_chainId`, and `eth_getCode` with `code_len` bytes of `0x60` (or a 307 when `redirect`).
 async fn node(code_len: usize, redirect: bool) -> String {

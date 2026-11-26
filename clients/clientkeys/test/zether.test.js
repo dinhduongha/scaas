@@ -130,7 +130,7 @@ test("the Zether PoP is portable (UA-8 P1): no chain field, over the typed UAReg
         `${curve} ${k.path}: the prover's digests are the typed ones`,
       );
       // chain fields are not inputs any more: a caller still passing the old context gets an error, not a silent drop
-      const ctx = { chainId: 7622, chainUid: "0x" + "25".repeat(32), registry: "0x" + "ab".repeat(20) };
+      const ctx = { chainId: 22779, chainUid: "0x" + "25".repeat(32), registry: "0x" + "ab".repeat(20) };
       assert.throws(() => zetherPop(curve, fromHex(k.x), ctx), /no chain context/);
       assert.notEqual(zetherPop(curve, fromHex(k.x)).pop, mine.pop, "hedged nonce");
       // the v1 purpose does not verify the portable PoP
@@ -432,7 +432,7 @@ test("typed owner ops: ZetherRollOver / ZetherSetRollOverMode digests, ownerSig 
   const curve = "bls12381";
   const k = R33[curve].keys[0];
   const x = fromHex(k.x);
-  const at = { contract: "0x" + "a2".repeat(20), chainId: 7622, chainUid: "0x" + "c1".repeat(32) };
+  const at = { contract: "0x" + "a2".repeat(20), chainId: 22779, chainUid: "0x" + "c1".repeat(32) };
   const roll = { ...at, message: { ua: k.UA, accSeq: 4, expectedPendingSeq: 9, validUntilBlock: 1000 } };
   const td = zetherRollOverTypedData(roll);
   assert.equal(td.domain.name, "SCaaS ZetherToken");
