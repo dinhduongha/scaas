@@ -314,6 +314,12 @@ impl Home {
     /// The contract's answer to `item(args)`, the SDK's named JSON; `None` for an item the home does not serve.
     fn answer(&self, item: &str, a: &Value) -> Option<Value> {
         let idx = |k: &str| a[k].as_str().and_then(|s| s.parse::<usize>().ok());
+        // the home holds one session: a view of another answers nothing (the contract's unknown session)
+        if a.get("sessionId")
+            .is_some_and(|x| x.as_str() != Some(self.sid.as_str()))
+        {
+            return None;
+        }
         Some(match item {
             "IPqChat.sessionOf" => json!({"s": strings(&self.epochs[0].record), "sigHash": ZERO}),
             "IPqChat.sessionSig" => json!({"sig": ua_sig(&self.epochs[0].sig)}),
