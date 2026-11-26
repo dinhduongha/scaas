@@ -45,9 +45,11 @@ FOUNDRY_PROFILE=scaas-testnet forge build
 ```
 
 On a shared machine run heavy jobs under `scripts/capped` (repo root). `lib/` is not committed; the libraries are
-pinned by commit and source checksum in `scripts/evm_libs.sh` (CTR-GEN-01): OpenZeppelin `fda6b85f` (master between
-v5.2.0 and v5.3.0), forge-std `88c8a288`. `../../scripts/evm_libs.sh install` fetches them (CI does), `check` compares
-whatever `lib/` holds (a checkout, a symlink) with the pins; run it before a build that will be deployed.
+packages of the root `vendor/`, pinned by commit, sha256 and tree id in `scripts/vendor.sh` (CTR-GEN-01, ARCH-POS-24):
+OpenZeppelin `fda6b85f` (master between v5.2.0 and v5.3.0), forge-std `88c8a288`. `../../scripts/vendor.sh install`
+fetches them and links `lib/openzeppelin-contracts` and `lib/forge-std` to them (CI does), `check` compares the packages
+and the links with the pins; run it before a build that will be deployed (`scripts/evm_libs.sh install|check` still
+works, a wrapper).
 
 **Size gate** (CTR-TOK-24), as CI runs it — `src/` only, never with the test helpers:
 

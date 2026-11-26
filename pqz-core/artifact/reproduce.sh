@@ -90,8 +90,9 @@ if [ $MODE = upstream ]; then
     N=${2:-3}
     PIN=3330e487228f633eceb322807b13a596b516770f
     U=$(pwd)/build/upstream
-    SRC=${LAZER_SRC:-$U/lazer-src}
-    [ -d "$SRC/.git" ] || git clone -q https://github.com/lazer-crypto/lazer "$SRC"
+    # LAZER_SRC (the Docker image's clone), else vendor/lazer-3330e48 (ARCH-POS-24: scripts/vendor.sh install kat)
+    SRC=${LAZER_SRC:-$(cd .. && pwd)/vendor/lazer-3330e48}
+    [ -n "${LAZER_SRC:-}" ] || sh ../scripts/vendor.sh check kat >/dev/null || exit 1
     [ "$(git -C "$SRC" rev-parse "$PIN^{commit}")" = $PIN ] || {
         echo "no LaZer $PIN in $SRC" >&2
         exit 1

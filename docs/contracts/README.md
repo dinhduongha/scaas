@@ -206,9 +206,10 @@ multisig before mainnet; real deployments are recorded in `deployments/<key>.jso
 
 <a id="CTR-GEN-01"></a>**CTR-GEN-01** — Contracts have their own CI workflow (`.github/workflows/ci.yml`),
 run on every PR/push that touches `smartcontracts/**` or `scaas-node/**`: (a) forge (foundry-toolchain) with
-`lib/` installed (`forge install` with `--no-git`) and checked by `scripts/evm_libs.sh` at pinned commits, each with the sha256 of the sources it
-compiles — OpenZeppelin `fda6b85f` (master after v5.2.0, before v5.3.0), forge-std `88c8a288` — because `lib/` is
-not committed (`check` also verifies a local `lib/` before a deploying build; review W-N, 2026-10-19); both profiles; (b) cargo test + clippy `-D warnings` + the anvil end-to-end tests; (c) one job per on-chain
+`lib/` installed and checked by `scripts/vendor.sh` (group `core`, [ARCH-POS-24](../decisions.md#ARCH-POS-24); `scripts/evm_libs.sh`
+wraps it) at pinned commits, each with the sha256 of its files and its git tree id — OpenZeppelin `fda6b85f` (master after
+v5.2.0, before v5.3.0), forge-std `88c8a288`, in `vendor/`, `lib/<name>` a link to each — because `lib/` is not committed
+(`check` also verifies a local `lib/` before a deploying build; review W-N, 2026-10-19); both profiles; (b) cargo test + clippy `-D warnings` + the anvil end-to-end tests; (c) one job per on-chain
 family, `contract-<family>` (`contract-evm`, `contract-soroban`, `contract-solana`, `contract-near`, `contract-algorand`,
 `contract-aptos`, `contract-sui`, `contract-cosmos`, `contract-ton`), each running `smartcontracts/scripts/test.sh <family>`
 with the local toolchain versions; `contract-evm` runs the whole forge suite at every PQZ parameter set (`at-set.sh`).
@@ -216,7 +217,7 @@ with the local toolchain versions; `contract-evm` runs the whole forge suite at 
 | Pin | Value |
 |---|---|
 | Solidity | `solc_version = "0.8.37"`, `evm_version = "amsterdam"`, `optimizer_runs = 200`, `via_ir = false` (the 13-parameter named function is decoded by hand instead, see [metatx.md](metatx.md#named-functions)) |
-| OpenZeppelin, forge-std | commits `fda6b85f`, `88c8a288`, each with the sha256 of its sources, in `scripts/evm_libs.sh` (W-N) |
+| OpenZeppelin, forge-std | commits `fda6b85f`, `88c8a288`, each with the sha256 of its files and its tree id, in `scripts/vendor.sh` (W-N, ARCH-POS-24) |
 | EVM profiles | every profile is `amsterdam` ([NET-EVM-06](../networks/evm.md#NET-EVM-06), owner 2026-10-21): `scaas-testnet` (the SCaaS testnet, [NET-EVM-02](../networks/evm.md#NET-EVM-02)), `zether`, `gnosis`, `celo`, `bsc`, `polygon`, `base`; test chains run anvil `--hardfork amsterdam --gas-limit 200000000 --code-size-limit 65536` (`scripts/e2e-zether.sh`: 131072, [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)) |
 | Invariant runs | `[invariant] runs = 64, depth = 32, fail_on_revert = true` |
 | Storage layout | `extra_output = ["storageLayout"]`; the v2 layout is pinned by `test_storageLayoutIsPinned` against committed JSON |

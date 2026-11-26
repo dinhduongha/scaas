@@ -25,7 +25,8 @@
 #           vectors (`specs` again first)                                                      (not for core_only)
 #   gate    PQZ_SET=<set> pqz-core/gate.sh (run alone; label = the set, an interrupted gate resumes)
 # Environment: PQZ_TOOLS = a directory with the pinned checkouts lk (leaky-LWE-Estimator 0a9caf8), le
-# (lattice-estimator 53da598), lz (LaZer 3330e48) (e_s1, codegen); PQZ_WORK = a work directory for the KAT build
+# (lattice-estimator 53da598), lz (LaZer 3330e48) (e_s1, codegen); unset: the vendor/ packages of the same commits
+# (ARCH-POS-24: scripts/vendor.sh install kat research); PQZ_WORK = a work directory for the KAT build
 # (LaZer / HEXL clones, the static lazer_dump; never committed). Heavy steps run under scripts/capped (never wrap
 # this script in timeout); docker containers carry their own --memory / --cpus. No timing is measured here.
 set -u
@@ -49,8 +50,20 @@ RELS="reg tx tx0 txs txs0 burn ds dr txm2 txm20 txm4 txm40 txm8 txm80 txm16 txm1
 tomlget() { python3 -I -c "import tomllib, sys; t = tomllib.load(open(sys.argv[1], 'rb')); print(t.get(sys.argv[2], ''))" "$D/set.toml" "$1"; }
 CORE_ONLY=$(tomlget core_only)
 FROZEN=$(tomlget frozen)
-tools() { [ -n "${PQZ_TOOLS:-}" ] && [ -d "$PQZ_TOOLS/$1" ] || {
-    echo "PQZ_TOOLS must hold $1 (see the header)" >&2
+# tool lk|le|lz: its checkout, PQZ_TOOLS/<name> or the vendor/ package
+tool() {
+    if [ -n "${PQZ_TOOLS:-}" ]; then
+        echo "$(cd "$PQZ_TOOLS" && pwd)/$1"
+        return
+    fi
+    case $1 in
+        lk) echo "$REPO/vendor/leaky-LWE-Estimator-0a9caf8" ;;
+        le) echo "$REPO/vendor/lattice-estimator-53da598" ;;
+        lz) echo "$REPO/vendor/lazer-3330e48" ;;
+    esac
+}
+tools() { [ -d "$(tool "$1")" ] || {
+    echo "no $1 checkout at $(tool "$1") (see the header)" >&2
     return 1
 }; }
 
@@ -59,10 +72,9 @@ step_specs() { python3 -I "$HERE/gen_set.py" "$S"; }
 # e_s1: every spec through e_s1_n.sage, then the agreement with set.toml
 step_e_s1() {
     tools lk && tools le && tools lz || return 1
-    T=$(cd "$PQZ_TOOLS" && pwd)
     specs=$(for r in $RELS; do printf '/set/%s_params.sage ' "$r"; done)
     "$CAP" docker run --rm --tmpfs /w --network none --memory 5g --cpus 2 -e PYTHONPATH=/le -e LE_COMMIT=53da5982597709ba0fdf94ea37a84d822310fd84 \
-        -e LK_COMMIT=0a9caf8bf0f80097724e0c6147194c52c6b90f86 -e PYTHONUNBUFFERED=1 -v "$T/le":/le:ro -v "$T/lz/third_party":/lz/third_party:ro \
+        -e LK_COMMIT=0a9caf8bf0f80097724e0c6147194c52c6b90f86 -e PYTHONUNBUFFERED=1 -v "$(tool le)":/le:ro -v "$(tool lz)/third_party":/lz/third_party:ro \
         -v "$CORE/pqzl/params/n-study":/p:ro -v "$CORE/pqzl/params":/params:ro -v "$D":/set:ro --entrypoint /bin/sh "$IMG" -c \
         "cp -r /params/codegen /w/ && ln -s /lz/third_party /w/third_party && cp /p/*.sage /w/ &&
      cd /w/codegen && sage /w/e_s1_n.sage $specs" >"$D/.e-s1.txt.new" 2>"$D/.e-s1.err" || return 1
@@ -87,7 +99,7 @@ EOF
 # codegen: LaZer's codegen per spec (as the earlier per-set regen.sh, now set-generic)
 step_codegen() {
     tools lz || return 1
-    LZ=$(cd "$PQZ_TOOLS/lz" && pwd)
+    LZ=$(cd "$(tool lz)" && pwd)
     [ "$(git -C "$LZ" rev-parse HEAD)" = 3330e487228f633eceb322807b13a596b516770f ] || {
         echo "LaZer must be at 3330e48" >&2
         return 1

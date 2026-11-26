@@ -222,7 +222,7 @@ pqz-core/artifact/reproduce.sh                 # quick
 pqz-core/artifact/reproduce.sh --full
 pqz-core/artifact/reproduce.sh --serve         # PORT=8000 BIND=127.0.0.1 by default
 pqz-core/artifact/reproduce.sh --multi-bench   # the multi-recipient (R_TXM) measurement table (~1 h, ~2 GB)
-LAZER_SRC=<LaZer clone> pqz-core/artifact/reproduce.sh --upstream [N]   # without LAZER_SRC it clones from GitHub
+LAZER_SRC=<LaZer clone> pqz-core/artifact/reproduce.sh --upstream [N]   # without LAZER_SRC: vendor/lazer-3330e48 (scripts/vendor.sh install kat)
 ```
 
 On a shared machine, put heavy runs under the repository's machine lock: `scripts/capped pqz-core/artifact/reproduce.sh …`.

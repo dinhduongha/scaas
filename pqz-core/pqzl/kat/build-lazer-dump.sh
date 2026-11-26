@@ -15,7 +15,8 @@
 # Then on the target machine:  ./lazer_dump-v4 > lazer-3330e48.json   and   python3 kat/check.py ...
 # The binary and the fetched sources are build outputs: never commit them. A statically linked GMP / MPFR
 # binary carries LGPL relinking duties if distributed (pqz-core/README.md).
-# Needs docker and network (apt, the LaZer clone, HEXL's cpu_features clone).
+# Needs docker and network (apt, HEXL's cpu_features clone); LaZer is cloned from vendor/lazer-3330e48 (ARCH-POS-24:
+# scripts/vendor.sh install kat, checked here first).
 set -eu
 W=$(mkdir -p "$1" && cd "$1" && pwd)
 V=${2:-v4}
@@ -32,7 +33,8 @@ case "$V" in
 esac
 
 if [ ! -d "$W/lazer-$V/.git" ]; then
-    git clone -q https://github.com/lazer-crypto/lazer "$W/lazer-$V"
+    sh "$HERE/../../scripts/vendor.sh" check kat >/dev/null || exit 1
+    git -c advice.detachedHead=false clone -q "$HERE/../../vendor/lazer-3330e48" "$W/lazer-$V"
 fi
 git -C "$W/lazer-$V" checkout -q "$PIN"
 [ "$(git -C "$W/lazer-$V" rev-parse HEAD)" = "$PIN" ] || {

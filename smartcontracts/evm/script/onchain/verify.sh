@@ -48,7 +48,7 @@ for r in ${*:-${VERIFY_REVS:-$revs}}; do
         rm -rf "$d"
         mkdir -p "$d"
         git -C ../.. archive "$(git rev-parse "$r^{commit}"):smartcontracts/evm" foundry.toml src script test | tar -x -C "$d"
-        cp -a lib "$d/lib"
+        cp -aL lib "$d/lib" # lib/<name> links into vendor/ (scripts/vendor.sh): the snapshot takes the files
         # shellcheck disable=SC2046
         (cd "$d" && CAPPED_SLOTS=3 "$CAPPED" forge build $(find src script -name '*.sol') test/helpers/Mocks.sol test/p6f/PqzPrecompileProbe.sol \
             >build.log 2>&1) || {

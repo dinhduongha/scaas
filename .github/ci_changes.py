@@ -40,7 +40,10 @@ UARS = (
     + RT
 )
 JOBS = {
-    "contract-evm": ["smartcontracts/evm/"] + SC + ["pqz-core/params/", "scripts/size_gate.py", "scripts/evm_libs.sh"],
+    "contract-evm": ["smartcontracts/evm/"]
+    + SC
+    + ["pqz-core/params/", "scripts/size_gate.py", "scripts/evm_libs.sh"]
+    + VENDOR,
     "contract-soroban": ["smartcontracts/soroban/"] + SC + RT,
     "contract-solana": ["smartcontracts/solana/"] + SC + RT,
     "contract-near": ["smartcontracts/near/"] + SC + RT,
@@ -54,7 +57,7 @@ JOBS = {
     # the network crate and the depth scan it takes from ua-rs (json)
     "scaas-rpc": ["clients/scaas-rpc/", "clients/ua-rs/"] + VENDOR + RT,
     "docs": [""],
-    "clientkeys": ["clients/clientkeys/", "smartcontracts/", "scaas-node/src/"],
+    "clientkeys": ["clients/clientkeys/", "smartcontracts/", "scaas-node/src/"] + VENDOR,
     # the directories the pqz job builds and tests (pqzl, ffi, stmt, pqzh/ligero, params, fuzz); pqz-core/nethermind/ (chain
     # scripts, the C# plugin), artifact/, glic/, research/, runs/ and the top-level gate scripts are run on the owner's machine
     "pqz": [
@@ -67,8 +70,10 @@ JOBS = {
         "pqz-core/gate-controls.sh",
         "smartcontracts/vectors/pqz/",
     ]
+    + VENDOR
     + RT,
     "zether-prover": ["clients/zether-prover/", "clients/scaas-ct/", "smartcontracts/evm/", "smartcontracts/vectors/"]
+    + VENDOR
     + RT,
     # secret_mul's own tests (ua-rs-sign T3c; T15o closes the gap T20 found: ua-rs and zether-prover only build the crate)
     "scaas-ct": ["clients/scaas-ct/"] + RT,
@@ -429,6 +434,9 @@ if __name__ == "__main__":
     ):
         assert needed([p])["ua-rs-fndsa-wasm"], p
     assert not needed(["smartcontracts/evm/src/x.sol"])["ua-rs-fndsa-wasm"]
+    # ARCH-POS-24, TODO 8b-9 (4b): a pin change in vendor.sh reaches the jobs that build over the forge libraries and the
+    # pqz job, which installs and checks the kat and research groups
+    assert all(needed(["scripts/vendor.sh"])[j] for j in ("contract-evm", "zether-prover", "clientkeys", "pqz", "node"))
     assert not needed(["scaas-node/src/main.rs"])["ua-deps"] and not needed(["clients/ua-py/x.py"])["ua-c"]
     assert needed(["smartcontracts/evm/foundry.txt"])["contract-evm"]  # a .txt outside runs/ counts
     assert needed(["scaas-node/runs/a.txt", "scaas-node/src/x.rs"])["node"]

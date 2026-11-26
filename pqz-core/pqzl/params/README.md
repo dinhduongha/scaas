@@ -178,13 +178,15 @@ PQZH (Ligero), the hash-based proof system, implements the same six relations as
 
 ## Rerun
 
-This reruns E-S0 (`estimator.txt`). Run from the repository root; it needs docker and network access only for the
-clone.
+This reruns E-S0 (`estimator.txt`). Run from the repository root; it needs docker, and network access only for
+`scripts/vendor.sh install research` (the estimator at `53da598` in `vendor/`, [ARCH-POS-24](../../../docs/decisions.md#ARCH-POS-24)).
+The other scripts here that take a LaZer or estimator checkout take `vendor/lazer-3330e48` (group `kat`),
+`vendor/lattice-estimator-53da598` and `vendor/leaky-LWE-Estimator-0a9caf8` the same way.
 
 ```sh
 T=$(mktemp -d)
-git clone https://github.com/malb/lattice-estimator "$T"/le && git -C "$T"/le checkout 53da598
-pqz-core/pqzl/params/run.sh "$T"/le > "$T"/estimator.txt     # one container, no network inside
+scripts/vendor.sh install research && scripts/vendor.sh check research
+pqz-core/pqzl/params/run.sh vendor/lattice-estimator-53da598 > "$T"/estimator.txt     # one container, no network inside
 diff pqz-core/pqzl/params/estimator.txt "$T"/estimator.txt   # must be empty
 ```
 
