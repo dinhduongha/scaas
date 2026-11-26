@@ -21,8 +21,13 @@
   `57a1aa39f980835a94100cf0b0d81bf8b221752e`: approve with fixes, 0 P0, 0 P1, 3 P2, 9 P3. By reading, the round-3 code
   under `fpemu` is a faithful port of the C PQClean ships (no hardware float or `libm` on the signing path; integer tables
   equal; `rnd = nonce || sampler seed` as `seeded.c`). FR-3 (a re-check of this tree against the crate's sha256 in CI,
-  P2) is fixed by `scripts/vendor.sh check` in CI at `f3ebb2da4`. Open before the label changes: the wasm32 gate as a CI job (P2), native / wasm32 key-generation parity over many seeds (P2),
-  the P3 items (signatures equal PQClean's except with probability about 2^-39 per signature, from `fpr_expm_p63`; a
-  rejected candidate left unwiped; variable-time hash-to-point, so never a secret message; `zeroize` in the glue; more
-  edge refusal rows), and a timing test. The record, with every finding, is
-  [`docs/audit/audited/vendor-falcon-rs.md`](../docs/audit/audited/vendor-falcon-rs.md) (owner 2026-11-26). After those fixes this path is labelled `AI-AUDITED (Fable)`, and `UNAUDITED` again on any change.
+  P2) is fixed by `scripts/vendor.sh check` in CI at `f3ebb2da4`. The other fixes, in the glue, tests, CI and docs (this tree
+  unedited), landed at `b9b5a4c24`: the wasm32 gate as CI job `ua-rs-fndsa-wasm` (FR-4), key-pair parity over 1,000 seeds per degree
+  natively and in wasm32 (FR-5), the stated differences (signatures equal PQClean's except with probability about 2^-39 per
+  signature, `fpr_expm_p63`; signed zero, FR-1, FR-2), the rule "never a secret message" (FR-7), the glue on
+  `falcon::falcon::*` only with a test guard (FR-8), the keygen cap as a named error (FR-9), `zeroize` (FR-10), 624 encoding-edge
+  rows and sign-side refusals (FR-11), verify after sign (FR-12). Open: FR-6, FR-7, FR-8, FR-9 upstream (the rejected padded
+  candidate left unwiped, the variable-time hash-to-point, the debug-only preconditions, the sampler's panic), the timing
+  measurement (written, not run) and the no-`f64` check of the wasm32 artefact. The record, with every finding and its state, is
+  [`docs/audit/audited/vendor-falcon-rs.md`](../docs/audit/audited/vendor-falcon-rs.md) (owner 2026-11-26); it says what remains
+  before this path is labelled `AI-AUDITED (Fable)`, and `UNAUDITED` again on any change.

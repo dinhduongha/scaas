@@ -259,12 +259,23 @@ claim, not measured here (libm stays in the graph, a fixed dependency of the pac
 48-byte HKDF seed takes SHAKE256 of the seed as keygen's stream; a signature takes `rnd` = the 40-byte nonce, then the 48-byte
 seed of the sampler's stream, `HashToPoint(SHAKE256(nonce ‖ ua_msg))`, padded to 666 / 1,280 bytes with zero bytes; verify takes
 the padded form only (the format of [CTR-UA-23](../contracts/accounts.md#CTR-UA-23), EIP-8052). The crate's FIPS 206 API is not
-used: it hashes `nonce ‖ 0x00 ‖ len(ctx) ‖ ctx ‖ m`. `build::FALCON` is true on wasm32 with `pq`. The gate, before and after every
-change of this path: `tests/fndsa_vrfy.rs` natively (every FN-DSA row of the vectors, 220: 48 accept, 172 refuse, equal to
-PQClean on each; 48 wallet cases over the four `keys.json` mnemonics, falcon-rs's key pair and fixed-randomness signature
-byte-equal to PQClean's) and `tests/fndsa/wasm/run.sh` in wasm32 under Node (the same rows, and the same cases' digest over
-`pk ‖ sk ‖ sig`). fn-dsa-vrfy 0.4.0 failed that gate (FIPS 206 `mu` hashing and its key packing):
-`clients/runs/2026-11-26-ua-rs-wasm-fndsa-summary.txt`. Size (stripped wasm32 `libscaas_ua_c`, [CLI-UAL-43](#CLI-UAL-43)): default 5,933,798 → 6,117,173 B (+183,375 B, +3.1 %), +179,226 to +184,321 B in the other four cells. BUILT; signing and verification UNAUDITED until the Fable audit.
+used: it hashes `nonce ‖ 0x00 ‖ len(ctx) ‖ ctx ‖ m`. `build::FALCON` is true on wasm32 with `pq`. Key pairs equal PQClean's; a
+signature equals PQClean's for the same `(sk, ua_msg, rnd)` except with probability about 2^-39 per signature, where falcon-rs's
+`fpr_expm_p63` (emulated binary64; PQClean clean: 64-bit fixed point) tips one sampler decision, and both signatures are then valid:
+nothing relies on Falcon signature bytes being equal across platforms. Signed zero differs in `fpr_floor`, `fpr_half`, `fpr_sqrt`
+and `fpr_lt`, which a hashed target does not reach (Fable audit FR-1, FR-2). The padded signer hashes to a point in variable time,
+so never a secret message on this path: the message is the public `ua_msg` (FR-7). `src/falcon/soft.rs` calls falcon-rs's
+round-3 API `falcon::falcon::*` only: the crate's other public modules check buffer sizes in debug builds only (FR-8). Every
+Falcon signature, native or wasm32, is verified under its own key data before `ua-rs` returns it, else `FalconSelfCheck` and
+nothing (FR-12); falcon-rs giving up key generation after 1,000 attempts, where PQClean loops on, is `FalconKeygenCap`; its
+sampler's panic after 1,000 rejections stays a panic, an abort on wasm32 (probability below 2^-1000, FR-9). The gate, in CI (job
+`ua-rs-fndsa-wasm`) and before every change of this path: `tests/fndsa_vrfy.rs` natively (every FN-DSA row of the vectors and
+the encoding edges of each accept row, 844: 48 accept, 796 refuse, equal to PQClean on each; 48 wallet cases over the four
+`keys.json` mnemonics, falcon-rs's key pair and fixed-randomness signature byte-equal to PQClean's; the key pairs of 1,000 seeds
+per degree equal to PQClean's, in release; soft.rs's sign-side refusals and its API guard) and `tests/fndsa/wasm/run.sh` in
+wasm32 under Node (the same rows, the same cases' digest over `pk ‖ sk ‖ sig`, the same key pairs' digest). fn-dsa-vrfy 0.4.0 failed that gate (FIPS 206 `mu` hashing and its key packing):
+`clients/runs/2026-11-26-ua-rs-wasm-fndsa-summary.txt`. Size (stripped wasm32 `libscaas_ua_c`, [CLI-UAL-43](#CLI-UAL-43)): default 5,933,798 → 6,117,173 B (+183,375 B, +3.1 %), +179,226 to +184,321 B in the other four cells. BUILT; UNAUDITED: the Fable audit's
+[record](../audit/audited/vendor-falcon-rs.md) lists what stays open before `AI-AUDITED (Fable)`.
 
 <a id="CLI-UAL-01"></a>**CLI-UAL-01** — **`ua-rs` is the only signer, and a secret leaves it only through a named export.**
 Every client signs through `scaas-ua`: a client core or wallet module over it never signs on its own, and apps reach it through
