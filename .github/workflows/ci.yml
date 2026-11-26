@@ -136,7 +136,8 @@
 #                          (cargo test --test e2e -- --ignored, V10e) stays local (runs/2026-11-22-pqvault-e2e.sh)
 #   pqchat-core:           in clients/pqchat-core (pqchat-core plan T2-T12): cargo test --locked; the vectors (--features vectors
 #                          --test vectors); cargo clippy --locked --all-targets -- -D warnings; cargo check --target wasm32-unknown-unknown;
-#                          python3 -I runs/check_reads.py (gate pqc-reads); cargo deny check and cargo audit (its deny.toml, .cargo/audit.toml);
+#                          python3 -I runs/check_reads.py (gate pqc-reads); python3 -I ../scaas-sdk/gas/pqchat_tree_rows.py
+#                          ../scaas-sdk/gas/pqchat-tree-forge.txt --check; cargo deny check and cargo audit (its deny.toml, .cargo/audit.toml);
 #                          the chain_ and e2e runs (anvil, Docker, Synapse: gates pqc-chain, pqc-e2e) stay local
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
 #                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
@@ -1594,6 +1595,9 @@ jobs:
       - name: every read with its mark (gate pqc-reads)
         working-directory: .
         run: python3 -I clients/pqchat-core/runs/check_reads.py
+      - name: the SDK's tree gas rows equal their forge lines (B-14 of the TreeKEM T4-T9 review)
+        working-directory: .
+        run: python3 -I clients/scaas-sdk/gas/pqchat_tree_rows.py clients/scaas-sdk/gas/pqchat-tree-forge.txt --check
       - name: cargo deny and cargo audit
         run: |
           cargo deny check

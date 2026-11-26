@@ -127,6 +127,9 @@ pub struct PqChat {
     pub(crate) matrix: Mutex<Option<Arc<dyn matrix::MatrixTransport>>>,
     /// the seed is locked: Matrix events are kept, never read (CLI-PQC-10)
     pub(crate) seed_locked: std::sync::atomic::AtomicBool,
+    /// the epochs opened by [`PqChat::tree_open`], by id: the info in force there, when the device holds it (CLI-PQC-17)
+    pub(crate) tree_epochs:
+        Mutex<std::collections::HashMap<String, Option<Arc<scaas_sdk::SecretBytes>>>>,
 }
 
 /// What the crate tells the app (spec §8); ids and UAs only, never a secret, handle, ciphertext, room id or Matrix id.
@@ -205,6 +208,7 @@ impl PqChat {
             unwraps: AtomicU64::new(0),
             events: Mutex::new(Events::default()),
             unfinal: Mutex::new(Default::default()),
+            tree_epochs: Mutex::new(Default::default()),
             in_use: Mutex::new(Default::default()),
             timelines: Mutex::new(Default::default()),
             matrix: Mutex::new(None),

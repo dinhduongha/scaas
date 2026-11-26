@@ -145,6 +145,17 @@ pub trait Net: Send + Sync {
         item: &'static str,
         args: Value,
     ) -> Result<Value, PqChatError>;
+    /// [`Net::read`] at the latest block instead of the final one (C37, D-14 of the TreeKEM T4-T9 review: what a sender
+    /// already landed); a port without it reads at the final block.
+    async fn read_latest(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<Value, PqChatError> {
+        self.read(chain, contract, item, args).await
+    }
     /// The write `item` of `contract` on `chain`, paid by `payer`: quoted and reviewed (the SDK's operation model, W1).
     async fn prepare(
         &self,
@@ -156,8 +167,9 @@ pub trait Net: Send + Sync {
     ) -> Result<AppCall, PqChatError>;
     /// Sends exactly a prepared write; the SDK operation's id.
     async fn submit(&self, call: AppCall) -> Result<String, PqChatError>;
-    /// R13 (CLI-PQC-17): the view `item` read by a strict majority of the chain's endpoints at the final block (CLI-RPC-05),
-    /// with how many named endpoints the chain lists. A port without an agreed read answers `TreeInfoUnconfirmed`.
+    /// R13 (CLI-PQC-17): the view `item` read by a strict majority of the chain's **named** endpoints at the final block
+    /// (CLI-RPC-05 over the named ones only: discovered and default endpoints do not count), with how many named endpoints the
+    /// chain lists. A port without an agreed read answers `TreeInfoUnconfirmed`.
     async fn read_majority(
         &self,
         chain: &str,
@@ -176,13 +188,14 @@ pub struct SdkNet {
     pub app: Arc<AppCore>,
 }
 
-/// CLI-PQC-16 (`PqChatConfig.agreed_reads`): [`SdkNet`] with every trusted `IPqChat` read (the control plane at an instance)
-/// an agreed read, the SDK's `read_app_agreed`; every other read and every write as [`SdkNet`]'s.
+/// CLI-PQC-16 (`PqChatConfig.agreed_reads`): [`SdkNet`] with every trusted `IPqChat` and `IPqChatTreeViews` read (the control
+/// plane at an instance) an agreed read, the SDK's `read_app_agreed`; every other read and every write as [`SdkNet`]'s.
 pub struct AgreedNet(pub SdkNet);
 
-/// Whether [`AgreedNet`] reads `item` agreed: a trusted read of an instance (CLI-PQC-16).
+/// Whether [`AgreedNet`] reads `item` agreed: a trusted read of an instance (CLI-PQC-16), its tree views included.
 pub fn agreed_item(item: &str) -> bool {
-    item.starts_with("IPqChat.") && matches!(trust(item), Ok(Trusted))
+    (item.starts_with("IPqChat.") || item.starts_with("IPqChatTreeViews."))
+        && matches!(trust(item), Ok(Trusted))
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
@@ -237,6 +250,26 @@ impl Net for SdkNet {
         Ok(self.sdk.wallet().submit_native_send(call.quote).await?)
     }
 
+    async fn read_latest(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<Value, PqChatError> {
+        trust(item)?;
+        let out = self
+            .app
+            .read_app_latest(
+                chain.into(),
+                contract.into(),
+                abi(item)?.into(),
+                args.to_string(),
+            )
+            .await?;
+        serde_json::from_str(&out).map_err(|_| PqChatError::Internal)
+    }
+
     async fn read_majority(
         &self,
         chain: &str,
@@ -248,7 +281,7 @@ impl Net for SdkNet {
         let named = self.app.named_endpoints(chain)?;
         let out = self
             .app
-            .read_app_agreed(
+            .read_app_agreed_named(
                 chain.into(),
                 contract.into(),
                 abi(item)?.into(),
@@ -301,6 +334,16 @@ impl Net for AgreedNet {
 
     async fn submit(&self, call: AppCall) -> Result<String, PqChatError> {
         self.0.submit(call).await
+    }
+
+    async fn read_latest(
+        &self,
+        chain: &str,
+        contract: &str,
+        item: &'static str,
+        args: Value,
+    ) -> Result<Value, PqChatError> {
+        self.0.read_latest(chain, contract, item, args).await
     }
 
     async fn read_majority(

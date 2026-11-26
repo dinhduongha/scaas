@@ -605,6 +605,10 @@ impl PqChat {
             }
             ep = match in_use(&id) {
                 Some(e) => e,
+                // a tree epoch's child opens only through a replay (CLI-PQC-17): the app replays, then sends
+                None if self.tree_epoch(&ep.epoch.id).is_some() => {
+                    return Err(PqChatError::EpochTaken)
+                }
                 None => {
                     let open = self
                         .open_epoch(s, &id, &me.key, &me.ua, None)

@@ -310,6 +310,17 @@ fn kem_view(out: &[u8]) -> Result<Value, SdkError> {
     Ok(serde_json::json!({"kemPk": hex(&kem_pk(&r.kem)), "sig": hex(&r.sig)}))
 }
 
+/// The slots an `accepted` word sets (bit `i` = slot `i`), as the direct path decodes `msigStateOf`.
+fn slots_of(accepted: alloy::primitives::U256) -> Vec<u16> {
+    let a = accepted.to_be_bytes::<32>();
+    (0..256u16)
+        .filter(|i| {
+            a.get(31 - usize::from(*i) / 8)
+                .is_some_and(|b| b >> (i % 8) & 1 == 1)
+        })
+        .collect()
+}
+
 /// `v[k]`, `Null` when absent.
 fn at<'a>(v: &'a Value, k: &str) -> &'a Value {
     v.get(k).unwrap_or(&Value::Null)
@@ -528,14 +539,7 @@ impl AppCore {
                 "msigStateOf" => {
                     let r = msigStateOfCall::abi_decode_returns(&out)
                         .map_err(|_| SdkError::Argument)?;
-                    let a = r.accepted.to_be_bytes::<32>();
-                    let slots = (0..256u16)
-                        .filter(|i| {
-                            a.get(31 - usize::from(*i) / 8)
-                                .is_some_and(|b| b >> (i % 8) & 1 == 1)
-                        })
-                        .collect();
-                    reads.accepted.insert(k, slots);
+                    reads.accepted.insert(k, slots_of(r.accepted));
                 }
                 _ => {
                     let s = crate::account::msig::decode_structure(&out);
@@ -605,15 +609,16 @@ pub struct PqTreeCommitSigned {
 impl PqTreeCommit {
     /// The author's signature over the record built here, once.
     pub fn sign(&self) -> Result<PqTreeCommitSigned, SdkError> {
+        // B-15 of the T4-T9 review: the key first, so a locked seed leaves the prepared record for a later try
+        let crate::op::Key::Ua(_, key) = crate::op::key(&self.core.sdk, &self.account)? else {
+            return Err(SdkError::Argument);
+        };
         let p = self
             .p
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take()
             .ok_or(SdkError::Argument)?;
-        let crate::op::Key::Ua(_, key) = crate::op::key(&self.core.sdk, &self.account)? else {
-            return Err(SdkError::Argument);
-        };
         let (b, sig) = p.sign(&key)?;
         Ok(PqTreeCommitSigned {
             record: b.record,
@@ -642,15 +647,15 @@ pub struct PqTreeExit {
 impl PqTreeExit {
     /// The signature over exactly the prepared record, once.
     pub fn sign(&self) -> Result<AppUaSig, SdkError> {
+        let crate::op::Key::Ua(_, key) = crate::op::key(&self.core.sdk, &self.account)? else {
+            return Err(SdkError::Argument);
+        };
         let p = self
             .p
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take()
             .ok_or(SdkError::Argument)?;
-        let crate::op::Key::Ua(_, key) = crate::op::key(&self.core.sdk, &self.account)? else {
-            return Err(SdkError::Argument);
-        };
         Ok(sig_of(&p.sign(&key)?))
     }
 }
@@ -992,8 +997,9 @@ impl AppCore {
         self.replay_with(&seed, ua, key_id, &kem, reads, pin, from, keys_from)
     }
 
-    /// Test-only (feature `vectors`, never in a release build): [`AppCore::pqchat_tree_replay`] by a vector device's KEM key
-    /// (`kemSeed`, 96 B, as `tree-secrets.json` lays it out) instead of a wallet key; `K` handles in `seed`'s arena.
+    /// Test-only (feature `vectors`, never in a release build): [`AppCore::pqchat_tree_replay`] (resumed from `from` when
+    /// given, [`AppCore::pqchat_tree_resume`]) by a vector device's KEM key (`kemSeed`, 96 B, as `tree-secrets.json` lays it
+    /// out) instead of a wallet key; `K` handles in `seed`'s arena.
     #[cfg(feature = "vectors")]
     #[allow(clippy::too_many_arguments)]
     pub fn pqchat_tree_vectors_replay(
@@ -1004,12 +1010,14 @@ impl AppCore {
         key_id: u64,
         reads: &PqTreeReads,
         pin: Option<&Value>,
+        from: Option<&PqTreeReplay>,
         keys_from: u64,
     ) -> Result<PqTreeStep<Option<Arc<PqTreeReplay>>>, SdkError> {
         self.label(PQCHAT_TREE.prefix.as_bytes())?;
         let b: &[u8; 96] = kem_seed.try_into().map_err(|_| SdkError::Argument)?;
         let kem = scaas_ua::wallet::KemKeyPair::vectors_ephemeral(b)?;
-        self.replay_with(seed, h32(ua)?, key_id, &kem, reads, pin, None, keys_from)
+        let pin = if from.is_some() { None } else { pin };
+        self.replay_with(seed, h32(ua)?, key_id, &kem, reads, pin, from, keys_from)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1103,13 +1111,13 @@ impl AppCore {
     }
 
     /// `chain`'s limits for a tree plan: the latest block's gas limit (read by RPC, failed over) and the profile's regular
-    /// gas cap of a transaction (2^24, EIP-7825, when the profile names none).
+    /// gas cap of a transaction (EIP-7825; none assumed when the profile names none, as the SDK's quote).
     pub async fn pqchat_tree_limits(&self, chain: &str) -> Result<PqLimits, SdkError> {
         let (profile, _, pool) = crate::op::evm(&self.sdk, chain)?;
-        let block = pool.block_gas().await.map_err(|_| SdkError::Argument)?;
+        let block = pool.block_gas().await.map_err(crate::op::sim)?;
         Ok(PqLimits {
             block: block.limit,
-            tx_regular: profile.tx_gas_cap.unwrap_or(1 << 24),
+            tx_regular: profile.tx_gas_cap,
         })
     }
 }
@@ -1154,54 +1162,93 @@ impl PqRow {
     }
 }
 
+/// A signer kind's row: its verify (regular gas) and its signature's bytes (`UASig` key data and signature).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PqKindRow {
+    pub verify: u64,
+    pub sig_bytes: u64,
+}
+
 /// A chain's tree gas rows (release data; `gas/pqchat-tree.json` is the forge reference): never a figure in code (the
-/// SDK's gas-table rule). Each transaction's limit is still its estimate at send time; these rows plan and quote.
+/// SDK's gas-table rule). Each transaction's limit is still its estimate at send time; these rows plan and quote. The
+/// record and the completion are sized by what they do: a tree term per path target, per Add, per Remove, per admin and per
+/// KiB of `sealedInfo` above the reference's one each (B-1, B-2, B-3 of the T4-T9 review).
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PqTreeGas {
-    /// the signer's verify, by kind name (`mldsa65`, `mldsa87`, …), regular gas
-    pub verify: BTreeMap<String, u64>,
-    /// the session record per member key (wrap hashes and members), and per admin
-    pub session: PqRow,
-    pub session_per_admin: PqGas,
-    /// a genesis or Welcome wrap: typical, and the first of a subtree
+    /// by signer kind name (`scaas-ua`'s, [`signer_name`]): the verify and the signature's bytes
+    pub kinds: BTreeMap<String, PqKindRow>,
+    /// the rows were measured with a signature of this many bytes; each byte more costs `per_sig_byte`
+    pub sig_ref: u64,
+    pub per_sig_byte: PqGas,
+    /// the creation in one transaction (the session record with every wrap) per member key, and per admin above one
+    pub creation: PqRow,
+    pub creation_per_admin: PqGas,
+    /// a Welcome wrap in `addWraps`
     pub wrap: PqGas,
-    pub wrap_first_of_subtree: PqGas,
-    /// the commit record per change (Add or Remove), per admin, per 1,024 B of `sealedInfo`
+    /// the commit record: base + per path target (the tree check), then per Add, per Remove, per admin above one, per
+    /// KiB of `sealedInfo` above one
     pub record: PqRow,
+    pub record_per_add: PqGas,
+    /// an Add on a large tree costs less (the tree term reads its paths already): `record_per_add` less this per target
+    pub record_per_add_drop: PqGas,
+    pub record_per_remove: PqGas,
     pub record_per_admin: PqGas,
     pub record_per_kib_info: PqGas,
     /// the list per entry, the node keys per key, the path ciphertexts per ciphertext
     pub list: PqRow,
     pub keys: PqRow,
     pub cts: PqRow,
-    /// the completion: per change and per path node
+    /// the completion: base + per path target, then per Add and per Remove
     pub completion: PqRow,
-    pub completion_per_node: PqGas,
+    pub completion_per_add: PqGas,
+    pub completion_per_remove: PqGas,
+    /// a commit with no piece (the last live leaf's Removes): its one transaction with the completion, base + per Remove
+    pub no_piece: PqRow,
 }
 
-/// The chain's limits: the block gas limit (read by RPC) and the regular gas cap of a transaction (2^24, EIP-7825).
+/// `scaas-ua`'s name of a signer kind (`mldsa65` for 0x0131, `mldsa87` for 0x0134, …), the key of [`PqTreeGas::kinds`].
+pub fn signer_name(kind: u16) -> Option<&'static str> {
+    scaas_ua::KINDS
+        .iter()
+        .find(|k| k.kind == kind)
+        .map(|k| k.name)
+}
+
+/// The chain's limits: the block gas limit (read by RPC) and the profile's regular gas cap of a transaction (EIP-7825;
+/// `None` when the profile names none: no cap assumed, as the SDK's quote).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PqLimits {
     pub block: u64,
-    pub tx_regular: u64,
+    pub tx_regular: Option<u64>,
 }
 
 impl PqLimits {
-    fn fits(&self, g: PqGas) -> bool {
-        g.regular < self.tx_regular && g.asked() <= self.block
+    /// Whether one transaction of `g` fits: its regular gas at most the cap (the quote's own comparison) and what it asks
+    /// within the block (EIP-8037: regular + state).
+    pub fn fits(&self, g: PqGas) -> bool {
+        self.tx_regular.is_none_or(|c| g.regular <= c) && g.asked() <= self.block
     }
 }
 
-/// A commit's shape: what the planner sizes (the record's changes, admins and info; the pieces).
+/// A commit's shape: what the planner sizes (the record's changes, Adds among them, admins and info; the pieces).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PqCommitShape {
+    /// Adds plus Removes
     pub changes: u64,
     pub admins: u64,
     pub info: u64,
+    /// the path targets (`ctCount`)
     pub cts: u64,
     pub keys: u64,
     pub adds: u64,
+}
+
+impl PqCommitShape {
+    fn removes(&self) -> u64 {
+        self.changes.saturating_sub(self.adds)
+    }
 }
 
 /// One planned transaction: the entry, its first index and count (ciphertexts, wraps), and its gas.
@@ -1228,7 +1275,7 @@ pub struct PqTreeRefused {
     pub what: &'static str,
     pub asked: u64,
     pub regular: u64,
-    pub limits: (u64, u64),
+    pub limits: (u64, Option<u64>),
 }
 
 fn refused(what: &'static str, g: PqGas, l: PqLimits) -> PqTreeRefused {
@@ -1240,35 +1287,106 @@ fn refused(what: &'static str, g: PqGas, l: PqLimits) -> PqTreeRefused {
     }
 }
 
-/// The record alone: base + changes, admins and info, with the signer's verify (an ML-DSA-87 record at its bounds is sized
-/// by its own row).
-fn record_gas(g: &PqTreeGas, signer: &str, s: &PqCommitShape) -> Result<PqGas, PqTreeRefused> {
-    let v = *g.verify.get(signer).ok_or(PqTreeRefused {
-        what: "no verify row for the signer's kind",
+/// A refusal by the rows' own gap: `signer` has no row.
+pub const NO_KIND_ROW: &str = "no verify row for the signer's kind";
+
+/// The signer's own part of a transaction it signs: its verify and its signature's bytes above the rows' reference.
+fn kind_gas(g: &PqTreeGas, signer: &str) -> Result<PqGas, PqTreeRefused> {
+    let k = g.kinds.get(signer).ok_or(PqTreeRefused {
+        what: NO_KIND_ROW,
         asked: 0,
         regular: 0,
-        limits: (0, 0),
+        limits: (0, None),
     })?;
+    Ok(PqGas {
+        regular: k.verify,
+        state: 0,
+    }
+    .add(g.per_sig_byte.times(k.sig_bytes.saturating_sub(g.sig_ref))))
+}
+
+/// The record alone: base + targets, Adds, Removes, admins and info, with the signer's verify and signature.
+fn record_gas(g: &PqTreeGas, signer: &str, s: &PqCommitShape) -> Result<PqGas, PqTreeRefused> {
+    let drop = g.record_per_add_drop.times(s.cts);
+    let per_add = PqGas {
+        regular: g.record_per_add.regular.saturating_sub(drop.regular),
+        state: g.record_per_add.state.saturating_sub(drop.state),
+    };
     Ok(g.record
-        .at(s.changes)
-        .add(g.record_per_admin.times(s.admins))
-        .add(g.record_per_kib_info.times(s.info.div_ceil(1024)))
-        .add(PqGas {
-            regular: v,
-            state: 0,
-        }))
+        .at(s.cts)
+        .add(per_add.times(s.adds))
+        .add(g.record_per_remove.times(s.removes()))
+        .add(g.record_per_admin.times(s.admins.saturating_sub(1)))
+        .add(
+            g.record_per_kib_info
+                .times(s.info.div_ceil(1024).saturating_sub(1)),
+        )
+        .add(kind_gas(g, signer)?))
+}
+
+/// The completion: base + targets, Adds and Removes.
+fn completion_gas(g: &PqTreeGas, s: &PqCommitShape) -> PqGas {
+    g.completion
+        .at(s.cts)
+        .add(g.completion_per_add.times(s.adds))
+        .add(g.completion_per_remove.times(s.removes()))
 }
 
 /// The plan of a commit (spec §13, C37): the whole commit in one transaction when it fits; else the record alone, the list,
 /// the node keys, the ciphertexts but one and the wraps (in chunks that fit), and the held ciphertext (else the last wrap)
-/// alone with the completion. A required piece that does not fit refuses the operation by name with its figures.
+/// alone with the completion. A commit with no piece is one transaction by its own row. A required piece that does not fit
+/// refuses the operation by name with its figures.
 pub fn plan_commit(
     g: &PqTreeGas,
     l: PqLimits,
     signer: &str,
     s: &PqCommitShape,
 ) -> Result<PqTreePlan, PqTreeRefused> {
+    let one = |gas: PqGas| PqTreePlan {
+        txs: vec![PqTreeTx {
+            entry: "commit",
+            first: 0,
+            count: 0,
+            gas,
+        }],
+        completion: gas,
+        dearest_last: gas,
+    };
+    if s.cts == 0 && s.adds == 0 {
+        // B-1: the last live leaf's commit, Removes only, measured as its own row
+        let whole = g.no_piece.at(s.removes()).add(kind_gas(g, signer)?);
+        if !l.fits(whole) {
+            return Err(refused("the commit (no piece: one transaction)", whole, l));
+        }
+        return Ok(one(whole));
+    }
     let record = record_gas(g, signer, s)?;
+    let at = |r: &PqRow, n: u64| if n > 0 { r.at(n) } else { PqGas::default() };
+    let completion = completion_gas(g, s);
+    let whole = record
+        .add(at(&g.list, s.cts))
+        .add(at(&g.keys, s.keys))
+        .add(at(&g.cts, s.cts))
+        .add(g.wrap.times(s.adds))
+        .add(completion);
+    if l.fits(whole) {
+        let mut p = one(whole);
+        p.completion = completion;
+        p.dearest_last = pieces(g, l, s, record).map_or(whole, |x| x.dearest_last);
+        return Ok(p);
+    }
+    pieces(g, l, s, record)
+}
+
+/// The split plan of `s` with the record's gas `record` (C37): the record, the list, the node keys, the ciphertexts but one
+/// and the wraps in chunks that fit, the held piece with the completion. Also the fallback of a one-transaction plan whose
+/// record another sender stored (fable-r2-9), with `record` zero.
+fn pieces(
+    g: &PqTreeGas,
+    l: PqLimits,
+    s: &PqCommitShape,
+    record: PqGas,
+) -> Result<PqTreePlan, PqTreeRefused> {
     let list = if s.cts > 0 {
         g.list.at(s.cts)
     } else {
@@ -1279,18 +1397,7 @@ pub fn plan_commit(
     } else {
         PqGas::default()
     };
-    let completion = g
-        .completion
-        .at(s.changes)
-        .add(g.completion_per_node.times(s.keys));
-    let cts = g.cts.at(s.cts);
-    let wraps = g.wrap.times(s.adds);
-    let whole = record
-        .add(list)
-        .add(keys)
-        .add(cts)
-        .add(wraps)
-        .add(completion);
+    let completion = completion_gas(g, s);
     // the dearest piece if it were last: the node keys (or the list) with the completion
     let dearest_last = if keys.asked() >= list.asked() {
         keys
@@ -1298,28 +1405,16 @@ pub fn plan_commit(
         list
     }
     .add(completion);
-    if l.fits(whole) {
-        return Ok(PqTreePlan {
-            txs: vec![PqTreeTx {
-                entry: "commit",
-                first: 0,
-                count: 0,
-                gas: whole,
-            }],
-            completion,
-            dearest_last,
-        });
-    }
     if s.cts == 0 && s.adds == 0 {
-        return Err(refused("the commit (no piece: one transaction)", whole, l));
+        return Err(refused("the commit (no piece: one transaction)", record, l));
     }
     let mut txs = Vec::new();
-    for (entry, gas) in [
-        ("commit", record),
-        ("addPathList", list),
-        ("addPathKeys", keys),
+    for (entry, gas, n) in [
+        ("commit", record, 1),
+        ("addPathList", list, s.cts),
+        ("addPathKeys", keys, s.keys),
     ] {
-        if entry != "commit" && gas == PqGas::default() {
+        if n == 0 {
             continue;
         }
         if !l.fits(gas) {
@@ -1332,18 +1427,20 @@ pub fn plan_commit(
             gas,
         });
     }
-    let (rest_cts, held_wrap) = match s.cts {
-        0 => (0, true),
-        n => (n - 1, false),
-    };
-    let one_ct = g.cts.at(1);
-    chunk(&mut txs, "addPath", rest_cts, |n| g.cts.at(n), l)?;
+    let held_wrap = s.cts == 0;
+    chunk(
+        &mut txs,
+        "addPath",
+        s.cts.saturating_sub(1),
+        |n| g.cts.at(n),
+        l,
+    )?;
     let rest_wraps = if held_wrap { s.adds - 1 } else { s.adds };
     chunk(&mut txs, "addWraps", rest_wraps, |n| g.wrap.times(n), l)?;
     let last = if held_wrap {
         ("addWraps", s.adds - 1, g.wrap.add(completion))
     } else {
-        ("addPath", s.cts - 1, one_ct.add(completion))
+        ("addPath", s.cts - 1, g.cts.at(1).add(completion))
     };
     if !l.fits(last.2) {
         return Err(refused("the held piece with the completion", last.2, l));
@@ -1361,7 +1458,7 @@ pub fn plan_commit(
     })
 }
 
-/// `n` items in chunks of the most that fit one transaction each.
+/// `n` items in chunks of the most that fit one transaction each (B-9: the largest by a search on the monotone `gas`).
 fn chunk(
     txs: &mut Vec<PqTreeTx>,
     entry: &'static str,
@@ -1371,25 +1468,31 @@ fn chunk(
 ) -> Result<(), PqTreeRefused> {
     let mut first = 0;
     while first < n {
-        let mut k = n - first;
-        while k > 0 && !l.fits(gas(k)) {
-            k /= 2;
+        let (mut lo, mut hi) = (0, n - first);
+        while lo < hi {
+            let mid = lo + (hi - lo).div_ceil(2);
+            if l.fits(gas(mid)) {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
         }
-        if k == 0 {
+        if lo == 0 {
             return Err(refused(entry, gas(1), l));
         }
         txs.push(PqTreeTx {
             entry,
             first,
-            count: k,
-            gas: gas(k),
+            count: lo,
+            gas: gas(lo),
         });
-        first += k;
+        first += lo;
     }
     Ok(())
 }
 
-/// What is in state of a staged commit (the piece views at the home: `pathListOf`, `pathKeys`, `pathCtAt`, `wrapAt`).
+/// What is in state of a staged commit (the piece views at the home: `pathListOf`, `pathKeys`, `pathCtAt`, `wrapAt`) and
+/// whether the epoch is complete (`epochComplete`).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PqTreeLanded {
     pub record: bool,
@@ -1397,6 +1500,7 @@ pub struct PqTreeLanded {
     pub keys: bool,
     pub cts: Vec<bool>,
     pub wraps: Vec<bool>,
+    pub complete: bool,
 }
 
 /// The next send of a commit on the state now (C37, codex-r3-12; the fallback to the piece entries once the record is
@@ -1405,18 +1509,22 @@ pub struct PqTreeLanded {
 pub enum PqTreeNext {
     /// send this (the planned transaction's entry and range)
     Send(PqTreeTx),
-    /// wait: the one before is not final (the list and the node keys go one by one)
+    /// wait: the one before is not final (the list and the node keys go one by one), or the last piece is not final yet
     Wait,
-    /// complete
+    /// complete at the final block
     Done,
     /// the order was broken (another sender landed the held piece first): the piece left would pay the completion and does
     /// not fit; nothing more is sent, the commit is rebuilt with a new nonce
     Void(PqTreeRefused),
 }
 
-/// The next send of `plan` on `landed` (at the head) with `fin` (at the final block): the first transaction not landed, the
-/// record, the list and the node keys each once the one before is final, the held piece once every other is final. When the
-/// held piece was landed by another sender first, the piece left last pays the completion: if it cannot, the commit is void.
+/// The next send of `plan` on `landed` (at the latest block) with `fin` (at the final block). Done only when the epoch is
+/// complete at the final block (C-1 of the T4-T9 review): a one-transaction plan whose record another sender stored goes on
+/// through the piece entries (fable-r2-9). Otherwise the first transaction not landed: the record, the list and the node
+/// keys each once the one before is final, the held piece once every other is final. When the held piece was landed by
+/// another sender first, the piece left last pays the completion: a chunk sends all but one item first and the last one
+/// alone; an indivisible piece (the list, the node keys) or one item that cannot pay it makes the commit void, decided on
+/// the final state.
 pub fn next_send(
     g: &PqTreeGas,
     l: PqLimits,
@@ -1425,6 +1533,19 @@ pub fn next_send(
     landed: &PqTreeLanded,
     fin: &PqTreeLanded,
 ) -> PqTreeNext {
+    if fin.complete {
+        return PqTreeNext::Done;
+    }
+    if plan.txs.len() == 1 && landed.record {
+        if s.cts == 0 && s.adds == 0 {
+            // no piece: the record's own transaction completes it
+            return PqTreeNext::Wait;
+        }
+        return match pieces(g, l, s, PqGas::default()) {
+            Ok(p) => next_send(g, l, &p, s, landed, fin),
+            Err(r) => PqTreeNext::Void(r),
+        };
+    }
     let at = |v: &[bool], i: u64| v.get(i as usize).copied().unwrap_or(false);
     let is_in = |st: &PqTreeLanded, t: &PqTreeTx| match t.entry {
         "commit" => st.record,
@@ -1433,27 +1554,32 @@ pub fn next_send(
         "addPath" => (t.first..t.first + t.count.max(1)).all(|i| at(&st.cts, i)),
         _ => (t.first..t.first + t.count.max(1)).all(|i| at(&st.wraps, i)),
     };
-    let left: Vec<usize> = (0..plan.txs.len())
-        .filter(|i| plan.txs.get(*i).is_some_and(|t| !is_in(landed, t)))
-        .collect();
+    let left_of = |st: &PqTreeLanded| -> Vec<usize> {
+        (0..plan.txs.len())
+            .filter(|i| plan.txs.get(*i).is_some_and(|t| !is_in(st, t)))
+            .collect()
+    };
+    let left = left_of(landed);
     let Some(&first) = left.first() else {
-        return PqTreeNext::Done;
+        // every piece landed, the completion not final yet
+        return PqTreeNext::Wait;
     };
     let held = plan.txs.len() - 1;
-    if plan.txs.len() > 1 && !left.contains(&held) {
-        let completion = g
-            .completion
-            .at(s.changes)
-            .add(g.completion_per_node.times(s.keys));
-        let last = plan
-            .txs
-            .get(*left.last().unwrap_or(&first))
-            .map_or(PqGas::default(), |t| t.gas)
-            .add(completion);
-        if !l.fits(last) {
+    let serial = |t: &PqTreeTx| matches!(t.entry, "commit" | "addPathList" | "addPathKeys");
+    let fin_left = left_of(fin);
+    let broken = plan.txs.len() > 1 && !fin_left.contains(&held) && !fin_left.is_empty();
+    if broken {
+        let completion = completion_gas(g, s);
+        let last = fin_left.last().and_then(|i| plan.txs.get(*i));
+        let one = last.map_or(PqGas::default(), |t| match t.entry {
+            _ if serial(t) || t.count <= 1 => t.gas,
+            "addPath" => g.cts.at(1),
+            _ => g.wrap,
+        });
+        if !l.fits(one.add(completion)) {
             return PqTreeNext::Void(refused(
                 "the piece left with the completion (the order broken)",
-                last,
+                one.add(completion),
                 l,
             ));
         }
@@ -1462,50 +1588,70 @@ pub fn next_send(
         return PqTreeNext::Done;
     };
     let all_final = |upto: usize| plan.txs.iter().take(upto).all(|x| is_in(fin, x));
-    let serial = matches!(t.entry, "commit" | "addPathList" | "addPathKeys");
     let last_left = left.len() == 1;
-    if (serial || last_left || first == held) && !all_final(first) {
+    if (serial(t) || last_left || first == held) && !all_final(first) {
         return PqTreeNext::Wait;
     }
-    if !serial && !last_left && first != held {
+    if !serial(t) && !last_left && first != held {
         // a ciphertext or wrap chunk goes once the record, the list and the node keys are final
-        let serial_done = plan
-            .txs
-            .iter()
-            .filter(|x| matches!(x.entry, "commit" | "addPathList" | "addPathKeys"));
-        if !serial_done.clone().all(|x| is_in(fin, x)) {
+        if !plan.txs.iter().filter(|x| serial(x)).all(|x| is_in(fin, x)) {
             return PqTreeNext::Wait;
         }
     }
     if first == held && left.len() > 1 {
         return PqTreeNext::Wait;
     }
-    PqTreeNext::Send(t.clone())
+    if serial(t) || t.count <= 1 {
+        return PqTreeNext::Send(t.clone());
+    }
+    // a chunk: the first run of its items not in state (another sender may have landed some; a piece landed twice is
+    // refused); B-8: a chunk left last after the held piece landed keeps its last item for the completion
+    let have = if t.entry == "addPath" {
+        &landed.cts
+    } else {
+        &landed.wraps
+    };
+    let missing: Vec<u64> = (t.first..t.first + t.count)
+        .filter(|i| !at(have, *i))
+        .collect();
+    let (Some(&a), Some(&z)) = (missing.first(), missing.last()) else {
+        return PqTreeNext::Wait;
+    };
+    let end = if broken && last_left && a < z {
+        z
+    } else {
+        z + 1
+    };
+    let run = (a..end).take_while(|i| missing.contains(i)).count() as u64;
+    let run = run.max(1);
+    PqTreeNext::Send(PqTreeTx {
+        first: a,
+        count: run,
+        gas: match t.entry {
+            "addPath" => g.cts.at(run),
+            _ => g.wrap.times(run),
+        },
+        ..t.clone()
+    })
 }
 
-/// The largest creation that fits one transaction (owner 2026-11-25): the session record of `k` member keys and its `k`
-/// wraps (`subtrees` of them the first of a subtree) within the chain's limits; 0 when not even one fits.
-pub fn create_cap(g: &PqTreeGas, l: PqLimits, signer: &str, admins: u64, subtrees: u64) -> u64 {
-    let Some(v) = g.verify.get(signer) else {
+/// The largest creation that fits one transaction (owner 2026-11-25): the session record of `k` member keys with its `k`
+/// wraps and `admins` admins, measured as one transaction (B-13), within the chain's limits; 0 when not even one fits.
+pub fn create_cap(g: &PqTreeGas, l: PqLimits, signer: &str, admins: u64) -> u64 {
+    let Ok(k) = kind_gas(g, signer) else {
         return 0;
     };
     let mut best = 0;
-    for k in 1..=512u64 {
-        let first = subtrees.min(k);
+    for n in 1..=512u64 {
         let gas = g
-            .session
-            .at(k)
-            .add(g.session_per_admin.times(admins))
-            .add(g.wrap_first_of_subtree.times(first))
-            .add(g.wrap.times(k - first))
-            .add(PqGas {
-                regular: *v,
-                state: 0,
-            });
+            .creation
+            .at(n)
+            .add(g.creation_per_admin.times(admins.saturating_sub(1)))
+            .add(k);
         if !l.fits(gas) {
             break;
         }
-        best = k;
+        best = n;
     }
     best
 }
@@ -1525,13 +1671,12 @@ mod tests {
     }
     const L60: PqLimits = PqLimits {
         block: 60_000_000,
-        tx_regular: 1 << 24,
+        tx_regular: Some(1 << 24),
     };
-    /// A small block (plan T5 says 20 M; with the measured rows the dearest plain record, the tree check on a cold tree of
-    /// 512 with the verify, asks 20.15 M, so the small chain of the test is 24 M)
+    /// A small block: plan T5's 20 M (the record's tree term from the rows, B-2 of the T4-T9 review)
     const L20: PqLimits = PqLimits {
-        block: 24_000_000,
-        tx_regular: 1 << 24,
+        block: 20_000_000,
+        tx_regular: Some(1 << 24),
     };
     fn plain() -> PqCommitShape {
         PqCommitShape {
@@ -1554,7 +1699,7 @@ mod tests {
         }
     }
 
-    /// Plan T5: a chain with a small block (24 M) takes a plain commit and refuses a record at its bounds by name, with
+    /// Plan T5: a chain with a small block (20 M) takes a plain commit and refuses a record at its bounds by name, with
     /// figures.
     #[test]
     fn a_20m_block_takes_a_plain_commit_and_refuses_the_bound_record() {
@@ -1564,11 +1709,15 @@ mod tests {
         let e = plan_commit(&g, L20, "mldsa87", &bounds()).unwrap_err();
         assert_eq!(e.what, "commit", "the record alone, by name: {e:?}");
         assert!(
-            e.asked > 24_000_000 && e.limits == (24_000_000, 1 << 24),
+            e.asked > 20_000_000 && e.limits == (20_000_000, Some(1 << 24)),
             "{e:?}"
         );
-        // at 60 M the bound commit plans, in C37's order, the held ciphertext last and alone
-        let p = plan_commit(&g, L60, "mldsa87", &bounds()).unwrap();
+        // at 60 M the bound commit plans with ML-DSA-65, in C37's order, the held ciphertext last and alone; with ML-DSA-87 its
+        // record alone is over 2^24 by the rows (20 Adds on 511 targets measured at 16.58 M with the verify, 32 admins and
+        // 4,124 B of info adding 0.34 M), refused by name
+        let e = plan_commit(&g, L60, "mldsa87", &bounds()).unwrap_err();
+        assert!(e.what == "commit" && e.regular > 1 << 24, "{e:?}");
+        let p = plan_commit(&g, L60, "mldsa65", &bounds()).unwrap();
         let names: Vec<&str> = p.txs.iter().map(|t| t.entry).collect();
         assert_eq!(
             &names[..3],
@@ -1599,6 +1748,7 @@ mod tests {
             keys: false,
             cts: vec![true; 511],
             wraps: vec![true; 20],
+            complete: false,
         };
         let fin = landed.clone();
         match next_send(&g, L60, &p, &s, &landed, &fin) {
@@ -1647,6 +1797,7 @@ mod tests {
             keys: true,
             cts: vec![true; 511],
             wraps: vec![true; 20],
+            complete: false,
         };
         landed.cts[510] = false;
         let fin = landed.clone();
@@ -1655,6 +1806,12 @@ mod tests {
             x => panic!("{x:?}"),
         }
         landed.cts[510] = true;
+        assert_eq!(
+            next_send(&g, L60, &p, &s, &landed, &landed.clone()),
+            PqTreeNext::Wait,
+            "every piece landed: done only once the epoch is complete at the final block"
+        );
+        landed.complete = true;
         assert_eq!(
             next_send(&g, L60, &p, &s, &landed, &landed.clone()),
             PqTreeNext::Done
@@ -1682,16 +1839,267 @@ mod tests {
         assert_eq!(kem_view(&enc(2)).unwrap()["kemPk"], "0x");
     }
 
-    /// Owner 2026-11-25: the creation in one transaction is capped by the chain's limits from the rows: 12 member keys at a
-    /// 60 M block by the measured rows (the spec's estimate said about 16), fewer where wraps open subtrees, fewer on a
-    /// small block, none for a kind without a row, and no figure in code.
+    /// Owner 2026-11-25: the creation in one transaction is capped by the chain's limits from the rows: 11 member keys at a
+    /// 60 M block by the creation measured as one transaction (B-13 of the T4-T9 review; 12 ask 63.1 M there; the record
+    /// and a wrap's fifteenth gave 12 before), fewer with 32 admins, fewer on a small block, none for a kind without a row,
+    /// and no figure in code.
     #[test]
     fn the_creation_cap() {
         let g = rows();
-        let typical = create_cap(&g, L60, "mldsa65", 1, 0);
-        assert_eq!(typical, 12, "{typical}");
-        assert!(create_cap(&g, L60, "mldsa65", 1, 8) <= typical);
-        assert!(create_cap(&g, L20, "mldsa65", 1, 0) < typical);
-        assert_eq!(create_cap(&g, L60, "nokind", 1, 0), 0);
+        let typical = create_cap(&g, L60, "mldsa65", 1);
+        assert_eq!(typical, 11, "{typical}");
+        assert!(create_cap(&g, L60, "mldsa65", 32) < typical);
+        assert!(create_cap(&g, L20, "mldsa65", 1) < typical);
+        assert_eq!(create_cap(&g, L60, "nokind", 1), 0);
+    }
+
+    /// The last live leaf's commit (A-8, spec §13: 20 Removes, the admins 1 -> 32, 4,124 B of info, no piece) measured at
+    /// 12.83 M / 15.78 M regular: one transaction, under 2^24 and a 60 M block, with both kinds (B-1 of the T4-T9 review).
+    #[test]
+    fn the_last_live_leafs_commit_plans_as_measured() {
+        let g = rows();
+        let s = PqCommitShape {
+            changes: 20,
+            admins: 32,
+            info: 4124,
+            cts: 0,
+            keys: 0,
+            adds: 0,
+        };
+        for kind in ["mldsa65", "mldsa87"] {
+            let p = plan_commit(&g, L60, kind, &s).unwrap_or_else(|e| panic!("{kind}: {e:?}"));
+            assert_eq!(p.txs.len(), 1, "{kind}");
+            assert!(p.txs[0].gas.regular < 1 << 24, "{kind}: {p:?}");
+        }
+    }
+
+    /// fable-r2-9 (C-1 = B-4 = D-9 of the review): a one-transaction plan whose record another sender stored alone is not
+    /// complete; the next send is the first piece through the piece entries; complete only when the epoch is.
+    #[test]
+    fn a_record_stored_alone_is_not_complete() {
+        let g = rows();
+        let s = plain();
+        let p = plan_commit(&g, L60, "mldsa65", &s).unwrap();
+        assert_eq!(p.txs.len(), 1, "one transaction: {p:?}");
+        let landed = PqTreeLanded {
+            record: true,
+            cts: vec![false; 3],
+            ..Default::default()
+        };
+        match next_send(&g, L60, &p, &s, &landed, &landed) {
+            PqTreeNext::Send(t) => assert_eq!(t.entry, "addPathList"),
+            x => panic!("{x:?}"),
+        }
+    }
+
+    /// B-5 = C-7 of the review: every signer kind the contract accepts has a verify row (ARCH-POS-18, never a kind refused
+    /// for want of a row); a kind with none is refused by its own name, not as a size.
+    #[test]
+    fn every_signer_kind_has_a_verify_row() {
+        let g = rows();
+        for kind in [
+            "mldsa44",
+            "mldsa65",
+            "mldsa87",
+            "fndsa512",
+            "fndsa1024",
+            "slhdsa128s",
+            "ed25519",
+            "p256",
+            "webauthn-p256",
+            "secp256k1",
+            "bip340",
+        ] {
+            assert!(plan_commit(&g, L60, kind, &plain()).is_ok(), "{kind}");
+            assert!(create_cap(&g, L60, kind, 1) > 0, "{kind}");
+        }
+        assert_eq!(
+            plan_commit(&g, L60, "nokind", &plain()).unwrap_err().what,
+            NO_KIND_ROW
+        );
+    }
+
+    /// B-9 of the review: each chunk but the last holds the most that fit one transaction.
+    #[test]
+    fn a_chunk_holds_the_most_that_fit() {
+        let g = rows();
+        let p = plan_commit(&g, L60, "mldsa65", &bounds()).unwrap();
+        let chunks: Vec<&PqTreeTx> = p
+            .txs
+            .iter()
+            .filter(|t| t.entry == "addPath" && t.count > 1)
+            .collect();
+        assert!(chunks.len() > 1, "{p:?}");
+        for t in &chunks[..chunks.len() - 1] {
+            assert!(
+                !L60.fits(g.cts.at(t.count + 1)),
+                "{t:?} could take one more"
+            );
+        }
+    }
+
+    fn a8() -> PqCommitShape {
+        PqCommitShape {
+            changes: 20,
+            admins: 32,
+            info: 4124,
+            cts: 0,
+            keys: 0,
+            adds: 0,
+        }
+    }
+
+    /// B-7 of the review: the regular cap binds by itself (EIP-7825): the last live leaf's ML-DSA-87 commit plans at a cap of
+    /// its regular gas, whatever the block, and is refused by name one below it.
+    #[test]
+    fn the_regular_cap_binds_by_itself() {
+        let g = rows();
+        let r = plan_commit(&g, L60, "mldsa87", &a8()).unwrap().txs[0]
+            .gas
+            .regular;
+        let cap = |c: u64| PqLimits {
+            block: 1 << 40,
+            tx_regular: Some(c),
+        };
+        assert!(plan_commit(&g, cap(r), "mldsa87", &a8()).is_ok());
+        let e = plan_commit(&g, cap(r - 1), "mldsa87", &a8()).unwrap_err();
+        assert_eq!(
+            (e.what, e.regular),
+            ("the commit (no piece: one transaction)", r)
+        );
+    }
+
+    /// B-7: the 5 % margin decides: a block of the raw regular + state refuses, a block of what is asked takes it.
+    #[test]
+    fn the_margin_decides() {
+        let g = rows();
+        let w = plan_commit(&g, L60, "mldsa65", &a8()).unwrap().txs[0].gas;
+        let block = |b: u64| PqLimits {
+            block: b,
+            tx_regular: None,
+        };
+        assert!(plan_commit(&g, block(w.regular + w.state), "mldsa65", &a8()).is_err());
+        assert!(plan_commit(&g, block(w.asked()), "mldsa65", &a8()).is_ok());
+    }
+
+    /// B-7: the held ciphertext waits until every chunk is final, not only landed; D-14: a piece landed at the latest block
+    /// and not final is waited for, never sent again.
+    #[test]
+    fn the_held_piece_waits_for_every_chunk_to_be_final() {
+        let g = rows();
+        let s = bounds();
+        let p = plan_commit(&g, L60, "mldsa65", &s).unwrap();
+        let mut landed = PqTreeLanded {
+            record: true,
+            list: true,
+            keys: true,
+            cts: vec![true; 511],
+            wraps: vec![true; 20],
+            complete: false,
+        };
+        landed.cts[510] = false;
+        let mut fin = landed.clone();
+        fin.cts[0] = false;
+        assert_eq!(next_send(&g, L60, &p, &s, &landed, &fin), PqTreeNext::Wait);
+        fin.cts[0] = true;
+        assert!(
+            matches!(next_send(&g, L60, &p, &s, &landed, &fin), PqTreeNext::Send(t) if t.first == 510)
+        );
+        // the record landed at the latest block, not final: nothing sent again
+        let landed = PqTreeLanded {
+            record: true,
+            cts: vec![false; 511],
+            wraps: vec![false; 20],
+            ..Default::default()
+        };
+        let fin = PqTreeLanded {
+            cts: vec![false; 511],
+            wraps: vec![false; 20],
+            ..Default::default()
+        };
+        assert_eq!(next_send(&g, L60, &p, &s, &landed, &fin), PqTreeNext::Wait);
+    }
+
+    /// B-8: the held ciphertext landed first by another sender with a chunk left: the chunk goes but its last ciphertext,
+    /// which then goes alone with the completion; the list left instead (indivisible, with the completion over the block)
+    /// is void.
+    #[test]
+    fn a_chunk_left_last_goes_but_one() {
+        let g = rows();
+        let s = bounds();
+        let p = plan_commit(&g, L60, "mldsa65", &s).unwrap();
+        let c = p
+            .txs
+            .iter()
+            .find(|t| t.entry == "addPath" && t.count > 1)
+            .unwrap()
+            .clone();
+        let mut landed = PqTreeLanded {
+            record: true,
+            list: true,
+            keys: true,
+            cts: vec![true; 511],
+            wraps: vec![true; 20],
+            complete: false,
+        };
+        for i in c.first..c.first + c.count {
+            landed.cts[i as usize] = false;
+        }
+        match next_send(&g, L60, &p, &s, &landed, &landed.clone()) {
+            PqTreeNext::Send(t) => assert_eq!(
+                (t.entry, t.first, t.count),
+                ("addPath", c.first, c.count - 1)
+            ),
+            x => panic!("{x:?}"),
+        }
+        for i in c.first..c.first + c.count - 1 {
+            landed.cts[i as usize] = true;
+        }
+        match next_send(&g, L60, &p, &s, &landed, &landed.clone()) {
+            PqTreeNext::Send(t) => assert_eq!((t.first, t.count), (c.first + c.count - 1, 1)),
+            x => panic!("{x:?}"),
+        }
+    }
+
+    /// B-6 of the review: the two decoders of the registry's records give the same reads: the direct path's (ABI bytes,
+    /// `pqchat_tree_registry`) and the port's (named JSON, `put_*`), for `kemKeyAt` (the key and its kept signature) and
+    /// `msigStateOf` (the accepted slots, low and high bits).
+    #[test]
+    fn the_two_registry_decoders_agree() {
+        use alloy::sol_types::SolCall;
+        let kem = TreeKemKey {
+            scheme: 1,
+            mlkemEk: vec![5u8; 1568].into(),
+            x25519: alloy::primitives::B256::repeat_byte(3),
+        };
+        let out = kemKeyAtCall::abi_encode_returns(&kemKeyAtReturn {
+            kem: kem.clone(),
+            sig: vec![9u8, 8].into(),
+        });
+        let mut r = PqTreeReads::default();
+        r.put_kem_key_at(
+            "kemKeyAt(0x01,2)",
+            &serde_json::json!({"kem": {"scheme": "1", "mlkemEk": hex(&kem.mlkemEk), "x25519": hex(kem.x25519.as_slice())},
+                "sig": "0x0908"}),
+        )
+        .unwrap();
+        assert_eq!(r.views["kemKeyAt(0x01,2)"], kem_view(&out).unwrap());
+        let acc =
+            alloy::primitives::U256::from(0b1011u64) | (alloy::primitives::U256::from(1u64) << 200);
+        let bytes = msigStateOfCall::abi_encode_returns(&msigStateOfReturn {
+            version: 1,
+            enabled: acc,
+            accepted: acc,
+        });
+        let direct = slots_of(
+            msigStateOfCall::abi_decode_returns(&bytes)
+                .unwrap()
+                .accepted,
+        );
+        let ua = format!("0x{}", "11".repeat(32));
+        r.put_msig_state(&ua, &serde_json::json!({"accepted": acc.to_string()}))
+            .unwrap();
+        assert_eq!(r.accepted[&ua], direct);
+        assert_eq!(direct, vec![0, 1, 3, 200]);
     }
 }

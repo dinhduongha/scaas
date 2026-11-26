@@ -2,68 +2,159 @@
  "format": "scaas.pqchat-tree-gas",
  "name": "reference",
  "family": "evm",
- "source": "forge, smartcontracts/evm/test/pqchat/PqChatTreeGas.t.sol (its GAS rows at 512 leaves and 20 changes), by clients/scaas-sdk/gas/pqchat_tree_rows.py: a line through each pair of measured rows (the list at 20 and 511 targets, the node keys at 6 and 9, the ciphertexts at 1 and 16, the session record at 64 and 128 keys), the record's base the plain record on a cold tree of 512 and its per-change the bound record's rest over 20 changes (admins and info in it), the completion the bound's over 20 changes, a wrap the 15 genesis wraps' fifteenth; each row replicated on the local Nethermind copy (runs/2026-11-26-pqchat-treekem-t8-nethermind.py). Plan and quote only: every transaction's limit is its estimate at send time.",
- "verify": {
-  "mldsa65": 5950000,
-  "mldsa87": 8860000
- },
- "session": {
-  "base": {
-   "regular": 0,
-   "state": 7726500
+ "source": "forge, smartcontracts/evm/test/pqchat/PqChatTreeGas.t.sol (its GAS rows at 512 leaves and 20 changes; the lines in clients/scaas-sdk/gas/pqchat-tree-forge.txt), by clients/scaas-sdk/gas/pqchat_tree_rows.py: each term a line through two measured rows or a measured row's rest over the terms before it, every measured point it does not come from checked at or under the rows. The verify caps and signature sizes are docs/contracts/accounts.md's. The T8 run on the local Nethermind copy (runs/2026-11-26-pqchat-treekem-t8-nethermind.py) included one burner transaction at the figures of each of its eight earlier points; the rows of this file are forge's. Plan and quote only: every transaction's limit is its estimate at send time.",
+ "kinds": {
+  "mldsa44": {
+   "verify": 4250000,
+   "sigBytes": 2420
   },
-  "per": {
-   "regular": 28405,
-   "state": 192780
+  "mldsa65": {
+   "verify": 5950000,
+   "sigBytes": 3309
+  },
+  "mldsa87": {
+   "verify": 8860000,
+   "sigBytes": 4627
+  },
+  "fndsa512": {
+   "verify": 2500000,
+   "sigBytes": 666
+  },
+  "fndsa1024": {
+   "verify": 5250000,
+   "sigBytes": 1280
+  },
+  "slhdsa128s": {
+   "verify": 1400000,
+   "sigBytes": 7856
+  },
+  "ed25519": {
+   "verify": 210000,
+   "sigBytes": 96
+  },
+  "p256": {
+   "verify": 400000,
+   "sigBytes": 128
+  },
+  "webauthn-p256": {
+   "verify": 400000,
+   "sigBytes": 400
+  },
+  "secp256k1": {
+   "verify": 50000,
+   "sigBytes": 129
+  },
+  "bip340": {
+   "verify": 50000,
+   "sigBytes": 96
+  },
+  "schnorr-bn254": {
+   "verify": 50000,
+   "sigBytes": 160
+  },
+  "schnorr-bls12381": {
+   "verify": 70000,
+   "sigBytes": 288
+  },
+  "bls-bn254-minsig": {
+   "verify": 345000,
+   "sigBytes": 192
+  },
+  "bls12381-minsig": {
+   "verify": 200000,
+   "sigBytes": 384
+  },
+  "musig2-secp256k1": {
+   "verify": 50000,
+   "sigBytes": 64
+  },
+  "frost-secp256k1": {
+   "verify": 50000,
+   "sigBytes": 65
+  },
+  "musig2-bn254": {
+   "verify": 50000,
+   "sigBytes": 96
+  },
+  "frost-bn254": {
+   "verify": 50000,
+   "sigBytes": 96
+  },
+  "bls12381-multi": {
+   "verify": 330000,
+   "sigBytes": 160
   }
  },
- "sessionPerAdmin": {
-  "regular": 0,
-  "state": 0
+ "sigRef": 3309,
+ "perSigByte": {
+  "regular": 33,
+  "state": 1524
+ },
+ "creation": {
+  "base": {
+   "regular": 225822,
+   "state": 7408038
+  },
+  "per": {
+   "regular": 301596,
+   "state": 3589818
+  }
+ },
+ "creationPerAdmin": {
+  "regular": 16296,
+  "state": 146880
  },
  "wrap": {
-  "regular": 264259,
-  "state": 3117222
- },
- "wrapFirstOfSubtree": {
-  "regular": 264259,
+  "regular": 264283,
   "state": 3117222
  },
  "record": {
   "base": {
-   "regular": 4595919,
-   "state": 7971300
+   "regular": 329301,
+   "state": 7762812
   },
   "per": {
-   "regular": 7133,
-   "state": 670752
+   "regular": 8350,
+   "state": 408
   }
  },
+ "recordPerAdd": {
+  "regular": 196592,
+  "state": 291637
+ },
+ "recordPerAddDrop": {
+  "regular": 83,
+  "state": 5
+ },
+ "recordPerRemove": {
+  "regular": 42941,
+  "state": 137496
+ },
  "recordPerAdmin": {
-  "regular": 0,
-  "state": 0
+  "regular": 8726,
+  "state": 48960
  },
  "recordPerKibInfo": {
-  "regular": 0,
-  "state": 0
+  "regular": 18291,
+  "state": 1566720
  },
  "list": {
   "base": {
-   "regular": 60058,
+   "regular": 60038,
    "state": 380970
   },
   "per": {
-   "regular": 4028,
+   "regular": 4029,
    "state": 55080
   }
  },
  "keys": {
   "base": {
-   "regular": 135325,
+   "regular": 135319,
    "state": 283050
   },
   "per": {
-   "regular": 134544,
+   "regular": 134545,
    "state": 2449530
   }
  },
@@ -79,16 +170,30 @@
  },
  "completion": {
   "base": {
-   "regular": 0,
-   "state": 0
+   "regular": 201945,
+   "state": 758064
   },
   "per": {
-   "regular": 398014,
-   "state": 1432768
+   "regular": 8560,
+   "state": 816
   }
  },
- "completionPerNode": {
-  "regular": 0,
-  "state": 0
+ "completionPerAdd": {
+  "regular": 372349,
+  "state": 1253825
+ },
+ "completionPerRemove": {
+  "regular": 102742,
+  "state": 88944
+ },
+ "noPiece": {
+  "base": {
+   "regular": 2054929,
+   "state": 18546660
+  },
+  "per": {
+   "regular": 260027,
+   "state": 342720
+  }
  }
 }
