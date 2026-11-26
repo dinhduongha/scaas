@@ -1,6 +1,7 @@
 # AI audit record: `vendor-falcon-rs`
 
-A separate audit stream, not a unit of the pre-freeze round ([README](../README.md)). The owner asked for it on 2026-11-26
+A separate audit stream ([README](../README.md)); since 2026-11-26 the pre-freeze round audits the same code again at its
+tag as unit 32, `vendor-falcon-rs` (controller call; [INDEX](../INDEX.md)), with this record as its prior review. The owner asked for it on 2026-11-26
 because nobody had audited falcon-rs, and asked that this one result be kept in the repository; the pre-freeze round's results
 stay local (owner 2026-11-24). Rules: [ARCH-POS-14](../../decisions.md#ARCH-POS-14) (an AI audit names its models; code
 changed after its round is `UNAUDITED` again), [ARCH-POS-22](../../review.md#ARCH-POS-22) (13 dimensions). The use it covers:

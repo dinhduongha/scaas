@@ -128,7 +128,8 @@ a library or a module (DELEGATECALL) must keep behaviour; say so when it does no
 
 ## 8. Your unit: `crypto-pqchat-tree`
 
-**FRAME: finalize when the TreeKEM build merges** (branch `pqchat-treekem`; the paths below are the branch's).
+**Finalized 2026-11-26:** the TreeKEM build merged from `pqchat-treekem` and was fixed in the review-fix round; every path
+below is under `T/`. pqchat-core's tree layer (CLI-PQC-17, plan T6a / T6b) is still SPECIFIED: list it under "Not covered".
 
 PqChat's TreeKEM mode (`groupMode = 1`) read vertically: the key schedule, path secrets from the seed, the tree and its hash,
 the admission of node keys, post-compromise security on removal, through clientkeys `treekem.js`, `ua-rs` `wallet/tree.rs` and
@@ -146,8 +147,6 @@ This unit leads dimension 2 for the tree; unit `evm-pqchat` audits the contract 
 `app-cores` the clients alone.
 
 **Primitives and every implementation (paths under `T/`; find any implementation this list misses and name it):**
-Paths are on branch `pqchat-treekem` (worktree `.claude/worktrees/pqchat-treekem` until it merges); at the tag they are under
-`T/`.
 - **The key schedule** (spec §5: `H(ikm, info) = HKDF-SHA-256(ikm, salt = empty, info, 32)`; `treeId`, `pathContext`,
   `firstPathSecret` from the seed, `pathSecrets`, `nodeKeyOf`, the path ciphertext's `ctKek` and AAD, `epochContext`,
   `joinerSecret`, `schedule`, `K`, the tree info and wrap seals): clientkeys `clients/clientkeys/src/treekem.js` (`treeScope`,
@@ -155,12 +154,15 @@ Paths are on branch `pqchat-treekem` (worktree `.claude/worktrees/pqchat-treekem
   `epochContext`, `joinerSecret`, `schedule`, `sealTreeInfo`, `openTreeInfo`, `sealTreeWrap`, `openTreeWrap`, `createGenesis`,
   `buildCommit`, `reader`), `src/pqchat-tree.js`, `src/kem.js` (`kemKeyFromSeed`); `ua-rs` `clients/ua-rs/src/wallet/tree.rs`
   (`TreeScope`, `PQCHAT_TREE`, `path_context`, `EpochFields`, `PathCt`, `wrap_hash`, `Genesis`, `CommitInput`, `BuiltCommit`,
-  `tree_prepare`, `tree_prepare_leave`, `tree_prepare_remove`, `key_of`, the replay), `src/wallet/kem.rs`, `src/wallet/pqchat.rs`
+  `tree_prepare`, `tree_prepare_leave`, `tree_prepare_remove`, `key_of`, the replay from a pin, `tree_resume`, the
+  rosters for the secret range, `exits_at`; every registry KEM key a path secret goes to authenticated by its record, `KemRecord`;
+  clientkeys `verifyKemRecord`, `walkTrees`), `src/wallet/kem.rs`, `src/wallet/pqchat.rs`
 - **The tree and its hash** (RFC 9420 array layout, blanks, resolution without unmerged leaves; the typed tree hash `TreeLeaf`
   / `TreeParent`; no RFC parent hash): `ua-rs` `src/wallet/tree_public.rs` (`level`, `root`, `parent`, `sibling`,
   `direct_path`, `copath`, `leaf_hash`, `parent_hash` (the tree hash's parent node), `ct_targets_hash`, `struct_hash`);
   clientkeys `src/treekem.js`, `src/pqchat-tree.js`; Solidity `smartcontracts/evm/src/pqgroup/PqGroupTree.sol` (tree math, tree
-  hash, `treeHash` at acceptance), `src/pqchat/PqChatTree.sol`
+  hash, `treeHash` at acceptance), `src/pqgroup/IPqGroupTree.sol`, `src/pqchat/PqChatTree.sol`, `PqChatTreeMembers.sol` (the
+  exits)
 - **Admission of node keys** (scheme 1, 1,601 B, canonical X25519 `pk_X`, ML-KEM `ek` coefficient bound 3,329, no two live
   leaves with the same key bytes): `PqGroupTree.sol`; `ua-rs` `tree_public.rs`; clientkeys `treekem.js`, `kem.js`
 - **PCS on removal and the no-return sets** (`gone`, `goneOwnKey`, `goneKey`; a removed or departed UA's leaves blanked by the
@@ -169,8 +171,8 @@ Paths are on branch `pqchat-treekem` (worktree `.claude/worktrees/pqchat-treekem
   `scripts/pqchat-vectors.mjs`, `scripts/treekem-fixture.mjs`; tests `clients/clientkeys/test/treekem.test.js`,
   `pqchat-tree.test.js`, `clients/ua-rs/tests/tree.rs`, `smartcontracts/evm/test/pqchat/PqChatTree*.t.sol`,
   `PqChatTreeModel.sol`
-- **Not built at the time of writing:** the SDK's and pqchat-core's tree layer (`clients/scaas-sdk/tests/feature_tree.rs` only);
-  read what the merge adds
+- **Not built at the time of writing (2026-11-26):** pqchat-core's tree layer and the SDK's tree calls (plan T5, T6a, T6b):
+  read what `T/` holds and list the rest under "Not covered"
 
 **Specifications and standards to read first:**
 - spec `T/docs/superpowers/specs/2026-11-23-pqchat-treekem.md` (§2 controller calls, §3 deviations from RFC 9420, §4 the
@@ -196,6 +198,14 @@ Paths are on branch `pqchat-treekem` (worktree `.claude/worktrees/pqchat-treekem
 6. Path ciphertexts: KEM scheme 1, `ctKek` and AAD binding `treeId`, epoch, node, target and `kemPk`; a ciphertext opened by
    the wrong target refused without an oracle.
 7. Constant time and zeroize of path secrets, node private keys, `joinerSecret` and `K`; every step inside `ua-rs` (spec §15).
+8. **Depth 9 and the readers' fixes** (added 2026-11-26; R8 512 and C10 20, owner 2026-11-25; the re-review and the fix
+   check): every implementation handles a tree of 512 leaves (depth 9, the 9-node direct path, `tree.json`'s depth-9 commit)
+   and 20 changes; the readers authenticate every KEM key they send a path secret to by its registry record (the cold tree
+   and epoch 0, C-1), number epochs from verified data only (C-3), derive `joinEpoch` from the walk (C-2), bound served counts
+   (C-6: 544, the same bound in clientkeys), refuse a UA exiting twice under one head and C21's owed total (B2-6), keep only
+   the trees at 0, the pin and the head (E-3 / B2-2), keep held keys when a read lies (C-6 of the fix check), never seal a
+   tree key (B2-8), and follow an `msig` member's records by the reader rule with step 6 into the pin's `msigVersions` (C-4 /
+   R-1). The exits (`PqChatTreeMembers`): named within `EXIT_LAG_MAX` = 16 of the head, applied at the head (C9, E-3).
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `T/docs/research/security-review-record.md` (index of every review, and what no review covered)
@@ -204,6 +214,11 @@ Paths are on branch `pqchat-treekem` (worktree `.claude/worktrees/pqchat-treekem
   `scratchpad/review-3zh/`, `scratchpad/review-t21/` (`ledger.md`, O1-O8), `scratchpad/sdk-complete-review/`,
   `scratchpad/sdk-review-20261123-0621/` (T26, `STATUS.md`), `scratchpad/pqvault-review/`,
   `scratchpad/treekem-review-20261123-1426/`
+- the review-fix round (2026-11-24 to -26, local): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 - the reports of the layer units of this round under `scratchpad/ai-audit/results/` when they exist: read them for leads,
   do not repeat their findings; a finding of yours that a layer unit already reported names that unit's id
 - `T/docs/research/zether-msm-crypto-review.md`, `T/docs/research/pqz-specialised-verifier.md` §7,
@@ -215,6 +230,15 @@ Paths are on branch `pqchat-treekem` (worktree `.claude/worktrees/pqchat-treekem
   closing matrix (every forge directory at the default set, the set-sensitive tests at the other three sets, node and e2e,
   clients, vectors)
 - `T/pqz-core/runs/gate/3zh-g2-<set>-summary.txt` for the four sets
+- the TreeKEM records: `T/clients/clientkeys/runs/2026-11-23-pqchat-treekem-t1a-mutants.txt`, `-t1b-mutants.txt`,
+  `T/clients/ua-rs/runs/2026-11-23-pqchat-treekem-t2-mutants.txt`, `T/smartcontracts/evm/runs/2026-11-23-pqchat-treekem-t3a-summary.txt`
+  to `-t3d-summary.txt`, `T/runs/2026-11-23-pqchat-treekem-t4-summary.txt`
+- the review-fix round: `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt` (with
+  `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
+  matrix (`2026-11-26-round-matrix.sh` and its summary)
+- the review-fix round's client rows: `T/clients/runs/2026-11-25-review-fix-client-summary.txt`,
+  `2026-11-26-review-fix3-client-summary.txt`, `2026-11-26-review-fix4-client-summary.txt` (with their `-mutants.py`
+  runners)
 
 **Also accepted for this unit (do not report):** the accepted cost of the joiner without RFC 9420's `init` chain; the key
  no-return set as hygiene only (equivalent keys, the lending residual); the owner rulings on the spec's open points
@@ -231,13 +255,13 @@ number (section 9).
 | 3 | Security | A non-admin changing another UA's keys; a commit with a forged path for another leaf; `treeId` or `parentTreeHash` not bound; a removed UA re-added. |
 | 4 | Rules that do not bend | Never lose ciphertext (path ciphertexts and node keys in state); no decryption oracle in the client's replay. |
 | 5 | Secrets and privacy | Path secrets, node private keys, `joinerSecret` and `K` only in `ua-rs` key memory; what the tree shape reveals. |
-| 6 | Robustness and denial of service | Tree sizes at the bounds (256 leaves, 32 changes) in every implementation; the resolution walk's cost. |
+| 6 | Robustness and denial of service | Tree sizes at the bounds (512 leaves at depth 9, 20 changes) in every implementation; the resolution walk's cost. |
 | 7 | Failure handling | A member that cannot follow an epoch shows it and sends nothing; a closed session's state. |
 | 8 | Consistency across languages and layers | The same tree hash, schedule and admission in Solidity, `ua-rs` and clientkeys on `tree.json` and `tree-secrets.json`; `PqChatTreeModel.sol` against both. |
 | 9 | Contract specifics | `PqGroupTree.sol`'s namespace, the body module split, the size gate, gas pins. |
-| 10 | Performance and cost | Commit size and client CPU at 256 leaves; the completion's gas (spec §13 estimates). |
+| 10 | Performance and cost | Commit size and client CPU at 512 leaves; the completion's gas (spec §13 estimates). |
 | 11 | Interfaces and misuse | The tree API in `ua-rs` (`tree_prepare*`) hard to misuse: the scope explicit, every field shown before signing. |
-| 12 | Tests | The T1a, T1b, T2, T3a, T3b mutant records; vectors read by both clients and the forge tests. |
+| 12 | Tests | The T1a, T1b, T2, T3a-T3d and T4 mutant records and the review-fix round's; vectors read by both clients and the forge tests. |
 | 13 | Operations and the supply chain | N/A for new dependencies (none added for the tree: say if one is). |
 
 ## 9. Report format (Markdown, English)

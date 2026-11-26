@@ -244,6 +244,16 @@ i. **Attachments through the Arweave seal** (plan T10b; CLI-SDK-21, CLI-UAL-64, 
 j. Reproduction: the cores' bytes equal clientkeys' rows (CLI-PQC-11) and the real-crypto end-to-end run is a gate
    (CLI-PQC-12); a vector row that only a canonical input exercises does not prove a canonicalization (section 5's note on
    tests that cannot fail).
+k. **The review-fix round's reader rules** (added 2026-11-26; CLI-PQC-15 and the pqchat-core / pqvault-core Changes of
+   2026-11-25 / -26; CTR-UA-74): pqchat-core's walk (`reads.rs` `walk`): an epoch counts only through its chain down to the
+   signed session record, each link judged against its parent with the parent's exits, ids recomputed, session and number
+   checked, the remover in the parent's admins (U-1, E-4); each remembered id bound to the hash of the record verified under
+   it (C-1); a record that is its own parent ends the walk, no underflow (C-2); "plain" computed as the contract's `_keeps`
+   (E-1, `check.rs`); a replica's exits read under the epoch named (E-5), a replica record compared with the home's with the
+   `msig` tags stripped (A-1); step 6 along a session's epochs and along pqvault-core's vault (`vault.rs` `verify`,
+   `epoch_agrees`: oldest first, no `msig` version below the highest seen; C-3 / R-2, `tests/exits.rs`); the leave and remove
+   builders checked at the head with the lag and the named epoch's lists (D2-4, C-5), refused by the new code `ExitLag` (29
+   codes).
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - the pqchat-core spec's §14 (Fable, 2026-11-17) and the PqVault spec's §16-§17 (reviews r1 / r2)
@@ -251,12 +261,20 @@ j. Reproduction: the cores' bytes equal clientkeys' rows (CLI-PQC-11) and the re
 - the cores' build review rounds as recorded in `T/docs/decisions.md` (CLI-PQC-15 to -17 and the pqchat-core Changes) and in
   the round-2 / round-3 mutant records (`clients/pqchat-core/runs/2026-11-17-pqchat-core-r2-mutants.txt`, `-r3-mutants.txt`);
   the T26 SDK review's app-core rows (`scratchpad/sdk-review-20261123-0621/`: A-5 part b, A-9, B-17)
+- the review-fix round (2026-11-24 to -26, local; the cores: E-1, E-4, E-5, U-1, D2-*, C-1 to C-5): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - the cores' gate summaries under `T/clients/pqchat-core/runs/` and `T/clients/pqvault-core/runs/` (mutants included:
   `T/clients/pqchat-core/runs/2026-11-17-pqchat-core-summary.txt` with its `pqc-reads` rows, the T1-T12, r2, r3, e2e and sigs
   mutant records, e.g. T1 10 of 10 killed; `T/clients/pqvault-core/runs/2026-11-22-pqvault-core-summary.txt` and the V10
   records), and the tag's own client gate summary
+- the review-fix round's client rows: `T/clients/runs/2026-11-25-review-fix-client-summary.txt`,
+  `2026-11-26-review-fix3-client-summary.txt`, `2026-11-26-review-fix4-client-summary.txt` (with their `-mutants.py`
+  runners), and the round's closing matrix (`T/smartcontracts/evm/runs/2026-11-26-round-matrix.sh` and its summary)
 
 **Also accepted for this unit (do not report):**
 - What the specs leave for later rounds: groups beyond what CLI-PQC-02 scopes, attachments in the app's first version
@@ -270,7 +288,7 @@ number (section 9).
 
 | # | Dimension | What to hunt in this unit |
 |---|---|---|
-| 1 | Conformance | CLI-PQC-01 to -17, CLI-PQV-01 to -15, CLI-SDK-19 to -21, the PqVault owner rulings O1-O9 and the PqChat state-only recovery ruling against `clients/pqchat-core/` and `clients/pqvault-core/` (the TreeKEM layer FRAME, section 8); the doc status tags against the built code. |
+| 1 | Conformance | CLI-PQC-01 to -17, CLI-PQV-01 to -15, CLI-SDK-19 to -21, the PqVault owner rulings O1-O9 and the PqChat state-only recovery ruling against `clients/pqchat-core/` and `clients/pqvault-core/` (the TreeKEM layer FRAME, section 8); the doc status tags against the built code; the reader rules of invariant k. |
 | 2 | Cryptography | The key schedules on handles (pqvault-core `keys.rs`: wrap, unwrap, `pass_key`, `vault_key`, `seal_info`, `encrypt_item`; pqchat-core's epoch, chain and message keys through the SDK); HKDF info binding `vaultId`, `epochId`, `passKdf`; Argon2id parameters and RFC 8265 normalisation (invariant g); the ratchet rules (invariant b); padding inside the AEAD. |
 | 3 | Security | Records signed only through the SDK's typed entries (no blind signing, invariant a); a removed or departed member reads no later epoch; biometric unlock bound to one device (invariant h); a shared vault's passphrase equal to a personal one refused. |
 | 4 | Rules that do not bend | No decryption oracle (invariant e); every read that feeds a decryption or chooses a key `FeedsDecryption` (invariant d); state-only recovery (invariant f); no ciphertext kept only off chain. |
@@ -281,7 +299,7 @@ number (section 9).
 | 9 | Contract specifics | N/A: no contract code (the contracts are units `evm-pqchat`, `evm-pqvault`). |
 | 10 | Performance and cost | Argon2id at 64 MiB / 3 / 4 on mobile (no timing runs); RPC reads per unlock and per history walk. |
 | 11 | Interfaces and misuse | The app-facing API (pqvault-core `entry` JSON ABI, `Net` seam) hard to misuse; prepare and sign in one step as decided (T26 A-5 part b). |
-| 12 | Tests | Mutant records (`runs/2026-11-22-pqvault-core-v10*-mutants.txt`, the pqchat-core mutants); the real-crypto e2e as a gate (CLI-PQC-12). |
+| 12 | Tests | Mutant records (`runs/2026-11-22-pqvault-core-v10*-mutants.txt`, the pqchat-core mutants); the real-crypto e2e as a gate (CLI-PQC-12); the review-fix round's client mutants (`T/clients/runs/2026-11-2[56]-review-fix*-client-*`). |
 | 13 | Operations and the supply chain | `Cargo.lock` and `cargo deny` / `cargo audit` of both crates; SPDX headers. |
 
 ## 9. Report format (Markdown, English)

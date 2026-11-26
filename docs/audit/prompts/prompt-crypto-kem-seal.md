@@ -148,7 +148,7 @@ layer alone.
   `ua-rs` `clients/ua-rs/src/wallet/kem.rs` (`ml-kem` =0.3.4, `curve25519-dalek` 4), `src/ua_portable.rs` (the KEM record);
   clientkeys `src/kem.js` (`@noble/post-quantum`, `@noble/curves`), `src/ua.js`; the registry's KEM record and its hash
   `smartcontracts/evm/src/ua/UAKinds.sol`, `UARegistry*.sol` (`setKemKey`, `kemKeyOf`, `kemKeyAt`); the tree's admission check
-  (`src/pqgroup/PqGroupTree.sol`, FRAME with the TreeKEM build); the C ABI and wrappers that expose it (`clients/ua-c/src/lib.rs`,
+  (`src/pqgroup/PqGroupTree.sol`, built); the C ABI and wrappers that expose it (`clients/ua-c/src/lib.rs`,
   `scaas_ua.h`, `ua-cxx`, `ua-cs`, `ua-py`, `ua-go`, `ua-dart-frb`)
 - **Seal and open** (labels, AAD bound into the key derivation, single use): `ua-rs` `src/wallet/seal.rs`, `src/wallet/aead.rs`;
   clientkeys `src/seal.js`; the file seal `ua-rs` `src/wallet/file.rs`, `src/file.rs`, `src/wallet/pqchat_file.rs`,

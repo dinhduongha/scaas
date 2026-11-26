@@ -165,7 +165,7 @@ number (section 9).
 | 10 | Performance and cost | N/A beyond copies of large blobs across the ABI. |
 | 11 | Interfaces and misuse | Leads within the unit: the C ABI and the bindings hard to misuse (ownership documented, lengths with pointers, thread rules). |
 | 12 | Tests | `json`, `fuzz_caps`, `ed25519_fuzz` tests and `fuzz/` targets can fail; the wrappers' own tests. |
-| 13 | Operations and the supply chain | `Cargo.lock`, `deny.toml` (advisories with reasons, `crypto-bigint` RUSTSEC-2026-0387 known), no build-time network fetch; SPDX headers. |
+| 13 | Operations and the supply chain | `Cargo.lock`, `deny.toml` (advisories with reasons, `crypto-bigint` RUSTSEC-2026-0387 known), no build-time network fetch; SPDX headers; the `path` entries of the vendored crates in `Cargo.lock` carry no checksum: `scripts/vendor.sh check` in CI is what pins them (ARCH-POS-24, FR-3). |
 
 ## 9. Report format (Markdown, English)
 

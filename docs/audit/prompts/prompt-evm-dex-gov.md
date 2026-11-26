@@ -127,22 +127,39 @@ The DEX (settlement, liquidity, executors, position readers), the trade library,
 
 **Specifications and rules to read first:**
 - `T/docs/contracts/dex.md` (CTR-DEX-*), `T/docs/contracts/settlement.md`; decisions CTR-DEX-13, -15, -19, -25, -26, -30 and the 2026-11-12 DEX rulings (open markets, `CLOSED_MARKETS` default off, settle by outcome)
-- governance: decisions CTR-GOV-01 to -30 (identity by UA `bytes32`, bit bands 0-127 SCaaS and 128-255 customer with none refused, one `GovernanceRouter` per chain, CTR-GOV-25 rescue, -28 `chainUid`, -29 `BURNER`, -30 supply caps)
+- governance: decisions CTR-GOV-01 to -33 (identity by UA `bytes32`, bit bands 0-127 SCaaS and 128-255 customer with none refused, one `GovernanceRouter` per chain, CTR-GOV-25 rescue, -28 `chainUid`, -29 `BURNER`, -30 supply caps, -31 `AUDITOR`, -32 router versions, -33 G1: one router for every registry generation); CTR-UA-73
 
 **Invariants to check (beyond section 5):**
 1. Settle by outcome: each recipient's own delta >= its signed floor, the seller's debit <= the fill, pay out what arrived pro rata; refunds and `restorePulled` with EIP-1153 transient state; approve reset; executor trust (`UniswapExecutor` returns unspent `tokensOut`).
 2. Typed orders and cancels (EIP-712, nonces, invalidation), the liquidity order (CTR-DEX-30), the p256 / webauthn verify cap 400,000; `DexPuller` only pulls what was signed.
 3. Governance: two-step admin transfer; grants with terms (min / max / total / perWindow + window / maxUses / validUntil / delegable narrower) enforced on every use; `grantDelay`; `disableFeature` one-way; `renounceRole` and every direct admin or role-holder entry carry `chainUid` (`acceptAdmin` without); router ops bind the target, op and word.
 4. `RescueVault`: two roles, a chain-neutral owner change with a sequence number, the CREATE2 deployer address; `rescue(asset)` moves only to the constant.
+5. **The G1 router and its keyed cancel** (added 2026-11-26; CTR-GOV-32, -33, CTR-UA-73; G-7 of the re-review):
+   `GovernanceRouterBase` names the chain's `OpenFactory` (`factory()`, immutable); a derived signer's op is checked on
+   `registryFor(target)` (the env registry the factory wrote into a clone it made, else the router's own) and its nonce keyed
+   `(registry, id, lane)` in `scaas.govrouter.nonce` (`mtxNonceFor`); `mtxCancelNonceFor` refuses a target with no code
+   (`TargetHasNoCode`) before anything moves (G-7: a keyed cancel for a predicted address ran in the router's own map and
+   again in the keyed map once the target existed). Hunt: one signature that runs in two maps, a cancel that bumps another
+   lane, a bad env registry (a malicious factory admin or registrar) admitting a signer the router's registry refuses.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `T/pqz-core/research/code-review-2026-10-26/README.md` (whole-contract review at `64549aa4`) and `code-review-2026-10-19/README.md`
 - `T/docs/research/security-review-record.md` (index of every review, and what no review covered)
 - `scratchpad/review-ua-mtx-merge/` (A-regulated, B-metatx-ua, C-pqz-zether, D-factory-gov-dex-pqchat, recheck-*, recheck2-*)
+- the review-fix round (2026-11-24 to -26, local): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - the tag's closing gate summary under `T/smartcontracts/evm/runs/` (every forge directory at the default set, the set-sensitive tests at the other three sets)
 - `T/smartcontracts/evm/runs/2026-11-15-3zh-core-g2.txt`, `2026-11-15-burner-wrap-caps.txt`, `2026-11-15-pqz-three-keys-round/summary.txt`, `2026-11-13-fix3-chainuid/summary.txt`, `2026-11-14-msig-members/mutants.txt`, `2026-11-15-3zh-mldsa.txt`
+- G1 and the keyed cancel: `T/smartcontracts/evm/runs/2026-11-24-router-g1-summary.txt`, `2026-11-24-router-cancel-summary.txt`,
+  the runner `T/smartcontracts/evm/script/governance/g1_mutants.py`
+- the review-fix round: `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt` (with
+  `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
+  matrix (`2026-11-26-round-matrix.sh` and its summary)
 - `T/smartcontracts/evm/size-baseline.json` with `T/scripts/size_gate.py` (the size ratchet, ceiling 64 KiB)
 
 **Dimension table** (ARCH-POS-22, `T/docs/review.md` §1; added 2026-11-24). Apply every dimension within this unit's
@@ -151,9 +168,9 @@ number (section 9).
 
 | # | Dimension | What to hunt in this unit |
 |---|---|---|
-| 1 | Conformance | CTR-DEX-13, -15, -19, -25, -26, -30, the 2026-11-12 DEX rulings and CTR-GOV-01 to -30 against `src/dex/`, `src/trade/`, `src/governance/`; `dex.md`, `settlement.md` BUILT rows with tests. |
+| 1 | Conformance | CTR-DEX-13, -15, -19, -25, -26, -30, the 2026-11-12 DEX rulings, CTR-GOV-01 to -33 and CTR-UA-73 against `src/dex/`, `src/trade/`, `src/governance/`; `dex.md`, `settlement.md` BUILT rows with tests. |
 | 2 | Cryptography | Typed orders, cancels and the liquidity order (EIP-712 domain, typehashes, nonces); the router op word binding target, op and word; the `RescueVault` owner change with a sequence number; the p256 / webauthn verify cap 400,000. |
-| 3 | Security | Leads within the unit: settle by outcome (each recipient's delta >= its signed floor, the seller's debit <= the fill); executor trust; `DexPuller` pulls only what was signed; governance grants (terms enforced on every use, `grantDelay`, `disableFeature` one-way, two-step admin, `renounceRole` with `chainUid`); front-running a fill or a grant. |
+| 3 | Security | Leads within the unit: settle by outcome (each recipient's delta >= its signed floor, the seller's debit <= the fill); executor trust; `DexPuller` pulls only what was signed; governance grants (terms enforced on every use, `grantDelay`, `disableFeature` one-way, two-step admin, `renounceRole` with `chainUid`); front-running a fill or a grant; the G1 keyed nonce map and the keyed cancel (invariant 5). |
 | 4 | Rules that do not bend | Relayable with fee 0; explicit parameters; one `GovernanceRouter` per chain; bit bands 0-127 / 128-255 none refused; no chain assumption; nothing upgradable; `rescue(asset)` only to the constant. |
 | 5 | Secrets and privacy | What orders and fills reveal (makers, amounts, as designed); business identifiers in governance events. |
 | 6 | Robustness and denial of service | Order books and position readers without bound; a fill that leaves dust that blocks a market; executor return data griefing. |
