@@ -468,6 +468,8 @@ struct Home {
     /// an updated `msig`'s structures by version, `msigAt` (CTR-UA-74)
     msig: MsigVersions,
     log: Vec<String>,
+    /// the contract's `treeOf.owed`: the live leaves of the UAs gone at the head, owed by the next commit
+    owed: u64,
 }
 
 impl Home {
@@ -519,6 +521,7 @@ impl Home {
             self.node_key.insert(*x, (unhex(&st["nodeKeys"][k]), epoch));
         }
         self.tree = a.tree;
+        self.owed = 0;
         self.epochs.push(Epoch {
             id: a32(&st["epochId"]),
             record: c.clone(),
@@ -546,8 +549,15 @@ impl Home {
                 .map(a32)
                 .collect()
         };
-        self.tree.mark_gone(&uas);
         let head = self.epochs.len() as u64 - 1;
+        for ua in &uas {
+            if !self.gone.contains_key(ua) {
+                self.owed += (0..self.tree.leaves)
+                    .filter(|i| self.tree.leaf(*i).is_some_and(|l| l.ua == *ua))
+                    .count() as u64;
+            }
+        }
+        self.tree.mark_gone(&uas);
         for ua in uas {
             self.gone.entry(ua).or_insert((kind, head));
         }
@@ -577,7 +587,8 @@ impl TreeReader for Home {
         Ok(match v {
             View::SessionOf => json!({"record": self.epochs[0].record, "sig": self.epochs[0].sig}),
             View::TreeOf => json!({"treeId": hx(&self.tree_id), "leaves": self.tree.leaves, "used": self.tree.used,
-                "treeHash": hx(&self.tree.tree_hash()), "genesisTreeHash": hx(&self.genesis_tree_hash)}),
+                "treeHash": hx(&self.tree.tree_hash()), "genesisTreeHash": hx(&self.genesis_tree_hash),
+                "owed": self.owed}),
             View::TreeLeaves => json!((0..self.tree.leaves)
                 .map(|i| match self.tree.leaf(i) {
                     Some(l) => {
@@ -681,6 +692,7 @@ fn new_home(
         ua_keys,
         msig: BTreeMap::new(),
         log: vec![],
+        owed: 0,
     }
 }
 

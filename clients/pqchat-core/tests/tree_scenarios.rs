@@ -103,7 +103,7 @@ struct Home {
     msigs: BTreeMap<(String, u64), (Vec<u8>, String)>,
     /// a commit accepted and not complete: its record in state, no piece yet (`commitOf` answers it, `epochsOf` does not)
     staged: Option<Ep>,
-    /// `treeOf.owed` (the leaves owed to exits at the head; a majority's home may hold an exit the endpoint hides)
+    /// `treeOf.owed`: the live leaves of the UAs gone at the head, owed by the next commit (the contract's)
     owed: u64,
 }
 
@@ -271,6 +271,7 @@ impl Home {
                 .insert(*x, (st["nodeKeys"][k].as_str().unwrap().to_string(), epoch));
         }
         self.tree = a.tree;
+        self.owed = 0;
         self.epochs.push(Ep {
             id: st["epochId"].as_str().unwrap().into(),
             record: c.clone(),
@@ -300,8 +301,15 @@ impl Home {
                 .map(a32)
                 .collect()
         };
-        self.tree.mark_gone(&uas);
         let head = self.epochs.len() as u64 - 1;
+        for ua in &uas {
+            if !self.gone.contains_key(&hx(ua)) {
+                self.owed += (0..self.tree.leaves)
+                    .filter(|i| self.tree.leaf(*i).is_some_and(|l| l.ua == *ua))
+                    .count() as u64;
+            }
+        }
+        self.tree.mark_gone(&uas);
         for ua in uas {
             self.gone.entry(hx(&ua)).or_insert((kind, head));
         }
@@ -1211,6 +1219,46 @@ async fn a_changed_info_is_sealed_only_after_the_majority_read() {
         }
         assert_eq!(*net.writes.lock().unwrap(), 0, "{what}");
     }
+}
+
+/// R13 (R2-D-1 of the T4-T9 re-check): an endpoint that serves the true `treeOf` (its `owed` the removed member's leaf) and
+/// hides the removal kept under the head is a lying read: the replay and a commit sealing a changed info (3 named endpoints
+/// that agree on `treeOf`) are refused (`TreeHeadRoot`), nothing pinned; the honest endpoint as control.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_hidden_exit_under_the_true_tree_of_is_refused() {
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    let sc = scenario(&v, "pin-exit");
+    let head = sc["steps"][0]["epochId"].as_str().unwrap().to_string();
+    let honest = Home::scenario(&v, &sc, None);
+    assert_eq!(honest.owed, 1, "the removed member's leaf is owed");
+    let (s, tree_id) = (sref(&honest), honest.tree_id.clone());
+    let r = crate_over(&w, HomeNet::new(honest));
+    let st = replay(&r, &v, &s, "A").await.unwrap();
+    let hide: Tamper = Box::new(move |i, a, v| {
+        if i == "IPqChat.removalCount" && a["epochId"].as_str() == Some(head.as_str()) {
+            *v = json!({"0": "0"});
+        }
+    });
+    let store = Arc::new(MemoryStore::new());
+    let net = HomeNet::with(Home::scenario(&v, &sc, None), Some(hide), 3, true);
+    let r = crate_with(&w, net.clone(), store.clone());
+    let e = replay(&r, &v, &s, "A").await.err().map(|e| e.code());
+    assert_eq!(e, Some("TreeHeadRoot"), "the replay");
+    assert!(pinned(&store, &tree_id).is_none(), "nothing pinned");
+    let e =
+        r.pq.tree_commit(
+            &s,
+            &st,
+            commit_req(&w, &v, "A", Some("{\"stores\":[]}"), vec![]),
+            0,
+        )
+        .await
+        .err()
+        .map(|e| e.code());
+    assert_eq!(e, Some("TreeHeadRoot"), "the commit");
+    assert_eq!(*net.writes.lock().unwrap(), 0);
 }
 
 /// R13 / spec §11 before an Add (the review's C-2 = D-1): the majority read is made; a majority of 3 named endpoints that

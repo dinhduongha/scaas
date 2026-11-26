@@ -1685,9 +1685,17 @@ impl Walk {
         Ok(out)
     }
 
-    /// The served snapshot against the walk's tree at the head (a list of `used` leaves or of every position; E-4).
+    /// The served snapshot against the walk's tree at the head (a list of `used` leaves or of every position; E-4), and
+    /// `treeOf.owed` against the leaves the head's exits the walk read owe (R2-D-1 of the T4-T9 re-check: an endpoint that
+    /// serves the true `treeOf` and hides an exit record is a lying read, so a strict-majority `treeOf` covers the exits).
     fn snapshot_agrees(&self, t: &Value, nodes: &[Value], cold: bool) -> Option<bool> {
         let w = self.trees.get(&self.head)?;
+        let owed: usize = self
+            .exits
+            .get(&self.head)?
+            .iter()
+            .map(|(u, _)| leaves_of(w, u))
+            .sum();
         let leaf = |i: usize| {
             u32::try_from(i).ok().map(|i| {
                 w.leaf(i)
@@ -1700,6 +1708,7 @@ impl Walk {
                 && u32j(t, "leaves").ok()? == w.leaves
                 && u32j(t, "used").ok()? == w.used
                 && b32j(t, "treeHash").ok()? == w.tree_hash()
+                && u64j(t, "owed").ok()? == owed as u64
                 && (!cold || b32j(t, "genesisTreeHash").ok()? == self.trees.get(&0)?.tree_hash())
                 && n >= w.used as usize
                 && n <= w.leaves as usize

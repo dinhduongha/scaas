@@ -426,6 +426,7 @@ export function newHome({ genesis, sig, kems, uaRecords }) {
     join: new Map(s.members.map((_, i) => [i, { joinEpoch: 0, wrapIndex: i }])),
     nodeKey: new Map(),
     gone: new Map(),
+    owed: 0,
     periods: new Map(),
     kems,
     uaRecords,
@@ -459,6 +460,7 @@ export function landCommit(h, built, sig) {
   );
   for (const ua of applied.tree.goneUa) if (!h.gone.has(ua)) h.gone.set(ua, { kind: 2, epoch: c.epoch });
   h.tree = applied.tree;
+  h.owed = 0;
   h.epochs.push({
     id: built.epochId,
     record: c,
@@ -478,6 +480,8 @@ export function landGone(h, kind, struct, record, sig) {
   const uas = kind === 1 ? [record.member] : record.members;
   const head = h.epochs.at(-1);
   (kind === 1 ? head.leaves : head.removals).push({ record: keptExit(record), sig });
+  // the contract's `owed`: the live leaves of each UA not gone before, owed by the next commit
+  for (const ua of uas) if (!h.gone.has(ua)) h.owed += leavesOf(h.tree, ua);
   h.tree = tr.markGone(h.tree, uas);
   for (const ua of uas) if (!h.gone.has(ua)) h.gone.set(ua, { kind, epoch: h.epochs.length - 1 });
   return h;
@@ -508,6 +512,7 @@ export function reader(h, tamper = (_, v) => v) {
       used: h.tree.used,
       treeHash: headHash(h),
       genesisTreeHash: h.genesisTreeHash,
+      owed: h.owed,
     })),
     treeLeaves: view("treeLeaves", () =>
       Array.from({ length: h.tree.leaves }, (_, i) => {
@@ -782,6 +787,9 @@ function walk(sc, rd, pin = null, keep = []) {
     t.leaves === w.leaves &&
     t.used === w.used &&
     t.treeHash === tr.treeHash(w) &&
+    // R2-D-1 of the T4-T9 re-check: `owed` equals the leaves the head's exits the walk read owe, so a strict-majority `treeOf`
+    // covers the exits (an endpoint serving the true `treeOf` and hiding an exit record is a lying read)
+    t.owed === a.exits[head].reduce((sum, x) => sum + leavesOf(w, x.ua), 0) &&
     (pin || t.genesisTreeHash === tr.treeHash(a.trees[0])) &&
     leaves.length >= w.used &&
     leaves.length <= w.leaves &&

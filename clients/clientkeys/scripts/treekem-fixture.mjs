@@ -695,6 +695,30 @@ export function flagClearScenario() {
   return w;
 }
 
+/** `overrides` with the `treeOf()` the contract serves over the exit records they put at the head (R2-D-1 of the T4-T9
+ *  re-check): `owed`, the live leaves of each UA they name that was not gone before the head. Overrides that serve their own
+ *  `treeOf()` are kept as they are. */
+function owing(w, overrides) {
+  if ("treeOf()" in overrides) return overrides;
+  const h = w.home;
+  const head = h.epochs.length - 1;
+  const view = (k, f) => (k in overrides ? overrides[k] : f());
+  const uas = new Set();
+  for (const [kind, list] of [
+    ["leave", h.epochs[head].leaves],
+    ["removal", h.epochs[head].removals],
+  ]) {
+    const n = view(`${kind}Count(${head})`, () => list.length);
+    for (let i = 0; i < n; i++) {
+      const r = view(`${kind}At(${head},${i})`, () => list[i])?.record;
+      for (const ua of kind === "leave" ? [r?.member] : (r?.members ?? [])) if (ua) uas.add(ua);
+    }
+  }
+  let owed = 0;
+  for (const ua of uas)
+    if (!(h.gone.get(ua)?.epoch < head)) owed += h.tree.nodes.filter((x, i) => i % 2 === 0 && x?.ua === ua).length;
+  return owed === h.owed ? overrides : { ...overrides, "treeOf()": { ...tk.reader(h).treeOf(), owed } };
+}
 const leafOf = (t, d) => t.nodes.findIndex((n, x) => x % 2 === 0 && n?.ua === d.ua && n.keyId === d.keyId) / 2;
 /** What an endpoint serves for a commit `built` (signed `sig`) it adds on the head of `w` with the tree after it: the views of
  *  the walk's reads that change, by read name. */
@@ -711,6 +735,7 @@ function served(w, built, sig) {
       used: t.used,
       treeHash: t.hash[tr.root(t.leaves)],
       genesisTreeHash: h.genesisTreeHash,
+      owed: 0,
     },
     "treeLeaves()": Array.from({ length: t.leaves }, (_, i) => {
       const x = t.nodes[2 * i];
@@ -798,7 +823,7 @@ function keptLeave(w, who, named, nonce) {
 export function lies(worlds) {
   const rows = [];
   const add = (name, world, device, overrides, expect, pin = null) =>
-    rows.push({ name, world, device, overrides, pin, expect });
+    rows.push({ name, world, device, overrides: owing(W(world), overrides), pin, expect });
   const W = (n) => worlds.get(n);
   {
     // E-1: H, a UA of no roster, signs the next epoch from the blank leaf 3 of the true tree
@@ -1041,7 +1066,15 @@ export function lies(worlds) {
     add("an epoch by a UA whose removal the walk read", "pin-exit", "A", served(w, f.built, f.sig), {
       replay: "TreeReadCorrupted",
       prepare: "TreeReadCorrupted",
-    });
+    }); // R2-D-1 of the T4-T9 re-check: the head's removal hidden while the endpoint serves the true `treeOf` (its `owed` the
+    // removed UA's leaf): the snapshot disagrees with the walk, a lying read, so a strict-majority `treeOf` covers the exits
+    add(
+      "the head's exit hidden under the true treeOf (R2-D-1)",
+      "pin-exit",
+      "A",
+      { "removalCount(1)": 0, "treeOf()": tk.reader(w.home).treeOf() },
+      { replay: "TreeHeadRoot", prepare: "TreeHeadRoot" },
+    );
   }
   {
     // an empty path (the last live leaf) whose record signs another list hash than the empty one (codex-r2-14)
