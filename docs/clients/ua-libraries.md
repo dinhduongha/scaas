@@ -263,7 +263,7 @@ change of this path: `tests/fndsa_vrfy.rs` natively (every FN-DSA row of the vec
 PQClean on each; 48 wallet cases over the four `keys.json` mnemonics, falcon-rs's key pair and fixed-randomness signature
 byte-equal to PQClean's) and `tests/fndsa/wasm/run.sh` in wasm32 under Node (the same rows, and the same cases' digest over
 `pk ‖ sk ‖ sig`). fn-dsa-vrfy 0.4.0 failed that gate (FIPS 206 `mu` hashing and its key packing):
-`clients/runs/2026-11-26-ua-rs-wasm-fndsa-summary.txt`. BUILT; signing and verification UNAUDITED until the Fable audit.
+`clients/runs/2026-11-26-ua-rs-wasm-fndsa-summary.txt`. Size (stripped wasm32 `libscaas_ua_c`, [CLI-UAL-43](#CLI-UAL-43)): default 5,933,798 → 6,117,173 B (+183,375 B, +3.1 %), +179,226 to +184,321 B in the other four cells. BUILT; signing and verification UNAUDITED until the Fable audit.
 
 <a id="CLI-UAL-01"></a>**CLI-UAL-01** — **`ua-rs` is the only signer, and a secret leaves it only through a named export.**
 Every client signs through `scaas-ua`: a client core or wallet module over it never signs on its own, and apps reach it through
