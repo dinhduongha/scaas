@@ -37,7 +37,7 @@ itself (`LINK_TO_SELF`).
 scripts/vendor.sh link <main checkout> core kat research && scripts/vendor.sh check core kat research
 ```
 
-**Layout.** A directory `vendor/<name>/` is the package's alone and git-ignored (`/vendor/*/` in the root `.gitignore`);
+**Layout.** A directory `vendor/<name>/` is the package's alone and git-ignored, as is a link in its place (`/vendor/*` in the root `.gitignore`, all but our files);
 `install` replaces it whole and never edits it. What SCaaS writes sits beside it and stays tracked: this file,
 `<name>.VENDORED.md` (where the package comes from, its pins, what uses it, its audit status) and `<name>.local/` (our own
 source built with the package; `!/vendor/*.local/`). The pins (archive sha256, tree id) live in `scripts/vendor.sh`. A tree id

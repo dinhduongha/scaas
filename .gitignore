@@ -38,6 +38,10 @@ scratchpad/
 HANDOFF.md
 
 # vendor/: the third-party sources, fetched at their pins and checked by scripts/vendor.sh (owner 2026-11-26,
-# ARCH-POS-24); SCaaS's own files beside them (README.md, <name>.VENDORED.md, <name>.local/) stay tracked
-/vendor/*/
+# ARCH-POS-24); SCaaS's own files beside them (README.md, <name>.VENDORED.md, <name>.local/) stay tracked. Everything else
+# is ignored, a package directory and the link `scripts/vendor.sh link` writes in its place alike (`/vendor/*/` matched
+# no link)
+/vendor/*
+!/vendor/README.md
+!/vendor/*.VENDORED.md
 !/vendor/*.local/
