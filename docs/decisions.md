@@ -613,8 +613,8 @@ most of the two generations side by side in the lockfiles and the deprecated `ge
 `Nonce::from_slice` in `opening.rs`, 8b-2).
 **Cost if wrong.** A changed byte in a KDF, cipher or hash output: another key, a ciphertext no other client opens, a
 proof the verifier refuses. The vectors and KATs catch it; none moved.
-**Source.** Owner 2026-11-26 (chat, through the coordinator), verbatim: "Ok, làm trước tag pre-freeze." (OK, do it before
-the pre-freeze tag; it was planned for after the freeze, TODO 8b-2b.)
+**Source.** Owner ruling 2026-11-26 (chat, through the coordinator): the direct RustCrypto uses move to the next generation
+before the pre-freeze tag; it was planned for after the freeze, TODO 8b-2b.
 
 ## 2. Node — General
 
