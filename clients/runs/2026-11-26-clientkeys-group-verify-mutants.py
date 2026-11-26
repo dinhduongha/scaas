@@ -28,8 +28,8 @@ M = [
     ("frost-secp256k1 sig length not read", [(G, "  if (sig.length !== 65) return false;\n  const Y", "  const Y")]),
     ("frost-secp256k1 the challenge without Y", [(G, 'H("chal", concatBytes(sig.subarray(0, 33), y, msg))', 'H("chal", concatBytes(sig.subarray(0, 33), msg))')]),
     ("frost-secp256k1 z reduced, not range-checked", [(G, "const scalar = (b, n) => (b.length === 32 && int(b) < n ? int(b) : fail());", "const scalar = (b, n) => (b.length === 32 ? int(b) % n : fail());")]),
-    ("SEC1 prefix not read", [(G, "(b.length === 33 && (b[0] === 2 || b[0] === 3) && int(b.subarray(1)) < P ?", "(b.length === 33 && int(b.subarray(1)) < P ?")]),
-    ("SEC1 x < p not read", [(G, "(b.length === 33 && (b[0] === 2 || b[0] === 3) && int(b.subarray(1)) < P ?", "(b.length === 33 && (b[0] === 2 || b[0] === 3) ?")]),
+    ("SEC1 prefix not read", [(G, "  b.length === 33 && (b[0] === 2 || b[0] === 3) && int(b.subarray(1)) < P ?", "  b.length === 33 && int(b.subarray(1)) < P ?")]),
+    ("SEC1 x < p not read", [(G, "  b.length === 33 && (b[0] === 2 || b[0] === 3) && int(b.subarray(1)) < P ?", "  b.length === 33 && (b[0] === 2 || b[0] === 3) ?")]),
     ("bn254 vk length not read", [(G, "const bnSchnorr = (vk, msg, sig) => vk.length === 64 && VERIFY", "const bnSchnorr = (vk, msg, sig) => VERIFY")]),
     # verifyPop
     ("key data not validated in verifyPop", [(G, "    validateKeyData(kind, key); // throws UAError: the caller's refusal\n", "")]),

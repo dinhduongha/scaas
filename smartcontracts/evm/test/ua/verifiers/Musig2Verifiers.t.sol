@@ -88,7 +88,7 @@ contract Musig2VerifiersTest is GroupFixtures {
                 ++seen;
             }
         }
-        assertEq(seen, 33); // 19 + 14
+        assertEq(seen, 47); // 25 + 22: 19 + 14 and the 2026-11-26 verify rows (6 secp256k1, 8 bn254)
     }
 
     function _vectorNegative(string memory j, uint16 kind, string memory r) internal view {

@@ -27,7 +27,8 @@ const fail = () => {
 /** A 32-byte big-endian scalar below `n`, else a throw. */
 const scalar = (b, n) => (b.length === 32 && int(b) < n ? int(b) : fail());
 /** SEC1 compressed: prefix 02 / 03, `x < p`, on the curve; else a throw. */
-const secpPt = (b) => (b.length === 33 && (b[0] === 2 || b[0] === 3) && int(b.subarray(1)) < P ? Pt.fromBytes(b) : fail());
+const secpPt = (b) =>
+  b.length === 33 && (b[0] === 2 || b[0] === 3) && int(b.subarray(1)) < P ? Pt.fromBytes(b) : fail();
 /** SEC1 compressed, the identity as 33 zero bytes (never equal to valid key data). */
 const secpEnc = (Q) => (Q.is0() ? new Uint8Array(33) : Q.toBytes(true));
 /** EIP-196 `x ‖ y`, the identity as 64 zero bytes. */
@@ -146,4 +147,5 @@ export function groupOk(kind, key, msg, sig, pop) {
   return (kind === 0x0112 || kind === 0x0113) && bnSchnorr(key, msg, sig);
 }
 /** The stored vk's length of a group kind (the key data's head), 0 for any other kind. */
-export const groupVkLength = (kind) => (kind === 0x0110 || kind === 0x0111 ? 33 : kind === 0x0112 || kind === 0x0113 ? 64 : 0);
+export const groupVkLength = (kind) =>
+  kind === 0x0110 || kind === 0x0111 ? 33 : kind === 0x0112 || kind === 0x0113 ? 64 : 0;
