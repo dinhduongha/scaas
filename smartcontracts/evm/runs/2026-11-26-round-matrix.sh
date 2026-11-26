@@ -101,7 +101,7 @@ STEPS=(
     "ua-cs|other|clients/ua-cs|$cap dotnet test Scaas.Ua.Tests; r=\$?; dotnet build-server shutdown >/dev/null; exit \$r"
     "ua-cxx|other|clients/ua-cxx|$cap cargo clippy $C --all-targets -- -D warnings && $cap sh -c 'cmake -S . -B build -G Ninja > /dev/null && cmake --build build -j2 && ctest --test-dir build --output-on-failure'"
     "ua-qt|other|clients/ua-qt|QMAKE=$Q/bin/qmake6 LD_LIBRARY_PATH=$Q/lib QT_QPA_PLATFORM=offscreen $cap sh -c 'cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=$Q > /dev/null && cmake --build build -j2 && ctest --test-dir build --output-on-failure'"
-    "ua-dart|other|clients/ua-dart|$cap dart analyze && $cap dart test && $cap dart test -p node && $cap dart run test/vectors_test.dart"
+    "ua-dart|other|clients/ua-dart|$cap dart pub get && $cap dart analyze && $cap dart test && $cap dart test -p node && $cap dart run test/vectors_test.dart"
     "ua-dart-frb|other|clients/ua-dart-frb|$cap dart pub get --enforce-lockfile && $cap cargo build $C --manifest-path rust/Cargo.toml && $cap cargo test $C --manifest-path rust/Cargo.toml && $cap dart test"
     "fam-soroban|other|.|$cap smartcontracts/scripts/test.sh soroban"
     "vec-check|other|.|set -e; (cd clients/clientkeys && for g in pqchat pqz3k pqz-leaf soroban-ua-ops; do node scripts/\$g-vectors.mjs --check; echo RESULT \$g --check ok; done); for g in metatx/gen_servicepull ua/gen_liquidity wraplimits/gen_wraplimits pqz/pqz_kat; do python3 -I smartcontracts/vectors/\$g.py --check; echo RESULT \$g --check ok; done; python3 -I pqz-core/params/sets/gen_set.py --all --check && python3 -I pqz-core/pqzl/params/to_rust.py --check && python3 -I smartcontracts/evm/script/pqz/gas-inputs.py --check && echo RESULT generated set files and gas inputs in sync"

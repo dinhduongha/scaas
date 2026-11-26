@@ -153,7 +153,7 @@ The OFFCHAIN PQZ verifier service, and the EVM deploy scripts with the factory c
 **Specifications and rules to read first:**
 - `T/scaas-pqz-verifier/README.md`, spec `T/docs/superpowers/specs/2026-11-06-attested-verify.md` (§5 the verdict, §6 keys,
   §11.2), `2026-11-13-pqz-three-keys.md`; decisions ARCH-POS-13, CTR-PQZ-36, -37, CTR-UA-43, KV-12
-- `T/docs/networks/README.md` (NET-ALL-25, NET-EVM-06, -11, -13), `T/docs/contracts/asset-suite.md` (the factory, CTR-TOK-29
+- `T/docs/networks/README.md` (NET-ALL-25, NET-EVM-06, -11, -13, -20), `T/docs/contracts/asset-suite.md` (the factory, CTR-TOK-29
   chain-neutral releases), `T/smartcontracts/evm/script/onchain/README.md`, CTR-GOV-19 (the size ceiling)
 
 **Invariants to check (beyond section 5; each a finding when it fails):**
@@ -188,15 +188,31 @@ i. **The books.** `deployments/<key>.json` named by the chain key (NET-EVM-13), 
    another chain's run; `verify-blockscout.sh` covers every contract deployed, children included.
 j. **Fit.** Every deploy transaction within EIP-8037 and 2^24 regular gas where EIP-7825 applies (`tx_gas_cap.py`); the
    size gate's ceiling (CTR-GOV-19).
+k. **The round's deploy changes** (added 2026-11-26): `DeployBase.sol` deploys and links `OpenFactoryLib` and deploys
+   PqChat's fourth body module `PqChatTreeMembers` beside `PqChatTopics`, `PqChatTree` and `PqChatTreeViews` (the release's
+   `implArgs` order), and the registry libraries (`UARegistryCoreLib`, `UARegistryAuxLib`, `UARegistryRegLib`);
+   `script/onchain/PqChat.s.sol` reuses a module already at its address (G-11); `script/onchain/groups.json` books
+   `OpenFactoryLib` under its label (G-10); `pq.py --offchain` deploys a second router naming the second factory (G-8);
+   `deploy_pqchatstore.py` pins `IPqChat`'s new interface id; `script/pqz/e2e.py`'s send limit; `verify-blockscout.sh` and
+   the completeness check cover each new child. NET-EVM-20's three EVM tiers are a classification in the docs only: check
+   that no script or book reads a tier or splits a rule by it (one rule on every chain).
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - the attested-verify reviews `T/docs/research/attest-codex-review.md`, `attest-fable-review.md` (Fable C-1)
 - `scratchpad/review-3w/` (three-keys u3 / u4 rows on the verifier), `scratchpad/chains-arweave-review/` (NET-ALL-25)
+- the review-fix round (2026-11-24 to -26, local; the script rows: G-8, G-10, G-11, the `deploy_pqchatstore.py` note): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 - `T/docs/research/security-review-record.md`
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - the verifier's rows in the tag's gate summary (`cargo test`, the anvil test), `T/smartcontracts/evm/runs/` deploy and reset
   summaries (reset 4 / 5 and the pre-tag reset of TODO 8b-6), `python3 script/test_*.py` in CI, the size gate
+- the review-fix round: `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt` (with
+  `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
+  matrix (`2026-11-26-round-matrix.sh` and its summary)
 
 **Also accepted for this unit (do not report):** the own-key OFFCHAIN token risk (CTR-PQZ-37); gas prices and calibration
 figures; the SCaaS testnet's RPC exposure; deploy scripts under `*/legacy/`.

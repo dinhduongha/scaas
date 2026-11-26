@@ -130,7 +130,7 @@ The universal-account registry and the account contracts: identity, registration
 
 **Specifications and rules to read first:**
 - `T/docs/contracts/accounts.md` (CTR-UA-*, CTR-ACC-*), `T/docs/contracts/mandates.md`
-- decisions: CTR-UA-03, -07, -14, -16, -24, -31, -32, -36, -37, -38, -39, -40, -42, -44; CTR-ACC-08, -11; CTR-PQZ-28; NODE-JOB-29 (the client side of the ML-DSA cache); the gen-1 kind rule (owner 2026-10-31 (a), Change 2026-11-15)
+- decisions: CTR-UA-03, -07, -14, -16, -24, -31, -32, -36, -37, -38, -39, -40, -42, -44, -73, -74 (with its Changes of 2026-11-25 / -26 and `msig-reader-rule`); CTR-ACC-08, -11; CTR-PQZ-28; NODE-JOB-29 (the client side of the ML-DSA cache); the gen-1 kind rule (owner 2026-10-31 (a), Change 2026-11-15)
 - `T/smartcontracts/vectors/ua/` (registration, portable records, `msig`, KEM, id display)
 
 **Invariants to check (beyond section 5):**
@@ -145,16 +145,40 @@ The universal-account registry and the account contracts: identity, registration
 9. `SmartKeyAccount`: key add / remove / rotate, guardian and recovery, `mtxExecute` with `AccountSig`, nonce cancel; WebAuthn blob compare (CTR-ACC-08); `MandateWallet` mandates, payees, revoke; the Hedera account auth.
 10. Replay across chain id, `chainUid`, registry generation, kind and purpose (`requirePortable` purpose set closed); `0x0142` is a scheme, never an id kind.
 11. `rescue(asset)` on the registry: anyone, the whole balance, only to the constant destination, nothing else movable.
+12. **Every `msig` version readable; the version tag** (added 2026-11-26; CTR-UA-74, owner 2026-11-25, the tag's place an
+   owner ruling of 2026-11-26, R-4): `msigAt(ua, version)` answers every version from 0 to `msigStateOf(ua).version` for ever
+   from state alone (each `updateMsig` blob ends with `address prev`, the SSTORE2 pointer of the version before; no storage
+   slot, the layout pin unmoved; `MSIG_UPDATE_GAS` 450,000); any other id or version gives the empty structure and never
+   reverts; gen 2 forwards a gen-1 record. The tag (empty at version 0, else exactly 8 bytes big-endian; in `UASig.signature`
+   of the signing `msig`, in `MemberSig.sig` of an `msig` member's slot, the trailing 8 bytes of a stored `msig` signature) is
+   accepted only when it is the current version's on every path the rule lists (`requireAuthorized`, `requirePortable`,
+   `requirePortableApp`, `setKemKey`, `setPqzKey`, `setPqzScopedKey`, `acceptMembership`, `registerMsig`'s `pop`,
+   `updateMsig`'s `sigs`), any other tag `UAUnauthorized`; a record of an `msig` never updated stays byte-identical; the
+   registration bound counts the outer tag (`_slotBytes`, R-6); the walked-interface pin 54 -> 55. Hunt: a path that takes a
+   stale or absent tag, a slot disabled for a leaked key that still signs a new record, a tag a relayer can turn into another
+   accepted value, a `msigAt` walk that can be made wrong (a forged `prev`) or unbounded, and the residual the rule states (a
+   slot appended at `v` that accepted later verifies older records of `v`).
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `T/pqz-core/research/code-review-2026-10-26/README.md` (whole-contract review at `64549aa4`) and `code-review-2026-10-19/README.md`
 - `T/docs/research/security-review-record.md` (index of every review, and what no review covered)
 - `scratchpad/review-ua-mtx-merge/` (A-regulated, B-metatx-ua, C-pqz-zether, D-factory-gov-dex-pqchat, recheck-*, recheck2-*)
 - `scratchpad/review-3w/20261115-16-codex-gpt-6.1-sol-high-three-keys-u4.md` (registry class records), `scratchpad/review-3zh/20261115-12-fable-fable5.2-high-spec-mldsa.md` (ML-DSA cache)
+- the review-fix round (2026-11-24 to -26, local): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - the tag's closing gate summary under `T/smartcontracts/evm/runs/` (every forge directory at the default set, the set-sensitive tests at the other three sets)
 - `T/smartcontracts/evm/runs/2026-11-15-3zh-core-g2.txt`, `2026-11-15-burner-wrap-caps.txt`, `2026-11-15-pqz-three-keys-round/summary.txt`, `2026-11-13-fix3-chainuid/summary.txt`, `2026-11-14-msig-members/mutants.txt`, `2026-11-15-3zh-mldsa.txt`
+- CTR-UA-74: `T/smartcontracts/evm/runs/2026-11-25-review-fix2-registry-summary.txt`, `2026-11-25-review-fix2-registry/mutants.txt`,
+  `2026-11-26-review-fix3-client-msig/mutants.txt`, the runners `T/smartcontracts/evm/script/ua/msig-history-mutants.py` and
+  `msig-mutants.py`
+- the review-fix round: `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt` (with
+  `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
+  matrix (`2026-11-26-round-matrix.sh` and its summary)
 - `T/smartcontracts/evm/size-baseline.json` with `T/scripts/size_gate.py` (the size ratchet, ceiling 64 KiB)
 
 **Dimension table** (ARCH-POS-22, `T/docs/review.md` §1; added 2026-11-24). Apply every dimension within this unit's
@@ -163,18 +187,18 @@ number (section 9).
 
 | # | Dimension | What to hunt in this unit |
 |---|---|---|
-| 1 | Conformance | CTR-UA-03, -07, -14, -16, -24, -31, -32, -36 to -40, -42, -44 and CTR-ACC-08, -11 one by one against `UARegistry.sol`, `UARegistryCoreLib.sol`, `UARegistryAuxLib.sol`, `UAKinds.sol`; the gen-1 kind rule (Change 2026-11-15); every BUILT row of `docs/contracts/accounts.md` and `mandates.md` has code and a test; code with no rule (a view or entry no CTR-UA row names). |
-| 2 | Cryptography | The registration typed digest (`UAKinds` / `uaMessage(kind, purpose, typedDigest)`): what it binds (kind, key data, `pqzKeyHash`, KEM record hash, `pqzPopHash`, generation, `chainUid`) and what it does not; the purpose tags and the closed `requirePortable` purpose set (domain separation); the `msig` id hash over its first structure; the ML-DSA cache parts binding the key (`mldsa_cache` hash); canonical key data per kind (one accepted encoding, `0x0142` a scheme, never an id kind); the KEM record (scheme 1, ML-KEM-1024 + X25519) hashed as clients hash it; PoP (`pop`, `pqzPop`) bound to the id and version. |
+| 1 | Conformance | CTR-UA-03, -07, -14, -16, -24, -31, -32, -36 to -40, -42, -44, -73, -74 and CTR-ACC-08, -11 one by one against `UARegistry.sol`, `UARegistryCoreLib.sol`, `UARegistryAuxLib.sol`, `UAKinds.sol`; the gen-1 kind rule (Change 2026-11-15); every BUILT row of `docs/contracts/accounts.md` and `mandates.md` has code and a test; code with no rule (a view or entry no CTR-UA row names). |
+| 2 | Cryptography | The registration typed digest (`UAKinds` / `uaMessage(kind, purpose, typedDigest)`): what it binds (kind, key data, `pqzKeyHash`, KEM record hash, `pqzPopHash`, generation, `chainUid`) and what it does not; the purpose tags and the closed `requirePortable` purpose set (domain separation); the `msig` id hash over its first structure; the ML-DSA cache parts binding the key (`mldsa_cache` hash); canonical key data per kind (one accepted encoding, `0x0142` a scheme, never an id kind); the KEM record (scheme 1, ML-KEM-1024 + X25519) hashed as clients hash it; PoP (`pop`, `pqzPop`) bound to the id and version; the `msig` version tag (not signed, bound by the registry's equality check at acceptance, CTR-UA-74). |
 | 3 | Security | Who may call each entry (`register`, `setKemKey`, PQZ key writes, `msig` update, member accept, `rescue`, `UAAdmin`); replay across chain id, `chainUid`, generation, kind and purpose; nonce lanes and `UAMembership` replay after disable + re-add; front-running a registration with other `pop` bytes; downgrade from an `msig` update to an older version; the 7702 classification at verify time (invariant 8); `SmartKeyAccount` guardian and recovery rights, `MandateWallet` payee and revoke. |
 | 4 | Rules that do not bend | Every state-changing `mtx*` / `ua*` entry relayable with fee 0; explicit parameters on every entry (no packed key bundles beyond one crypto object); no EIP-7702 path; maximal support (ARCH-POS-18): an uncached ML-DSA key on a no-precompile registry reverts by name rather than disabling the kind, `mldsa87` as CTR-UA-39 rules; one rule on every chain (no L1 / L2 split in `UAKinds`); nothing upgradable in the registry, the libs or the accounts. |
 | 5 | Secrets and privacy | Business identifiers in clear in the registry's events and state (ARCH-POS-17); what a public observer links between a UA, its KEM key, its PQZ keys and its `msig` members; `SmartKeyAccount` guardian lists and `MandateWallet` payees as public metadata. |
-| 6 | Robustness and denial of service | Unbounded `msig` slot loops, member lists, generation walks (`predecessor` chains, `MAX_GENERATION`), `uaPage` reads; storage griefing by many registrations or key versions; an input that locks a UA (a member that never accepts, CTR-UA-37 accepted); every verify path <= 2^24 regular gas; registration with the largest key data (SLH-DSA, ML-DSA-87, `msig` of 16) within EIP-8037. |
+| 6 | Robustness and denial of service | Unbounded `msig` slot loops, member lists, generation walks (`predecessor` chains, `MAX_GENERATION`), `uaPage` reads; storage griefing by many registrations or key versions; an input that locks a UA (a member that never accepts, CTR-UA-37 accepted); every verify path <= 2^24 regular gas; registration with the largest key data (SLH-DSA, ML-DSA-87, `msig` of 16) within EIP-8037; `msigAt`'s walk of `current - version` blobs. |
 | 7 | Failure handling | Named errors on every refusal (`UAKeyNotCached` and the rest); no partial registration after a revert in a library call (revert bubbling through `UARegistryCoreLib` / `AuxLib`); reentrancy through a verifier or an account callback; `rescue` cannot move anything else. |
 | 8 | Consistency across languages and layers | The registration bytes and digests equal `T/smartcontracts/vectors/ua/` and what clientkeys `ua.js`, `ua-rs` `ua_portable.rs` / `keydata.rs` and the SDK `account/register.rs` build; the registry views the SDK's `line.rs` reads (`holderOf`, `kindHome`, `generation`, `uaPage`, `pqzKeyOf`) answer as the SDK expects; the node's allow-lists for the registry entries (`typed.rs`, `guard.rs`, `selector_audit.json`); the Soroban registry's same rule (`smartcontracts/soroban/contracts/ua-registry/`) where this unit's rule claims one rule on every chain. |
-| 9 | Contract specifics | The library split (DELEGATECALL storage, `this`, `msg.sender`, return data, `LinkClosure` release pins); the layout pins under `test/v2/layout/`; every typehash `*TypehashIsPinned`; `UARegistryAuxLib` only what the owner allowed to move; immutability (no admin upgrade path in `UAAdmin`); the size gate rows of the registry and libs. |
+| 9 | Contract specifics | The library split (DELEGATECALL storage, `this`, `msg.sender`, return data, `LinkClosure` release pins); the layout pins under `test/v2/layout/`; every typehash `*TypehashIsPinned`; `UARegistryAuxLib` only what the owner allowed to move; immutability (no admin upgrade path in `UAAdmin`); the size gate rows of the registry and libs; the walked-interface pin (54 -> 55 entries) and `MSIG_UPDATE_GAS` 450,000 (invariant 12). |
 | 10 | Performance and cost | Gas per registration and per verify against `docs/contracts/accounts.md`; the ML-DSA cache write cost and who pays it; storage growth per UA, per key version and per `msig` member over a long life. |
 | 11 | Interfaces and misuse | The registry view API is hard to misuse: a view that returns a default for an unknown UA instead of refusing; `requirePortable` callers that can pass a purpose outside the closed set; error codes stable across generations. |
-| 12 | Tests | Each refusal of invariants 1-11 has a positive twin and a test that can fail; the `msig` mutants (`runs/2026-11-14-msig-members/mutants.txt`) cover every check, survivors explained; the vectors under `vectors/ua/` read by the forge tests. |
+| 12 | Tests | Each refusal of invariants 1-11 has a positive twin and a test that can fail; the `msig` mutants (`runs/2026-11-14-msig-members/mutants.txt`) cover every check, survivors explained; the vectors under `vectors/ua/` read by the forge tests; the CTR-UA-74 mutants (`runs/2026-11-25-review-fix2-registry/mutants.txt`, `script/ua/msig-history-mutants.py`). |
 | 13 | Operations and the supply chain | N/A for config and dependencies (no off-chain code in this unit); SPDX headers on every file in scope. |
 
 ## 9. Report format (Markdown, English)

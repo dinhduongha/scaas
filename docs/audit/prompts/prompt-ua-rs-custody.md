@@ -126,6 +126,9 @@ ua-rs wallet custody: vault, store, AEAD, seal / open, KEM, derivation, pairing,
 - the sealed PQZ leaf (invariant 6, added 2026-11-24): `src/facade/pqz.rs` (`derive`, `pqz_leaf_label`, `PqzKey::open_leaf`),
   `clients/ua-c/` (`scaas_ua_wallet_seal_pq_key`, `scaas_ua_pqz_open_leaf`), clientkeys `src/pq.js` (read as the other side),
   `smartcontracts/vectors/ua/pqz_leaf.json`; tests `pqz_leaf`, `vectors_marker`
+- `src/wallet/{tree,tree_public}.rs` (added 2026-11-26, as no layer unit held them: the `ua-rs` side of CLI-PQC-17, BUILT:
+  path secrets from the KEM seed, node keys, the replay from a pin, rosters, every tree secret in key memory); tests `tree`;
+  unit `crypto-pqchat-tree` reads them vertically
 
 **Specifications and rules to read first:**
 - spec `T/docs/superpowers/specs/2026-11-05-ua-rs-sign.md`, plan `T/docs/superpowers/plans/2026-11-05-ua-rs-sign.md`
@@ -173,10 +176,20 @@ ua-rs wallet custody: vault, store, AEAD, seal / open, KEM, derivation, pairing,
      `scripts/pqz-leaf-vectors.mjs` and the tests cited -52 until branch `audit-docs` corrected them). Report a stale id, or one
      that `python3 scripts/docs_check.py resolve` maps to another rule (dimension 1).
    - No secret in errors, logs, `Debug` prints or binding exceptions.
+7. **The tree's secrets** (added 2026-11-26; CLI-PQC-17, the re-review and fix check): path secrets, node private keys,
+   `joinerSecret` and `K` only in key memory, zeroized; a tree key never sealed (`wallet/appkey.rs` `seal_key` refuses an `Origin::Tree` key,
+   B2-8); the replay keeps only the trees at 0, the pin and the head, and rosters for the secret range only (E-3 / B2-2); a
+   resumed replay keeps its held keys and pin when a read lies (`tree_resume` by reference, C-6 of the fix check); every
+   bound on served counts (544) holds before an allocation.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `scratchpad/review-t21/` (T21 at `806f4f2c2`: `scope.md`, `ledger.md` with its FIX-NOW / OWNER / LATER / REJECT rows and the owner decisions O1-O8, the Fable and Codex part reports); the fix waves landed after it (`git -C T log --grep 't21'`)
 - `T/docs/research/ua-rs-sign-fable-review.md`, `ua-rs-sign-codex-review.md`
+- the review-fix round (2026-11-24 to -26, local; `ua-rs` tree: area B of the code review, B2-2, B2-8, C-6): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - `T/smartcontracts/evm/runs/2026-11-16-ua-rs-sign-t21-summary.txt`, `2026-11-16-ua-rs-sign-sync7-summary.txt`, `2026-11-09-ua-rs-sign-t20d-summary.txt`, and the tag's own client gate summary
@@ -195,7 +208,7 @@ number (section 9).
 | 2 | Cryptography | Leads within the unit (with `crypto-kem-seal`): scrypt bounds, NFKC, AEAD labels and AAD, single-use keys; BIP-39 / HKDF derivation labels; the UA KEM key (ML-KEM-1024 + X25519): small-order X25519 points, implicit rejection, the combiner; seal / open labels and AAD bound into the key derivation; the sealed PQZ leaf `sealPqKey` / `openPqKey` (invariant 6: the label `pqz:registry:<account>:<index>:<version>`, the AAD binding the seed vault's id, one `VaultOpen` class). |
 | 3 | Security | A foreign vault refused; the link window on the opener's clock (O3); equal backup generation (O4); handles revoked on lock; `ExternalKey` verifies before returning; signing policy `Expect`. |
 | 4 | Rules that do not bend | No decryption oracle: a wrong key, wrong version or truncated blob refused with one error class, no timing or later action telling them apart (invariant 6). |
-| 5 | Secrets and privacy | Leads within the unit: keys and seeds only in `mlock`ed, zeroizing buffers (`secret.rs`), never copied into a `Vec` reallocation, `String` or FFI buffer; no secret in errors, logs, `Debug`. |
+| 5 | Secrets and privacy | Leads within the unit: keys and seeds only in `mlock`ed, zeroizing buffers (`secret.rs`), never copied into a `Vec` reallocation, `String` or FFI buffer; no secret in errors, logs, `Debug`; the tree's secrets (invariant 7). |
 | 6 | Robustness and denial of service | Bounded decode of vault blobs, manifests and pairing messages (`bounded.rs`); no panic on a corrupt store. |
 | 7 | Failure handling | A failed open leaves the vault locked and unchanged; store writes atomic; backup paths fail closed. |
 | 8 | Consistency across languages and layers | Vault, seal and KEM bytes equal clientkeys `vault.js`, `seal.js`, `kem.js`, `seed.js`, `pq.js` (`sealPqKey`) and the vectors (`T/smartcontracts/vectors/keys/`, `keystore/`, the PQZ leaf rows), both ways; every `ua-*` wrapper reads the same rows. |

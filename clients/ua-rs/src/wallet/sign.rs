@@ -226,7 +226,7 @@ impl UaKey {
         if pqsign::is_pq(self.kind) {
             return self
                 .secret
-                .with(|s| pqsign::sign(self.kind, s, ua_msg, fixed))?;
+                .with(|s| pqsign::sign(self.kind, s, &self.key_data, ua_msg, fixed))?;
         }
         if pairing::is_pairing(self.kind) {
             return self

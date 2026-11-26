@@ -153,7 +153,10 @@ alone.
   (`@noble/post-quantum` 0.7.1 `ml_dsa44` / `ml_dsa65` / `ml_dsa87`), `src/uakey.js`, `src/ua-verify.js`
 - **Falcon / FN-DSA** (`fndsa512` 0x0132, `fndsa1024` 0x0135; round-3 specification v1.2, padded form; FIPS 206 risk accepted,
   CTR-UA-40 Q1): Solidity `src/ua/FnDsa.sol` (pure Solidity on every EVM chain, no precompile: CTR-UA-40); `ua-rs`
-  `src/falcon.rs` over the vendored PQClean `vendor/pqclean-falcon-seeded` (repository root) (no Falcon on wasm32: say what a wasm caller gets);
+  `src/falcon.rs` routing natively to the vendored PQClean `vendor/pqclean-falcon-seeded` (repository root) and on
+  `wasm32-unknown-unknown` to falcon-rs 0.3.1 (`fpemu`) through `src/falcon/soft.rs` (CLI-UAL-66; `build.rs`, `Cargo.toml`;
+  the falcon-rs tree itself is audited as code in unit `vendor-falcon-rs`: read here the routing and the key, signature and
+  verdict parity of the two paths, tests `tests/fndsa_vrfy.rs`, `tests/fndsa/`);
   clientkeys `src/pq.js` (`falcon512padded`, `falcon1024padded`); Soroban: the kind tag in `ua-registry/src/digest.rs` (say
   whether Soroban verifies or refuses it)
 - **SLH-DSA-SHA2-128s** (`slhdsa128s` 0x0133; FIPS 205): Solidity `src/ua/SlhDsa.sol`; `ua-rs` `src/pq.rs` (crate `slh-dsa`
@@ -174,20 +177,22 @@ alone.
   `Musig2Bn254Verifier.sol`, `FrostSecp256k1Verifier.sol`, `FrostBn254Verifier.sol`; `ua-rs` `src/musig2.rs`, `src/frost.rs`
   (`frost-secp256k1` =3.0.0), `src/groups.rs` and their vector files (`clients/ua-rs/tests/key_agg_vectors.json`,
   `nonce_gen_vectors.json`, `sign_verify_vectors.json`, `rfc9591_e5.json`, `zf_frost_secp256k1_dkg.json`); clientkeys group
-  key data (`src/ua.js`, `src/uakey.js`); Soroban `ua-registry/src/lib.rs` (group layouts), `ua-common/src/lib.rs`
+  key data (`src/ua.js`, `src/uakey.js`) and, since 2026-11-26, the group verifiers `src/ua-group.js` (verify and `verifyPop`
+  for 0x0110-0x0113); Soroban `ua-registry/src/lib.rs` (group layouts), `ua-common/src/lib.rs`
 - **BLS** (BLS12-381 and bn254 multi-signatures, RFC 9380 hash-to-curve, EIP-2537): Solidity `src/common/Bls12381.sol`,
   `HashToCurve.sol`, `src/ua/verifiers/PairingVerifiers.sol`, `BlsMultiBls12381Verifier.sol`, `src/ua/BlsMultiKeyData.sol`;
   `ua-rs` `src/bls_multi.rs`; clientkeys `src/bls-multi.js`; SDK `clients/scaas-sdk/src/op/bls_multi.rs`
 - **Purposes and domains**: `src/ua/UAKinds.sol` (`uaMessage(kind, purpose, typedDigest)`, `TAG(kind)`, the purpose
   constants, `uaAuthDigest`), `src/common/SaltedEIP712.sol`; `ua-rs` `src/wallet/uasig.rs`, `src/wallet/eip712.rs`; clientkeys
   `src/ua.js`, `src/ua-verify.js`; the node's kind rules (`scaas-node/src/guard.rs`); the verifier service's
-  `purpose_pqz_verdict` (`scaas-pqz-verifier/src/lib.rs`)
+  `purpose_pqz_verdict` (`scaas-pqz-verifier/src/lib.rs`); the `msig` version tag inside the signature object (CTR-UA-74:
+  not signed, bound by the registry's equality check, in no digest)
 
 **Specifications and standards to read first:**
 - FIPS 204, FIPS 205, Falcon round-3 v1.2, RFC 8032, SEC 1, RFC 6979, BIP-340, BIP-327, RFC 9591, RIP-7212 / EIP-7951,
   WebAuthn L3, RFC 9380, EIP-2537, EIP-8355
 - `T/docs/contracts/accounts.md` (the kind table), `T/docs/clients/signers-clientkeys.md`, `T/pqz-core/nethermind/README.md`;
-  decisions CTR-UA-14, -24, -36, -39, -40, CTR-PQZ-28, ARCH-POS-18
+  decisions CTR-UA-14, -24, -36, -39, -40, -74, CTR-PQZ-28, ARCH-POS-18, CLI-UAL-66
 
 **Invariants to check (beyond section 5; each a finding when it fails):**
 1. Each verifier accepts exactly its standard's valid signatures for the bound message and key, and the signer produces
@@ -205,6 +210,12 @@ alone.
    true, and the software path stays within 2^24 regular gas on a path a user must take.
 6. Constant time where a secret is used (signing in `ua-rs` and clientkeys; no secret-dependent branch in the vendored Falcon
    wrapper's length checks).
+7. **Falcon on wasm32** (added 2026-11-26; CLI-UAL-66): a seed gives the same Falcon key pair, and a fixed `(sk, msg, rnd)`
+   the same signature, natively (PQClean) and on wasm32 (falcon-rs `fpemu`), and both give PQClean's verdict on every FN-DSA
+   vector row; the stated exception (FR-1 of the falcon-rs record: another, equally valid signature with probability about
+   2^-39 per signature) is the only one; header and length checks equal; the routing cannot pick falcon-rs natively or
+   PQClean on wasm32. The group kinds: clientkeys `ua-group.js` gives the Solidity verifiers' and `ua-rs` `groups.rs`'s
+   verdict on every `vectors/ua/groups.json` row.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `T/docs/research/security-review-record.md` (index of every review, and what no review covered)
@@ -213,6 +224,12 @@ alone.
   `scratchpad/review-3zh/`, `scratchpad/review-t21/` (`ledger.md`, O1-O8), `scratchpad/sdk-complete-review/`,
   `scratchpad/sdk-review-20261123-0621/` (T26, `STATUS.md`), `scratchpad/pqvault-review/`,
   `scratchpad/treekem-review-20261123-1426/`
+- the review-fix round (2026-11-24 to -26, local): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
+- `T/docs/audit/audited/vendor-falcon-rs.md` (FR-1 to FR-12; the tree is unit `vendor-falcon-rs`, the parity is here)
 - the reports of the layer units of this round under `scratchpad/ai-audit/results/` when they exist: read them for leads,
   do not repeat their findings; a finding of yours that a layer unit already reported names that unit's id
 - `T/docs/research/zether-msm-crypto-review.md`, `T/docs/research/pqz-specialised-verifier.md` §7,
@@ -224,6 +241,7 @@ alone.
   closing matrix (every forge directory at the default set, the set-sensitive tests at the other three sets, node and e2e,
   clients, vectors)
 - `T/pqz-core/runs/gate/3zh-g2-<set>-summary.txt` for the four sets
+- `T/clients/runs/2026-11-26-ua-rs-wasm-fndsa-summary.txt` (Falcon on wasm32), `2026-11-26-clientkeys-group-verify-summary.txt`
 
 **Also accepted for this unit (do not report):** `fndsa1024` on Falcon round-3 v1.2 (CTR-UA-40 Q1); `crypto-bigint`
  RUSTSEC-2026-0387 through `frost-secp256k1` =3.0.0 (known, `deny.toml`); an `msig` with no `pop` unusable until accepted
@@ -238,7 +256,7 @@ number (section 9).
 | 1 | Conformance | CTR-UA-14, -39, -40, CTR-PQZ-28 and the kind table, read for each implementation. |
 | 2 | Cryptography | **Leads this dimension for its family, read vertically.** Section 8's invariants 1-6 for each primitive, every implementation against its standard and against each other. |
 | 3 | Security | Kind confusion, a signature valid for two purposes or chains, a verifier that reads an empty precompile return as true, a group signature replayed across sessions. |
-| 4 | Rules that do not bend | Maximal support (ARCH-POS-18): a kind missing a precompile or host function verifies in software or is refused only with the owner's confirmation (`mldsa87` on Soroban, Falcon on wasm32); one rule on every chain; no EIP-7702. |
+| 4 | Rules that do not bend | Maximal support (ARCH-POS-18): a kind missing a precompile or host function verifies in software or is refused only with the owner's confirmation (`mldsa87` on Soroban; Falcon on wasm32 now keys, signs and verifies, CLI-UAL-66); one rule on every chain; no EIP-7702. |
 | 5 | Secrets and privacy | N/A for verifiers (public data); for signers: keys, nonces and seeds only in the arena, never in an error or log. |
 | 6 | Robustness and denial of service | Short or oversized keys and signatures in every parser; the worst-case verify gas (Falcon decode, SLH-DSA, ML-DSA uncached about 19.0 M against 2^24). |
 | 7 | Failure handling | A malformed signature refused by name or `false` in every layer, never an exception mapped to success. |
@@ -247,7 +265,7 @@ number (section 9).
 | 10 | Performance and cost | Verify gas per kind and chain against the docs; sign time on mobile and wasm. |
 | 11 | Interfaces and misuse | Signer APIs that take a caller RNG where the spec forbids it; a verify API that skips the length check. |
 | 12 | Tests | KATs and negative rows per kind read by every implementation; malleability and small-order rows; mutants of each check. |
-| 13 | Operations and the supply chain | Library pins (`ml-dsa` =0.1.1, `slh-dsa` =0.2.0-rc.5, `ed25519-dalek` =2.2.0, `k256` / `p256` =0.14.0, `frost-*` =3.0.0, `@noble/*` 2.4.0, `@noble/post-quantum` 0.7.1, the vendored PQClean Falcon), their advisories and licences. |
+| 13 | Operations and the supply chain | Library pins (`ml-dsa` =0.1.1, `slh-dsa` =0.2.0-rc.5, `ed25519-dalek` =2.2.0, `k256` / `p256` =0.14.0, `frost-*` =3.0.0, `@noble/*` 2.4.0, `@noble/post-quantum` 0.7.1, the vendored PQClean Falcon and falcon-rs 0.3.1, both installed and checked by `scripts/vendor.sh`, ARCH-POS-24), their advisories and licences. |
 
 ## 9. Report format (Markdown, English)
 

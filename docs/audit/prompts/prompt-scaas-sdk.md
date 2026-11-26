@@ -224,6 +224,12 @@ j. **The T26 review fixes and the F2 shared line reader** (plan T26, the SDK rev
    feature `dev-profiles`), B2-15 (`TokenBalance.unknown`); and the findings left open in `STATUS.md` (A2-2, A2-3, A2-7, B2-7,
    B-19's Aptos point): say which are still open at the tag. Every fix should have a red-first test and a killed mutant
    (`T/clients/scaas-sdk/runs/2026-11-17-scaas-sdk-t26-mutants.py`): name a fix whose test cannot fail.
+k. **The review-fix round's rows** (added 2026-11-26; CTR-UA-74, CLI-SDK-34): `account/msig.rs` signs an `msig` with the tag
+   of the version current at signing time and reads one `msigAt` per version a verified record names (at most 17);
+   `app_core.rs`, `pqchat_records.rs`, `pqchat_keys.rs` keep the versions a verified record names and refuse a decrease along
+   a chain (step 6, C-3 of the fix check: the test at `tests/app_core.rs` asserts the refusal); the exit review lines say the
+   lag ("applies if it lands within 16 epochs", F-4); before signing, the target's registry generation knows every derived
+   UA named (CLI-SDK-34); the gas reference table (`gas/reference.json`) re-measured after the registry change.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - the T26 review: `scratchpad/sdk-review-20261123-0621/` (`BRIEF.md`, `fable-A.md`, `fable-A2.md`, `fable-B.md`,
@@ -234,6 +240,11 @@ j. **The T26 review fixes and the F2 shared line reader** (plan T26, the SDK rev
 - `scratchpad/pr-a-review/20261119-claude-review.md`; `scratchpad/avax-dot-arweave-review/20261121-fable-spec-review.md`;
   `scratchpad/sdk-keys-research-fable-review.md`
 - the review rows recorded in `T/docs/decisions.md` under CLI-SDK-31 / -33 and CLI-RPC-*
+- the review-fix round (2026-11-24 to -26, local; the SDK rows: F-4, D2-*, C-3, R-2): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - `T/clients/scaas-sdk/runs/2026-11-17-scaas-sdk-summary.txt`, `2026-11-20-m20-nethermind-summary.txt`;
@@ -241,6 +252,9 @@ j. **The T26 review fixes and the F2 shared line reader** (plan T26, the SDK rev
   `T/smartcontracts/evm/runs/2026-11-19-pr-a-matrix-summary.txt`, and the tag's own client gate summary (bindings included)
 - T26: the gate rows in `T/clients/scaas-sdk/runs/2026-11-17-scaas-sdk-summary.txt` at the T26 merge, and the T26 mutant
   records (`2026-11-17-scaas-sdk-t26-mutants.py` and its record: area A 26 of 26, area B every row killed after the reruns)
+- the review-fix round's client rows: `T/clients/runs/2026-11-25-review-fix-client-summary.txt`,
+  `2026-11-26-review-fix3-client-summary.txt`, `2026-11-26-review-fix4-client-summary.txt` (with their `-mutants.py`
+  runners), and the round's closing matrix (`T/smartcontracts/evm/runs/2026-11-26-round-matrix.sh` and its summary)
 
 **Also accepted or known for this unit (do not report as such):**
 - What the SDK docs mark SPECIFIED or PLANNED is not a finding for being unbuilt (invariants (h) and (i) apply only if landed).
@@ -254,7 +268,7 @@ number (section 9).
 
 | # | Dimension | What to hunt in this unit |
 |---|---|---|
-| 1 | Conformance | CLI-SDK-01 to -21 and -30 to -33, CLI-RPC-01 to -14, ARCH-POS-13, -15, -18, -19, -20, NET-ALL-25 against `clients/scaas-sdk/src/`, `scaas-rpc/src/`; the T26 decisions (103)-(161) as recorded; BUILT rows with tests. |
+| 1 | Conformance | CLI-SDK-01 to -21 and -30 to -33, CLI-RPC-01 to -14, ARCH-POS-13, -15, -18, -19, -20, NET-ALL-25 against `clients/scaas-sdk/src/`, `scaas-rpc/src/`; the T26 decisions (103)-(161) as recorded; BUILT rows with tests; CLI-SDK-34 and CTR-UA-74 on the SDK side (invariant k). |
 | 2 | Cryptography | The digests and typed data the SDK rebuilds (invariant b); the registry line it resolves before a key is chosen (`line.rs`, invariant j); the KEM wraps and app-core handles it hands to `ua-rs`; the Arweave seal's `ctSha256` check. |
 | 3 | Security | Leads within the unit: every refusal before signing (invariant c); a signature only over bytes rebuilt from named fields; the hand-off import (invariant h); a lying node, gateway or bundler. |
 | 4 | Rules that do not bend | No decryption oracle (invariant d); every RPC read that feeds a decryption under `FeedsDecryption` with the majority option (invariant a; B-17's `read_app` default); explicit parameters; maximal support across families; one rule on every chain. |

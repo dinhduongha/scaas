@@ -1,0 +1,73 @@
+# review-fix-contract round matrix, 2026-11-26 (runner 2026-11-26-round-matrix.sh; full logs git-ignored, scratchpad/)
+# step | commit | rc | counts. Every row is green. A row's commit is the HEAD it ran at; the commits after it touch
+# only files that row does not read (018268b9c check_test_features.py; 45a8fbfbd appcore handles.json and its two
+# readers; bcbfb4a7a test/metatx/TypedOps.t.sol; a16b5ce33 the runner; c9ced8ce7 script/pqz/e2e.py section 6c), or
+# the row was rerun after them.
+# Reds fixed in the round (old -> new in each commit): a0c9c864a PqChatTreeCommit world 22, WORLDS 22 -> 23;
+# 018268b9c features (wasm Falcon runner crate test-only); 45a8fbfbd vec-regen (handles.json stale since 0736ad763);
+# bcbfb4a7a forge-metatx (G-7 TargetHasNoCode on the UACancelNonceFor row); a16b5ce33 ua-dart (dart pub get);
+# c9ced8ce7 pq-e2e 6c (AuditorRequired: the harness opted out on a FULL token, CTR-PQZ-24).
+# pq-e2e: 574 checks, 0 failures (5b ML-DSA-65 mtxShield gasUsed 443,787); pq-offchain: 235 records, 0 failed.
+# sets-sensitive / sets-modules: n2048-kmax1024, n2560-kmax16384, n2816-kmax65536 ok (--clean for sensitive).
+# Skipped families (untouched by 6ba93164d..HEAD, no shared vector they read changed): solana, near, algorand, move
+# (aptos, sui), ton, cosmos. fam-soroban ran: it reads vectors/ua/portable.json, which moved.
+ci-guards | c9ced8ce7 | 0 | no temp path
+clientkeys | a16b5ce33 | 0 | ℹ pass 671; ℹ fail 0
+clientkeys-mldsa | b202a6fa2 | 0 | forge 2 passed, 0 failed, 0 skipped (1 suites)
+docs | c9ced8ce7 | 0 | docs ok
+fam-soroban | a16b5ce33 | 0 | cargo 262 passed, 0 failed, 0 ignored (8 binaries)
+features | a16b5ce33 | 0 | -
+forge-account | b202a6fa2 | 0 | forge 103 passed, 0 failed, 0 skipped (6 suites)
+forge-as | b202a6fa2 | 0 | forge 568 passed, 0 failed, 0 skipped (92 suites)
+forge-confidential | b202a6fa2 | 0 | forge 5 passed, 0 failed, 0 skipped (1 suites)
+forge-factory | b202a6fa2 | 0 | forge 2 passed, 0 failed, 0 skipped (1 suites)
+forge-fork | b202a6fa2 | 0 | forge 0 passed, 0 failed, 1 skipped (1 suites)
+forge-gas | bcbfb4a7a | 0 | forge 406 passed, 0 failed, 1 skipped (53 suites)
+forge-governance | 45a8fbfbd | 0 | forge 1013 passed, 0 failed, 0 skipped (93 suites)
+forge-hedera | 45a8fbfbd | 0 | forge 20 passed, 0 failed, 0 skipped (2 suites)
+forge-liquidity | 45a8fbfbd | 0 | forge 93 passed, 0 failed, 1 skipped (9 suites)
+forge-merge | 45a8fbfbd | 0 | forge 350 passed, 0 failed, 0 skipped (30 suites)
+forge-metatx | bcbfb4a7a | 0 | forge 550 passed, 0 failed, 1 skipped (44 suites)
+forge-modules | b202a6fa2 | 0 | forge 253 passed, 0 failed, 0 skipped (32 suites)
+forge-p6f | 45a8fbfbd | 0 | forge 4 passed, 0 failed, 0 skipped (1 suites)
+forge-pqchat | 45a8fbfbd | 0 | forge 288 passed, 0 failed, 2 skipped (25 suites)
+forge-pqvault | 45a8fbfbd | 0 | forge 105 passed, 0 failed, 0 skipped (12 suites)
+forge-pqz | 45a8fbfbd | 0 | forge 694 passed, 0 failed, 4 skipped (64 suites)
+forge-pqzh | bcbfb4a7a | 0 | forge 42 passed, 0 failed, 0 skipped (3 suites)
+forge-research | bcbfb4a7a | 0 | forge 360 passed, 0 failed, 7 skipped (29 suites)
+forge-top | b202a6fa2 | 0 | forge 29 passed, 0 failed, 0 skipped (5 suites)
+forge-ua | bcbfb4a7a | 0 | forge 1051 passed, 0 failed, 0 skipped (72 suites)
+forge-v2 | bcbfb4a7a | 0 | forge 758 passed, 0 failed, 0 skipped (57 suites)
+forge-wallet | bcbfb4a7a | 0 | forge 185 passed, 0 failed, 0 skipped (12 suites)
+forge-wrap | bcbfb4a7a | 0 | forge 324 passed, 0 failed, 0 skipped (37 suites)
+forge-zether | bcbfb4a7a | 0 | forge 478 passed, 0 failed, 4 skipped (38 suites)
+format | c9ced8ce7 | 0 | -
+node-clippy | c9ced8ce7 | 0 | -
+node-e2e | c9ced8ce7 | 0 | cargo 27 passed, 0 failed, 0 ignored (1 binaries)
+node-test | c9ced8ce7 | 0 | cargo 912 passed, 0 failed, 75 ignored (19 binaries)
+pqchat-core | b202a6fa2 | 0 | cargo 139 passed, 0 failed, 7 ignored (23 binaries)
+pq-e2e | c9ced8ce7 | 0 | -
+pq-offchain | a16b5ce33 | 0 | -
+pqvault-core | 45a8fbfbd | 0 | cargo 26 passed, 0 failed, 5 ignored (7 binaries)
+scaas-cli | bcbfb4a7a | 0 | cargo 46 passed, 0 failed, 1 ignored (6 binaries)
+scaas-sdk | bcbfb4a7a | 0 | cargo 490 passed, 0 failed, 18 ignored (44 binaries); gas table in sync
+sets-modules | a16b5ce33 | 0 | -
+sets-sensitive | bcbfb4a7a | 0 | -
+size | b202a6fa2 | 0 | -
+testnet-build | b202a6fa2 | 0 | src and script built
+ua-c | bcbfb4a7a | 0 | cargo 9 passed, 0 failed, 0 ignored (2 binaries); Ran 106 tests in 27.038s
+ua-cs | bcbfb4a7a | 0 | Passed!  - Failed:     0, Passed:    66, Skipped:     0, Total:    66, Duration: 2 m 54 s - Scaas.Ua.Tests.dll (net10.0)
+ua-cxx | bcbfb4a7a | 0 | 100% tests passed, 0 tests failed out of 46
+ua-dart | a16b5ce33 | 0 | -
+ua-dart-frb | bcbfb4a7a | 0 | cargo 3 passed, 0 failed, 0 ignored (1 binaries)
+uagas | b202a6fa2 | 0 | forge 29 passed, 0 failed, 0 skipped (3 suites)
+ua-go | bcbfb4a7a | 0 | -
+ua-py | bcbfb4a7a | 0 | Ran 106 tests in 39.320s
+ua-qt | bcbfb4a7a | 0 | 100% tests passed, 0 tests failed out of 1
+ua-rs-app-core-vectors | a16b5ce33 | 0 | cargo 770 passed, 0 failed, 6 ignored (77 binaries)
+ua-rs-groups-regen | b202a6fa2 | 0 | cargo 1 passed, 0 failed, 0 ignored (1 binaries); groups.json regenerated byte-identical
+ua-rs-wasm-falcon | b202a6fa2 | 0 | -
+vec-check | a16b5ce33 | 0 | pqchat --check ok; pqz3k --check ok; pqz-leaf --check ok; soroban-ua-ops --check ok; metatx/gen_servicepull --check ok; ua/gen_liquidity --check ok; wraplimits/gen_wraplimits --check ok; pqz/pqz_kat --check ok; generated set files and gas inputs in sync
+vec-regen | a16b5ce33 | 0 | 36 regenerated files compared, all byte-identical
+vendor | a16b5ce33 | 0 | -
+zether-prover | bcbfb4a7a | 0 | cargo 186 passed, 0 failed, 4 ignored (32 binaries)

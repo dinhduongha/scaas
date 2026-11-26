@@ -131,22 +131,32 @@ The `PqChat` contract (UA-7): sessions, epochs, wraps, messages, topics and entr
   at `initialize(ownerUA, sigStore)` (CTR-CHAT-23), several KEM keys per member UA (CTR-CHAT-24), `uint8 groupMode` the last
   field of `PqChatSession` (CTR-CHAT-25); tests `test/pqchat/PqChatSigs.t.sol`, `PqChatSigGas.t.sol`, `PqChatDevices.t.sol`,
   `PqChatGroupMode.t.sol`; plan `T/docs/superpowers/plans/2026-11-23-pqchat-signatures.md`
-- **the TreeKEM mode (FRAME: finalize when the TreeKEM build merges; branch `pqchat-treekem`)** (added 2026-11-24):
-  `src/pqgroup/PqGroupTree.sol` (the app-agnostic tree base: tree math, tree hash, key admission, the tree namespace, the
-  no-return sets, acceptance and completion), `src/pqchat/PqChatTree.sol` (PqChat's DELEGATECALL body module: `commit`,
-  `treeLeave`, `treeRemove`, `addPathList`, `addPathKeys`, `addPath`, the glue to `PqChatCore`), the tree records in
-  `PqChatTypes.sol` / `IPqChat.sol`; tests `test/pqchat/PqChatTree.t.sol`, `PqChatTreeCommit.t.sol`, `PqChatTreeRules.t.sol`,
-  `PqChatTreeModel.sol`; the six tree rows of `test/vectors/selector_audit.json`; `T/smartcontracts/vectors/pqchat/tree.json`,
-  `tree-secrets.json` (read for the bytes). Until the merge, the file list and line references are the branch's; if `T/`
-  has no `PqGroupTree.sol`, write that under "Not covered" and audit the rest
+- **the TreeKEM mode** (added 2026-11-24; finalized 2026-11-26: the build merged from `pqchat-treekem` and was fixed in the
+  review-fix round): `src/pqgroup/PqGroupTree.sol` (the app-agnostic tree base: tree math, tree hash, key admission, the
+  tree namespace, the no-return sets, acceptance and completion; `TREE_LEAVES_LIMIT` 512), `src/pqgroup/IPqGroupTree.sol`
+  (the app-agnostic change records `TreeAdd` / `TreeRemove`, inherited by `IPqChat`; review A-6: the ABI is the tuple, nothing
+  signed moved), `src/pqchat/PqChatTree.sol` (PqChat's DELEGATECALL body module: `commit`, `addPathList`, `addPathKeys`,
+  `addPath`, the glue to `PqChatCore`), `src/pqchat/PqChatTreeMembers.sol` (the fourth body module, split out 2026-11-25
+  under the owner's pre-approval: the tree exits `treeLeave` / `treeRemove`, and mode 0's `leave` / `remove`, moved out of
+  `PqChat` when E-3 took it over its size line; `implArgs = abi.encode(topics, tree, views, members)`),
+  `src/pqchat/PqChatTreeViews.sol` / `IPqChatTreeViews.sol` (the read-only module), the tree records in `PqChatTypes.sol` /
+  `IPqChat.sol`; tests `test/pqchat/PqChatTree.t.sol`, `PqChatTreeCommit.t.sol` (plays every world of `tree-secrets.json`,
+  its world count pinned), `PqChatTreeRules.t.sol`, `PqChatTreeGuards.t.sol`, `PqChatTreeExits.t.sol`, `PqChatTreeGas.t.sol`,
+  `PqChatTreeViews.t.sol`, `PqGroupTreeBase.t.sol`, `PqChatEpochs.t.sol` (the mode-0 exits and the replica copies),
+  `PqChatTreeModel.sol`; the tree rows of `test/vectors/selector_audit.json`; `T/smartcontracts/vectors/pqchat/tree.json`
+  (with a depth-9 commit), `tree-secrets.json` (read for the bytes)
 
 **Specifications and rules to read first:**
 - `T/docs/contracts/pqchat.md`, decisions CTR-CHAT-01 to -25 (D1-D22, P1-P49 as recorded; CTR-CHAT-20 removal, -21 home,
   -22 `PqChatStore`, -23 signature storage, -24 several keys per member, -25 `groupMode`)
-- TreeKEM (FRAME, as above): spec `T/docs/superpowers/specs/2026-11-23-pqchat-treekem.md` (§4 the tree, §6 records and
+- the round's Changes of 2026-11-24 to -26 under CTR-CHAT-07, -10, -20, -27 (E-3: exits checked and applied at the head;
+  the spec check's lag `EXIT_LAG_MAX`; E-2 / A-16: the named epoch's lists and the replica rule; A-15: an empty `addWraps`
+  refused; C38-C40; R8 512 leaves and C10's 20 changes, owner 2026-11-25); CTR-UA-74 in `T/docs/contracts/accounts.md` (an
+  `msig`'s version tag inside the signature object; `msig-replica-copy`: a replica's copy carries the replica's tag)
+- TreeKEM: spec `T/docs/superpowers/specs/2026-11-23-pqchat-treekem.md` (§4 the tree, §6 records and
   entries, §7 storage, §8 what the contract checks and what only clients check, §9 rights, leave, removal, §11 refusals, §13
   bounds and gas, §14 threats), plan `T/docs/superpowers/plans/2026-11-23-pqchat-treekem.md`, decisions CTR-CHAT-26 (the
-  mode, two layers, no return), CTR-CHAT-27 (the checks and bounds, controller calls C1-C38), CTR-CHAT-28 (the tree is
+  mode, two layers, no return), CTR-CHAT-27 (the checks and bounds, controller calls C1-C40, R8 512 leaves at depth 9, C10's `TREE_CHANGES_MAX` 20), CTR-CHAT-28 (the tree is
   app-agnostic); `T/docs/clients/pqchat-core.md` CLI-PQC-17 (what only clients check)
 
 **Invariants to check (beyond section 5):**
@@ -163,31 +173,56 @@ The `PqChat` contract (UA-7): sessions, epochs, wraps, messages, topics and entr
    mismatched signature refused at write in both modes; members sorted by `(ua, keyId)`, at most 8 keys per UA, one wrap per
    key, rights, leave and removal per UA; `groupMode` fixed at creation, signed in the record, values above 1 refused
    `PqChatModeUnsupported`; `PqVault` accepts only 0 (`PqVaultModeUnsupported`).
-9. **The TreeKEM mode** (CTR-CHAT-26 to -28; **FRAME: finalize when the TreeKEM build merges**): a tree session only on an
+9. **The TreeKEM mode** (CTR-CHAT-26 to -28): a tree session only on an
    `sstore2` home and only at its home instance; flat entries refused on a tree session and tree entries on a flat one
    (`PqChatModeEntry`); `treeId = hashStruct(PqChatSession)` and `parentTreeHash` bound in every commit; at acceptance the
    tree computed in memory on the head (path length, resolution targets `PqChatTreeTargets`, root against `treeHash`
    `PqChatTreeHash`), then each piece once against its signed hash; node keys of scheme 1, 1,601 B, through the admission
    check (canonical X25519 `pk_X`, `PqChatKemKey`), no two live leaves with the same key bytes; the no-return sets `gone`,
    `goneOwnKey`, `goneKey` never cleared; a non-admin changes keys of its own UA only; `admins` cannot keep a UA that is gone
-   (`PqChatRemovedKept`); `TREE_LEAVES_MAX` 256, `TREE_CHANGES_MAX` 32, `TREE_ADMINS_MAX` 32, `TREE_INFO_MAX` 4,124 B; every
+   (`PqChatRemovedKept`); `TREE_LEAVES_MAX` 512 (depth 9), `TREE_CHANGES_MAX` 20, `TREE_ADMINS_MAX` 32, `TREE_INFO_MAX` 4,124 B; every
    ciphertext, node key and path list kept in SSTORE2; the last piece's completion within EIP-8037 and 2^24; the
    `PqGroupTree` storage namespace apart from `PqGroupBase`'s and `PqChat`'s (`test/v2/layout/namespaces.json`).
+10. **Exits at the head** (added 2026-11-26; E-3 of the TreeKEM code review, owner "Yes, both modes"; the spec check's lag;
+   E-2 and A-16 of the re-review; CTR-CHAT-10, -20, -27 C9): at home a leave or removal (mode 0's `leave` / `remove`, the
+   tree's `treeLeave` / `treeRemove`, all in `PqChatTreeMembers`) names the head or a complete ancestor of it
+   (`PqChatIncomplete` for a staged child) at most `EXIT_LAG_MAX` = 16 epochs below the head (`PqChatExitLag(named, head)`;
+   no withdrawal, no typehash moved), and is checked and applied at the head (the leaver a member of the head, the remover a
+   live admin of it, its UAs members or admins of it); when the named epoch is not the head the signer and every named UA are
+   also in the named epoch's lists (E-2); a repeated exit, or one that newly flags nobody, is `PqChatNotMember`; the flag, the
+   record and the event are the head's. A replica keeps the epoch named, its flag allows an ancestor within `EXIT_LAG_MAX`,
+   and it takes a repeat naming one epoch (A-16); the tree has no replica (C4). Hunt: a front-runner that strands a signed
+   exit, home and replica judging one record differently, `PqGroupBase`'s bounded ancestor walk wrong for one of its users.
+11. **The round's other contract fixes** (added 2026-11-26): an `addWraps` with no wrap is `PqChatShape` in both modes,
+   checked first (A-15; `_storeWraps` unchanged for `createSession`, `rekey`, `commit`); C39 (an Add's key held by a leaf a
+   Remove of the same commit takes out is free in every order), C40 (`addPath` carries at least one ciphertext), C38 (a
+   `treeRemove` naming a UA already `gone` refused whole); an `msig` author's records carry its version tag inside
+   `UASig.signature`, accepted only when current (CTR-UA-74), and a replica's copy carries the replica registry's current tag
+   (`test_a1_replicaCopyCarriesTheReplicaTag`), so a home record and its copy differ in `sigHash`: check every view and
+   check that assumed them equal.
 
 **Prior reports (do not re-report what they list as fixed; give the closure table):**
 - `T/pqz-core/research/code-review-2026-10-26/README.md` (whole-contract review at `64549aa4`) and `code-review-2026-10-19/README.md`
 - `T/docs/research/security-review-record.md` (index of every review, and what no review covered)
 - `scratchpad/review-ua-mtx-merge/` (A-regulated, B-metatx-ua, C-pqz-zether, D-factory-gov-dex-pqchat, recheck-*, recheck2-*)
-- TreeKEM (FRAME): the spec reviews `scratchpad/treekem-review-20261123-1426/` (Fable and Codex, rounds 1-3, `resolution.md`)
-  and the code review of the TreeKEM build when it exists (the controller adds it here)
+- TreeKEM: the spec reviews `scratchpad/treekem-review-20261123-1426/` (Fable and Codex, rounds 1-3, `resolution.md`)
+- the review-fix round (2026-11-24 to -26, local): the TreeKEM and G1 code review
+  `scratchpad/treekem-g1-review-20261124-1550/` (`BRIEF.md`, Fable areas A-G at `8cac68125`; its fixes, red tests and
+  mutants in `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt`), the re-review
+  `scratchpad/review-fix-review-20261125-1959/` (`STATUS.md`: verdict, branch, fix commit, red test and mutant per finding;
+  `fable-{A..G}.md`) and the fix check `scratchpad/review-fix-check-20261126-0429/` (`STATUS.md`, `fable-{A,R,C}.md`)
 
 **Gate evidence at the tag (read for what was run; a green gate proves nothing by itself):**
 - the tag's closing gate summary under `T/smartcontracts/evm/runs/` (every forge directory at the default set, the set-sensitive tests at the other three sets)
 - `T/smartcontracts/evm/runs/2026-11-15-3zh-core-g2.txt`, `2026-11-15-burner-wrap-caps.txt`, `2026-11-15-pqz-three-keys-round/summary.txt`, `2026-11-13-fix3-chainuid/summary.txt`, `2026-11-14-msig-members/mutants.txt`, `2026-11-15-3zh-mldsa.txt`
 - `T/smartcontracts/evm/size-baseline.json` with `T/scripts/size_gate.py` (the size ratchet, ceiling 64 KiB)
 - `T/smartcontracts/evm/runs/2026-11-23-pqchat-sigs-summary.txt`, `2026-11-23-pqchat-sigs-mutants.txt` (14 of 14 killed)
-- TreeKEM (FRAME): `T/smartcontracts/evm/runs/2026-11-23-pqchat-treekem-t3a-summary.txt`, `-t3b-summary.txt`,
-  `-t3a-mutants.txt`, `-t3b-mutants.txt` (41 of 41), and the merge's own gate rows
+- TreeKEM: `T/smartcontracts/evm/runs/2026-11-23-pqchat-treekem-t3a-summary.txt` to `-t3d-summary.txt` and their mutant
+  records; `2026-11-25-treekem512-nethermind.py` (the last-live-leaf commit at 512 leaves on the local Nethermind copy, which
+  enforces 2^24)
+- the review-fix round: `T/smartcontracts/evm/runs/2026-11-24-review-fix-contract-summary.txt` (with
+  `2026-11-24-review-fix-contract-mutants.py`), `2026-11-26-review-fix4-contract-summary.txt`, and the round's closing
+  matrix (`2026-11-26-round-matrix.sh` and its summary)
 
 **Dimension table** (ARCH-POS-22, `T/docs/review.md` §1; added 2026-11-24). Apply every dimension within this unit's
 scope; each row says what to hunt here. A row marked `N/A` gives its reason and stays. Every finding names its dimension
@@ -195,19 +230,19 @@ number (section 9).
 
 | # | Dimension | What to hunt in this unit |
 |---|---|---|
-| 1 | Conformance | CTR-CHAT-01 to -25 (and -26 to -28 for the TreeKEM mode, FRAME) one by one against `src/pqchat/`, `src/pqgroup/PqGroupBase.sol` (and `PqGroupTree.sol`); the BUILT status of each row in `docs/contracts/pqchat.md` with its test (`PqChatSigs.t.sol`, `PqChatDevices.t.sol`, `PqChatGroupMode.t.sol`, the tree tests). |
+| 1 | Conformance | CTR-CHAT-01 to -28 with their Changes of 2026-11-24 to -26 (invariants 10, 11) one by one against `src/pqchat/`, `src/pqgroup/PqGroupBase.sol`, `PqGroupTree.sol`, `IPqGroupTree.sol`; the BUILT status of each row in `docs/contracts/pqchat.md` with its test (`PqChatSigs.t.sol`, `PqChatDevices.t.sol`, `PqChatGroupMode.t.sol`, the tree tests). |
 | 2 | Cryptography | On-chain cryptography of the unit: the typehashes and `DS_C` domain of every record (session, epoch, leave, remove, message, topic, entry, and the tree's `PqChatCommit`, `TreeAdd`, `TreeRemove`, `PathList`, `PathCt`, `PqChatTreeLeave`, `PqChatTreeRemove`); `uaMessage(kind, purpose, typedDigest)` under `PURPOSE_PQCHAT`; wrap hashes and `sigHash` binding to session, epoch and member `(ua, keyId)`; `treeId = hashStruct(PqChatSession)`, `parentTreeHash`, the typed tree hash (leaf `TreeLeaf`, parent `TreeParent`, no RFC parent hash) computed in `PqGroupTree.sol` against `treeHash`; `genesisCtx`; `kemHash = keccak256(kemPk)` and the scheme-1 admission check (canonical X25519 `pk_X`, 1,601-B node keys); what each hash does not bind (a node key known only by its signed hash). |
-| 3 | Security | Authorship of each record (the signer the record names, `requirePortable`); admins and rights per UA (a non-admin changes its own UA's keys only); removal and leave; the home-chain child slot; replay of a record to another session, epoch, instance or chain; nonce scopes; front-running the child slot (CTR-CHAT-09 O2 accepted); downgrade between `groupMode` values and between `sigStore` settings; the no-return sets (`gone`, `goneOwnKey`, `goneKey`). |
+| 3 | Security | Authorship of each record (the signer the record names, `requirePortable`); admins and rights per UA (a non-admin changes its own UA's keys only); removal and leave; the home-chain child slot; replay of a record to another session, epoch, instance or chain; nonce scopes; front-running the child slot (CTR-CHAT-09 O2 accepted); downgrade between `groupMode` values and between `sigStore` settings; the no-return sets (`gone`, `goneOwnKey`, `goneKey`); exits at the head: a front-runner stranding a signed exit (the lag), home and replica judging one exit differently (E-2, A-16). |
 | 4 | Rules that do not bend | Every record and ciphertext kept in full in state (CTR-CHAT-05; tree node keys and path ciphertexts in SSTORE2); no decryption oracle (no check depends on a wrap's content); explicit parameters (one entry per tree operation); relayable with fee 0 (CTR-CHAT-19, the pieces by anyone); one rule on every chain; nothing upgradable. |
 | 5 | Secrets and privacy | Metadata a public observer learns: member UAs and key ids, epoch cadence, message sizes (padding buckets), tree shape and who commits; signatures in state on `sstore2` instances (what they reveal). |
-| 6 | Robustness and denial of service | Bounds: name 1-512 B, wraps chunked, at most 8 keys per UA, `TREE_LEAVES_MAX` 256, `TREE_CHANGES_MAX` 32, `TREE_ADMINS_MAX` 32, `TREE_INFO_MAX` 4,124 B, 64 leaves per `treeLeaves` call; `PqChatTreeBacklog`; a staged commit no piece can complete; the completion's transaction (about 49.1 M asked) and the last-leaf commit (near 2^24) against EIP-8037 and EIP-7825; open topics' state growth (accepted). |
+| 6 | Robustness and denial of service | Bounds: name 1-512 B, wraps chunked, at most 8 keys per UA, `TREE_LEAVES_MAX` 512 (depth 9), `TREE_CHANGES_MAX` 20, `TREE_ADMINS_MAX` 32, `TREE_INFO_MAX` 4,124 B, 64 leaves per `treeLeaves` call; `PqChatTreeBacklog`; a staged commit no piece can complete; the completion's transaction (about 49.1 M asked) and the last-leaf commit (near 2^24) against EIP-8037 and EIP-7825; open topics' state growth (accepted); the exit lag's ancestor walk (at most `EXIT_LAG_MAX` reads). |
 | 7 | Failure handling | Named errors; no partial epoch after a refused wrap or piece; a closed tree session; recovery from state alone (CTR-CHAT-14: `sessionsOf`, `latestEpoch`, `storedRange`, the tree's commits since a Welcome); reentrancy through the registry call. |
-| 8 | Consistency across languages and layers | Records, typehashes and wrap hashes equal `T/smartcontracts/vectors/pqchat/` (`records.json`, `tree.json`) as clientkeys `pqchat.js` / `pqchat-tree.js` / `treekem.js`, `ua-rs` `wallet/pqchat.rs` / `tree.rs` / `tree_public.rs` and pqchat-core build them; the six tree rows and the flat rows of `selector_audit.json` equal the node's `typed.rs` rows both ways; PqVault's use of `PqGroupBase` unchanged. |
-| 9 | Contract specifics | Layout pins `PqChat.json`, `PqChatStore.json`, `namespaces.json` (the tree namespace `scaas.pqchat.tree` apart); typehash pins (`PqChatTypes.t.sol`); the body modules (`PqChatTopics`, `PqChatTree`) by DELEGATECALL: storage, `msg.sender`, return data; the size gate; gas pins with old -> new figures (`PqChatGas.t.sol`, `PqChatSigGas.t.sol`, the tree gas rows). |
+| 8 | Consistency across languages and layers | Records, typehashes and wrap hashes equal `T/smartcontracts/vectors/pqchat/` (`records.json`, `tree.json`) as clientkeys `pqchat.js` / `pqchat-tree.js` / `treekem.js`, `ua-rs` `wallet/pqchat.rs` / `tree.rs` / `tree_public.rs` and pqchat-core build them; the six tree rows and the flat rows of `selector_audit.json` equal the node's `typed.rs` rows both ways; PqVault's use of `PqGroupBase` unchanged; the node refuses an empty `addWraps` as the contract does (A-5). |
+| 9 | Contract specifics | Layout pins `PqChat.json`, `PqChatStore.json`, `namespaces.json` (the tree namespace `scaas.pqchat.tree` apart); typehash pins (`PqChatTypes.t.sol`); the body modules (`PqChatTopics`, `PqChatTree`, `PqChatTreeMembers`, the read-only `PqChatTreeViews`; the `implArgs` order) by DELEGATECALL: storage, `msg.sender`, return data; the size gate; gas pins with old -> new figures (`PqChatGas.t.sol`, `PqChatSigGas.t.sol`, the tree gas rows). |
 | 10 | Performance and cost | Gas per entry against `docs/contracts/pqchat.md` and the TreeKEM spec §13 (estimates until pinned); the state gas of the no-return slots (97,920 each); who pays the last piece's completion. |
 | 11 | Interfaces and misuse | Entries hard to misuse: a flat entry on a tree session refused by name; the piece order a client must follow (one ciphertext held back) documented; stable error codes. |
-| 12 | Tests | Each refusal has a positive twin; the sigs mutants (14 of 14) and the TreeKEM mutants (41 of 41) cover each check; `PqChatTreeModel.sol` as an independent model that can disagree with the contract; vectors read by the forge tests. |
-| 13 | Operations and the supply chain | N/A for config and dependencies (pure Solidity); SPDX headers on the new files (`PqGroupTree.sol`, `PqChatTree.sol`). |
+| 12 | Tests | Each refusal has a positive twin; the sigs mutants (14 of 14) and the TreeKEM mutants (T3a-T3d) and the review-fix round's contract mutants cover each check; `PqChatTreeModel.sol` as an independent model that can disagree with the contract; vectors read by the forge tests. |
+| 13 | Operations and the supply chain | N/A for config and dependencies (pure Solidity); SPDX headers on the new files (`PqGroupTree.sol`, `IPqGroupTree.sol`, `PqChatTree.sol`, `PqChatTreeMembers.sol`, `PqChatTreeViews.sol`). |
 
 ## 9. Report format (Markdown, English)
 
