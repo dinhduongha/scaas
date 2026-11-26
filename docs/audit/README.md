@@ -1,7 +1,8 @@
 # Pre-freeze AI audit: plan
 
 The AI audit of [ARCH-POS-14](../decisions.md#ARCH-POS-14) at the pre-freeze tag. This directory holds the plan (this file),
-the [unit index](INDEX.md) and the 31 self-contained [prompts](prompts/); that is all the repository holds of the audit. The
+the [unit index](INDEX.md) and the 31 self-contained [prompts](prompts/); that is all the repository holds of the audit, except the records of separate audit streams the owner asked to keep in
+[`audited/`](audited/) (owner 2026-11-26: `vendor-falcon-rs` only). The
 results, the run ledger and the closure tables are local and git-ignored, under `scratchpad/ai-audit/` (owner 2026-11-24). The
 repository is public: anyone can rerun the audit on the same tag with the same prompts
 (owner 2026-11-24). Every review here covers the 13 dimensions of [review.md](../review.md#ARCH-POS-22) (ARCH-POS-22).

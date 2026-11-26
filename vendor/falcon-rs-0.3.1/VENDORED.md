@@ -19,5 +19,5 @@
   crate's sha256 in CI (P2), the wasm32 gate as a CI job (P2), native / wasm32 key-generation parity over many seeds (P2),
   the P3 items (signatures equal PQClean's except with probability about 2^-39 per signature, from `fpr_expm_p63`; a
   rejected candidate left unwiped; variable-time hash-to-point, so never a secret message; `zeroize` in the glue; more
-  edge refusal rows), and a timing test. The full report stays local (owner 2026-11-24: audit results are not
-  committed). After those fixes this path is labelled `AI-AUDITED (Fable)`, and `UNAUDITED` again on any change.
+  edge refusal rows), and a timing test. The record, with every finding, is
+  [`docs/audit/audited/vendor-falcon-rs.md`](../../docs/audit/audited/vendor-falcon-rs.md) (owner 2026-11-26). After those fixes this path is labelled `AI-AUDITED (Fable)`, and `UNAUDITED` again on any change.
