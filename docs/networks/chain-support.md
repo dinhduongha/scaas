@@ -11,7 +11,7 @@ Status: SPECIFIED.
   writes where they can be done, and SDK support.
 - **Self-relay on every chain with a SCaaS contract** (owner 2026-11-22): a user's own native key submits a signed SCaaS
   operation, its own or one someone else signed and handed over (a payment to that user, for example), and pays the chain's
-  fee and storage. It includes, on every such chain, reading the native fee-token balance and signing and broadcasting a
+  gas fee and storage. It includes, on every such chain, reading the balance of the native coin that pays gas and signing and broadcasting a
   native transaction with the user's key.
 - **A native column on every row** (owner 2026-11-22): the chain's own native account model, its balance read, a plain native
   transfer signed with the user's key and sent, apart from the SCaaS operations. So there is no native NEAR row and no native DOT
@@ -27,6 +27,9 @@ Status: SPECIFIED.
   exists.
 - **Contract deployment is not part of the rule.** A public chain deploys when its fork allows it (owner 2026-10-21;
   [NET-EVM-06](evm.md#NET-EVM-06)).
+- **EVM tiers** ([NET-EVM-20](evm.md#NET-EVM-20), owner 2026-11-26): each EVM row names its chains' tier, **tier 1 in bold**
+  (supports Glamsterdam: the SCaaS testnet, Sepolia), tier 2 plain (deployable once the chain raises its code size), *tier 3
+  in italics* (not yet eligible). The tier is evm.md's; this table only repeats it.
 - One row per chain, never a group; every EVM profile of `smartcontracts/evm/chain-uids.json` has its own row, its testnets in the
   same row, but Ethereum Classic, dropped by the owner on 2026-11-22 (decisions CLI-SDK-32).
 
@@ -53,7 +56,7 @@ Columns: **Contract** the SCaaS contracts for the chain; **Relay** and **Index**
 `ua-rs` signs what the chain verifies (a SCaaS operation; a native transfer is the Native column); **rpc read** and **rpc write**
 `scaas-rpc` reads and direct broadcast; **SDK** the SDK's reads and writes on the chain; **Zether** classical Zether; **PQ** the PQ
 UA kinds (ML-DSA, FN-DSA, SLH-DSA registration and verification, precompile or software); **PQZ** the PQ confidential token; **Self-relay** the user's own native key submits a signed SCaaS operation (its own, or one
-handed to it) and pays the fee and storage, with the native fee-token balance read and the native transaction signed and broadcast
+handed to it) and pays the gas fee and storage, with the native coin's balance read and the native transaction signed and broadcast
 by the SDK (§4); **Native** the chain's own native account: its balance read, a plain native transfer signed with the user's key
 and sent (`(read B)`: the read is built, the send is not).
 
@@ -63,20 +66,20 @@ Status: SPECIFIED.
 
 | # | Chain (testnet in the same row) | Contract | Relay | Index | Signing | rpc read | rpc write | SDK | Zether | PQ | PQZ | Self-relay | Native |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | scaas-testnet (7622) | B | B | B | B | B | B | B | B | B | B | B T41.evm | B |
-| 2 | Ethereum L1 (1; Sepolia, Hoodi; Holesky unreachable) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
-| 3 | BNB Smart Chain (56; 97) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
-| 4 | Polygon PoS (137; Amoy 80002) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
-| 5 | Base (8453; Base Sepolia 84532) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled on Base mainnet) | B‡ (disabled on Base mainnet) | B T41.evm | B |
-| 6 | Gnosis (100; Chiado 10200) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
-| 7 | Celo (42220; Celo Sepolia 11142220; Alfajores unreachable) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
-| 9 | OP Mainnet (10; OP Sepolia 11155420) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
-| 10 | Arbitrum One (42161; Arbitrum Sepolia 421614) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
-| 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
-| 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | B T41.evm (EVM side, a `hedera_ecdsa` payer; the native side's: after the freeze (owner 2026-11-22)) | B (EVM side; native side: after the freeze (owner 2026-11-22), T41.hedera read and ed25519 sends, gRPC-web by default, `tonic` under `fam-hedera-grpc`, owner Q-R5) |
-| 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled on Fuji) | B‡ (disabled on Fuji) | B T41.evm | B |
-| 14 | Polkadot Hub (EVM and Substrate sides; Paseo; Westend dropped, owner 2026-11-22) | B‡ | P CA-T14 | B | B | B (`max_tx_gas`: P CA-T14) | B | B (`max_tx_gas`: P CA-T14) | M ARCH-POS-18 (no EIP-2537, CA-T12) | P CA-T13 | P CA-T14 | P CA-T14 (its `max_tx_gas` from T13's Paseo measurement, on the owner's word) | after the freeze (owner 2026-11-22) (read B; T41.dot's sends) |
-| 15 | Moonbeam (Moonbase Alpha) | B‡ | B | B | B | B (pinned reads refused: `pinnedReads` false) | B | B (pinned reads refused: the profile's `pinned_reads` false, owner 2026-11-22) | B‡ | B‡ (T15 checks its storage gas) | B‡ (T15) | B T41.evm (pinned reads refused, plain reads) | B |
+| 1 | **scaas-testnet** (7622; tier 1) | B | B | B | B | B | B | B | B | B | B | B T41.evm | B |
+| 2 | Ethereum L1: Ethereum mainnet (1; tier 2); **Sepolia** (tier 1); *Hoodi* (tier 3, not measured); Holesky unreachable | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
+| 3 | BNB Smart Chain (56; tier 2); *testnet 97* (tier 3, not measured) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
+| 4 | Polygon PoS (137; tier 2); *Amoy 80002* (tier 3, not measured) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
+| 5 | *Base* (8453; tier 3); Base Sepolia (84532; tier 2) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled on Base mainnet) | B‡ (disabled on Base mainnet) | B T41.evm | B |
+| 6 | *Gnosis* (100; *Chiado* 10200; tier 3, not measured) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
+| 7 | *Celo* (42220; *Celo Sepolia* 11142220; tier 3; Alfajores unreachable) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
+| 9 | *OP Mainnet* (10; *OP Sepolia* 11155420; tier 3) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
+| 10 | *Arbitrum One* (42161; *Arbitrum Sepolia* 421614; tier 3) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
+| 11 | Linea (59144; Linea Sepolia 59141; tier 2) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
+| 12 | *Hedera* (295; 296; tier 3, not yet eligible) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | B T41.evm (EVM side, a `hedera_ecdsa` payer; the native side's: after the freeze (owner 2026-11-22)) | B (EVM side; native side: after the freeze (owner 2026-11-22), T41.hedera read and ed25519 sends, gRPC-web by default, `tonic` under `fam-hedera-grpc`, owner Q-R5) |
+| 13 | Avalanche C-Chain (43114; tier 2); *Fuji* (43113; tier 3) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled on Fuji) | B‡ (disabled on Fuji) | B T41.evm | B |
+| 14 | *Polkadot Hub* (EVM and Substrate sides; *Paseo*; tier 3; Westend dropped, owner 2026-11-22) | B‡ | P CA-T14 | B | B | B (`max_tx_gas`: P CA-T14) | B | B (`max_tx_gas`: P CA-T14) | M ARCH-POS-18 (no EIP-2537, CA-T12) | P CA-T13 | P CA-T14 | P CA-T14 (its `max_tx_gas` from T13's Paseo measurement, on the owner's word) | after the freeze (owner 2026-11-22) (read B; T41.dot's sends) |
+| 15 | Moonbeam (Moonbase Alpha; tier 2) | B‡ | B | B | B | B (pinned reads refused: `pinnedReads` false) | B | B (pinned reads refused: the profile's `pinned_reads` false, owner 2026-11-22) | B‡ | B‡ (T15 checks its storage gas) | B‡ (T15) | B T41.evm (pinned reads refused, plain reads) | B |
 | 16 | NEAR (SCaaS family) | B | B | B | B | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | P `ua-near` | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
 | 17 | Algorand | B | B | B | B | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | P `ua-algorand` | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
 | 18 | Cosmos (CosmWasm) | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
@@ -136,9 +139,11 @@ Status: SPECIFIED.
   self-relay's gas limit adds `NodeInterface.gasEstimateL1Component` over its calldata, with the margin; a native send's
   `eth_estimateGas` holds the L1 part already) and `"linea"` is `L1Fee::Linea` (the fees are `linea_estimateGas`'s over the
   transaction, never below the chain's own); `tests/l1_fee.rs`, `src/op/tests.rs`.
-- **Hedera (row 12), `B‡`.** The token kinds, the DEX, the registry pair and the factory do not fit Hedera until it raises its code
-  size (owner 2026-11-09; the public Hedera testnet refused runtime above 24,576 B; each transaction within 15 M gas); a small
-  contract that needs none of them can deploy. Classical Zether needs EIP-2537 ([CTR-ZTH-32](../contracts/zether.md#CTR-ZTH-32)),
+- **Hedera (row 12), `B‡`, tier 3: not yet eligible** ([NET-EVM-20](evm.md#NET-EVM-20)). Its gas limit is small (each
+  transaction within 15 M gas, below EIP-7825's 2^24), and the token kinds, the DEX, the registry pair and the factory do not
+  fit it until it raises its code size (owner 2026-11-09; the public Hedera testnet refused runtime above 24,576 B); a small
+  contract that needs none of them can deploy. Nothing is deployed on Hedera; the code behind `IS_HEDERA` (HIP-632, HTS
+  `0x167`, `HederaMandateWallet`) stays unchanged (owner 2026-11-26). HCS is outside the EVM and has no code here. Classical Zether needs EIP-2537 ([CTR-ZTH-32](../contracts/zether.md#CTR-ZTH-32)),
   PQZ is refused there ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)) and `mldsa87` does not fit the 10.5 M verify
   budget: none of the three is a confirmed disablement under ARCH-POS-18, so each waits for its numbers.
 - **Avalanche, Polkadot Hub, Moonbeam (rows 13–15).** Draft profiles (chains-arweave T2, T11; `src/chains/<key>/`) with their
@@ -168,12 +173,12 @@ Status: SPECIFIED.
   `FamilyParams::Substrate`, `balances` of an SS58 id; tested on answers recorded from Westend Asset Hub, the public Paseo Hub
   endpoints answering no plain HTTP JSON-RPC that day) and a Substrate transfer extrinsic (T33, T34: deferred, owner
   2026-11-22); this is DOT's native account, and the former native DOT row now lives here. NEAR (row 16): the former native NEAR row, `view_account`'s `amount` (BUILT, T24.near) and
-  the native transfer (the former T31, now in T41.near). The other seven families: the fee-token account (ALGO, the Cosmos
+  the native transfer (the former T31, now in T41.near). The other seven families: the account of the native coin that pays gas (ALGO, the Cosmos
   chain's denom, APT, SOL, XLM, SUI, GRAM), its balance BUILT by T24; XLM's send BUILT (T41.soroban), the other six sends after
   the freeze (owner 2026-11-22), in T41.<family> on the builder that Self-relay uses (Algorand also needs its key network in `ua-rs`).
 - **Self-relay (column 11).** Contracts: every family lets any account submit an operation whose `relayer` is unbound, and an
   operation bound to an account lets that account submit: EVM `MetaTxLib.canon` zeroes an unbound relayer and fee recipient,
-  and the payee may self-relay with fee 0 ([CTR-MTX-08](../contracts/metatx.md#CTR-MTX-08), "payee self-relay",
+  and the payee may self-relay with token fee 0, paying the gas fee itself ([CTR-MTX-08](../contracts/metatx.md#CTR-MTX-08), "payee self-relay",
   [metatx §12](../contracts/metatx.md#payers)); NEAR `relayer: Option<AccountId>` against the predecessor, storage from the
   submitter's attached deposit ([NET-NEAR-09](near.md#NET-NEAR-09)); Algorand `relayer` zero = any, the MBR paid by a payment
   in the submitter's group ([NET-ALG-02](algorand.md#NET-ALG-02)); Cosmos `relayer` empty = any, else `info.sender`; Aptos and

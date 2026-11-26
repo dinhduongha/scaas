@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="646" viewBox="0 0 960 646" role="img" aria-labelledby="t d">
   <title id="t">Smart chain vs IaaS and BaaS</title>
-  <desc id="d">Scorecard of a cloud VM (IaaS), a hosted backend (BaaS) and a smart chain with SCaaS across five rows. Code and data: the chain is worse (seconds to minutes until finality). Money and billing: the chain is better (a native fee in every transaction). Operations and reliability: different (many validators, lock-in to the chain). Who holds the power: the chain wins (the subject signs every write). Privacy and data: the chain is better (Zether and PQ Zether hide amounts and balances; records are immutable, so a mistake is corrected by a new entry). Use the chain for write authority, value and records nobody may rewrite; keep reads, reports and workflows on ordinary infrastructure.</desc>
+  <desc id="d">Scorecard of a cloud VM (IaaS), a hosted backend (BaaS) and a smart chain with SCaaS across five rows. Code and data: the chain is worse (seconds to minutes until finality). Money and billing: the chain is better (a gas fee in every transaction). Operations and reliability: different (many validators, lock-in to the chain). Who holds the power: the chain wins (the subject signs every write). Privacy and data: the chain is better (Zether and PQ Zether hide amounts and balances; records are immutable, so a mistake is corrected by a new entry). Use the chain for write authority, value and records nobody may rewrite; keep reads, reports and workflows on ordinary infrastructure.</desc>
   <defs>
     <style>
       text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
@@ -49,7 +49,7 @@
   <text class="s" x="464" y="264">Needs a bank or payment processor</text>
   <rect x="698" y="204" width="238" height="72" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
   <rect x="708" y="212" width="64" height="18" rx="9" fill="#16a34a"/><text class="chip" x="740" y="225" text-anchor="middle" style="fill:#ffffff">BETTER</text>
-  <text class="b" x="710" y="247">A native fee in every transaction</text>
+  <text class="b" x="710" y="247">A gas fee in every transaction</text>
   <text class="s" x="710" y="264">Value moves as an ordinary call</text>
   <rect x="20" y="284" width="176" height="72" rx="8" fill="#ffffff" stroke="#d0d7de"/>
   <text class="rl" x="30" y="316">c) Operations &amp; reliability</text>

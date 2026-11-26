@@ -26,18 +26,21 @@ specified in detail).
 
 ## <a id="families-and-chains"></a>1. Families and chains
 
-The family taxonomy is an owner decision: EVM (Hedera is an EVM chain with its own page), Cosmos (CosmWasm), Soroban
+The family taxonomy is an owner decision: EVM (Hedera is an EVM chain with its own page; tier 3), Cosmos (CosmWasm), Soroban
 (Stellar and Pi Network), Move (Sui and Aptos), GRAM (formerly TON), Solana, NEAR (owner 2026-10-17; built on branch `near-algorand`, [near.md](near.md)), Algorand (owner
-2026-10-17; built on the same branch, [algorand.md](algorand.md)). Planned: TRON as an EVM profile (Base is already a draft EVM profile).
+2026-10-17; built on the same branch, [algorand.md](algorand.md)). Planned: TRON as an EVM profile (Base is already a draft EVM profile). EVM chains come in three tiers, each chain classified once in
+[evm.md](evm.md#NET-EVM-20) ([NET-EVM-20](evm.md#NET-EVM-20)): **tier 1, supports Glamsterdam (the SCaaS testnet, Sepolia)**;
+tier 2, deployable once the chain raises its code size (Ethereum mainnet, Polygon PoS, BNB Smart Chain, Avalanche C-Chain, …);
+*tier 3, not yet eligible (Hedera among them)*.
 
 Pay-meta ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)) and the relay fee ([CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27)) are built on the EVM, Hedera, Soroban, Solana, Cosmos, Sui, Aptos and GRAM families (see each family's "Pay-meta and relay fee" section). NEAR carries the same two rules from its first build (wrappers and an escrow router, [near.md](near.md#paymeta-relayfee)); so does Algorand (one atomic group with an executor LogicSig, [algorand.md](algorand.md#paymeta-relayfee)). Work item owner 2026-10-27, spec approved 2026-10-28, branch `near-algorand`. The picture below predates the two.
 
-<p align="center"><img src="../assets/chain-families.svg" width="860" alt="Chain families: EVM with the SCaaS testnet (built, first target) and anvil 31337 (built, dev only), Hedera 295 to 298 (built, own page), and Gnosis 100, Celo 42220, BNB Smart Chain 56, Polygon PoS 137 and Base 8453 seeded as draft until the operator gate passes; Cosmos (CosmWasm), Soroban (Stellar, Pi Network; not on the mesh), Move (Sui, Aptos), GRAM (built, blocked for every path but the ERP pull path until the forward-TON cap lands) and Solana, all built. Planned, no code yet: TRON (an EVM profile on TVM), NEAR and Algorand. GRAM is the former TON."></p>
+<p align="center"><img src="../assets/chain-families.svg" width="860" alt="Chain families: EVM in three tiers, with the SCaaS testnet (tier 1, built, first target) and anvil 31337 (built, dev only), Hedera 295 to 298 (tier 3, not yet eligible: code built behind IS_HEDERA, nothing deployed, own page), BNB Smart Chain 56 and Polygon PoS 137 (tier 2), Gnosis 100, Celo 42220 and Base 8453 (tier 3), all seeded as draft until the operator gate passes; Cosmos (CosmWasm), Soroban (Stellar, Pi Network; not on the mesh), Move (Sui, Aptos), GRAM (built, blocked for every path but the ERP pull path until the forward-TON cap lands) and Solana, all built. Planned, no code yet: TRON (an EVM profile on TVM), NEAR and Algorand. GRAM is the former TON."></p>
 
 | Family | Chains | Meta-tx mechanism | Subject signature | Relayer lane key | Mesh v1 | Status |
 |---|---|---|---|---|---|---|
-| EVM | Gnosis (100), Celo (42220), SCaaS testnet, anvil 31337 | contract-level EIP-712 (`ERC20MetaTx`) | ECDSA secp256k1 (EOA) / ERC-1271 (`SmartKeyAccount`: P-256 WebAuthn, secp256k1) | secp256k1 `m/44'/60'/0'/0/i` | yes | BUILT |
-| Hedera | 295 / 296 / 297 / 298 | the same Solidity on HSCS through a JSON-RPC relay | ECDSA (EVM alias) or ED25519 through HIP-632 `isAuthorizedRaw` | secp256k1 `m/44'/3030'/0'/0/i` | yes (family `hedera`) | BUILT |
+| EVM | **SCaaS testnet**, **Sepolia**; the public profiles by tier ([NET-EVM-20](evm.md#NET-EVM-20)); anvil 31337 | contract-level EIP-712 (`ERC20MetaTx`) | ECDSA secp256k1 (EOA) / ERC-1271 (`SmartKeyAccount`: P-256 WebAuthn, secp256k1) | secp256k1 `m/44'/60'/0'/0/i` | yes | BUILT |
+| *Hedera* | 295 / 296 / 297 / 298 | the same Solidity on HSCS through a JSON-RPC relay | ECDSA (EVM alias) or ED25519 through HIP-632 `isAuthorizedRaw` | secp256k1 `m/44'/3030'/0'/0/i` | yes (family `hedera`) | code BUILT; *tier 3, not yet eligible*: nothing deployed ([hedera.md](hedera.md)) |
 | Cosmos | CosmWasm chains (`cosmos:<chain-id>`) | contract-level `Relay{payload, auth}` | ADR-036 secp256k1 (Keplr/Leap `signArbitrary`) / WebAuthn P-256 | secp256k1 `m/44'/118'/0'/0/i` | yes | BUILT |
 | Soroban | Stellar (`pubnet`, `testnet`, `standalone`), Pi Network (`pi-mainnet`, `pi-testnet`) | native Soroban authorization (`SorobanAddressCredentials`, nonce + ledger expiry) | ed25519 (Freighter `signAuthEntry`) / custom account `__check_auth` with `secp256r1_verify` | ed25519 `m/44'/148'/i'`; Pi `m/44'/314159'/i'` | **no** | BUILT |
 | Move — Aptos | 1 / 2 / 4 | contract-level, one `Account` object per owner, lanes inside | ed25519 (Wallet Standard `signMessage`) / WebAuthn P-256 (pure-Move verifier) | ed25519 `m/44'/637'/i'/0'/0'` | yes | BUILT |
@@ -164,7 +167,7 @@ MetaTransfer { domain "scaas.metatransfer.v1", network, contract, asset, from, t
   read. Family-specific signed bounds stay in the family's `MetaTransfer` (GRAM: the forward-TON floor,
   [NET-TON-14](ton.md#NET-TON-14)).
 - `network` = the chain identity of [NET-ALL-22](#NET-ALL-22).
-- No fee field off EVM: the lane pays native gas, as for EVM contracts that are not tokens
+- No token-fee field off EVM: the lane pays the gas fee, as for EVM contracts that are not tokens
   ([CTR-MTX-22](../contracts/metatx.md#CTR-MTX-22)); a family that ever charges a token fee adds it to `MetaTransfer`
   only ([INT-ERP-06](../integration.md#INT-ERP-06), [NODE-MESH-05](../node/mesh.md#NODE-MESH-05)).
 - One lane space per contract for both kinds ([CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)). DEX orders keep their
@@ -212,7 +215,7 @@ Parity with EVM ([CTR-MTX-09](../contracts/metatx.md#CTR-MTX-09), [CTR-MTX-23](.
 | `mtxPay(UAMetaTransfer, UASig, PayMeta)` | `mtx_pay` / `MtxPay` | EVM: `entryRef == metaPayId(meta)`, any lane of the payer (pay-meta-tax O3, [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)); non-EVM until its round: `entry_ref = payId`, lane derived on chain as `H("scaas.pay.lane" ‖ payId)`, `nonce = 0` |
 | `mtxExecuteTransfer` | `mtx_execute_transfer` / `MtxExecuteTransfer` | the transfer struct on a client-chosen lane (Move: fields as typed arguments); not on Soroban (host nonces, no lanes) |
 | `mtxBatchTransfer`, `mtxBatch` | multi-message transactions (Cosmos messages, Solana instructions, Sui PTB commands, GRAM messages from one lane); Aptos `mtx_batch_transfer` with parallel vectors | atomic per transaction |
-| `mtxTransferWithFee`, `mtxPayWithPayeeFee` (`mtxExecuteWithFee` is in legacy, typed-signing) | none while non-EVM tokens charge no relayer fee | added with a token fee |
+| `mtxTransferWithFee`, `mtxPayWithPayeeFee` (`mtxExecuteWithFee` is in legacy, typed-signing) | none while non-EVM tokens charge no token fee | added with a token fee |
 
 One rule (the `ua*` / `mtx*` merge, [CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30); BUILT on EVM, SPECIFIED elsewhere):
 per operation a contract has its direct entry and at most one contract-verified signed entry, which takes every subject the
@@ -523,11 +526,11 @@ branch, the spec / plan file names and the commit prefixes use these names.
 | 5 | SDK, toolchain and network pins | exact versions pinned, local network first | the chain's SDK / node versions | S5 |
 | 6 | UA ledger in tokens | UA balances live in our tokens, never in a native account a UA cannot sign for ([NET-ALL-21](#NET-ALL-21)) | storage shape of the ledger | S6 |
 | 7 | Replay protection | per-UA lanes and nonces; a payment on any lane of its payer (pay-meta-tax O3; built on EVM, each other family in its round, until then its pay lane, nonce 0) | where the lanes are stored | S7 |
-| 8 | Relayer binding | every UA entry relayable (fee may be 0); an optional bound relayer authenticates itself | how the relayer proves itself | S8 |
+| 8 | Relayer binding | every UA entry relayable (token fee may be 0); an optional bound relayer authenticates itself | how the relayer proves itself | S8 |
 | 9 | Who may receive | only a UA that can spend on that chain | the chain's spend check | S9 |
 | 10 | `msig` members | members verified by their own kinds; a member the chain cannot verify carries no signing weight there; a stored `msig` signature (`pop`, KEM, PQZ key) is minimal: `T ≥ N` and `T − weight(i) < N` for every slot `i` (`T` the slots' total weight, `N` the threshold), and a classical-dominant `msig` registers with an empty `pop` (owner 2026-10-31; built on EVM and Soroban; [CTR-UA-07](../contracts/accounts.md#CTR-UA-07), [NET-SOR-18](soroban.md#NET-SOR-18); NEAR UA round: a written requirement, NEAR has no UA registry yet; Algorand UA round: a written requirement, Algorand has no UA registry yet) | which native members exist | S10 |
 | 11 | Storage, expiry, archival | records stay in state; nothing is only a hash; an archived or frozen record is restorable, never deleted; a 64-member `bls12381-multi` record holds ≈ 12.6 KB of key data on EVM (`d` 16,772 B): each round checks the cap against its entry limit and rent model and never lowers it (PLANNED; [CTR-UA-54](../contracts/accounts.md#CTR-UA-54)) | rent / TTL / storage-deposit / MBR model | S11 |
-| 12 | Who pays fees, storage and restores | the relayer; users and UAs need no native coin | the chain's fee and deposit flows | S12 |
+| 12 | Who pays gas fees, storage and restores | the relayer; users and UAs need no native coin | the chain's fee and deposit flows | S12 |
 | 13 | Classical Zether (not post-quantum) | its own item, never lumped with PQZ; the Zether PoP kind 0x0141 is enabled only with a Zether token on that chain | whether a verifier fits the chain | S13a |
 | 14 | PQZ | its own item; PQZ ciphertexts stay in state ([never lose ciphertext](../contracts/pq-zero-knowledge.md)); without a PQZ verifier the PQZ attributes are stored unproven | whether a PQZ verifier exists | S13b |
 | 15 | Code authority | an account signs with its own key, no delegated code authority ([CTR-UA-24](../contracts/accounts.md#CTR-UA-24), [NET-ALL-83](#NET-ALL-83)) | the chain's ways to hand authority to code and which are detectable | S14 |
@@ -694,7 +697,7 @@ Lessons from the first families' reviews, designed into every family from the st
   tokens`; a second deployment of the same code emitting identical events is ignored.
 - <a id="NET-ALL-08"></a>**NET-ALL-08** — **Every amount chosen by the relayer that decides whether value arrives
   must be inside the payer's signature.** Gas, compute units and priority fees chosen by the relayer may only affect
-  the relayer: an out-of-gas rolls back everything except the lane's fee and nonce. A billed failure is rebuilt
+  the relayer: an out-of-gas rolls back everything except the lane's gas fee and nonce. A billed failure is rebuilt
   **once** at the configured cap, then reported `reverted` ([NET-APT-21](aptos.md#NET-APT-21),
   [NET-SOL-23](solana.md#NET-SOL-23); Solana at `max_cu`). The forward-TON cap ([NET-TON-14](ton.md#NET-TON-14),
   the unsigned `forwardTon` amount) is the case that taught it.
@@ -810,7 +813,7 @@ Non-EVM books are served after the venue moves into the node store ([CLI-APP-21]
 | Post-quantum Zether | any EVM chain whose client has the `PQZ` precompile and passes its self-test (no chain-id allowlist, owner ruling 2026-10-31); today the SCaaS testnet (precompile in our client); dev chains tests only (anvil cannot host the precompile, so forge mocks it with `vm.mockCall` on KAT inputs; end to end on a SCaaS testnet copy) | no | Cosmos SDK private chains feasible later (Go module calling `libpqz` via cgo; own spec) | no | no | no | no | no | no |
 | Crypto-shredding commitments | keccak256 | keccak256 | SHA-256, tag `scaas.commit.sha256.v1` | 〃 | 〃 | 〃 | 〃 | 〃 | 〃 |
 
-Common to all wrappers: fees are `NONE` off EVM, so fee policies are EVM/Hedera only; named meta-tx functions are
+Common to all wrappers: token fees are `NONE` off EVM, so token-fee policies are EVM only (Hedera's code included); named meta-tx functions are
 EVM/Hedera (non-EVM ops are already named — `pay`, `Relay{payload}`, `SignedOp`); a multi-underlying guardian and
 rate timelock, when built elsewhere, follow the EVM rules verbatim. Payee fee is unavailable on v1, Zether and
 non-EVM families; there the options are payee self-relay and sponsorship. Sponsorship cost fields apply on every

@@ -3,6 +3,14 @@
 Common rules for every family: [networks/README](README.md). Status: contracts, adapter and client verifier
 **BUILT**; the items marked SPECIFIED below are normative and not yet in code.
 
+**Tier 3: not yet eligible** ([NET-EVM-20](evm.md#NET-EVM-20), owner 2026-11-26). Its gas limit is small: a transaction at most
+15 M gas, below EIP-7825's 2^24 ([§4](#4-relayer)), at least 80 % of the gas limit charged (HIP-185), runtime 24,576 B on the
+public testnet; Zether and PQZ refuse it ([§8](#wrappers)). No SCaaS contract set is deployed on a Hedera network. The code below
+exists and stays unchanged (owner 2026-11-26), so a deployment needs no new code if the chain becomes eligible. Inside Hedera's EVM
+the contracts use HIP-632 native-account signatures and HTS (precompile `0x167`), behind `IS_HEDERA`; HCS (Hedera Consensus
+Service) is outside the EVM and SCaaS has no HCS code (an HCS message store for PqChat is only SPECIFIED, and HCS anchoring is
+open, [NET-HED-01](#NET-HED-01)).
+
 **Contents**
 
 1. [Overview](#1-overview)
@@ -24,7 +32,7 @@ payer-sponsored path is not used.** HSCS runs EVM bytecode (Besu), so the Solidi
 the token kinds with `IS_HEDERA`, `HederaMandateWallet`, `SCaaSDex` (P5; the v1 line is in `legacy/p5/`). There is **no
 `SmartKeyAccount` and no EVM pipeline on Hedera** (as built: `DeployHedera.s.sol`, `adapters/hedera.rs:4-6`): native Hedera accounts already rotate keys, and the relayer runs
 the one-transaction-per-lane runner ([NET-HED-08](#NET-HED-08)). ED25519 accounts need a raw signer
-([NET-HED-15](#NET-HED-15)). Payer-account sponsorship (the subject sends a Hedera account transaction whose fee
+([NET-HED-15](#NET-HED-15)). Payer-account sponsorship (the subject sends a Hedera account transaction whose gas fee
 someone else pays) is **not** used: it orders operations by the subject's account, exactly the lock
 [NET-ALL-02](README.md#NET-ALL-02) removes. Chain ids 295 (mainnet), 296 (testnet), 297 (previewnet), 298
 (localnet); `chain_key` is always `hedera:<chainId>`.
@@ -35,7 +43,7 @@ someone else pays) is **not** used: it orders operations by the subject's accoun
 | Account auth | library calling `isAuthorizedRaw` with `CALL` (100 000 gas cap); a revert or garbage ⇒ `false` | `smartcontracts/evm/src/hedera/HederaAccountAuth.sol` |
 | Mandate | `HederaMandateWallet is MandateWallet` checks HIP-632 signatures on every entry ([NET-HED-03](#NET-HED-03)) | `smartcontracts/evm/src/hedera/HederaMandateWallet.sol` |
 | DEX | a SCaaS leg's `UATradeOrder` is checked by the Hedera token (HIP-632 included); `DexOrder` and DEX cancels have no HIP-632 branch ([Mandate and DEX](#mandate)) | — |
-| Relayer | EVM adapter pointed at the JSON-RPC relay, run under `lane_runner`; fee `eth_gasPrice × 1.2`, priority 0 | `scaas-node/src/adapters/hedera.rs` |
+| Relayer | EVM adapter pointed at the JSON-RPC relay, run under `lane_runner`; gas fee `eth_gasPrice × 1.2`, priority 0 | `scaas-node/src/adapters/hedera.rs` |
 | Client | long-zero payer `0.0.N` ⇒ native ED25519 path ([client families](../integration.md#families)) | — |
 
 ## <a id="payload"></a>2. Payload
@@ -407,7 +415,7 @@ Hedera item ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)).
   transactions (`ScheduleCreateTransaction` / `ScheduleSignTransaction`, multi-signature collection over time) are a
   candidate for high-risk approvals; not specified. Status `open`.
 - The payer-account sponsorship and HTS-token relayer rewards described in early requirements are not used
-  ([NET-HED-04](#NET-HED-04)); relayer fees on EVM-family chains are token fees in the meta-tx
+  ([NET-HED-04](#NET-HED-04)); a relayer is paid back by token fees in the meta-tx, as on every EVM chain
   ([contracts/metatx](../contracts/metatx.md)).
 
 ## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)

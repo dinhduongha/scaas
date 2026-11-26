@@ -3,6 +3,8 @@
 Public EVM mainnet. Row `moonbeam-mainnet` of [`chain-uids.json`](../../../chain-uids.json): chain id **1284**, chain_uid
 `0x7e6b3bbed86828a558271c9c9f62354b1d8b5aa15ff85fd6f1e7cbe9af9dde7e`, network `mainnet`. A chain is (chainId, chain_uid) (NET-ALL-22). Frontier on a Polkadot parachain; Ethereum gas; the second Polkadot EVM after Polkadot Hub (NET-EVM-17).
 
+**EVM tier** ([NET-EVM-20](../../../../../docs/networks/evm.md#NET-EVM-20), owner 2026-11-26): Tier 2: deployable once the chain raises its code size. Block 60 M, a transaction at most 52 M, every kind fits; runtime 24,576 B (controller classification, owner may move it).
+
 Profile [`profile.json`](profile.json) (`draft`, chains-arweave plan T11; the format of SDK plan T40), from the probes of
 2026-11-22 (`clients/scaas-rpc/runs/2026-11-22-evm-probes.py`, chains-arweave T12; summary `2026-11-22-evm-probes-summary.txt`
 beside it; **one sample each**: the 24-h and 7-day windows of NET-EVM-19 are the operator's scheduler's, still to run):

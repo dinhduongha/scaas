@@ -3,6 +3,8 @@
 Public EVM testnet. Row `linea-testnet` of [`chain-uids.json`](../../../chain-uids.json): chain id **59141**, chain_uid
 `0x65a64c825d7c13ce1bf077801d0b6b2a89853e19e4a89a5433d7d85d2102a20b`, network `testnet`. A chain is (chainId, chain_uid) (NET-ALL-22).
 
+**EVM tier** ([NET-EVM-20](../../../../../docs/networks/evm.md#NET-EVM-20), owner 2026-11-26): Tier 2: deployable once the chain raises its code size. Block 2,000 M, every kind fits; `osaka`, runtime 24,576 B (controller classification, owner may move it).
+
 Profile [`profile.json`](profile.json) (`draft`, SDK plan T40), from the probes of 2026-11-22
 (`clients/scaas-rpc/runs/2026-11-22-evm-probes.py`; summary `2026-11-22-evm-probes-summary.txt` beside it; one sample each, the
 24-h and 7-day windows of NET-EVM-19 still to run):

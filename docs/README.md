@@ -76,7 +76,7 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
 
 | Area | What you get | Read |
 |---|---|---|
-| Gasless meta-transactions | Users sign typed data; a relayer submits and pays gas; 2D nonces and lanes so one stuck operation never blocks another; fee policies from "free" (B2B) to fee-paying | [contracts/metatx.md](contracts/metatx.md) |
+| Gasless meta-transactions | Users sign typed data; a relayer submits and pays the gas fee; 2D nonces and lanes so one stuck operation never blocks another; token-fee policies from none (B2B, token fee 0) to a token fee the subject signs ([gas fee and token fee](../README.md#fee-terms)) | [contracts/metatx.md](contracts/metatx.md) |
 | Tokens and wrappers | Issuer tokens and wrappers of one to eight underlying legs (ERC-20 or the native coin) at fixed or adjustable rates; features chosen at creation; an open factory of immutable clones; contract-only allowances | [contracts/token-wrappers.md](contracts/token-wrappers.md) |
 | Accounts | Universal Account: one account identifier derived from any key type (secp256k1, ed25519, P-256, BLS, post-quantum…), registered per chain with proof of possession, registration relayable; `SmartKeyAccount` with many keys (ERC-1271); passkey-controlled smart accounts with guardians and recovery | [contracts/accounts.md](contracts/accounts.md) |
 | Mandates | `MandateWallet`: per-payment and per-period caps, approved payees and expiry | [contracts/mandates.md](contracts/mandates.md) |
@@ -85,7 +85,7 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
 | Procurement | Sealed-bid tenders with deposits, commit/reveal and refunds | [contracts/tender.md](contracts/tender.md) |
 | Asset tokenization | Regulated tokens, vesting and streaming, distributions, corporate actions, templates | [contracts/asset-suite.md](contracts/asset-suite.md) |
 | Confidential amounts | Zether: identities visible, amounts and balances hidden; shield, multi-recipient transfer with decoys, unshield; disclosure to an auditor through four openings. PQZ, the post-quantum line, is built and runs on the SCaaS testnet; a public chain needs its lattice precompile. Both are unaudited and on EVM only | [contracts/zether.md](contracts/zether.md), [contracts/pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) |
-| Many chains | Eight families — EVM (including Hedera), Cosmos, Soroban (Stellar, Pi Network), Move (Aptos, Sui), GRAM, Solana, NEAR, Algorand — with one relaying model; the depth differs per family, see the root [README](../README.md#3-contracts-what-is-built-on-what) | [networks/README.md](networks/README.md) |
+| Many chains | Eight families — EVM (in three tiers, [NET-EVM-20](networks/evm.md#NET-EVM-20)), Cosmos, Soroban (Stellar, Pi Network), Move (Aptos, Sui), GRAM, Solana, NEAR, Algorand — with one relaying model; the depth differs per family, see the root [README](../README.md#3-contracts-what-is-built-on-what) | [networks/README.md](networks/README.md) |
 | The node | Job API for server-side clients, a public gateway, finality-gated event feeds, gas breakers, sponsorship policies, an admin API with built-in users or OIDC | [node/README.md](node/README.md) |
 | Relayer mesh | Relayers that share intents with admitted partners or an open gossip network; private chains never leave the admitted set | [node/mesh.md](node/mesh.md), [node/gossip.md](node/gossip.md) |
 | Operations | SLOs, metrics and alerts, FinOps usage reports, incident runbooks, backup and disaster recovery | [node/ops.md](node/ops.md), [node/runbooks.md](node/runbooks.md) |
@@ -189,7 +189,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | Doc | Covers |
 |---|---|
 | [README](networks/README.md) | Common model, chain identity (`chain_uid`), signing domains, passkeys, availability |
-| [evm.md](networks/evm.md) · [hedera.md](networks/hedera.md) | EVM chains and Hedera |
+| [evm.md](networks/evm.md) · [hedera.md](networks/hedera.md) | EVM chains and their tiers; Hedera (tier 3, not yet eligible) |
 | [cosmos.md](networks/cosmos.md) · [soroban.md](networks/soroban.md) · [ton.md](networks/ton.md) | CosmWasm, Stellar / Pi, GRAM |
 | [sui.md](networks/sui.md) · [aptos.md](networks/aptos.md) · [solana.md](networks/solana.md) | Move families and Solana |
 | [near.md](networks/near.md) | NEAR |

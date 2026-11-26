@@ -3,6 +3,8 @@
 Public EVM mainnet. Row `celo-mainnet` of [`chain-uids.json`](../../../chain-uids.json): chain id **42220**, chain_uid
 `0x19ea3339d3c8cda97235bc8293240d5b9dadcdfbb5d4b0b90ee731cac1bd11c3`, network `mainnet`. A chain is (chainId, chain_uid) (NET-ALL-22).
 
+**EVM tier** ([NET-EVM-20](../../../../../docs/networks/evm.md#NET-EVM-20), owner 2026-11-26): *Tier 3: not yet eligible.* Block 30 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled.
+
 Profile [`profile.json`](profile.json) (`draft`, SDK plan T40), from the probes of 2026-11-22
 (`clients/scaas-rpc/runs/2026-11-22-evm-probes.py`; summary `2026-11-22-evm-probes-summary.txt` beside it; one sample each, the
 24-h and 7-day windows of NET-EVM-19 still to run):

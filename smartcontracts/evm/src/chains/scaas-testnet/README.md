@@ -3,6 +3,8 @@
 Chain đích **đầu tiên** cho Zether (quyết định #5: gas không phải ràng buộc, nên
 chạy private trước).
 
+**EVM tier** ([NET-EVM-20](../../../../../docs/networks/evm.md#NET-EVM-20), owner 2026-11-26): **Tier 1: supports Glamsterdam.** Amsterdam from block 1, runtime ceiling 131,072 B; the contract set deploys today.
+
 | | |
 |---|---|
 | chainId | **7622** (`0x1dc6`); formerly 9000 (`0x2328`), moved 2026-10-07 because 9000 is also Evmos Testnet. Genesis was reset: state started empty, every contract redeployed |

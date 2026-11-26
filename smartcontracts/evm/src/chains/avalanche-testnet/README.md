@@ -3,6 +3,8 @@
 Public EVM testnet. Row `avalanche-testnet` of [`chain-uids.json`](../../../chain-uids.json): chain id **43113**, chain_uid
 `0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b`, network `testnet`. A chain is (chainId, chain_uid) (NET-ALL-22). **It shares block 0 with C-Chain (43114)**: the chain id separates them (NET-ALL-25); NET-EVM-16.
 
+**EVM tier** ([NET-EVM-20](../../../../../docs/networks/evm.md#NET-EVM-20), owner 2026-11-26): *Tier 3: not yet eligible.* Block 32 M: `mldsa44`, `mldsa65`, `mldsa87` and PQZ disabled.
+
 Profile [`profile.json`](profile.json) (`draft`, chains-arweave plan T2; the format of SDK plan T40), from the probes of
 2026-11-22 (`clients/scaas-rpc/runs/2026-11-22-evm-probes.py`, chains-arweave T12; summary `2026-11-22-evm-probes-summary.txt`
 beside it; **one sample each**: the 24-h and 7-day windows of NET-EVM-19 are the operator's scheduler's, still to run):

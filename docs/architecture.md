@@ -33,8 +33,8 @@ as equivalent modules or programs elsewhere, and that checks the subject's signa
 every call. ERPs, portals, mobile apps and AI agents call them the way they call any API. The contracts are the
 product; everything else is a way to reach them:
 
-- **Smart contracts** (`smartcontracts/`) — **the product.** One code base per network family: EVM (with Hedera as a
-  per-chain variant), Cosmos, Soroban, Move (Aptos, Sui), GRAM and Solana ([networks/README.md](networks/README.md)).
+- **Smart contracts** (`smartcontracts/`) — **the product.** One code base per network family: EVM (in three tiers,
+  [NET-EVM-20](networks/evm.md#NET-EVM-20); Hedera, tier 3, is a per-chain variant of the code), Cosmos, Soroban, Move (Aptos, Sui), GRAM and Solana ([networks/README.md](networks/README.md)).
   On EVM: the token tree — one meta-transaction base, kinds by code, features chosen at creation
   ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21), [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)) — the
   open factory, the DEX ([contracts/dex.md](contracts/dex.md)), accounts and mandates (Universal Account registry,
@@ -142,14 +142,14 @@ Design consequences:
 | A token gatekeeper | The factory is open; provenance replaces allowlists. Controlled (regulated) tokens are an explicit creation-time choice, flags 5–9 on one regulated implementation per kind, not built ([CTR-AS-17](contracts/asset-suite.md#CTR-AS-17); [contracts/token-wrappers.md](contracts/token-wrappers.md), [contracts/asset-suite.md](contracts/asset-suite.md)) |
 | A hosted node service | The node is infrastructure anyone can run; operators are independent, set their own policies and can only refuse or delay, never forge |
 | A single-ERP product | Any ERP integrates through the same job API ([integration.md](integration.md)) |
-| A market maker or profit-seeking relayer market | Relayer economics are cost recovery between parties with aligned interests; fee = 0 is the B2B default ([Economics](#economics)) |
+| A market maker or profit-seeking relayer market | Relayer economics are cost recovery between parties with aligned interests; token fee 0 is the B2B default ([Economics](#economics)) |
 
 <a id="profiles"></a>
 ### 1.3 Profiles
 
 | Profile | Chains | Mesh | Typical relayers | Data exposure |
 |---|---|---|---|---|
-| **Public** (`profile = public`) | Public networks (Gnosis, Celo, Hedera, Cosmos chains, Sui, Aptos, GRAM, Solana, Stellar, Pi Network) | Open mesh (gossip, opt-in per chain, policy and job) plus the pull bus for partners | Issuer, distributors, partners, third-party open relayers | The ledger is public; private windows and the per-job bus scope control what is offered to peers ([INT-ERP-15](integration.md#INT-ERP-15)) |
+| **Public** (`profile = public`) | Public networks (EVM chains by tier, [NET-EVM-20](networks/evm.md#NET-EVM-20); Cosmos chains, Sui, Aptos, GRAM, Solana, Stellar, Pi Network) | Open mesh (gossip, opt-in per chain, policy and job) plus the pull bus for partners | Issuer, distributors, partners, third-party open relayers | The ledger is public; private windows and the per-job bus scope control what is offered to peers ([INT-ERP-15](integration.md#INT-ERP-15)) |
 | **Private / PoA** (`profile = private`, the default) | A permissioned chain (reference: SCaaS testnet, Nethermind, Clique, one signer, forks through Fusaka, base fee 0; [networks/evm.md](networks/evm.md)) | No gossip, ever; pull bus only to admitted private peers, served by the origin only, over PQ-protected carriers | The operator's own nodes and admitted private peers | Chain-local; intents never leave the admitted set ([NODE-MESH-06](node/mesh.md#NODE-MESH-06), [NODE-MESH-12](node/mesh.md#NODE-MESH-12)) |
 | **Consortium** | A permissioned or public chain shared by members | Pull bus between admitted members (SPKI-pinned mTLS or QUIC), optionally gossip for public chains | Each member runs a node | Per-job `bus_scope`: `restricted` (default), `open` (admitted peers) or `public` (also the open mesh) |
 
@@ -218,7 +218,7 @@ uses Zether; hiding the relationship itself is out of scope by design ("not a mi
 |---|---|---|
 | Use | Bridging to off-chain systems: bank rails, payment gateways, physical delivery, approvals | Token payments, DEX trades, mandates, tender deposits and refunds, loyalty |
 | Mechanism | Client state machine with compensation steps; the on-chain step is one leg | Contract atomicity: all legs in one transaction or none |
-| Failure | Can stall between phases; needs timeouts and compensation jobs | **Fee collected ⇔ operation completed**; any failure reverts everything and the nonce is not consumed |
+| Failure | Can stall between phases; needs timeouts and compensation jobs | **Token fee collected ⇔ operation completed**; any failure reverts everything and the nonce is not consumed |
 | Latency | Bound by the slowest party (seconds to days) | One inclusion plus finality |
 | Risk control | Maker-checker, compensations | `validUntil`, lane nonces, mandate caps, price limits signed by the subject |
 
@@ -241,7 +241,7 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 | Component | Path | Role | Status |
 |---|---|---|---|
 | EVM contracts | `smartcontracts/evm/` (Foundry; `src/{account,chains,common,confidential,dex,factory,governance,hedera,metatx,pqz,trade,ua,wallet,zether}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `GovernanceLib`, `WrappedLib`, `ZetherLib`, `HederaLib`, with pay inline behind the `PAYABLE` flag in `MetaTokenBase` (no `PayLib`; [CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UARegistry` (`src/ua/`); the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `scaas-testnet`, `zether`, `gnosis`, `celo` | BUILT (P1a–P1e): `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase`, kind `NORMAL` = `NormalToken`, kind `WRAPPED` = `WrappedToken` (1–8 legs, native-coin leg) + `WrappedLib`, `AdminLib` (since the governance build `GovernanceBase` / `GovernanceLib` and the chain's `GovernanceRouter`, branch `governance`), `HederaLib`, and `OpenFactory` with `createToken`/`TokenConfig`; `TradeLib` and the `SCaaSDex` clone (P2), the `*_ZETHER` kinds and `ZetherLib` (P3), `MandateWallet` and `SmartKeyAccount` (P4); the v1 line, the old `ZetherToken` and the typed structs in `legacy/` (P3–P5). SPECIFIED: `PqzToken` |
-| Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | BUILT (P1c–P1d): `IS_HEDERA` is an immutable of every implementation; `HederaLib` (`smartcontracts/evm/src/hedera/`) holds the HIP-632 path, and the HTS association is called from `WrappedLib` init; the Hedera wrapper children are deleted (the v1 `HederaMetaToken` is in `legacy/p5/`) |
+| Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | code BUILT (P1c–P1d) and kept unchanged; nothing deployed on Hedera, a tier-3 chain ([NET-EVM-20](networks/evm.md#NET-EVM-20)): `IS_HEDERA` is an immutable of every implementation; `HederaLib` (`smartcontracts/evm/src/hedera/`) holds the HIP-632 path, and the HTS association is called from `WrappedLib` init; the Hedera wrapper children are deleted (the v1 `HederaMetaToken` is in `legacy/p5/`) |
 | Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `scaas-token` (CW20 + meta-op), `scaas-mandate`, `scaas-dex`, shared `scaas-metaop` | BUILT |
 | Soroban contracts | `smartcontracts/soroban/` | SEP-41 token + `pay`, mandate, DEX; native auth as the meta-tx (Stellar and Pi Network) | BUILT |
 | Move contracts | `smartcontracts/move/{aptos,sui}/` | Package `scaas`: `meta` (per-subject account + lanes), mandate, DEX | BUILT |
@@ -302,7 +302,7 @@ classDiagram
     }
     class ERC20MetaTx {
         <<abstract>>
-        ERC-20, MetaTransfer, fee, UA ledger
+        ERC-20, MetaTransfer, token fee, UA ledger
     }
     class MetaTokenBase {
         <<abstract>>
@@ -326,7 +326,7 @@ the libraries ([CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); the four p
 One base serves every SCaaS contract: `MetaTxBase` carries the signed call, the nonce lanes and the one signature
 check (`SigCheck`, [CTR-MTX-25](contracts/metatx.md#CTR-MTX-25)), so `MandateWallet`, `SmartKeyAccount` and
 third-party contracts are gasless in the same way as tokens ([CTR-MTX-22](contracts/metatx.md#CTR-MTX-22)).
-`ERC20MetaTx` adds what only a balance holder can do (the typed transfer, a fee in the token, the UA ledger), and
+`ERC20MetaTx` adds what only a balance holder can do (the typed transfer, a token fee, the UA ledger), and
 `MetaTokenBase` adds trade, pay and administration. Every token is made by `OpenFactory` as an EIP-1167 clone of a
 registered implementation, initialized in the same call, and answers its own provenance
 ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25), [CTR-TOK-17](contracts/token-wrappers.md#CTR-TOK-17)).
@@ -378,18 +378,18 @@ flowchart LR
     SUB["Subject<br/>signs EIP-712 typed data"]
     SUB -->|"MetaTransfer<br/>transfer or payment"| SUBM
     SUB -->|"MetaTransaction<br/>any allowlisted function"| SUBM
-    SUBM["Submitter pays gas<br/>company relayer, open relayer or payee"]
+    SUBM["Submitter pays the gas fee<br/>company relayer, open relayer or payee"]
     SUBM -->|"mtxExecuteTransfer"| TOK["Token<br/>moves its own balance"]
     SUBM -->|"mtxExecute"| SELF["Any MetaTxBase contract<br/>runs a self-call"]
-    TOK -.->|"optional fee in the token"| SUBM
-    SELF -.->|"fee mode NONE outside tokens"| OFF["Gas booked off chain"]
+    TOK -.->|"optional token fee"| SUBM
+    SELF -.->|"token fee NONE outside tokens"| OFF["Gas fee booked off chain"]
 ```
 
 *Two signed structs, one relayer path; the contract itself checks relayer binding, expiry, lane nonce and signature
 before anything runs ([CTR-MTX-17](contracts/metatx.md#CTR-MTX-17), [CTR-MTX-23](contracts/metatx.md#CTR-MTX-23)).*
 
 Subjects hold no gas, and many never will (a loyalty member, a supplier's clerk, an AI agent). So the subject signs
-and anyone may submit: a relayer pays the gas and can delay or refuse an intent but never change it. The signature
+and anyone may submit: a relayer pays the gas fee and can delay or refuse an intent but never change it. The signature
 is checked inside the contract it targets — the EIP-712 `verifyingContract` is that contract, and the domain `salt`
 is the chain's `chain_uid` ([NET-ALL-22](networks/README.md#NET-ALL-22)) — so there is no trusted forwarder and no
 bundler between the subject and its funds ([CTR-MTX-16](contracts/metatx.md#CTR-MTX-16)).
@@ -397,14 +397,15 @@ bundler between the subject and its funds ([CTR-MTX-16](contracts/metatx.md#CTR-
 There are two signed structs because wallets must show what is signed. A transfer or payment is a typed
 `MetaTransfer` that a wallet displays field by field ("send `value` to `to`", with `entryRef` for a payment); anything
 else is a generic `MetaTransaction` whose `data` is a call of one of the contract's **own** functions, from a fixed
-selector allowlist ([CTR-MTX-19](contracts/metatx.md#CTR-MTX-19)). The self-call runs first and the fee is charged
+selector allowlist ([CTR-MTX-19](contracts/metatx.md#CTR-MTX-19)). The self-call runs first and the token fee is charged
 after, so a failed operation costs the subject nothing. Each subject has independent **lanes** (2D nonces), so a stuck
 payment never blocks an unrelated one, and a payment request derives its own lane so it can be paid at most once
 ([CTR-MTX-03](contracts/metatx.md#CTR-MTX-03)).
 
-Who pays is a commercial choice, not a contract change: the company relayer with fee 0 (the B2B default), a fee in
-the token to an open relayer, the payee submitting the payer's signed cheque itself, or the payee co-signing to pay
-the fee ([payers](contracts/metatx.md#payers), [payee fee](contracts/metatx.md#payee-fee)). A sponsorship
+Who pays is a commercial choice, not a contract change. The submitter always pays the gas fee; a token fee, signed in the
+intent and paid in the token, is how a relayer is paid back ([gas fee and token fee](../README.md#fee-terms)): the company
+relayer with token fee 0 (the B2B default), a token fee to an open relayer, the payee submitting the payer's signed cheque
+itself, or the payee co-signing to pay the token fee ([payers](contracts/metatx.md#payers), [payee fee](contracts/metatx.md#payee-fee)). A sponsorship
 policy is node configuration ([node/sponsorship.md](node/sponsorship.md)).
 
 <a id="accounts-and-keys"></a>
@@ -856,8 +857,8 @@ funds (except for `SELF_SCHNORR` accounts). Relayer lane keys are a third, unrel
 today; KMS/HSM signers plug in behind it); environment-variable key custody (`env:`) is for development only. A
 payment request is pinned by the typed-data domain (`chainId`, `verifyingContract`, and — specified — `salt =
 chain_uid`, the genesis hash) and expires at `validUntil`; a subject can revoke an unused signature with
-`cancelMetaNonce(batch)` (specified name `cancelNonce`). On private chains the B2B fee mode is `NONE`
-with `MODE_RESTRICT_RELAYER` and `fee = 0`; on public chains the gateway also accepts fee-paying intents from anyone.
+`cancelMetaNonce(batch)` (specified name `cancelNonce`). On private chains the B2B token-fee mode is `NONE`
+with `MODE_RESTRICT_RELAYER` and `fee = 0`; on public chains the gateway also accepts intents paying a token fee from anyone.
 
 <a id="authority-after-deployment"></a>
 ### 7.1 Authority after deployment
@@ -891,18 +892,18 @@ matrices are in [networks/README.md](networks/README.md).
 <a id="economics"></a>
 ## 9. Economics
 
-**Break-even of a fee-earning relayer** (an order-of-magnitude argument): a meta-tx on Gnosis costs about $0.00015 of
+**Break-even of a relayer earning token fees** (an order-of-magnitude argument): a meta-tx on Gnosis costs about $0.00015 of
 gas; at a 10× markup the margin is about $0.0015 per transaction; a relayer with an SLA RPC, a small VPS and gas float
 costs about $45–70 per month, so break-even is about $60 / $0.0015 = **40,000 transactions per month**. Most
 enterprises do not reach this early. Hence:
 
 1. Relayers are run by parties with an aligned business interest (issuer, distributors, partners, the payee), not by a
-   fee market. The only in-protocol reward is the intent's own `fee` / `feeRecipient`: no mesh sponsorship pool, no
+   fee market. The only in-protocol reward is the intent's own token fee (`fee` / `feeRecipient`): no mesh sponsorship pool, no
    forwarder pay, no stake ([NODE-MESH-05](node/mesh.md#NODE-MESH-05)). The opt-in `SponsorshipPool` is an application
    contract, not a mesh reward ([NODE-SPN-04](node/sponsorship.md#NODE-SPN-04)).
-2. **B2B default `fee = 0`** (`MODE_FEE_NONE` + `MODE_RESTRICT_RELAYER` to the company relayer,
-   [INT-ERP-06](integration.md#INT-ERP-06)): gas is an operating expense of the company relayer, booked per
-   transaction. `MODE_FEE_NONE` is also the cheapest mode (about 8,300 gas less than a fee-taking meta-tx).
+2. **B2B default token fee 0** (`MODE_FEE_NONE` + `MODE_RESTRICT_RELAYER` to the company relayer,
+   [INT-ERP-06](integration.md#INT-ERP-06)): the gas fee is an operating expense of the company relayer, booked per
+   transaction. `MODE_FEE_NONE` is also the cheapest mode (about 8,300 gas less than a meta-tx taking a token fee).
 3. Payee-side relaying removes the relayer dependence for incoming payments.
 4. A sponsorship policy (gas subsidy for qualifying inbound payments) is a node policy row, never a contract feature
    ([node/sponsorship.md](node/sponsorship.md)).

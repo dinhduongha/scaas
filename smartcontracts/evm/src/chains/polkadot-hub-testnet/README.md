@@ -3,6 +3,8 @@
 Public EVM testnet. Row `polkadot-hub-testnet` of [`chain-uids.json`](../../../chain-uids.json): chain id **420420417**, chain_uid
 `0xd6eec26135305a8ad257a20d003357284c8aa03d0bdb2b357ab0a22371e11ef2`, network `testnet`. A chain is (chainId, chain_uid) (NET-ALL-22). The EVM side (pallet-revive on REVM, `eth-rpc`, accounts as mapped H160) carries SCaaS; the Substrate side (sr25519, `System.Account`) is the chain-support Native column, read by the SDK (T41.dot). NET-EVM-17.
 
+**EVM tier** ([NET-EVM-20](../../../../../docs/networks/evm.md#NET-EVM-20), owner 2026-11-26): *Tier 3: not yet eligible.* REVM's hard 24,576-B runtime cap with no plan to raise it; its gas is no Ethereum gas.
+
 Profile [`profile.json`](profile.json) (`draft`, chains-arweave plan T11; the format of SDK plan T40), from the probes of
 2026-11-22 (`clients/scaas-rpc/runs/2026-11-22-evm-probes.py`, chains-arweave T12; summary `2026-11-22-evm-probes-summary.txt`
 beside it; **one sample each**: the 24-h and 7-day windows of NET-EVM-19 are the operator's scheduler's, still to run):
