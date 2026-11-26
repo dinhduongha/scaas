@@ -1589,7 +1589,8 @@ pub fn next_send(
     };
     let all_final = |upto: usize| plan.txs.iter().take(upto).all(|x| is_in(fin, x));
     let last_left = left.len() == 1;
-    if (serial(t) || last_left || first == held) && !all_final(first) {
+    // the record, the list and the node keys, and the last piece left (the held one), each once every one before is final
+    if (serial(t) || last_left) && !all_final(first) {
         return PqTreeNext::Wait;
     }
     if !serial(t) && !last_left && first != held {
@@ -1706,6 +1707,10 @@ mod tests {
         let g = rows();
         let p = plan_commit(&g, L20, "mldsa65", &plain()).unwrap();
         assert!(p.txs.iter().all(|t| L20.fits(t.gas)), "{p:?}");
+        // B-2: a plain commit's tree term is its own few targets', far below the cold tree of 512's (4.6 M regular)
+        let verify = g.kinds["mldsa65"].verify;
+        let r = record_gas(&g, "mldsa65", &plain()).unwrap();
+        assert!(r.regular < verify + 1_000_000, "{r:?}");
         let e = plan_commit(&g, L20, "mldsa87", &bounds()).unwrap_err();
         assert_eq!(e.what, "commit", "the record alone, by name: {e:?}");
         assert!(
