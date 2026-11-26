@@ -570,7 +570,7 @@ const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const isHex = (v) => typeof v === "string" && /^0x([0-9a-fA-F]{2})*$/.test(v);
 const isB32 = (v) => typeof v === "string" && /^0x[0-9a-fA-F]{64}$/.test(v);
 const isNat = (v) => Number.isSafeInteger(v) && v >= 0;
-/** A signer kind the contract accepts and this reader has no verifier for (the group kinds 0x0110 to 0x0113) is a defect of
+/** A signer kind the contract accepts and this reader has no verifier for (a native member it cannot check) is a defect of
  *  the reader, never a lying read (spec §10 step 5, C-7): `UANotVerifiable` by its name. */
 const notVerifiable = (e) => {
   if (e?.code === "UANotVerifiable") refuse("UANotVerifiable");

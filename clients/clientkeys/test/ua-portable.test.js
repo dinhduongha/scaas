@@ -1847,21 +1847,26 @@ test("verifyRegistration refuses every kinds.json invalid key by its error; vali
       () => undefined,
     );
   for (const r of K.invalid) refuses(go(r), r.error, JSON.stringify(r).slice(0, 120));
-  for (const r of K.valid.filter((x) => x.kind !== 0x0120 && !(x.kind >= 0x0110 && x.kind <= 0x0113)))
-    refuses(go(r), "UAPoP", r.keyData.slice(0, 40));
+  for (const r of K.valid.filter((x) => x.kind !== 0x0120)) refuses(go(r), "UAPoP", r.keyData.slice(0, 40));
   assert.equal(K.invalid.length, 225); // bls-multi T4: 207 + the 18 0x0121 refusal rows
 });
 
-test("the group kinds have no verifier here: refused, never accepted (C14; ua-rs checks them)", () => {
+// The group kinds (src/ua-group.js, ARCH-POS-18): every groups.json registration verifies, every register negative is refused by its
+// error, as ua-rs (tests/groups_verify.rs) and the registry refuse it.
+test("the group kinds' registrations: every groups.json group accepted, every register negative refused by its error", () => {
   const G = JSON.parse(readFileSync(new URL("groups.json", dir), "utf8"));
   const none = { pqzKey: "0x", pqzPopHash: Z, kemPk: "0x" };
-  for (const g of G.groups)
-    refuses(
-      () =>
-        verifyRegistration({ kind: g.kind, keyData: g.keyData, attrs: none, pop: g.pop.blob, pqzPop: "0x" }, keysOf),
-      "UANotVerifiable",
-      g.name,
-    );
+  const reg = (kind, keyData, pop) => () =>
+    verifyRegistration({ kind, keyData, attrs: none, pop, pqzPop: "0x" }, keysOf);
+  let n = 0;
+  for (const g of G.groups) {
+    reg(g.kind, g.keyData, g.pop.blob)();
+    for (const x of g.negatives.filter((y) => y.entry === "register")) {
+      refuses(reg(g.kind, x.keyData, x.pop), x.error, `${g.name} ${x.name}`);
+      n++;
+    }
+  }
+  assert.deepEqual([G.groups.length, n], [20, 57]);
 });
 
 // bls-multi T4 (spec 2026-11-19-bls12381-multi §2, §4, §6): the blsMultiRegistrations rows: the pop (the members' aggregate over

@@ -87,7 +87,10 @@ fn verify_more(kind: u16, vk: &[u8], digest: &[u8; 32], m: &[u8; 32], s0: &[u8])
     let m_other = ua_message(other, &purpose_tag("metatx").unwrap(), digest).unwrap();
     let word = |x: u8| [vec![0u8; 31], vec![x]].concat();
     let g = if secp {
-        secp_x(2, "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+        secp_x(
+            2,
+            "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        )
     } else {
         [word(1), word(2)].concat()
     };
@@ -99,19 +102,67 @@ fn verify_more(kind: u16, vk: &[u8], digest: &[u8; 32], m: &[u8; 32], s0: &[u8])
     };
     let mut v = vec![
         neg_verify("wrong-key", &g, m, s0, "vk replaced by the generator G"),
-        neg_verify("wrong-kind", vk, &m_other, s0, "the metatx signature offered for the other group kind of the curve's message"),
-        neg_verify("sig-trailing-byte", vk, m, &[s0, &[0]].concat(), "metatx signature with one byte appended"),
-        neg_verify("sig-truncated", vk, m, &s0[..s0.len() - 1], "metatx signature without its last byte"),
-        neg_verify("r-off-curve", vk, m, &[&off[..], &s0[w..]].concat(), "R replaced by a point off the curve (secp256k1 x = 5, bn254 (1, 3))"),
+        neg_verify(
+            "wrong-kind",
+            vk,
+            &m_other,
+            s0,
+            "the metatx signature offered for the other group kind of the curve's message",
+        ),
+        neg_verify(
+            "sig-trailing-byte",
+            vk,
+            m,
+            &[s0, &[0]].concat(),
+            "metatx signature with one byte appended",
+        ),
+        neg_verify(
+            "sig-truncated",
+            vk,
+            m,
+            &s0[..s0.len() - 1],
+            "metatx signature without its last byte",
+        ),
+        neg_verify(
+            "r-off-curve",
+            vk,
+            m,
+            &[&off[..], &s0[w..]].concat(),
+            "R replaced by a point off the curve (secp256k1 x = 5, bn254 (1, 3))",
+        ),
     ];
     if secp {
-        v.push(neg_verify("vk-prefix-04", &[&[4u8][..], &vk[1..]].concat(), m, s0, "vk with prefix 0x04 (x unchanged)"));
+        v.push(neg_verify(
+            "vk-prefix-04",
+            &[&[4u8][..], &vk[1..]].concat(),
+            m,
+            s0,
+            "vk with prefix 0x04 (x unchanged)",
+        ));
     } else {
         let z = plus_modulus::<ark_bn254::Fr>(&s0[64..]);
-        v.push(neg_verify("z-plus-order", vk, m, &[&s0[..64], &z[..]].concat(), "z + r: the same scalar mod r, non-canonical"));
+        v.push(neg_verify(
+            "z-plus-order",
+            vk,
+            m,
+            &[&s0[..64], &z[..]].concat(),
+            "z + r: the same scalar mod r, non-canonical",
+        ));
         let rx = plus_modulus::<ark_bn254::Fq>(&s0[..32]);
-        v.push(neg_verify("r-x-plus-p", vk, m, &[&rx[..], &s0[32..]].concat(), "x(R) + p: the same point mod p, non-canonical"));
-        v.push(neg_verify("vk-off-curve", &[word(1), word(3)].concat(), m, s0, "vk (1, 3), off the curve"));
+        v.push(neg_verify(
+            "r-x-plus-p",
+            vk,
+            m,
+            &[&rx[..], &s0[32..]].concat(),
+            "x(R) + p: the same point mod p, non-canonical",
+        ));
+        v.push(neg_verify(
+            "vk-off-curve",
+            &[word(1), word(3)].concat(),
+            m,
+            s0,
+            "vk (1, 3), off the curve",
+        ));
     }
     v
 }

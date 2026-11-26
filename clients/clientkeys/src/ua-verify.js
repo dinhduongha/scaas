@@ -2,7 +2,7 @@
 // `verify(kind, keyData, msg, sig, pop)` per derived kind (any throw is a refusal), the native EOA rule `nativeOk`, and the
 // client's re-check of a portable record (`verifyRegistration`, `verifyKemRecord`, `verifyPqzKeyRecord`; UA8-D24, C14): the
 // rules of ua-rs `ua_portable::check_*` on the noble verifiers, the same rows and errors. Not in ua.js, which the signer bundles load:
-// nothing here reaches them. The group kinds 0x0110–0x0113 have no verifier here: `UANotVerifiable`, never an acceptance.
+// nothing here reaches them. The group kinds 0x0110–0x0113 are checked by `ua-group.js` (ARCH-POS-18), as the registry checks them.
 import { p256 } from "@noble/curves/nist.js";
 import { secp256k1, schnorr } from "@noble/curves/secp256k1.js";
 import { bn254 } from "@noble/curves/bn254.js";
@@ -13,6 +13,7 @@ import { schnorrVerify as zetherVerify } from "./zether.js";
 import { PQ_KINDS, pqMessage } from "./pq.js";
 import * as ua from "./ua.js";
 import { blsMultiOk } from "./bls-multi.js";
+import { groupOk, groupVkLength } from "./ua-group.js";
 import { PURPOSE_PQZ_SCOPED_KEY, pqzScopedKeyRecordDigest } from "./pqzopen.js";
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, abiEncode, word } from "./bytes.js";
 export const int = (b) => BigInt(hex(b));
@@ -182,6 +183,10 @@ export const VERIFY = {
   0x0108: (kd, msg, sig) => kd.length === 64 && nativeOk(hex(keccak_256(kd).subarray(12)), msg, hex(sig)),
   // bls12381-multi (spec 2026-11-19): key data d; `pop` the registration PoP, else `minimal` picks verifyMinimal over verify
   0x0121: (kd, msg, sig, pop, minimal) => blsMultiOk(kd, msg, sig, minimal, pop),
+  // the group kinds (ua-group.js): `pop` the record's own check on its key data (`verifyPop`), else the stored vk (`verify`)
+  ...Object.fromEntries(
+    [0x0110, 0x0111, 0x0112, 0x0113].map((k) => [k, (kd, msg, sig, pop) => groupOk(k, kd, msg, sig, pop)]),
+  ),
 };
 /** `verify` / `verifyPop` (pop only matters for the BLS kinds); `minimal` (0x0121 only): the stored paths' verifyMinimal (spec
  *  2026-11-19-bls12381-multi §5.3). Any throw is a refusal. */
@@ -283,7 +288,6 @@ export function kindVerify(kind, keyData, msg, sig, pop, minimal = false) {
   );
 }
 
-const isGroup = (kind) => kind >= 0x0110 && kind <= 0x0113;
 const refuse = (code, reason) => {
   throw new ua.UAError(code, reason);
 };
@@ -372,7 +376,6 @@ const verdict = (ok, a, code, reason) => {
  *  levels), each slot accepted (`a.record`, outside the pop), enabled in `en` (the `enabled` word of `d`'s version) and by `slotOk`. */
 function signatureOk(kind, d, id, purpose, digest, sig, members, a, eligible = d, en = ALL) {
   const message = ua.uaMessage(kind, purpose, digest);
-  if (isGroup(kind)) refuse("UANotVerifiable", `kind 0x${kind.toString(16)}`);
   if (ua.hasSurplusForm(kind)) {
     // spec 2026-11-19-bls12381-multi §5.3: `pop` v2 → verifyPop(d), every other purpose → verifyMinimal
     const pop = eq(toBytes(purpose), toBytes(ua.POP_V2_TAG));
@@ -432,7 +435,9 @@ function slotOk(m, key, digest, md, s, members, a) {
  *  check. `minimal`: a stored path (`slotOk`), where a surplus-form member (0x0121) takes its minimal form; `authOk` passes false. */
 function leafOk(m, key, md, sig, native, minimal) {
   if (m.kind === 0x0001) return nativeOk(`0x${m.id.slice(26)}`, native, hex(sig));
-  if (ua.isNativeKind(m.kind) || isGroup(m.kind)) refuse("UANotVerifiable", `member ${m.id}`);
+  if (ua.isNativeKind(m.kind)) refuse("UANotVerifiable", `member ${m.id}`);
+  // a group kind signs against its stored vk, the key data's head (ua-rs `leaf_ok`, the registry's `keyPtr`)
+  if (groupVkLength(m.kind)) key = toBytes(key).subarray(0, groupVkLength(m.kind));
   return kindVerify(m.kind, key, ua.uaMessage(m.kind, ua.purposeTag("member"), md), sig, false, minimal);
 }
 /** A registration row `{ kind, keyData, attrs, pop, pqzPop }` as `register` checks it, on bytes and the accepted bits (ua-rs `check_registration`):
