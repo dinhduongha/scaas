@@ -41,6 +41,10 @@ enum StoreError {
   profilePassphraseRequired,
   profileRollback,
   profileDamaged,
+
+  /// owner 2026-11-28 (CLI-UPR-22's Change): a writer that waited 120 s on a re-seal; a part's manifest at 65,536 entries
+  profileBusy,
+  profilePartFull,
 }
 
 /// How an item is kept: on this device only, out of cloud backups, behind user presence.

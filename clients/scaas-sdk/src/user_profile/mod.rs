@@ -717,7 +717,7 @@ impl From<Error> for SdkError {
 }
 
 /// A store code as the face's (CLI-UPR-22 names `StoreError`'s codes): `ProfileFormat` is `VaultFormat` at the store;
-/// `ProfileBusy` and `ProfilePartFull`, which `StoreError` does not name, are `Unavailable` (the write is not taken now).
+/// `ProfileBusy` and `ProfilePartFull` by name (owner 2026-11-28; they were `Unavailable`).
 fn store_code(e: Error) -> StoreError {
     match e {
         Error::StoreConflict => StoreError::Conflict,
@@ -726,7 +726,8 @@ fn store_code(e: Error) -> StoreError {
         Error::ProfilePassphraseRequired => StoreError::ProfilePassphraseRequired,
         Error::ProfileRollback => StoreError::ProfileRollback,
         Error::ProfileDamaged => StoreError::ProfileDamaged,
-        Error::ProfileBusy | Error::ProfilePartFull => StoreError::Unavailable,
+        Error::ProfileBusy => StoreError::ProfileBusy,
+        Error::ProfilePartFull => StoreError::ProfilePartFull,
         // the profile-level codes never come from a store call: `Io`
         Error::Argument
         | Error::VaultIo
@@ -840,5 +841,30 @@ impl SecureStore for PartStore {
         }
         let f = self.run(move |c, p| c.lock_item(p, &name)).await?;
         Ok(StoreLock::new(Box::new(f)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Owner 2026-11-28 (CLI-UPR-22's Change): the store codes reach the face by name, `ProfileBusy` and `ProfilePartFull`
+    /// among them (no longer `Unavailable`); `ProfileFormat` is the store's `VaultFormat`.
+    #[test]
+    fn store_codes_by_name() {
+        use super::{store_code, Error};
+        for e in [
+            Error::ProfileBusy,
+            Error::ProfilePartFull,
+            Error::ProfileLocked,
+            Error::ProfilePassphraseRequired,
+            Error::ProfileRollback,
+            Error::ProfileDamaged,
+            Error::VaultFormat,
+        ] {
+            assert_eq!(format!("{:?}", store_code(e)), e.code());
+        }
+        assert_eq!(
+            format!("{:?}", store_code(Error::ProfileFormat)),
+            "VaultFormat"
+        );
     }
 }

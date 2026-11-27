@@ -13000,6 +13000,13 @@ class SdkError:  # type: ignore
         def __repr__(self):
             return "SdkError.ProfileDamaged({})".format(repr(str(self)))
     _UniffiTempSdkError.ProfileDamaged = ProfileDamaged # type: ignore
+    class ProfileHiddenAmbiguous(_UniffiTempSdkError):
+        """
+        a hidden name and passphrase that open two or more hidden profiles (owner 2026-11-28): `hidden_matches` lists them
+"""
+        def __repr__(self):
+            return "SdkError.ProfileHiddenAmbiguous({})".format(repr(str(self)))
+    _UniffiTempSdkError.ProfileHiddenAmbiguous = ProfileHiddenAmbiguous # type: ignore
     class Ua(_UniffiTempSdkError):
         """
         A `scaas-ua` wallet error, by its own code.
@@ -13444,10 +13451,14 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 106:
-            return SdkError.Ua(
+            return SdkError.ProfileHiddenAmbiguous(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 107:
+            return SdkError.Ua(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 108:
             return SdkError.Rpc(
                 _UniffiFfiConverterString.read(buf),
             )
@@ -13664,6 +13675,8 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
         if isinstance(value, SdkError.ProfileRollback):
             return
         if isinstance(value, SdkError.ProfileDamaged):
+            return
+        if isinstance(value, SdkError.ProfileHiddenAmbiguous):
             return
         if isinstance(value, SdkError.Ua):
             return
@@ -13882,10 +13895,12 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
             buf.write_i32(104)
         if isinstance(value, SdkError.ProfileDamaged):
             buf.write_i32(105)
-        if isinstance(value, SdkError.Ua):
+        if isinstance(value, SdkError.ProfileHiddenAmbiguous):
             buf.write_i32(106)
-        if isinstance(value, SdkError.Rpc):
+        if isinstance(value, SdkError.Ua):
             buf.write_i32(107)
+        if isinstance(value, SdkError.Rpc):
+            buf.write_i32(108)
 
 
 class SeedBackupProtocol(typing.Protocol):
@@ -26234,6 +26249,25 @@ class StoreError:  # type: ignore
         def __repr__(self):
             return "StoreError.ProfileDamaged({})".format(str(self))
     _UniffiTempStoreError.ProfileDamaged = ProfileDamaged # type: ignore
+    class ProfileBusy(_UniffiTempStoreError):
+        """
+        owner 2026-11-28 (CLI-UPR-22's Change): a writer that waited 120 s on a re-seal; a part's manifest at 65,536 entries
+"""
+        
+        def __init__(self):
+            pass
+
+        def __repr__(self):
+            return "StoreError.ProfileBusy({})".format(str(self))
+    _UniffiTempStoreError.ProfileBusy = ProfileBusy # type: ignore
+    class ProfilePartFull(_UniffiTempStoreError):
+        
+        def __init__(self):
+            pass
+
+        def __repr__(self):
+            return "StoreError.ProfilePartFull({})".format(str(self))
+    _UniffiTempStoreError.ProfilePartFull = ProfilePartFull # type: ignore
 
 StoreError = _UniffiTempStoreError # type: ignore
 del _UniffiTempStoreError
@@ -26270,6 +26304,12 @@ class _UniffiFfiConverterTypeStoreError(_UniffiConverterRustBuffer):
         if variant == 9:
             return StoreError.ProfileDamaged(
             )
+        if variant == 10:
+            return StoreError.ProfileBusy(
+            )
+        if variant == 11:
+            return StoreError.ProfilePartFull(
+            )
         raise InternalError("Raw enum value doesn't match any cases")
 
     @staticmethod
@@ -26292,6 +26332,10 @@ class _UniffiFfiConverterTypeStoreError(_UniffiConverterRustBuffer):
             return
         if isinstance(value, StoreError.ProfileDamaged):
             return
+        if isinstance(value, StoreError.ProfileBusy):
+            return
+        if isinstance(value, StoreError.ProfilePartFull):
+            return
 
     @staticmethod
     def write(value, buf):
@@ -26313,6 +26357,10 @@ class _UniffiFfiConverterTypeStoreError(_UniffiConverterRustBuffer):
             buf.write_i32(8)
         if isinstance(value, StoreError.ProfileDamaged):
             buf.write_i32(9)
+        if isinstance(value, StoreError.ProfileBusy):
+            buf.write_i32(10)
+        if isinstance(value, StoreError.ProfilePartFull):
+            buf.write_i32(11)
 
 
 

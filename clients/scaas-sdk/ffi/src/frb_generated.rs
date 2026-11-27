@@ -24687,6 +24687,8 @@ impl SseDecode for scaas_sdk::vault::store::StoreError {
             6 => scaas_sdk::vault::store::StoreError::ProfilePassphraseRequired,
             7 => scaas_sdk::vault::store::StoreError::ProfileRollback,
             8 => scaas_sdk::vault::store::StoreError::ProfileDamaged,
+            9 => scaas_sdk::vault::store::StoreError::ProfileBusy,
+            10 => scaas_sdk::vault::store::StoreError::ProfilePartFull,
             _ => unreachable!("Invalid variant for StoreError: {}", inner),
         };
     }
@@ -32498,6 +32500,8 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::vault::store::Store
             scaas_sdk::vault::store::StoreError::ProfilePassphraseRequired => 6.into_dart(),
             scaas_sdk::vault::store::StoreError::ProfileRollback => 7.into_dart(),
             scaas_sdk::vault::store::StoreError::ProfileDamaged => 8.into_dart(),
+            scaas_sdk::vault::store::StoreError::ProfileBusy => 9.into_dart(),
+            scaas_sdk::vault::store::StoreError::ProfilePartFull => 10.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -38248,6 +38252,8 @@ impl SseEncode for scaas_sdk::vault::store::StoreError {
                 scaas_sdk::vault::store::StoreError::ProfilePassphraseRequired => 6,
                 scaas_sdk::vault::store::StoreError::ProfileRollback => 7,
                 scaas_sdk::vault::store::StoreError::ProfileDamaged => 8,
+                scaas_sdk::vault::store::StoreError::ProfileBusy => 9,
+                scaas_sdk::vault::store::StoreError::ProfilePartFull => 10,
                 _ => {
                     unimplemented!("");
                 }

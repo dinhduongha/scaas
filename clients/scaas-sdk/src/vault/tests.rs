@@ -689,6 +689,9 @@ fn store_codes_map_by_name() {
         ),
         (StoreError::ProfileRollback, "ProfileRollback"),
         (StoreError::ProfileDamaged, "ProfileDamaged"),
+        // owner 2026-11-28 (CLI-UPR-22): a writer that waited on a re-seal, a part's manifest full
+        (StoreError::ProfileBusy, "ProfileBusy"),
+        (StoreError::ProfilePartFull, "ProfilePartFull"),
         (StoreError::Conflict, "StoreConflict"),
         (StoreError::Io, "VaultIo"),
         (StoreError::Unavailable, "VaultIo"),

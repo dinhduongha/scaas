@@ -61,6 +61,8 @@ pub(crate) fn io(e: StoreError) -> SdkError {
         StoreError::ProfilePassphraseRequired => SdkError::ProfilePassphraseRequired,
         StoreError::ProfileRollback => SdkError::ProfileRollback,
         StoreError::ProfileDamaged => SdkError::ProfileDamaged,
+        StoreError::ProfileBusy => SdkError::ProfileBusy,
+        StoreError::ProfilePartFull => SdkError::ProfilePartFull,
         StoreError::Io | StoreError::Unavailable | StoreError::Unexpected => SdkError::VaultIo,
     }
 }

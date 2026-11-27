@@ -34957,6 +34957,13 @@ internal class SdkException: UniffiException {
     }
     
     /// <summary>
+    /// a hidden name and passphrase that open two or more hidden profiles (owner 2026-11-28): `hidden_matches` lists them
+    /// </summary>
+    public class ProfileHiddenAmbiguous: SdkException {
+        public ProfileHiddenAmbiguous(string message): base(message) {}
+    }
+    
+    /// <summary>
     /// A `scaas-ua` wallet error, by its own code.
     /// </summary>
     public class Ua: SdkException {
@@ -35083,8 +35090,9 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case 103: return new SdkException.KeyLocked(FfiConverterString.INSTANCE.Read(stream));
             case 104: return new SdkException.ProfileRollback(FfiConverterString.INSTANCE.Read(stream));
             case 105: return new SdkException.ProfileDamaged(FfiConverterString.INSTANCE.Read(stream));
-            case 106: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
-            case 107: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
+            case 106: return new SdkException.ProfileHiddenAmbiguous(FfiConverterString.INSTANCE.Read(stream));
+            case 107: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
+            case 108: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Read()", value));
         }
@@ -35411,11 +35419,14 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case SdkException.ProfileDamaged:
                 stream.WriteInt(105);
                 break;
-            case SdkException.Ua:
+            case SdkException.ProfileHiddenAmbiguous:
                 stream.WriteInt(106);
                 break;
-            case SdkException.Rpc:
+            case SdkException.Ua:
                 stream.WriteInt(107);
+                break;
+            case SdkException.Rpc:
+                stream.WriteInt(108);
                 break;
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Write()", value));
@@ -35857,6 +35868,19 @@ internal class StoreException: UniffiException {
     }
     
     
+    /// <summary>
+    /// owner 2026-11-28 (CLI-UPR-22's Change): a writer that waited 120 s on a re-seal; a part's manifest at 65,536 entries
+    /// </summary>
+    public class ProfileBusy : StoreException {
+        public ProfileBusy() : base() {}
+    }
+    
+    
+    public class ProfilePartFull : StoreException {
+        public ProfilePartFull() : base() {}
+    }
+    
+    
 
     
 }
@@ -35885,6 +35909,10 @@ class FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException>, CallS
                 return new StoreException.ProfileRollback();
             case 9:
                 return new StoreException.ProfileDamaged();
+            case 10:
+                return new StoreException.ProfileBusy();
+            case 11:
+                return new StoreException.ProfilePartFull();
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeStoreError.Read()", value));
         }
@@ -35919,6 +35947,12 @@ class FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException>, CallS
 
             case StoreException.ProfileDamaged variant_value:
                 return 4;
+
+            case StoreException.ProfileBusy variant_value:
+                return 4;
+
+            case StoreException.ProfilePartFull variant_value:
+                return 4;
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeStoreError.AllocationSize()", value));
         }
@@ -35952,6 +35986,12 @@ class FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException>, CallS
                 break;
             case StoreException.ProfileDamaged variant_value:
                 stream.WriteInt(9);
+                break;
+            case StoreException.ProfileBusy variant_value:
+                stream.WriteInt(10);
+                break;
+            case StoreException.ProfilePartFull variant_value:
+                stream.WriteInt(11);
                 break;
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeStoreError.Write()", value));

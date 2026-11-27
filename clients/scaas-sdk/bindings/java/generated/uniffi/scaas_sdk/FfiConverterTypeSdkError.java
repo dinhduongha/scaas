@@ -112,8 +112,9 @@ public enum FfiConverterTypeSdkError implements FfiConverterRustBuffer<SdkExcept
             case 103 -> new SdkException.KeyLocked(FfiConverterString.INSTANCE.read(buf));
             case 104 -> new SdkException.ProfileRollback(FfiConverterString.INSTANCE.read(buf));
             case 105 -> new SdkException.ProfileDamaged(FfiConverterString.INSTANCE.read(buf));
-            case 106 -> new SdkException.Ua(FfiConverterString.INSTANCE.read(buf));
-            case 107 -> new SdkException.Rpc(FfiConverterString.INSTANCE.read(buf));
+            case 106 -> new SdkException.ProfileHiddenAmbiguous(FfiConverterString.INSTANCE.read(buf));
+            case 107 -> new SdkException.Ua(FfiConverterString.INSTANCE.read(buf));
+            case 108 -> new SdkException.Rpc(FfiConverterString.INSTANCE.read(buf));
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };
     }
@@ -441,11 +442,14 @@ public enum FfiConverterTypeSdkError implements FfiConverterRustBuffer<SdkExcept
             case SdkException.ProfileDamaged x -> {
                 buf.putInt(105);
             }
-            case SdkException.Ua x -> {
+            case SdkException.ProfileHiddenAmbiguous x -> {
                 buf.putInt(106);
             }
-            case SdkException.Rpc x -> {
+            case SdkException.Ua x -> {
                 buf.putInt(107);
+            }
+            case SdkException.Rpc x -> {
+                buf.putInt(108);
             }
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };

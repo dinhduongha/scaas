@@ -591,6 +591,8 @@ fn store_err(e: JsValue) -> StoreError {
         "ProfilePassphraseRequired" => StoreError::ProfilePassphraseRequired,
         "ProfileRollback" => StoreError::ProfileRollback,
         "ProfileDamaged" => StoreError::ProfileDamaged,
+        "ProfileBusy" => StoreError::ProfileBusy,
+        "ProfilePartFull" => StoreError::ProfilePartFull,
         _ => StoreError::Unexpected,
     }
 }

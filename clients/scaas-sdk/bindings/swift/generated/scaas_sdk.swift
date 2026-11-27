@@ -28193,6 +28193,11 @@ public enum SdkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
     case ProfileDamaged(message: String)
     
     /**
+     * a hidden name and passphrase that open two or more hidden profiles (owner 2026-11-28): `hidden_matches` lists them
+     */
+    case ProfileHiddenAmbiguous(message: String)
+    
+    /**
      * A `scaas-ua` wallet error, by its own code.
      */
     case Ua(message: String)
@@ -28651,11 +28656,15 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 106: return .Ua(
+        case 106: return .ProfileHiddenAmbiguous(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 107: return .Rpc(
+        case 107: return .Ua(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 108: return .Rpc(
             message: try FfiConverterString.read(from: &buf)
         )
         
@@ -28880,10 +28889,12 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(104))
         case .ProfileDamaged(_ /* message is ignored*/):
             writeInt(&buf, Int32(105))
-        case .Ua(_ /* message is ignored*/):
+        case .ProfileHiddenAmbiguous(_ /* message is ignored*/):
             writeInt(&buf, Int32(106))
-        case .Rpc(_ /* message is ignored*/):
+        case .Ua(_ /* message is ignored*/):
             writeInt(&buf, Int32(107))
+        case .Rpc(_ /* message is ignored*/):
+            writeInt(&buf, Int32(108))
 
         
         }
@@ -29262,6 +29273,11 @@ public enum StoreError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     case ProfilePassphraseRequired
     case ProfileRollback
     case ProfileDamaged
+    /**
+     * owner 2026-11-28 (CLI-UPR-22's Change): a writer that waited 120 s on a re-seal; a part's manifest at 65,536 entries
+     */
+    case ProfileBusy
+    case ProfilePartFull
 
     
 
@@ -29300,6 +29316,8 @@ public struct FfiConverterTypeStoreError: FfiConverterRustBuffer {
         case 7: return .ProfilePassphraseRequired
         case 8: return .ProfileRollback
         case 9: return .ProfileDamaged
+        case 10: return .ProfileBusy
+        case 11: return .ProfilePartFull
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29346,6 +29364,14 @@ public struct FfiConverterTypeStoreError: FfiConverterRustBuffer {
         
         case .ProfileDamaged:
             writeInt(&buf, Int32(9))
+        
+        
+        case .ProfileBusy:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .ProfilePartFull:
+            writeInt(&buf, Int32(11))
         
         }
     }

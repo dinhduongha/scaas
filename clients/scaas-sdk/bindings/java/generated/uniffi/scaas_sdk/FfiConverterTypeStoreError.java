@@ -17,6 +17,8 @@ public enum FfiConverterTypeStoreError implements FfiConverterRustBuffer<StoreEx
             case 7 -> new StoreException.ProfilePassphraseRequired();
             case 8 -> new StoreException.ProfileRollback();
             case 9 -> new StoreException.ProfileDamaged();
+            case 10 -> new StoreException.ProfileBusy();
+            case 11 -> new StoreException.ProfilePartFull();
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };
     }
@@ -60,6 +62,14 @@ public enum FfiConverterTypeStoreError implements FfiConverterRustBuffer<StoreEx
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4L
             );
+            case StoreException.ProfileBusy x -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4L
+            );
+            case StoreException.ProfilePartFull x -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4L
+            );
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };
     }
@@ -93,6 +103,12 @@ public enum FfiConverterTypeStoreError implements FfiConverterRustBuffer<StoreEx
             }
             case StoreException.ProfileDamaged x -> {
                 buf.putInt(9);
+            }
+            case StoreException.ProfileBusy x -> {
+                buf.putInt(10);
+            }
+            case StoreException.ProfilePartFull x -> {
+                buf.putInt(11);
             }
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };

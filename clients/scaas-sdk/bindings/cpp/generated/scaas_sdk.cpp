@@ -18600,9 +18600,12 @@ std::shared_ptr<SdkError> FfiConverterSdkError::read(RustStream &stream) {
         return std::make_shared<sdk_error::ProfileDamaged>(FfiConverterString::read(stream));
     
     case 106:
-        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::ProfileHiddenAmbiguous>(FfiConverterString::read(stream));
     
     case 107:
+        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+    
+    case 108:
         return std::make_shared<sdk_error::Rpc>(FfiConverterString::read(stream));
     
     default:
@@ -19044,6 +19047,16 @@ std::shared_ptr<StoreError> FfiConverterStoreError::read(RustStream &stream) {
         store_error::ProfileDamaged var;
         return std::make_shared<store_error::ProfileDamaged>(var);
     }
+    case 10:
+    {
+        store_error::ProfileBusy var;
+        return std::make_shared<store_error::ProfileBusy>(var);
+    }
+    case 11:
+    {
+        store_error::ProfilePartFull var;
+        return std::make_shared<store_error::ProfilePartFull>(var);
+    }
     default:
         throw std::runtime_error("Unexpected error variant");
     }
@@ -19097,6 +19110,16 @@ void FfiConverterStoreError::write(RustStream &stream, const StoreError &val) {
         auto var = static_cast<const store_error::ProfileDamaged&>(val);
         break;
     }
+    case 10:
+    {
+        auto var = static_cast<const store_error::ProfileBusy&>(val);
+        break;
+    }
+    case 11:
+    {
+        auto var = static_cast<const store_error::ProfilePartFull&>(val);
+        break;
+    }
     }
 }
 
@@ -19145,6 +19168,16 @@ uint64_t FfiConverterStoreError::allocation_size(const StoreError &val) {
     case 9:
     {
         auto var = static_cast<const store_error::ProfileDamaged&>(val);
+        return static_cast<uint64_t>(sizeof(int32_t));
+    }
+    case 10:
+    {
+        auto var = static_cast<const store_error::ProfileBusy&>(val);
+        return static_cast<uint64_t>(sizeof(int32_t));
+    }
+    case 11:
+    {
+        auto var = static_cast<const store_error::ProfilePartFull&>(val);
         return static_cast<uint64_t>(sizeof(int32_t));
     }
     default:

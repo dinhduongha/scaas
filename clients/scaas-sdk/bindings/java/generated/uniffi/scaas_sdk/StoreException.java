@@ -116,6 +116,31 @@ public class StoreException extends java.lang.Exception {
       
       
     }
+    
+    /**
+     * owner 2026-11-28 (CLI-UPR-22's Change): a writer that waited 120 s on a re-seal; a part's manifest at 65,536 entries
+     */
+    public static class ProfileBusy extends StoreException {
+      public ProfileBusy() {
+        super(new StringBuilder()
+        .toString());
+        }
+
+      
+      
+      
+    }
+    
+    public static class ProfilePartFull extends StoreException {
+      public ProfilePartFull() {
+        super(new StringBuilder()
+        .toString());
+        }
+
+      
+      
+      
+    }
      
 }
 

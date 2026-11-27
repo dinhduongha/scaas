@@ -72,6 +72,9 @@ pub enum StoreError {
     ProfilePassphraseRequired,
     ProfileRollback,
     ProfileDamaged,
+    /// owner 2026-11-28 (CLI-UPR-22's Change): a writer that waited 120 s on a re-seal; a part's manifest at 65,536 entries
+    ProfileBusy,
+    ProfilePartFull,
 }
 
 /// A foreign store's lock release, run to its end on a thread of its own on a current-thread runtime (review T26 C-7): a

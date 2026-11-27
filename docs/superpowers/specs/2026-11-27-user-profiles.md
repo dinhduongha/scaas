@@ -49,6 +49,7 @@ ARCH-POS-15. Order of sources: AGENTS.md "Which source wins".
 | O18 | 2026-11-28 | `set_passphrase` on a migrated "default" (`migration: pending`, a keystore moved in) shows the seeds being moved and needs the user's confirm: the SDK's `migrated_seeds()` gives their count and labels from the keystore's public fields, and `set_passphrase(…, Some(ConfirmMigratedSeeds { seeds }))` requires that count; without it, or with another count, `ConfirmationMissing`, nothing written (the crate takes `ConfirmMigratedKeystore` for the same refusal). It answers review G-3: `migration: pending` is not authenticated, so a keystore a root writer planted is never sealed unseen. | CLI-UPR-11, CLI-UPR-12 |
 | O19 | 2026-11-28 | The reverse of a strengthening counts as weakening and needs the profile passphrase: a chain profile's `strict_majority` turned off, a lowered cap raised or removed (per chain profile and global), alongside the list's turning the idle lock off or lengthening it and turning the clipboard on (§7.7); the import's filter keeps only what strengthens the defaults (review G-5, A-15). | CLI-UPR-26 |
 | O20 | 2026-11-28 | Two instances running `create_hidden` with one (name, passphrase) at once may both pass the duplicate search (no lock is held across a KDF): accepted. A hidden open never picks silently: two or more matches is **`ProfileHiddenAmbiguous`**; `hidden_matches(name, passphrase)` lists them as opaque choices (`HiddenMatch { index, created_ms }`: the place among the matches by id order and the creation time from the UUIDv7, never the id), and `open_hidden_match(name, passphrase, choice)` runs the search again and opens the choice that still holds by place and creation time, else `ProfileOpen` (§8). | CLI-UPR-13 |
+| O21 | 2026-11-28 | `ProfileBusy` and `ProfilePartFull` become `StoreError` codes: the store face passes them through by name (they were `Unavailable`), `vault::io` maps each to the `SdkError` of the same name, a foreign or wasm store names them, and every SDK caller sees them (§7.2 "Errors"). | CLI-UPR-22 |
 
 Standing rules applied: secrets never leave the SDK and every KDF, AEAD and MAC runs in `ua-rs` (CLI-SDK-01, CLI-SDK-02); fail closed
 with named errors; no decryption oracle (ARCH-POS-13); every RPC consumer takes a list of nodes (ARCH-POS-15); the node is open and
@@ -335,8 +336,8 @@ shown, without a terminator; integers big-endian at the width shown.
   1 KiB; `rev_of` reads the outer `rev` of a sealed item up to that bound instead of 16 MiB, and SDK spec §6.9's size contract says so
   (§15.2). `keystore.head` passes through unsealed: it is public by contract (`rev` and a hash, at most 64 bytes, for a keychain).
 - **Errors.** `StoreError` gains `VaultFormat` (a sealed item that does not open; a plain item in a protected profile),
-  `ProfileLocked`, `ProfilePassphraseRequired`, `ProfileRollback` and `ProfileDamaged`, and `vault::io` maps each to the `SdkError` of
-  the same name; this is a change to the keystore code (one mapping), which otherwise runs above the adapter as today.
+  `ProfileLocked`, `ProfilePassphraseRequired`, `ProfileRollback`, `ProfileDamaged`, and (owner O21, 2026-11-28) `ProfileBusy` and
+  `ProfilePartFull`, and `vault::io` maps each to the `SdkError` of the same name; this is a change to the keystore code (one mapping), which otherwise runs above the adapter as today.
 - **One store core, two faces.** The sealed store is one synchronous core (file I/O and AEAD are blocking work), holding the store
   write lock and the manifests for every part. The SDK's `SecureStore` face runs it on `spawn_blocking`; **pqchat-core's
   `PqChatStore` face is synchronous** and pqchat-core calls it from a blocking task: the one helper is pqchat-core's `Items`

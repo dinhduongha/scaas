@@ -31124,6 +31124,11 @@ sealed class SdkException(message: String): kotlin.Exception(message) {
         class ProfileDamaged(message: String) : SdkException(message)
         
     /**
+     * a hidden name and passphrase that open two or more hidden profiles (owner 2026-11-28): `hidden_matches` lists them
+     */
+        class ProfileHiddenAmbiguous(message: String) : SdkException(message)
+        
+    /**
      * A `scaas-ua` wallet error, by its own code.
      */
         class Ua(message: String) : SdkException(message)
@@ -31251,8 +31256,9 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
             103 -> SdkException.KeyLocked(FfiConverterString.read(buf))
             104 -> SdkException.ProfileRollback(FfiConverterString.read(buf))
             105 -> SdkException.ProfileDamaged(FfiConverterString.read(buf))
-            106 -> SdkException.Ua(FfiConverterString.read(buf))
-            107 -> SdkException.Rpc(FfiConverterString.read(buf))
+            106 -> SdkException.ProfileHiddenAmbiguous(FfiConverterString.read(buf))
+            107 -> SdkException.Ua(FfiConverterString.read(buf))
+            108 -> SdkException.Rpc(FfiConverterString.read(buf))
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
         
@@ -31684,12 +31690,16 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
                 buf.putInt(105)
                 Unit
             }
-            is SdkException.Ua -> {
+            is SdkException.ProfileHiddenAmbiguous -> {
                 buf.putInt(106)
                 Unit
             }
-            is SdkException.Rpc -> {
+            is SdkException.Ua -> {
                 buf.putInt(107)
+                Unit
+            }
+            is SdkException.Rpc -> {
+                buf.putInt(108)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -32216,6 +32226,21 @@ sealed class StoreException: kotlin.Exception() {
             get() = ""
     }
     
+    /**
+     * owner 2026-11-28 (CLI-UPR-22's Change): a writer that waited 120 s on a re-seal; a part's manifest at 65,536 entries
+     */
+    class ProfileBusy(
+        ) : StoreException() {
+        override val message
+            get() = ""
+    }
+    
+    class ProfilePartFull(
+        ) : StoreException() {
+        override val message
+            get() = ""
+    }
+    
 
     
 
@@ -32244,6 +32269,8 @@ public object FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException
             7 -> StoreException.ProfilePassphraseRequired()
             8 -> StoreException.ProfileRollback()
             9 -> StoreException.ProfileDamaged()
+            10 -> StoreException.ProfileBusy()
+            11 -> StoreException.ProfilePartFull()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -32286,6 +32313,14 @@ public object FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is StoreException.ProfileBusy -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is StoreException.ProfilePartFull -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -32325,6 +32360,14 @@ public object FfiConverterTypeStoreError : FfiConverterRustBuffer<StoreException
             }
             is StoreException.ProfileDamaged -> {
                 buf.putInt(9)
+                Unit
+            }
+            is StoreException.ProfileBusy -> {
+                buf.putInt(10)
+                Unit
+            }
+            is StoreException.ProfilePartFull -> {
+                buf.putInt(11)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

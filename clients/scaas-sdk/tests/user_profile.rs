@@ -151,9 +151,10 @@ async fn secure_store_face() {
     );
     core.set_write_wait(Duration::from_millis(50));
     let g = core.write_lock().unwrap();
+    // owner 2026-11-28: the store's own code by name (it was `Unavailable`)
     assert_eq!(
         s.put_if("sdk.state".into(), None, item(1, "s"), p).await,
-        Err(StoreError::Unavailable)
+        Err(StoreError::ProfileBusy)
     );
     drop(g);
 }

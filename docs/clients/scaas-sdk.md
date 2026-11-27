@@ -834,11 +834,14 @@ errors, a sealed size bound and a synchronous store face for pqchat-core** (cont
 PLANNED; the crate is CLI-UPR-02's Change). `UserProfiles` takes a root
 directory, the app's keychain interface, an authenticator and its own heavy limiter; a profile opens and keeps its `Sdk` (a second
 call returns it), and its lock calls the new `Sdk::close` (tasks stopped, pools dropped, a closed flag) and leaves a state every later
-call meets (`ProfileLocked`); `StoreError` gains `VaultFormat`, `ProfileLocked`, `ProfilePassphraseRequired`, `ProfileRollback` and
-`ProfileDamaged`; `rev_of` reads a sealed item up to the base64 of its plain bound; `keystore.head` stays unsealed; one synchronous
+call meets (`ProfileLocked`); `StoreError` gains `VaultFormat`, `ProfileLocked`, `ProfilePassphraseRequired`, `ProfileRollback`,
+`ProfileDamaged`, `ProfileBusy` and `ProfilePartFull` (the last two: owner 2026-11-28, below); `rev_of` reads a sealed item up to the base64 of its plain bound; `keystore.head` stays unsealed; one synchronous
 sealed core, the SDK's `SecureStore` over it on `spawn_blocking`, pqchat-core's `PqChatStore` over it directly from a blocking task (a
 synchronous face never waits on a future; the one helper is pqchat-core's `Items`, made async over `spawn_blocking`), `StoreFault`
-carrying the code; the browser needs an async core of its own (PLANNED); no new crate.
+carrying the code; the browser needs an async core of its own (PLANNED); no new crate. **Change (owner 2026-11-28; BUILT, the SDK's
+`store_codes_map_by_name`, `store_codes_by_name`, `secure_store_face`):** `ProfileBusy` and `ProfilePartFull` are `StoreError`
+codes: the store face passes them through by name (they were `Unavailable`), `vault::io` maps each to the `SdkError` of the same
+name, and the wasm store's JS names and the bindings carry them.
 
 <a id="CLI-UPR-23"></a>**CLI-UPR-23** — **Platform unlock on a shared OS account is an accepted risk; each seed and each imported
 secret key may carry its own passphrase, never opened by platform unlock** (owner 2026-11-27; SPECIFIED: platform unlock and the SDK's key-lock calls, wave 2; the key-lock

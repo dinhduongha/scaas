@@ -29131,6 +29131,7 @@ var ErrSdkErrorProfileBusy = fmt.Errorf("SdkErrorProfileBusy")
 var ErrSdkErrorKeyLocked = fmt.Errorf("SdkErrorKeyLocked")
 var ErrSdkErrorProfileRollback = fmt.Errorf("SdkErrorProfileRollback")
 var ErrSdkErrorProfileDamaged = fmt.Errorf("SdkErrorProfileDamaged")
+var ErrSdkErrorProfileHiddenAmbiguous = fmt.Errorf("SdkErrorProfileHiddenAmbiguous")
 var ErrSdkErrorUa = fmt.Errorf("SdkErrorUa")
 var ErrSdkErrorRpc = fmt.Errorf("SdkErrorRpc")
 
@@ -31250,6 +31251,27 @@ func (self SdkErrorProfileDamaged) Is(target error) bool {
 	return target == ErrSdkErrorProfileDamaged
 }
 
+// a hidden name and passphrase that open two or more hidden profiles (owner 2026-11-28): `hidden_matches` lists them
+type SdkErrorProfileHiddenAmbiguous struct {
+	message string
+}
+
+// a hidden name and passphrase that open two or more hidden profiles (owner 2026-11-28): `hidden_matches` lists them
+func NewSdkErrorProfileHiddenAmbiguous() *SdkError {
+	return &SdkError{err: &SdkErrorProfileHiddenAmbiguous{}}
+}
+
+func (e SdkErrorProfileHiddenAmbiguous) destroy() {
+}
+
+func (err SdkErrorProfileHiddenAmbiguous) Error() string {
+	return fmt.Sprintf("ProfileHiddenAmbiguous: %s", err.message)
+}
+
+func (self SdkErrorProfileHiddenAmbiguous) Is(target error) bool {
+	return target == ErrSdkErrorProfileHiddenAmbiguous
+}
+
 // A `scaas-ua` wallet error, by its own code.
 type SdkErrorUa struct {
 	message string
@@ -31524,8 +31546,10 @@ func (c FfiConverterSdkError) Read(reader io.Reader) *SdkError {
 	case 105:
 		return &SdkError{&SdkErrorProfileDamaged{message}}
 	case 106:
-		return &SdkError{&SdkErrorUa{message}}
+		return &SdkError{&SdkErrorProfileHiddenAmbiguous{message}}
 	case 107:
+		return &SdkError{&SdkErrorUa{message}}
+	case 108:
 		return &SdkError{&SdkErrorRpc{message}}
 	default:
 		panic(fmt.Sprintf("Unknown error code %d in FfiConverterSdkError.Read()", errorID))
@@ -31745,10 +31769,12 @@ func (c FfiConverterSdkError) Write(writer io.Writer, value *SdkError) {
 		writeInt32(writer, 104)
 	case *SdkErrorProfileDamaged:
 		writeInt32(writer, 105)
-	case *SdkErrorUa:
+	case *SdkErrorProfileHiddenAmbiguous:
 		writeInt32(writer, 106)
-	case *SdkErrorRpc:
+	case *SdkErrorUa:
 		writeInt32(writer, 107)
+	case *SdkErrorRpc:
+		writeInt32(writer, 108)
 	default:
 		_ = variantValue
 		panic(fmt.Sprintf("invalid error value `%v` in FfiConverterSdkError.Write", value))
@@ -31968,6 +31994,8 @@ func (_ FfiDestroyerSdkError) Destroy(value *SdkError) {
 	case SdkErrorProfileRollback:
 		variantValue.destroy()
 	case SdkErrorProfileDamaged:
+		variantValue.destroy()
+	case SdkErrorProfileHiddenAmbiguous:
 		variantValue.destroy()
 	case SdkErrorUa:
 		variantValue.destroy()
@@ -32360,6 +32388,8 @@ var ErrStoreErrorProfileLocked = fmt.Errorf("StoreErrorProfileLocked")
 var ErrStoreErrorProfilePassphraseRequired = fmt.Errorf("StoreErrorProfilePassphraseRequired")
 var ErrStoreErrorProfileRollback = fmt.Errorf("StoreErrorProfileRollback")
 var ErrStoreErrorProfileDamaged = fmt.Errorf("StoreErrorProfileDamaged")
+var ErrStoreErrorProfileBusy = fmt.Errorf("StoreErrorProfileBusy")
+var ErrStoreErrorProfilePartFull = fmt.Errorf("StoreErrorProfilePartFull")
 
 // Variant structs
 // `put_if`: the stored revision is not the expected one
@@ -32530,6 +32560,44 @@ func (self StoreErrorProfileDamaged) Is(target error) bool {
 	return target == ErrStoreErrorProfileDamaged
 }
 
+// owner 2026-11-28 (CLI-UPR-22's Change): a writer that waited 120 s on a re-seal; a part's manifest at 65,536 entries
+type StoreErrorProfileBusy struct {
+}
+
+// owner 2026-11-28 (CLI-UPR-22's Change): a writer that waited 120 s on a re-seal; a part's manifest at 65,536 entries
+func NewStoreErrorProfileBusy() *StoreError {
+	return &StoreError{err: &StoreErrorProfileBusy{}}
+}
+
+func (e StoreErrorProfileBusy) destroy() {
+}
+
+func (err StoreErrorProfileBusy) Error() string {
+	return fmt.Sprint("ProfileBusy")
+}
+
+func (self StoreErrorProfileBusy) Is(target error) bool {
+	return target == ErrStoreErrorProfileBusy
+}
+
+type StoreErrorProfilePartFull struct {
+}
+
+func NewStoreErrorProfilePartFull() *StoreError {
+	return &StoreError{err: &StoreErrorProfilePartFull{}}
+}
+
+func (e StoreErrorProfilePartFull) destroy() {
+}
+
+func (err StoreErrorProfilePartFull) Error() string {
+	return fmt.Sprint("ProfilePartFull")
+}
+
+func (self StoreErrorProfilePartFull) Is(target error) bool {
+	return target == ErrStoreErrorProfilePartFull
+}
+
 type FfiConverterStoreError struct{}
 
 var FfiConverterStoreErrorINSTANCE = FfiConverterStoreError{}
@@ -32568,6 +32636,10 @@ func (c FfiConverterStoreError) Read(reader io.Reader) *StoreError {
 		return &StoreError{&StoreErrorProfileRollback{}}
 	case 9:
 		return &StoreError{&StoreErrorProfileDamaged{}}
+	case 10:
+		return &StoreError{&StoreErrorProfileBusy{}}
+	case 11:
+		return &StoreError{&StoreErrorProfilePartFull{}}
 	default:
 		panic(fmt.Sprintf("Unknown error code %d in FfiConverterStoreError.Read()", errorID))
 	}
@@ -32593,6 +32665,10 @@ func (c FfiConverterStoreError) Write(writer io.Writer, value *StoreError) {
 		writeInt32(writer, 8)
 	case *StoreErrorProfileDamaged:
 		writeInt32(writer, 9)
+	case *StoreErrorProfileBusy:
+		writeInt32(writer, 10)
+	case *StoreErrorProfilePartFull:
+		writeInt32(writer, 11)
 	default:
 		_ = variantValue
 		panic(fmt.Sprintf("invalid error value `%v` in FfiConverterStoreError.Write", value))
@@ -32620,6 +32696,10 @@ func (_ FfiDestroyerStoreError) Destroy(value *StoreError) {
 	case StoreErrorProfileRollback:
 		variantValue.destroy()
 	case StoreErrorProfileDamaged:
+		variantValue.destroy()
+	case StoreErrorProfileBusy:
+		variantValue.destroy()
+	case StoreErrorProfilePartFull:
 		variantValue.destroy()
 	default:
 		_ = variantValue

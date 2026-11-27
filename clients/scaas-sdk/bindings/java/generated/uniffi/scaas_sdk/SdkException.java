@@ -786,6 +786,15 @@ public class SdkException extends java.lang.Exception {
     }
     
     /**
+     * a hidden name and passphrase that open two or more hidden profiles (owner 2026-11-28): `hidden_matches` lists them
+     */
+    public static class ProfileHiddenAmbiguous extends SdkException {
+      public ProfileHiddenAmbiguous(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
      * A `scaas-ua` wallet error, by its own code.
      */
     public static class Ua extends SdkException {
