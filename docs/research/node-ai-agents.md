@@ -2,8 +2,8 @@
 
 # scaas-node and AI agents — direction
 
-Written 2026-10-11 for the owner ("Định hướng node có thể làm việc với AI Agent": the node should be able to work
-with AI agents). This is a direction, not a spec: nothing here changes a rule. SCaaS facts cite rule ids of the
+Written 2026-10-11 for the owner's direction that the node should be able to work
+with AI agents. This is a direction, not a spec: nothing here changes a rule. SCaaS facts cite rule ids of the
 component docs; outside facts cite the sources in §7. **[unverified]** marks a claim that rests on secondary
 reporting or memory and was not confirmed against a primary source. Most agent-payment standards below are Drafts or
 betas and change monthly.

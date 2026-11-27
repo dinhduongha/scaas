@@ -251,6 +251,7 @@ export function createSession({
   devicesKnown,
   homeChain,
   homeChatContract,
+  pathRefreshBound = 20,
 }) {
   const session = {
     creator: personOf(creator).ua,
@@ -260,6 +261,7 @@ export function createSession({
     admins: sortedUas(admins),
     members: members.map((n) => ({ ua: deviceOf(n).ua, keyId: deviceOf(n).keyId, via: Z32 })),
     groupMode: 1,
+    pathRefreshBound,
   };
   assertSorted(session.members, `session ${tag}`);
   const genesis = tk.createGenesis(sc, {
@@ -277,16 +279,19 @@ export function createSession({
 
 /** `name`'s device commits on the head: `adds` are `[device, leaf]` (or with a `via`), `removes` device names; `info`
  *  "auto" (the device's rule, C33), null (the marker) or a full info; `admins` names or the head's list. Lands it unless
- *  `land` is false. `faults` and `seedOf` (a foreign seed) are for refusal rows. */
+ *  `land` is false. `faults` and `seedOf` (a foreign seed) are for refusal rows. `pathless` (the delta §4.1): a path-less
+ *  Add on the head handle of `headFrom`'s replay (default the author's; another device's is an insider holding the epoch),
+ *  its nonce `addNonce` at `try` unless `nonce` is given. */
 export function commit(w, name, o = {}) {
   const d = deviceOf(name);
   const rd = tk.reader(w.home);
   const prep = tk.prepareCommit(sc, rd);
   const leaf = prep.tree.nodes.findIndex((n, x) => x % 2 === 0 && n?.ua === d.ua && n.keyId === d.keyId) / 2;
   const headRecord = w.home.epochs.at(-1).record;
-  const nonce = o.nonce ?? 100 + w.home.epochs.length;
+  const nonce = o.pathless ? o.nonce : (o.nonce ?? 100 + w.home.epochs.length);
+  const own = tk.replay(sc, tk.reader(w.home), o.headFrom ? deviceOf(o.headFrom) : d);
   let info = o.info === undefined ? "auto" : o.info;
-  if (info === "auto") info = tk.infoToSeal(tk.replay(sc, tk.reader(w.home), d));
+  if (info === "auto") info = tk.infoToSeal(own);
   const step = `${w.tag}/${o.tag ?? `epoch-${w.home.epochs.length}`}`;
   const built = tk.buildCommit(
     sc,
@@ -319,6 +324,9 @@ export function commit(w, name, o = {}) {
       accepted: () => true,
       keyOf: prep.keyOf,
       rand: (x, n) => rnd(`tree-secrets/${step}/${x}`, n),
+      pathless: o.pathless === true,
+      head: own.head,
+      try: o.try,
     },
     o.faults,
   );
@@ -695,6 +703,191 @@ export function flagClearScenario() {
   return w;
 }
 
+/** `overrides` with the `treeOf()` the contract serves over the exit records they put at the head (R2-D-1 of the T4-T9
+ *  re-check): `owed`, the live leaves of each UA they name that was not gone before the head. Overrides that serve their own
+ *  `treeOf()` are kept as they are. */
+function owing(w, overrides) {
+  if ("treeOf()" in overrides) return overrides;
+  const h = w.home;
+  const head = h.epochs.length - 1;
+  const view = (k, f) => (k in overrides ? overrides[k] : f());
+  const uas = new Set();
+  for (const [kind, list] of [
+    ["leave", h.epochs[head].leaves],
+    ["removal", h.epochs[head].removals],
+  ]) {
+    const n = view(`${kind}Count(${head})`, () => list.length);
+    for (let i = 0; i < n; i++) {
+      const r = view(`${kind}At(${head},${i})`, () => list[i])?.record;
+      for (const ua of kind === "leave" ? [r?.member] : (r?.members ?? [])) if (ua) uas.add(ua);
+    }
+  }
+  let owed = 0;
+  for (const ua of uas)
+    if (!(h.gone.get(ua)?.epoch < head)) owed += h.tree.nodes.filter((x, i) => i % 2 === 0 && x?.ua === ua).length;
+  return owed === h.owed ? overrides : { ...overrides, "treeOf()": { ...tk.reader(h).treeOf(), owed } };
+}
+
+// ------------------------------------------------------------------ the path-less delta's worlds (§13)
+
+/** A run on a warm tree (rows 1, 18, §13's clients list): B and F commit; A (an admin) adds D path-less in the far half (A's
+ *  path nodes 1 and 3 keep their keys, the root is blanked); B adds its own key B2 path-less; F's path commit resets the
+ *  counter, its targets the two joiners' leaves and node 3 (held by A, B, C, E through the run); A adds G path-less. */
+export function pathlessScenario() {
+  const w = createSession({
+    tag: "pathless",
+    creator: "A",
+    nonce: 30,
+    admins: ["A"],
+    members: ["A", "B", "C", "E", "F"],
+    info: INFO.I1,
+    pathRefreshBound: 24,
+  });
+  commit(w, "B"); // 1
+  commit(w, "F"); // 2
+  // two path-less children of one parent, and a twin under A's id with other Adds (§13): built, never landed
+  const probe = (n, o) => {
+    const r = commit(w, n, { ...o, land: false });
+    w.steps.pop();
+    return r.built;
+  };
+  const a = probe("A", { pathless: true, adds: [["D", 5]] });
+  w.twins = {
+    a,
+    b: probe("B", { pathless: true, adds: [["B2", 5]] }),
+    twin: probe("A", { pathless: true, nonce: a.record.nonce, adds: [["H", 5]] }),
+  };
+  commit(w, "A", { pathless: true, adds: [["D", 5]] }); // 3: sincePath 1
+  commit(w, "B", { pathless: true, adds: [["B2", 6]] }); // 4: sincePath 2
+  commit(w, "F"); // 5: the reset path commit
+  commit(w, "A", { pathless: true, adds: [["G", 7]] }); // 6: sincePath 1
+  return w;
+}
+/** Row 20: the first commit after creation is path-less (parent epoch 0, `next_0` under genesisCtx), bound 0. */
+export function pathlessFirstScenario() {
+  const w = createSession({
+    tag: "pathless-first",
+    creator: "A",
+    nonce: 31,
+    admins: ["A"],
+    members: ["A", "B"],
+    info: INFO.I1,
+    pathRefreshBound: 0,
+  });
+  commit(w, "A", { pathless: true, adds: [["C", 2]] }); // 1
+  commit(w, "C", { pathless: true, adds: [["C2", 3]] }); // 2: the joiner adds its own second key
+  return w;
+}
+/** The faults a path-less record can carry (§6.2, §6.3, §6.5): a bad Welcome (D: not followed at its join); a wrong tag
+ *  (members: "author did not hold", the chain's key kept, no info in force; E: not followed at its join); an admin's full
+ *  info (C33 after C45); a bad sealedInfo with a good tag ("followed, info not taken" for the members, the author and the
+ *  joiner C2); a wrong tag while F and C2 are in their first run ("Welcome may not match"); A's path commit reaching them
+ *  all; B's path commit with a wrong tag ("not followed (tag)", B's own: the warning). `control`: the same commits with no
+ *  fault, for the read / write trace (§13, ARCH-POS-13). */
+export function pathlessFaultsScenario(control) {
+  const w = createSession({
+    tag: control ? "pathless-faults-control" : "pathless-faults",
+    creator: "A",
+    nonce: 32,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: INFO.I1,
+    pathRefreshBound: 24,
+  });
+  const f = (faults) => (control ? {} : { faults });
+  const bad = (tag) => ({ welcomeJoiner: hex(rnd(`tree-secrets/pathless-faults/${tag}`)) });
+  commit(w, "A"); // 1
+  commit(w, "A", { pathless: true, adds: [["D", 3]], ...f(bad("welcome")) }); // 2
+  commit(w, "B", { pathless: true, adds: [["B2", 4]], ...f({ tag: hex(rnd("tree-secrets/pathless-faults/tag-3")) }) }); // 3
+  commit(w, "A", { pathless: true, adds: [["F", 5]], info: INFO.I2 }); // 4
+  commit(w, "C", { pathless: true, adds: [["C2", 6]], ...f({ infoK: hex(rnd("tree-secrets/pathless-faults/info")) }) }); // 5
+  commit(w, "A", { pathless: true, adds: [["G", 7]], ...f({ tag: hex(rnd("tree-secrets/pathless-faults/tag-6")) }) }); // 6
+  commit(w, "A", { info: INFO.I2 }); // 7: the reset
+  commit(w, "B", f({ tag: hex(rnd("tree-secrets/pathless-faults/tag-8")) })); // 8
+  return w;
+}
+/** The own-commit test (C47, F-2): B's own Add at try 1 is reproduced; then an insider holding the epoch signs a path-less
+ *  Add under B's UA (A's head, a random nonce, a correct tag): the members follow it, B's device shows the compromise
+ *  warning. `behind`: B did not follow the parent (a bad ciphertext at 1), and shows the warning all the same. */
+export function pathlessOwnScenario(behind) {
+  const tag = behind ? "pathless-own-behind" : "pathless-own";
+  const w = createSession({
+    tag,
+    creator: "A",
+    nonce: behind ? 34 : 33,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: INFO.I1,
+    pathRefreshBound: 24,
+    devicesKnown: [...DEVICES, "B3"],
+  });
+  if (behind) commitBadFor(w, "A", ["B"]);
+  else commit(w, "A"); // 1
+  if (!behind) commit(w, "B", { pathless: true, try: 1, adds: [["B3", 3]] }); // 2
+  const random = BigInt(`0x${hex(rnd(`tree-secrets/${tag}/insider-nonce`, 8)).slice(2)}`);
+  commit(w, "B", { pathless: true, headFrom: "A", nonce: random, adds: [["B2", behind ? 3 : 4]] }); // 3 (2 when behind)
+  return w;
+}
+/** The bound at N and N + 1 (R18; N = 2): two path-less leaves accepted, the third only after the reset (A's path commit). */
+export function pathlessBoundScenario() {
+  const w = createSession({
+    tag: "pathless-bound",
+    creator: "A",
+    nonce: 35,
+    admins: ["A"],
+    members: ["A", "B"],
+    info: INFO.I1,
+    pathRefreshBound: 2,
+  });
+  commit(w, "A", { pathless: true, adds: [["C", 2]] }); // 1
+  commit(w, "A", { pathless: true, adds: [["D", 3]] }); // 2: sincePath 2 = N
+  commit(w, "B"); // 3: the reset
+  commit(w, "A", { pathless: true, adds: [["E", 4]] }); // 4
+  return w;
+}
+/** The admins' warning (R18, C46): bound 0; B, C and D add their own seven keys path-less, then D one more: sincePath 21 at the
+ *  head, past W(0) = 20; A's device (an admin) is warned, B's is not. */
+export function pathlessWarnScenario() {
+  const keys = (n) => BACKLOG_KEYS.filter((x) => x[0] === n);
+  const w = createSession({
+    tag: "pathless-warn",
+    creator: "A",
+    nonce: 36,
+    admins: ["A"],
+    members: ["A", "B", "C", "D"],
+    info: INFO.I1,
+    pathRefreshBound: 0,
+    devicesKnown: [...new Set([...DEVICES, ...BACKLOG_KEYS])],
+  });
+  let at = 4;
+  for (const n of ["B", "C", "D"])
+    commit(w, n, {
+      pathless: true,
+      adds: keys(n)
+        .slice(0, 7 - (n === "D") * 1)
+        .map((k) => [k, at++]),
+    });
+  commit(w, "D", { pathless: true, adds: [["D8", at++]] });
+  return w;
+}
+/** E-3 and the exit (§5.5): C leaves at a path-less head; the next commit is the honouring path commit; C held `next` of
+ *  that head and cannot derive the path commit's epoch. */
+export function pathlessExitScenario() {
+  const w = createSession({
+    tag: "pathless-exit",
+    creator: "A",
+    nonce: 37,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: INFO.I1,
+    pathRefreshBound: 24,
+  });
+  commit(w, "A", { pathless: true, adds: [["D", 3]] }); // 1
+  gone(w, 1, "C", [], 1);
+  commit(w, "A", { removes: ["C"] }); // 2: the honouring path commit
+  return w;
+}
+
 const leafOf = (t, d) => t.nodes.findIndex((n, x) => x % 2 === 0 && n?.ua === d.ua && n.keyId === d.keyId) / 2;
 /** What an endpoint serves for a commit `built` (signed `sig`) it adds on the head of `w` with the tree after it: the views of
  *  the walk's reads that change, by read name. */
@@ -711,6 +904,8 @@ function served(w, built, sig) {
       used: t.used,
       treeHash: t.hash[tr.root(t.leaves)],
       genesisTreeHash: h.genesisTreeHash,
+      sincePath: t.sincePath,
+      owed: 0,
     },
     "treeLeaves()": Array.from({ length: t.leaves }, (_, i) => {
       const x = t.nodes[2 * i];
@@ -743,6 +938,8 @@ function forgedCommit(w, name, tree, o = {}) {
     keyId: d.keyId,
     kemSeed: d.kemSeed,
     nonce: 900 + h.epochs.length,
+    pathless: o.pathless === true,
+    head: { epochId: head.id, treeHash: tr.treeHash(tree), next: hex(rnd(`tree-secrets/${w.tag}/forged-next`)) },
     removes: (o.removes ?? []).map((n) => {
       const r = deviceOf(n);
       return { leaf: leafOf(tree, r), ua: r.ua, keyId: r.keyId };
@@ -798,7 +995,7 @@ function keptLeave(w, who, named, nonce) {
 export function lies(worlds) {
   const rows = [];
   const add = (name, world, device, overrides, expect, pin = null) =>
-    rows.push({ name, world, device, overrides, pin, expect });
+    rows.push({ name, world, device, overrides: owing(W(world), overrides), pin, expect });
   const W = (n) => worlds.get(n);
   {
     // E-1: H, a UA of no roster, signs the next epoch from the blank leaf 3 of the true tree
@@ -1041,7 +1238,15 @@ export function lies(worlds) {
     add("an epoch by a UA whose removal the walk read", "pin-exit", "A", served(w, f.built, f.sig), {
       replay: "TreeReadCorrupted",
       prepare: "TreeReadCorrupted",
-    });
+    }); // R2-D-1 of the T4-T9 re-check: the head's removal hidden while the endpoint serves the true `treeOf` (its `owed` the
+    // removed UA's leaf): the snapshot disagrees with the walk, a lying read, so a strict-majority `treeOf` covers the exits
+    add(
+      "the head's exit hidden under the true treeOf (R2-D-1)",
+      "pin-exit",
+      "A",
+      { "removalCount(1)": 0, "treeOf()": tk.reader(w.home).treeOf() },
+      { replay: "TreeHeadRoot", prepare: "TreeHeadRoot" },
+    );
   }
   {
     // an empty path (the last live leaf) whose record signs another list hash than the empty one (codex-r2-14)
@@ -1525,6 +1730,54 @@ export function lies(worlds) {
       pin,
     );
   }
+  {
+    // the path-less delta §5.1, C25: each condition a path-less record breaks is a lying read for the walk (§6.1)
+    const both = { replay: "TreeReadCorrupted", prepare: "TreeReadCorrupted" };
+    const w = W("pathless");
+    const n = w.home.epochs.length;
+    const pl = (name, o) => {
+      const f = forgedCommit(w, "A", o.tree ?? w.home.tree, { pathless: true, adds: [["H", 8]], ...o });
+      add(`a path-less record ${name}`, "pathless", "C", { ...served(w, f.built, f.sig), ...(o.more ?? {}) }, both);
+    };
+    pl("with a Remove (R19)", { removes: ["C"] });
+    pl("that changes the admins (R19)", { admins: ["A", "B"] });
+    pl("with a node key (C42)", {
+      edit: (r) => ({ ...r, nodeKeyHashes: [hex(rnd("tree-secrets/lies/pathless-key"))] }),
+    });
+    pl("with no Add (C42)", { edit: (r) => ({ ...r, adds: [], wrapHashes: [], leaves: 8 }) });
+    // the owed exit: B removed at the head, then a path-less record on it
+    pl("on a head that owes an exit (§5.5)", {
+      more: { [`removalCount(${n - 1})`]: 1, [`removalAt(${n - 1},0)`]: keptRemoval(w, "A", ["B"], n - 1, 7) },
+    });
+    // the bound (R18): N = 2 and sincePath 1 at the head; two more leaves cross it (built on a tree without the bound)
+    const wb = W("pathless-bound");
+    const free = tr.treeFromJson({ ...tr.treeJson(wb.home.tree), pathBound: 0 });
+    const f = forgedCommit(wb, "A", free, {
+      pathless: true,
+      adds: [
+        ["F", 5],
+        ["G", 6],
+      ],
+    });
+    add("a path-less record over the bound (R18)", "pathless-bound", "B", served(wb, f.built, f.sig), both);
+    // the snapshot's counter (C44): `treeOf` serving another `sincePath` than the walk's is refused, as any other field
+    const t0 = tk.reader(w.home).treeOf();
+    add(
+      "a treeOf whose sincePath is not the walk's (C44)",
+      "pathless",
+      "C",
+      { "treeOf()": { ...t0, sincePath: t0.sincePath + 1 } },
+      {
+        replay: "TreeHeadRoot",
+        prepare: "TreeHeadRoot",
+      },
+    );
+    const g = forgedCommit(wb, "A", free, { pathless: true, adds: [["F", 5]] });
+    add("a path-less record at the bound (control)", "pathless-bound", "B", served(wb, g.built, g.sig), {
+      replay: null,
+      prepare: null,
+    });
+  }
   return rows;
 }
 /** `returned`: A, B, C, E; B commits (1); A removes C at 1; B honours it (2). */
@@ -1552,7 +1805,7 @@ export function lyingReader(w, overrides) {
       const read = `${k}(${a.join(",")})`;
       if (!(read in overrides)) return f(...a);
       rd.log.push(read);
-      return JSON.parse(JSON.stringify(overrides[read]));
+      return structuredClone(overrides[read]);
     };
   }
   return out;

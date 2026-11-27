@@ -39,12 +39,12 @@ docs/clients/app.md CLI-APP-09, docs/networks/README.md NET-ALL-23 / NET-ALL-84;
 
 Owner rules (quoted or restated without change):
 
-- **Scope** (owner 2026-10-31, decision 1): "every operation an EOA wallet sees **plus the UA paths** (for the app review /
-  audit) **plus the portable functions**".
-- **Portable records** (decision 2): "typed EIP-712 under a domain with only `name` + `version` ("SCaaS UA Portable",
-  "1"); the `ua_msg` wrapper kept". No Ledger / Trezor test first (decision 3).
-- **Native EOA msig members** (decision 4): "sign the typed record (`eth_signTypedData_v4`) instead of `personal_sign`".
-- **Option B** (owner 2026-10-31, replaces decision 5): "a named entry point per operation, everything explicit" —
+- **Scope** (owner 2026-10-31, decision 1): every operation an EOA wallet sees **plus the UA paths** (for the app review /
+  audit) **plus the portable functions**.
+- **Portable records** (decision 2): typed EIP-712 under a domain with only `name` + `version` ("SCaaS UA Portable",
+  "1"); the `ua_msg` wrapper kept. No Ledger / Trezor test first (decision 3).
+- **Native EOA msig members** (decision 4): sign the typed record (`eth_signTypedData_v4`) instead of `personal_sign`.
+- **Option B** (owner 2026-10-31, replaces decision 5): a named entry point per operation, everything explicit —
   `mtxUnwrap(…, <envelope>, sig)`, `mtxWrap`, `mtxWrapToUA`, `mtxUnwrapToUA`, `mtxBurn`, `mtxAddReserve`,
   `mtxCancelNonce`, Zether / PQZ `mtxShield` etc., MandateWallet `mtxSetMandate` / `mtxSetPayee` / `mtxRevokeMandate`,
   SmartKeyAccount `mtxAddKey` / `mtxRemoveKey` / `mtxRotateKey` / `mtxSetGuardian` / `mtxCancelRecovery`, and their `ua*`
@@ -52,13 +52,13 @@ Owner rules (quoted or restated without change):
   is inherently arbitrary (SmartKeyAccount / MandateWallet `execute`).
 - **Relay fee and wrap-by-signature** (decision 6): dedicated typed structs `RelayFee(...)`, `WrapOrder(...)`.
 - **`0x0108` in MetaMask** (decision 7): pending; controller proposal "not a goal" — this plan does not build it.
-- **`kind`** (decision 8): "`uint16` only (no string field); the name is looked up in the kind table (app / docs). No
-  `paramSet`." Plus (owner 2026-10-31): a public `UARegistry` view returning a kind id's name.
-- **Explicit parameters** (owner 2026-10-31, general): "every parameter is explicit, as in a REST / JSON / RPC API — no
-  packed / opaque `bytes` that bundle several fields"; genuine cryptographic blobs stay `bytes` "but as their own named
-  parameter (`proof`, `ciphertext`, `kemPk`, `pqzKey`, `signature`, …)"; "the statement / digest bytes that pqz-stmt and
-  the verifiers hash stay byte-identical (the contract assembles them from the explicit params)"; the node job API takes
-  "explicit named JSON fields per operation instead of opaque hex blobs; the node builds the XDR / calldata".
+- **`kind`** (decision 8): `uint16` only (no string field); the name is looked up in the kind table (app / docs). No
+  `paramSet`. Plus (owner 2026-10-31): a public `UARegistry` view returning a kind id's name.
+- **Explicit parameters** (owner 2026-10-31, general): every parameter is explicit, as in a REST / JSON / RPC API — no
+  packed / opaque `bytes` that bundle several fields; genuine cryptographic blobs stay `bytes` but as their own named
+  parameter (`proof`, `ciphertext`, `kemPk`, `pqzKey`, `signature`, …); the statement / digest bytes that pqz-stmt and
+  the verifiers hash stay byte-identical (the contract assembles them from the explicit params); the node job API takes
+  explicit named JSON fields per operation instead of opaque hex blobs; the node builds the XDR / calldata.
 - Never lose ciphertext: PQZ / Zether ciphertexts and PQZ key / proof bytes stay in contract state (an explicit
   parameter is stored exactly as the packed bytes were). Zether ≠ PQZ (separate tasks, tests, docs). NEAR ≠ Algorand.
 - Every state-changing write relayable (owner 2026-10-20): every named `mtx*` / `ua*` entry is submitted by a relayer,

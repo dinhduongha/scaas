@@ -37,12 +37,13 @@ contract PqChatTreeViews is IPqChatTreeViews, PqChatCore {
             bytes32 treeHash,
             bytes32 genesisTreeHash,
             bytes32 headEpochId,
-            uint32 owed
+            uint32 owed,
+            uint32 sincePath
         )
     {
         Tree storage t = _treeOf(sessionId);
         (IUARegistry reg,,) = _env();
-        return (t.treeId, t.leaves, t.used, _treeHash(reg, t), t.genesisTreeHash, t.head, t.owed);
+        return (t.treeId, t.leaves, t.used, _treeHash(reg, t), t.genesisTreeHash, t.head, t.owed, t.sincePath);
     }
 
     /// @dev The length of the page `first..first + count` of `total`, `count` capped at `cap`.

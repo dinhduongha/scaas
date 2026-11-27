@@ -1,0 +1,22 @@
+# p9 mutants at commit 2df5f28b1 (name | outcome | test)
+next sealed | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_next_never_leaves
+next KEM-wrapped | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_next_never_leaves
+next derived from | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_next_never_leaves
+next MACed | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_next_never_leaves
+resume drops the warnings | survived | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_resume_keeps_the_leaves_under_review
+resume drops the suspects | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_resume_keeps_the_leaves_under_review
+adopt keeps the old head | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_resume_keeps_the_leaves_under_review
+JS resume drops the suspects | killed | ../../scripts/capped node --test --test-name-pattern='C-2 = G-1' test/treekem.test.js
+a bound above 510 signed | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_session_bound_above_the_cap_is_a_lie
+JS a bound above 510 signed | killed | ../../scripts/capped node --test --test-name-pattern='C-1: a key no signed' test/treekem.test.js
+a missing sincePath read as 0 | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_json_needs_its_counter
+JS a missing counter read as 0 | killed | ../../scripts/capped node --test --test-name-pattern='C-9' test/pqchat-tree.test.js
+JS seedless own path-less as compromise | killed | ../../scripts/capped node --test --test-name-pattern='C-10' test/treekem.test.js
+PathBound named Shape | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_pathless_refusals_by_name
+PathRequired named Shape | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_pathless_refusals_by_name
+the review not asked | killed | CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios a_path_commit_over_leaves_under_review_asks_first
+no head admins read | killed | CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios the_pathless_form_from_the_state
+a lost slot not named | killed | CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --lib a_lost_slot_is_named
+a head confirmed by number only | killed | CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 --features vectors --test tree_scenarios a_head_is_confirmed_by_its_id
+the chain kept over a path commit not followed | killed | CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j 2 --features app-core,vectors --test tree -- --exact tree_secrets_every_row
+20 mutants, 19 killed, 1 survived (0 killed elsewhere), 0 not loaded

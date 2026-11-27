@@ -2,8 +2,8 @@
 
 # UA identity: id derivation and encryption keys as attributes
 
-Written 2026-10-20 at the owner's request. The question: "Does the UA need to be that complex? An EOA just pads into a
-UA; a 32-byte public key (Stellar/XLM ed25519) is the UA; Zether → hash; other kinds: hash if not a 32-byte public key?"
+Written 2026-10-20 at the owner's request. The question: does the UA need to be that complex? An EOA just pads into a
+UA; a 32-byte public key (Stellar/XLM ed25519) is the UA; Zether → hash; other kinds: hash if not a 32-byte public key?
 The owner ruled the same day that (R1) a UA is always **one** entity that can verify signatures (single key, BLS,
 `msig` m-of-n, …); (R2) encryption keys (the PQZ PQZL public key, 16,384 B; the Zether public key `Y`) are
 **attributes** of a UA supplied at registration, not UA kinds; (R3) an encryption key registered to one UA may never be

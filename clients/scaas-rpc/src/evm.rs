@@ -1006,6 +1006,25 @@ impl EvmPool {
         self.pool.agree(self, choice, purpose, f).await
     }
 
+    /// [`EvmPool::read_at_block_agreed`] over the list's `named` endpoints only ([`crate::pool::Pool::agree_named`]: at least 3,
+    /// a strict majority of them; discovered and default nodes do not count).
+    pub async fn read_at_block_agreed_named<T, F, Fut>(
+        &self,
+        choice: BlockChoice,
+        purpose: Purpose,
+        f: F,
+    ) -> Result<Agreed<T, B256>, RpcError>
+    where
+        T: Clone + PartialEq,
+        F: Fn(ReadAt<B256>) -> Fut,
+        Fut: Future<Output = Result<T, ReadError>>,
+    {
+        if !self.pinned_reads {
+            return Err(RpcError::PinnedReadsUntrusted);
+        }
+        self.pool.agree_named(self, choice, purpose, f).await
+    }
+
     /// Whether this pool's pinned reads are trusted (the profile's `pinnedReads`).
     pub fn pinned_reads(&self) -> bool {
         self.pinned_reads
@@ -1021,7 +1040,7 @@ impl EvmPool {
         }
     }
 
-    /// The sticky read (owner 2026-11-23, "Sticky endpoint"; a chain whose pinned reads are not trusted, the profile's
+    /// The sticky read (owner 2026-11-23; a chain whose pinned reads are not trusted, the profile's
     /// `pinnedReads` false): every call of `f` goes to one endpoint at its latest block (on such a pool each request names
     /// `latest`), that endpoint's head (number and hash) read before and after; a moved head retries the whole read, at most
     /// [`STICKY_TRIES`] times, then `HeadMoving`. It never mixes nodes: each try is one endpoint, failing over as a plain read.

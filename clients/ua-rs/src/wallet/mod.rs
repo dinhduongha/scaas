@@ -1207,7 +1207,7 @@ impl Wallet {
         crate::facade::pqz::derive(&self.store, account, index, version)
     }
 
-    /// The three-key handle of a PQZ key with the opening (T21 O5 (b), owner 2026-11-16 "ok, as proposed"; CLI-SGN-51):
+    /// The three-key handle of a PQZ key with the opening (T21 O5 (b), owner 2026-11-16; CLI-SGN-51):
     /// `offchain-shared` (`scope.token` `None`) or `offchain-token` of a token with the opening, at `scope.version`. Its PQZ seed
     /// (K3-2) and its opening KEM seed (K3-6b) are derived from this wallet's seed into its arena (`lock()` revokes the handle);
     /// `pk` and the opening KEM key come out. `WalletLocked` while locked.

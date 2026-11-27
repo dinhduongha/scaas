@@ -1,0 +1,47 @@
+# pqvault-ui-rules (CLI-SDK-36, CLI-PQV-16 H1-H3, the Fable review's fixes CLI-PQV-17): task | step | commit | rc | counts. Logs git-ignored.
+round 1 | pqvault-core cargo test (default) | 71f449f65 | 0 | lib 12; core 8; devices 4; exits 3; e2e 5 ignored
+round 1 | pqvault-core --features vectors --test vectors | 71f449f65 | 0 | 4 passed
+round 1 | pqvault-core clippy --all-targets -D warnings (default, vectors) | 71f449f65 | 0 | -
+round 1 | scaas-sdk --test app_core --test app_core_vault_records (CI set) | 29ef67a6b | 0 | 14 passed; 6 passed
+round 1 | scaas-sdk clippy -D warnings (CI set, vectors, native-networks, raw-native; lib + app_core tests) | 29ef67a6b | 0 | -
+round 1 | e2e (runs/2026-11-22-pqvault-e2e.sh) default four | 71f449f65 | 0 | personal 734 s, shared 46 s, second core 24 s, kem/msig 41 s
+round 1 | e2e pqvault_records_on_a_two_generation_line | 71f449f65 | 101 | Sdk::open Argument (chain 31930, Depth(0))
+round 1 | the same at the base 03e3edc40 | 03e3edc40 | 101 | Sdk::open Argument: older than the branch (SDK T26 B-22)
+round 1 | mutants (2026-11-27-pqvault-ui-rules-mutants.txt) | 9b84e889c | 0 | 12 mutants, 12 killed
+review | e2e pqvault_records_on_a_two_generation_line at chain 31337 (the fix, before the other review edits) | 02b7533af + fix | 0 | 556 s
+review | pqvault-core cargo test (default) | 454d0a3b4 | 0 | lib 20; core 8; devices 4; exits 3; e2e 5 ignored
+review | pqvault-core --features vectors --test vectors (items.json + 5 rows) | 454d0a3b4 | 0 | 4 passed
+review | pqvault-core clippy --all-targets -D warnings (default, vectors) | 454d0a3b4 | 0 | -
+review | scaas-sdk --test app_core --test app_core_vault_records (CI set); --lib app_core::tests | 454d0a3b4 | 0 | 14 passed; 6 passed; 1 passed
+review | scaas-sdk clippy -D warnings (CI set, vectors, native-networks, raw-native; lib + app_core tests) | 454d0a3b4 | 0 | -
+review | clientkeys node --test pqchat, pqvault, treekem | 454d0a3b4 | 0 | 22, 18, 47 passed
+review | clientkeys pqchat-vectors --check; pqvault-vectors regenerated and compared | 454d0a3b4 | 0 | pqchat ok; pqvault records/keys/items/pass byte-identical
+review | scripts/format.sh --check (every language; forge on PATH) | 454d0a3b4 | 0 | -
+review | docs_check check / paths / facts; test_docs_check | 454d0a3b4 | 0 | 0 errors; 0 paths; 0 misses; ok
+review | mutants --r2 (2026-11-27-pqvault-ui-rules-r2-mutants.txt) | 454d0a3b4 | 0 | 19 mutants, 19 killed
+review | e2e personal_vault_recovery_conflict_passphrase | 454d0a3b4 | 0 | 95 s
+re-check | pqvault-core cargo test (default) | 62e71414b | 0 | lib 24; core 8; devices 5; exits 3; e2e 5 ignored
+re-check | pqvault-core --features vectors --test vectors | 2017d6d4f | 0 | 4 passed
+re-check | pqvault-core clippy --all-targets -D warnings (default; vectors) | 2017d6d4f; 62e71414b | 0 | -
+re-check | scaas-sdk --lib app_core::tests; --test app_core --test app_core_vault_records (CI set) | 2017d6d4f | 0 | 1; 14; 6 passed
+re-check | scaas-sdk clippy -D warnings (CI set, vectors, native-networks, raw-native; lib + app_core tests) | 2017d6d4f | 0 | -
+re-check | mutants --r3 (2026-11-27-pqvault-ui-rules-r3-mutants.txt) | 2017d6d4f; 62e71414b | 0 | 12 mutants, 12 killed (the R-8 row after its test fix)
+re-check | e2e, all five (runs/2026-11-22-pqvault-e2e.sh) | 62e71414b | 0 | personal 109 s, shared 33 s, second core 37 s, kem/msig 27 s, two generations 23 s
+re-check | scripts/format.sh --check (every language; forge on PATH) | 62e71414b | 0 | -
+re-check | docs_check check / paths / facts; test_docs_check | 2017d6d4f | 0 | 0 errors; 0 paths; 0 misses; ok
+re-check | clientkeys node --test pqchat, pqvault, treekem | 62e71414b | 0 | 22, 18, 47 passed
+# the round's client matrix after merging dev 4fc9c5e2b (2efe2bb9c) and 9ed19e100 (b0426f6df); the second merge touched
+# pqchat-core, pqchat-transport, scaas-matrix, docs, CI and scripts only, so the SDK, pqvault-core, clientkeys and ua-rs rows
+# at 2efe2bb9c hold for b0426f6df (their inputs unchanged)
+matrix | scaas-sdk cargo test --features <CI set> | 2efe2bb9c | 0 | 485 passed, 18 ignored
+matrix | scaas-sdk --features <CI set>,vectors --test pqchat_keys --test app_core_vault_rows | 2efe2bb9c + the pin 15 -> 19 | 0 | 18; 5 passed (before the pin: item_versions 19 != 15)
+matrix | scaas-sdk clippy --all-targets --features <CI set>,vectors,native-networks,raw-native -D warnings | 2efe2bb9c | 0 | -
+matrix | ua-rs cargo test --features vectors; --features app-core,vectors; clippy --all-targets --features vectors | 2efe2bb9c + the pin | 0 | 1558 passed in all
+matrix | clientkeys npm test | 2efe2bb9c | 0 | 679 passed, 0 failed
+matrix | clientkeys every generator rerun, tree unchanged | 2efe2bb9c | 0 | every vector byte-identical; native-vectors needs NATIVE_DOWNLOADS (not run); webauthn-vector randomised by design (restored)
+matrix | pqvault-core cargo test; --features vectors --test vectors; clippy (default, vectors) | 2efe2bb9c | 0 | lib 24, core 8, devices 5, exits 3; vectors 4
+matrix | pqvault-core e2e, all five | 2efe2bb9c | 0 | personal 57 s, shared 31 s, second core 21 s, kem/msig 27 s, two generations 29 s
+matrix | pqchat-core cargo test; --features vectors --test vectors; clippy; wasm32 check; check_reads; pqchat_tree_rows --check | b0426f6df | 0 | 139 passed, 8 ignored; vectors 7
+matrix | pqchat-core chain_ tests on anvil (--ignored --test-threads 1 chain_) | b0426f6df | 0 | 8 passed
+matrix | scripts/format.sh --check (every language) | b0426f6df | 0 | -
+matrix | docs_check check / paths / facts; test_docs_check; check_test_features | b0426f6df | 0 | 0 errors; 0 paths; 0 misses; ok; ok

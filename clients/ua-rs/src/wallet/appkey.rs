@@ -67,6 +67,9 @@ pub(super) enum Origin {
     Chain,
     /// a TreeKEM epoch key `K_e` (`tree`): derived inside the boundary from secrets no caller chose, an epoch key as mode 0's
     Tree,
+    /// a TreeKEM head's `next` (`tree`, the path-less delta §4.1): read inside the boundary only; never sealed, wrapped,
+    /// derived from or MACed by a caller (fable-C-1 = F-3 of the path-less review)
+    TreeNext,
 }
 
 /// A key in the arena. No `Clone`, `Debug` or byte accessor; released by [`AppKeys::destroy`] or the wallet's `lock`.
@@ -303,6 +306,9 @@ impl AppKeys {
         let mut ikm = Zeroizing::new(Vec::with_capacity(32 * keys.len()));
         for k in keys {
             self.check_usage(k, KeyUsage::Derive)?;
+            if matches!(k.origin, Origin::TreeNext) {
+                return Err(Error::AppKeyUsage);
+            }
             ikm.extend_from_slice(&self.bytes(k)?[..]);
         }
         let rooted = keys.iter().any(|k| k.rooted);
@@ -328,6 +334,9 @@ impl AppKeys {
     /// HMAC-SHA-256 of `data` (exactly) under the `Derive` handle `key`, into a 32-byte key of `usage`.
     pub fn mac_derive(&self, key: &KeyHandle, data: &[u8], usage: KeyUsage) -> Result<KeyHandle> {
         self.check_usage(key, KeyUsage::Derive)?;
+        if matches!(key.origin, Origin::TreeNext) {
+            return Err(Error::AppKeyUsage);
+        }
         let out = Zeroizing::new(hmac_sha256(&self.bytes(key)?[..], data));
         let mut h = self.make(&out[..], usage, Origin::Derived, None)?;
         h.rooted = key.rooted;
@@ -426,8 +435,9 @@ impl AppKeys {
         if key.rooted {
             return Err(Error::AppKeyRooted);
         }
-        // a tree epoch key `K_e` is a handle and never leaves sealed either (spec §15, B-8, B2-8), as `wrap_with` refuses
-        if matches!(key.origin, Origin::Tree) {
+        // a tree epoch key `K_e` is a handle and never leaves sealed either (spec §15, B-8, B2-8), as `wrap_with` refuses;
+        // nor a head's `next`
+        if matches!(key.origin, Origin::Tree | Origin::TreeNext) {
             return Err(Error::Argument);
         }
         let mut n = [0u8; 12];
@@ -516,8 +526,9 @@ impl AppKeys {
         if key.rooted {
             return Err(Error::AppKeyRooted);
         }
-        // a tree epoch key `K_e` is a handle and never wrapped (spec §15, B-8): a tree session needs no flat wrap of it
-        if matches!(key.origin, Origin::Tree) {
+        // a tree epoch key `K_e` is a handle and never wrapped (spec §15, B-8): a tree session needs no flat wrap of it;
+        // nor a head's `next`
+        if matches!(key.origin, Origin::Tree | Origin::TreeNext) {
             return Err(Error::Argument);
         }
         let (mlkem_ct, x25519_eph, ss) = super::kem::encaps(kem_pk, m, e)?;

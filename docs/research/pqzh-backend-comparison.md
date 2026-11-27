@@ -2,8 +2,8 @@
 
 # PQZH backend comparison and soundness regimes (2026-10-14)
 
-Status: research summary, written 2026-10-14 (session 4) at the owner's request ("lưu tất cả thông tin nghiên cứu
-vào file"). It collects in one place what was so far only said in the session: the side-by-side comparison of every
+Status: research summary, written 2026-10-14 (session 4) at the owner's request to save all the research
+information in a file. It collects in one place what was so far only said in the session: the side-by-side comparison of every
 PQZH backend that was built and measured, the explanation of proven vs conjectured vs Johnson-bound soundness, and the
 owner decisions of the day with their status. Every number comes from a research note and its run files, named in each
 row; nothing here is newly measured.
@@ -37,7 +37,7 @@ The FRI + ZK STARK and ZK WHIR lose to it on every axis except native verify, wh
 Sources: `pqzh-ligero.md` §6, §11, §12; `pqzh-zk-ext5.md` §7; `pqzh-zk-whir.md` §7–§9 and §10 (the re-examination); `pqzh-solidity-verifier.md`; `pqzh-starkex-verifier.md` §6. Non-ZK WHIR (`p3-multi-stark`, 257,530 B at
 125.3 bits, `pqzh-zk-ext5.md` §8) is left out: zero knowledge is required (owner 2026-10-13).
 
-**ZK WHIR re-examined (owner "Xem lại WHIR", 2026-10-14; `pqzh-zk-whir.md` §10, merged):** the 1.95 MB measurement is
+**ZK WHIR re-examined (owner request to re-examine WHIR, 2026-10-14; `pqzh-zk-whir.md` §10, merged):** the 1.95 MB measurement is
 right (a fresh proof's byte breakdown sums exactly; ≈ 357–363 KB masked base case + 111–121 KB rounds per opening, four
 openings); the ≈ 360 KB per opening is inherent to HVZK WHIR as ePrint 2026/391 defines it (the paper gives only an
 asymptotic Õ(k·λ) overhead; its Construction 7.2 built as written gives the same size); p3-whir's soundness counting
@@ -69,7 +69,7 @@ domain sizes reachable in F_q, so it gives nothing over the proven analysis in t
 
 1. **ZK WHIR path accepted, with an FRI fallback** (adapter over `HidingWhirPcs`, no ZK `p3-multi-stark`; stop and
    settle on FRI if `R_TX` lands above 340,431 B). Status: done — measured 1,948,901 B, stop rule triggered, merged
-   `a1bfbd8` as a negative result; re-examination requested ("Xem lại WHIR", in progress on branch
+   `a1bfbd8` as a negative result; re-examination requested (in progress on branch
    `pqzh-whir-review`).
 2. **Ligero: radix-431 FFT stage and the modified ZK construction** (blinding rows at full degree inside the proximity
    test, in F_q⁴). Status: done, merged `9e7cd20`.

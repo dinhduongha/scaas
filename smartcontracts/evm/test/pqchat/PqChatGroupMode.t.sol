@@ -45,6 +45,46 @@ contract PqChatGroupModeTest is PqChatBase {
         chat.createSession(s, new IPqChat.Wrap[](0), sig);
     }
 
+    /// The path-less delta §3.1, §13 row 8 (C41, C43): in mode 0 a `pathRefreshBound` or a `confirmTag` that is not 0 is
+    /// `PqChatShape`, both 0 the control; the vector rows: `sessionBound0`, `sessionBound24`, `sessionBound510` pass the
+    /// bound and stop at their unregistered members (`PqChatKemKey`), `sessionBound511`, `sessionMode0Bound1`,
+    /// `sessionMode0Tag` are `PqChatShape`, the rows' error, before them.
+    function test_pathRefreshBoundAndTagAtCreation() public {
+        (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(2, 21, address(chat));
+        s.pathRefreshBound = 1;
+        IUARegistry.UASig memory sig = _sig(s.creator, h.session(s));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatShape.selector));
+        chat.createSession(s, w, sig);
+        (s.pathRefreshBound, s.confirmTag) = (0, keccak256("a tag in mode 0"));
+        sig = _sig(s.creator, h.session(s));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatShape.selector));
+        chat.createSession(s, w, sig);
+        s.confirmTag = 0;
+        _create(chat, s, w);
+        string memory rec = vm.readFile("../vectors/pqchat/records.json");
+        string[6] memory rows = [
+            ".sessionBound0",
+            ".sessionBound24",
+            ".sessionBound510",
+            ".sessionBound511",
+            ".sessionMode0Bound1",
+            ".sessionMode0Tag"
+        ];
+        for (uint256 i; i < rows.length; ++i) {
+            (IPqChat.PqChatSession memory v, IUARegistry.UASig memory vs) = _vectorSession(rows[i]);
+            if (i < 3) {
+                assertFalse(vm.keyExistsJson(rec, string.concat(rows[i], ".error")), rows[i]);
+                vm.expectRevert(
+                    abi.encodeWithSelector(IPqChat.PqChatKemKey.selector, v.members[0].ua, v.members[0].keyId)
+                );
+            } else {
+                assertEq(vm.parseJsonString(rec, string.concat(rows[i], ".error")), "PqChatShape", rows[i]);
+                vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatShape.selector));
+            }
+            chat.createSession(v, new IPqChat.Wrap[](0), vs);
+        }
+    }
+
     /// A session row of `records.json` (`row` its key) with its signature.
     function _vectorSession(string memory row)
         internal
@@ -58,6 +98,8 @@ contract PqChatGroupModeTest is PqChatBase {
         s.homeChain = vm.parseJsonBytes32(rec, string.concat(p, ".homeChain"));
         s.homeChatContract = vm.parseJsonAddress(rec, string.concat(p, ".homeChatContract"));
         s.groupMode = uint8(vm.parseJsonUint(rec, string.concat(p, ".groupMode")));
+        s.pathRefreshBound = uint32(vm.parseJsonUint(rec, string.concat(p, ".pathRefreshBound")));
+        s.confirmTag = vm.parseJsonBytes32(rec, string.concat(p, ".confirmTag"));
         s.admins = vm.parseJsonBytes32Array(rec, string.concat(p, ".admins"));
         s.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));
         s.sealedInfo = vm.parseJsonBytes(rec, string.concat(p, ".sealedInfo"));

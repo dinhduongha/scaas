@@ -38,14 +38,14 @@ the surface it needs (§5) and marks each row **per the SDK spec's App cores sec
 
 ## 1. Rulings and conditions
 
-**Owner rulings, all 2026-11-17, quoted** (recorded in CLI-PQC-30; not reopened here):
+**Owner rulings, all 2026-11-17** (recorded in CLI-PQC-30; not reopened here):
 
 | # | Ruling | Where it lands |
 |---|---|---|
-| Q-R1 | "pqchat-core cũng đảo chiều luôn" ("OK, reverse pqchat-core too"): `pqchat-core` depends on `scaas-sdk` like any app core; the SDK has no chat module | CLI-PQC-01 |
-| Q-R2 | Chat "(b)": ordinary Matrix chat in the default app build, PqChat in the `scaas` build; one matrix-rust-sdk stack, one client, one login. `pqchat-core` takes the app's live Matrix client (scaas-app's `app-matrix`) as its transport and store and sends envelopes as `net.scaas.pqchat.v1` events | CLI-PQC-05, §6 |
+| Q-R1 | The dependency is reversed for `pqchat-core` too: `pqchat-core` depends on `scaas-sdk` like any app core; the SDK has no chat module | CLI-PQC-01 |
+| Q-R2 | Chat option (b): ordinary Matrix chat in the default app build, PqChat in the `scaas` build; one matrix-rust-sdk stack, one client, one login. `pqchat-core` takes the app's live Matrix client (scaas-app's `app-matrix`) as its transport and store and sends envelopes as `net.scaas.pqchat.v1` events | CLI-PQC-05, §6 |
 | Q-R3 | In scaas-app, `pqchat-core` is the Cargo feature `pqchat` of `app-core-rust` (the app's contract, section 12) | CLI-PQC-01, §11 |
-| Q-R4 | "Ok, đưa e2e vào plan pqchat-core" ("OK, put the e2e into the pqchat-core plan"): a real-crypto client e2e | CLI-PQC-12, plan T11 |
+| Q-R4 | The e2e goes into the pqchat-core plan: a real-crypto client e2e | CLI-PQC-12, plan T11 |
 
 **Earlier owner rulings it follows** (CTR-CHAT-01 and the UA-7 spec): recovery from state alone, no events relied on
 (2026-11-10, P47); the 2-person chat first, groups correct (2026-11-10); spam filtered by clients, no on-chain consent step
@@ -189,7 +189,7 @@ UA-7's bytes for PqChat; the requirements of §5.3 hold for whichever form the S
 | V1 | verify a portable PqChat record | a record (named fields) and a `UASig` against the signer's registry record (a trusted read; single key, `msig` minimal form two levels); returns the typed digest and id; `Refused` carries no detail. Runs where the signature's bytes are at hand: messages from stores, topic records | `records.json`, `topics.json` |
 | V2 | decode received bytes, bounded | a stored payload, a stored record blob, a view's page, by length and depth ([CLI-UAL-03](../../clients/ua-libraries.md#CLI-UAL-03)) into named fields; `hashStruct` of a read wrap for the check against `wrapHashes` | `messages.json`, `records.json` |
 | R1 | ordinary chain reads | topic pages and the other views that choose nothing, through `scaas-rpc`'s lists (ARCH-POS-15) | — |
-| R2 | trusted reads | under `Purpose::FeedsDecryption` ([CLI-RPC-06](../../clients/scaas-rpc.md#CLI-RPC-06)): the registry's `kemKeyOf`, `kemKeyAt`, `checkedOf`, `memberAccepted`, `msigOf` (an `msig` seat's slots, P13; added 2026-11-22, controller call); the factory listing (`infoOf`, `contractsPage`); at an instance, every view of a session's state: `sessionOf`, `epochOf` (their `wrapHashes` and `sealedInfo`), `epochComplete`, `epochCount`, `epochsOf`, `latestEpoch`, `childOf`, `wrapAt` (the wraps), `leftIn`, `removedIn`, `removalCount`, `removalAt`, `messageCount`, `messageAt`, `storedCount`, `storedRange`; the signer's registry record for V1 (read inside the SDK) (CLI-PQC-13; held to the crate's `READS` by gate `pqc-reads`; widened 2026-11-22 from the first list to every session-state view, controller call); and since CTR-CHAT-23 (owner 2026-11-23, CLI-PQC-15) `sigStore`, `sessionSig`, `epochSig`, `leaveCount`, `leaveAt`, `leaveSig`, `removalSig`, `messageSig` | — |
+| R2 | trusted reads | under `Purpose::FeedsDecryption` ([CLI-RPC-06](../../clients/scaas-rpc.md#CLI-RPC-06)): the registry's `kemKeyOf`, `kemKeyAt`, `checkedOf`, `memberAccepted`, `msigOf` (an `msig` seat's slots, P13; added 2026-11-22, controller call); the factory listing (`infoOf`, `contractsPage`); at an instance, every view of a session's state: `sessionOf`, `epochOf` (their `wrapHashes` and `sealedInfo`), `epochComplete`, `epochCount`, `epochsOf`, `latestEpoch`, `childOf`, `wrapAt` (the wraps), `leftIn`, `removedIn`, `removalCount`, `removalAt`, `messageCount`, `messageAt`, `storedCount`, `storedRange`; the signer's registry record for V1 (read inside the SDK) (CLI-PQC-13; held to the crate's `READS` by gate `pqc-reads`; widened 2026-11-22 from the first list to every session-state view, controller call); and since CTR-CHAT-23 (owner 2026-11-23, CLI-PQC-15) `sigStore`, `sessionSig`, `epochSig`, `leaveCount`, `leaveAt`, `leaveSig`, `removalSig`, `messageSig`; and since CTR-CHAT-27 (the tree mode, CLI-PQC-17; plan 2026-11-23-pqchat-treekem T6a, controller call 2026-11-26) the tree views `treeOf`, `treeLeaves`, `treeNodes`, `treeNodeKey`, `commitOf`, `pathListOf`, `pathKeys`, `pathCtAt`, `goneOf`, `goneKeyOf`, `goneOwnKeyOf` (`IPqChatTreeViews`), the registry's records of a tree's signers and leaves (`registrationOf`, `msigStateOf`, `msigAt`, with `kemKeyAt`), put into the SDK's tree reads by its converters | — |
 | R3 | finality | the home's `childOf` / `epochsOf` read at a final block | — |
 | W1 | submission | the `PqChat` writes (`createSession`, `addWraps`, `rekey`, `leave`, `remove`, `postMessage`, `storeMessage`, the six topic writes) as prepared operations (prepare, review, quote, submit, follow; [CLI-SDK-08](../../clients/scaas-sdk.md#CLI-SDK-08)), self-relay or a gateway that takes them, fee 0 allowed; the quote (a simulation) sizes wrap chunks; an unsigned write (`addWraps`, `storeMessage`) is paid or self-relayed (UA-7 P17) | — |
 | T1 | test-only vectors build | fixed randomness and key import for K1, K2, S1, S5 and the signers; refused in a release build by the SDK's load check | §10 |
@@ -366,6 +366,16 @@ operation states).
 | `CardRefused` | a contact card that does not count for its UA (UA-7 §14 O7, CLI-PQC-05): not its signature, or not well formed |
 | `HomeUnsigned` | under `require_signed_records`, a session created on a home that keeps no signatures (`sigStore` `none`; CLI-PQC-15, owner 2026-11-23) |
 | `ExitLag` | a leave or removal naming an epoch more than 16 below the home's head, refused before it is signed (C9, the contract's `PqChatExitLag`; fable re-review D2-4, 2026-11-25) |
+| `TreeReads` | a tree call whose reads did not settle within its bound of read rounds (CLI-PQC-17; plan 2026-11-23-pqchat-treekem T6a) |
+| `TreeTooLarge` | a tree creation over the chain's one-transaction cap, or a commit whose required piece does not fit the chain's limits (TreeKEM spec §13) |
+| `TreeHomeNone` | a tree session on a home that keeps no signatures (TreeKEM spec C1, the contract's `PqChatTreeSigStore`) |
+| `TreeVoid` | a commit whose pieces another sender landed out of order, so that the piece left cannot pay the completion; rebuilt with a new nonce (C37) |
+| `TreeInfoUnconfirmed` | a changed session info whose head a strict majority of at least 3 named endpoints did not confirm (TreeKEM spec R13) |
+| `TreeInfoReview` | an admin's new info after a gap, sealed without the admin's review of it (TreeKEM spec codex-r3-7) |
+| `TreeCreationIncomplete` | a tree creation that did not complete and whose prepared record this store does not hold: it cannot be finished (codex-r3-5) |
+| `TreeStale` | a tree commit on a state whose head moved since (C33: replay first; the TreeKEM T4-T9 review's D-10) |
+| `TreeInfoMissing` | a send under a tree epoch whose info in force the device does not hold (after a gap, or taken flagged: C33; the review's C-3) |
+| `TreeLeavesUnderReview` | a path commit while leaves are under review (a compromise warning or a C45 state names them), not acknowledged by the caller: nothing signed (the path-less delta §6.2, F-3; the path-less review's D-1 = G-2) |
 
 ## 9. Threat model
 
@@ -507,7 +517,7 @@ controller proposal already in [ua-libraries.md](../../clients/ua-libraries.md#p
 **O9 — Attachments.** The `file` content carries its key inside the plaintext (P49), so sending one means a fresh key whose bytes
 enter the content. (a) Out of this round (as the app's contract §11.6: attachments not in its first version). (b) An SDK call that
 encrypts a file under a fresh key and returns the ciphertext and the key as `Plaintext` content. **Recommendation: (a) now, (b)**
-with the attachment task. **Owner 2026-11-21: (b), in this round** ("put it in"): the file sealed under a fresh key by an SDK
+with the attachment task. **Owner 2026-11-21: (b), in this round**: the file sealed under a fresh key by an SDK
 call, the ciphertext on Arweave (`ar://<id>`), `ctSha256` checked before opening, size padded; plan T10b, after TODO 8i's research.
 
 **O10 — The e2e homeserver.** (a) Synapse in Docker (what matrix-rust-sdk's own integration tests use). (b) A lighter server
@@ -521,8 +531,8 @@ endpoints. (b) A later `PqChat` release keeps these signatures' bytes in state, 
 (a contract change, a new catalogued release, the owner's). (c) Read them from the creating transaction's calldata (not state, and
 the transaction is found only through an event). **Recommendation: (a) now, (b) asked for the next `PqChat` release**; (c) breaks
 CTR-CHAT-14.
-**Settled (owner 2026-11-17, "chốt hai điểm": settle both points): (a) now, (b) asked for the next `PqChat` release.**
-**Decided (owner 2026-11-23, "Theo cách 2 với mặc định là SSTORE2, kèm (d - option)"; replaces "(b) asked for the next `PqChat`
+**Settled (owner 2026-11-17, both points): (a) now, (b) asked for the next `PqChat` release.**
+**Decided (owner 2026-11-23, way 2 with SSTORE2 as the default, plus (d) as an option; replaces "(b) asked for the next `PqChat`
 release"):** (b) as a setting per home instance fixed at creation, `none` or `sstore2`, the default `sstore2`
 ([CTR-CHAT-23](../../contracts/pqchat.md#CTR-CHAT-23)); the client option `require_signed_records`, verifying every control-plane
 record's kept signature on an `sstore2` home ([CLI-PQC-15](../../clients/pqchat-core.md#CLI-PQC-15)); and (d) strict majority for
@@ -533,7 +543,7 @@ rejected (a lying endpoint could report it off). Plan [`2026-11-23-pqchat-signat
 their events without Megolm, so the seed alone recovers the Matrix history; the homeserver sees the event type and the hint. (b)
 Megolm on; Matrix history then needs Matrix's own recovery key or a verified device, and only a chain store gives messages from
 state alone. **Recommendation and applied: (a)**, since the main case is a 1:1 session with Matrix as its only store.
-**Settled (owner 2026-11-17, "chốt hai điểm"): (a).** Ordinary Matrix rooms of the default build keep Megolm; only rooms
+**Settled (owner 2026-11-17): (a).** Ordinary Matrix rooms of the default build keep Megolm; only rooms
 bound to a PqChat session carry their already PQ-encrypted envelopes without it.
 
 **O13 — An optional session passphrase** (owner question 2026-11-17, after PqVault's passphrase). Whoever holds the seed opens every
@@ -541,14 +551,14 @@ epoch's key (each is wrapped to the seed's KEM key) and so the whole history, wh
 (a) Nothing more. (b) An optional per-session passphrase as in PqVault: the message keys of an epoch come from
 `HKDF(epoch key ‖ Argon2id(passphrase, salt))`, the flag and the salt inside `sealedInfo` (encrypted, so no contract change), every
 member agreeing it out of band; the seed alone then opens no message of that session. (c) Forward secrecy by deleting old keys and
-regular rekeys, which contradicts the state-only recovery the owner ruled for PqChat. **Settled (owner 2026-11-17, "Ok, theo
-đề xuất (b), ghi vào spec pqchat-core"): (b), optional, off by default, for sensitive 1:1 sessions**, as an extension of UA-7's key
+regular rekeys, which contradicts the state-only recovery the owner ruled for PqChat. **Settled (owner 2026-11-17, option
+(b), written into the pqchat-core spec): (b), optional, off by default, for sensitive 1:1 sessions**, as an extension of UA-7's key
 schedule: a new protocol version with its own vectors in clientkeys `pqchat.js` first and its own review; not in this round's
 tasks (T0–T15 build UA-7 as pinned). Rules for when it is built: the passphrase is never stored or sent; a wrong one is detected
 before any message is shown (an AEAD check on `sealedInfo`); forgetting it loses that session's history; a group session may use
 it only if every member enters the same passphrase; the UI says a PqChat session is not an out-of-band channel for it.
 
-**O14 — Several KEM keys per member (per-device keys).** **Decided (owner 2026-11-23, "Chọn M. Nó vẫn là option chứ?": (M),
+**O14 — Several KEM keys per member (per-device keys).** **Decided (owner 2026-11-23: (M),
 optional per member):** a member may sit in an epoch with several `keyId`s, `(ua, keyId)` strictly ascending, at most 8, one wrap
 each ([CTR-CHAT-24](../../contracts/pqchat.md#CTR-CHAT-24)); everything but the wraps stays per UA. This crate (BUILT on
 `pqchat-sigs`): its shapes and its plain-rekey check read members per UA (`check::distinct`), it tries each own wrap and uses
@@ -559,7 +569,7 @@ version seen per UA; with per-device keys it must become per `keyId` (each devic
 valid for the wraps that name it), and `kemKeyOf` (the highest version) no longer names the seed key once a device key is
 registered above it, so a sender picks the keys to wrap to by `kemKeyAt` per chosen version.
 
-**O15 — The group mode.** **Decided (owner 2026-11-23, "add the field now, in pqchat-sigs"):** `PqChatSession.groupMode`, the
+**O15 — The group mode.** **Decided (owner 2026-11-23: the field is added now, in `pqchat-sigs`):** `PqChatSession.groupMode`, the
 record's last field, 0 flat wraps; this release accepts 0 only ([CTR-CHAT-25](../../contracts/pqchat.md#CTR-CHAT-25)). This
 crate signs 0 (through the SDK) and refuses a read session of any other mode (`decode`); TreeKEM (1) comes with a later release.
 

@@ -15,7 +15,7 @@ mod prepared;
 use pqvault_core::content;
 use pqvault_core::keys::{self, ItemAt};
 use pqvault_core::records::*;
-use pqvault_core::{Error, PqVault};
+use pqvault_core::{Error, Item, PqVault};
 use prepared::SignPrepared as _;
 use scaas_sdk::app_core::{AppCore, AppKey, AppKeyUsage, AppPath, SecretBytes};
 use scaas_sdk::op::KeyRef;
@@ -25,6 +25,7 @@ use scaas_sdk::{
 };
 use serde_json::Value;
 use std::sync::Arc;
+use zeroize::Zeroizing;
 
 pub const REPO: &str = "bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author capable act festival slice deposit sauce coconut afford frown better";
 
@@ -351,8 +352,8 @@ async fn key_schedule() {
             e["json"].as_str().unwrap()
         );
         assert_eq!(
-            content::pad_info(e["json"].as_str().unwrap().as_bytes()).unwrap(),
-            ub(&e["pt"])
+            &content::pad_info(e["json"].as_str().unwrap().as_bytes()).unwrap()[..],
+            &ub(&e["pt"])[..]
         );
         let again = keys::seal_info(&a, &kv, vid, eid, &info).unwrap();
         assert_eq!(again.len(), ub(&e["sealedInfo"]).len());
@@ -394,8 +395,9 @@ async fn key_schedule() {
     .is_none());
 }
 
-/// items.json: each version opened by `keys::decrypt_item` into its content, its plaintext `content::item_plaintext` of the
-/// content, its AAD `item_aad`; a fresh encryption opening back; a file item's key opening under `kFile`; every refusal row
+/// items.json: each version opened by `keys::decrypt_item` into its content, typed by the item layer (CLI-PQV-16 H1); the
+/// generator's canonical bytes read by `Item::from_canonical` and written back by `Item::plaintext` byte for byte (the stored
+/// format unchanged by the typed layer); its AAD `item_aad`; a fresh encryption opening back; a file item's key opening under `kFile`; every refusal row
 /// the one `Unreadable`, beside the base that opens.
 #[tokio::test(flavor = "multi_thread")]
 async fn item_versions_and_refusals() {
@@ -428,16 +430,18 @@ async fn item_versions_and_refusals() {
             ub(&x["aad"]),
             "{name}"
         );
+        let item = Item::from_canonical(x["json"].as_str().unwrap().as_bytes()).unwrap();
+        assert_eq!(&item.plaintext().unwrap()[..], &ub(&x["pt"])[..], "{name}");
         assert_eq!(
-            content::item_plaintext(&x["content"]).unwrap(),
-            ub(&x["pt"]),
+            serde_json::from_slice::<Value>(&item.canonical().unwrap()).unwrap(),
+            x["content"],
             "{name}"
         );
         let got = keys::decrypt_item(&a, &kv, &p, &ub(&x["ciphertext"])).unwrap();
-        assert_eq!(got, x["content"], "{name}");
-        let ct = keys::encrypt_item(&a, &seed, &kv, &p, ub(&x["pt"])).unwrap();
+        assert_eq!(got, item, "{name}");
+        let ct = keys::encrypt_item(&a, &seed, &kv, &p, Zeroizing::new(ub(&x["pt"]))).unwrap();
         assert_eq!(ct.len(), ub(&x["ciphertext"]).len());
-        assert_eq!(keys::decrypt_item(&a, &kv, &p, &ct).unwrap(), x["content"]);
+        assert_eq!(keys::decrypt_item(&a, &kv, &p, &ct).unwrap(), item);
         if let Some(f) = x.get("file").filter(|f| !f.is_null()) {
             let wire = ub(&x["content"]["keyWrap"]);
             let fk = keys::open_file_key(&a, &kv, &p, &wire).unwrap();

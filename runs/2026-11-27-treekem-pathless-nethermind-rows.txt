@@ -1,0 +1,33 @@
+# the path-less delta P8 on the local copy of the SCaaS testnet's chain (runs/2026-11-27-treekem-pathless-nethermind.sh)
+# entry | gasUsed | regular | state | gas limit; [rows] lines name the row the transactions after them belong to
+[chain] node http://127.0.0.1:18545: registry 0x340031063f6d05393cb8119c1595ac80bf09b83d, factory 0xbc53ea34420e08af659d338c9f7fe540163aa337, PqChat 0x8b76aaca97ed3e8788173fa904581306f230ac4b
+[chain] node http://127.0.0.1:18545: a 30 M loop stopped at 16777216 gas (positive control)
+[chain] 14 UAs registered (accounts from 100)
+createSession | 16105345 | - | - | 16491159
+[tree] session 0x91f2c79a1f2c905350ea9fc82aaf90c1c7bb084689f7052ba5b141939101ab56 created (bound None)
+[rows] path-less, 1 Add
+[tree] built 1 Adds (refresh false): pathless true
+commit | 13175717 | - | - | 13596365
+[rows] plan ["commit"]
+[rows] path-less, 2 Adds
+[tree] built 2 Adds (refresh false): pathless true
+[result] called `Result::unwrap()` on an `Err` value: GasAboveTxCap
+[result] test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 186.46s
+[chain] node http://127.0.0.1:18545: registry 0x340031063f6d05393cb8119c1595ac80bf09b83d, factory 0xbc53ea34420e08af659d338c9f7fe540163aa337, PqChat 0x8b76aaca97ed3e8788173fa904581306f230ac4b
+[chain] node http://127.0.0.1:18545: a 30 M loop stopped at 16777216 gas (positive control)
+[chain] 4 UAs registered (accounts from 200)
+createSession | 16105561 | - | - | 16491381
+[tree] session 0x65c79f782695fa60af6ca39d8fca3b2af1b7c548124982b42994112d1c0ec807 created (bound Some(1))
+[tree] built 1 Adds (refresh false): pathless true
+commit | 13175681 | - | - | 13596329
+[tree] built 1 Adds (refresh false): pathless false
+[result] called `Result::unwrap()` on an `Err` value: GasAboveTxCap
+[result] test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 88.77s
+[chain] node http://127.0.0.1:18545: registry 0x340031063f6d05393cb8119c1595ac80bf09b83d, factory 0xbc53ea34420e08af659d338c9f7fe540163aa337, PqChat 0x8b76aaca97ed3e8788173fa904581306f230ac4b
+[chain] node http://127.0.0.1:18545: a 30 M loop stopped at 16777216 gas (positive control)
+[chain] 4 UAs registered (accounts from 300)
+createSession | 16105657 | - | - | 16491478
+[tree] session 0x837721fca04b77494586a445375f8e74a3cce95bb55afe81e85ada31a6c431b2 created in one transaction, gas limit 16491478
+[tree] quote: path-less 27399378 asked, add and refresh 42809336 asked; the next refresh carries about 2 ciphertexts, about 5.7 M asked
+[result] called `Result::unwrap()` on an `Err` value: GasAboveTxCap
+[result] test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 79.81s

@@ -22,7 +22,7 @@ Profile [`profile.json`](profile.json) (`draft`, SDK plan T40), from the probes 
 - **Explorer:** Basescan (Etherscan v2), `sepolia.basescan.org`; verification (NET-EVM-12) with the API key named by `VERIFY_API_KEY_ENV`; the key
   itself never enters the repo.
 - **RPC:** from the environment, passed to `smartcontracts/scripts/deploy.sh evm <rpc>`; no URL or key committed.
-- **Disabled kinds** (owner 2026-11-22, "disable the kinds that do not fit on Base and Celo": ARCH-POS-18 confirmed,
+- **Disabled kinds** (owner 2026-11-22: the kinds that do not fit on Base and Celo disabled, ARCH-POS-18 confirmed,
   decisions CLI-SDK-32 (2)): each PQ kind's largest transaction, regular and regular + EIP-8037 state gas (Amsterdam,
   measured), against this chain's block gas limit 120,000,000 by accounts.md's MD-5 rule (regular × 1.05 < 2^24, total × 1.05
   within the limit); `profile.json` `disabledKinds`; the SDK refuses a disabled kind `KindDisabled` before anything is signed:

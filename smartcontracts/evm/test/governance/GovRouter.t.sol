@@ -926,7 +926,7 @@ contract GovRouterTest is GovRouterFixture {
         assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
     }
 
-    /// Round 3zb + 3zc (CTR-GOV-28 Change, owner 2026-11-13 "(2), gộp vào round 3zb + 3zc."): every role holder's op signs
+    /// Round 3zb + 3zc (CTR-GOV-28 Change, owner 2026-11-13, option (2), merged into round 3zb + 3zc): every role holder's op signs
     /// the target's word. Signed and sent for a sibling (another word): the target refuses it by name, nothing written, the
     /// nonce unspent; signed for the own word but sent with another: another digest, `MetaTxBadSignature`; the own word, the
     /// control, is `_everyOp` (`test_eachOpByNative`).

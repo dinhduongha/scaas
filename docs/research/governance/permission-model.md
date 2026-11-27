@@ -19,8 +19,8 @@ normative text now lives in `docs/decisions.md` (CTR-GOV-01 to -19), the summary
 the build made false carries **superseded:** with the built rule and its CTR-GOV id or is corrected in place, and `[V]` line numbers read
 at `b3cf5718` are re-pointed to the current file or dropped.
 
-Version 1 (same day, superseded by this file) derived the model from the owner's question *"is there a right, and
-within what?"* and placed every per-holder limit outside the token. The attack round
+Version 1 (same day, superseded by this file) derived the model from the owner's question *is there a right, and
+within what?* and placed every per-holder limit outside the token. The attack round
 ([permission-model-attack.md](permission-model-attack.md), A1–A21, plus the parts of the escalation report after its
 7th finding and of the `MODERATE` report after its 2nd, read this session from the workflow journal) and three owner
 decisions of 2026-11-02 change the placement, not the model:

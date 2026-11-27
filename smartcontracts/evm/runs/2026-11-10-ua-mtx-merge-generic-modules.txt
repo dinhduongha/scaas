@@ -1,5 +1,5 @@
-# ua-mtx-merge: every class's release is module-checked (CTR-TOK-30, owner 2026-11-10: "fix it so every class is
-# checked"). OpenFactory's generic class path (deployRelease -> _newRelease) now runs _checkModules as the token-kind
+# ua-mtx-merge: every class's release is module-checked (CTR-TOK-30, owner 2026-11-10: every class is
+# checked). OpenFactory's generic class path (deployRelease -> _newRelease) now runs _checkModules as the token-kind
 # and DEX paths do. Full output in the git-ignored .log files of runs/2026-11-10-ua-mtx-merge-generic-modules/. UNAUDITED.
 # Base: 565305c7. The factory deploy gas: a top-level ReleaseProbe CREATE2 of OpenFactory's init code under isolate
 # (DeployBase._measuredGas's method: regular = lastCallGas x 64/63, state = EIP-8037's), asked = (regular + state) x 1.05.

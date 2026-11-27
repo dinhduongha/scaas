@@ -232,7 +232,7 @@ abstract contract GovernanceBaseCore {
         if (admin) _govChainWord(chainUid_);
     }
 
-    /// @dev CTR-GOV-28 Change (owner 2026-11-13, "(2), gộp vào round 3zb + 3zc."): every direct entry a role holder calls.
+    /// @dev CTR-GOV-28 Change (owner 2026-11-13, option (2), merged into round 3zb + 3zc): every direct entry a role holder calls.
     ///      The subject; if it holds `bit`, its word before any write and before a grant is debited. A caller without the bit
     ///      is refused by the body, by the name it has today (`MissingRole`, `NotGuardian`, `NotRateAdmin`, …): no existing
     ///      refusal changes.

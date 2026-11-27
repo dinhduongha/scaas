@@ -1,0 +1,3 @@
+# p9 mutants at commit 65638f16a (name | outcome | test)
+JS resume drops the warnings | killed | ../../scripts/capped node --test --test-name-pattern='R-1' test/treekem.test.js
+1 mutants, 1 killed, 0 survived (0 killed elsewhere), 0 not loaded

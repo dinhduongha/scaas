@@ -114,7 +114,7 @@ THE preset [counted, spike B], whose rows are 1.3× `n2048-kmax1024`'s [estimate
 
 ## Fallbacks (owner 2026-10-22)
 
-Production at this set is preset B (above; owner 2026-10-22: "chọn B, A và C là các phương án dự phòng"). Two
+Production at this set is preset B (above; owner 2026-10-22: B chosen, A and C kept as fallbacks). Two
 fallbacks are kept for the case that B is rejected later (e.g. by a review of its domains or a chain that wants no
 set-specific preset); neither is in a production build. Analysis, numbers and the zero-knowledge argument:
 `docs/research/pqzh-set-a-proof-limit.md`.

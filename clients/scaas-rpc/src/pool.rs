@@ -459,7 +459,48 @@ impl Pool {
         F: Fn(ReadAt<P::Hash>) -> Fut,
         Fut: Future<Output = Result<T, ReadError>>,
     {
+        self.agree_among(probe, choice, purpose, false, f).await
+    }
+
+    /// [`Pool::agree`] over the list's `named` endpoints only (R13 of the TreeKEM spec, ARCH-POS-15: a strict majority over at
+    /// least 3 named endpoints, discovered and default nodes do not count): `need` is ⌊m/2⌋ + 1 of the `m` named ones, the
+    /// others are not asked; fewer than 3 named is `AgreementNeedsThree`.
+    pub async fn agree_named<T, P, F, Fut>(
+        &self,
+        probe: &P,
+        choice: BlockChoice,
+        purpose: Purpose,
+        f: F,
+    ) -> Result<Agreed<T, P::Hash>, RpcError>
+    where
+        T: Clone + PartialEq,
+        P: Probe,
+        F: Fn(ReadAt<P::Hash>) -> Fut,
+        Fut: Future<Output = Result<T, ReadError>>,
+    {
+        self.agree_among(probe, choice, purpose, true, f).await
+    }
+
+    async fn agree_among<T, P, F, Fut>(
+        &self,
+        probe: &P,
+        choice: BlockChoice,
+        purpose: Purpose,
+        only_named: bool,
+        f: F,
+    ) -> Result<Agreed<T, P::Hash>, RpcError>
+    where
+        T: Clone + PartialEq,
+        P: Probe,
+        F: Fn(ReadAt<P::Hash>) -> Fut,
+        Fut: Future<Output = Result<T, ReadError>>,
+    {
         let n = self.len();
+        let member = |i: usize| !only_named || self.classes[i] == Class::Named;
+        let m = (0..n).filter(|&i| member(i)).count();
+        if only_named && m < 3 {
+            return Err(RpcError::AgreementNeedsThree);
+        }
         if n < 2 {
             return Err(RpcError::argument(
                 "strict_majority needs two endpoints or more",
@@ -470,7 +511,7 @@ impl Pool {
                 "strict_majority needs a pinned chain_uid",
             ));
         }
-        let need = n / 2 + 1;
+        let need = m / 2 + 1;
         let trusted = |i: usize| self.classes[i] != Class::Discovered;
         if purpose == Purpose::FeedsDecryption {
             if !(0..n).any(trusted) {
@@ -486,18 +527,26 @@ impl Pool {
         // (1) identity and the block each endpoint names, concurrently; every name is waited for (each one request, under its
         // timeout and the deadline): the need-th highest needs them all
         let names: Vec<Option<u64>> = futures::future::join_all((0..n).map(|i| async move {
-            self.identity_ok(probe, i, deadline).await?;
-            probe.named(i, choice, deadline).await
+            if !member(i) {
+                return None;
+            }
+            Some(
+                async {
+                    self.identity_ok(probe, i, deadline).await?;
+                    probe.named(i, choice, deadline).await
+                }
+                .await,
+            )
         }))
         .await
         .into_iter()
-        .map(|r| r.map_err(|e| failures.push(self.label(e))).ok())
+        .map(|r| r?.map_err(|e| failures.push(self.label(e))).ok())
         .collect();
         let mut sorted: Vec<u64> = names.iter().flatten().copied().collect();
         sorted.sort_unstable_by(|a, b| b.cmp(a));
         let highest_named = sorted.first().copied().unwrap_or(0);
         let no = |largest: usize, failures: Vec<EndpointFailure>| RpcError::EndpointNoMajority {
-            n,
+            n: m,
             need,
             largest,
             failures,

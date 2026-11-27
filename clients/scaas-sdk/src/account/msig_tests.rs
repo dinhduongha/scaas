@@ -830,7 +830,7 @@ impl crate::platform::Authenticator for Se {
     }
 }
 
-/// M1 and M5 (owner 2026-11-19, "approved M1–M5 as proposed"): a 2-of-2 over fndsa512 #0 and a secure-element row. The
+/// M1 and M5 (owner 2026-11-19): a 2-of-2 over fndsa512 #0 and a secure-element row. The
 /// fndsa512 slot signed apart (what `member_sign` returns on its device) comes back as `MsigSlot::Signed`; the secure-element
 /// slot signs through the external flow (one device request after a dry run); `msig_combine` puts them in index order and the
 /// set verifies. A `Signed` slot naming another index, and the same slot twice, are refused; an inactive slot is
@@ -1227,7 +1227,7 @@ async fn msig_on_a_two_generation_line() {
     }
 }
 
-/// [`msig_on_a_two_generation_line`] on a chain with pinned reads, and on one without (owner 2026-11-23, "Sticky endpoint":
+/// [`msig_on_a_two_generation_line`] on a chain with pinned reads, and on one without (owner 2026-11-23, sticky endpoint:
 /// Moonbeam's profile; the same views by the sticky read, where `PinnedReadsUntrusted` refused them before).
 async fn msig_line(pinned: bool) {
     const G1: &str = "0x5ca00000000000000000000000000000000000c1";

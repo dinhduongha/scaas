@@ -93,6 +93,29 @@ codes! {
     HomeUnsigned,
     /// a leave or removal naming an epoch more than 16 below the home's head (C9, the contract's `PqChatExitLag`; D2-4)
     ExitLag,
+    /// a tree call whose reads did not settle within its bound of read rounds (CLI-PQC-17)
+    TreeReads,
+    /// a tree creation over the chain's one-transaction cap, or a commit whose required piece does not fit (spec §13)
+    TreeTooLarge,
+    /// a tree session on a home that keeps no signatures (C1, the contract's `PqChatTreeSigStore`)
+    TreeHomeNone,
+    /// a commit whose pieces another sender landed out of order, so that the piece left cannot pay the completion: void,
+    /// rebuilt with a new nonce (C37, codex-r3-12)
+    TreeVoid,
+    /// a changed session info whose head a strict majority of at least 3 named endpoints did not confirm (R13)
+    TreeInfoUnconfirmed,
+    /// an admin's new info after a gap, sealed without the admin's review of it (codex-r3-7)
+    TreeInfoReview,
+    /// a tree creation that did not complete and whose prepared record this store does not hold: it cannot be finished
+    /// (codex-r3-5)
+    TreeCreationIncomplete,
+    /// a tree commit on a state whose head moved since (C33: replay first)
+    TreeStale,
+    /// a send under a tree epoch whose info in force the device does not hold (after a gap, or taken flagged: C33)
+    TreeInfoMissing,
+    /// a path commit while leaves are under review (a compromise warning or an author that did not hold the epoch names
+    /// them), not acknowledged by the caller: nothing signed (the path-less delta §6.2, F-3)
+    TreeLeavesUnderReview,
 }
 
 impl fmt::Display for PqChatError {
@@ -116,5 +139,12 @@ impl From<SdkError> for PqChatError {
             return PqChatError::KemKeyInvalid;
         }
         PqChatError::Sdk(e)
+    }
+}
+
+impl From<pqchat_transport::TransportError> for PqChatError {
+    /// A transport call that failed: a room that cannot be created, joined or written (no room id or Matrix id in it).
+    fn from(_: pqchat_transport::TransportError) -> Self {
+        PqChatError::MatrixRoom
     }
 }

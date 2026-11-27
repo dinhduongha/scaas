@@ -88,6 +88,8 @@ pub mod platform;
 pub mod pqchat_keys;
 #[cfg(feature = "pqchat-records")]
 pub mod pqchat_records;
+#[cfg(feature = "pqchat-records")]
+pub mod pqchat_tree;
 pub mod surface;
 #[cfg(feature = "sync-api")]
 #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]

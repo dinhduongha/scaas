@@ -1,12 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="800" viewBox="0 0 1000 800" role="img" aria-labelledby="t d">
   <title id="t">Client stack</title>
-  <desc id="d">Which client crate depends on which. scaas-app's front-ends use app-core-rust, which links scaas-profile and scaas-matrix in every build and adds scaas-sdk, pqchat-core and pqvault-core with the feature scaas. In this repository scaas-tui and the CLI use the SDK; pqchat-core and pqvault-core sit above the SDK; scaas-matrix and pqchat-core share the trait-only crate pqchat-transport; the SDK depends on scaas-profile, scaas-rpc and ua-rs with all features, the only signer; scaas-profile depends on ua-rs with the user-profile features only, with no signing code. Dashed arrows are data dependencies only.</desc>
+  <desc id="d">Which client crate depends on which. scaas-app's front-ends use app-core-rust, which links scaas-profile and scaas-matrix in every build and adds scaas-sdk, pqchat-core and pqvault-core with the feature scaas. In this repository scaas-tui and the CLI use the SDK; scaas-tui also links pqchat-core, pqvault-core and scaas-matrix, and the CLI will link the same three (planned, dotted purple arrows); pqchat-core and pqvault-core sit above the SDK; scaas-matrix and pqchat-core share the trait-only crate pqchat-transport; the SDK depends on scaas-profile, scaas-rpc and ua-rs with all features, the only signer; scaas-profile depends on ua-rs with the user-profile features only, with no signing code. Dashed arrows are data dependencies only.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
     </marker>
     <marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#0969da"/>
+    </marker>
+    <marker id="ahp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8250df"/>
     </marker>
     <style>
       text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
@@ -19,6 +22,8 @@
       .chip { font-size: 9.5px; font-weight: 700; fill: #ffffff; }
       .flow { stroke: #57606a; stroke-width: 1.5; fill: none; }
       .every { stroke: #0969da; stroke-width: 1.8; fill: none; }
+      .planned { stroke: #8250df; stroke-width: 1.6; fill: none; stroke-dasharray: 2 3; }
+      .plab { font-size: 11px; fill: #8250df; font-weight: 600; }
       .data { stroke: #57606a; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
       .built { fill: #ffffff; stroke: #1a7f37; stroke-width: 1.5; }
       .wip { fill: #ffffff; stroke: #9a6700; stroke-width: 1.5; }
@@ -59,6 +64,8 @@
   <!-- this repository group -->
   <rect x="20" y="268" width="960" height="514" rx="12" fill="#eef7ee" stroke="#d0d7de"/>
   <text class="grp" x="34" y="288">this repository (scaas)</text>
+  <path class="planned" d="M240 284 L270 284"/>
+  <text class="plab" x="276" y="288">planned dependency (the CLI)</text>
 
   <!-- row: front ends of this repo -->
   <rect x="40" y="298" width="180" height="50" rx="10" class="wip"/>
@@ -66,7 +73,7 @@
   <text class="s" x="56" y="337">also uses scaas-sdk</text>
   <rect x="240" y="298" width="160" height="50" rx="10" class="built"/>
   <text class="b" x="256" y="319">CLI scaas</text>
-  <text class="s" x="256" y="337">thin client of scaas-sdk</text>
+  <text class="s" x="256" y="337">SDK; app cores planned</text>
 
   <!-- row: app cores, trait, matrix -->
   <rect x="40" y="390" width="200" height="50" rx="10" class="built"/>
@@ -123,8 +130,13 @@
 
   <!-- scaas-tui -->
   <path class="flow" d="M120 348 L120 388" marker-end="url(#ah)"/>
-  <path class="flow" d="M200 348 L300 388" marker-end="url(#ah)"/>
+  <path class="flow" d="M290 366 L290 388" marker-end="url(#ah)"/>
   <path class="flow" d="M210 348 L210 366 L800 366 L800 388" marker-end="url(#ah)"/>
+  <!-- CLI: planned (owner 2026-11-27, spec Q2) -->
+  <path class="planned" d="M250 348 L250 378 L228 378 L228 388" marker-end="url(#ahp)"/>
+  <path class="planned" d="M360 348 L360 388" marker-end="url(#ahp)"/>
+  <path class="planned" d="M395 348 L395 356 L930 356 L930 388" marker-end="url(#ahp)"/>
+  <text class="plab" x="470" y="350">planned</text>
   <path class="data" d="M60 298 L60 258 L780 258 L780 150" marker-end="url(#ah)"/>
 
   <!-- app cores to sdk and trait -->

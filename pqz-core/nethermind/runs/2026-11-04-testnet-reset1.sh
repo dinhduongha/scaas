@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# SCaaS testnet (chain id 7622) reset 1, owner 2026-11-04 ("Làm reset: mục 2, reset lần 1"; TODO pre-freeze work order
+# SCaaS testnet (chain id 7622) reset 1, owner 2026-11-04 (reset now: item 2, reset 1; TODO pre-freeze work order
 # item 2): image scaas/nethermind-pqz:2.2.0-pqz7 (the MLDSA87 plugin), chainspec of RUNBOOK "Code size 128 KiB"
 # (patch-chainspec.py --testnet-reset: maxCodeSize 0x20000, eip7954TransitionTimestamp removed) plus a second engine.Pqz
 # schedule from add-schedule.py --mldsa87 (= schedule 0 + mldsa87Gas 102,000, PROVISIONAL, not calibrated). No chain-data

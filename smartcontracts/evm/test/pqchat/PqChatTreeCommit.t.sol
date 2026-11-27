@@ -161,6 +161,8 @@ abstract contract PqChatTreeWorld is PqChatBase {
             s.members[i] = IPqChat.MemberKey(_b32(k, ".ua"), uint64(_u(k, ".keyId")), _b32(k, ".via"));
         }
         s.groupMode = uint8(_j().readUint(string.concat(g, ".groupMode")));
+        s.pathRefreshBound = uint32(_j().readUint(string.concat(g, ".pathRefreshBound")));
+        s.confirmTag = _j().readBytes32(string.concat(g, ".confirmTag"));
         s.wrapHashes = _j().readBytes32Array(string.concat(g, ".wrapHashes"));
         s.sealedInfo = _j().readBytes(string.concat(g, ".sealedInfo"));
         w = _wrapsAt(string.concat(_sc(si), ".genesis.wraps"));
@@ -262,6 +264,8 @@ abstract contract PqChatTreeWorld is PqChatBase {
         c.ctListHash = _j().readBytes32(string.concat(r, ".ctListHash"));
         c.treeHash = _j().readBytes32(string.concat(r, ".treeHash"));
         c.sealedInfo = _j().readBytes(string.concat(r, ".sealedInfo"));
+        c.pathless = _j().readBool(string.concat(r, ".pathless"));
+        c.confirmTag = _j().readBytes32(string.concat(r, ".confirmTag"));
     }
 
     /// A `treeLeave` or `treeRemove` step, landed.
@@ -683,6 +687,11 @@ contract PqChatTreeScenarioTest is PqChatTreeWorld {
         for (uint256 i; i < 8; ++i) {
             assertEq(got[i], vm.parseJsonBytes32(tj, string.concat(".typehashes.", names[i], ".hash")), names[i]);
         }
+        // the path-less delta (C42, C43; C41 for the genesis): PqChatCommit 0xce1e681e…23fd4d -> 0x871e8239…d62a01 (`bool
+        // pathless`, `bytes32 confirmTag` after `sealedInfo`); TreeGenesis 0xb3b1ba63…e7337d -> 0xbdb75e71…fdc0ae
+        // (`uint32 pathRefreshBound` after `groupMode`)
+        assertEq(PqChatTypes.COMMIT_TYPEHASH, 0x871e8239f743e42defe7cdfeaeefb9df9dc72f76b294214408868ef0e6d62a01);
+        assertEq(PqChatTypes.TREE_GENESIS_TYPEHASH, 0xbdb75e71daf7422753cfe342b2598d1a2c47cec7acdc5ec82837682920fdc0ae);
         bytes32 empty = th2.pathList(new uint32[](0), new bytes32[](0));
         assertEq(empty, vm.parseJsonBytes32(tj, ".digests.emptyPathList"));
         assertEq(
@@ -774,8 +783,9 @@ contract PqChatTreeScenarioTest is PqChatTreeWorld {
     // (their genesis lands); 20 is commits alone.
 
     /// The number of worlds in `tree-secrets.json`, each played by a test here: a new world is red until it is played and
-    /// this constant moves. The merge with branch `review-fix4-client` (its nested-msig world 22) moved it 22 -> 23.
-    uint256 internal constant WORLDS = 23;
+    /// this constant moves. The merge with branch `review-fix4-client` (its nested-msig world 22) moved it 22 -> 23; the
+    /// path-less delta's eight worlds (23 to 30) 23 -> 31; the faults world's control (26, aef1b9647) 31 -> 32.
+    uint256 internal constant WORLDS = 32;
 
     function test_scenario_worldCount() public {
         _open();
@@ -822,6 +832,70 @@ contract PqChatTreeScenarioTest is PqChatTreeWorld {
         assertEq(v, 1, "N's tag named version 1");
         (v,,) = p.msigStateOf(_b32(_stepKey(22, 1), ".gone.record.admin"));
         assertEq(v, 0, "X never updated");
+    }
+
+    /// Worlds 23 to 31 by name: a world inserted before one of them moves its index, red here rather than another world played
+    /// under the old name (the control world 26 moved 26..30 to 27..31).
+    function test_scenario_pathlessNames() public {
+        _open();
+        string[9] memory n = [
+            "pathless",
+            "pathless-first",
+            "pathless-faults",
+            "pathless-faults-control",
+            "pathless-own",
+            "pathless-own-behind",
+            "pathless-bound",
+            "pathless-warn",
+            "pathless-exit"
+        ];
+        for (uint256 i; i < n.length; ++i) {
+            assertEq(vm.parseJsonString(_j(), string.concat(_sc(23 + i), ".name")), n[i], "world by name");
+        }
+    }
+
+    // The path-less delta (§13): worlds 23 to 31, each landed whole or in pieces (a path-less record, then its wraps, the
+    // last one completing it); the contract checks the shapes, R19, the bound and the counter, never a tag or a Welcome
+
+    function test_scenario_pathless() public {
+        _run(23, false);
+    }
+
+    function test_scenario_pathless_chunked() public {
+        _run(23, true);
+    }
+
+    function test_scenario_pathlessFirst() public {
+        _run(24, false);
+    }
+
+    function test_scenario_pathlessFaults() public {
+        _run(25, true);
+    }
+
+    /// The faults world's control (the path-less review's trace test, aef1b9647): the same steps with honest tags
+    function test_scenario_pathlessFaultsControl() public {
+        _run(26, false);
+    }
+
+    function test_scenario_pathlessOwn() public {
+        _run(27, false);
+    }
+
+    function test_scenario_pathlessOwnBehind() public {
+        _run(28, false);
+    }
+
+    function test_scenario_pathlessBound() public {
+        _run(29, true);
+    }
+
+    function test_scenario_pathlessWarn() public {
+        _run(30, false);
+    }
+
+    function test_scenario_pathlessExit() public {
+        _run(31, false);
     }
 
     /// The lag world (17 commits), then C9's lag on its head: a leave naming epoch 0, 17 below the head, is

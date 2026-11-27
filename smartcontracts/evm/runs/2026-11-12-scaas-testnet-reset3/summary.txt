@@ -1,4 +1,4 @@
-# SCaaS testnet (7622, scaas-testnet) reset 3, 2026-11-11/12. Owner standing leave 2026-11-10 ("tự động làm, không cần hỏi nữa").
+# SCaaS testnet (7622, scaas-testnet) reset 3, 2026-11-11/12. Owner standing leave 2026-11-10: run automatically, without asking again.
 # Branch ua-mtx-merge at d709d672 (short final gate green at 7c85c2a3). UNAUDITED. Full output in git-ignored .log files
 # beside this file; STATE.md has the detail of each step. Chain genesis / chain_uid
 # 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164.

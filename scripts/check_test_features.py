@@ -77,6 +77,9 @@ ARTIFACTS = [
     ("clients/pqvault-core", "shipped"),
     # the profile store (owner 2026-11-27): every feature it ships, its own test feature `test-hooks` excepted
     ("clients/scaas-profile", "shipped"),
+    # the Matrix client crate and its trait crate (CLI-MTX-01): no guarded crate in their graphs at all
+    ("clients/scaas-matrix", []),
+    ("clients/pqchat-transport", []),
 ]
 
 

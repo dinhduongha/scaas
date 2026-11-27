@@ -183,7 +183,7 @@ The `PqChat` contract (UA-7): sessions, epochs, wraps, messages, topics and entr
    (`PqChatRemovedKept`); `TREE_LEAVES_MAX` 512 (depth 9), `TREE_CHANGES_MAX` 20, `TREE_ADMINS_MAX` 32, `TREE_INFO_MAX` 4,124 B; every
    ciphertext, node key and path list kept in SSTORE2; the last piece's completion within EIP-8037 and 2^24; the
    `PqGroupTree` storage namespace apart from `PqGroupBase`'s and `PqChat`'s (`test/v2/layout/namespaces.json`).
-10. **Exits at the head** (added 2026-11-26; E-3 of the TreeKEM code review, owner "Yes, both modes"; the spec check's lag;
+10. **Exits at the head** (added 2026-11-26; E-3 of the TreeKEM code review, owner: in both modes; the spec check's lag;
    E-2 and A-16 of the re-review; CTR-CHAT-10, -20, -27 C9): at home a leave or removal (mode 0's `leave` / `remove`, the
    tree's `treeLeave` / `treeRemove`, all in `PqChatTreeMembers`) names the head or a complete ancestor of it
    (`PqChatIncomplete` for a staged child) at most `EXIT_LAG_MAX` = 16 epochs below the head (`PqChatExitLag(named, head)`;

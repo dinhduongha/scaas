@@ -37,7 +37,7 @@ Object sizes: pk 22,528 B, ciphertext 22,656 B, R_TX statement 113,792 B (audito
 [CTR-PQZ-37](../../../docs/contracts/pq-zero-knowledge.md#CTR-PQZ-37)): an opening token at this set needs a chain whose block
 gas limit is at least 73.32 M under EIP-8037** (one op 1 with the auditor, relayed: 8,401,816 regular + 64,917,900 state =
 73,319,716; without the auditor 70,485,628), **and every scoped key record (class 2 or 3, with the opening or not) needs at
-least 61.06 M** (`storePqzScopedPop`: 5,806,179 + 55,251,360 = 61,057,539), above a 60 M Ethereum-like block. Owner ruling 2026-11-14 (verbatim in
+least 61.06 M** (`storePqzScopedPop`: 5,806,179 + 55,251,360 = 61,057,539), above a 60 M Ethereum-like block. Owner ruling 2026-11-14 (recorded in
 `docs/decisions.md`, CTR-PQZ-37): this set is only for customer chains with larger blocks; no factory refusal, no design change.
 
 Measured where marked (plan 5h Task 8d part 2b: forge 1.8.5 under Amsterdam through the real token and registry, the

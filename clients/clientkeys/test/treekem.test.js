@@ -14,7 +14,7 @@ import * as tk from "../src/treekem.js";
 import * as tr from "../src/pqchat-tree.js";
 import * as pc from "../src/pqchat.js";
 import { kemKeyFromSeed } from "../src/kem.js";
-import { hex, keccak_256, utf8ToBytes, concatBytes, abiEncode, fromHex } from "../src/bytes.js";
+import { hex, keccak_256, utf8ToBytes, concatBytes, abiEncode, fromHex, jsonParse } from "../src/bytes.js";
 
 const sc = tk.PQCHAT_TREE;
 const Z32 = f.Z32;
@@ -931,8 +931,12 @@ test("negative rows: a node key that does not match its secret, a Welcome that d
   assert.equal(at(f.replayOf(w2, "C"), 1).state, "followed");
   const w3 = mk("t/neg3");
   f.commit(w3, "A", { faults: { infoK: rnd("t/neg/K") } });
-  for (const n of ["B", "C"])
-    assert.deepEqual(states(f.replayOf(w3, n)).at(-1), [1, "not followed", "info does not open"], n);
+  // the delta's F-8 (C12 as amended): the tag decides the key state, sealedInfo only the info
+  for (const n of ["B", "C"]) {
+    assert.deepEqual(states(f.replayOf(w3, n)).at(-1), [1, "followed", null], n);
+    assert.equal(at(f.replayOf(w3, n), 1).info, "not taken", n);
+    assert.equal(at(f.replayOf(w3, n), 1).inForce, null, n);
+  }
   const w4 = mk("t/neg4");
   f.commit(w4, "A", { adds: [["D", 3]] });
   for (const n of ["B", "C", "D"]) assert.equal(at(f.replayOf(w4, n), 1).state, "followed", n);
@@ -1049,6 +1053,8 @@ test("the lies of plan T11 (E-1, F-1, sc-F-3, sc-F-7, E-4, the lag): replay and 
     ["backlog", f.backlogScenario()],
     ["msig-history", f.msigHistoryScenario()],
     ["msig-nested", f.msigNestedScenario()],
+    ["pathless", f.pathlessScenario()],
+    ["pathless-bound", f.pathlessBoundScenario()],
   ]);
   const code = (fn) => {
     try {
@@ -1107,9 +1113,7 @@ test("receipts (R11): a tree session sends none automatically, whatever the stor
 
 // ------------------------------------------------------------------ the frozen rows
 
-const V = JSON.parse(
-  readFileSync(new URL("../../../smartcontracts/vectors/pqchat/tree-secrets.json", import.meta.url)),
-);
+const V = jsonParse(readFileSync(new URL("../../../smartcontracts/vectors/pqchat/tree-secrets.json", import.meta.url)));
 
 test("tree-secrets.json: secrets, pathCt and schedule rows recomputed from their inputs", () => {
   for (const r of V.secrets) {
@@ -1130,8 +1134,152 @@ test("tree-secrets.json: secrets, pathCt and schedule rows recomputed from their
   }
   for (const r of V.schedule) {
     const s = tk.schedule(sc, r.joiner, r.fields);
-    assert.deepEqual([hex(s.ctx), hex(s.S), hex(s.K)], [r.ctx, r.S, r.K]);
+    assert.deepEqual(
+      [hex(s.ctx), hex(s.S), hex(s.K), hex(s.next), hex(s.tag)],
+      [r.ctx, r.S, r.K, r.next, r.confirmTag],
+    );
+    // the four branches of S by hand (the delta §4.1): a reader that made two labels equal fails one of these
+    assert.equal(r.K, hex(H(fromHex(r.S), l8("scaas/pqchat/v1/tree/key"))));
+    assert.equal(r.next, hex(H(fromHex(r.S), l8("scaas/pqchat/v1/tree/next"))));
+    const tagCtx = r.fields.epoch === 0 ? fromHex(r.fields.treeId) : fromHex(r.ctx);
+    assert.equal(r.confirmTag, hex(H(fromHex(r.S), concatBytes(l8("scaas/pqchat/v1/tree/confirm"), tagCtx))));
+    assert.equal(new Set([r.K, r.next, r.confirmTag]).size, 3);
   }
+});
+
+test("tree-secrets.json pathless rows: addNonce (try 0, 1) and the add-joiner by hand, the twins, the exit's next, W(N)", () => {
+  const P = V.pathless;
+  for (const r of P.addNonce) {
+    const want = [0, 1].map((t) => {
+      const x = r.input;
+      const h = H(
+        fromHex(r.kemSeed),
+        concatBytes(
+          l8("scaas/pqchat/v1/tree/add-nonce"),
+          ...[x.treeId, x.parentEpochId, x.parentTreeHash, x.addsHash].map(fromHex),
+          u32(t),
+        ),
+      );
+      return h.subarray(0, 8).reduce((a, v) => (a << 8n) | BigInt(v), 0n);
+    });
+    assert.deepEqual(r.nonces.map(BigInt), want, r.name);
+    assert.deepEqual(
+      [0, 1].map((t) => tk.addNonce(sc, r.kemSeed, r.input, t)),
+      want,
+    );
+    assert.equal(BigInt(r.nonce), want[0], r.name);
+    refused("TreeAddNonce", () => tk.addNonce(sc, r.kemSeed, r.input, tk.ADD_NONCE_TRIES));
+  }
+  for (const r of P.addJoiner) {
+    const want = H(
+      fromHex(r.next),
+      concatBytes(l8("scaas/pqchat/v1/tree/add-joiner"), ...[r.treeId, r.epochId, r.addsHash].map(fromHex)),
+    );
+    assert.equal(hex(want), r.joiner, r.name);
+    assert.equal(hex(tk.addJoinerSecret(sc, r.next, r.treeId, r.epochId, r.addsHash)), r.joiner);
+    // the path commit's label over the same input gives another secret (R9: no chain across a path commit's kind)
+    assert.notEqual(hex(tk.joinerSecret(sc, r.next, r.treeId, r.epochId)), r.joiner);
+  }
+  assert.equal(P.twins.a.epochId, P.twins.twin.epochId);
+  assert.equal(new Set([P.twins.a.K, P.twins.b.K, P.twins.twin.K]).size, 3);
+  const e = P.exitNext;
+  assert.notEqual(e.tried, e.joiner);
+  for (const { N, W } of P.warn) {
+    assert.equal(tk.warnAt(N), W, `W(${N})`);
+    assert.equal(W, N === 0 ? 20 : Math.max(1, N - Math.ceil(N / 4)));
+  }
+  assert.deepEqual(
+    P.warn.map((x) => x.W),
+    [20, 1, 1, 3, 18, 75, 382],
+  );
+});
+
+test("epoch 0's tag (C43, F-7): a genesis whose session record carries another tag is not followed; the honest one is", () => {
+  const w = f.genesisScenario();
+  const rec = { ...w.genesis.record, confirmTag: hex(rnd("t/genesis/bad-tag")) };
+  const kems = new Map(["A", "B", "C"].map((n) => [`${f.deviceOf(n).ua}/${f.deviceOf(n).keyId}`, f.kemRecOf(n)]));
+  const home = (r) =>
+    tk.newHome({
+      genesis: { ...w.genesis, record: r, treeId: hex(tr.treeId(r)) },
+      sig: f.sign("A", "PqChatSession", r),
+      kems,
+      uaRecords: f.uaRecords(),
+    });
+  for (const n of ["A", "B", "C"]) {
+    assert.deepEqual(states(tk.replay(sc, tk.reader(home(rec)), f.deviceOf(n))), [[0, "not followed", "tag"]], n);
+    assert.deepEqual(
+      states(tk.replay(sc, tk.reader(home(w.genesis.record)), f.deviceOf(n))),
+      [[0, "followed", null]],
+      n,
+    );
+  }
+});
+
+test("path-less Adds: the head handle is the record's parent (claude-19); the bound, the shape and the conditions", () => {
+  const w = f.pathlessBoundScenario();
+  const d = f.deviceOf("A");
+  const r = tk.replay(sc, tk.reader(w.home), d);
+  assert.equal(r.sincePath, 1);
+  assert.equal(r.pathWarning, true); // W(2) = 1, A an admin
+  assert.equal(tk.replay(sc, tk.reader(w.home), f.deviceOf("B")).pathWarning, false); // not an admin
+  // another parent's handle: refused by name, nothing built
+  const stale = { ...r.head, epochId: w.home.epochs[2].id };
+  const prep = tk.prepareCommit(sc, tk.reader(w.home));
+  const base = {
+    tree: prep.tree,
+    parent: prep.parent,
+    sessionId: w.home.sessionId,
+    treeId: w.home.treeId,
+    author: d.ua,
+    leaf: 0,
+    keyId: d.keyId,
+    kemSeed: d.kemSeed,
+    admins: prep.admins,
+    info: null,
+    uaRecordOf: (u) => f.uaRecords().get(u) ?? null,
+    accepted: () => true,
+    keyOf: prep.keyOf,
+    rand: (x, n) => rnd(`t/pl/${x}`, n),
+    pathless: true,
+  };
+  const add = (n, leaf) => ({
+    leaf,
+    ua: f.deviceOf(n).ua,
+    keyId: f.deviceOf(n).keyId,
+    via: Z32,
+    kemHash: hex(keccak_256(fromHex(f.deviceOf(n).kemPk))),
+    ...f.kemRecOf(n),
+  });
+  refused("TreeHandle", () => tk.buildCommit(sc, { ...base, head: stale, adds: [add("F", 5)] }));
+  refused("TreeHandle", () => tk.buildCommit(sc, { ...base, head: { ...r.head, treeHash: Z32 }, adds: [add("F", 5)] }));
+  const ok = tk.buildCommit(sc, { ...base, head: r.head, adds: [add("F", 5)] });
+  assert.equal(ok.record.pathless, true);
+  assert.equal(
+    ok.record.nonce,
+    tk.addNonce(sc, d.kemSeed, { ...ok.record, addsHash: tr.arrayHash("TreeAdd", ok.record.adds) }, 0),
+  );
+  assert.deepEqual([ok.record.nodeKeyHashes, ok.record.ctCount, ok.ctTargets], [[], 0, []]);
+  assert.equal(ok.tree.sincePath, 2);
+  // N + 1: refused whole, by the bound
+  refused("PqChatTreePathBound", () => tk.buildCommit(sc, { ...base, head: r.head, adds: [add("F", 5), add("G", 6)] }));
+  // the walk: a path commit resets the counter (pqchat-tree's applyCommit), a path-less one counts each leaf
+  const t0 = prep.tree;
+  const pc0 = { author: d.ua, keyId: d.keyId, leaf: 0, removes: [], adds: [], nodeKeyHashes: [] };
+  const n = tr.filteredPath(t0, 0).length;
+  const path = tr.applyCommit(t0, {
+    ...pc0,
+    nodeKeyHashes: Array.from({ length: n }, (_, k) => hex(rnd(`t/pl/nk/${k}`))),
+  });
+  assert.equal(path.tree.sincePath, 0);
+  // the conditions (R19): a Remove or another admin list is PqChatTreePathRequired; the head's list is plain
+  const after = ok.tree;
+  refused("PqChatTreePathRequired", () =>
+    tr.judgeCommit(t0, after, { ...ok.record, removes: [{ leaf: 1, ua: f.uaOf("B"), keyId: 1 }] }, prep.admins),
+  );
+  refused("PqChatTreePathRequired", () =>
+    tr.judgeCommit(t0, after, { ...ok.record, admins: [...prep.admins, f.uaOf("B")].sort() }, prep.admins),
+  );
+  tr.judgeCommit(t0, after, ok.record, prep.admins);
 });
 
 test("tree-secrets.json scenario rows: every step's record, pieces and tree hash land on a home rebuilt from the file, and every member's replay gives the K of the row", () => {
@@ -1179,6 +1327,13 @@ test("tree-secrets.json scenario rows: every step's record, pieces and tree hash
         `${sRow.name} ${name} info`,
       );
       assert.deepEqual(r.warnings, want.warnings, `${sRow.name} ${name} warnings`);
+      // the path-less delta: the C45 epochs, the leaves under review, the counter, the admins' warning, the head's handle
+      assert.deepEqual(
+        [r.suspects, r.review, r.sincePath, r.pathWarning],
+        [want.suspects, want.review, want.sincePath, want.pathWarning],
+        `${sRow.name} ${name} pathless`,
+      );
+      assert.deepEqual(r.head, want.head, `${sRow.name} ${name} head`);
     }
     assert.deepEqual(tk.pinsOf(sc, tk.reader(h)), sRow.pins, sRow.name);
   }
@@ -1265,6 +1420,52 @@ test("E-3, B2-2: a replay resumed from the device's previous one walks from its 
   refused("TreeConflict", () => tk.replay(sc, tk.reader(w.home), B, null, { ...r6, pin: { ...r6.pin, hash: Z32 } }));
 });
 
+test("F-3 of the path-less delta (the path-less review's C-2 = G-1): a resume past a C45 epoch keeps the leaves under review, as a cold replay of the head names them", () => {
+  const w = f.createSession({
+    tag: "t/resume-review",
+    creator: "A",
+    nonce: 72,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+    pathRefreshBound: 24,
+  });
+  f.commit(w, "A"); // 1
+  f.commit(w, "B", { pathless: true, adds: [["B2", 3]], faults: { tag: f.hex(rnd("t/resume-review/tag", 32)) } }); // 2
+  const A = f.deviceOf("A");
+  const early = tk.replay(sc, tk.reader(w.home), A);
+  assert.deepEqual(early.review, [3], "control: the C45 epoch's leaf under review");
+  f.commit(w, "A", { pathless: true, adds: [["D", 4]] }); // 3
+  f.commit(w, "C"); // 4: a path commit
+  const cold = tk.replay(sc, tk.reader(w.home), A);
+  const more = tk.replay(sc, tk.reader(w.home), A, null, early);
+  assert.deepEqual(more.review, cold.review, "the leaves under review");
+  assert.deepEqual(
+    more.suspects.map((x) => x.epoch),
+    cold.suspects.map((x) => x.epoch),
+  );
+});
+
+test("R2-D-6 (C-4 as ua-rs): a resume that finds no new epoch keeps the info in force, its flag and the head followed, so it seals what the replay it resumed from sealed", () => {
+  const w = f.createSession({
+    tag: "t/resume-twice",
+    creator: "A",
+    nonce: 72,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+  });
+  f.commit(w, "B");
+  const B = f.deviceOf("B");
+  const r1 = tk.replay(sc, tk.reader(w.home), B);
+  assert.notEqual(tk.infoToSeal(r1), null);
+  const r2 = tk.replay(sc, tk.reader(w.home), B, null, r1);
+  assert.deepEqual(r2.epochs, []);
+  assert.deepEqual(tk.infoToSeal(r2), tk.infoToSeal(r1));
+  const r3 = tk.replay(sc, tk.reader(w.home), B, null, r2);
+  assert.deepEqual(tk.infoToSeal(r3), tk.infoToSeal(r1));
+});
+
 test("C-1: a key no signed tree hash covers is authenticated by its registry record before it is used: an Add's, a member's at creation", () => {
   const w = f.createSession({
     tag: "t/auth",
@@ -1324,6 +1525,18 @@ test("C-1: a key no signed tree hash covers is authenticated by its registry rec
   const good = ["A", "B", "C"].map(f.kemRecOf);
   assert.equal(make(good).sessionId, w.home.sessionId);
   refused("TreeKemRecord", () => make([good[0], good[1], { ...good[2], kemPk: f.deviceOf("H").kemPk }]));
+  // E-3 = C-5 of the path-less review: a bound above the cap is refused at creation, the cap itself builds
+  const bounded = (b) =>
+    tk.createGenesis(sc, {
+      session: { ...session, pathRefreshBound: b },
+      kems: good,
+      uaRecordOf: (u) => f.uaRecords().get(u) ?? null,
+      accepted: () => true,
+      info: f.INFO.I1,
+      rand: (x, n) => rnd(`tree-secrets/t/auth/genesis/${x}`, n),
+    });
+  refused("PqChatShape", () => bounded(511));
+  assert.ok(bounded(510).sessionId);
 });
 
 test("C-6: an exit count above EXITS_MAX is refused before any record is read (ua-rs's bound, 544)", () => {
@@ -1373,4 +1586,57 @@ test("a version-0 KEM key by the registration's proof of possession (fix check C
   }
   // a reader with no registration for the UA (`registrationOf` null): refused
   refused("TreeKemRecord", () => tk.recordKey(g.ua, 0, { kemPk: key }, uaRecordOf));
+});
+
+test("fable-C-10 of the path-less review: a device with a random key reads its own path-less record as its own path commit, not followed (random key), never the compromise warning", () => {
+  const w = f.createSession({
+    tag: "t/random-own",
+    creator: "A",
+    nonce: 73,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+    pathRefreshBound: 24,
+  });
+  f.commit(w, "A"); // 1: a path commit of its own
+  f.commit(w, "A", { pathless: true, adds: [["D", 3]] }); // 2: a path-less Add of its own
+  const A = f.deviceOf("A");
+  const seeded = tk.replay(sc, tk.reader(w.home), A);
+  assert.equal(seeded.epochs.find((e) => e.epoch === 2).state, "followed", "control: the seed reproduces it");
+  const r = tk.replay(sc, tk.reader(w.home), { ...A, kemSeed: null });
+  for (const n of [1, 2]) {
+    const e = r.epochs.find((x) => x.epoch === n);
+    assert.deepEqual([e.state, e.reason], ["not followed", "random key"], `epoch ${n}`);
+  }
+  assert.deepEqual(r.warnings, [], "no compromise warning");
+});
+
+test("the path-less re-check's R-1: a resume keeps the compromise warnings, as a cold replay of the head names them", () => {
+  const w = f.createSession({
+    tag: "t/resume-warning",
+    creator: "A",
+    nonce: 74,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+    pathRefreshBound: 24,
+  });
+  f.commit(w, "A"); // 1
+  // 2: a path-less Add under A's own leaf that A's seed did not build (a foreign seed): the compromise warning at A
+  f.commit(w, "A", { pathless: true, adds: [["D", 3]], seedOf: "B" });
+  const A = f.deviceOf("A");
+  const early = tk.replay(sc, tk.reader(w.home), A);
+  assert.deepEqual(
+    early.warnings.map((x) => x.epoch),
+    [2],
+    "control: the warning",
+  );
+  f.commit(w, "B"); // 3
+  const cold = tk.replay(sc, tk.reader(w.home), A);
+  const more = tk.replay(sc, tk.reader(w.home), A, null, early);
+  assert.deepEqual(
+    more.warnings.map((x) => x.epoch),
+    cold.warnings.map((x) => x.epoch),
+  );
+  assert.deepEqual(more.review, cold.review, "the leaves under review");
 });

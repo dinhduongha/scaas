@@ -334,7 +334,7 @@ the set's `set.toml` `[pqzh_preset]` (preset, `max_proof`).
 
 ## Minimum block gas limit per set (owner 2026-11-14)
 
-Owner ruling 2026-11-14: n2560 and n2816 are only for customer chains with larger blocks (verbatim in `docs/decisions.md`,
+Owner ruling 2026-11-14: n2560 and n2816 are only for customer chains with larger blocks (recorded in `docs/decisions.md`,
 CTR-PQZ-37). Under EIP-8037 a transaction fits only if its regular + state gas is at most the block gas limit; the worst
 single transaction of the three-key build per set (`smartcontracts/evm/test/pqz/PqzThreeKeysGas.t.sol`, measured 2026-11-14;
 the table in `docs/contracts/pq-zero-knowledge.md` CTR-PQZ-37 "Cost"):

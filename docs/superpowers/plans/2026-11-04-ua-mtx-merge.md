@@ -90,7 +90,7 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 
 ## Plan decisions (MD-*; controller calls, owner may override; recorded in `decisions.md` by T19)
 
-**Owner 2026-11-04: MD-1 to MD-10 accepted as written; MD-11 (after Q6's change) is a controller call, open to the owner.** ("theo khuyên"), including MD-10 (the mesh refuses a derived `from` by name until a ruling on how a peer checks a derived `UASig`) and MD-5 (the cancel's signed purpose moves to the named-op purpose).
+**Owner 2026-11-04: MD-1 to MD-10 accepted as written; MD-11 (after Q6's change) is a controller call, open to the owner.** (as recommended), including MD-10 (the mesh refuses a derived `from` by name until a ruling on how a peer checks a derived `UASig`) and MD-5 (the cancel's signed purpose moves to the named-op purpose).
 
 - **MD-1 Where `executeMetaTransaction` lives.** Spec §2.5 keeps it in the `MetaTxBase` core "on tokens"; R26 puts "the address
   generic path (wallets, and `executeMetaTransaction` on tokens per R3)" in `MetaTxAddressBase`. If tokens inherited
@@ -2222,7 +2222,7 @@ module is security-relevant).
       entry (CTR-GOV-19's ceiling).
 - [ ] **Step 4:** whole `forge test`, the four PQZ sets, size gate, gas pins old -> new, deploy-gas table for every contract against
       60 M, mutants of each split.
-- [ ] **Step 5: the full deploy on the SCaaS testnet (owner 2026-11-09: "Deploy lên scaas testnet thì hợp lý hơn"; replaces
+- [ ] **Step 5: the full deploy on the SCaaS testnet (owner 2026-11-09: deploying on the SCaaS testnet is the better choice; replaces
       the Hedera deploy below).** After Step 4, on chain 7622 through its RPC only (no container, config or port of the live
       stack changed; the controller confirms with the owner right before the first transaction): `DeployBase` and every
       release of the split (kinds 0–13, their modules and libraries, the DEX, the registry pair, the factory), each

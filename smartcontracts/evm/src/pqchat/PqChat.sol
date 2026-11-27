@@ -37,6 +37,8 @@ contract PqChat is IPqChat, PqChatCore {
     uint256 public constant EPOCHS_RANGE_MAX = 128;
     /// @inheritdoc IPqChat
     uint256 public constant REMOVE_MAX = 16;
+    /// @notice CTR-CHAT-30: the largest `entryRows` batch (`PqChatTopics.ENTRY_ROWS_MAX`, which enforces it).
+    uint256 public constant ENTRY_ROWS_MAX = 64;
 
     address public immutable FACTORY;
     uint64 internal immutable VERSION;
@@ -147,6 +149,8 @@ contract PqChat is IPqChat, PqChatCore {
     /// @dev P8, 3C-D6: the lists, the creator a member and an admin, the home instance named (P32).
     function _checkSession(IUARegistry reg, PqChatSession calldata s) internal view {
         if (s.groupMode > 1) revert PqChatModeUnsupported(s.groupMode); // CTR-CHAT-25, CTR-CHAT-26: flat wraps and TreeKEM
+        // the path-less delta §3.1 (C41, C43): both fields 0 in mode 0; the bound at most TREE_LEAVES_MAX - 2 in mode 1
+        if (s.groupMode == 0 ? s.pathRefreshBound != 0 || s.confirmTag != 0 : s.pathRefreshBound > TREE_LEAVES_MAX - 2) revert PqChatShape();
         MemberKey[] memory members = s.members;
         bytes32[] memory admins = s.admins;
         _checkLists(reg, admins, members, s.wrapHashes.length, 2);
@@ -518,7 +522,15 @@ contract PqChat is IPqChat, PqChatCore {
         _forwardView();
     }
 
-    function versionAt(bytes32, uint32) external view returns (string memory, bytes memory, bytes32) {
+    function versionAt(bytes32, uint32)
+        external
+        view
+        returns (string memory, bytes memory, bytes32, uint64, uint64, uint64)
+    {
+        _forwardView();
+    }
+
+    function entryRows(bytes32[] calldata, bytes32) external view returns (EntryRow[] memory) {
         _forwardView();
     }
 

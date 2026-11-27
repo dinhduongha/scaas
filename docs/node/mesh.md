@@ -702,7 +702,7 @@ a bus that only private peers see: a liveness loss, never a leak.
 
 <a id="NODE-MESH-12"></a>**NODE-MESH-12** — **Private-visibility rows are served only by their origin** (stored
 `source != 'peer'`). Every private recipient must be admitted by the origin directly; otherwise a correct private peer
-would re-serve to peers *it* trusts, outside the origin's allowlist (owner: "allowlisted private peers"). Private liveness depends on the origin being up.
+would re-serve to peers *it* trusts, outside the origin's allowlist (owner: allowlisted private peers). Private liveness depends on the origin being up.
 
 ```
 chain_visibility(chain) = private if chain_profile == 'private' else open

@@ -525,7 +525,7 @@ q ≈ 2^50 with the same digit width; the spec's table quoted 4096).
 **Derivation for the chosen q.** With `K = 65,536`: `15·K = 983,040 < 2^20`, so `M_i ∈ [0, 2^20)` (today `2^14`);
 `K·B_FRESH = 65,536 · 15,940 = 1,044,643,840 < 2^30`, so `e_T ∈ [−2^30, 2^30)` (today `2^24`); `Δ = ⌊q / 2^22⌋ =
 2^32 − 1`, `2E = 2^31 ≤ Δ`; `Δ·(2^20 − 1) + 2^30 < 2^52 + 2^30 < q/2 ≈ 2^53`. Hence `q ≥ 2^(m+4)·E = 2^54`: the
-owner's "q ≈ 2^54" is exactly the smallest power that holds `K = 2^16`. The reachable worst case `(K − 1)·B` is
+owner's q ≈ 2^54 is exactly the smallest power that holds `K = 2^16`. The reachable worst case `(K − 1)·B` is
 1,044,627,900; the mint threshold `Δ − E = 3,221,225,471` is 3.08× above it (n = 2688: 3.21×; n = 2560: 3.36×).
 The range proofs grow: `M_i` 14 → 20 bits, carries 11 → 17 bits (`c_i + 64 ∈ [0, 2^17)`, honest carries
 `≤ 2^20 / 15`), `e_T` 25 → 31 bits; R_TX 917 → 1,199 bits (15 → 19 binary polys), R_BURN 853 → 1,135 (14 → 18), op 7
@@ -869,7 +869,7 @@ Each ruling, with its content and status:
    decided; **built off chain in 8d part 1** (`0x000000000000000000000000000000005caa0f01` / `…5caa0012` / `…5caa0013` in
    the Nethermind plugin, the chain scripts, `script/pqz/e2e.py` and the docs); the Solidity constants and contract
    tests in 8d part 2; chain 7622's live image keeps the old addresses until the next roll-out.
-10. **Op blobs stay in contract state ("Không được mất ciphertext": a ciphertext must never be lost).** Absolute rule:
+10. **Op blobs stay in contract state (a ciphertext must never be lost).** Absolute rule:
     calldata and events can be pruned by history expiry (EIP-4444), so every ciphertext a later debit or rollover needs
     stays in state (CTR-PQZ-07 Change 2026-10-19 holds). The state-gas cost is real money on a customer chain and is
     accepted: ≈ 30 M per debit under EIP-8037 at 16k (Task 7b: 32.0 M for op 1's blob), ≈ 27–29 M at set (a) (n-study

@@ -66,7 +66,7 @@ TODO.md §00 P2 notes (D1: `mtxWrap` and `NativeNotGasless` come with P2).
 - **F3 — `mtxWrap` errors:** `NativeNotGasless()`, `WrapOrderInvalid(receiveToken)` (step 2, `o.receiveToken ≠ this`),
   `WrapReceivedMismatch(expected, received)`. The relayer binding of step 2 is enforced by the underlying's `mtxTrade`
   (the wrapper passes its caller as `submitter`), so the wrapper does not repeat it.
-- **F4 — Size:** the owner's "optimise later" stands: `NormalToken` and `WrappedToken` enter the ratchet
+- **F4 — Size:** the owner's ruling to optimise later stands: `NormalToken` and `WrappedToken` enter the ratchet
   baseline at their new sizes; the size-pin tests move to NORMAL ≤ 23,552 and WRAPPED ≤ 30,720. Flag to the owner: NORMAL
   is now over its 20,480 budget (still deployable).
 - **F5 — Vectors:** the new KAT is `test/vectors/trade_kat.json`; `dex_kat.json` stays the built `SCaaSDex` `Order`

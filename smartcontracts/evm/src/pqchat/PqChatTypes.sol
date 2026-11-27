@@ -18,7 +18,8 @@ library PqChatTypes {
         keccak256("Wrap(bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey)");
     bytes32 internal constant SESSION_TYPEHASH = keccak256(
         "PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,"
-        "MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"
+        "MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo,uint8 groupMode,uint32 pathRefreshBound,bytes32 confirmTag)"
+        "MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"
     );
     bytes32 internal constant EPOCH_TYPEHASH = keccak256(
         "PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,"
@@ -66,7 +67,8 @@ library PqChatTypes {
     bytes32 internal constant COMMIT_TYPEHASH = keccak256(
         "PqChatCommit(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32 treeId,"
         "bytes32 parentTreeHash,uint32 leaf,uint64 keyId,uint32 leaves,bytes32[] admins,TreeRemove[] removes,TreeAdd[] adds,"
-        "bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo)"
+        "bytes32[] wrapHashes,bytes32[] nodeKeyHashes,uint32 ctCount,bytes32 ctListHash,bytes32 treeHash,bytes sealedInfo,"
+        "bool pathless,bytes32 confirmTag)"
         "TreeAdd(uint32 leaf,bytes32 ua,uint64 keyId,bytes32 via,bytes32 kemHash)TreeRemove(uint32 leaf,bytes32 ua,uint64 keyId)"
     );
     bytes32 internal constant PATH_LIST_TYPEHASH = keccak256("PathList(uint32[] ctTargets,bytes32[] ctHashes)");
@@ -80,7 +82,7 @@ library PqChatTypes {
     );
     bytes32 internal constant TREE_GENESIS_TYPEHASH = keccak256(
         "TreeGenesis(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,"
-        "MemberKey[] members,uint8 groupMode)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"
+        "MemberKey[] members,uint8 groupMode,uint32 pathRefreshBound)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)"
     );
 
     /// @notice Id tags (spec §4.3, topics P36) and nonce-scope tags (3C-D5).
@@ -126,7 +128,9 @@ library PqChatTypes {
                 hashMembers(s.members),
                 keccak256(abi.encodePacked(s.wrapHashes)),
                 keccak256(s.sealedInfo),
-                s.groupMode
+                s.groupMode,
+                s.pathRefreshBound,
+                s.confirmTag
             )
         );
     }
@@ -185,7 +189,9 @@ library PqChatTypes {
             c.ctCount,
             c.ctListHash,
             c.treeHash,
-            keccak256(c.sealedInfo)
+            keccak256(c.sealedInfo),
+            c.pathless,
+            c.confirmTag
         );
         return keccak256(bytes.concat(a, b));
     }

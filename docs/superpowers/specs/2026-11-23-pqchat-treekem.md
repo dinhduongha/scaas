@@ -1,7 +1,7 @@
 # PqChat TreeKEM mode (`groupMode = 1`), minimal scope: design
 
 **Status:** SPECIFIED; BUILT (UNAUDITED): the contract (plan T1a-T3d with the code review's fixes of 2026-11-24 on branch `review-fix-contract`), clientkeys and `ua-rs` (T1a, T1b, the forward walk of C25 / C26), the node's rows and bounds (T4's allow-list part, D-4, D-7); PLANNED: T4's whole-set guard and C37's order at the node, T5-T10. **UNAUDITED**: a new cryptographic protocol; every construction below is a design, not a
-reviewed protocol. **Revision 3 (2026-11-23)**, after two review rounds by Codex and Fable: of revision 1 (`f42a75af2`; 22 and
+reviewed protocol. **Change (2026-11-25):** path-less Adds in mode 1, the delta [`2026-11-25-treekem-pathless-add.md`](2026-11-25-treekem-pathless-add.md) (owner R17-R20, SPECIFIED); its §11 amends R1, R3, R9, R10, C6, C9, C12, C23-C25, C29, C37 and the sentences of §3 and §5 marked below. **Revision 3 (2026-11-23)**, after two review rounds by Codex and Fable: of revision 1 (`f42a75af2`; 22 and
 16 findings, 2 unsure) and of revision 2 (`29ba84732`; Codex 16, Fable 9 and 1 unsure). A finding is cited by its id where its
 fix sits (`codex-n`, `fable-n`; round 2: `codex-r2-n`, `fable-r2-n`; round 3: `fable-r3-n`, `codex-r3-n`); [§17](#17-what-revisions-2-and-3-changed) lists them. **A
 third, focused round by Fable on revision 3 (`fable-r3-n`: 0 P0, 2 P1, 4 P2, 3 P3; approve with fixes) is fixed in place:**
@@ -46,24 +46,24 @@ CLI-PQC-17 (owner). Ids of branch `pqchat-sigs` this builds on: CTR-CHAT-23 (sig
 
 ## 1. Rulings this spec follows
 
-**Owner, 2026-11-23 (owner: yes), as relayed by the controller:**
+**Owner, 2026-11-23 (owner: yes):**
 
-- R1. "Minimal mode 1 is built now, before the pre-freeze tag. It covers a commit with UpdatePath, Add and Remove, with Welcome
-  by wraps. External commits, PSKs and ReInit are out."
-- R2. "A new DELEGATECALL body module is accepted for it."
-- R3. "`groupMode` is a protocol id: 0 = flat; 1 = RFC 9420 tree rules over KEM scheme 1 (ML-KEM-1024 + X25519,
+- R1. Minimal mode 1 is built now, before the pre-freeze tag. It covers a commit with UpdatePath, Add and Remove, with Welcome
+  by wraps. External commits, PSKs and ReInit are out.
+- R2. A new DELEGATECALL body module is accepted for it.
+- R3. `groupMode` is a protocol id: 0 = flat; 1 = RFC 9420 tree rules over KEM scheme 1 (ML-KEM-1024 + X25519,
   `clients/ua-rs/src/wallet/kem.rs`); 2–255 for later variants. It is appended at the end of `PqChatSession` and
-  `PqVaultCreate`, and fixed at creation."
-- R4. "The committer's own path secrets are seed-derived (HKDF over the session and the commit), so no self-wrap."
-- R5. "PqVault accepts only 0 in this release; it stays open for a later PqVault release."
-- R6. "Our own TreeKEM in `ua-rs`, following RFC 9420's algorithms, with typed records. No MLS library."
-- R7 (on revision 1's open points, as relayed for this revision): the leaf is the registry KEM key and is not refreshed per
+  `PqVaultCreate`, and fixed at creation.
+- R4. The committer's own path secrets are seed-derived (HKDF over the session and the commit), so no self-wrap.
+- R5. PqVault accepts only 0 in this release; it stays open for a later PqVault release.
+- R6. Our own TreeKEM in `ua-rs`, following RFC 9420's algorithms, with typed records. No MLS library.
+- R7 (on revision 1's open points, for this revision): the leaf is the registry KEM key and is not refreshed per
   commit (C5); a non-admin commits only for its own UA's leaves (C8); tree sessions are refused on `none` homes and on replicas
   (C1, C4); ML-KEM-1024 is the only node scheme (C2); no unmerged leaves (C6).
 - R8. `TREE_LEAVES_MAX` = 256, **confirmed on revision 2's figures:** one session record creates up to about 200 keys at a 60 M
-  block, the rest come by Adds (§13). **Change (owner 2026-11-25, "OK, then raise it to 512"): 512, depth 9** (option (d) of
-  `docs/research/2026-11-25-treekem-beyond-256.md`; the measured rows in §13's "Measured at 512"). **`TREE_CHANGES_MAX` 32 -> 20 the same day (owner, "Choose
-  20", in English)**, so the commit of the last live leaf at the bounds fits 2^24 with an ML-DSA-87 author (C10).
+  block, the rest come by Adds (§13). **Change (owner 2026-11-25): 512, depth 9** (option (d) of
+  `docs/research/2026-11-25-treekem-beyond-256.md`; the measured rows in §13's "Measured at 512"). **`TREE_CHANGES_MAX` 32 -> 20 the same day (owner, option
+  20)**, so the commit of the last live leaf at the bounds fits 2^24 with an ML-DSA-87 author (C10).
 - R9. The joiner secret is derived **without RFC 9420's `init` chain** (C23). A member that misses an epoch follows again at
   the next commit that reaches its leaf, or by a commit of its own.
 - R10. **The cost of R9 is accepted** (fable-r2-1): in mode 1, as in mode 0's `rekey`, one UA signature lets its holder build
@@ -76,10 +76,10 @@ CLI-PQC-17 (owner). Ids of branch `pqchat-sigs` this builds on: CTR-CHAT-23 (sig
 - R13. **Freshness before publishing newly private session information** (a changed `sealedInfo`: room and store lists): the
   client needs the head and the roster read at a final block under the strict majority over **at least 3 named endpoints**
   (ARCH-POS-15). With fewer it refuses (§11; codex-4).
-- R14. **No return (mode 1 only).** "Members are not allowed back" (the owner's words, translated here and below): a UA that was removed from a tree session, or left it,
+- R14. **No return (mode 1 only).** Members are not allowed back: a UA that was removed from a tree session, or left it,
   is never added back to that session; the contract refuses the Add (C28). A UA's own key changes (a new `keyId`) are not a
-  return. "To come back, the user creates a new UA and is added": the way back is a **new UA** (a new account index or a new
-  seed, a KEM holder with its own registry record), added by a live admin like any new member. "Yes, block the `kemHash` too": the
+  return. To come back, the user creates a new UA and is added: the way back is a **new UA** (a new account index or a new
+  seed, a KEM holder with its own registry record), added by a live admin like any new member. The `kemHash` is blocked too: the
   set also holds the `kemHash` of **every key ever taken out** of the session, and an Add of such a key is refused under any
   UA, with an error of its own; a new UA comes with a fresh KEM key. Mode 0 and PqVault are unchanged: re-adds stay allowed
   there. **The key half is two-level since R16:** a key a UA takes out of its own leaves is refused to that UA only; the
@@ -129,7 +129,7 @@ Each is the controller's (owner: no) unless marked; the owner may override any. 
 | C6 | (owner, R7) No unmerged leaves: an Add blanks the new leaf's direct path; no truncation of the tree; every commit carries a path | simpler resolution on chain (note §8.5); blank levels cost nothing because the path is filtered |
 | C7 | (owner, R12) The contract keeps the tree hash and computes the commit's tree in memory **when the record is accepted**: the signed `treeHash`, `ctCount`, the path length and the removed UAs are compared then, the target list when it lands | a wrong value is never staged and never becomes an epoch, so no client ever has to reject an accepted commit (§8; fable-r2-3) |
 | C8 | (owner, R7) A non-admin author changes keys of its own UA only | a tree is stateful: dropping another member's leaf lasts until an Add (§9) |
-| C9 | Leaving and removing in a tree session name a **complete epoch of the session: the head or an ancestor of it**, and **take effect on the head when they land**: the UA is `gone` from the head's number, every leaf it holds at the head is owed, and the record is kept under the head's epoch; a staged, losing or unknown epoch is refused (`PqChatIncomplete`, `PqChatUnknown`). In a tree session every complete epoch is on the head's chain (C4, C20, CTR-CHAT-08), so "complete and of this session" is the whole ancestor check: three slots of the named epoch and two for the head's number, no walk (Change 2026-11-24, E-3). **An exit expires by a bounded lag (Change 2026-11-24, the spec check, sc-E-2, sc-F-5):** it is valid only while `head.epoch ≤ named.epoch + EXIT_LAG_MAX`, `EXIT_LAG_MAX` = 16, else `PqChatExitLag(named, head)`; no typehash moves. **A repeat is refused:** an exit whose UAs it would newly flag at the head number none is `PqChatNotMember` (A-4, sc-E-5). **The same rules hold in mode 0 and in PqVault** (owner 2026-11-24: "Yes, both modes"): at home their `remove` / `leave` and `removeVaultMembers` / `leaveVault` name the head or an ancestor within the lag and apply at the head; a replica applies a flag the home applied at a later epoch by the lag rule of CTR-CHAT-20 (CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06). **There, at home, the signer and every UA an exit names are in the lists of the epoch named as well as the head's** (Change 2026-11-25, E-2 of the re-review; controller call), since a replica checks them on the epoch named; and **a replica takes an exit that newly flags nobody** (A-16): the home may have applied a second record naming that epoch at a later head, and a flag only allows there. So a replica can copy every exit the home took. A tree session has no replica (C4) and keeps no list per epoch, so its exits keep the head's checks | the next commit is the only one that can honour them. **Chain-level front-running is in the threat model (owner 2026-11-24):** under "the head only" a member about to be removed lands a commit first, the exit names a parent that now has a child and is void, and that repeats for ever (E-3). **Why 16:** to void one exit a front-runner must complete 17 epochs in a row before it lands, each a commit or rekey of its own with a PQ signature check and its pieces, against which the admin re-signs one record at the new head; a held, delayed or reverted-and-copied exit dies after 16 epochs of the group's own activity, so a decision is never applied to a group much changed since (sc-E-2's scenarios); 32 would double the front-runner's cost for twice the window, and the ratio, not the window, is what stops it |
+| C9 | Leaving and removing in a tree session name a **complete epoch of the session: the head or an ancestor of it**, and **take effect on the head when they land**: the UA is `gone` from the head's number, every leaf it holds at the head is owed, and the record is kept under the head's epoch; a staged, losing or unknown epoch is refused (`PqChatIncomplete`, `PqChatUnknown`). In a tree session every complete epoch is on the head's chain (C4, C20, CTR-CHAT-08), so "complete and of this session" is the whole ancestor check: three slots of the named epoch and two for the head's number, no walk (Change 2026-11-24, E-3). **An exit expires by a bounded lag (Change 2026-11-24, the spec check, sc-E-2, sc-F-5):** it is valid only while `head.epoch ≤ named.epoch + EXIT_LAG_MAX`, `EXIT_LAG_MAX` = 16, else `PqChatExitLag(named, head)`; no typehash moves. **A repeat is refused:** an exit whose UAs it would newly flag at the head number none is `PqChatNotMember` (A-4, sc-E-5). **The same rules hold in mode 0 and in PqVault** (owner 2026-11-24: both modes): at home their `remove` / `leave` and `removeVaultMembers` / `leaveVault` name the head or an ancestor within the lag and apply at the head; a replica applies a flag the home applied at a later epoch by the lag rule of CTR-CHAT-20 (CTR-CHAT-20, CTR-CHAT-10, CTR-PQV-06). **There, at home, the signer and every UA an exit names are in the lists of the epoch named as well as the head's** (Change 2026-11-25, E-2 of the re-review; controller call), since a replica checks them on the epoch named; and **a replica takes an exit that newly flags nobody** (A-16): the home may have applied a second record naming that epoch at a later head, and a flag only allows there. So a replica can copy every exit the home took. A tree session has no replica (C4) and keeps no list per epoch, so its exits keep the head's checks | the next commit is the only one that can honour them. **Chain-level front-running is in the threat model (owner 2026-11-24):** under "the head only" a member about to be removed lands a commit first, the exit names a parent that now has a child and is void, and that repeats for ever (E-3). **Why 16:** to void one exit a front-runner must complete 17 epochs in a row before it lands, each a commit or rekey of its own with a PQ signature check and its pieces, against which the admin re-signs one record at the new head; a held, delayed or reverted-and-copied exit dies after 16 epochs of the group's own activity, so a decision is never applied to a group much changed since (sc-E-2's scenarios); 32 would double the front-runner's cost for twice the window, and the ratio, not the window, is what stops it |
 | C10 | (owner, R8) `TREE_LEAVES_MAX` = 512 (depth 9; 256, depth 8, until 2026-11-25); `TREE_CHANGES_MAX` = 20 adds plus removes per commit (owner 2026-11-25; 32, a controller call, until then) | §13 |
 | C11 | A tree session's control-plane records are always verified by the client, whatever `require_signed_records` says | C1's reason |
 | C12 | The epoch secret is confirmed by opening the commit's `sealedInfo`, which a tree commit may not leave empty; no separate confirmation tag | the tag would sit outside the signed record; `sealedInfo` is already an AEAD under a key from `K` (fable-13) |
@@ -174,11 +174,11 @@ return of a UA that left or was removed (R14), a tree in PqVault (R5), any other
 
 **Deviations from RFC 9420, all deliberate:** typed EIP-712 records instead of TLS-encoded messages; keccak256 in the tree hash;
 no parent hash (C13); HKDF-SHA-256 labels of this repo instead of `ExpandWithLabel`; scheme-1 KEM plus AES-256-GCM instead of
-HPKE; no unmerged leaves, so **an added leaf is in the resolution of its commit** and receives a path ciphertext (RFC 9420 §7.5
-excludes new members and puts a path secret in the Welcome; fable-5); `sealedInfo` instead of the confirmation tag; the group
+HPKE; no unmerged leaves, so **an added leaf is in the resolution of its commit** when that is a path commit and receives a path ciphertext (a path-less Add's leaf receives a Welcome only, delta §6.3) (RFC 9420 §7.5
+excludes new members and puts a path secret in the Welcome; fable-5); a confirmation tag in every commit (C12, C43 of the delta); the group
 context without a transcript hash (the chain orders and keeps the transcript); deterministic committer secrets (R4); a joiner
-secret without the `init` chain (C23, R9), so that **a commit proves its author's signature and not knowledge of the previous
-epoch** (R10); no membership tag. None of RFC 9420's analyses covers the result.
+secret without the `init` chain (C23, R9), so that **a path commit proves its author's signature and not knowledge of the previous
+epoch** (R10; a path-less Add is usable only by one who held the parent epoch); no membership tag. None of RFC 9420's analyses covers the result.
 
 ## 4. The ratchet tree
 
@@ -344,12 +344,12 @@ one id and one tree can differ in `sealedInfo` or in `admins`. Which of them is 
   wrap seals `joiner_e` to an added key. The `Wrap` struct is mode 0's; `kek` and `aad` are mode 0's `wrapKek` and `wrapAad`
   with the label `scaas/pqchat/v1/tree/wrap` and, in place of `sessionId`, `genesisCtx` for epoch 0 and `treeId` for a
   Welcome, so a tree wrap opens under no flat processing (fable-13).
-- **A joiner also takes its path secret** (codex-5, fable-5): the added leaf is a target of its join commit (§4), and the
+- **A joiner of a path commit also takes its path secret** (codex-5, fable-5; a joiner of a path-less Add holds no node secret, delta §6.3): the added leaf is a target of its join commit (§4), and the
   joiner opens that ciphertext, derives upward, compares the node keys and so holds every node above its leaf that the commit
   set. The Welcome wrap and the path ciphertext must give the same `joiner_e`; a difference is "not followed" (§10).
 - **`K_e` is the epoch key.** Sender chains (`…/v1/chain`), `infoKey`, `envKey`, `hint` and call keys derive from `K_e` exactly
   as in mode 0; messages, `sealedInfo` and the stores do not change.
-- **Confirmation (C12).** A member that derived `K_e` opens the commit's `sealedInfo`; the handle of epoch `e` is usable only
+- **Confirmation (C12; as amended by the delta: the tag, then `sealedInfo`, the states of C12).** A member that derived `K_e` opens the commit's `sealedInfo`; the handle of epoch `e` is usable only
   after that. A failure means the device did not follow that epoch (§10).
 - **Session info and the marker (C33; codex-r2-3, fable-r2-5).** `sealedInfo` is mode 0's form: the content padded (`pad`: 256,
   1,024, 4,096 B buckets here), sealed under `infoKey`; 12 + 16 B longer than its bucket, so at most 4,124 B (`TREE_INFO_MAX`,
@@ -627,9 +627,14 @@ compares `keccak256` of every derived `kemPk` with the signed `nodeKeyHashes`, t
    the highest epoch number the device verified with **the `hashStruct` of that commit record** (of the session record at
    epoch 0), and never builds on a lower number or on another record at that number. An epoch id is author plus nonce and does
    not bind the record: its author can sign a twin under the same id. Every later read of a pinned epoch is compared with its
-   pinned hash. **A conflict (fable-r3-3):** the pin is written from a read under the default failover, and verifying a head
-   proves a signature and a matching root, not that the record is the home's; so the head's author, with an endpoint, can
-   have its twin pinned first. On a mismatch at a pinned number the client reads that epoch under the strict-majority
+   pinned hash. **The first pin** (CLI-PQC-17; the T4-T9 review's D-2, amended 2026-11-26 after the re-check's R2-D-2, a
+   controller call the owner may veto) is written only from a strict-majority read over at least 3 named endpoints that
+   serves the head the device walked to, so a lying endpoint cannot plant one; a pin the device holds then moves to each
+   head it verifies under the default failover. Cost: with fewer than 3 named endpoints (a `default`-only list has none) no
+   pin is ever written, so every start and every commit walks from epoch 0 and nothing refuses, across a restart, a head
+   below one the device verified before. **A conflict (fable-r3-3):** a pin moves on a read under the default failover,
+   and verifying a head proves a signature and a matching root, not that the record is the home's; so the head's author,
+   with an endpoint, can have its twin pinned. On a mismatch at a pinned number the client reads that epoch under the strict-majority
    option (at least 3 nodes, ARCH-POS-15): the majority's record, verified like any head, replaces the pin, the epoch is
    replayed from it and the event is shown. Without 3 nodes, or without a majority that agrees, the session shows
    **"conflicting head"** and the client builds nothing on it until such a read succeeds. **A higher head does not settle
@@ -1424,7 +1429,7 @@ No record, typehash, derivation or byte format moved; `goneOf`'s epoch and the t
 | D-7 (P3) | C40: `addPath` carries at least one ciphertext | §2 C40; §6; §15 |
 | F-5 (P3) | a one-leaf tree's root is that leaf's `th`, at a commit too | §4 |
 | D-4 (P3) | the node bounds `createSession` with `groupMode = 1` by the tree's bounds (the contract's are §8's, unchanged) | §15 |
-| E-3 in mode 0 and PqVault (owner 2026-11-24: "Yes, both modes") | mode 0's `remove` and `leave` and PqVault's `removeVaultMembers` and `leaveVault`, at home: the epoch named is the head or an ancestor, complete; checked and applied at the head (flags, kept record, event); the head's next rekey drops the UA and is wrapped without it; a replica keeps the epoch named. PqVault is exposed although only admins rekey: an admin's rekey voided another admin's removal or a member's leave | §2 C9; CTR-CHAT-09, CTR-CHAT-10, CTR-CHAT-20, CTR-PQV-06 |
+| E-3 in mode 0 and PqVault (owner 2026-11-24: both modes) | mode 0's `remove` and `leave` and PqVault's `removeVaultMembers` and `leaveVault`, at home: the epoch named is the head or an ancestor, complete; checked and applied at the head (flags, kept record, event); the head's next rekey drops the UA and is wrapped without it; a replica keeps the epoch named. PqVault is exposed although only admins rekey: an admin's rekey voided another admin's removal or a member's leave | §2 C9; CTR-CHAT-09, CTR-CHAT-10, CTR-CHAT-20, CTR-PQV-06 |
 | A-1 (P2), Fable area A | the same rule as D-6: a leaf is live while this commit has not removed it | §2 C39; §8 |
 | A-2 (P2) | concurs with E-3; covered by C9 | §2 C9 |
 | A-3 (P3) | the piece entries on a tree session's epoch 0 are refused by name | §6 |

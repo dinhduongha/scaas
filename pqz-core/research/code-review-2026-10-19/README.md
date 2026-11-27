@@ -1,6 +1,6 @@
 # Whole-code review 2026-10-19 (PQZH Rust, PQZL C, LaZer fork)
 
-Owner request 2026-10-19: "codex review toàn bộ phần code rust của pqzh và pqzl C". Codex started four read-only passes; all
+Owner request 2026-10-19: a Codex review of all of pqzh's Rust code and of the pqzl C code. Codex started four read-only passes; all
 four stopped after about 3 minutes ("Your workspace is out of credits"). Their unverified leads are in
 [codex-aborted-leads.md](codex-aborted-leads.md). The owner then chose four Claude reviewers, same scopes, static reading
 only (no build, no run), started after the gas calibration of the Rust roll-out. Each verified or refuted the Codex lead of

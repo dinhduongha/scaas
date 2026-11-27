@@ -21,7 +21,7 @@
 #   docs, docs-test, ci-guards
 #   mut-<task>       runs/2026-11-17-set-auditor/mutants.py <task> all (MUT_IDS="<id> ...": those only), in a lane
 #   proof-forge, proof-cargo   the lane cache proof (owner 2026-11-18): incremental vs clean, see below
-# Lanes (owner 2026-11-18, "Đồng ý. Làm luôn"): LANE=<n2304-kmax4096|n2048-kmax1024|n2560-kmax16384|n2816-kmax65536|mutants>
+# Lanes (owner 2026-11-18): LANE=<n2304-kmax4096|n2048-kmax1024|n2560-kmax16384|n2816-kmax65536|mutants>
 # runs the steps in the fixed lane <repo>/scratchpad/lanes/<LANE>/ (git-ignored, on /home; the path never changes) after an
 # `rsync -a --delete` of the tree under test (LANE_FROM, default this repository) with every exclude anchored at the root
 # (scratchpad/lanes/<LANE>.excludes): /.git, /scratchpad/, /.claude/, /smartcontracts/evm/lib/, this runner's log directories,

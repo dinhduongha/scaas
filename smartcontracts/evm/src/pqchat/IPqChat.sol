@@ -42,6 +42,11 @@ interface IPqChat is IPqGroupTree {
         ///         (`PqChatModeUnsupported`); fixed at creation (no epoch record names it); last, so every other field keeps its
         ///         place
         uint8 groupMode;
+        /// @notice The path-less delta §3.1 (R18, C41): mode 1's forced path commit, 0 never forced, N > 0 the (N + 1)-th
+        ///         path-less leaf since the last path commit refused; at most 510 in mode 1, 0 in mode 0; fixed at creation
+        uint32 pathRefreshBound;
+        /// @notice C43: epoch 0's confirmation `H(S_0, …/confirm ‖ genesisCtx)` in mode 1 (a client check), 0 in mode 0
+        bytes32 confirmTag;
     }
 
     struct PqChatEpoch {
@@ -144,7 +149,9 @@ interface IPqChat is IPqGroupTree {
         uint64 seq;
     }
 
-    /// @notice `entryOf`: the original's place (topic, author, parent, depth, reference) and its latest version's content.
+    /// @notice `entryOf`: the original's place (topic, author, parent, depth, reference) and its latest version's content;
+    ///         `postedAt` the block time the original landed, `editedAt` the latest edit's (0 before one; CTR-CHAT-29),
+    ///         `nonce` the latest version's (CTR-CHAT-31).
     struct EntryView {
         bytes32 topicId;
         bytes32 author;
@@ -155,6 +162,30 @@ interface IPqChat is IPqGroupTree {
         bytes body;
         bytes32 sigHash;
         uint32 versionCount;
+        uint64 postedAt;
+        uint64 editedAt;
+        uint64 nonce;
+    }
+
+    /// @notice `entryRows` (CTR-CHAT-30): an entry's `EntryView` without `body`, the latest version's `bodyLength`, the counts
+    ///         `up` and `down`, the viewer's `vote` (`voteOf`'s value) and the direct `replies` count (`replies`' length).
+    struct EntryRow {
+        bytes32 topicId;
+        bytes32 author;
+        bytes32 parentId;
+        uint32 depth;
+        EntryRef ref;
+        string mediaType;
+        bytes32 sigHash;
+        uint32 versionCount;
+        uint64 postedAt;
+        uint64 editedAt;
+        uint64 nonce;
+        uint256 bodyLength;
+        uint128 up;
+        uint128 down;
+        int8 vote;
+        uint256 replies;
     }
 
     // CTR-CHAT-27 (spec 2026-11-23-pqchat-treekem §6): a tree epoch's changes are `IPqGroupTree.TreeAdd` (a key added to
@@ -185,6 +216,11 @@ interface IPqChat is IPqGroupTree {
         bytes32 ctListHash;
         bytes32 treeHash;
         bytes sealedInfo;
+        /// @notice The path-less delta §3.2 (C42): a commit of Adds only with no path (no node key, no ciphertext, the head's
+        ///         admin list, no Remove); the contract requires that shape exactly when it is true
+        bool pathless;
+        /// @notice C43: `H(S_e, …/confirm ‖ ctx_e)`, every commit (a client check)
+        bytes32 confirmTag;
     }
 
     /// @notice A path ciphertext: 1,568 + 32 + 48 B, hashed as `PathCt` into the list's `ctHashes`.
@@ -316,6 +352,12 @@ interface IPqChat is IPqGroupTree {
     error PqChatTreeHash(bytes32 computed);
     /// @notice CTR-CHAT-27 C18: a key that a live leaf already holds (`kemHash = keccak256(kemPk)`).
     error PqChatTreeKeyLive(bytes32 kemHash);
+    /// @notice The path-less delta §5.1 item 3 (R19): a path-less commit with a Remove, or whose admin list is not the
+    ///         head's element for element.
+    error PqChatTreePathRequired();
+    /// @notice R18: a path-less commit whose leaves would bring the count since the last path commit above the session's
+    ///         `pathRefreshBound`.
+    error PqChatTreePathBound(uint32 sincePath, uint32 bound);
     /// @notice `validateEnv`: `chainUid` 0, registry 0, no code-size limit or one under EIP-170's 24,576 B (3C-D1); a
     ///         constructor id other than class 3, kind 0, version >= 1.
     error PqChatEnv();
@@ -329,6 +371,8 @@ interface IPqChat is IPqGroupTree {
     error PqTopicVoteValue(int8 value);
     error PqTopicShape();
     error PqTopicUnknown(bytes32 id);
+    /// @notice CTR-CHAT-30: `entryRows` asked for more than `ENTRY_ROWS_MAX` ids.
+    error PqTopicRows(uint256 count);
 
     // ------------------------------------------------------------------ the instance (D22, topics spec §11)
 
@@ -456,11 +500,24 @@ interface IPqChat is IPqGroupTree {
     /// @notice The topic's create record with `name`, `about` and `openReplies` as its latest update set them.
     function topicOf(bytes32 topicId) external view returns (PqTopic memory t, uint64 seq);
     function entryOf(bytes32 entryId) external view returns (EntryView memory);
-    /// @notice Version `version` (1 = the original, 2.. the edits).
+    /// @notice Version `version` (1 = the original, 2.. the edits): its content, signature hash and nonce (CTR-CHAT-31), the
+    ///         original's `postedAt` and this version's `editedAt` (0 for version 1; CTR-CHAT-29).
     function versionAt(bytes32 entryId, uint32 version)
         external
         view
-        returns (string memory mediaType, bytes memory body, bytes32 sigHash);
+        returns (
+            string memory mediaType,
+            bytes memory body,
+            bytes32 sigHash,
+            uint64 nonce,
+            uint64 postedAt,
+            uint64 editedAt
+        );
+    /// @notice CTR-CHAT-30: one row per id, in order, each as `entryOf` without the body (`PqTopicUnknown` for an id not
+    ///         here), the viewer's vote as `voteOf(id, viewer)`'s value; at most `ENTRY_ROWS_MAX` ids (`PqTopicRows`).
+    function entryRows(bytes32[] calldata entryIds, bytes32 viewer) external view returns (EntryRow[] memory rows);
+    /// @notice The largest `entryRows` batch: 64 ids.
+    function ENTRY_ROWS_MAX() external view returns (uint256);
     function writerOf(bytes32 topicId, bytes32 ua) external view returns (bool granted, uint64 seq);
     function scoreOf(bytes32 entryId) external view returns (uint128 up, uint128 down);
     function voteOf(bytes32 entryId, bytes32 ua) external view returns (int8 value, uint64 seq);

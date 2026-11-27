@@ -79,6 +79,18 @@ impl Net for Recorder {
         self.0.lock().unwrap().push("call".into());
         Err(SdkError::Argument)
     }
+    async fn quote(
+        &self,
+        _: &str,
+        _: Addr,
+        _: &str,
+        _: Value,
+        _: KeyRef,
+        _: KeyRef,
+    ) -> Result<scaas_sdk::app_core::AppQuote, SdkError> {
+        self.0.lock().unwrap().push("quote".into());
+        Err(SdkError::Argument)
+    }
 }
 
 static ONE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -121,6 +133,18 @@ fn ua_key(seed: &str, kind: u16) -> KeyRef {
         seed: seed.into(),
         kind,
         account: 0,
+        index: 0,
+    }
+}
+
+/// A payer of `k`'s seed (its native EVM key).
+fn payer(k: &KeyRef) -> KeyRef {
+    let (KeyRef::Ua { seed, .. } | KeyRef::Native { seed, .. }) = k else {
+        unreachable!()
+    };
+    KeyRef::Native {
+        seed: seed.clone(),
+        network: "evm".into(),
         index: 0,
     }
 }
@@ -174,7 +198,7 @@ async fn p1_refusals_before_any_call() {
             vec![]
         };
         let r = pv
-            .create_vault(&k, &info(), &m, &at(), Mode::Portable, &off)
+            .create_vault(&k, &info(), &m, &at(), Mode::Portable, &off, payer(&k))
             .await;
         assert_eq!(format!("{:?}", r.err().unwrap()), want);
         let r = pv.recover(&k, &at()).await;
@@ -183,7 +207,15 @@ async fn p1_refusals_before_any_call() {
     }
     let k = PqVault::vault_key(&full, 1);
     let r = pv
-        .create_vault(&k, &info(), &members(&pv, &k), &at(), Mode::Portable, &off)
+        .create_vault(
+            &k,
+            &info(),
+            &members(&pv, &k),
+            &at(),
+            Mode::Portable,
+            &off,
+            payer(&k),
+        )
         .await;
     assert!(matches!(r, Err(Error::Sdk(_))));
     assert_eq!(
@@ -207,13 +239,13 @@ async fn passphrase_length() {
     }];
     let short = Passphrase::On(sec("fifteen chars!!".as_bytes()));
     let r = pv
-        .create_vault(&k, &info(), &m, &at(), Mode::Portable, &short)
+        .create_vault(&k, &info(), &m, &at(), Mode::Portable, &short, payer(&k))
         .await;
     assert!(matches!(r, Err(Error::PassphraseTooShort)));
     assert!(rec.0.lock().unwrap().is_empty());
     let ok = Passphrase::On(sec("sixteen chars!!!".as_bytes()));
     let r = pv
-        .create_vault(&k, &info(), &m, &at(), Mode::Portable, &ok)
+        .create_vault(&k, &info(), &m, &at(), Mode::Portable, &ok, payer(&k))
         .await;
     assert!(matches!(r, Err(Error::Sdk(_))));
 }
@@ -340,8 +372,8 @@ fn no_key_bytes_in_the_surface() {
 /// the warning.
 #[test]
 fn migration_plan_and_warning() {
-    use pqvault_core::ItemVersion;
-    let v = |id: u8, value: Value| ItemVersion {
+    use pqvault_core::{Item, ItemVersion};
+    let v = |id: u8, value: Item| ItemVersion {
         item_id: B32([id; 32]),
         version: 1,
         version_count: 1,
@@ -352,11 +384,11 @@ fn migration_plan_and_warning() {
     let from = vec![(
         B32([1; 32]),
         vec![
-            v(1, serde_json::json!({"type": "login", "title": "a"})),
-            v(2, serde_json::json!({"type": "deleted"})),
+            v(1, Item::new("login")),
+            v(2, Item::deleted()),
             ItemVersion {
                 value: Err(Error::Unreadable),
-                ..v(3, Value::Null)
+                ..v(3, Item::new("login"))
             },
         ],
     )];

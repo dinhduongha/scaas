@@ -7,7 +7,7 @@
 //! again; `open` builds a new arena at the raised generation. An operation that copies a secret out of the arena and uses the
 //! copy after the guard is gone (a vault's scrypt and AEAD, a seal's KDF and AEAD after decapsulation, a backup's split and
 //! seals, a group round 2) holds a read lease ([`Lease`]) for the copy's whole use: leases never wait for each other, and
-//! `lock` waits until none is in flight before it wipes (T21 L82, owner 2026-11-16 "ok, as proposed"). Lock order: a lease is
+//! `lock` waits until none is in flight before it wipes (T21 L82, owner 2026-11-16). Lock order: a lease is
 //! taken before any guard of its store, never while one is held; `lock` holds the lease count from the moment it is zero
 //! until the arena is wiped, then the write lock. The store also holds the wallet's public manifest (spec §8.3),
 //! outside the arena: `lock` keeps it. Memory protection (T10, feature `mlock`, best effort): each chunk is locked in RAM

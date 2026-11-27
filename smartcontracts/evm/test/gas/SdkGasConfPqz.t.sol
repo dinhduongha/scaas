@@ -174,7 +174,7 @@ contract SdkGasConfPqzTest is SdkGasPqzBase {
         }
         counts[k] = PqzSet.ROLL_MAX;
         if (_sgPinned()) assertEq(PqzSet.ROLL_MAX, 64, "the table's set: its rows n1 .. n64");
-        // P4 (owner 2026-11-19, "approved"): the chord does not hold (the rise an entry steps from 5,531 to 5,574 between 16
+        // P4 (owner 2026-11-19): the chord does not hold (the rise an entry steps from 5,531 to 5,574 between 16
         // and 32 and back), so the worst slope's line, about 2,000 above the largest count; the excess pinned and stated
         sgLineLoose = true;
         _bothN("pqz", "mtxRollOver", v, t, _sgFrom(), _pRoll, counts);

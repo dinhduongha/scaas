@@ -286,7 +286,7 @@ skipped on both sides (upstream has no bounded decoder).
 
 ## 11. Optimisation (P6d-2)
 
-Done 2026-10-13 at the owner's request ("optimise the fork"), branch `p6d2-opt`. Pure implementation changes: the
+Done 2026-10-13 at the owner's request to optimise the fork, branch `p6d2-opt`. Pure implementation changes: the
 parameters, the relations, the proof format and `proofSystemId` are unchanged. The bench now hashes the proofs
 (FNV-1a over the seeds): **every step left the proofs byte-identical** to main for the same seeds, and native and
 wasm proofs are equal byte for byte (seeds 0..2) [measured]. KAT 19/19, the symbol scan (native and wasm) and the five

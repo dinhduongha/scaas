@@ -411,6 +411,60 @@ pub struct AppCall {
     pub quote: crate::wallet::NativeQuote,
 }
 
+/// [`entry_call`]'s parts and the call's review.
+type CallReview = (
+    alloy::json_abi::Function,
+    serde_json::Map<String, serde_json::Value>,
+    Vec<u8>,
+    Vec<ReviewField>,
+);
+
+/// The review of a call of `entry` with `args` at `contract` (`prepare_app_call`'s and `quote_app_call`'s, one place): the
+/// contract, the entry's signature and every named argument, with [`entry_call`]'s function, arguments and calldata.
+fn call_review(entry: &str, args: &str, contract: &str) -> Result<CallReview, SdkError> {
+    let (f, o, data) = entry_call(entry, args)?;
+    let mut review = vec![
+        field("contract", contract.to_ascii_lowercase(), Source::Derived),
+        field("entry", f.signature(), Source::Derived),
+    ];
+    for p in &f.inputs {
+        let v = o.get(&p.name).ok_or(SdkError::Argument)?;
+        flatten(&format!("args.{}", p.name), v, &mut review);
+    }
+    Ok((f, o, data, review))
+}
+
+/// The count an app gas row's `per_item` names (one of the gas tables' items, `members`, `legs`, …) in a call's arguments
+/// (review A-1): the length of the one array of that name, a top-level argument or a field of one (`v.members`), the
+/// record's signature `sig` not counted (its `members` are the signer's slots, empty before the signature: re-check R-1);
+/// `None` when there is none or more than one (the row then refuses, `GasCountUnknown`).
+fn arg_count(o: &serde_json::Map<String, serde_json::Value>, item: &str) -> Option<u64> {
+    let mut found = o
+        .iter()
+        .filter(|(k, _)| *k != "sig")
+        .flat_map(|(k, v)| {
+            let top = (k == item).then_some(v);
+            let inner = v.as_object().and_then(|x| x.get(item));
+            top.into_iter().chain(inner)
+        })
+        .filter_map(serde_json::Value::as_array);
+    match (found.next(), found.next()) {
+        (Some(a), None) => Some(a.len() as u64),
+        _ => None,
+    }
+}
+
+/// A call of an app's own contract quoted before its record is signed ([`AppCore::quote_app_call`], CLI-SDK-36): the review
+/// of `prepare_app_call` with the signature empty, and the payer's quote from the gas rows (`None`: unquoted). It is no
+/// `NativeQuote`, so `Wallet::submit_native_send` does not take it; the signed record's call is `prepare_app_call`'s. The
+/// L1 data fee of an OP Stack chain, where it applies, is over the unsigned calldata (the signature's share not in it).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AppQuote {
+    pub review: Vec<ReviewField>,
+    pub quote: Option<crate::op::SubmitQuote>,
+}
+
 /// One registry record as [`AppCore::verify_app_record`] reads it: `(kind, keyData)` of `registrationOf`, an `msig`'s current
 /// structure with its `enabled` word (`None`: never updated) and `version`, the structures of the versions the record's tags
 /// name (`msigAt`, CTR-UA-74: [`tagged_versions`]) and its accepted bits (`msigStateOf.accepted`: acceptance is per slot and
@@ -1019,6 +1073,8 @@ impl AppCore {
         aad: Vec<u8>,
         pt: Vec<u8>,
     ) -> Result<Vec<u8>, SdkError> {
+        // the plaintext the app core gave is wiped when it is dropped here (CLI-PQV-16 H1: an item's canonical JSON)
+        let pt = zeroize::Zeroizing::new(pt);
         match &nonce {
             AppNonce::FromHandle(n) => self.with(&[&key, n], |s, hs| {
                 s.seal(
@@ -1786,15 +1842,7 @@ impl AppCore {
         args: String,
         payer: KeyRef,
     ) -> Result<AppCall, SdkError> {
-        let (f, o, data) = entry_call(&entry, &args)?;
-        let mut review = vec![
-            field("contract", contract.to_ascii_lowercase(), Source::Derived),
-            field("entry", f.signature(), Source::Derived),
-        ];
-        for p in &f.inputs {
-            let v = o.get(&p.name).ok_or(SdkError::Argument)?;
-            flatten(&format!("args.{}", p.name), v, &mut review);
-        }
+        let (_, _, data, review) = call_review(&entry, &args, &contract)?;
         let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
         self.refuse_contract(&profile, &pool, &contract).await?;
         let quote = self
@@ -1810,6 +1858,79 @@ impl AppCore {
             })
             .await?;
         Ok(AppCall { review, quote })
+    }
+
+    /// The quote of a call of the app's own contract before its record is signed (CLI-SDK-36): `entry`, `args` and `payer` as
+    /// [`Self::prepare_app_call`]'s (the payer checked first, `Argument` for one that is no native EVM key), the record's
+    /// `UASig` in `args` empty (`keyData`, `signature` `0x`, no members), `signer` the key that will sign the record. Its gas
+    /// from the gas tables alone, never a simulation (the simulation follows the signature, in `prepare_app_call`): the base
+    /// row `(entry's name, "app", not fresh)` and `signer`'s verify row (its `sig_bytes` at the calldata price), the
+    /// transaction row with the unsigned calldata, in the lookup order chain → module → reference, with the margin; a row's
+    /// `per_byte` input may be `calldata` (the unsigned calldata's length) and its `per_item` item counts the one argument
+    /// array of that name, top level or a field of one (`v.members`: its length); `quote` none (unquoted) without the
+    /// rows, or for a signer whose verify gas this entry does not read (an `msig`, a group, a stored key). The review is `prepare_app_call`'s; the contract
+    /// checks are its (`AppDomainRefused`, `Argument`). Not a transaction: nothing here can be sent.
+    pub async fn quote_app_call(
+        self: &Arc<Self>,
+        chain: String,
+        contract: String,
+        entry: String,
+        args: String,
+        payer: KeyRef,
+        signer: KeyRef,
+    ) -> Result<AppQuote, SdkError> {
+        let (f, o, data, review) = call_review(&entry, &args, &contract)?;
+        let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
+        self.refuse_contract(&profile, &pool, &contract).await?;
+        // the payer checked before anything is reviewed, rows or none (review A-2): `prepare_app_call` takes the same
+        crate::op::quote::payer_address(&self.sdk, &payer)?;
+        let kind = match &signer {
+            KeyRef::Ua { kind, .. } => *kind,
+            KeyRef::Native { .. } | KeyRef::Imported { .. } => crate::op::gas::NATIVE_EVM,
+            // an `msig`'s, a group's or a stored key's verify gas is not read here: no row answers it (unquoted)
+            _ => u16::MAX,
+        };
+        // the rows read before any await: `OpGas` is not `Send`
+        let fig = {
+            let len = data.len();
+            let counted = |path: &str| arg_count(&o, path);
+            let op = crate::op::gas::OpGas {
+                len: &|i| (i == "calldata").then_some(len as u64),
+                count: &counted,
+                saves: false,
+                fee: false,
+                attached: None,
+                holder: false,
+                registry: profile.registry.as_deref(),
+            };
+            crate::op::gas::quoted(
+                &profile.gas,
+                &profile.gas_opt_in,
+                &self.sdk.gas_tables,
+                None,
+                (&f.name, "app", kind, false),
+                len,
+                &op,
+            )?
+        };
+        let quote = match fig {
+            Some(fig) => Some(
+                crate::op::quote::self_relay(
+                    &self.sdk,
+                    &chain,
+                    &payer,
+                    addr20(&contract.to_ascii_lowercase())?.into(),
+                    alloy::primitives::U256::ZERO,
+                    Bytes::from(data),
+                    "0".into(),
+                    false,
+                    Some(fig),
+                )
+                .await?,
+            ),
+            None => None,
+        };
+        Ok(AppQuote { review, quote })
     }
 
     /// Whether `ua`'s single key (`kind`, `key_data`, read by the caller from the UA's record) signs `typed_json` on `path`.
@@ -1941,11 +2062,12 @@ impl AppCore {
         args: String,
         purpose: Purpose,
     ) -> Result<String, SdkError> {
-        self.read_app_by(chain, contract, entry, args, purpose, false)
+        self.read_app_by(chain, contract, entry, args, purpose, By::One)
             .await
     }
 
-    /// [`AppCore::read_app`] at `purpose`, under strict majority when `agreed` ([`AppCore::read_app_agreed`]).
+    /// [`AppCore::read_app`] at `purpose`: from one endpoint (failed over), under strict majority of the list
+    /// ([`AppCore::read_app_agreed`]) or of its named endpoints ([`AppCore::read_app_agreed_named`]).
     async fn read_app_by(
         self: &Arc<Self>,
         chain: String,
@@ -1953,7 +2075,7 @@ impl AppCore {
         entry: String,
         args: String,
         purpose: Purpose,
-        agreed: bool,
+        by: By,
     ) -> Result<String, SdkError> {
         use alloy::dyn_abi::FunctionExt;
         use alloy::json_abi::StateMutability;
@@ -1976,11 +2098,17 @@ impl AppCore {
             let d = data.clone();
             async move { pool.call_at(&at, to, d).await.map(|b| b.to_vec()) }
         };
-        let choice = final_block(&profile);
-        let out = if agreed {
-            pool.read_at_block_agreed(choice, purpose, call).await?
-        } else {
-            pool.read_at_block(choice, purpose, call).await?
+        let choice = match by {
+            By::Latest => scaas_rpc::pool::BlockChoice::Latest,
+            _ => final_block(&profile),
+        };
+        let out = match by {
+            By::One | By::Latest => pool.read_at_block(choice, purpose, call).await?,
+            By::Agreed => pool.read_at_block_agreed(choice, purpose, call).await?,
+            By::Named => {
+                pool.read_at_block_agreed_named(choice, purpose, call)
+                    .await?
+            }
         }
         .value;
         if out.len() > READ_MAX {
@@ -2001,6 +2129,15 @@ impl AppCore {
 }
 
 mod agreed;
+
+/// How [`AppCore::read_app_by`] reads.
+#[derive(Clone, Copy)]
+enum By {
+    One,
+    Latest,
+    Agreed,
+    Named,
+}
 
 /// Test-only entry points (feature `vectors`, never in a release build nor a binding): key bytes in and out and fixed
 /// randomness, for the vectors.
@@ -2097,5 +2234,37 @@ impl AppCore {
         self.with(&[&key], |s, hs| {
             s.vectors_seal(at(hs, 0)?, &nonce, &aad, &pt).map_err(ua)
         })
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    /// Review A-1: an app row's per-item count is the length of the one argument array of its name, top level or one level
+    /// down; none or two: no count (`GasCountUnknown`).
+    #[test]
+    fn an_app_rows_count_is_an_arguments_array() {
+        let o: serde_json::Map<String, serde_json::Value> = serde_json::from_value(serde_json::json!({
+            "legs": [1, 2, 3], "v": {"members": [1, 2], "legs": "x"}, "e": {"members": 1}, "id": "0x11"
+        }))
+        .unwrap();
+        assert_eq!(super::arg_count(&o, "legs"), Some(3));
+        assert_eq!(super::arg_count(&o, "members"), Some(2));
+        assert_eq!(super::arg_count(&o, "orders"), None);
+        // the record's signature is not counted: a create record's `v.members` beside the empty `sig.members` (R-1)
+        let create: serde_json::Map<String, serde_json::Value> = serde_json::from_value(serde_json::json!({
+            "v": {"members": [1, 2, 3]}, "wraps": [1, 2, 3], "sig": {"keyData": "0x", "signature": "0x", "members": []}
+        }))
+        .unwrap();
+        assert_eq!(super::arg_count(&create, "members"), Some(3));
+        let two: serde_json::Map<String, serde_json::Value> = serde_json::from_value(
+            serde_json::json!({"a": {"members": [1]}, "b": {"members": [1, 2]}}),
+        )
+        .unwrap();
+        assert_eq!(
+            super::arg_count(&two, "members"),
+            None,
+            "two arrays of the name"
+        );
     }
 }

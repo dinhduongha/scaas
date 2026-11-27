@@ -5,8 +5,8 @@ import {IPqGroupTree} from "./IPqGroupTree.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 
-/// @title A group's ratchet tree, for any contract that keeps one (owner 2026-11-23, CTR-CHAT-26: the two layers; and "or other
-///        systems that use a tree"): RFC 9420's array layout and tree hash over registry KEM keys, the key admission check of
+/// @title A group's ratchet tree, for any contract that keeps one (owner 2026-11-23, CTR-CHAT-26: the two layers; also for other
+///        systems that use a tree): RFC 9420's array layout and tree hash over registry KEM keys, the key admission check of
 ///        scheme 1, the live tree and the no-return sets (R16) of each group, in an ERC-7201 namespace of the inheritor.
 /// @notice App-agnostic: no record type, no domain, no error of its own. The inheritor fixes, by the hooks below, the namespace
 ///         slot (`_treeSlot`: ERC-7201 of its own namespace id followed by `.tree`, so two apps whose ids differ never share
@@ -32,6 +32,8 @@ abstract contract PqGroupTree {
     uint8 internal constant T_REMOVED_KEPT = 11; // (head, ua): a gone UA keeps a leaf, is an admin or the author
     uint8 internal constant T_NOT_MEMBER = 12; // (ua): no live leaf, or gone
     uint8 internal constant T_NOT_ADMIN = 13; // (ua): not a live admin of the head
+    uint8 internal constant T_PATH_REQUIRED = 14; // (): a path-less commit with a Remove or another admin list (R19)
+    uint8 internal constant T_PATH_BOUND = 15; // (sincePath, bound): a path-less commit over the group's bound (R18)
 
     uint256 internal constant KEM_PK = 1601; // 0x01 ‖ ek (1,568) ‖ pk_X (32)
     /// @dev The base's own bound on leaf positions, whatever `_treeBounds()` says (review A-6; owner R8 2026-11-25: 256 ->
@@ -81,6 +83,8 @@ abstract contract PqGroupTree {
         uint32 used;
         uint32 leaves;
         uint32 owed;
+        uint32 sincePath; // leaves added by path-less commits since the last path commit (the path-less delta §5.3, C44)
+        uint32 pathBound; // the group's bound on them, 0 = none, fixed at `_treeOpen` (R18)
         mapping(uint256 => Leaf) leafAt; // by leaf index
         mapping(uint256 => Node) nodeAt; // by node index (odd: parents)
         mapping(bytes32 => Keys) keysOf; // by UA
@@ -119,6 +123,7 @@ abstract contract PqGroupTree {
         bytes32[] nodeKeyHashes;
         uint32 ctCount;
         bytes32 treeHash;
+        bool pathless; // a commit of Adds only with no path (the path-less delta §3.2, C42)
     }
 
     /// @dev The tree of a commit, in memory (nothing written): per node `st` (0 as stored, 1 blank, 2 set), its `th` when
@@ -194,8 +199,11 @@ abstract contract PqGroupTree {
     // ------------------------------------------------------------------ the group
 
     /// @dev A new group's tree, cold: `used` leaf positions (`leaves` the smallest power of two not below it), every node
-    ///      blank, the admin list. Leaves come by `_treeSetLeaf`.
-    function _treeOpen(bytes32 gid, bytes32 treeId, uint256 used, bytes32[] calldata admins) internal {
+    ///      blank, the admin list, the bound on path-less leaves between two path commits (0 = none, R18; the inheritor checks
+    ///      its range). Leaves come by `_treeSetLeaf`.
+    function _treeOpen(bytes32 gid, bytes32 treeId, uint256 used, bytes32[] calldata admins, uint32 pathBound)
+        internal
+    {
         (uint256 leavesMax, uint256 adminsMax,,) = _treeBounds();
         if (used == 0 || used > leavesMax || used > TREE_LEAVES_LIMIT || admins.length > adminsMax) {
             _treeFail(T_SHAPE, 0, 0);
@@ -203,7 +211,7 @@ abstract contract PqGroupTree {
         uint256 leaves = 1;
         while (leaves < used) leaves <<= 1;
         Tree storage t = _tree(gid);
-        (t.treeId, t.used, t.leaves) = (treeId, uint32(used), uint32(leaves));
+        (t.treeId, t.used, t.leaves, t.pathBound) = (treeId, uint32(used), uint32(leaves), pathBound);
         t.admins = admins;
     }
 
@@ -317,14 +325,31 @@ abstract contract PqGroupTree {
                 uint256(d.author)
             );
         }
+        if (d.pathless) _pathlessCheck(t, d);
         w = _walkInit(t, d);
         _walkRemoves(reg, t, d, w);
         _walkAdds(reg, t, d, w);
         _walkJudge(reg, t, d, w);
-        _walkPath(t, d, w);
+        // a path-less commit sets no node and walks no path: each Add has blanked its own direct path up to the root (C6)
+        if (!d.pathless) _walkPath(t, d, w);
         _walkHash(reg, t, w);
         if (w.leaves != d.leaves) _treeFail(T_SHAPE, 0, 0);
         if (w.root != d.treeHash) _treeFail(T_HASH, uint256(w.root), 0);
+    }
+
+    /// @dev The path-less delta §5.1 items 2-4 (C42, R19, R18): at least one Add, no node key and no ciphertext
+    ///      (`T_SHAPE`); no Remove and the head's admin list element for element (`T_PATH_REQUIRED`); the bound, refused whole
+    ///      (`T_PATH_BOUND`). Anything owed and a `gone` admin kept fail `_walkJudge` as for any commit.
+    function _pathlessCheck(Tree storage t, Delta memory d) private view {
+        if (d.adds.length == 0 || d.nodeKeyHashes.length != 0 || d.ctCount != 0) _treeFail(T_SHAPE, 0, 0);
+        bytes32[] storage h = t.admins;
+        bool same = d.removes.length == 0 && d.admins.length == h.length;
+        for (uint256 i; same && i < h.length; ++i) {
+            same = d.admins[i] == h[i];
+        }
+        if (!same) _treeFail(T_PATH_REQUIRED, 0, 0);
+        uint256 bound = t.pathBound;
+        if (bound != 0 && uint256(t.sincePath) + d.adds.length > bound) _treeFail(T_PATH_BOUND, t.sincePath, bound);
     }
 
     /// @dev The size after the Adds (each at a leaf below `used`, or at `used`, in order) and the memory tree.
@@ -592,6 +617,8 @@ abstract contract PqGroupTree {
             t.nodeAt[w.path[i]].keyAt = uint160(keys) | (i * KEM_PK) << 160 | uint256(d.epoch) << 176;
         }
         (t.used, t.leaves, t.head, t.owed) = (uint32(w.used), uint32(w.leaves), head, 0);
+        // the path-less delta §5.3 (C44): a path-less commit counts its leaves, every other completed commit resets
+        t.sincePath = d.pathless ? t.sincePath + uint32(d.adds.length) : 0;
         t.admins = d.admins;
     }
 

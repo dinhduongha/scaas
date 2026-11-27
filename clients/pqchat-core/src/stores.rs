@@ -120,8 +120,12 @@ impl PqChat {
         })
     }
 
-    /// `ep`'s `sealedInfo` opened (K5), its JSON only as the SDK's handle (owner 2026-11-22, spec §11).
+    /// `ep`'s `sealedInfo` opened (K5), its JSON only as the SDK's handle (owner 2026-11-22, spec §11); a tree epoch's
+    /// ([`PqChat::tree_open`]) is the info in force there from the replay (`TreeInfoMissing` when the device holds none).
     pub fn info(&self, ep: &OpenEpoch) -> Result<Arc<SecretBytes>, PqChatError> {
+        if let Some(i) = self.tree_epoch(&ep.epoch.id) {
+            return i.ok_or(PqChatError::TreeInfoMissing);
+        }
         Ok(Arc::new(self.app.pqchat_open_info(
             ep.k.clone(),
             ep.epoch.session_id.clone(),
@@ -228,9 +232,23 @@ impl PqChat {
             Body::File(_) => None,
         };
         let ep = self.send_under(s, me).await?;
+        let prefs = self.prefs(&ep.epoch.session_id)?;
+        // R11: a tree session sends no automatic receipt, whatever its store list: only the user's own choice turns them on
+        if matches!(content, Some(Content::Receipt { .. }))
+            && self.tree_epoch(&ep.epoch.id).is_some()
+            && prefs.receipts != Some(true)
+        {
+            return Ok((
+                SendReport {
+                    message_id: None,
+                    stores: vec![],
+                    post: None,
+                },
+                None,
+            ));
+        }
         let info = self.info_of(&ep)?;
         check_stores(&info)?;
-        let prefs = self.prefs(&ep.epoch.session_id)?;
         let mut report = SendReport {
             message_id: None,
             stores: vec![],

@@ -100,7 +100,7 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
 - **The owner UA names the instance and nothing more** (Q2): `owner()` returns it; it has no power over sessions, epochs,
   messages, topics, entries or votes, and no entry reads it. The instance has no pause, no admin and no upgrade.
 - **Introspection**: `factoryInfo()` returns `(factory, chainUid, contractClass = 3, kind = 0, version,
-  initialized)` (CTR-GOV-23: no owner in it; the instance's `owner()` answers its owner UA); `supportsInterface` answers ERC-165 (`0x01ffc9a7`), `type(IPqChat).interfaceId` (`0x7b7acc12`) and the tree views'
+  initialized)` (CTR-GOV-23: no owner in it; the instance's `owner()` answers its owner UA); `supportsInterface` answers ERC-165 (`0x01ffc9a7`), `type(IPqChat).interfaceId` (`0xe9e2068a` since `entryRows`, [CTR-CHAT-30](#CTR-CHAT-30); `0x8412b2f1` since the path-less delta's records; `0x7b7acc12` before) and the tree views'
   `type(IPqChatTreeViews).interfaceId` (`0xec42e734`).
 - **The body module** ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30), applied by 3C-D2 when the release passed the
   33,594 B line at 34,223 B): `PqChatTopics` holds the bodies of the public topics and votes (§9: the six writes and
@@ -234,7 +234,7 @@ calls, owner may override).
 <a id="CTR-CHAT-23"></a>**CTR-CHAT-23** — **Every `PqChat` instance has a signature-storage setting fixed when it is created,
 `none` or `sstore2`, the default `sstore2`: an `sstore2` instance keeps the signature of every accepted control-plane record and
 posted message in state, read by views; `none` keeps each record's `sigHash` only** (owner 2026-11-23, the pqchat-core spec's O11:
-"by way 2, with SSTORE2 as the default, plus (d) as an option", verbatim in the
+way 2, with SSTORE2 as the default, plus (d) as an option, recorded in the
 [register](../decisions.md#ctr-chat-23--every-pqchat-instance-has-a-signature-storage-setting-fixed-at-creation-none-or-sstore2-the-default-sstore2);
 the storage form, the views and the numbering are controller calls, the
 owner may override). Status: **BUILT on branch `pqchat-sigs` (EVM), UNAUDITED** (plan
@@ -301,7 +301,7 @@ figures come first in the gas rows; groups stay correct and tested, and no 1:1 g
 
 <a id="CTR-CHAT-25"></a>**CTR-CHAT-25** — **`PqChatSession` carries `uint8 groupMode`, its last field, fixed at creation: 0 flat
 wraps; this release accepts 0 only and refuses any other value first, `PqChatModeUnsupported(groupMode)`** (owner 2026-11-23,
-"add the field now, in pqchat-sigs", verbatim in the
+the field added now, in pqchat-sigs, recorded in the
 [register](../decisions.md#ctr-chat-25--pqchatsession-carries-uint8-groupmode-fixed-at-creation-this-release-accepts-0-only);
 its place last, after the TreeKEM research note, a controller call). Status: **BUILT on branch `pqchat-sigs`, UNAUDITED**
 (`test/pqchat/PqChatGroupMode.t.sol`; the vector row `sessionTreeKem`).
@@ -314,18 +314,22 @@ its place last, after the TreeKEM research note, a controller call). Status: **B
   deployment (an immutable store such as immudb, or Supabase), `groupMode = 2` is the whole group off chain (a tree of depth
   up to 18) and `groupMode = 3` is the membership on chain with the KEM bytes off chain. No build is decided. Contracts refuse
   both, with 4-255, `PqChatModeUnsupported` (the vector row `sessionMode2`).
+- **Path-less Adds' fields (Change 2026-11-25, the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md); SPECIFIED, nothing built):** `groupMode` is
+  followed by `uint32 pathRefreshBound` and `bytes32 confirmTag` (mode 1's option and epoch 0's tag, both 0 in mode 0, else
+  `PqChatShape()`; the bound at most 510 in mode 1). The struct and its typehash move once more (test-only chains), so the
+  stability sentence above is superseded.
 - **Fixed at creation:** only the session record names it; no epoch, leave or removal record carries it, so no child can
   change it (there is no field to change). `sessionOf` returns it with the record.
 - **Checked first** in `createSession`, before the lists, the KEM keys and the signature: a record of another mode costs no
   registry read.
 - **Pins moved:** the `PqChatSession` typehash `0xe2c3b4c1…ad1e4d` → `0x7e832d4c…62d911` (full value in `PqChatTypes.t.sol` and
-  the vectors), the selectors of `createSession` and `sessionOf` (`interfaceId` → `0x869305e0`, `selector_audit.json`, the node's
+  the vectors), the selectors of `createSession` and `sessionOf` (`interfaceId` → `0x869305e0`, then `0x7b7acc12` with the tree entries and `0x8412b2f1` with the path-less delta's records, `selector_audit.json`, the node's
   type row). Cost: one word more in calldata and in the stored record, +48,960 state gas per `createSession`.
 
 <a id="CTR-CHAT-24"></a>**CTR-CHAT-24** — **A member may sit in an epoch with several KEM keys: `members` is strictly sorted
 by `(ua, keyId)`, one or more keys per UA and at most `KEYS_PER_UA_MAX` = 8, one wrap per entry, each a KEM key its UA holds
-here; every other rule stays per UA** (owner 2026-11-23, (M): "Choose M. It is still an option, isn't it?", yes: optional per member,
-verbatim in the [register](../decisions.md#ctr-chat-24--a-member-may-hold-several-kem-keys-in-an-epoch-members-sorted-by-ua-keyid-at-most-8-per-ua);
+here; every other rule stays per UA** (owner 2026-11-23, option (M), optional per member,
+recorded in the [register](../decisions.md#ctr-chat-24--a-member-may-hold-several-kem-keys-in-an-epoch-members-sorted-by-ua-keyid-at-most-8-per-ua);
 the cap of 8 a controller call). Status: **BUILT on branch `pqchat-sigs` in `PqGroupBase` (PqChat and PqVault), UNAUDITED**
 (`test/pqchat/PqChatDevices.t.sol`, `test/pqvault/PqVaultDevices.t.sol`).
 
@@ -435,7 +439,7 @@ the parent** (owner D4 of 2026-11-04, O2 and O4; the exact test 3C-D7 is a contr
   that has not left it (`PqChatNotMember(author)`; Fable review 2026-11-10, P1-2 fix (a)).
 - **The limit** (UA-7 spec P9): the first complete child wins, so a member can take the slot before an admin's
   membership change (O2) and the admin rekeys again from that child. Liveness only (the member never reads an epoch it is
-  not wrapped into). **An exit is not exposed to it (Change 2026-11-24, E-3; owner 2026-11-24: "Yes, both modes"; BUILT on
+  not wrapped into). **An exit is not exposed to it (Change 2026-11-24, E-3; owner 2026-11-24: in both modes; BUILT on
   branch `review-fix-contract`):** at home `remove` ([CTR-CHAT-20](#CTR-CHAT-20)) and `leave`
   ([CTR-CHAT-10](#CTR-CHAT-10)) name the head or an ancestor of it and apply at the head, so a member about to be removed
   can no longer keep itself in by answering each new tip, and a member's rekey no longer voids another's leave.
@@ -452,7 +456,7 @@ review's P1-2 fix (b); **BUILT** on `ua-mtx-merge`, plan 3c, UNAUDITED; UA-7 spe
   admin of `epochId` (`PqChatNotAdmin`) who signs it; the nonce in the epoch scope `(sessionId, admin)` (`PqChatNonceUsed`).
   Anyone submits it, relayable with a fee of 0. The record and its `sigHash` are kept in state.
 - **At home, applied at the head (Change 2026-11-24, E-3 of the TreeKEM code review, the rule of
-  [CTR-CHAT-27](#CTR-CHAT-27)'s C9 in mode 0; owner 2026-11-24: "Yes, both modes"; BUILT on branch
+  [CTR-CHAT-27](#CTR-CHAT-27)'s C9 in mode 0; owner 2026-11-24: in both modes; BUILT on branch
   `review-fix-contract`).** Replaces "at home with no complete child" above:
   - `epochId` is the head or an ancestor of it: stored for `sessionId` and complete (`PqChatUnknown`, `PqChatIncomplete`).
     At home a child completes only by taking its parent's slot ([CTR-CHAT-08](#CTR-CHAT-08)), so every complete epoch is
@@ -513,7 +517,7 @@ and its nonce 3C-D8 are a controller call, owner may override).
 
 `leave(PqChatLeave l, UASig sig)`: `l.epochId` stored for `l.sessionId` (`PqChatUnknown(epochId)`), `l.member` in its
 `members` (`PqChatNotMember(member)`), signed by `member`, nonce in the epoch scope `(sessionId, member)` shared with its
-rekeys. **At home, applied at the head (Change 2026-11-24, E-3; owner 2026-11-24: "Yes, both modes"; BUILT on branch `review-fix-contract`):**
+rekeys. **At home, applied at the head (Change 2026-11-24, E-3; owner 2026-11-24: in both modes; BUILT on branch `review-fix-contract`):**
 `l.epochId` is the head or an ancestor of it within `EXIT_LAG_MAX` = 16 epochs (`PqChatExitLag` beyond; the spec check),
 complete (`PqChatIncomplete` for a staged or losing child, which was accepted before), `l.member` a member of the head
 that has not left it and was not removed from it (`PqChatNotMember`: a repeated leave is refused, the spec check, sc-E-5)
@@ -663,7 +667,8 @@ checked** (owner D19, D20 and Q1 of 2026-11-07; topics spec P33, P35, P38).
   got)`), `mediaType` and `body` as above, signed by `author`, nonce in the original's topic scope. An edit keeps the
   original's topic, parent, reference, votes and place in every list; replies and votes attach to the original id.
   `entryOf(entryId)` returns the place and the latest version (`versionCount` included), `versionAt(entryId, version)`
-  any version, 1 being the original (`PqTopicVersion(count, version)` outside `1..count`).
+  any version, 1 being the original (`PqTopicVersion(count, version)` outside `1..count`); both also return the times of
+  [CTR-CHAT-29](#CTR-CHAT-29) and the version's nonce of [CTR-CHAT-31](#CTR-CHAT-31).
 
 <a id="CTR-CHAT-17"></a>**CTR-CHAT-17** — **One vote per UA per entry, changeable; the counts `up` and `down` are kept in
 state** (owner D21 of 2026-11-07; topics spec P40).
@@ -682,11 +687,36 @@ count)`, `replies(parentId, start, count)` and `byAuthor(author, start, count)` 
 most `count` ids from `start`, fewer at the end, empty past it, and the list's length; `count = 0` is the count view. No
 clamp: the call's gas bounds a page. The node's indexer may mirror them; the state is the answer.
 
-**PLANNED for the next `PqChat` release** (owner 2026-11-27, [CLI-PQC-18](../decisions.md#CLI-PQC-18)): `postedAt` packed into
-the entry's slot and `editedAt` beside each version pointer, no new slot, returned by `entryOf` and `versionAt` (G1); a batched
-view `entryRows(bytes32[] ids, bytes32 viewer)` with each entry's row without its body, its body length, `up`, `down`, the
-viewer's vote and the direct reply count (G2); the version's `nonce` in `entryOf` and `versionAt` (G5). Layout and gas pins move
-with their old and new figures; record typehashes and vectors stay.
+<a id="CTR-CHAT-29"></a>**CTR-CHAT-29** — **Every entry and every edit keeps the block time it landed, in the slot it
+already has** (owner 2026-11-27, public-topics UI research §8 G1). Status: **BUILT** (`test/pqchat/PqTopicRows.t.sol`,
+`PqChatLayout.t.sol` `test_entryTimesArePinned`), UNAUDITED.
+
+- `postEntry` stores `postedAt = uint64(block.timestamp)` in the entry's slot beside the head blob's address and `depth`
+  (`record | depth << 160 | postedAt << 192`, the 64 bits that were free); `editEntry` stores `editedAt` beside each
+  version's pointer (`versions[id][i] = record | editedAt << 160`, the element was the address alone). No slot is added; the
+  records, their typehashes and the vectors are unchanged.
+- `entryOf` returns `postedAt` (the original's, never moved by an edit) and `editedAt` (the latest edit's, 0 before one);
+  `versionAt(entryId, v)` returns the original's `postedAt` and version `v`'s `editedAt` (0 for version 1).
+- The time is the block's, as the chain reports it; a reader ranks and shows it as such ("Hot", "Active", "2 h ago").
+
+<a id="CTR-CHAT-30"></a>**CTR-CHAT-30** — **`entryRows(ids, viewer)` returns a feed's rows in one call, without the
+bodies** (owner 2026-11-27, research §8 G2). Status: **BUILT** (`test/pqchat/PqTopicRows.t.sol`), UNAUDITED.
+
+`entryRows(bytes32[] entryIds, bytes32 viewer) returns (EntryRow[] rows)`: one row per id, in the order asked, each
+`entryOf`'s fields without `body` (`topicId`, `author`, `parentId`, `depth`, `ref`, the latest version's `mediaType`,
+`sigHash` and `nonce`, `versionCount`, `postedAt`, `editedAt`), plus the latest version's `bodyLength`, `up` and `down`
+(`scoreOf`), the viewer's `vote` (`voteOf(id, viewer)`'s value, 0 when none) and `replies`, the direct reply count
+(`replies(id, 0, 0)`'s total). At most `ENTRY_ROWS_MAX` = 64 ids (`PqTopicRows(count)` above it, as `PqChat.ENTRY_ROWS_MAX()`
+reports); an id not here is `PqTopicUnknown(id)`; no id, no row. The row reads the head blob's fixed words and the slots,
+never the body: 64 rows cost about 1.49 M gas of an `eth_call` whether each body is 8 B or a 150,000-B chain of blobs
+(`test_topics_entryRowsSkipTheBody`). A body is read by `entryOf` or `versionAt`.
+
+<a id="CTR-CHAT-31"></a>**CTR-CHAT-31** — **The views return each version's nonce** (owner 2026-11-27, research §8 G5).
+Status: **BUILT** (`test/pqchat/PqTopicRows.t.sol`), UNAUDITED.
+
+`entryOf` and `entryRows` return the latest version's `nonce` (the original's before an edit), `versionAt(entryId, v)`
+version `v`'s. With the place, the media type and the body, that rebuilds the typed digest of any version from state, the
+`contentHash` a `ref` may pin ([CTR-CHAT-16](#CTR-CHAT-16)).
 
 ## 10. Every external entry
 
@@ -729,6 +759,7 @@ Status: **BUILT**. Errors are those of `IPqChat.sol`; "registry" means the bubbl
 | `epochCount(sessionId)`, `epochsOf(sessionId, offset, limit)`, `latestEpoch(sessionId)`, `EPOCHS_RANGE_MAX()` | view | page clamped to 128; 0 while the session is incomplete here | none |
 | `topicOf(topicId)`, `entryOf(entryId)` | view | known id | `PqTopicUnknown` |
 | `versionAt(entryId, version)` | view | known id, `1 ≤ version ≤ count` | `PqTopicUnknown`, `PqTopicVersion` |
+| `entryRows(entryIds, viewer)`, `ENTRY_ROWS_MAX()` | view | at most 64 ids, each known ([CTR-CHAT-30](#CTR-CHAT-30)) | `PqTopicRows`, `PqTopicUnknown` |
 | `writerOf`, `scoreOf`, `voteOf`, `topicNonceUsed`, `entryNonceUsed` | view | — | none: zero when unknown |
 | `topics`, `topicsByAdmin`, `writersOf`, `posts`, `replies`, `byAuthor` | view | `(ids, total)`, no clamp | none |
 
@@ -766,7 +797,10 @@ the size gate's row `PqChat` in `smartcontracts/evm/size-baseline.json`).
 `DeployBase._module` (its gate, forge's estimate × 1.05 within 60 M) and the onchain script's `PqChat.s.sol` `_module`,
 with an explicit limit of 59 M (that script runs at × 1.3, which for a 33 KB module would ask about 73 M; the code
 review's A-11). The history of the release's size is in
-the pins' comments; before the first split it was 34,223 B and asked 58.0 M.
+the pins' comments; before the first split it was 34,223 B and asked 58.0 M. Since the topics' G1, G2 and G5
+([CTR-CHAT-29](#CTR-CHAT-29) to [CTR-CHAT-31](#CTR-CHAT-31), 2026-11-27): `PqChat` 34,029 B (2,368,552 + 52,639,650,
+57.8 M asked), `PqChatTopics` 18,523 B (1,236,756 + 28,523,790, 31.2 M asked); the topic writes' rows below moved by
+less than the ±500 pin slack, their state gas not at all (the times sit in slots already written).
 
 **Per transaction** (regular / state gas; the stand-in verifier, so a real signer adds its verifier's regular gas: about
 2.3 M for FN-DSA-512, 5.8 M for ML-DSA-65 on its cached key, 0.2 M for an EIP-8355 precompile):
@@ -840,6 +874,7 @@ Status: **BUILT** for the files below, mutants included (T91: `smartcontracts/ev
 | `PqChatMessages.t.sol` | `postMessage` (hash in state, bytes in the event, device dimension, a device id never parsed, one blob), `storeMessage`, `storedRange` |
 | `PqChatRecovery.t.sol` | `sessionsOf`, `epochsOf`, `latestEpoch`: entries, paging, the end, the clamp, home against replica |
 | `PqTopics.t.sol`, `PqTopicVotes.t.sol` | the topics spec §8 tests 1–10 |
+| `PqTopicRows.t.sol` | CTR-CHAT-29 to CTR-CHAT-31: the times of an entry and its versions, each version's nonce rebuilding its typed digest, `entryRows` field by field against `entryOf` (a chained body, a 64-B media type, an edit, votes, replies, two viewers), 64 ids answered and 65 refused, an unknown id refused |
 | `PqChatLayout.t.sol` | the ERC-7201 namespace and field slots |
 | `PqChatGas.t.sol` | the gas rows and the deployment figures of §12 (T90), the tests' instance at `sstore2` |
 | `PqChatDevices.t.sol` | CTR-CHAT-24: two keys of a member, one wrap each and one `sessionsOf` entry; `(ua, keyId)` order and a repeated key refused; 8 keys land, 9 refused; two keys of one UA are one member; a member's keys change in a plain rekey, adding a UA does not; leave and removal take every key of the UA |
@@ -913,7 +948,7 @@ store path, as HCS does on Hedera; the contract, its state storage and its bound
 ## 16. The TreeKEM mode (`groupMode = 1`)
 
 Status: **SPECIFIED**; the cold tree (creation, the leaves with the wraps, the genesis tree hash) and the commits **BUILT** on
-branch `pqchat-treekem` (plan T3a-T3d), with the code review's fixes of 2026-11-24 on branch `review-fix-contract`. **UNAUDITED** (spec [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md),
+branch `pqchat-treekem` (plan T3a-T3d), with the code review's fixes of 2026-11-24 on branch `review-fix-contract`; the node's whole-set guard and C37's order, the SDK's tree calls and `pqchat-core`'s tree mode (its core) **BUILT** on branch `treekem-t4-t10` (plan T4 to T6b; [job-api](../node/job-api.md#tree-set-guard), [CLI-PQC-17](../clients/pqchat-core.md#CLI-PQC-17); the local-chain test `clients/pqchat-core/tests/chain_tree.rs`; the SDK's gas rows `clients/scaas-sdk/gas/pqchat-tree.json` measured from `test/pqchat/PqChatTreeGas.t.sol` and replicated on the local Nethermind copy: the creation in one transaction holds 12 member keys at a 60 M block). **UNAUDITED** (spec [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md),
 plan [`2026-11-23-pqchat-treekem.md`](../superpowers/plans/2026-11-23-pqchat-treekem.md)). It builds on branch `pqchat-sigs`:
 the signature-storage setting per home, several `keyId`s per member UA, and `groupMode` in `PqChatSession`.
 
@@ -954,7 +989,13 @@ scheme 1, in minimal scope (a commit with an UpdatePath, Adds and Removes, Welco
 - **Accepted cost of the joiner without RFC 9420's `init` chain (owner 2026-11-23):** as in mode 0's `rekey`, one UA signature
   lets its holder build the next epoch; the contract cannot check knowledge of the previous one.
 - **Recovery** is from state alone ([CTR-CHAT-14](#CTR-CHAT-14)), by replaying the commits since the device's Welcome.
-- **Two layers (owner 2026-11-23: "agreed, that is how it should be"; and "or other systems that use a tree"; verbatim in
+- **Path-less Adds (owner 2026-11-25, the rulings of the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md); SPECIFIED, nothing built).** In mode 1 only, a
+  commit of Adds only may carry no path (`pathless` true): no node key, no path ciphertext, one Welcome wrap per added key, the
+  rights of the spec's §9. Its joiner secret derives from the parent epoch's `next` secret, a chain reset by every path
+  commit. A session option `pathRefreshBound`, fixed at creation: 0 never forced; N > 0, the (N + 1)-th path-less leaf since
+  the last path commit is refused, every path-less leaf counted; the client default 20 and, with 0, the admins warned after
+  20. Removals, exits, admin changes and refreshes keep a path. Mode 0 and `PqVault` do not change.
+- **Two layers (owner 2026-11-23: agreed, the shared base also serving other systems that use a tree; recorded in
   the [register](../decisions.md#ctr-chat-26--pqchats-treekem-mode-groupmode--1-is-built-now-in-minimal-scope-in-a-body-module)).** The tree
   is built as `PqGroupBase` and `PqChat` are: `src/pqgroup/PqGroupTree.sol`, an abstract base with no app domain, record
   type or error of its own, for any contract that keeps a group tree (another first-party contract, a later `PqVaultTree`, a
@@ -1042,8 +1083,8 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
   record's transaction carries no per-member index slot. The wraps of epoch 0 are made once and signed by hash: a
   creation is finished only from the prepared pieces ([CLI-PQC-17](../clients/pqchat-core.md#CLI-PQC-17)); an
   incomplete one is usable by nobody.
-- **Bounds.** `TREE_LEAVES_MAX` = 512 keys, depth 9 (owner; 256, depth 8, until the owner's change of 2026-11-25, "OK, then raise it to
-  512"), `TREE_CHANGES_MAX` = 20 adds plus removes per commit (owner 2026-11-25, "Choose 20", in English; 32 until then),
+- **Bounds.** `TREE_LEAVES_MAX` = 512 keys, depth 9 (owner; 256, depth 8, until the owner's change of 2026-11-25 to
+  512), `TREE_CHANGES_MAX` = 20 adds plus removes per commit (owner 2026-11-25; 32 until then),
   `TREE_ADMINS_MAX` =
   32, `TREE_INFO_MAX` = 4,124 B (at creation too), 64 leaves per `treeLeaves` call, at most 8 keys per UA. The contract enforces no minimum size; "useful from about 7 keys, where
   several members commit" is a client hint. **Measured at 512 and 20 changes (plan T3d's harness, `test/pqchat/PqChatTreeGas.t.sol`, forge, the verify's gas
@@ -1074,7 +1115,15 @@ acceptance, C22's receipts, C23 and C28's sets are owner rulings; in the
 - **The node.** `scaas-node`'s rows of the six tree writes, their lists and shapes at the bounds above, equal to the contract's
   both directions ([job-api](../node/job-api.md#pqchat-tree-calls); Change 2026-11-24, plan T4's allow-list part, BUILT on
   branch `pqchat-treekem`), with `createSession`'s tree bounds at creation and the empty `addPath` refused (D-4, D-7, BUILT on
-  branch `review-fix-contract`). The whole-set guard and the order of C37 at the node are SPECIFIED (plan T4, after the merge).
+  branch `review-fix-contract`). The whole-set guard and the order of C37 at the node are BUILT (plan T4 after the merge, branch `treekem-t4-t10`, `scaas-node/src/tree_set.rs`, [job-api](../node/job-api.md#tree-set-guard); UNAUDITED).
+- **Path-less Adds' checks (Change 2026-11-25, the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md) §5; controller calls C41-C47; SPECIFIED).**
+  `pathless` true requires at least one Add, an empty `nodeKeyHashes`, `ctCount` 0 and the empty list's `ctListHash`
+  (`PqChatShape`), no Remove and `admins` equal element for element to the head's (`PqChatTreePathRequired()`), nothing owed
+  and no `gone` admin kept (`PqChatRemovedKept`), and `sincePath + adds.length` at most `pathRefreshBound` when that is not 0
+  (`PqChatTreePathBound(sincePath, bound)`); no path walk, each Add blanks its own direct path up to the root (C6). `Tree`
+  gains `uint32 sincePath` and `uint32 pathBound` in its slot 3; `sincePath` grows by the Adds at a path-less completion and is
+  0 after every completed path commit; `treeOf` appends it. No targets hash is written when `ctCount` is 0. Every commit and
+  the session record carry `confirmTag`, a client check.
 - **Open with the owner:** nothing (the spec's §16).
 
 <a id="CTR-CHAT-28"></a>**CTR-CHAT-28** — **The tree is app-agnostic: its labels and the app's scope are parameters, PqChat is one
@@ -1084,6 +1133,7 @@ Status: clientkeys and `ua-rs` **BUILT**, the contract's cold tree **BUILT** (`P
 
 - **Labels.** Every tree label is `<prefix>/<name>` (`path`, `node`, `commit`, `ct`, `joiner`, `epoch`, `key`, `wrap`, and the
   tags of `path-context` and `context`); PqChat's prefix is `scaas/pqchat/v1/tree`.
+  Plus `next`, `add-joiner`, `confirm`, `add-nonce` (Change 2026-11-25, the path-less [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md); SPECIFIED).
 - **The app's scope.** The info label above `K`, the records' typed data, the UA purpose and the ids are the scope's; PqChat's
   are mode 0's info label, `DS_C`, `PURPOSE_PQCHAT` and its `scaas/pqchat/v1/*` ids. Another app takes the same tree, the same
   checks and the same records' shapes under its own scope; nothing in the tree's code names PqChat but its one instance.

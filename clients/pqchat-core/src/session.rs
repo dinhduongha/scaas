@@ -271,7 +271,7 @@ impl PqChat {
     /// The leaves of `uas` (P13, CTR-UA-38): a UA as itself (`via` zero); an `msig` seat as its accepted slots, an accepted
     /// `msig` slot as its own accepted leaves (two levels), each with `via` = the seat; a deeper level is no leaf. A leaf named
     /// twice keeps its first `via` (direct members first). `MembersInvalid` for a seat with no leaf.
-    async fn expand(
+    pub(crate) async fn expand(
         &self,
         chain: &str,
         uas: &[String],
@@ -448,7 +448,9 @@ impl PqChat {
         let sealed = model::unhex(field(&signed, "message.sealedInfo")?)?;
         let s = json!({"creator": me, "nonce": r.nonce.to_string(), "homeChain": c.chain_uid,
             "homeChatContract": r.home.to_ascii_lowercase(), "groupMode": "0", "admins": admins, "members": members_json(&w.keys),
-            "wrapHashes": signed.wrap_hashes, "sealedInfo": model::hex(&sealed)});
+            "wrapHashes": signed.wrap_hashes, "sealedInfo": model::hex(&sealed),
+            // the path-less delta §3.1: mode 1's option and epoch 0's tag, both 0 in mode 0
+            "pathRefreshBound": "0", "confirmTag": format!("0x{}", "00".repeat(32))});
         let epoch = Epoch {
             id: sid.clone(),
             session_id: sid.clone(),

@@ -1,4 +1,4 @@
-# SCaaS testnet (7622) reset 1, 2026-11-04 (owner: "Làm reset: mục 2, reset lần 1"; TODO pre-freeze work order item 2).
+# SCaaS testnet (7622) reset 1, 2026-11-04 (owner: reset now, item 2, reset 1; TODO pre-freeze work order item 2).
 # Contracts side. Node side: pqz-core/nethermind/runs/2026-11-04-testnet-reset1{,-throwaway}.txt. RUNBOOK section
 # "Code size 128 KiB on the SCaaS testnet: reset 1". Branch testnet-reset-1 at bf6f3d04 (= origin/main). Full tool output
 # stays in git-ignored local .log files beside this one; this file is the summary.

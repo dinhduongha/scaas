@@ -578,7 +578,7 @@ proof `P` verified over the statement, so a state-only `T` without `P` certifies
 
 ### 14.7 Retention: who keeps the proof (owner remark and decisions, 2026-11-06)
 
-The owner's remark: "outside parties won't store the proofs", and the decisions of 2026-11-06 at the head of §14. Taking
+The owner's remark that outside parties will not store the proofs, and the decisions of 2026-11-06 at the head of §14. Taking
 them as given [inference unless tagged]:
 
 1. **What a holder needs.** Only the debit material (the debit transaction with `P`, plus `T` or its record) of the
@@ -858,7 +858,7 @@ the same work, plus a `pqz-stmt` change and a full gate at four sets (hours each
 
 ## 15A. Agreed design (owner 2026-11-06)
 
-The owner agreed the following as the design direction ("thống nhất vậy"). It is research until a spec and plan exist;
+The owner agreed the following as the design direction. It is research until a spec and plan exist;
 a `decisions.md` entry follows with the spec. Estimates on paper at `n2304-kmax4096`, UNAUDITED; USD only as
 `gas × gwei × 1e-9 × ETH-USD` with 1 gwei and 3,000 USD/ETH as assumptions.
 

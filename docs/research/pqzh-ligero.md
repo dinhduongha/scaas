@@ -428,8 +428,8 @@ proofSystemId for the Ligero kind and an independent review of §4.1.
 5. **(c) Controller proposal (not an owner decision): PQZH proof limit 160 KB → 256 KB, precompile `MAX_INPUT`
    262,144 B**, so that the proven preset fits. Recorded as a proposal; the proven worst cases are 243,150 B (`R_TX`)
    and 198,138 B (`R_REG`) (§8).
-6. **EVM verifier (owner correction 2026-10-14):** the 2026-10-13 ruling "no chain needs PQZH without the precompile,
-   build no Solidity verifier" is **withdrawn**; if PQZH fits the limits on a chain without the precompile it will be
+6. **EVM verifier (owner correction 2026-10-14):** the 2026-10-13 ruling (no chain needs PQZH without the precompile,
+   build no Solidity verifier) is **withdrawn**; if PQZH fits the limits on a chain without the precompile it will be
    used there. *Status: measured* (§11): it does not fit, in any regime.
 
 **Open questions for the owner** (none blocks further work):

@@ -17,7 +17,7 @@ import {SdkGasLedger} from "./SdkGasLedger.sol";
 /// registry redeployed with the real verifiers at the gen-1 caps (`SdkGasLedger`). Keys `sample_<signer>_<entry>_<fresh|used>_normal`
 /// (`<signer>` `0000` or the kind in 4 hex digits) and `sample_<signer>_sig_bytes` (the `UASig` in calldata less an empty
 /// one); `scaas-sdk`'s `sampled_end_to_end_check` holds them to the table. A kind whose verify gas depends on the data
-/// (owner 2026-11-19, "approved, as proposed"; here ed25519) is sampled twice per cell: the composition cell signed by a
+/// (owner 2026-11-19; here ed25519) is sampled twice per cell: the composition cell signed by a
 /// worst-case signature of the class its verify row was measured with (every 4-bit window of `S` and of `k` nonzero, found by
 /// moving the clock, hence `validUntil` and the digest), and `<cell>_safety`, the most expensive of 32 ordinary signatures
 /// (the clock at 1,000,000 + i seconds on), held to the lower bound only (measured <= base + verify + ua_extra < measured + 2,000; owner 2026-11-19, A1).

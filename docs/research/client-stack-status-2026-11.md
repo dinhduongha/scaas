@@ -3,16 +3,15 @@
 # Client stack: components, layers, specs, plans and code (status note, 2026-11-17)
 
 A map of the client-side work and the last contract change before the pre-freeze tag: what each part is, where its spec and
-plan live, how far its code is, and what it waits for. Owner 2026-11-17: "Lưu thông tin bảng các phần và spec, plan, code +
-nhóm và nội dung … vào file docs/research" (save the table of parts, with spec, plan, code, groups and content, under
-docs/research). This note is a snapshot; the specs, plans and `docs/decisions.md` are the sources. Everything here is
+plan live, how far its code is, and what it waits for. Owner 2026-11-17: save the table of parts, with spec, plan, code,
+groups and content, under docs/research. This note is a snapshot; the specs, plans and `docs/decisions.md` are the sources. Everything here is
 UNAUDITED.
 
 ## 1. Layers
 
 Owner rulings 2026-11-17: `ua-rs` is the only signer from `scaas-sdk` down (CLI-UAL-01 scope); app cores depend on
-`scaas-sdk`, never the reverse ("Đồng ý đảo chiều", "pqchat-core cũng đảo chiều luôn"); app contracts may sign by path A (an
-open portable app namespace in `UARegistry`) or path B (chain-bound `requireAuthorized`) ("Support cả A và B").
+`scaas-sdk`, never the reverse (the dependency reversed, for pqchat-core too); app contracts may sign by path A (an
+open portable app namespace in `UARegistry`) or path B (chain-bound `requireAuthorized`), both supported.
 
 ```mermaid
 flowchart TB
@@ -52,7 +51,7 @@ State of 2026-11-17 evening. "Branch" is a local branch of this repository unles
 | `ua-rs-sign` | the signer round, integration branch | `superpowers/specs/2026-11-05-ua-rs-sign.md` | `superpowers/plans/2026-11-05-ua-rs-sign.md` | built; main (PR #18) merged in locally, not pushed | `ua-rs-native` in, then push and a PR to `main` |
 | `scaas-rpc` | the shared network crate: endpoint lists, failover, strict majority, bounded transport | `superpowers/specs/2026-11-17-scaas-rpc.md`, rules `clients/scaas-rpc.md` (CLI-RPC-01..12, CLI-RPC-50; Q1–Q6 settled) (branch `scaas-sdk`) | `superpowers/plans/2026-11-17-scaas-rpc.md` | T0–T12 started; T13 review after | — |
 | `scaas-sdk` | the one API apps call: `vault` (seeds), `account`, `wallet`, `confidential`, `dex`, `admin`; the app-core surface | `superpowers/specs/2026-11-17-scaas-sdk.md`, rules `clients/scaas-sdk.md` (CLI-SDK-01..18) (branch `scaas-sdk`); §25 settled; revised for the reversed stack | `superpowers/plans/2026-11-17-scaas-sdk.md` | none | rpc T1; `ua-rs-native` merged (T2a, T5, T19); the bindings spike T3 decides Q-B1 |
-| PqVault | on-chain PQ notes and passwords: contract (class 4), `pqvault-core` above the SDK | `superpowers/specs/2026-11-17-pqvault.md`, rules `contracts/pqvault.md` (CTR-PQV-*), CLI-PQV-* in `clients/ua-libraries.md`, research `research/pqvault.md` (branch `pqvault`); revised for paths A and B and per-vault modes | `superpowers/plans/2026-11-17-pqvault.md` (Part R, Part V, V10e real-crypto e2e) | none | Fable review of revision 2; Part R before the pre-freeze tag |
+| PqVault | on-chain PQ notes and passwords: contract (class 4), `pqvault-core` above the SDK | `superpowers/specs/2026-11-17-pqvault.md`, rules `contracts/pqvault.md` (CTR-PQV-*), CLI-PQV-* in `clients/pqvault-core.md`, research `research/pqvault.md` (branch `pqvault`); revised for paths A and B and per-vault modes | `superpowers/plans/2026-11-17-pqvault.md` (Part R, Part V, V10e real-crypto e2e) | none | Fable review of revision 2; Part R before the pre-freeze tag |
 | Registry path A | `UARegistry.requirePortableApp(ua, appId, typedDigest, auth)`: open portable app namespace (CTR-UA-45, CTR-UA-46) | in the PqVault spec, Part R; `contracts/accounts.md` | PqVault plan Part R | none | Fable review; then the last contract change before the pre-freeze tag |
 | `pqchat-core` | PqChat's Rust client core above the SDK, over `app-matrix`'s client | being written (branch `pqchat-core`); protocol: `superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md`, `2026-11-07-pqchat-public-topics.md`, `contracts/pqchat.md` | being written, with a real-crypto e2e (owner) | none (JS reference `clients/clientkeys/src/pqchat.js`, vectors `smartcontracts/vectors/pqchat/`; contract BUILT) | the SDK's app-core surface |
 | `scaas-tui` | terminal front-end, SCaaS only, over the SDK and scaas-app's view model | being written (branch `scaas-tui`) | being written | none | the SDK |
@@ -62,7 +61,7 @@ State of 2026-11-17 evening. "Branch" is a local branch of this repository unles
 ## 3. scaas-app task groups
 
 Plans: `docs/superpowers/plans/2026-11-17-scaas-app-next.md` in the Qt repository (groups A, B, C) and, being moved, groups
-R, M, X with a new F into the scaas-app repository (owner 2026-11-17 "chuyển sang scaas-app").
+R, M, X with a new F into the scaas-app repository (owner 2026-11-17: moved to scaas-app).
 
 | Group | Crate / part | Content | Code |
 |---|---|---|---|
@@ -89,7 +88,7 @@ R, M, X with a new F into the scaas-app repository (owner 2026-11-17 "chuyển s
 - Real-crypto client e2e in the `pqchat-core` and PqVault plans: today's on-chain PqChat runs use stand-in wraps
   (`smartcontracts/evm/script/onchain/PqChat.s.sol`), contract-only.
 - The `0x05` / `0x19 0x01` first-byte refusal withdrawn from `ua-rs` and the SDK raw entry (closing review C1).
-- Specs are written early as frames (owner: "cứ viết spec, để có khung sẵn").
+- Specs are written early as frames (owner: specs are written so that a frame is ready).
 
 ## 5. Open points
 

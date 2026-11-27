@@ -3,10 +3,9 @@
 **Status (2026-11-17):** PLANNED, nothing built. Spec: [`specs/2026-11-17-set-auditor.md`](../specs/2026-11-17-set-auditor.md)
 (rules [CTR-GOV-31](../../decisions.md#CTR-GOV-31), [CTR-ZTH-95](../../contracts/zether.md#CTR-ZTH-95),
 [CTR-PQZ-43](../../contracts/pq-zero-knowledge.md#CTR-PQZ-43)), revised after the Fable review of the same day (spec §16).
-Owner 2026-11-17: "Do format phải chạy lại rất nhiều, tiện thể làm luôn '- setAuditor', dùng 1 bit cho việc này. Gom chung vào
-format code, để chạy gate .v.v. 1 lần" (build `setAuditor` now, on one bit, bundled with the formatting so the gates run
-once), then "Làm luôn" (do it now); on the holder "Vẫn UA như bình thường chứ, bao gồm cả contract và msig" (any UA); on the
-open points "Ok, theo đề xuất cả O1, O2, O4" (the delay `max(noticePeriod(), grantDelay)`; kind 4 stays in
+Owner 2026-11-17: build `setAuditor` now, on one bit, bundled with the formatting so the gates run
+once; then: it is done now; on the holder: any UA as usual, contracts and msig included; on the
+open points: O1, O2 and O4 as proposed (the delay `max(noticePeriod(), grantDelay)`; kind 4 stays in
 `NormalPqzTokenQ`; a delay of 0 applies at once and the wallet says so).
 
 ## How to run this plan
@@ -26,14 +25,14 @@ open points "Ok, theo đề xuất cả O1, O2, O4" (the delay `max(noticePeriod
   `smartcontracts/evm/runs/2026-11-17-set-auditor/` (summary lines only, no absolute paths).
 - **Heavy commands** go through `scripts/capped`, foreground, never inside `timeout`. PQZ per-set runs by
   `script/pqz/at-set.sh <set> test` (it rewrites `src/pqz/PqzSet.sol`: one run per work tree, restored after).
-- **Gates in the tasks** (owner ruling 2026-11-18, "Theo đề xuất"): a task runs only its own suites at the default set, its
+- **Gates in the tasks** (owner ruling 2026-11-18): a task runs only its own suites at the default set, its
   mutants, and every test that pins what it changed (code-hash, typehash, layout, gas or size pins it moves, old → new in the
   commit). No full forge sweep and no per-set sweep per task. A task is committed once its own tests and mutants are green; its
   commit body says "full matrix pending (bundle gate)". The **one full matrix** runs after A10, bundled with F2 (`forge fmt`,
   `bytecode_hash = "none"`) and the re-pin: one compile, one re-pin, one full gate (Closing). After the 2026-11-18 reboot lost
   the per-task snapshots, A1-A8 are one commit (the byte formats change in contracts, clients and node at once), A9 and A10
   their own.
-- **Lanes** (owner ruling 2026-11-18, "Đồng ý. Làm luôn"; `runs/2026-11-17-set-auditor/gates.sh`, `LANE=<name>`): fixed
+- **Lanes** (owner ruling 2026-11-18, done at once; `runs/2026-11-17-set-auditor/gates.sh`, `LANE=<name>`): fixed
   directories under the git-ignored `scratchpad/lanes/` on `/home`, one per PQZ set (`n2304-kmax4096`, `n2048-kmax1024`,
   `n2560-kmax16384`, `n2816-kmax65536`, each with its own `PqzSet.sol`) and one for mutants (`mutants`). A run syncs the tree
   under test into its lane with `rsync -a --delete`, excluding `out/`, `cache/`, `target/`, `lib/`, `node_modules/` (and `.git/`,

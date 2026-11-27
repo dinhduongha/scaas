@@ -26,6 +26,13 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
     struct Entry {
         address record; // the original's head blob; 0 = unknown
         uint32 depth;
+        uint64 postedAt; // CTR-CHAT-29: the block time the original landed, in the slot's free 64 bits
+    }
+
+    /// @dev CTR-CHAT-29: an edit's head blob and the block time it landed, one slot (was the `address` alone).
+    struct Version {
+        address record;
+        uint64 editedAt;
     }
 
     struct Vote {
@@ -56,7 +63,7 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
         mapping(bytes32 => Topic) topics;
         mapping(bytes32 => mapping(bytes32 => Writer)) writers;
         mapping(bytes32 => Entry) entries;
-        mapping(bytes32 => address[]) versions;
+        mapping(bytes32 => Version[]) versions;
         mapping(bytes32 => mapping(bytes32 => Vote)) votes;
         mapping(bytes32 => Score) scores;
         bytes32[] allTopics;
@@ -159,6 +166,8 @@ abstract contract PqChatCore is PqGroupBase, PqGroupTree {
         if (code == T_BACKLOG) revert IPqChat.PqChatTreeBacklog(a);
         if (code == T_TARGETS) revert IPqChat.PqChatTreeTargets(a);
         if (code == T_HASH) revert IPqChat.PqChatTreeHash(bytes32(a));
+        if (code == T_PATH_REQUIRED) revert IPqChat.PqChatTreePathRequired();
+        if (code == T_PATH_BOUND) revert IPqChat.PqChatTreePathBound(uint32(a), uint32(b));
         if (code == T_REMOVED_KEPT) _chatFail(F_REMOVED_KEPT, a, b);
         if (code == T_NOT_MEMBER) _chatFail(F_NOT_MEMBER, a, b);
         if (code == T_NOT_ADMIN) _chatFail(F_NOT_ADMIN, a, b);

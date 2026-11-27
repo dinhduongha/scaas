@@ -2,7 +2,7 @@
 
 Status: groups `mldsa`, `tokens`, `pqchat` **BUILT** (green on local anvil, set `mldsa-off`; the precompile path on an own Nethermind copy, set `mldsa-on`, see the commits); `pqzkeys`, `pqzwallet` **BUILT** (`mldsa_on_pqz.py`, green on the own Nethermind copy, set `mldsa-on`; not yet on local anvil, set `mldsa-off`). Their run on the live set waits for reset 5. Test chains only. **UNAUDITED.**
 
-Owner 2026-11-16 ("Ok, cách 2, một chain hai bộ deploy"; "Ok, cách 1, bắt đầu viết ngay"): reset 5 deploys the same build twice on
+Owner 2026-11-16 (option 2: one chain, two deploy sets; option 1, written at once): reset 5 deploys the same build twice on
 the SCaaS testnet, set `mldsa-off` (`MLDSA_PRECOMPILE=off`, the registry's expanded-key cache) for the whole forge matrix
 ([README.md](README.md)) and set `mldsa-on` (the shipped default: `MldsaVerifier` on the chain's ML-DSA precompiles) checked by
 real transactions. Forge's EVM has neither the ML-DSA nor the PQZ precompile: a forge script runs every call in that EVM before
@@ -138,7 +138,7 @@ ua-rs `pqz3k::PqzKeyHandle`) is driven as forge drives it, by its JSON on stdin.
   (matrix.sh's local Nethermind copy has both precompiles: a local deploy of set `mldsa-on` on it would check them before the
   testnet.)
 
-## Decisions (owner 2026-11-16, "ĐỒNG Ý")
+## Decisions (owner 2026-11-16)
 
 - **D1** PqzKeysSetup split: `PqzKeysPublic.pub()` holds the rows with no ML-DSA signer and no `R_REG` proof (above), a run of
   its own before `setup()` (pqzkeys.sh `PQZK_PHASES`, default `public setup roll`; matrix.sh runs `public` alone on a remote

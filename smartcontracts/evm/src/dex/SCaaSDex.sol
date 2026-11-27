@@ -165,7 +165,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         return id == type(IERC165).interfaceId || id == type(IGovernance).interfaceId;
     }
 
-    // O8 (owner 2026-11-13, "Đồng ý, chuyển sang module trong round 3zb + 3zc"; CTR-TOK-30 Change): the four power entries
+    // O8 (owner 2026-11-13, moved to a module in round 3zb + 3zc; CTR-TOK-30 Change): the four power entries
     // (`setMarket`, `setFeeSplit`, `setExchangeTarget`, `setListedOnly`) run in `SCaaSDexGovernanceModule`, by the stubs below
     // (`_forward`: the guard check, DELEGATECALL, the revert data verbatim); `_pair`, `_setFeeSplit`, `_classify` are
     // `SCaaSDexCore`'s, one definition for both sides.

@@ -366,7 +366,7 @@ state gas) exceeds 2^24, up to about 115.7 M simulated for the largest implement
 **Change (owner 2026-11-03, [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)):** the SCaaS testnet runs every Amsterdam EIP but EIP-7954, by removing `eip7954TransitionTimestamp` from its chainspec, because with EIP-7954 active the code limit is 65,536 B whatever `maxCodeSize` says (`pqz-core/nethermind/runs/2026-11-03-code-size-probe.txt`). `maxCodeSize` is `0x20000` (131,072 B); the init code limit is then 262,144 B, measured. The SCaaS mainnet (22777) stays the owner's at launch. Every other chain keeps the rule above. Status: **BUILT, executed 2026-11-04** (SCaaS testnet reset 1, owner's go; `patch-chainspec.py --testnet-reset`, governance T16 `52ef7d22`, `55a97e0e`, refusing every chain but the SCaaS testnet): image `2.2.0-pqz7`, genesis unchanged `0xf1f491ab…3164`; 65,537 B and 119,800 B deploy at a 200 M block, `WrappedPqzToken` (72,160 B) is deployed; `pqz-core/nethermind/chain/RUNBOOK.md` "Code size 128 KiB on the SCaaS testnet: reset 1", `smartcontracts/evm/runs/2026-11-04-testnet-reset1-7622.txt`.
 
 <a id="NET-EVM-18"></a>**NET-EVM-18** — **On a chain without the Amsterdam fork a contract deploys only when its `amsterdam`
-build fits that chain** (owner 2026-11-21, ARCH-POS-19 Q1 "per contract"; the five conditions a controller call of
+build fits that chain** (owner 2026-11-21, ARCH-POS-19 Q1, per contract; the five conditions a controller call of
 [ARCH-POS-20](../decisions.md#ARCH-POS-20) C5, revised after the review; the five checks **BUILT** on branch `chains-arweave`
 (plan T4: `smartcontracts/evm/script/forkcheck.py`, its test `script/test_forkcheck.py`, the fixtures `test/forkcheck/`, the gate
 step `forkcheck`; their application to `PqChatStore` is SPECIFIED, plan T6). NET-EVM-06 is unchanged: one compile
@@ -621,7 +621,7 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   label; each `forge verify-contract` runs in its snapshot outside `capped` in a 1 GiB scope, one at a time, bounded by
   `VERIFY_TIMEOUT`, and a forge run that compiles aborts the step. The explorer's own answer decides, never forge's exit
   code: forge 1.8.5 exits 0 on Blockscout's `Fail - Unable to verify`, so such a contract is submitted once more. The SCaaS testnet's explorer and its first full run:
-  [NET-EVM-09](#NET-EVM-09). Change (owner 2026-11-16, "many transactions per block, groups in parallel"; BUILT on `reset5`, UNAUDITED): on a remote
+  [NET-EVM-09](#NET-EVM-09). Change (owner 2026-11-16: many transactions per block, groups in parallel; BUILT on `reset5`, UNAUDITED): on a remote
   target `matrix.sh` runs its groups in waves (`script/onchain/sched.py plan`: a group after the groups it needs, `views`
   alone after the others, a list against that order refused by name, `GROUP_ORDER`), the groups of a wave at the same time,
   each with its own key set from the testnet mnemonic file (indexes fixed by the group's name, topped up from index 0 in one
@@ -651,7 +651,7 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   `zether.sh`, `basebook.py`, `vcheck.py`, `zether_reg.py`, `pqz/e2e.py`); tests `script/test_deploybook.py`,
   `test/governance/DeployBook.t.sol`, `test/governance/ReleaseList.t.sol`. A local anvil is named by the script that starts
   it, `local-<chain id>-testnet` (`matrix.sh local`, `e2e-zether.sh`, the node e2e). forge's own
-  `broadcast/<Script>/<chainid>/` stays. Change (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"; BUILT on `reset5`,
+  `broadcast/<Script>/<chainid>/` stays. Change (owner 2026-11-16, option 2: one chain, two deploy sets; BUILT on `reset5`,
   UNAUDITED): **deploy sets.** One chain may carry two deploys of the same build, each with its own `DEPLOY_SALT` and releases
   book, named by a set label: `mldsa-off` (`MLDSA_PRECOMPILE=off`: every ML-DSA kind on the registry's expanded-key cache) and
   `mldsa-on` (`MLDSA_PRECOMPILE=on`, the shipped default: `MldsaVerifier` 0x0130 / 0x0131 / 0x0134 on the chain's
@@ -668,7 +668,7 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   scripts runs against it later on the same chain). This is one rule on every chain, not a split: on / off is a deploy-time
   setting chosen by the chain's precompile availability ([NET-EVM-11](#NET-EVM-11)'s `pq_verifiers.py` step); a chain
   with the precompiles ships `mldsa-on`, and the second set exists for the test matrix of a test chain. Two full sets
-  (owner 2026-11-16, "agreed"; a test-only layout): each set is a whole deploy with its own `OpenFactory`, UA registry,
+  (owner 2026-11-16; a test-only layout): each set is a whole deploy with its own `OpenFactory`, UA registry,
   `GovernanceRouter`, releases and tokens; the one-`GovernanceRouter`-per-chain rule (owner 2026-11-04) applies per deploy
   set; a mainnet or a customer chain carries one set, chosen by the chain's precompile availability. The two sets share the
   chain, its genesis, the RescueVault genesis alloc ([NET-EVM-14](#NET-EVM-14)) and Blockscout, nothing else: a UA of one

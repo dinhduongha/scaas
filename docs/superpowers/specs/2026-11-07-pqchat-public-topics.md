@@ -183,6 +183,13 @@ reads a log, and no reader needs one. Errors named per check: `PqTopicSeq`, `PqT
 `PqTopicNotAuthor`, `PqTopicParent`, `PqTopicVersion`, `PqTopicRef`, `PqTopicVoteValue`, `PqTopicShape`,
 `PqTopicUnknown`, plus the parent's `PqChatNonceUsed`.
 
+Change (owner 2026-11-27, G1, G2, G5 of the public-topics UI research §8; normative in
+[CTR-CHAT-29](../../contracts/pqchat.md#CTR-CHAT-29) to [CTR-CHAT-31](../../contracts/pqchat.md#CTR-CHAT-31)): each entry
+keeps `postedAt` and each edit `editedAt` (block time, in the slots they already had); `entryOf` adds `postedAt`,
+`editedAt` and the latest version's `nonce`, `versionAt` that version's `nonce`, the original's `postedAt` and its
+`editedAt`; `entryRows(ids, viewer)` returns up to 64 rows of `entryOf` without `body`, with `bodyLength`, `up`, `down`,
+the viewer's vote and the direct reply count (`PqTopicRows` above 64).
+
 **P43 — Several instances and chains.** One rule in every instance on every chain: the same records, ids and checks.
 Copying a topic elsewhere is copying its records, parents before replies, originals before edits, grants before the
 writer's posts; out of order, a record is refused there until what it needs has landed. Readers display the topic's home
@@ -277,7 +284,7 @@ the `ref` shape check, the nonce scope's `topicId` dimension, the list key (pare
 
 ## 9. Owner decisions and questions
 
-**Decisions of 2026-11-07** (owner, relayed by the coordinator; a Change on CTR-CHAT-01):
+**Decisions of 2026-11-07** (owner; a Change on CTR-CHAT-01):
 
 - **D18 — Nothing hidden, no on-chain moderation.** Neither the topic owner, a moderator nor anyone else may hide an
   entry; the contract has no hide flag, no moderator role and no ban list. Every accepted entry stays listed for good. A
@@ -291,7 +298,7 @@ the `ref` shape check, the nonce scope's `topicId` dimension, the list key (pare
 - **D22 — `PqChat` is a factory kind** (parent §2.1 P32): many instances per chain, each with its own owner UA, sessions
   and public topics; `PqChat` is class 3 on the factory's generic path (§11, factory index spec §8, owner-approved
   2026-11-07).
-- **Cost:** the owner accepts the on-chain cost ("if storing on chain is cheap, fine"); §6 gives it per KiB.
+- **Cost:** the owner accepts the on-chain cost where storing on chain is cheap; §6 gives it per KiB.
 
 **Owner 2026-11-07: Q1 and Q2 answered as recommended** (a Change on CTR-CHAT-01): (Q1) no contract feature; the client
 posts the rest of a long text as replies by the same author, marked as continued; (Q2) an instance's owner UA has no power

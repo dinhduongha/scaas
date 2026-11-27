@@ -85,7 +85,7 @@ transaction status, whether an operation was consumed, the lane's nonce or seque
 the first endpoint only and never fail over; what fails over is the building of a transaction (simulations and views), under the
 rules above.
 
-**The sticky read** (owner 2026-11-23, "Sticky endpoint", decisions CLI-SDK-33 (160); BUILT:
+**The sticky read** (owner 2026-11-23, decisions CLI-SDK-33 (160); BUILT:
 `EvmPool::read_sticky`, test `a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head` in `tests/evm_profiles.rs`,
 UNAUDITED). On a pool built `with_pinned_reads(false)` (the profile's `"pinnedReads": false`: Moonbeam, Moonbase) a logical read
 of several calls cannot be pinned by hash, so every call of it goes to the **same** endpoint at its latest block (each request
@@ -117,7 +117,11 @@ endpoint; in the node every family has its caps (Soroban `max_resource_fee_per_j
 `two_altered_differently_is_no_majority` against three anvils, EIP-1898 verified against anvil and a local Nethermind 2.2.0
 (plan T0; Hedera's relay not verified); on another family PLANNED. A caller may ask the agreed read of one read on a `failover`
 list, `EvmPool::read_at_block_agreed` (the same checks; one endpoint or no pinned `chain_uid` `Argument`; owner 2026-11-23, an app
-core's option, never forced on the list; BUILT on `pqchat-sigs`: `an_agreed_read_on_a_failover_list_outvotes_one_liar`).
+core's option, never forced on the list; BUILT on `pqchat-sigs`: `an_agreed_read_on_a_failover_list_outvotes_one_liar`). Its
+named form, `EvmPool::read_at_block_agreed_named` (`agree_named`), counts the list's **named** endpoints only: at least 3 named
+(`AgreementNeedsThree` before any request), `need` = ⌊m/2⌋ + 1 of the m named, discovered and default endpoints never asked, one
+block and one hash per group as above (the TreeKEM T4-T9 review's D-4; BUILT, UNAUDITED:
+`the_named_agreement_counts_named_endpoints_only`).
 
 <a id="CLI-RPC-06"></a>**CLI-RPC-06** — **A read that feeds a decryption never rests on a discovered endpoint alone** (ARCH-POS-15,
 ARCH-POS-13, as stated; BUILT, plan T3: `discovered_is_skipped_under_failover`, `only_discovered_is_no_trusted_endpoint`,

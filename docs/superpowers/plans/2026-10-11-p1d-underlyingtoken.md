@@ -31,7 +31,7 @@ OpenZeppelin Contracts 5.2.0, forge-std 1.16.2; `scaas-node` e2e (Rust, `cargo t
   `timeout 900 scripts/capped bash -c 'cd smartcontracts/evm && forge test …'`. `rtk` rewrites git/grep output: use
   `/usr/bin/grep`, `rtk proxy git diff`.
 - Build pins unchanged (solc 0.8.28, optimizer 200, no via-IR, EVM prague). New/touched src files `pragma solidity ^0.8.24;`.
-- **Size: not optimised in this plan (owner, 2026-10-11: "tạm thời chưa quan tâm kích thước, tối ưu sau").** Measured in
+- **Size: not optimised in this plan (owner, 2026-10-11: size is not a concern for now; it is optimised later).** Measured in
   the spike: `WrappedToken` 25,408 B (over EIP-170 24,576 — see D2), `WrappedLib` 11,018 B, `NormalToken`
   20,038 B (unchanged), `AdminLib` 3,406 B. Size tests pin ceilings, they do not shrink anything.
 - Flag bits (CTR-TOK-22): 0 `PAYABLE`, 1 `MINTABLE`, 2 `BURNABLE`, 3 `RATE_ADJUSTABLE` (role rateAdmin, contract only),
@@ -82,7 +82,7 @@ OpenZeppelin Contracts 5.2.0, forge-std 1.16.2; `scaas-node` e2e (Rust, `cargo t
   `NativeValueMismatch(0, amount)` (a self-call carries no value). Cost if wrong: none now; P2 adds one entry point.
 - **D2 — Size is out of scope (owner).** `WrappedToken` is ~25.4 KB, over EIP-170, so it cannot be deployed on a real
   chain yet; forge tests do not enforce EIP-170. The deploy scripts keep deploying only `META_NONE` (the P1b R3
-  arrangement continues) and the size tests pin a ceiling (26,624). The size work (the owner's "optimise later", at
+  arrangement continues) and the size tests pin a ceiling (26,624). The size work (the owner's ruling to optimise later, at
   the latest the P1e CI size gate) must bring it under 24,576 (and the 20,480 budget). Flag to the owner.
 - **D3 — `WrappedToken.sol` is `git mv` of `SingleUnderlyingToken.sol`, rewritten**; most of its logic moves to the
   new `WrappedLib.sol`. `MultiUnderlyingToken.sol` and `src/hedera/HederaTokensV2.sol` are deleted.

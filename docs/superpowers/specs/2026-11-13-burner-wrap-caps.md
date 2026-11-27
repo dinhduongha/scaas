@@ -36,18 +36,18 @@ Sources read: `GovernanceBits`, `GovernanceLib`, `GovernanceBase`, `IGovernance`
 | C7 | Convention: an uncapped hybrid uses `maxSupply = 2^256 - 1`. |
 | — | Accepted, not re-raised: a minter may mint unbacked units and unwrap them against the reserve; a user can send units to an unspendable address (not a burn). |
 
-### 0.1 Owner rulings on this spec (2026-11-13, relayed by the controller)
+### 0.1 Owner rulings on this spec (2026-11-13)
 
-| # | Ruling (verbatim) | Content | Status |
+| # | Ruling | Content | Status |
 |---|---|---|---|
-| O1 | "1, 2 theo đề xuất." (question 1) | `BURNER` gates only the public `burn` / `mtxBurn` and the generic `mtxExecute` burn. The confidential `R_BURN` / `ZetherBurn` unshield is **not** gated: a shielded holder unshields, then burns under the role check. | SPECIFIED, §2.3; nothing built |
-| O2 | "1, 2 theo đề xuất." (question 2) | No zero-recipient guard is added to `_poolMove` (every caller already refuses 0). | closed, nothing to build |
-| O3 | "OK, giữ chainUid_" | The direct setters stay `setMaxSupply(uint256, bytes32 chainUid_)` and `setMaxWrapSupply(uint256, bytes32 chainUid_)`; the router ops carry the word as a signed field. | SPECIFIED, §3.5, §3.7; nothing built |
-| O4 | "OQ1, OQ2 theo đề xuất" (OQ1, review S-1) | No: a pending lower cap does **not** bind new wraps or mints before its apply. The blocking behaviour stays as documented, with the listed remedies. | SPECIFIED, §3.5; nothing built |
-| O5 | "OQ1, OQ2 theo đề xuất" (OQ2, review S-12) | Yes: `setWrapLimits` and `mtxSetWrapLimits` gain the chain word in this round (direct entry: trailing `chainUid_`, `NotAdmin` then `ChainUidMismatch` before any write; router op: a signed field). `setWrapMember` stays without. | SPECIFIED, §3.8; nothing built |
-| O6 | "(2), gộp vào round 3zb + 3zc." | CTR-GOV-28 widens from admin entries to **every direct entry a role holder calls**, in this round: `setWrapMember` (this replaces O5's "stays without") and every power entry of the 12 token kinds and the DEX. Pattern: trailing `bytes32 chainUid_`, one shared helper, the caller's check first, then the word, before any write; the router ops sign the word. | SPECIFIED, §3.9; nothing built |
-| O7 | "OQ3 theo đề xuất" | `burn(amount)` in `BURNER` mode and the unwrap entries that draw on `REDEEMER` stay **without** the chain word: they are every user's own-balance entries. The ERC-20 `burn(uint256)` selector, the `UABurn` / `UAUnwrap*` typehashes and the tokens' allow-lists are unchanged. | SPECIFIED, §3.9; nothing built |
-| O8 | "Đồng ý, chuyển sang module trong round 3zb + 3zc" | `SCaaSDex`'s four power entries (`setMarket`, `setExchangeTarget`, `setListedOnly`, `setFeeSplit`, with `_power` and their chain word) move from the main contract into `SCaaSDexGovernanceModule` in this round, deliberately, not waiting for the T-1 line. | SPECIFIED, §3.10; nothing built |
+| O1 | as proposed (question 1) | `BURNER` gates only the public `burn` / `mtxBurn` and the generic `mtxExecute` burn. The confidential `R_BURN` / `ZetherBurn` unshield is **not** gated: a shielded holder unshields, then burns under the role check. | SPECIFIED, §2.3; nothing built |
+| O2 | as proposed (question 2) | No zero-recipient guard is added to `_poolMove` (every caller already refuses 0). | closed, nothing to build |
+| O3 | keep `chainUid_` | The direct setters stay `setMaxSupply(uint256, bytes32 chainUid_)` and `setMaxWrapSupply(uint256, bytes32 chainUid_)`; the router ops carry the word as a signed field. | SPECIFIED, §3.5, §3.7; nothing built |
+| O4 | as proposed (OQ1, review S-1) | No: a pending lower cap does **not** bind new wraps or mints before its apply. The blocking behaviour stays as documented, with the listed remedies. | SPECIFIED, §3.5; nothing built |
+| O5 | as proposed (OQ2, review S-12) | Yes: `setWrapLimits` and `mtxSetWrapLimits` gain the chain word in this round (direct entry: trailing `chainUid_`, `NotAdmin` then `ChainUidMismatch` before any write; router op: a signed field). `setWrapMember` stays without. | SPECIFIED, §3.8; nothing built |
+| O6 | option (2), in round 3zb + 3zc | CTR-GOV-28 widens from admin entries to **every direct entry a role holder calls**, in this round: `setWrapMember` (this replaces O5's "stays without") and every power entry of the 12 token kinds and the DEX. Pattern: trailing `bytes32 chainUid_`, one shared helper, the caller's check first, then the word, before any write; the router ops sign the word. | SPECIFIED, §3.9; nothing built |
+| O7 | as proposed (OQ3) | `burn(amount)` in `BURNER` mode and the unwrap entries that draw on `REDEEMER` stay **without** the chain word: they are every user's own-balance entries. The ERC-20 `burn(uint256)` selector, the `UABurn` / `UAUnwrap*` typehashes and the tokens' allow-lists are unchanged. | SPECIFIED, §3.9; nothing built |
+| O8 | move to a module in round 3zb + 3zc | `SCaaSDex`'s four power entries (`setMarket`, `setExchangeTarget`, `setListedOnly`, `setFeeSplit`, with `_power` and their chain word) move from the main contract into `SCaaSDexGovernanceModule` in this round, deliberately, not waiting for the T-1 line. | SPECIFIED, §3.10; nothing built |
 
 ## 1. Governance bits — SPECIFIED
 
@@ -539,7 +539,7 @@ Sentences (final wording at build, in the generator):
   the word, by O5 `setWrapLimits` / `mtxSetWrapLimits`, and by O6 every role holder's entry). **The CTR-GOV-28
   Change text:**
 
-  > Change (owner 2026-11-13, "(2), gộp vào round 3zb + 3zc."; status: SPECIFIED, round 3zb + 3zc). The rule widens
+  > Change (owner 2026-11-13, option (2), in round 3zb + 3zc; status: SPECIFIED, round 3zb + 3zc). The rule widens
   > from "every direct admin entry" to **every direct entry an admin or a role holder calls**. The table's row "the
   > powers, the lists, the tax entries, `setMarket`, `setExchangeTarget`, `setFeeSplit`, `setListedOnly`,
   > `setWrapLimits`, `setWrapMember`, `setProofStore`: no → no (role entries)" is replaced by the 24 rows of the
@@ -554,7 +554,7 @@ Sentences (final wording at build, in the generator):
   > typehashes, the interface ids. `acceptAdmin()` stays without.
 
   A Change on CTR-DEX's module rule (the entry that records the governance module, CTR-TOK-30's DEX part; the id is
-  fixed in step 1) quotes O8 in full: "Đồng ý, chuyển sang module trong round 3zb + 3zc": the four power entries of
+  fixed in step 1) records O8 in full: the four power entries of
   `SCaaSDex` run in `SCaaSDexGovernanceModule` from this round, by the owner's word and not by the size gate (the
   "ask before a module split" rule is met by this ruling); sizes old → new; what did not move (the views,
   `initialize`, `rescue`); status SPECIFIED, then BUILT with the commit. `docs/contracts/dex.md` gets the entry list of

@@ -854,7 +854,7 @@ zero at its commit.
 
 ### 15.2 Forward notes on rules this spec changes when built
 
-- [CLI-SDK-17](../../clients/scaas-sdk.md#CLI-SDK-17) and SDK spec §6.3: the shared data directory becomes the shared root; an open
+- [CLI-SDK-17](../../clients/scaas-cli.md#CLI-SDK-17) and SDK spec §6.3: the shared data directory becomes the shared root; an open
   profile is never shared (CLI-UPR-14); restoring `keystore.prev` by hand becomes `vault.restore_previous()`.
 - [CLI-TUI-06](../../clients/scaas-tui.md#CLI-TUI-06): the overlay "one file for the CLI and the TUI" becomes the profile's sealed
   `settings`; the CLI's `--overlay` is withdrawn for `scaas profile settings import`; a weakening change needs the profile passphrase.

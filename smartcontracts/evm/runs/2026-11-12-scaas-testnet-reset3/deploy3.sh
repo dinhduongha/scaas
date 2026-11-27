@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# SCaaS testnet reset 3, step 2 (owner 2026-11-10 "tự động làm, không cần hỏi nữa"): reset 2's deploy2.sh on the merged
+# SCaaS testnet reset 3, step 2 (owner 2026-11-10: run automatically, without asking again): reset 2's deploy2.sh on the merged
 # build: deploy.sh evm (NET-EVM-11: Deploy.s.sol simulated, DeploySend.s.sol sends; the 3r order SmartKeyAccount factory,
 # ComplianceRegistry, router, factory, configureChain, releases, setChainEntries) with every kind deploy.sh carries,
 # DEPLOY_ZETHER=1 and DEPLOY_PQCHAT=1. FACTORY_ADMIN_NEXT is not set (optional; no next admin named): the factory admin

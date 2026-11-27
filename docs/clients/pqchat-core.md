@@ -29,22 +29,26 @@ unsupported; `MsigAuthorPlanned` in `src/session.rs`, `src/topics.rs`; tests `te
 `tests/message.rs`, `tests/stores.rs`).
 
 <a id="CLI-PQC-01"></a>**CLI-PQC-01** — **`pqchat-core` is an app core above `scaas-sdk`: it depends on the SDK and on the app's
-Matrix client, and the SDK names no chat** (owner 2026-11-17, "OK, reverse pqchat-core too"; BUILT). It depends on
+Matrix client, and the SDK names no chat** (owner 2026-11-17, the dependency reversed for pqchat-core too; BUILT). It depends on
 `scaas-sdk` with the SDK's app-core feature and the feature that carries the SDK's `PqChat` record entries (the SDK spec's App
 cores section, [`2026-11-17-scaas-sdk.md`](../superpowers/specs/2026-11-17-scaas-sdk.md), as rewritten on branch `scaas-sdk`,
 names them `app-core` and `pqchat-records`), and on nothing else that touches a key or a node: no `scaas-ua`, no `scaas-rpc` and no
-Matrix SDK of its own (a `cargo tree` test). It reaches the app's live Matrix client (scaas-app's `app-matrix`) through a small
+Matrix SDK of its own (a `cargo tree` test). It reaches the app's live Matrix client (`scaas-matrix`, [CLI-PQC-20](../decisions.md#CLI-PQC-20)) through a small
 transport trait it defines and the app's Matrix crate implements, so the dependency points from the app to `pqchat-core`, never
 into the app's repository. It holds no cryptography: no KEM, KDF, MAC, AEAD, signature, and no writer, hash or decoder of a
 signed or encrypted byte format (typed digests, ids, `sigHash`, wrap hashes, the envelope's inner ABI bytes, padding, the canonical
 JSON of a content or of `sealedInfo`); those are `ua-rs`'s, reached through the SDK ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01)).
 It owns the state machine: what to build, when, from which reads, and what to show. In scaas-app it is the Cargo feature `pqchat`
-of the one library `app-core-rust` (implying `scaas`), so the SDK, `app-matrix`, `pqchat-core` and `ua-rs` share one process, one
+of the one library `app-core-rust` (implying `scaas`), so the SDK, `scaas-matrix`, `pqchat-core` and `ua-rs` share one process, one
 tokio runtime and one Matrix login ([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12)'s one library per app).
 
-**The Matrix client moves into this repository** (owner 2026-11-27; PLANNED): scaas-app's planned `app-matrix` becomes the crate
-`clients/scaas-matrix` (working name), which implements `MatrixTransport` and is used by scaas-app's front-ends, `scaas-tui` and
-this crate's e2e; this crate's normal graph still holds no Matrix crate (`tests/deps.rs`). **Each user profile has its own Matrix**:
+**The Matrix client moves into this repository** (owner 2026-11-27; BUILT on branch `scaas-matrix`): scaas-app's planned
+`app-matrix` becomes the crate `clients/scaas-matrix` ([scaas-matrix.md](scaas-matrix.md)), which implements `MatrixTransport` and is
+used by scaas-app's front-ends, `scaas-tui` and this crate's e2e (PLANNED there: the e2e still runs its test-only HTTP client). The
+trait, its error `TransportError`, its value types and `conformance` live in the trait-only crate `clients/pqchat-transport`
+([CLI-MTX-01](scaas-matrix.md#CLI-MTX-01)), re-exported here at `pqchat_core::matrix`, so neither crate depends on the other; every bound room is told to the
+transport (`bound`) on each `join_room`, and all of them by `tell_bound_rooms`, which the app calls after `attach_matrix`; this
+crate's normal graph still holds no Matrix crate (`tests/deps.rs`). **Each user profile has its own Matrix**:
 its logins, session, store, crypto keys and device id are sealed in that profile and shared with no other; the app runs one
 `scaas-matrix` client per open profile, not per app, and a profile switch closes it before the other profile's opens. So "the app's
 live Matrix client" below is the open profile's: [CLI-PQC-20](../decisions.md#CLI-PQC-20).
@@ -65,7 +69,7 @@ scope is shown as unsupported and never acted on (UA-7 P49).
 Status: **BUILT** (the SDK's `app_core` surface and its `pqchat_*` entries; the crate's handles in `src/lib.rs`,
 `src/message.rs`; tests `tests/message.rs`, `tests/vectors.rs`, `tests/e2e.rs`, the bindings check `runs/bind_surface.py`).
 
-**Attachments are in this round** (owner 2026-11-21, "put it in" after "images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave"; O9 (b); owner 2026-11-22: two new calls and an app id for PqChat): the `file` content (UA-7 §6.4.1 with its 2026-11-21 Change, P28) is sent and read; the file is sealed under a fresh file key by the SDK's `seal_for_arweave` under PqChat's app id (`keccak256("scaas.pqchat.v1")`), framed to its power-of-two bucket inside the AEAD, its key entered into the content inside `ua-rs` by `pqchat_seal_file_message`, so no key byte reaches the crate; the signed item is returned for the app to post to Arweave (`url` = `ar://<id>`) and keep, the crate posts nothing; a reader opens the object by `pqchat_open_file`, which checks its length and `ctSha256` before any decryption and reads the key from the opened content inside `ua-rs`; a failed file is shown on the device only. BUILT (plan T10b, `src/file.rs`: `send_file`, `file_info`, `open_file`; tests `tests/stores.rs`; the form and the controller calls in CLI-PQC-02's Change of 2026-11-23 in [decisions](../decisions.md)), UNAUDITED; a `file` without an `ar://` url is not built or read in this round.
+**Attachments are in this round** (owner 2026-11-21: in this round; images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave; O9 (b); owner 2026-11-22: two new calls and an app id for PqChat): the `file` content (UA-7 §6.4.1 with its 2026-11-21 Change, P28) is sent and read; the file is sealed under a fresh file key by the SDK's `seal_for_arweave` under PqChat's app id (`keccak256("scaas.pqchat.v1")`), framed to its power-of-two bucket inside the AEAD, its key entered into the content inside `ua-rs` by `pqchat_seal_file_message`, so no key byte reaches the crate; the signed item is returned for the app to post to Arweave (`url` = `ar://<id>`) and keep, the crate posts nothing; a reader opens the object by `pqchat_open_file`, which checks its length and `ctSha256` before any decryption and reads the key from the opened content inside `ua-rs`; a failed file is shown on the device only. BUILT (plan T10b, `src/file.rs`: `send_file`, `file_info`, `open_file`; tests `tests/stores.rs`; the form and the controller calls in CLI-PQC-02's Change of 2026-11-23 in [decisions](../decisions.md)), UNAUDITED; a `file` without an `ar://` url is not built or read in this round.
 
 <a id="CLI-PQC-03"></a>**CLI-PQC-03** — **Secrets stay below the SDK: `pqchat-core` holds key handles only, and only decrypted
 plaintext leaves** (coordinator condition 1, 2026-11-17; BUILT). The epoch key `K` and the sender chains' positions are `ua-rs`
@@ -106,14 +110,14 @@ its form (the send is the confirm): [CLI-SDK-36](../decisions.md#CLI-SDK-36).
 
 ## 3. The Matrix store
 
-Status: **BUILT** on the crate's side (`src/matrix.rs`, the conformance test `tests/matrix_conformance.rs`, the fake
+Status: **BUILT** on the crate's side (`src/matrix.rs` over `clients/pqchat-transport`'s trait, the conformance test `tests/matrix_conformance.rs`, the fake
 `tests/matrix_fake.rs`, the e2e over a local Synapse); scaas-app's contract, its section 11, is the app side, in its own
 repository, held to the trait by the same conformance test.
 
 <a id="CLI-PQC-05"></a>**CLI-PQC-05** — **The Matrix store is the app's live Matrix client: one stack, one client, one login; a
-PqChat session is never a Matrix room to the user; a room and a Matrix id count only when bound** (owner 2026-11-17, chat "(b)";
+PqChat session is never a Matrix room to the user; a room and a Matrix id count only when bound** (owner 2026-11-17, option (b);
 the binding rules a controller call after Fable's review, owner may override; BUILT). `pqchat-core` attaches to the app's
-`app-matrix` client after the app's Matrix login and detaches before the app's Matrix logout; it opens no Matrix client, login or
+`scaas-matrix` client (the open profile's, CLI-PQC-20) after the app's Matrix login and detaches before the app's Matrix logout; it opens no Matrix client, login or
 sync loop of its own and links no second Matrix SDK. It sends each envelope as one `net.scaas.pqchat.v1` event `{v, hint, env}`
 (UA-7 P15; `hint` and `env` in RFC 4648 §4 base64 with padding, the `matrixEvent` row's form, and only that form read back).
 **Binding.** A room counts for a session only if this client created it for that session, or joined it through that session's
@@ -142,7 +146,7 @@ chat comes to the web build later and not to the extension: [CLI-PQC-19](../deci
 Status: **BUILT** for CLI-PQC-06 to CLI-PQC-10 and CLI-PQC-13 to CLI-PQC-16 (`src/stores.rs`, `consent.rs`, `check.rs`,
 `drops.rs`, `session.rs`, `recovery.rs`, `reads.rs`, `message.rs`, `signed.rs`; tests `tests/stores.rs`, `check.rs`, `session.rs`,
 `recovery.rs`, `reads.rs`, `message.rs`, `signed.rs`, `chain_*.rs`; the reads check `runs/check_reads.py`),
-but the sealed local history of CLI-PQC-09, **PLANNED**; the tree mode, CLI-PQC-17, **SPECIFIED**.
+but the sealed local history of CLI-PQC-09, **PLANNED**; the tree mode, CLI-PQC-17, **BUILT** (`src/tree.rs`).
 
 <a id="CLI-PQC-06"></a>**CLI-PQC-06** — **Every message goes to every listed message store its type may use; a session with a store
 the crate does not implement cannot send; chain-store gas is spent only under the user's consent; a new store is used only after the
@@ -306,7 +310,7 @@ commits since its Welcome; every tree secret stays in `ua-rs`; a committer's pat
 that cannot follow an epoch shows it and sends nothing by itself** (owner 2026-11-23: our own TreeKEM in `ua-rs` after RFC
 9420's algorithms, no MLS library; seed-derived committer secrets, no self-wrap; spec
 [`2026-11-23-pqchat-treekem.md`](../superpowers/specs/2026-11-23-pqchat-treekem.md), revision 3, §5, §8, §10, §11, §15; the contract
-side is [CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **SPECIFIED** for the crate (plan T6a, T6b), UNAUDITED;
+side is [CTR-CHAT-26](../contracts/pqchat.md#CTR-CHAT-26)). Status: **BUILT** for the crate's core (plan T6a, T6b, branch `treekem-t4-t10`, `src/tree.rs`: the views read by `ua-rs`'s names through the port, the creation in one transaction, a commit built by `ua-rs` and sent in C37's order, the exits, the replay with its pin kept by `treeId`, the epoch opened for messages from the replay's `K`; `tests/chain_tree.rs` on a local chain), with the strict-majority read before a changed info (the TreeKEM spec's ruling 13), an admin's info after a gap, the prepared creation across a restart, the size hint, one snapshot per state and the Add warning's lookup (versions to the highest when it is at most 64, else 0, the highest and the leaves' versions, with what it did not cover), and its suites `tests/tree_scenarios.rs` (every scenario's every device replayed through the crate to the vectors, the hostile reads, the trace test of ARCH-POS-13, the majority read, the snapshot) and `tests/chain_tree.rs` (a local chain), UNAUDITED; the tree calls are Rust-only in the bindings this round; **the T4-T9 review's fixes (2026-11-26, [CTR-CHAT-27](../decisions.md#ctr-chat-27--the-tree-modes-checks-and-bounds-controller-calls)'s Change of the day, UNAUDITED):** the TreeKEM spec's ruling 13 on the sending side (the agreed read over named endpoints only, `treeOf` compared whole, before anything is built), the first pin and the conflict at the pin by the majority (`unconfirmed`, `pin_replaced`), the receiving side never refused, a commit on a moved head refused (`TreeStale`), completion by `epochComplete` at the final block with the record-stored fallback for every plan, the message branch (`tree_open` carries the info in force and the parent; no receipt by default; `tests/chain_tree.rs` sends and receives under a tree epoch), the snapshot checked before each call (a resume never consumed and thrown away), a resume's reads from its pin; **the re-check's fixes (the second Change of the day, UNAUDITED):** `treeOf.owed` tied to the head's exits (ruling 13 covers a hidden exit), `K` handles for every followed epoch the walk opens, a resume below the store's pin (`TreeCheckpoint`) or from a consumed replay (`TreePeriod`) refused, the previous replay's node keys moved only after the pin is stored, `unconfirmed` until a strict majority read of the head agreed (sending on an unconfirmed head is the app's choice), a tree epoch with its author and admins, a record unknown behind a down first endpoint read as not stored; a batch of Adds over the cap split into several commits within the cap less the SDK's margin (`tree_commit_plan`, `adds_left`; owner 2026-11-27, the Change of that day); left: the epochs of a resumed state are the new ones only (the app keeps the earlier state for older epochs), and the info in force crosses the SDK as a string (Rust-only);
 its `ua-rs` side (the tree secrets, the forward walk, replay, the signing operations; plan T2, T11) is **BUILT**, UNAUDITED. The bullets below
 other than the owner's rulings are controller calls, the owner may override. **Owner rulings of 2026-11-23 on the second
 review:** the joiner without RFC 9420's `init` chain and its cost; the compromise warning; no automatic receipts in a tree
@@ -315,6 +319,16 @@ warning before an Add of a key registered to another UA. **Codex's third review 
 replay, the comparison at the pin, the warning's roster and empty path, the prepared creation, the lookup behind the Add
 warning, an admin's new info after a gap, the order of a commit's pieces, the closed session.
 
+- **Path-less Adds (Change 2026-11-25, the [delta spec](../superpowers/specs/2026-11-25-treekem-pathless-add.md) §6; the owner's ruling for the warning, controller calls
+  C45-C47; SPECIFIED, nothing built).** The admins are warned from `sincePath ≥ W(N)`, `W(0)` = 20, `W(N) = max(1, N − ⌈N/4⌉)`,
+  with the next refresh's cost; every path-less Add's review shows the count; the default form is path-less only when the device
+  followed the head, nothing is owed, no head admin is `gone`, no path commit of the device's own is staged on the head (F-5, owner
+  2026-11-27), a `try` is left and the bound leaves room;
+  the default bound is 20. A device anchored in a run keeps the chain's key when a tag fails ("the author did not hold the
+  epoch"); a path-less joiner whose later tag fails sees "this device's Welcome may not match the group"; a good tag with a
+  `sealedInfo` that fails is "followed, info not taken"; the leaves under review are listed in every path commit's review,
+  and a path commit over them is built only once the caller acknowledged them (`TreeLeavesUnderReview`); a
+  path-less record of the device's own `(ua, keyId)` whose nonce no `try` of its seed reproduces is the compromise warning.
 - **One branch.** Both modes end in an epoch key `K` per epoch id; sender chains, `sealedInfo`, messages, stores and consent sit
   above `K` and do not change. Until the mode is built the crate refuses `groupMode ≠ 0` by name. A tree session's state,
   consent and pins are keyed by `treeId = hashStruct(PqChatSession)`, which binds the home and the genesis record.
@@ -439,8 +453,8 @@ first where a rule has none: keys whose order differs in UTF-16 and UTF-8, a con
 refusals, and a chain read far past its first counter. Every unbound field is non-zero in some row (`via`, `device`, `parents`,
 `ref`). The call-key rows wait for the call tasks (CLI-PQC-02).
 
-<a id="CLI-PQC-12"></a>**CLI-PQC-12** — **A real-crypto end-to-end run is a gate of the crate** (owner 2026-11-17, "OK, put the e2e
-into the pqchat-core plan"; BUILT locally, UNAUDITED; the SCaaS testnet run PLANNED). On a local chain that enforces EIP-7825's per-transaction cap and a local Matrix
+<a id="CLI-PQC-12"></a>**CLI-PQC-12** — **A real-crypto end-to-end run is a gate of the crate** (owner 2026-11-17, the e2e put
+into the pqchat-core plan; BUILT locally, UNAUDITED; the SCaaS testnet run PLANNED). On a local chain that enforces EIP-7825's per-transaction cap and a local Matrix
 homeserver, through `pqchat-core` over the SDK with no stand-in wrap: a 1:1 session wrapped by the hybrid KEM to registered KEM keys;
 a message sent by one member and decrypted by the other, equal byte for byte; an epoch rekey after which a removed member cannot
 read; a fresh device recovering its sessions and the latest messages from state alone, after an explicit acceptance; a replica read
