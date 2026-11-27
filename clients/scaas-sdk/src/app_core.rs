@@ -142,7 +142,8 @@ pub struct AppKey {
 }
 
 impl AppKey {
-    /// The seed whose arena holds the key.
+    /// The seed whose arena holds the key (its callers: the Arweave seal and PqChat's chain positions).
+    #[cfg(any(feature = "arweave", feature = "pqchat-records"))]
     pub(crate) fn seed(&self) -> &str {
         &self.seed
     }
