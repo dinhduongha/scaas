@@ -1225,7 +1225,7 @@ fn every_signing_command_asks_first() {
         let ua_key = json!({"Ua": {"seed": seed, "kind": ED25519, "account": 0, "index": 0}});
         let (sg, nk) = (signer.to_string(), native.to_string());
         // S1 / S2 and the card take the signer's UA (`account_ua`): a UA key, not an imported one
-        let ua = ua_key.to_string();
+        let (ua_id, ua) = (ua.clone(), ua_key.to_string());
         let valid = (now + 3600).to_string();
         // the objects a session's signing command takes, made by the commands that make them
         let prepared = || vec![
@@ -1319,6 +1319,25 @@ fn every_signing_command_asks_first() {
                 "app-core prepare-pqchat-topic-entry" => rec("prepare-pqchat-topic-entry", zero_words::<PqTopicEntry>()),
                 "app-core prepare-pqchat-topic-edit" => rec("prepare-pqchat-topic-edit", zero_words::<PqTopicEdit>()),
                 "app-core prepare-pqchat-topic-vote" => rec("prepare-pqchat-topic-vote", zero_words::<PqTopicVote>()),
+                "app-core prepare-pqchat-tree-session" => {
+                    let z = format!("0x{}", "11".repeat(32));
+                    let record = json!({"creator": ua_id, "nonce": 1, "homeChain": z, "homeChatContract": APP_CONTRACT,
+                        "groupMode": 1, "admins": [ua_id], "members": [{"ua": ua_id, "keyId": 0, "via": format!("0x{}", "00".repeat(32))}],
+                        "wrapHashes": [z], "sealedInfo": "0x01", "pathRefreshBound": 20, "confirmTag": z});
+                    Run::One(s(&["--unlock", &seed, "--passphrase-fd", "0", "--app", &pqchat_app, "app-core", "prepare-pqchat-tree-session", "--account", &ua,
+                        "--record", &record.to_string()]))
+                }
+                "app-core prepare-pqchat-tree-leave" => {
+                    let z = format!("0x{}", "11".repeat(32));
+                    Run::One(s(&["--unlock", &seed, "--passphrase-fd", "0", "--app", &pqchat_app, "app-core", "prepare-pqchat-tree-leave", "--account", &ua, "--session-id", &z,
+                        "--tree-id", &z, "--epoch-id", &z, "--nonce", "1"]))
+                }
+                "app-core prepare-pqchat-tree-remove" => {
+                    let z = format!("0x{}", "11".repeat(32));
+                    let members = json!([format!("0x{}", "22".repeat(32))]).to_string();
+                    Run::One(s(&["--unlock", &seed, "--passphrase-fd", "0", "--app", &pqchat_app, "app-core", "prepare-pqchat-tree-remove", "--account", &ua, "--session-id", &z,
+                        "--tree-id", &z, "--epoch-id", &z, "--next-epoch", "1", "--members", &members, "--nonce", "1"]))
+                }
                 _ => return None,
             })
         };
