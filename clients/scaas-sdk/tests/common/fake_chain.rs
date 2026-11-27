@@ -115,6 +115,8 @@ pub struct Chain {
     pub verdict_bodies: Vec<String>,
     /// a verifier answering from the request (plan T16: a verdict over the statement it was sent); read before `verdict`
     pub verdict_fn: Option<VerdictFn>,
+    /// a stalled endpoint (user-profiles review C-7, C-8): each JSON-RPC request recorded in `requests`, never answered
+    pub stall: bool,
 }
 
 impl Default for Chain {
@@ -166,6 +168,7 @@ impl Default for Chain {
             verdict: None,
             verdict_bodies: vec![],
             verdict_fn: None,
+            stall: false,
         }
     }
 }
@@ -632,6 +635,13 @@ pub async fn serve(c: Fake) -> String {
                     }
                     let body = buf[end + 4..end + 4 + len].to_vec();
                     buf.drain(..end + 4 + len);
+                    if !path.contains("/v1/") && c.lock().unwrap().stall {
+                        c.lock()
+                            .unwrap()
+                            .requests
+                            .push(String::from_utf8_lossy(&body).to_string());
+                        std::future::pending::<()>().await;
+                    }
                     let (status, out) = {
                         let mut c = c.lock().unwrap();
                         if path.ends_with("/v1/gateway") {

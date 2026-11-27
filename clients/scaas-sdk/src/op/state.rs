@@ -107,6 +107,15 @@ struct State {
     pops: std::collections::BTreeMap<String, String>,
 }
 
+/// `bytes` read as this SDK reads the item (an import's `sdk.state`, user-profiles spec §10.1, review C-5): `VaultFormat` for
+/// what no operation call could load.
+#[cfg(feature = "user-profile")]
+pub(crate) fn check(bytes: &[u8]) -> Result<(), SdkError> {
+    serde_json::from_slice::<State>(bytes)
+        .map(drop)
+        .map_err(|_| SdkError::VaultFormat)
+}
+
 async fn load(sdk: &Sdk) -> Result<(Option<u64>, State), SdkError> {
     let item = sdk
         .store

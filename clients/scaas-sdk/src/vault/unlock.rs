@@ -125,15 +125,25 @@ impl Vault {
                     }
                     other => other?,
                 };
-                {
+                let seed = Arc::new(OpenSeed { wallet });
+                #[cfg(feature = "test-hooks")]
+                sdk.hook("unlock");
+                let kept = {
                     let mut open = sdk.open.lock().unwrap_or_else(PoisonError::into_inner);
-                    // two unlocks at once: the first session stays, the second wallet is locked unused
-                    if open.contains_key(&id) {
-                        drop(open);
-                        wallet.lock();
-                        return Ok(());
+                    // review C-1: the closed flag read under the lock `Sdk::close` takes after setting it, so no wallet stays
+                    // open after a close (`ProfileLocked`); two unlocks at once: the first session stays, the second wallet is
+                    // locked unused
+                    let first = sdk.live().map(|()| !open.contains_key(&id));
+                    if matches!(first, Ok(true)) {
+                        open.insert(id.clone(), seed.clone());
                     }
-                    open.insert(id.clone(), Arc::new(OpenSeed { wallet }));
+                    first
+                };
+                #[cfg(feature = "test-hooks")]
+                sdk.hook("unlock.done");
+                if !matches!(kept, Ok(true)) {
+                    seed.wallet.lock();
+                    return kept.map(drop);
                 }
                 sdk.emit(Event::SeedUnlocked { seed: id });
                 Ok(())
@@ -158,10 +168,21 @@ impl Vault {
                     .heavy(move || open_entry(&e, &key, Some(&bip39_passphrase)))
                     .await?;
                 let id = super::seeds::uuid4()?;
-                sdk.hidden
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .insert(id.clone(), (seed, Arc::new(OpenSeed { wallet })));
+                let set = Arc::new(OpenSeed { wallet });
+                #[cfg(feature = "test-hooks")]
+                sdk.hook("unlock");
+                let kept = {
+                    let mut hidden = sdk.hidden.lock().unwrap_or_else(PoisonError::into_inner);
+                    // review C-1, as `unlock`
+                    sdk.live()
+                        .map(|()| hidden.insert(id.clone(), (seed, set.clone())))
+                };
+                #[cfg(feature = "test-hooks")]
+                sdk.hook("unlock.done");
+                if let Err(e) = kept {
+                    set.wallet.lock();
+                    return Err(e);
+                }
                 Ok(SessionSet { id })
             })
             .await
@@ -180,27 +201,11 @@ impl Vault {
     /// Locks every seed: each seed with an open main set or a hidden set (one `lock` each), so a hidden set opened on a locked
     /// seed is locked too.
     pub async fn lock_all(&self) -> Vec<String> {
-        let mut ids: BTreeSet<String> = self
-            .sdk
-            .open
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .keys()
-            .cloned()
-            .collect();
-        ids.extend(
-            self.sdk
-                .hidden
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .values()
-                .map(|(seed, _)| seed.clone()),
-        );
-        let mut out = vec![];
-        for id in ids {
-            out.extend(self.lock(id).await);
-        }
-        out
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move { Ok(sdk.lock_every().await) })
+            .await
+            .unwrap_or_default()
     }
 
     /// The seed's info as listed now.
@@ -264,6 +269,30 @@ impl Sdk {
             .get(seed)
             .cloned()
             .ok_or(SdkError::Ua(scaas_ua::wallet::Error::WalletLocked))
+    }
+
+    /// `Vault::lock_all`'s work, also `Sdk::close`'s (after its closed flag): `lock_seed` for each seed with an open main set
+    /// or a hidden set.
+    pub(crate) async fn lock_every(&self) -> Vec<String> {
+        let mut ids: BTreeSet<String> = self
+            .open
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .keys()
+            .cloned()
+            .collect();
+        ids.extend(
+            self.hidden
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .values()
+                .map(|(seed, _)| seed.clone()),
+        );
+        let mut out = vec![];
+        for id in ids {
+            out.extend(self.lock_seed(&id).await);
+        }
+        out
     }
 
     /// Takes the seed and its hidden sets out of the session first (new calls are `WalletLocked` at once), then locks their

@@ -293,7 +293,7 @@ async fn g11_sdk_twice_and_locked() {
     face.put_if("cache".into(), None, item(1, "c"), p)
         .await
         .unwrap();
-    let head = up.part_store(SDK).unwrap();
+    let head = PartStore::new(up.core(), SDK).unwrap();
     let anchor = br#"{"rev":1,"sha256":"00112233445566778899aabbccddeeff"}"#.to_vec();
     head.put_if("keystore.head".into(), None, anchor, p)
         .await
@@ -317,7 +317,10 @@ async fn g11_sdk_twice_and_locked() {
             .await,
         Err(StoreError::ProfileLocked)
     );
-    assert_eq!(code(up.part_store(SDK).map(|_| ())), "ProfileLocked");
+    assert_eq!(
+        code(up.part_store(ProfilePart::PqVault).map(|_| ())),
+        "ProfileLocked"
+    );
     assert_eq!(code(up.matrix_store().map(|_| ())), "ProfileLocked");
 }
 
@@ -374,23 +377,17 @@ async fn events_are_the_sdks() {
     assert_eq!(ups.events(), Vec::<Event>::new(), "drained");
 }
 
-/// G11: after `lock` no request leaves on the old `Sdk` (`Sdk::close`: pools dropped, the closed flag): a chain call is
-/// `ProfileLocked` by its exact code, and the fake chain sees nothing more. Control first: the same call reaches the chain each
-/// time while the profile is open.
+/// The fake chain at `url` as the EVM chain profile "local".
 #[cfg(feature = "evm")]
-#[tokio::test(flavor = "multi_thread")]
-async fn g11_no_request_after_lock() {
-    use fake_chain::{fake, hash_of, serve, CHAIN_ID};
-    let c = fake();
-    c.lock().unwrap().index = vec![];
-    let url = serve(c.clone()).await;
+fn local(url: String) -> ChainProfile {
+    use fake_chain::{hash_of, CHAIN_ID};
     let endpoint = scaas_sdk::EndpointConfig {
         url,
         class: scaas_rpc::Class::Named,
         label: None,
         auth: None,
     };
-    let profile = ChainProfile {
+    ChainProfile {
         key: "local".into(),
         family: scaas_sdk::Family::Evm,
         chain_id: Some(CHAIN_ID),
@@ -415,9 +412,21 @@ async fn g11_no_request_after_lock() {
         pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
-    };
+    }
+}
+
+/// G11: after `lock` no request leaves on the old `Sdk` (`Sdk::close`: pools dropped, the closed flag): a chain call is
+/// `ProfileLocked` by its exact code, and the fake chain sees nothing more. Control first: the same call reaches the chain each
+/// time while the profile is open.
+#[cfg(feature = "evm")]
+#[tokio::test(flavor = "multi_thread")]
+async fn g11_no_request_after_lock() {
+    use fake_chain::{fake, serve};
+    let c = fake();
+    c.lock().unwrap().index = vec![];
+    let url = serve(c.clone()).await;
     let (_ups, up, _) = open_protected().await;
-    let s = up.sdk(sdk_config(vec![profile])).await.unwrap();
+    let s = up.sdk(sdk_config(vec![local(url)])).await.unwrap();
     let seen = || c.lock().unwrap().requests.len();
     let n0 = seen();
     assert_eq!(code(s.wallet().tokens("local".into(), true).await), "Ok");
@@ -1173,11 +1182,14 @@ async fn g9_export_import_through_sdk() {
         .native_address(key(seed.clone()), None)
         .await
         .unwrap();
-    let store = up.part_store(SDK).unwrap();
-    let state =
-        br#"{"rev":1,"ops":[{"op":"a","state":"signed"},{"op":"b","state":"landed"}]}"#.to_vec();
+    let store = PartStore::new(up.core(), SDK).unwrap();
     store
-        .put_if("sdk.state".into(), None, state, StorePolicy::default())
+        .put_if(
+            "sdk.state".into(),
+            None,
+            ops_state(),
+            StorePolicy::default(),
+        )
         .await
         .unwrap();
     let fingerprints = |b: &[u8]| -> Vec<String> {
@@ -1238,7 +1250,7 @@ async fn g9_export_import_through_sdk() {
         .open(info.id, Some(ProfileUnlock::Passphrase(sec(NEW))))
         .await
         .unwrap();
-    let store2 = up2.part_store(SDK).unwrap();
+    let store2 = PartStore::new(up2.core(), SDK).unwrap();
     let ks = store2.get("keystore".into(), String::new()).await.unwrap();
     assert_eq!(
         fingerprints(&ks.unwrap().bytes),
@@ -1247,11 +1259,17 @@ async fn g9_export_import_through_sdk() {
     );
     let st = store2.get("sdk.state".into(), String::new()).await.unwrap();
     let st: serde_json::Value = serde_json::from_slice(&st.unwrap().bytes).unwrap();
+    let states: Vec<&str> = st["ops"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["state"].as_str().unwrap())
+        .collect();
     assert_eq!(
-        st["ops"][0]["state"], "imported",
-        "an operation in flight is not followed"
+        states,
+        ["imported", "imported", "imported", "landed", "reverted", "consumed", "expired"],
+        "every operation in flight marked, none followed; the terminal ones kept"
     );
-    assert_eq!(st["ops"][1]["state"], "landed");
     let s2 = up2.sdk(sdk_config(vec![])).await.unwrap();
     let id2 = s2.vault().seeds().await.unwrap()[0].id.clone();
     s2.vault()
@@ -1262,4 +1280,269 @@ async fn g9_export_import_through_sdk() {
         s2.wallet().native_address(key(id2), None).await.unwrap(),
         addr
     );
+}
+
+// ---- R3: the review's SDK findings (C-1, C-4, C-5, C-6, C-7, C-8) ----
+
+/// Waits until the fake chain holds more than `n` requests (one reached the stalled endpoint).
+#[cfg(feature = "evm")]
+async fn stalled(c: &fake_chain::Fake, n: usize) {
+    for _ in 0..500 {
+        if c.lock().unwrap().requests.len() > n {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("no request reached the stalled endpoint");
+}
+
+/// Review C-1: a seed unlock (and a hidden open) whose KDF ends while `lock()` runs leaves no wallet open in the closed `Sdk`.
+/// The test hook drives the race: the call waits after its KDF until the close stands between its closed flag and its seeds'
+/// lock, and the close waits there until the call has kept or refused its wallet; the call ends `ProfileLocked`. The twin: the
+/// same call with no lock keeps its wallet.
+#[tokio::test(flavor = "multi_thread")]
+async fn c1_unlock_racing_lock_keeps_nothing() {
+    use scaas_sdk::user_profile::{open_sets, set_sdk_hook};
+    use scaas_sdk::vault::Vault;
+    use std::sync::{mpsc::channel, Mutex};
+    for hidden in [false, true] {
+        let (_ups, up, _) = open_protected().await;
+        let s = up.sdk(sdk_config(vec![])).await.unwrap();
+        let v = s.vault();
+        let id = v
+            .import_words(ImportWords {
+                label: "Main".into(),
+                words: sec(REPO),
+                vault_passphrase: sec(VAULT_PASS),
+            })
+            .await
+            .unwrap()
+            .id;
+        v.lock(id.clone()).await;
+        let call = move |v: Arc<Vault>, id: String| async move {
+            let pass = Unlock::Passphrase(sec(VAULT_PASS));
+            match hidden {
+                false => v.unlock(id, pass).await,
+                true => v.open_hidden(id, pass, sec("h")).await.map(drop),
+            }
+        };
+        call(v.clone(), id.clone()).await.unwrap();
+        assert_eq!(open_sets(&s), 1, "the twin: kept");
+        v.lock(id.clone()).await;
+        assert_eq!(open_sets(&s), 0);
+        let (reached_tx, reached) = channel::<()>();
+        let (go_tx, go) = channel::<()>();
+        let (done_tx, done) = channel::<()>();
+        let (reached_tx, go, done_tx) =
+            (Mutex::new(reached_tx), Mutex::new(go), Mutex::new(done_tx));
+        let (go_tx, done) = (Mutex::new(go_tx), Mutex::new(done));
+        set_sdk_hook(
+            &s,
+            Arc::new(move |point| match point {
+                "unlock" => {
+                    reached_tx.lock().unwrap().send(()).unwrap();
+                    go.lock().unwrap().recv().unwrap();
+                }
+                "unlock.done" => done_tx.lock().unwrap().send(()).unwrap(),
+                "close" => {
+                    go_tx.lock().unwrap().send(()).unwrap();
+                    done.lock().unwrap().recv().unwrap();
+                }
+                _ => {}
+            }),
+        );
+        let racing = tokio::spawn(call(v.clone(), id.clone()));
+        tokio::task::spawn_blocking(move || reached.recv().unwrap())
+            .await
+            .unwrap();
+        up.clone().lock().await;
+        assert_eq!(open_sets(&s), 0, "hidden {hidden}: nothing open after lock");
+        assert_eq!(
+            code(racing.await.unwrap()),
+            "ProfileLocked",
+            "hidden {hidden}"
+        );
+    }
+}
+
+/// Review C-4: the profile's `Sdk` holds the open profile: with the `UserProfile` dropped without `lock()`, the profile stays in
+/// use (`ProfileInUse` for another open) and its `Sdk` answers; with the `Sdk` dropped too, the profile opens again.
+#[tokio::test(flavor = "multi_thread")]
+async fn c4_sdk_keeps_the_profile_open() {
+    let (ups, up, _) = open_protected().await;
+    let id = ups.list().await.unwrap()[0].id.clone();
+    let s = up.sdk(sdk_config(vec![])).await.unwrap();
+    drop(up);
+    let again = || ups.open(id.clone(), Some(ProfileUnlock::Passphrase(sec(PASS))));
+    assert_eq!(code(again().await.map(drop)), "ProfileInUse");
+    assert_eq!(code(s.vault().seeds().await.map(drop)), "Ok");
+    drop(s);
+    assert_eq!(code(again().await.map(drop)), "Ok", "the twin");
+}
+
+/// Review C-5 (= E-10): the preview reads `sdk.state` with the SDK's own parser of the item: a state the store's marking takes
+/// (each row with a string `state`) but no operation call could load (rows without their fields) is `ProfileImportOpen`,
+/// nothing written. The twin: `g9_export_import_through_sdk` (whole rows preview, import and read back marked).
+#[tokio::test(flavor = "multi_thread")]
+async fn c5_preview_reads_state_with_the_sdk_parser() {
+    let (ups, up, root) = open_protected().await;
+    let store = PartStore::new(up.core(), SDK).unwrap();
+    let bad = br#"{"rev":1,"ops":[{"op":"a","state":"signed"}]}"#.to_vec();
+    store
+        .put_if("sdk.state".into(), None, bad, StorePolicy::default())
+        .await
+        .unwrap();
+    let target = tmp().join("bad.scaasx").to_string_lossy().into_owned();
+    up.export(
+        ConfirmExportProfile { name: sec("work") },
+        sec(PASS),
+        sec(XPASS),
+        Some(TEST_KDF),
+        ExportTarget::Path(target.clone()),
+    )
+    .await
+    .unwrap();
+    let snap = snapshot(&root);
+    let got = ups
+        .import_preview(ImportSource::Path(target), sec(XPASS))
+        .await;
+    assert_eq!(code(got.map(drop)), "ProfileImportOpen");
+    assert!(snapshot(&root) == snap, "nothing written");
+}
+
+/// Review C-6: `part_store` refuses the part `sdk` (`Argument`; the profile's own `Sdk` reaches it through `sdk()`). The twin:
+/// another part's face.
+#[tokio::test(flavor = "multi_thread")]
+async fn c6_part_store_refuses_the_sdk_part() {
+    let (_ups, up, _) = open_protected().await;
+    assert_eq!(code(up.part_store(SDK).map(drop)), "Argument");
+    assert_eq!(code(up.part_store(ProfilePart::PqVault).map(drop)), "Ok");
+}
+
+/// Review C-7: a call in flight across `lock()` (its endpoint stalled) is aborted and waited for: `lock` returns, the call ends
+/// `ProfileLocked`, and no request leaves after it. The twin: the same call answers while the profile is open.
+#[cfg(feature = "evm")]
+#[tokio::test(flavor = "multi_thread")]
+async fn c7_call_across_lock_aborted() {
+    use fake_chain::{fake, serve};
+    let c = fake();
+    c.lock().unwrap().index = vec![];
+    let url = serve(c.clone()).await;
+    let (_ups, up, _) = open_protected().await;
+    let s = up.sdk(sdk_config(vec![local(url)])).await.unwrap();
+    let tokens =
+        |s: Arc<scaas_sdk::Sdk>| async move { s.wallet().tokens("local".into(), true).await };
+    assert_eq!(code(tokens(s.clone()).await), "Ok", "the twin");
+    c.lock().unwrap().stall = true;
+    let n0 = c.lock().unwrap().requests.len();
+    let call = tokio::spawn(tokens(s.clone()));
+    stalled(&c, n0).await;
+    tokio::time::timeout(Duration::from_secs(5), up.clone().lock())
+        .await
+        .expect("lock returns with the call aborted");
+    let got = tokio::time::timeout(Duration::from_secs(5), call)
+        .await
+        .expect("the call ended")
+        .unwrap();
+    assert_eq!(code(got), "ProfileLocked");
+    let n = c.lock().unwrap().requests.len();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(c.lock().unwrap().requests.len(), n, "no request after lock");
+}
+
+/// Review C-8 (c): a call cancelled under a plain `Sdk` that was never closed (its adopted runtime shut down while the call
+/// waits on a stalled endpoint) is `Internal`; `ProfileLocked` is a closed `Sdk`'s alone (`c7_call_across_lock_aborted`).
+#[cfg(feature = "evm")]
+#[tokio::test(flavor = "multi_thread")]
+async fn c8_cancelled_plain_sdk_call_is_internal() {
+    use fake_chain::{fake, serve};
+    use scaas_sdk::vault::FileStore;
+    use scaas_sdk::{Sdk, SdkConfig};
+    let c = fake();
+    c.lock().unwrap().index = vec![];
+    let url = serve(c.clone()).await;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .unwrap();
+    let s = Sdk::open(SdkConfig {
+        profiles: vec![local(url)],
+        store: FileStore::new(tmp()).unwrap(),
+        authenticator: None,
+        rp_id: None,
+        runtime: RuntimeChoice::Adopt(rt.handle().clone()),
+        limits: Default::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    c.lock().unwrap().stall = true;
+    let n0 = c.lock().unwrap().requests.len();
+    let call = {
+        let s = s.clone();
+        tokio::spawn(async move { s.wallet().tokens("local".into(), true).await })
+    };
+    stalled(&c, n0).await;
+    rt.shutdown_background();
+    let got = tokio::time::timeout(Duration::from_secs(5), call)
+        .await
+        .expect("the call ended")
+        .unwrap();
+    assert_eq!(code(got), "Internal");
+}
+
+/// The rows of an `sdk.state` as the SDK writes them, one per state: three in flight (`signed`, `sent`, an earlier import's
+/// `imported`) and the four a chain fact ended.
+fn ops_state() -> Vec<u8> {
+    let ops: Vec<serde_json::Value> = [
+        "signed", "sent", "imported", "landed", "reverted", "consumed", "expired",
+    ]
+    .iter()
+    .enumerate()
+    .map(|(i, state)| {
+        serde_json::json!({
+            "op": format!("op{i}"), "chain": "local", "entry": "mtxTransfer", "struct": "Transfer", "kind": "token",
+            "contract": "0x5ca0000000000000000000000000000000000001", "from": "0x01", "batch": "0", "nonce": "1",
+            "valid_until": 1_900_000_000u64, "digest": "0x00", "op_json": null, "calldata": "0x", "path": "gateway",
+            "from_block": 1, "state": state, "detail": "", "relayer_bound": false
+        })
+    })
+    .collect();
+    serde_json::to_vec(&serde_json::json!({ "rev": 1, "ops": ops })).unwrap()
+}
+
+/// Review E-5 through the SDK: `ProfilesConfig::write_last` false (the CLI) opens without writing the index's `last`; true (the
+/// default: an app or a TUI instance) writes it.
+#[tokio::test(flavor = "multi_thread")]
+async fn e5_write_last_through_sdk() {
+    for write_last in [true, false] {
+        let root = tmp().join("root");
+        let mut c = ProfilesConfig::new(root.to_string_lossy().into_owned());
+        assert!(c.write_last, "the default");
+        c.write_last = write_last;
+        let ups = UserProfiles::new(c).await.unwrap();
+        let id = ups.list().await.unwrap()[0].id.clone();
+        ups.open(id.clone(), None).await.unwrap().lock().await;
+        let ix = std::fs::read_to_string(root.join("profiles.json")).unwrap();
+        assert_eq!(
+            ix.contains(&format!(r#""last":"{id}""#)),
+            write_last,
+            "{ix}"
+        );
+    }
+}
+
+/// Review E-6: the SDK hands a client the store's one name helper (spec §6: names compared everywhere by it).
+#[test]
+fn e6_name_helpers_reexported() {
+    use scaas_sdk::user_profile::{check_name, name_key, same_name};
+    assert!(same_name("Work", "WORK") && !same_name("work", "play"));
+    assert_eq!(*name_key("Work"), "work");
+    assert_eq!(
+        code(check_name("").map_err(SdkError::from)),
+        "ProfileNameInvalid"
+    );
+    assert_eq!(check_name("work").unwrap(), "work");
 }

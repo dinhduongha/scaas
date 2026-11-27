@@ -655,7 +655,7 @@ impl Op {
 
 /// Runs `f` on as a task of the SDK's runtime, whatever happens to the caller (spec §13.4); on wasm32 a task of the page's event
 /// loop (`wasm_bindgen_futures::spawn_local`: no tokio `LocalSet` there; closing review P2-9). After `Sdk::close` nothing
-/// starts, and a close aborts it.
+/// starts; a close aborts one in flight and waits for it, natively (on wasm32 it runs to its end: user-profiles review C-8).
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn detach(sdk: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + Send + 'static) {
     let _ = sdk.task(f);

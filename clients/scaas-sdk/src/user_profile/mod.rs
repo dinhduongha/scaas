@@ -14,10 +14,10 @@ pub use scaas_profile::settings::{
     Caps, ChainSettings, CredentialKind, CredentialRef, Endpoint, EndpointList, ReviewItem, Setting,
 };
 pub use scaas_profile::{
-    keychain_name, Anchor, ConfirmDeleteUnreadable, ConfirmRebuildIndex, Core, CoreOpen, Error,
-    Head, Item, KdfParams, Manifest, MatrixStore, Plain, ProfileEvent,
-    ProfileInfo as UserProfileInfo, ProfileKeychain, ProfilePart, ProfileSettings, Verdict,
-    WriteGuard, PART_MAX,
+    check_name, keychain_name, name_key, same_name, Anchor, ConfirmDeleteUnreadable,
+    ConfirmRebuildIndex, Core, CoreOpen, Error, Head, Item, KdfParams, Manifest, MatrixStore,
+    Plain, ProfileEvent, ProfileInfo as UserProfileInfo, ProfileKeychain, ProfilePart,
+    ProfileSettings, Verdict, WriteGuard, PART_MAX,
 };
 
 use crate::error::SdkError;
@@ -52,6 +52,9 @@ pub struct ProfilesConfig {
     /// the CLI's overlay (`$XDG_CONFIG_HOME/scaas/overlay.json`, else `~/.config/scaas/overlay.json`), moved into "default"'s
     /// settings by the migration; the caller computes it
     pub legacy_overlay: Option<String>,
+    /// whether an open writes the index's `last` (spec §6, §13; review E-5): true by default (an app, a TUI instance); the CLI
+    /// sets false (it never follows `last`, so it never writes it)
+    pub write_last: bool,
 }
 
 impl ProfilesConfig {
@@ -65,6 +68,7 @@ impl ProfilesConfig {
             kdf_max_kib: KdfParams::MAX_KIB,
             legacy: None,
             legacy_overlay: None,
+            write_last: true,
         }
     }
 }
@@ -133,35 +137,6 @@ impl ImportReview {
 
 const STATE: &str = "sdk.state";
 
-/// `sdk.state` with every operation a chain fact has not ended marked `imported` in its `state` (spec §10.1): `Op::resume`
-/// sends only `signed` rows and every other step is the user's call, so none is sent or followed without the user's word. A
-/// state of no such form (`rev`, `ops`, each with a `state`) is `ProfileImportOpen`.
-fn mark_imported(bytes: &[u8]) -> Result<Zeroizing<Vec<u8>>, SdkError> {
-    use serde_json::Value;
-    let bad = || SdkError::ProfileImportOpen;
-    if scaas_ua::json::depth_within(bytes, 64).is_err() {
-        return Err(bad());
-    }
-    let mut v: Value = serde_json::from_slice(bytes).map_err(|_| bad())?;
-    if !v.get("rev").is_some_and(Value::is_u64) {
-        return Err(bad());
-    }
-    let ops = v
-        .get_mut("ops")
-        .and_then(Value::as_array_mut)
-        .ok_or_else(bad)?;
-    for op in ops {
-        let s = op.get_mut("state").ok_or_else(bad)?;
-        match s.as_str().ok_or_else(bad)? {
-            "landed" | "reverted" | "consumed" | "expired" => {}
-            _ => *s = Value::from("imported"),
-        }
-    }
-    serde_json::to_vec(&v)
-        .map(Zeroizing::new)
-        .map_err(|_| bad())
-}
-
 /// How a protected profile opens (spec §11; the platform unlock is wave 2).
 pub enum ProfileUnlock {
     Passphrase(Arc<SecretBytes>),
@@ -211,6 +186,7 @@ impl UserProfiles {
         c.max_concurrent_heavy = config.limits.max_concurrent_heavy as usize;
         c.legacy = config.legacy.map(Into::into);
         c.legacy_overlay = config.legacy_overlay.map(Into::into);
+        c.write_last = config.write_last;
         let profiles = Arc::new(run(move || Profiles::new(c)).await?);
         Ok(Arc::new(UserProfiles {
             profiles,
@@ -292,7 +268,8 @@ impl UserProfiles {
     }
 
     /// Opens an export (spec §10.1, the first call): read and verified whole in memory, nothing written; its keystore checked
-    /// by the SDK's parser and its seeds and accounts counted, its `sdk.state`'s operations marked `imported`. Every refusal is
+    /// by the SDK's parser and its seeds and accounts counted; its `sdk.state`, whose operations the store marked `imported`,
+    /// read by the SDK's own parser of the item (review C-5). Every refusal is
     /// `ProfileImportOpen` (the store's local reason: `last_import_refusal`), but `ProfileKdfTooLarge` and
     /// `ProfileKdfOutOfMemory`.
     pub async fn import_preview(
@@ -301,7 +278,7 @@ impl UserProfiles {
         export_passphrase: Arc<SecretBytes>,
     ) -> Result<Arc<ImportReview>, SdkError> {
         let p = self.profiles.clone();
-        let mut r = run(move || {
+        let r = run(move || {
             export_passphrase.with(|e| match &source {
                 ImportSource::Path(s) => {
                     p.import_preview(scaas_profile::ImportSource::Path(s.as_ref()), e)
@@ -317,8 +294,7 @@ impl UserProfiles {
             None => Keystore::default(),
         };
         if let Some(b) = r.item(STATE) {
-            let marked = mark_imported(b)?;
-            r.set_item(STATE, marked)?;
+            crate::op::state::check(b).map_err(|_| SdkError::ProfileImportOpen)?;
         }
         let n = |c: usize| u32::try_from(c).unwrap_or(u32::MAX);
         Ok(Arc::new(ImportReview {
@@ -396,8 +372,9 @@ impl UserProfile {
             gas_tables: config.gas_tables,
         })
         .await?;
-        // the gate of spec §7.6: while the profile is unprotected, every secret-creating call is `ProfilePassphraseRequired`
-        let _ = s.profile.set(self.open.core().clone());
+        // the gate of spec §7.6: while the profile is unprotected, every secret-creating call is `ProfilePassphraseRequired`;
+        // the `Sdk` holds the open profile, so its instance lock lives as long as the `Sdk` (review C-4)
+        let _ = s.profile.set(self.open.clone());
         *held = Some(s.clone());
         Ok(s)
     }
@@ -499,7 +476,6 @@ impl UserProfile {
             return Err(SdkError::ConfirmationMissing);
         }
         if let Some(s) = held.as_ref() {
-            s.vault().lock_all().await;
             s.close().await;
         }
         let (p, open) = (self.profiles.clone(), self.open.clone());
@@ -557,8 +533,12 @@ impl UserProfile {
         .await
     }
 
-    /// The `SecureStore` face of part `part` for an app core (the part `profile` is the manifests' and no `ProfilePart`).
+    /// The `SecureStore` face of part `part` for an app core (the part `profile` is the manifests' and no `ProfilePart`). The part
+    /// `sdk` is the profile's own `Sdk`'s, reached only through [`UserProfile::sdk`]: `Argument` (review C-6).
     pub fn part_store(&self, part: ProfilePart) -> Result<Arc<dyn SecureStore>, SdkError> {
+        if part == ProfilePart::Sdk {
+            return Err(SdkError::Argument);
+        }
         self.open.core().live()?;
         Ok(PartStore::new(self.open.core().clone(), part)?)
     }
@@ -576,14 +556,14 @@ impl UserProfile {
         Ok(self.open.matrix_store()?)
     }
 
-    /// Locks the profile (spec §10 "lock"): `lock_all` on its `Sdk`, then `Sdk::close`, then the stores closed, the arena
-    /// destroyed and the instance lock released. Returns the abandoned hidden operations. Again: nothing more.
+    /// Locks the profile (spec §10 "lock"): `Sdk::close` (its closed flag first, then every seed and hidden set locked: review
+    /// C-1), then the stores closed, the arena destroyed and the instance lock released. Returns the abandoned hidden
+    /// operations. Again: nothing more.
     pub async fn lock(self: Arc<Self>) -> Vec<String> {
         let held = self.sdk.lock().await;
         let mut out = vec![];
         if let Some(s) = held.as_ref() {
-            out = s.vault().lock_all().await;
-            s.close().await;
+            out = s.close().await;
         }
         self.open.lock();
         out
@@ -597,6 +577,32 @@ impl UserProfile {
     pub fn core(&self) -> Arc<Core> {
         self.open.core().clone()
     }
+}
+
+/// Test-only (feature `test-hooks`): `hook` called at the named points of `sdk`'s unlocks and hidden opens (`unlock` after the
+/// KDF, `unlock.done` after the wallet kept or refused) and of its `close` (`close` between the closed flag and the seeds'
+/// lock), to drive review C-1's race.
+#[cfg(feature = "test-hooks")]
+pub fn set_sdk_hook(sdk: &Sdk, hook: Arc<dyn Fn(&'static str) + Send + Sync>) {
+    *sdk.test_hook
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(hook);
+}
+
+/// Test-only (feature `test-hooks`): the seeds and hidden sets open in `sdk`'s session.
+#[cfg(feature = "test-hooks")]
+pub fn open_sets(sdk: &Sdk) -> usize {
+    use std::sync::PoisonError;
+    let open = sdk
+        .open
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .len();
+    open + sdk
+        .hidden
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .len()
 }
 
 /// A store code as the SDK's: the code of the same name.

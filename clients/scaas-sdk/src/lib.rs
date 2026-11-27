@@ -78,8 +78,12 @@ pub mod frb;
 pub mod line;
 #[cfg(feature = "evm")]
 pub mod op;
-/// Without `evm`: the operation rows alone (spec §13.4), which the families' operations write ahead (plan T41.soroban)
-#[cfg(all(feature = "soroban", not(feature = "evm")))]
+/// Without `evm`: the operation rows alone (spec §13.4), which the families' operations write ahead (plan T41.soroban) and an
+/// import's preview reads (user-profiles review C-5)
+#[cfg(all(
+    any(feature = "soroban", feature = "user-profile"),
+    not(feature = "evm")
+))]
 pub(crate) mod op {
     pub(crate) mod state;
 }
@@ -321,6 +325,10 @@ pub struct Sdk {
     /// the tasks this SDK spawned (exported calls, detached sends, the watch loop), aborted by [`Sdk::close`]; `None`: closed,
     /// every later call `ProfileLocked` (user-profiles spec §10 "lock")
     tasks: Mutex<Option<Vec<tokio::task::AbortHandle>>>,
+    /// held (read) by every task of [`Sdk::task`] until its future ends or is dropped; [`Sdk::close`] takes it (write) to wait
+    /// for the tasks it aborted
+    #[cfg(not(target_arch = "wasm32"))]
+    running: Arc<tokio::sync::RwLock<()>>,
     pub(crate) limits: Limits,
     /// the module gas tables of the configuration and the SCaaS reference table (`reference`); a chain reads one only when its
     /// profile opts in (spec §13.3)
@@ -372,11 +380,18 @@ pub struct Sdk {
     /// the tests' count of SCaaS signatures made (`op::submit::sign`)
     #[cfg(all(test, feature = "evm"))]
     pub(crate) signs: std::sync::atomic::AtomicU32,
-    /// a user profile's `Sdk` (`UserProfile::sdk`): the profile's store core, read by [`Sdk::secrets_allowed`]; unset for a plain
-    /// [`Sdk::open`]
+    /// a user profile's `Sdk` (`UserProfile::sdk`): the open profile, held as long as this `Sdk` lives (review C-4: its instance
+    /// lock with it), its core read by [`Sdk::secrets_allowed`]; unset for a plain [`Sdk::open`]
     #[cfg(feature = "user-profile")]
-    pub(crate) profile: std::sync::OnceLock<Arc<scaas_profile::Core>>,
+    pub(crate) profile: std::sync::OnceLock<Arc<scaas_profile::OpenProfile>>,
+    /// test-only (feature `test-hooks`): called at the named points of an unlock, a hidden open and [`Sdk::close`] (review C-1)
+    #[cfg(feature = "test-hooks")]
+    pub(crate) test_hook: Mutex<Option<TestHook>>,
 }
+
+/// Test-only (feature `test-hooks`): a hook called with a point's name ([`Sdk::close`], the unlocks).
+#[cfg(feature = "test-hooks")]
+pub(crate) type TestHook = Arc<dyn Fn(&'static str) + Send + Sync>;
 
 /// The configuration's module gas tables, then the SCaaS reference table: `Argument` for a module named `reference`, two of one
 /// name, or a family other than `evm` (the only one with a table today).
@@ -678,6 +693,8 @@ impl Sdk {
         Ok(Arc::new(Sdk {
             chains: RwLock::new(chains.into_iter().map(Arc::new).collect()),
             tasks: Mutex::new(Some(vec![])),
+            #[cfg(not(target_arch = "wasm32"))]
+            running: Arc::default(),
             limits: config.limits,
             gas_tables,
             clock: config.clock,
@@ -710,13 +727,16 @@ impl Sdk {
             signs: std::sync::atomic::AtomicU32::new(0),
             #[cfg(feature = "user-profile")]
             profile: std::sync::OnceLock::new(),
+            #[cfg(feature = "test-hooks")]
+            test_hook: Mutex::new(None),
         }))
     }
 
     /// Runs `f` on the SDK's runtime and waits for it (spec §14): a generator that polls the caller's future from a foreign
     /// executor never runs I/O outside a reactor, a dropped caller future leaves the task to complete, and a panic inside it is
     /// `Internal`. Rust-only (outside the binding surface).
-    /// After [`Sdk::close`] it is `ProfileLocked`, and a task the close aborted ends `ProfileLocked`.
+    /// After [`Sdk::close`] it is `ProfileLocked`, and a task the close aborted ends `ProfileLocked`; a task cancelled otherwise
+    /// (an adopted runtime shut down under it) is `Internal` (review C-8).
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn spawn<T: Send + 'static>(
         &self,
@@ -724,13 +744,13 @@ impl Sdk {
     ) -> Result<T, SdkError> {
         match self.task(f)?.await {
             Ok(r) => r,
-            Err(e) if e.is_cancelled() => Err(SdkError::ProfileLocked),
+            Err(e) if e.is_cancelled() && self.live().is_err() => Err(SdkError::ProfileLocked),
             Err(_) => Err(SdkError::Internal),
         }
     }
 
     /// wasm32: one thread, the page's event loop; `f` is awaited where it is called (the RPC transport's futures are not
-    /// `Send` there, so no runtime handle could take them).
+    /// `Send` there, so no runtime handle could take them), so [`Sdk::close`] aborts nothing: a call in flight runs to its end.
     #[cfg(target_arch = "wasm32")]
     pub async fn spawn<T: 'static>(
         &self,
@@ -750,6 +770,16 @@ impl Sdk {
     {
         let mut tasks = self.tasks.lock().unwrap_or_else(PoisonError::into_inner);
         live(&tasks)?;
+        // `close` waits for this guard: it goes with the future, at its end or its abort
+        let running = self
+            .running
+            .clone()
+            .try_read_owned()
+            .map_err(|_| SdkError::ProfileLocked)?;
+        let f = async move {
+            let _running = running;
+            f.await
+        };
         let h = match &self.rt {
             Some(rt) => rt.handle.spawn(f),
             None => tokio::spawn(f),
@@ -766,7 +796,7 @@ impl Sdk {
     /// A plain [`Sdk::open`] is not a profile's: always `Ok`.
     pub(crate) fn secrets_allowed(&self) -> Result<(), SdkError> {
         #[cfg(feature = "user-profile")]
-        if self.profile.get().is_some_and(|c| !c.protected()) {
+        if self.profile.get().is_some_and(|p| !p.core().protected()) {
             return Err(SdkError::ProfilePassphraseRequired);
         }
         Ok(())
@@ -777,19 +807,42 @@ impl Sdk {
         live(&self.tasks.lock().unwrap_or_else(PoisonError::into_inner))
     }
 
-    /// Closes the SDK for good (user-profiles spec §10 "lock", §11): its tasks (exported calls in flight, detached sends,
-    /// the watch loop) aborted, its chains' pools and gateway lists dropped, and every later call `ProfileLocked`, so no request
-    /// leaves on it. The seeds are the caller's to lock first (`Vault::lock_all`). Again: nothing.
-    pub async fn close(&self) {
+    /// Closes the SDK for good (user-profiles spec §10 "lock", §11): the closed flag first, so every later call is
+    /// `ProfileLocked`; its tasks (exported calls in flight, detached sends, the watch loop) aborted; every seed and hidden set
+    /// locked, as `Vault::lock_all` (an unlock or a hidden open checks the flag under its map's lock before it keeps a wallet,
+    /// so none is kept after the flag: review C-1); its chains' pools and gateway lists dropped; then it waits for the aborted
+    /// tasks to end (one polled at the abort runs to its next await), so no request leaves on it once `close` returned.
+    /// Returns the abandoned hidden operations, as `lock_all`. wasm32: nothing is aborted or waited for (a call runs where it is
+    /// awaited, a detached send on the page's event loop): those in flight finish after the close (review C-8). Again: nothing.
+    pub async fn close(&self) -> Vec<String> {
         let tasks = self
             .tasks
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
         tasks.into_iter().flatten().for_each(|t| t.abort());
+        #[cfg(feature = "test-hooks")]
+        self.hook("close");
+        let out = self.lock_every().await;
         let chains =
             std::mem::take(&mut *self.chains.write().unwrap_or_else(PoisonError::into_inner));
         drop(chains);
+        #[cfg(not(target_arch = "wasm32"))]
+        drop(self.running.write().await);
+        out
+    }
+
+    /// Test-only (feature `test-hooks`): the hook at `point`, when one is set.
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn hook(&self, point: &'static str) {
+        let h = self
+            .test_hook
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if let Some(h) = h {
+            h(point);
+        }
     }
 
     /// The first chain `pred` takes (`ChainUnknown`; `ProfileLocked` after [`Sdk::close`]).
