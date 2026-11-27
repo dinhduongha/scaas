@@ -15,6 +15,9 @@ P = "clients/pqchat-core/src/tree.rs"
 PT = ("cd clients/pqchat-core && CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target ../../scripts/capped cargo test --locked --offline -j 2 "
       "--features vectors --test tree_scenarios the_pathless_form_from_the_state")
 K = "the_pathless_form_from_the_state"
+CT = ("cd clients/pqchat-core && PATH=$HOME/.foundry/bin:$PATH CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=../scaas-sdk/target "
+      "../../scripts/capped cargo test --locked --offline -j 2 --test chain_tree -- --ignored")
+CK = "chain_tree_session"
 MUTANTS = [
     ("offered when the device does not hold the head", [(P, "            holds_head: r.holds_head,", "            holds_head: true,")], PT, K),
     ("the owed count not parsed", [(P, "                .and_then(|x| x.parse::<u32>().ok())", "                .and_then(|_| Some(0))")], PT, K),
@@ -22,6 +25,12 @@ MUTANTS = [
     ("a Remove not read", [(P, "            removes: !c.removes.is_empty(),", "            removes: false,")], PT, K),
     ("the staged marker of another parent", [(P, "                .map(str::to_ascii_lowercase)\n                == head,", "                .map(str::to_ascii_lowercase)\n                != head,")], PT, K),
     ("the staged marker ignored", [(P, "                .map(str::to_ascii_lowercase)\n                == head,", "                .map(str::to_ascii_lowercase)\n                == None,")], PT, K),
+    # the gaps closed on 2026-11-27 (controller, after the reboot): the try counter (C47), the quote's two prices and the
+    # deferred cost (§6.4, §9); chain_tree on anvil
+    ("no try counter (always a try left)", [(P, "            tries_left: self.next_try(st)? < pt::ADD_NONCE_TRIES,", "            tries_left: true,")], PT, K),
+    ("the try counter not moved by a signed path-less Add", [(P, "let next = self.next_try(st)?.saturating_add(1);", "let next = self.next_try(st)?;")], CT, CK),
+    ("the quote without the refresh price", [(P, "            split.refresh = Some(", "            let _unused = Some(")], CT, CK),
+    ("the deferred cost without this commit's Adds", [(P, "            split.deferred = self.tree_deferred(s, st, shape.adds)?;", "            split.deferred = self.tree_deferred(s, st, 0)?;")], CT, CK),
 ]
 
 if __name__ == "__main__":

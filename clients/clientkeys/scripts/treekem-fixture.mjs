@@ -782,10 +782,11 @@ export function pathlessFirstScenario() {
  *  (members: "author did not hold", the chain's key kept, no info in force; E: not followed at its join); an admin's full
  *  info (C33 after C45); a bad sealedInfo with a good tag ("followed, info not taken" for the members, the author and the
  *  joiner C2); a wrong tag while F and C2 are in their first run ("Welcome may not match"); A's path commit reaching them
- *  all; B's path commit with a wrong tag ("not followed (tag)", B's own: the warning). */
-export function pathlessFaultsScenario() {
+ *  all; B's path commit with a wrong tag ("not followed (tag)", B's own: the warning). `control`: the same commits with no
+ *  fault, for the read / write trace (§13, ARCH-POS-13). */
+export function pathlessFaultsScenario(control) {
   const w = createSession({
-    tag: "pathless-faults",
+    tag: control ? "pathless-faults-control" : "pathless-faults",
     creator: "A",
     nonce: 32,
     admins: ["A"],
@@ -793,23 +794,16 @@ export function pathlessFaultsScenario() {
     info: INFO.I1,
     pathRefreshBound: 24,
   });
-  commit(w, "A"); // 1
+  const f = (faults) => (control ? {} : { faults });
   const bad = (tag) => ({ welcomeJoiner: hex(rnd(`tree-secrets/pathless-faults/${tag}`)) });
-  commit(w, "A", { pathless: true, adds: [["D", 3]], faults: bad("welcome") }); // 2
-  commit(w, "B", {
-    pathless: true,
-    adds: [["B2", 4]],
-    faults: { tag: hex(rnd("tree-secrets/pathless-faults/tag-3")) },
-  }); // 3
+  commit(w, "A"); // 1
+  commit(w, "A", { pathless: true, adds: [["D", 3]], ...f(bad("welcome")) }); // 2
+  commit(w, "B", { pathless: true, adds: [["B2", 4]], ...f({ tag: hex(rnd("tree-secrets/pathless-faults/tag-3")) }) }); // 3
   commit(w, "A", { pathless: true, adds: [["F", 5]], info: INFO.I2 }); // 4
-  commit(w, "C", {
-    pathless: true,
-    adds: [["C2", 6]],
-    faults: { infoK: hex(rnd("tree-secrets/pathless-faults/info")) },
-  }); // 5
-  commit(w, "A", { pathless: true, adds: [["G", 7]], faults: { tag: hex(rnd("tree-secrets/pathless-faults/tag-6")) } }); // 6
+  commit(w, "C", { pathless: true, adds: [["C2", 6]], ...f({ infoK: hex(rnd("tree-secrets/pathless-faults/info")) }) }); // 5
+  commit(w, "A", { pathless: true, adds: [["G", 7]], ...f({ tag: hex(rnd("tree-secrets/pathless-faults/tag-6")) }) }); // 6
   commit(w, "A", { info: INFO.I2 }); // 7: the reset
-  commit(w, "B", { faults: { tag: hex(rnd("tree-secrets/pathless-faults/tag-8")) } }); // 8
+  commit(w, "B", f({ tag: hex(rnd("tree-secrets/pathless-faults/tag-8")) })); // 8
   return w;
 }
 /** The own-commit test (C47, F-2): B's own Add at try 1 is reproduced; then an insider holding the epoch signs a path-less

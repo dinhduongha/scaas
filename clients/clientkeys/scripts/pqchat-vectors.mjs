@@ -1615,6 +1615,7 @@ write("tree.json", {
     ["pathless", fx.pathlessScenario()],
     ["pathless-first", fx.pathlessFirstScenario()],
     ["pathless-faults", fx.pathlessFaultsScenario()],
+    ["pathless-faults-control", fx.pathlessFaultsScenario(true)],
     ["pathless-own", fx.pathlessOwnScenario(false)],
     ["pathless-own-behind", fx.pathlessOwnScenario(true)],
     ["pathless-bound", fx.pathlessBoundScenario()],

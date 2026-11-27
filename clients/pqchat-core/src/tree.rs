@@ -89,6 +89,7 @@ pub struct TreeCreated {
 
 /// A commit to make (spec §8): Removes and Adds by leaf (`TreeRemove`, `TreeAdd` named JSON), the admins after it, and a
 /// changed info (`None`: the info in force if the device holds it, else the marker).
+#[derive(Clone)]
 pub struct TreeCommit {
     pub me: Me,
     pub key_id: u64,
@@ -130,6 +131,9 @@ pub struct TreeBuilt {
     pub head_confirmed: bool,
     /// the Adds left for the next commits when the request was split (owner 2026-11-27), in order; empty otherwise
     pub adds_left: Vec<Value>,
+    /// the commit's review as signed (`scaas-ua`'s lines), and for a path commit the leaves under review (the path-less
+    /// delta §6.2, F-3: listed, never removed by this client on its own)
+    pub review: Vec<(String, String)>,
 }
 
 /// The commits a commit request becomes (owner 2026-11-27, [`PqChat::tree_commit_plan`]): the most Adds one commit takes
@@ -139,6 +143,22 @@ pub struct TreeSplit {
     pub adds_per_commit: Option<u64>,
     pub batches: Vec<u64>,
     pub plans: Vec<pt::PqTreePlan>,
+    /// a path-less build's other price (the path-less delta §6.5, §9): the same Adds as "add and refresh", a path commit,
+    /// its plans; `None` for a path commit
+    pub refresh: Option<Vec<pt::PqTreePlan>>,
+    /// a path-less build's deferred cost (§6.4, D-10): the ciphertexts the next path commit carries for the leaves added
+    /// without one, and what they ask ([`deferred_line`]); `None` for a path commit or without rows
+    pub deferred: Option<(u64, pt::PqGas)>,
+}
+
+/// The review's line of a deferred cost (the path-less delta §6.4): "the next refresh carries about m ciphertexts, about
+/// x M asked".
+pub fn deferred_line(m: u64, g: pt::PqGas) -> String {
+    format!(
+        "the next refresh carries about {m} ciphertext{}, about {:.1} M asked",
+        if m == 1 { "" } else { "s" },
+        g.asked() as f64 / 1e6
+    )
 }
 
 /// What a strict-majority read of `treeOf` said about the one a call read (R13, C26).
@@ -194,6 +214,11 @@ pub fn tree_advised(keys: usize, committers: usize) -> bool {
 /// 2026-11-27): `{epochId, parent}`; it holds back a path-less Add only while its parent is the head.
 fn staged_key(session_id: &str) -> String {
     format!("tree/staged/{}", session_id.to_ascii_lowercase())
+}
+
+/// The store key of this device's path-less `try` counter on a head (C47): `{parent, next}`.
+fn tries_key(session_id: &str) -> String {
+    format!("tree/tries/{}", session_id.to_ascii_lowercase())
 }
 
 /// The store key of a tree session's checkpoint (C26), by its `treeId` (C16).
@@ -1085,7 +1110,29 @@ impl PqChat {
                 .await?;
         }
         let plan = split.plans.first().cloned().unwrap_or_else(one_tx);
+        let mut review = prepared.review.clone();
+        let pathless = prepared.record.get("pathless") == Some(&json!(true));
+        if !pathless && !st.replay.review.is_empty() {
+            let l: Vec<String> = st.replay.review.iter().map(u32::to_string).collect();
+            review.push((
+                "leavesUnderReview".into(),
+                format!("leaves under review (a warning or an author that did not hold the epoch names them): {}", l.join(", ")),
+            ));
+        }
         let signed = prepared.sign().map_err(sdk)?;
+        if pathless {
+            // C47: the next path-less build on this head takes the next `try`
+            let parent = signed
+                .record
+                .get("parentEpochId")
+                .cloned()
+                .unwrap_or_default();
+            let next = self.next_try(st)?.saturating_add(1);
+            crate::store::Items(&*self.store)
+                .update::<Value, _>(&tries_key(&st.session_id), |_| {
+                    Ok(json!({"parent": parent, "next": next}))
+                })?;
+        }
         // F-5 (owner 2026-11-27): this device's own path commit sent in several transactions holds its path-less Adds back
         // while it is staged on this head
         if signed.record.get("pathless") == Some(&json!(false)) && plan.txs.len() > 1 {
@@ -1103,6 +1150,7 @@ impl PqChat {
             plan,
             head_confirmed,
             adds_left: left.to_vec(),
+            review,
         })
     }
 
@@ -1121,7 +1169,42 @@ impl PqChat {
         leaf: u32,
     ) -> Result<TreeSplit, PqChatError> {
         let (prepared, _) = self.tree_built(s, st, c, &c.adds, leaf).await?;
-        self.tree_split(s, &c.me, &shape_of(&prepared.record)).await
+        let shape = shape_of(&prepared.record);
+        let mut split = self.tree_split(s, &c.me, &shape).await?;
+        if prepared.record.get("pathless") == Some(&json!(true)) {
+            // the path-less delta §6.5, §9: the quote names both prices, this one and "add and refresh"'s
+            let refresh = TreeCommit {
+                refresh: true,
+                ..c.clone()
+            };
+            let (path, _) = self.tree_built(s, st, &refresh, &c.adds, leaf).await?;
+            split.refresh = Some(
+                self.tree_split(s, &c.me, &shape_of(&path.record))
+                    .await?
+                    .plans,
+            );
+            split.deferred = self.tree_deferred(s, st, shape.adds)?;
+        }
+        Ok(split)
+    }
+
+    /// The deferred cost on the head of `st` with `adds` more path-less leaves (the path-less delta §6.4, D-10): about one
+    /// ciphertext per leaf added since the last path commit, from the chain's rows; `None` without rows. The admins' warning
+    /// shows it with `adds` 0.
+    // ponytail: `sincePath` plus the Adds only, a lower bound; the warm nodes the Adds blanked (up to d - 2 more, §9) are
+    // not counted until the walk exposes them
+    pub fn tree_deferred(
+        &self,
+        s: &SessionRef,
+        st: &TreeState,
+        adds: u64,
+    ) -> Result<Option<(u64, pt::PqGas)>, PqChatError> {
+        let Some(g) = self.conf(&s.chain)?.tree_gas.as_deref() else {
+            return Ok(None);
+        };
+        let g: PqTreeGas = serde_json::from_str(g).map_err(|_| PqChatError::Internal)?;
+        let m = u64::from(st.replay.since_path) + adds;
+        Ok(Some((m, pt::deferred_cost(&g, m))))
     }
 
     /// The split of a built commit's shape on the chain's rows (one commit, one transaction, without rows or for a kind
@@ -1136,6 +1219,8 @@ impl PqChat {
             adds_per_commit: None,
             batches: vec![shape.adds],
             plans: vec![one_tx()],
+            refresh: None,
+            deferred: None,
         };
         let Some(g) = self.conf(&s.chain)?.tree_gas.as_deref() else {
             return Ok(one());
@@ -1181,6 +1266,8 @@ impl PqChat {
             }
         }
         Ok(TreeSplit {
+            refresh: None,
+            deferred: None,
             adds_per_commit: per,
             batches,
             plans,
@@ -1235,6 +1322,7 @@ impl PqChat {
         };
         let key = c.me.key.clone();
         let pathless = !c.refresh && self.pathless_form(st, c, adds, &seen)?.is_ok();
+        let try_ = self.next_try(st)?;
         let prepared = self
             .tree_run(s, &mut reads, start.unwrap_or(0), |rd| {
                 if pathless {
@@ -1247,7 +1335,7 @@ impl PqChat {
                         &st.replay,
                         &ch.adds,
                         ch.info.clone(),
-                        0,
+                        try_,
                     )
                 } else {
                     self.app.pqchat_tree_prepare_commit(
@@ -1266,6 +1354,27 @@ impl PqChat {
             return Err(PqChatError::TreeStale);
         }
         Ok((prepared, head_confirmed))
+    }
+
+    /// The `try` (C47) of this device's next path-less Add on the head of `st`: one more than the last it signed on that
+    /// head, 0 on a new head.
+    fn next_try(&self, st: &TreeState) -> Result<u32, PqChatError> {
+        let t: Option<Value> = crate::store::Items(&*self.store).get(&tries_key(&st.session_id))?;
+        let head = st.ids.last().map(|x| x.to_ascii_lowercase());
+        Ok(match t {
+            Some(t)
+                if t.get("parent")
+                    .and_then(Value::as_str)
+                    .map(str::to_ascii_lowercase)
+                    == head =>
+            {
+                t.get("next")
+                    .and_then(Value::as_u64)
+                    .and_then(|n| u32::try_from(n).ok())
+                    .unwrap_or(u32::MAX)
+            }
+            _ => 0,
+        })
     }
 
     /// The path-less delta §6.5 (C46; F-5 by the owner's ruling of 2026-11-27): whether `c` with the Adds `adds` goes
@@ -1330,7 +1439,7 @@ impl PqChat {
                 .and_then(|v| v.get("parent").and_then(Value::as_str))
                 .map(str::to_ascii_lowercase)
                 == head,
-            tries_left: true,
+            tries_left: self.next_try(st)? < pt::ADD_NONCE_TRIES,
         };
         Ok(check.form())
     }

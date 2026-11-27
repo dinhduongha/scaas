@@ -113,7 +113,17 @@ async fn chain_tree_session() {
             l.conf(),
         )
     };
-    let pq = device();
+    // alice's device keeps its store at hand: the path-less `try` counter (C47) is read below
+    let alice_store = Arc::new(pqchat_core::MemoryStore::new());
+    let pq = PqChat::with_net(
+        app.clone(),
+        Arc::new(pqchat_core::net::SdkNet {
+            sdk: l.sdk.clone(),
+            app: app.clone(),
+        }),
+        alice_store.clone(),
+        l.conf(),
+    );
     // created small: alice and bob, the record and both wraps in one transaction
     let created = pq
         .create_tree(CreateTree {
@@ -171,30 +181,78 @@ async fn chain_tree_session() {
                 "kemHash": kem_of(&l, me)})
         })
         .collect();
-    let TreeBuilt {
-        signed: c1,
-        plan: plan1,
-        head_confirmed,
-        adds_left,
-    } = pq
-        .tree_commit(
+    let req1 = TreeCommit {
+        me: alice.clone(),
+        key_id: 0,
+        removes: vec![],
+        adds,
+        admins: vec![alice.ua.to_ascii_lowercase()],
+        info: None,
+        info_reviewed: false,
+        payer: l.payer.clone(),
+        refresh: false,
+    };
+    // the path-less delta §6.5, §9 (the quote) and §6.4 (the deferred cost), on a device with the chain's rows: the
+    // path-less build names both prices, its own and "add and refresh"'s (the same Adds as a path commit, dearer), and the
+    // deferred cost of its two leaves (`sincePath` 0 plus 2: 2 ciphertexts); a path commit names one price
+    let rows = include_str!("../../scaas-sdk/gas/pqchat-tree.json");
+    let mut conf = l.conf();
+    conf.chains[0].tree_gas = Some(rows.into());
+    let quoting = PqChat::with_net(
+        app.clone(),
+        Arc::new(pqchat_core::net::SdkNet {
+            sdk: l.sdk.clone(),
+            app: app.clone(),
+        }),
+        Arc::new(pqchat_core::MemoryStore::new()),
+        conf,
+    );
+    let q = quoting
+        .tree_commit_plan(&s, &a0, &req1, leaf_a)
+        .await
+        .unwrap();
+    let asked = |p: &[scaas_sdk::pqchat_tree::PqTreePlan]| -> u64 {
+        p.iter().flat_map(|p| &p.txs).map(|t| t.gas.asked()).sum()
+    };
+    let refresh = q.refresh.as_deref().expect("the refresh price");
+    assert!(
+        asked(refresh) > asked(&q.plans),
+        "{} vs {}",
+        asked(refresh),
+        asked(&q.plans)
+    );
+    let g: scaas_sdk::pqchat_tree::PqTreeGas = serde_json::from_str(rows).unwrap();
+    let (n, d) = q.deferred.expect("the deferred cost");
+    assert_eq!((n, d), (2, scaas_sdk::pqchat_tree::deferred_cost(&g, 2)));
+    println!(
+        "[tree] quote: path-less {} asked, add and refresh {} asked; {}",
+        asked(&q.plans),
+        asked(refresh),
+        pqchat_core::tree::deferred_line(n, d)
+    );
+    let p = quoting
+        .tree_commit_plan(
             &s,
             &a0,
-            TreeCommit {
-                me: alice.clone(),
-                key_id: 0,
-                removes: vec![],
-                adds,
-                admins: vec![alice.ua.to_ascii_lowercase()],
-                info: None,
-                info_reviewed: false,
-                payer: l.payer.clone(),
-                refresh: false,
+            &TreeCommit {
+                refresh: true,
+                ..req1.clone()
             },
             leaf_a,
         )
         .await
         .unwrap();
+    assert!(
+        p.refresh.is_none() && p.deferred.is_none(),
+        "a path commit names one price"
+    );
+    let TreeBuilt {
+        signed: c1,
+        plan: plan1,
+        head_confirmed,
+        adds_left,
+        ..
+    } = pq.tree_commit(&s, &a0, req1, leaf_a).await.unwrap();
     // R2-C-5 of the TreeKEM T4-T9 re-check: one endpoint, no strict majority: an Add built with its head not confirmed
     assert!(adds_left.is_empty(), "two Adds: one commit");
     // the path-less delta §6.5 (C46): an Adds-only change on the head the device holds goes path-less by default, relayed as
@@ -207,6 +265,16 @@ async fn chain_tree_session() {
     assert!(
         !head_confirmed && a0.unconfirmed,
         "one endpoint confirms nothing"
+    );
+    // C47: the device's next path-less Add on this head takes the next `try`
+    let tries: Value = pqchat_core::Items(&*alice_store)
+        .get(&format!("tree/tries/{}", s.session_id.to_ascii_lowercase()))
+        .unwrap()
+        .expect("the try counter");
+    assert_eq!(
+        (tries["parent"].clone(), tries["next"].clone()),
+        (c1.record["parentEpochId"].clone(), json!(1)),
+        "{tries}"
     );
     let sent = land_commit(&l, &pq, &s, &c1, &plan1).await;
     println!(

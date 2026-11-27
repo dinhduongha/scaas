@@ -574,6 +574,9 @@ pub struct PqTreeGenesis {
 /// when its caller names none; 0 only when named.
 pub const PATH_REFRESH_BOUND_DEFAULT: u64 = 20;
 
+/// The `try`s of a path-less Add's nonce per head (C47), `scaas-ua`'s.
+pub use scaas_ua::wallet::tree::ADD_NONCE_TRIES;
+
 /// The creation review's line of a session's bound (the path-less delta §3.1, C46).
 pub fn refresh_line(bound: u64) -> String {
     if bound == 0 {

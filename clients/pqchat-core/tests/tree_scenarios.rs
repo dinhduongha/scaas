@@ -2269,6 +2269,29 @@ async fn the_pathless_form_from_the_state() {
         form(&req("A"), &seen).is_err_and(|e| e.contains("in progress")),
         "its own path commit staged on the head"
     );
+    staged(&st.ids[st.ids.len() - 2]);
+    // C47: eight path-less Adds signed on this head use every `try`; a counter of another head holds nothing back
+    let tries = |parent: &str, next: u32| {
+        pqchat_core::Items(&*store)
+            .update::<Value, _>(
+                &format!("tree/tries/{}", st.session_id.to_ascii_lowercase()),
+                |_| Ok(json!({"parent": parent, "next": next})),
+            )
+            .unwrap();
+    };
+    tries(st.ids.last().unwrap(), 7);
+    assert_eq!(form(&req("A"), &seen), Ok(()), "a try left");
+    tries(st.ids.last().unwrap(), 8);
+    assert!(
+        form(&req("A"), &seen).is_err_and(|e| e.contains("try")),
+        "no try left"
+    );
+    tries(&st.ids[st.ids.len() - 2], 8);
+    assert_eq!(
+        form(&req("A"), &seen),
+        Ok(()),
+        "the counter of another head"
+    );
     let home = Home::scenario(&v, &scenario(&v, "pathless-own"), None);
     let (s, seen) = (sref(&home), home.tree_of());
     let r = crate_over(&w, HomeNet::new(home));
@@ -2280,4 +2303,41 @@ async fn the_pathless_form_from_the_state() {
             .is_err_and(|e| e.contains("the head's epoch")),
         "a device that does not hold the head"
     );
+}
+
+/// ARCH-POS-13, the path-less delta's read / write trace (§13): every faulty row of `pathless-faults` (C45's bad tag at 3
+/// and 6, the joiner's bad tag at 3 (B2), "followed, info not taken" at 5, not followed through a run (D), "Welcome may not
+/// match" (C2, F), the path commit's bad tag at 8) reads, device by device, the same contract views in the same order as in
+/// `pathless-faults-control` (the same commits with no fault, every epoch followed); a later poll the same again; nothing
+/// sent.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_pathless_faults_read_as_their_control() {
+    let _one = common::sdk::ONE.lock().await;
+    let w = common::sdk::world().await;
+    let v = vectors();
+    for dev in ["A", "B", "B2", "C", "C2", "D", "F", "G"] {
+        let mut got = Vec::new();
+        for name in ["pathless-faults", "pathless-faults-control"] {
+            let home = Home::scenario(&v, &scenario(&v, name), None);
+            let s = sref(&home);
+            let net = HomeNet::new(home);
+            let r = crate_over(&w, net.clone());
+            let st = replay(&r, &v, &s, dev).await.unwrap();
+            let first = net.items();
+            net.reads.lock().unwrap().clear();
+            resume(&r, &v, &s, dev, Some(&st.replay)).await.unwrap();
+            let again = net.items();
+            assert_eq!(*net.writes.lock().unwrap(), 0, "{name} {dev}: a send");
+            got.push((rows(&st).0, first, again));
+        }
+        assert_ne!(got[0].0, got[1].0, "{dev}: the faults show in the states");
+        assert_eq!(
+            got[0].1, got[1].1,
+            "{dev}: the faulty rows' reads are the control's"
+        );
+        assert_eq!(
+            got[0].2, got[1].2,
+            "{dev}: a later poll's reads are the control's too"
+        );
+    }
 }

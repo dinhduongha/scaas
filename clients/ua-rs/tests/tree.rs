@@ -1024,6 +1024,8 @@ const EXPLICIT_INFO: &[&str] = &[
     "admin-gap/epoch-4",
     "pathless-faults/epoch-4",
     "pathless-faults/epoch-7",
+    "pathless-faults-control/epoch-4",
+    "pathless-faults-control/epoch-7",
     "pathless-own/epoch-3",
     "pathless-own-behind/epoch-2",
 ];
