@@ -1,6 +1,6 @@
 # Spike PACK: op 7 M = 8 and tight coefficient packing at parameter set (a), Amsterdam (plan 5h part B, research)
 
-**Status:** research, 2026-10-21 (owner: "làm 4 việc đó đi, để có con số rõ ràng"). No `src/` change: every number is
+**Status:** research, 2026-10-21 (owner: do those four things, so the numbers are clear). No `src/` change: every number is
 the as-built token in a size-swapped work tree (`gasa.sh`, as `../p16k/gas16k.sh` did for 16k), the packed layouts are
 patches applied in that work tree only (`pack46.patch`, `pack51.patch`). Research is not a decision: §5 recommends,
 the owner decides.

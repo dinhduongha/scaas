@@ -106,7 +106,7 @@ with tempfile.TemporaryDirectory() as t:
     open(os.path.join(t, "deployments/fixture-testnet-releases.json"), "w").write("{}")
     assert d.find(31337, OTHER, "-releases.json", env=env) == "deployments/fixture-testnet-releases.json"
 
-# deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): the labels, the merge, a reader's book
+# deploy sets (owner 2026-11-16: option 2, one chain, two deploy sets): the labels, the merge, a reader's book
 H = d.header("scaas-testnet", "SCaaS testnet", 22779, SCAAS[1], "testnet")
 assert d.set_label("mldsa-off") == "mldsa-off" and d.set_label("mldsa-on", "on") == "mldsa-on"
 assert d.set_label("mldsa-on", "") == "mldsa-on"  # MLDSA_PRECOMPILE unset: on (deploy.sh's default)

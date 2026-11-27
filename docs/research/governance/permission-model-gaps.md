@@ -176,7 +176,7 @@ implementation (`Env`, constructor, constant). **Creation** = per instance (`ini
 | `noticePeriod` | immutable, at most 30 days | — | — | `:36`, `:40`, `:59` |
 | Publish an `Env` | — | — | registrar, no delay on publishing; append-only, version ≥ 1, never changed, no revoke; `env.factory`, `env.chainUid`, pins checked | `:73-79`, `:263-279` |
 | Content of an `Env` (registry, `smartKeyAccountImpl`, `hedera`, `deps`, `libs`, `libCodeHashes`) | becomes immutable in each release built on it | — | as above, per version | `factory/IFactoryToken.sol:29-38` |
-| **`deployImplementation`: which Env** | — | — | registrar **names `envVersion` explicitly**, no default to the latest, `EnvUnknown` otherwise; the delay is `usableFrom = now + noticePeriod`; append-only. **The owner's "must not simply bind the kind's latest Env" is met by the code**, marked interim in `factory/IOpenFactory.sol:111-112` "until the governance-matrix spec" | `:95-113`, `:283-305` |
+| **`deployImplementation`: which Env** | — | — | registrar **names `envVersion` explicitly**, no default to the latest, `EnvUnknown` otherwise; the delay is `usableFrom = now + noticePeriod`; append-only. **The owner's rule that a release must not simply bind the kind's latest Env is met by the code**, marked interim in `factory/IOpenFactory.sol:111-112` "until the governance-matrix spec" | `:95-113`, `:283-305` |
 | `deployDexImplementation` | — | — | as above, DEX domain | `:206-224` |
 | `deprecate`, `deprecateDex` | — | — | registrar, immediate, one-way; existing instances untouched | `:115-119`, `:232-236` |
 | `setKindEnabled` | plain kinds start on (`_enabled = 3`) | — | registrar, immediate, both ways, not lockable | `:50`, `:121-125` |

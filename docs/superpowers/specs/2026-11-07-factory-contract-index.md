@@ -15,8 +15,8 @@ each instance's `ChainEnv` appended to its clone code, read by `EXTCODECOPY`; Fa
 (chain-neutral spec §4.4), written into §2.1, §2.2, §2.3 and §8.4 below; the record stays three slots.
 
 **Owner, 2026-11-07:** an owner or creator must be able to list the contracts they made (for example the owner creates many
-gift-card tokens and needs their list) from contract **state**, not from events ("không lọc event, vì mất": logs and history
-expire); every contract the factory creates, not only tokens, with a class a caller can filter on; who created it and when.
+gift-card tokens and needs their list) from contract **state**, not from events (events are not filtered, since they get lost: logs and
+history expire); every contract the factory creates, not only tokens, with a class a caller can filter on; who created it and when.
 
 ## 1. What the factory creates today (read at `HEAD`, `src/factory/OpenFactory.sol`)
 
@@ -193,7 +193,7 @@ owner lists; (5) lists per class only; (6) unregistered contracts are indexed, f
 
 ## 8. Extension: an extensible catalogue (direction approved by the owner 2026-11-07)
 
-**Owner, 2026-11-07:** "OpenFactory must be built so that later the admin can easily add another kind / implementation."
+**Owner, 2026-11-07:** OpenFactory is built so that later the admin can easily add another kind / implementation.
 Same day: `PqChat` becomes a factory-made contract (anyone creates instances, as tokens and DEXes; EIP-1167 clones of
 catalogued releases). **Direction approved by the owner 2026-11-07:** a generic class / kind catalogue registered by the
 registrar under the existing notice period; one generic creation entry calling the release's catalogued, typed initializer

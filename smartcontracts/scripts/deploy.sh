@@ -56,8 +56,8 @@
 #                            ONCHAIN_TIP, default 1 gwei; max fee ONCHAIN_MAXFEE, default 2 x base fee + tip) and the fee
 #                            gate MAX_FEE_GWEI (default 0.1 on a mainnet, the chain key's -mainnet; none on a testnet unless
 #                            set): a max fee above it stops by name before the batch (FEE_OVER_MAX); a re-run skips the
-#                            releases already there. DEPLOY_SET? (owner 2026-11-16, "ok, option 2, one chain, two deploy
-#                            sets"): this deploy's set label, mldsa-off (MLDSA_PRECOMPILE=off) or mldsa-on (on), its own
+#                            releases already there. DEPLOY_SET? (owner 2026-11-16: option 2, one chain, two deploy
+#                            sets): this deploy's set label, mldsa-off (MLDSA_PRECOMPILE=off) or mldsa-on (on), its own
 #                            DEPLOY_SALT and RELEASES_JSON; an unknown label or one that is not the deploy's mode refused
 #                            by name before anything is sent (DEPLOY_SET_UNKNOWN, DEPLOY_SET_MISMATCH); the book then holds
 #                            every set of the chain under sets.<label>, its top level the default set mldsa-off
@@ -153,7 +153,7 @@ case "$FAMILY" in
         case "${DEPLOY_PQCHAT:-}" in 1 | true) KINDS="$KINDS PqChat" ;; esac
         case "${DEPLOY_PQVAULT:-}" in 1 | true) KINDS="$KINDS PqVault" ;; esac
         for KIND in $KINDS; do python3 -I script/deploybook.py kind-check "$KIND" "$C" "$G0" >/dev/null || exit 1; done
-        # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET names this deploy's set
+        # deploy sets (owner 2026-11-16: option 2, one chain, two deploy sets): DEPLOY_SET names this deploy's set
         # (mldsa-off with MLDSA_PRECOMPILE=off, mldsa-on with on), refused by name before anything is sent; the book then
         # keeps every set of this chain (deploybook.py set-merge)
         DS="${DEPLOY_SET:-}"

@@ -1021,7 +1021,7 @@ impl EvmPool {
         }
     }
 
-    /// The sticky read (owner 2026-11-23, "Sticky endpoint"; a chain whose pinned reads are not trusted, the profile's
+    /// The sticky read (owner 2026-11-23; a chain whose pinned reads are not trusted, the profile's
     /// `pinnedReads` false): every call of `f` goes to one endpoint at its latest block (on such a pool each request names
     /// `latest`), that endpoint's head (number and hash) read before and after; a moved head retries the whole read, at most
     /// [`STICKY_TRIES`] times, then `HeadMoving`. It never mixes nodes: each try is one endpoint, failing over as a plain read.

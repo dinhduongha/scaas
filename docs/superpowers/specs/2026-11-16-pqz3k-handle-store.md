@@ -3,7 +3,7 @@
 Status: **BUILT** (branch `pqz3k-handle`; gates `smartcontracts/evm/runs/2026-11-16-pqz3k-handle-gates.txt`, mutants
 `smartcontracts/evm/runs/2026-11-16-pqz3k-handle-mutants.txt`). UNAUDITED.
 
-Owner 2026-11-16, T21 O5 (b): "ok, as proposed" (TODO, ua-rs-sign line "Before the freeze (O5 (b))"). Rules this note
+Owner 2026-11-16, T21 O5 (b), as proposed (TODO, ua-rs-sign line "Before the freeze (O5 (b))"). Rules this note
 implements, not reopens: [CLI-SGN-51](../../clients/signers-clientkeys.md#CLI-SGN-51) (K3-7, the key handle, the marks),
 [ARCH-POS-13](../../decisions.md#ARCH-POS-13) (never a decryption oracle), spec
 [2026-11-13-pqz-three-keys.md](2026-11-13-pqz-three-keys.md) §6 / §14.1 / §14.18 / §14.19, signer spec §8.2 (lock revokes every
@@ -137,7 +137,7 @@ acceptance of this handle (K3-7 passed for this key at these offsets), a TRIVIAL
 fields. ARCH-POS-13's attacker (whoever chooses a ciphertext: a node, a sender) has no entry that decrypts a ciphertext of its
 choice. The `vectors` closures keep the old shape for tests; they get the same gates and the same `T`.
 
-**Owner decision 2026-11-16 ("ok, as proposed") on the shielded-in-only first debit.** The reviews confirmed the contract allows
+**Owner decision 2026-11-16 (as proposed) on the shielded-in-only first debit.** The reviews confirmed the contract allows
 it (`PqzCore._total`: a new account, `p = rolled = 0`, `Trivial(shieldIn)` alone, one unit) and a client needs it (the contract
 docs give wallets the same-call `shieldIn` top-up for "shield and spend now"). `Debit` takes the named field `shield_in`
 (`shieldIn` in clientkeys): `(lastDebit 0, no own part, empty window)` passes exactly when `shield_in > 0` (`T = Trivial(shieldIn)`,
@@ -178,7 +178,7 @@ names start each message):
 ## 9. Other users
 
 `smartcontracts/evm/script/pqz/wallet` (the on-chain matrix's wallet simulator, a test tool) builds the release `scaas-ua`
-(owner 2026-11-17, "ok, as proposed", option (b): no `vectors` in any normal dependency, `scripts/check_test_features.py`): each
+(owner 2026-11-17, option (b): no `vectors` in any normal dependency, `scripts/check_test_features.py`): each
 record names its test wallet's BIP-39 entropy, the tool restores it with `Wallet::from_mnemonic` and takes the handle from
 `Wallet::pqz_scoped_key`, so the matrix runs the shipped API; the auditor tool (pqz-ffi `check_auditor`, no handle entry) takes
 the same mnemonic's opening KEM seed through pqz-ffi (equal to the wallet's, the tool's test). It opens the debit with

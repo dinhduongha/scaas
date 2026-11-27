@@ -4791,7 +4791,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // owner 2026-11-12: -> 288, the router's `mtxCreateToken`, `mtxCreateDex`; EXEMPT 200 -> 198
     // owner 2026-11-12 (GUARDIAN): -> 296, the account's eight rows; EXEMPT -> 207, its six self-called operations and its three
     // generic entries; GOVERNED -> 297, its guardian's `initiateRecovery`
-    // owner 2026-11-12 ("both the generic row and the per-class ones"): -> 297, the router's `mtxCreateInstance`; EXEMPT -> 206
+    // owner 2026-11-12 (both the generic row and the per-class ones): -> 297, the router's `mtxCreateInstance`; EXEMPT -> 206
     // the three-key model: -> 303, `mtxRollOverSigned` on the four PQZ kinds (row `PqzRollOver`), the registry's
     // `setPqzScopedKey` (SIGNED) and `storePqzScopedPop` (PERMISSIONLESS)
     // round 3zb + 3zc: -> 305, the router's `mtxSetMaxSupply`, `mtxSetMaxWrapSupply`; GOVERNED 297 -> 309, `setMaxSupply`,

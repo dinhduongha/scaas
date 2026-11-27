@@ -21,36 +21,28 @@ leave the SDK; platform APIs are reached through traits each app implements (`Au
 `vault` holds several independent seeds, each with its own label and passphrase; passkey and hardware keys sit beside
 seeds, not derived; signing only through `ua-rs` (the controller's TODO item for `scaas-sdk`).
 
-The owner's words (recorded as given; the analysis that follows is research for the owner to decide):
+The owner's points (the analysis that follows is research for the owner to decide):
 
-1. **"From an ordinary wallet (an EOA or a raw private key), with a hash / passphrase, derive a new seed set and so a new
+1. **From an ordinary wallet (an EOA or a raw private key), with a hash / passphrase, derive a new seed set and so a new
    wallet set: an origin address plus new addresses. Each seed set may take a further passphrase to derive secondary
-   seed sets / wallet sets."** The owner is "not fully clear on this yet": explore it (§7.1).
-2. **"The origin → new link stays local by default. To allow recovery without making the origin public: two levels.
+   seed sets / wallet sets.** The owner is not fully clear on this yet: explore it (§7.1).
+2. **The origin → new link stays local by default. To allow recovery without making the origin public: two levels.
    Origin → (derived) level-1 key used only as the guardian / recovery key → level-2 wallets whose on-chain guardian is
-   that level-1 key. So the chain never shows the origin."** Analyse what still links (§7.2).
-3. **"The SDK supports WebAuthn / passkeys / P-256 (Secure Enclave, Android StrongBox, TPM) and biometrics. Is an extra
-   seed level from a passkey sound?"** (§8, §10).
-4. **Owner rule (2026-11-11), verbatim: "Seeds sinh ra luôn dùng 24 words trở lên."** ("Generated seeds always use 24
-   words or more.") Within BIP-39 that means 24 words for every seed the SDK generates (§3.4).
-5. **Owner ruling (2026-11-11) on importing 12–21-word phrases, verbatim: "nhận kèm cảnh báo"** ("accept, with a
-   warning"). The SDK accepts the import of an existing 12–21-word BIP-39 phrase with a warning: lower entropy than the
+   that level-1 key. So the chain never shows the origin.** Analyse what still links (§7.2).
+3. **The SDK supports WebAuthn / passkeys / P-256 (Secure Enclave, Android StrongBox, TPM) and biometrics. Is an extra
+   seed level from a passkey sound?** (§8, §10).
+4. **Owner rule (2026-11-11): generated seeds always use 24 words or more.** Within BIP-39 that means 24 words for every seed the SDK generates (§3.4).
+5. **Owner ruling (2026-11-11) on importing 12–21-word phrases: accepted, with a warning.** The SDK accepts the import of an existing 12–21-word BIP-39 phrase with a warning: lower entropy than the
    24-word rule, and a suggestion to move funds to a new 24-word seed. A generated seed stays 24 words only (§3.4).
 6. The owner asked for BIP-39 and BIP-85 to be explained in full for a reader new to them (§3, §4).
-7. **Owner question (2026-11-11), verbatim: "có thể sinh key PQ, rồi sinh KEM có được không?"** ("can we generate the PQ
-   key and then generate the KEM key?"): fill the KEM gap (§6.4).
-8. **Owner note (2026-11-11), verbatim: "Lưu ý là user có thể import private key cổ điển."** ("Note that the user can
-   import a classical private key."): §9.1.
-9. **Owner ruling (2026-11-11) on Fable's P1-1** (PQ keys under roots (c) / (d)), verbatim: **"chỉ mạnh ngang passphrase
-   => Chấp nhận rủi ro này. Yêu cầu passphrase phải đủ dài (10 ký tự) trong trường hợp này. Hoặc có lựa chọn dùng seed' =
-   KDF(privkey, passphrase, nhãn, index)."** ("only as strong as the passphrase ⇒ this risk is accepted. The passphrase
-   must be long enough (10 characters) in this case. Or offer the option seed' = KDF(privkey, passphrase, label,
-   index).") So: the risk is accepted; (c) and (d) sets may carry PQ, PQZ and KEM keys, marked classical-rooted; the
+7. **Owner question (2026-11-11): can the PQ key be generated, and then the KEM key?** Fill the KEM gap (§6.4).
+8. **Owner note (2026-11-11): the user can import a classical private key.** §9.1.
+9. **Owner ruling (2026-11-11) on Fable's P1-1** (PQ keys under roots (c) / (d)): **only as strong as the passphrase ⇒
+   this risk is accepted; the passphrase must be long enough (10 characters) in this case; or offer the option
+   seed' = KDF(privkey, passphrase, label, index).** So: the risk is accepted; (c) and (d) sets may carry PQ, PQZ and KEM keys, marked classical-rooted; the
    derivation passphrase has at least 10 characters; both (c) and (d) are offered (§5.5, §5.7).
-10. **Owner ruling (2026-11-11), verbatim: "đồng ý, sửa theo đó"** ("agreed, change it accordingly"), in answer to the
-    owner's own remark **"passphrase do SDK sinh => người dùng sẽ không nhớ passphrase. Trong khi dùng cách (d) kia thì có
-    thể chỉ cần nhớ privkey."** ("an SDK-generated passphrase ⇒ the user will not remember it. With method (d) the user
-    may need to remember only the private key."). So: passphrases are **user-chosen**, never SDK-generated (a strength
+10. **Owner ruling (2026-11-11): changed accordingly**, on the owner's own remark that **an SDK-generated passphrase ⇒
+    the user will not remember it; with method (d) the user may need to remember only the private key.** So: passphrases are **user-chosen**, never SDK-generated (a strength
     meter may be shown); for (c) the passphrase stays **mandatory, ≥ 10 characters**; for (d) it is **optional** —
     empty ⇒ HKDF from the key alone, non-empty ⇒ ≥ 10 characters and Argon2id then HKDF (§5.5).
 
@@ -150,14 +142,13 @@ any phrase that is not 24 words ("R32: mnemonic must have 24 words", `src/keys.r
 [CLI-SGN-11](../clients/signers-clientkeys.md#CLI-SGN-11): generate 24 words, import 12–24 [F]. So one 12-word phrase
 opens in `clientkeys` and is refused by `zether-prover` (decision 15).
 
-**Owner rule (2026-11-11), verbatim: "Seeds sinh ra luôn dùng 24 words trở lên."** ("Generated seeds always use 24 words
-or more.") Read within BIP-39, which stops at 24: **every seed the SDK generates is 24 words** — master seeds, BIP-85
+**Owner rule (2026-11-11): generated seeds always use 24 words or more.** Read within BIP-39, which stops at 24: **every seed the SDK generates is 24 words** — master seeds, BIP-85
 children (the 24-word application, §4.2), and seed sets made from a passkey PRF or an EOA signature or key (a 32-byte
 root ⇒ 24 words, §5.5). **24 words is not always 256 bits** [I]: a fresh master has 256 bits; a derived set has **at
 most the entropy of its origin**. A (c)/(d) root from an EOA that came from a 12-word phrase is 128 bits written as 24
 words; a BIP-85 `24'` child of an imported 12-word master likewise. The letter of the rule holds; "256-bit" does not.
 
-**Owner ruling (2026-11-11), verbatim: "nhận kèm cảnh báo"** ("accept, with a warning"): **the SDK accepts the import
+**Owner ruling (2026-11-11): accepted, with a warning.** **The SDK accepts the import
 of an existing 12–21-word phrase with a warning** — lower entropy than the 24-word rule (128–224 bits), and a suggestion
 to move funds to a new 24-word seed. The warning stays visible on that seed set and is **carried down** to every child
 and every set derived from it (the record's `origin.parent` chain, §6.5) [I]. Only `zether-prover`'s stricter refusal
@@ -871,8 +862,8 @@ not repeated here.
     registered attribute** (KEM, PQZ, Zether, signing kinds); the shared form allowed but warned.
 14. **PQ-required `msig` template** (§9.2). Default: offered as an account template, not the default account, until the
     owner sets a PQ horizon.
-15. **`zether-prover` and imported 12–21-word phrases.** The import itself is ruled (owner 2026-11-11, "nhận kèm cảnh
-    báo": accepted with a warning, §3.4); `zether-prover` still refuses every phrase but 24 words (`src/keys.rs`).
+15. **`zether-prover` and imported 12–21-word phrases.** The import itself is ruled (owner 2026-11-11: accepted with a
+    warning, §3.4); `zether-prover` still refuses every phrase but 24 words (`src/keys.rs`).
     Default: align `zether-prover` with the ruling (accept 12–24 with the same warning), so Rust and JS share one rule
     and an imported seed set gets confidential keys like any other.
 16. **Guardian key path.** Default: `g_i = m/7622'/0'/<a_gi>'/2'/0'` with `a_gi` in a reserved guardian account range

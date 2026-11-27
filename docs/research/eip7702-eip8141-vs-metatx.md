@@ -2,7 +2,7 @@
 
 # EIP-7702 and EIP-8141 compared with the SCaaS meta-transaction
 
-Written 2026-10-11 for the owner ("EIP-7702 and EIP-8141 need to be compared with MetaTx"). SCaaS facts cite rule ids
+Written 2026-10-11 for the owner's request to compare EIP-7702 and EIP-8141 with MetaTx. SCaaS facts cite rule ids
 of the component docs; outside facts cite the sources in §6. **[unverified]** marks a claim that rests on secondary
 reporting or memory and was not confirmed against a primary source. EIP-8141 is a Draft: everything said about it may
 change.
@@ -181,8 +181,8 @@ delegates (MetaMask, Coinbase, Ambire were named in 2025 coverage **[unverified]
 
 ### 5.1 Update 2026-10-30: the "Decide" row is decided
 
-After the 2026-10-29 EIP-7702 hot-wallet drain the owner ruled ("an EOA must really sign — no delegation at all; an
-EOA must not run code"), on the [EIP-7702 audit of 2026-10-30](eip7702-audit-2026-10-30.md):
+After the 2026-10-29 EIP-7702 hot-wallet drain the owner ruled that an EOA must really sign, with no delegation at all, and that an
+EOA must not run code, on the [EIP-7702 audit of 2026-10-30](eip7702-audit-2026-10-30.md):
 - **D1** a designator signs by ECDSA with its own key only, never ERC-1271 through the delegate (the `SigCheck` row above:
   "ECDSA only"; passkey / session-key 7702 wallets cannot sign for SCaaS, their base key can);
 - **D2** a designator direct caller is refused (`CallerDelegated`) wherever the caller is authority; **D3** also the

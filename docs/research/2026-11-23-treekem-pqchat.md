@@ -2,15 +2,15 @@
 
 # TreeKEM (MLS, RFC 9420) for PqChat and PqVault groups
 
-Research of 2026-11-23 for the owner ("Đang sửa pqchat-sign, nghiên cứu TreeKEM luôn"), written while branch `pqchat-sigs`
+Research of 2026-11-23 for the owner's request to study TreeKEM alongside the pqchat-sigs fixes, written while branch `pqchat-sigs`
 changes `PqChat` and `PqGroupBase`. Nothing here is built or specified; every design below is a proposal and **UNAUDITED**.
 Tags: **[F]** fact with its source, **[I]** inference, **[E]** estimate. Gas figures are paper estimates on the pinned PqChat
 rows, not measurements. Web sources were read on 2026-11-23.
 
 **Decided while this note was written (owner 2026-11-23):**
 
-- "Có thể chạy ở hai chế độ tùy chọn: phẳng hoặc TreeKEM": a group runs in one of two modes, flat wraps (today's) or TreeKEM.
-- "thêm field ngay trong pqchat-sigs": `PqChatSession` gains `uint8 groupMode` (0 = flat, 1 = TreeKEM), fixed at creation; the
+- A group runs in one of two modes, flat wraps (today's) or TreeKEM.
+- The field is added now, in `pqchat-sigs`: `PqChatSession` gains `uint8 groupMode` (0 = flat, 1 = TreeKEM), fixed at creation; the
   release built now accepts only 0, and a later release accepts 1 with the same struct. `PqVaultCreate` gains the same field as
   a controller call.
 
@@ -370,7 +370,7 @@ settle now is wording: `groupMode` is a protocol id, not a flag.
 
 ## 8. Can mode 1 be built now, in `pqchat-sigs`, before the tag?
 
-Owner 2026-11-23: "Nghiên cứu xem có thể làm luôn ngay pqchat-sigs, không chờ đến release sau." The answer: **it can be built,
+Owner question 2026-11-23: can it be built now, in pqchat-sigs, without waiting for a later release? The answer: **it can be built,
 but not inside the tag's window**; it multiplies the time to the tag by three to five and puts a new cryptographic protocol in
 the pre-freeze audit, for a mode that helps no group that exists today. Every figure below is **[E]**.
 

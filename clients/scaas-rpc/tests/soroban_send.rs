@@ -471,7 +471,7 @@ async fn entries_fee_stats_and_status_read_within_their_forms() {
     );
 }
 
-/// Owner 2026-11-22 ("accept SourceAccount when self-paying"): a `SourceAccount` auth entry reads as such (the SDK accepts it
+/// Owner 2026-11-22 (SourceAccount accepted when self-paying): a `SourceAccount` auth entry reads as such (the SDK accepts it
 /// only when the transaction's source is the op's subject); one cut short, or with a byte after it, does not.
 #[test]
 fn a_source_account_entry_reads_as_such() {

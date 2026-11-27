@@ -1007,7 +1007,7 @@ UA owner's choice, P5); O7 a signed contact card exchanged out of band, no on-ch
 user id optional); family rounds named
 `pqchat-<family>`.
 
-**Decision of 2026-11-05** (owner: "add HCS as transport 3 to the spec"; a Change on
+**Decision of 2026-11-05** (owner: HCS added as transport 3 to the spec; a Change on
 [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)): **D14** — the Hedera Consensus Service is the third transport, between
 Matrix and the chain (P2): one immutable topic per session (no admin key, no submit key, no custom fee, empty memo), its
 id only inside `sealedInfo`; the payload is the same signed record in the P15 envelope with the signature's full bytes;
@@ -1017,7 +1017,7 @@ the node's Hedera job (PLANNED) (§7.3, P24–P26). Why: about 10,000× cheaper 
 without running a homeserver. Cost: Hedera only, retention as long as mirror nodes keep it, and the topic id links all
 of a session's messages.
 
-**Decision of 2026-11-05** (owner: "as recommended, all three"; a Change on
+**Decision of 2026-11-05** (owner: all three as recommended; a Change on
 [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)): **D15** — (1) a session lists its stores inside `sealedInfo`, any subset,
 at least one, of a Matrix room, an HCS topic and chains by `chain_uid` with `PqChat`; the client sends every message to
 every listed store and readers dedupe by `messageId`; the list changes at a rekey; Matrix is optional, the default when
@@ -1030,7 +1030,7 @@ replication of stores, possibly without Matrix. Cost: each listed chain pays ≈
 a chain store keeps an epoch's 8-byte hint public and linkable across chains (P20); a session without Matrix or HCS has no
 call signalling (closed by D16 when it lists libp2p); a testnet store may lose its data.
 
-**Decision of 2026-11-05** (owner: "as recommended"; a Change on [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)):
+**Decision of 2026-11-05** (owner: as recommended; a Change on [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)):
 **D16** — libp2p carries call signalling (SDP, ICE candidates, call-key events, join and leave) peer to peer, one more
 transport beside Matrix (MatrixRTC) and HCS, as the P15 envelope, nothing new in the clear; no stored messages (a libp2p
 or Waku message store later, not specified). Rendezvous under a DHT key derived from the epoch key, `rdvKey`; members
@@ -1056,7 +1056,7 @@ required, is the user's. **Rulings of the same day, with it:** the node relays t
 default (P17; the job rule in the node's spec, PLANNED); the O7 contact card's Matrix user id is optional (§14 O7); any
 Matrix homeserver works, public or self-hosted, SCaaS runs none, with the costs of a public one stated in P15.
 
-**Decisions of 2026-11-07** (owner, relayed by the coordinator; a Change on
+**Decisions of 2026-11-07** (owner; a Change on
 [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)): **D22** — `PqChat` is a factory kind: `OpenFactory` creates instances
 freely from catalogued releases (EIP-1167 clones, versions in the catalogue, nothing deployed upgraded), each with its own
 owner UA, sessions and public topics; the home of a session is an instance `(homeChain, homeChatContract)`, a chain store

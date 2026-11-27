@@ -12,7 +12,7 @@ import {ZUID} from "../zether/helpers/ZetherFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {SdkGasOps} from "./SdkGasOps.sol";
 
-/// G4 (owner 2026-11-19, "approved"): the shared fixtures of the gas rows with the registry, the router and the release envs
+/// G4 (owner 2026-11-19): the shared fixtures of the gas rows with the registry, the router and the release envs
 /// as a real deploy configures them (`SdkGasDeploy`): the `SmartKeyAccount` implementation made before the fixture's own
 /// `setUp` (its releases and router name it), the fixture's registry made again at its address with the deploy's settings
 /// after it (its registrations kept), a kind the fixture's own registrations rely on on the fixture's verifier.

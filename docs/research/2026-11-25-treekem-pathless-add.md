@@ -589,7 +589,7 @@ by hand on the tree rules, not run against clientkeys.
 
 ## Owner, 2026-11-25: the path-commit bound
 
-The owner chose **24** for the bound of path-less Adds ("Ok, ghi 24 vào research note"), if path-less Adds are built: at most 24
+The owner chose **24** for the bound of path-less Adds, recorded in this research note, if path-less Adds are built: at most 24
 leaves added by path-less Adds since the last path commit; the next commit must then carry a path. The controller's figures
 [E] at 256 keys: a forced path commit about 115-140 M asked over three transactions (its base 45-62 M plus about 2.9 M per
 joiner that has not committed), about 0.5-0.6 M more per member than a bound of 32 (16: about 1.4-1.9 M more), and the window
@@ -646,7 +646,7 @@ Open for the owner: keep (2) alone for path commits (today, R9) with (1) only fo
    admin or a member) makes a path commit at any time, updating its own leaf at its own cost; the contract forces one after
    at most 24 path-less leaves. Removals and periodic updates stay path commits on (2) alone, with point 1's property.
 
-**If nobody pays for the path commit (the owner's question, 2026-11-25: "what if nobody, not even an admin, pays?").** The
+**If nobody pays for the path commit (the owner's question, 2026-11-25: what if nobody, not even an admin, pays?).** The
 bound of 24 forces nobody to pay; it only stops further cheap Adds: after 24 path-less leaves the contract refuses a 25th
 path-less Add, while messages, leaves and removals go on. Whoever wants the 25th member makes a path commit (the Add with a
 path) and pays the refresh: usually the admin who is inviting. If nobody adds and nobody updates afterwards, the group keeps
@@ -660,8 +660,7 @@ cannot make anyone pay; it can only refuse what would widen the window.
 
 ## The owner's direction, 2026-11-25 (not ruled yet)
 
-"Có lẽ sẽ chọn Add không path, nhưng nới việc commit có path: chỉ là option khi tạo session, không bắt buộc. Có cảnh báo ở
-client (admin) cần commit có path." The owner leans to path-less Adds, with the forced path commit made a **session option
+The owner leans to path-less Adds, with the forced path commit made a **session option
 at creation**, not a protocol rule, and a client warning to admins that a path commit is due.
 
 The controller's reading of the consequences:
@@ -680,7 +679,7 @@ Open before anything is built:
 5. when: (a) before the freeze as a mode-1 revision (spec, a Fable spec review, code, vectors, review, audit), or (b) after
    it as a new `groupMode`; either way after the review-fix round and PR #30, as its own round.
 
-**Owner, 2026-11-25 ("Ok, theo §9, chỉ mode 1, làm sau PR #30"):** path-less Adds are to be built **in mode 1 only**, with
+**Owner, 2026-11-25:** path-less Adds are to be built **in mode 1 only**, with
 **§9's rights** (an admin adds anyone; a member adds keys of its own UA, at most `KEYS_PER_UA_MAX`), the forced path commit a
 **session option at creation** (`pathRefreshBound`, 0 = never forced), a client warning to admins when a path commit is due,
 **as its own round after PR #30** (on `dev`, before the freeze): spec (R9 / C23 narrow reopening, C6, R1, C12), a Fable spec

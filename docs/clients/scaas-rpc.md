@@ -85,7 +85,7 @@ transaction status, whether an operation was consumed, the lane's nonce or seque
 the first endpoint only and never fail over; what fails over is the building of a transaction (simulations and views), under the
 rules above.
 
-**The sticky read** (owner 2026-11-23, "Sticky endpoint", decisions CLI-SDK-33 (160); BUILT:
+**The sticky read** (owner 2026-11-23, decisions CLI-SDK-33 (160); BUILT:
 `EvmPool::read_sticky`, test `a_sticky_read_stays_on_one_endpoint_and_retries_a_moved_head` in `tests/evm_profiles.rs`,
 UNAUDITED). On a pool built `with_pinned_reads(false)` (the profile's `"pinnedReads": false`: Moonbeam, Moonbase) a logical read
 of several calls cannot be pinned by hash, so every call of it goes to the **same** endpoint at its latest block (each request

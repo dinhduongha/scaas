@@ -11,9 +11,9 @@ listed in §18. **Fable review 2026-11-11 at `47cf777d`: approve with changes, n
 (read-only; the review note stays local); the controller's calls under the same leave, and the owner's ruling R6 on its
 P3-8, are applied below, tagged (Fable P1-1 …), and listed in §19.
 
-## 1. The ruling (owner, 2026-11-11, in chat)
+## 1. The ruling (owner, 2026-11-11)
 
-The owner's words, on the controller's proposal of the same day: **"OK, vậy đi"** (OK, go with it). The proposal, as approved:
+The owner approved the controller's proposal of the same day. The proposal, as approved:
 
 - **R1. Config.** A new `verifierFee` (`uint64`) and an immutable cap `verifierFeeMax` in `IFactoryToken.ConfidentialConfig`. Only
   `OFFCHAIN` tokens of kinds 4, 5, 12, 13 may set them; a `PRECOMPILE` token refuses a non-zero value, the same class as
@@ -36,7 +36,7 @@ The owner's words, on the controller's proposal of the same day: **"OK, vậy đ
 - **R5.** The Vietnamese comment on `MODE_OPEN` in `smartcontracts/evm/src/common/MetaTxLib.sol:44` becomes English. **Moved out of
   3t** (controller call 4): Vietnamese comments sit in hundreds of lines across `smartcontracts/evm/src` and `scaas-node/src`, so
   the controller makes them one separate cleanup item in TODO; 3t changes no comment, no task and no pin for it.
-- **R6** (owner, 2026-11-11, on the review's P3-8, verbatim): **"Hỏi trước khi tách."** (ask before splitting). No module is split
+- **R6** (owner, 2026-11-11, on the review's P3-8): **ask before splitting**. No module is split
   and no size lever applied without asking the owner: a module or library past its notice line stops the work, its measured
   sizes are reported, the owner decides (§16, T2b; Change line on CTR-TOK-30).
 
@@ -502,7 +502,7 @@ then the fee restored. `coverage.py gen`; local run only; the SCaaS testnet run 
   model), CTR-PQZ-29 (a fee change invalidates built statements), CTR-TOK-25 (the `TokenConfig` encoding moves for every kind),
   CTR-GOV-15 (the router's closed table gains `mtxSetVerifierFee`), CTR-AS-25 (the verifier fee leg on 12, 13), NODE-JOB-22
   (`pqz_fee`, `PQZ_FEE_MISMATCH`); after the review, CTR-PQZ-25 (the direct transfer's binding binds `vf` on `OFFCHAIN`, Fable
-  P1-1) and CTR-TOK-30 (R6, the owner's "ask before splitting", its words on that entry's Source line).
+  P1-1) and CTR-TOK-30 (R6, the owner's rule to ask before splitting, on that entry's Source line).
 - **`contracts/token-wrappers.md`** (this commit): the splitting rule of CTR-TOK-30's module section gains R6's sentence, so the
   normative text no longer splits a module on its own.
 - **`contracts/pq-zero-knowledge.md`** (T11): §9.5 (the CTR-PQZ-27 table gains the two fields; the trust model; the rule
@@ -645,7 +645,7 @@ B; the libraries' lines are 33,903 / 35,694 B. Code-hash pins move only for the 
 `TokenConfig` decoder), the PQZ libraries and the router, old → new in T9; with the `MetaTxLib.sol` comment out of 3t (controller
 call 4) no other artifact's metadata hash moves.
 
-**Measure early, ask before splitting** (R6, owner 2026-11-11: "Hỏi trước khi tách."; Fable P3-8). The margin is an estimate on
+**Measure early, ask before splitting** (R6, owner 2026-11-11; Fable P3-8). The margin is an estimate on
 top of 3s's estimate, so Q(12) and Q(13) (and Q(4), S(5), S(13), the PQZ libraries) are measured at the four sets **right after
 T2** (T2b), before the tests are written against a layout. **No module is split and no size lever applied without asking the
 owner:** if any module or library passes its notice line, the work stops, the measured sizes are reported, and the owner decides;
@@ -704,5 +704,5 @@ of 2026-11-10; the owner ruled on P3-8 (R6). Each is applied where named.
 | P3-5 an exact `shieldIn` top-up publishes the shortfall | accept: round top-ups | §6.2, T30, §12 |
 | P3-6 `ConfidentialTransfer.fee` mixes three payees | accept: operator note | §10 |
 | P3-7 labels | accept: call 1 says "interprets" and the typed number at `shieldScale ≠ 1`; calls tagged inside CTR-PQZ-36's Rule; the `normative:` pointer moves in T11 | §3.1, §14, §18, T11, `decisions.md` |
-| P3-8 size margin | accept, with the owner's R6 ("Hỏi trước khi tách."): measure after T2; never split or apply a lever without asking | §1, §16, T2b, T9; CTR-TOK-30's Change, `token-wrappers.md` |
+| P3-8 size margin | accept, with the owner's R6 (ask before splitting): measure after T2; never split or apply a lever without asking | §1, §16, T2b, T9; CTR-TOK-30's Change, `token-wrappers.md` |
 | P3-9 the service race | accept as written: harmless, noted | §11 |

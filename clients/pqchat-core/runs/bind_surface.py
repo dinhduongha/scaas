@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""pqchat-core plan T12 (owner 2026-11-22, "Handle SecretBytes"): decrypted content in the generated Dart surface only as the
+"""pqchat-core plan T12 (owner 2026-11-22): decrypted content in the generated Dart surface only as the
 SDK's `SecretBytes` handle (`ArcSecretBytes`), read through the SDK's copy calls; run by runs/2026-11-17-pqchat-core-bind.sh
 over the generated Dart directory:
   python3 -I clients/pqchat-core/runs/bind_surface.py <dart dir>

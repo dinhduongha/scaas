@@ -95,7 +95,7 @@ fn amount(d: &[u8; 16]) -> u64 {
 }
 
 /// One record's inputs: the holder's BIP-39 entropy (the matrix's test wallet; `entropy`, 16 to 32 bytes), its UA, the chain,
-/// the scope and the key version. Owner 2026-11-17 ("ok, as proposed", option (b)): the handle comes through the release path, a
+/// the scope and the key version. Owner 2026-11-17 (option (b)): the handle comes through the release path, a
 /// `Wallet` restored from the entropy's mnemonic and `Wallet::pqz_scoped_key`; this tool builds scaas-ua without `vectors`.
 struct Rec {
     words: String,

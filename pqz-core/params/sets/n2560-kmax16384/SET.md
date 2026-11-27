@@ -30,7 +30,7 @@ derived (see [`../README.md`](../README.md)).
 **Opening tokens (three-key round, measured 2026-11-14, `test/pqz/PqzThreeKeysGas.t.sol`; [CTR-PQZ-37](../../../docs/contracts/pq-zero-knowledge.md#CTR-PQZ-37)):
 an opening token at this set needs a chain whose block gas limit is at least 63.40 M under EIP-8037** (one op 1 with the auditor,
 relayed: 7,725,976 regular + 55,676,700 state = 63,402,676; without the auditor 60,578,780), above a 60 M Ethereum-like block.
-A scoped key record fits it (`setPqzScopedKey` 36,292,108, `storePqzScopedPop` 56,081,285). Owner ruling 2026-11-14 (verbatim in `docs/decisions.md`, CTR-PQZ-37):
+A scoped key record fits it (`setPqzScopedKey` 36,292,108, `storePqzScopedPop` 56,081,285). Owner ruling 2026-11-14 (recorded in `docs/decisions.md`, CTR-PQZ-37):
 this set is only for customer chains with larger blocks; no factory refusal, no design change.
 
 Measured where marked: plan 5h Task 8d part 2b, forge 1.8.5 under Amsterdam through the real token and registry, the
@@ -50,8 +50,8 @@ Task 9) + 3 per input word (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2560-
 3. **Calldata ≤ the EIP-7976 floor's 261,909 B per transaction:** the largest relayed PQZL calldata is 120,708 B (op 7
    M = 8, auditor) [measured]; the precompile input is built in memory by the token, bounded by `MAX_INPUT`, not by
    calldata.
-4. **Block gas limit for the state dimension (EIP-8037):** every debit stores its op blob in state (SSTORE2; "Không
-   được mất ciphertext": ciphertexts are never only in calldata / events), packed at ⌈log2 q⌉ = 50 bits (P46):
+4. **Block gas limit for the state dimension (EIP-8037):** every debit stores its op blob in state (SSTORE2; never lose
+   ciphertext: ciphertexts are never only in calldata / events), packed at ⌈log2 q⌉ = 50 bits (P46):
    25.69 M state gas per relayed op 1, 24.97 M per prepare half, 54.02 M for op 7 M = 8 with the auditor, 52.80 M
    without [measured]. Block gas used = max(Σ regular, Σ state) (EIP-8037), so Ethereum mainnet's 60 M block holds two
    op 1 debits of this set and one op 7 M = 8; a transaction needs a block limit ≥ its state gas (the SCaaS testnet:

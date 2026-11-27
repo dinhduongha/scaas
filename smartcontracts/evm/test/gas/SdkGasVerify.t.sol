@@ -31,7 +31,7 @@ import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {SdkGasRows} from "./SdkGasOps.sol";
 import {BlsMultiKit} from "../ua/BlsMultiKit.sol";
 
-/// The copy-cost forwarder (owner 2026-11-19, "OK"): what a token does with a signature, nothing else: the token's own
+/// The copy-cost forwarder (owner 2026-11-19): what a token does with a signature, nothing else: the token's own
 /// `MtxPipelineLib._authorize` (a native id: the pool and key-data guards, then `SigCheck.isValid`; a derived one: the
 /// registry's `requireAuthorized`, the `UASig` copied from calldata into the call). Owner 2026-11-19 (the sampled check):
 /// a bare `SigCheck.isValid` as the native reference was 938 gas cheaper than the token's native path and its derived
@@ -304,7 +304,7 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
         uint256 worst = _fnMost(v, kind, pk, m, sig, "sg-fn");
         extra = worst > same ? worst - same : 0;
         _pin(string.concat("verify_", _hex4(kind), "_varied_extra"), extra);
-        // the safety check (owner 2026-11-19, "approved, as proposed"): 64 further salts, never above the row with its margin
+        // the safety check (owner 2026-11-19): 64 further salts, never above the row with its margin
         // (`scaas-sdk` holds `verify_<kind>_safety_extra` to it)
         worst = _fnMost(v, kind, pk, m, sig, "sg-fn-safety");
         _pin(string.concat("verify_", _hex4(kind), "_safety_extra"), worst > same ? worst - same : 0);
@@ -337,7 +337,7 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
     /// clientDataJSON together at most 1,024 bytes; the chains take any length.
     uint256 internal constant SG_WA_CAP = 1_024;
 
-    /// Q2 (owner 2026-11-19, "approved"): `0x0100`'s verify gas grows with clientDataJSON, so its row is measured at the cap.
+    /// Q2 (owner 2026-11-19): `0x0100`'s verify gas grows with clientDataJSON, so its row is measured at the cap.
     /// The worst case there (`WebAuthnClientData.parse`): the origin, scanned byte by byte up to its closing quote, as long as
     /// the cap leaves (`prefix ‖ origin ‖ "}`, the L2 form); the vector key's own authenticatorData (37 bytes), signed by its
     /// vector secret over `message` (the challenge), low-s. Beside it, pinned for the record and not in the row, ua-rs's
@@ -482,7 +482,7 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
         );
     }
 
-    /// Owner ruling 2026-11-19 (plan Task 16, "approved"; was a plan choice): the line of a counted row from its n = 2 and
+    /// Owner ruling 2026-11-19 (plan Task 16; was a plan choice): the line of a counted row from its n = 2 and
     /// n = 64 points, `per_item = ⌈(g(64) − g(2)) / 62⌉` (the worst over `g`'s rows), `gas = g(2) − 2·per_item`, checked
     /// at or above all four points. Controller call (owner auto-run 2026-11-19): where a point lies above that line (the
     /// verify row at n = 16, by 304 gas), the row's gas is raised to the largest `g(n) − per_item·n`, the slope kept; the

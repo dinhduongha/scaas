@@ -2,7 +2,7 @@
 
 # PQZ at parameter set (a): op 7 M = 8 and tight packing of stored ciphertexts (plan 5h part B, 2026-10-21)
 
-Owner 2026-10-21: "làm 4 việc đó đi, để có con số rõ ràng" (do those four things, so the numbers are clear). Research
+Owner 2026-10-21: do those four things, so the numbers are clear. Research
 only: no `src/` change. Full tables, logs, patches and reruns:
 [`pqz-core/pqzl/params/pa-pack/results-pack.md`](../../pqz-core/pqzl/params/pa-pack/results-pack.md).
 Tags: [measured] = Foundry 1.8.5 under Amsterdam on the as-built token in a size-swapped work tree; [estimate] = a model
@@ -72,7 +72,7 @@ randomness group is already shared by every leg (CTR-PQZ-04). Further options no
 (adds noise to every homomorphic sum, `K_MAX` 4,096 of them — a parameter study), dropping the auditor copies from state
 (rejected: they are ciphertexts too), G = 1 for M = 8 (≈ 449 at 144 hints at set (a) [inference], below 450).
 
-**Ciphertexts stay in state — absolute (owner 2026-10-21: "Không được mất ciphertext").** A hash-only design (blob
+**Ciphertexts stay in state — absolute (owner 2026-10-21: never lose ciphertext).** A hash-only design (blob
 bytes in calldata / events, the hash in state) was considered and rejected: calldata and logs live in block history,
 which clients prune (EIP-4444 history expiry), and a lost ciphertext freezes its funds for good. The state-gas cost is
 accepted as the price of that rule.

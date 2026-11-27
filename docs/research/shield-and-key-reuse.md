@@ -2,7 +2,7 @@
 
 # Zether key reuse and a proof-free `pqzShield`
 
-Status: controller analysis 2026-10-20 on two owner questions (chat). Nothing is decided by this note.
+Status: controller analysis 2026-10-20 on two owner questions. Nothing is decided by this note.
 
 ## 1. The Zether key both signs and decrypts: is it a leak risk?
 

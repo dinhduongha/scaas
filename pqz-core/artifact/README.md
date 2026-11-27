@@ -32,7 +32,7 @@ KAT, the fix checks, the PQZL differential, C = Rust = wasm32, the vectors, pqz-
 PQZH cross-checks, fuzz and the Rust core, at each of the four sets; logs `../runs/gate/`). The sets and their numbers:
 [`../params/sets/README.md`](../params/sets/README.md).
 
-**What it covers** (scope: both systems, owner 2026-10-14, replacing "PQZL only" of 2026-10-13):
+**What it covers** (scope: both systems, owner 2026-10-14, replacing the PQZL-only scope of 2026-10-13):
 
 - **PQZL**, the LaZer fork in C: the six relations `R_REG`, `R_TX`, `R_BURN`, `R_DS`, `R_DR`, `R_TX0`; the generic
   verifier `pqz_verify` and the specialised verifier (SV) `pqz_verify_fast`; and the multi-recipient transfer

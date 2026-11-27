@@ -46,8 +46,8 @@ contract HotProbe {
     }
 }
 
-/// CTR-UA-44 (TODO 3ze, owner 2026-11-14: "Không, tắt member cũ, thành viên mới cho phép thêm vào. ua chỉ tính fix 1 lần khi
-/// đăng ký."; "Và vì đi theo chain, thế nên version tiếp theo sẽ là version+1 => không cần nhảy."): `updateMsig` disables old
+/// CTR-UA-44 (TODO 3ze, owner 2026-11-14: old members disabled, new members may be added, the UA id fixed once at
+/// registration; the version follows the chain, so the next one is version + 1, no jump): `updateMsig` disables old
 /// slots, appends new ones, changes weights and the threshold, one registry at a time; the id stays the first structure's. Each
 /// refusal runs next to a passing twin that differs in that one thing. Members: EOAs (native, ECDSA), `mldsa65` keys and one
 /// `p256` key under the stand-in verifier (`_sig`).

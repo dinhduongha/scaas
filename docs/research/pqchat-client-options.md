@@ -367,7 +367,7 @@ only through `ua-rs`.
 3. **For a Status fork:** keep the cut (B′) or restore the Nim wallet (B / W0); wallet services W0, W1, W2 or W3; which
    Status screens to keep (Communities, Browser, Market …).
 4. **UI toolkit:** Qt (paths 1, 4-D; keeps owner answer 5) or Flutter (paths 2, 3, 4-C; changes it).
-5. **Matrix adapter:** libQuotient app-side (answer 5) or matrix-rust-sdk inside the core. **Settled 2026-11-17 (owner, "(b)"): one matrix-rust-sdk stack in a shared crate below both chat paths (plain Matrix chat with Olm / Megolm in scaas-app's default build; PqChat envelopes through the same client in the `scaas` build); see decisions.md CTR-CHAT-01.** **Note (2026-11-17, owner, later the same day):** the client dependency is reversed: `pqchat-core` sits above
+5. **Matrix adapter:** libQuotient app-side (answer 5) or matrix-rust-sdk inside the core. **Settled 2026-11-17 (owner, option (b)): one matrix-rust-sdk stack in a shared crate below both chat paths (plain Matrix chat with Olm / Megolm in scaas-app's default build; PqChat envelopes through the same client in the `scaas` build); see decisions.md CTR-CHAT-01.** **Note (2026-11-17, owner, later the same day):** the client dependency is reversed: `pqchat-core` sits above
 `scaas-sdk` and takes that Matrix client itself; the SDK has no `chat` module (decisions.md CTR-CHAT-01's Change, CLI-SDK-14).
 6. **Licence of `pqchat-core`** and the `scaas-ua` parts it needs: L1 (`Apache-2.0 OR MIT`), L2 (Vegan), L3 (Vegan or
    AGPL-3.0 dual), L4 (process split). Owner / lawyer decision; under L2 paths (1), (2), (4) work, (3) does not.

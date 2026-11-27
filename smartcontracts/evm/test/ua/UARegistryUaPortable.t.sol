@@ -1366,7 +1366,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
         UACall.register(p, x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
     }
 
-    /// Owner ruling 2026-10-30 ("an EOA must really sign, no delegation"; supersedes R-7702 and A5-m m2): a native member
+    /// Owner ruling 2026-10-30 (an EOA must really sign, no delegation; supersedes R-7702 and A5-m m2): a native member
     /// with an EIP-7702 designator (an EOA delegated to a wallet) in a portable pop is an EOA: only its own key's
     /// signature over the typed digest (the vector's pop, TS-D4) is accepted; ERC-1271 through the delegate is never
     /// asked, even for a signature the delegate itself accepts, and the own key over `memberDigest` is refused (`UAPoP`).

@@ -13,7 +13,7 @@ import {regArgs} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 
-/// CTR-GOV-28 (owner 2026-11-13, "có thêm."): every direct admin entry of the 12 token kinds and the DEX carries the chain
+/// CTR-GOV-28 (owner 2026-11-13): every direct admin entry of the 12 token kinds and the DEX carries the chain
 /// word. On a bare clone of each release (the test plays the factory; the admin and the features written into the governance
 /// namespace, as `AdminNames.t.sol` does), per entry: the admin's call made for a sibling with the same chain id (another
 /// word) is refused by name, `ChainUidMismatch(own, sibling)`, nothing written; a stranger is refused `NotAdmin` first (the

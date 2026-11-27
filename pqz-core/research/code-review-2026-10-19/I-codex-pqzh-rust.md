@@ -1,7 +1,7 @@
 # I — Codex review of PQZH Rust (round 2)
 
 **Date:** 2026-10-19. **Reviewer:** Codex CLI 0.163.0 (one read-only task, thread `01a153d0-927f-78a0-bef6-489ab516dcb1`;
-owner-requested: "Dùng Codex, agy và sub-agent để review PQZH Rust, sau đó PQZL bản C"). **Target:** frozen detached
+owner-requested: Codex, agy and a sub-agent review PQZH Rust, then the PQZL C version). **Target:** frozen detached
 worktree at `e9cabd1`: `pqzh/ligero`, the pqz-ffi PQZH path, `stmt`, `xcheck` (primary, live); `pqzh/stark-backup`
 (secondary, not live). Brief: same nine dimensions as G / H (soundness, decoding, panics, wasm32, allocation, features /
 `unsafe`, constant time, wiping, spec). No builds, tests or timing. Triage: [J-agy-pqzh-rust.md](J-agy-pqzh-rust.md).

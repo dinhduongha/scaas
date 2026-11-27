@@ -1,4 +1,4 @@
-# Matrix add-on (owner 2026-11-13: "Dời matrix local sau khi bổ sung Matrix mới hợp lý."), branch ua-mtx-fix3-chainuid.
+# Matrix add-on (owner 2026-11-13: the local matrix runs after the Matrix additions), branch ua-mtx-fix3-chainuid.
 # matrix.sh local (fresh anvil 31337 + a local Nethermind copy 7622 for pq / pqoff), MATRIX_OUT=runs/2026-11-13-matrix-addon;
 # full output in the git-ignored *.log there. Test keys only (anvil accounts; the copy's 0x..01-0x..03). UNAUDITED.
 # src unchanged across the three runs (scripts only): run A d52be8cf (every group), run B ba5f0394 (every group but pq,

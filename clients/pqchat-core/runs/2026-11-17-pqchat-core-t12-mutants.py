@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""pqchat-core plan T12's mutants (owner 2026-11-22, "Handle SecretBytes"; 2026-11-23, send takes the content JSON as a
+"""pqchat-core plan T12's mutants (owner 2026-11-22, SecretBytes handles; 2026-11-23, send takes the content JSON as a
 handle): each killed by its own check, the bindings check
 (runs/2026-11-17-pqchat-core-bind.sh, its TAP `not ok` line) or the crate's named test:
 python3 clients/pqchat-core/runs/2026-11-17-pqchat-core-t12-mutants.py check | run"""

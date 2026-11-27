@@ -72,7 +72,7 @@ contract SdkGasKindTable {
     }
 }
 
-/// @notice G4 (owner 2026-11-19, "approved"): the gas fixtures' registry configured as a real deploy configures it,
+/// @notice G4 (owner 2026-11-19): the gas fixtures' registry configured as a real deploy configures it,
 ///         `DeployBase._deployUARegistry` on a chain like forge's (EIP-2537 and the bn254 G2 check answer, not Hedera,
 ///         `MLDSA_PRECOMPILE=off`): generation 1 (no predecessor), budget `UA_VERIFY_BUDGET` 12,000,000, the chain's
 ///         `SmartKeyAccount` implementation (`Deploy.s.sol`: `SmartKeyAccountFactory(uid).IMPLEMENTATION()`, also the router's and

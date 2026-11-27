@@ -37,8 +37,8 @@ contract Sweeper {
     receive() external payable {}
 }
 
-/// Owner ruling 2026-10-30 after the EIP-7702 sweeper drain: "an EOA must really sign — no delegation at all; an EOA
-/// must not run code." The victim (`owner`: holder, token owner and minter, `MandateWallet` owner) signed a 7702
+/// Owner ruling 2026-10-30 after the EIP-7702 sweeper drain: an EOA must really sign, with no delegation at all; an EOA
+/// runs no code. The victim (`owner`: holder, token owner and minter, `MandateWallet` owner) signed a 7702
 /// authorization to a sweeper. Every path the sweeper tries — its code calling as the victim (D2) and its ERC-1271
 /// answering for the victim (D1) — is refused; the victim's own key still works through a relayed meta-transaction.
 contract Sweeper7702Test is MandateFixture {

@@ -14,9 +14,9 @@ next to the commitment, so the sender opens its own transfer from its seed and c
 Both kinds (`NORMAL_ZETHER`, `WRAPPED_ZETHER`); relaying and the envelope binding unchanged except the entry
 selectors. PQ Zether (CTR-PQZ-19/23/24) stays spec only.
 
-Owner decision (2026-10-11, Vietnamese, as given): "Ở Zether/PqZether: 1. Chấp nhận hai kiểu: commit-reveal và bundle.
-2. Chấp nhận có Auditor hoặc không có Auditor (full hoặc không). Cấu hình khi khởi tạo contract. Nên có lẽ phải thêm
-implement." The coordinator's later messages of the same day refined it, and the docs agent wrote the result into the
+Owner decision (2026-10-11): on Zether and PQ Zether, (1) both disclosure modes are accepted, commit-reveal and
+bundle; (2) a token with an auditor and a token without one (full or none) are both accepted, configured when the
+contract is created, which needs more implementation. The coordinator's later messages of the same day refined it, and the docs agent wrote the result into the
 spec; this plan implements the spec as merged (the readings in between — HASH-only COMMIT tokens, a dropped no-bundle
 entry, a two-value auditor mode, a `40·M` memo of `Y` points — are superseded and not built).
 

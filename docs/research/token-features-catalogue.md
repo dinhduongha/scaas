@@ -86,7 +86,7 @@ EVM freeze; "—" where the question does not arise. *Priority*: as in §4 (P1, 
 | [B10](#b10) SINKING FUND | The issuer retires part of an issue each year | A DEX bid or a funded `ExchangeOffer`; the schedule is a `VestingGrant` into the offer. | exists (composition) | after | E (template P3) |
 | [B11](#b11) CONVERSION | Convertible notes, preferred into common, warrants | Voluntary: `ExchangeOffer`; mandatory: B8 stop, then claim; warrants: B6's two-input contract. | exists / B6's contract | after | E / P3 |
 | [B12](#b12) MERGER, spin-off, name change | Merger, exchange offer, spin-off | Merger: `ExchangeOffer` old → new; spin-off: `Distribution`; names are immutable, so migration or disclosure. | exists | after | E |
-| [B13](#b13) VOTING / proxy | Shareholder meeting, proxy vote | The owner said "not now"; it would need in-token checkpoints, reopening CTR-AS-11. | — | — | P3 / R today |
+| [B13](#b13) VOTING / proxy | Shareholder meeting, proxy vote | The owner deferred it (not now); it would need in-token checkpoints, reopening CTR-AS-11. | — | — | P3 / R today |
 
 **C. Banking and payments** ([§4.3](#43-c-banking-and-payments))
 
@@ -413,7 +413,7 @@ token. DRIP is a claim option ("cash or units"), as two leaves per holder of whi
 spin-off is a `Distribution` of the new token. A name change cannot happen: name and symbol are immutable, so it is a
 migration or a disclosure. **E**.
 
-<a id="b13"></a>**B13 VOTING / proxy** — the owner said "not now" (regulated-kinds spec §1, non-goals). If it comes, it needs in-token
+<a id="b13"></a>**B13 VOTING / proxy** — the owner deferred it, not now (regulated-kinds spec §1, non-goals). If it comes, it needs in-token
 checkpoints, which would reopen CTR-AS-11. **P3 / R today**.
 
 **ISO 15022 event types against the catalogue.** ISO 15022 lists corporate actions by event indicator (`:22F::CAEV`).
@@ -760,7 +760,7 @@ The top-up changed no quota: deposits and quotas are independent.
 
 - **Per member, not per role.** A member record is `{ uint128 ratePerDay; uint16 capDays; uint128 stored; uint32
   lastDay; bool suspended; }`. Children of different ages get different rates. There are no classes. That follows the
-  owner's own choice for tax (group 3e's O10, "no tax classes"): fewer moving parts, and a class is just the same number
+  owner's own choice for tax (group 3e's O10: no tax classes): fewer moving parts, and a class is just the same number
   set on several members.
 - **Adding** a member: `addMember(bytes32 member, uint128 ratePerDay, uint16 capDays, uint128 startQuota)`, by the
   manager. Members are UA ids (`bytes32`): native or derived.

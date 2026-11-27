@@ -81,7 +81,7 @@ check removed: red. 4 / 4.
 
 **Stopped:** rejection rows in `opening.json` would change a committed vector file: group 2.
 
-## 5. seed_enc — seal-side repeat guard (BUILT; owner 2026-11-15 "Ok, duyệt 5 và 7")
+## 5. seed_enc — seal-side repeat guard (BUILT; owner 2026-11-15, items 5 and 7 approved)
 
 Why: K3-6's coins are `SHAKE256(label ‖ seed_leg ‖ role ‖ keccak256(kemPk))`, so the same `seed_enc` to the same
 recipient gives the same ML-KEM coins, KEK and GCM nonce; a second seal of that `seed_leg` under another `aad` reuses a
@@ -130,7 +130,7 @@ refused by today's plugin. It is written by the calibration (`calibrate.sh`, Cal
 it needs a calibration run (owner's go) or a provisional copy. README §chain describes it as "PQZL v3 / PQZH v1 ids"
 (stale wording).
 
-## 7. U3h-2 — the plugin's fault boundary and exit watchdog (BUILT; owner 2026-11-15 "Ok, duyệt 5 và 7, thêm watchdog")
+## 7. U3h-2 — the plugin's fault boundary and exit watchdog (BUILT; owner 2026-11-15, items 5 and 7 approved, the watchdog added)
 
 Before: `MlDsa.Verify` allocated its output and checked the length before its `try`; its `CryptographicException`
 handler logged inside the `catch`, so a throwing logger escaped the sibling `catch (Exception)`; `NodeFault` built the

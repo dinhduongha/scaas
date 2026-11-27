@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# 3zh-core gas calibration (owner 2026-11-15 "Calibration: ok", before group 2): one slice of a calibration run of the
+# 3zh-core gas calibration (owner 2026-11-15, calibration approved, before group 2): one slice of a calibration run of the
 # 26 n2304-kmax4096 rows (three-key ids PQZL v6 / PQZH v4) in the calib image pqz10, the fs3 Task 13 method
 # (runs/2026-10-30-fs3-t13-calib-step.sh: calibrate.sh --keys a-b, n = 1000, --cold-only slice without rows).
 #   scripts/capped pqz-core/nethermind/runs/2026-11-15-3zh-calib-step.sh <run> <a-b> [<cold processes>]

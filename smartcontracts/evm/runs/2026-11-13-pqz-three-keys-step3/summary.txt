@@ -23,8 +23,8 @@ test/{BlsKat,ExpectRevertLint,FeePolicy,HashToCurve,MultiSig} | this | 0 | 5 sui
 test/factory, confidential, fork, p6f, vectors | this | 0 | no suite runs without its env
 isolate test/ua/{UAGas,UARegistryGroups} | this | 0 | 2 suites, 22 passed
 size gate | this | 0 after rows moved | UARegistry 31,134; UARegistryAuxLib 26,652; UARegistryCoreLib 33,729 (library notice
-    line 33,903, T-1 35,694; owner 2026-11-13: "UARegistryCoreLib => chỉ khi vượt giới hạn mới báo. Vượt cảnh báo không sao."
-    — report only past the limit, passing the notice line is fine)
+    line 33,903, T-1 35,694; owner 2026-11-13: UARegistryCoreLib is reported
+    only past the limit; passing the notice line is accepted)
 --- other sets (script/pqz/at-set.sh <set>, one run at a time, PqzSet.sol restored after each; the set-sensitive tests this
     step touches: test/ua/{UARegistryUA8,PqzScopedKeys,UAStoreLayout}, test/governance/{PlusZero,SelectorAudit},
     test/pqz/invariant/ProofPathInvariants) ---

@@ -204,7 +204,7 @@ that `arbundles` builds differently from ours or refuses (type 3's `v` included)
 
 ## T3 — Node lanes on an Avalanche-like chain
 
-**Owner 2026-11-22** ("Đồng ý, thu gọn T3": agreed, slim down T3; owner: yes): audit first, writing nothing; a test only where no
+**Owner 2026-11-22** (T3 slimmed down; owner: yes): audit first, writing nothing; a test only where no
 test covers a point the node meets; a real gap built as a profile value, never a chain-id branch, test first, with its mutant;
 no local chain and no e2e run for T3 itself; gates `node-test` and `docs`, plus `node-clippy` and `node-e2e` (10 threads) when node
 code changes. The original steps (a mock chain delaying receipts, written first) are replaced by the audit below.
@@ -345,7 +345,7 @@ code changes. The original steps (a mock chain delaying receipts, written first)
   Hub keys (one public eth-rpc provider each; mainnet and Paseo serve no block 0); H2 on both Moonbeam keys (a read pinned by a
   made-up block hash is answered from an empty state, not refused); Westend Hub's eth-rpc refused every `eth_call` ("Metadata
   error"), so H2, `fork`, `codesize`, `eip2537` and `caps` failed or are unread there. Avalanche passed H1, H2, H4 and H7.
-- **Owner 2026-11-22** ("5 câu hỏi: theo đề xuất": the five questions, as proposed; owner: yes; decisions ARCH-POS-20):
+- **Owner 2026-11-22** (the five questions, as proposed; owner: yes; decisions ARCH-POS-20):
   (1) Hub's `chainUid` is the Substrate genesis; (2) Moonbeam's pinned reads are not trusted: `profile.json` `pinnedReads`
   false, `scaas-rpc` refuses pinned reads on such a pool (`PinnedReadsUntrusted`), plain reads work; **follow-up (T41 family,
   PLANNED):** the SDK reads `pinnedReads` from its profile and builds the pool with it; (3) Westend Hub dropped
