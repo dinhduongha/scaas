@@ -487,6 +487,33 @@ async fn hidden_set_writes_and_emits_nothing() {
     );
 }
 
+/// `lock_all` locks a hidden set opened on a seed that is itself locked (its seed is in no open main set): the hidden set is
+/// taken out of the session (`HiddenOpsAbandoned` once, a later `lock` of its seed finds nothing), and the answer is `lock`'s.
+#[tokio::test]
+async fn lock_all_locks_hidden_sets_of_a_locked_seed() {
+    let (s, _) = sdk().await;
+    let id = import(&s, "Main", REPO).await.unwrap();
+    s.vault().lock(id.clone()).await;
+    assert!(!s.vault().seed(id.clone()).await.unwrap().unlocked);
+    s.vault()
+        .open_hidden(id.clone(), Unlock::Passphrase(sec(PASS)), sec("h"))
+        .await
+        .unwrap();
+    let ev = s.subscribe();
+    assert_eq!(
+        s.vault().lock_all().await,
+        Vec::<String>::new(),
+        "lock's answer"
+    );
+    assert_eq!(
+        ev.next(1000).await,
+        Some(Event::HiddenOpsAbandoned { count: 0 }),
+        "the hidden set is locked"
+    );
+    assert_eq!(s.vault().lock(id).await, Vec::<String>::new());
+    assert_eq!(ev.next(200).await, None, "nothing left to lock");
+}
+
 #[tokio::test]
 async fn hidden_set_wrong_passphrase_is_another_set() {
     let (s, _) = sdk().await;
