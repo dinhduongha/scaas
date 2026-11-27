@@ -78,7 +78,7 @@ MUTANTS = [
        "        let b = serde_json::to_vec(v).map_err(|_| MatrixError::Internal)?;\n")],
      PROF + "no_secret_on_any_file"),
     ("settings not persisted",
-     [(LIB, "        self.inner.put(SETTINGS_KEY, &s, policy::SETTINGS_MAX).await?;\n", "")],
+     [(LIB, "        self.inner\n            .put(SETTINGS_KEY, &s, policy::SETTINGS_MAX)\n            .await?;\n", "")],
      PROF + "settings_persist_with_private_defaults"),
     ("a login over an existing store",
      [(LIB, "        if store_dir(dir).exists() {\n            return Err(MatrixError::MatrixSession);\n        }\n", "")],
