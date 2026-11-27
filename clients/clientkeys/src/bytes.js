@@ -151,6 +151,11 @@ export const jsonStringify = (v, replacer = null, space = undefined) =>
     space,
   ).replace(/"@@uint:(\d+)"/g, "$1");
 export const jsonParse = (s) =>
-  JSON.parse(s, (_, v, c) =>
-    typeof v === "number" && !Number.isSafeInteger(v) && c && /^\d+$/.test(c.source) ? BigInt(c.source) : v,
-  );
+  JSON.parse(s, (_, v, c) => {
+    if (typeof v !== "number" || Number.isSafeInteger(v)) return v;
+    // a runtime without the reviver's source text (JSON.parse source access) would round the integer: refused, never
+    // rounded (the path-less review's C-7)
+    if (!c || typeof c.source !== "string")
+      throw new Error("jsonParse: an integer beyond 2^53 needs JSON.parse source access");
+    return /^\d+$/.test(c.source) ? BigInt(c.source) : v;
+  });

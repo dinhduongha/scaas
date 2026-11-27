@@ -849,3 +849,14 @@ test("C-7: a node outside the tree has no direct path (PqChatShape), never a loo
   refused("PqChatShape", () => tr.directPath(-1, 4));
   refused("PqChatShape", () => tr.directPath(99, 4));
 });
+
+test("fable-C-9 of the path-less review: a tree read without its counter or bound is a lying read (TreeReadCorrupted), never 0", () => {
+  const t = tr.coldTree([key("A"), key("B")], 5);
+  const j = { ...t, goneUa: [...t.goneUa], goneOwnKey: {}, goneKey: [...t.goneKey] };
+  assert.equal(tr.treeFromJson(j).pathBound, 5, "control");
+  for (const f of ["sincePath", "pathBound"]) {
+    const k = { ...j };
+    delete k[f];
+    refused("TreeReadCorrupted", () => tr.treeFromJson(k));
+  }
+});

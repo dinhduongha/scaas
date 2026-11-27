@@ -278,6 +278,8 @@ export function openTreeWrap(sc, { wrap, ctxId, epochId, kemPk }, key) {
  *  the randomness. In order: genesisCtx → joiner_0, K_0 → the wraps and sealedInfo → the record → treeId (the signature is the
  *  caller's). */
 export function createGenesis(sc, { session, kems, uaRecordOf, accepted, info, rand }) {
+  // C41: a bound above 510 is a record the contract refuses: nothing built or signed (the path-less review's E-3 = C-5)
+  if ((session.pathRefreshBound ?? 0) > tr.PATH_REFRESH_BOUND_MAX) refuse("PqChatShape");
   const kemPks = session.members.map((m, i) => recordKey(m.ua, m.keyId, kems[i], uaRecordOf, accepted));
   const fields = genesisFields(session);
   const joiner0 = rand("joiner-0", 32);
@@ -1198,8 +1200,17 @@ export function replay(sc, rd, dev, store = null, from = null) {
   let headFollowed = from ? from.headFollowed : false;
   let chain = from ? from.chain : null;
   const epochs = [];
-  const warnings = [];
-  const suspects = [];
+  // a resume carries `from`'s warnings and C45 states (the leaves under review, F-3), their leaves left recomputed at the new
+  // head (fable-C-2 = G-1 of the path-less review, as ua-rs)
+  const leftAt = (adds) =>
+    adds
+      .filter((x) => {
+        const y = a.trees[head].nodes[2 * x.leaf];
+        return y?.ua === x.ua && y.keyId === x.keyId;
+      })
+      .map((x) => x.leaf);
+  const warnings = (from?.warnings ?? []).map((w) => ({ ...w, leavesLeft: leftAt(w.adds) }));
+  const suspects = (from?.suspects ?? []).map((x) => ({ ...x, leavesLeft: leftAt(x.adds) }));
   for (const p of plan) {
     const n = p.n;
     const c = recs[n];
@@ -1351,7 +1362,9 @@ function finish(sc, a, c, p, dev, commitSecret) {
 function pathlessCommit(sc, a, dev, p, chain, joining) {
   const c = a.recs[p.n];
   const epochId = a.ids[p.n];
-  if (p.own && !(dev.kemSeed && addNonceTry(sc, dev.kemSeed, c) >= 0)) return { state: "compromise" };
+  // a device with a random key reproduces nothing of its own: "not followed" as for its own path commit (fable-C-10)
+  if (p.own && !dev.kemSeed) return { state: "not followed", reason: "random key" };
+  if (p.own && addNonceTry(sc, dev.kemSeed, c) < 0) return { state: "compromise" };
   if (joining) {
     const joiner = openTreeWrap(sc, { wrap: p.wrap, ctxId: a.treeId, epochId, kemPk: dev.kemPk }, dev.key);
     if (!joiner) return { state: "not followed", reason: "opening failed" };

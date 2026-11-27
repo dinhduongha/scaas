@@ -1420,6 +1420,32 @@ test("E-3, B2-2: a replay resumed from the device's previous one walks from its 
   refused("TreeConflict", () => tk.replay(sc, tk.reader(w.home), B, null, { ...r6, pin: { ...r6.pin, hash: Z32 } }));
 });
 
+test("F-3 of the path-less delta (the path-less review's C-2 = G-1): a resume past a C45 epoch keeps the leaves under review, as a cold replay of the head names them", () => {
+  const w = f.createSession({
+    tag: "t/resume-review",
+    creator: "A",
+    nonce: 72,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+    pathRefreshBound: 24,
+  });
+  f.commit(w, "A"); // 1
+  f.commit(w, "B", { pathless: true, adds: [["B2", 3]], faults: { tag: f.hex(rnd("t/resume-review/tag", 32)) } }); // 2
+  const A = f.deviceOf("A");
+  const early = tk.replay(sc, tk.reader(w.home), A);
+  assert.deepEqual(early.review, [3], "control: the C45 epoch's leaf under review");
+  f.commit(w, "A", { pathless: true, adds: [["D", 4]] }); // 3
+  f.commit(w, "C"); // 4: a path commit
+  const cold = tk.replay(sc, tk.reader(w.home), A);
+  const more = tk.replay(sc, tk.reader(w.home), A, null, early);
+  assert.deepEqual(more.review, cold.review, "the leaves under review");
+  assert.deepEqual(
+    more.suspects.map((x) => x.epoch),
+    cold.suspects.map((x) => x.epoch),
+  );
+});
+
 test("R2-D-6 (C-4 as ua-rs): a resume that finds no new epoch keeps the info in force, its flag and the head followed, so it seals what the replay it resumed from sealed", () => {
   const w = f.createSession({
     tag: "t/resume-twice",
@@ -1499,6 +1525,18 @@ test("C-1: a key no signed tree hash covers is authenticated by its registry rec
   const good = ["A", "B", "C"].map(f.kemRecOf);
   assert.equal(make(good).sessionId, w.home.sessionId);
   refused("TreeKemRecord", () => make([good[0], good[1], { ...good[2], kemPk: f.deviceOf("H").kemPk }]));
+  // E-3 = C-5 of the path-less review: a bound above the cap is refused at creation, the cap itself builds
+  const bounded = (b) =>
+    tk.createGenesis(sc, {
+      session: { ...session, pathRefreshBound: b },
+      kems: good,
+      uaRecordOf: (u) => f.uaRecords().get(u) ?? null,
+      accepted: () => true,
+      info: f.INFO.I1,
+      rand: (x, n) => rnd(`tree-secrets/t/auth/genesis/${x}`, n),
+    });
+  refused("PqChatShape", () => bounded(511));
+  assert.ok(bounded(510).sessionId);
 });
 
 test("C-6: an exit count above EXITS_MAX is refused before any record is read (ua-rs's bound, 544)", () => {
@@ -1548,4 +1586,27 @@ test("a version-0 KEM key by the registration's proof of possession (fix check C
   }
   // a reader with no registration for the UA (`registrationOf` null): refused
   refused("TreeKemRecord", () => tk.recordKey(g.ua, 0, { kemPk: key }, uaRecordOf));
+});
+
+test("fable-C-10 of the path-less review: a device with a random key reads its own path-less record as its own path commit, not followed (random key), never the compromise warning", () => {
+  const w = f.createSession({
+    tag: "t/random-own",
+    creator: "A",
+    nonce: 73,
+    admins: ["A"],
+    members: ["A", "B", "C"],
+    info: f.INFO.I1,
+    pathRefreshBound: 24,
+  });
+  f.commit(w, "A"); // 1: a path commit of its own
+  f.commit(w, "A", { pathless: true, adds: [["D", 3]] }); // 2: a path-less Add of its own
+  const A = f.deviceOf("A");
+  const seeded = tk.replay(sc, tk.reader(w.home), A);
+  assert.equal(seeded.epochs.find((e) => e.epoch === 2).state, "followed", "control: the seed reproduces it");
+  const r = tk.replay(sc, tk.reader(w.home), { ...A, kemSeed: null });
+  for (const n of [1, 2]) {
+    const e = r.epochs.find((x) => x.epoch === n);
+    assert.deepEqual([e.state, e.reason], ["not followed", "random key"], `epoch ${n}`);
+  }
+  assert.deepEqual(r.warnings, [], "no compromise warning");
 });

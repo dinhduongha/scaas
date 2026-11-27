@@ -103,9 +103,15 @@ const clone = (t) => ({
   goneUa: new Set(t.goneUa),
   goneOwnKey: new Map([...(t.goneOwnKey ?? [])].map(([ua, ks]) => [ua, new Set(ks)])),
   goneKey: new Set(t.goneKey),
-  sincePath: t.sincePath ?? 0,
-  pathBound: t.pathBound ?? 0,
+  // the counter and its bound (the path-less delta §5.3) are always there: a tree without them is a lying read, never "0"
+  // (the path-less review's C-9)
+  sincePath: counter(t.sincePath),
+  pathBound: counter(t.pathBound),
 });
+function counter(v) {
+  if (!Number.isInteger(v) || v < 0 || v > 0xffffffff) refuse("TreeReadCorrupted");
+  return v;
+}
 const pairOut = (t, ua, kemHash) => {
   if (!t.goneOwnKey.has(ua)) t.goneOwnKey.set(ua, new Set());
   t.goneOwnKey.get(ua).add(kemHash);
