@@ -859,6 +859,25 @@ fn lock_wipes_the_arena() {
     assert_eq!(after.1, 0, "a chunk released with a non-zero byte");
 }
 
+/// Review B-6: `check_pass` with a wrap that opens under the typed passphrase, but to another `DEK_p` (a second profile's
+/// wrap under the same passphrase, salt and public JSON): `Aead`; the profile's own wrap: `Ok`.
+#[test]
+fn check_pass_another_dek() {
+    let _g = kdf_lock();
+    let (p, salt, pubj) = (ProfileKeys::KDF_TEST, [5u8; 16], b"{\"pub\":2}");
+    let k = ProfileKeys::new();
+    k.create_dek().unwrap();
+    let mine = k.wrap_pass(b"same pass", &salt, p, pubj).unwrap();
+    let o = ProfileKeys::new();
+    o.create_dek().unwrap();
+    let theirs = o.wrap_pass(b"same pass", &salt, p, pubj).unwrap();
+    assert_eq!(
+        k.check_pass(b"same pass", &salt, p, pubj, &theirs),
+        Err(Error::Aead)
+    );
+    k.check_pass(b"same pass", &salt, p, pubj, &mine).unwrap();
+}
+
 /// A drawn DEK_p round-trips through its pass wrap into a second arena: the profile's lifecycle at the test set.
 #[test]
 fn create_wrap_open() {

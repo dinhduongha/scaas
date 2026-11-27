@@ -164,3 +164,13 @@ R1 | final prof (test default and test-hooks, on the final tree) | 687d936c5 | 0
 R1 | fmt (format.sh --check rust toml py) | 687d936c5 | 0 | 25 parts ok
 R1 | docs (docs_check check; test_docs_check) | 687d936c5 | 0 | 0 errors, 8 warnings (budgets of docs not touched), 16 notes; test_docs_check ok
 R1 | features (check_test_features) | 687d936c5 | 0 | ok, every control True
+R2 | red (B-1, B-4: --test wallet_vault key_lock_; B-6 check_pass against the mutant; B-7 type) | 723abc542 + R2 tests | 101 | key_lock_refuses_the_old_plain_vault, key_lock_mark_kept_against_an_older_manifest FAILED (5 others ok); check_pass_another_dek FAILED (left Ok, right Err(Aead)); random_bytes_bounded E0308
+R2 | ua-profile (--features app-core,user-profile,test-hooks,vectors --test profile --test app_core) | 723abc542 + R2 files | 0 | profile 20 / 20 (18 -> 20 since UP2: check_pass_another_dek, +1 at R1), app_core 22 / 22
+R2 | ua-vault (wallet_vault, wallet_custody, retained_key, wallet_import_ua, wallet_link) | 723abc542 + R2 files | 0 | wallet_vault 31 (29 -> 31), wallet_custody 13, retained_key 2, wallet_import_ua 8, wallet_link 5; --features vectors retained_key 3, wallet_custody 19 (the per-thread chunk counter)
+R2 | ua-clippy (default; user-profile,test-hooks,vectors; --no-default-features user-profile; --no-default-features key-handles; --all-targets -D warnings) | 723abc542 + R2 files | 0 | 4 cells, 0 warnings
+R2 | kh-nm (local, --offline) | 723abc542 + R2 files | 0 | user-profile 7543 symbols, 0 signing (0 off the wallet allow-list, 0 SIGNING); wallet 24444 symbols, 7643 (5592 off the allow-list, 2111 SIGNING); scaas-profile's scaas-ua features json, key-handles, mlock, rand_core, user-profile
+R2 | kh-nm (CI form: CI=1, no --offline, warm cache) | 723abc542 + R2 files | 0 | the same counts; a cold cache not run here (the first CI run of the cell settles B-2)
+R2 | prof (test default, test-hooks; clippy both --all-targets -D warnings) | 723abc542 + R2 files | 0 | default: lib 1, export 1, lifecycle 7, lock 4, profiles 9, settings 4, store 14; test-hooks: lib 1, export 8, hidden 6, lifecycle 12, lock 4, profiles 15, reseal 8, review 26, settings 5, store 16; 0 warnings
+R2 | sdk-up (--features user-profile,test-hooks --test user_profile; the test reads the Zeroizing salt by slice) | 723abc542 + R2 files | 0 | user_profile 15 / 15
+R2 | fmt (format.sh --check rust py) | 723abc542 + R2 files | 0 | 24 parts ok
+R2 | docs (docs_check check; test_docs_check) | 723abc542 + R2 files | 0 | 0 errors, 8 warnings (budgets of docs not touched), 16 notes; test_docs_check ok

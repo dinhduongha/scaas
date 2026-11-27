@@ -134,30 +134,25 @@ impl Drop for Chunk {
     }
 }
 
-/// Test-only (feature `vectors`): every chunk released in this process, and those released with a non-zero byte.
+/// Test-only (feature `vectors`): every chunk released on this thread, and those released with a non-zero byte. Counted per
+/// thread, so a test measures only its own releases, never another test's running beside it (review B-6).
 #[cfg(feature = "vectors")]
 pub(crate) mod vectors {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    static RELEASED: AtomicUsize = AtomicUsize::new(0);
-    static NONZERO: AtomicUsize = AtomicUsize::new(0);
-
-    pub(super) fn released(bytes: &[u8]) {
-        RELEASED.fetch_add(1, Ordering::SeqCst);
-        if bytes.iter().any(|b| *b != 0) {
-            NONZERO.fetch_add(1, Ordering::SeqCst);
-        }
-    }
-
-    /// `(released, released non-zero)`.
-    pub fn chunks_released() -> (usize, usize) {
-        (
-            RELEASED.load(Ordering::SeqCst),
-            NONZERO.load(Ordering::SeqCst),
-        )
-    }
+    use std::cell::Cell;
 
     std::thread_local! {
+        static RELEASED: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
         static PAUSE: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = std::cell::RefCell::new(None);
+    }
+
+    pub(super) fn released(bytes: &[u8]) {
+        let nonzero = usize::from(bytes.iter().any(|b| *b != 0));
+        RELEASED.with(|r| r.set((r.get().0 + 1, r.get().1 + nonzero)));
+    }
+
+    /// `(released, released non-zero)` on this thread.
+    pub fn chunks_released() -> (usize, usize) {
+        RELEASED.with(Cell::get)
     }
 
     /// `f` runs once, on this thread, at the next point where a leased operation holds its copy of a store secret (T21 L82).

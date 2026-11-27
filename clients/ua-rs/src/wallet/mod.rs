@@ -1429,7 +1429,8 @@ impl NativeKey {
 mod vectors {
     use super::*;
 
-    /// `(released, released with a non-zero byte)`: the arena chunks released in this process (each wiped before it goes back).
+    /// `(released, released with a non-zero byte)`: the arena chunks released on this thread (each wiped before it goes back;
+    /// per thread, so tests running beside each other do not count for one another).
     pub fn vectors_chunks_released() -> (usize, usize) {
         store::vectors::chunks_released()
     }
