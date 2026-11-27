@@ -1,0 +1,8 @@
+# user-profiles wave-1 plan: gate summary (task | step | commit | rc | counts). Logs: 2026-11-27-user-profiles-<step>.log, git-ignored.
+UP0 | ck | ae584748d | 0 | 675 tests, 670 pass, 0 fail, 5 skipped
+UP0 | docs | ae584748d | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
+UP0 | ua-vault, sdk-reg, features | - | - | not run at UP0 (controller: later tasks run them)
+UP1 | ck | ae584748d + UP1 files (a detached worktree: the shared tree held another task's uncommitted red test) | 0 | 691 tests, 686 pass, 0 fail, 5 skipped (profile.test.js 16 / 16)
+UP1 | ck-gen | ae584748d tree dirty | 0 | profile-vectors.mjs into a mktemp dir, diff -r against smartcontracts/vectors/profile: identical (4 files)
+UP1 | fmt js | ae584748d tree dirty | 0 | format.sh --check js with the UP1 files staged: js ok
+UP1 | docs | ae584748d tree dirty | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
