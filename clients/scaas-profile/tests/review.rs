@@ -404,6 +404,7 @@ fn a4_g6_settings_strings_bounded() {
     }
     for bad in [
         r"https://evil.example\\@good.example/",
+        r"https://evil.example\\good.example/",
         "https://user:pw@rpc.example/",
         "https://user@rpc.example",
         "ftp://rpc.example/",
