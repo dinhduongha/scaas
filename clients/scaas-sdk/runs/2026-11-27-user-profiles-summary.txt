@@ -126,3 +126,24 @@ UP10 | features | f31e52bb6 + UP10 files | 0 | check_test_features ok; feature_t
 UP10 | fmt rust toml | f31e52bb6 + UP10 files | 0 | 22 parts ok (rustfmt run on the touched files first)
 UP10 | docs | f31e52bb6 + UP10 files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
 UP10 | mutants up10 (one at a time: run "<name>") | f17fb2947 | 0 | the passphrase check of set_settings removed: killed (settings.rs:240 a weakening change without the passphrase written); parse before verify: killed (export.rs:596 refused at the label, not the tag); settings imported whole: killed (:515 an endpoint kept without its confirm); a filter that forgets credential references: killed (settings.rs:195 a credential reference kept); start removing a temporary directory whose build.lock is held: killed (export.rs:633 the import's directory removed by a start beside it); a preview written to disk in plain form: killed (:492 the root changed by the preview); record 6 mutants, 6 killed, 0 survived, 0 not loaded, 0 other failure
+UP11 | ck (clientkeys npm test) | a37a0f188 | 0 | 702 tests, 697 pass, 0 fail, 5 skipped
+UP11 | ck-gen (profile-vectors.mjs into a mktemp dir, diff -r against smartcontracts/vectors/profile) | a37a0f188 | 0 | 4 files identical
+UP11 | ks-gen (keystore-vectors.mjs into a mktemp dir, diff -r against smartcontracts/vectors/keystore) | a37a0f188 | 0 | 3 files identical (3 fingerprints, 13 MACs, 2 re-sealed vaults, 7 containers, 36 refused, 2 key-lock rows)
+UP11 | ua-profile (the gate table's command lacks app-core: cargo refuses `--test app_core` without it since KH; run with user-profile,test-hooks,vectors,app-core) | a37a0f188 | 0 | profile 19 / 19, app_core 22 / 22
+UP11 | ua-clippy (--all-targets -D warnings: default; user-profile,test-hooks,vectors; --no-default-features user-profile; --no-default-features key-handles) | a37a0f188 | 0 | 4 cells, 0 warnings
+UP11 | ua-vault | a37a0f188 | 0 | wallet_vault 29, wallet_custody 13, retained_key 2, wallet_import_ua 8: all pass
+UP11 | kh-nm | a37a0f188 | 0 | user-profile 7542 symbols, 0 signing; wallet 24432 symbols, 5561 signing (control); scaas-profile's scaas-ua features json, key-handles, rand_core, user-profile
+UP11 | prof (test default, test-hooks; clippy both --all-targets -D warnings; cargo deny --offline check) | a37a0f188 | 0 | default: export 1, lifecycle 7, lock 4, profiles 9, settings 4, store 14; test-hooks: export 8, hidden 6, lifecycle 12, lock 4, profiles 15, reseal 8, settings 5, store 16; 0 warnings; advisories, bans, licenses, sources ok
+UP11 | sdk-up | a37a0f188 | 0 | user_profile 14 / 14; --lib user_profile 0 (144 filtered)
+UP11 | sdk-reg | a37a0f188 | 0 | vault 28 / 28, keystore_vectors 2 / 2, --lib vault 18 / 18
+UP11 | sdk-clippy (UPF and default, --all-targets -D warnings) | a37a0f188 | 0 | 0 warnings
+UP11 | sdk-wasm (check wasm32-unknown-unknown --no-default-features vault,account,wallet,evm) | a37a0f188 | 0 | ok
+UP11 | sdk-uniffi binding (gates.sh F + uniffi, --test binding) | a37a0f188 | 0 | 4 / 4
+UP11 | features | a37a0f188 | 0 | check_test_features 74 manifests, 0 findings, every control True; feature_tree 5 / 5
+UP11 | bind-gen --check | a37a0f188 | 0 | FRB Dart, C++, C#, Python, Kotlin, Swift, Java, Go ok; no drift; no test-only entry
+UP11 | fmt (format.sh --check, every language) | a37a0f188 | 0 | 38 parts ok (first pass: sol and tact failed on the environment, forge not on PATH and smartcontracts/ton/node_modules absent in the worktree; both re-run with forge on PATH and node_modules copied: ok)
+UP11 | docs | a37a0f188 | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok; paths 0
+UP11 | ci_changes self-test | a37a0f188 | 0 | ok
+UP11 | mutants check (every runner) | a37a0f188 | 0 | every runner loads after one runner update (up6 "close not called at lock": its text occurred twice since UP9's delete; the `old` now includes the lock_all line of lock(), same intent); 39 stale rows
+UP11 | mutants re-run (one at a time: run "<name>"; rows "a37a0f188 dirty" = the up6 runner edit only) | a37a0f188 | 0 | up2 5 / 5, up4 2 / 2, up5 7 / 7, up6 9 / 9, up7 7 / 7, up8 6 / 6, up9 3 / 3 re-run: all killed
+UP11 | mutants records | a37a0f188 | 0 | up1 5/5, up2 5/5, up3 3/3, up4 3/3, up5 8/8, up6 11/11, up7 7/7, up8 7/7, up9 4/4, up10 6/6, kh 2/2 killed: 61 mutants, 61 killed, 0 survived, 0 not loaded, 0 other failure; check: no stale row
