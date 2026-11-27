@@ -79,6 +79,8 @@ pub struct ProfileInfo {
     pub id: String,
     pub name: String,
     pub protected: bool,
+    /// a hidden profile (its sealed label's flag; spec §8: its name is never drawn); `false` in a list
+    pub hidden: bool,
 }
 
 impl std::fmt::Debug for ProfileInfo {
@@ -461,7 +463,7 @@ impl Profiles {
     }
 
     /// `change` applied to the index under the root lock; written when it says so.
-    fn update_index(&self, change: impl FnOnce(&mut Index) -> bool) -> Result<(), Error> {
+    pub(crate) fn update_index(&self, change: impl FnOnce(&mut Index) -> bool) -> Result<(), Error> {
         let _root = self.root_lock()?;
         let (mut ix, at) = self.index_locked()?;
         if change(&mut ix) {
@@ -486,6 +488,7 @@ impl Profiles {
                     protected: env.state == State::Protected,
                     id: r.id,
                     name: r.name,
+                    hidden: false,
                 })
             })
             .collect())
@@ -514,6 +517,7 @@ impl Profiles {
             id,
             name,
             protected: false,
+            hidden: false,
         })
     }
 
@@ -624,14 +628,9 @@ impl Profiles {
             }
             name = label.name.to_string();
         }
-        let opened = self.finish(instance, &env, &bytes, keys, &name, &lower)?;
+        let opened = self.finish(instance, &env, &bytes, keys, &name, false, &lower)?;
         if name != hint {
-            let mut e = env;
-            e.name = Some(name.clone());
-            e.rev = e.rev.checked_add(1).ok_or(Error::ProfileFormat)?;
-            let b = e.json()?;
-            file::write(&dir, &dir.join(envelope::FILE), &b)?;
-            opened.core.set_envelope(Head::of(e.rev, &b))?;
+            self.rewrite_hint(&opened, env, &name)?;
         }
         if self.after_open(id, &name)? || name != hint {
             self.event(ProfileEvent::ProfileIndexMismatch);
@@ -639,9 +638,27 @@ impl Profiles {
         Ok(opened)
     }
 
+    /// The hint of the open profile `opened` rewritten from its label's `name` (spec §6), the envelope's rev raised; the
+    /// anchor follows.
+    pub(crate) fn rewrite_hint(
+        &self,
+        opened: &OpenProfile,
+        mut env: Envelope,
+        name: &str,
+    ) -> Result<(), Error> {
+        let dir = self.p.join(&env.id);
+        env.name = Some(name.into());
+        env.rev = env.rev.checked_add(1).ok_or(Error::ProfileFormat)?;
+        let b = env.json()?;
+        file::write(&dir, &dir.join(envelope::FILE), &b)?;
+        opened.core.set_envelope(Head::of(env.rev, &b))
+    }
+
     /// An open's end, under the instance lock `instance` of `p/<env.id>/`, after the envelope's checks and its wrap and label opened: the store
     /// core opened against the anchor, a lower generation removed (spec §7.3), the keychain's `protected` marker written when
-    /// missing. `keys` are locked on a failure.
+    /// missing. `name` and `hidden` are the sealed label's (an unprotected profile: its hint, visible). `keys` are locked on a
+    /// failure.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn finish(
         &self,
         instance: File,
@@ -649,6 +666,7 @@ impl Profiles {
         bytes: &[u8],
         keys: Option<Arc<ProfileKeys>>,
         name: &str,
+        hidden: bool,
         lower: &[PathBuf],
     ) -> Result<OpenProfile, Error> {
         let core = Core::open(CoreOpen {
@@ -670,6 +688,7 @@ impl Profiles {
                 id: env.id.clone(),
                 name: name.into(),
                 protected: keys.is_some(),
+                hidden,
             }),
             core,
             instance: Mutex::new(Some(instance)),
@@ -920,6 +939,14 @@ impl OpenProfile {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .name = name.into();
+    }
+
+    /// `hide()` / `show()`'s new flag (spec §8).
+    pub(crate) fn set_hidden(&self, hidden: bool) {
+        self.info
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .hidden = hidden;
     }
 
     /// The store core (the SDK's faces go over it).

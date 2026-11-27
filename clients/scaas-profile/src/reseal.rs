@@ -18,16 +18,15 @@
 //!
 //! A failure before the commit removes `g<N+1>/`, then the journal; a crash there is rolled back at the next open (§7.3, in
 //! `Profiles::open`). Under `test-hooks` a hook after each step can stop the run as if the process died.
-use crate::envelope::{self, Envelope, Kdf, KdfParams, Label, State, B64};
+use crate::envelope::{self, Envelope, Kdf, KdfParams, State, B64};
 use crate::file::{self, mkdir, rev_of, MAX_BYTES};
-use crate::hidden::{search, taken};
+use crate::hidden::{seal_label, search, taken, unchanged};
 use crate::names::random_vec;
 use crate::profile::{open_code, read_envelope, remove_dir, remove_file, sync_dir, OpenProfile};
 use crate::{keychain_name, Error, Head};
 use base64::Engine;
 use scaas_ua::wallet::ProfileKeys;
 use std::sync::Arc;
-use zeroize::Zeroizing;
 
 /// The journal of a re-seal (spec §5, §7.3).
 pub(crate) const NEXT: &str = "profile.envelope.next";
@@ -123,8 +122,8 @@ impl OpenProfile {
         let core = &self.core;
         let dir = core.dir().to_path_buf();
         let info = self.info();
-        let w = core.write_lock()?;
-        let (env, _) = read_envelope(&dir, &info.id)?.ok_or(Error::ProfileFormat)?;
+        core.live()?;
+        let (env, bytes) = read_envelope(&dir, &info.id)?.ok_or(Error::ProfileFormat)?;
         if (env.state == State::Protected) != old.is_some() || env.gen != core.gen() {
             return Err(Error::Argument);
         }
@@ -146,15 +145,20 @@ impl OpenProfile {
             salt: B64.encode(random_vec(16)?),
         };
         let (argon, salt) = new_kdf.check(self.kdf_max_kib)?;
+        // the old passphrase's check and a hidden profile's duplicate search run before the store write lock (review F-5);
+        // the envelope is read again under it
         if let Some(old) = old {
             self.check_pass(&env, old)?;
         }
-        // spec §8: a hidden profile's new passphrase first runs the duplicate search (a match other than itself is taken)
-        if env.state == State::Protected && env.name.is_none() {
+        // spec §8: a hidden profile's new passphrase first runs the duplicate search (a match other than itself is taken);
+        // hidden is the sealed label's flag, never the hint on disk (review G-2)
+        if info.hidden {
             let p = dir.parent().ok_or(Error::VaultIo)?;
             let found = search(p, &self.heavy, self.kdf_max_kib, &info.name, pass)?;
             taken(found, &info.id)?;
         }
+        let w = core.write_lock()?;
+        let env = unchanged(core, &info.id, &bytes)?;
         let gen = env.gen.checked_add(1).ok_or(Error::ProfileFormat)?;
         // spec §12 step 3: a migrated "default"'s `migration: pending` ends with its seal (controller call UP9)
         let mut next = Envelope {
@@ -164,19 +168,12 @@ impl OpenProfile {
             gen,
             kdf: Some(new_kdf),
             platform: None,
+            name: (!info.hidden).then(|| info.name.clone()),
             ..env.clone()
         };
         let keys = Arc::new(ProfileKeys::new());
         keys.create_dek().map_err(kdf_code)?;
-        let label = Zeroizing::new(
-            serde_json::to_vec(&Label {
-                name: info.name.clone(),
-                hidden: env.name.is_none(),
-            })
-            .map_err(|_| Error::Argument)?,
-        );
-        let sealed = keys.seal_label(&info.id, &label).map_err(kdf_code)?;
-        next.label = Some(B64.encode(sealed));
+        next.label = Some(seal_label(&keys, &info.id, &info.name, info.hidden)?);
         let wrap = {
             let _heavy = self.heavy.acquire();
             keys.wrap_pass(pass, &salt, argon, &next.public_json()?)

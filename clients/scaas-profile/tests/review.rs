@@ -12,16 +12,19 @@
 )]
 
 use scaas_profile::{
-    keychain_name, uuid7, Error, KdfParams, OpenProfile, ProfileEvent, ProfileKeychain, Profiles,
-    ProfilesConfig,
+    keychain_name, uuid7, Envelope, Error, ImportSource, KdfParams, OpenProfile, ProfileEvent,
+    ProfileKeychain, Profiles, ProfilesConfig,
 };
+use scaas_ua::wallet::ProfileKeys;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 
 const PASS: &[u8] = b"correct horse battery staple";
 const PASS2: &[u8] = b"another passphrase, longer";
+const XPASS: &[u8] = b"export passphrase, typed twice";
 const TEST: KdfParams = KdfParams { m_kib: 8192, t: 1 };
 
 static KDF: Mutex<()> = Mutex::new(());
@@ -202,4 +205,107 @@ fn g11_missing_generation_damaged() {
     std::fs::remove_file(dir.join("profile.head")).unwrap();
     assert_eq!(code(p.open(&id, Some(PASS))), "ProfileDamaged");
     assert!(!dir.join("g1").exists(), "never created");
+}
+
+/// The envelope of the profile directory `dir` with `f` applied, written back in its canonical form.
+fn edit_envelope(dir: &Path, f: impl FnOnce(&mut Envelope)) {
+    let id = dir.file_name().unwrap().to_str().unwrap();
+    let mut e = Envelope::parse(&std::fs::read(dir.join("profile.envelope")).unwrap(), id).unwrap();
+    f(&mut e);
+    std::fs::write(dir.join("profile.envelope"), e.json().unwrap()).unwrap();
+}
+
+fn index_text(root: &Path) -> String {
+    std::fs::read_to_string(root.join("profiles.json")).unwrap_or_default()
+}
+
+/// G-2 / A-12: an open hidden profile keeps its sealed label's hidden flag (`info().hidden`); a name planted into its
+/// envelope meanwhile is not taken for "visible": a rename writes no row and removes the planted hint, an export says
+/// hidden, a passphrase change keeps it hidden (the prompt finds it under the new passphrase). Control: a visible profile
+/// is not hidden and its rename writes its row.
+#[test]
+fn g2_hidden_flag_from_the_label() {
+    let _k = kdf_lock();
+    let root = tmp();
+    let p = Profiles::new(cfg(&root, None)).unwrap();
+    let o = p.create_hidden(b"Hid", PASS, Some(TEST)).unwrap();
+    assert!(o.info().hidden);
+    let dir = o.core().dir().to_path_buf();
+    edit_envelope(&dir, |e| e.name = Some("Planted".into()));
+    p.rename(&o, b"Hid2", Some(PASS)).unwrap();
+    assert!(!index_text(&root).contains("Hid2"), "no row for a hidden profile");
+    let env = std::fs::read_to_string(dir.join("profile.envelope")).unwrap();
+    assert!(!env.contains(r#""name""#), "the planted hint removed");
+    edit_envelope(&dir, |e| e.name = Some("Planted".into()));
+    let target = root.with_extension("export");
+    o.export(b"Hid2", PASS, XPASS, Some(TEST), &target).unwrap();
+    let r = p
+        .import_preview(ImportSource::Path(&target), XPASS)
+        .unwrap();
+    assert!(r.hidden(), "exported as hidden");
+    o.change_passphrase(PASS, PASS2, None).unwrap();
+    o.lock();
+    assert!(p.open_hidden(b"Hid2", PASS2).unwrap().info().hidden);
+    let id = p.list().unwrap()[0].id.clone();
+    let v = p.open(&id, None).unwrap();
+    assert!(!v.info().hidden, "control");
+    p.rename(&v, b"Vis", None).unwrap();
+    assert!(index_text(&root).contains("Vis"), "control");
+}
+
+/// A-8: a visible protected profile whose hint was stripped (its rev raised, so the anchor follows) is refused by id (spec
+/// §6), opens through the hidden prompt, and there has its hint and row rewritten from its label with
+/// `ProfileIndexMismatch`: it is listed and opens by id again. Control: it opens by id before.
+#[test]
+fn a8_stripped_hint_rewritten_from_the_label() {
+    let _k = kdf_lock();
+    let root = tmp();
+    let (p, o, id, dir) = protected(&root, None);
+    o.lock();
+    p.open(&id, Some(PASS)).unwrap().lock();
+    edit_envelope(&dir, |e| {
+        e.name = None;
+        e.rev += 1;
+    });
+    assert_eq!(code(p.open(&id, Some(PASS))), "ProfileOpen");
+    p.drain_events();
+    let h = p.open_hidden(b"default", PASS).unwrap();
+    assert!(!h.info().hidden);
+    assert!(p.drain_events().contains(&ProfileEvent::ProfileIndexMismatch));
+    assert_eq!(p.list().unwrap().len(), 1, "listed again");
+    h.lock();
+    p.open(&id, Some(PASS)).unwrap();
+}
+
+/// F-1: a passphrase that is not a valid OpaqueString (empty, a control character) still costs max(candidates, 4) runs,
+/// with no hidden profile and with one. Control: a well-formed wrong passphrase costs the same.
+#[test]
+fn f1_invalid_passphrase_costs_every_run() {
+    let _k = kdf_lock();
+    let p = Profiles::new(cfg(&tmp(), None)).unwrap();
+    for hidden in [false, true] {
+        if hidden {
+            p.create_hidden(b"Hid", PASS, Some(TEST)).unwrap().lock();
+        }
+        for pass in [&b""[..], b"tab\there passphrase", b"well formed but wrong"] {
+            let before = ProfileKeys::kdf_runs();
+            assert_eq!(code(p.open_hidden(b"Alice", pass)), "ProfileOpen");
+            assert_eq!(ProfileKeys::kdf_runs() - before, 4, "{pass:?}");
+        }
+    }
+}
+
+/// F-5: `hide()`'s wrap check and duplicate search run before the store write lock: with the lock held elsewhere it makes
+/// its KDF runs, then fails `ProfileBusy`. Control: the lock released, it hides.
+#[test]
+fn f5_search_before_the_store_write_lock() {
+    let _k = kdf_lock();
+    let (p, o, ..) = protected(&tmp(), None);
+    o.core().set_write_wait(Duration::from_millis(50));
+    let w = o.core().write_lock().unwrap();
+    let before = ProfileKeys::kdf_runs();
+    assert_eq!(code(p.hide(&o, PASS)), "ProfileBusy");
+    assert!(ProfileKeys::kdf_runs() - before >= 5, "the wrap check and the search ran");
+    drop(w);
+    p.hide(&o, PASS).unwrap();
 }

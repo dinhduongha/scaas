@@ -410,7 +410,7 @@ impl OpenProfile {
         self.check_pass(&env, profile_pass)?;
         let label = serde_json::to_vec(&Label {
             name: info.name.clone(),
-            hidden: env.name.is_none(),
+            hidden: info.hidden,
         })
         .map(Zeroizing::new)
         .map_err(|_| Error::Argument)?;
@@ -551,6 +551,7 @@ impl Profiles {
             id,
             name: name.to_string(),
             protected: true,
+            hidden,
         })
     }
 }

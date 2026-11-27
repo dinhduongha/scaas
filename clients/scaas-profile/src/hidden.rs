@@ -15,8 +15,8 @@ use crate::file::{self, lock_file, mkdir, try_lock_file};
 use crate::index::{self, Row};
 use crate::names::{check_name, new_id, random_vec, same_name};
 use crate::profile::{
-    open_label, read_envelope, remove_dir, scan, Heavy, OpenProfile, Profiles, BUILD_LOCK,
-    INSTANCE_LOCK,
+    open_label, read_envelope, remove_dir, scan, Heavy, OpenProfile, ProfileEvent, Profiles,
+    BUILD_LOCK, INSTANCE_LOCK,
 };
 use crate::reseal::{check_passphrase, kdf_code};
 use crate::store::{Core, WriteGuard};
@@ -129,9 +129,13 @@ pub(crate) fn search(
     if candidates.len() > SEARCH_MAX {
         return Err(Error::ProfileSearchTooLarge);
     }
+    // a passphrase that is no OpaqueString (empty, a control character) opens nothing, and still costs every run: each
+    // candidate a dummy (spec §8 step 2, review F-1)
+    let usable = scaas_ua::wallet::passphrase_bytes(pass).is_ok();
     let (mut found, mut failed) = (Vec::new(), None);
     for (id, env) in &candidates {
-        match try_one(heavy, max_kib, env.as_ref().map(|(e, _)| e), name, pass) {
+        let e = env.as_ref().map(|(e, _)| e).filter(|_| usable);
+        match try_one(heavy, max_kib, e, name, pass) {
             Ok(Some(keys)) => found.push(Found {
                 id: id.clone(),
                 bytes: env.as_ref().map(|(_, b)| b.clone()).unwrap_or_default(),
@@ -172,6 +176,15 @@ pub(crate) fn seal_label(
         .seal_label(id, &pt.map_err(|_| Error::Argument)?)
         .map_err(kdf_code)?;
     Ok(B64.encode(sealed))
+}
+
+/// The envelope read again under the store write lock: `StoreConflict` when it is not `bytes`, as read before the lock
+/// (another write landed while a KDF ran outside it, review F-5).
+pub(crate) fn unchanged(core: &Core, id: &str, bytes: &[u8]) -> Result<Envelope, Error> {
+    match read_envelope(core.dir(), id)?.ok_or(Error::ProfileFormat)? {
+        (env, b) if b == bytes => Ok(env),
+        _ => Err(Error::StoreConflict),
+    }
 }
 
 /// `env` written with its rev raised, under the store write lock `w`; the anchor follows.
@@ -251,7 +264,7 @@ impl Profiles {
             keys.lock();
         }
         let instance = r?;
-        self.finish(instance, &env, &bytes, Some(keys), &name, &[])
+        self.finish(instance, &env, &bytes, Some(keys), &name, true, &[])
     }
 
     /// Opens a hidden profile by its `name` and `passphrase`, both typed (spec §8): the search; on exactly one match its
@@ -281,14 +294,31 @@ impl Profiles {
         let lower = self.generations(&dir, &f.id, env.gen)?;
         self.check_marker(&f.id, env.state)?;
         let label = open_label(&f.keys, &env)?;
-        self.finish(
+        let opened = self.finish(
             instance,
             &env,
             &bytes,
             Some(f.keys.clone()),
             &label.name,
+            label.hidden,
             &lower,
-        )
+        )?;
+        // spec §6: a visible label beside no hint (a stripped hint): the hint and the row rewritten from the label
+        if !label.hidden {
+            self.rewrite_hint(&opened, env, &label.name)?;
+            self.update_index(|ix| {
+                let add = !ix.profiles.iter().any(|r| r.id == f.id) && ix.profiles.len() < index::ROWS;
+                if add {
+                    ix.profiles.push(Row {
+                        id: f.id.clone(),
+                        name: label.name.to_string(),
+                    });
+                }
+                add
+            })?;
+            self.event(ProfileEvent::ProfileIndexMismatch);
+        }
+        Ok(opened)
     }
 
     /// `o` is a profile of this root.
@@ -331,13 +361,14 @@ impl Profiles {
     pub fn hide(&self, o: &OpenProfile, passphrase: &[u8]) -> Result<(), Error> {
         self.mine(o)?;
         let (core, info) = (o.core(), o.info());
-        let w = core.write_lock()?;
-        let (mut env, _) = read_envelope(core.dir(), &info.id)?.ok_or(Error::ProfileFormat)?;
+        core.live()?;
         let keys = core.keys().ok_or(Error::ProfilePassphraseRequired)?;
-        if env.name.is_none() {
+        if info.hidden {
             return Err(Error::Argument);
         }
         self.room(false, true)?;
+        // the wrap check and the duplicate search before the store write lock (review F-5)
+        let (env, bytes) = read_envelope(core.dir(), &info.id)?.ok_or(Error::ProfileFormat)?;
         o.check_pass(&env, passphrase)?;
         let found = search(
             &self.p,
@@ -347,6 +378,10 @@ impl Profiles {
             passphrase,
         )?;
         taken(found, &info.id)?;
+        let w = core.write_lock()?;
+        let mut env = unchanged(core, &info.id, &bytes)?;
+        // the row first, then the envelope (review A-7): a crash between them leaves no row naming a hidden profile
+        self.drop_row(&info.id)?;
         env.label = Some(seal_label(&keys, &info.id, &info.name, true)?);
         env.name = None;
         env.platform = None;
@@ -355,7 +390,8 @@ impl Profiles {
             kc.delete(&keychain_name(&info.id, "unlock"))?;
         }
         drop(w);
-        self.drop_row(&info.id)
+        o.set_hidden(true);
+        Ok(())
     }
 
     /// Shows the open, hidden profile `o` (spec §8): its name free among the visible ones (`ProfileNameTaken`), its row
@@ -367,13 +403,15 @@ impl Profiles {
         let w = core.write_lock()?;
         let (mut env, _) = read_envelope(core.dir(), &info.id)?.ok_or(Error::ProfileFormat)?;
         let keys = core.keys().ok_or(Error::ProfilePassphraseRequired)?;
-        if env.name.is_some() {
+        if !info.hidden {
             return Err(Error::Argument);
         }
         env.label = Some(seal_label(&keys, &info.id, &info.name, false)?);
         env.name = Some(info.name.clone());
         self.put_row(&info.id, &info.name)?;
-        write_envelope(core, &w, &mut env)
+        write_envelope(core, &w, &mut env)?;
+        o.set_hidden(false);
+        Ok(())
     }
 
     /// Renames the open profile `o` (spec §10 "rename"): the label re-sealed under `DEK_p` (a protected profile), the wraps
@@ -389,23 +427,39 @@ impl Profiles {
         self.mine(o)?;
         let name = Zeroizing::new(check_name(utf8(name)?)?);
         let (core, info) = (o.core(), o.info());
-        let w = core.write_lock()?;
-        let (mut env, _) = read_envelope(core.dir(), &info.id)?.ok_or(Error::ProfileFormat)?;
-        let hidden = env.name.is_none();
-        if let Some(keys) = core.keys() {
-            if hidden {
+        core.live()?;
+        // hidden is the sealed label's flag, never the hint on disk (review G-2)
+        let hidden = info.hidden;
+        // a hidden profile: the wrap check and the duplicate search before the store write lock (review F-5)
+        let seen = match (core.keys(), hidden) {
+            (Some(_), true) => {
                 let pass = passphrase.ok_or(Error::Argument)?;
+                let (env, bytes) =
+                    read_envelope(core.dir(), &info.id)?.ok_or(Error::ProfileFormat)?;
                 o.check_pass(&env, pass)?;
                 taken(
                     search(&self.p, &self.heavy, self.kdf_max_kib, &name, pass)?,
                     &info.id,
                 )?;
+                Some(bytes)
             }
+            _ => None,
+        };
+        let w = core.write_lock()?;
+        let mut env = match &seen {
+            Some(b) => unchanged(core, &info.id, b)?,
+            None => read_envelope(core.dir(), &info.id)?.ok_or(Error::ProfileFormat)?.0,
+        };
+        if let Some(keys) = core.keys() {
             env.label = Some(seal_label(&keys, &info.id, &name, hidden)?);
         }
-        if !hidden {
-            self.put_row(&info.id, &name)?;
-            env.name = Some(name.to_string());
+        match hidden {
+            false => {
+                self.put_row(&info.id, &name)?;
+                env.name = Some(name.to_string());
+            }
+            // a hint planted on a hidden profile goes
+            true => env.name = None,
         }
         write_envelope(core, &w, &mut env)?;
         o.set_name(&name);
