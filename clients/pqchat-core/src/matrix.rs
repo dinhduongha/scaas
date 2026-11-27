@@ -25,11 +25,10 @@ use serde_json::{json, Value};
 // The transport trait, its error and value types and the conformance test live in `pqchat-transport` (CLI-MTX-01), so that
 // `scaas-matrix` implements the trait without this crate and this crate pulls no Matrix crate; re-exported at their old paths.
 pub use pqchat_transport::{
-    conformance, HistoryPage, MatrixTransport, RoomEvent, Seen, TransportError, Witness, EVENT_TYPE,
+    conformance, HistoryPage, MatrixTransport, RoomEvent, Seen, TransportError, Witness, EVENT_MAX,
+    EVENT_TYPE,
 };
 
-/// An event's content above this is dropped (`decode`): a homeserver's event bound.
-pub const EVENT_MAX: usize = 65_536;
 /// History pages read back at most per room and call (the rest: the server's retention, or the next call).
 pub const HISTORY_PAGES: usize = 64;
 /// Events of one history read processed at most.
@@ -246,7 +245,8 @@ impl PqChat {
     /// has not confirmed it; refused (shown with the reason, `RoomNotUsed`) when another session holds it, or when the
     /// account had joined it before this client bound it and one of its members does not check against `ep` (a fresh
     /// device's room: every id it holds, joined or invited, is the account's own or one `ep`'s `sealedInfo` maps to a member
-    /// of `ep`); else joined (an invite held answered) and bound.
+    /// of `ep`); else joined (an invite held answered) and bound. Every `Bound` answer is told to the attached transport
+    /// ([`MatrixTransport::bound`]), so a fresh device or a new Matrix login treats the room as this session's.
     pub async fn join_room(&self, ep: &OpenEpoch) -> Result<RoomUse, PqChatError> {
         self.require_accepted(&ep.epoch.session_id)?;
         let sid = ep.epoch.session_id.to_ascii_lowercase();
@@ -268,14 +268,14 @@ impl PqChat {
         match self.room_bind(room)? {
             Some(RoomBind {
                 session: Some(s), ..
-            }) if s == sid => return Ok(RoomUse::Bound),
+            }) if s == sid => return self.told_bound(room).await,
             Some(RoomBind {
                 session: Some(_), ..
             }) => return refuse(RoomRefusal::OtherSession),
             // created here and not given to a session yet: this one's
             Some(RoomBind { created: true, .. }) => {
                 self.bind_created(room, &sid)?;
-                return Ok(RoomUse::Bound);
+                return self.told_bound(room).await;
             }
             _ => {}
         }
@@ -294,7 +294,7 @@ impl PqChat {
             }
         } else {
             t.join(room).await?;
-            t.hold_invite(room, false).await;
+            t.hold_invite(room, false).await?;
         }
         Items(&*self.store).update::<RoomBind, _>(&room_key(room), |_| {
             Ok(RoomBind {
@@ -302,6 +302,15 @@ impl PqChat {
                 created: false,
             })
         })?;
+        t.bound(room).await?;
+        Ok(RoomUse::Bound)
+    }
+
+    /// `Bound`, told to the transport when one is attached (none attached: nothing to tell).
+    async fn told_bound(&self, room: &str) -> Result<RoomUse, PqChatError> {
+        if let Some(t) = self.matrix() {
+            t.bound(room).await?;
+        }
         Ok(RoomUse::Bound)
     }
 

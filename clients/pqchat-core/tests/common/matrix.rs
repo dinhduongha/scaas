@@ -147,7 +147,7 @@ impl Client {
             .lock()
             .unwrap()
             .iter()
-            .filter(|(c, _)| !matches!(c.as_str(), "joined" | "members" | "hold_invite"))
+            .filter(|(c, _)| !matches!(c.as_str(), "joined" | "members" | "hold_invite" | "bound"))
             .count()
     }
 }
@@ -261,7 +261,7 @@ impl MatrixTransport for Client {
             before: (start > 0).then(|| start.to_string()),
         })
     }
-    async fn hold_invite(&self, room: &str, hold: bool) {
+    async fn hold_invite(&self, room: &str, hold: bool) -> Result<(), TransportError> {
         self.rec("hold_invite", room);
         let mut h = self.held.lock().unwrap();
         if hold {
@@ -269,6 +269,11 @@ impl MatrixTransport for Client {
         } else {
             h.remove(room);
         }
+        Ok(())
+    }
+    async fn bound(&self, room: &str) -> Result<(), TransportError> {
+        self.rec("bound", room);
+        Ok(())
     }
 }
 
@@ -279,6 +284,9 @@ pub const WITNESS: &str = "@witness:fake.local";
 
 #[async_trait]
 impl Witness for ServerWitness {
+    fn user_id(&self) -> String {
+        WITNESS.into()
+    }
     async fn seen(&self, room: &str, user: &str) -> Result<Seen, TransportError> {
         let rooms = self.0.rooms.lock().unwrap();
         let r = rooms.get(room).ok_or_else(no_room)?;

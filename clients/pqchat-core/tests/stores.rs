@@ -124,7 +124,9 @@ impl MatrixTransport for Room {
     ) -> Result<pqchat_core::matrix::HistoryPage, TransportError> {
         Ok(Default::default())
     }
-    async fn hold_invite(&self, _: &str, _: bool) {}
+    async fn hold_invite(&self, _: &str, _: bool) -> Result<(), TransportError> {
+        Ok(())
+    }
 }
 
 fn review<'a>(s: &'a PqChatSigned, name: &str) -> &'a str {

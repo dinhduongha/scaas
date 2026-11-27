@@ -8,7 +8,7 @@ publish = false
 license-file = "../../LICENSE"
 description = "PqChat's Matrix transport trait and its conformance test, shared by pqchat-core and scaas-matrix (CLI-MTX-01). No Matrix crate, no SDK. UNAUDITED."
 
-# docs/clients/scaas-matrix.md CLI-MTX-01: only what both sides share; serde for the two value types pqchat-core stores,
+# docs/clients/scaas-matrix.md CLI-MTX-01: only what both sides share; serde for `RoomEvent`, which pqchat-core stores,
 # serde_json for the trait's `Value`, async-trait for `dyn MatrixTransport`
 [dependencies]
 async-trait = "0.1"

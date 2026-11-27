@@ -151,6 +151,32 @@ async fn created_room_unencrypted_and_bound_by_create() {
     assert_eq!(code(w.pq.create(req(&room, 3)).await), "MatrixRoom");
 }
 
+/// Every `Bound` answer is told to the transport (`bound`), the first bind and each later use alike: a fresh device or a new
+/// Matrix login learns the binding the crate's store holds (scaas-matrix marks the room PqChat on it).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_bound_room_is_told_to_the_transport() {
+    let _one = ONE.lock().await;
+    let w = ready().await;
+    let (server, c) = attach(&w);
+    let room = invited_room(&server, BOB);
+    let s = signed(
+        &w,
+        &w.bob,
+        None,
+        1,
+        &[&w.alice, &w.bob],
+        &[&w.bob],
+        info(vec![room_entry(&room)], &[]),
+    )
+    .await;
+    let ep = in_use(&w, &s).await;
+    assert!(c.calls_of("bound").is_empty());
+    assert_eq!(w.pq.join_room(&ep).await.unwrap(), RoomUse::Bound);
+    assert_eq!(c.calls_of("bound"), vec![room.clone()]);
+    assert_eq!(w.pq.join_room(&ep).await.unwrap(), RoomUse::Bound);
+    assert_eq!(c.calls_of("bound"), vec![room.clone(), room]);
+}
+
 /// An event of a room no session binds is ignored (nothing counted, nothing read); the same kind of event in the bound room
 /// is read and shown.
 #[tokio::test(flavor = "multi_thread")]

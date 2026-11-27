@@ -237,6 +237,9 @@ pub struct SynapseWitness<'a> {
 
 #[async_trait]
 impl Witness for SynapseWitness<'_> {
+    fn user_id(&self) -> String {
+        self.other.user.clone()
+    }
     async fn seen(&self, room: &str, user: &str) -> Result<Seen, TransportError> {
         Ok(self.s.seen_of(room, user))
     }
@@ -453,9 +456,10 @@ impl MatrixTransport for Http {
         };
         Ok(HistoryPage { events, before })
     }
-    async fn hold_invite(&self, room: &str, hold: bool) {
+    async fn hold_invite(&self, room: &str, hold: bool) -> Result<(), TransportError> {
         // this client never answers an invite by itself: holding is recording
         self.rec(format!("hold_invite {room} {hold}"));
+        Ok(())
     }
 }
 
@@ -507,7 +511,7 @@ impl MatrixTransport for LastN {
             before: None,
         })
     }
-    async fn hold_invite(&self, room: &str, hold: bool) {
+    async fn hold_invite(&self, room: &str, hold: bool) -> Result<(), TransportError> {
         self.inner.hold_invite(room, hold).await
     }
 }
