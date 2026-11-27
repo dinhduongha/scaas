@@ -411,13 +411,32 @@ fn u16_of(n: Num) -> Result<u16> {
     u16::try_from(n.0).map_err(|_| Error::ChainUnverified)
 }
 
-/// A write signed on the user's confirm ([`PqVault::confirm`]): the signed record and its wraps, and the call of it,
-/// prepared and simulated (`Err`: not sent; the record can be called again with [`PqVault::prepare_signed`]).
+/// A write signed on the user's confirm ([`PqVault::confirm`]): the signed record and its wraps, the call of it, prepared
+/// and simulated (`Err`: not sent; the record can be called again with [`PqVault::prepare_signed`]), and the quote the user
+/// reviewed. A `Confirmed` the front-end abandons is a valid signed record still: it drops it (re-check R-8).
 #[derive(Debug)]
 pub struct Confirmed<R> {
     pub signed: Signed<R>,
     pub wraps: Vec<Wrap>,
     pub call: Result<AppCall>,
+    pub reviewed: AppQuote,
+}
+
+impl<R> Confirmed<R> {
+    /// CLI-PQV-18 (owner 2026-11-27): whether the call may be sent on the confirm already given: the fresh quote's payer is
+    /// the reviewed one and its `max_cost` at most the reviewed `max_cost`. `false` when the call failed, when the review was
+    /// unquoted or when a figure does not parse: the front-end then shows the fresh quote and sends only on a second
+    /// confirm.
+    pub fn within_review(&self) -> bool {
+        let (Ok(call), Some(r)) = (&self.call, &self.reviewed.quote) else {
+            return false;
+        };
+        let fresh = &call.quote.quote;
+        let cost = |q: &scaas_sdk::op::SubmitQuote| q.max_cost.parse::<u128>().ok();
+        fresh.payer.is_some()
+            && fresh.payer == r.payer
+            && matches!((cost(fresh), cost(r)), (Some(f), Some(r)) if f <= r)
+    }
 }
 
 impl<R> Prepared<R> {
@@ -1111,6 +1130,7 @@ impl PqVault {
             },
             wraps: p.wraps,
             call,
+            reviewed: p.quote,
         })
     }
 

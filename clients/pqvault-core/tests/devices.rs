@@ -117,33 +117,7 @@ impl Net for Seam {
             return Err(SdkError::Argument);
         }
         self.called.lock().unwrap().push(args);
-        Ok(AppCall {
-            review: vec![],
-            quote: scaas_sdk::wallet::NativeQuote {
-                key: payer.clone(),
-                chain: chain.into(),
-                from: String::new(),
-                to: String::new(),
-                value: "0".into(),
-                data: String::new(),
-                quote: scaas_sdk::op::SubmitQuote {
-                    path: scaas_sdk::op::SubmitPath::SelfRelay { payer },
-                    payer: None,
-                    gas_limit: 0,
-                    regular_gas: 0,
-                    gas: None,
-                    gas_from: None,
-                    max_fee_per_gas: "0".into(),
-                    max_priority_fee_per_gas: "0".into(),
-                    max_cost: "0".into(),
-                    fee_to_relayer: "0".into(),
-                    gateways: vec![],
-                    tx_nonce: 0,
-                    tx_type: 2,
-                },
-                delegated: false,
-            },
-        })
+        Ok(app_call(chain, &payer, submit_quote(&payer, "0", None)))
     }
     async fn quote(
         &self,
@@ -160,6 +134,44 @@ impl Net for Seam {
             review: vec![],
             quote: None,
         })
+    }
+}
+
+/// A payer's quote of `max_cost` (wei, decimal) by `from` (its address, `None` unknown).
+fn submit_quote(payer: &KeyRef, max_cost: &str, from: Option<&str>) -> scaas_sdk::op::SubmitQuote {
+    scaas_sdk::op::SubmitQuote {
+        path: scaas_sdk::op::SubmitPath::SelfRelay {
+            payer: payer.clone(),
+        },
+        payer: from.map(Into::into),
+        gas_limit: 0,
+        regular_gas: 0,
+        gas: None,
+        gas_from: None,
+        max_fee_per_gas: "0".into(),
+        max_priority_fee_per_gas: "0".into(),
+        max_cost: max_cost.into(),
+        fee_to_relayer: "0".into(),
+        gateways: vec![],
+        tx_nonce: 0,
+        tx_type: 2,
+    }
+}
+
+/// A prepared call carrying `quote`.
+fn app_call(chain: &str, payer: &KeyRef, quote: scaas_sdk::op::SubmitQuote) -> AppCall {
+    AppCall {
+        review: vec![],
+        quote: scaas_sdk::wallet::NativeQuote {
+            key: payer.clone(),
+            chain: chain.into(),
+            from: String::new(),
+            to: String::new(),
+            value: "0".into(),
+            data: String::new(),
+            quote,
+            delegated: false,
+        },
     }
 }
 
@@ -646,4 +658,55 @@ async fn nothing_is_signed_before_the_confirm() {
     let again = w.pv.prepare_signed(&at(), &c.signed, &c.wraps, pay()).await;
     assert!(again.is_ok(), "the same signed record called again");
     assert_eq!(signs(&w), n + 1, "no second signature");
+}
+
+/// CLI-PQV-18 (owner 2026-11-27): after the confirm, the call is sent on that confirm only when the fresh quote's payer is
+/// the reviewed one and its `max_cost` at most the reviewed one; a higher cost, another payer, an unquoted review, a failed
+/// call or a figure that does not parse asks a second confirm.
+#[test]
+fn a_fresh_quote_within_the_review_needs_no_second_confirm() {
+    let payer = KeyRef::Native {
+        seed: "s".into(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let a = Some("0x00000000000000000000000000000000000000a1");
+    let b = Some("0x00000000000000000000000000000000000000b2");
+    let leave = VaultLeave {
+        vault_id: B32([1; 32]),
+        epoch_id: B32([2; 32]),
+        member: B32([3; 32]),
+        nonce: Num(1),
+    };
+    let within = |reviewed: Option<(&str, Option<&str>)>, fresh: Option<(&str, Option<&str>)>| {
+        pqvault_core::Confirmed {
+            signed: Signed {
+                record: leave.clone(),
+                sig: UaSig::default(),
+            },
+            wraps: vec![],
+            call: fresh
+                .map(|(c, f)| app_call("anvil", &payer, submit_quote(&payer, c, f)))
+                .ok_or(Error::Unreadable),
+            reviewed: AppQuote {
+                review: vec![],
+                quote: reviewed.map(|(c, f)| submit_quote(&payer, c, f)),
+            },
+        }
+        .within_review()
+    };
+    assert!(within(Some(("100", a)), Some(("100", a))), "the same cost");
+    assert!(within(Some(("100", a)), Some(("99", a))), "a lower cost");
+    assert!(!within(Some(("100", a)), Some(("101", a))), "a higher cost");
+    assert!(!within(Some(("100", a)), Some(("100", b))), "another payer");
+    assert!(
+        !within(Some(("100", None)), Some(("100", None))),
+        "no payer named"
+    );
+    assert!(!within(None, Some(("100", a))), "an unquoted review");
+    assert!(!within(Some(("100", a)), None), "a failed call");
+    assert!(
+        !within(Some(("1e3", a)), Some(("100", a))),
+        "a figure that does not parse"
+    );
 }
