@@ -9,6 +9,10 @@
 //! `--no-default-features` keeps this verify-only layer. UNAUDITED.
 use sha3::{Digest, Keccak256};
 
+// user-profiles spec §7.5: the test KDF set (8 MiB / 1 / 4) and the forced out-of-memory hook never reach a release build
+#[cfg(all(feature = "test-hooks", not(debug_assertions)))]
+compile_error!("scaas-ua's feature `test-hooks` is test-only: never in a release build");
+
 #[cfg(feature = "fam-algorand")]
 pub mod algorand;
 #[cfg(feature = "fam-arweave")]

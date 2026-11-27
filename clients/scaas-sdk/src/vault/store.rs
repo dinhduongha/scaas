@@ -65,6 +65,13 @@ pub enum StoreError {
     Io,
     Unavailable,
     Unexpected,
+    /// user-profiles spec §7.2 "Errors" (each the `SdkError` of its name): a sealed item that does not open, or a plain item in
+    /// a protected profile
+    VaultFormat,
+    ProfileLocked,
+    ProfilePassphraseRequired,
+    ProfileRollback,
+    ProfileDamaged,
 }
 
 /// A foreign store's lock release, run to its end on a thread of its own on a current-thread runtime (review T26 C-7): a
@@ -114,14 +121,27 @@ pub trait SecureStore: Send + Sync {
     async fn lock(&self, name: String) -> Result<Arc<StoreLock>, StoreError>;
 }
 
-/// The revision of an item's bytes: its top-level JSON `rev`, else `u64::MAX`.
+/// A sealed item's bound (user-profiles spec §7.2 "Size"): the base64 of the 16 MiB plain bound plus 1 KiB.
+pub(crate) const SEALED_MAX: usize = 4 * super::keystore::MAX_BYTES.div_ceil(3) + 1024;
+
+/// The revision of an item's bytes: its top-level JSON `rev`, else `u64::MAX`. Read up to 16 MiB, or for a sealed item (bytes
+/// that begin `{"rev":<digits>,"sealed":"`) up to the base64 of 16 MiB plus 1 KiB.
 pub fn rev_of(bytes: &[u8]) -> u64 {
     #[derive(serde::Deserialize)]
     struct Rev {
         rev: u64,
     }
-    if bytes.len() > super::keystore::MAX_BYTES || scaas_ua::json::depth_within(bytes, 64).is_err()
-    {
+    let rest = bytes.strip_prefix(br#"{"rev":"#).unwrap_or_default();
+    let digits = rest.iter().take_while(|b| b.is_ascii_digit()).count();
+    let sealed = rest
+        .get(digits..)
+        .is_some_and(|r| r.starts_with(br#","sealed":""#));
+    let max = if sealed {
+        SEALED_MAX
+    } else {
+        super::keystore::MAX_BYTES
+    };
+    if bytes.len() > max || scaas_ua::json::depth_within(bytes, 64).is_err() {
         return u64::MAX;
     }
     serde_json::from_slice::<Rev>(bytes).map_or(u64::MAX, |r| r.rev)
@@ -445,5 +465,28 @@ mod tests {
         assert_eq!(rev_of(br#"{"format":"x","rev":42,"seeds":[]}"#), 42);
         assert_eq!(rev_of(b"not json"), u64::MAX);
         assert_eq!(rev_of(br#"{"rev":-1}"#), u64::MAX);
+    }
+
+    /// `n` bytes of `head` + filler + `"}` (user-profiles spec §7.2 "Size").
+    fn item(head: &str, n: usize) -> Vec<u8> {
+        let mut b = head.as_bytes().to_vec();
+        b.resize(n - 2, b'A');
+        b.extend_from_slice(br#""}"#);
+        b
+    }
+
+    /// A sealed item `{"rev":N,"sealed":"<base64>"}` reads its rev up to the base64 of 16 MiB plus 1 KiB
+    /// (4 * ceil(16 MiB / 3) + 1,024 = 22,370,648 bytes), one byte above is `u64::MAX`; a plain item keeps the 16 MiB bound.
+    #[test]
+    fn rev_of_sealed_bound() {
+        const SEALED: usize = 22_370_648;
+        const PLAIN: usize = 16 << 20;
+        assert_eq!(rev_of(&item(r#"{"rev":7,"sealed":""#, SEALED)), 7);
+        assert_eq!(
+            rev_of(&item(r#"{"rev":7,"sealed":""#, SEALED + 1)),
+            u64::MAX
+        );
+        assert_eq!(rev_of(&item(r#"{"rev":7,"ops":""#, PLAIN)), 7, "control");
+        assert_eq!(rev_of(&item(r#"{"rev":7,"ops":""#, PLAIN + 1)), u64::MAX);
     }
 }

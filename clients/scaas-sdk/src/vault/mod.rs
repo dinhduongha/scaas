@@ -51,10 +51,17 @@ pub(crate) struct Loaded {
     pub(crate) rollback: bool,
 }
 
-fn io(e: StoreError) -> SdkError {
+/// A store's failure as the SDK's code (spec §6.9; user-profiles spec §7.2 "Errors": the profile codes by name); the one mapping
+/// of the keystore and of `sdk.state`.
+pub(crate) fn io(e: StoreError) -> SdkError {
     match e {
         StoreError::Conflict => SdkError::StoreConflict,
-        _ => SdkError::VaultIo,
+        StoreError::VaultFormat => SdkError::VaultFormat,
+        StoreError::ProfileLocked => SdkError::ProfileLocked,
+        StoreError::ProfilePassphraseRequired => SdkError::ProfilePassphraseRequired,
+        StoreError::ProfileRollback => SdkError::ProfileRollback,
+        StoreError::ProfileDamaged => SdkError::ProfileDamaged,
+        StoreError::Io | StoreError::Unavailable | StoreError::Unexpected => SdkError::VaultIo,
     }
 }
 

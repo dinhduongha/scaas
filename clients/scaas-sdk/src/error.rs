@@ -179,6 +179,33 @@ own_codes! {
     FileHashMismatch,
     /// a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
     Cancelled,
+    // user-profiles spec §11 "New codes" (CLI-UPR-22); none carries an id, a name, a passphrase or a path
+    ProfileInUse,
+    ProfileOpen,
+    /// a `--profile` name or id with no visible profile
+    ProfileUnknown,
+    ProfileNameTaken,
+    ProfileNameInvalid,
+    ProfileLimit,
+    ProfileHiddenLimit,
+    ProfilePartFull,
+    ProfileRootUnsafe,
+    ProfilePassphraseRequired,
+    ProfilePassphraseWeak,
+    ProfileFormat,
+    ProfileVersion,
+    ProfileKdfTooLarge,
+    ProfileKdfOutOfMemory,
+    ProfileSearchTooLarge,
+    ProfileImportOpen,
+    ProfileExportTooLarge,
+    ProfileLocked,
+    /// a writer that waited 120 s on a re-seal
+    ProfileBusy,
+    KeyLocked,
+    /// user-profiles spec §7.2 "Errors": the store codes `StoreError::ProfileRollback` and `ProfileDamaged`, by name
+    ProfileRollback,
+    ProfileDamaged,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

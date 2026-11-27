@@ -84,6 +84,11 @@ raw-native = ["wallet"]
 # owner 2026-11-23 (T26 B-22): a development build whose profiles may take `Finality::Depth(0)` on any chain; never a release
 dev-profiles = []
 arweave = ["vault", "scaas-rpc/arweave", "scaas-rpc/node-client", "scaas-ua/fam-arweave"]
+# user-profiles plan UP4 (spec 2026-11-27-user-profiles §11; bit 33): many protected local profiles over `ua-rs`'s profile arena
+user-profile = ["vault", "file-store", "scaas-ua/user-profile"]
+# user-profiles spec §7.5 (bit 34): the test KDF set (8 MiB / 1 / 4) and the test hooks; refused in a release build
+# (`compile_error!` without `debug_assertions`), never in a binding (scripts/check_test_features.py, the bind-gen check)
+test-hooks = ["user-profile", "scaas-ua/test-hooks"]
 # the Dart adapter (src/frb.rs): the platform interfaces as records of async closures; no dependency of its own
 frb = []
 # T20b-T20h (spec §16.1): the UniFFI surface (src/binding.rs), async (Python, Kotlin, Swift, Java, C# and Go where their

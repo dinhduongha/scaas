@@ -23,11 +23,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 GUARDED = ("scaas-ua", "zether-prover", "pqz-ffi", "scaas-ct", "scaas-sdk")
-TEST = ("vectors", "hazmat")
+TEST = ("vectors", "hazmat", "test-hooks")
 
 
 def is_test(f):
-    """A test feature: `vectors`, `hazmat`, or a `xcheck-<family>` (plan T42: a chain crate as a third cross-check, tests and
+    """A test feature: `vectors`, `hazmat`, `test-hooks` (user-profiles spec §7.5: the test KDF set and hooks), or a
+    `xcheck-<family>` (plan T42: a chain crate as a third cross-check, tests and
     CI only, never default, never in a release build)."""
     return f in TEST or f.startswith("xcheck-")
 
@@ -35,8 +36,14 @@ def is_test(f):
 # test-only crates, each named with its reason: the fuzz harness of ua-rs (its targets reach the facades through `vectors`);
 # the wasm32 Falcon gate's runner (CLI-UAL-66, tests/fndsa/wasm/run.sh: publish = false, its own workspace and lockfile, a
 # cdylib loaded only by run.cjs; tests/fndsa/sign.rs signs through the `vectors` hooks `vectors_with_secret` and
-# `vectors_sign_ua_msg`, so the feature is what it tests, never a build beside a shipped artifact)
-TEST_ONLY = {"clients/ua-rs/fuzz/Cargo.toml", "clients/ua-rs/tests/fndsa/wasm/Cargo.toml"}
+# `vectors_sign_ua_msg`, so the feature is what it tests, never a build beside a shipped artifact); the Nethermind plugin's
+# fault library (P6f Task 2: pqz-ffi's `test-hooks` for the fault child process only, publish = false, its own workspace,
+# never in the image, which build-image.sh scans)
+TEST_ONLY = {
+    "clients/ua-rs/fuzz/Cargo.toml",
+    "clients/ua-rs/tests/fndsa/wasm/Cargo.toml",
+    "pqz-core/nethermind/fault-hooks/Cargo.toml",
+}
 # the production artifacts: (directory, extra cargo tree arguments); the bindings' cores and zether-read-balance
 ARTIFACTS = [
     ("clients/ua-c", []),
@@ -204,8 +211,15 @@ def main():
         and check_manifest("scratch", head + "[dependencies]\n" + xdep) != []
         and check_manifest("scratch", head + "[dev-dependencies]\n" + xdep) == []
     )
+    # user-profiles spec §7.5: `test-hooks` (the test KDF set, the forced out-of-memory hook) is found as `vectors` is
+    tdep = 'scaas-ua = { path = "x", features = ["test-hooks"] }\n'
+    ok = (
+        ok
+        and check_manifest("scratch", head + "[dependencies]\n" + tdep) != []
+        and check_manifest("scratch", head + "[dev-dependencies]\n" + tdep) == []
+    )
     print(
-        f"positive control (manifests): vectors and xcheck-near in [dependencies] (scaas-ua, scaas-ct) and a forwarded hazmat "
+        f"positive control (manifests): vectors, xcheck-near and test-hooks in [dependencies] (scaas-ua, scaas-ct) and a forwarded hazmat "
         f"found, [dev-dependencies] not: {ok}"
     )
     bad += [] if ok else ["positive control (manifests) failed"]
@@ -248,6 +262,19 @@ def main():
         f"positive control (graph): clients/scaas-sdk with vectors forced: {len(forced)} findings, both crates found: {ok}"
     )
     bad += [] if ok else ["positive control (graph, scaas-sdk row) failed"]
+    # user-profiles UP4: the SDK's `test-hooks` forced is found, in the SDK and in scaas-ua; `user-profile` ships
+    forced = check_graph("clients/scaas-sdk", ["--features", "test-hooks"])
+    sdk = shipped("clients/scaas-sdk")[1].split(",")
+    ok = (
+        "test-hooks" not in sdk
+        and "user-profile" in sdk
+        and any('scaas-sdk feature "test-hooks"' in x for x in forced)
+        and any('scaas-ua feature "test-hooks"' in x for x in forced)
+    )
+    print(
+        f"positive control (graph): clients/scaas-sdk with test-hooks forced: {len(forced)} findings, both crates found: {ok}"
+    )
+    bad += [] if ok else ["positive control (graph, scaas-sdk test-hooks) failed"]
     # T15m: the ua-rs row is not vacuous: its own `vectors` forced is found
     forced = check_graph("clients/ua-rs", ["--features", "vectors"])
     ok = "clients/ua-rs" in rows and any('scaas-ua feature "vectors"' in x for x in forced)

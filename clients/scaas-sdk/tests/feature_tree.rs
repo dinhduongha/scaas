@@ -54,6 +54,8 @@ fn this_build() -> Vec<&'static str> {
         (cfg!(feature = "substrate"), "substrate"),
         (cfg!(feature = "native-networks"), "native-networks"),
         (cfg!(feature = "arweave"), "arweave"),
+        (cfg!(feature = "user-profile"), "user-profile"),
+        (cfg!(feature = "test-hooks"), "test-hooks"),
     ];
     all.iter().filter(|(on, _)| *on).map(|(_, f)| *f).collect()
 }
@@ -121,6 +123,13 @@ fn feature_tree() {
         cfg!(feature = "vectors"),
         "{f:?}"
     );
+    // user-profiles UP4: scaas-ua's profile arena and its test hooks come only with the SDK's features of those names
+    for (ua, on) in [
+        ("user-profile", cfg!(feature = "user-profile")),
+        ("test-hooks", cfg!(feature = "test-hooks")),
+    ] {
+        assert_eq!(f.iter().any(|x| x == ua), on, "{ua}: {f:?}");
+    }
 }
 
 /// Plan T42: each SDK family feature and the `scaas-ua` `fam-<row>` features it enables (CLI-SDK-33 (31)); EVM is

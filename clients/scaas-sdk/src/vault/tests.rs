@@ -675,3 +675,25 @@ async fn unlock_of_an_open_seed_keeps_its_session() {
         "control: a new session after a lock"
     );
 }
+
+/// user-profiles UP4 (spec §7.2 "Errors"): each new store code reaches the `SdkError` of its name, from the keystore's mapping
+/// and `sdk.state`'s (one function); `Conflict` stays `StoreConflict`, the rest `VaultIo`.
+#[test]
+fn store_codes_map_by_name() {
+    for (e, want) in [
+        (StoreError::VaultFormat, "VaultFormat"),
+        (StoreError::ProfileLocked, "ProfileLocked"),
+        (
+            StoreError::ProfilePassphraseRequired,
+            "ProfilePassphraseRequired",
+        ),
+        (StoreError::ProfileRollback, "ProfileRollback"),
+        (StoreError::ProfileDamaged, "ProfileDamaged"),
+        (StoreError::Conflict, "StoreConflict"),
+        (StoreError::Io, "VaultIo"),
+        (StoreError::Unavailable, "VaultIo"),
+        (StoreError::Unexpected, "VaultIo"),
+    ] {
+        assert_eq!(io(e).code(), want, "{e:?}");
+    }
+}

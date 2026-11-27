@@ -586,6 +586,11 @@ fn store_err(e: JsValue) -> StoreError {
         "Conflict" => StoreError::Conflict,
         "Io" => StoreError::Io,
         "Unavailable" => StoreError::Unavailable,
+        "VaultFormat" => StoreError::VaultFormat,
+        "ProfileLocked" => StoreError::ProfileLocked,
+        "ProfilePassphraseRequired" => StoreError::ProfilePassphraseRequired,
+        "ProfileRollback" => StoreError::ProfileRollback,
+        "ProfileDamaged" => StoreError::ProfileDamaged,
         _ => StoreError::Unexpected,
     }
 }

@@ -151,6 +151,55 @@ fn error_codes_are_names() {
     );
 }
 
+/// user-profiles spec §11 "New codes", appended in order after the last code before them (`Cancelled`), then the two store
+/// codes §7.2 "Errors" maps by name; `Event`'s three profile events carry no field (no id, name or path).
+#[test]
+fn profile_codes_appended() {
+    let new = [
+        "ProfileInUse",
+        "ProfileOpen",
+        "ProfileUnknown",
+        "ProfileNameTaken",
+        "ProfileNameInvalid",
+        "ProfileLimit",
+        "ProfileHiddenLimit",
+        "ProfilePartFull",
+        "ProfileRootUnsafe",
+        "ProfilePassphraseRequired",
+        "ProfilePassphraseWeak",
+        "ProfileFormat",
+        "ProfileVersion",
+        "ProfileKdfTooLarge",
+        "ProfileKdfOutOfMemory",
+        "ProfileSearchTooLarge",
+        "ProfileImportOpen",
+        "ProfileExportTooLarge",
+        "ProfileLocked",
+        "ProfileBusy",
+        "KeyLocked",
+        "ProfileRollback",
+        "ProfileDamaged",
+    ];
+    let at = OWN_CODES.iter().position(|c| *c == "Cancelled").unwrap();
+    assert_eq!(&OWN_CODES[at + 1..], &new[..]);
+    for (e, name) in [
+        (
+            scaas_sdk::Event::ProfileIndexMismatch,
+            "ProfileIndexMismatch",
+        ),
+        (scaas_sdk::Event::ProfileRollback, "ProfileRollback"),
+        (scaas_sdk::Event::ProfileDamaged, "ProfileDamaged"),
+    ] {
+        assert_eq!(serde_json::to_value(&e).unwrap(), serde_json::json!(name));
+    }
+    assert!(
+        serde_json::to_value(scaas_sdk::Event::KeystoreChanged { rev: 1 })
+            .unwrap()
+            .is_object(),
+        "control: a variant with a field is an object"
+    );
+}
+
 #[test]
 fn broadcast_rejected_is_not_an_error() {
     assert!(!OWN_CODES.contains(&"BroadcastRejected"));
@@ -364,7 +413,11 @@ fn features_bits_match_the_build() {
         (cfg!(feature = "file-store"), bits::FILE_STORE),
         (cfg!(feature = "mlock"), bits::MLOCK),
         (cfg!(feature = "classical-roots"), bits::CLASSICAL_ROOTS),
+        (cfg!(feature = "user-profile"), bits::USER_PROFILE),
+        (cfg!(feature = "test-hooks"), bits::TEST_HOOKS),
     ];
+    // user-profiles UP4: the two bits appended after `dev-profiles`' 32
+    assert_eq!([bits::USER_PROFILE, bits::TEST_HOOKS], [1 << 33, 1 << 34]);
     for (on, bit) in expect {
         assert_eq!(f & bit != 0, on, "bit {bit:#x}");
     }

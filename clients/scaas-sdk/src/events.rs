@@ -52,6 +52,12 @@ pub enum Event {
     StateChanged {
         rev: u64,
     },
+    /// user-profiles spec §6, §7.2, §11: an index row or name hint that differs from the profile's envelope; an item, a
+    /// manifest, an envelope or a generation below its manifest or anchor; an item its manifest lists but whose file is
+    /// missing. No field: no id, name or path.
+    ProfileIndexMismatch,
+    ProfileRollback,
+    ProfileDamaged,
 }
 
 /// An operation's state (spec §13.5, CLI-SDK-18): terminal only on a chain fact from a decisive read at the profile's final

@@ -38,6 +38,8 @@ macro_rules! frb_hint {
 compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 #[cfg(all(feature = "vectors", not(debug_assertions)))]
 compile_error!("scaas-sdk's feature `vectors` is test-only: never in a release build");
+#[cfg(all(feature = "test-hooks", not(debug_assertions)))]
+compile_error!("scaas-sdk's feature `test-hooks` is test-only: never in a release build");
 
 // decisions CLI-SDK-33 (100): the UniFFI surface is built over `evm` (the reference library's default features); UniFFI's
 // `#[uniffi::export]` on an impl block exports every method whatever its `#[cfg]`, so a list entry under `evm` cannot drop out
@@ -163,6 +165,10 @@ pub mod bits {
     pub const ARWEAVE: u64 = 1 << 31;
     /// development profiles: `Finality::Depth(0)` on any chain (owner 2026-11-23, T26 B-22); never in a release build
     pub const DEV_PROFILES: u64 = 1 << 32;
+    /// user-profiles: many protected local profiles (spec 2026-11-27-user-profiles §11)
+    pub const USER_PROFILE: u64 = 1 << 33;
+    /// user-profiles spec §7.5: the test KDF set and hooks; never in a release build nor a binding
+    pub const TEST_HOOKS: u64 = 1 << 34;
 }
 
 /// The load check of a binding (spec §16.3): `AbiMismatch` unless this library's `api_version` is `expect_api`, it has every
@@ -226,6 +232,8 @@ pub fn features() -> u64 {
         (cfg!(feature = "evm"), EVM),
         (cfg!(feature = "arweave"), ARWEAVE),
         (cfg!(feature = "dev-profiles"), DEV_PROFILES),
+        (cfg!(feature = "user-profile"), USER_PROFILE),
+        (cfg!(feature = "test-hooks"), TEST_HOOKS),
     ];
     on.iter()
         .filter(|(enabled, _)| *enabled)

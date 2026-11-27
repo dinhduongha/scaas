@@ -4,7 +4,7 @@
 //! history cursors (spec §8.4: the last block read per watched `(chain, account, token)`; never for a hidden set).
 // without `evm` only the families' rows are written: the watch's cursors and the split registration's proofs are EVM's
 #![cfg_attr(not(feature = "evm"), allow(dead_code))]
-use crate::vault::{StoreError, StorePolicy};
+use crate::vault::{io, StoreError, StorePolicy};
 use crate::{Sdk, SdkError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -105,13 +105,6 @@ struct State {
     /// (merged-tree review M1, 2026-11-20)
     #[serde(default)]
     pops: std::collections::BTreeMap<String, String>,
-}
-
-fn io(e: StoreError) -> SdkError {
-    match e {
-        StoreError::Conflict => SdkError::StoreConflict,
-        _ => SdkError::VaultIo,
-    }
 }
 
 async fn load(sdk: &Sdk) -> Result<(Option<u64>, State), SdkError> {
