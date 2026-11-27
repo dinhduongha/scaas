@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # The path-less round's task-level matrix gaps (delta P4, P5; controller 2026-11-27): the forge directories at the default set
 # not run in their tasks (one directory per capped call), the top-level tests, `test/modules` with its pre-split side, the UA
-# gas pins, the other three sets (`at-set.sh others sensitive`, then `others modules`), the deploy e2e of CI's contract job
+# gas pins, the other three sets (`at-set.sh <set> sensitive`, then `<set> modules`, one set after another: one capped job
+# at a time on a shared machine), the deploy e2e of CI's contract job
 # (PqChatStore's path on anvil at cancun), and the node e2e on anvil. From the worktree root:
 #   runs/2026-11-27-treekem-pathless-matrix.sh --list
 #   runs/2026-11-27-treekem-pathless-matrix.sh [--force] <step>...
@@ -26,8 +27,8 @@ STEPS=(
     "forge-top|smartcontracts/evm|rm -rf test-s-top && mkdir test-s-top && cp test/*.t.sol test-s-top/ && FOUNDRY_TEST=test-s-top FOUNDRY_SCRIPT=test-s-top $cap forge test -j 1; r=\$?; rm -rf test-s-top; exit \$r"
     "forge-modules|smartcontracts/evm|PYTHONPATH=$W/pqz-core/nethermind/chain python3 script/modules/legacy_artifacts.py build && $(fdir modules) --match-contract '^(Diff|Modules|Paths|Groups)'"
     "uagas|smartcontracts/evm|FOUNDRY_TEST=test/ua FOUNDRY_SCRIPT=test/ua $cap forge test -j 1 --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'"
-    "sets-sensitive|smartcontracts/evm|sh script/pqz/at-set.sh others sensitive"
-    "sets-modules|smartcontracts/evm|sh script/pqz/at-set.sh others modules"
+    "sets-sensitive|smartcontracts/evm|r=0; for x in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do sh script/pqz/at-set.sh \$x sensitive || r=1; done; exit \$r"
+    "sets-modules|smartcontracts/evm|r=0; for x in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do sh script/pqz/at-set.sh \$x modules || r=1; done; exit \$r"
     "deploy-e2e|smartcontracts/evm|for t in script/test_*.py; do echo \"## \$t\"; python3 \"\$t\" || exit 1; done && T=\$(mktemp -d) && $cap forge build src/pqchat/PqChatStore.sol test/forkcheck --extra-output evm.legacyAssembly --out \"\$T\"/out --cache-path \"\$T\"/cache && python3 -I script/forkcheck.py exec cancun test/forkcheck/cases.json --out \"\$T\"/out && python3 -I script/forkcheck.py control cancun --out \"\$T\"/out && python3 -I script/deploy_pqchatstore.py local --out \"\$T\"/out; r=\$?; rm -rf \"\$T\"; exit \$r"
     "node-e2e|scaas-node|(cd ../clients/zether-prover && $cap cargo build $C --release --bin zether-cli --features hazmat) && $cap cargo test $C --test e2e -- --ignored --test-threads=1"
 )
