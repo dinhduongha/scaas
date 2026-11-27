@@ -47,6 +47,7 @@ ls_files() { ls_all "$@" | grep -v -E '(^|/)runs/'; }
 # it reaches is kept as it was (format) or not reported (check).
 RUST_CRATES="scaas-node scaas-pqz-verifier clients/ua-rs clients/ua-c clients/zether-prover clients/scaas-rpc
   clients/scaas-ct clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust clients/scaas-sdk clients/scaas-cli clients/pqvault-core clients/pqchat-core
+  clients/pqchat-transport clients/scaas-matrix
   pqz-core
   smartcontracts/evm/script/pqz/wallet
   smartcontracts/soroban smartcontracts/cosmos smartcontracts/solana smartcontracts/near"
