@@ -241,8 +241,8 @@ off-chain store keeps SCaaS's signatures; it gives up SCaaS's executor.
   [CTR-CHAT-08](../contracts/pqchat.md#CTR-CHAT-08)), keeps nonce bitmaps, holds the indexes recovery reads (`sessionsOf`,
   `vaultsOf`), and keeps every byte available to anyone with an RPC node.
 
-There is no `docs/clients/pqvault-core.md`; PqVault's client rules are the CLI-PQV rows of
-[ua-libraries.md](../clients/ua-libraries.md) and the spec [2026-11-17-pqvault.md](../superpowers/specs/2026-11-17-pqvault.md) [F].
+PqVault's client rules are the CLI-PQV rows of [pqvault-core.md](../clients/pqvault-core.md) (in
+`ua-libraries.md` when this note was written; moved 2026-11-27) and the spec [2026-11-17-pqvault.md](../superpowers/specs/2026-11-17-pqvault.md) [F].
 
 ### 5.2 Function by function
 

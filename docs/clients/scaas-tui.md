@@ -29,7 +29,7 @@ with no code path of its own: it calls `scaas-sdk` and nothing below it. It is t
 (`app-common/viewmodel/`). SCaaS only: no native-chain app core and no Trust Wallet Core. It links the app cores `pqchat-core`
 and `pqvault-core` (owner 2026-11-24, spec §16 Q-T2), each as a crate behind its own feature, so it has chat and vault screens; their
 own rules hold in the TUI as in any app: every signature and key operation goes through the SDK, and no key reaches an app core
-([CLI-PQC-03](pqchat-core.md#CLI-PQC-03), [CLI-PQC-04](pqchat-core.md#CLI-PQC-04), [CLI-PQV-12](ua-libraries.md#CLI-PQV-12)).
+([CLI-PQC-03](pqchat-core.md#CLI-PQC-03), [CLI-PQC-04](pqchat-core.md#CLI-PQC-04), [CLI-PQV-12](pqvault-core.md#CLI-PQV-12)).
 
 **Chat over Matrix and PqChat** (owner 2026-11-27; SPECIFIED): the TUI chats over plain Matrix too, its list holding Matrix rooms and
 PqChat sessions as two row kinds that never mix ([CLI-PQC-19](../decisions.md#CLI-PQC-19)). Its Matrix client is the crate

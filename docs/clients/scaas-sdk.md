@@ -421,7 +421,7 @@ OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control charac
 a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`. PqVault's V1 vectors
 (`smartcontracts/vectors/pqvault/`) run through this surface only (BUILT, UNAUDITED; `tests/app_core_vault_rows.rs` under
 `vectors`, `tests/app_core_vault_records.rs` in the main suite: typed digests in both domains, both signing paths,
-the verification); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](ua-libraries.md#CLI-PQV-12) in decisions.md.
+the verification); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](pqvault-core.md#CLI-PQV-12) in decisions.md.
 PqVault's records are signed and verified by `prepare_pqvault_record` and `verify_pqvault_record` (owner 2026-11-22,
 [CLI-PQV-13](../decisions.md#CLI-PQV-13); BUILT, UNAUDITED): thin calls of `ua-rs`'s `wallet::pqvault` with the generic
 calls' profile checks, accepting PqVault's domains `DS_V` / `DS_B` and its seven structs only; `prepare_app_record` and
