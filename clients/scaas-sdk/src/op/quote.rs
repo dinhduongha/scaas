@@ -437,11 +437,7 @@ pub(crate) async fn signed_quote(
 ) -> Result<SubmitQuote, SdkError> {
     let calldata = signed;
     let signed = calldata.len();
-    let c = sdk
-        .chains
-        .iter()
-        .find(|c| c.profile.key == chain)
-        .ok_or(SdkError::ChainUnknown)?;
+    let c = sdk.chain(chain)?;
     // M17 (review 2026-11-20): the caller's quote never lowers the regular bound either: a quote naming no regular part (0)
     // is read as whole, and the operation's own bound (`own`) is the floor
     let q_regular = match q.regular_gas {
@@ -541,11 +537,7 @@ impl Op {
                 super::submit::fresh(&sdk, &prepared).await?;
                 // the amount the relayer takes (a PERCENT envelope's computed fee, never its rate: P2-4)
                 let fee = fee_of(prepared.t.name, &prepared.t.message)?;
-                let chain = sdk
-                    .chains
-                    .iter()
-                    .find(|c| c.profile.key == prepared.chain())
-                    .ok_or(SdkError::ChainUnknown)?;
+                let chain = sdk.chain(&prepared.chain())?;
                 let gateways = chain.gateways.as_ref().map_or(0, |g| g.len());
                 // no signature here (ruling 1): the gas figure of the operation's key (ruling B, the gas-table rulings), on
                 // every path

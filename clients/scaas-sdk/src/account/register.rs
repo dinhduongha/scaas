@@ -494,11 +494,7 @@ fn table_figure(
     shape: &GasShape,
     len: usize,
 ) -> Result<Option<Figure>, SdkError> {
-    let c = sdk
-        .chains
-        .iter()
-        .find(|c| c.profile.key == chain)
-        .ok_or(SdkError::ChainUnknown)?;
+    let c = sdk.chain(chain)?;
     crate::op::gas::registry_gas(
         &c.profile.gas,
         &c.profile.gas_opt_in,

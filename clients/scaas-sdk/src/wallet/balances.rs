@@ -71,7 +71,7 @@ impl Wallet {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let c = sdk.chain(&chain)?;
+                let c = &sdk.chain(&chain)?;
                 if c.profile.family != crate::Family::Evm {
                     return super::families::balances(&sdk, &chain, &id).await;
                 }

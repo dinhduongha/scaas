@@ -50,7 +50,7 @@ use std::future::Future;
 
 /// `balances` on a profile of a family other than EVM; `FeatureMissing` for a family this build does not read.
 pub(crate) async fn balances(sdk: &Sdk, chain: &str, id: &str) -> Result<Balances, SdkError> {
-    let c = sdk.chain(chain)?;
+    let c = &sdk.chain(chain)?;
     match c.profile.family {
         #[cfg(feature = "near")]
         crate::Family::Near => near::balances(c, id).await,
@@ -286,11 +286,7 @@ mod tests {
 /// review T26 B-7, and its sibling on Soroban's `/v1/ops`); none left: `ProfileMismatch` when one announced another, else
 /// the last failure. `SubmitPathNone` without gateways (an EVM profile without a chain id too).
 pub(crate) async fn check_gateways(sdk: &crate::Sdk, chain: &str) -> Result<Vec<u32>, SdkError> {
-    let c = sdk
-        .chains
-        .iter()
-        .find(|c| c.profile.key == chain)
-        .ok_or(SdkError::ChainUnknown)?;
+    let c = &sdk.chain(chain)?;
     let list = c.gateways.clone().ok_or(SdkError::SubmitPathNone)?;
     let evm = c.profile.family == crate::Family::Evm;
     let id = c.profile.chain_id;
@@ -341,10 +337,9 @@ pub(crate) async fn kept_gateways(
 ) -> Result<scaas_rpc::node::NodeClient, SdkError> {
     let kept = check_gateways(sdk, chain).await?;
     let list = sdk
-        .chains
-        .iter()
-        .find(|c| c.profile.key == chain)
-        .and_then(|c| c.gateways.clone())
+        .chain(chain)?
+        .gateways
+        .clone()
         .ok_or(SdkError::SubmitPathNone)?;
     let endpoints = kept
         .iter()

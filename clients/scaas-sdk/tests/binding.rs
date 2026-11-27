@@ -79,6 +79,8 @@ fn exported_async() -> BTreeSet<(String, String)> {
         ("Sdk", "open"),
         ("Sdk", "spawn"),
         ("Sdk", "poll"),
+        // user-profiles UP6b: the profile layer's (`UserProfile::lock`), outside the binding surface in wave 1
+        ("Sdk", "close"),
         ("Wallet", "native_sign"),
         ("Vault", "lock"),
         ("Vault", "lock_all"),

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""user-profiles UP6 mutants, part a (the profile root, the index, the envelope, start, open and lock at the store's crate
-clients/scaas-profile; part b's mutant, `close` not called at lock, is the SDK's):
+"""user-profiles UP6 mutants: part a (the profile root, the index, the envelope, start, open and lock at the store's crate
+clients/scaas-profile) and part b (the SDK's: `close` not called at lock, the closed flag not checked):
 python3 clients/scaas-sdk/runs/2026-11-27-user-profiles-up6-mutants.py check | run [name]"""
 import sys
 from pathlib import Path
@@ -19,6 +19,10 @@ T = ("cd clients/scaas-profile && CARGO_INCREMENTAL=0 ../../scripts/capped cargo
      "--features test-hooks --test ")
 LOCK = T + "lock -- --exact "
 PROF = T + "profiles -- --exact "
+U = "clients/scaas-sdk/src/user_profile/mod.rs"
+L = "clients/scaas-sdk/src/lib.rs"
+SDK = ("cd clients/scaas-sdk && CARGO_INCREMENTAL=0 ../../scripts/capped cargo test --locked --offline -j2 "
+       "--features user-profile,test-hooks --test user_profile -- --exact ")
 MUTANTS = [
     ("the instance lock dropped",
      [(P, "        let instance = try_lock_file(&dir.join(INSTANCE_LOCK))?.ok_or(Error::ProfileInUse)?;\n",
@@ -58,6 +62,15 @@ MUTANTS = [
      [(P, "        let _heavy = self.heavy.acquire();\n",
        "        let _heavy = (self.heavy.acquire(), self.root_lock()?);\n")],
      PROF + "g8_start_during_held_kdf"),
+    # part b: without the close, the old `Sdk`'s chain call still reaches the chain after lock
+    ("close not called at lock",
+     [(U, "            s.close().await;\n", "")],
+     SDK + "g11_no_request_after_lock"),
+    # part b: without the flag, the closed `Sdk`'s chain call is `ChainUnknown` (its chains dropped), not `ProfileLocked`: only
+    # the exact code tells
+    ("the closed flag not checked",
+     [(L, "        Some(_) => Ok(()),\n        None => Err(SdkError::ProfileLocked),\n", "        _ => Ok(()),\n")],
+     SDK + "g11_no_request_after_lock"),
 ]
 
 if __name__ == "__main__":

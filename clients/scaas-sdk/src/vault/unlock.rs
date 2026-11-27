@@ -220,6 +220,7 @@ impl Sdk {
     /// The stored keystore; an older container put back (the anchor's verdict) is shown as `Event::KeystoreRollback` on every
     /// read (closing review P2-2; spec §6.3), never fatal.
     pub(crate) async fn load_keystore(&self) -> Result<super::Loaded, SdkError> {
+        self.live()?;
         let l = self.keystore.load().await?;
         if l.rollback {
             self.emit(Event::KeystoreRollback);

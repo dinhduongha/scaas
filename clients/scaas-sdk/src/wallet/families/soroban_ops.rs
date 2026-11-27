@@ -841,7 +841,7 @@ impl Wallet {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let c = sdk.chain(&req.chain)?;
+                let c = &sdk.chain(&req.chain)?;
                 let (sor, _, passphrase) = soroban(c)?;
                 listed(c, &req.contract)?;
                 let now = sdk.now();
@@ -921,7 +921,7 @@ impl Wallet {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let c = sdk.chain(&p.chain)?;
+                let c = &sdk.chain(&p.chain)?;
                 let (sor, _, passphrase) = soroban(c)?;
                 let op = rebuilt(&p, passphrase)?;
                 let max_time = p.valid_until.min(sdk.now().saturating_add(TX_WINDOW_SECS));
@@ -986,7 +986,7 @@ impl Wallet {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let c = sdk.chain(&p.chain)?;
+                let c = &sdk.chain(&p.chain)?;
                 let (sor, nid, passphrase) = soroban(c)?;
                 // an op the subject authorizes here (signed, or by its own transaction's source) is checked as `prepare` did
                 if p.signature.is_none() {
@@ -1109,7 +1109,7 @@ impl Wallet {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let c = sdk.chain(&p.chain)?;
+                let c = &sdk.chain(&p.chain)?;
                 let (sor, _, passphrase) = soroban(c)?;
                 if p.signature.is_some() || p.op.is_some() {
                     return Err(SdkError::Argument);
@@ -1156,7 +1156,7 @@ impl Wallet {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let c = sdk.chain(&expect.chain)?;
+                let c = &sdk.chain(&expect.chain)?;
                 let (sor, _, passphrase) = soroban(c)?;
                 if blob.v != 1 || blob.family != "soroban" || blob.chain_uid != c.profile.chain_uid
                 {
@@ -1325,7 +1325,7 @@ impl Wallet {
                 if r.terminal() {
                     return Ok(r.state);
                 }
-                let c = sdk.chain(&r.chain)?;
+                let c = &sdk.chain(&r.chain)?;
                 let (sor, _, passphrase) = soroban(c)?;
                 let w = watch(&r, passphrase)?;
                 let w = &w;
@@ -1377,7 +1377,7 @@ impl Wallet {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let c = sdk.chain(&req.chain)?;
+                let c = &sdk.chain(&req.chain)?;
                 let (sor, _, _) = soroban(c)?;
                 let (_, _, pk) = stellar(&sdk, &req.key)?;
                 let to = match holder(&req.to) {
@@ -1419,7 +1419,7 @@ impl Wallet {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let c = sdk.chain(&q.chain)?;
+                let c = &sdk.chain(&q.chain)?;
                 let (sor, nid, _) = soroban(c)?;
                 let (_seed, key, pk) = stellar(&sdk, &q.key)?;
                 if g_of(&pk) != q.from || q.fee > cap(&sdk, &q.chain)? {

@@ -74,3 +74,16 @@ UP6a | features | 9ab7b83ea + UP6a files | 0 | check_test_features ok, every con
 UP6a | fmt rust js toml py | 9ab7b83ea + UP6a files | 0 | every part ok
 UP6a | docs | 9ab7b83ea + UP6a files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok
 UP6a | mutants up6 (one at a time) | aa921c1f7 | 0 | 9 mutants, 9 killed, 0 survived, 0 not loaded, 0 other failure
+UP6b | WIP 8fb61b159 built: prof test (default; test-hooks), ua-rs --features test-hooks,vectors --test profile | 8fb61b159 | 0 | --locked accepts both hand-edited Cargo.lock files (no lock change); prof: lock 4 / 4, profiles 9 / 9, store 14 / 14; test-hooks: lock 4 / 4, profiles 15 / 15, store 16 / 16; ua-rs profile 19 / 19 (random_bytes_bounded)
+UP6b | red (the new tests before the code) | 8fb61b159 + UP6b tests | 101 | error[E0432]: unresolved imports scaas_sdk::user_profile::{ProfileSdkConfig, ProfileUnlock, ProfilesConfig, UserProfile, UserProfiles}
+UP6b | prof (test default, test-hooks; clippy both --all-targets -D warnings; cargo deny --offline check) | 8fb61b159 + UP6b files | 0 | lock 4 / 4, profiles 9 / 9, store 14 / 14; test-hooks: lock 4 / 4, profiles 15 / 15, store 16 / 16; 0 warnings; advisories, bans, licenses, sources ok
+UP6b | ua-rs clippy --no-default-features --features user-profile --all-targets; kh-nm | 8fb61b159 + UP6b files | 0 | 0 warnings; user-profile 7542 symbols 0 signing, wallet 24432 / 5561 signing (control), scaas-profile's scaas-ua features json, key-handles, rand_core, user-profile
+UP6b | sdk-up | 8fb61b159 + UP6b files | 0 | user_profile 6 / 6 (g11_sdk_twice_and_locked, g11_lock_revokes_hidden_set_of_a_locked_seed, events_are_the_sdks, g11_no_request_after_lock); --lib user_profile 0 (144 filtered out)
+UP6b | sdk-reg | 8fb61b159 + UP6b files | 0 | keystore_vectors 2 / 2, vault 28 / 28, --lib vault 18 / 18
+UP6b | sdk-clippy (UPF and default, --all-targets -D warnings) | 8fb61b159 + UP6b files | 0 | 0 warnings
+UP6b | SDK clippy cells (CI's wide set + vectors, native-networks, raw-native; no evm; vault,file-store; --no-default-features UPF; UniFFI set + uniffi, + sync-api) | 8fb61b159 + UP6b files | 0 | 0 warnings (the vault,file-store cell found chain / chain_where unused: gated on `wallet` as `chain` was)
+UP6b | wasm32 (check --no-default-features vault,account,wallet,evm; clippy with wasm -D warnings) | 8fb61b159 + UP6b files | 0 | ok, 0 warnings
+UP6b | SDK suites over the changed spawn / chain paths: --lib; wallet, wallet_ops, handoff, history; with dex,soroban,near: soroban_ops, soroban, dex, account_ops, near; UniFFI set + uniffi: --test binding, --lib binding::tests; + sync-api: --lib sync_cpp::tests, --test binding | 8fb61b159 + UP6b files | 0 | lib 144 / 144; wallet 12 / 12 (1 ignored), wallet_ops 11 / 11, handoff 8 / 8, history 9 / 9; soroban_ops 16 / 16, soroban 5 / 5, dex 9 / 9, account_ops 12 / 12, near 11 / 11; binding 4 / 4 (red first: async calls without a twin [("Sdk", "close")]; close registered Rust-only), binding::tests 2 / 2; sync_cpp::tests 1 / 1, binding 14 / 14
+UP6b | features | 8fb61b159 + UP6b files | 0 | check_test_features ok, every control True; feature_tree 5 / 5
+UP6b | fmt rust toml py | 8fb61b159 + UP6b files | 0 | every part ok
+UP6b | docs | 8fb61b159 + UP6b files | 0 | docs_check 0 errors, 8 warnings, 16 notes; test_docs_check ok

@@ -122,7 +122,7 @@ use scaas_rpc::endpoint::{READ_TIMEOUT_MS, SLOW_TIMEOUT_MS, TIMEOUT_MS};
 use scaas_rpc::{Endpoint, NodeList};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use tokio::sync::{broadcast, Semaphore};
 
 /// The binding surface's version (§16.3): starts at 1, raised by any change a generated binding could misread.
@@ -312,8 +312,13 @@ impl Drop for Rt {
 
 /// The top object (spec §4).
 pub struct Sdk {
+    /// the chains with their pools and gateway lists; emptied by [`Sdk::close`] (the pools dropped with the credentials they
+    /// hold); read through [`Sdk::chain_where`]
     #[allow(dead_code)]
-    pub(crate) chains: Vec<Chain>,
+    chains: RwLock<Vec<Arc<Chain>>>,
+    /// the tasks this SDK spawned (exported calls, detached sends, the watch loop), aborted by [`Sdk::close`]; `None`: closed,
+    /// every later call `ProfileLocked` (user-profiles spec §10 "lock")
+    tasks: Mutex<Option<Vec<tokio::task::AbortHandle>>>,
     pub(crate) limits: Limits,
     /// the module gas tables of the configuration and the SCaaS reference table (`reference`); a chain reads one only when its
     /// profile opts in (spec §13.3)
@@ -661,7 +666,8 @@ impl Sdk {
             config.limits.max_concurrent_heavy.max(1) as usize
         ));
         Ok(Arc::new(Sdk {
-            chains,
+            chains: RwLock::new(chains.into_iter().map(Arc::new).collect()),
+            tasks: Mutex::new(Some(vec![])),
             limits: config.limits,
             gas_tables,
             clock: config.clock,
@@ -698,14 +704,16 @@ impl Sdk {
     /// Runs `f` on the SDK's runtime and waits for it (spec §14): a generator that polls the caller's future from a foreign
     /// executor never runs I/O outside a reactor, a dropped caller future leaves the task to complete, and a panic inside it is
     /// `Internal`. Rust-only (outside the binding surface).
+    /// After [`Sdk::close`] it is `ProfileLocked`, and a task the close aborted ends `ProfileLocked`.
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn spawn<T: Send + 'static>(
         &self,
         f: impl Future<Output = Result<T, SdkError>> + Send + 'static,
     ) -> Result<T, SdkError> {
-        match &self.rt {
-            Some(rt) => rt.handle.spawn(f).await.map_err(|_| SdkError::Internal)?,
-            None => f.await,
+        match self.task(f)?.await {
+            Ok(r) => r,
+            Err(e) if e.is_cancelled() => Err(SdkError::ProfileLocked),
+            Err(_) => Err(SdkError::Internal),
         }
     }
 
@@ -716,7 +724,65 @@ impl Sdk {
         &self,
         f: impl Future<Output = Result<T, SdkError>> + 'static,
     ) -> Result<T, SdkError> {
+        self.live()?;
         f.await
+    }
+
+    /// `f` as a task of the SDK's runtime (else of the current one), its abort handle kept for [`Sdk::close`]: the check and
+    /// the push under one lock, so no task starts after the close (`ProfileLocked`).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn task<F>(&self, f: F) -> Result<tokio::task::JoinHandle<F::Output>, SdkError>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        let mut tasks = self.tasks.lock().unwrap_or_else(PoisonError::into_inner);
+        live(&tasks)?;
+        let h = match &self.rt {
+            Some(rt) => rt.handle.spawn(f),
+            None => tokio::spawn(f),
+        };
+        if let Some(t) = tasks.as_mut() {
+            t.retain(|a| !a.is_finished());
+            t.push(h.abort_handle());
+        }
+        Ok(h)
+    }
+
+    /// `ProfileLocked` once [`Sdk::close`] ran.
+    pub(crate) fn live(&self) -> Result<(), SdkError> {
+        live(&self.tasks.lock().unwrap_or_else(PoisonError::into_inner))
+    }
+
+    /// Closes the SDK for good (user-profiles spec §10 "lock", §11): its tasks (exported calls in flight, detached sends,
+    /// the watch loop) aborted, its chains' pools and gateway lists dropped, and every later call `ProfileLocked`, so no request
+    /// leaves on it. The seeds are the caller's to lock first (`Vault::lock_all`). Again: nothing.
+    pub async fn close(&self) {
+        let tasks = self
+            .tasks
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        tasks.into_iter().flatten().for_each(|t| t.abort());
+        let chains =
+            std::mem::take(&mut *self.chains.write().unwrap_or_else(PoisonError::into_inner));
+        drop(chains);
+    }
+
+    /// The first chain `pred` takes (`ChainUnknown`; `ProfileLocked` after [`Sdk::close`]).
+    #[cfg(feature = "wallet")]
+    pub(crate) fn chain_where(
+        &self,
+        pred: impl Fn(&Chain) -> bool,
+    ) -> Result<Arc<Chain>, SdkError> {
+        self.live()?;
+        self.chains
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .find(|c| pred(c))
+            .cloned()
+            .ok_or(SdkError::ChainUnknown)
     }
 
     /// `f` off the async workers, at most `Limits::max_concurrent_heavy` at once (scrypt, Argon2id, proofs, slow keygen).
@@ -725,6 +791,7 @@ impl Sdk {
         f: impl FnOnce() -> Result<T, SdkError> + Send + 'static,
     ) -> Result<T, SdkError> {
         use std::sync::atomic::Ordering::SeqCst;
+        self.live()?;
         let _permit = self.heavy.acquire().await.map_err(|_| SdkError::Internal)?;
         let (now, max) = (self.heavy_now.clone(), self.heavy_max.clone());
         let job = move || {
@@ -799,9 +866,8 @@ impl Sdk {
     /// The signing window of chain `chain`: its profile's, else `Limits::max_valid_secs`.
     #[cfg(feature = "evm")]
     pub(crate) fn window(&self, chain: &str) -> u64 {
-        self.chains
-            .iter()
-            .find(|c| c.profile.key == chain)
+        self.chain(chain)
+            .ok()
             .and_then(|c| c.profile.max_valid_secs)
             .unwrap_or(self.limits.max_valid_secs)
     }
@@ -812,21 +878,14 @@ impl Sdk {
         &self,
         chain: &str,
     ) -> Result<scaas_rpc::node::VerifierClient, SdkError> {
-        let c = self
-            .chains
-            .iter()
-            .find(|c| c.profile.key == chain)
-            .ok_or(SdkError::ChainUnknown)?;
+        let c = self.chain(chain)?;
         c.verifiers.clone().ok_or(SdkError::VerdictRefused)
     }
 
-    /// The chain of profile `chain` (`ChainUnknown`).
+    /// The chain of profile `chain` (`ChainUnknown`; `ProfileLocked` after [`Sdk::close`]).
     #[cfg(feature = "wallet")]
-    pub(crate) fn chain(&self, chain: &str) -> Result<&Chain, SdkError> {
-        self.chains
-            .iter()
-            .find(|c| c.profile.key == chain)
-            .ok_or(SdkError::ChainUnknown)
+    pub(crate) fn chain(&self, chain: &str) -> Result<Arc<Chain>, SdkError> {
+        self.chain_where(|c| c.profile.key == chain)
     }
 
     /// An EVM chain's profile, chain id and the session's pool (`ChainUnknown`; `Argument`: not an EVM profile with a chain id).
@@ -835,14 +894,18 @@ impl Sdk {
         &self,
         chain: &str,
     ) -> Result<(ChainProfile, u64, Arc<scaas_rpc::evm::EvmPool>), SdkError> {
-        let c = self
-            .chains
-            .iter()
-            .find(|c| c.profile.key == chain)
-            .ok_or(SdkError::ChainUnknown)?;
+        let c = self.chain(chain)?;
         let id = c.profile.chain_id.ok_or(SdkError::Argument)?;
         let pool = c.pool.clone().ok_or(SdkError::Argument)?;
         Ok((c.profile.clone(), id, pool))
+    }
+}
+
+/// The closed flag of [`Sdk::tasks`]: `ProfileLocked` once closed.
+fn live(tasks: &Option<Vec<tokio::task::AbortHandle>>) -> Result<(), SdkError> {
+    match tasks {
+        Some(_) => Ok(()),
+        None => Err(SdkError::ProfileLocked),
     }
 }
 

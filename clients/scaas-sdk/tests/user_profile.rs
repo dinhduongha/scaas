@@ -2,7 +2,8 @@
 //! User profiles (spec docs/superpowers/specs/2026-11-27-user-profiles.md, plan docs/superpowers/plans/2026-11-27-user-profiles.md):
 //! the SDK's side of the store `scaas-profile` (owner 2026-11-27; the store's own tests are clients/scaas-profile/tests/). UP5:
 //! the `SecureStore` face and the codes. Profiles are built by hand: a generation directory and a `ProfileKeys` with a fresh
-//! `DEK_p` (`create_dek`, no Argon2id).
+//! `DEK_p` (`create_dek`, no Argon2id). UP6b (§10 lock, §11, §17 G11): `UserProfiles`, `UserProfile::sdk`, `Sdk::close`; the
+//! protected profiles there are planted by hand (one wrap at the test KDF set) and opened through `UserProfiles`.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -10,13 +11,21 @@
     clippy::indexing_slicing
 )]
 
-use scaas_sdk::user_profile::{Core, CoreOpen, Error, Head, PartStore, ProfilePart};
-use scaas_sdk::vault::{SecureStore, StoreError, StorePolicy};
-use scaas_sdk::SdkError;
-use scaas_ua::wallet::ProfileKeys;
+#[cfg(feature = "evm")]
+#[path = "common/fake_chain.rs"]
+mod fake_chain;
+
+use scaas_sdk::user_profile::{
+    Core, CoreOpen, Error, Head, PartStore, ProfilePart, ProfileSdkConfig, ProfileUnlock,
+    ProfilesConfig, UserProfile, UserProfiles,
+};
+use scaas_sdk::vault::{ImportWords, SecureStore, StoreError, StorePolicy, Unlock};
+use scaas_sdk::{ChainProfile, Event, RuntimeChoice, SdkError};
+use scaas_ua::wallet::{ProfileKeys, SecretBytes};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
+use zeroize::Zeroizing;
 
 const SDK: ProfilePart = ProfilePart::Sdk;
 
@@ -134,4 +143,249 @@ async fn secure_store_face() {
         Err(StoreError::Unavailable)
     );
     drop(g);
+}
+
+// ---- UP6b: UserProfiles, UserProfile::sdk, Sdk::close (spec §10 lock, §11; §17 G11) ----
+
+const PASS: &str = "correct horse battery staple";
+const VAULT_PASS: &str = "river-otter-7 \u{fc}n\u{ef}";
+const REPO: &str = "bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author capable act festival slice deposit sauce coconut afford frown better";
+
+fn sec(s: &str) -> Arc<SecretBytes> {
+    Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(s.as_bytes().to_vec())).unwrap())
+}
+
+fn code<T>(r: Result<T, SdkError>) -> &'static str {
+    r.map_or_else(|e| e.code(), |_| "Ok")
+}
+
+/// A protected profile at the test KDF set planted under `root/p/` by hand (one wrap of a fresh `DEK_p`, its label, its hint
+/// `name`), as scaas-profile's own tests build one; start rebuilds the index from it. Returns its id.
+fn plant_protected(root: &Path, name: &str) -> String {
+    use base64::Engine;
+    let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let k = ProfileKeys::new();
+    let r: [u8; 10] = ProfileKeys::random_bytes(10).unwrap()[..]
+        .try_into()
+        .unwrap();
+    let id = scaas_profile::uuid7(ms, &r);
+    let salt = ProfileKeys::random_bytes(16).unwrap();
+    let kdf = format!(
+        r#"{{"alg":"argon2id","v":1,"m":8192,"t":1,"p":4,"salt":"{}"}}"#,
+        b64(&salt)
+    );
+    let public = format!(
+        r#"{{"format":"scaas.profile","v":1,"id":"{id}","state":"protected","gen":1,"kdf":{kdf}}}"#
+    );
+    k.create_dek().unwrap();
+    let wrap = k
+        .wrap_pass(
+            PASS.as_bytes(),
+            &salt,
+            ProfileKeys::KDF_TEST,
+            public.as_bytes(),
+        )
+        .unwrap();
+    let label = k
+        .seal_label(
+            &id,
+            format!(r#"{{"name":"{name}","hidden":false}}"#).as_bytes(),
+        )
+        .unwrap();
+    let d = root.join("p").join(&id);
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(
+        d.join("profile.envelope"),
+        format!(
+            r#"{{"format":"scaas.profile","v":1,"id":"{id}","state":"protected","rev":1,"gen":1,"name":"{name}","kdf":{kdf},"pass":"{}","label":"{}"}}"#,
+            b64(&wrap),
+            b64(&label)
+        ),
+    )
+    .unwrap();
+    id
+}
+
+/// A root holding one planted protected profile, started; the profile opened by its passphrase.
+async fn open_protected() -> (Arc<UserProfiles>, Arc<UserProfile>, PathBuf) {
+    let root = tmp().join("root");
+    let id = plant_protected(&root, "work");
+    let ups = UserProfiles::new(ProfilesConfig::new(root.to_string_lossy().into_owned()))
+        .await
+        .unwrap();
+    let up = ups
+        .open(id, Some(ProfileUnlock::Passphrase(sec(PASS))))
+        .await
+        .unwrap();
+    (ups, up, root)
+}
+
+fn sdk_config(chain_profiles: Vec<ChainProfile>) -> ProfileSdkConfig {
+    ProfileSdkConfig {
+        chain_profiles,
+        rp_id: None,
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        clock: None,
+        gas_tables: vec![],
+    }
+}
+
+/// G11: `sdk()` twice returns the same `Sdk`; after `lock` every call on the old `Sdk` is `ProfileLocked` (a vault call, a
+/// second `sdk()`), and so is every call of the store face, `keystore.head` included. Each beside its control before the lock.
+#[tokio::test(flavor = "multi_thread")]
+async fn g11_sdk_twice_and_locked() {
+    let (ups, up, _) = open_protected().await;
+    assert_eq!(code(ups.list().await.map(|l| l.len())), "Ok");
+    let s = up.sdk(sdk_config(vec![])).await.unwrap();
+    let again = up.sdk(sdk_config(vec![])).await.unwrap();
+    assert!(Arc::ptr_eq(&s, &again), "sdk() twice: the same Sdk");
+    let face = up.part_store(ProfilePart::PqVault).unwrap();
+    let p = StorePolicy::default();
+    face.put_if("cache".into(), None, item(1, "c"), p)
+        .await
+        .unwrap();
+    let head = up.part_store(SDK).unwrap();
+    let anchor = br#"{"rev":1,"sha256":"00112233445566778899aabbccddeeff"}"#.to_vec();
+    head.put_if("keystore.head".into(), None, anchor, p)
+        .await
+        .unwrap();
+    assert_eq!(code(s.vault().seeds().await.map(|v| v.len())), "Ok");
+    assert!(up.clone().lock().await.is_empty());
+    assert_eq!(code(s.vault().seeds().await), "ProfileLocked");
+    assert_eq!(code(s.vault().seed("x".into()).await), "ProfileLocked");
+    assert_eq!(code(up.sdk(sdk_config(vec![])).await), "ProfileLocked");
+    assert_eq!(
+        face.get("cache".into(), String::new()).await,
+        Err(StoreError::ProfileLocked)
+    );
+    assert_eq!(
+        head.get("keystore.head".into(), String::new()).await,
+        Err(StoreError::ProfileLocked),
+        "keystore.head passes through the face, never past the lock"
+    );
+    assert_eq!(
+        head.put_if("keystore.head".into(), Some(1), item(2, "h"), p)
+            .await,
+        Err(StoreError::ProfileLocked)
+    );
+    assert_eq!(code(up.part_store(SDK).map(|_| ())), "ProfileLocked");
+    assert_eq!(code(up.matrix_store().map(|_| ())), "ProfileLocked");
+}
+
+/// G11 (A-8's fix): `lock` with a hidden set open on a seed that is not unlocked revokes it.
+#[tokio::test(flavor = "multi_thread")]
+async fn g11_lock_revokes_hidden_set_of_a_locked_seed() {
+    let (_ups, up, _) = open_protected().await;
+    let s = up.sdk(sdk_config(vec![])).await.unwrap();
+    let id = s
+        .vault()
+        .import_words(ImportWords {
+            label: "Main".into(),
+            words: sec(REPO),
+            vault_passphrase: sec(VAULT_PASS),
+        })
+        .await
+        .unwrap()
+        .id;
+    s.vault().lock(id.clone()).await;
+    assert!(!s.vault().seed(id.clone()).await.unwrap().unlocked);
+    s.vault()
+        .open_hidden(id, Unlock::Passphrase(sec(VAULT_PASS)), sec("h"))
+        .await
+        .unwrap();
+    let ev = s.subscribe();
+    assert_eq!(
+        up.clone().lock().await,
+        Vec::<String>::new(),
+        "lock's answer"
+    );
+    assert_eq!(
+        ev.next(1000).await,
+        Some(Event::HiddenOpsAbandoned { count: 0 }),
+        "the hidden set is locked"
+    );
+}
+
+/// The crate's events reach the SDK's by name: a UUID-named directory without an envelope is `ProfileDamaged` at start; a
+/// clean root reports none (the control).
+#[tokio::test(flavor = "multi_thread")]
+async fn events_are_the_sdks() {
+    let clean = tmp().join("root");
+    let ups = UserProfiles::new(ProfilesConfig::new(clean.to_string_lossy().into_owned()))
+        .await
+        .unwrap();
+    assert_eq!(ups.events(), Vec::<Event>::new());
+    let root = tmp().join("root");
+    plant_protected(&root, "work");
+    std::fs::create_dir_all(root.join("p/01a21ce0-6e7b-7e63-9b1d-f667cc7d8dab")).unwrap();
+    let ups = UserProfiles::new(ProfilesConfig::new(root.to_string_lossy().into_owned()))
+        .await
+        .unwrap();
+    assert_eq!(ups.events(), vec![Event::ProfileDamaged]);
+    assert_eq!(ups.events(), Vec::<Event>::new(), "drained");
+}
+
+/// G11: after `lock` no request leaves on the old `Sdk` (`Sdk::close`: pools dropped, the closed flag): a chain call is
+/// `ProfileLocked` by its exact code, and the fake chain sees nothing more. Control first: the same call reaches the chain each
+/// time while the profile is open.
+#[cfg(feature = "evm")]
+#[tokio::test(flavor = "multi_thread")]
+async fn g11_no_request_after_lock() {
+    use fake_chain::{fake, hash_of, serve, CHAIN_ID};
+    let c = fake();
+    c.lock().unwrap().index = vec![];
+    let url = serve(c.clone()).await;
+    let endpoint = scaas_sdk::EndpointConfig {
+        url,
+        class: scaas_rpc::Class::Named,
+        label: None,
+        auth: None,
+    };
+    let profile = ChainProfile {
+        key: "local".into(),
+        family: scaas_sdk::Family::Evm,
+        chain_id: Some(CHAIN_ID),
+        chain_uid: hash_of(0),
+        rpc: vec![endpoint],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: None,
+        factory: Some("0x5ca00000000000000000000000000000000000f0".into()),
+        router: None,
+        finality: scaas_sdk::Finality::Finalized,
+        tx_gas_cap: Some(1 << 24),
+        gas: Default::default(),
+        max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
+        gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
+        tokens: vec![],
+        l1_fee: None,
+        pinned_reads: true,
+        disabled_kinds: vec![],
+        family_params: None,
+    };
+    let (_ups, up, _) = open_protected().await;
+    let s = up.sdk(sdk_config(vec![profile])).await.unwrap();
+    let seen = || c.lock().unwrap().requests.len();
+    let n0 = seen();
+    assert_eq!(code(s.wallet().tokens("local".into(), true).await), "Ok");
+    let n1 = seen();
+    assert!(n1 > n0, "control: the call reaches the chain");
+    assert_eq!(code(s.wallet().tokens("local".into(), true).await), "Ok");
+    let n2 = seen();
+    assert!(n2 > n1, "control: again");
+    up.clone().lock().await;
+    assert_eq!(
+        code(s.wallet().tokens("local".into(), true).await),
+        "ProfileLocked"
+    );
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(seen(), n2, "no request after lock");
 }

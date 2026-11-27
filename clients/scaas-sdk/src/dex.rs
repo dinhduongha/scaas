@@ -345,11 +345,7 @@ async fn floor(
 
 /// The gateway list of `chain` and its chain id (`SubmitPathNone` without one).
 fn gateways(sdk: &Sdk, chain: &str) -> Result<(NodeClient, u64), SdkError> {
-    let c = sdk
-        .chains
-        .iter()
-        .find(|c| c.profile.key == chain)
-        .ok_or(SdkError::ChainUnknown)?;
+    let c = sdk.chain(chain)?;
     let (Some(list), Some(id)) = (c.gateways.clone(), c.profile.chain_id) else {
         return Err(SdkError::SubmitPathNone);
     };

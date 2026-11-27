@@ -43,11 +43,7 @@ fn rpc_error(e: SimError) -> SdkError {
 
 /// The chain's profile, its registry and chain id: `ChainUnknown` without the profile.
 fn evm_chain(sdk: &crate::Sdk, key: &str) -> Result<(crate::ChainProfile, u64), SdkError> {
-    let chain = sdk
-        .chains
-        .iter()
-        .find(|c| c.profile.key == key)
-        .ok_or(SdkError::ChainUnknown)?;
+    let chain = sdk.chain(key)?;
     Ok((
         chain.profile.clone(),
         chain.profile.chain_id.ok_or(SdkError::Argument)?,

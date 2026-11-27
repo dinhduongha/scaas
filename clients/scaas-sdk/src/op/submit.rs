@@ -267,9 +267,8 @@ pub(crate) fn sign_tx(
     let id = hex(&scaas_ua::keccak256(&signed.raw));
     // the payer's next nonce after this one, the floor of its next quote in this session
     if let (Some(c), Ok(from)) = (
-        sdk.chains
-            .iter()
-            .find(|c| c.profile.chain_id == Some(chain_id)),
+        sdk.chain_where(|c| c.profile.chain_id == Some(chain_id))
+            .ok(),
         payer_address(sdk, payer),
     ) {
         let mut n = sdk
@@ -603,12 +602,8 @@ impl Op {
                         // PR A review, finding 2: the row's own figure (its entry, kind, signer kind and lane state, from
                         // its stored message and arguments), so a payer's quote of another operation never lowers it
                         let own = {
-                            let profile = &sdk
-                                .chains
-                                .iter()
-                                .find(|c| c.profile.key == row.chain)
-                                .ok_or(SdkError::ChainUnknown)?
-                                .profile;
+                            let c = sdk.chain(&row.chain)?;
+                            let profile = &c.profile;
                             figure(
                                 &sdk,
                                 profile,
@@ -659,18 +654,18 @@ impl Op {
 }
 
 /// Runs `f` on as a task of the SDK's runtime, whatever happens to the caller (spec §13.4); on wasm32 a task of the page's event
-/// loop (`wasm_bindgen_futures::spawn_local`: no tokio `LocalSet` there; closing review P2-9).
+/// loop (`wasm_bindgen_futures::spawn_local`: no tokio `LocalSet` there; closing review P2-9). After `Sdk::close` nothing
+/// starts, and a close aborts it.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn detach(sdk: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + Send + 'static) {
-    match &sdk.rt {
-        Some(rt) => drop(rt.handle.spawn(f)),
-        None => drop(tokio::spawn(f)),
-    }
+    let _ = sdk.task(f);
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn detach(_: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + 'static) {
-    wasm_bindgen_futures::spawn_local(f);
+pub(crate) fn detach(sdk: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + 'static) {
+    if sdk.live().is_ok() {
+        wasm_bindgen_futures::spawn_local(f);
+    }
 }
 
 /// One send of `row`'s bytes on its path; the row then `sent` with the outcome's detail, and the event. A refused simulation

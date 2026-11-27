@@ -157,7 +157,7 @@ impl Op {
             .spawn(async move {
                 // review A2-7: `from_json`'s bounds (size, depth) however the blob was built (a binding's record, serde)
                 SignedOpBlob::from_json(&blob.to_json()?)?;
-                let c = sdk.chain(&expect.chain)?;
+                let c = &sdk.chain(&expect.chain)?;
                 // 1. the chain
                 if blob.v != 1
                     || blob.family != "evm"

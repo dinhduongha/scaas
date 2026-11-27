@@ -331,7 +331,8 @@ impl Core {
         self.closed.store(true, SeqCst);
     }
 
-    fn live(&self) -> Result<(), Error> {
+    /// `ProfileLocked` once the store is closed (the SDK's face checks it on the `keystore.head` it passes through).
+    pub fn live(&self) -> Result<(), Error> {
         match self.closed.load(SeqCst) {
             true => Err(Error::ProfileLocked),
             false => Ok(()),

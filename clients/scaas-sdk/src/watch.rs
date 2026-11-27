@@ -106,12 +106,14 @@ impl Sdk {
 
     /// `sdk.state`'s `rev` now (R17; 0 when none is written).
     pub async fn state_rev(&self) -> Result<u64, SdkError> {
+        self.live()?;
         state::rev(self).await
     }
 
     /// One watch poll now (the loop runs one every `Limits::watch_poll_ms`; Rust-only). A triple whose read fails is read again
     /// next poll; the first failure is returned after the others ran.
     pub async fn poll(&self) -> Result<(), SdkError> {
+        self.live()?;
         let rev = state::rev(self).await?;
         let seen = self.state_seen.swap(rev, SeqCst);
         if seen != REV_UNSEEN && seen != rev {
@@ -252,7 +254,8 @@ impl Sdk {
     }
 }
 
-/// The poll loop on the SDK's runtime, holding the SDK weakly (it ends when the SDK goes).
+/// The poll loop on the SDK's runtime, holding the SDK weakly (it ends when the SDK goes, or is closed: `Sdk::close` aborts
+/// it, and on wasm32 it ends at its first `ProfileLocked`).
 fn start_loop(sdk: &Arc<Sdk>) {
     let weak = Arc::downgrade(sdk);
     let ms = sdk.limits.watch_poll_ms.max(1);
@@ -264,13 +267,13 @@ fn start_loop(sdk: &Arc<Sdk>) {
             wasmtimer::tokio::sleep(std::time::Duration::from_millis(ms)).await;
             let Some(sdk) = weak.upgrade() else { return };
             // a failed poll is read again at the next one
-            let _ = sdk.poll().await;
+            if matches!(sdk.poll().await, Err(SdkError::ProfileLocked)) {
+                return;
+            }
         }
     };
     #[cfg(not(target_arch = "wasm32"))]
-    if let Some(rt) = &sdk.rt {
-        rt.handle.spawn(run);
-    }
+    let _ = sdk.task(run);
     #[cfg(target_arch = "wasm32")]
     wasm_bindgen_futures::spawn_local(run);
 }

@@ -308,11 +308,7 @@ impl Op {
                     .len();
                 let to = registry(&sdk, &chain).await?;
                 let cd = register_calldata(&d, &[0u8; 128])?; // the PoP's length, not its value
-                let c = sdk
-                    .chains
-                    .iter()
-                    .find(|c| c.profile.key == chain)
-                    .ok_or(SdkError::ChainUnknown)?;
+                let c = sdk.chain(&chain)?;
                 let figure = super::gas::registry_gas(
                     &c.profile.gas,
                     &c.profile.gas_opt_in,
