@@ -435,11 +435,13 @@ fn call_review(entry: &str, args: &str, contract: &str) -> Result<CallReview, Sd
 }
 
 /// The count an app gas row's `per_item` names (one of the gas tables' items, `members`, `legs`, …) in a call's arguments
-/// (review A-1): the length of the one array of that name, a top-level argument or a field of one (`v.members`); `None`
-/// when there is none or more than one (the row then refuses, `GasCountUnknown`).
+/// (review A-1): the length of the one array of that name, a top-level argument or a field of one (`v.members`), the
+/// record's signature `sig` not counted (its `members` are the signer's slots, empty before the signature: re-check R-1);
+/// `None` when there is none or more than one (the row then refuses, `GasCountUnknown`).
 fn arg_count(o: &serde_json::Map<String, serde_json::Value>, item: &str) -> Option<u64> {
     let mut found = o
         .iter()
+        .filter(|(k, _)| *k != "sig")
         .flat_map(|(k, v)| {
             let top = (k == item).then_some(v);
             let inner = v.as_object().and_then(|x| x.get(item));
@@ -2231,6 +2233,12 @@ mod tests {
         assert_eq!(super::arg_count(&o, "legs"), Some(3));
         assert_eq!(super::arg_count(&o, "members"), Some(2));
         assert_eq!(super::arg_count(&o, "orders"), None);
+        // the record's signature is not counted: a create record's `v.members` beside the empty `sig.members` (R-1)
+        let create: serde_json::Map<String, serde_json::Value> = serde_json::from_value(serde_json::json!({
+            "v": {"members": [1, 2, 3]}, "wraps": [1, 2, 3], "sig": {"keyData": "0x", "signature": "0x", "members": []}
+        }))
+        .unwrap();
+        assert_eq!(super::arg_count(&create, "members"), Some(3));
         let two: serde_json::Map<String, serde_json::Value> = serde_json::from_value(
             serde_json::json!({"a": {"members": [1]}, "b": {"members": [1, 2]}}),
         )
